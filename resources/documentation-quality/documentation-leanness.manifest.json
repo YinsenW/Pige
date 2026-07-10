@@ -1,0 +1,147 @@
+{
+  "schemaVersion": 2,
+  "baseline": {
+    "capturedAt": "2026-07-10",
+    "markdownFiles": 57,
+    "markdownLines": 25076,
+    "markdownWords": 172140,
+    "markdownBytes": 1274010
+  },
+  "budgets": {
+    "maximumMarkdownFiles": 57,
+    "maximumMarkdownLines": 23820,
+    "maximumMarkdownWords": 163500,
+    "maximumMarkdownBytes": 1210000,
+    "maximumAlwaysReadWords": 4200,
+    "maximumTraceManifestLines": 5500,
+    "maximumTraceManifestBytes": 250000
+  },
+  "fileCountPolicy": {
+    "mode": "reviewed_ratchet",
+    "rule": "The current cap may increase only in the same change that adds a distinct owner role, document-map lifecycle metadata, links from the router, and evidence that an existing owner cannot hold the contract cleanly."
+  },
+  "alwaysRead": [
+    "AGENTS.md",
+    "README.md",
+    "docs/START_HERE_FOR_AI_AGENTS.md"
+  ],
+  "traceManifests": [
+    "resources/traceability/p0-coverage.manifest.json",
+    "resources/traceability/acceptance.manifest.json",
+    "resources/traceability/semantic-claims.manifest.json"
+  ],
+  "copyPastePolicy": {
+    "maximumUnapprovedGroups": 0,
+    "shortNormativeLine": {
+      "minimumCharacters": 28,
+      "minimumLexicalUnits": 4
+    },
+    "listWindow": {
+      "minimumItems": 3,
+      "minimumCharacters": 80
+    },
+    "tableData": {
+      "minimumRows": 2,
+      "minimumCharacters": 100,
+      "singleRowMinimumCharacters": 160
+    },
+    "multilineBlock": {
+      "minimumLines": 3,
+      "minimumCharacters": 120
+    },
+    "longParagraph": {
+      "minimumLexicalUnits": 24,
+      "minimumCharacters": 160,
+      "minimumLengthRatio": 0.6,
+      "minimumJaccard": 0.68,
+      "minimumContainment": 0.84
+    },
+    "fencedBlock": {
+      "minimumLines": 4,
+      "minimumCharacters": 120,
+      "minimumLengthRatio": 0.65,
+      "minimumContainment": 0.9
+    },
+    "externalUrl": {
+      "minimumOccurrences": 2
+    },
+    "approvedGroups": []
+  },
+  "ownerRules": [
+    {
+      "id": "start-template",
+      "owner": "docs/AI_DEVELOPMENT_GUIDE.md",
+      "ownerMarker": "## 5. Context Pack Template",
+      "forbidden": [
+        { "path": "docs/START_HERE_FOR_AI_AGENTS.md", "fragment": "```txt\nTask:" }
+      ]
+    },
+    {
+      "id": "handoff-template",
+      "owner": "docs/AI_DEVELOPMENT_GUIDE.md",
+      "ownerMarker": "## 13. Handoff Note Template",
+      "forbidden": [
+        { "path": "docs/START_HERE_FOR_AI_AGENTS.md", "fragment": "Tests/evidence:" }
+      ]
+    },
+    {
+      "id": "document-map",
+      "owner": "resources/documentation-quality/document-map.manifest.json",
+      "ownerMarker": "\"documents\"",
+      "forbidden": [
+        { "path": "docs/START_HERE_FOR_AI_AGENTS.md", "fragment": "<!-- document-map:start -->" },
+        { "path": "README.md", "fragment": "The complete document map lives in [Start Here For AI Agents]" }
+      ]
+    },
+    {
+      "id": "resolved-decisions",
+      "owner": "docs/DECISION_LOG.md",
+      "ownerMarker": "## 3. Accepted And Superseded Decisions",
+      "forbidden": [
+        { "path": "docs/PRD.md", "fragment": "- Target heavy user scale:" }
+      ]
+    },
+    {
+      "id": "source-storage-type",
+      "owner": "docs/SOURCE_STORAGE_STRATEGY.md",
+      "ownerMarker": "SourceStorageStrategy",
+      "forbidden": [
+        { "path": "docs/TECH_ARCHITECTURE.md", "fragment": "type SourceStorageStrategy =" }
+      ]
+    },
+    {
+      "id": "model-task-class",
+      "owner": "docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md",
+      "ownerMarker": "ModelTaskClass",
+      "forbidden": [
+        { "path": "docs/TECH_ARCHITECTURE.md", "fragment": "type ModelTaskClass =" }
+      ]
+    },
+    {
+      "id": "error-core",
+      "owner": "docs/API_AND_IPC_DESIGN.md",
+      "ownerMarker": "PigeError",
+      "forbidden": [
+        { "path": "docs/DIAGNOSTICS_AND_OBSERVABILITY.md", "fragment": "interface PigeError" }
+      ]
+    }
+  ],
+  "staleChannelFragments": {
+    "docs/TECH_ARCHITECTURE.md": [
+      "permissions.list",
+      "permissions.decide",
+      "notes.read",
+      "settings.updateProvider",
+      "backup.restore"
+    ],
+    "docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md": [
+      "models.setDefault",
+      "agent.runJob"
+    ],
+    "docs/ONBOARDING_AND_FIRST_RUN.md": [
+      "providers.add",
+      "providers.test",
+      "providers.refreshModels"
+    ]
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "id": "pdfjs_napi_canvas",
+  "protocolVersion": 1,
+  "rendererVersion": "pdfjs-dist@6.1.200+@napi-rs/canvas@1.0.2",
+  "engines": [
+    {
+      "id": "pdfjs-dist",
+      "version": "6.1.200"
+    },
+    {
+      "id": "@napi-rs/canvas",
+      "version": "1.0.2"
+    }
+  ],
+  "sourceKinds": [
+    "pdf_file"
+  ],
+  "capabilities": [
+    "bounded_page_selection",
+    "page_to_png",
+    "page_locators",
+    "symlink_rejection",
+    "ocr_handoff"
+  ],
+  "executionBoundary": "node_worker_thread",
+  "inputFileAccess": "validated_preserved_source_only",
+  "networkAccess": false,
+  "externalFileAccess": false,
+  "hiddenDownloads": false,
+  "workerPath": "apps/desktop/src/main/workers/pdf-page-renderer-worker.ts",
+  "servicePath": "apps/desktop/src/main/services/pdf-page-renderer-service.ts",
+  "limits": {
+    "maxPdfBytes": 209715200,
+    "maxPages": 20,
+    "maxPageCandidates": 10000,
+    "maxEdge": 3072,
+    "maxPixelsPerPage": 9437184,
+    "maxPngBytesPerPage": 16777216,
+    "maxTotalPngBytes": 67108864,
+    "maxOldGenerationSizeMb": 512,
+    "timeoutMs": 120000
+  }
+}

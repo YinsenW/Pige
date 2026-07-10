@@ -1,0 +1,29 @@
+{
+  "name": "@pige/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "node ../../scripts/build/macos-vision-ocr-helper.mjs && electron-vite dev",
+    "build": "node ../../scripts/build/macos-vision-ocr-helper.mjs && electron-vite build",
+    "typecheck": "tsc -p tsconfig.json --noEmit --pretty false"
+  },
+  "dependencies": {
+    "@mozilla/readability": "0.6.0",
+    "@napi-rs/canvas": "1.0.2",
+    "@pige/contracts": "0.0.0",
+    "@pige/domain": "0.0.0",
+    "@pige/markdown": "0.0.0",
+    "@pige/schemas": "0.0.0",
+    "fast-xml-parser": "5.9.3",
+    "jsdom": "29.1.1",
+    "mammoth": "1.12.0",
+    "pdfjs-dist": "6.1.200",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "undici": "7.28.0",
+    "yauzl": "3.4.0",
+    "yazl": "3.3.1"
+  }
+}

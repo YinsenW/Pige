@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "pdfjs_text",
+  "engine": "pdfjs-dist",
+  "engineVersion": "6.1.200",
+  "sourceKinds": ["pdf_file"],
+  "capabilities": ["embedded_text", "document_metadata", "page_locators", "ocr_handoff"],
+  "executionBoundary": "node_worker_thread",
+  "networkAccess": false,
+  "hiddenDownloads": false,
+  "limits": {
+    "maxBytes": 209715200,
+    "maxPages": 2000,
+    "timeoutMs": 60000
+  }
+}

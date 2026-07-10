@@ -1,0 +1,19 @@
+{
+  "name": "@pige/knowledge",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -p tsconfig.json --noEmit --pretty false"
+  },
+  "dependencies": {
+    "@pige/domain": "0.0.0",
+    "@pige/markdown": "0.0.0",
+    "@pige/schemas": "0.0.0"
+  }
+}

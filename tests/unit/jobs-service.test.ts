@@ -1,0 +1,1867 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  AgentIngestService,
+  type AgentIngestModelClient,
+  type AgentIngestModelConfigPort
+} from "../../apps/desktop/src/main/services/agent-ingest-service";
+import { CaptureService, type SourceFetchPort } from "../../apps/desktop/src/main/services/capture-service";
+import { DocumentParserService, type DocumentParserPort } from "../../apps/desktop/src/main/services/document-parser-service";
+import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
+import { LocalDatabaseService } from "../../apps/desktop/src/main/services/local-database-service";
+import { extractOfficeText } from "../../apps/desktop/src/main/services/office-parser-core";
+import { OfficeParserService } from "../../apps/desktop/src/main/services/office-parser-service";
+import {
+  OFFICE_PARSER_MAX_BYTES,
+  OFFICE_PARSER_MAX_ENTRIES,
+  OFFICE_PARSER_MAX_SELECTED_XML_BYTES,
+  OFFICE_PARSER_MAX_SLIDES,
+  OFFICE_PARSER_MAX_TEXT_CHARACTERS,
+  OFFICE_PARSER_MAX_UNCOMPRESSED_BYTES,
+  OFFICE_PARSER_MAX_XML_ENTRY_BYTES
+} from "../../apps/desktop/src/main/services/office-parser-types";
+import { extractPdfText } from "../../apps/desktop/src/main/services/pdf-parser-core";
+import { PdfParserService } from "../../apps/desktop/src/main/services/pdf-parser-service";
+import type { PdfPageRendererPort } from "../../apps/desktop/src/main/services/pdf-page-renderer-service";
+import {
+  PDF_PAGE_RENDERER_ID,
+  PDF_PAGE_RENDERER_PROTOCOL_VERSION,
+  PDF_PAGE_RENDERER_VERSION,
+  type PdfPageRendererResult
+} from "../../apps/desktop/src/main/services/pdf-page-renderer-types";
+import {
+  OcrService,
+  type NativeImageOcrAdapterPort,
+  type OcrPort
+} from "../../apps/desktop/src/main/services/ocr-service";
+import type { NativeOcrResult } from "../../apps/desktop/src/main/services/ocr-types";
+import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
+import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
+import type { VaultSummary } from "@pige/contracts";
+import { createTestDocx, createTestPptx } from "./helpers/office-fixture";
+import { createTestPdf } from "./helpers/pdf-fixture";
+import { createJpegScanPdf } from "./helpers/pdf-image-fixture";
+
+const tempRoots: string[] = [];
+
+function makeVault(): { vaultPath: string; vault: VaultSummary } {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-jobs-test-"));
+  tempRoots.push(root);
+  createVaultOnDisk({
+    parentDirectory: root,
+    vaultName: "Jobs",
+    appDataPath: path.join(root, "app-data"),
+    tempPath: path.join(root, "temp"),
+    now: new Date("2026-07-09T12:00:00.000Z")
+  });
+  const vaultPath = path.join(root, "Jobs");
+  return { vaultPath, vault: loadVaultSummary(vaultPath) };
+}
+
+const runtimeConfig: ModelProviderRuntimeConfig = {
+  provider: {
+    id: "provider_test",
+    displayName: "Test Provider",
+    providerKind: "openai",
+    authSecretRef: "provider_secret_test",
+    modelListStrategy: "manual",
+    cloudBoundary: "cloud",
+    createdAt: "2026-07-09T12:00:00.000Z",
+    updatedAt: "2026-07-09T12:00:00.000Z"
+  },
+  model: {
+    id: "model_test",
+    providerProfileId: "provider_test",
+    modelId: "test-model",
+    source: "manual",
+    enabled: true,
+    createdAt: "2026-07-09T12:00:00.000Z",
+    updatedAt: "2026-07-09T12:00:00.000Z"
+  },
+  apiKey: "sk-runtime-secret"
+};
+
+function makeModelPort(
+  getConfig: () => ModelProviderRuntimeConfig | undefined = () => runtimeConfig
+): AgentIngestModelConfigPort {
+  return {
+    getDefaultModel: () => {
+      const config = getConfig();
+      return config ? { ...config.model, isDefault: true } : undefined;
+    },
+    getDefaultProvider: () => getConfig()?.provider,
+    getDefaultRuntimeConfig: getConfig
+  };
+}
+
+function makeServices(
+  vaultPath: string,
+  vault: VaultSummary,
+  agentIngest?: AgentIngestService,
+  database?: LocalDatabaseService,
+  sourceFetch?: SourceFetchPort,
+  documentParser?: DocumentParserPort,
+  ocr?: OcrPort
+): { capture: CaptureService; jobs: JobsService } {
+  const vaultPort = {
+    current: () => vault,
+    activeVaultPath: () => vaultPath
+  };
+  return {
+    capture: new CaptureService(vaultPort, sourceFetch),
+    jobs: new JobsService(vaultPort, agentIngest, database, documentParser, ocr)
+  };
+}
+
+afterEach(() => {
+  for (const root of tempRoots.splice(0)) {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+describe("jobs service", () => {
+  it("lists queued capture jobs with safe source summaries", async () => {
+    const { vaultPath, vault } = makeVault();
+    const { capture, jobs } = makeServices(vaultPath, vault);
+    const sourcePath = path.join(path.dirname(vaultPath), "drop.md");
+    fs.writeFileSync(sourcePath, "# Drop\n\nCaptured from disk.", "utf8");
+    capture.submitText({
+      text: "Remember this small idea.",
+      inputKind: "typed_text",
+      userIntent: "capture",
+      locale: "en"
+    });
+    await capture.submitFiles({
+      filePaths: [sourcePath],
+      inputKind: "file_drop",
+      userIntent: "capture",
+      locale: "en"
+    });
+
+    const result = jobs.list({ limit: 10, classes: ["capture"], states: ["queued"] });
+
+    expect(result.activeVaultId).toBe(vault.vaultId);
+    expect(result.invalidJobCount).toBe(0);
+    expect(result.jobs).toHaveLength(2);
+    expect(result.jobs.map((job) => job.state)).toEqual(["queued", "queued"]);
+    expect(result.jobs.some((job) => job.sourceDisplayName === "drop.md")).toBe(true);
+    expect(JSON.stringify(result.jobs)).not.toContain(sourcePath);
+    expect(JSON.stringify(result.jobs)).not.toContain("raw/files");
+  });
+
+  it("counts invalid job records without failing the whole list", () => {
+    const { vaultPath, vault } = makeVault();
+    const { jobs } = makeServices(vaultPath, vault);
+    const invalidPath = path.join(vaultPath, ".pige", "jobs", "2026", "07", "broken.json");
+    fs.mkdirSync(path.dirname(invalidPath), { recursive: true });
+    fs.writeFileSync(invalidPath, "{not json", "utf8");
+
+    const result = jobs.list();
+
+    expect(result.invalidJobCount).toBe(1);
+    expect(result.jobs).toHaveLength(0);
+  });
+
+  it("reconciles interrupted jobs conservatively on startup", () => {
+    const { vaultPath, vault } = makeVault();
+    const { jobs } = makeServices(vaultPath, vault);
+    const jobsPath = path.join(vaultPath, ".pige", "jobs", "2026", "07");
+    fs.mkdirSync(jobsPath, { recursive: true });
+    const records = [
+      { id: "job_20260710_parse0001", class: "parse", state: "running" },
+      { id: "job_20260710_ocr000001", class: "ocr", state: "running" },
+      { id: "job_20260710_agent0001", class: "agent_ingest", state: "running" },
+      { id: "job_20260710_restore01", class: "restore", state: "running" },
+      { id: "job_20260710_cancel001", class: "parse", state: "cancel_requested" }
+    ] as const;
+    for (const record of records) {
+      fs.writeFileSync(path.join(jobsPath, `${record.id}.json`), `${JSON.stringify({
+        ...record,
+        createdAt: "2026-07-10T01:00:00.000Z",
+        updatedAt: "2026-07-10T01:01:00.000Z",
+        message: "Interrupted fixture job."
+      }, null, 2)}\n`, "utf8");
+    }
+
+    const result = jobs.recoverInterruptedJobs();
+    const queued = jobs.list({ states: ["queued"], limit: 10 }).jobs;
+    const retryable = jobs.list({ states: ["failed_retryable"], limit: 10 }).jobs;
+
+    expect(result).toEqual({ requeued: 3, failedRetryable: 2 });
+    expect(queued.map((job) => job.class).sort()).toEqual(["agent_ingest", "ocr", "parse"]);
+    expect(queued.every((job) => job.message.includes("validated outputs will be reused"))).toBe(true);
+    expect(retryable.map((job) => job.id).sort()).toEqual([
+      "job_20260710_cancel001",
+      "job_20260710_restore01"
+    ]);
+    expect(retryable.every((job) => job.message.includes("explicit retry"))).toBe(true);
+  });
+
+  it("processes queued text captures into source pages and log entries", () => {
+    const { vaultPath, vault } = makeVault();
+    const { capture, jobs } = makeServices(vaultPath, vault);
+    const captureResult = capture.submitText({
+      text: "Source page title\n\nA compact captured idea.",
+      inputKind: "typed_text",
+      userIntent: "capture",
+      locale: "en"
+    });
+
+    const processResult = jobs.processQueuedCaptures({ jobIds: [captureResult.jobId] });
+    const sourceRecordPath = findFile(path.join(vaultPath, ".pige/source-records"), `${captureResult.sourceId}.json`);
+    const sourceRecord = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as {
+      knowledgePageId: string;
+      knowledgePagePath: string;
+    };
+    const sourcePage = fs.readFileSync(path.join(vaultPath, sourceRecord.knowledgePagePath), "utf8");
+    const log = fs.readFileSync(path.join(vaultPath, "log.md"), "utf8");
+    const listedJob = jobs.list({ states: ["completed"] }).jobs[0];
+
+    expect(processResult).toEqual({ processed: 1, completed: 1, failed: 0 });
+    expect(sourceRecord.knowledgePageId).toMatch(/^page_\d{8}_[a-z0-9]{8,}$/);
+    expect(sourceRecord.knowledgePagePath).toMatch(/^sources\/text\/\d{4}\/src_/);
+    expect(sourcePage).toContain('type: "source"');
+    expect(sourcePage).toContain(`source_ids: ["${captureResult.sourceId}"]`);
+    expect(sourcePage).toContain("Source page title");
+    expect(sourcePage).toContain("A compact captured idea.");
+    expect(log).toContain(captureResult.sourceId);
+    expect(listedJob?.id).toBe(captureResult.jobId);
+    expect(listedJob?.state).toBe("completed");
+  });
+
+  it("processes queued URL captures into web source pages from extracted text", async () => {
+    const { vaultPath, vault } = makeVault();
+    const { capture, jobs } = makeServices(vaultPath, vault, undefined, undefined, {
+      fetchSnapshot: async () => ({
+        originalUrl: "https://example.com/article?token=secret-token",
+        finalUrl: "https://example.com/article?token=secret-token",
+        contentType: "text/html",
+        title: "URL Source",
+        rawContent: "<html><script>ignore()</script><body>Raw HTML shell</body></html>",
+        extractedText: "Readable article text.",
+        warnings: []
+      })
+    });
+    const captureResult = await capture.submitUrl({
+      url: "https://example.com/article?token=secret-token",
+      inputKind: "pasted_url",
+      userIntent: "capture",
+      locale: "en"
+    });
+
+    const processResult = jobs.processQueuedCaptures({ jobIds: [captureResult.jobId] });
+    const sourceRecordPath = findFile(path.join(vaultPath, ".pige/source-records"), `${captureResult.sourceId}.json`);
+    const sourceRecord = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as {
+      knowledgePagePath: string;
+    };
+    const sourcePage = fs.readFileSync(path.join(vaultPath, sourceRecord.knowledgePagePath), "utf8");
+
+    expect(processResult).toEqual({ processed: 1, completed: 1, failed: 0 });
+    expect(sourceRecord.knowledgePagePath).toMatch(/^sources\/web\/\d{4}\/src_/u);
+    expect(sourcePage).toContain("Readable article text.");
+    expect(sourcePage).toContain("token=%5Bredacted%5D");
+    expect(sourcePage).not.toContain("<script>");
+    expect(sourcePage).not.toContain("secret-token");
+  });
+
+  it("creates a waiting Agent ingest job when no default model is ready", () => {
+    const { vaultPath, vault } = makeVault();
+    const { capture, jobs } = makeServices(vaultPath, vault);
+    const captureResult = capture.submitText({
+      text: "Process later when a model exists.",
+      inputKind: "typed_text",
+      userIntent: "capture",
+      locale: "en"
+    });
+
+    jobs.processQueuedCaptures({ jobIds: [captureResult.jobId] });
+    const waiting = jobs.list({ classes: ["agent_ingest"], states: ["waiting_dependency"] }).jobs[0];
+
+    expect(waiting?.sourceId).toBe(captureResult.sourceId);
+    expect(waiting?.message).toContain("waiting for a tested default model");
+  });
+
+  it("creates a metadata-only source page and waiting parser job for preserved PDFs", async () => {
+    const { vaultPath, vault } = makeVault();
+    const { capture, jobs } = makeServices(vaultPath, vault);
+    const sourcePath = path.join(path.dirname(vaultPath), "research.pdf");
+    fs.writeFileSync(sourcePath, Buffer.from("%PDF-1.7\nDo not treat this binary as text."));
+
+    const captureResult = await capture.submitFiles({
+      filePaths: [sourcePath],
+      inputKind: "file_drop",
+      userIntent: "capture",
+      locale: "en"
+    });
+    const sourceId = requireFirst(captureResult.sourceIds);
+    const jobId = requireFirst(captureResult.jobIds);
+    const processResult = jobs.processQueuedCaptures({ jobIds: [jobId] });
+    const sourceRecordPath = findFile(path.join(vaultPath, ".pige/source-records"), `${sourceId}.json`);
+    const sourceRecord = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as {
+      knowledgePagePath: string;
+    };
+    const sourcePage = fs.readFileSync(path.join(vaultPath, sourceRecord.knowledgePagePath), "utf8");
+    const waitingParser = jobs.list({ classes: ["parse"], states: ["waiting_dependency"] }).jobs[0];
+
+    expect(processResult).toEqual({ processed: 1, completed: 1, failed: 0 });
+    expect(sourceRecord.knowledgePagePath).toMatch(/^sources\/files\/\d{4}\/src_/u);
+    expect(sourcePage).toContain("No extracted text preview is available yet");
+    expect(sourcePage).toContain("Source kind: `pdf_file`");
+    expect(sourcePage).not.toContain("Do not treat this binary as text.");
+    expect(waitingParser?.sourceId).toBe(sourceId);
+    expect(waitingParser?.message).toContain("waiting for local parser capability");
+    expect(jobs.list({ classes: ["agent_ingest"], states: ["waiting_dependency"] }).jobs).toHaveLength(0);
+  });
+
+  it("parses preserved PDFs into durable text artifacts before Agent ingest", async () => {
+    const { vaultPath, vault } = makeVault();
+    const pdfParser = makePdfParser();
+    const { capture, jobs } = makeServices(vaultPath, vault, undefined, undefined, undefined, pdfParser);
+    const sourcePath = path.join(path.dirname(vaultPath), "knowledge.pdf");
+    const embeddedText = "Pige extracts embedded PDF text locally with stable page references.";
+    fs.writeFileSync(sourcePath, createTestPdf([embeddedText], "PDF Knowledge"));
+
+    const captureResult = await capture.submitFiles({
+      filePaths: [sourcePath],
+      inputKind: "file_drop",
+      userIntent: "capture",
+      locale: "en"
+    });
+    const sourceId = requireFirst(captureResult.sourceIds);
+    jobs.processQueuedCaptures({ jobIds: captureResult.jobIds });
+    expect(jobs.list({ classes: ["parse"], states: ["queued"] }).jobs[0]?.sourceId).toBe(sourceId);
+
+    const parseResult = await jobs.processQueuedParses({ sourceIds: [sourceId] });
+    const sourceRecordPath = findFile(path.join(vaultPath, ".pige/source-records"), `${sourceId}.json`);
+    const sourceRecord = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as {
+      knowledgePagePath: string;
+      artifacts: { id: string; kind: string; path: string }[];
+      metadata: Record<string, unknown>;
+    };
+    const textArtifact = sourceRecord.artifacts.find((artifact) => artifact.kind === "extracted_text");
+    const metadataArtifact = sourceRecord.artifacts.find((artifact) => artifact.kind === "metadata");
+    const sourcePage = fs.readFileSync(path.join(vaultPath, sourceRecord.knowledgePagePath), "utf8");
+    const extractedArtifactText = fs.readFileSync(path.join(vaultPath, requireValue(textArtifact?.path)), "utf8");
+    const metadataSidecar = fs.readFileSync(path.join(vaultPath, requireValue(metadataArtifact?.path)), "utf8");
+    const parsedSidecar = JSON.parse(metadataSidecar) as {
+      readonly pages: readonly { readonly locator: string; readonly characterStart: number; readonly characterEnd: number }[];
+    };
+    const operation = fs.readFileSync(findFileContaining(path.join(vaultPath, ".pige/operations"), '"kind": "create_artifact"'), "utf8");
+
+    expect(parseResult).toMatchObject({ processed: 1, completed: 1, failed: 0, agentReadySourceIds: [sourceId] });
+    expect(jobs.list({ classes: ["parse"], states: ["completed"] }).jobs[0]?.sourceId).toBe(sourceId);
+    expect(extractedArtifactText).toContain(embeddedText);
+    expect(sourcePage).toContain("Pige preserved this source and extracted readable text locally");
+    expect(sourcePage).toContain(embeddedText);
+    expect(sourcePage).toContain(requireValue(textArtifact?.id));
+    expect(sourcePage).not.toContain(requireValue(textArtifact?.path));
+    expect(metadataSidecar).toContain('"locator": "page:1"');
+    expect(metadataSidecar).not.toContain(embeddedText);
+    const firstPage = requireValue(parsedSidecar.pages[0]);
+    expect(extractedArtifactText.slice(firstPage.characterStart, firstPage.characterEnd)).toBe(embeddedText);
+    expect(operation).toContain('"kind": "create_artifact"');
+    expect(operation).toContain(requireValue(textArtifact?.path));
+    expect(operation).not.toContain(embeddedText);
+    expect(sourceRecord.metadata).toMatchObject({
+      parserStatus: "parsed",
+      parserEngine: "pdfjs-dist",
+      parserVersion: "6.1.200",
+      textCoverage: "high",
+      agentTextReady: true
+    });
+    expect(sourceRecord.metadata.knowledgePageChecksum).toMatch(/^sha256:[a-f0-9]{64}$/u);
+    expect(jobs.list({ classes: ["ocr"], states: ["waiting_dependency"] }).jobs).toHaveLength(0);
+    expect(jobs.list({ classes: ["agent_ingest"], states: ["waiting_dependency"] }).jobs[0]?.sourceId).toBe(sourceId);
+  });
+
+  it("hands image-only PDFs to OCR without creating an empty Agent ingest job", async () => {
+    const { vaultPath, vault } = makeVault();
+    const { capture, jobs } = makeServices(vaultPath, vault, undefined, undefined, undefined, makePdfParser());
+    const sourcePath = path.join(path.dirname(vaultPath), "scan.pdf");
+    fs.writeFileSync(sourcePath, createTestPdf([""], "Scanned Page"));
+    const captureResult = await capture.submitFiles({
+      filePaths: [sourcePath],
+      inputKind: "file_drop",
+      userIntent: "capture",
+      locale: "en"
+    });
+    const sourceId = requireFirst(captureResult.sourceIds);
+
+    jobs.processQueuedCaptures({ jobIds: captureResult.jobIds });
+    const parseResult = await jobs.processQueuedParses({ sourceIds: [sourceId] });
+    const sourceRecordPath = findFile(path.join(vaultPath, ".pige/source-records"), `${sourceId}.json`);
+    const sourceRecord = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as {
+      artifacts: { kind: string; path: string }[];
+      metadata: Record<string, unknown>;
+    };
+
+    expect(parseResult).toMatchObject({ processed: 1, completed: 1, failed: 0, agentReadySourceIds: [], ocrWaitingSourceIds: [sourceId] });
+    expect(sourceRecord.artifacts.some((artifact) => artifact.kind === "extracted_text")).toBe(false);
+    expect(sourceRecord.artifacts.some((artifact) => artifact.kind === "metadata")).toBe(true);
+    expect(sourceRecord.metadata).toMatchObject({ parserStatus: "parsed_needs_ocr", textCoverage: "none", agentTextReady: false });
+    expect(jobs.list({ classes: ["parse"], states: ["completed_with_warnings"] }).jobs[0]?.sourceId).toBe(sourceId);
+    expect(jobs.list({ classes: ["ocr"], states: ["waiting_dependency"] }).jobs[0]?.sourceId).toBe(sourceId);
+    expect(jobs.list({ classes: ["agent_ingest"] }).jobs).toHaveLength(0);
+  });
+
+  it("uses source-aware OCR readiness after PDF parsing", async () => {
+    const { vaultPath, vault } = makeVault();
+    const pdfOcr: OcrPort = {
+      canOcr: (sourceKind) => sourceKind === "pdf_file",
+      inspectSource: (sourceRecord) => sourceRecord.kind === "pdf_file" &&
+        sourceRecord.metadata.textCoverage === "none"
+        ? { ready: true, message: "Image-only PDF parsed; local page OCR job queued." }
+        : { ready: false, message: "Mixed PDF is waiting for bounded OCR page routing." },
+      ocrSource: async () => {
+        throw new Error("OCR execution is outside this routing test.");
+      }
+    };
+    const { capture, jobs } = makeServices(
+      vaultPath,
+      vault,
+      undefined,
+      undefined,
+      undefined,
+      makePdfParser(),
+      pdfOcr
+    );
+    const sourceRoot = path.dirname(vaultPath);
+    const scanPath = path.join(sourceRoot, "scan-ready.pdf");
+    const mixedPath = path.join(sourceRoot, "mixed-waiting.pdf");
+    fs.writeFileSync(scanPath, createTestPdf([""], "Scan"));
+    fs.writeFileSync(mixedPath, createTestPdf([
+      "This embedded page has enough native text to remain independent evidence for the Agent.",
+      ""
+    ], "Mixed"));
+    const captured = await capture.submitFiles({
+      filePaths: [scanPath, mixedPath],
+      inputKind: "file_drop",
+      userIntent: "capture",
+      locale: "en"
+    });
+
+    jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    await jobs.processQueuedParses({ sourceIds: captured.sourceIds, limit: 10 });
+
+    const queued = jobs.list({ classes: ["ocr"], states: ["queued"], limit: 10 }).jobs;
+    const waiting = jobs.list({ classes: ["ocr"], states: ["waiting_dependency"], limit: 10 }).jobs;
+    expect(queued).toHaveLength(1);
+    expect(queued[0]?.message).toContain("page OCR job queued");
+    expect(waiting).toHaveLength(1);
+    expect(waiting[0]?.message).toContain("bounded OCR page routing");
+  });
+
+  it("renders and OCRs an image-only PDF through the recoverable Job pipeline", async () => {
+    const { vaultPath, vault } = makeVault();
+    const adapter = new StaticNativeOcrAdapter(validNativeOcrResult({
+      text: "Scanned PDF knowledge is searchable.",
+      blocks: [{
+        text: "Scanned PDF knowledge is searchable.",
+        kind: "line",
+        confidence: 0.93,
+        boundingBox: { x: 0.1, y: 0.2, width: 0.8, height: 0.1 },
+        languageHints: ["en"],
+        isTitle: false
+      }],
+      confidence: 0.93
+    }));
+    const renderer = new StaticPdfPageRenderer();
+    const ocr = new OcrService(adapter, undefined, renderer);
+    const { capture, jobs } = makeServices(
+      vaultPath,
+      vault,
+      undefined,
+      undefined,
+      undefined,
+      makePdfParser(),
+      ocr
+    );
+    const sourcePath = path.join(path.dirname(vaultPath), "rendered-scan.pdf");
+    fs.writeFileSync(sourcePath, createJpegScanPdf(1));
+    const captured = await capture.submitFiles({
+      filePaths: [sourcePath],
+      inputKind: "file_drop",
+      userIntent: "capture",
+      locale: "en"
+    });
+    const sourceId = requireFirst(captured.sourceIds);
+
+    jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    const parsed = await jobs.processQueuedParses({ sourceIds: [sourceId] });
+    expect(parsed.ocrWaitingSourceIds).toEqual([sourceId]);
+    expect(jobs.list({ classes: ["ocr"], states: ["queued"] }).jobs[0]?.sourceId).toBe(sourceId);
+
+    const firstRun = await jobs.processQueuedOcr({ sourceIds: [sourceId] });
+    const sourceRecordPath = findFile(path.join(vaultPath, ".pige/source-records"), `${sourceId}.json`);
+    const sourceRecord = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as {
+      knowledgePagePath: string;
+      artifacts: { id: string; kind: string; path: string }[];
+      metadata: Record<string, unknown>;
+    };
+    expect(firstRun).toEqual({ processed: 1, completed: 1, failed: 0, agentReadySourceIds: [sourceId] });
+    const ocrArtifact = requireValue(sourceRecord.artifacts.find((artifact) => artifact.kind === "ocr"));
+    const ocrSidecar = requireValue(sourceRecord.artifacts.find((artifact) => artifact.id.endsWith("_pdf_ocr_metadata")));
+    const sourcePage = fs.readFileSync(path.join(vaultPath, sourceRecord.knowledgePagePath), "utf8");
+
+    expect(renderer.callCount).toBe(1);
+    expect(adapter.callCount).toBe(1);
+    expect(renderer.inputPaths[0]).toContain(`${path.sep}pige-verified-input-`);
+    expect(adapter.inputPaths[0]).toContain(`${path.sep}pige-verified-input-`);
+    expect(fs.existsSync(requireValue(renderer.inputPaths[0]))).toBe(false);
+    expect(fs.existsSync(requireValue(adapter.inputPaths[0]))).toBe(false);
+    expect(fs.readFileSync(path.join(vaultPath, ocrArtifact.path), "utf8")).toContain("Scanned PDF knowledge is searchable.");
+    expect(fs.readFileSync(path.join(vaultPath, ocrSidecar.path), "utf8")).toContain('"locator": "page:1/ocr:block:1"');
+    expect(sourcePage).toContain("Scanned PDF knowledge is searchable.");
+    expect(sourceRecord.metadata).toMatchObject({
+      parserStatus: "parsed_needs_ocr",
+      textCoverage: "none",
+      ocrStatus: "completed",
+      needsOcr: false,
+      agentTextReady: true
+    });
+    expect(jobs.list({ classes: ["agent_ingest"], states: ["waiting_dependency"] }).jobs[0]?.sourceId).toBe(sourceId);
+
+    const completedJob = requireValue(jobs.list({ classes: ["ocr"], states: ["completed"] }).jobs[0]);
+    const completedJobPath = findFile(path.join(vaultPath, ".pige/jobs"), `${completedJob.id}.json`);
+    const jobRecord = JSON.parse(fs.readFileSync(completedJobPath, "utf8")) as Record<string, unknown>;
+    fs.writeFileSync(completedJobPath, `${JSON.stringify({ ...jobRecord, state: "running" }, null, 2)}\n`, "utf8");
+    adapter.available = false;
+    expect(jobs.recoverInterruptedJobs()).toEqual({ requeued: 1, failedRetryable: 0 });
+    expect(await jobs.processQueuedOcr({ sourceIds: [sourceId] })).toMatchObject({ completed: 1, failed: 0 });
+    expect(renderer.callCount).toBe(1);
+    expect(adapter.callCount).toBe(1);
+  });
+
+  it("delays Agent ingest until sparse mixed-PDF pages join native evidence", async () => {
+    const { vaultPath, vault } = makeVault();
+    const nativePageText = "Native PDF evidence explains the durable knowledge model and remains useful while one sparse page needs OCR enrichment.";
+    const ocrPageText = "OCR recovered the second page's local-only implementation detail.";
+    const modelClient = new StaticModelClient({
+      title: "Combined PDF evidence",
+      summary: { text: "The PDF combines native and OCR evidence.", evidenceRefs: ["ev_01", "ev_02"] },
+      keyPoints: [
+        { text: "Native page retained", evidenceRefs: ["ev_01"] },
+        { text: "Sparse page recovered", evidenceRefs: ["ev_02"] }
+      ],
+      tags: ["pdf"],
+      topics: ["Evidence"],
+      entities: ["Pige"],
+      warnings: [],
+      confidence: "high"
+    });
+    const agentIngest = new AgentIngestService(makeModelPort(), modelClient);
+    const adapter = new StaticNativeOcrAdapter(validNativeOcrResult({
+      text: ocrPageText,
+      blocks: [{
+        text: ocrPageText,
+        kind: "line",
+        confidence: 0.91,
+        boundingBox: { x: 0.1, y: 0.2, width: 0.8, height: 0.1 },
+        languageHints: ["en"],
+        isTitle: false
+      }],
+      confidence: 0.91
+    }));
+    const renderer = new StaticPdfPageRenderer();
+    const { capture, jobs } = makeServices(
+      vaultPath,
+      vault,
+      agentIngest,
+      undefined,
+      undefined,
+      makePdfParser(),
+      new OcrService(adapter, undefined, renderer)
+    );
+    const sourcePath = path.join(path.dirname(vaultPath), "mixed-evidence.pdf");
+    fs.writeFileSync(sourcePath, createTestPdf([nativePageText, ""], "Mixed Evidence"));
+    const captured = await capture.submitFiles({
+      filePaths: [sourcePath],
+      inputKind: "file_drop",
+      userIntent: "capture",
+      locale: "en"
+    });
+    const sourceId = requireFirst(captured.sourceIds);
+
+    jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    const parsed = await jobs.processQueuedParses({ sourceIds: [sourceId] });
+
+    expect(parsed).toMatchObject({
+      processed: 1,
+      completed: 1,
+      failed: 0,
+      agentReadySourceIds: [],
+      ocrWaitingSourceIds: [sourceId]
+    });
+    expect(jobs.list({ classes: ["agent_ingest"] }).jobs).toHaveLength(0);
+    expect(jobs.list({ classes: ["ocr"], states: ["queued"] }).jobs[0]?.sourceId).toBe(sourceId);
+
+    const ocrResult = await jobs.processQueuedOcr({ sourceIds: [sourceId] });
+    expect(ocrResult).toEqual({ processed: 1, completed: 1, failed: 0, agentReadySourceIds: [sourceId] });
+    expect(renderer.requestedPageSets).toEqual([[2]]);
+    expect(adapter.callCount).toBe(1);
+    expect(jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]?.sourceId).toBe(sourceId);
+
+    const sourceRecordPath = findFile(path.join(vaultPath, ".pige/source-records"), `${sourceId}.json`);
+    const sourceRecord = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as {
+      artifacts: { kind: string }[];
+      metadata: Record<string, unknown>;
+    };
+    expect(sourceRecord.artifacts.filter((artifact) => artifact.kind === "extracted_text")).toHaveLength(1);
+    expect(sourceRecord.artifacts.filter((artifact) => artifact.kind === "ocr")).toHaveLength(1);
+    expect(sourceRecord.metadata).toMatchObject({
+      textCoverage: "medium",
+      ocrProcessedPages: [2],
+      needsOcr: false,
+      agentTextReady: true
+    });
+
+    const agentResult = await jobs.processQueuedAgentIngest({ sourceIds: [sourceId] });
+    const prompt = requireValue(modelClient.requests[0]).user;
+    const note = fs.readFileSync(findFile(path.join(vaultPath, "wiki"), ".md"), "utf8");
+    expect(agentResult).toEqual({ processed: 1, completed: 1, failed: 0 });
+    expect(prompt).toContain('ref="ev_01"');
+    expect(prompt).toContain('kind="extracted_text" locator="page:1"');
+    expect(prompt).toContain(nativePageText.slice(0, 72));
+    expect(prompt).toContain('ref="ev_02"');
+    expect(prompt).toContain('kind="ocr" locator="page:2/ocr:block:1"');
+    expect(prompt).toContain(ocrPageText);
+    expect(prompt).toContain("- ocr_enrichment_pending: false");
+    expect(note).toContain(`[source:${sourceId}#p1]`);
+    expect(note).toContain(`[source:${sourceId}#p2-ocr1]`);
+  });
+
+  it("pauses a native-text Agent job when PDF OCR becomes ready before it starts", async () => {
+    const { vaultPath, vault } = makeVault();
+    const modelClient = new StaticModelClient({
+      title: "Late OCR enrichment",
+      summary: { text: "Native and recovered text were joined before ingest.", evidenceRefs: ["ev_01", "ev_02"] },
+      keyPoints: [
+        { text: "Native evidence", evidenceRefs: ["ev_01"] },
+        { text: "Recovered evidence", evidenceRefs: ["ev_02"] }
+      ],
+      tags: [],
+      topics: ["Evidence"],
+      entities: [],
+      warnings: [],
+      confidence: "high"
+    });
+    const adapter = new StaticNativeOcrAdapter(validNativeOcrResult({
+      text: "OCR capability recovered before Agent execution.",
+      blocks: [{
+        text: "OCR capability recovered before Agent execution.",
+        kind: "line",
+        confidence: 0.9,
+        boundingBox: { x: 0.1, y: 0.2, width: 0.8, height: 0.1 },
+        languageHints: ["en"],
+        isTitle: false
+      }],
+      confidence: 0.9
+    }), false);
+    const renderer = new StaticPdfPageRenderer();
+    const { capture, jobs } = makeServices(
+      vaultPath,
+      vault,
+      new AgentIngestService(makeModelPort(), modelClient),
+      undefined,
+      undefined,
+      makePdfParser(),
+      new OcrService(adapter, undefined, renderer)
+    );
+    const sourcePath = path.join(path.dirname(vaultPath), "late-ocr.pdf");
+    fs.writeFileSync(sourcePath, createTestPdf([
+      "Verified native text is useful while a sparse second page waits for local OCR capability.",
+      ""
+    ], "Late OCR"));
+    const captured = await capture.submitFiles({
+      filePaths: [sourcePath],
+      inputKind: "file_drop",
+      userIntent: "capture",
+      locale: "en"
+    });
+    const sourceId = requireFirst(captured.sourceIds);
+    jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    const parsed = await jobs.processQueuedParses({ sourceIds: [sourceId] });
+
+    expect(parsed.agentReadySourceIds).toEqual([sourceId]);
+    expect(jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]?.sourceId).toBe(sourceId);
+    expect(jobs.list({ classes: ["ocr"], states: ["waiting_dependency"] }).jobs[0]?.sourceId).toBe(sourceId);
+
+    adapter.available = true;
+    expect(jobs.requeueWaitingOcr()).toEqual({ requeued: 1 });
+    expect(await jobs.processQueuedAgentIngest({ sourceIds: [sourceId] })).toEqual({
+      processed: 1,
+      completed: 0,
+      failed: 1
+    });
+    expect(modelClient.requests).toHaveLength(0);
+    expect(jobs.list({ classes: ["agent_ingest"], states: ["waiting_dependency"] }).jobs[0]?.message).toContain(
+      "Waiting for selected PDF OCR enrichment"
+    );
+    expect(jobs.requeueWaitingAgentIngest()).toEqual({ requeued: 0 });
+
+    expect(await jobs.processQueuedOcr({ sourceIds: [sourceId] })).toMatchObject({
+      completed: 1,
+      failed: 0,
+      agentReadySourceIds: [sourceId]
+    });
+    expect(jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]?.sourceId).toBe(sourceId);
+    expect(await jobs.processQueuedAgentIngest({ sourceIds: [sourceId] })).toEqual({
+      processed: 1,
+      completed: 1,
+      failed: 0
+    });
+    expect(modelClient.requests).toHaveLength(1);
+    expect(renderer.requestedPageSets).toEqual([[2]]);
+  });
+
+  it("releases verified native PDF text when OCR becomes unavailable after parsing", async () => {
+    const { vaultPath, vault } = makeVault();
+    const modelClient = new StaticModelClient({
+      title: "Native PDF fallback",
+      summary: { text: "Verified native text remains usable while OCR is unavailable.", evidenceRefs: ["ev_01"] },
+      keyPoints: [{ text: "Native evidence retained", evidenceRefs: ["ev_01"] }],
+      tags: [],
+      topics: ["Evidence"],
+      entities: [],
+      warnings: [],
+      confidence: "high"
+    });
+    const adapter = new StaticNativeOcrAdapter(validNativeOcrResult(), true);
+    const { capture, jobs } = makeServices(
+      vaultPath,
+      vault,
+      new AgentIngestService(makeModelPort(), modelClient),
+      undefined,
+      undefined,
+      makePdfParser(),
+      new OcrService(adapter, undefined, new StaticPdfPageRenderer())
+    );
+    const sourcePath = path.join(path.dirname(vaultPath), "ocr-dropped.pdf");
+    fs.writeFileSync(sourcePath, createTestPdf([
+      "Verified native text must remain usable when the OCR helper disappears after parse routing.",
+      ""
+    ], "OCR Dropped"));
+    const captured = await capture.submitFiles({
+      filePaths: [sourcePath],
+      inputKind: "file_drop",
+      userIntent: "capture",
+      locale: "en"
+    });
+    const sourceId = requireFirst(captured.sourceIds);
+    jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    expect((await jobs.processQueuedParses({ sourceIds: [sourceId] })).agentReadySourceIds).toEqual([]);
+    expect(jobs.list({ classes: ["agent_ingest"] }).jobs).toHaveLength(0);
+
+    adapter.available = false;
+    expect(await jobs.processQueuedOcr({ sourceIds: [sourceId] })).toEqual({
+      processed: 1,
+      completed: 0,
+      failed: 1,
+      agentReadySourceIds: [sourceId]
+    });
+    expect(jobs.list({ classes: ["ocr"], states: ["waiting_dependency"] }).jobs[0]?.sourceId).toBe(sourceId);
+    expect(jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]?.sourceId).toBe(sourceId);
+
+    expect(await jobs.processQueuedAgentIngest({ sourceIds: [sourceId] })).toEqual({
+      processed: 1,
+      completed: 1,
+      failed: 0
+    });
+    expect(requireValue(modelClient.requests[0]).user).toContain("- ocr_enrichment_pending: true");
+    const note = fs.readFileSync(findFile(path.join(vaultPath, "wiki"), ".md"), "utf8");
+    expect(note).toContain('status: "needs_review"');
+    expect(note).toContain("Some visible document content may still be waiting for local OCR enrichment.");
+  });
+
+  it("requeues Agent ingest when OCR changes the evidence during a model call", async () => {
+    const { vaultPath, vault } = makeVault();
+    const adapter = new StaticNativeOcrAdapter(validNativeOcrResult({
+      text: "OCR completed while the first model request was in flight.",
+      blocks: [{
+        text: "OCR completed while the first model request was in flight.",
+        kind: "line",
+        confidence: 0.92,
+        boundingBox: { x: 0.1, y: 0.2, width: 0.8, height: 0.1 },
+        languageHints: ["en"],
+        isTitle: false
+      }],
+      confidence: 0.92
+    }), false);
+    let jobs!: JobsService;
+    const modelClient = new StaticModelClient({
+      title: "Fresh combined evidence",
+      summary: { text: "Both evidence revisions are present.", evidenceRefs: ["ev_01", "ev_02"] },
+      keyPoints: [
+        { text: "Native evidence", evidenceRefs: ["ev_01"] },
+        { text: "OCR evidence", evidenceRefs: ["ev_02"] }
+      ],
+      tags: [],
+      topics: ["Evidence"],
+      entities: [],
+      warnings: [],
+      confidence: "high"
+    }, async () => {
+      if (modelClient.requests.length !== 1) return;
+      adapter.available = true;
+      expect(jobs.requeueWaitingOcr()).toEqual({ requeued: 1 });
+      expect(await jobs.processQueuedOcr()).toMatchObject({ completed: 1, failed: 0 });
+    });
+    const services = makeServices(
+      vaultPath,
+      vault,
+      new AgentIngestService(makeModelPort(), modelClient),
+      undefined,
+      undefined,
+      makePdfParser(),
+      new OcrService(adapter, undefined, new StaticPdfPageRenderer())
+    );
+    jobs = services.jobs;
+    const sourcePath = path.join(path.dirname(vaultPath), "mid-call-ocr.pdf");
+    fs.writeFileSync(sourcePath, createTestPdf([
+      "The first page is valid native evidence before a sparse second page is recognized.",
+      ""
+    ], "Mid-call OCR"));
+    const captured = await services.capture.submitFiles({
+      filePaths: [sourcePath],
+      inputKind: "file_drop",
+      userIntent: "capture",
+      locale: "en"
+    });
+    const sourceId = requireFirst(captured.sourceIds);
+    jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    await jobs.processQueuedParses({ sourceIds: [sourceId] });
+
+    expect(await jobs.processQueuedAgentIngest({ sourceIds: [sourceId] })).toEqual({
+      processed: 1,
+      completed: 0,
+      failed: 1
+    });
+    expect(jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]?.message).toContain(
+      "requeued with the latest evidence"
+    );
+    expect(listFiles(path.join(vaultPath, "wiki")).filter((file) => file.endsWith(".md"))).toHaveLength(0);
+
+    expect(await jobs.processQueuedAgentIngest({ sourceIds: [sourceId] })).toEqual({
+      processed: 1,
+      completed: 1,
+      failed: 0
+    });
+    expect(modelClient.requests).toHaveLength(2);
+    expect(modelClient.requests[1]?.user).toContain('kind="ocr" locator="page:2/ocr:block:1"');
+    const note = fs.readFileSync(findFile(path.join(vaultPath, "wiki"), ".md"), "utf8");
+    expect(note).toContain(`[source:${sourceId}#p2-ocr1]`);
+  });
+
+  it("fails closed before PDF rendering when parser target metadata is tampered", async () => {
+    const { vaultPath, vault } = makeVault();
+    const adapter = new StaticNativeOcrAdapter(validNativeOcrResult());
+    const renderer = new StaticPdfPageRenderer();
+    const { capture, jobs } = makeServices(
+      vaultPath,
+      vault,
+      undefined,
+      undefined,
+      undefined,
+      makePdfParser(),
+      new OcrService(adapter, undefined, renderer)
+    );
+    const sourcePath = path.join(path.dirname(vaultPath), "tampered-target.pdf");
+    fs.writeFileSync(sourcePath, createTestPdf([
+      "This native page is long enough to make the empty second page the sole OCR target.",
+      ""
+    ], "Tampered Target"));
+    const captured = await capture.submitFiles({
+      filePaths: [sourcePath],
+      inputKind: "file_drop",
+      userIntent: "capture",
+      locale: "en"
+    });
+    const sourceId = requireFirst(captured.sourceIds);
+    jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    await jobs.processQueuedParses({ sourceIds: [sourceId] });
+    const sourceRecordPath = findFile(path.join(vaultPath, ".pige/source-records"), `${sourceId}.json`);
+    const sourceRecord = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as {
+      artifacts: { id: string; path: string }[];
+    };
+    const parserMetadata = requireValue(sourceRecord.artifacts.find((artifact) => artifact.id.endsWith("_pdf_metadata")));
+    const parserMetadataPath = path.join(vaultPath, parserMetadata.path);
+    const sidecar = JSON.parse(fs.readFileSync(parserMetadataPath, "utf8")) as Record<string, unknown>;
+    fs.writeFileSync(parserMetadataPath, `${JSON.stringify({ ...sidecar, ocrCandidatePages: [1] }, null, 2)}\n`, "utf8");
+
+    const result = await jobs.processQueuedOcr({ sourceIds: [sourceId] });
+
+    expect(result).toEqual({ processed: 1, completed: 0, failed: 1, agentReadySourceIds: [] });
+    expect(renderer.callCount).toBe(0);
+    expect(adapter.callCount).toBe(0);
+    expect(jobs.list({ classes: ["ocr"], states: ["failed_final"] }).jobs[0]?.message).toContain("failed validation");
+    expect(jobs.list({ classes: ["agent_ingest"] }).jobs).toHaveLength(0);
+  });
+
+  it("persists parse follow-up jobs before the parent can leave its recoverable state", async () => {
+    const { vaultPath, vault } = makeVault();
+    const adapter = new StaticNativeOcrAdapter(validNativeOcrResult());
+    const { capture, jobs } = makeServices(
+      vaultPath,
+      vault,
+      undefined,
+      undefined,
+      undefined,
+      makePdfParser(),
+      new OcrService(adapter, undefined, new StaticPdfPageRenderer())
+    );
+    const sourcePath = path.join(path.dirname(vaultPath), "parse-handoff.pdf");
+    fs.writeFileSync(sourcePath, createTestPdf([
+      "Native text remains valid while a sparse page creates an OCR follow-up.",
+      ""
+    ], "Parse Handoff"));
+    const captured = await capture.submitFiles({
+      filePaths: [sourcePath],
+      inputKind: "file_drop",
+      userIntent: "capture",
+      locale: "en"
+    });
+    const sourceId = requireFirst(captured.sourceIds);
+    jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    replaceLogWithDirectory(vaultPath);
+
+    expect(await jobs.processQueuedParses({ sourceIds: [sourceId] })).toMatchObject({
+      processed: 1,
+      completed: 0,
+      failed: 1,
+      ocrWaitingSourceIds: [sourceId]
+    });
+    expect(jobs.list({ classes: ["parse"], states: ["failed_retryable"] }).jobs[0]?.sourceId).toBe(sourceId);
+    expect(jobs.list({ classes: ["ocr"], states: ["queued"] }).jobs[0]?.sourceId).toBe(sourceId);
+  });
+
+  it("persists Agent follow-up before an OCR parent can leave its recoverable state", async () => {
+    const { vaultPath, vault } = makeVault();
+    const adapter = new StaticNativeOcrAdapter(validNativeOcrResult());
+    const { capture, jobs } = makeServices(
+      vaultPath,
+      vault,
+      new AgentIngestService(makeModelPort(), new StaticModelClient({
+        title: "Recoverable handoff",
+        summary: { text: "OCR evidence survived parent finalization failure.", evidenceRefs: ["ev_01"] },
+        keyPoints: [{ text: "Evidence retained", evidenceRefs: ["ev_01"] }],
+        tags: [],
+        topics: [],
+        entities: [],
+        warnings: [],
+        confidence: "high"
+      })),
+      undefined,
+      undefined,
+      makePdfParser(),
+      new OcrService(adapter, undefined, new StaticPdfPageRenderer())
+    );
+    const sourcePath = path.join(path.dirname(vaultPath), "ocr-handoff.pdf");
+    fs.writeFileSync(sourcePath, createJpegScanPdf(1));
+    const captured = await capture.submitFiles({
+      filePaths: [sourcePath],
+      inputKind: "file_drop",
+      userIntent: "capture",
+      locale: "en"
+    });
+    const sourceId = requireFirst(captured.sourceIds);
+    jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    await jobs.processQueuedParses({ sourceIds: [sourceId] });
+    replaceLogWithDirectory(vaultPath);
+
+    expect(await jobs.processQueuedOcr({ sourceIds: [sourceId] })).toEqual({
+      processed: 1,
+      completed: 0,
+      failed: 1,
+      agentReadySourceIds: [sourceId]
+    });
+    expect(jobs.list({ classes: ["ocr"], states: ["failed_retryable"] }).jobs[0]?.sourceId).toBe(sourceId);
+    expect(jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]?.sourceId).toBe(sourceId);
+  });
+
+  it("keeps incomplete PDF rendering retryable without scheduling Agent ingest", async () => {
+    const { vaultPath, vault } = makeVault();
+    const adapter = new StaticNativeOcrAdapter(validNativeOcrResult());
+    const renderer = new StaticPdfPageRenderer(true);
+    const { capture, jobs } = makeServices(
+      vaultPath,
+      vault,
+      undefined,
+      undefined,
+      undefined,
+      makePdfParser(),
+      new OcrService(adapter, undefined, renderer)
+    );
+    const sourcePath = path.join(path.dirname(vaultPath), "incomplete-scan.pdf");
+    fs.writeFileSync(sourcePath, createJpegScanPdf(1));
+    const captured = await capture.submitFiles({
+      filePaths: [sourcePath],
+      inputKind: "file_drop",
+      userIntent: "capture",
+      locale: "en"
+    });
+    const sourceId = requireFirst(captured.sourceIds);
+    jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    await jobs.processQueuedParses({ sourceIds: [sourceId] });
+
+    const result = await jobs.processQueuedOcr({ sourceIds: [sourceId] });
+
+    expect(result).toEqual({ processed: 1, completed: 0, failed: 1, agentReadySourceIds: [] });
+    expect(adapter.callCount).toBe(0);
+    expect(jobs.list({ classes: ["ocr"], states: ["failed_retryable"] }).jobs[0]?.message).toContain("validated artifacts remain retryable");
+    expect(jobs.list({ classes: ["agent_ingest"] }).jobs).toHaveLength(0);
+  });
+
+  it("preserves a user-edited source page while keeping validated PDF artifacts", async () => {
+    const { vaultPath, vault } = makeVault();
+    const { capture, jobs } = makeServices(vaultPath, vault, undefined, undefined, undefined, makePdfParser());
+    const sourcePath = path.join(path.dirname(vaultPath), "edited.pdf");
+    fs.writeFileSync(sourcePath, createTestPdf([
+      "This PDF contains enough embedded text to be useful while the user-owned source page remains protected from overwrite."
+    ]));
+    const captureResult = await capture.submitFiles({
+      filePaths: [sourcePath],
+      inputKind: "file_drop",
+      userIntent: "capture",
+      locale: "en"
+    });
+    const sourceId = requireFirst(captureResult.sourceIds);
+    jobs.processQueuedCaptures({ jobIds: captureResult.jobIds });
+    const beforeRecordPath = findFile(path.join(vaultPath, ".pige/source-records"), `${sourceId}.json`);
+    const beforeRecord = JSON.parse(fs.readFileSync(beforeRecordPath, "utf8")) as { knowledgePagePath: string };
+    const sourcePagePath = path.join(vaultPath, beforeRecord.knowledgePagePath);
+    fs.appendFileSync(sourcePagePath, "\nUser-authored source-page note.\n", "utf8");
+
+    const parseResult = await jobs.processQueuedParses({ sourceIds: [sourceId] });
+    const afterRecord = JSON.parse(fs.readFileSync(beforeRecordPath, "utf8")) as {
+      artifacts: { kind: string; path: string }[];
+      metadata: Record<string, unknown>;
+    };
+
+    expect(parseResult.completed).toBe(1);
+    expect(parseResult.agentReadySourceIds).toEqual([sourceId]);
+    expect(fs.readFileSync(sourcePagePath, "utf8")).toContain("User-authored source-page note.");
+    expect(afterRecord.artifacts.some((artifact) => artifact.kind === "extracted_text")).toBe(true);
+    expect(afterRecord.metadata.sourcePageRefreshConflict).toBe(true);
+    expect(jobs.list({ classes: ["parse"], states: ["completed_with_warnings"] }).jobs[0]?.message).toContain("edited source page was preserved");
+  });
+
+  it("routes preserved Office documents to parser jobs and images to OCR jobs", async () => {
+    const { vaultPath, vault } = makeVault();
+    const { capture, jobs } = makeServices(vaultPath, vault);
+    const sourceRoot = path.dirname(vaultPath);
+    const documentPaths = [
+      path.join(sourceRoot, "brief.docx"),
+      path.join(sourceRoot, "deck.pptx")
+    ];
+    const imagePath = path.join(sourceRoot, "scan.png");
+    for (const sourcePath of documentPaths) {
+      fs.writeFileSync(sourcePath, Buffer.from("preserved document bytes"));
+    }
+    fs.writeFileSync(imagePath, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]));
+
+    const captureResult = await capture.submitFiles({
+      filePaths: [...documentPaths, imagePath],
+      inputKind: "file_drop",
+      userIntent: "capture",
+      locale: "en"
+    });
+
+    const processResult = jobs.processQueuedCaptures({ jobIds: captureResult.jobIds });
+    const parserJobs = jobs.list({ classes: ["parse"], states: ["waiting_dependency"], limit: 10 }).jobs;
+    const ocrJobs = jobs.list({ classes: ["ocr"], states: ["waiting_dependency"], limit: 10 }).jobs;
+
+    expect(processResult).toEqual({ processed: 3, completed: 3, failed: 0 });
+    expect(parserJobs.map((job) => job.sourceKind).sort()).toEqual(["docx_file", "pptx_file"]);
+    expect(parserJobs.every((job) => job.message.includes("waiting for local parser capability"))).toBe(true);
+    expect(ocrJobs).toHaveLength(1);
+    expect(ocrJobs[0]?.sourceKind).toBe("image_file");
+    expect(ocrJobs[0]?.message).toContain("waiting for local OCR capability");
+    expect(jobs.list({ classes: ["agent_ingest"], states: ["waiting_dependency"], limit: 10 }).jobs).toHaveLength(0);
+  });
+
+  it("persists image OCR artifacts, refreshes the source page, and reuses validated output after recovery", async () => {
+    const { vaultPath, vault } = makeVault();
+    const adapter = new StaticNativeOcrAdapter(validNativeOcrResult(), false);
+    const ocr = new OcrService(adapter);
+    const { capture, jobs } = makeServices(vaultPath, vault, undefined, undefined, undefined, undefined, ocr);
+    const imagePath = path.join(path.dirname(vaultPath), "knowledge.png");
+    fs.writeFileSync(imagePath, Buffer.from("synthetic-image-for-ocr"));
+    const captured = await capture.submitFiles({
+      filePaths: [imagePath],
+      inputKind: "file_drop",
+      userIntent: "capture",
+      locale: "en"
+    });
+    const sourceId = requireFirst(captured.sourceIds);
+
+    jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    expect(jobs.list({ classes: ["ocr"], states: ["waiting_dependency"] }).jobs[0]?.sourceId).toBe(sourceId);
+
+    adapter.available = true;
+    expect(jobs.requeueWaitingOcr()).toEqual({ requeued: 1 });
+    const firstRun = await jobs.processQueuedOcr({ sourceIds: [sourceId] });
+    const sourceRecordPath = findFile(path.join(vaultPath, ".pige/source-records"), `${sourceId}.json`);
+    const sourceRecord = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as {
+      knowledgePagePath: string;
+      artifacts: { id: string; kind: string; path: string; checksum?: string; size?: number }[];
+      metadata: Record<string, unknown>;
+    };
+    const textArtifact = requireValue(sourceRecord.artifacts.find((artifact) => artifact.kind === "ocr"));
+    const metadataArtifact = requireValue(sourceRecord.artifacts.find((artifact) => artifact.id.endsWith("_ocr_metadata")));
+    const ocrText = fs.readFileSync(path.join(vaultPath, textArtifact.path), "utf8");
+    const sidecarText = fs.readFileSync(path.join(vaultPath, metadataArtifact.path), "utf8");
+    const sourcePage = fs.readFileSync(path.join(vaultPath, sourceRecord.knowledgePagePath), "utf8");
+    const operation = fs.readFileSync(findFile(path.join(vaultPath, ".pige/operations"), ".json"), "utf8");
+
+    expect(firstRun).toEqual({ processed: 1, completed: 1, failed: 0, agentReadySourceIds: [sourceId] });
+    expect(adapter.callCount).toBe(1);
+    expect(ocrText).toBe("Pige OCR recovered local knowledge.\n");
+    expect(sourcePage).toContain("Pige OCR recovered local knowledge.");
+    expect(sidecarText).toContain('"locator": "ocr:block:1"');
+    expect(sidecarText).toContain('"boundingBox"');
+    expect(sidecarText).not.toContain("Pige OCR recovered local knowledge.");
+    expect(operation).toContain('"kind": "create_artifact"');
+    expect(operation).not.toContain("Pige OCR recovered local knowledge.");
+    expect(textArtifact.checksum).toMatch(/^sha256:[a-f0-9]{64}$/u);
+    expect(metadataArtifact.checksum).toMatch(/^sha256:[a-f0-9]{64}$/u);
+    expect(textArtifact.size).toBe(fs.statSync(path.join(vaultPath, textArtifact.path)).size);
+    expect(metadataArtifact.size).toBe(fs.statSync(path.join(vaultPath, metadataArtifact.path)).size);
+    expect(sourceRecord.metadata).toMatchObject({
+      parserStatus: "ocr_completed",
+      ocrStatus: "completed",
+      ocrAdapterId: "macos_vision_ocr",
+      ocrAdapterVersion: "1.0.0",
+      ocrEngine: "macos_vision_document",
+      ocrConfidence: 0.94,
+      ocrTextCharacterCount: 35,
+      agentTextReady: true,
+      needsOcr: false
+    });
+    expect(jobs.list({ classes: ["agent_ingest"], states: ["waiting_dependency"] }).jobs[0]?.sourceId).toBe(sourceId);
+
+    const completedOcrJob = requireValue(jobs.list({ classes: ["ocr"], states: ["completed"] }).jobs[0]);
+    const completedOcrJobPath = findFile(path.join(vaultPath, ".pige/jobs"), `${completedOcrJob.id}.json`);
+    const interrupted = JSON.parse(fs.readFileSync(completedOcrJobPath, "utf8")) as Record<string, unknown>;
+    fs.writeFileSync(completedOcrJobPath, `${JSON.stringify({ ...interrupted, state: "running" }, null, 2)}\n`, "utf8");
+    adapter.available = false;
+    expect(jobs.recoverInterruptedJobs()).toEqual({ requeued: 1, failedRetryable: 0 });
+
+    const recoveredRun = await jobs.processQueuedOcr({ sourceIds: [sourceId] });
+    const recoveredSource = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as { artifacts: { id: string }[] };
+    expect(recoveredRun).toEqual({ processed: 1, completed: 1, failed: 0, agentReadySourceIds: [sourceId] });
+    expect(adapter.callCount).toBe(1);
+    expect(new Set(recoveredSource.artifacts.map((artifact) => artifact.id)).size).toBe(recoveredSource.artifacts.length);
+
+    adapter.available = true;
+    fs.writeFileSync(path.join(vaultPath, textArtifact.path), "corrupted OCR artifact\n", "utf8");
+    const completedAgain = JSON.parse(fs.readFileSync(completedOcrJobPath, "utf8")) as Record<string, unknown>;
+    fs.writeFileSync(completedOcrJobPath, `${JSON.stringify({ ...completedAgain, state: "running" }, null, 2)}\n`, "utf8");
+    expect(jobs.recoverInterruptedJobs()).toEqual({ requeued: 1, failedRetryable: 0 });
+
+    const repairedRun = await jobs.processQueuedOcr({ sourceIds: [sourceId] });
+    expect(repairedRun).toEqual({ processed: 1, completed: 1, failed: 0, agentReadySourceIds: [sourceId] });
+    expect(adapter.callCount).toBe(2);
+    expect(fs.readFileSync(path.join(vaultPath, textArtifact.path), "utf8")).toBe("Pige OCR recovered local knowledge.\n");
+  });
+
+  it("fails image OCR before adapter execution when the preserved source checksum changes", async () => {
+    const { vaultPath, vault } = makeVault();
+    const adapter = new StaticNativeOcrAdapter(validNativeOcrResult());
+    const { capture, jobs } = makeServices(
+      vaultPath,
+      vault,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      new OcrService(adapter)
+    );
+    const imagePath = path.join(path.dirname(vaultPath), "tampered.png");
+    const original = Buffer.from("same-size-image-source");
+    fs.writeFileSync(imagePath, original);
+    const captured = await capture.submitFiles({
+      filePaths: [imagePath],
+      inputKind: "file_drop",
+      userIntent: "capture",
+      locale: "en"
+    });
+    const sourceId = requireFirst(captured.sourceIds);
+    jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    const sourceRecordPath = findFile(path.join(vaultPath, ".pige/source-records"), `${sourceId}.json`);
+    const sourceRecord = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as { managedCopy: { path: string } };
+    const changed = Buffer.from(original);
+    changed[0] = changed[0] === 0 ? 1 : changed[0] - 1;
+    fs.writeFileSync(path.join(vaultPath, sourceRecord.managedCopy.path), changed);
+
+    const result = await jobs.processQueuedOcr({ sourceIds: [sourceId] });
+
+    expect(result).toEqual({ processed: 1, completed: 0, failed: 1, agentReadySourceIds: [] });
+    expect(adapter.callCount).toBe(0);
+    expect(jobs.list({ classes: ["ocr"], states: ["failed_final"] }).jobs[0]?.message).toContain("cannot be processed safely");
+    expect(fs.existsSync(path.join(vaultPath, sourceRecord.managedCopy.path))).toBe(true);
+  });
+
+  it("rejects an OCR Source Record that redirects its managed path outside the vault", async () => {
+    const { vaultPath, vault } = makeVault();
+    const adapter = new StaticNativeOcrAdapter(validNativeOcrResult());
+    const { capture, jobs } = makeServices(
+      vaultPath,
+      vault,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      new OcrService(adapter)
+    );
+    const imagePath = path.join(path.dirname(vaultPath), "path-escape.png");
+    fs.writeFileSync(imagePath, Buffer.from("outside-vault-image"));
+    const captured = await capture.submitFiles({
+      filePaths: [imagePath],
+      inputKind: "file_drop",
+      userIntent: "capture",
+      locale: "en"
+    });
+    const sourceId = requireFirst(captured.sourceIds);
+    jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    const sourceRecordPath = findFile(path.join(vaultPath, ".pige/source-records"), `${sourceId}.json`);
+    const sourceRecord = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as {
+      managedCopy: { path: string; checksum: string; size: number };
+    } & Record<string, unknown>;
+    fs.writeFileSync(sourceRecordPath, `${JSON.stringify({
+      ...sourceRecord,
+      managedCopy: { ...sourceRecord.managedCopy, path: "../path-escape.png" }
+    }, null, 2)}\n`, "utf8");
+
+    const result = await jobs.processQueuedOcr({ sourceIds: [sourceId] });
+
+    expect(result).toEqual({ processed: 1, completed: 0, failed: 1, agentReadySourceIds: [] });
+    expect(adapter.callCount).toBe(0);
+    expect(jobs.list({ classes: ["ocr"], states: ["failed_final"] }).jobs[0]?.message).toContain("cannot be processed safely");
+  });
+
+  it("completes empty image OCR with warnings and does not enqueue Agent ingest", async () => {
+    const { vaultPath, vault } = makeVault();
+    const adapter = new StaticNativeOcrAdapter(validNativeOcrResult({
+      text: "",
+      blocks: [],
+      confidence: undefined,
+      warnings: ["ocr_empty_text"]
+    }));
+    const { capture, jobs } = makeServices(
+      vaultPath,
+      vault,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      new OcrService(adapter)
+    );
+    const imagePath = path.join(path.dirname(vaultPath), "empty.png");
+    fs.writeFileSync(imagePath, Buffer.from("synthetic-empty-image"));
+    const captured = await capture.submitFiles({
+      filePaths: [imagePath],
+      inputKind: "file_drop",
+      userIntent: "capture",
+      locale: "en"
+    });
+    const sourceId = requireFirst(captured.sourceIds);
+    jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+
+    const result = await jobs.processQueuedOcr({ sourceIds: [sourceId] });
+    const sourceRecordPath = findFile(path.join(vaultPath, ".pige/source-records"), `${sourceId}.json`);
+    const sourceRecord = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as {
+      artifacts: { kind: string }[];
+      metadata: Record<string, unknown>;
+    };
+
+    expect(result).toEqual({ processed: 1, completed: 1, failed: 0, agentReadySourceIds: [] });
+    expect(sourceRecord.artifacts.some((artifact) => artifact.kind === "ocr")).toBe(false);
+    expect(sourceRecord.artifacts.some((artifact) => artifact.kind === "metadata")).toBe(true);
+    expect(sourceRecord.metadata).toMatchObject({
+      parserStatus: "ocr_completed_empty",
+      ocrStatus: "completed_empty",
+      ocrTextCharacterCount: 0,
+      agentTextReady: false,
+      ocrWarnings: ["ocr_empty_text"]
+    });
+    expect(jobs.list({ classes: ["ocr"], states: ["completed_with_warnings"] }).jobs[0]?.sourceId).toBe(sourceId);
+    expect(jobs.list({ classes: ["agent_ingest"] }).jobs).toHaveLength(0);
+  });
+
+  it("parses preserved DOCX and PPTX files into verified artifacts before OCR and Agent handoff", async () => {
+    const { vaultPath, vault } = makeVault();
+    const { capture, jobs } = makeServices(vaultPath, vault, undefined, undefined, undefined, makeOfficeParser());
+    const sourceRoot = path.dirname(vaultPath);
+    const docxPath = path.join(sourceRoot, "knowledge.docx");
+    const pptxPath = path.join(sourceRoot, "roadmap.pptx");
+    fs.writeFileSync(docxPath, await createTestDocx());
+    fs.writeFileSync(pptxPath, await createTestPptx());
+
+    const captureResult = await capture.submitFiles({
+      filePaths: [docxPath, pptxPath],
+      inputKind: "file_drop",
+      userIntent: "capture",
+      locale: "en"
+    });
+    jobs.processQueuedCaptures({ jobIds: captureResult.jobIds });
+    expect(jobs.list({ classes: ["parse"], states: ["queued"], limit: 10 }).jobs).toHaveLength(2);
+
+    const parseResult = await jobs.processQueuedParses({ sourceIds: captureResult.sourceIds, limit: 10 });
+
+    expect(parseResult).toMatchObject({ processed: 2, completed: 2, failed: 0 });
+    expect([...parseResult.agentReadySourceIds].sort()).toEqual([...captureResult.sourceIds].sort());
+    expect([...parseResult.ocrWaitingSourceIds].sort()).toEqual([...captureResult.sourceIds].sort());
+    for (const sourceId of captureResult.sourceIds) {
+      const sourceRecordPath = findFile(path.join(vaultPath, ".pige/source-records"), `${sourceId}.json`);
+      const sourceRecord = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as {
+        kind: "docx_file" | "pptx_file";
+        knowledgePagePath: string;
+        artifacts: { kind: string; path: string; checksum?: string; size?: number }[];
+        metadata: Record<string, unknown>;
+      };
+      const textArtifact = requireValue(sourceRecord.artifacts.find((artifact) => artifact.kind === "extracted_text"));
+      const metadataArtifact = requireValue(sourceRecord.artifacts.find((artifact) => artifact.kind === "metadata"));
+      const extractedText = fs.readFileSync(path.join(vaultPath, textArtifact.path), "utf8");
+      const sidecarText = fs.readFileSync(path.join(vaultPath, metadataArtifact.path), "utf8");
+      const sourcePageText = fs.readFileSync(path.join(vaultPath, sourceRecord.knowledgePagePath), "utf8");
+      const expectedText = sourceRecord.kind === "docx_file" ? "Local knowledge architecture" : "Roadmap first";
+
+      expect(extractedText).toContain(expectedText);
+      expect(sourcePageText).toContain(expectedText);
+      expect(sidecarText).not.toContain(expectedText);
+      expect(textArtifact.checksum).toMatch(/^sha256:[a-f0-9]{64}$/u);
+      expect(metadataArtifact.checksum).toMatch(/^sha256:[a-f0-9]{64}$/u);
+      expect(textArtifact.size).toBe(fs.statSync(path.join(vaultPath, textArtifact.path)).size);
+      expect(metadataArtifact.size).toBe(fs.statSync(path.join(vaultPath, metadataArtifact.path)).size);
+      expect(sourceRecord.metadata).toMatchObject({
+        parserStatus: "parsed_needs_ocr",
+        parserId: "office_openxml",
+        parserVersion: "1.12.0+5.9.3+3.4.0",
+        agentTextReady: true,
+        needsOcr: true
+      });
+    }
+    expect(jobs.list({ classes: ["ocr"], states: ["waiting_dependency"], limit: 10 }).jobs).toHaveLength(2);
+    expect(jobs.list({ classes: ["agent_ingest"], states: ["waiting_dependency"], limit: 10 }).jobs).toHaveLength(2);
+    expect(jobs.list({ classes: ["parse"], states: ["completed_with_warnings"], limit: 10 }).jobs).toHaveLength(2);
+  });
+
+  it("processes queued Agent ingest jobs into wiki notes, operations, index, and log entries", async () => {
+    const { vaultPath, vault } = makeVault();
+    const agentIngest = new AgentIngestService(
+      makeModelPort(),
+      new StaticModelClient({
+        title: "Generated knowledge note",
+        summary: { text: "The Agent compiled a durable wiki note.", evidenceRefs: ["ev_01"] },
+        keyPoints: [
+          { text: "Source page exists", evidenceRefs: ["ev_01"] },
+          { text: "Operation record exists", evidenceRefs: ["ev_01"] }
+        ],
+        tags: ["agent"],
+        topics: ["Ingest"],
+        entities: ["Pige"],
+        warnings: [],
+        confidence: "high"
+      })
+    );
+    const { capture, jobs } = makeServices(vaultPath, vault, agentIngest);
+    const captureResult = capture.submitText({
+      text: "A source that should become a generated wiki note.",
+      inputKind: "typed_text",
+      userIntent: "capture",
+      locale: "en"
+    });
+
+    jobs.processQueuedCaptures({ jobIds: [captureResult.jobId] });
+    const queued = jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0];
+    const processResult = await jobs.processQueuedAgentIngest({ jobIds: queued ? [queued.id] : [] });
+    const completed = jobs.list({ classes: ["agent_ingest"], states: ["completed"] }).jobs[0];
+    const notePath = findFile(path.join(vaultPath, "wiki"), ".md");
+    const note = fs.readFileSync(notePath, "utf8");
+    const operation = fs.readFileSync(findFileContaining(path.join(vaultPath, ".pige/operations"), '"kind": "create_page"'), "utf8");
+    const index = fs.readFileSync(path.join(vaultPath, "index.md"), "utf8");
+    const log = fs.readFileSync(path.join(vaultPath, "log.md"), "utf8");
+
+    expect(processResult).toEqual({ processed: 1, completed: 1, failed: 0 });
+    expect(completed?.sourceId).toBe(captureResult.sourceId);
+    const completedRecord = JSON.parse(fs.readFileSync(
+      findFile(path.join(vaultPath, ".pige/jobs"), `${completed?.id}.json`),
+      "utf8"
+    )) as { policyContextId?: string; policyHash?: string; operationIds?: string[] };
+    expect(completedRecord.policyContextId).toMatch(/^policy_[a-f0-9]{16}$/u);
+    expect(completedRecord.policyHash).toMatch(/^sha256:[a-f0-9]{64}$/u);
+    expect(completedRecord.operationIds).toHaveLength(2);
+    expect(note).toContain('type: "note"');
+    expect(note).toContain("Generated knowledge note");
+    expect(operation).toContain('"kind": "create_page"');
+    expect(index).toContain("Generated knowledge note");
+    expect(log).toContain("Created wiki note");
+  });
+
+  it("requeues Agent ingest when SourceRecord changes at the final note commit fence", async () => {
+    const { vaultPath, vault } = makeVault();
+    let modelReturned = false;
+    const modelClient = new StaticModelClient({
+      title: "Stale generated note",
+      summary: { text: "This response must not survive a source revision change.", evidenceRefs: ["ev_01"] },
+      keyPoints: [],
+      tags: [],
+      topics: [],
+      entities: [],
+      warnings: [],
+      confidence: "high"
+    }, () => {
+      modelReturned = true;
+    });
+    const { capture, jobs } = makeServices(
+      vaultPath,
+      vault,
+      new AgentIngestService(makeModelPort(), modelClient)
+    );
+    const captureResult = capture.submitText({
+      text: "The durable source revision must fence the final generated-note commit.",
+      inputKind: "typed_text",
+      userIntent: "capture",
+      locale: "en"
+    });
+    jobs.processQueuedCaptures({ jobIds: [captureResult.jobId] });
+    const queued = jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0];
+    const sourceRecordPath = findFile(
+      path.join(vaultPath, ".pige", "source-records"),
+      `${captureResult.sourceId}.json`
+    );
+    const originalFsync = fs.fsyncSync.bind(fs);
+    let changedAtCommit = false;
+    const fsyncSpy = vi.spyOn(fs, "fsyncSync").mockImplementation((descriptor) => {
+      if (modelReturned && !changedAtCommit) {
+        const current = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as {
+          metadata: Record<string, unknown>;
+        };
+        current.metadata = {
+          ...current.metadata,
+          concurrentRevision: "after_model_before_note_commit"
+        };
+        fs.writeFileSync(sourceRecordPath, `${JSON.stringify(current, null, 2)}\n`, "utf8");
+        changedAtCommit = true;
+      }
+      originalFsync(descriptor);
+    });
+
+    let processResult: Awaited<ReturnType<JobsService["processQueuedAgentIngest"]>>;
+    try {
+      processResult = await jobs.processQueuedAgentIngest({ jobIds: queued ? [queued.id] : [] });
+    } finally {
+      fsyncSpy.mockRestore();
+    }
+
+    const requeued = jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0];
+    const operationBodies = listFiles(path.join(vaultPath, ".pige", "operations"))
+      .map((filePath) => fs.readFileSync(filePath, "utf8"));
+    expect(processResult).toEqual({ processed: 1, completed: 0, failed: 1 });
+    expect(changedAtCommit).toBe(true);
+    expect(modelClient.requests).toHaveLength(1);
+    expect(requeued?.sourceId).toBe(captureResult.sourceId);
+    expect(requeued?.message).toContain("requeued with the latest evidence");
+    expect(listFiles(path.join(vaultPath, "wiki", "generated")).filter((filePath) => filePath.endsWith(".md")))
+      .toEqual([]);
+    expect(operationBodies.some((body) => body.includes('"kind": "model_egress_decision"'))).toBe(true);
+    expect(operationBodies.some((body) => body.includes('"kind": "create_page"'))).toBe(false);
+  });
+
+  it("marks low-confidence Agent ingest jobs as completed with warnings", async () => {
+    const { vaultPath, vault } = makeVault();
+    const agentIngest = new AgentIngestService(
+      makeModelPort(),
+      new StaticModelClient({
+        title: "Review needed note",
+        summary: { text: "The Agent produced a note that should be checked.", evidenceRefs: ["ev_01"] },
+        keyPoints: [{ text: "Review before trusting", evidenceRefs: ["ev_01"] }],
+        tags: [],
+        topics: [],
+        entities: [],
+        warnings: ["The evidence is incomplete."],
+        confidence: "low"
+      })
+    );
+    const { capture, jobs } = makeServices(vaultPath, vault, agentIngest);
+    const captureResult = capture.submitText({
+      text: "A thin source that should not become clean knowledge.",
+      inputKind: "typed_text",
+      userIntent: "capture",
+      locale: "en"
+    });
+
+    jobs.processQueuedCaptures({ jobIds: [captureResult.jobId] });
+    const queued = jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0];
+    const processResult = await jobs.processQueuedAgentIngest({ jobIds: queued ? [queued.id] : [] });
+    const warningJob = jobs.list({ classes: ["agent_ingest"], states: ["completed_with_warnings"] }).jobs[0];
+    const notePath = findFile(path.join(vaultPath, "wiki"), ".md");
+    const note = fs.readFileSync(notePath, "utf8");
+    const log = fs.readFileSync(path.join(vaultPath, "log.md"), "utf8");
+
+    expect(processResult).toEqual({ processed: 1, completed: 1, failed: 0 });
+    expect(warningJob?.sourceId).toBe(captureResult.sourceId);
+    expect(warningJob?.message).toContain("needs review");
+    expect(note).toContain('status: "needs_review"');
+    expect(note).toContain('review_state: "needs_review"');
+    expect(log).toContain("Review is needed before treating it as clean knowledge.");
+    expect(jobs.list({ classes: ["agent_ingest"], states: ["completed"] }).jobs).toHaveLength(0);
+  });
+
+  it("requeues waiting Agent ingest jobs after a default model becomes ready", async () => {
+    const { vaultPath, vault } = makeVault();
+    let configured = false;
+    const agentIngest = new AgentIngestService(
+      makeModelPort(() => (configured ? runtimeConfig : undefined)),
+      new StaticModelClient({
+        title: "Late model note",
+        summary: { text: "The waiting job resumed after model setup.", evidenceRefs: ["ev_01"] },
+        keyPoints: [{ text: "Resumed", evidenceRefs: ["ev_01"] }],
+        tags: [],
+        topics: [],
+        entities: [],
+        warnings: [],
+        confidence: "medium"
+      })
+    );
+    const { capture, jobs } = makeServices(vaultPath, vault, agentIngest);
+    const captureResult = capture.submitText({
+      text: "This capture waits for a model.",
+      inputKind: "typed_text",
+      userIntent: "capture",
+      locale: "en"
+    });
+
+    jobs.processQueuedCaptures({ jobIds: [captureResult.jobId] });
+    expect(jobs.list({ classes: ["agent_ingest"], states: ["waiting_dependency"] }).jobs).toHaveLength(1);
+
+    configured = true;
+    expect(jobs.requeueWaitingAgentIngest()).toEqual({ requeued: 1 });
+    const queued = jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0];
+    await jobs.processQueuedAgentIngest({ jobIds: queued ? [queued.id] : [] });
+
+    expect(jobs.list({ classes: ["agent_ingest"], states: ["completed"] }).jobs[0]?.sourceId).toBe(captureResult.sourceId);
+  });
+
+  it("creates Markdown file source pages without inlining large bodies", async () => {
+    const { vaultPath, vault } = makeVault();
+    const { capture, jobs } = makeServices(vaultPath, vault);
+    const sourcePath = path.join(path.dirname(vaultPath), "long.md");
+    const largeMarkdown = `# Long Markdown\n\n${"long-source-line\n".repeat(500)}`;
+    fs.writeFileSync(sourcePath, largeMarkdown, "utf8");
+    const captureResult = await capture.submitFiles({
+      filePaths: [sourcePath],
+      inputKind: "file_drop",
+      userIntent: "capture",
+      locale: "en"
+    });
+    const sourceId = requireFirst(captureResult.sourceIds);
+    const jobId = requireFirst(captureResult.jobIds);
+
+    jobs.processQueuedCaptures({ jobIds: [jobId] });
+
+    const sourceRecordPath = findFile(path.join(vaultPath, ".pige/source-records"), `${sourceId}.json`);
+    const sourceRecord = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as {
+      knowledgePagePath: string;
+    };
+    const sourcePage = fs.readFileSync(path.join(vaultPath, sourceRecord.knowledgePagePath), "utf8");
+
+    expect(sourceRecord.knowledgePagePath).toMatch(/^sources\/files\/\d{4}\/src_/);
+    expect(sourcePage).toContain("Long Markdown");
+    expect(sourcePage).toContain("complete body is preserved in the managed source copy");
+    expect(sourcePage).not.toContain(largeMarkdown);
+  });
+
+  it("cancels queued jobs without deleting preserved sources", () => {
+    const { vaultPath, vault } = makeVault();
+    const { capture, jobs } = makeServices(vaultPath, vault);
+    const captureResult = capture.submitText({
+      text: "Preserved before cancellation.",
+      inputKind: "typed_text",
+      userIntent: "capture",
+      locale: "en"
+    });
+
+    const cancelResult = jobs.cancel({ jobId: captureResult.jobId });
+    const sourceRecordPath = findFile(path.join(vaultPath, ".pige/source-records"), `${captureResult.sourceId}.json`);
+    const sourceRecord = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as { managedCopy: { path: string } };
+    const managedSourcePath = path.join(vaultPath, sourceRecord.managedCopy.path);
+    const listedJob = jobs.list({ states: ["cancelled"] }).jobs[0];
+
+    expect(cancelResult.status).toBe("cancelled");
+    expect(listedJob?.state).toBe("cancelled");
+    expect(fs.existsSync(sourceRecordPath)).toBe(true);
+    expect(fs.readFileSync(managedSourcePath, "utf8")).toBe("Preserved before cancellation.");
+  });
+
+  it("requeues cancelled jobs and refuses to retry already queued jobs", () => {
+    const { vaultPath, vault } = makeVault();
+    const { capture, jobs } = makeServices(vaultPath, vault);
+    const captureResult = capture.submitText({
+      text: "Retry me later.",
+      inputKind: "typed_text",
+      userIntent: "capture",
+      locale: "en"
+    });
+
+    expect(jobs.retry({ jobId: captureResult.jobId }).status).toBe("not_allowed");
+    expect(jobs.cancel({ jobId: captureResult.jobId }).status).toBe("cancelled");
+
+    const retryResult = jobs.retry({ jobId: captureResult.jobId });
+    const listedJob = jobs.list({ states: ["queued"] }).jobs[0];
+
+    expect(retryResult.status).toBe("requeued");
+    expect(listedJob?.id).toBe(captureResult.jobId);
+    expect(listedJob?.state).toBe("queued");
+  });
+
+  it("records index rebuild as a durable job before rebuilding SQLite search", () => {
+    const { vaultPath, vault } = makeVault();
+    const database = new LocalDatabaseService();
+    const { jobs } = makeServices(vaultPath, vault, undefined, database);
+    writePage(vaultPath, "wiki/index-job.md", {
+      id: "page_20260710_indexjob",
+      title: "Index Job",
+      body: "Durable index rebuild jobs make local search recoverable."
+    });
+
+    const rebuild = jobs.requestIndexRebuild();
+    const listedJob = jobs.list({ classes: ["index_rebuild"], states: ["completed"] }).jobs[0];
+    const search = database.searchPages(vaultPath, { query: "recoverable search" });
+    const log = fs.readFileSync(path.join(vaultPath, "log.md"), "utf8");
+
+    expect(rebuild.jobId).toMatch(/^job_\d{8}_[a-z0-9]{8,}$/);
+    expect(rebuild.state).toBe("completed");
+    expect(rebuild.pageCount).toBe(1);
+    expect(listedJob?.id).toBe(rebuild.jobId);
+    expect(listedJob?.message).toContain("Index rebuilt from Markdown");
+    expect(search?.results[0]?.summary.title).toBe("Index Job");
+    expect(log).toContain("Rebuilt local database index from Markdown");
+  });
+});
+
+function findFile(root: string, suffix: string): string {
+  const found = findFileOptional(root, suffix);
+  if (!found) throw new Error(`Missing file ending with ${suffix}`);
+  return found;
+}
+
+function replaceLogWithDirectory(vaultPath: string): void {
+  const logPath = path.join(vaultPath, "log.md");
+  fs.rmSync(logPath, { force: true });
+  fs.mkdirSync(logPath);
+}
+
+function findFileContaining(root: string, marker: string): string {
+  for (const filePath of listFiles(root)) {
+    if (fs.readFileSync(filePath, "utf8").includes(marker)) return filePath;
+  }
+  throw new Error(`Missing file containing ${marker}`);
+}
+
+function listFiles(root: string): string[] {
+  if (!fs.existsSync(root)) return [];
+  return fs.readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
+    const fullPath = path.join(root, entry.name);
+    return entry.isDirectory() ? listFiles(fullPath) : entry.isFile() ? [fullPath] : [];
+  });
+}
+
+function makePdfParser(): PdfParserService {
+  return new PdfParserService({
+    extract: (filePath) => extractPdfText({
+      requestId: "jobs-test",
+      filePath,
+      limits: { maxBytes: 5 * 1024 * 1024, maxPages: 20 }
+    })
+  });
+}
+
+function makeOfficeParser(): DocumentParserService {
+  return new DocumentParserService([
+    new OfficeParserService({
+      extract: (filePath, sourceKind) => extractOfficeText({
+        requestId: "jobs-office-test",
+        filePath,
+        sourceKind,
+        limits: {
+          maxBytes: OFFICE_PARSER_MAX_BYTES,
+          maxEntries: OFFICE_PARSER_MAX_ENTRIES,
+          maxUncompressedBytes: OFFICE_PARSER_MAX_UNCOMPRESSED_BYTES,
+          maxXmlEntryBytes: OFFICE_PARSER_MAX_XML_ENTRY_BYTES,
+          maxSelectedXmlBytes: OFFICE_PARSER_MAX_SELECTED_XML_BYTES,
+          maxSlides: OFFICE_PARSER_MAX_SLIDES,
+          maxTextCharacters: OFFICE_PARSER_MAX_TEXT_CHARACTERS
+        }
+      })
+    })
+  ]);
+}
+
+function requireValue<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error("Expected value to exist.");
+  return value;
+}
+
+function findFileOptional(root: string, suffix: string): string | undefined {
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    const fullPath = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      const found = findFileOptional(fullPath, suffix);
+      if (found) return found;
+    }
+    if (entry.isFile() && entry.name.endsWith(suffix)) {
+      return fullPath;
+    }
+  }
+  return undefined;
+}
+
+function requireFirst(values: readonly string[]): string {
+  const first = values[0];
+  if (!first) throw new Error("Expected at least one value.");
+  return first;
+}
+
+function writePage(vaultPath: string, relativePath: string, input: {
+  readonly id: string;
+  readonly title: string;
+  readonly body: string;
+  readonly type?: string;
+  readonly language?: string;
+}): void {
+  const filePath = path.join(vaultPath, ...relativePath.split("/"));
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, `---
+id: "${input.id}"
+schema_version: 1
+title: "${input.title}"
+type: "${input.type ?? "note"}"
+created_at: "2026-07-10T12:00:00.000Z"
+updated_at: "2026-07-10T12:00:00.000Z"
+status: "active"
+language: "${input.language ?? "en"}"
+source_ids: []
+---
+
+${input.body}
+`, "utf8");
+}
+
+class StaticModelClient implements AgentIngestModelClient {
+  readonly requests: Parameters<AgentIngestModelClient["generateJson"]>[1][] = [];
+
+  constructor(
+    private readonly output: unknown,
+    private readonly onRequest?: () => void | Promise<void>
+  ) {}
+
+  async generateJson(
+    _config: ModelProviderRuntimeConfig,
+    request: Parameters<AgentIngestModelClient["generateJson"]>[1]
+  ): Promise<{ readonly text: string }> {
+    this.requests.push(request);
+    await this.onRequest?.();
+    return { text: JSON.stringify(this.output) };
+  }
+}
+
+class StaticPdfPageRenderer implements PdfPageRendererPort {
+  callCount = 0;
+  readonly requestedPageSets: number[][] = [];
+  readonly inputPaths: string[] = [];
+
+  constructor(private readonly incomplete = false) {}
+
+  isAvailable(): boolean {
+    return true;
+  }
+
+  async renderPages(filePath: string, pageCandidates: readonly number[]): Promise<PdfPageRendererResult> {
+    this.callCount += 1;
+    this.inputPaths.push(filePath);
+    const requestedPages = [...pageCandidates];
+    this.requestedPageSets.push(requestedPages);
+    const renderedPages = this.incomplete ? [] : requestedPages;
+    const pages = renderedPages.map((page) => {
+      const png = Uint8Array.from(Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+        "base64"
+      ));
+      return {
+        requestedPage: page,
+        renderedPage: page,
+        locator: `page:${page}`,
+        mimeType: "image/png" as const,
+        png,
+        width: 1,
+        height: 1,
+        pngByteSize: png.byteLength
+      };
+    });
+    return {
+      protocolVersion: PDF_PAGE_RENDERER_PROTOCOL_VERSION,
+      rendererId: PDF_PAGE_RENDERER_ID,
+      rendererVersion: PDF_PAGE_RENDERER_VERSION,
+      pageCount: requestedPages.at(-1) ?? 1,
+      requestedPages,
+      renderedPages,
+      pages,
+      totalPngByteSize: pages.reduce((total, page) => total + page.pngByteSize, 0),
+      warnings: this.incomplete ? [{ code: "page_render_failed", page: requestedPages[0] ?? 1 }] : [],
+      truncated: this.incomplete
+    };
+  }
+}
+
+class StaticNativeOcrAdapter implements NativeImageOcrAdapterPort {
+  callCount = 0;
+  readonly inputPaths: string[] = [];
+
+  constructor(
+    readonly result: NativeOcrResult,
+    public available = true
+  ) {}
+
+  isAvailable(): boolean {
+    return this.available;
+  }
+
+  async recognize(inputPath: string): Promise<NativeOcrResult> {
+    this.callCount += 1;
+    this.inputPaths.push(inputPath);
+    return this.result;
+  }
+}
+
+function validNativeOcrResult(overrides: Partial<NativeOcrResult> = {}): NativeOcrResult {
+  return {
+    engine: "macos_vision_document",
+    engineVersion: "revision1",
+    adapterVersion: "1.0.0",
+    text: "Pige OCR recovered local knowledge.",
+    blocks: [{
+      text: "Pige OCR recovered local knowledge.",
+      kind: "line",
+      confidence: 0.94,
+      boundingBox: { x: 0.1, y: 0.2, width: 0.7, height: 0.12 },
+      languageHints: ["en"],
+      isTitle: true
+    }],
+    languageHints: ["en"],
+    confidence: 0.94,
+    warnings: [],
+    image: {
+      typeIdentifier: "public.png",
+      frameCount: 1,
+      sourceWidth: 1600,
+      sourceHeight: 500,
+      decodedWidth: 1600,
+      decodedHeight: 500,
+      downsampled: false
+    },
+    ...overrides
+  };
+}

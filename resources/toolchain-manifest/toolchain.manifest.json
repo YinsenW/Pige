@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "tools": [
+    {
+      "id": "git",
+      "name": "Git",
+      "required": true,
+      "bundledPath": "../../vendor/toolchain/git/bin/git",
+      "repairHint": "Bundled Git is not installed yet."
+    },
+    {
+      "id": "bun",
+      "name": "Bun",
+      "required": true,
+      "bundledPath": "../../vendor/toolchain/bun/bin/bun",
+      "repairHint": "Bundled Bun is not installed yet."
+    },
+    {
+      "id": "uv",
+      "name": "uv",
+      "required": true,
+      "bundledPath": "../../vendor/toolchain/uv/bin/uv",
+      "repairHint": "Bundled uv is not installed yet."
+    },
+    {
+      "id": "pdf-parser",
+      "name": "PDF parser",
+      "required": true,
+      "bundledModule": "pdfjs-dist/package.json",
+      "repairHint": "The bundled PDF.js parser module is missing or damaged."
+    },
+    {
+      "id": "pdf-parser-runtime",
+      "name": "PDF parser runtime",
+      "required": true,
+      "bundledModule": "@napi-rs/canvas/package.json",
+      "repairHint": "The bundled PDF.js native runtime is missing or damaged."
+    },
+    {
+      "id": "office-docx-parser",
+      "name": "DOCX parser",
+      "required": true,
+      "bundledModule": "mammoth/package.json",
+      "repairHint": "The bundled DOCX parser module is missing or damaged."
+    },
+    {
+      "id": "office-openxml-parser",
+      "name": "OpenXML parser",
+      "required": true,
+      "bundledModule": "fast-xml-parser/package.json",
+      "repairHint": "The bundled OpenXML parser module is missing or damaged."
+    },
+    {
+      "id": "office-archive-runtime",
+      "name": "Office archive runtime",
+      "required": true,
+      "bundledModule": "yauzl/package.json",
+      "repairHint": "The bundled Office archive runtime is missing or damaged."
+    },
+    {
+      "id": "web-readability-parser",
+      "name": "Web article parser",
+      "required": true,
+      "bundledModule": "@mozilla/readability/package.json",
+      "repairHint": "The bundled web article parser is missing or damaged."
+    },
+    {
+      "id": "web-dom-runtime",
+      "name": "Web DOM runtime",
+      "required": true,
+      "bundledModule": "jsdom/package.json",
+      "repairHint": "The bundled inert web DOM runtime is missing or damaged."
+    },
+    {
+      "id": "web-fetch-runtime",
+      "name": "Web fetch runtime",
+      "required": true,
+      "bundledModule": "undici/package.json",
+      "repairHint": "The bundled secure web fetch runtime is missing or damaged."
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+export const PDF_PAGE_RENDERER_WORKER_ENTRY_NAME = "workers/pdf-page-renderer-worker";
+export const PDF_PAGE_RENDERER_WORKER_ENTRY_RELATIVE_PATH = `./${PDF_PAGE_RENDERER_WORKER_ENTRY_NAME}.js`;

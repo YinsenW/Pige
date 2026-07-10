@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "id": "macos_vision_ocr",
+  "helperVersion": "1.0.0",
+  "protocolVersion": 1,
+  "platforms": ["macos-arm64", "macos-x64"],
+  "minimumOperatingSystem": "macOS 26.0",
+  "engines": [
+    { "id": "macos_vision_document", "framework": "Vision", "request": "RecognizeDocumentsRequest", "revision": "revision1" },
+    { "id": "macos_vision_text", "framework": "Vision", "request": "RecognizeTextRequest", "revision": "revision3" }
+  ],
+  "sourceKinds": ["image_file"],
+  "capabilities": [
+    "document_text",
+    "line_text",
+    "normalized_bounding_boxes",
+    "confidence",
+    "language_hints",
+    "title_hints",
+    "downsampled_decode",
+    "ocr_artifact_handoff"
+  ],
+  "executionBoundary": "native_helper_process",
+  "requestTransport": "single_bounded_json_on_stdin",
+  "responseTransport": "single_bounded_json_on_stdout",
+  "networkAccess": false,
+  "hiddenDownloads": false,
+  "sourcePath": "apps/desktop/native/macos-vision-ocr/PigeVisionOCR.swift",
+  "buildScript": "scripts/build/macos-vision-ocr-helper.mjs",
+  "smokeScript": "scripts/verify/macos-vision-ocr-helper-smoke.mjs",
+  "adapterSmokeTest": "tests/unit/macos-vision-ocr-adapter-smoke.test.ts",
+  "binaryPathPattern": "artifacts/native/macos/{arch}/pige-vision-ocr",
+  "integrity": "adjacent manifest with exact build-script/source/binary SHA-256 values and binary byte size",
+  "limits": {
+    "maxFileBytes": 52428800,
+    "maxSourcePixels": 40000000,
+    "maxSourceDimension": 20000,
+    "maxDecodedDimension": 4096,
+    "maxFrames": 1,
+    "maxBlocks": 10000,
+    "maxOutputCharacters": 1000000,
+    "maxProtocolOutputBytes": 8388608,
+    "timeoutMs": 60000
+  },
+  "releaseRequirements": [
+    "build each supported architecture with the macOS 26 SDK",
+    "sign the nested helper with the application release identity",
+    "embed the helper and integrity manifest in the application resources",
+    "verify recognition and invalid-image smoke on the packaged application",
+    "notarize and staple the enclosing application artifact"
+  ]
+}

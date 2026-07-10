@@ -1,0 +1,2629 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pige Key Screens Prototype</title>
+  <style>
+    :root {
+      --page: #eef1ef;
+      --app: #fbfbfa;
+      --surface: #ffffff;
+      --surface-soft: #f5f7f4;
+      --surface-cool: #f4f7fa;
+      --line: #e1e5df;
+      --line-strong: #cbd2ca;
+      --text: #20231f;
+      --muted: #6f766d;
+      --faint: #98a094;
+      --green: #477563;
+      --green-soft: #e6f0eb;
+      --blue: #2f6fd0;
+      --blue-soft: #e8f0fb;
+      --coral: #bf634f;
+      --coral-soft: #f6ebe7;
+      --amber: #9a6a22;
+      --amber-soft: #f5eedf;
+      --shadow: 0 18px 45px rgba(31, 36, 30, 0.12);
+      --soft-shadow: 0 8px 22px rgba(31, 36, 30, 0.08);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--page);
+      color: var(--text);
+      letter-spacing: 0;
+    }
+
+    svg {
+      display: block;
+    }
+
+    .icon {
+      width: 18px;
+      height: 18px;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      flex: 0 0 auto;
+    }
+
+    .prototype-board {
+      width: min-content;
+      padding: 44px;
+      margin: 0 auto;
+    }
+
+    .board-header {
+      width: 1120px;
+      margin: 0 0 28px;
+    }
+
+    .board-header h1 {
+      margin: 0 0 10px;
+      font-size: 28px;
+      font-weight: 720;
+      line-height: 1.2;
+    }
+
+    .board-header p {
+      width: 760px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.7;
+    }
+
+    .prototype-screen {
+      margin: 0 0 44px;
+    }
+
+    .screen-caption {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 14px;
+      font-size: 14px;
+      color: var(--muted);
+      font-weight: 560;
+    }
+
+    .screen-index {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--green);
+      border: 1px solid var(--line);
+      font-size: 12px;
+      font-weight: 720;
+    }
+
+    .app-window {
+      position: relative;
+      overflow: hidden;
+      background: var(--app);
+      border: 1px solid rgba(32, 35, 31, 0.08);
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+    }
+
+    .phone-window {
+      width: 390px;
+      height: 720px;
+    }
+
+    .wide-window {
+      width: 1120px;
+      height: 720px;
+    }
+
+    .reader-window {
+      width: 1440px;
+      height: 840px;
+    }
+
+    .modal-window {
+      width: 900px;
+      height: 620px;
+      background: #f7f8f6;
+    }
+
+    .settings-window {
+      width: 1180px;
+      height: 700px;
+    }
+
+    .provider-browser-window {
+      width: 1180px;
+      height: 760px;
+    }
+
+    .traffic {
+      display: flex;
+      gap: 7px;
+      align-items: center;
+    }
+
+    .dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: #d4d9d1;
+    }
+
+    .dot.red { background: #e48a7a; }
+    .dot.yellow { background: #e1bd66; }
+    .dot.green { background: #83bd8e; }
+
+    .topbar {
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      color: var(--muted);
+      position: relative;
+      z-index: 2;
+    }
+
+    .brand {
+      color: var(--text);
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .top-actions,
+    .row-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .icon-button {
+      width: 34px;
+      height: 34px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      color: var(--muted);
+      background: transparent;
+    }
+
+    .icon-button.active {
+      color: var(--green);
+      background: var(--green-soft);
+      border-color: rgba(71, 117, 99, 0.16);
+    }
+
+    .icon-button.strong {
+      color: #ffffff;
+      background: var(--green);
+      border-color: var(--green);
+    }
+
+    .icon-button.subtle {
+      background: var(--surface);
+      border-color: var(--line);
+    }
+
+    .compact-shell {
+      height: calc(100% - 48px);
+      display: flex;
+      flex-direction: column;
+      padding: 34px 26px 22px;
+    }
+
+    .home-shell {
+      position: relative;
+      height: calc(100% - 48px);
+      padding: 28px 24px 22px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .compact-center {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: stretch;
+      gap: 22px;
+      padding-bottom: 24px;
+    }
+
+    .quiet-title {
+      text-align: center;
+      font-size: 22px;
+      line-height: 1.25;
+      font-weight: 720;
+      color: var(--text);
+    }
+
+    .home-empty-center {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      padding: 0 6px 120px;
+      text-align: center;
+    }
+
+    .home-title {
+      font-size: 22px;
+      line-height: 1.25;
+      font-weight: 740;
+      color: var(--text);
+    }
+
+    .home-subtle {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .bottom-composer {
+      position: absolute;
+      left: 24px;
+      right: 24px;
+      bottom: 22px;
+    }
+
+    .composer-card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: 0 16px 42px rgba(31, 36, 30, 0.14);
+      padding: 13px;
+    }
+
+    .composer-text {
+      min-height: 42px;
+      display: flex;
+      align-items: center;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.35;
+      padding: 0 2px 4px;
+    }
+
+    .composer-tools {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .composer-tools .spacer {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .home-status-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding-bottom: 112px;
+    }
+
+    .capture-box {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--soft-shadow);
+      padding: 12px;
+    }
+
+    .capture-line {
+      min-height: 52px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .placeholder {
+      flex: 1;
+      min-width: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.4;
+    }
+
+    .capture-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 0 0 1px;
+      color: var(--faint);
+      font-size: 12px;
+    }
+
+    .bottom-quiet {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      min-height: 36px;
+    }
+
+    .drop-overlay {
+      position: absolute;
+      inset: 16px;
+      border: 1.5px dashed rgba(71, 117, 99, 0.42);
+      border-radius: 12px;
+      background: #f3faf6;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      color: var(--green);
+    }
+
+    .drop-title {
+      font-size: 25px;
+      font-weight: 740;
+      color: var(--text);
+    }
+
+    .file-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      width: 250px;
+    }
+
+    .file-pill {
+      height: 42px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 12px;
+      border: 1px solid rgba(71, 117, 99, 0.18);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.76);
+      color: var(--text);
+      font-size: 13px;
+    }
+
+    .drop-hint {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .activity-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .section-label {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 650;
+      margin-bottom: 2px;
+    }
+
+    .activity-row {
+      display: grid;
+      grid-template-columns: 24px 1fr auto;
+      gap: 10px;
+      align-items: center;
+      padding: 11px 12px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    .status-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 0 4px var(--green-soft);
+      justify-self: center;
+    }
+
+    .status-dot.blue {
+      background: var(--blue);
+      box-shadow: 0 0 0 4px var(--blue-soft);
+    }
+
+    .status-dot.amber {
+      background: var(--amber);
+      box-shadow: 0 0 0 4px var(--amber-soft);
+    }
+
+    .activity-title {
+      font-size: 13px;
+      color: var(--text);
+      font-weight: 620;
+      line-height: 1.25;
+    }
+
+    .activity-sub {
+      margin-top: 3px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.3;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      height: 24px;
+      padding: 0 8px;
+      border-radius: 8px;
+      background: var(--surface-soft);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 620;
+      white-space: nowrap;
+    }
+
+    .badge.green {
+      color: var(--green);
+      background: var(--green-soft);
+    }
+
+    .badge.blue {
+      color: var(--blue);
+      background: var(--blue-soft);
+    }
+
+    .badge.coral {
+      color: var(--coral);
+      background: var(--coral-soft);
+    }
+
+    .workspace {
+      height: 100%;
+      display: grid;
+      grid-template-columns: 264px 1fr;
+      background: var(--app);
+    }
+
+    .sidebar {
+      border-right: 1px solid var(--line);
+      background: #f6f7f5;
+      padding: 14px 12px;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .sidebar-top {
+      height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 4px 8px;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 14px;
+    }
+
+    .nav-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .nav-item {
+      height: 36px;
+      display: grid;
+      grid-template-columns: 22px 1fr auto;
+      align-items: center;
+      gap: 9px;
+      padding: 0 9px;
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .nav-item.active {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--line);
+    }
+
+    .nav-count {
+      color: var(--faint);
+      font-size: 12px;
+    }
+
+    .tree-list {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      margin-top: 7px;
+      min-width: 0;
+    }
+
+    .tree-item {
+      min-height: 30px;
+      display: grid;
+      grid-template-columns: 16px 18px 1fr auto;
+      align-items: center;
+      gap: 7px;
+      border-radius: 8px;
+      padding: 0 8px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 590;
+      min-width: 0;
+    }
+
+    .tree-item.depth-2 {
+      padding-left: 22px;
+    }
+
+    .tree-item.depth-3 {
+      padding-left: 38px;
+    }
+
+    .tree-item.active {
+      color: var(--text);
+      background: var(--surface);
+      border: 1px solid var(--line);
+    }
+
+    .tree-item .label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+
+    .tree-count {
+      color: var(--faint);
+      font-size: 11px;
+      font-weight: 620;
+    }
+
+    .tree-spacer {
+      width: 16px;
+      height: 16px;
+    }
+
+    .sidebar-section {
+      margin-top: 24px;
+      padding: 0 8px;
+      color: var(--faint);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .sidebar-section.compact {
+      margin-top: 14px;
+    }
+
+    .mini-note {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      padding: 9px 10px;
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .mini-note.active {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      color: var(--text);
+    }
+
+    .content {
+      min-width: 0;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .content-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      min-height: 42px;
+    }
+
+    .page-title {
+      font-size: 18px;
+      font-weight: 740;
+      line-height: 1.25;
+    }
+
+    .page-subtitle {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .search-pill {
+      height: 40px;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      min-width: 300px;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .workspace-grid {
+      display: grid;
+      grid-template-columns: 1fr 300px;
+      gap: 14px;
+      min-height: 0;
+      flex: 1;
+    }
+
+    .home-grid {
+      display: grid;
+      grid-template-columns: 1fr 300px;
+      gap: 14px;
+      min-height: 0;
+      flex: 1;
+    }
+
+    .main-feed,
+    .side-panel,
+    .result-card,
+    .setting-card,
+    .dialog-card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    .main-feed {
+      min-width: 0;
+      padding: 14px;
+      overflow: hidden;
+    }
+
+    .home-feed {
+      min-width: 0;
+      padding: 16px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    .home-thread {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-height: 0;
+      padding: 4px 0 14px;
+    }
+
+    .side-panel {
+      padding: 14px;
+      min-width: 0;
+    }
+
+    .capture-wide {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #fff;
+      box-shadow: var(--soft-shadow);
+      margin-bottom: 16px;
+    }
+
+    .feed-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .message {
+      max-width: 620px;
+      padding: 11px 13px;
+      border-radius: 8px;
+      font-size: 13px;
+      line-height: 1.55;
+      border: 1px solid var(--line);
+      background: #fff;
+    }
+
+    .message.user {
+      margin-left: auto;
+      background: #f1f6f3;
+      border-color: rgba(71, 117, 99, 0.18);
+    }
+
+    .message.agent {
+      margin-right: auto;
+    }
+
+    .delta-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .delta-row {
+      display: grid;
+      grid-template-columns: 22px 1fr auto;
+      gap: 9px;
+      align-items: center;
+      padding: 9px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-soft);
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .side-list {
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+      margin-top: 10px;
+    }
+
+    .source-row {
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      align-items: center;
+      gap: 9px;
+      padding: 9px;
+      border-radius: 8px;
+      background: var(--surface-soft);
+      border: 1px solid transparent;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .source-row strong {
+      display: block;
+      color: var(--text);
+      font-size: 12px;
+      margin-bottom: 2px;
+    }
+
+    .ask-layout {
+      display: grid;
+      grid-template-columns: 1fr 306px;
+      gap: 14px;
+      min-height: 0;
+      flex: 1;
+    }
+
+    .ask-main {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .ask-box {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      box-shadow: var(--soft-shadow);
+    }
+
+    .ask-input {
+      height: 46px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    .summary-card {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 15px;
+    }
+
+    .summary-card h3,
+    .side-panel h3,
+    .setting-card h3,
+    .dialog-card h3 {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.35;
+      font-weight: 740;
+    }
+
+    .summary-card p {
+      margin: 9px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.65;
+    }
+
+    .citation {
+      display: inline-flex;
+      align-items: center;
+      height: 20px;
+      padding: 0 6px;
+      border-radius: 6px;
+      background: var(--blue-soft);
+      color: var(--blue);
+      font-size: 11px;
+      font-weight: 700;
+      vertical-align: baseline;
+    }
+
+    .result-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .result-card {
+      padding: 13px;
+    }
+
+    .result-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .result-title {
+      font-size: 14px;
+      font-weight: 720;
+    }
+
+    .result-card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .reader {
+      height: 100%;
+      display: grid;
+      grid-template-columns: 278px minmax(0, 1fr) 340px;
+      background: var(--app);
+    }
+
+    .knowledge-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 306px;
+      gap: 14px;
+      min-height: 0;
+      flex: 1;
+    }
+
+    .knowledge-tree-canvas {
+      position: relative;
+      min-width: 0;
+      overflow: hidden;
+      background: linear-gradient(180deg, #fbfcfb, #f4f7f5);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    .tree-svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .branch-label {
+      position: absolute;
+      min-width: 104px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(71, 117, 99, 0.16);
+      background: rgba(255, 255, 255, 0.94);
+      box-shadow: var(--soft-shadow);
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .branch-label.primary {
+      color: var(--text);
+      background: var(--green-soft);
+    }
+
+    .branch-label .node-title {
+      color: var(--text);
+      font-weight: 740;
+      line-height: 1.25;
+    }
+
+    .branch-label .node-meta {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.25;
+    }
+
+    .knowledge-leaf {
+      position: absolute;
+      border-radius: 999px 999px 999px 8px;
+      border: 1px solid rgba(71, 117, 99, 0.16);
+      background: #d7eade;
+      transform: rotate(-26deg);
+      box-shadow: 0 8px 18px rgba(31, 36, 30, 0.08);
+    }
+
+    .knowledge-leaf.deep {
+      background: #75a98e;
+      border-color: rgba(71, 117, 99, 0.28);
+    }
+
+    .knowledge-leaf.mid {
+      background: #a8ceb8;
+    }
+
+    .knowledge-leaf.light {
+      background: #dfeee5;
+    }
+
+    .knowledge-leaf.blue {
+      background: #d9e7fb;
+      border-color: rgba(47, 111, 208, 0.2);
+    }
+
+    .tree-scale {
+      position: absolute;
+      left: 18px;
+      bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.86);
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .scale-leaves {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .scale-leaf {
+      display: inline-block;
+      width: 10px;
+      height: 14px;
+      border-radius: 999px 999px 999px 3px;
+      background: #dfeee5;
+      transform: rotate(-26deg);
+    }
+
+    .scale-leaf.mid {
+      width: 14px;
+      height: 18px;
+      background: #a8ceb8;
+    }
+
+    .scale-leaf.deep {
+      width: 18px;
+      height: 23px;
+      background: #75a98e;
+    }
+
+    .relation-row {
+      display: grid;
+      grid-template-columns: 24px 1fr auto;
+      align-items: center;
+      gap: 9px;
+      padding: 9px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: var(--surface-soft);
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .reader-main {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--line);
+      background: #fff;
+    }
+
+    .reader-toolbar {
+      height: 54px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 22px;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+    }
+
+    .note-scroll {
+      flex: 1;
+      overflow: hidden;
+      padding: 34px 42px 48px;
+    }
+
+    .note {
+      max-width: 760px;
+      margin: 0 auto;
+    }
+
+    .note h1 {
+      margin: 0 0 12px;
+      font-size: 34px;
+      line-height: 1.15;
+      font-weight: 760;
+    }
+
+    .note-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 26px;
+    }
+
+    .note h2 {
+      margin: 28px 0 10px;
+      font-size: 18px;
+      line-height: 1.35;
+    }
+
+    .note p {
+      margin: 0 0 15px;
+      color: #343832;
+      font-size: 15px;
+      line-height: 1.85;
+    }
+
+    .note ul {
+      margin: 0 0 18px 20px;
+      padding: 0;
+      color: #343832;
+      font-size: 15px;
+      line-height: 1.8;
+    }
+
+    .blockquote {
+      margin: 20px 0;
+      padding: 14px 16px;
+      border-left: 3px solid var(--green);
+      background: #f4f8f5;
+      border-radius: 0 8px 8px 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    .agent-panel {
+      background: #f7f8f6;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .agent-header {
+      height: 54px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .agent-body {
+      flex: 1;
+      padding: 14px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .agent-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 12px;
+    }
+
+    .agent-card p {
+      margin: 8px 0 0;
+      font-size: 12px;
+      line-height: 1.55;
+      color: var(--muted);
+    }
+
+    .agent-chat {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: auto;
+    }
+
+    .agent-bubble {
+      padding: 10px 11px;
+      border-radius: 8px;
+      font-size: 12px;
+      line-height: 1.55;
+      background: #fff;
+      border: 1px solid var(--line);
+      color: var(--muted);
+    }
+
+    .agent-bubble.user {
+      background: var(--green-soft);
+      border-color: rgba(71, 117, 99, 0.18);
+      color: var(--text);
+    }
+
+    .agent-input {
+      height: 42px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 9px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .selection-highlight {
+      background: #fff1c9;
+      color: #28251e;
+      border-radius: 4px;
+      padding: 1px 2px;
+    }
+
+    .selection-menu {
+      position: absolute;
+      left: 532px;
+      top: 410px;
+      height: 42px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px;
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 16px 36px rgba(31, 36, 30, 0.18);
+      z-index: 5;
+    }
+
+    .selection-action {
+      height: 32px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 9px;
+      border-radius: 7px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 620;
+    }
+
+    .selection-action.primary {
+      background: var(--green-soft);
+      color: var(--green);
+    }
+
+    .modal-stage {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background:
+        linear-gradient(rgba(247, 248, 246, 0.82), rgba(247, 248, 246, 0.82)),
+        #f7f8f6;
+    }
+
+    .dialog-card {
+      width: 520px;
+      padding: 20px;
+      box-shadow: var(--shadow);
+    }
+
+    .dialog-head {
+      display: grid;
+      grid-template-columns: 38px 1fr;
+      gap: 12px;
+      align-items: start;
+      margin-bottom: 16px;
+    }
+
+    .dialog-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--green);
+      background: var(--green-soft);
+    }
+
+    .dialog-card p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .scope-box {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-soft);
+      margin: 14px 0;
+    }
+
+    .scope-row {
+      display: grid;
+      grid-template-columns: 86px 1fr;
+      gap: 12px;
+      align-items: center;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .scope-row strong {
+      color: var(--text);
+      font-weight: 650;
+    }
+
+    .button-row {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 18px;
+    }
+
+    .text-button {
+      height: 36px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0 13px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+
+    .text-button.primary {
+      border-color: var(--green);
+      background: var(--green);
+      color: #fff;
+    }
+
+    .text-button.danger {
+      color: var(--coral);
+      background: var(--coral-soft);
+      border-color: rgba(191, 99, 79, 0.2);
+    }
+
+    .settings-layout {
+      height: 100%;
+      display: grid;
+      grid-template-columns: 244px 1fr;
+      background: var(--app);
+    }
+
+    .settings-main {
+      padding: 24px;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .settings-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-top: 18px;
+    }
+
+    .setting-card {
+      padding: 15px;
+      min-height: 168px;
+    }
+
+    .setting-card p {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+      margin: 6px 0 12px;
+    }
+
+    .radio-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .radio-row {
+      display: grid;
+      grid-template-columns: 18px 1fr auto;
+      gap: 9px;
+      align-items: center;
+      padding: 9px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      background: var(--surface-soft);
+    }
+
+    .radio-row.active {
+      border-color: rgba(71, 117, 99, 0.32);
+      background: var(--green-soft);
+      color: var(--text);
+    }
+
+    .radio-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 1.5px solid var(--line-strong);
+      background: #fff;
+    }
+
+    .radio-row.active .radio-dot {
+      border: 4px solid var(--green);
+    }
+
+    .provider-row {
+      display: grid;
+      grid-template-columns: 34px 1fr auto;
+      gap: 10px;
+      align-items: center;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-soft);
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .provider-mark {
+      width: 34px;
+      height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      background: #fff;
+      border: 1px solid var(--line);
+      color: var(--blue);
+    }
+
+    .settings-underlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(247, 248, 246, 0.72);
+    }
+
+    .provider-dialog {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 760px;
+      height: 760px;
+      background: var(--surface);
+      border: 1px solid rgba(32, 35, 31, 0.12);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      overflow: hidden;
+    }
+
+    .provider-dialog-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 20px 22px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .provider-dialog-title {
+      font-size: 18px;
+      line-height: 1.25;
+      font-weight: 760;
+    }
+
+    .provider-dialog-subtitle {
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .provider-simple-body {
+      display: grid;
+      grid-template-columns: 210px 1fr;
+      gap: 16px;
+      min-height: 0;
+      padding: 18px 22px;
+      background: #fbfbfa;
+    }
+
+    .provider-type-list,
+    .provider-setup {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+
+    .provider-type-list {
+      padding: 8px;
+    }
+
+    .provider-type-row {
+      height: 44px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 10px;
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .provider-type-row.active {
+      color: var(--text);
+      background: var(--green-soft);
+      border: 1px solid var(--line);
+    }
+
+    .provider-type-dot {
+      width: 24px;
+      height: 24px;
+      border-radius: 7px;
+      background: var(--surface-soft);
+      color: var(--green);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 11px;
+    }
+
+    .provider-setup {
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .provider-setup h3 {
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.35;
+    }
+
+    .provider-setup p {
+      margin: -4px 0 2px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .provider-form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .provider-form-grid .wide {
+      grid-column: 1 / -1;
+    }
+
+    .model-list-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-soft);
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .model-list-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .model-list-title {
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 720;
+      line-height: 1.3;
+    }
+
+    .model-list-hint {
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .model-row {
+      min-height: 30px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--text);
+      font-size: 12px;
+    }
+
+    .model-row.muted {
+      color: var(--muted);
+      background: transparent;
+      border-style: dashed;
+    }
+
+    .model-slot-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .model-slot-row {
+      min-height: 28px;
+      display: grid;
+      grid-template-columns: 72px 1fr;
+      gap: 10px;
+      align-items: center;
+      padding: 5px 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-soft);
+      font-size: 12px;
+    }
+
+    .model-slot-label {
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    .field-label {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .field-box {
+      height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-soft);
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      color: var(--text);
+      font-size: 12px;
+    }
+
+    .provider-dialog-footer {
+      height: 58px;
+      padding: 0 22px;
+      border-top: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--surface);
+    }
+
+    .provider-footnote {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .single {
+      min-height: 100vh;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .single .board-header,
+    .single .screen-caption {
+      display: none;
+    }
+
+    .single .prototype-screen {
+      display: none;
+      margin: 0;
+    }
+
+    .single .prototype-screen.selected {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute">
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"/><path d="M19 11a7 7 0 0 1-14 0"/><path d="M12 18v3"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="m5 12 14-7-7 14-2-5-5-2Z"/><path d="m10 14 9-9"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="m15 4 5 5-4 1-4 7-2-2-5 5 5-5-2-2 7-4 1-5Z"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19 12a7.7 7.7 0 0 0-.1-1.2l2-1.5-2-3.4-2.4 1a8 8 0 0 0-2-1.2L14.2 3h-4.4l-.4 2.7a8 8 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.5A7.7 7.7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.4-1a8 8 0 0 0 2 1.2l.4 2.7h4.4l.4-2.7a8 8 0 0 0 2-1.2l2.4 1 2-3.4-2-1.5c.1-.4.1-.8.1-1.2Z"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><path d="m21 21-4.3-4.3"/><circle cx="11" cy="11" r="7"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/><path d="M14 3v6h6"/></symbol>
+    <symbol id="i-note" viewBox="0 0 24 24"><path d="M5 4h14v16H5Z"/><path d="M8 8h8M8 12h8M8 16h5"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 13 4 4L19 7"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 5 3 8.5 7 10 4-1.5 7-5 7-10V6Z"/><path d="m9 12 2 2 4-5"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h14v17H6a2 2 0 0 0-2 2Z"/><path d="M4 5v17"/></symbol>
+    <symbol id="i-heartbeat" viewBox="0 0 24 24"><path d="M3 12h4l2-5 4 10 2-5h6"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l2 2M14 9l2 2"/></symbol>
+    <symbol id="i-puzzle" viewBox="0 0 24 24"><path d="M8 3h4v4a2 2 0 1 0 4 0V3h5v6h-4a2 2 0 1 0 0 4h4v8h-7v-4a2 2 0 1 0-4 0v4H3v-7h4a2 2 0 1 0 0-4H3V3h5Z"/></symbol>
+    <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M17.5 18H8a5 5 0 1 1 1.1-9.9A6 6 0 0 1 20 11.5 3.5 3.5 0 0 1 17.5 18Z"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="m4 11 8-7 8 7"/><path d="M6 10v10h12V10"/><path d="M10 20v-6h4v6"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6h7l2 2h9v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></symbol>
+  </svg>
+
+  <main class="prototype-board" id="board">
+    <header class="board-header">
+      <h1>Pige 关键页面原型</h1>
+      <p>这版重点确认产品心智和核心交互：首页底部统一对话框、全窗口拖拽、知识库召回回答、阅读态右侧 Agent、划词动作、权限与设置。它是产品交互原型，不是最终 UI 效果图。</p>
+    </header>
+
+    <section class="prototype-screen" id="screen-compact" data-screen="compact">
+      <div class="screen-caption"><span class="screen-index">01</span>默认首页：底部统一对话框</div>
+      <div class="app-window phone-window">
+        <div class="topbar">
+          <div class="brand">Pige</div>
+          <div class="top-actions">
+            <div class="icon-button active"><svg class="icon"><use href="#i-pin"/></svg></div>
+            <div class="icon-button"><svg class="icon"><use href="#i-menu"/></svg></div>
+          </div>
+        </div>
+        <div class="home-shell">
+          <div class="home-empty-center">
+            <div class="home-title">把东西扔进来，或直接问</div>
+            <div class="home-subtle">Pige 会先检索你的知识库，再整理回答。</div>
+          </div>
+          <div class="bottom-composer">
+            <div class="composer-card">
+              <div class="composer-text">发消息、粘贴链接或拖入文件</div>
+              <div class="composer-tools">
+                <span class="spacer"></span>
+                <div class="icon-button"><svg class="icon"><use href="#i-plus"/></svg></div>
+                <div class="icon-button"><svg class="icon"><use href="#i-mic"/></svg></div>
+                <div class="icon-button strong"><svg class="icon"><use href="#i-send"/></svg></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="prototype-screen" id="screen-drag" data-screen="drag">
+      <div class="screen-caption"><span class="screen-index">02</span>全窗口拖拽热区</div>
+      <div class="app-window phone-window">
+        <div class="topbar">
+          <div class="brand">Pige</div>
+          <div class="top-actions">
+            <div class="icon-button active"><svg class="icon"><use href="#i-pin"/></svg></div>
+            <div class="icon-button"><svg class="icon"><use href="#i-menu"/></svg></div>
+          </div>
+        </div>
+        <div class="drop-overlay">
+          <div class="drop-title">松手保存</div>
+          <div class="file-stack">
+            <div class="file-pill"><svg class="icon"><use href="#i-file"/></svg> 产品调研.pdf</div>
+            <div class="file-pill"><svg class="icon"><use href="#i-file"/></svg> 截图 2026-07-09.png</div>
+            <div class="file-pill"><svg class="icon"><use href="#i-link"/></svg> https://example.com/article</div>
+          </div>
+          <div class="drop-hint">Pige 会保留原始材料并整理成笔记</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="prototype-screen" id="screen-activity" data-screen="activity">
+      <div class="screen-caption"><span class="screen-index">03</span>录入后的轻量活动流</div>
+      <div class="app-window phone-window">
+        <div class="topbar">
+          <div class="brand">Pige</div>
+          <div class="top-actions">
+            <div class="icon-button active"><svg class="icon"><use href="#i-pin"/></svg></div>
+            <div class="icon-button"><svg class="icon"><use href="#i-menu"/></svg></div>
+          </div>
+        </div>
+        <div class="home-shell">
+          <div class="section-label">最近</div>
+          <div class="activity-list home-status-stack">
+            <div class="activity-row">
+              <div class="status-dot blue"></div>
+              <div>
+                <div class="activity-title">正在解析 产品调研.pdf</div>
+                <div class="activity-sub">文本已提取，图片 OCR 排队中</div>
+              </div>
+              <span class="badge blue">72%</span>
+            </div>
+            <div class="activity-row">
+              <div class="status-dot"></div>
+              <div>
+                <div class="activity-title">已保存网页快照</div>
+                <div class="activity-sub">创建 1 篇来源笔记</div>
+              </div>
+              <span class="badge green">完成</span>
+            </div>
+            <div class="activity-row">
+              <div class="status-dot amber"></div>
+              <div>
+                <div class="activity-title">3 个链接建议等待确认</div>
+                <div class="activity-sub">涉及 RAG、OCR、权限设计</div>
+              </div>
+              <span class="badge">确认</span>
+            </div>
+          </div>
+          <div class="bottom-composer">
+            <div class="composer-card">
+              <div class="composer-text">继续对话、提问或保存材料</div>
+              <div class="composer-tools">
+                <span class="spacer"></span>
+                <div class="icon-button"><svg class="icon"><use href="#i-plus"/></svg></div>
+                <div class="icon-button"><svg class="icon"><use href="#i-mic"/></svg></div>
+                <div class="icon-button strong"><svg class="icon"><use href="#i-send"/></svg></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="prototype-screen" id="screen-workspace" data-screen="workspace">
+      <div class="screen-caption"><span class="screen-index">04</span>展开侧边栏后的首页工作区</div>
+      <div class="app-window wide-window">
+        <div class="workspace">
+          <aside class="sidebar">
+            <div class="sidebar-top">
+              <div class="brand">Pige</div>
+              <div class="icon-button"><svg class="icon"><use href="#i-menu"/></svg></div>
+            </div>
+            <div class="nav-list">
+              <div class="nav-item active"><svg class="icon"><use href="#i-home"/></svg><span>首页</span></div>
+              <div class="nav-item"><svg class="icon"><use href="#i-book"/></svg><span>笔记库</span></div>
+              <div class="nav-item"><svg class="icon"><use href="#i-heartbeat"/></svg><span>知识树</span></div>
+              <div class="nav-item"><svg class="icon"><use href="#i-settings"/></svg><span>设置</span></div>
+            </div>
+            <div class="sidebar-section compact">笔记库</div>
+            <div class="tree-list">
+              <div class="tree-item"><svg class="icon"><use href="#i-chevron"/></svg><svg class="icon"><use href="#i-folder"/></svg><span class="label">知识库</span><span class="tree-count">42</span></div>
+              <div class="tree-item depth-2"><svg class="icon"><use href="#i-chevron"/></svg><svg class="icon"><use href="#i-folder"/></svg><span class="label">技术</span><span class="tree-count">16</span></div>
+              <div class="tree-item depth-3 active"><span class="tree-spacer"></span><svg class="icon"><use href="#i-note"/></svg><span class="label">本地 RAG 设计</span></div>
+              <div class="tree-item depth-3"><span class="tree-spacer"></span><svg class="icon"><use href="#i-note"/></svg><span class="label">Agent Memory</span></div>
+              <div class="tree-item depth-3"><span class="tree-spacer"></span><svg class="icon"><use href="#i-note"/></svg><span class="label">OCR 管线</span></div>
+              <div class="tree-item depth-2"><svg class="icon"><use href="#i-chevron"/></svg><svg class="icon"><use href="#i-folder"/></svg><span class="label">创作</span><span class="tree-count">9</span></div>
+              <div class="tree-item depth-3"><span class="tree-spacer"></span><svg class="icon"><use href="#i-note"/></svg><span class="label">科幻小说</span></div>
+              <div class="tree-item depth-3"><span class="tree-spacer"></span><svg class="icon"><use href="#i-note"/></svg><span class="label">视频脚本</span></div>
+              <div class="tree-item"><span class="tree-spacer"></span><svg class="icon"><use href="#i-folder"/></svg><span class="label">工作</span><span class="tree-count">7</span></div>
+              <div class="tree-item"><span class="tree-spacer"></span><svg class="icon"><use href="#i-folder"/></svg><span class="label">索引</span><span class="tree-count">5</span></div>
+            </div>
+            <div class="sidebar-section compact">知识树</div>
+            <div class="mini-note"><strong>本地优先</strong><span>12 节点 · 28 连接</span></div>
+            <div class="mini-note"><strong>Agent 工作流</strong><span>9 节点 · 17 连接</span></div>
+          </aside>
+          <section class="content">
+            <div class="content-topbar">
+              <div>
+                <div class="page-title">首页</div>
+                <div class="page-subtitle">收集、提问、检索，都从同一个对话框开始</div>
+              </div>
+              <div class="search-pill"><svg class="icon"><use href="#i-search"/></svg> 全库搜索</div>
+            </div>
+            <div class="home-grid">
+              <div class="home-feed">
+                <div class="feed-group">
+                  <div class="message user">把这篇关于本地 RAG 的文章保存一下，顺便和我们之前的设计连起来。</div>
+                  <div class="message agent">
+                    已保存原文快照，并生成了来源笔记。发现 4 个可连接主题。
+                    <div class="delta-list">
+                      <div class="delta-row"><svg class="icon"><use href="#i-note"/></svg><span>新建：本地 RAG 设计</span><span class="badge green">已写入</span></div>
+                      <div class="delta-row"><svg class="icon"><use href="#i-link"/></svg><span>建议链接：Agent Memory、OCR、权限模式</span><span class="badge">待确认</span></div>
+                    </div>
+                  </div>
+                  <div class="message user">本地 RAG 这一块我们最后怎么定的？</div>
+                  <div class="message agent">
+                    我先检索了知识库，最相关的是「本地 RAG 设计」「性能与可靠性预算」「模型与外部依赖」。结论是：词法检索先可用，语义检索由本地 Qwen3 Embedding 增强，用户不需要配置嵌入服务。
+                  </div>
+                </div>
+                <div class="bottom-composer" style="position: static; margin-top: auto;">
+                  <div class="composer-card">
+                    <div class="composer-text">发消息、粘贴链接或拖入文件</div>
+                    <div class="composer-tools">
+                      <span class="spacer"></span>
+                      <div class="icon-button"><svg class="icon"><use href="#i-plus"/></svg></div>
+                      <div class="icon-button"><svg class="icon"><use href="#i-mic"/></svg></div>
+                      <div class="icon-button strong"><svg class="icon"><use href="#i-send"/></svg></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <aside class="side-panel">
+                <h3>状态</h3>
+                <div class="side-list">
+                  <div class="source-row"><svg class="icon"><use href="#i-file"/></svg><div><strong>产品调研.pdf</strong>正在 OCR</div></div>
+                  <div class="source-row"><svg class="icon"><use href="#i-link"/></svg><div><strong>AI SDK Providers</strong>等待整理</div></div>
+                </div>
+                <div style="height: 18px;"></div>
+                <h3>待确认</h3>
+                <div class="side-list">
+                  <div class="source-row"><svg class="icon"><use href="#i-check"/></svg><div><strong>1 个链接建议</strong>确认后写入知识树</div></div>
+                  <div class="source-row"><svg class="icon"><use href="#i-note"/></svg><div><strong>3 篇笔记变化</strong>1 新建，2 更新</div></div>
+                </div>
+              </aside>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section class="prototype-screen" id="screen-ask" data-screen="ask">
+      <div class="screen-caption"><span class="screen-index">05</span>首页对话：知识库召回回答</div>
+      <div class="app-window wide-window">
+        <div class="workspace">
+          <aside class="sidebar">
+            <div class="sidebar-top">
+              <div class="brand">Pige</div>
+              <div class="icon-button"><svg class="icon"><use href="#i-menu"/></svg></div>
+            </div>
+            <div class="nav-list">
+              <div class="nav-item active"><svg class="icon"><use href="#i-home"/></svg><span>首页</span></div>
+              <div class="nav-item"><svg class="icon"><use href="#i-book"/></svg><span>笔记库</span></div>
+              <div class="nav-item"><svg class="icon"><use href="#i-heartbeat"/></svg><span>知识树</span></div>
+              <div class="nav-item"><svg class="icon"><use href="#i-settings"/></svg><span>设置</span></div>
+            </div>
+            <div class="sidebar-section compact">笔记库</div>
+            <div class="tree-list">
+              <div class="tree-item"><svg class="icon"><use href="#i-chevron"/></svg><svg class="icon"><use href="#i-folder"/></svg><span class="label">知识库</span><span class="tree-count">42</span></div>
+              <div class="tree-item depth-2"><svg class="icon"><use href="#i-chevron"/></svg><svg class="icon"><use href="#i-folder"/></svg><span class="label">技术</span><span class="tree-count">16</span></div>
+              <div class="tree-item depth-3 active"><span class="tree-spacer"></span><svg class="icon"><use href="#i-note"/></svg><span class="label">本地 RAG 设计</span></div>
+              <div class="tree-item depth-3"><span class="tree-spacer"></span><svg class="icon"><use href="#i-note"/></svg><span class="label">性能与可靠性</span></div>
+              <div class="tree-item depth-3"><span class="tree-spacer"></span><svg class="icon"><use href="#i-note"/></svg><span class="label">模型与外部依赖</span></div>
+              <div class="tree-item depth-2"><span class="tree-spacer"></span><svg class="icon"><use href="#i-folder"/></svg><span class="label">思考</span><span class="tree-count">8</span></div>
+              <div class="tree-item depth-2"><span class="tree-spacer"></span><svg class="icon"><use href="#i-folder"/></svg><span class="label">工作</span><span class="tree-count">7</span></div>
+            </div>
+            <div class="sidebar-section compact">知识树</div>
+            <div class="mini-note"><strong>本地 RAG</strong><span>Embedding、索引、性能</span></div>
+          </aside>
+          <section class="content">
+            <div class="content-topbar">
+              <div>
+                <div class="page-title">首页</div>
+                <div class="page-subtitle">对话返回以知识库召回为主</div>
+              </div>
+            </div>
+            <div class="ask-layout">
+              <div class="ask-main">
+                <div class="message user">本地 RAG 这一块我们最后怎么定的？</div>
+                <div class="summary-card">
+                  <h3>摘要</h3>
+                  <p>v0.1 默认使用本地 RAG，不要求用户配置嵌入模型。词法搜索必须先可用，语义检索在下载 Qwen3 Embedding 0.6B 后增强召回。RAG 是 Agent 的基础能力，不单独暴露成复杂模型设置。<span class="citation">RAG-01</span> <span class="citation">PRD-14</span></p>
+                </div>
+                <div class="result-list">
+                  <div class="result-card">
+                    <div class="result-top">
+                      <div class="result-title">本地 RAG 设计</div>
+                      <span class="badge green">94% 匹配</span>
+                    </div>
+                    <p>默认本地嵌入、本地索引、模型在线下载；无模型时先返回词法与元数据结果。</p>
+                  </div>
+                  <div class="result-card">
+                    <div class="result-top">
+                      <div class="result-title">性能与可靠性预算</div>
+                      <span class="badge blue">82% 匹配</span>
+                    </div>
+                    <p>首页对话的首批词法结果目标低于 2 秒；向量检索可以后台补全。</p>
+                  </div>
+                  <div class="result-card">
+                    <div class="result-top">
+                      <div class="result-title">模型与外部依赖</div>
+                      <span class="badge">76% 匹配</span>
+                    </div>
+                    <p>嵌入模型不打包进安装包；由用户显式下载，记录版本和校验信息。</p>
+                  </div>
+                </div>
+                <div class="bottom-composer" style="position: static; margin-top: auto;">
+                  <div class="composer-card">
+                    <div class="composer-text">继续追问、保存回答或拖入新材料</div>
+                    <div class="composer-tools">
+                      <span class="spacer"></span>
+                      <div class="icon-button"><svg class="icon"><use href="#i-plus"/></svg></div>
+                      <div class="icon-button"><svg class="icon"><use href="#i-mic"/></svg></div>
+                      <div class="icon-button strong"><svg class="icon"><use href="#i-send"/></svg></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <aside class="side-panel">
+                <h3>筛选</h3>
+                <div class="side-list">
+                  <div class="source-row"><svg class="icon"><use href="#i-note"/></svg><div><strong>笔记</strong>18 个结果</div></div>
+                  <div class="source-row"><svg class="icon"><use href="#i-file"/></svg><div><strong>来源</strong>7 个结果</div></div>
+                  <div class="source-row"><svg class="icon"><use href="#i-link"/></svg><div><strong>链接</strong>5 个结果</div></div>
+                </div>
+                <div style="height: 18px;"></div>
+                <h3>相关主题</h3>
+                <div class="side-list">
+                  <span class="badge green">Embedding</span>
+                  <span class="badge blue">知识取回</span>
+                  <span class="badge">性能预算</span>
+                  <span class="badge">本地优先</span>
+                </div>
+              </aside>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section class="prototype-screen" id="screen-reader" data-screen="reader">
+      <div class="screen-caption"><span class="screen-index">06</span>全屏阅读：笔记正文 + 右侧 Agent</div>
+      <div class="app-window reader-window">
+        <div class="reader">
+          <aside class="sidebar">
+            <div class="sidebar-top">
+              <div class="brand">Pige</div>
+              <div class="icon-button"><svg class="icon"><use href="#i-menu"/></svg></div>
+            </div>
+            <div class="nav-list">
+              <div class="nav-item active"><svg class="icon"><use href="#i-book"/></svg><span>笔记库</span></div>
+              <div class="nav-item"><svg class="icon"><use href="#i-home"/></svg><span>首页</span></div>
+              <div class="nav-item"><svg class="icon"><use href="#i-heartbeat"/></svg><span>知识树</span></div>
+            </div>
+            <div class="sidebar-section compact">笔记库</div>
+            <div class="tree-list">
+              <div class="tree-item"><svg class="icon"><use href="#i-chevron"/></svg><svg class="icon"><use href="#i-folder"/></svg><span class="label">知识库</span><span class="tree-count">42</span></div>
+              <div class="tree-item depth-2"><svg class="icon"><use href="#i-chevron"/></svg><svg class="icon"><use href="#i-folder"/></svg><span class="label">技术</span><span class="tree-count">16</span></div>
+              <div class="tree-item depth-3 active"><span class="tree-spacer"></span><svg class="icon"><use href="#i-note"/></svg><span class="label">本地 RAG 设计</span></div>
+              <div class="tree-item depth-3"><span class="tree-spacer"></span><svg class="icon"><use href="#i-note"/></svg><span class="label">Agent Memory</span></div>
+              <div class="tree-item depth-3"><span class="tree-spacer"></span><svg class="icon"><use href="#i-note"/></svg><span class="label">权限模式</span></div>
+              <div class="tree-item depth-3"><span class="tree-spacer"></span><svg class="icon"><use href="#i-note"/></svg><span class="label">OCR 管线</span></div>
+              <div class="tree-item depth-2"><span class="tree-spacer"></span><svg class="icon"><use href="#i-folder"/></svg><span class="label">产品设计</span><span class="tree-count">11</span></div>
+            </div>
+            <div class="sidebar-section compact">知识树</div>
+            <div class="mini-note"><strong>本地 RAG</strong><span>当前主题图谱</span></div>
+          </aside>
+          <main class="reader-main">
+            <div class="reader-toolbar">
+              <div class="row-actions">
+                <div class="icon-button subtle"><svg class="icon"><use href="#i-search"/></svg></div>
+                <span style="font-size:13px;">本地 RAG 设计</span>
+              </div>
+              <div class="row-actions">
+                <span class="badge green">已保存</span>
+                <div class="icon-button"><svg class="icon"><use href="#i-settings"/></svg></div>
+              </div>
+            </div>
+            <div class="note-scroll">
+              <article class="note">
+                <h1>本地 RAG 设计</h1>
+                <div class="note-meta">
+                  <span class="badge green">RAG</span>
+                  <span class="badge blue">本地优先</span>
+                  <span class="badge">Agent 基础能力</span>
+                </div>
+                <p>Pige 的知识取回不应该只表现为一个聊天回答。更合理的形态是增强搜索：先找到相关笔记和来源，再基于这些材料生成可追溯摘要。</p>
+                <h2>v0.1 决策</h2>
+                <ul>
+                  <li>词法与元数据检索必须在未下载模型时可用。</li>
+                  <li>语义检索使用本地嵌入模型，模型由用户显式下载。</li>
+                  <li>RAG 结果服务于首页对话、Note Agent 和整理工作流。</li>
+                </ul>
+                <div class="blockquote">默认体验应该是用户只配置在线语言模型 API；嵌入和检索能力由 Pige 本地维护。</div>
+                <h2>相关链接</h2>
+                <p>这篇笔记连接到 <span class="citation">性能与可靠性预算</span>、<span class="citation">模型与外部依赖</span>、<span class="citation">权限模式</span>。</p>
+              </article>
+            </div>
+          </main>
+          <aside class="agent-panel">
+            <div class="agent-header">
+              <strong style="font-size:14px;">Note Agent</strong>
+              <span class="badge">当前笔记</span>
+            </div>
+            <div class="agent-body">
+              <div class="agent-card">
+                <h3>可继续处理</h3>
+                <p>发现 2 处可以补充来源，1 个概念可能与 Agent Memory 重复。</p>
+              </div>
+              <div class="agent-card">
+                <h3>相关笔记</h3>
+                <div class="side-list">
+                  <div class="source-row"><svg class="icon"><use href="#i-note"/></svg><div><strong>性能与可靠性</strong>搜索延迟预算</div></div>
+                  <div class="source-row"><svg class="icon"><use href="#i-note"/></svg><div><strong>Agent Memory</strong>上下文准备</div></div>
+                </div>
+              </div>
+              <div class="agent-chat">
+                <div class="agent-bubble user">把这篇压缩成 5 条工程原则。</div>
+                <div class="agent-bubble">可以。我会只基于当前笔记和已链接来源整理。</div>
+                <div class="agent-input">
+                  <span style="flex:1;">询问或编辑当前笔记</span>
+                  <svg class="icon"><use href="#i-send"/></svg>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <section class="prototype-screen" id="screen-selection" data-screen="selection">
+      <div class="screen-caption"><span class="screen-index">07</span>划词动作：像 Notion 一样就地处理</div>
+      <div class="app-window reader-window">
+        <div class="reader">
+          <aside class="sidebar">
+            <div class="sidebar-top"><div class="brand">Pige</div><div class="icon-button"><svg class="icon"><use href="#i-menu"/></svg></div></div>
+            <div class="nav-list">
+              <div class="nav-item active"><svg class="icon"><use href="#i-book"/></svg><span>笔记库</span></div>
+              <div class="nav-item"><svg class="icon"><use href="#i-home"/></svg><span>首页</span></div>
+              <div class="nav-item"><svg class="icon"><use href="#i-heartbeat"/></svg><span>知识树</span></div>
+            </div>
+            <div class="sidebar-section compact">笔记库</div>
+            <div class="tree-list">
+              <div class="tree-item"><svg class="icon"><use href="#i-chevron"/></svg><svg class="icon"><use href="#i-folder"/></svg><span class="label">知识库</span><span class="tree-count">42</span></div>
+              <div class="tree-item depth-2"><svg class="icon"><use href="#i-chevron"/></svg><svg class="icon"><use href="#i-folder"/></svg><span class="label">技术</span><span class="tree-count">16</span></div>
+              <div class="tree-item depth-3"><span class="tree-spacer"></span><svg class="icon"><use href="#i-note"/></svg><span class="label">本地 RAG 设计</span></div>
+              <div class="tree-item depth-3 active"><span class="tree-spacer"></span><svg class="icon"><use href="#i-note"/></svg><span class="label">权限模式</span></div>
+              <div class="tree-item depth-2"><span class="tree-spacer"></span><svg class="icon"><use href="#i-folder"/></svg><span class="label">工作</span><span class="tree-count">7</span></div>
+            </div>
+          </aside>
+          <main class="reader-main">
+            <div class="reader-toolbar">
+              <span style="font-size:13px;color:var(--muted);">权限模式</span>
+              <span class="badge green">已保存</span>
+            </div>
+            <div class="note-scroll">
+              <article class="note">
+                <h1>权限模式</h1>
+                <div class="note-meta">
+                  <span class="badge green">安全</span>
+                  <span class="badge blue">Agent</span>
+                  <span class="badge">YOLO</span>
+                </div>
+                <p>Pige 不引入“本会话允许”的心智，因为产品弱化了会话概念。更清楚的权限模型是：拒绝、仅本次允许、永久允许，并把永久允许限定在明确的资源范围内。</p>
+                <p><span class="selection-highlight">永久允许不应该是无限授权，它必须绑定到 actor、capability、resource scope、provider profile 或 vault boundary。</span> 用户可以在设置中随时查看和撤销。</p>
+                <h2>默认模式</h2>
+                <p>默认是每次询问。高级用户可以切换到记住限定授权，或显式开启 YOLO 全访问。</p>
+              </article>
+            </div>
+          </main>
+          <aside class="agent-panel">
+            <div class="agent-header"><strong style="font-size:14px;">Note Agent</strong><span class="badge">划词上下文</span></div>
+            <div class="agent-body">
+              <div class="agent-card">
+                <h3>选中内容</h3>
+                <p>已选中 56 个字，可复制、询问、翻译、润色、扩写或生成摘要。</p>
+              </div>
+              <div class="agent-input" style="margin-top:auto;">
+                <span style="flex:1;">基于选中文本提问</span>
+                <svg class="icon"><use href="#i-send"/></svg>
+              </div>
+            </div>
+          </aside>
+        </div>
+        <div class="selection-menu">
+          <div class="selection-action"><svg class="icon"><use href="#i-file"/></svg>复制</div>
+          <div class="selection-action primary"><svg class="icon"><use href="#i-search"/></svg>询问</div>
+          <div class="selection-action">翻译</div>
+          <div class="selection-action">润色</div>
+          <div class="selection-action">扩写</div>
+          <div class="selection-action">摘要</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="prototype-screen" id="screen-permission" data-screen="permission">
+      <div class="screen-caption"><span class="screen-index">08</span>敏感操作权限弹窗</div>
+      <div class="app-window modal-window">
+        <div class="modal-stage">
+          <div class="dialog-card">
+            <div class="dialog-head">
+              <div class="dialog-icon"><svg class="icon"><use href="#i-shield"/></svg></div>
+              <div>
+                <h3>允许 Pige 抓取这个网页？</h3>
+                <p>来源内容会发送给当前模型提供商用于整理摘要和标签。</p>
+              </div>
+            </div>
+            <div class="scope-box">
+              <div class="scope-row"><span>执行者</span><strong>Agent · 网页整理</strong></div>
+              <div class="scope-row"><span>范围</span><strong>仅此 URL</strong></div>
+              <div class="scope-row"><span>模型</span><strong>OpenAI 兼容 · personal</strong></div>
+              <div class="scope-row"><span>位置</span><strong>桌面本地运行时</strong></div>
+            </div>
+            <div class="button-row">
+              <button class="text-button danger">拒绝</button>
+              <button class="text-button">仅本次允许</button>
+              <button class="text-button primary">永久允许此范围</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="prototype-screen" id="screen-vault-settings" data-screen="vault-settings">
+      <div class="screen-caption"><span class="screen-index">09</span>设置：仓库与笔记存储</div>
+      <div class="app-window settings-window">
+        <div class="settings-layout">
+          <aside class="sidebar">
+            <div class="sidebar-top">
+              <div class="brand">设置</div>
+              <div class="icon-button"><svg class="icon"><use href="#i-menu"/></svg></div>
+            </div>
+            <div class="sidebar-section compact">基础</div>
+            <div class="nav-list">
+              <div class="nav-item"><svg class="icon"><use href="#i-settings"/></svg><span>通用</span></div>
+              <div class="nav-item"><svg class="icon"><use href="#i-note"/></svg><span>外观与语言</span></div>
+            </div>
+            <div class="sidebar-section compact">知识库</div>
+            <div class="nav-list">
+              <div class="nav-item active"><svg class="icon"><use href="#i-book"/></svg><span>仓库与笔记存储</span></div>
+              <div class="nav-item"><svg class="icon"><use href="#i-search"/></svg><span>索引与维护</span></div>
+            </div>
+            <div class="sidebar-section compact">AI</div>
+            <div class="nav-list">
+              <div class="nav-item"><svg class="icon"><use href="#i-key"/></svg><span>模型服务商</span></div>
+              <div class="nav-item"><svg class="icon"><use href="#i-download"/></svg><span>本地能力</span></div>
+              <div class="nav-item"><svg class="icon"><use href="#i-heartbeat"/></svg><span>Agent 与记忆</span></div>
+            </div>
+            <div class="sidebar-section compact">安全</div>
+            <div class="nav-list">
+              <div class="nav-item"><svg class="icon"><use href="#i-shield"/></svg><span>权限与隐私</span></div>
+            </div>
+            <div class="sidebar-section compact">扩展</div>
+            <div class="nav-list">
+              <div class="nav-item"><svg class="icon"><use href="#i-puzzle"/></svg><span>Skills</span></div>
+              <div class="nav-item"><svg class="icon"><use href="#i-cloud"/></svg><span>Pi Packages</span></div>
+            </div>
+            <div class="sidebar-section compact">系统</div>
+            <div class="nav-list">
+              <div class="nav-item"><svg class="icon"><use href="#i-download"/></svg><span>更新与诊断</span></div>
+            </div>
+          </aside>
+          <main class="settings-main">
+            <div class="content-topbar">
+              <div>
+                <div class="page-title">仓库与笔记存储</div>
+                <div class="page-subtitle">你的笔记库就是这个本地文件夹，可以打开、切换、备份和恢复。</div>
+              </div>
+              <button class="text-button primary">新建仓库</button>
+            </div>
+            <div class="settings-grid">
+              <section class="setting-card">
+                <h3>当前笔记库</h3>
+                <p>Pige Vault · /Users/cherry/Documents/Pige Vault<br/>长期笔记是 Markdown；原始资料可以复制进 Pige，也可以只记住原位置。</p>
+                <div class="provider-row">
+                  <div class="provider-mark"><svg class="icon"><use href="#i-folder"/></svg></div>
+                  <div><strong style="color:var(--text);">笔记存储位置</strong><br/>/Users/cherry/Documents/Pige Vault</div>
+                  <span class="badge green">当前</span>
+                </div>
+                <div class="provider-row">
+                  <div class="provider-mark"><svg class="icon"><use href="#i-file"/></svg></div>
+                  <div><strong style="color:var(--text);">原始资料位置</strong><br/>/Users/cherry/Documents/Pige Vault/raw</div>
+                  <span class="badge">默认</span>
+                </div>
+                <div class="provider-row">
+                  <div class="provider-mark"><svg class="icon"><use href="#i-settings"/></svg></div>
+                  <div><strong style="color:var(--text);">默认保存方式</strong><br/>拖入文件复制到 Pige；也可引用原位置</div>
+                  <span class="badge">可改</span>
+                </div>
+                <div class="provider-row">
+                  <div class="provider-mark"><svg class="icon"><use href="#i-note"/></svg></div>
+                  <div><strong style="color:var(--text);">内容</strong><br/>1,248 笔记 · 312 资料 · Schema 0.1</div>
+                  <span class="badge">本地</span>
+                </div>
+                <div class="row-actions" style="justify-content:flex-start;">
+                  <button class="text-button">在 Finder 中显示笔记库</button>
+                  <button class="text-button">打开已有仓库</button>
+                </div>
+              </section>
+              <section class="setting-card">
+                <h3>最近笔记库</h3>
+                <p>从列表移除只会忘记入口，不会删除文件。</p>
+                <div class="provider-row">
+                  <div class="provider-mark"><svg class="icon"><use href="#i-book"/></svg></div>
+                  <div><strong style="color:var(--text);">Research Archive</strong><br/>~/Documents/Research Archive</div>
+                  <span class="badge">打开</span>
+                </div>
+                <div class="provider-row">
+                  <div class="provider-mark"><svg class="icon"><use href="#i-note"/></svg></div>
+                  <div><strong style="color:var(--text);">Work Notes</strong><br/>~/Library/CloudStorage/Work Notes</div>
+                  <span class="badge">打开</span>
+                </div>
+              </section>
+              <section class="setting-card">
+                <h3>备份与恢复</h3>
+                <p>备份包含 Markdown、来源记录、Pige 托管的原始资料、记忆、会话和操作记录；不包含 API Key。</p>
+                <div class="provider-row">
+                  <div class="provider-mark"><svg class="icon"><use href="#i-download"/></svg></div>
+                  <div><strong style="color:var(--text);">上次备份</strong><br/>尚未创建备份</div>
+                  <span class="badge">未设置</span>
+                </div>
+                <div class="row-actions" style="justify-content:flex-start;">
+                  <button class="text-button primary">创建备份</button>
+                  <button class="text-button">恢复备份</button>
+                </div>
+              </section>
+              <section class="setting-card">
+                <h3>存储安全</h3>
+                <p>移动当前仓库需要先完成备份和路径校验；第一版不做一键搬迁。</p>
+                <div class="provider-row">
+                  <div class="provider-mark"><svg class="icon"><use href="#i-shield"/></svg></div>
+                  <div><strong style="color:var(--text);">路径检查</strong><br/>不建议嵌套仓库或使用系统应用数据目录</div>
+                  <span class="badge green">正常</span>
+                </div>
+              </section>
+            </div>
+          </main>
+        </div>
+      </div>
+    </section>
+
+    <section class="prototype-screen" id="screen-model-settings" data-screen="model-settings">
+      <div class="screen-caption"><span class="screen-index">10</span>设置：清晰分组后的模型页</div>
+      <div class="app-window settings-window">
+        <div class="settings-layout">
+          <aside class="sidebar">
+            <div class="sidebar-top">
+              <div class="brand">设置</div>
+              <div class="icon-button"><svg class="icon"><use href="#i-menu"/></svg></div>
+            </div>
+            <div class="sidebar-section compact">基础</div>
+            <div class="nav-list">
+              <div class="nav-item"><svg class="icon"><use href="#i-settings"/></svg><span>通用</span></div>
+              <div class="nav-item"><svg class="icon"><use href="#i-note"/></svg><span>外观与语言</span></div>
+            </div>
+            <div class="sidebar-section compact">知识库</div>
+            <div class="nav-list">
+              <div class="nav-item"><svg class="icon"><use href="#i-book"/></svg><span>仓库与笔记存储</span></div>
+              <div class="nav-item"><svg class="icon"><use href="#i-search"/></svg><span>索引与维护</span></div>
+            </div>
+            <div class="sidebar-section compact">AI</div>
+            <div class="nav-list">
+              <div class="nav-item active"><svg class="icon"><use href="#i-key"/></svg><span>模型服务商</span></div>
+              <div class="nav-item"><svg class="icon"><use href="#i-download"/></svg><span>本地能力</span></div>
+              <div class="nav-item"><svg class="icon"><use href="#i-heartbeat"/></svg><span>Agent 与记忆</span></div>
+            </div>
+            <div class="sidebar-section compact">安全</div>
+            <div class="nav-list">
+              <div class="nav-item"><svg class="icon"><use href="#i-shield"/></svg><span>权限与隐私</span></div>
+            </div>
+            <div class="sidebar-section compact">扩展</div>
+            <div class="nav-list">
+              <div class="nav-item"><svg class="icon"><use href="#i-puzzle"/></svg><span>Skills</span></div>
+              <div class="nav-item"><svg class="icon"><use href="#i-cloud"/></svg><span>Pi Packages</span></div>
+            </div>
+            <div class="sidebar-section compact">系统</div>
+            <div class="nav-list">
+              <div class="nav-item"><svg class="icon"><use href="#i-download"/></svg><span>更新与诊断</span></div>
+            </div>
+          </aside>
+          <main class="settings-main">
+            <div class="content-topbar">
+              <div>
+                <div class="page-title">模型服务商</div>
+                <div class="page-subtitle">连接一个可用的语言模型服务即可；Pige 会自动选择合适的调用方式</div>
+              </div>
+              <button class="text-button primary">添加提供商</button>
+            </div>
+            <div class="settings-grid">
+              <section class="setting-card">
+                <h3>当前提供商</h3>
+                <p>第一版只要求配置一个可用的 BYOK 服务。</p>
+                <div class="provider-row">
+                  <div class="provider-mark"><svg class="icon"><use href="#i-key"/></svg></div>
+                  <div><strong style="color:var(--text);">OpenAI 兼容</strong><br/>api.example.com/v1</div>
+                  <span class="badge green">已启用</span>
+                </div>
+                <div class="provider-row">
+                  <div class="provider-mark"><svg class="icon"><use href="#i-shield"/></svg></div>
+                  <div><strong style="color:var(--text);">API Key</strong><br/>已加密保存</div>
+                  <span class="badge green">正常</span>
+                </div>
+                <div class="provider-row">
+                  <div class="provider-mark"><svg class="icon"><use href="#i-check"/></svg></div>
+                  <div><strong style="color:var(--text);">测试连接</strong><br/>上次测试：刚刚</div>
+                  <span class="badge green">可用</span>
+                </div>
+              </section>
+            </div>
+          </main>
+        </div>
+      </div>
+    </section>
+
+    <section class="prototype-screen" id="screen-add-provider" data-screen="add-provider">
+      <div class="screen-caption"><span class="screen-index">11</span>添加服务商：接通 Pi Agent 的模型服务</div>
+      <div class="app-window provider-browser-window">
+        <div class="settings-layout">
+          <aside class="sidebar">
+            <div class="sidebar-top">
+              <div class="brand">设置</div>
+              <div class="icon-button"><svg class="icon"><use href="#i-menu"/></svg></div>
+            </div>
+            <div class="sidebar-section compact">AI</div>
+            <div class="nav-list">
+              <div class="nav-item active"><svg class="icon"><use href="#i-key"/></svg><span>模型服务商</span></div>
+              <div class="nav-item"><svg class="icon"><use href="#i-download"/></svg><span>本地能力</span></div>
+              <div class="nav-item"><svg class="icon"><use href="#i-heartbeat"/></svg><span>Agent 与记忆</span></div>
+            </div>
+            <div class="sidebar-section compact">安全</div>
+            <div class="nav-list">
+              <div class="nav-item"><svg class="icon"><use href="#i-shield"/></svg><span>权限与隐私</span></div>
+            </div>
+            <div class="sidebar-section compact">扩展</div>
+            <div class="nav-list">
+              <div class="nav-item"><svg class="icon"><use href="#i-puzzle"/></svg><span>Skills</span></div>
+              <div class="nav-item"><svg class="icon"><use href="#i-cloud"/></svg><span>Pi Packages</span></div>
+            </div>
+          </aside>
+          <main class="settings-main">
+            <div class="content-topbar">
+              <div>
+                <div class="page-title">模型服务商</div>
+                <div class="page-subtitle">只需要连接一个可用服务，Pige 会自动调用</div>
+              </div>
+              <button class="text-button primary">添加提供商</button>
+            </div>
+          </main>
+        </div>
+        <div class="settings-underlay"></div>
+        <div class="provider-dialog">
+          <div class="provider-dialog-header">
+            <div>
+              <div class="provider-dialog-title">添加模型服务商</div>
+              <div class="provider-dialog-subtitle">只填写 Pi Agent 调用模型所需的信息。</div>
+            </div>
+            <div class="icon-button subtle"><svg class="icon"><use href="#i-check"/></svg></div>
+          </div>
+          <div class="provider-simple-body">
+            <div class="provider-type-list">
+              <div class="provider-type-row active"><span class="provider-type-dot">OC</span><span>OpenAI 兼容</span></div>
+              <div class="provider-type-row"><span class="provider-type-dot">OA</span><span>OpenAI</span></div>
+              <div class="provider-type-row"><span class="provider-type-dot">A</span><span>Anthropic</span></div>
+              <div class="provider-type-row"><span class="provider-type-dot">C</span><span>自定义端点</span></div>
+            </div>
+            <aside class="provider-setup">
+              <h3>OpenAI 兼容</h3>
+              <p>适合 OpenRouter、硅基流动、自托管服务等兼容接口。支持 ModelList 时会自动拉取模型。</p>
+              <div class="provider-form-grid">
+                <div class="wide">
+                  <div class="field-label">Base URL</div>
+                  <div class="field-box">https://api.example.com/v1</div>
+                </div>
+                <div class="wide">
+                  <div class="field-label">API Key</div>
+                  <div class="field-box">sk-••••••••••••••••••••</div>
+                </div>
+                <div>
+                  <div class="field-label">名称</div>
+                  <div class="field-box">默认</div>
+                </div>
+                <div>
+                  <div class="field-label">模型来源</div>
+                  <div class="field-box">自动拉取</div>
+                </div>
+              </div>
+              <div class="model-list-card">
+                <div class="model-list-head">
+                  <div>
+                    <div class="model-list-title">模型列表</div>
+                    <div class="model-list-hint">拉取失败时可以手动添加模型 ID。</div>
+                  </div>
+                  <button class="text-button">刷新</button>
+                </div>
+                <div class="model-row"><span>gpt-4.1-mini</span><span class="badge green">默认</span></div>
+                <div class="model-row"><span>gpt-4.1</span><span class="badge">设为默认</span></div>
+                <div class="model-row muted"><span>手动添加模型 ID</span><span>+</span></div>
+              </div>
+            </aside>
+          </div>
+          <div class="provider-dialog-footer">
+            <div class="provider-footnote">保存后，Pi Agent 会自动使用默认模型。</div>
+            <div class="row-actions">
+              <button class="text-button">取消</button>
+              <button class="text-button primary">测试并保存</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="prototype-screen" id="screen-knowledge-tree" data-screen="knowledge-tree">
+      <div class="screen-caption"><span class="screen-index">12</span>知识树：主干、分支与叶片</div>
+      <div class="app-window wide-window">
+        <div class="workspace">
+          <aside class="sidebar">
+            <div class="sidebar-top">
+              <div class="brand">Pige</div>
+              <div class="icon-button"><svg class="icon"><use href="#i-menu"/></svg></div>
+            </div>
+            <div class="nav-list">
+              <div class="nav-item"><svg class="icon"><use href="#i-home"/></svg><span>首页</span></div>
+              <div class="nav-item"><svg class="icon"><use href="#i-book"/></svg><span>笔记库</span></div>
+              <div class="nav-item active"><svg class="icon"><use href="#i-heartbeat"/></svg><span>知识树</span></div>
+              <div class="nav-item"><svg class="icon"><use href="#i-settings"/></svg><span>设置</span></div>
+            </div>
+            <div class="sidebar-section compact">知识树</div>
+            <div class="tree-list">
+              <div class="tree-item active"><svg class="icon"><use href="#i-chevron"/></svg><svg class="icon"><use href="#i-folder"/></svg><span class="label">本地优先</span><span class="tree-count">12</span></div>
+              <div class="tree-item depth-2"><span class="tree-spacer"></span><svg class="icon"><use href="#i-heartbeat"/></svg><span class="label">本地 RAG</span><span class="tree-count">6</span></div>
+              <div class="tree-item depth-2"><span class="tree-spacer"></span><svg class="icon"><use href="#i-heartbeat"/></svg><span class="label">Agent Memory</span><span class="tree-count">5</span></div>
+              <div class="tree-item depth-2"><span class="tree-spacer"></span><svg class="icon"><use href="#i-heartbeat"/></svg><span class="label">权限模式</span><span class="tree-count">4</span></div>
+              <div class="tree-item"><span class="tree-spacer"></span><svg class="icon"><use href="#i-folder"/></svg><span class="label">创作系统</span><span class="tree-count">9</span></div>
+              <div class="tree-item"><span class="tree-spacer"></span><svg class="icon"><use href="#i-folder"/></svg><span class="label">工作流</span><span class="tree-count">11</span></div>
+            </div>
+            <div class="sidebar-section compact">待确认连接</div>
+            <div class="mini-note"><strong>3 个新连接</strong><span>确认后写入双链</span></div>
+          </aside>
+          <section class="content">
+            <div class="content-topbar">
+              <div>
+                <div class="page-title">知识树</div>
+                <div class="page-subtitle">主干代表知识领域，分支代表主题，叶片代表碎片化知识的数量与密度</div>
+              </div>
+              <div class="search-pill"><svg class="icon"><use href="#i-search"/></svg> 搜索主题或关系</div>
+            </div>
+            <div class="knowledge-layout">
+              <div class="knowledge-tree-canvas">
+                <svg class="tree-svg" viewBox="0 0 520 560" preserveAspectRatio="none">
+                  <path d="M252 536 C246 454 251 380 263 312 C274 250 263 194 244 118" stroke="#4f6f61" stroke-width="34" fill="none" stroke-linecap="round"/>
+                  <path d="M253 526 C252 448 258 374 268 316 C276 254 265 198 250 124" stroke="#8fb59f" stroke-width="10" fill="none" stroke-linecap="round" opacity=".62"/>
+                  <path d="M260 316 C206 278 160 235 116 186" stroke="#6f927d" stroke-width="18" fill="none" stroke-linecap="round"/>
+                  <path d="M262 300 C326 248 376 211 434 176" stroke="#5f846f" stroke-width="24" fill="none" stroke-linecap="round"/>
+                  <path d="M263 382 C203 390 152 415 93 462" stroke="#86aa96" stroke-width="13" fill="none" stroke-linecap="round"/>
+                  <path d="M267 372 C326 376 376 402 431 438" stroke="#8fb59f" stroke-width="12" fill="none" stroke-linecap="round"/>
+                  <path d="M248 226 C205 198 167 166 129 124" stroke="#9bbca8" stroke-width="11" fill="none" stroke-linecap="round"/>
+                  <path d="M262 302 C315 312 360 342 407 374" stroke="#b5c9be" stroke-width="8" fill="none" stroke-linecap="round"/>
+                </svg>
+                <div class="branch-label primary" style="left: 205px; top: 268px;">
+                  <div class="node-title">本地优先</div>
+                  <div class="node-meta">42 笔记 · 108 碎片</div>
+                </div>
+                <div class="branch-label" style="left: 70px; top: 158px;">
+                  <div class="node-title">Embedding</div>
+                  <div class="node-meta">8 笔记 · 21 碎片</div>
+                </div>
+                <div class="branch-label" style="left: 386px; top: 156px;">
+                  <div class="node-title">本地 RAG</div>
+                  <div class="node-meta">18 笔记 · 45 碎片</div>
+                </div>
+                <div class="branch-label" style="left: 374px; top: 418px;">
+                  <div class="node-title">BYOK</div>
+                  <div class="node-meta">6 笔记 · 14 碎片</div>
+                </div>
+                <div class="branch-label" style="left: 52px; top: 430px;">
+                  <div class="node-title">Agent Memory</div>
+                  <div class="node-meta">9 笔记 · 18 碎片</div>
+                </div>
+                <div class="branch-label" style="left: 292px; top: 466px;">
+                  <div class="node-title">OCR 管线</div>
+                  <div class="node-meta">7 笔记 · 16 碎片</div>
+                </div>
+                <span class="knowledge-leaf deep" style="left: 414px; top: 108px; width: 24px; height: 32px;"></span>
+                <span class="knowledge-leaf deep" style="left: 444px; top: 120px; width: 21px; height: 29px;"></span>
+                <span class="knowledge-leaf mid" style="left: 466px; top: 152px; width: 18px; height: 24px;"></span>
+                <span class="knowledge-leaf deep" style="left: 388px; top: 112px; width: 20px; height: 27px;"></span>
+                <span class="knowledge-leaf mid" style="left: 424px; top: 74px; width: 17px; height: 23px;"></span>
+                <span class="knowledge-leaf light" style="left: 458px; top: 82px; width: 14px; height: 19px;"></span>
+                <span class="knowledge-leaf mid" style="left: 101px; top: 112px; width: 18px; height: 24px;"></span>
+                <span class="knowledge-leaf mid" style="left: 132px; top: 96px; width: 16px; height: 22px;"></span>
+                <span class="knowledge-leaf light" style="left: 84px; top: 80px; width: 13px; height: 18px;"></span>
+                <span class="knowledge-leaf light" style="left: 152px; top: 134px; width: 13px; height: 18px;"></span>
+                <span class="knowledge-leaf deep" style="left: 70px; top: 386px; width: 20px; height: 27px;"></span>
+                <span class="knowledge-leaf mid" style="left: 104px; top: 396px; width: 17px; height: 23px;"></span>
+                <span class="knowledge-leaf mid" style="left: 132px; top: 426px; width: 16px; height: 22px;"></span>
+                <span class="knowledge-leaf light" style="left: 50px; top: 440px; width: 13px; height: 18px;"></span>
+                <span class="knowledge-leaf blue" style="left: 394px; top: 342px; width: 17px; height: 23px;"></span>
+                <span class="knowledge-leaf blue" style="left: 424px; top: 358px; width: 15px; height: 20px;"></span>
+                <span class="knowledge-leaf light" style="left: 454px; top: 390px; width: 13px; height: 18px;"></span>
+                <span class="knowledge-leaf mid" style="left: 306px; top: 426px; width: 17px; height: 23px;"></span>
+                <span class="knowledge-leaf light" style="left: 334px; top: 444px; width: 13px; height: 18px;"></span>
+                <span class="tree-scale"><span>叶片越大越深，碎片越多</span><span class="scale-leaves"><span class="scale-leaf"></span><span class="scale-leaf mid"></span><span class="scale-leaf deep"></span></span></span>
+              </div>
+              <aside class="side-panel">
+                <h3>当前主干</h3>
+                <div class="side-list">
+                  <div class="source-row"><svg class="icon"><use href="#i-heartbeat"/></svg><div><strong>本地优先</strong>42 笔记 · 108 知识碎片</div></div>
+                  <div class="source-row"><svg class="icon"><use href="#i-note"/></svg><div><strong>树干粗细</strong>代表这个领域的知识体量</div></div>
+                  <div class="source-row"><svg class="icon"><use href="#i-file"/></svg><div><strong>叶片数量与色深</strong>代表分支下碎片密度</div></div>
+                </div>
+                <div style="height: 18px;"></div>
+                <h3>分支</h3>
+                <div class="side-list">
+                  <div class="relation-row"><svg class="icon"><use href="#i-link"/></svg><span>本地 RAG</span><span class="badge green">最粗</span></div>
+                  <div class="relation-row"><svg class="icon"><use href="#i-link"/></svg><span>Agent Memory</span><span class="badge">生长中</span></div>
+                  <div class="relation-row"><svg class="icon"><use href="#i-link"/></svg><span>OCR 管线</span><span class="badge">较新</span></div>
+                </div>
+                <div style="height: 18px;"></div>
+                <h3>待确认生长</h3>
+                <div class="side-list">
+                  <div class="source-row"><svg class="icon"><use href="#i-link"/></svg><div><strong>3 个分支连接建议</strong>确认后写入双链</div></div>
+                  <div class="source-row"><svg class="icon"><use href="#i-note"/></svg><div><strong>本地 RAG 设计</strong>打开核心笔记</div></div>
+                </div>
+              </aside>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const screen = params.get("screen");
+    if (screen) {
+      const board = document.getElementById("board");
+      board.classList.add("single");
+      for (const node of document.querySelectorAll(".prototype-screen")) {
+        if (node.dataset.screen === screen) node.classList.add("selected");
+      }
+    }
+  </script>
+</body>
+</html>

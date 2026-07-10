@@ -1,0 +1,60 @@
+name: Feature request
+description: Propose a product or design improvement.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Pige is simplicity-first and local-first. Please connect feature requests to a user workflow and avoid turning Pige into a generic Agent console.
+  - type: textarea
+    id: workflow
+    attributes:
+      label: User workflow
+      description: What user job would this improve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the smallest useful behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why now?
+      description: Explain why this belongs in v0.1 or a later milestone.
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Impact area
+      multiple: true
+      options:
+        - Product scope
+        - UI/interaction
+        - Vault/data model
+        - Markdown schema
+        - Parser/OCR
+        - Search/RAG
+        - Agent/model provider
+        - Permissions/security
+        - Privacy/data use
+        - Skills/packages
+        - Performance/reliability
+        - Release/updates
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: docs
+    attributes:
+      label: Related design documents
+      description: Link PRD, architecture, UI, data, security, or other relevant docs if known.
+  - type: textarea
+    id: tradeoffs
+    attributes:
+      label: Tradeoffs and risks
+      description: Include privacy, security, performance, complexity, backup/restore, or future mobile/cloud implications.

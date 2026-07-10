@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Pige Dependency Manifest",
+  "type": "object",
+  "required": ["schemaVersion", "records"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "records": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "registryRef",
+          "name",
+          "category",
+          "status",
+          "usage",
+          "packageManager",
+          "packageId",
+          "version",
+          "upstreamUrl",
+          "license",
+          "noticeRequired",
+          "distributionMode",
+          "checksumPolicy",
+          "checksumOrSignatureRef",
+          "dataBoundary",
+          "ownerService",
+          "platforms",
+          "sizeClass",
+          "updatePolicy",
+          "replacementPath",
+          "lastReviewedAt",
+          "reviewedBy",
+          "notes"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

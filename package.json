@@ -1,0 +1,65 @@
+{
+  "name": "pige",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Local-first, AI-first personal knowledge Agent.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "packageManager": "npm@11.9.0",
+  "engines": {
+    "node": ">=24.14.0 <25",
+    "npm": ">=11.9.0 <12"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @pige/desktop",
+    "build": "npm run build --workspaces --if-present",
+    "build:native:macos-ocr": "node scripts/build/macos-vision-ocr-helper.mjs",
+    "typecheck": "tsc -b tsconfig.packages.json --pretty false && npm run typecheck --workspace @pige/desktop",
+    "test": "vitest run",
+    "test:eval": "vitest run tests/evals",
+    "lint": "npm run verify:boundaries",
+    "format:check": "npm run verify:whitespace",
+    "verify": "npm run verify:docs && npm run verify:decisions && npm run verify:ui-visual && npm run verify:traceability && npm run verify:contracts && npm run verify:dependencies && npm run verify:fixtures && npm run verify:boundaries && npm run verify:source-artifacts && npm run verify:documentation-leanness && npm run verify:documentation-quality",
+    "verify:docs": "npm run verify:links && npm run verify:whitespace && npm run verify:doc-map && npm run verify:parser-manifests && npm run verify:prd-contract",
+    "verify:links": "node scripts/verify/markdown-links.mjs",
+    "verify:whitespace": "node scripts/verify/trailing-whitespace.mjs",
+    "verify:doc-map": "node scripts/verify/document-map.mjs",
+    "verify:parser-manifests": "node scripts/verify/parser-manifest-alignment.mjs",
+    "verify:prd-contract": "node scripts/verify/prd-contract.mjs && node scripts/verify/prd-contract-negative-cases.mjs",
+    "verify:decisions": "node scripts/verify/decision-log.mjs",
+    "verify:ui-visual": "node scripts/verify/ui-visual-contract.mjs",
+    "verify:traceability": "node scripts/verify/traceability.mjs && node scripts/verify/traceability-negative-cases.mjs",
+    "verify:contracts": "node scripts/verify/contract-stable-vocabulary.mjs && node scripts/verify/contract-job-recovery.mjs && node scripts/verify/contract-source-lifecycle.mjs && node scripts/verify/contract-security-egress.mjs && node scripts/verify/contract-consistency.mjs",
+    "verify:independent-documentation-review": "node scripts/verify/independent-documentation-review.mjs",
+    "verify:documentation-leanness": "node scripts/verify/documentation-leanness.mjs",
+    "verify:documentation-quality": "npm run verify:independent-documentation-review && node scripts/verify/documentation-quality.mjs",
+    "verify:dependencies": "node scripts/verify/dependency-manifest.mjs",
+    "verify:fixtures": "node scripts/verify/fixture-manifest.mjs",
+    "verify:boundaries": "node scripts/verify/import-boundaries.mjs",
+    "verify:source-artifacts": "node scripts/verify/source-artifacts.mjs",
+    "smoke:parser-workers": "node scripts/verify/parser-worker-smoke.mjs",
+    "smoke:macos-vision-ocr": "node scripts/build/macos-vision-ocr-helper.mjs && node scripts/verify/macos-vision-ocr-helper-smoke.mjs && vitest run tests/unit/macos-vision-ocr-adapter-smoke.test.ts"
+  },
+  "dependencies": {
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/jsdom": "28.0.3",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@types/yauzl": "3.4.0",
+    "@types/yazl": "3.3.1",
+    "@vitejs/plugin-react": "5.2.0",
+    "electron": "43.1.0",
+    "electron-vite": "5.0.0",
+    "typescript": "7.0.2",
+    "vite": "7.3.6",
+    "vitest": "4.1.10"
+  }
+}

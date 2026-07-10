@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "entryBudget": {
+    "maximumWords": 4200,
+    "paths": [
+      "AGENTS.md",
+      "README.md",
+      "docs/START_HERE_FOR_AI_AGENTS.md"
+    ]
+  },
+  "columns": [
+    "path",
+    "tier",
+    "ownerRole",
+    "defaultReadBehavior",
+    "lifecycleDisposition"
+  ],
+  "lifecyclePolicies": {
+    "Maintain": {
+      "reviewTrigger": "The owned behavior, boundary, workflow, or repository structure changes.",
+      "minimumCheckFrequency": "Same change, plus quarterly inventory.",
+      "reclamationAction": "Merge duplicate guidance into its owner; keep the mapped file only while its owner role remains distinct."
+    },
+    "Public workflow": {
+      "reviewTrigger": "Repository URL, reporting path, public policy, contribution flow, or release support changes.",
+      "minimumCheckFrequency": "Same change and before every public release.",
+      "reclamationAction": "Repair stale public links immediately; remove obsolete intake paths instead of leaving redirects in prose."
+    },
+    "Historical": {
+      "reviewTrigger": "An active owner cites it or a rationale audit is requested.",
+      "minimumCheckFrequency": "Annual inventory.",
+      "reclamationAction": "Move any still-normative rule to an owner, then archive or remove the artifact when it no longer provides linked rationale."
+    },
+    "Prototype evidence": {
+      "reviewTrigger": "Accepted UI behavior or visual evidence changes.",
+      "minimumCheckFrequency": "At each UI contract review.",
+      "reclamationAction": "Promote accepted behavior to docs/UI_PROTOTYPE.md; archive superseded screenshots and indexes when no active contract links them."
+    },
+    "Phase-gated resource": {
+      "reviewTrigger": "The owning implementation phase starts or completes.",
+      "minimumCheckFrequency": "At both phase boundaries, plus quarterly inventory.",
+      "reclamationAction": "Add reviewed resources, explicitly retain the empty placeholder with a current reason, or remove it."
+    }
+  },
+  "documents": [
+    ["AGENTS.md", "Entry", "Repository-level AI agent rules and non-negotiable invariants", "Always read for non-trivial work", "Maintain"],
+    ["README.md", "Entry", "Compact project orientation and public implementation snapshot", "Always read for non-trivial work", "Maintain"],
+    ["docs/START_HERE_FOR_AI_AGENTS.md", "Entry", "Canonical task packs, authority, context budget, and inventory pointer", "Always read for non-trivial work", "Maintain"],
+    ["docs/PRD.md", "Owner contract", "AI-native product optimization order, observable behavior, v0.1 scope, acceptance intent, and risks", "Read task sections; whole file only for broad product scope", "Maintain"],
+    ["docs/VISION.md", "Owner contract", "Long-term product vision, principles, and AI-first boundary", "Read for broad product or principle changes", "Maintain"],
+    ["docs/MILESTONES.md", "Owner contract", "M0-M7 release outcomes and the sole phase-to-milestone crosswalk", "Read for milestone outcomes or release planning", "Maintain"],
+    ["docs/TECH_ARCHITECTURE.md", "Owner contract", "Stack, services, process boundaries, and dependency registry", "Read task sections; whole file only for broad architecture changes", "Maintain"],
+    ["docs/DOMAIN_MODEL.md", "Owner contract", "Glossary, object model, service ownership, and anti-confusion rules", "Read when naming, modeling, or service ownership is involved", "Maintain"],
+    ["docs/DATA_ARCHITECTURE.md", "Owner contract", "Durable truth, caches, secrets, backup, restore, and sync-ready data rules", "Read task sections for storage and data ownership", "Maintain"],
+    ["docs/MARKDOWN_SCHEMA.md", "Owner contract", "Markdown page and frontmatter schema, citations, managed blocks, and PIGE.md", "Read for Markdown writes, parsing, citations, or vault schema", "Maintain"],
+    ["docs/UI_PROTOTYPE.md", "Owner contract", "Product interaction model, layouts, settings, reader, retrieval, and accessibility", "Read for UI or interaction work; use the section map", "Maintain"],
+    ["docs/SECURITY_THREAT_MODEL.md", "Owner contract", "Trust boundaries, permissions, secrets, BYOK, web, tool, and update risks", "Read for security, permissions, tools, web, secrets, or model calls", "Maintain"],
+    ["docs/PERFORMANCE_AND_RELIABILITY.md", "Owner contract", "Scale targets, responsiveness budgets, workers, recovery, and reliability gates", "Read for performance, background jobs, or large-vault behavior", "Maintain"],
+    ["docs/QUALITY_AND_TEST_STRATEGY.md", "Owner contract", "Test pyramid, fixtures, safety gates, and release quality gates", "Read for tests, fixtures, and quality gates", "Maintain"],
+    ["docs/RELEASE_ENGINEERING.md", "Owner contract", "Platforms, packaging, CI, signing, updates, and downloadable resources", "Read for packaging, updates, release, or dependency upgrades", "Maintain"],
+    ["docs/I18N_DESIGN.md", "Owner contract", "Six-locale strategy, CJK search, OCR, and speech language behavior", "Read for visible strings, language, search, speech, or OCR UI", "Maintain"],
+    ["docs/LOCAL_DATABASE_DESIGN.md", "Specialized contract", "SQLite role, driver, schema areas, and rebuild behavior", "Read for database, indexes, graph, chunks, or job metadata", "Maintain"],
+    ["docs/KNOWLEDGE_MODEL_AND_LINKING.md", "Specialized contract", "Tags, topics, concepts, entities, claims, backlinks, and Knowledge Tree", "Read for knowledge linking, graph, or topic behavior", "Maintain"],
+    ["docs/JOB_OPERATION_AND_RECOVERY.md", "Specialized contract", "Durable jobs, proposals, operations, retry, cancellation, and crash recovery", "Read for long-running work, recovery, proposals, or operations", "Maintain"],
+    ["docs/SYNC_CONFLICT_AND_MIGRATION.md", "Specialized contract", "Stable IDs, conflicts, tombstones, migrations, and sync adapter boundaries", "Read for sync readiness, external edits, migrations, or conflicts", "Maintain"],
+    ["docs/SOURCE_STORAGE_STRATEGY.md", "Specialized contract", "Source ownership, references, managed copies, asset roots, and backup behavior", "Read for original files, copied sources, or evidence paths", "Maintain"],
+    ["docs/PARSER_INGEST_SPEC.md", "Specialized contract", "Capture, parser, OCR, artifact, failure, and ingest handoff contracts", "Read for file, URL, OCR, document, or source ingest", "Maintain"],
+    ["docs/ONBOARDING_AND_FIRST_RUN.md", "Specialized contract", "First-run vault choice, model setup, capture-only mode, and dependency waiting", "Read for onboarding and startup recovery", "Maintain"],
+    ["docs/API_AND_IPC_DESIGN.md", "Specialized contract", "Renderer, preload, main, and worker API contracts, DTOs, errors, and events", "Read for IPC, API, or process-boundary changes", "Maintain"],
+    ["docs/FUTURE_MOBILE_AND_CLOUD_ARCHITECTURE.md", "Specialized contract", "Future remote Agent backend and mobile-lite client boundary", "Read only for future mobile, web, cloud, or compatibility work", "Maintain"],
+    ["docs/SETTINGS_AND_PREFERENCES.md", "Specialized contract", "Settings scopes, storage, registry, apply behavior, backup, and export", "Read for any visible or Agent-affecting setting", "Maintain"],
+    ["docs/DIAGNOSTICS_AND_OBSERVABILITY.md", "Specialized contract", "Local diagnostics, logs, support bundles, redaction, and telemetry policy", "Read for logs, metrics, diagnostics, or support export", "Maintain"],
+    ["docs/PROMPT_DESIGN.md", "Specialized contract", "Prompt hierarchy, untrusted source blocks, structured outputs, and prompt tests", "Read for prompts, structured model output, or prompt safety", "Maintain"],
+    ["docs/AGENT_RUNTIME_POLICY_CONTEXT.md", "Specialized contract", "Typed policy context compiled from settings, permissions, capabilities, and providers", "Read for Agent-affecting settings and runtime policy", "Maintain"],
+    ["docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md", "Specialized contract", "Local-first retrieval, context packing, citations, memory injection, and compaction", "Read for answers, context budgets, citations, or grounded model calls", "Maintain"],
+    ["docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md", "Specialized contract", "Pi Agent adapter, provider profiles, model discovery, routing gates, and permissions", "Read for Pi Agent, BYOK, provider, or model settings", "Maintain"],
+    ["docs/AGENT_MEMORY_DESIGN.md", "Specialized contract", "Pige-native memory architecture and scope", "Read for Agent memory behavior", "Maintain"],
+    ["docs/SKILL_EXTENSION_DESIGN.md", "Specialized contract", "Skill classes, install flow, capabilities, and Permission Broker integration", "Read for Skills, packages, or extension permissions", "Maintain"],
+    ["docs/REPOSITORY_STRUCTURE.md", "Routing/control", "Repository, package, module, and ownership layout", "Read for scaffolding, package boundaries, or file placement", "Maintain"],
+    ["docs/CODING_CONVENTIONS.md", "Routing/control", "TypeScript, service, schema, testing, dependency, and documentation conventions", "Read for implementation style and boundaries", "Maintain"],
+    ["docs/CONTRIBUTING_GUIDE.md", "Routing/control", "Detailed human and AI contribution workflow", "Read for contribution and public collaboration work", "Maintain"],
+    ["docs/AI_DEVELOPMENT_GUIDE.md", "Routing/control", "Implementation loop, operating checklists, decision aids, and handoff format", "Read section 5 before implementation and section 13 at handoff; read other sections only as needed", "Maintain"],
+    ["docs/V0_1_IMPLEMENTATION_PLAYBOOK.md", "Routing/control", "Phase order, status, evidence, and exit gates", "Read for phase planning and implementation order", "Maintain"],
+    ["docs/SPEC_TRACEABILITY.md", "Routing/control", "Requirement-to-service, data, test, and evidence mapping", "Read for traceability, test coverage, or release gates", "Maintain"],
+    ["docs/DECISION_LOG.md", "Routing/control", "Accepted, superseded, and deferred durable decisions", "Search by keyword when resolving or recording decisions", "Maintain"],
+    ["SECURITY.md", "Routing/control", "Private vulnerability reporting and security handling policy", "Read for security reports and private triage", "Public workflow"],
+    ["PRIVACY.md", "Routing/control", "Public v0.1 privacy and data-use baseline", "Read for privacy-facing behavior and public copy", "Public workflow"],
+    ["SUPPORT.md", "Routing/control", "Public support, issue triage, and redacted reproduction policy", "Read for support and public issue handling", "Public workflow"],
+    ["CONTRIBUTING.md", "Routing/control", "Public contribution entry point and checklist", "Read for public contribution flow changes", "Public workflow"],
+    ["CODE_OF_CONDUCT.md", "Routing/control", "Public collaboration behavior expectations", "Read for community governance changes", "Public workflow"],
+    ["LICENSE", "Routing/control", "Apache 2.0 license text", "Read for licensing or distribution changes", "Public workflow"],
+    ["NOTICE", "Routing/control", "Apache distribution notice and attribution", "Read for notice or attribution changes", "Public workflow"],
+    [".github/pull_request_template.md", "Routing/control", "Pull request intake, safety checks, and active-development impact notification", "Read for GitHub PR workflow changes", "Public workflow"],
+    ["docs/DESIGN_REVIEW.md", "Historical/research", "Historical accepted design improvements and rationale", "Not default reading; use for rationale only", "Historical"],
+    ["docs/DESIGN_BASELINE_AUDIT.md", "Historical/research", "Historical pre-implementation audit and readiness evidence", "Not default reading; use for baseline audit history", "Historical"],
+    ["docs/PI_PACKAGE_RESEARCH.md", "Historical/research", "Dated Pi package catalog research and curation rationale", "Read only when package curation is in scope", "Historical"],
+    ["docs/prototypes/README.md", "Historical/research", "Rendered key-screen prototype index and screenshots", "Read only for UI review or interaction validation", "Prototype evidence"],
+    ["resources/curated-packages/README.md", "Resource", "Placeholder and admission rule for curated Pi package manifests", "Read at the owning extension phase boundaries", "Phase-gated resource"],
+    ["resources/documentation-quality/README.md", "Resource", "Documentation quality manifests, snapshot binding, and acceptance-report generation", "Read when documentation quality gates or accepted scores change", "Maintain"],
+    ["resources/parser-manifests/README.md", "Resource", "Active parser manifest index and alignment reminder", "Read when parser or release inputs change", "Maintain"],
+    ["resources/traceability/README.md", "Resource", "Machine-readable P0 coverage, acceptance linkage, evidence selectors, and phase status controls", "Read when scope, requirements, phases, milestones, Builds, Exits, evidence, or phase status changes", "Maintain"],
+    ["resources/prompts/ingest/README.md", "Resource", "Placeholder boundary for versioned external ingest prompts", "Read when prompt ownership or Agent ingest resources change", "Phase-gated resource"],
+    ["resources/prompts/retrieval/README.md", "Resource", "Placeholder boundary for versioned model-grounded retrieval prompts", "Read when retrieval prompt ownership changes", "Phase-gated resource"],
+    ["resources/skill-templates/README.md", "Resource", "Placeholder and admission rule for Skill templates", "Read at the owning extension phase boundaries", "Phase-gated resource"]
+  ]
+}

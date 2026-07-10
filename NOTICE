@@ -1,0 +1,26 @@
+Pige
+Copyright 2026 YinsenW
+
+This product includes software developed for the Pige project.
+
+Third-party software bundled by Pige includes:
+
+- Mozilla PDF.js (`pdfjs-dist`), Copyright Mozilla and PDF.js contributors,
+  licensed under the Apache License 2.0. https://github.com/mozilla/pdf.js
+- NAPI-RS Canvas (`@napi-rs/canvas`), Copyright its contributors,
+  licensed under the MIT License. https://github.com/Brooooooklyn/canvas
+- Mammoth.js (`mammoth`), Copyright Michael Williamson and contributors,
+  licensed under the BSD 2-Clause License. https://github.com/mwilliamson/mammoth.js
+- fast-xml-parser, Copyright Natural Intelligence and contributors,
+  licensed under the MIT License. https://github.com/NaturalIntelligence/fast-xml-parser
+- yauzl, Copyright Josh Wolfe and contributors,
+  licensed under the MIT License. https://github.com/thejoshwolfe/yauzl
+- Mozilla Readability (`@mozilla/readability`), Copyright Mozilla and contributors,
+  licensed under the Apache License 2.0. https://github.com/mozilla/readability
+- jsdom, Copyright jsdom contributors,
+  licensed under the MIT License. https://github.com/jsdom/jsdom
+- Undici, Copyright Node.js contributors,
+  licensed under the MIT License. https://github.com/nodejs/undici
+
+Release packages must also preserve the complete license texts shipped with
+their corresponding dependency packages.

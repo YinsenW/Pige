@@ -1,0 +1,46 @@
+name: Design review
+description: Propose a change to product, architecture, data, UI, or release design.
+title: "[Design]: "
+labels:
+  - design
+body:
+  - type: textarea
+    id: current
+    attributes:
+      label: Current design
+      description: Link the source document and summarize the current decision.
+    validations:
+      required: true
+  - type: textarea
+    id: issue
+    attributes:
+      label: Problem or conflict
+      description: What is unclear, inconsistent, risky, or overcomplicated?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: Describe the concrete design change.
+    validations:
+      required: true
+  - type: textarea
+    id: affected
+    attributes:
+      label: Affected documents and contracts
+      placeholder: "PRD, TECH_ARCHITECTURE, DATA_ARCHITECTURE, MARKDOWN_SCHEMA, UI_PROTOTYPE, ..."
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Required tests or gates
+      description: What tests, fixtures, release gates, or docs must change?
+  - type: checkboxes
+    id: ai
+    attributes:
+      label: AI-development impact
+      options:
+        - label: This change reduces ambiguity or implementation drift for future AI agents.
+        - label: This change requires updating START_HERE_FOR_AI_AGENTS or AI_DEVELOPMENT_GUIDE.

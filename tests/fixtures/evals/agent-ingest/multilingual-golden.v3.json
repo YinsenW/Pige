@@ -1,0 +1,382 @@
+{
+  "schemaVersion": 3,
+  "fixtures": [
+    {
+      "id": "agent-ingest-en-direct-text-v1",
+      "locale": "en",
+      "input": {
+        "kind": "text",
+        "text": "Pige stores durable knowledge as local Markdown and keeps derived indexes rebuildable.",
+        "evidence": [
+          {
+            "ref": "ev_01",
+            "text": "Pige stores durable knowledge as local Markdown and keeps derived indexes rebuildable.",
+            "locator": "managed_source_preview"
+          }
+        ]
+      },
+      "modelOutput": {
+        "title": "Local-first knowledge storage",
+        "summary": {
+          "text": "Pige stores durable knowledge in local Markdown.",
+          "evidenceRefs": ["ev_01"]
+        },
+        "keyPoints": [
+          {
+            "text": "Derived indexes remain rebuildable.",
+            "evidenceRefs": ["ev_01"]
+          }
+        ],
+        "tags": ["local-first"],
+        "topics": ["Knowledge management"],
+        "entities": ["Pige"],
+        "warnings": [],
+        "confidence": "high"
+      },
+      "expected": {
+        "claims": [
+          {
+            "text": "Pige stores durable knowledge in local Markdown.",
+            "allowedEvidenceRefs": ["ev_01"],
+            "requiredEvidenceTerms": ["durable knowledge", "local Markdown"]
+          },
+          {
+            "text": "Derived indexes remain rebuildable.",
+            "allowedEvidenceRefs": ["ev_01"],
+            "requiredEvidenceTerms": ["derived indexes", "rebuildable"]
+          }
+        ],
+        "citationLocators": ["source"],
+        "languagePattern": "[A-Za-z]",
+        "reviewRequired": false
+      }
+    },
+    {
+      "id": "agent-ingest-zh-hans-low-confidence-ocr-v1",
+      "locale": "zh-Hans",
+      "input": {
+        "kind": "ocr",
+        "text": "知识应当保存在本地，识别结果需要人工核对。",
+        "evidence": [
+          {
+            "ref": "ev_01",
+            "text": "知识应当保存在本地，识别结果需要人工核对。",
+            "locator": "ocr:block:1",
+            "confidence": 0.42
+          }
+        ],
+        "quality": {
+          "ocrConfidence": 0.42
+        }
+      },
+      "modelOutput": {
+        "title": "本地知识与识别核对",
+        "summary": {
+          "text": "材料强调知识应保存在本地。",
+          "evidenceRefs": ["ev_01"]
+        },
+        "keyPoints": [
+          {
+            "text": "识别结果需要人工核对。",
+            "evidenceRefs": ["ev_01"]
+          }
+        ],
+        "tags": ["本地优先"],
+        "topics": ["知识管理"],
+        "entities": [],
+        "warnings": [],
+        "confidence": "high"
+      },
+      "expected": {
+        "claims": [
+          {
+            "text": "材料强调知识应保存在本地。",
+            "allowedEvidenceRefs": ["ev_01"],
+            "requiredEvidenceTerms": ["知识", "保存在本地"]
+          },
+          {
+            "text": "识别结果需要人工核对。",
+            "allowedEvidenceRefs": ["ev_01"],
+            "requiredEvidenceTerms": ["识别结果", "人工核对"]
+          }
+        ],
+        "citationLocators": ["ocr1"],
+        "languagePattern": "[\\p{Script=Han}]",
+        "reviewRequired": true
+      }
+    },
+    {
+      "id": "agent-ingest-fr-url-v1",
+      "locale": "fr",
+      "input": {
+        "kind": "url",
+        "text": "Le coffre conserve les notes en Markdown local. L'index dérivé peut être reconstruit à partir des notes.",
+        "evidence": [
+          {
+            "ref": "ev_01",
+            "text": "Le coffre conserve les notes en Markdown local. L'index dérivé peut être reconstruit à partir des notes.",
+            "locator": "url"
+          }
+        ]
+      },
+      "modelOutput": {
+        "title": "Notes locales et index reconstruisible",
+        "summary": {
+          "text": "Le coffre conserve les notes en Markdown local.",
+          "evidenceRefs": ["ev_01"]
+        },
+        "keyPoints": [
+          {
+            "text": "L'index dérivé peut être reconstruit à partir des notes.",
+            "evidenceRefs": ["ev_01"]
+          }
+        ],
+        "tags": ["local"],
+        "topics": ["Gestion des connaissances"],
+        "entities": [],
+        "warnings": [],
+        "confidence": "high"
+      },
+      "expected": {
+        "claims": [
+          {
+            "text": "Le coffre conserve les notes en Markdown local.",
+            "allowedEvidenceRefs": ["ev_01"],
+            "requiredEvidenceTerms": ["notes", "Markdown local"]
+          },
+          {
+            "text": "L'index dérivé peut être reconstruit à partir des notes.",
+            "allowedEvidenceRefs": ["ev_01"],
+            "requiredEvidenceTerms": ["index dérivé", "reconstruit"]
+          }
+        ],
+        "citationLocators": ["url"],
+        "languagePattern": "[A-Za-zÀ-ÿ]",
+        "reviewRequired": false
+      }
+    },
+    {
+      "id": "agent-ingest-ja-pdf-contradiction-v1",
+      "locale": "ja",
+      "input": {
+        "kind": "pdf",
+        "text": "1ページ: 公開日は2026年6月18日と記載されている。\n2ページ: 公開日は2026年6月21日と記載されている。",
+        "evidence": [
+          {
+            "ref": "ev_01",
+            "text": "1ページ: 公開日は2026年6月18日と記載されている。",
+            "locator": "page:1"
+          },
+          {
+            "ref": "ev_02",
+            "text": "2ページ: 公開日は2026年6月21日と記載されている。",
+            "locator": "page:2"
+          }
+        ]
+      },
+      "modelOutput": {
+        "title": "公開日の不一致",
+        "summary": {
+          "text": "資料内の公開日は一致していない。",
+          "evidenceRefs": ["ev_01", "ev_02"]
+        },
+        "keyPoints": [
+          {
+            "text": "1ページは6月18日、2ページは6月21日と記載している。",
+            "evidenceRefs": ["ev_01", "ev_02"]
+          }
+        ],
+        "tags": ["要確認"],
+        "topics": ["公開日"],
+        "entities": [],
+        "warnings": ["公開日の記載が矛盾しているため確認が必要です。"],
+        "confidence": "medium"
+      },
+      "expected": {
+        "claims": [
+          {
+            "text": "資料内の公開日は一致していない。",
+            "allowedEvidenceRefs": ["ev_01", "ev_02"],
+            "requiredEvidenceTerms": ["2026年6月18日", "2026年6月21日"]
+          },
+          {
+            "text": "1ページは6月18日、2ページは6月21日と記載している。",
+            "allowedEvidenceRefs": ["ev_01", "ev_02"],
+            "requiredEvidenceTerms": ["1ページ", "2ページ"]
+          }
+        ],
+        "citationLocators": ["p1", "p2"],
+        "languagePattern": "[\\p{Script=Han}\\p{Script=Hiragana}]",
+        "reviewRequired": true
+      }
+    },
+    {
+      "id": "agent-ingest-de-pptx-v1",
+      "locale": "de",
+      "input": {
+        "kind": "pptx",
+        "text": "Folie 1: Wissen wird täglich erfasst.\nFolie 2: Die Notizen werden wöchentlich verdichtet.",
+        "evidence": [
+          {
+            "ref": "ev_01",
+            "text": "Folie 1: Wissen wird täglich erfasst.",
+            "locator": "slide:1"
+          },
+          {
+            "ref": "ev_02",
+            "text": "Folie 2: Die Notizen werden wöchentlich verdichtet.",
+            "locator": "slide:2"
+          }
+        ]
+      },
+      "modelOutput": {
+        "title": "Rhythmus der Wissenspflege",
+        "summary": {
+          "text": "Die Präsentation empfiehlt tägliche Erfassung und wöchentliche Verdichtung.",
+          "evidenceRefs": ["ev_01", "ev_02"]
+        },
+        "keyPoints": [
+          {
+            "text": "Folie 1 fordert die tägliche Erfassung von Wissen.",
+            "evidenceRefs": ["ev_01"]
+          },
+          {
+            "text": "Folie 2 sieht eine wöchentliche Verdichtung der Notizen vor.",
+            "evidenceRefs": ["ev_02"]
+          }
+        ],
+        "tags": ["Wissenspflege"],
+        "topics": ["Arbeitsrhythmus"],
+        "entities": [],
+        "warnings": [],
+        "confidence": "high"
+      },
+      "expected": {
+        "claims": [
+          {
+            "text": "Die Präsentation empfiehlt tägliche Erfassung und wöchentliche Verdichtung.",
+            "allowedEvidenceRefs": ["ev_01", "ev_02"],
+            "requiredEvidenceTerms": ["täglich", "wöchentlich"]
+          },
+          {
+            "text": "Folie 1 fordert die tägliche Erfassung von Wissen.",
+            "allowedEvidenceRefs": ["ev_01"],
+            "requiredEvidenceTerms": ["Folie 1", "täglich"]
+          },
+          {
+            "text": "Folie 2 sieht eine wöchentliche Verdichtung der Notizen vor.",
+            "allowedEvidenceRefs": ["ev_02"],
+            "requiredEvidenceTerms": ["Folie 2", "wöchentlich"]
+          }
+        ],
+        "citationLocators": ["slide1", "slide2"],
+        "languagePattern": "[A-Za-zÄÖÜäöüß]",
+        "reviewRequired": false
+      }
+    },
+    {
+      "id": "agent-ingest-ko-image-ocr-v1",
+      "locale": "ko",
+      "input": {
+        "kind": "ocr",
+        "text": "화면의 메모는 로컬에 저장되며 검색 색인은 다시 만들 수 있다.",
+        "evidence": [
+          {
+            "ref": "ev_01",
+            "text": "화면의 메모는 로컬에 저장되며 검색 색인은 다시 만들 수 있다.",
+            "locator": "ocr:block:1",
+            "confidence": 0.93
+          }
+        ],
+        "quality": {
+          "ocrConfidence": 0.93
+        }
+      },
+      "modelOutput": {
+        "title": "로컬 메모와 검색 색인",
+        "summary": {
+          "text": "화면의 메모는 로컬에 저장된다.",
+          "evidenceRefs": ["ev_01"]
+        },
+        "keyPoints": [
+          {
+            "text": "검색 색인은 다시 만들 수 있다.",
+            "evidenceRefs": ["ev_01"]
+          }
+        ],
+        "tags": ["로컬"],
+        "topics": ["지식 관리"],
+        "entities": [],
+        "warnings": [],
+        "confidence": "high"
+      },
+      "expected": {
+        "claims": [
+          {
+            "text": "화면의 메모는 로컬에 저장된다.",
+            "allowedEvidenceRefs": ["ev_01"],
+            "requiredEvidenceTerms": ["메모", "로컬에 저장"]
+          },
+          {
+            "text": "검색 색인은 다시 만들 수 있다.",
+            "allowedEvidenceRefs": ["ev_01"],
+            "requiredEvidenceTerms": ["검색 색인", "다시 만들"]
+          }
+        ],
+        "citationLocators": ["ocr1"],
+        "languagePattern": "[\\p{Script=Hangul}]",
+        "reviewRequired": false
+      }
+    },
+    {
+      "id": "agent-ingest-zh-en-mixed-text-v1",
+      "locale": "zh-Hans",
+      "input": {
+        "kind": "text",
+        "text": "知识正文保存在 local Markdown，检索只把 selected evidence 发送给云模型。",
+        "evidence": [
+          {
+            "ref": "ev_01",
+            "text": "知识正文保存在 local Markdown，检索只把 selected evidence 发送给云模型。",
+            "locator": "managed_source_preview"
+          }
+        ]
+      },
+      "modelOutput": {
+        "title": "本地正文与 selected evidence",
+        "summary": {
+          "text": "知识正文保存在 local Markdown。",
+          "evidenceRefs": ["ev_01"]
+        },
+        "keyPoints": [
+          {
+            "text": "云模型只接收 selected evidence。",
+            "evidenceRefs": ["ev_01"]
+          }
+        ],
+        "tags": ["local-first"],
+        "topics": ["上下文检索"],
+        "entities": [],
+        "warnings": [],
+        "confidence": "high"
+      },
+      "expected": {
+        "claims": [
+          {
+            "text": "知识正文保存在 local Markdown。",
+            "allowedEvidenceRefs": ["ev_01"],
+            "requiredEvidenceTerms": ["知识正文", "local Markdown"]
+          },
+          {
+            "text": "云模型只接收 selected evidence。",
+            "allowedEvidenceRefs": ["ev_01"],
+            "requiredEvidenceTerms": ["云模型", "selected evidence"]
+          }
+        ],
+        "citationLocators": ["source"],
+        "languagePattern": "(?=.*[\\p{Script=Han}])(?=.*[A-Za-z])",
+        "reviewRequired": false
+      }
+    }
+  ]
+}

@@ -1,0 +1,233 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "path": "docs/PRD.md",
+    "startHeading": "### 8.1 P0 Must Have",
+    "endHeading": "### 8.2 P1 Should Have"
+  },
+  "itemIdFormat": "P0-<CATEGORY>-<THREE_DIGIT_ORDINAL>",
+  "categories": [
+    {
+      "key": "HOME",
+      "name": "Home and capture",
+      "expectedItems": 17,
+      "coverage": [
+        { "range": [1, 4], "requirements": ["PIGE-UI-003"], "capabilities": ["ui.home-navigation-shell"] },
+        { "items": [5], "requirements": ["PIGE-CAP-004"], "capabilities": ["capture.whole-window-drop"] },
+        { "items": [6], "requirements": ["PIGE-CAP-003"], "capabilities": ["capture.local-voice"] },
+        { "items": [7], "requirements": ["PIGE-CAP-001", "PIGE-CAP-002"], "capabilities": ["capture.preserve-source", "capture.large-paste-reference"] },
+        { "items": [8], "requirements": ["PIGE-CAP-001", "PIGE-VAULT-003"], "capabilities": ["capture.preserve-source", "vault.source-ownership"] },
+        { "range": [9, 12], "requirements": ["PIGE-CAP-001", "PIGE-INGEST-003"], "capabilities": ["capture.preserve-source", "ingest.web-pdf-office"] },
+        { "items": [13], "requirements": ["PIGE-CAP-001", "PIGE-INGEST-004"], "capabilities": ["capture.preserve-source", "ingest.native-ocr-routing"] },
+        { "items": [14], "requirements": ["PIGE-CAP-001", "PIGE-INGEST-002", "PIGE-INGEST-004"], "capabilities": ["capture.preserve-source", "ingest.paddle-lifecycle", "ingest.native-ocr-routing"] },
+        { "items": [15], "requirements": ["PIGE-INGEST-002", "PIGE-DEP-002"], "capabilities": ["ingest.paddle-lifecycle", "dependency.bundled-toolchain"] },
+        { "range": [16, 17], "requirements": ["PIGE-JOB-007"], "capabilities": ["job.visible-status"] }
+      ]
+    },
+    {
+      "key": "OUTPUT",
+      "name": "Agent output",
+      "expectedItems": 12,
+      "coverage": [
+        { "range": [1, 12], "requirements": ["PIGE-KNOW-006"], "capabilities": ["knowledge.agent-output"] }
+      ]
+    },
+    {
+      "key": "VAULT",
+      "name": "Vault",
+      "expectedItems": 20,
+      "coverage": [
+        { "range": [1, 3], "requirements": ["PIGE-VAULT-005"], "capabilities": ["vault.storage-settings-layout"] },
+        { "items": [4], "requirements": ["PIGE-VAULT-001"], "capabilities": ["vault.markdown-truth"] },
+        { "items": [5], "requirements": ["PIGE-VAULT-003", "PIGE-VAULT-005"], "capabilities": ["vault.source-ownership", "vault.storage-settings-layout"] },
+        { "items": [6], "requirements": ["PIGE-VAULT-003", "PIGE-INGEST-003", "PIGE-INGEST-004"], "capabilities": ["vault.source-ownership", "ingest.web-pdf-office", "ingest.native-ocr-routing"] },
+        { "items": [7], "requirements": ["PIGE-VAULT-001", "PIGE-SCHEMA-001"], "capabilities": ["vault.markdown-truth", "markdown.frontmatter"] },
+        { "items": [8], "requirements": ["PIGE-VAULT-001", "PIGE-KNOW-006"], "capabilities": ["vault.markdown-truth", "knowledge.agent-output"] },
+        { "items": [9], "requirements": ["PIGE-VAULT-003", "PIGE-VAULT-005"], "capabilities": ["vault.source-ownership", "vault.storage-settings-layout"] },
+        { "items": [10], "requirements": ["PIGE-MEM-001", "PIGE-BACKUP-001"], "capabilities": ["memory.inspectable-lifecycle", "backup.default-inclusions"] },
+        { "items": [11], "requirements": ["PIGE-JOB-006", "PIGE-BACKUP-001"], "capabilities": ["job.conversation-history", "backup.default-inclusions"] },
+        { "items": [12], "requirements": ["PIGE-SKILL-001"], "capabilities": ["skill.lifecycle"] },
+        { "items": [13], "requirements": ["PIGE-DB-001"], "capabilities": ["database.rebuildable"] },
+        { "items": [14], "requirements": ["PIGE-VAULT-004"], "capabilities": ["vault.trash-first"] },
+        { "items": [15], "requirements": ["PIGE-VAULT-001", "PIGE-SCHEMA-001"], "capabilities": ["vault.markdown-truth", "markdown.frontmatter"] },
+        { "items": [16], "requirements": ["PIGE-SCHEMA-001"], "capabilities": ["markdown.frontmatter"] },
+        { "items": [17], "requirements": ["PIGE-VAULT-006"], "capabilities": ["vault.atomic-conflict"] },
+        { "items": [18], "requirements": ["PIGE-VAULT-004"], "capabilities": ["vault.trash-first"] },
+        { "items": [19], "requirements": ["PIGE-VAULT-002", "PIGE-VAULT-007"], "capabilities": ["vault.path-independent-id", "vault.sync-conflict-metadata"] },
+        { "items": [20], "requirements": ["PIGE-RUNTIME-001"], "capabilities": ["runtime.capability-adapters"] }
+      ]
+    },
+    {
+      "key": "SCALE",
+      "name": "Scale and platform",
+      "expectedItems": 5,
+      "coverage": [
+        { "items": [1, 5], "requirements": ["PIGE-REL-004"], "capabilities": ["release.performance-budgets"] },
+        { "range": [2, 4], "requirements": ["PIGE-REL-001", "PIGE-REL-005"], "capabilities": ["release.platform-update", "release.artifact-attribution"] }
+      ]
+    },
+    {
+      "key": "NAV",
+      "name": "Navigation",
+      "expectedItems": 22,
+      "coverage": [
+        { "range": [1, 5], "requirements": ["PIGE-UI-003"], "capabilities": ["ui.home-navigation-shell"] },
+        { "items": [6], "requirements": ["PIGE-KNOW-004"], "capabilities": ["knowledge.simple-tree"] },
+        { "items": [7], "requirements": ["PIGE-UI-004"], "capabilities": ["ui.tree-visual-semantics"] },
+        { "items": [8], "requirements": ["PIGE-SEARCH-001"], "capabilities": ["search.home-grounded"] },
+        { "items": [9], "requirements": ["PIGE-UI-006"], "capabilities": ["ui.reader-related-metadata"] },
+        { "range": [10, 11], "requirements": ["PIGE-UI-005"], "capabilities": ["ui.note-agent-actions"] },
+        { "items": [12], "requirements": ["PIGE-SKILL-001"], "capabilities": ["skill.lifecycle"] },
+        { "items": [13], "requirements": ["PIGE-SKILL-002"], "capabilities": ["package.curated-lifecycle"] },
+        { "items": [14], "requirements": ["PIGE-SEC-002"], "capabilities": ["security.permission-broker"] },
+        { "items": [15], "requirements": ["PIGE-SEC-003"], "capabilities": ["security.permission-modes"] },
+        { "items": [16], "requirements": ["PIGE-SETTINGS-001", "PIGE-UI-003"], "capabilities": ["settings.registry", "ui.home-navigation-shell"] },
+        { "items": [17], "requirements": ["PIGE-SETTINGS-001"], "capabilities": ["settings.registry"] },
+        { "items": [18], "requirements": ["PIGE-VAULT-005", "PIGE-SETTINGS-001"], "capabilities": ["vault.storage-settings-layout", "settings.registry"] },
+        { "items": [19], "requirements": ["PIGE-PI-002", "PIGE-PI-004"], "capabilities": ["pi.default-model", "pi.byok-providers"] },
+        { "items": [20], "requirements": ["PIGE-CAP-003", "PIGE-DEP-002", "PIGE-INGEST-001", "PIGE-INGEST-002", "PIGE-INGEST-003", "PIGE-INGEST-004", "PIGE-SEARCH-003", "PIGE-SETTINGS-001"], "capabilities": ["capture.local-voice", "dependency.bundled-toolchain", "ingest.no-task-download", "ingest.paddle-lifecycle", "ingest.web-pdf-office", "ingest.native-ocr-routing", "search.local-rag", "settings.registry"] },
+        { "items": [21], "requirements": ["PIGE-DIAG-003", "PIGE-SEC-001", "PIGE-SEC-002", "PIGE-SEC-003", "PIGE-SEC-005", "PIGE-SETTINGS-001"], "capabilities": ["diagnostics.bounded-redacted-logs", "security.secret-storage", "security.permission-broker", "security.permission-modes", "security.model-egress", "settings.registry"] },
+        { "items": [22], "requirements": ["PIGE-SKILL-001", "PIGE-SKILL-002", "PIGE-SETTINGS-001"], "capabilities": ["skill.lifecycle", "package.curated-lifecycle", "settings.registry"] }
+      ]
+    },
+    {
+      "key": "I18N",
+      "name": "Internationalization",
+      "expectedItems": 6,
+      "coverage": [
+        { "range": [1, 2], "requirements": ["PIGE-I18N-001"], "capabilities": ["i18n.release-locales"] },
+        { "range": [3, 5], "requirements": ["PIGE-I18N-002"], "capabilities": ["i18n.language-metadata"] },
+        { "items": [6], "requirements": ["PIGE-I18N-002", "PIGE-SEARCH-002", "PIGE-SEARCH-003"], "capabilities": ["i18n.language-metadata", "search.lexical-before-model", "search.local-rag"] }
+      ]
+    },
+    {
+      "key": "A11Y",
+      "name": "Accessibility",
+      "expectedItems": 5,
+      "coverage": [
+        { "range": [1, 5], "requirements": ["PIGE-UI-002"], "capabilities": ["ui.accessibility-baseline"] }
+      ]
+    },
+    {
+      "key": "MODELS",
+      "name": "Models",
+      "expectedItems": 9,
+      "coverage": [
+        { "range": [1, 5], "requirements": ["PIGE-PI-004"], "capabilities": ["pi.byok-providers"] },
+        { "items": [6], "requirements": ["PIGE-PI-002"], "capabilities": ["pi.default-model"] },
+        { "items": [7], "requirements": ["PIGE-SEARCH-003"], "capabilities": ["search.local-rag"] },
+        { "items": [8], "requirements": ["PIGE-SEC-005"], "capabilities": ["security.model-egress"] },
+        { "items": [9], "requirements": ["PIGE-SEC-001"], "capabilities": ["security.secret-storage"] }
+      ]
+    },
+    {
+      "key": "RAG",
+      "name": "Local RAG",
+      "expectedItems": 5,
+      "coverage": [
+        { "range": [1, 5], "requirements": ["PIGE-SEARCH-003"], "capabilities": ["search.local-rag"] }
+      ]
+    },
+    {
+      "key": "DB",
+      "name": "Local database",
+      "expectedItems": 4,
+      "coverage": [
+        { "range": [1, 2], "requirements": ["PIGE-DB-002"], "capabilities": ["database.driver-domains"] },
+        { "items": [3], "requirements": ["PIGE-DB-001"], "capabilities": ["database.rebuildable"] },
+        { "items": [4], "requirements": ["PIGE-DB-001", "PIGE-SETTINGS-002"], "capabilities": ["database.rebuildable", "settings.machine-local-backup"] }
+      ]
+    },
+    {
+      "key": "MEM",
+      "name": "Agent memory",
+      "expectedItems": 6,
+      "coverage": [
+        { "range": [1, 5], "requirements": ["PIGE-MEM-001"], "capabilities": ["memory.inspectable-lifecycle"] },
+        { "items": [6], "requirements": ["PIGE-MEM-001", "PIGE-BACKUP-001"], "capabilities": ["memory.inspectable-lifecycle", "backup.default-inclusions"] }
+      ]
+    },
+    {
+      "key": "CONV",
+      "name": "Conversation history",
+      "expectedItems": 3,
+      "coverage": [
+        { "items": [1], "requirements": ["PIGE-JOB-006"], "capabilities": ["job.conversation-history"] },
+        { "items": [2], "requirements": ["PIGE-JOB-006", "PIGE-CAP-002"], "capabilities": ["job.conversation-history", "capture.large-paste-reference"] },
+        { "items": [3], "requirements": ["PIGE-JOB-006", "PIGE-BACKUP-001"], "capabilities": ["job.conversation-history", "backup.default-inclusions"] }
+      ]
+    },
+    {
+      "key": "TOOLS",
+      "name": "Bundled toolchain",
+      "expectedItems": 4,
+      "coverage": [
+        { "range": [1, 2], "requirements": ["PIGE-DEP-002"], "capabilities": ["dependency.bundled-toolchain"] },
+        { "items": [3], "requirements": ["PIGE-DEP-002", "PIGE-INGEST-001"], "capabilities": ["dependency.bundled-toolchain", "ingest.no-task-download"] },
+        { "items": [4], "requirements": ["PIGE-DEP-002"], "capabilities": ["dependency.bundled-toolchain"] }
+      ]
+    },
+    {
+      "key": "PACKAGES",
+      "name": "Pi packages",
+      "expectedItems": 5,
+      "coverage": [
+        { "range": [1, 5], "requirements": ["PIGE-SKILL-002", "PIGE-SEC-002"], "capabilities": ["package.curated-lifecycle", "security.permission-broker"] }
+      ]
+    },
+    {
+      "key": "SKILLS",
+      "name": "Skills",
+      "expectedItems": 6,
+      "coverage": [
+        { "range": [1, 4], "requirements": ["PIGE-SKILL-001"], "capabilities": ["skill.lifecycle"] },
+        { "range": [5, 6], "requirements": ["PIGE-SKILL-001", "PIGE-SEC-002"], "capabilities": ["skill.lifecycle", "security.permission-broker"] }
+      ]
+    },
+    {
+      "key": "NATIVE",
+      "name": "Native platform capabilities",
+      "expectedItems": 7,
+      "coverage": [
+        { "items": [1, 5, 6], "requirements": ["PIGE-CAP-003"], "capabilities": ["capture.local-voice"] },
+        { "range": [2, 3], "requirements": ["PIGE-INGEST-004"], "capabilities": ["ingest.native-ocr-routing"] },
+        { "items": [4], "requirements": ["PIGE-INGEST-002", "PIGE-INGEST-004"], "capabilities": ["ingest.paddle-lifecycle", "ingest.native-ocr-routing"] },
+        { "items": [7], "requirements": ["PIGE-REL-005"], "capabilities": ["release.artifact-attribution"] }
+      ]
+    },
+    {
+      "key": "BACKUP",
+      "name": "Backup",
+      "expectedItems": 4,
+      "coverage": [
+        { "items": [1], "requirements": ["PIGE-BACKUP-003"], "capabilities": ["backup.versioned-export"] },
+        { "items": [2], "requirements": ["PIGE-BACKUP-004"], "capabilities": ["backup.validated-restore"] },
+        { "items": [3], "requirements": ["PIGE-BACKUP-002", "PIGE-SEC-001"], "capabilities": ["backup.default-exclusions", "security.secret-storage"] },
+        { "items": [4], "requirements": ["PIGE-BACKUP-001"], "capabilities": ["backup.default-inclusions"] }
+      ]
+    },
+    {
+      "key": "RELEASE",
+      "name": "Release",
+      "expectedItems": 4,
+      "coverage": [
+        { "range": [1, 3], "requirements": ["PIGE-REL-001", "PIGE-REL-005"], "capabilities": ["release.platform-update", "release.artifact-attribution"] },
+        { "items": [4], "requirements": ["PIGE-REL-005", "PIGE-DEP-001"], "capabilities": ["release.artifact-attribution", "dependency.registry"] }
+      ]
+    },
+    {
+      "key": "SAFETY",
+      "name": "Safety and trust",
+      "expectedItems": 7,
+      "coverage": [
+        { "items": [1], "requirements": ["PIGE-EVAL-003"], "capabilities": ["eval.safe-auto-apply"] },
+        { "items": [2], "requirements": ["PIGE-JOB-003"], "capabilities": ["job.risky-proposals"] },
+        { "items": [3], "requirements": ["PIGE-JOB-005"], "capabilities": ["job.agent-write-operation"] },
+        { "items": [4], "requirements": ["PIGE-VAULT-006"], "capabilities": ["vault.atomic-conflict"] },
+        { "items": [5], "requirements": ["PIGE-DIAG-001", "PIGE-DIAG-002"], "capabilities": ["diagnostics.no-telemetry", "diagnostics.user-export"] },
+        { "items": [6], "requirements": ["PIGE-API-002", "PIGE-DIAG-002", "PIGE-DIAG-003"], "capabilities": ["api.shared-error-taxonomy", "diagnostics.user-export", "diagnostics.bounded-redacted-logs"] },
+        { "items": [7], "requirements": ["PIGE-REL-004"], "capabilities": ["release.performance-budgets"] }
+      ]
+    }
+  ]
+}

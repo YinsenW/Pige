@@ -1,0 +1,169 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { LocalDatabaseService } from "../../apps/desktop/src/main/services/local-database-service";
+
+const tempRoots: string[] = [];
+
+function makeVaultRoot(): string {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-db-test-"));
+  tempRoots.push(root);
+  fs.mkdirSync(path.join(root, ".pige/db"), { recursive: true });
+  return root;
+}
+
+afterEach(() => {
+  for (const root of tempRoots.splice(0)) {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+describe("local database service", () => {
+  it("initializes the node sqlite migration state behind the driver abstraction", () => {
+    const vaultPath = makeVaultRoot();
+    const service = new LocalDatabaseService();
+
+    const status = service.initialize(vaultPath);
+    const state = JSON.parse(fs.readFileSync(path.join(vaultPath, ".pige/db/schema-state.json"), "utf8")) as {
+      driver: string;
+      appSchemaVersion: number;
+      appliedMigrations: unknown[];
+    };
+
+    expect(status.driver).toBe("node_sqlite");
+    expect(status.status).toBe("ready");
+    expect(status.appSchemaVersion).toBe(1);
+    expect(status.appliedMigrationCount).toBe(1);
+    expect(state.driver).toBe("node_sqlite");
+    expect(state.appliedMigrations).toHaveLength(1);
+    expect(fs.existsSync(path.join(vaultPath, ".pige/db/vault.sqlite"))).toBe(true);
+  });
+
+  it("rebuilds page metadata and FTS search from Markdown files", () => {
+    const vaultPath = makeVaultRoot();
+    const service = new LocalDatabaseService();
+    writePage(vaultPath, "wiki/local-rag.md", {
+      id: "page_20260709_rag12345",
+      title: "Local RAG",
+      body: "Local RAG uses lexical search before vector retrieval."
+    });
+    writePage(vaultPath, "wiki/ocr.md", {
+      id: "page_20260709_cjk12345",
+      title: "本地 OCR",
+      body: "图片和扫描 PDF 需要本地识别能力。",
+      language: "zh-Hans"
+    });
+
+    const rebuild = service.rebuild(vaultPath);
+    const pages = service.listPages(vaultPath, { limit: 10 });
+    const latin = service.searchPages(vaultPath, { query: "lexical search" });
+    const cjk = service.searchPages(vaultPath, { query: "本地识别" });
+
+    expect(rebuild).toMatchObject({ pageCount: 2, invalidPageCount: 0 });
+    expect(pages?.total).toBe(2);
+    expect(pages?.pages.map((page) => page.title)).toContain("Local RAG");
+    expect(latin?.results[0]?.summary.title).toBe("Local RAG");
+    expect(cjk?.results[0]?.summary.title).toBe("本地 OCR");
+  });
+
+  it("indexes wiki links and local Markdown links as rebuildable related pages", () => {
+    const vaultPath = makeVaultRoot();
+    const service = new LocalDatabaseService();
+    writePage(vaultPath, "wiki/topic.md", {
+      id: "page_20260709_topic1",
+      title: "Knowledge Tree",
+      body: "A durable note that can be reached by explicit links."
+    });
+    writePage(vaultPath, "wiki/research/source.md", {
+      id: "page_20260709_source1",
+      title: "Source Note",
+      body: `See [[Knowledge Tree]] and [the same topic](../topic.md#details).
+
+[External](https://example.com) should not become a graph edge.
+\`[[Ignored Code Link]]\`
+`
+    });
+
+    service.rebuild(vaultPath);
+
+    const outgoing = service.relatedPages(vaultPath, { pageId: "page_20260709_source1" });
+    const backlinks = service.relatedPages(vaultPath, { pageId: "page_20260709_topic1" });
+
+    expect(outgoing?.totalOutgoing).toBe(1);
+    expect(outgoing?.outgoing).toHaveLength(1);
+    expect(outgoing?.outgoing[0]?.summary).toMatchObject({
+      pageId: "page_20260709_topic1",
+      title: "Knowledge Tree"
+    });
+    expect(backlinks?.totalBacklinks).toBe(1);
+    expect(backlinks?.backlinks[0]?.summary).toMatchObject({
+      pageId: "page_20260709_source1",
+      title: "Source Note"
+    });
+    expect(JSON.stringify(outgoing)).not.toContain("example.com");
+  });
+
+  it("rebuilds after database deletion without losing Markdown knowledge", () => {
+    const vaultPath = makeVaultRoot();
+    const service = new LocalDatabaseService();
+    writePage(vaultPath, "wiki/rebuild.md", {
+      id: "page_20260709_rebuild1",
+      title: "Rebuildable Knowledge",
+      body: "The database can disappear while Markdown remains durable."
+    });
+    service.rebuild(vaultPath);
+    fs.rmSync(path.join(vaultPath, ".pige/db/vault.sqlite"), { force: true });
+
+    const result = service.listPages(vaultPath);
+
+    expect(result?.total).toBe(1);
+    expect(result?.pages[0]?.title).toBe("Rebuildable Knowledge");
+  });
+
+  it("detects external Markdown edits and refreshes the FTS index", () => {
+    const vaultPath = makeVaultRoot();
+    const service = new LocalDatabaseService();
+    writePage(vaultPath, "wiki/external.md", {
+      id: "page_20260709_external",
+      title: "External Edit",
+      body: "Initial body."
+    });
+    service.rebuild(vaultPath);
+    writePage(vaultPath, "wiki/external.md", {
+      id: "page_20260709_external",
+      title: "External Edit",
+      body: "External editors can add nebula retrieval notes."
+    });
+
+    const result = service.searchPages(vaultPath, { query: "nebula retrieval" });
+
+    expect(result?.total).toBe(1);
+    expect(result?.results[0]?.snippets[0]).toContain("nebula retrieval");
+  });
+});
+
+function writePage(vaultPath: string, relativePath: string, input: {
+  readonly id: string;
+  readonly title: string;
+  readonly body: string;
+  readonly type?: string;
+  readonly language?: string;
+}): void {
+  const filePath = path.join(vaultPath, ...relativePath.split("/"));
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, `---
+id: "${input.id}"
+schema_version: 1
+title: "${input.title}"
+type: "${input.type ?? "note"}"
+created_at: "2026-07-09T12:00:00.000Z"
+updated_at: "2026-07-09T12:00:00.000Z"
+status: "active"
+language: "${input.language ?? "en"}"
+source_ids: []
+---
+
+${input.body}
+`, "utf8");
+}

@@ -1,0 +1,86 @@
+name: Bug report
+description: Report a reproducible bug using synthetic or redacted data.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Pige.
+
+        Do not include private vaults, source files, API keys, raw prompts, raw model responses, full logs, backups, or unreviewed support bundles. Use synthetic or redacted reproductions. Security issues must follow SECURITY.md instead of this public form.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the bug and user-visible impact.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect Pige to do?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Use synthetic or redacted data.
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      multiple: true
+      options:
+        - Capture
+        - Parser/OCR
+        - Markdown/vault storage
+        - Search/RAG
+        - Agent/model provider
+        - Permissions/YOLO
+        - Skills/packages
+        - Backup/restore
+        - Updates/release
+        - Diagnostics/support bundle
+        - UI/I18N/accessibility
+        - Documentation
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: "0.1.0-alpha.x or commit SHA"
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      placeholder: "macOS 26.x / Windows 11 / Windows 10"
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Redacted diagnostics
+      description: Include only error codes, job IDs, operation IDs, or redacted support-bundle summaries.
+  - type: textarea
+    id: requirement
+    attributes:
+      label: Related requirement or document
+      description: Link a requirement ID or design doc section if known.
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety checklist
+      options:
+        - label: I have removed secrets, private vault content, source files, raw prompts, raw model responses, and private paths.
+          required: true
+        - label: This is not a security vulnerability report.
+          required: true

@@ -1,0 +1,771 @@
+import type { PigeClientCapabilityTier, PigeRuntimeKind } from "@pige/domain";
+import type {
+  BoundaryVerification,
+  CloudBoundary,
+  CloudSendPolicy,
+  ChangeOperation,
+  ConfirmationProposal,
+  Locale,
+  JobClass,
+  JobState,
+  MarkdownPageStatus,
+  MarkdownPageType,
+  ModelListStrategy,
+  ProposalState,
+  ProposalTrustLevel,
+  ProviderKind,
+  SettingApplyBehavior,
+  SettingPermissionRequirement,
+  SettingScope,
+  SourceKind,
+  SourceAssetRootKind,
+  SourceStorageStrategy,
+  WindowLayoutMode
+} from "@pige/schemas";
+
+export type {
+  DiagnosticError,
+  PigeError,
+  PigeErrorAction,
+  PigeErrorDomain,
+  PigeErrorSeverity,
+  PigeErrorSummary,
+  PigeWarning
+} from "@pige/schemas";
+
+export interface AppHealth {
+  readonly status: "ok";
+  readonly appVersion: string;
+  readonly checkedAt: string;
+}
+
+export interface VaultCounts {
+  readonly notes: number;
+  readonly sources: number;
+  readonly managedSourceCopies: number;
+  readonly referencedOriginals: number;
+}
+
+export interface VaultSummary {
+  readonly vaultId: string;
+  readonly name: string;
+  readonly activeVaultPathDisplay: string;
+  readonly knowledgeRootDisplay: string;
+  readonly sourceAssetRootDisplay: string;
+  readonly sourceAssetRootKind: SourceAssetRootKind;
+  readonly defaultSourceStorageStrategy: SourceStorageStrategy;
+  readonly schemaVersion: number;
+  readonly counts?: VaultCounts;
+  readonly lastBackupAt?: string;
+}
+
+export interface RecentVaultSummary {
+  readonly vaultId: string;
+  readonly name: string;
+  readonly pathDisplay: string;
+  readonly schemaVersion: number;
+  readonly lastOpenedAt: string;
+}
+
+export interface OnboardingStatus {
+  readonly state: "blocked_no_vault" | "capture_only" | "ready";
+  readonly activeVault?: VaultSummary;
+  readonly hasDefaultModel: boolean;
+  readonly waitingDependencyCounts?: {
+    readonly modelProvider: number;
+    readonly localTool: number;
+    readonly localModel: number;
+    readonly runtimeCapability: number;
+    readonly vaultBinding: number;
+    readonly externalSource: number;
+  };
+}
+
+export interface AgentRuntimePolicyContext {
+  readonly schemaVersion: 1;
+  readonly policyContextId: string;
+  readonly builtAt: string;
+  readonly jobId: string;
+  readonly policyHash: string;
+  readonly vaultId: string;
+  readonly sourceStorage: {
+    readonly defaultStrategy: SourceStorageStrategy;
+    readonly sourceAssetRootKind: SourceAssetRootKind;
+    readonly allowPerCaptureOverride: boolean;
+    readonly linkStrategyEnabled: false;
+  };
+  readonly model: {
+    readonly defaultModelProfileId?: string;
+    readonly modelConfigured: boolean;
+    readonly cloudBoundary: "cloud" | "self_hosted" | "local" | "unknown";
+    readonly boundaryVerification: BoundaryVerification;
+    readonly cloudSendPolicy: CloudSendPolicy;
+    readonly modelRoutingMode: "default_model_only" | "pi_upstream_model_slots" | "pige_model_routing_service";
+  };
+  readonly permissions: {
+    readonly defaultMode: "ask_every_time" | "remember_scoped_grants" | "yolo_full_access";
+    readonly yoloEnabled: boolean;
+    readonly savedGrantSummaryRefs: readonly string[];
+  };
+  readonly language: {
+    readonly appLocale: Locale;
+    readonly generatedKnowledgeLanguage: "preserve_source" | "follow_query" | "app_locale";
+    readonly preserveSourceLanguage: boolean;
+    readonly ocrLanguageHints: readonly string[];
+    readonly voiceInputLanguage?: string;
+  };
+  readonly confirmation: {
+    readonly safeAutoApplyThreshold: number;
+    readonly mutatingReviewThreshold: number;
+    readonly riskyChangeRequiresConfirmation: boolean;
+  };
+  readonly memory: {
+    readonly vaultMemoryEnabled: boolean;
+    readonly allowedMemoryScopes: readonly ("preference" | "correction" | "workflow_lesson" | "profile")[];
+    readonly includeMemoryInBackup: boolean;
+  };
+  readonly retrieval: {
+    readonly lexicalSearchAvailable: boolean;
+    readonly vectorSearchAvailable: boolean;
+    readonly rerankerAvailable: boolean;
+    readonly maxSnippetsForCloudSynthesis: number;
+  };
+  readonly localCapabilities: {
+    readonly localDatabase: "not_initialized" | "ready" | "needs_rebuild" | "error";
+    readonly parserToolchainReady: boolean;
+    readonly ocrEngines: readonly ("apple_vision" | "windows_ai" | "paddleocr")[];
+    readonly speechInputAvailable: boolean;
+    readonly embeddingModelInstalled: boolean;
+    readonly hiddenDownloadsAllowed: false;
+  };
+}
+
+export interface AgentRuntimeStatus {
+  readonly runtimeKind: PigeRuntimeKind;
+  readonly clientCapabilityTier: PigeClientCapabilityTier;
+  readonly adapterMode: "phase_1_stub" | "embedded_pi_sdk" | "rpc_json" | "development_cli";
+  readonly state: "blocked_no_vault" | "waiting_for_model" | "ready";
+  readonly canRunModelJobs: boolean;
+  readonly missingDependencies: readonly ("vault" | "default_model")[];
+  readonly defaultModelProfileId?: string;
+  readonly policySnapshot?: {
+    readonly policyContextId: string;
+    readonly policyHash: string;
+    readonly builtAt: string;
+    readonly vaultId: string;
+    readonly cloudBoundary: AgentRuntimePolicyContext["model"]["cloudBoundary"];
+    readonly localDatabase: AgentRuntimePolicyContext["localCapabilities"]["localDatabase"];
+  };
+}
+
+export interface DiagnosticsHealth {
+  readonly status: "ok" | "degraded";
+  readonly checkedAt: string;
+  readonly localOnly: true;
+  readonly recentErrorCount: number;
+  readonly checks: readonly {
+    readonly id: string;
+    readonly status: "ok" | "warning" | "error";
+    readonly message: string;
+  }[];
+}
+
+export interface SupportBundleCategory {
+  readonly id: string;
+  readonly label: string;
+  readonly included: boolean;
+  readonly reason: string;
+}
+
+export interface SupportBundlePreview {
+  readonly previewId: string;
+  readonly generatedAt: string;
+  readonly localOnly: true;
+  readonly estimatedBytes: number;
+  readonly includedCategories: readonly SupportBundleCategory[];
+  readonly excludedCategories: readonly SupportBundleCategory[];
+  readonly privacyWarnings: readonly string[];
+}
+
+export interface SupportBundleExportResult {
+  readonly status: "exported" | "canceled";
+  readonly exportedAt?: string;
+  readonly outputPath?: string;
+  readonly bytesWritten?: number;
+}
+
+export interface ExportSupportBundleRequest {
+  readonly previewId: string;
+}
+
+export interface LocalDatabaseResetResult {
+  readonly resetAt: string;
+  readonly removedRoots: readonly string[];
+  readonly recreatedRoots: readonly string[];
+}
+
+export interface LocalDatabaseRebuildResult {
+  readonly rebuiltAt: string;
+  readonly pageCount: number;
+  readonly invalidPageCount: number;
+  readonly jobId?: string;
+  readonly state?: JobState;
+}
+
+export interface LocalDatabaseStatus {
+  readonly driver: "pending_sqlite_driver" | "better_sqlite3" | "node_sqlite";
+  readonly appSchemaVersion: number;
+  readonly appliedMigrationCount: number;
+  readonly status: "not_initialized" | "ready" | "needs_rebuild" | "error";
+  readonly updatedAt: string;
+}
+
+export interface ProviderProfileSummary {
+  readonly id: string;
+  readonly displayName: string;
+  readonly providerKind: ProviderKind;
+  readonly baseUrl?: string;
+  readonly modelListStrategy: ModelListStrategy;
+  readonly cloudBoundary: CloudBoundary;
+  readonly boundaryVerification?: BoundaryVerification;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface ModelProfileSummary {
+  readonly id: string;
+  readonly providerProfileId: string;
+  readonly modelId: string;
+  readonly displayName?: string;
+  readonly source: "provider_list" | "manual";
+  readonly enabled: boolean;
+  readonly isDefault: boolean;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface ModelProviderSettingsSummary {
+  readonly providers: readonly ProviderProfileSummary[];
+  readonly models: readonly ModelProfileSummary[];
+  readonly defaultModelProfileId?: string;
+  readonly hasDefaultModel: boolean;
+}
+
+export interface AddManualProviderRequest {
+  readonly displayName: string;
+  readonly providerKind: ProviderKind;
+  readonly baseUrl?: string;
+  readonly apiKey: string;
+  readonly manualModelId: string;
+  readonly cloudBoundary: CloudBoundary;
+}
+
+export interface SetDefaultModelRequest {
+  readonly modelProfileId: string;
+}
+
+export interface SettingRegistryEntry {
+  readonly key: string;
+  readonly page: string;
+  readonly scope: SettingScope;
+  readonly owner: string;
+  readonly storage: string;
+  readonly backedUpByDefault: boolean;
+  readonly applyBehavior: SettingApplyBehavior;
+  readonly permissionRequirement: SettingPermissionRequirement;
+  readonly agentPolicyEffect?: string;
+}
+
+export interface SettingsRegistrySummary {
+  readonly entries: readonly SettingRegistryEntry[];
+}
+
+export interface AppearanceSettingsSummary {
+  readonly locale: Locale;
+  readonly availableLocales: readonly Locale[];
+}
+
+export interface SetLocaleRequest {
+  readonly locale: Locale;
+}
+
+export type CaptureUserIntent = "capture" | "ask" | "unknown";
+
+export interface SubmitTextCaptureRequest {
+  readonly text: string;
+  readonly inputKind: "typed_text" | "pasted_text";
+  readonly userIntent: CaptureUserIntent;
+  readonly locale: Locale;
+}
+
+export interface SubmitDroppedFilesCaptureRequest {
+  readonly inputKind: "file_drop" | "file_picker";
+  readonly userIntent: CaptureUserIntent;
+  readonly locale: Locale;
+}
+
+export interface SubmitFilesCaptureRequest extends SubmitDroppedFilesCaptureRequest {
+  readonly filePaths: readonly string[];
+}
+
+export interface SubmitUrlCaptureRequest {
+  readonly url: string;
+  readonly inputKind: "pasted_url" | "typed_url";
+  readonly userIntent: CaptureUserIntent;
+  readonly locale: Locale;
+}
+
+export interface CaptureSubmitResult {
+  readonly status: "queued";
+  readonly captureId: string;
+  readonly sourceId: string;
+  readonly jobId: string;
+  readonly conversationEventId: string;
+  readonly preservedAt: string;
+}
+
+export interface CaptureFileRejection {
+  readonly displayName: string;
+  readonly reason: "empty_path" | "missing" | "not_regular_file" | "unsupported_type" | "copy_failed";
+}
+
+export interface CaptureFilesSubmitResult {
+  readonly status: "queued" | "partially_queued" | "rejected";
+  readonly captureId: string;
+  readonly sourceIds: readonly string[];
+  readonly jobIds: readonly string[];
+  readonly conversationEventIds: readonly string[];
+  readonly rejectedFiles: readonly CaptureFileRejection[];
+  readonly preservedAt: string;
+}
+
+export interface JobsListRequest {
+  readonly limit?: number;
+  readonly states?: readonly JobState[];
+  readonly classes?: readonly JobClass[];
+}
+
+export interface JobSummary {
+  readonly id: string;
+  readonly class: JobClass;
+  readonly state: JobState;
+  readonly sourceId?: string;
+  readonly captureId?: string;
+  readonly conversationEventId?: string;
+  readonly sourceDisplayName?: string;
+  readonly sourceKind?: SourceKind;
+  readonly message: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface JobsListResult {
+  readonly scannedAt: string;
+  readonly activeVaultId: string;
+  readonly total: number;
+  readonly invalidJobCount: number;
+  readonly jobs: readonly JobSummary[];
+}
+
+export interface JobActionRequest {
+  readonly jobId: string;
+}
+
+export interface JobActionResult {
+  readonly status: "cancelled" | "requeued" | "not_found" | "not_allowed";
+  readonly reason?: string;
+  readonly job?: JobSummary;
+}
+
+export interface ProposalsListRequest {
+  readonly limit?: number;
+  readonly states?: readonly ProposalState[];
+}
+
+export interface ProposalSummary {
+  readonly id: string;
+  readonly state: ProposalState;
+  readonly trustLevel: ProposalTrustLevel;
+  readonly jobId?: string;
+  readonly summary: string;
+  readonly reason: string;
+  readonly operationCount: number;
+  readonly warningCount: number;
+  readonly targetCount: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface ProposalsListResult {
+  readonly scannedAt: string;
+  readonly activeVaultId: string;
+  readonly total: number;
+  readonly invalidProposalCount: number;
+  readonly proposals: readonly ProposalSummary[];
+}
+
+export interface ProposalGetRequest {
+  readonly proposalId: string;
+}
+
+export interface ProposalGetResult {
+  readonly proposal: ConfirmationProposal;
+}
+
+export interface StageProposalRequest {
+  readonly jobId?: string;
+  readonly trustLevel: ProposalTrustLevel;
+  readonly summary: string;
+  readonly reason: string;
+  readonly sourceRefs?: ConfirmationProposal["sourceRefs"];
+  readonly targetRefs?: ConfirmationProposal["targetRefs"];
+  readonly proposedOperations: readonly ChangeOperation[];
+  readonly diffRefs?: ConfirmationProposal["diffRefs"];
+  readonly warnings?: readonly string[];
+  readonly baseHashes?: Record<string, string>;
+  readonly requiredPermissionIds?: readonly string[];
+}
+
+export interface StageProposalResult {
+  readonly proposal: ConfirmationProposal;
+}
+
+export interface ProposalDecisionRequest {
+  readonly proposalId: string;
+  readonly reason?: string;
+}
+
+export interface ProposalDecisionResult {
+  readonly status: "approved" | "rejected" | "not_found" | "not_allowed";
+  readonly reason?: string;
+  readonly proposal?: ConfirmationProposal;
+}
+
+export interface LibraryListRequest {
+  readonly limit?: number;
+  readonly pageTypes?: readonly MarkdownPageType[];
+}
+
+export interface LibraryPageSummary {
+  readonly pageId: string;
+  readonly title: string;
+  readonly pageType: MarkdownPageType;
+  readonly status: MarkdownPageStatus;
+  readonly pagePath: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly language?: string;
+  readonly sourceIds: readonly string[];
+}
+
+export interface LibraryListResult {
+  readonly scannedAt: string;
+  readonly activeVaultId: string;
+  readonly total: number;
+  readonly invalidPageCount: number;
+  readonly pages: readonly LibraryPageSummary[];
+}
+
+export interface LibraryRelatedRequest {
+  readonly pageId: string;
+  readonly limit?: number;
+}
+
+export interface LibraryRelatedPage {
+  readonly summary: LibraryPageSummary;
+  readonly relation: "outgoing" | "backlink";
+  readonly target: string;
+}
+
+export interface LibraryRelatedResult {
+  readonly queriedAt: string;
+  readonly activeVaultId: string;
+  readonly pageId: string;
+  readonly totalOutgoing: number;
+  readonly totalBacklinks: number;
+  readonly invalidPageCount: number;
+  readonly outgoing: readonly LibraryRelatedPage[];
+  readonly backlinks: readonly LibraryRelatedPage[];
+  readonly degraded: boolean;
+  readonly degradedReason?: "local_database_not_ready";
+}
+
+export interface NoteGetRequest {
+  readonly pageId: string;
+}
+
+export type NoteRenderRequest = NoteGetRequest;
+
+export interface NoteDocument {
+  readonly summary: LibraryPageSummary;
+  readonly markdownBody: string;
+  readonly byteSize: number;
+}
+
+export interface NoteRenderResult {
+  readonly summary: LibraryPageSummary;
+  readonly html: string;
+  readonly byteSize: number;
+}
+
+export interface RetrievalSearchRequest {
+  readonly query: string;
+  readonly limit?: number;
+  readonly pageTypes?: readonly MarkdownPageType[];
+}
+
+export interface RetrievalSearchResultItem {
+  readonly summary: LibraryPageSummary;
+  readonly score: number;
+  readonly snippets: readonly string[];
+  readonly matchReasons: readonly string[];
+}
+
+export interface RetrievalSearchResult {
+  readonly searchedAt: string;
+  readonly activeVaultId: string;
+  readonly query: string;
+  readonly mode: "lexical_markdown_scan" | "lexical_sqlite_fts";
+  readonly total: number;
+  readonly invalidPageCount: number;
+  readonly degraded: boolean;
+  readonly degradedReason?: "local_database_not_ready" | "local_rag_not_installed";
+  readonly results: readonly RetrievalSearchResultItem[];
+}
+
+export interface RetrievalAskRequest extends RetrievalSearchRequest {
+  readonly locale?: Locale;
+}
+
+export type RetrievalAnswerWarning =
+  | "insufficient_evidence"
+  | "limited_evidence"
+  | "local_extractive_only"
+  | "search_degraded";
+
+export interface RetrievalAnswerCitation {
+  readonly refId: string;
+  readonly label: string;
+  readonly pageId: string;
+  readonly title: string;
+  readonly pageType: MarkdownPageType;
+  readonly locator: string;
+}
+
+export interface RetrievalAskResult extends RetrievalSearchResult {
+  readonly answeredAt: string;
+  readonly answer: string;
+  readonly answerMode: "local_extractive" | "model_grounded";
+  readonly confidence: "grounded" | "limited" | "insufficient";
+  readonly citations: readonly RetrievalAnswerCitation[];
+  readonly warnings: readonly RetrievalAnswerWarning[];
+}
+
+export interface ToolchainToolStatus {
+  readonly id: string;
+  readonly name: string;
+  readonly required: boolean;
+  readonly status: "ready" | "missing";
+  readonly resolvedPath?: string;
+  readonly repairHint?: string;
+}
+
+export interface ToolchainHealth {
+  readonly status: "ready" | "needs_repair";
+  readonly checkedAt: string;
+  readonly tools: readonly ToolchainToolStatus[];
+}
+
+export interface WindowSize {
+  readonly width: number;
+  readonly height: number;
+}
+
+export interface WindowState {
+  readonly mode: WindowLayoutMode;
+  readonly alwaysOnTop: boolean;
+  readonly sidebarOpen: boolean;
+  readonly isFullScreen: boolean;
+  readonly size: WindowSize;
+}
+
+export interface SetWindowModeRequest {
+  readonly mode: WindowLayoutMode;
+}
+
+export interface SetAlwaysOnTopRequest {
+  readonly alwaysOnTop: boolean;
+}
+
+export interface SetSidebarOpenRequest {
+  readonly sidebarOpen: boolean;
+}
+
+export interface BackupRestoreStatus {
+  readonly phase: "entry_point_only" | "available";
+  readonly createAvailable: boolean;
+  readonly restoreAvailable: boolean;
+  readonly lastBackupAt?: string;
+  readonly messageKey: "backup.statusEntryOnly" | "backup.statusReady" | "backup.statusNoVault";
+  readonly defaultIncludes: {
+    readonly markdownKnowledge: boolean;
+    readonly sourceRecords: boolean;
+    readonly managedSourceCopies: boolean;
+    readonly conversations: boolean;
+    readonly vaultMemory: boolean;
+    readonly trash: boolean;
+    readonly rebuildableDatabaseCache: boolean;
+    readonly secrets: boolean;
+  };
+}
+
+export interface BackupManifestSummary {
+  readonly formatVersion: 1;
+  readonly format: "pige-backup";
+  readonly appVersion: string;
+  readonly vaultId: string;
+  readonly vaultName: string;
+  readonly vaultSchemaVersion: number;
+  readonly createdAt: string;
+  readonly fileCount: number;
+  readonly totalBytes: number;
+  readonly noteCount: number;
+  readonly sourceCount: number;
+  readonly conversationCount: number;
+  readonly memoryCount: number;
+  readonly includesSecrets: false;
+  readonly includes: BackupRestoreStatus["defaultIncludes"];
+}
+
+export interface BackupCreateResult {
+  readonly status: "created" | "canceled";
+  readonly backupPath?: string;
+  readonly manifest?: BackupManifestSummary;
+}
+
+export interface RestorePreviewResult {
+  readonly status: "ready" | "canceled";
+  readonly backupPath?: string;
+  readonly manifest?: BackupManifestSummary;
+  readonly invalidFileCount?: number;
+  readonly warnings?: readonly string[];
+}
+
+export interface RestoreApplyRequest {
+  readonly backupPath: string;
+}
+
+export interface RestoreApplyResult {
+  readonly status: "restored" | "canceled";
+  readonly restoredVaultPath?: string;
+  readonly vault?: VaultSummary;
+  readonly localDatabaseRebuild?: LocalDatabaseRebuildResult;
+  readonly manifest?: BackupManifestSummary;
+}
+
+export interface CreateVaultRequest {
+  readonly vaultName: string;
+}
+
+export interface UpdateSourceStoragePolicyRequest {
+  readonly defaultStrategy: SourceStorageStrategy;
+}
+
+export type VaultActionResult =
+  | {
+      readonly status: "completed";
+      readonly vault: VaultSummary;
+      readonly onboarding: OnboardingStatus;
+    }
+  | {
+      readonly status: "canceled";
+    };
+
+export interface PigeDesktopApi {
+  readonly getHealth: () => Promise<AppHealth>;
+  readonly window: {
+    readonly current: () => Promise<WindowState>;
+    readonly setMode: (request: SetWindowModeRequest) => Promise<WindowState>;
+    readonly setAlwaysOnTop: (request: SetAlwaysOnTopRequest) => Promise<WindowState>;
+    readonly setSidebarOpen: (request: SetSidebarOpenRequest) => Promise<WindowState>;
+  };
+  readonly agent: {
+    readonly runtimeStatus: () => Promise<AgentRuntimeStatus>;
+  };
+  readonly capture: {
+    readonly submitText: (request: SubmitTextCaptureRequest) => Promise<CaptureSubmitResult>;
+    readonly submitUrl: (request: SubmitUrlCaptureRequest) => Promise<CaptureSubmitResult>;
+    readonly submitDroppedFiles: (
+      files: readonly File[],
+      request: SubmitDroppedFilesCaptureRequest
+    ) => Promise<CaptureFilesSubmitResult>;
+  };
+  readonly jobs: {
+    readonly list: (request?: JobsListRequest) => Promise<JobsListResult>;
+    readonly cancel: (request: JobActionRequest) => Promise<JobActionResult>;
+    readonly retry: (request: JobActionRequest) => Promise<JobActionResult>;
+  };
+  readonly proposals: {
+    readonly list: (request?: ProposalsListRequest) => Promise<ProposalsListResult>;
+    readonly get: (request: ProposalGetRequest) => Promise<ProposalGetResult>;
+    readonly approve: (request: ProposalDecisionRequest) => Promise<ProposalDecisionResult>;
+    readonly reject: (request: ProposalDecisionRequest) => Promise<ProposalDecisionResult>;
+  };
+  readonly library: {
+    readonly list: (request?: LibraryListRequest) => Promise<LibraryListResult>;
+    readonly related: (request: LibraryRelatedRequest) => Promise<LibraryRelatedResult>;
+  };
+  readonly notes: {
+    readonly get: (request: NoteGetRequest) => Promise<NoteDocument>;
+    readonly render: (request: NoteRenderRequest) => Promise<NoteRenderResult>;
+  };
+  readonly retrieval: {
+    readonly search: (request: RetrievalSearchRequest) => Promise<RetrievalSearchResult>;
+    readonly ask: (request: RetrievalAskRequest) => Promise<RetrievalAskResult>;
+  };
+  readonly vault: {
+    readonly current: () => Promise<VaultSummary | undefined>;
+    readonly recent: () => Promise<readonly RecentVaultSummary[]>;
+    readonly onboardingStatus: () => Promise<OnboardingStatus>;
+    readonly create: (request: CreateVaultRequest) => Promise<VaultActionResult>;
+    readonly open: () => Promise<VaultActionResult>;
+    readonly revealKnowledgeRoot: () => Promise<void>;
+    readonly revealSourceAssetRoot: () => Promise<void>;
+    readonly updateSourceStoragePolicy: (request: UpdateSourceStoragePolicyRequest) => Promise<VaultSummary>;
+    readonly removeRecent: (vaultId: string) => Promise<readonly RecentVaultSummary[]>;
+  };
+  readonly maintenance: {
+    readonly rebuildLocalDatabase: () => Promise<LocalDatabaseRebuildResult>;
+    readonly resetLocalDatabase: () => Promise<LocalDatabaseResetResult>;
+    readonly localDatabaseStatus: () => Promise<LocalDatabaseStatus>;
+  };
+  readonly diagnostics: {
+    readonly health: () => Promise<DiagnosticsHealth>;
+    readonly previewSupportBundle: () => Promise<SupportBundlePreview>;
+    readonly exportSupportBundle: (request: ExportSupportBundleRequest) => Promise<SupportBundleExportResult>;
+  };
+  readonly models: {
+    readonly summary: () => Promise<ModelProviderSettingsSummary>;
+    readonly addManualProvider: (request: AddManualProviderRequest) => Promise<ModelProviderSettingsSummary>;
+    readonly setDefaultModel: (request: SetDefaultModelRequest) => Promise<ModelProviderSettingsSummary>;
+  };
+  readonly settings: {
+    readonly appearance: () => Promise<AppearanceSettingsSummary>;
+    readonly setLocale: (request: SetLocaleRequest) => Promise<AppearanceSettingsSummary>;
+    readonly registry: () => Promise<SettingsRegistrySummary>;
+  };
+  readonly backup: {
+    readonly status: () => Promise<BackupRestoreStatus>;
+    readonly create: () => Promise<BackupCreateResult>;
+    readonly previewRestore: () => Promise<RestorePreviewResult>;
+    readonly applyRestore: (request: RestoreApplyRequest) => Promise<RestoreApplyResult>;
+  };
+  readonly system: {
+    readonly toolchainHealth: () => Promise<ToolchainHealth>;
+  };
+}
+
+export interface RuntimeCapabilities {
+  readonly runtimeKind: PigeRuntimeKind;
+  readonly clientCapabilityTier: PigeClientCapabilityTier;
+}

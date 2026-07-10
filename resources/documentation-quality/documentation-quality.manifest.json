@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "minimumDimensionScore": 9.5,
+  "dimensions": [
+    {
+      "id": "navigation_and_resource_lifecycle",
+      "label": "Navigation and resource lifecycle",
+      "checks": [
+        { "id": "NAV-001", "weight": 2, "title": "Every governed document has one structured map entry and lifecycle disposition." },
+        { "id": "NAV-002", "weight": 2, "title": "All repository Markdown links and local anchors resolve." },
+        { "id": "NAV-003", "weight": 2, "title": "Authority, current-state, historical, and conflict rules are explicit." },
+        { "id": "NAV-004", "weight": 2, "title": "Resource reclamation has triggers, review frequency, and actions." },
+        { "id": "NAV-005", "weight": 2, "title": "Task packs and active-development coordination avoid unnecessary context and interruption." }
+      ]
+    },
+    {
+      "id": "cross_document_contract_consistency",
+      "label": "Cross-document contract consistency",
+      "checks": [
+        { "id": "CON-001", "weight": 2, "title": "Stable IDs, page types, source kinds, and durable schema versions have one executable vocabulary." },
+        { "id": "CON-002", "weight": 2, "title": "Job classes, states, records, operations, and recovery contracts are single-owned and compatible." },
+        { "id": "CON-003", "weight": 2, "title": "Source records, asset roots, backup, restore, and vault identity have unambiguous authority and migration rules." },
+        { "id": "CON-004", "weight": 2, "title": "Provider, permission, secret-use, and model-egress contracts are typed and fail safe." },
+        { "id": "CON-005", "weight": 2, "title": "Decision history identifies current versus superseded contracts and passes semantic contract validation." }
+      ]
+    },
+    {
+      "id": "continuous_traceability_and_acceptance",
+      "label": "Continuous traceability and acceptance closure",
+      "checks": [
+        { "id": "TRC-001", "weight": 2, "title": "Requirement definitions are unique, area-allowed, and referenced outside their definition table." },
+        { "id": "TRC-002", "weight": 2, "title": "Every active v0.1 requirement maps to owner, milestone, phase, status, verification, and evidence." },
+        { "id": "TRC-003", "weight": 2, "title": "Every phase build item has an exit criterion or explicit deferral." },
+        { "id": "TRC-004", "weight": 2, "title": "The Playbook is the sole phase owner and Milestones provides the canonical crosswalk." },
+        { "id": "TRC-005", "weight": 2, "title": "P0 release scope is complete and current evidence never relies only on historical documents." }
+      ]
+    },
+    {
+      "id": "ongoing_development_support",
+      "label": "Support for ongoing development",
+      "checks": [
+        { "id": "DEV-001", "weight": 2, "title": "Current implementation status and remaining work are honest and centrally discoverable." },
+        { "id": "DEV-002", "weight": 2, "title": "Implementation starts from requirement, owner, durable data, risks, tests, and documentation impact." },
+        { "id": "DEV-003", "weight": 2, "title": "Concurrent planning and implementation changes carry explicit cost and compatibility notifications." },
+        { "id": "DEV-004", "weight": 2, "title": "Normal repository verification runs documentation, traceability, decision, and contract gates." },
+        { "id": "DEV-005", "weight": 2, "title": "Generated score evidence is reproducible and each dimension independently meets the threshold." }
+      ]
+    },
+    {
+      "id": "documentation_leanness_and_maintainability",
+      "label": "Documentation leanness and maintainability",
+      "checks": [
+        { "id": "LEN-001", "weight": 2, "title": "The always-read context stays within an explicit attention budget." },
+        { "id": "LEN-002", "weight": 2, "title": "Normative templates, types, and contract prose have one owner rather than synchronized copies." },
+        { "id": "LEN-003", "weight": 2, "title": "Traceability is normalized and reviewable without redundant human or machine projections." },
+        { "id": "LEN-004", "weight": 2, "title": "The governed inventory stays bounded and its full lifecycle map is outside default context." },
+        { "id": "LEN-005", "weight": 2, "title": "Physical volume falls materially from the audited baseline without weakening verification." }
+      ]
+    }
+  ]
+}

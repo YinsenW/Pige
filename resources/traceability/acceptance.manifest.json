@@ -1,0 +1,4164 @@
+{
+  "schemaVersion": 3,
+  "phaseStates": {
+    "P0": "in_progress",
+    "P1": "in_progress",
+    "P2": "in_progress",
+    "P3": "in_progress",
+    "P4": "in_progress",
+    "P5": "in_progress",
+    "P6": "in_progress",
+    "P7": "planned",
+    "P8": "planned",
+    "P9": "planned"
+  },
+  "capabilities": {
+    "capture.preserve-source": {
+      "requirement": "PIGE-CAP-001",
+      "builds": [
+        "B2.01",
+        "B2.03",
+        "B2.04",
+        "B2.06",
+        "B2.07"
+      ],
+      "exits": [
+        "E2.02",
+        "E2.05",
+        "E2.06",
+        "E2.08"
+      ]
+    },
+    "capture.large-paste-reference": {
+      "requirement": "PIGE-CAP-002",
+      "builds": [
+        "B2.01",
+        "B2.09"
+      ],
+      "exits": [
+        "E2.02",
+        "E2.03"
+      ]
+    },
+    "capture.local-voice": {
+      "requirement": "PIGE-CAP-003",
+      "builds": [
+        "B2.02"
+      ],
+      "exits": [
+        "E2.04"
+      ]
+    },
+    "capture.whole-window-drop": {
+      "requirement": "PIGE-CAP-004",
+      "builds": [
+        "B2.05"
+      ],
+      "exits": [
+        "E2.07"
+      ]
+    },
+    "vault.markdown-truth": {
+      "requirement": "PIGE-VAULT-001",
+      "builds": [
+        "B1.02",
+        "B1.05",
+        "B1.06",
+        "B1.15",
+        "B1.16"
+      ],
+      "exits": [
+        "E1.01",
+        "E1.03",
+        "E1.08",
+        "E1.09"
+      ]
+    },
+    "vault.path-independent-id": {
+      "requirement": "PIGE-VAULT-002",
+      "builds": [
+        "B1.21"
+      ],
+      "exits": [
+        "E1.17"
+      ]
+    },
+    "vault.source-ownership": {
+      "requirement": "PIGE-VAULT-003",
+      "builds": [
+        "B2.03",
+        "B2.04",
+        "B2.06",
+        "B2.07"
+      ],
+      "exits": [
+        "E2.05",
+        "E2.06",
+        "E2.08"
+      ]
+    },
+    "vault.trash-first": {
+      "requirement": "PIGE-VAULT-004",
+      "builds": [
+        "B9.07",
+        "B9.08"
+      ],
+      "exits": [
+        "E9.03",
+        "E9.04"
+      ]
+    },
+    "vault.storage-settings-layout": {
+      "requirement": "PIGE-VAULT-005",
+      "builds": [
+        "B1.02",
+        "B1.04",
+        "B1.05",
+        "B1.06"
+      ],
+      "exits": [
+        "E1.01",
+        "E1.03",
+        "E1.04"
+      ]
+    },
+    "vault.atomic-conflict": {
+      "requirement": "PIGE-VAULT-006",
+      "builds": [
+        "B1.25"
+      ],
+      "exits": [
+        "E1.21"
+      ]
+    },
+    "vault.sync-conflict-metadata": {
+      "requirement": "PIGE-VAULT-007",
+      "builds": [
+        "B1.21"
+      ],
+      "exits": [
+        "E1.17"
+      ]
+    },
+    "markdown.frontmatter": {
+      "requirement": "PIGE-SCHEMA-001",
+      "builds": [
+        "B3.08",
+        "B3.09"
+      ],
+      "exits": [
+        "E3.04"
+      ]
+    },
+    "knowledge.facets-pages": {
+      "requirement": "PIGE-KNOW-001",
+      "builds": [
+        "B4.01",
+        "B4.06",
+        "B4.07",
+        "B4.08"
+      ],
+      "exits": [
+        "E4.01",
+        "E4.04",
+        "E4.05",
+        "E4.06"
+      ]
+    },
+    "knowledge.rebuildable-graph": {
+      "requirement": "PIGE-KNOW-002",
+      "builds": [
+        "B6.09",
+        "B6.12"
+      ],
+      "exits": [
+        "E6.07"
+      ]
+    },
+    "knowledge.risky-relations": {
+      "requirement": "PIGE-KNOW-003",
+      "builds": [
+        "B7.01",
+        "B7.02",
+        "B7.03",
+        "B7.04"
+      ],
+      "exits": [
+        "E7.01"
+      ]
+    },
+    "knowledge.simple-tree": {
+      "requirement": "PIGE-KNOW-004",
+      "builds": [
+        "B6.12"
+      ],
+      "exits": [
+        "E6.07"
+      ]
+    },
+    "knowledge.health": {
+      "requirement": "PIGE-KNOW-005",
+      "builds": [
+        "B9.09"
+      ],
+      "exits": [
+        "E9.05"
+      ]
+    },
+    "knowledge.agent-output": {
+      "requirement": "PIGE-KNOW-006",
+      "builds": [
+        "B3.06",
+        "B3.07",
+        "B3.08",
+        "B3.09",
+        "B3.10",
+        "B3.12"
+      ],
+      "exits": [
+        "E3.04",
+        "E3.05",
+        "E3.07"
+      ]
+    },
+    "job.durable-before-work": {
+      "requirement": "PIGE-JOB-001",
+      "builds": [
+        "B2.08"
+      ],
+      "exits": [
+        "E2.01"
+      ]
+    },
+    "job.idempotent-recovery": {
+      "requirement": "PIGE-JOB-002",
+      "builds": [
+        "B2.08",
+        "B2.11"
+      ],
+      "exits": [
+        "E2.01",
+        "E2.10"
+      ]
+    },
+    "job.risky-proposals": {
+      "requirement": "PIGE-JOB-003",
+      "builds": [
+        "B7.01",
+        "B7.02",
+        "B7.03",
+        "B7.04"
+      ],
+      "exits": [
+        "E7.01"
+      ]
+    },
+    "job.waiting-dependency": {
+      "requirement": "PIGE-JOB-004",
+      "builds": [
+        "B2.13"
+      ],
+      "exits": [
+        "E2.11"
+      ]
+    },
+    "job.agent-write-operation": {
+      "requirement": "PIGE-JOB-005",
+      "builds": [
+        "B7.04"
+      ],
+      "exits": [
+        "E7.01"
+      ]
+    },
+    "job.conversation-history": {
+      "requirement": "PIGE-JOB-006",
+      "builds": [
+        "B7.08",
+        "B7.09"
+      ],
+      "exits": [
+        "E7.03",
+        "E7.04"
+      ]
+    },
+    "job.visible-status": {
+      "requirement": "PIGE-JOB-007",
+      "builds": [
+        "B2.10",
+        "B2.12"
+      ],
+      "exits": [
+        "E2.09"
+      ]
+    },
+    "job.durable-vocabulary": {
+      "requirement": "PIGE-JOB-008",
+      "builds": [
+        "B1.26"
+      ],
+      "exits": [
+        "E1.22"
+      ]
+    },
+    "api.renderer-boundary": {
+      "requirement": "PIGE-API-001",
+      "builds": [
+        "B1.01"
+      ],
+      "exits": [
+        "E1.10"
+      ]
+    },
+    "api.shared-error-taxonomy": {
+      "requirement": "PIGE-API-002",
+      "builds": [
+        "B1.20"
+      ],
+      "exits": [
+        "E1.16"
+      ]
+    },
+    "database.rebuildable": {
+      "requirement": "PIGE-DB-001",
+      "builds": [
+        "B4.01",
+        "B4.04",
+        "B4.05"
+      ],
+      "exits": [
+        "E4.02",
+        "E4.03",
+        "E4.05"
+      ]
+    },
+    "database.driver-domains": {
+      "requirement": "PIGE-DB-002",
+      "builds": [
+        "B4.01"
+      ],
+      "exits": [
+        "E4.05"
+      ]
+    },
+    "security.secret-storage": {
+      "requirement": "PIGE-SEC-001",
+      "builds": [
+        "B3.02"
+      ],
+      "exits": [
+        "E3.02"
+      ]
+    },
+    "security.permission-broker": {
+      "requirement": "PIGE-SEC-002",
+      "builds": [
+        "B8.01",
+        "B8.02",
+        "B8.08"
+      ],
+      "exits": [
+        "E8.02"
+      ]
+    },
+    "security.permission-modes": {
+      "requirement": "PIGE-SEC-003",
+      "builds": [
+        "B8.03",
+        "B8.04"
+      ],
+      "exits": [
+        "E8.03"
+      ]
+    },
+    "security.private-disclosure": {
+      "requirement": "PIGE-SEC-004",
+      "builds": [
+        "B9.17"
+      ],
+      "exits": [
+        "E9.11"
+      ]
+    },
+    "security.model-egress": {
+      "requirement": "PIGE-SEC-005",
+      "builds": [
+        "B3.05"
+      ],
+      "exits": [
+        "E3.03"
+      ]
+    },
+    "security.secret-adapter": {
+      "requirement": "PIGE-SEC-006",
+      "builds": [
+        "B1.19"
+      ],
+      "exits": [
+        "E1.15"
+      ]
+    },
+    "privacy.public-copy": {
+      "requirement": "PIGE-PRIV-001",
+      "builds": [
+        "B9.17"
+      ],
+      "exits": [
+        "E9.11"
+      ]
+    },
+    "pi.service-boundary": {
+      "requirement": "PIGE-PI-001",
+      "builds": [
+        "B3.06",
+        "B3.13"
+      ],
+      "exits": [
+        "E3.04",
+        "E3.08"
+      ]
+    },
+    "pi.default-model": {
+      "requirement": "PIGE-PI-002",
+      "builds": [
+        "B3.04"
+      ],
+      "exits": [
+        "E3.01"
+      ]
+    },
+    "pi.permission-boundary": {
+      "requirement": "PIGE-PI-003",
+      "builds": [
+        "B8.08"
+      ],
+      "exits": [
+        "E8.02"
+      ]
+    },
+    "pi.byok-providers": {
+      "requirement": "PIGE-PI-004",
+      "builds": [
+        "B3.01",
+        "B3.03",
+        "B3.04"
+      ],
+      "exits": [
+        "E3.01"
+      ]
+    },
+    "settings.registry": {
+      "requirement": "PIGE-SETTINGS-001",
+      "builds": [
+        "B1.10",
+        "B1.11"
+      ],
+      "exits": [
+        "E1.05"
+      ]
+    },
+    "settings.machine-local-backup": {
+      "requirement": "PIGE-SETTINGS-002",
+      "builds": [
+        "B1.10",
+        "B1.11"
+      ],
+      "exits": [
+        "E1.05"
+      ]
+    },
+    "settings.guarded-mutation": {
+      "requirement": "PIGE-SETTINGS-003",
+      "builds": [
+        "B1.24"
+      ],
+      "exits": [
+        "E1.20"
+      ]
+    },
+    "ingest.no-task-download": {
+      "requirement": "PIGE-INGEST-001",
+      "builds": [
+        "B5.10"
+      ],
+      "exits": [
+        "E5.02"
+      ]
+    },
+    "ingest.paddle-lifecycle": {
+      "requirement": "PIGE-INGEST-002",
+      "builds": [
+        "B5.10"
+      ],
+      "exits": [
+        "E5.02"
+      ]
+    },
+    "ingest.web-pdf-office": {
+      "requirement": "PIGE-INGEST-003",
+      "builds": [
+        "B5.01",
+        "B5.02",
+        "B5.03",
+        "B5.04",
+        "B5.05",
+        "B5.06",
+        "B5.09"
+      ],
+      "exits": [
+        "E5.01"
+      ]
+    },
+    "ingest.native-ocr-routing": {
+      "requirement": "PIGE-INGEST-004",
+      "builds": [
+        "B5.07",
+        "B5.08"
+      ],
+      "exits": [
+        "E5.05"
+      ]
+    },
+    "dependency.registry": {
+      "requirement": "PIGE-DEP-001",
+      "builds": [
+        "B0.09",
+        "B0.10"
+      ],
+      "exits": [
+        "E0.05"
+      ]
+    },
+    "dependency.bundled-toolchain": {
+      "requirement": "PIGE-DEP-002",
+      "builds": [
+        "B1.18"
+      ],
+      "exits": [
+        "E1.14"
+      ]
+    },
+    "prompt.untrusted-source": {
+      "requirement": "PIGE-PROMPT-001",
+      "builds": [
+        "B5.11"
+      ],
+      "exits": [
+        "E5.03"
+      ]
+    },
+    "prompt.typed-policy": {
+      "requirement": "PIGE-PROMPT-002",
+      "builds": [
+        "B1.12"
+      ],
+      "exits": [
+        "E1.06"
+      ]
+    },
+    "context.local-first-selection": {
+      "requirement": "PIGE-CONTEXT-001",
+      "builds": [
+        "B6.04"
+      ],
+      "exits": [
+        "E6.03"
+      ]
+    },
+    "context.reference-pack": {
+      "requirement": "PIGE-CONTEXT-002",
+      "builds": [
+        "B6.04"
+      ],
+      "exits": [
+        "E6.03"
+      ]
+    },
+    "eval.ingest-quality": {
+      "requirement": "PIGE-EVAL-001",
+      "builds": [
+        "B5.12"
+      ],
+      "exits": [
+        "E5.04"
+      ]
+    },
+    "eval.risky-output-routing": {
+      "requirement": "PIGE-EVAL-002",
+      "builds": [
+        "B3.07",
+        "B3.11"
+      ],
+      "exits": [
+        "E3.05",
+        "E3.06"
+      ]
+    },
+    "eval.safe-auto-apply": {
+      "requirement": "PIGE-EVAL-003",
+      "builds": [
+        "B3.07",
+        "B3.08",
+        "B3.09"
+      ],
+      "exits": [
+        "E3.04",
+        "E3.05"
+      ]
+    },
+    "eval.retrieval-linking-quality": {
+      "requirement": "PIGE-EVAL-004",
+      "builds": [
+        "B6.15"
+      ],
+      "exits": [
+        "E6.10"
+      ]
+    },
+    "search.home-grounded": {
+      "requirement": "PIGE-SEARCH-001",
+      "builds": [
+        "B6.01",
+        "B6.02",
+        "B6.03"
+      ],
+      "exits": [
+        "E6.01",
+        "E6.04"
+      ]
+    },
+    "search.lexical-before-model": {
+      "requirement": "PIGE-SEARCH-002",
+      "builds": [
+        "B4.02",
+        "B4.03",
+        "B4.06"
+      ],
+      "exits": [
+        "E4.01"
+      ]
+    },
+    "search.local-rag": {
+      "requirement": "PIGE-SEARCH-003",
+      "builds": [
+        "B6.05",
+        "B6.06",
+        "B6.07"
+      ],
+      "exits": [
+        "E6.02"
+      ]
+    },
+    "memory.inspectable-lifecycle": {
+      "requirement": "PIGE-MEM-001",
+      "builds": [
+        "B7.05",
+        "B7.06",
+        "B7.07"
+      ],
+      "exits": [
+        "E7.02",
+        "E7.05"
+      ]
+    },
+    "backup.default-inclusions": {
+      "requirement": "PIGE-BACKUP-001",
+      "builds": [
+        "B9.02"
+      ],
+      "exits": [
+        "E9.01"
+      ]
+    },
+    "backup.default-exclusions": {
+      "requirement": "PIGE-BACKUP-002",
+      "builds": [
+        "B9.02"
+      ],
+      "exits": [
+        "E9.01"
+      ]
+    },
+    "backup.versioned-export": {
+      "requirement": "PIGE-BACKUP-003",
+      "builds": [
+        "B9.01",
+        "B9.02"
+      ],
+      "exits": [
+        "E9.01"
+      ]
+    },
+    "backup.validated-restore": {
+      "requirement": "PIGE-BACKUP-004",
+      "builds": [
+        "B9.03",
+        "B9.04",
+        "B9.05",
+        "B9.06"
+      ],
+      "exits": [
+        "E9.02"
+      ]
+    },
+    "release.platform-update": {
+      "requirement": "PIGE-REL-001",
+      "builds": [
+        "B9.12",
+        "B9.13"
+      ],
+      "exits": [
+        "E9.08",
+        "E9.09"
+      ]
+    },
+    "release.phase-scope": {
+      "requirement": "PIGE-REL-002",
+      "builds": [
+        "B0.12",
+        "B0.16"
+      ],
+      "exits": [
+        "E0.07",
+        "E0.13"
+      ]
+    },
+    "release.public-alpha-scenario": {
+      "requirement": "PIGE-REL-003",
+      "builds": [
+        "B9.16"
+      ],
+      "exits": [
+        "E9.10"
+      ]
+    },
+    "release.performance-budgets": {
+      "requirement": "PIGE-REL-004",
+      "builds": [
+        "B9.14"
+      ],
+      "exits": [
+        "E9.08"
+      ]
+    },
+    "release.artifact-attribution": {
+      "requirement": "PIGE-REL-005",
+      "builds": [
+        "B9.12",
+        "B9.15"
+      ],
+      "exits": [
+        "E9.08"
+      ]
+    },
+    "i18n.release-locales": {
+      "requirement": "PIGE-I18N-001",
+      "builds": [
+        "B9.10"
+      ],
+      "exits": [
+        "E9.06"
+      ]
+    },
+    "i18n.language-metadata": {
+      "requirement": "PIGE-I18N-002",
+      "builds": [
+        "B9.18"
+      ],
+      "exits": [
+        "E9.12"
+      ]
+    },
+    "i18n.catalog-scaffold": {
+      "requirement": "PIGE-I18N-003",
+      "builds": [
+        "B0.08"
+      ],
+      "exits": [
+        "E0.09"
+      ]
+    },
+    "runtime.capability-adapters": {
+      "requirement": "PIGE-RUNTIME-001",
+      "builds": [
+        "B1.13",
+        "B1.22"
+      ],
+      "exits": [
+        "E1.12",
+        "E1.18"
+      ]
+    },
+    "repository.workspace-scaffold": {
+      "requirement": "PIGE-REPO-001",
+      "builds": [
+        "B0.01",
+        "B0.02",
+        "B0.03",
+        "B0.04"
+      ],
+      "exits": [
+        "E0.01",
+        "E0.02",
+        "E0.03"
+      ]
+    },
+    "repository.import-boundaries": {
+      "requirement": "PIGE-REPO-002",
+      "builds": [
+        "B0.05",
+        "B0.06"
+      ],
+      "exits": [
+        "E0.03",
+        "E0.04"
+      ]
+    },
+    "repository.fixture-artifacts": {
+      "requirement": "PIGE-REPO-003",
+      "builds": [
+        "B0.11",
+        "B0.13"
+      ],
+      "exits": [
+        "E0.06",
+        "E0.10"
+      ]
+    },
+    "repository.phase0-reading": {
+      "requirement": "PIGE-REPO-004",
+      "builds": [
+        "B0.16"
+      ],
+      "exits": [
+        "E0.13"
+      ]
+    },
+    "diagnostics.no-telemetry": {
+      "requirement": "PIGE-DIAG-001",
+      "builds": [
+        "B1.23"
+      ],
+      "exits": [
+        "E1.19"
+      ]
+    },
+    "diagnostics.user-export": {
+      "requirement": "PIGE-DIAG-002",
+      "builds": [
+        "B1.14"
+      ],
+      "exits": [
+        "E1.07"
+      ]
+    },
+    "diagnostics.bounded-redacted-logs": {
+      "requirement": "PIGE-DIAG-003",
+      "builds": [
+        "B1.23"
+      ],
+      "exits": [
+        "E1.19"
+      ]
+    },
+    "support.public-redaction": {
+      "requirement": "PIGE-SUPPORT-001",
+      "builds": [
+        "B9.17"
+      ],
+      "exits": [
+        "E9.11"
+      ]
+    },
+    "governance.public-collaboration": {
+      "requirement": "PIGE-GOV-001",
+      "builds": [
+        "B0.15"
+      ],
+      "exits": [
+        "E0.12"
+      ]
+    },
+    "governance.license-metadata": {
+      "requirement": "PIGE-GOV-002",
+      "builds": [
+        "B0.07"
+      ],
+      "exits": [
+        "E0.08"
+      ]
+    },
+    "documentation.minimal-routing": {
+      "requirement": "PIGE-DOC-001",
+      "builds": [
+        "B0.14"
+      ],
+      "exits": [
+        "E0.11"
+      ]
+    },
+    "documentation.owner-lifecycle": {
+      "requirement": "PIGE-DOC-002",
+      "builds": [
+        "B0.14"
+      ],
+      "exits": [
+        "E0.11"
+      ]
+    },
+    "documentation.requirement-identity": {
+      "requirement": "PIGE-DOC-003",
+      "builds": [
+        "B0.12"
+      ],
+      "exits": [
+        "E0.07"
+      ]
+    },
+    "documentation.readiness-gate": {
+      "requirement": "PIGE-DOC-004",
+      "builds": [
+        "B0.16"
+      ],
+      "exits": [
+        "E0.13"
+      ]
+    },
+    "documentation.quality-threshold": {
+      "requirement": "PIGE-DOC-005",
+      "builds": [
+        "B0.14"
+      ],
+      "exits": [
+        "E0.11"
+      ]
+    },
+    "ui.reader-editor": {
+      "requirement": "PIGE-UI-001",
+      "builds": [
+        "B6.08",
+        "B6.13"
+      ],
+      "exits": [
+        "E6.05",
+        "E6.08"
+      ]
+    },
+    "ui.accessibility-baseline": {
+      "requirement": "PIGE-UI-002",
+      "builds": [
+        "B9.11"
+      ],
+      "exits": [
+        "E9.07"
+      ]
+    },
+    "ui.home-navigation-shell": {
+      "requirement": "PIGE-UI-003",
+      "builds": [
+        "B1.03",
+        "B1.07",
+        "B1.08",
+        "B1.09",
+        "B1.17"
+      ],
+      "exits": [
+        "E1.02",
+        "E1.11",
+        "E1.13"
+      ]
+    },
+    "ui.tree-visual-semantics": {
+      "requirement": "PIGE-UI-004",
+      "builds": [
+        "B6.14"
+      ],
+      "exits": [
+        "E6.09"
+      ]
+    },
+    "ui.note-agent-actions": {
+      "requirement": "PIGE-UI-005",
+      "builds": [
+        "B6.10",
+        "B6.11"
+      ],
+      "exits": [
+        "E6.06"
+      ]
+    },
+    "ui.reader-related-metadata": {
+      "requirement": "PIGE-UI-006",
+      "builds": [
+        "B6.08",
+        "B6.09"
+      ],
+      "exits": [
+        "E6.05",
+        "E6.07"
+      ]
+    },
+    "skill.lifecycle": {
+      "requirement": "PIGE-SKILL-001",
+      "builds": [
+        "B8.05",
+        "B8.06",
+        "B8.07"
+      ],
+      "exits": [
+        "E8.01"
+      ]
+    },
+    "package.curated-lifecycle": {
+      "requirement": "PIGE-SKILL-002",
+      "builds": [
+        "B8.09",
+        "B8.10"
+      ],
+      "exits": [
+        "E8.04"
+      ]
+    }
+  },
+  "requirements": {
+    "PIGE-CAP-001": {
+      "status": "partial",
+      "evidence": [
+        "EV-CAPTURE",
+        "EV-FILE-CAPTURE",
+        "EV-DOCUMENT-CAPTURE"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-CAP-001",
+        "description": "All storage strategies still need end-to-end proof before parser and model boundaries.",
+        "targetBuilds": [
+          "B2.01",
+          "B2.03",
+          "B2.04",
+          "B2.06",
+          "B2.07"
+        ],
+        "targetExits": [
+          "E2.02",
+          "E2.05",
+          "E2.06",
+          "E2.08"
+        ]
+      }
+    },
+    "PIGE-CAP-002": {
+      "status": "verified",
+      "evidence": [
+        "EV-LARGE-PASTE"
+      ]
+    },
+    "PIGE-CAP-003": {
+      "status": "planned",
+      "plannedTarget": "SpeechAnalyzer adapter, permission, unavailable-state, and no-cloud-audio integration tests."
+    },
+    "PIGE-CAP-004": {
+      "status": "partial",
+      "evidence": [
+        "EV-DROP-ZONE",
+        "EV-FILE-CAPTURE"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-CAP-004",
+        "description": "Drop-zone keyboard/accessibility behavior and mixed accepted/rejected UI integration remain open.",
+        "targetBuilds": [
+          "B2.05"
+        ],
+        "targetExits": [
+          "E2.07"
+        ]
+      }
+    },
+    "PIGE-VAULT-001": {
+      "status": "partial",
+      "evidence": [
+        "EV-VAULT-LAYOUT",
+        "EV-VAULT-RESET",
+        "EV-DB-REBUILD"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-VAULT-001",
+        "description": "Cross-service proof that every durable knowledge write remains Markdown-owned is incomplete.",
+        "targetBuilds": [
+          "B1.02",
+          "B1.05",
+          "B1.06",
+          "B1.15",
+          "B1.16"
+        ],
+        "targetExits": [
+          "E1.01",
+          "E1.03",
+          "E1.08",
+          "E1.09"
+        ]
+      }
+    },
+    "PIGE-VAULT-002": {
+      "status": "partial",
+      "evidence": [
+        "EV-STABLE-ID",
+        "EV-SYNC-CONFLICT"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-VAULT-002",
+        "description": "Rename and path-move fixtures for every durable ID class remain open.",
+        "targetBuilds": [
+          "B1.21"
+        ],
+        "targetExits": [
+          "E1.17"
+        ]
+      }
+    },
+    "PIGE-VAULT-003": {
+      "status": "partial",
+      "evidence": [
+        "EV-FILE-CAPTURE",
+        "EV-VAULT-POLICY",
+        "EV-VERIFIED-INPUT-SNAPSHOT",
+        "EV-PDF-REFERENCE-ORIGINAL"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-VAULT-003",
+        "description": "Cross-root referenced-original relink and recovery acceptance remains open for the v0.1 reference strategy.",
+        "targetBuilds": [
+          "B2.07"
+        ],
+        "targetExits": [
+          "E2.08"
+        ]
+      }
+    },
+    "PIGE-VAULT-004": {
+      "status": "partial",
+      "evidence": [
+        "EV-BACKUP"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-VAULT-004",
+        "description": "Cross-service trash/restore, compaction, cleanup, reset, package, and migration lifecycle tests remain open.",
+        "targetBuilds": [
+          "B9.07",
+          "B9.08"
+        ],
+        "targetExits": [
+          "E9.03",
+          "E9.04"
+        ]
+      }
+    },
+    "PIGE-VAULT-005": {
+      "status": "partial",
+      "evidence": [
+        "EV-VAULT-LAYOUT",
+        "EV-VAULT-POLICY"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-VAULT-005",
+        "description": "Complete Settings UI acceptance for root switching, recent vaults, and backup/restore entry points remains open.",
+        "targetBuilds": [
+          "B1.02",
+          "B1.04",
+          "B1.05",
+          "B1.06"
+        ],
+        "targetExits": [
+          "E1.01",
+          "E1.03",
+          "E1.04"
+        ]
+      }
+    },
+    "PIGE-VAULT-006": {
+      "status": "partial",
+      "evidence": [
+        "EV-MARKDOWN-ATOMIC",
+        "EV-DB-EXTERNAL-EDIT",
+        "EV-SOURCE-PAGE-CONFLICT-PRESERVATION",
+        "EV-SOURCE-PAGE-SOURCE-REVISION",
+        "EV-GENERATED-NOTE-FINAL-FENCE",
+        "EV-GENERATED-NOTE-CONFLICT-PRESERVATION"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-VAULT-006",
+        "description": "User-visible conflict resolution, strict cross-process commit-fence proof, and parent-swap-resistant destination binding remain open.",
+        "targetBuilds": [
+          "B1.25"
+        ],
+        "targetExits": [
+          "E1.21"
+        ]
+      }
+    },
+    "PIGE-VAULT-007": {
+      "status": "partial",
+      "evidence": [
+        "EV-SYNC-CONFLICT",
+        "EV-SCHEMAS"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-VAULT-007",
+        "description": "Complete revision and tombstone fields plus conflict-detection fixtures remain open.",
+        "targetBuilds": [
+          "B1.21"
+        ],
+        "targetExits": [
+          "E1.17"
+        ]
+      }
+    },
+    "PIGE-SCHEMA-001": {
+      "status": "partial",
+      "evidence": [
+        "EV-MARKDOWN",
+        "EV-AGENT-INGEST",
+        "EV-SOURCE-PAGE-PATH-PROJECTION"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-SCHEMA-001",
+        "description": "All managed page types and bounded sidecar fields still need schema round-trip coverage.",
+        "targetBuilds": [
+          "B3.08",
+          "B3.09"
+        ],
+        "targetExits": [
+          "E3.04"
+        ]
+      }
+    },
+    "PIGE-KNOW-001": {
+      "status": "partial",
+      "evidence": [
+        "EV-LIBRARY",
+        "EV-DB-LINKS"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-KNOW-001",
+        "description": "Durable lifecycle fixtures for topic, concept, entity, claim, and question pages remain open.",
+        "targetBuilds": [
+          "B4.01",
+          "B4.06",
+          "B4.07",
+          "B4.08"
+        ],
+        "targetExits": [
+          "E4.01",
+          "E4.04",
+          "E4.05",
+          "E4.06"
+        ]
+      }
+    },
+    "PIGE-KNOW-002": {
+      "status": "partial",
+      "evidence": [
+        "EV-DB-LINKS"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-KNOW-002",
+        "description": "Knowledge Tree aggregate rebuild and source-backed navigation acceptance remain open.",
+        "targetBuilds": [
+          "B6.09",
+          "B6.12"
+        ],
+        "targetExits": [
+          "E6.07"
+        ]
+      }
+    },
+    "PIGE-KNOW-003": {
+      "status": "partial",
+      "evidence": [
+        "EV-PROPOSAL"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-KNOW-003",
+        "description": "Complete relationship-risk classes, proposal UI, stale-conflict, and approve/reject operation acceptance remain open.",
+        "targetBuilds": [
+          "B7.01",
+          "B7.02",
+          "B7.03",
+          "B7.04"
+        ],
+        "targetExits": [
+          "E7.01"
+        ]
+      }
+    },
+    "PIGE-KNOW-004": {
+      "status": "planned",
+      "plannedTarget": "Semantic-tree aggregate, navigation, empty-state, and accessibility tests."
+    },
+    "PIGE-KNOW-005": {
+      "status": "planned",
+      "plannedTarget": "Deterministic broken-link, orphan, duplicate-topic, unsourced-claim, and proposal-routing fixtures."
+    },
+    "PIGE-KNOW-006": {
+      "status": "partial",
+      "evidence": [
+        "EV-AGENT-INGEST"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-KNOW-006",
+        "description": "Complete deterministic created/updated/skipped/failed/confirmation-needed action-summary coverage remains open.",
+        "targetBuilds": [
+          "B3.06",
+          "B3.07",
+          "B3.08",
+          "B3.09",
+          "B3.10",
+          "B3.12"
+        ],
+        "targetExits": [
+          "E3.04",
+          "E3.05",
+          "E3.07"
+        ]
+      }
+    },
+    "PIGE-JOB-001": {
+      "status": "partial",
+      "evidence": [
+        "EV-JOB-RECOVERY",
+        "EV-PARSE-FOLLOWUP-DURABILITY",
+        "EV-OCR-FOLLOWUP-DURABILITY"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-JOB-001",
+        "description": "Every expensive parser, model, permission, backup, and migration path still needs pre-work job assertions.",
+        "targetBuilds": [
+          "B2.08"
+        ],
+        "targetExits": [
+          "E2.01"
+        ]
+      }
+    },
+    "PIGE-JOB-002": {
+      "status": "partial",
+      "evidence": [
+        "EV-JOB-DRAIN",
+        "EV-JOB-CANCEL",
+        "EV-PDF-OCR-SOURCE-REVISION",
+        "EV-PDF-RENDER-GENERATION"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-JOB-002",
+        "description": "Parser/model retries still need duplicate-page and duplicate-operation assertions.",
+        "targetBuilds": [
+          "B2.08",
+          "B2.11"
+        ],
+        "targetExits": [
+          "E2.01",
+          "E2.10"
+        ]
+      }
+    },
+    "PIGE-JOB-003": {
+      "status": "partial",
+      "evidence": [
+        "EV-PROPOSAL"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-JOB-003",
+        "description": "Complete relationship-risk classes, proposal UI, stale-conflict, and approve/reject operation acceptance remain open.",
+        "targetBuilds": [
+          "B7.01",
+          "B7.02",
+          "B7.03",
+          "B7.04"
+        ],
+        "targetExits": [
+          "E7.01"
+        ]
+      }
+    },
+    "PIGE-JOB-004": {
+      "status": "partial",
+      "evidence": [
+        "EV-JOB-WAIT",
+        "EV-WAITING-AGENT-REQUEUE",
+        "EV-OCR-NATIVE-FALLBACK"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-JOB-004",
+        "description": "Tool, path, and runtime dependency classes plus structured repair actions remain open.",
+        "targetBuilds": [
+          "B2.13"
+        ],
+        "targetExits": [
+          "E2.11"
+        ]
+      }
+    },
+    "PIGE-JOB-005": {
+      "status": "partial",
+      "evidence": [
+        "EV-AGENT-INGEST"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-JOB-005",
+        "description": "Complete job/model/source/path field coverage for every applied Agent write remains open.",
+        "targetBuilds": [
+          "B7.04"
+        ],
+        "targetExits": [
+          "E7.01"
+        ]
+      }
+    },
+    "PIGE-JOB-006": {
+      "status": "partial",
+      "evidence": [
+        "EV-CAPTURE"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-JOB-006",
+        "description": "Conversation browsing, restart recovery, and compaction identity/reference tests remain open.",
+        "targetBuilds": [
+          "B7.08",
+          "B7.09"
+        ],
+        "targetExits": [
+          "E7.03",
+          "E7.04"
+        ]
+      }
+    },
+    "PIGE-JOB-007": {
+      "status": "partial",
+      "evidence": [
+        "EV-JOB-STATUS",
+        "EV-JOB-WAIT"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-JOB-007",
+        "description": "Waiting-permission, confirmation-needed, failure, and completion UI integration remains open.",
+        "targetBuilds": [
+          "B2.10",
+          "B2.12"
+        ],
+        "targetExits": [
+          "E2.09"
+        ]
+      }
+    },
+    "PIGE-JOB-008": {
+      "status": "verified",
+      "evidence": [
+        "EV-DURABLE-VOCAB"
+      ]
+    },
+    "PIGE-API-001": {
+      "status": "verified",
+      "evidence": [
+        "EV-BOUNDARY"
+      ]
+    },
+    "PIGE-API-002": {
+      "status": "partial",
+      "evidence": [
+        "EV-ERROR"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-API-002",
+        "description": "Complete service, diagnostics, and UI adoption of the shared error vocabulary remains open.",
+        "targetBuilds": [
+          "B1.20"
+        ],
+        "targetExits": [
+          "E1.16"
+        ]
+      }
+    },
+    "PIGE-DB-001": {
+      "status": "verified",
+      "evidence": [
+        "EV-DB-REBUILD",
+        "EV-DB-EXTERNAL-EDIT"
+      ]
+    },
+    "PIGE-DB-002": {
+      "status": "partial",
+      "evidence": [
+        "EV-DB-DRIVER"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-DB-002",
+        "description": "Schema and migration coverage for graph, job, chunk, memory, and rebuild-status domains remains open.",
+        "targetBuilds": [
+          "B4.01"
+        ],
+        "targetExits": [
+          "E4.05"
+        ]
+      }
+    },
+    "PIGE-SEC-001": {
+      "status": "partial",
+      "evidence": [
+        "EV-PROVIDER"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-SEC-001",
+        "description": "OS-keychain integration, portable-mode warning, and release backup secret scans remain open.",
+        "targetBuilds": [
+          "B3.02"
+        ],
+        "targetExits": [
+          "E3.02"
+        ]
+      }
+    },
+    "PIGE-SEC-002": {
+      "status": "planned",
+      "plannedTarget": "Permission Broker deny, allow-once, waiting-permission, restart, and package-capability tests."
+    },
+    "PIGE-SEC-003": {
+      "status": "planned",
+      "plannedTarget": "Permission-mode scope, provenance, revocation, auto-allow, and operation-log tests."
+    },
+    "PIGE-SEC-004": {
+      "status": "partial",
+      "evidence": [
+        "EV-SECURITY-POLICY"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-SEC-004",
+        "description": "Live private-reporting availability and release-time public-surface review remain open.",
+        "targetBuilds": [
+          "B9.17"
+        ],
+        "targetExits": [
+          "E9.11"
+        ]
+      }
+    },
+    "PIGE-SEC-005": {
+      "status": "partial",
+      "evidence": [
+        "EV-EGRESS",
+        "EV-EGRESS-SERVICE",
+        "EV-EGRESS-PROFILE-BINDING",
+        "EV-EGRESS-RUNTIME-BINDING"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-SEC-005",
+        "description": "User-confirmation resume and complete provider-path adoption remain open.",
+        "targetBuilds": [
+          "B3.05"
+        ],
+        "targetExits": [
+          "E3.03"
+        ]
+      }
+    },
+    "PIGE-SEC-006": {
+      "status": "partial",
+      "evidence": [
+        "EV-PROVIDER"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-SEC-006",
+        "description": "OS-keychain integration and explicit portable-mode warning remain open.",
+        "targetBuilds": [
+          "B1.19"
+        ],
+        "targetExits": [
+          "E1.15"
+        ]
+      }
+    },
+    "PIGE-PRIV-001": {
+      "status": "partial",
+      "evidence": [
+        "EV-PRIVACY-POLICY"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-PRIV-001",
+        "description": "Release-time data-flow verification against public privacy copy remains open.",
+        "targetBuilds": [
+          "B9.17"
+        ],
+        "targetExits": [
+          "E9.11"
+        ]
+      }
+    },
+    "PIGE-PI-001": {
+      "status": "partial",
+      "evidence": [
+        "EV-RUNTIME",
+        "EV-AGENT-INGEST",
+        "EV-BOUNDARY"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-PI-001",
+        "description": "Embedded Pi integration and direct-call rejection across every product feature remain open.",
+        "targetBuilds": [
+          "B3.06",
+          "B3.13"
+        ],
+        "targetExits": [
+          "E3.04",
+          "E3.08"
+        ]
+      }
+    },
+    "PIGE-PI-002": {
+      "status": "partial",
+      "evidence": [
+        "EV-PROVIDER"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-PI-002",
+        "description": "Stable upstream Pi routing-slot detection remains open while Advanced/Fast UI stays gated.",
+        "targetBuilds": [
+          "B3.04"
+        ],
+        "targetExits": [
+          "E3.01"
+        ]
+      }
+    },
+    "PIGE-PI-003": {
+      "status": "planned",
+      "plannedTarget": "Wrapped Pi tool and extension-bypass security tests."
+    },
+    "PIGE-PI-004": {
+      "status": "partial",
+      "evidence": [
+        "EV-PROVIDER",
+        "EV-PROVIDER-CONNECTION"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-PI-004",
+        "description": "Live connection/discovery acceptance for all four provider classes remains open.",
+        "targetBuilds": [
+          "B3.01",
+          "B3.03",
+          "B3.04"
+        ],
+        "targetExits": [
+          "E3.01"
+        ]
+      }
+    },
+    "PIGE-SETTINGS-001": {
+      "status": "partial",
+      "evidence": [
+        "EV-SETTINGS",
+        "EV-LOCAL-SETTINGS"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-SETTINGS-001",
+        "description": "The full release-visible settings census and restore behavior for every scope remain open.",
+        "targetBuilds": [
+          "B1.10",
+          "B1.11"
+        ],
+        "targetExits": [
+          "E1.05"
+        ]
+      }
+    },
+    "PIGE-SETTINGS-002": {
+      "status": "partial",
+      "evidence": [
+        "EV-SETTINGS",
+        "EV-LOCAL-SETTINGS"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-SETTINGS-002",
+        "description": "The full release-visible settings census and restore behavior for every scope remain open.",
+        "targetBuilds": [
+          "B1.10",
+          "B1.11"
+        ],
+        "targetExits": [
+          "E1.05"
+        ]
+      }
+    },
+    "PIGE-SETTINGS-003": {
+      "status": "partial",
+      "evidence": [
+        "EV-SETTING-GUARD",
+        "EV-DESKTOP-SETTING-GUARD"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-SETTINGS-003",
+        "description": "Durable Permission Broker decisions and all sensitive-setting owner integrations remain open.",
+        "targetBuilds": [
+          "B1.24"
+        ],
+        "targetExits": [
+          "E1.20"
+        ]
+      }
+    },
+    "PIGE-INGEST-001": {
+      "status": "partial",
+      "evidence": [
+        "EV-PARSER-SMOKE"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-INGEST-001",
+        "description": "Packaged-platform proof that every core parser avoids task-time dependency download remains open.",
+        "targetBuilds": [
+          "B5.10"
+        ],
+        "targetExits": [
+          "E5.02"
+        ]
+      }
+    },
+    "PIGE-INGEST-002": {
+      "status": "planned",
+      "plannedTarget": "PaddleOCR install, verify, test, update, disable, remove, repair, language-pack, and no-hidden-install integration tests."
+    },
+    "PIGE-INGEST-003": {
+      "status": "partial",
+      "evidence": [
+        "EV-DOCUMENT-PIPELINE",
+        "EV-PARSER-SMOKE",
+        "EV-MIXED-PDF-OCR",
+        "EV-PDF-PARSER-INPUT-SNAPSHOT",
+        "EV-OFFICE-PARSER-INPUT-SNAPSHOT",
+        "EV-MARKDOWN-ATOMIC",
+        "EV-SOURCE-PAGE-CONFLICT-PRESERVATION",
+        "EV-SOURCE-PAGE-SOURCE-REVISION",
+        "EV-SOURCE-PAGE-BASELINE",
+        "EV-SOURCE-PAGE-PATH-PROJECTION",
+        "EV-SOURCE-PAGE-PATH-CONFINEMENT",
+        "EV-SOURCE-PAGE-PREVIEW-BOUNDARY",
+        "EV-GENERATED-NOTE-FINAL-FENCE",
+        "EV-GENERATED-NOTE-CONFLICT-PRESERVATION"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-INGEST-003",
+        "description": "Complete URL/PDF/DOCX/PPTX source-to-note locator and degraded-path acceptance remains open across the full copy/reference and packaged-platform matrix; strict cross-process CAS/parent-swap resistance plus Source Record-to-Source Page, Artifact-to-note, and note-to-index/operation cross-file commits remain open.",
+        "targetBuilds": [
+          "B5.01",
+          "B5.02",
+          "B5.03",
+          "B5.04",
+          "B5.05",
+          "B5.06",
+          "B5.09"
+        ],
+        "targetExits": [
+          "E5.01"
+        ]
+      }
+    },
+    "PIGE-INGEST-004": {
+      "status": "partial",
+      "evidence": [
+        "EV-OCR-ADAPTER",
+        "EV-OCR",
+        "EV-MIXED-PDF-OCR",
+        "EV-PDF-OCR-WRITE-CONTAINMENT",
+        "EV-OCR-NATIVE-FALLBACK"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-INGEST-004",
+        "description": "Windows AI OCR, Paddle fallback, rendered slide/media pixels, packaged-platform proof, and cross-platform routing tests remain open.",
+        "targetBuilds": [
+          "B5.07",
+          "B5.08"
+        ],
+        "targetExits": [
+          "E5.05"
+        ]
+      }
+    },
+    "PIGE-DEP-001": {
+      "status": "verified",
+      "evidence": [
+        "EV-DEPENDENCY"
+      ]
+    },
+    "PIGE-DEP-002": {
+      "status": "partial",
+      "evidence": [
+        "EV-TOOLCHAIN"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-DEP-002",
+        "description": "Packaged-platform integrity and visible repair integration remain open.",
+        "targetBuilds": [
+          "B1.18"
+        ],
+        "targetExits": [
+          "E1.14"
+        ]
+      }
+    },
+    "PIGE-PROMPT-001": {
+      "status": "partial",
+      "evidence": [
+        "EV-AGENT-INGEST",
+        "EV-UNTRUSTED-SOURCE-BOUNDARY",
+        "EV-UNTRUSTED-OUTPUT-SCHEMA"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-PROMPT-001",
+        "description": "URL Readability, DOCX, PDF, PPTX, and image-OCR public-ingest adversarial cases are executable; the full Pi tool/Permission Broker runtime remains open.",
+        "targetBuilds": [
+          "B5.11"
+        ],
+        "targetExits": [
+          "E5.03"
+        ]
+      }
+    },
+    "PIGE-PROMPT-002": {
+      "status": "partial",
+      "evidence": [
+        "EV-POLICY"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-PROMPT-002",
+        "description": "Complete owning-service enforcement for every Agent-affecting policy field remains open.",
+        "targetBuilds": [
+          "B1.12"
+        ],
+        "targetExits": [
+          "E1.06"
+        ]
+      }
+    },
+    "PIGE-CONTEXT-001": {
+      "status": "partial",
+      "evidence": [
+        "EV-CONTEXT",
+        "EV-AGENT-EVIDENCE-REVISION"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-CONTEXT-001",
+        "description": "All Home, Note Agent, selection, memory, and compaction context-pack paths remain to be integrated.",
+        "targetBuilds": [
+          "B6.04"
+        ],
+        "targetExits": [
+          "E6.03"
+        ]
+      }
+    },
+    "PIGE-CONTEXT-002": {
+      "status": "partial",
+      "evidence": [
+        "EV-CONTEXT"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-CONTEXT-002",
+        "description": "All Home, Note Agent, selection, memory, and compaction context-pack paths remain to be integrated.",
+        "targetBuilds": [
+          "B6.04"
+        ],
+        "targetExits": [
+          "E6.03"
+        ]
+      }
+    },
+    "PIGE-EVAL-001": {
+      "status": "verified",
+      "evidence": [
+        "EV-AGENT-INGEST-EVAL",
+        "EV-FIXTURE-MANIFEST",
+        "EV-UNTRUSTED-SOURCE-BOUNDARY",
+        "EV-UNTRUSTED-OUTPUT-SCHEMA"
+      ]
+    },
+    "PIGE-EVAL-002": {
+      "status": "partial",
+      "evidence": [
+        "EV-LOW-CONFIDENCE",
+        "EV-PROPOSAL"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-EVAL-002",
+        "description": "Contradiction, missing-evidence, destructive, and broad-hierarchy routing fixtures remain open.",
+        "targetBuilds": [
+          "B3.07",
+          "B3.11"
+        ],
+        "targetExits": [
+          "E3.05",
+          "E3.06"
+        ]
+      }
+    },
+    "PIGE-EVAL-003": {
+      "status": "partial",
+      "evidence": [
+        "EV-SAFE-AUTO-APPLY",
+        "EV-LOW-CONFIDENCE"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-EVAL-003",
+        "description": "The complete safe-auto-apply classifier and destructive/broad-change rejection matrix remain open.",
+        "targetBuilds": [
+          "B3.07",
+          "B3.08",
+          "B3.09"
+        ],
+        "targetExits": [
+          "E3.04",
+          "E3.05"
+        ]
+      }
+    },
+    "PIGE-EVAL-004": {
+      "status": "partial",
+      "evidence": [
+        "EV-RETRIEVAL",
+        "EV-DB-LINKS"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-EVAL-004",
+        "description": "Unified retrieval/linking/summarization golden thresholds and generated regression report remain open.",
+        "targetBuilds": [
+          "B6.15"
+        ],
+        "targetExits": [
+          "E6.10"
+        ]
+      }
+    },
+    "PIGE-SEARCH-001": {
+      "status": "partial",
+      "evidence": [
+        "EV-RETRIEVAL"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-SEARCH-001",
+        "description": "The 10,000-page budget and complete grounded-summary UI acceptance remain open.",
+        "targetBuilds": [
+          "B6.01",
+          "B6.02",
+          "B6.03"
+        ],
+        "targetExits": [
+          "E6.01",
+          "E6.04"
+        ]
+      }
+    },
+    "PIGE-SEARCH-002": {
+      "status": "verified",
+      "evidence": [
+        "EV-CJK",
+        "EV-LIBRARY"
+      ]
+    },
+    "PIGE-SEARCH-003": {
+      "status": "planned",
+      "plannedTarget": "Verified embedding-model lifecycle, vector rebuild, lexical fallback, and optional local-reranker tests."
+    },
+    "PIGE-MEM-001": {
+      "status": "planned",
+      "plannedTarget": "Remember, provenance, inspect, disable, delete, export, backup, and secret-scan integration tests."
+    },
+    "PIGE-BACKUP-001": {
+      "status": "partial",
+      "evidence": [
+        "EV-BACKUP"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-BACKUP-001",
+        "description": "Explicit include/exclude controls and complete memory/conversation fixtures remain open.",
+        "targetBuilds": [
+          "B9.02"
+        ],
+        "targetExits": [
+          "E9.01"
+        ]
+      }
+    },
+    "PIGE-BACKUP-002": {
+      "status": "partial",
+      "evidence": [
+        "EV-BACKUP"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-BACKUP-002",
+        "description": "Release backup scans for every secret, model, tool, database, index, and cache class remain open.",
+        "targetBuilds": [
+          "B9.02"
+        ],
+        "targetExits": [
+          "E9.01"
+        ]
+      }
+    },
+    "PIGE-BACKUP-003": {
+      "status": "partial",
+      "evidence": [
+        "EV-BACKUP"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-BACKUP-003",
+        "description": "Durable backup job/checkpoint, crash retry, and external-dependency completeness evidence remain open.",
+        "targetBuilds": [
+          "B9.01",
+          "B9.02"
+        ],
+        "targetExits": [
+          "E9.01"
+        ]
+      }
+    },
+    "PIGE-BACKUP-004": {
+      "status": "partial",
+      "evidence": [
+        "EV-BACKUP",
+        "EV-RESTORE-CONFLICT"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-BACKUP-004",
+        "description": "Durable restore checkpoints, incompatible schemas, identity modes, and complete derived-index rebuild remain open.",
+        "targetBuilds": [
+          "B9.03",
+          "B9.04",
+          "B9.05",
+          "B9.06"
+        ],
+        "targetExits": [
+          "E9.02"
+        ]
+      }
+    },
+    "PIGE-REL-001": {
+      "status": "planned",
+      "plannedTarget": "Supported-platform alpha artifacts and alpha-to-alpha update report."
+    },
+    "PIGE-REL-002": {
+      "status": "verified",
+      "evidence": [
+        "EV-TRACE",
+        "EV-PLAYBOOK",
+        "EV-PHASE-PREFLIGHT"
+      ]
+    },
+    "PIGE-REL-003": {
+      "status": "planned",
+      "plannedTarget": "Populated 25-source scenario manifest and schema-valid generated release report."
+    },
+    "PIGE-REL-004": {
+      "status": "planned",
+      "plannedTarget": "Scale, installer-size, idle-memory, and active-memory threshold reports."
+    },
+    "PIGE-REL-005": {
+      "status": "planned",
+      "plannedTarget": "Platform, release-note, attribution, and signing/notarization-status reports."
+    },
+    "PIGE-I18N-001": {
+      "status": "partial",
+      "evidence": [
+        "EV-I18N"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-I18N-001",
+        "description": "Six-locale release-critical workflow smoke and narrow-layout coverage remain open.",
+        "targetBuilds": [
+          "B9.10"
+        ],
+        "targetExits": [
+          "E9.06"
+        ]
+      }
+    },
+    "PIGE-I18N-002": {
+      "status": "partial",
+      "evidence": [
+        "EV-CJK"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-I18N-002",
+        "description": "Full language-metadata propagation and six-locale query-language behavior remain open.",
+        "targetBuilds": [
+          "B9.18"
+        ],
+        "targetExits": [
+          "E9.12"
+        ]
+      }
+    },
+    "PIGE-I18N-003": {
+      "status": "verified",
+      "evidence": [
+        "EV-I18N"
+      ]
+    },
+    "PIGE-RUNTIME-001": {
+      "status": "partial",
+      "evidence": [
+        "EV-RUNTIME",
+        "EV-RUNTIME-CONTRACT",
+        "EV-OCR-ADAPTER",
+        "EV-OCR-SERVICE"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-RUNTIME-001",
+        "description": "Tool, parser, OCR, and RAG adapter parity plus future-backend capability tests remain open.",
+        "targetBuilds": [
+          "B1.13",
+          "B1.22"
+        ],
+        "targetExits": [
+          "E1.12",
+          "E1.18"
+        ]
+      }
+    },
+    "PIGE-REPO-001": {
+      "status": "verified",
+      "evidence": [
+        "EV-REPO"
+      ]
+    },
+    "PIGE-REPO-002": {
+      "status": "verified",
+      "evidence": [
+        "EV-BOUNDARY",
+        "EV-CI"
+      ]
+    },
+    "PIGE-REPO-003": {
+      "status": "verified",
+      "evidence": [
+        "EV-FIXTURE",
+        "EV-ARTIFACT-LAYOUT"
+      ]
+    },
+    "PIGE-REPO-004": {
+      "status": "verified",
+      "evidence": [
+        "EV-PHASE-PREFLIGHT"
+      ]
+    },
+    "PIGE-DIAG-001": {
+      "status": "partial",
+      "evidence": [
+        "EV-DIAGNOSTICS",
+        "EV-PRIVACY-POLICY"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-DIAG-001",
+        "description": "A repository-level no-telemetry/no-auto-upload verifier and crash-hook review remain open.",
+        "targetBuilds": [
+          "B1.23"
+        ],
+        "targetExits": [
+          "E1.19"
+        ]
+      }
+    },
+    "PIGE-DIAG-002": {
+      "status": "partial",
+      "evidence": [
+        "EV-DIAGNOSTICS"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-DIAG-002",
+        "description": "Cancellation and selected-output-path integration acceptance remain open.",
+        "targetBuilds": [
+          "B1.14"
+        ],
+        "targetExits": [
+          "E1.07"
+        ]
+      }
+    },
+    "PIGE-DIAG-003": {
+      "status": "partial",
+      "evidence": [
+        "EV-DIAGNOSTICS",
+        "EV-DIAG-ROTATION"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-DIAG-003",
+        "description": "Rotation/retention thresholds and every prohibited private-content class need direct tests.",
+        "targetBuilds": [
+          "B1.23"
+        ],
+        "targetExits": [
+          "E1.19"
+        ]
+      }
+    },
+    "PIGE-SUPPORT-001": {
+      "status": "partial",
+      "evidence": [
+        "EV-SUPPORT-POLICY"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-SUPPORT-001",
+        "description": "Release-time public issue/support template review and maintainer workflow acceptance remain open.",
+        "targetBuilds": [
+          "B9.17"
+        ],
+        "targetExits": [
+          "E9.11"
+        ]
+      }
+    },
+    "PIGE-GOV-001": {
+      "status": "partial",
+      "evidence": [
+        "EV-PUBLIC-WORKFLOW",
+        "EV-PUBLIC-CONDUCT",
+        "EV-PUBLIC-BUG",
+        "EV-PUBLIC-SECURITY"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-GOV-001",
+        "description": "Automated schema validation for every public issue template and live private-reporting availability remain open.",
+        "targetBuilds": [
+          "B0.15"
+        ],
+        "targetExits": [
+          "E0.12"
+        ]
+      }
+    },
+    "PIGE-GOV-002": {
+      "status": "verified",
+      "evidence": [
+        "EV-LICENSE-PACKAGE",
+        "EV-LICENSE-TEXT",
+        "EV-LICENSE-NOTICE",
+        "EV-DOCMAP"
+      ]
+    },
+    "PIGE-DOC-001": {
+      "status": "verified",
+      "evidence": [
+        "EV-DOCMAP"
+      ]
+    },
+    "PIGE-DOC-002": {
+      "status": "verified",
+      "evidence": [
+        "EV-DOCMAP"
+      ]
+    },
+    "PIGE-DOC-003": {
+      "status": "verified",
+      "evidence": [
+        "EV-TRACE"
+      ]
+    },
+    "PIGE-DOC-004": {
+      "status": "verified",
+      "evidence": [
+        "EV-PHASE-PREFLIGHT"
+      ]
+    },
+    "PIGE-DOC-005": {
+      "status": "verified",
+      "evidence": [
+        "EV-DOCQUALITY",
+        "EV-DOCQUALITY-INDEPENDENT"
+      ]
+    },
+    "PIGE-UI-001": {
+      "status": "partial",
+      "evidence": [
+        "EV-RENDERER"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-UI-001",
+        "description": "Source-preserving editing, IME, long-page budget, and external-conflict UI tests remain open.",
+        "targetBuilds": [
+          "B6.08",
+          "B6.13"
+        ],
+        "targetExits": [
+          "E6.05",
+          "E6.08"
+        ]
+      }
+    },
+    "PIGE-UI-002": {
+      "status": "planned",
+      "plannedTarget": "Keyboard, focus, accessible-name, contrast, reduced-motion, and six-locale narrow-layout smoke evidence."
+    },
+    "PIGE-UI-003": {
+      "status": "partial",
+      "evidence": [
+        "EV-APP-SHELL"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-UI-003",
+        "description": "Capture-only, context continuity, three-level Library, and six-locale UI acceptance remain open.",
+        "targetBuilds": [
+          "B1.03",
+          "B1.07",
+          "B1.08",
+          "B1.09",
+          "B1.17"
+        ],
+        "targetExits": [
+          "E1.02",
+          "E1.11",
+          "E1.13"
+        ]
+      }
+    },
+    "PIGE-UI-004": {
+      "status": "planned",
+      "plannedTarget": "Knowledge Tree visual-weight, density, navigation, keyboard, and accessible-description tests."
+    },
+    "PIGE-UI-005": {
+      "status": "planned",
+      "plannedTarget": "Note Agent and complete selection-action context, local-copy, translation, and proposal tests."
+    },
+    "PIGE-UI-006": {
+      "status": "partial",
+      "evidence": [
+        "EV-READER-RELATED",
+        "EV-READER-UI"
+      ],
+      "open": {
+        "id": "OPEN-REQ-PIGE-UI-006",
+        "description": "Reader source-metadata presentation and unavailable-graph UI degradation acceptance remain open.",
+        "targetBuilds": [
+          "B6.08",
+          "B6.09"
+        ],
+        "targetExits": [
+          "E6.05",
+          "E6.07"
+        ]
+      }
+    },
+    "PIGE-SKILL-001": {
+      "status": "planned",
+      "plannedTarget": "Settings/chat staging, URL/Markdown/ZIP, update, lifecycle, export, path-safety, and permission tests."
+    },
+    "PIGE-SKILL-002": {
+      "status": "planned",
+      "plannedTarget": "Catalog, install, update, version-pin, rollback, uninstall, disclosure, and no-hidden-install tests."
+    }
+  },
+  "exits": {
+    "E0.01": {
+      "status": "partial",
+      "evidence": [
+        "EV-REPO"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E0.01",
+        "description": "A dedicated launch/root-command smoke report remains open.",
+        "targetBuilds": [
+          "B0.03"
+        ],
+        "targetExits": [
+          "E0.01"
+        ]
+      }
+    },
+    "E0.02": {
+      "status": "partial",
+      "evidence": [
+        "EV-REPO"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E0.02",
+        "description": "A dedicated launch/root-command smoke report remains open.",
+        "targetBuilds": [
+          "B0.01",
+          "B0.04"
+        ],
+        "targetExits": [
+          "E0.02"
+        ]
+      }
+    },
+    "E0.03": {
+      "status": "verified",
+      "evidence": [
+        "EV-BOUNDARY"
+      ]
+    },
+    "E0.04": {
+      "status": "partial",
+      "evidence": [
+        "EV-CI"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E0.04",
+        "description": "The workflow contract exists; a current CI run report remains external evidence.",
+        "targetBuilds": [
+          "B0.06"
+        ],
+        "targetExits": [
+          "E0.04"
+        ]
+      }
+    },
+    "E0.05": {
+      "status": "verified",
+      "evidence": [
+        "EV-DEPENDENCY"
+      ]
+    },
+    "E0.06": {
+      "status": "verified",
+      "evidence": [
+        "EV-FIXTURE"
+      ]
+    },
+    "E0.07": {
+      "status": "verified",
+      "evidence": [
+        "EV-TRACE"
+      ]
+    },
+    "E0.08": {
+      "status": "verified",
+      "evidence": [
+        "EV-LICENSE-PACKAGE",
+        "EV-LICENSE-TEXT",
+        "EV-LICENSE-NOTICE",
+        "EV-DOCMAP"
+      ]
+    },
+    "E0.09": {
+      "status": "verified",
+      "evidence": [
+        "EV-I18N"
+      ]
+    },
+    "E0.10": {
+      "status": "partial",
+      "evidence": [
+        "EV-ARTIFACT-LAYOUT"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E0.10",
+        "description": "A generated report schema smoke remains open.",
+        "targetBuilds": [
+          "B0.13"
+        ],
+        "targetExits": [
+          "E0.10"
+        ]
+      }
+    },
+    "E0.11": {
+      "status": "verified",
+      "evidence": [
+        "EV-DOCQUALITY",
+        "EV-DOCQUALITY-INDEPENDENT"
+      ]
+    },
+    "E0.12": {
+      "status": "partial",
+      "evidence": [
+        "EV-PUBLIC-WORKFLOW",
+        "EV-PUBLIC-CONDUCT",
+        "EV-PUBLIC-BUG",
+        "EV-PUBLIC-SECURITY"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E0.12",
+        "description": "Automated template-schema validation and live private-reporting availability remain open.",
+        "targetBuilds": [
+          "B0.15"
+        ],
+        "targetExits": [
+          "E0.12"
+        ]
+      }
+    },
+    "E0.13": {
+      "status": "verified",
+      "evidence": [
+        "EV-TRACE",
+        "EV-PHASE-PREFLIGHT"
+      ]
+    },
+    "E1.01": {
+      "status": "partial",
+      "evidence": [
+        "EV-VAULT-LAYOUT"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E1.01",
+        "description": "Full executable acceptance remains open for Exit E1.01: User can create and open a vault through validated paths.",
+        "targetBuilds": [
+          "B1.02"
+        ],
+        "targetExits": [
+          "E1.01"
+        ]
+      }
+    },
+    "E1.02": {
+      "status": "partial",
+      "evidence": [
+        "EV-APP-SHELL"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E1.02",
+        "description": "Capture-only, context-continuity, three-level Library, and six-locale UI acceptance remain open.",
+        "targetBuilds": [
+          "B1.03"
+        ],
+        "targetExits": [
+          "E1.02"
+        ]
+      }
+    },
+    "E1.03": {
+      "status": "partial",
+      "evidence": [
+        "EV-VAULT-LAYOUT"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E1.03",
+        "description": "Full executable acceptance remains open for Exit E1.03: Default vault files are visible, human-readable, schema-valid, and free of machine-local active paths.",
+        "targetBuilds": [
+          "B1.05",
+          "B1.06"
+        ],
+        "targetExits": [
+          "E1.03"
+        ]
+      }
+    },
+    "E1.04": {
+      "status": "partial",
+      "evidence": [
+        "EV-VAULT-POLICY"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E1.04",
+        "description": "Full executable acceptance remains open for Exit E1.04: User can find and reveal note/source storage, switch or create vaults, and reach backup/restore without entering diagnostics or maintenance surfaces.",
+        "targetBuilds": [
+          "B1.04"
+        ],
+        "targetExits": [
+          "E1.04"
+        ]
+      }
+    },
+    "E1.05": {
+      "status": "partial",
+      "evidence": [
+        "EV-SETTINGS",
+        "EV-LOCAL-SETTINGS"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E1.05",
+        "description": "Full executable acceptance remains open for Exit E1.05: Every exposed setting is registered; machine-local values and secrets are absent from the vault manifest and default backup inputs.",
+        "targetBuilds": [
+          "B1.10",
+          "B1.11"
+        ],
+        "targetExits": [
+          "E1.05"
+        ]
+      }
+    },
+    "E1.06": {
+      "status": "partial",
+      "evidence": [
+        "EV-POLICY"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E1.06",
+        "description": "Full executable acceptance remains open for Exit E1.06: Agent-affecting settings have typed policy effects and owning-service enforcement rather than prompt-only behavior.",
+        "targetBuilds": [
+          "B1.12"
+        ],
+        "targetExits": [
+          "E1.06"
+        ]
+      }
+    },
+    "E1.07": {
+      "status": "partial",
+      "evidence": [
+        "EV-DIAGNOSTICS"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E1.07",
+        "description": "Full executable acceptance remains open for Exit E1.07: Diagnostics export is redacted, previewed, cancelable, local-only, bounded, and free of raw secrets or source/note bodies by default.",
+        "targetBuilds": [
+          "B1.14"
+        ],
+        "targetExits": [
+          "E1.07"
+        ]
+      }
+    },
+    "E1.08": {
+      "status": "partial",
+      "evidence": [
+        "EV-VAULT-RESET",
+        "EV-DB-REBUILD"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E1.08",
+        "description": "Full executable acceptance remains open for Exit E1.08: Deleting `.pige/db/` does not delete user-owned files, and the empty migration/rebuild path succeeds.",
+        "targetBuilds": [
+          "B1.15"
+        ],
+        "targetExits": [
+          "E1.08"
+        ]
+      }
+    },
+    "E1.09": {
+      "status": "partial",
+      "evidence": [
+        "EV-VAULT-RESET",
+        "EV-DB-REBUILD"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E1.09",
+        "description": "Full executable acceptance remains open for Exit E1.09: Reset Local Database cannot delete Markdown knowledge, source records/assets, memory, conversations, proposals, operations, or trash.",
+        "targetBuilds": [
+          "B1.16"
+        ],
+        "targetExits": [
+          "E1.09"
+        ]
+      }
+    },
+    "E1.10": {
+      "status": "verified",
+      "evidence": [
+        "EV-BOUNDARY"
+      ]
+    },
+    "E1.11": {
+      "status": "partial",
+      "evidence": [
+        "EV-APP-SHELL"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E1.11",
+        "description": "Capture-only, context-continuity, three-level Library, and six-locale UI acceptance remain open.",
+        "targetBuilds": [
+          "B1.07",
+          "B1.08",
+          "B1.09"
+        ],
+        "targetExits": [
+          "E1.11"
+        ]
+      }
+    },
+    "E1.12": {
+      "status": "partial",
+      "evidence": [
+        "EV-RUNTIME",
+        "EV-PROVIDER"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E1.12",
+        "description": "Full executable acceptance remains open for Exit E1.12: One default model profile can be stored and resolved through the adapter contract without exposing ineffective Advanced/Fast controls.",
+        "targetBuilds": [
+          "B1.13"
+        ],
+        "targetExits": [
+          "E1.12"
+        ]
+      }
+    },
+    "E1.13": {
+      "status": "partial",
+      "evidence": [
+        "EV-APP-SHELL"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E1.13",
+        "description": "Capture-only, context-continuity, three-level Library, and six-locale UI acceptance remain open.",
+        "targetBuilds": [
+          "B1.17"
+        ],
+        "targetExits": [
+          "E1.13"
+        ]
+      }
+    },
+    "E1.14": {
+      "status": "partial",
+      "evidence": [
+        "EV-TOOLCHAIN"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E1.14",
+        "description": "Full executable acceptance remains open for Exit E1.14: Packaged core tools are version-pinned, report ready/missing/damaged state, and expose a user-visible repair path without an ordinary job improvising a download.",
+        "targetBuilds": [
+          "B1.18"
+        ],
+        "targetExits": [
+          "E1.14"
+        ]
+      }
+    },
+    "E1.15": {
+      "status": "partial",
+      "evidence": [
+        "EV-PROVIDER"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E1.15",
+        "description": "Full executable acceptance remains open for Exit E1.15: The secret-storage adapter protects a synthetic value outside vault files, SQLite, logs, diagnostics, and backups; P3 proves provider-key integration.",
+        "targetBuilds": [
+          "B1.19"
+        ],
+        "targetExits": [
+          "E1.15"
+        ]
+      }
+    },
+    "E1.16": {
+      "status": "partial",
+      "evidence": [
+        "EV-ERROR"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E1.16",
+        "description": "Full executable acceptance remains open for Exit E1.16: API errors, durable Job warnings/errors, diagnostics, and UI failure actions validate against one shared taxonomy; malformed codes or unstructured private details are rejected, and every locale covers release-visible message keys.",
+        "targetBuilds": [
+          "B1.20"
+        ],
+        "targetExits": [
+          "E1.16"
+        ]
+      }
+    },
+    "E1.17": {
+      "status": "partial",
+      "evidence": [
+        "EV-STABLE-ID",
+        "EV-SYNC-CONFLICT"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E1.17",
+        "description": "All durable ID rename/move fixtures and complete conflict/tombstone metadata remain open.",
+        "targetBuilds": [
+          "B1.21"
+        ],
+        "targetExits": [
+          "E1.17"
+        ]
+      }
+    },
+    "E1.18": {
+      "status": "partial",
+      "evidence": [
+        "EV-RUNTIME",
+        "EV-RUNTIME-CONTRACT",
+        "EV-OCR-ADAPTER"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E1.18",
+        "description": "Tool, parser, OCR, and RAG adapter parity and degraded-state tests remain open.",
+        "targetBuilds": [
+          "B1.22"
+        ],
+        "targetExits": [
+          "E1.18"
+        ]
+      }
+    },
+    "E1.19": {
+      "status": "partial",
+      "evidence": [
+        "EV-DIAGNOSTICS",
+        "EV-DIAG-ROTATION"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E1.19",
+        "description": "No-telemetry scanning, crash-hook review, and rotation/retention tests remain open.",
+        "targetBuilds": [
+          "B1.23"
+        ],
+        "targetExits": [
+          "E1.19"
+        ]
+      }
+    },
+    "E1.20": {
+      "status": "partial",
+      "evidence": [
+        "EV-SETTING-GUARD"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E1.20",
+        "description": "Complete sensitive-setting owner and persisted Permission Broker adoption remains open.",
+        "targetBuilds": [
+          "B1.24"
+        ],
+        "targetExits": [
+          "E1.20"
+        ]
+      }
+    },
+    "E1.21": {
+      "status": "partial",
+      "evidence": [
+        "EV-MARKDOWN-ATOMIC",
+        "EV-DB-EXTERNAL-EDIT",
+        "EV-SOURCE-PAGE-CONFLICT-PRESERVATION",
+        "EV-SOURCE-PAGE-SOURCE-REVISION",
+        "EV-GENERATED-NOTE-FINAL-FENCE",
+        "EV-GENERATED-NOTE-CONFLICT-PRESERVATION"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E1.21",
+        "description": "User-visible conflict resolution, strict cross-process commit-fence proof, and parent-swap-resistant destination binding remain open.",
+        "targetBuilds": [
+          "B1.25"
+        ],
+        "targetExits": [
+          "E1.21"
+        ]
+      }
+    },
+    "E1.22": {
+      "status": "verified",
+      "evidence": [
+        "EV-DURABLE-VOCAB"
+      ]
+    },
+    "E2.01": {
+      "status": "partial",
+      "evidence": [
+        "EV-JOB-RECOVERY",
+        "EV-PARSE-FOLLOWUP-DURABILITY",
+        "EV-OCR-FOLLOWUP-DURABILITY"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E2.01",
+        "description": "Full executable acceptance remains open for Exit E2.01: Killing and reopening the app does not lose queued or partially processed captures; durable jobs reconcile to retryable states.",
+        "targetBuilds": [
+          "B2.08"
+        ],
+        "targetExits": [
+          "E2.01"
+        ]
+      }
+    },
+    "E2.02": {
+      "status": "verified",
+      "evidence": [
+        "EV-LARGE-PASTE"
+      ]
+    },
+    "E2.03": {
+      "status": "partial",
+      "evidence": [
+        "EV-CAPTURE"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E2.03",
+        "description": "Full executable acceptance remains open for Exit E2.03: Capture events are durable and reference sources/jobs; only bounded short chat text may remain inline.",
+        "targetBuilds": [
+          "B2.09"
+        ],
+        "targetExits": [
+          "E2.03"
+        ]
+      }
+    },
+    "E2.04": {
+      "status": "planned",
+      "plannedTarget": "SpeechAnalyzer adapter, permission, unavailable-state, and no-cloud-audio integration report."
+    },
+    "E2.05": {
+      "status": "partial",
+      "evidence": [
+        "EV-FILE-CAPTURE"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E2.05",
+        "description": "Full executable acceptance remains open for Exit E2.05: Markdown and TXT capture preserves the original source, creates one source record, and does not duplicate large bodies into conversation events.",
+        "targetBuilds": [
+          "B2.03"
+        ],
+        "targetExits": [
+          "E2.05"
+        ]
+      }
+    },
+    "E2.06": {
+      "status": "partial",
+      "evidence": [
+        "EV-DOCUMENT-CAPTURE"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E2.06",
+        "description": "Full executable acceptance remains open for Exit E2.06: PDF, DOCX, PPTX, and image capture preserves evidence before processing and creates visible retryable parser/OCR dependency jobs.",
+        "targetBuilds": [
+          "B2.04"
+        ],
+        "targetExits": [
+          "E2.06"
+        ]
+      }
+    },
+    "E2.07": {
+      "status": "partial",
+      "evidence": [
+        "EV-DROP-ZONE",
+        "EV-FILE-CAPTURE"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E2.07",
+        "description": "Full executable acceptance remains open for Exit E2.07: Whole-window drop validates files, preserves accepted items, and reports rejected display names without exposing private paths.",
+        "targetBuilds": [
+          "B2.05"
+        ],
+        "targetExits": [
+          "E2.07"
+        ]
+      }
+    },
+    "E2.08": {
+      "status": "partial",
+      "evidence": [
+        "EV-VAULT-POLICY",
+        "EV-CAPTURE",
+        "EV-VERIFIED-INPUT-SNAPSHOT",
+        "EV-PDF-REFERENCE-ORIGINAL"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E2.08",
+        "description": "Full executable acceptance remains open for Exit E2.08: Source IDs remain stable across retry, and the selected copy/reference strategy affects new captures through the Source Storage Service.",
+        "targetBuilds": [
+          "B2.06",
+          "B2.07"
+        ],
+        "targetExits": [
+          "E2.08"
+        ]
+      }
+    },
+    "E2.09": {
+      "status": "partial",
+      "evidence": [
+        "EV-JOB-STATUS",
+        "EV-JOB-WAIT"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E2.09",
+        "description": "Full executable acceptance remains open for Exit E2.09: Home and timeline show durable, localized, redacted job state and progress without claiming completion early.",
+        "targetBuilds": [
+          "B2.10",
+          "B2.12"
+        ],
+        "targetExits": [
+          "E2.09"
+        ]
+      }
+    },
+    "E2.10": {
+      "status": "partial",
+      "evidence": [
+        "EV-JOB-CANCEL",
+        "EV-PDF-OCR-SOURCE-REVISION",
+        "EV-PDF-RENDER-GENERATION"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E2.10",
+        "description": "Full executable acceptance remains open for Exit E2.10: Retry is idempotent; cancellation preserves sources and leaves no half-enabled UI or ambiguous durable state.",
+        "targetBuilds": [
+          "B2.11"
+        ],
+        "targetExits": [
+          "E2.10"
+        ]
+      }
+    },
+    "E2.11": {
+      "status": "partial",
+      "evidence": [
+        "EV-JOB-WAIT",
+        "EV-WAITING-AGENT-REQUEUE",
+        "EV-OCR-NATIVE-FALLBACK"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E2.11",
+        "description": "Tool, path, and runtime dependency classes and repair-action metadata remain open.",
+        "targetBuilds": [
+          "B2.13"
+        ],
+        "targetExits": [
+          "E2.11"
+        ]
+      }
+    },
+    "E3.01": {
+      "status": "partial",
+      "evidence": [
+        "EV-PROVIDER",
+        "EV-RUNTIME"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E3.01",
+        "description": "Full executable acceptance remains open for Exit E3.01: Each supported provider profile can be connection-tested, can discover or accept model IDs, and resolves one effective default model used by Agent ingest.",
+        "targetBuilds": [
+          "B3.01",
+          "B3.03",
+          "B3.04"
+        ],
+        "targetExits": [
+          "E3.01"
+        ]
+      }
+    },
+    "E3.02": {
+      "status": "partial",
+      "evidence": [
+        "EV-PROVIDER"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E3.02",
+        "description": "Full executable acceptance remains open for Exit E3.02: API keys do not appear in vault files, SQLite, logs, persisted prompts, diagnostics, operations, or backups.",
+        "targetBuilds": [
+          "B3.02"
+        ],
+        "targetExits": [
+          "E3.02"
+        ]
+      }
+    },
+    "E3.03": {
+      "status": "partial",
+      "evidence": [
+        "EV-EGRESS",
+        "EV-EGRESS-SERVICE",
+        "EV-EGRESS-PROFILE-BINDING",
+        "EV-EGRESS-RUNTIME-BINDING"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E3.03",
+        "description": "A user-confirmation resume path for waiting_permission model egress remains open.",
+        "targetBuilds": [
+          "B3.05"
+        ],
+        "targetExits": [
+          "E3.03"
+        ]
+      }
+    },
+    "E3.04": {
+      "status": "partial",
+      "evidence": [
+        "EV-AGENT-INGEST",
+        "EV-SOURCE-PAGE-PATH-PROJECTION"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E3.04",
+        "description": "Full executable acceptance remains open for Exit E3.04: Pasted text can become a source page, schema-valid wiki note, index update, and append-only log entry with source citations.",
+        "targetBuilds": [
+          "B3.06",
+          "B3.08",
+          "B3.09",
+          "B3.10"
+        ],
+        "targetExits": [
+          "E3.04"
+        ]
+      }
+    },
+    "E3.05": {
+      "status": "partial",
+      "evidence": [
+        "EV-LOW-CONFIDENCE"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E3.05",
+        "description": "Full executable acceptance remains open for Exit E3.05: Invalid, unsupported, low-confidence, or hostile structured output is rejected or routed to warning/proposal without an unsafe durable write.",
+        "targetBuilds": [
+          "B3.07"
+        ],
+        "targetExits": [
+          "E3.05"
+        ]
+      }
+    },
+    "E3.06": {
+      "status": "partial",
+      "evidence": [
+        "EV-PROPOSAL"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E3.06",
+        "description": "Full executable acceptance remains open for Exit E3.06: A risky generated change can be staged durably as a redacted proposal without being silently applied.",
+        "targetBuilds": [
+          "B3.11"
+        ],
+        "targetExits": [
+          "E3.06"
+        ]
+      }
+    },
+    "E3.07": {
+      "status": "partial",
+      "evidence": [
+        "EV-AGENT-INGEST"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E3.07",
+        "description": "Complete deterministic action-summary coverage remains open.",
+        "targetBuilds": [
+          "B3.12"
+        ],
+        "targetExits": [
+          "E3.07"
+        ]
+      }
+    },
+    "E3.08": {
+      "status": "partial",
+      "evidence": [
+        "EV-BOUNDARY",
+        "EV-RUNTIME",
+        "EV-AGENT-INGEST"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E3.08",
+        "description": "Embedded Pi and complete direct-call rejection across product features remain open.",
+        "targetBuilds": [
+          "B3.13"
+        ],
+        "targetExits": [
+          "E3.08"
+        ]
+      }
+    },
+    "E4.01": {
+      "status": "partial",
+      "evidence": [
+        "EV-CJK",
+        "EV-LIBRARY"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E4.01",
+        "description": "The 10,000-page budget fixture remains open.",
+        "targetBuilds": [
+          "B4.02",
+          "B4.03",
+          "B4.06"
+        ],
+        "targetExits": [
+          "E4.01"
+        ]
+      }
+    },
+    "E4.02": {
+      "status": "verified",
+      "evidence": [
+        "EV-DB-REBUILD"
+      ]
+    },
+    "E4.03": {
+      "status": "verified",
+      "evidence": [
+        "EV-DB-EXTERNAL-EDIT"
+      ]
+    },
+    "E4.04": {
+      "status": "partial",
+      "evidence": [
+        "EV-DB-LINKS"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E4.04",
+        "description": "Full executable acceptance remains open for Exit E4.04: Backlinks and basic relationship edges rebuild from Markdown, citations, source records, and managed sections.",
+        "targetBuilds": [
+          "B4.07"
+        ],
+        "targetExits": [
+          "E4.04"
+        ]
+      }
+    },
+    "E4.05": {
+      "status": "partial",
+      "evidence": [
+        "EV-DB-REBUILD"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E4.05",
+        "description": "Full executable acceptance remains open for Exit E4.05: Schema migration and reset cover pages, sources, jobs, operations, tags, and links without turning SQLite into durable truth.",
+        "targetBuilds": [
+          "B4.01"
+        ],
+        "targetExits": [
+          "E4.05"
+        ]
+      }
+    },
+    "E4.06": {
+      "status": "planned",
+      "plannedTarget": "Durable topic, concept, entity, claim, and question Markdown lifecycle fixtures."
+    },
+    "E5.01": {
+      "status": "partial",
+      "evidence": [
+        "EV-PARSER",
+        "EV-PARSER-SMOKE",
+        "EV-MIXED-PDF-OCR",
+        "EV-PDF-REFERENCE-ORIGINAL",
+        "EV-PDF-OCR-SOURCE-REVISION",
+        "EV-PDF-PARSER-INPUT-SNAPSHOT",
+        "EV-OFFICE-PARSER-INPUT-SNAPSHOT",
+        "EV-MARKDOWN-ATOMIC",
+        "EV-SOURCE-PAGE-CONFLICT-PRESERVATION",
+        "EV-SOURCE-PAGE-SOURCE-REVISION",
+        "EV-SOURCE-PAGE-BASELINE",
+        "EV-SOURCE-PAGE-PATH-PROJECTION",
+        "EV-SOURCE-PAGE-PATH-CONFINEMENT",
+        "EV-SOURCE-PAGE-PREVIEW-BOUNDARY",
+        "EV-GENERATED-NOTE-FINAL-FENCE",
+        "EV-GENERATED-NOTE-CONFLICT-PRESERVATION"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E5.01",
+        "description": "Full executable acceptance remains open for Exit E5.01 across URL, PDF, DOCX, and PPTX copy/reference inputs, locator-bearing results, degraded paths, and supported packaged platforms; strict cross-process CAS/parent-swap resistance plus Source Record-to-Source Page, Artifact-to-note, and note-to-index/operation cross-file commits remain open.",
+        "targetBuilds": [
+          "B5.01",
+          "B5.02",
+          "B5.03",
+          "B5.04",
+          "B5.05",
+          "B5.06",
+          "B5.09"
+        ],
+        "targetExits": [
+          "E5.01"
+        ]
+      }
+    },
+    "E5.02": {
+      "status": "partial",
+      "evidence": [
+        "EV-PARSER-SMOKE"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E5.02",
+        "description": "The complete optional PaddleOCR lifecycle remains open.",
+        "targetBuilds": [
+          "B5.10"
+        ],
+        "targetExits": [
+          "E5.02"
+        ]
+      }
+    },
+    "E5.03": {
+      "status": "partial",
+      "evidence": [
+        "EV-AGENT-INGEST",
+        "EV-UNTRUSTED-SOURCE-BOUNDARY",
+        "EV-UNTRUSTED-OUTPUT-SCHEMA"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E5.03",
+        "description": "URL/DOCX/PDF/PPTX/image-OCR public-ingest adversarial cases pass; full Pi tool/Permission Broker proof remains open for Exit E5.03.",
+        "targetBuilds": [
+          "B5.11"
+        ],
+        "targetExits": [
+          "E5.03"
+        ]
+      }
+    },
+    "E5.04": {
+      "status": "verified",
+      "evidence": [
+        "EV-AGENT-INGEST-EVAL",
+        "EV-UNTRUSTED-SOURCE-BOUNDARY",
+        "EV-UNTRUSTED-OUTPUT-SCHEMA"
+      ]
+    },
+    "E5.05": {
+      "status": "partial",
+      "evidence": [
+        "EV-OCR",
+        "EV-MIXED-PDF-OCR",
+        "EV-PDF-OCR-WRITE-CONTAINMENT",
+        "EV-OCR-NATIVE-FALLBACK"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E5.05",
+        "description": "Rendered slide/media OCR, packaged-platform proof, and cross-platform fallback remain open.",
+        "targetBuilds": [
+          "B5.07",
+          "B5.08"
+        ],
+        "targetExits": [
+          "E5.05"
+        ]
+      }
+    },
+    "E6.01": {
+      "status": "partial",
+      "evidence": [
+        "EV-RETRIEVAL"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E6.01",
+        "description": "Full executable acceptance remains open for Exit E6.01: Home retrieval works before model download through lexical/metadata search and returns ranked notes rather than answer-only chat.",
+        "targetBuilds": [
+          "B6.01",
+          "B6.02"
+        ],
+        "targetExits": [
+          "E6.01"
+        ]
+      }
+    },
+    "E6.02": {
+      "status": "planned",
+      "plannedTarget": "Verified local embedding model lifecycle, vector rebuild, lexical fallback, and optional reranker report."
+    },
+    "E6.03": {
+      "status": "partial",
+      "evidence": [
+        "EV-CONTEXT",
+        "EV-AGENT-EVIDENCE-REVISION"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E6.03",
+        "description": "Full executable acceptance remains open for Exit E6.03: Model calls receive selected snippets, policy/budget metadata, and citation refs, not the full vault or unbounded conversation history.",
+        "targetBuilds": [
+          "B6.04"
+        ],
+        "targetExits": [
+          "E6.03"
+        ]
+      }
+    },
+    "E6.04": {
+      "status": "partial",
+      "evidence": [
+        "EV-RETRIEVAL"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E6.04",
+        "description": "Full executable acceptance remains open for Exit E6.04: Retrieval fixtures pass expected top-result, grounded-summary, citation-coverage, and insufficient-evidence checks.",
+        "targetBuilds": [
+          "B6.03"
+        ],
+        "targetExits": [
+          "E6.04"
+        ]
+      }
+    },
+    "E6.05": {
+      "status": "partial",
+      "evidence": [
+        "EV-RENDERER"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E6.05",
+        "description": "Full executable acceptance remains open for Exit E6.05: Note reader is sanitized, source-safe, keyboard reachable, and within the long-page rendering budget.",
+        "targetBuilds": [
+          "B6.08"
+        ],
+        "targetExits": [
+          "E6.05"
+        ]
+      }
+    },
+    "E6.06": {
+      "status": "planned",
+      "plannedTarget": "Note Agent and complete selection-action integration report."
+    },
+    "E6.07": {
+      "status": "partial",
+      "evidence": [
+        "EV-DB-LINKS"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E6.07",
+        "description": "Knowledge Tree UI and aggregate acceptance remain open.",
+        "targetBuilds": [
+          "B6.09",
+          "B6.12"
+        ],
+        "targetExits": [
+          "E6.07"
+        ]
+      }
+    },
+    "E6.08": {
+      "status": "planned",
+      "plannedTarget": "Source-preserving Markdown editing, IME, and external-edit conflict tests."
+    },
+    "E6.09": {
+      "status": "planned",
+      "plannedTarget": "Knowledge Tree visual semantics and accessibility report."
+    },
+    "E6.10": {
+      "status": "partial",
+      "evidence": [
+        "EV-RETRIEVAL",
+        "EV-DB-LINKS"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E6.10",
+        "description": "Unified retrieval/linking/summarization thresholds and generated regression report remain open.",
+        "targetBuilds": [
+          "B6.15"
+        ],
+        "targetExits": [
+          "E6.10"
+        ]
+      }
+    },
+    "E7.01": {
+      "status": "partial",
+      "evidence": [
+        "EV-PROPOSAL",
+        "EV-AGENT-INGEST"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E7.01",
+        "description": "Full executable acceptance remains open for Exit E7.01: Risky edits are never silently applied; approve/reject decisions are durable, checksum conflicts block stale application, and every applied Agent write creates a redacted operation with job ID, model profile, source IDs, and changed paths.",
+        "targetBuilds": [
+          "B7.01",
+          "B7.02",
+          "B7.03",
+          "B7.04"
+        ],
+        "targetExits": [
+          "E7.01"
+        ]
+      }
+    },
+    "E7.02": {
+      "status": "planned",
+      "plannedTarget": "Memory lifecycle, provenance, backup, and secret-scan integration report."
+    },
+    "E7.03": {
+      "status": "partial",
+      "evidence": [
+        "EV-CAPTURE"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E7.03",
+        "description": "Full executable acceptance remains open for Exit E7.03: Conversation history remains readable and restart-safe without duplicating large source assets or saved note bodies.",
+        "targetBuilds": [
+          "B7.08"
+        ],
+        "targetExits": [
+          "E7.03"
+        ]
+      }
+    },
+    "E7.04": {
+      "status": "planned",
+      "plannedTarget": "Conversation compaction identity/reference preservation tests."
+    },
+    "E7.05": {
+      "status": "planned",
+      "plannedTarget": "Memory lifecycle, provenance, backup, and secret-scan integration report."
+    },
+    "E8.01": {
+      "status": "planned",
+      "plannedTarget": "Skill Settings/chat staging and complete lifecycle report."
+    },
+    "E8.02": {
+      "status": "planned",
+      "plannedTarget": "Permission Broker and wrapped Pi capability report."
+    },
+    "E8.03": {
+      "status": "planned",
+      "plannedTarget": "Permission-mode scope, provenance, visibility, and revocation report."
+    },
+    "E8.04": {
+      "status": "planned",
+      "plannedTarget": "Curated Pi package lifecycle, pin, rollback, disclosure, and no-hidden-install report."
+    },
+    "E9.01": {
+      "status": "partial",
+      "evidence": [
+        "EV-BACKUP"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E9.01",
+        "description": "Full executable acceptance remains open for Exit E9.01: Backup includes required durable vault data, trash/tombstones, vault Skills, memory, conversations, proposals, operations, and non-secret settings; it excludes secrets, models, tools, database, indexes, and caches by default and reports external dependencies.",
+        "targetBuilds": [
+          "B9.01",
+          "B9.02"
+        ],
+        "targetExits": [
+          "E9.01"
+        ]
+      }
+    },
+    "E9.02": {
+      "status": "partial",
+      "evidence": [
+        "EV-BACKUP",
+        "EV-RESTORE-CONFLICT"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E9.02",
+        "description": "Full executable acceptance remains open for Exit E9.02: Previewed fresh-folder restore validates archive paths and schemas, preserves stable IDs and durable records, resolves vault-copy identity explicitly, and rebuilds only derived state.",
+        "targetBuilds": [
+          "B9.03",
+          "B9.04",
+          "B9.05",
+          "B9.06"
+        ],
+        "targetExits": [
+          "E9.02"
+        ]
+      }
+    },
+    "E9.03": {
+      "status": "planned",
+      "plannedTarget": "Versioned durable-data migration rollback/repair report."
+    },
+    "E9.04": {
+      "status": "partial",
+      "evidence": [
+        "EV-BACKUP"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E9.04",
+        "description": "Cross-service destructive lifecycle tests remain open.",
+        "targetBuilds": [
+          "B9.08"
+        ],
+        "targetExits": [
+          "E9.04"
+        ]
+      }
+    },
+    "E9.05": {
+      "status": "planned",
+      "plannedTarget": "Deterministic Knowledge Health and proposal-routing report."
+    },
+    "E9.06": {
+      "status": "partial",
+      "evidence": [
+        "EV-I18N"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E9.06",
+        "description": "Six-locale workflow smoke remains open.",
+        "targetBuilds": [
+          "B9.10"
+        ],
+        "targetExits": [
+          "E9.06"
+        ]
+      }
+    },
+    "E9.07": {
+      "status": "planned",
+      "plannedTarget": "Keyboard, focus, accessible-name, contrast, reduced-motion, and narrow-layout report."
+    },
+    "E9.08": {
+      "status": "planned",
+      "plannedTarget": "Platform, scale, installer-size, memory, attribution, release-note, and signing-status reports."
+    },
+    "E9.09": {
+      "status": "planned",
+      "plannedTarget": "Alpha-to-alpha update and active-risky-job safeguard report."
+    },
+    "E9.10": {
+      "status": "planned",
+      "plannedTarget": "25-source Public Alpha scenario generated report."
+    },
+    "E9.11": {
+      "status": "partial",
+      "evidence": [
+        "EV-SECURITY-POLICY",
+        "EV-PRIVACY-POLICY",
+        "EV-SUPPORT-POLICY"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E9.11",
+        "description": "Release-time data-flow and localized error/empty-state review remains open.",
+        "targetBuilds": [
+          "B9.17"
+        ],
+        "targetExits": [
+          "E9.11"
+        ]
+      }
+    },
+    "E9.12": {
+      "status": "partial",
+      "evidence": [
+        "EV-CJK"
+      ],
+      "open": {
+        "id": "OPEN-EXIT-E9.12",
+        "description": "Full metadata propagation and query-language smoke remain open.",
+        "targetBuilds": [
+          "B9.18"
+        ],
+        "targetExits": [
+          "E9.12"
+        ]
+      }
+    }
+  },
+  "evidenceCatalog": {
+    "EV-REPO": {
+      "kind": "implementation",
+      "path": "package.json",
+      "selector": "\"workspaces\""
+    },
+    "EV-CI": {
+      "kind": "contract",
+      "path": ".github/workflows/ci.yml",
+      "selector": "npm run verify"
+    },
+    "EV-BOUNDARY": {
+      "kind": "verifier",
+      "path": "scripts/verify/import-boundaries.mjs",
+      "selector": "Import boundaries OK."
+    },
+    "EV-ERROR": {
+      "kind": "test",
+      "path": "tests/unit/error-contract-schemas.test.ts",
+      "selector": "uses one executable vocabulary across API, Job, and diagnostic records"
+    },
+    "EV-DEPENDENCY": {
+      "kind": "verifier",
+      "path": "scripts/verify/dependency-manifest.mjs",
+      "selector": "Dependency manifest OK:"
+    },
+    "EV-FIXTURE": {
+      "kind": "verifier",
+      "path": "scripts/verify/fixture-manifest.mjs",
+      "selector": "Fixture manifests OK:"
+    },
+    "EV-FIXTURE-MANIFEST": {
+      "kind": "implementation",
+      "path": "tests/fixtures/manifests/fixtures.manifest.json",
+      "selector": "\"fixtures\""
+    },
+    "EV-AGENT-INGEST-EVAL": {
+      "kind": "test",
+      "path": "tests/evals/agent-ingest.multilingual-golden.test.ts",
+      "selector": "passes deterministic citation, support, recall, language, and review gates"
+    },
+    "EV-TRACE": {
+      "kind": "verifier",
+      "path": "scripts/verify/traceability.mjs",
+      "selector": "Traceability OK:"
+    },
+    "EV-DOCMAP": {
+      "kind": "verifier",
+      "path": "scripts/verify/document-map.mjs",
+      "selector": "Document map OK:"
+    },
+    "EV-DOCQUALITY": {
+      "kind": "verifier",
+      "path": "scripts/verify/independent-documentation-review.mjs",
+      "selector": "Independent documentation review OK:"
+    },
+    "EV-DOCQUALITY-INDEPENDENT": {
+      "kind": "manual-report",
+      "path": "artifacts/documentation-quality/independent-review.json",
+      "selector": "\"status\": \"passed\"",
+      "recipe": "resources/documentation-quality/independent-review.recipe.json"
+    },
+    "EV-ARTIFACT-LAYOUT": {
+      "kind": "contract",
+      "path": "docs/REPOSITORY_STRUCTURE.md",
+      "selector": "release-evidence/"
+    },
+    "EV-PLAYBOOK": {
+      "kind": "contract",
+      "path": "docs/V0_1_IMPLEMENTATION_PLAYBOOK.md",
+      "selector": "This document is the sole owner of P0-P9 phase numbers"
+    },
+    "EV-PUBLIC-WORKFLOW": {
+      "kind": "contract",
+      "path": ".github/pull_request_template.md",
+      "selector": "## Safety Checklist"
+    },
+    "EV-PUBLIC-CONDUCT": {
+      "kind": "contract",
+      "path": "CODE_OF_CONDUCT.md",
+      "selector": "## AI Agent Contributions"
+    },
+    "EV-PUBLIC-BUG": {
+      "kind": "contract",
+      "path": ".github/ISSUE_TEMPLATE/bug_report.yml",
+      "selector": "Security issues must follow SECURITY.md instead of this public form."
+    },
+    "EV-PUBLIC-SECURITY": {
+      "kind": "contract",
+      "path": ".github/ISSUE_TEMPLATE/security_contact_request.yml",
+      "selector": "I need a private channel to share security details."
+    },
+    "EV-PHASE-PREFLIGHT": {
+      "kind": "contract",
+      "path": "docs/V0_1_IMPLEMENTATION_PLAYBOOK.md",
+      "selector": "If all items pass, begin Phase 0 only"
+    },
+    "EV-LICENSE-PACKAGE": {
+      "kind": "implementation",
+      "path": "package.json",
+      "selector": "\"license\": \"Apache-2.0\""
+    },
+    "EV-LICENSE-TEXT": {
+      "kind": "contract",
+      "path": "LICENSE",
+      "selector": "Apache License"
+    },
+    "EV-LICENSE-NOTICE": {
+      "kind": "contract",
+      "path": "NOTICE",
+      "selector": "This product includes software developed for the Pige project."
+    },
+    "EV-VAULT-LAYOUT": {
+      "kind": "test",
+      "path": "tests/unit/vault-layout.test.ts",
+      "selector": "creates the required readable vault files without storing machine-local absolute paths in the manifest"
+    },
+    "EV-VAULT-POLICY": {
+      "kind": "test",
+      "path": "tests/unit/vault-layout.test.ts",
+      "selector": "keeps source storage policy in vault config and reflects it in the summary"
+    },
+    "EV-VAULT-RESET": {
+      "kind": "test",
+      "path": "tests/unit/vault-layout.test.ts",
+      "selector": "resets only rebuildable database and index roots"
+    },
+    "EV-SCHEMAS": {
+      "kind": "implementation",
+      "path": "packages/schemas/src/index.ts",
+      "selector": "export const PageIdSchema"
+    },
+    "EV-STABLE-ID": {
+      "kind": "test",
+      "path": "tests/unit/domain.test.ts",
+      "selector": "creates sync-ready local vault IDs"
+    },
+    "EV-SYNC-CONFLICT": {
+      "kind": "test",
+      "path": "tests/unit/durable-contract-schemas.test.ts",
+      "selector": "uses one stable ID vocabulary and rejects retired aliases"
+    },
+    "EV-MARKDOWN-ATOMIC": {
+      "kind": "test",
+      "path": "tests/unit/source-page-service.test.ts",
+      "selector": "recovers a completed page write after a crash before checksum finalization"
+    },
+    "EV-SOURCE-PAGE-CONFLICT-PRESERVATION": {
+      "kind": "test",
+      "path": "tests/unit/source-page-service.test.ts",
+      "selector": "preserves a user edit that lands after the pending Source Record commit"
+    },
+    "EV-SOURCE-PAGE-SOURCE-REVISION": {
+      "kind": "test",
+      "path": "tests/unit/source-page-service.test.ts",
+      "selector": "preserves a newer Source Record revision detected before pending replacement"
+    },
+    "EV-SOURCE-PAGE-BASELINE": {
+      "kind": "test",
+      "path": "tests/unit/source-page-service.test.ts",
+      "selector": "rejects a stale Source Record baseline before source-page projection begins"
+    },
+    "EV-SOURCE-PAGE-PATH-PROJECTION": {
+      "kind": "test",
+      "path": "tests/unit/source-page-service.test.ts",
+      "selector": "accepts an absolute Source Record path only inside the vault Source Record root"
+    },
+    "EV-SOURCE-PAGE-PATH-CONFINEMENT": {
+      "kind": "test",
+      "path": "tests/unit/source-page-service.test.ts",
+      "selector": "rejects an absolute Source Record path outside the vault Source Record root"
+    },
+    "EV-SOURCE-PAGE-PREVIEW-BOUNDARY": {
+      "kind": "test",
+      "path": "tests/unit/source-page-service.test.ts",
+      "selector": "rejects a symlinked extracted-text preview without leaking external text"
+    },
+    "EV-APP-SHELL": {
+      "kind": "implementation",
+      "path": "apps/desktop/src/renderer/src/App.tsx",
+      "selector": "mode-${windowState?.mode ?? \"compact\"}"
+    },
+    "EV-SETTINGS": {
+      "kind": "test",
+      "path": "tests/unit/settings-registry.test.ts",
+      "selector": "classifies implemented user-visible and agent-affecting settings"
+    },
+    "EV-LOCAL-SETTINGS": {
+      "kind": "test",
+      "path": "tests/unit/local-settings.test.ts",
+      "selector": "preserves machine-local window preferences when activating a vault"
+    },
+    "EV-SETTING-GUARD": {
+      "kind": "test",
+      "path": "tests/unit/setting-action-guard.test.ts",
+      "selector": "fails closed for a Permission Broker requirement until a broker decision exists"
+    },
+    "EV-POLICY": {
+      "kind": "test",
+      "path": "tests/unit/agent-policy-context.test.ts",
+      "selector": "builds a non-secret policy context from vault config"
+    },
+    "EV-DIAGNOSTICS": {
+      "kind": "test",
+      "path": "tests/unit/diagnostics-service.test.ts",
+      "selector": "exports only redacted local support bundle content"
+    },
+    "EV-DIAG-ROTATION": {
+      "kind": "implementation",
+      "path": "apps/desktop/src/main/services/diagnostics-service.ts",
+      "selector": "#rotateIfNeeded(): void"
+    },
+    "EV-TOOLCHAIN": {
+      "kind": "test",
+      "path": "tests/unit/toolchain-service.test.ts",
+      "selector": "reports needs_repair when required bundled tools are missing"
+    },
+    "EV-PROVIDER": {
+      "kind": "test",
+      "path": "tests/unit/model-provider-registry.test.ts",
+      "selector": "stores provider metadata and discovered model profiles without writing raw API keys to profile files"
+    },
+    "EV-PROVIDER-CONNECTION": {
+      "kind": "test",
+      "path": "tests/unit/model-provider-connection.test.ts",
+      "selector": "uses Anthropic-compatible model list headers"
+    },
+    "EV-RUNTIME": {
+      "kind": "test",
+      "path": "tests/unit/agent-runtime-service.test.ts",
+      "selector": "becomes ready when a default model profile is available"
+    },
+    "EV-RUNTIME-CONTRACT": {
+      "kind": "implementation",
+      "path": "packages/contracts/src/index.ts",
+      "selector": "export interface RuntimeCapabilities"
+    },
+    "EV-OCR-ADAPTER": {
+      "kind": "test",
+      "path": "tests/unit/macos-vision-ocr-adapter.test.ts",
+      "selector": "preferredLanguages"
+    },
+    "EV-DROP-ZONE": {
+      "kind": "implementation",
+      "path": "apps/desktop/src/renderer/src/App.tsx",
+      "selector": "onDrop={handleDrop}"
+    },
+    "EV-CAPTURE": {
+      "kind": "test",
+      "path": "tests/unit/capture-service.test.ts",
+      "selector": "preserves text capture as a managed source, source record, conversation event, and queued job"
+    },
+    "EV-LARGE-PASTE": {
+      "kind": "test",
+      "path": "tests/unit/capture-service.test.ts",
+      "selector": "stores large pasted text once and references it from conversation history"
+    },
+    "EV-FILE-CAPTURE": {
+      "kind": "test",
+      "path": "tests/unit/capture-service.test.ts",
+      "selector": "preserves dropped Markdown files as managed source copies without duplicating file bodies in conversation history"
+    },
+    "EV-DOCUMENT-CAPTURE": {
+      "kind": "test",
+      "path": "tests/unit/capture-service.test.ts",
+      "selector": "preserves document and image files as managed sources for later parser or OCR work"
+    },
+    "EV-JOB-RECOVERY": {
+      "kind": "test",
+      "path": "tests/unit/jobs-service.test.ts",
+      "selector": "reconciles interrupted jobs conservatively on startup"
+    },
+    "EV-JOB-WAIT": {
+      "kind": "test",
+      "path": "tests/unit/jobs-service.test.ts",
+      "selector": "creates a waiting Agent ingest job when no default model is ready"
+    },
+    "EV-JOB-CANCEL": {
+      "kind": "test",
+      "path": "tests/unit/jobs-service.test.ts",
+      "selector": "cancels queued jobs without deleting preserved sources"
+    },
+    "EV-JOB-DRAIN": {
+      "kind": "test",
+      "path": "tests/unit/background-job-drainer.test.ts",
+      "selector": "continues beyond one batch while yielding between bounded batches"
+    },
+    "EV-JOB-STATUS": {
+      "kind": "implementation",
+      "path": "apps/desktop/src/renderer/src/App.tsx",
+      "selector": "states: [\"queued\", \"running\", \"waiting_dependency\", \"failed_retryable\", \"failed_final\"]"
+    },
+    "EV-DURABLE-VOCAB": {
+      "kind": "verifier",
+      "path": "scripts/verify/traceability.mjs",
+      "selector": "checkDurableVocabularyParity"
+    },
+    "EV-MARKDOWN": {
+      "kind": "test",
+      "path": "tests/unit/markdown-frontmatter.test.ts",
+      "selector": "parses the known top-level fields used by library summaries"
+    },
+    "EV-AGENT-INGEST": {
+      "kind": "test",
+      "path": "tests/unit/agent-ingest-service.test.ts",
+      "selector": "turns a preserved source into a wiki note, index entry, and operation record without storing prompts or secrets"
+    },
+    "EV-GENERATED-NOTE-FINAL-FENCE": {
+      "kind": "test",
+      "path": "tests/unit/jobs-service.test.ts",
+      "selector": "requeues Agent ingest when SourceRecord changes at the final note commit fence"
+    },
+    "EV-GENERATED-NOTE-CONFLICT-PRESERVATION": {
+      "kind": "test",
+      "path": "tests/unit/agent-ingest-service.test.ts",
+      "selector": "preserves a user page created while the model call is running"
+    },
+    "EV-UNTRUSTED-SOURCE-BOUNDARY": {
+      "kind": "test",
+      "path": "tests/evals/agent-ingest-untrusted-source.test.ts",
+      "selector": "keeps URL, PDF, Office, and image-OCR instructions inside the evidence boundary"
+    },
+    "EV-UNTRUSTED-OUTPUT-SCHEMA": {
+      "kind": "test",
+      "path": "tests/evals/agent-ingest-untrusted-source.test.ts",
+      "selector": "rejects model-authored control-plane and destination fields before generated-note writes"
+    },
+    "EV-LOW-CONFIDENCE": {
+      "kind": "test",
+      "path": "tests/unit/agent-ingest-service.test.ts",
+      "selector": "marks low-confidence or warning-bearing generated notes as needing review"
+    },
+    "EV-SAFE-AUTO-APPLY": {
+      "kind": "test",
+      "path": "tests/unit/agent-ingest-service.test.ts",
+      "selector": "turns a preserved source into a wiki note, index entry, and operation record without storing prompts or secrets"
+    },
+    "EV-EGRESS": {
+      "kind": "test",
+      "path": "tests/unit/security-contract-schemas.test.ts",
+      "selector": "enforces fail-safe model-egress outcomes from boundary, policy, and content class"
+    },
+    "EV-EGRESS-SERVICE": {
+      "kind": "test",
+      "path": "tests/unit/agent-ingest-service.test.ts",
+      "selector": "requires an egress decision before credential lookup or model invocation"
+    },
+    "EV-EGRESS-PROFILE-BINDING": {
+      "kind": "test",
+      "path": "tests/unit/agent-ingest-service.test.ts",
+      "selector": "rejects a same-ID provider endpoint change before prompt rendering or credential lookup"
+    },
+    "EV-EGRESS-RUNTIME-BINDING": {
+      "kind": "test",
+      "path": "tests/unit/agent-ingest-service.test.ts",
+      "selector": "rejects a same-ID runtime endpoint or model change before model invocation"
+    },
+    "EV-LIBRARY": {
+      "kind": "test",
+      "path": "tests/unit/library-service.test.ts",
+      "selector": "lists pages through the local database index when available"
+    },
+    "EV-DB-REBUILD": {
+      "kind": "test",
+      "path": "tests/unit/local-database-service.test.ts",
+      "selector": "rebuilds after database deletion without losing Markdown knowledge"
+    },
+    "EV-DB-EXTERNAL-EDIT": {
+      "kind": "test",
+      "path": "tests/unit/local-database-service.test.ts",
+      "selector": "detects external Markdown edits and refreshes the FTS index"
+    },
+    "EV-DB-LINKS": {
+      "kind": "test",
+      "path": "tests/unit/local-database-service.test.ts",
+      "selector": "indexes wiki links and local Markdown links as rebuildable related pages"
+    },
+    "EV-DB-DRIVER": {
+      "kind": "test",
+      "path": "tests/unit/local-database-service.test.ts",
+      "selector": "initializes the node sqlite migration state behind the driver abstraction"
+    },
+    "EV-READER-RELATED": {
+      "kind": "test",
+      "path": "tests/unit/library-service.test.ts",
+      "selector": "returns related pages through the local database without exposing note bodies"
+    },
+    "EV-CJK": {
+      "kind": "test",
+      "path": "tests/unit/retrieval-service.test.ts",
+      "selector": "uses CJK-friendly character grams instead of whitespace-only matching"
+    },
+    "EV-RETRIEVAL": {
+      "kind": "test",
+      "path": "tests/unit/retrieval-service.test.ts",
+      "selector": "answers from bounded local evidence with citations and ranked pages"
+    },
+    "EV-CONTEXT": {
+      "kind": "test",
+      "path": "tests/unit/retrieval-service.test.ts",
+      "selector": "serializes context-pack refs and budgets without selected snippet bodies"
+    },
+    "EV-PARSER": {
+      "kind": "test",
+      "path": "tests/unit/parser-artifact-service.test.ts",
+      "selector": "reuses verified artifacts and regenerates an artifact whose checksum changed"
+    },
+    "EV-PARSER-SMOKE": {
+      "kind": "verifier",
+      "path": "scripts/verify/parser-worker-smoke.mjs",
+      "selector": "Built document and web parser workers loaded and returned valid protocol responses."
+    },
+    "EV-DOCUMENT-PIPELINE": {
+      "kind": "test",
+      "path": "tests/unit/jobs-service.test.ts",
+      "selector": "parses preserved DOCX and PPTX files into verified artifacts before OCR and Agent handoff"
+    },
+    "EV-OCR": {
+      "kind": "test",
+      "path": "tests/unit/jobs-service.test.ts",
+      "selector": "persists image OCR artifacts, refreshes the source page, and reuses validated output after recovery"
+    },
+    "EV-MIXED-PDF-OCR": {
+      "kind": "test",
+      "path": "tests/unit/jobs-service.test.ts",
+      "selector": "delays Agent ingest until sparse mixed-PDF pages join native evidence"
+    },
+    "EV-VERIFIED-INPUT-SNAPSHOT": {
+      "kind": "test",
+      "path": "tests/unit/verified-file-snapshot.test.ts",
+      "selector": "copies bytes into a private checksum-bound snapshot and applies POSIX read-only mode"
+    },
+    "EV-PDF-PARSER-INPUT-SNAPSHOT": {
+      "kind": "test",
+      "path": "tests/unit/referenced-source-pipeline.test.ts",
+      "selector": "runs a referenced PDF through parser artifacts and Agent ingest without a managed copy"
+    },
+    "EV-OFFICE-PARSER-INPUT-SNAPSHOT": {
+      "kind": "test",
+      "path": "tests/unit/parser-artifact-service.test.ts",
+      "selector": "binds Office extraction to a private snapshot across a live pathname replacement"
+    },
+    "EV-PDF-OCR-WRITE-CONTAINMENT": {
+      "kind": "test",
+      "path": "tests/unit/pdf-ocr-artifact-service.test.ts",
+      "selector": "rejects rendered-page writes through a parent symlink outside the vault"
+    },
+    "EV-PDF-OCR-SOURCE-REVISION": {
+      "kind": "test",
+      "path": "tests/unit/pdf-ocr-artifact-service.test.ts",
+      "selector": "rejects a detected Source Record update before final OCR replacement"
+    },
+    "EV-PDF-RENDER-GENERATION": {
+      "kind": "test",
+      "path": "tests/unit/pdf-ocr-artifact-service.test.ts",
+      "selector": "records incomplete and completed render generations without reusing stale provenance"
+    },
+    "EV-PARSE-FOLLOWUP-DURABILITY": {
+      "kind": "test",
+      "path": "tests/unit/jobs-service.test.ts",
+      "selector": "persists parse follow-up jobs before the parent can leave its recoverable state"
+    },
+    "EV-OCR-FOLLOWUP-DURABILITY": {
+      "kind": "test",
+      "path": "tests/unit/jobs-service.test.ts",
+      "selector": "persists Agent follow-up before an OCR parent can leave its recoverable state"
+    },
+    "EV-WAITING-AGENT-REQUEUE": {
+      "kind": "test",
+      "path": "tests/unit/jobs-service.test.ts",
+      "selector": "requeues waiting Agent ingest jobs after a default model becomes ready"
+    },
+    "EV-OCR-NATIVE-FALLBACK": {
+      "kind": "test",
+      "path": "tests/unit/jobs-service.test.ts",
+      "selector": "releases verified native PDF text when OCR becomes unavailable after parsing"
+    },
+    "EV-AGENT-EVIDENCE-REVISION": {
+      "kind": "test",
+      "path": "tests/unit/jobs-service.test.ts",
+      "selector": "requeues Agent ingest when OCR changes the evidence during a model call"
+    },
+    "EV-PDF-REFERENCE-ORIGINAL": {
+      "kind": "test",
+      "path": "tests/unit/pdf-ocr-artifact-service.test.ts",
+      "selector": "keeps empty OCR body-free and supports a referenced original PDF"
+    },
+    "EV-PROPOSAL": {
+      "kind": "test",
+      "path": "tests/unit/proposal-service.test.ts",
+      "selector": "stages durable proposals and lists safe summaries without proposed content"
+    },
+    "EV-BACKUP": {
+      "kind": "test",
+      "path": "tests/unit/backup-service.test.ts",
+      "selector": "creates a zip backup with durable vault files and restores it into a new vault without rebuildable cache files"
+    },
+    "EV-RESTORE-CONFLICT": {
+      "kind": "test",
+      "path": "tests/unit/backup-service.test.ts",
+      "selector": "flags checksum mismatches during restore preview and blocks restore apply"
+    },
+    "EV-I18N": {
+      "kind": "test",
+      "path": "tests/unit/i18n-catalog.test.ts",
+      "selector": "keeps every v0.1 locale populated with the same keys"
+    },
+    "EV-RENDERER": {
+      "kind": "test",
+      "path": "tests/unit/markdown-renderer.test.ts",
+      "selector": "sanitizes raw HTML and renders Pige inline references as safe anchors"
+    },
+    "EV-SECURITY-POLICY": {
+      "kind": "contract",
+      "path": "SECURITY.md",
+      "selector": "Use GitHub private vulnerability reporting"
+    },
+    "EV-PRIVACY-POLICY": {
+      "kind": "contract",
+      "path": "PRIVACY.md",
+      "selector": "Pige does not run product analytics"
+    },
+    "EV-SUPPORT-POLICY": {
+      "kind": "contract",
+      "path": "SUPPORT.md",
+      "selector": "synthetic or redacted"
+    },
+    "EV-DESKTOP-SETTING-GUARD": {
+      "kind": "test",
+      "path": "tests/unit/desktop-shell-contract.test.ts",
+      "selector": "guards sensitive settings in the main process before mutation"
+    },
+    "EV-OCR-SERVICE": {
+      "kind": "implementation",
+      "path": "apps/desktop/src/main/services/ocr-service.ts",
+      "selector": "export class OcrService implements OcrPort"
+    },
+    "EV-READER-UI": {
+      "kind": "implementation",
+      "path": "apps/desktop/src/renderer/src/App.tsx",
+      "selector": "function NoteReader(props:"
+    }
+  }
+}

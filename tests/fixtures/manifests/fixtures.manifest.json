@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "fixtures": [
+    {
+      "id": "generated-pdf-embedded-text",
+      "path": "tests/unit/helpers/pdf-fixture.ts",
+      "kind": "generated-pdf",
+      "license": "Apache-2.0 (Pige synthetic fixture)",
+      "expectedOutputRefs": ["tests/unit/pdf-parser-core.test.ts"],
+      "redactionStatus": "synthetic_no_sensitive_data",
+      "sizeClass": "small",
+      "requiredPlatformCapabilities": [],
+      "owner": "Ingest",
+      "updatePolicy": "Update with the PDF parser contract and its golden assertions."
+    },
+    {
+      "id": "generated-docx-semantic-structure",
+      "path": "tests/unit/helpers/office-fixture.ts",
+      "kind": "generated-docx-openxml",
+      "license": "Apache-2.0 (Pige synthetic fixture)",
+      "expectedOutputRefs": ["tests/unit/office-parser-core.test.ts"],
+      "redactionStatus": "synthetic_no_sensitive_data",
+      "sizeClass": "small",
+      "requiredPlatformCapabilities": [],
+      "owner": "Ingest",
+      "updatePolicy": "Update with the DOCX parser contract and semantic-structure assertions."
+    },
+    {
+      "id": "generated-pptx-order-notes-media",
+      "path": "tests/unit/helpers/office-fixture.ts",
+      "kind": "generated-pptx-openxml",
+      "license": "Apache-2.0 (Pige synthetic fixture)",
+      "expectedOutputRefs": ["tests/unit/office-parser-core.test.ts"],
+      "redactionStatus": "synthetic_no_sensitive_data",
+      "sizeClass": "small",
+      "requiredPlatformCapabilities": [],
+      "owner": "Ingest",
+      "updatePolicy": "Update with PPTX ordering, notes, and media-reference assertions."
+    },
+    {
+      "id": "generated-hostile-openxml",
+      "path": "tests/unit/helpers/office-fixture.ts",
+      "kind": "generated-malformed-and-bounded-openxml",
+      "license": "Apache-2.0 (Pige synthetic fixture)",
+      "expectedOutputRefs": ["tests/unit/office-parser-core.test.ts"],
+      "redactionStatus": "synthetic_no_sensitive_data",
+      "sizeClass": "small",
+      "requiredPlatformCapabilities": [],
+      "owner": "Security and Ingest",
+      "updatePolicy": "Update only when bounded OpenXML security behavior changes."
+    },
+    {
+      "id": "synthetic-web-article",
+      "path": "tests/fixtures/web/article.html",
+      "kind": "representative-html-article",
+      "license": "Apache-2.0 (Pige synthetic fixture)",
+      "expectedOutputRefs": ["tests/unit/web-content-extractor-core.test.ts"],
+      "redactionStatus": "synthetic_no_sensitive_data",
+      "sizeClass": "small",
+      "requiredPlatformCapabilities": [],
+      "owner": "Capture",
+      "updatePolicy": "Update with readability extraction and metadata assertions."
+    },
+    {
+      "id": "synthetic-hostile-web-page",
+      "path": "tests/fixtures/web/hostile.html",
+      "kind": "hostile-inert-html",
+      "license": "Apache-2.0 (Pige synthetic fixture)",
+      "expectedOutputRefs": ["tests/unit/web-content-extractor-core.test.ts"],
+      "redactionStatus": "synthetic_no_sensitive_data",
+      "sizeClass": "small",
+      "requiredPlatformCapabilities": [],
+      "owner": "Security and Capture",
+      "updatePolicy": "Update only when hostile-content containment assertions change."
+    },
+    {
+      "id": "generated-macos-vision-ocr-image",
+      "path": "scripts/verify/macos-vision-ocr-helper-smoke.mjs",
+      "kind": "generated-image-and-invalid-image-native-ocr-smoke",
+      "license": "Apache-2.0 (Pige synthetic fixture)",
+      "expectedOutputRefs": ["tests/unit/macos-vision-ocr-adapter-smoke.test.ts"],
+      "redactionStatus": "synthetic_no_sensitive_data",
+      "sizeClass": "small",
+      "requiredPlatformCapabilities": ["macos-26-vision"],
+      "owner": "Local Capabilities",
+      "updatePolicy": "Update with the signed helper protocol or macOS Vision adapter contract."
+    },
+    {
+      "id": "eval-agent-ingest-multilingual-v3",
+      "path": "tests/fixtures/evals/agent-ingest/multilingual-golden.v3.json",
+      "kind": "deterministic-agent-ingest-multilingual-golden",
+      "license": "Apache-2.0 (Pige synthetic fixture)",
+      "expectedOutputRefs": ["tests/evals/agent-ingest.multilingual-golden.test.ts"],
+      "redactionStatus": "synthetic_no_sensitive_data",
+      "sizeClass": "small",
+      "requiredPlatformCapabilities": [],
+      "owner": "Agent Runtime and Quality",
+      "updatePolicy": "Version the fixture when claim text, evidence refs, citation semantics, or language policy changes."
+    }
+  ]
+}

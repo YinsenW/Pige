@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "web_readability",
+  "engines": [
+    { "id": "@mozilla/readability", "version": "0.6.0", "sourceKinds": ["url"] },
+    { "id": "jsdom", "version": "29.1.1", "sourceKinds": ["url"] }
+  ],
+  "capabilities": [
+    "article_text",
+    "article_metadata",
+    "canonical_url",
+    "redacted_image_references",
+    "structured_text_fallback"
+  ],
+  "executionBoundary": "node_worker_thread",
+  "networkAccess": false,
+  "scriptExecution": false,
+  "externalResourceLoading": false,
+  "hiddenDownloads": false,
+  "concurrency": 1,
+  "maxPending": 8,
+  "limits": {
+    "maxInputCharacters": 2097152,
+    "maxElements": 20000,
+    "maxOutputCharacters": 1000000,
+    "maxImageReferences": 64,
+    "maxOldGenerationSizeMb": 256,
+    "timeoutMs": 5000
+  }
+}
