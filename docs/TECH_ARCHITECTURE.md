@@ -293,15 +293,18 @@ Current implementation:
 - Capture Service writes queued capture job records under `.pige/jobs/YYYY/MM/`.
 - Jobs Service exposes `jobs.list` as a read-only safe-summary query for Home status after launch.
 - Jobs Service exposes durable cancel/retry for eligible jobs; active process-local
-  parse/OCR uses `cancel_requested`, shared abort, and persisted stage/progress.
-- Jobs Service can synchronously process queued text/Markdown/TXT capture jobs into minimal source pages.
+  parse/OCR/Agent ingest uses `cancel_requested` and shared abort.
+- Non-cooperative capture uses `capturing_source` and persists its guard before the first Source Record/Page projection.
 - Jobs Service routes queued PDF/DOCX/PPTX sources through a document-parser registry into bounded worker-backed parse jobs, writes durable checksummed text/metadata artifacts, and gates Agent ingest on evidence quality. Direct images, verified PDF candidates, and parser-selected PPTX raster media run through `OcrPort`; runnable enrichment blocks first Agent ingest, while unavailable OCR may release useful native evidence with review warnings.
 - Parse and OCR runners write their OCR/Agent-ingest continuation Job before finalizing the upstream Job record, so a later parent-state or logging failure leaves a durable child plus a retryable parent.
-- Jobs Service can process queued Agent ingest jobs when a tested default model exists.
+- Agent ingest distinguishes provider abort/timeout and guards fenced note, current-job adoption, or missing-index repair for an existing same-source Pige note.
 - `maintenance.rebuildLocalDatabase` creates and completes an `index_rebuild` job before rebuilding SQLite metadata/FTS from Markdown.
 - Startup/vault activation reconciles interrupted idempotent capture/parse/OCR/Agent-ingest/index jobs, re-evaluates waiting Agent-ingest work against current model and runnable-PDF-OCR gates, resumes eligible work through coalesced background drainers, and marks uncertain interrupted work retryable with an explanation. Each service processes at most 20 jobs per batch and yields to the main loop before continuing, so multi-file drops are not silently capped by a query limit.
-- Running cancellation for other classes, cross-process routing, durable checkpoint
-  arrays, full-slide OCR, parent/child batches, priority scheduling, and compaction remain open.
+- Job guards use unique no-follow temporary files, file flush, supported directory flush,
+  and atomic replacement before publication. Strict cross-process Job revision CAS/lost-update,
+  parent-directory swap, guard-to-domain atomicity/guard-without-output recovery, packaged-filesystem proof,
+  running capture/index_rebuild/other-class cancellation, checkpoint arrays, full-slide OCR,
+  parent/child batches, priority scheduling, and compaction remain open.
 
 ### 5.1.3 Library Service
 
@@ -1564,7 +1567,7 @@ Current basic Agent ingest bridge:
 - Main-process `EvidenceAssemblyService` reads every eligible extracted-text/OCR Artifact for the source, verifies integrity, pairs each body with its own checksummed sidecar, preserves page/block/slide/OCR spans, orders native evidence before OCR, and applies a 24-fragment/18,000-character budget. Its merged Evidence Pack is call-scoped and is not another durable body.
 - Structured summary and key-point statements carry only ephemeral `ev_NN` refs. Unknown refs fail before write; empty refs force review; service-side rendering emits canonical source citations and strips model-authored citation syntax.
 - Model egress follows `docs/AGENT_RUNTIME_POLICY_CONTEXT.md`: the audit binds ordered evidence, redacted dynamic prompt metadata, and concrete non-secret Provider/Model routing identities while storing only hashes and Artifact refs. The bridge revalidates those identities before prompt rendering and again before model invocation.
-- Parser/OCR Agent ingest hashes the full Source Record selected by `EvidenceAssemblyService` and rechecks it before model invocation, after the response, and after flushing the exclusive temporary note immediately before create-only publication. Drift requeues or waits; concurrent targets are preserved or same-source recovered. Strict cross-process SourceRecord-to-note CAS, parent-swap resistance, cross-file transactions, and packaged-platform proof remain open.
+- Agent ingest composes Job abort with provider timeout, rechecks Source Record and cancellation around model access, then uses two final Source Record checks around a durably persisted `agent_note_publication_started` guard before create-only publication. Bounded `last_job_id` attributes same-job recovery; other-job/legacy same-source Pige notes set a guard only before repairing a genuinely missing `index.md` entry. Drift requeues or waits, and conflicting targets remain untouched. Strict cross-process SourceRecord-to-note CAS, parent-swap resistance, cross-file transactions, and packaged-platform proof remain open.
 - OpenAI-format generation uses `/v1/chat/completions` with JSON response mode. Anthropic-format generation uses `/v1/messages` and requests JSON-only output through prompt/schema validation.
 - The bridge is a Pige-owned provider adapter, not direct renderer access and not global Pi config mutation.
 - The model receives bounded, redacted evidence fragments inside an untrusted-source block. Raw prompts, raw provider responses, API keys, sidecar bodies, merged evidence bodies, and large source bodies are not persisted by default.

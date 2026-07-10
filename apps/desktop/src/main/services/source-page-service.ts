@@ -17,6 +17,10 @@ export interface SourcePageRefreshResult extends SourcePageResult {
   readonly conflict: boolean;
 }
 
+export interface SourcePagePublicationHooks {
+  readonly onPublicationStart?: () => void;
+}
+
 interface SourcePageRefreshPending {
   readonly previousChecksum?: string;
   readonly targetChecksum: string;
@@ -50,8 +54,10 @@ export class SourcePageService {
     sourceRecord: SourceRecord,
     sourceRecordPath: string,
     jobId: string,
-    expectedCurrentSourceRecord: SourceRecord = sourceRecord
+    expectedCurrentSourceRecord: SourceRecord = sourceRecord,
+    hooks: SourcePagePublicationHooks = {}
   ): SourcePageResult {
+    const startPublication = createPublicationGate(hooks.onPublicationStart);
     const pageId = createPageId(sourceRecord.id);
     const pagePath = createSourcePagePath(sourceRecord);
     const absolutePagePath = resolveVaultRelativePath(vaultPath, pagePath);
@@ -75,7 +81,8 @@ export class SourcePageService {
         pagePath,
         title,
         pending,
-        sourceRecordRevision
+        sourceRecordRevision,
+        onPublicationStart: startPublication
       });
       return { pageId, pagePath, created: recovered.created, title };
     }
@@ -105,6 +112,7 @@ export class SourcePageService {
         ? recordedPageChecksum
         : undefined;
     if (renderedPage && pageChecksum) {
+      startPublication();
       const pendingRecord = createPendingSourceRecord(sourceRecord, {
         pageId,
         pagePath,
@@ -137,6 +145,7 @@ export class SourcePageService {
       },
       updatedAt: now
     });
+    startPublication();
     writeJsonAtomic(
       vaultPath,
       absoluteSourceRecordPath,
@@ -158,15 +167,18 @@ export class SourcePageService {
     sourceRecord: SourceRecord,
     sourceRecordPath: string,
     jobId: string,
-    expectedCurrentSourceRecord: SourceRecord = sourceRecord
+    expectedCurrentSourceRecord: SourceRecord = sourceRecord,
+    hooks: SourcePagePublicationHooks = {}
   ): SourcePageRefreshResult {
+    const startPublication = createPublicationGate(hooks.onPublicationStart);
     if (!sourceRecord.knowledgePageId || !sourceRecord.knowledgePagePath) {
       const created = this.createForSource(
         vaultPath,
         sourceRecord,
         sourceRecordPath,
         jobId,
-        expectedCurrentSourceRecord
+        expectedCurrentSourceRecord,
+        { onPublicationStart: startPublication }
       );
       return { ...created, updated: created.created, conflict: false };
     }
@@ -188,7 +200,8 @@ export class SourcePageService {
         pagePath: sourceRecord.knowledgePagePath,
         title: createTitle(vaultPath, sourceRecord),
         pending,
-        sourceRecordRevision
+        sourceRecordRevision,
+        onPublicationStart: startPublication
       });
       return {
         pageId: sourceRecord.knowledgePageId,
@@ -206,7 +219,8 @@ export class SourcePageService {
         sourceRecord,
         sourceRecordPath,
         jobId,
-        expectedCurrentSourceRecord
+        expectedCurrentSourceRecord,
+        { onPublicationStart: startPublication }
       );
       return { ...created, updated: created.created, conflict: false };
     }
@@ -214,6 +228,7 @@ export class SourcePageService {
     const expectedChecksum = stringMetadata(sourceRecord.metadata.knowledgePageChecksum);
     const currentChecksum = currentPage.revision.checksum;
     if (!expectedChecksum || expectedChecksum !== currentChecksum) {
+      startPublication();
       writeSourcePageConflictRecord(
         vaultPath,
         absoluteSourceRecordPath,
@@ -269,6 +284,7 @@ export class SourcePageService {
           sourcePageRefreshConflict: false
         }
       });
+      startPublication();
       writeJsonAtomic(
         vaultPath,
         absoluteSourceRecordPath,
@@ -290,6 +306,7 @@ export class SourcePageService {
       pagePath: sourceRecord.knowledgePagePath,
       pending: { previousChecksum: currentChecksum, targetChecksum, updatedAt: now, jobId }
     });
+    startPublication();
     const pendingRevision = writeJsonAtomic(
       vaultPath,
       absoluteSourceRecordPath,
@@ -927,12 +944,14 @@ function recoverPendingRefresh(input: {
   readonly title: string;
   readonly pending: SourcePageRefreshPending;
   readonly sourceRecordRevision: RegularFileRevision;
+  readonly onPublicationStart: () => void;
 }): { readonly created: boolean; readonly updated: boolean; readonly conflict: boolean } {
   const absoluteSourceRecordPath = resolveSourceRecordPath(input.vaultPath, input.sourceRecordPath);
   const currentPage = readOptionalRegularTextFile(input.vaultPath, input.absolutePagePath);
   const pageExists = currentPage !== undefined;
   const currentChecksum = currentPage?.revision.checksum;
   if (currentChecksum === input.pending.targetChecksum) {
+    input.onPublicationStart();
     finalizePendingRefresh(input);
     return { created: false, updated: true, conflict: false };
   }
@@ -951,6 +970,7 @@ function recoverPendingRefresh(input: {
       vaultPath: input.vaultPath
     });
     if (checksumText(renderedPage) === input.pending.targetChecksum) {
+      input.onPublicationStart();
       writeFileAtomic(
         input.vaultPath,
         input.absolutePagePath,
@@ -963,6 +983,7 @@ function recoverPendingRefresh(input: {
     }
   }
 
+  input.onPublicationStart();
   writeSourcePageConflictRecord(
     input.vaultPath,
     absoluteSourceRecordPath,
@@ -970,6 +991,15 @@ function recoverPendingRefresh(input: {
     input.sourceRecordRevision
   );
   return { created: false, updated: false, conflict: true };
+}
+
+function createPublicationGate(onPublicationStart: (() => void) | undefined): () => void {
+  let started = false;
+  return () => {
+    if (started) return;
+    onPublicationStart?.();
+    started = true;
+  };
 }
 
 function finalizePendingRefresh(input: {

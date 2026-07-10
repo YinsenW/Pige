@@ -44,6 +44,7 @@ import type { NativeOcrResult } from "../../apps/desktop/src/main/services/ocr-t
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
 import type { VaultSummary } from "@pige/contracts";
+import { PigeDomainError } from "@pige/domain";
 import { createTestDocx, createTestPptx, TINY_PNG } from "./helpers/office-fixture";
 import { createTestPdf } from "./helpers/pdf-fixture";
 import { createJpegScanPdf } from "./helpers/pdf-image-fixture";
@@ -120,6 +121,7 @@ function makeServices(
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const root of tempRoots.splice(0)) {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -174,6 +176,15 @@ describe("jobs service", () => {
     const jobsPath = path.join(vaultPath, ".pige", "jobs", "2026", "07");
     fs.mkdirSync(jobsPath, { recursive: true });
     const records = [
+      {
+        id: "job_20260710_capture01",
+        class: "capture",
+        state: "running",
+        cancellation: {
+          safeCheckpointId: "capture_source_page_publication_started",
+          durableWritesApplied: true
+        }
+      },
       { id: "job_20260710_parse0001", class: "parse", state: "running" },
       { id: "job_20260710_ocr000001", class: "ocr", state: "running" },
       { id: "job_20260710_agent0001", class: "agent_ingest", state: "running" },
@@ -201,9 +212,13 @@ describe("jobs service", () => {
     const queued = jobs.list({ states: ["queued"], limit: 10 }).jobs;
     const retryable = jobs.list({ states: ["failed_retryable"], limit: 10 }).jobs;
 
-    expect(result).toEqual({ requeued: 3, failedRetryable: 2 });
-    expect(queued.map((job) => job.class).sort()).toEqual(["agent_ingest", "ocr", "parse"]);
+    expect(result).toEqual({ requeued: 4, failedRetryable: 2 });
+    expect(queued.map((job) => job.class).sort()).toEqual(["agent_ingest", "capture", "ocr", "parse"]);
     expect(queued.every((job) => job.message.includes("validated outputs will be reused"))).toBe(true);
+    expect(readJobCancellation(vaultPath, "job_20260710_capture01")).toEqual({
+      safeCheckpointId: "capture_source_page_publication_started",
+      durableWritesApplied: true
+    });
     expect(retryable.map((job) => job.id).sort()).toEqual([
       "job_20260710_cancel001",
       "job_20260710_restore01"
@@ -250,6 +265,91 @@ describe("jobs service", () => {
     expect(log).toContain(captureResult.sourceId);
     expect(listedJob?.id).toBe(captureResult.jobId);
     expect(listedJob?.state).toBe("completed");
+  });
+
+  it("blocks capture projection when the durable Job guard cannot be committed", () => {
+    const { vaultPath, vault } = makeVault();
+    const { capture, jobs } = makeServices(vaultPath, vault);
+    const captured = capture.submitText({
+      text: "The source projection must wait for its durable action-safety guard.",
+      inputKind: "typed_text",
+      userIntent: "capture",
+      locale: "en"
+    });
+    const jobPath = findFile(path.join(vaultPath, ".pige", "jobs"), `${captured.jobId}.json`);
+    const sourceRecordPath = findFile(
+      path.join(vaultPath, ".pige", "source-records"),
+      `${captured.sourceId}.json`
+    );
+    const sourceBefore = fs.readFileSync(sourceRecordPath, "utf8");
+    const originalRename = fs.renameSync.bind(fs);
+    let jobRenames = 0;
+    vi.spyOn(fs, "renameSync").mockImplementation((oldPath, newPath) => {
+      if (path.resolve(String(newPath)) === path.resolve(jobPath)) {
+        jobRenames += 1;
+        if (jobRenames === 2) throw new Error("simulated durable guard commit failure");
+      }
+      originalRename(oldPath, newPath);
+    });
+
+    const result = jobs.processQueuedCaptures({ jobIds: [captured.jobId] });
+
+    expect(result).toEqual({ processed: 1, completed: 0, failed: 1 });
+    expect(jobRenames).toBe(3);
+    expect(fs.readFileSync(sourceRecordPath, "utf8")).toBe(sourceBefore);
+    expect(listFiles(path.join(vaultPath, "sources", "text")).filter((filePath) => filePath.endsWith(".md")))
+      .toEqual([]);
+    expect(readJobCancellation(vaultPath, captured.jobId)).toBeUndefined();
+    expect(jobs.list({ classes: ["capture"], states: ["failed_retryable"] }).jobs[0]?.id)
+      .toBe(captured.jobId);
+  });
+
+  it("persists the capture guard before the first projection write and keeps it after restart", () => {
+    const { vaultPath, vault } = makeVault();
+    const { capture, jobs } = makeServices(vaultPath, vault);
+    const captured = capture.submitText({
+      text: "A persisted guard must survive before any source-page byte is published.",
+      inputKind: "typed_text",
+      userIntent: "capture",
+      locale: "en"
+    });
+    const jobPath = findFile(path.join(vaultPath, ".pige", "jobs"), `${captured.jobId}.json`);
+    const sourceRecordPath = findFile(
+      path.join(vaultPath, ".pige", "source-records"),
+      `${captured.sourceId}.json`
+    );
+    const sourceBefore = fs.readFileSync(sourceRecordPath, "utf8");
+    const originalRename = fs.renameSync.bind(fs);
+    let guardedJobAtFirstProjection: Record<string, unknown> | undefined;
+    vi.spyOn(fs, "renameSync").mockImplementation((oldPath, newPath) => {
+      if (!guardedJobAtFirstProjection && path.resolve(String(newPath)) === path.resolve(sourceRecordPath)) {
+        guardedJobAtFirstProjection = JSON.parse(fs.readFileSync(jobPath, "utf8")) as Record<string, unknown>;
+        throw new Error("simulated failure before the first source projection rename");
+      }
+      originalRename(oldPath, newPath);
+    });
+
+    const result = jobs.processQueuedCaptures({ jobIds: [captured.jobId] });
+    vi.restoreAllMocks();
+    const restartedJobs = makeServices(vaultPath, vault).jobs;
+
+    expect(result).toEqual({ processed: 1, completed: 0, failed: 1 });
+    expect(guardedJobAtFirstProjection).toMatchObject({
+      state: "running",
+      cancellation: {
+        safeCheckpointId: "capture_source_page_publication_started",
+        durableWritesApplied: true
+      }
+    });
+    expect(fs.readFileSync(sourceRecordPath, "utf8")).toBe(sourceBefore);
+    expect(readJobCancellation(vaultPath, captured.jobId)).toEqual({
+      safeCheckpointId: "capture_source_page_publication_started",
+      durableWritesApplied: true
+    });
+    expect(restartedJobs.cancel({ jobId: captured.jobId })).toMatchObject({
+      status: "not_allowed",
+      job: { id: captured.jobId, state: "failed_retryable" }
+    });
   });
 
   it("processes queued URL captures into web source pages from extracted text", async () => {
@@ -1488,6 +1588,152 @@ describe("jobs service", () => {
     expect(log).toContain("Created wiki note");
   });
 
+  it("cancels Agent ingest cleanly when the request wins before the publication guard", async () => {
+    const { vaultPath, vault } = makeVault();
+    const modelClient = new BlockingModelClient();
+    const { capture, jobs } = makeServices(
+      vaultPath,
+      vault,
+      new AgentIngestService(makeModelPort(), modelClient)
+    );
+    const captured = capture.submitText({
+      text: "Cancellation should stop this model call before note publication.",
+      inputKind: "typed_text",
+      userIntent: "capture",
+      locale: "en"
+    });
+    jobs.processQueuedCaptures({ jobIds: [captured.jobId] });
+    const queued = requireValue(jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]);
+
+    const processing = jobs.processQueuedAgentIngest({ jobIds: [queued.id] });
+    await modelClient.started.promise;
+    const running = requireValue(jobs.list({ classes: ["agent_ingest"], states: ["running"] }).jobs[0]);
+    expect(running.stage).toBe("waiting_for_model");
+    const request = jobs.cancel({ jobId: running.id });
+    expect(request).toMatchObject({ status: "cancel_requested", job: { state: "cancel_requested" } });
+    expect(await processing).toEqual({ processed: 1, completed: 0, failed: 1 });
+
+    const cancelled = requireValue(jobs.list({ classes: ["agent_ingest"], states: ["cancelled"] }).jobs[0]);
+    expect(readJobCancellation(vaultPath, cancelled.id)).toMatchObject({
+      requestedAt: request.job?.updatedAt,
+      requestedBy: "user",
+      durableWritesApplied: false
+    });
+    expect(listFiles(path.join(vaultPath, "wiki", "generated")).filter((filePath) => filePath.endsWith(".md")))
+      .toEqual([]);
+    expect(readOperationBodies(vaultPath).some((body) => body.includes('"kind": "model_egress_decision"')))
+      .toBe(true);
+  });
+
+  it("keeps Agent ingest retryable when note publication fails after the durable guard but before link", async () => {
+    const { vaultPath, vault } = makeVault();
+    const agentIngest = new AgentIngestService(makeModelPort(), new StaticModelClient(standardAgentOutput(
+      "Pre-link publication failure"
+    )));
+    const { capture, jobs } = makeServices(vaultPath, vault, agentIngest);
+    const captured = capture.submitText({
+      text: "The note link must never precede its durable action-safety guard.",
+      inputKind: "typed_text",
+      userIntent: "capture",
+      locale: "en"
+    });
+    jobs.processQueuedCaptures({ jobIds: [captured.jobId] });
+    const queued = requireValue(jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]);
+    vi.spyOn(fs, "linkSync").mockImplementation(() => {
+      throw new Error("simulated pre-link failure");
+    });
+
+    const result = await jobs.processQueuedAgentIngest({ jobIds: [queued.id] });
+
+    expect(result).toEqual({ processed: 1, completed: 0, failed: 1 });
+    const failed = requireValue(jobs.list({ classes: ["agent_ingest"], states: ["failed_retryable"] }).jobs[0]);
+    expect(readJobCancellation(vaultPath, failed.id)).toEqual({
+      safeCheckpointId: "agent_note_publication_started",
+      durableWritesApplied: true
+    });
+    expect(listFiles(path.join(vaultPath, "wiki", "generated")).filter((filePath) => filePath.endsWith(".md")))
+      .toEqual([]);
+    expect(jobs.cancel({ jobId: failed.id })).toMatchObject({ status: "not_allowed" });
+  });
+
+  it("preserves a verified Agent note when cancellation races its create-only commit", async () => {
+    const { vaultPath, vault } = makeVault();
+    const agentIngest = new AgentIngestService(makeModelPort(), new StaticModelClient(standardAgentOutput(
+      "Committed cancellation race"
+    )));
+    const { capture, jobs } = makeServices(vaultPath, vault, agentIngest);
+    const captured = capture.submitText({
+      text: "A create-only note that wins the race must remain verifiable.",
+      inputKind: "typed_text",
+      userIntent: "capture",
+      locale: "en"
+    });
+    jobs.processQueuedCaptures({ jobIds: [captured.jobId] });
+    const queued = requireValue(jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]);
+    const originalLink = fs.linkSync.bind(fs);
+    let cancelResult: ReturnType<JobsService["cancel"]> | undefined;
+    vi.spyOn(fs, "linkSync").mockImplementation((existingPath, newPath) => {
+      originalLink(existingPath, newPath);
+      cancelResult = jobs.cancel({ jobId: queued.id });
+    });
+
+    const result = await jobs.processQueuedAgentIngest({ jobIds: [queued.id] });
+
+    expect(cancelResult).toMatchObject({ status: "cancel_requested" });
+    expect(result).toEqual({ processed: 1, completed: 1, failed: 0 });
+    const completed = requireValue(jobs.list({
+      classes: ["agent_ingest"],
+      states: ["completed_with_warnings"]
+    }).jobs[0]);
+    expect(readJobCancellation(vaultPath, completed.id)).toMatchObject({
+      requestedBy: "user",
+      safeCheckpointId: "agent_note_publication_started",
+      durableWritesApplied: true
+    });
+    expect(completed.message).toContain("Durable output committed");
+    expect(fs.readFileSync(findFile(path.join(vaultPath, "wiki", "generated"), ".md"), "utf8"))
+      .toContain("Committed cancellation race");
+  });
+
+  it("reuses a same-job committed note with a real recovery checkpoint", async () => {
+    const { vaultPath, vault } = makeVault();
+    const modelClient = new StaticModelClient(standardAgentOutput("Recovered same-job note"));
+    const { capture, jobs } = makeServices(
+      vaultPath,
+      vault,
+      new AgentIngestService(makeModelPort(), modelClient)
+    );
+    const captured = capture.submitText({
+      text: "A restart should attribute this generated note to its exact publishing job.",
+      inputKind: "typed_text",
+      userIntent: "capture",
+      locale: "en"
+    });
+    jobs.processQueuedCaptures({ jobIds: [captured.jobId] });
+    const queued = requireValue(jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]);
+    const originalLink = fs.linkSync.bind(fs);
+    vi.spyOn(fs, "linkSync").mockImplementation((existingPath, newPath) => {
+      originalLink(existingPath, newPath);
+      throw new Error("simulated process loss after create-only link");
+    });
+    expect(await jobs.processQueuedAgentIngest({ jobIds: [queued.id] }))
+      .toEqual({ processed: 1, completed: 0, failed: 1 });
+    vi.restoreAllMocks();
+
+    const failed = requireValue(jobs.list({ classes: ["agent_ingest"], states: ["failed_retryable"] }).jobs[0]);
+    expect(fs.existsSync(findFile(path.join(vaultPath, "wiki", "generated"), ".md"))).toBe(true);
+    expect(jobs.retry({ jobId: failed.id }).status).toBe("requeued");
+    expect(await jobs.processQueuedAgentIngest({ jobIds: [failed.id] }))
+      .toEqual({ processed: 1, completed: 1, failed: 0 });
+
+    const completed = requireValue(jobs.list({ classes: ["agent_ingest"], states: ["completed"] }).jobs[0]);
+    expect(readJobCancellation(vaultPath, completed.id)).toEqual({
+      safeCheckpointId: "agent_existing_note_adoption_started",
+      durableWritesApplied: true
+    });
+    expect(modelClient.requests).toHaveLength(1);
+  });
+
   it("requeues Agent ingest when SourceRecord changes at the final note commit fence", async () => {
     const { vaultPath, vault } = makeVault();
     let modelReturned = false;
@@ -1552,10 +1798,80 @@ describe("jobs service", () => {
     expect(modelClient.requests).toHaveLength(1);
     expect(requeued?.sourceId).toBe(captureResult.sourceId);
     expect(requeued?.message).toContain("requeued with the latest evidence");
+    expect(requeued ? readJobCancellation(vaultPath, requeued.id) : undefined).toBeUndefined();
     expect(listFiles(path.join(vaultPath, "wiki", "generated")).filter((filePath) => filePath.endsWith(".md")))
       .toEqual([]);
     expect(operationBodies.some((body) => body.includes('"kind": "model_egress_decision"'))).toBe(true);
     expect(operationBodies.some((body) => body.includes('"kind": "create_page"'))).toBe(false);
+  });
+
+  it("keeps permission and provider failures clean-cancellable before Agent publication", async () => {
+    const permissionFixture = makeVault();
+    const confirmConfig: ModelProviderRuntimeConfig = {
+      ...runtimeConfig,
+      provider: {
+        ...runtimeConfig.provider,
+        cloudBoundary: "unknown",
+        boundaryVerification: "unknown"
+      }
+    };
+    const permissionServices = makeServices(
+      permissionFixture.vaultPath,
+      permissionFixture.vault,
+      new AgentIngestService(makeModelPort(() => confirmConfig), new StaticModelClient(standardAgentOutput(
+        "Permission-gated note"
+      )))
+    );
+    const permissionCapture = permissionServices.capture.submitText({
+      text: "Unknown provider boundaries require explicit confirmation.",
+      inputKind: "typed_text",
+      userIntent: "capture",
+      locale: "en"
+    });
+    permissionServices.jobs.processQueuedCaptures({ jobIds: [permissionCapture.jobId] });
+    const permissionJob = requireValue(permissionServices.jobs.list({
+      classes: ["agent_ingest"],
+      states: ["queued"]
+    }).jobs[0]);
+    expect(await permissionServices.jobs.processQueuedAgentIngest({ jobIds: [permissionJob.id] }))
+      .toEqual({ processed: 1, completed: 0, failed: 1 });
+    const waiting = requireValue(permissionServices.jobs.list({
+      classes: ["agent_ingest"],
+      states: ["waiting_permission"]
+    }).jobs[0]);
+    expect(readJobCancellation(permissionFixture.vaultPath, waiting.id)).toBeUndefined();
+    expect(permissionServices.jobs.cancel({ jobId: waiting.id }).status).toBe("cancelled");
+
+    const providerFixture = makeVault();
+    const providerServices = makeServices(
+      providerFixture.vaultPath,
+      providerFixture.vault,
+      new AgentIngestService(makeModelPort(), new StaticModelClient(
+        standardAgentOutput("Provider failure note"),
+        () => {
+          throw new PigeDomainError("model_provider.network_failed", "Synthetic provider failure.");
+        }
+      ))
+    );
+    const providerCapture = providerServices.capture.submitText({
+      text: "A provider failure before publication must not set the durable guard.",
+      inputKind: "typed_text",
+      userIntent: "capture",
+      locale: "en"
+    });
+    providerServices.jobs.processQueuedCaptures({ jobIds: [providerCapture.jobId] });
+    const providerJob = requireValue(providerServices.jobs.list({
+      classes: ["agent_ingest"],
+      states: ["queued"]
+    }).jobs[0]);
+    expect(await providerServices.jobs.processQueuedAgentIngest({ jobIds: [providerJob.id] }))
+      .toEqual({ processed: 1, completed: 0, failed: 1 });
+    const failed = requireValue(providerServices.jobs.list({
+      classes: ["agent_ingest"],
+      states: ["failed_retryable"]
+    }).jobs[0]);
+    expect(readJobCancellation(providerFixture.vaultPath, failed.id)).toBeUndefined();
+    expect(providerServices.jobs.cancel({ jobId: failed.id }).status).toBe("cancelled");
   });
 
   it("marks low-confidence Agent ingest jobs as completed with warnings", async () => {
@@ -1726,6 +2042,7 @@ describe("jobs service", () => {
     expect(rebuild.pageCount).toBe(1);
     expect(listedJob?.id).toBe(rebuild.jobId);
     expect(listedJob?.message).toContain("Index rebuilt from Markdown");
+    expect(readJobCancellation(vaultPath, rebuild.jobId)).toBeUndefined();
     expect(search?.results[0]?.summary.title).toBe("Index Job");
     expect(log).toContain("Rebuilt local database index from Markdown");
   });
@@ -1794,12 +2111,35 @@ function requireValue<T>(value: T | undefined): T {
   return value;
 }
 
-function readJobCancellation(vaultPath: string, jobId: string): { readonly durableWritesApplied?: boolean } | undefined {
+function readJobCancellation(vaultPath: string, jobId: string): {
+  readonly requestedAt?: string;
+  readonly requestedBy?: string;
+  readonly safeCheckpointId?: string;
+  readonly durableWritesApplied?: boolean;
+} | undefined {
   const jobPath = findFile(path.join(vaultPath, ".pige", "jobs"), `${jobId}.json`);
   const job = JSON.parse(fs.readFileSync(jobPath, "utf8")) as {
     readonly cancellation?: { readonly durableWritesApplied?: boolean };
   };
   return job.cancellation;
+}
+
+function readOperationBodies(vaultPath: string): string[] {
+  return listFiles(path.join(vaultPath, ".pige", "operations"))
+    .map((filePath) => fs.readFileSync(filePath, "utf8"));
+}
+
+function standardAgentOutput(title: string): unknown {
+  return {
+    title,
+    summary: { text: "Grounded Agent output for an action-safety test.", evidenceRefs: ["ev_01"] },
+    keyPoints: [{ text: "Publication stays create-only", evidenceRefs: ["ev_01"] }],
+    tags: [],
+    topics: [],
+    entities: [],
+    warnings: [],
+    confidence: "high"
+  };
 }
 
 function findFileOptional(root: string, suffix: string): string | undefined {
@@ -1863,6 +2203,43 @@ class StaticModelClient implements AgentIngestModelClient {
     await this.onRequest?.();
     return { text: JSON.stringify(this.output) };
   }
+}
+
+class BlockingModelClient implements AgentIngestModelClient {
+  readonly started = deferred<void>();
+
+  async generateJson(
+    _config: ModelProviderRuntimeConfig,
+    request: Parameters<AgentIngestModelClient["generateJson"]>[1]
+  ): Promise<{ readonly text: string }> {
+    this.started.resolve();
+    return new Promise((_resolve, reject) => {
+      const rejectAbort = (): void => {
+        const error = new Error("model request cancelled");
+        error.name = "AbortError";
+        reject(error);
+      };
+      if (request.signal?.aborted) {
+        rejectAbort();
+      } else {
+        request.signal?.addEventListener("abort", rejectAbort, { once: true });
+      }
+    });
+  }
+}
+
+function deferred<T>(): {
+  readonly promise: Promise<T>;
+  readonly resolve: (value: T | PromiseLike<T>) => void;
+  readonly reject: (reason?: unknown) => void;
+} {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
 }
 
 class StaticPdfPageRenderer implements PdfPageRendererPort {

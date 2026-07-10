@@ -114,7 +114,48 @@ describe("provider model JSON client", () => {
     }
     expect(calls).toBe(0);
   });
+
+  it("preserves an external abort as cooperative cancellation instead of a provider failure", async () => {
+    const controller = new AbortController();
+    const client = new ProviderModelJsonClient(abortableFetch);
+
+    const request = client.generateJson(makeConfig("openai"), {
+      system: "system",
+      user: "user",
+      maxTokens: 10,
+      signal: controller.signal
+    });
+    controller.abort();
+
+    await expect(request).rejects.toMatchObject({ name: "AbortError" });
+  });
+
+  it("keeps the provider timeout distinct from an external abort", async () => {
+    const client = new ProviderModelJsonClient(abortableFetch, 5);
+
+    await expect(client.generateJson(makeConfig("openai"), {
+      system: "system",
+      user: "user",
+      maxTokens: 10
+    })).rejects.toMatchObject({ code: "model_provider.timeout" });
+  });
 });
+
+async function abortableFetch(_url: string | URL | Request, init?: RequestInit): Promise<Response> {
+  return new Promise<Response>((_resolve, reject) => {
+    const signal = init?.signal;
+    const rejectAbort = (): void => {
+      const error = new Error("fetch aborted");
+      error.name = "AbortError";
+      reject(error);
+    };
+    if (signal?.aborted) {
+      rejectAbort();
+    } else {
+      signal?.addEventListener("abort", rejectAbort, { once: true });
+    }
+  });
+}
 
 function makeConfig(
   providerKind: "openai" | "anthropic" | "openai_compatible",

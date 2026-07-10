@@ -37,7 +37,7 @@ Current implementation state, last reconciled 2026-07-10:
 | --- | --- | --- |
 | P0 | in progress | Repository and traceability foundations have current evidence; the full P0 exit set has not been re-run as a phase-completion claim. |
 | P1 | in progress | Desktop, vault, settings, diagnostics, and runtime foundations have evidence; the full mapped exit set remains open. |
-| P2 | in progress | Capture, durable jobs, retry, and process-local parse/OCR progress/cancel have evidence; visible UI, other classes, voice, and full exits remain open. |
+| P2 | in progress | Capture publication guards plus process-local parse/OCR/Agent-ingest progress or cancellation have evidence; running capture, `index_rebuild`, remaining classes, visible UI, voice, and full exits remain open. |
 | P3 | in progress | BYOK and Agent-ingest foundations have evidence; complete provider, egress, output-summary, and exit evidence remain open. |
 | P4 | in progress | SQLite, lexical search, Library, and rebuild foundations have evidence; the full scale and relationship exit set remains open. |
 | P5 | in progress | PDF, Office, static-web, direct-image macOS Vision OCR, Artifact, and recovery slices have evidence; cross-platform/document OCR and remaining P5 exits are still open. |
@@ -237,6 +237,11 @@ Exit criteria:
 - [E2.10] Retry is idempotent; cancellation preserves sources and leaves no half-enabled UI or ambiguous durable state.
 - [E2.11] Missing model, tool, path, or runtime dependencies enter visible retryable `waiting_dependency` with a structured repair/retry action and no source loss.
 
+Current B2.08/B2.11 evidence covers first-wins guards for capture/parse/OCR/agent_ingest,
+process-local parse/OCR/agent_ingest cancellation, restart retention, and verified note
+races. Running capture/`index_rebuild` cancellation,
+strict cross-process Job revision CAS, and guard-to-domain atomicity remain open.
+
 ## 8. Phase 3: BYOK And Basic Agent Ingest
 
 Context pack: `docs/PRD.md` BYOK and Agent workflow sections; `docs/TECH_ARCHITECTURE.md` model provider and Agent contracts; `docs/PROMPT_DESIGN.md`; `docs/MARKDOWN_SCHEMA.md`; `docs/KNOWLEDGE_MODEL_AND_LINKING.md`; `docs/JOB_OPERATION_AND_RECOVERY.md`; `docs/SECURITY_THREAT_MODEL.md`; `docs/DATA_ARCHITECTURE.md`.
@@ -339,18 +344,17 @@ both success and failure. Referenced-PDF integration proves that the parser rece
 separate disposable path, while the shared snapshot fixture proves copied bytes survive
 later source-path replacement. The remaining packaged-platform matrix stays open.
 
-B5.09 source-page evidence now covers a stale pre-Artifact Source Record baseline,
-detected concurrent Source Record and Markdown changes, recovery from an interrupted
-pending refresh, vault-relative Source Record projection, and non-disclosing rejection
-of an escaping preview. These tests do not close the residual cross-process,
-parent-swap, or cross-file source-page transaction windows owned by the Source Storage
-contract.
+B5.09 source-page evidence covers stale baselines, concurrent Source Record/Markdown
+changes, pending recovery, confined projections/previews, and a capture Job guard that
+must persist before new, recovered, adopted, or conflicted projection writes. Strict
+cross-process revision CAS, parent-swap, and cross-file source-page transactions remain
+open under Source Storage.
 
-Generated-note commit evidence now covers a final Source Record recheck after the
-exclusive temporary note is flushed, atomic create-only publication, preservation of a
-concurrent user page, and idempotent recovery when another worker publishes the same
-source-owned Pige note. Strict cross-process SourceRecord-to-note CAS, parent-swap
-resistance, note/index/operation transactions, and packaged-platform proof remain open.
+Generated-note evidence covers first-wins cancellation, two Source Record fences,
+durable pre-link guard, create-only publication, conflict
+preservation, bounded same-job provenance, guarded missing-index repair, and recovery.
+Strict cross-process SourceRecord-to-note CAS, parent-swap,
+note/index/operation transactions, and packaged-platform proof remain open.
 
 Evidence exists for validated-address-pinned static URL fetch -> bounded response -> charset-aware snapshot -> serial Readability/jsdom worker -> checksummed article text and redacted metadata -> quality-aware Agent handoff.
 
@@ -366,7 +370,7 @@ B5.12/E5.04 evidence covers seven text, URL, PDF, PPTX, and image-OCR cases acro
 
 Evidence exists for startup reconciliation of interrupted idempotent document/OCR/Agent jobs.
 
-Still open before P5 completion: signed helper/packaged PDF acceptance, Windows/Paddle, full-slide/vector/chart/DOCX-media OCR, unsupported/oversized PPTX targets, full Pi-runtime injection, numeric/running-cancel UI, other-class action-safety/cancellation coverage, cross-process cancellation, and the exits below.
+Still open before P5 completion: signed helper/packaged PDF acceptance, Windows/Paddle, full-slide/vector/chart/DOCX-media OCR, unsupported/oversized PPTX targets, full Pi-runtime injection, numeric/running-cancel UI, remaining Job-class domain publishers, running capture/`index_rebuild`/other-class cancellation, and strict cross-process cancellation/CAS.
 
 Deferred from this phase:
 

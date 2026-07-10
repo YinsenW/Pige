@@ -7,6 +7,7 @@ export interface ModelJsonRequest {
   readonly system: string;
   readonly user: string;
   readonly maxTokens: number;
+  readonly signal?: AbortSignal;
 }
 
 export interface ModelJsonResult {
@@ -54,7 +55,7 @@ export class ProviderModelJsonClient {
         response_format: { type: "json_object" },
         store: false
       })
-    });
+    }, request.signal);
 
     if (!response.ok) {
       throw createProviderError(response.status);
@@ -89,7 +90,7 @@ export class ProviderModelJsonClient {
           }
         ]
       })
-    });
+    }, request.signal);
 
     if (!response.ok) {
       throw createProviderError(response.status);
@@ -103,20 +104,42 @@ export class ProviderModelJsonClient {
     return { text: content };
   }
 
-  async #fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  async #fetchWithTimeout(url: string, init: RequestInit, externalSignal?: AbortSignal): Promise<Response> {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.#timeoutMs);
+    let abortSource: "external" | "timeout" | undefined;
+    const abort = (source: "external" | "timeout"): void => {
+      if (abortSource) return;
+      abortSource = source;
+      controller.abort();
+    };
+    const onExternalAbort = (): void => abort("external");
+    if (externalSignal?.aborted) {
+      abort("external");
+    } else {
+      externalSignal?.addEventListener("abort", onExternalAbort, { once: true });
+    }
+    const timeout = setTimeout(() => abort("timeout"), this.#timeoutMs);
     try {
       return await this.#fetch(url, { ...init, signal: controller.signal });
     } catch (caught) {
-      if (caught instanceof Error && caught.name === "AbortError") {
+      if (abortSource === "external") {
+        throw createAbortError();
+      }
+      if (abortSource === "timeout") {
         throw new PigeDomainError("model_provider.timeout", "The provider model call timed out.");
       }
       throw new PigeDomainError("model_provider.network_failed", "The provider could not be reached.");
     } finally {
       clearTimeout(timeout);
+      externalSignal?.removeEventListener("abort", onExternalAbort);
     }
   }
+}
+
+function createAbortError(): Error {
+  const error = new Error("The provider model call was cancelled.");
+  error.name = "AbortError";
+  return error;
 }
 
 function isAnthropicKind(kind: ProviderKind): boolean {

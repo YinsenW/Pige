@@ -539,7 +539,10 @@ describe("agent ingest service", () => {
     const operationPath = requireOperation(readOperationFiles(vaultPath), '"kind": "create_page"').path;
     fs.rmSync(operationPath);
     fs.writeFileSync(path.join(vaultPath, "index.md"), "# Index\n", "utf8");
-    const second = await service.ingestSource(vaultPath, sourceRecord, job);
+    const checkpoints: string[] = [];
+    const second = await service.ingestSource(vaultPath, sourceRecord, job, {
+      onPublicationStart: (checkpointId) => checkpoints.push(checkpointId)
+    });
     const recoveredOperation = requireOperation(readOperationFiles(vaultPath), '"kind": "create_page"').text;
     const recoveredIndex = fs.readFileSync(path.join(vaultPath, "index.md"), "utf8");
 
@@ -549,6 +552,57 @@ describe("agent ingest service", () => {
     expect(second.operationId).toBe(first.operationId);
     expect(recoveredOperation).toContain("Recovered operation metadata");
     expect(recoveredIndex).toContain(`[Reusable source](${first.pagePath})`);
+    expect(checkpoints).toEqual(["agent_existing_note_adoption_started"]);
+    expect(modelClient.callCount).toBe(1);
+  });
+
+  it("attributes existing notes by bounded last-job provenance and guards only new index adoption", async () => {
+    const { vaultPath, vault } = makeVault();
+    const captured = makeCapture(vaultPath, vault).submitText({
+      text: "Existing-note provenance must stay bounded to its actual publishing job.",
+      inputKind: "typed_text",
+      userIntent: "capture",
+      locale: "en"
+    });
+    const sourceRecord = readJson<SourceRecord>(findFile(path.join(vaultPath, ".pige/source-records"), `${captured.sourceId}.json`));
+    const originalJob = readJson<JobRecord>(findFile(path.join(vaultPath, ".pige/jobs"), `${captured.jobId}.json`));
+    const modelClient = new CapturingModelClient({
+      title: "Bounded provenance note",
+      summary: { text: "The note belongs to one exact publishing job.", evidenceRefs: ["ev_01"] },
+      keyPoints: [],
+      tags: [],
+      topics: [],
+      entities: [],
+      warnings: [],
+      confidence: "high"
+    });
+    const service = new AgentIngestService(makeModelPort(), modelClient);
+    const first = await service.ingestSource(vaultPath, sourceRecord, originalJob);
+    const notePath = path.join(vaultPath, first.pagePath);
+    const otherJob: JobRecord = { ...originalJob, id: "job_20260710_otherjob01" };
+
+    const otherJobCheckpoints: string[] = [];
+    await service.ingestSource(vaultPath, sourceRecord, otherJob, {
+      onPublicationStart: (checkpointId) => otherJobCheckpoints.push(checkpointId)
+    });
+    expect(otherJobCheckpoints).toEqual([]);
+
+    fs.writeFileSync(path.join(vaultPath, "index.md"), "# Index\n", "utf8");
+    const indexAdoptionCheckpoints: string[] = [];
+    await service.ingestSource(vaultPath, sourceRecord, otherJob, {
+      onPublicationStart: (checkpointId) => indexAdoptionCheckpoints.push(checkpointId)
+    });
+    expect(indexAdoptionCheckpoints).toEqual(["agent_index_publication_started"]);
+
+    const legacyNote = fs.readFileSync(notePath, "utf8")
+      .replace(/^  last_job_id:.*\n/mu, "");
+    fs.writeFileSync(notePath, legacyNote, "utf8");
+    const legacyJob: JobRecord = { ...originalJob, id: "job_20260710_legacyjob1" };
+    const legacyCheckpoints: string[] = [];
+    await service.ingestSource(vaultPath, sourceRecord, legacyJob, {
+      onPublicationStart: (checkpointId) => legacyCheckpoints.push(checkpointId)
+    });
+    expect(legacyCheckpoints).toEqual([]);
     expect(modelClient.callCount).toBe(1);
   });
 
@@ -573,6 +627,7 @@ describe("agent ingest service", () => {
       confidence: "high"
     });
     let currentChecks = 0;
+    const fenceEvents: string[] = [];
 
     await expect(new AgentIngestService(makeModelPort(), modelClient).ingestSource(
       vaultPath,
@@ -581,14 +636,23 @@ describe("agent ingest service", () => {
       {
         assertSourceCurrent: () => {
           currentChecks += 1;
-          if (currentChecks === 3) {
+          fenceEvents.push(`source-${currentChecks}`);
+          if (currentChecks === 4) {
             throw new PigeDomainError("agent_ingest.source_changed", "Source evidence changed at commit.");
           }
-        }
+        },
+        onPublicationStart: (checkpointId) => fenceEvents.push(checkpointId)
       }
     )).rejects.toMatchObject({ code: "agent_ingest.source_changed" });
 
-    expect(currentChecks).toBe(3);
+    expect(currentChecks).toBe(4);
+    expect(fenceEvents).toEqual([
+      "source-1",
+      "source-2",
+      "source-3",
+      "agent_note_publication_started",
+      "source-4"
+    ]);
     expect(listFiles(path.join(vaultPath, "wiki", "generated"), ".md")).toEqual([]);
     expect(readOperationFiles(vaultPath).some((operation) => operation.text.includes('"kind": "create_page"'))).toBe(false);
   });

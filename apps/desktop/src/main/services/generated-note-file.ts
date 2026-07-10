@@ -7,6 +7,13 @@ const GENERATED_NOTE_HEADER_READ_LIMIT_BYTES = 128 * 1024;
 
 export type GeneratedNoteCommitResult = "created" | "exists";
 
+export interface GeneratedNoteCommitHooks {
+  readonly beforeFinalSourceCheck?: () => void;
+  readonly assertSourceCurrent?: () => void;
+  readonly onPublicationStart?: () => void;
+  readonly afterPublicationStart?: () => void;
+}
+
 export function readGeneratedNoteHeader(vaultPath: string, filePath: string): string | undefined {
   if (!ensureSafeParent(vaultPath, filePath, false)) return undefined;
   let pathStatBefore: fs.Stats;
@@ -60,7 +67,7 @@ export function createGeneratedNoteExclusive(
   vaultPath: string,
   filePath: string,
   value: string,
-  beforeCommit?: () => void
+  hooks: GeneratedNoteCommitHooks = {}
 ): GeneratedNoteCommitResult {
   ensureSafeParent(vaultPath, filePath, true);
   if (targetExists(filePath)) return "exists";
@@ -82,7 +89,11 @@ export function createGeneratedNoteExclusive(
     fs.closeSync(descriptor);
     descriptor = undefined;
 
-    beforeCommit?.();
+    hooks.beforeFinalSourceCheck?.();
+    hooks.assertSourceCurrent?.();
+    hooks.onPublicationStart?.();
+    hooks.afterPublicationStart?.();
+    hooks.assertSourceCurrent?.();
     ensureSafeParent(vaultPath, filePath, false);
     if (targetExists(filePath)) return "exists";
 

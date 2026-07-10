@@ -124,6 +124,51 @@ describe("cooperative durable job cancellation", () => {
     expect(fs.existsSync(requireValue(extractor.snapshotPath))).toBe(false);
   });
 
+  it("lets cancel_requested win before a durable guard mutation without rewriting the request pair", async () => {
+    const fixture = makeFixture();
+    const started = deferred<void>();
+    const release = deferred<void>();
+    const ocr: OcrPort = {
+      canOcr: () => true,
+      inspectSource: () => ({ ready: true, message: "Linearization fixture is ready." }),
+      ocrSource: async (_vaultPath, _sourceRecord, _sourceRecordPath, _job, control) => {
+        started.resolve();
+        await release.promise;
+        control?.markDurableCheckpoint("must_not_be_persisted");
+        throw new Error("The cancellation should win before publication.");
+      }
+    };
+    const { capture, jobs } = makeServices(fixture, undefined, ocr);
+    const imagePath = path.join(fixture.root, "linearization.png");
+    fs.writeFileSync(imagePath, Buffer.from("synthetic linearization image"));
+    const captured = await capture.submitFiles({
+      filePaths: [imagePath],
+      inputKind: "file_drop",
+      userIntent: "capture",
+      locale: "en"
+    });
+    const sourceId = requireFirst(captured.sourceIds);
+    jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+
+    const processing = jobs.processQueuedOcr({ sourceIds: [sourceId] });
+    await started.promise;
+    const running = requireValue(jobs.list({ classes: ["ocr"], states: ["running"] }).jobs[0]);
+    const requested = jobs.cancel({ jobId: running.id });
+    expect(requested).toMatchObject({ status: "cancel_requested" });
+    release.resolve();
+    expect(await processing).toEqual({ processed: 1, completed: 0, failed: 1, agentReadySourceIds: [] });
+
+    const cancelled = readJobRecord(fixture.vaultPath, running.id);
+    expect(cancelled.state).toBe("cancelled");
+    expect(cancelled.cancellation).toMatchObject({
+      requestedAt: requested.job?.updatedAt,
+      requestedBy: "user",
+      safeCheckpointId: "before_durable_write",
+      durableWritesApplied: false
+    });
+    expect(cancelled.cancellation?.safeCheckpointId).not.toBe("must_not_be_persisted");
+  });
+
   it("keeps staged PDF pages retryable when cancellation arrives between OCR page units", async () => {
     const fixture = makeFixture();
     const adapter = new SecondCallBlockingNativeOcrAdapter();
@@ -529,7 +574,7 @@ describe("cooperative durable job cancellation", () => {
     expect(result).toEqual({ processed: 1, completed: 1, failed: 0, agentReadySourceIds: [] });
     expect(completed.message).toContain("Durable output committed");
     expect(completed.progress).toEqual({ completedUnits: 1, totalUnits: 1, unit: "image" });
-    expect(completedRecord.cancellation?.safeCheckpointId).toBe("durable_output_committed");
+    expect(completedRecord.cancellation?.safeCheckpointId).toBe("fixture_output_committed");
     expect(completedRecord.cancellation?.durableWritesApplied).toBe(true);
     expect(jobs.list({ classes: ["ocr"], states: ["cancelled"] }).jobs).toEqual([]);
   });

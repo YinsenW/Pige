@@ -319,7 +319,104 @@ describe("source page service", () => {
     expect(finalRecord.metadata.sourcePageRefreshConflict).toBe(true);
     expect(finalRecord.metadata.knowledgePageChecksum).toBeUndefined();
   });
+
+  it("gates new, pending-recovery, existing-adoption, and conflict projections before their first write", () => {
+    const service = new SourcePageService();
+    const checkpoints: string[] = [];
+    const blockPublication = (name: string): (() => void) => () => {
+      checkpoints.push(name);
+      throw new Error(`blocked ${name}`);
+    };
+
+    const fresh = makeTextFixture(false);
+    const freshRecordBefore = fs.readFileSync(fresh.sourceRecordFile, "utf8");
+    const freshPagePath = expectedTextPagePath(fresh);
+    expect(() => service.createForSource(
+      fresh.vaultPath,
+      fresh.sourceRecord,
+      fresh.sourceRecordPath,
+      fresh.jobId,
+      fresh.sourceRecord,
+      { onPublicationStart: blockPublication("new") }
+    )).toThrow("blocked new");
+    expect(fs.readFileSync(fresh.sourceRecordFile, "utf8")).toBe(freshRecordBefore);
+    expect(fs.existsSync(freshPagePath)).toBe(false);
+
+    const pending = makeTextFixture(true);
+    const pendingPagePath = path.join(pending.vaultPath, requireValue(pending.sourceRecord.knowledgePagePath));
+    const pendingPageBefore = fs.readFileSync(pendingPagePath, "utf8");
+    const pendingRecord = SourceRecordSchema.parse({
+      ...pending.sourceRecord,
+      metadata: {
+        ...pending.sourceRecord.metadata,
+        sourcePageRefreshPending: {
+          targetChecksum: checksum(pendingPageBefore),
+          updatedAt: "2026-07-10T12:10:00.000Z",
+          jobId: pending.jobId
+        }
+      },
+      updatedAt: "2026-07-10T12:10:00.000Z"
+    });
+    fs.writeFileSync(pending.sourceRecordFile, `${JSON.stringify(pendingRecord, null, 2)}\n`, "utf8");
+    const pendingRecordBefore = fs.readFileSync(pending.sourceRecordFile, "utf8");
+    expect(() => service.createForSource(
+      pending.vaultPath,
+      pendingRecord,
+      pending.sourceRecordPath,
+      pending.jobId,
+      pendingRecord,
+      { onPublicationStart: blockPublication("pending") }
+    )).toThrow("blocked pending");
+    expect(fs.readFileSync(pending.sourceRecordFile, "utf8")).toBe(pendingRecordBefore);
+    expect(fs.readFileSync(pendingPagePath, "utf8")).toBe(pendingPageBefore);
+
+    const existing = makeTextFixture(true);
+    const existingPagePath = path.join(existing.vaultPath, requireValue(existing.sourceRecord.knowledgePagePath));
+    const existingRecordBefore = fs.readFileSync(existing.sourceRecordFile, "utf8");
+    const existingPageBefore = fs.readFileSync(existingPagePath, "utf8");
+    expect(() => service.createForSource(
+      existing.vaultPath,
+      existing.sourceRecord,
+      existing.sourceRecordPath,
+      existing.jobId,
+      existing.sourceRecord,
+      { onPublicationStart: blockPublication("existing") }
+    )).toThrow("blocked existing");
+    expect(fs.readFileSync(existing.sourceRecordFile, "utf8")).toBe(existingRecordBefore);
+    expect(fs.readFileSync(existingPagePath, "utf8")).toBe(existingPageBefore);
+
+    const conflict = makeTextFixture(false);
+    const conflictPagePath = expectedTextPagePath(conflict);
+    const userPage = "# Existing user page\n\nKeep this page.\n";
+    fs.mkdirSync(path.dirname(conflictPagePath), { recursive: true });
+    fs.writeFileSync(conflictPagePath, userPage, "utf8");
+    const conflictRecordBefore = fs.readFileSync(conflict.sourceRecordFile, "utf8");
+    expect(() => service.createForSource(
+      conflict.vaultPath,
+      conflict.sourceRecord,
+      conflict.sourceRecordPath,
+      conflict.jobId,
+      conflict.sourceRecord,
+      { onPublicationStart: blockPublication("conflict") }
+    )).toThrow("blocked conflict");
+    expect(fs.readFileSync(conflict.sourceRecordFile, "utf8")).toBe(conflictRecordBefore);
+    expect(fs.readFileSync(conflictPagePath, "utf8")).toBe(userPage);
+    expect(checkpoints).toEqual(["new", "pending", "existing", "conflict"]);
+  });
 });
+
+function expectedTextPagePath(fixture: {
+  readonly vaultPath: string;
+  readonly sourceRecord: SourceRecord;
+}): string {
+  return path.join(
+    fixture.vaultPath,
+    "sources",
+    "text",
+    "2026",
+    `${fixture.sourceRecord.id}.md`
+  );
+}
 
 function makeTextFixture(processCapture: boolean): {
   readonly vaultPath: string;

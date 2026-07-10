@@ -88,9 +88,10 @@ Phase 2 implementation note:
 - Job summaries expose safe identity/state plus optional stage/progress; they never expose paths, bodies, prompts, responses, or secrets.
 - Invalid job JSON is counted and skipped rather than blocking Home.
 - `jobs.cancel` directly cancels eligible non-running work only when its action-safety
-  guard is false/absent; active in-process parse/OCR becomes `cancel_requested`.
+  guard is false/absent; active in-process parse/OCR/Agent ingest becomes `cancel_requested`.
 - `jobs.retry` can mark eligible failed/waiting/cancelled jobs back to `queued` for later processing.
-- Queued text/Markdown/TXT capture jobs can create minimal no-model source pages. Success marks the job `completed`; failure marks it `failed_retryable` while preserving source records and managed source copies.
+- Capture enters `running/capturing_source`; source preservation does not set the guard.
+  A once-only checkpoint precedes its first Source Record/Page projection; running capture cancellation remains open.
 - Queued PDF/DOCX/PPTX capture jobs create metadata-only source pages, then create queued `parse` jobs when the matching bundled adapter resolves. Image capture creates a queued `ocr` job when the verified macOS Vision helper is ready and otherwise stays `waiting_dependency`; matching waiting jobs are requeued when capability becomes available.
 - Parse/OCR routing and evidence gates are owned by `PARSER_INGEST_SPEC.md`; Artifact,
   sidecar, and revision boundaries by `TECH_ARCHITECTURE.md` and
@@ -101,16 +102,14 @@ Phase 2 implementation note:
 - Home's contextual processing strip includes active capture, parse, OCR, Agent ingest, and index jobs. It remains hidden when no work needs attention and uses compact localized status indicators rather than a new queue destination.
 - Source-page writes use pending/previous/target checksums so a crash can be reconciled without confusing Pige's partial write with a user edit.
 - Phase 3 text-readable source-page completion creates a deterministic follow-up `agent_ingest` job per source. If no tested default model exists, the job enters `waiting_dependency`; after model setup, waiting ingest jobs can be requeued and processed without duplicating the source page.
-- Phase 3 `agent_ingest` writes simple wiki notes, operation records, `index.md`, and `log.md` after structured output validation. It hashes the full Source Record selected for Evidence Assembly and rechecks that revision before provider invocation, after the response, and after flushing a same-directory exclusive temporary note immediately before the create-only target commit. Detected source drift requeues or returns the Job to dependency waiting; a concurrent user/nonmatching page is preserved as a retryable conflict, while an existing same-source Pige note recovers idempotently without another overwrite. This is a pathname-bound final fence, not strict cross-process SourceRecord-to-note CAS; parent-swap resistance, the note/index/operation cross-file transaction, and packaged-platform proof remain open. Low-confidence or warning-bearing output marks the generated note `needs_review` and the job `completed_with_warnings`. Invalid model JSON or provider failures mark the job `failed_retryable`; API keys, raw prompts, raw provider responses, and large source bodies are not persisted.
+- Phase 3 `agent_ingest` is process-locally cancellable through provider access and generated-note commit. It distinguishes user abort from provider timeout, fences the Source Record on both sides of a durable note-publication checkpoint, and uses create-only publication. Current-job note adoption requires bounded `last_job_id` provenance; otherwise only a new durable `index.md` entry starts a guard. Egress audit alone does not. Drift requeues or waits, user/nonmatching pages remain untouched, and same-job notes recover idempotently. Strict cross-process SourceRecord-to-note CAS, parent-swap resistance, note/index/operation transactions, and packaged-platform proof remain open.
 - Phase 4 `index_rebuild` is created by `maintenance.rebuildLocalDatabase` before SQLite page metadata and FTS are rebuilt from Markdown. Success marks the job `completed`, logs rebuild counts, and returns the job ID; failure marks the job `failed_retryable`. The current runner may execute synchronously after job creation, but large-vault release readiness requires moving the execution body to worker/job orchestration with progress and cancellation.
-- Process-local parse/OCR persists monotonic `stage`/`progress` (`document`, `image`,
-  `page`, or `media`) and shares cancellation across workers. Retry resets run metadata,
-  reuses verified Artifacts, and retains their action-safety guard.
-- Cooperative cancellation with a false/absent action-safety guard becomes `cancelled`;
-  once true it cannot end `cancelled`, and a final-publication race becomes
-  `completed_with_warnings`. Other classes and their action-safety propagation, durable
-  checkpoint arrays, cross-process/batch routing, pushed events, numeric Home UI, and
-  compaction remain open.
+- Process-local parse/OCR persists monotonic progress and shares cancellation with Agent
+  ingest. Capture/parse/OCR/Agent ingest implement the Section 6 publication guard; retry
+  retains it. Guard-first cancellation cannot end `cancelled`, and only a verified output
+  race becomes `completed_with_warnings`. Other writers, running capture/index_rebuild/other-class
+  cancellation, strict cross-process routing/CAS, checkpoint arrays, pushed events, numeric
+  Home UI, and compaction remain open.
 
 ## 4. Job Classes
 
@@ -203,7 +202,7 @@ Invalid shortcuts:
 - Do not move from `waiting_dependency` to `running` without recording the dependency repair/configuration event or requeue reason.
 - Do not move from `awaiting_review` to `completed` without an approved proposal or explicit rejection result.
 - Direct transition to `cancelled` requires `durableWritesApplied !== true`; active
-  parse/OCR may still accept `cancel_requested` and stop in a non-`cancelled` state.
+  parse/OCR/Agent ingest may still accept `cancel_requested` and stop in a non-`cancelled` state.
   Abandon/archive is separate.
 
 ## 6. Job Record Contract
@@ -224,6 +223,14 @@ The Job record, append-only audit/Operation entries, preserved input, and indepe
 actionable follow-up Jobs do not set it by themselves; Artifact, Page, note, or other
 domain-output publication does.
 The schema rejects a half request pair and rejects `cancelled` with a true guard.
+
+Before first publication, current capture/parse/OCR/Agent-ingest writers reread the Job.
+An earlier cancellation wins; otherwise a unique no-follow temporary write, file flush,
+directory flush where supported, and atomic replacement persist `true` plus a real
+`*_publication_started` checkpoint before a second cancellation check. Failure blocks
+publication; a later first-write failure retains `true`. This closes only the
+single-active-writer ordering window; cross-process revision CAS, parent-directory swap,
+guard-to-domain atomicity, guard-without-output recovery, and packaged filesystem proof stay open.
 
 ```ts
 type JobRecord = {
@@ -414,9 +421,9 @@ Cancellation is best effort, not data erasure.
 
 Rules:
 
-- Canceling a capture after source preservation keeps the source record/source asset unless the user explicitly deletes it.
-- Canceling parse/OCR/index jobs preserves completed artifacts and marks incomplete artifacts stale or temporary.
-- Canceling model generation stops streaming when possible and records no raw partial response unless user-visible.
+- Canceling capture before execution keeps its source; once capture is running, its source-page guard prevents a false clean-cancel claim, but cooperative running cancellation remains open.
+- Canceling parse/OCR/`index_rebuild` jobs preserves completed artifacts and marks incomplete artifacts stale or temporary.
+- Canceling Agent ingest aborts the provider call when possible and remains distinct from provider timeout; no raw partial response is persisted.
 - Canceling backup removes incomplete temp archives when safe.
 - Canceling restore before apply leaves the original vault untouched. Canceling during apply must finish a safe checkpoint or stop with a recovery report.
 - Canceling a job with applied operations does not roll back automatically; rollback is a separate proposal or repair flow.
@@ -607,6 +614,7 @@ Recovery decisions:
 | Parse artifact exists, source page missing | Resume source page creation. |
 | Proposal ready, app crashed before display | Show proposal in Home status. |
 | Operation record says page updated, index missing | Rebuild index. |
+| Action-safety guard is true after restart | Keep it monotonic; use provenance/checksums to retry, adopt same-job output, or repair a missing derived index. Missing output never proves clean cancellation. |
 | Temp file exists without operation | Validate and delete or quarantine temp file. |
 | Target page changed after proposal | Mark proposal conflicted. |
 | Permission prompt was open | Recreate pending permission UI or fail clearly if context expired. |

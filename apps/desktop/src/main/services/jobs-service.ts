@@ -104,7 +104,7 @@ const DEFAULT_JOB_LIST_LIMIT = 20;
 const MAX_JOB_LIST_LIMIT = 100;
 const CANCELABLE_STATES = new Set<JobState>(["queued", "waiting_dependency", "waiting_permission", "failed_retryable"]);
 const RETRYABLE_STATES = new Set<JobState>(["failed_retryable", "waiting_dependency", "cancelled"]);
-const COOPERATIVELY_CANCELABLE_CLASSES = new Set<JobClass>(["parse", "ocr"]);
+const COOPERATIVELY_CANCELABLE_CLASSES = new Set<JobClass>(["parse", "ocr", "agent_ingest"]);
 
 export class JobsService {
   readonly #vaults: JobsVaultPort;
@@ -391,6 +391,7 @@ export class JobsService {
     let failed = 0;
 
     for (const jobFile of jobFiles) {
+      let execution: { readonly job: JobRecord; readonly control: JobExecutionControl } | undefined;
       try {
         const sourceRecordFile = jobFile.job.sourceId ? readSourceRecordFile(vaultPath, jobFile.job.sourceId) : undefined;
         if (!sourceRecordFile) {
@@ -399,14 +400,35 @@ export class JobsService {
           continue;
         }
 
-        const page = this.#sourcePages.createForSource(vaultPath, sourceRecordFile.sourceRecord, sourceRecordFile.path, jobFile.job.id);
-        const updatedJob = JobRecordSchema.parse({
-          ...jobFile.job,
-          state: "completed",
-          updatedAt: new Date().toISOString(),
-          message: page.created ? "Source page created from preserved source." : "Source page already exists for preserved source."
-        });
-        writeJsonAtomic(jobFile.path, updatedJob);
+        const captureExecution = this.#beginNonCooperativeExecution(
+          jobFile.path,
+          jobFile.job,
+          "capturing_source",
+          "Publishing the preserved source into the local knowledge vault."
+        );
+        execution = captureExecution;
+        const page = this.#sourcePages.createForSource(
+          vaultPath,
+          sourceRecordFile.sourceRecord,
+          sourceRecordFile.path,
+          captureExecution.job.id,
+          sourceRecordFile.sourceRecord,
+          {
+            onPublicationStart: () => captureExecution.control.markDurableCheckpoint(
+              "capture_source_page_publication_started"
+            )
+          }
+        );
+        const updatedJob = this.#completeCooperativeExecution(
+          jobFile.path,
+          captureExecution.job,
+          "completed",
+          page.created
+            ? "Source page created from preserved source."
+            : "Source page already exists for preserved source.",
+          "source",
+          captureExecution.control.durableWriteState()
+        );
         if (needsParserOrOcr(sourceRecordFile.sourceRecord.kind)) {
           ensureParserOrOcrJob(
             vaultPath,
@@ -420,8 +442,18 @@ export class JobsService {
         }
         appendLog(vaultPath, `${new Date().toISOString()} Created source page [${page.title}](${page.pagePath}) for source \`${jobFile.job.sourceId}\`.`);
         completed += 1;
-      } catch {
-        markJobFailedRetryable(jobFile.path, jobFile.job, "Source page creation failed. Preserved source remains retryable.");
+      } catch (caught) {
+        const cancellation = execution ? resolveCancellation(execution.control, caught) : undefined;
+        if (cancellation) {
+          markJobCancellationOutcome(jobFile.path, execution?.job ?? jobFile.job, cancellation);
+        } else {
+          markJobFailedRetryable(
+            jobFile.path,
+            execution?.job ?? jobFile.job,
+            "Source page creation failed. Preserved source remains retryable.",
+            execution?.control.durableWriteState()
+          );
+        }
         failed += 1;
       }
     }
@@ -675,22 +707,20 @@ export class JobsService {
         continue;
       }
       const sourceRevision = sourceRecordRevision(sourceRecordFile.sourceRecord);
-
-      let activeJob = jobFile.job;
+      const execution = this.#beginCooperativeExecution(
+        jobFile.path,
+        jobFile.job,
+        "waiting_for_model",
+        "Agent ingest is preparing grounded evidence for the configured model."
+      );
+      const runningJob = execution.job;
+      let activeJob = runningJob;
       try {
-        const runningJob = JobRecordSchema.parse({
-          ...jobFile.job,
-          state: "running",
-          updatedAt: new Date().toISOString(),
-          message: "Agent ingest is generating a wiki note."
-        });
-        activeJob = runningJob;
-        writeJsonAtomic(jobFile.path, runningJob);
-
-        const result = await agentIngest.ingestSource(vaultPath, sourceRecordFile.sourceRecord, activeJob, {
+        const result = await agentIngest.ingestSource(vaultPath, sourceRecordFile.sourceRecord, runningJob, {
           onPolicyResolved: (snapshot) => {
+            const current = readJobRecordAtPath(jobFile.path) ?? activeJob;
             activeJob = JobRecordSchema.parse({
-              ...activeJob,
+              ...current,
               policyContextId: snapshot.policyContextId,
               policyHash: snapshot.policyHash,
               updatedAt: new Date().toISOString(),
@@ -699,15 +729,16 @@ export class JobsService {
             writeJsonAtomic(jobFile.path, activeJob);
           },
           onEgressRecorded: (operationId) => {
+            const current = readJobRecordAtPath(jobFile.path) ?? activeJob;
             activeJob = JobRecordSchema.parse({
-              ...activeJob,
-              operationIds: Array.from(new Set([...(activeJob.operationIds ?? []), operationId])),
+              ...current,
+              operationIds: Array.from(new Set([...(current.operationIds ?? []), operationId])),
               updatedAt: new Date().toISOString()
             });
             writeJsonAtomic(jobFile.path, activeJob);
           },
           assertSourceCurrent: () => {
-            const currentSource = activeJob.sourceId ? readSourceRecord(vaultPath, activeJob.sourceId) : undefined;
+            const currentSource = readSourceRecord(vaultPath, sourceRecordFile.sourceRecord.id);
             if (
               !currentSource ||
               sourceRecordRevision(currentSource) !== sourceRevision ||
@@ -718,52 +749,73 @@ export class JobsService {
                 "The selected source evidence changed while Agent ingest was running."
               );
             }
-          }
+          },
+          throwIfCancellationRequested: () => execution.control.throwIfCancellationRequested(),
+          onPublicationStart: (checkpointId) => execution.control.markDurableCheckpoint(checkpointId),
+          signal: execution.control.signal
         });
-        const updatedJob = JobRecordSchema.parse({
-          ...activeJob,
-          state: result.reviewRequired ? "completed_with_warnings" : "completed",
-          updatedAt: new Date().toISOString(),
-          operationIds: Array.from(new Set([...(activeJob.operationIds ?? []), ...result.operationIds])),
-          message: result.reviewRequired
+        const completedJob = this.#completeCooperativeExecution(
+          jobFile.path,
+          runningJob,
+          result.reviewRequired ? "completed_with_warnings" : "completed",
+          result.reviewRequired
             ? "Agent ingest created a wiki note that needs review."
-            : result.created ? "Agent ingest created a wiki note." : "Agent ingest wiki note already exists."
-        });
-        writeJsonAtomic(jobFile.path, updatedJob);
-        const warningSuffix = result.reviewRequired ? " Review is needed before treating it as clean knowledge." : "";
-        appendLog(vaultPath, `${new Date().toISOString()} Created wiki note [${result.title}](${result.pagePath}) from source \`${activeJob.sourceId}\`.${warningSuffix}`);
-        completed += 1;
+            : result.created ? "Agent ingest created a wiki note." : "Agent ingest wiki note already exists.",
+          "source",
+          execution.control.durableWriteState(),
+          result.operationIds
+        );
+        if (completedJob.state === "cancelled") {
+          failed += 1;
+        } else {
+          const warningSuffix = result.reviewRequired ? " Review is needed before treating it as clean knowledge." : "";
+          appendLog(vaultPath, `${new Date().toISOString()} Created wiki note [${result.title}](${result.pagePath}) from source \`${sourceRecordFile.sourceRecord.id}\`.${warningSuffix}`);
+          completed += 1;
+        }
       } catch (caught) {
-        if (caught instanceof PigeDomainError && caught.code === "model_provider.default_model_missing") {
-          markJobWaitingDependency(jobFile.path, activeJob, "Waiting for a tested default model before Agent ingest.");
+        const cancellation = resolveCancellation(execution.control, caught);
+        const durableState = execution.control.durableWriteState();
+        if (cancellation) {
+          markJobCancellationOutcome(jobFile.path, runningJob, cancellation);
+        } else if (caught instanceof PigeDomainError && caught.code === "model_provider.default_model_missing") {
+          markJobWaitingDependency(jobFile.path, runningJob, "Waiting for a tested default model before Agent ingest.", durableState);
         } else if (caught instanceof PigeDomainError && caught.code === "source.external_unavailable") {
-          markJobWaitingDependency(jobFile.path, activeJob, "Waiting for the referenced original source to be reconnected before Agent ingest can continue.");
+          markJobWaitingDependency(jobFile.path, runningJob, "Waiting for the referenced original source to be reconnected before Agent ingest can continue.", durableState);
         } else if (caught instanceof PigeDomainError && /^source\.(?:checksum_mismatch|managed_unavailable|path_outside_vault|reference_invalid)$/u.test(caught.code)) {
-          markJobFailedFinal(jobFile.path, activeJob, "The source cannot be verified safely. Re-import it to create a new source version before Agent ingest.");
+          markJobFailedFinal(jobFile.path, runningJob, "The source cannot be verified safely. Re-import it to create a new source version before Agent ingest.", durableState);
         } else if (caught instanceof PigeDomainError && caught.code === "model_egress.confirmation_required") {
-          markJobWaitingPermission(jobFile.path, activeJob, "Waiting for explicit approval before selected evidence is sent to the configured model service.");
+          markJobWaitingPermission(jobFile.path, runningJob, "Waiting for explicit approval before selected evidence is sent to the configured model service.", durableState);
         } else if (caught instanceof PigeDomainError && caught.code === "model_egress.blocked") {
-          markJobFailedFinal(jobFile.path, activeJob, "Model egress is blocked by the current privacy policy; the preserved source remains local.");
+          markJobFailedFinal(jobFile.path, runningJob, "Model egress is blocked by the current privacy policy; the preserved source remains local.", durableState);
         } else if (caught instanceof PigeDomainError && caught.code === "agent_ingest.source_changed") {
-          const currentSource = activeJob.sourceId ? readSourceRecord(vaultPath, activeJob.sourceId) : undefined;
+          const currentSource = readSourceRecord(vaultPath, sourceRecordFile.sourceRecord.id);
           if (currentSource && shouldWaitForRunnableOcr(this.#ocr, currentSource)) {
             markJobWaitingDependency(
               jobFile.path,
-              activeJob,
-              `Source evidence changed while Agent ingest was running; waiting for ${documentLabel(currentSource.kind)} OCR enrichment before retry.`
+              runningJob,
+              `Source evidence changed while Agent ingest was running; waiting for ${documentLabel(currentSource.kind)} OCR enrichment before retry.`,
+              durableState
             );
           } else {
+            const currentJob = readJobRecordAtPath(jobFile.path) ?? runningJob;
             writeJsonAtomic(jobFile.path, JobRecordSchema.parse({
-              ...activeJob,
+              ...withDurableWriteState(currentJob, durableState),
               state: "queued",
               updatedAt: new Date().toISOString(),
               message: "Source evidence changed while Agent ingest was running; ingest requeued with the latest evidence."
             }));
           }
         } else {
-          markJobFailedRetryable(jobFile.path, activeJob, "Agent ingest failed. Preserved source and source page remain retryable.");
+          markJobFailedRetryable(
+            jobFile.path,
+            runningJob,
+            "Agent ingest failed. Preserved source and source page remain retryable.",
+            durableState
+          );
         }
         failed += 1;
+      } finally {
+        this.#finishCooperativeExecution(runningJob.id, execution.controller);
       }
     }
 
@@ -843,6 +895,26 @@ export class JobsService {
     stage: JobStage,
     message: string
   ): { readonly job: JobRecord; readonly controller: AbortController; readonly control: JobExecutionControl } {
+    return this.#beginExecution(jobPath, job, stage, message, true);
+  }
+
+  #beginNonCooperativeExecution(
+    jobPath: string,
+    job: JobRecord,
+    stage: JobStage,
+    message: string
+  ): { readonly job: JobRecord; readonly control: JobExecutionControl } {
+    const execution = this.#beginExecution(jobPath, job, stage, message, false);
+    return { job: execution.job, control: execution.control };
+  }
+
+  #beginExecution(
+    jobPath: string,
+    job: JobRecord,
+    stage: JobStage,
+    message: string,
+    cooperative: boolean
+  ): { readonly job: JobRecord; readonly controller: AbortController; readonly control: JobExecutionControl } {
     const controller = new AbortController();
     const startedAt = new Date().toISOString();
     const preserveDurableWrites = job.cancellation?.durableWritesApplied === true;
@@ -863,11 +935,11 @@ export class JobsService {
       ...(preserveDurableWrites ? { cancellation: { durableWritesApplied: true } } : {}),
       message
     });
-    this.#activeExecutions.set(job.id, controller);
+    if (cooperative) this.#activeExecutions.set(job.id, controller);
     try {
       writeJsonAtomic(jobPath, runningJob);
     } catch (caught) {
-      this.#activeExecutions.delete(job.id);
+      if (cooperative) this.#activeExecutions.delete(job.id);
       throw caught;
     }
     return {
@@ -885,26 +957,41 @@ export class JobsService {
     state: Extract<JobState, "completed" | "completed_with_warnings">,
     message: string,
     defaultUnit: string,
-    durableState: JobDurableWriteState
+    durableState: JobDurableWriteState,
+    operationIds: readonly string[] = []
   ): JobRecord {
     const current = readJobRecordAtPath(jobPath) ?? fallback;
-    const cancellationArrivedBeforePublication = current.state === "cancel_requested";
+    const cancellationArrived = current.state === "cancel_requested";
+    const durableWritesApplied = current.cancellation?.durableWritesApplied === true ||
+      durableState.durableWritesApplied;
+    const mergedOperationIds = Array.from(new Set([...(current.operationIds ?? []), ...operationIds]));
     const progress = completedProgress(current.progress, defaultUnit);
     const finishedAt = new Date().toISOString();
+    if (cancellationArrived && !durableWritesApplied) {
+      const cancelledJob = JobRecordSchema.parse({
+        ...current,
+        state: "cancelled",
+        progress,
+        updatedAt: finishedAt,
+        finishedAt,
+        cancellation: {
+          ...current.cancellation,
+          durableWritesApplied: false
+        },
+        ...(mergedOperationIds.length > 0 ? { operationIds: mergedOperationIds } : {}),
+        message: "Job cancelled at a safe checkpoint. Preserved source data remains in the vault."
+      });
+      writeJsonAtomic(jobPath, cancelledJob);
+      return cancelledJob;
+    }
     const completedJob = JobRecordSchema.parse({
       ...withDurableWriteState(current, durableState),
-      state: cancellationArrivedBeforePublication ? "completed_with_warnings" : state,
+      state: cancellationArrived ? "completed_with_warnings" : state,
       progress,
       updatedAt: finishedAt,
       finishedAt,
-      ...(cancellationArrivedBeforePublication ? {
-        cancellation: {
-          ...current.cancellation,
-          safeCheckpointId: "durable_output_committed",
-          durableWritesApplied: true
-        }
-      } : {}),
-      message: cancellationArrivedBeforePublication
+      ...(mergedOperationIds.length > 0 ? { operationIds: mergedOperationIds } : {}),
+      message: cancellationArrived
         ? "Durable output committed before cancellation could safely apply; the completed result was preserved."
         : message
     });
@@ -933,9 +1020,13 @@ class FileBackedJobExecutionControl implements JobExecutionControl {
   throwIfCancellationRequested(boundary: JobCancellationBoundary = {}): void {
     const current = readJobRecordAtPath(this.#jobPath);
     if (!this.signal.aborted && current?.state !== "cancel_requested") return;
-    const safeCheckpointId = boundary.safeCheckpointId ?? this.#durableCheckpointId;
+    const safeCheckpointId = boundary.safeCheckpointId ??
+      current?.cancellation?.safeCheckpointId ??
+      this.#durableCheckpointId;
     throw new JobCancellationError({
-      durableWritesApplied: this.#durableWritesApplied || boundary.durableWritesApplied === true,
+      durableWritesApplied: this.#durableWritesApplied ||
+        current?.cancellation?.durableWritesApplied === true ||
+        boundary.durableWritesApplied === true,
       ...(safeCheckpointId ? { safeCheckpointId } : {})
     });
   }
@@ -956,8 +1047,36 @@ class FileBackedJobExecutionControl implements JobExecutionControl {
 
   markDurableCheckpoint(checkpointId: string): void {
     if (!checkpointId) throw new Error("A durable checkpoint id is required.");
+    const current = readJobRecordAtPath(this.#jobPath);
+    if (!current) {
+      throw new Error("The active Job record is unavailable at the durable publication boundary.");
+    }
+    if (this.signal.aborted || current.state === "cancel_requested" || current.state === "cancelled") {
+      const safeCheckpointId = current.cancellation?.safeCheckpointId ?? this.#durableCheckpointId;
+      throw new JobCancellationError({
+        durableWritesApplied: current.cancellation?.durableWritesApplied === true || this.#durableWritesApplied,
+        ...(safeCheckpointId ? { safeCheckpointId } : {})
+      });
+    }
+    if (current.state !== "running") {
+      throw new Error(`Job state ${current.state} cannot enter a durable publication boundary.`);
+    }
+    const guardedJob = JobRecordSchema.parse({
+      ...current,
+      cancellation: {
+        ...current.cancellation,
+        safeCheckpointId: checkpointId,
+        durableWritesApplied: true
+      },
+      updatedAt: new Date().toISOString()
+    });
+    writeJsonAtomic(this.#jobPath, guardedJob);
     this.#durableWritesApplied = true;
     this.#durableCheckpointId = checkpointId;
+    this.throwIfCancellationRequested({
+      durableWritesApplied: true,
+      safeCheckpointId: checkpointId
+    });
   }
 
   durableWriteState(): JobDurableWriteState {
@@ -1322,10 +1441,15 @@ function markJobWaitingDependency(
   }));
 }
 
-function markJobWaitingPermission(filePath: string, job: JobRecord, message: string): void {
+function markJobWaitingPermission(
+  filePath: string,
+  job: JobRecord,
+  message: string,
+  durableState?: JobDurableWriteState
+): void {
   const current = readJobRecordAtPath(filePath) ?? job;
   writeJsonAtomic(filePath, JobRecordSchema.parse({
-    ...current,
+    ...withDurableWriteState(current, durableState),
     state: "waiting_permission",
     updatedAt: new Date().toISOString(),
     message
@@ -1652,8 +1776,62 @@ function appendLog(vaultPath: string, line: string): void {
 }
 
 function writeJsonAtomic(filePath: string, value: unknown): void {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  const temporaryPath = `${filePath}.${process.pid}.tmp`;
-  fs.writeFileSync(temporaryPath, `${JSON.stringify(value, null, 2)}\n`);
-  fs.renameSync(temporaryPath, filePath);
+  const directoryPath = path.dirname(filePath);
+  fs.mkdirSync(directoryPath, { recursive: true });
+  const temporaryPath = path.join(
+    directoryPath,
+    `.${path.basename(filePath)}.${process.pid}.${randomUUID()}.tmp`
+  );
+  let descriptor: number | undefined;
+  try {
+    const flags = fs.constants.O_WRONLY |
+      fs.constants.O_CREAT |
+      fs.constants.O_EXCL |
+      (fs.constants.O_NOFOLLOW ?? 0);
+    descriptor = fs.openSync(temporaryPath, flags, 0o600);
+    fs.writeFileSync(descriptor, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+    fs.fsyncSync(descriptor);
+    fs.closeSync(descriptor);
+    descriptor = undefined;
+    fs.renameSync(temporaryPath, filePath);
+    flushDirectoryWhereSupported(directoryPath);
+  } finally {
+    if (descriptor !== undefined) {
+      try {
+        fs.closeSync(descriptor);
+      } catch {
+        // Preserve the authoritative write failure.
+      }
+    }
+    try {
+      fs.rmSync(temporaryPath, { force: true });
+    } catch {
+      // Preserve the authoritative write result.
+    }
+  }
+}
+
+function flushDirectoryWhereSupported(directoryPath: string): void {
+  let descriptor: number | undefined;
+  try {
+    descriptor = fs.openSync(directoryPath, fs.constants.O_RDONLY);
+    fs.fsyncSync(descriptor);
+  } catch (caught) {
+    if (!isUnsupportedDirectoryFlush(caught)) throw caught;
+  } finally {
+    if (descriptor !== undefined) {
+      try {
+        fs.closeSync(descriptor);
+      } catch {
+        // A directory-handle cleanup failure must not replace the durable write result.
+      }
+    }
+  }
+}
+
+function isUnsupportedDirectoryFlush(value: unknown): boolean {
+  if (!(value instanceof Error) || !("code" in value)) return false;
+  const code = String(value.code);
+  if (new Set(["EBADF", "EINVAL", "ENOSYS", "ENOTSUP"]).has(code)) return true;
+  return process.platform === "win32" && new Set(["EACCES", "EISDIR", "EPERM"]).has(code);
 }

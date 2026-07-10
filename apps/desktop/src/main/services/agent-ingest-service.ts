@@ -59,6 +59,9 @@ export interface AgentIngestHooks {
   readonly onPolicyResolved?: (snapshot: AgentIngestPolicySnapshot) => void;
   readonly onEgressRecorded?: (operationId: string) => void;
   readonly assertSourceCurrent?: () => void;
+  readonly throwIfCancellationRequested?: () => void;
+  readonly onPublicationStart?: (checkpointId: string) => void;
+  readonly signal?: AbortSignal;
 }
 
 export interface AgentIngestResult {
@@ -137,6 +140,10 @@ interface ModelEgressBinding {
   readonly modelIdentityHash: string;
 }
 
+const AGENT_NOTE_PUBLICATION_CHECKPOINT = "agent_note_publication_started";
+const AGENT_EXISTING_NOTE_ADOPTION_CHECKPOINT = "agent_existing_note_adoption_started";
+const AGENT_INDEX_PUBLICATION_CHECKPOINT = "agent_index_publication_started";
+
 export class AgentIngestService {
   readonly #models: AgentIngestModelConfigPort;
   readonly #modelClient: AgentIngestModelClient;
@@ -176,7 +183,8 @@ export class AgentIngestService {
         pageId,
         pagePath,
         sourceRecord,
-        existing
+        existing,
+        hooks
       });
     }
 
@@ -253,12 +261,19 @@ export class AgentIngestService {
       approvedBinding,
       "The default provider or model changed after egress approval and before prompt rendering."
     );
+    hooks.throwIfCancellationRequested?.();
     hooks.assertSourceCurrent?.();
     const systemPrompt = createSystemPrompt();
     const userPrompt = createUserPrompt(promptContextResult.context);
     const runtimeConfig = this.#models.getDefaultRuntimeConfig();
     assertApprovedRuntimeBinding(runtimeConfig, approvedBinding);
-    const modelOutput = await this.#requestStructuredIngest(runtimeConfig, systemPrompt, userPrompt);
+    const modelOutput = await this.#requestStructuredIngest(
+      runtimeConfig,
+      systemPrompt,
+      userPrompt,
+      hooks.signal
+    );
+    hooks.throwIfCancellationRequested?.();
     hooks.assertSourceCurrent?.();
     const output = applySourceQualityGuards(sourceRecord, modelOutput, evidencePack);
     const now = new Date().toISOString();
@@ -275,7 +290,16 @@ export class AgentIngestService {
       vaultPath,
       absolutePagePath,
       noteMarkdown,
-      hooks.assertSourceCurrent
+      {
+        ...(hooks.throwIfCancellationRequested ? {
+          beforeFinalSourceCheck: hooks.throwIfCancellationRequested,
+          afterPublicationStart: hooks.throwIfCancellationRequested
+        } : {}),
+        ...(hooks.assertSourceCurrent ? { assertSourceCurrent: hooks.assertSourceCurrent } : {}),
+        ...(hooks.onPublicationStart ? {
+          onPublicationStart: () => hooks.onPublicationStart?.(AGENT_NOTE_PUBLICATION_CHECKPOINT)
+        } : {})
+      }
     );
     if (commitResult === "exists") {
       const concurrent = readExistingGeneratedNoteState(vaultPath, absolutePagePath, sourceRecord.id);
@@ -292,7 +316,8 @@ export class AgentIngestService {
         pagePath,
         sourceRecord,
         existing: concurrent,
-        precedingOperationIds: [egressOperation.id]
+        precedingOperationIds: [egressOperation.id],
+        hooks
       });
     }
     appendIndex(vaultPath, output.title, pagePath, sourceRecord.id);
@@ -325,12 +350,14 @@ export class AgentIngestService {
   async #requestStructuredIngest(
     runtimeConfig: ModelProviderRuntimeConfig,
     systemPrompt: string,
-    userPrompt: string
+    userPrompt: string,
+    signal?: AbortSignal
   ): Promise<AgentIngestOutput> {
     const response = await this.#modelClient.generateJson(runtimeConfig, {
       system: systemPrompt,
       user: userPrompt,
-      maxTokens: 1600
+      maxTokens: 1600,
+      ...(signal ? { signal } : {})
     });
     return AgentIngestOutputSchema.parse(parseJsonObject(response.text));
   }
@@ -874,6 +901,12 @@ function appendIndex(vaultPath: string, title: string, pagePath: string, sourceI
   writeFileAtomic(indexPath, next);
 }
 
+function indexContainsPage(vaultPath: string, pagePath: string): boolean {
+  const indexPath = path.join(vaultPath, "index.md");
+  if (!fs.existsSync(indexPath)) return false;
+  return fs.readFileSync(indexPath, "utf8").includes(`](${pagePath})`);
+}
+
 function escapeXmlAttribute(value: string): string {
   return value
     .replaceAll("&", "&amp;")
@@ -992,6 +1025,7 @@ interface ExistingGeneratedNoteState {
   readonly reviewRequired: boolean;
   readonly isPigeGeneratedForSource: boolean;
   readonly modelProfileId?: string;
+  readonly lastJobId?: string;
 }
 
 function readExistingGeneratedNoteState(
@@ -1008,6 +1042,10 @@ function readExistingGeneratedNoteState(
   const modelProfileId = modelProfileCandidate && /^model_[a-z0-9_]+$/u.test(modelProfileCandidate)
     ? modelProfileCandidate
     : undefined;
+  const lastJobCandidate = readNestedFrontmatterScalar(frontmatter, "provenance", "last_job_id");
+  const lastJobId = lastJobCandidate && /^job_\d{8}_[a-z0-9]{8,}$/u.test(lastJobCandidate)
+    ? lastJobCandidate
+    : undefined;
   return {
     ...(parsed?.frontmatter.title?.trim()
       ? { title: parsed.frontmatter.title.trim() }
@@ -1016,7 +1054,8 @@ function readExistingGeneratedNoteState(
       readNestedFrontmatterScalar(frontmatter, "note", "review_state") === "needs_review",
     isPigeGeneratedForSource: readNestedFrontmatterScalar(frontmatter, "provenance", "generated_by") === "pige" &&
       parsed?.frontmatter.source_ids?.includes(sourceId) === true,
-    ...(modelProfileId ? { modelProfileId } : {})
+    ...(modelProfileId ? { modelProfileId } : {}),
+    ...(lastJobId ? { lastJobId } : {})
   };
 }
 
@@ -1060,6 +1099,7 @@ function recoverExistingGeneratedNote(input: {
   readonly sourceRecord: SourceRecord;
   readonly existing: ExistingGeneratedNoteState;
   readonly precedingOperationIds?: readonly string[];
+  readonly hooks?: AgentIngestHooks;
 }): AgentIngestResult {
   if (!input.existing.isPigeGeneratedForSource) {
     throw new PigeDomainError(
@@ -1067,8 +1107,24 @@ function recoverExistingGeneratedNote(input: {
       "The deterministic Agent note path contains a page not generated for this source."
     );
   }
+  input.hooks?.assertSourceCurrent?.();
+  input.hooks?.throwIfCancellationRequested?.();
   const title = input.existing.title ?? "Generated Note";
+  const indexWriteRequired = !indexContainsPage(input.vaultPath, input.pagePath);
+  if (input.existing.lastJobId === input.job.id) {
+    input.hooks?.onPublicationStart?.(AGENT_EXISTING_NOTE_ADOPTION_CHECKPOINT);
+    input.hooks?.throwIfCancellationRequested?.();
+  } else if (indexWriteRequired) {
+    input.hooks?.onPublicationStart?.(AGENT_INDEX_PUBLICATION_CHECKPOINT);
+    input.hooks?.throwIfCancellationRequested?.();
+  }
   appendIndex(input.vaultPath, title, input.pagePath, input.sourceRecord.id);
+  if (indexWriteRequired && !indexContainsPage(input.vaultPath, input.pagePath)) {
+    throw new PigeDomainError(
+      "agent_ingest.index_write_failed",
+      "Pige could not verify the generated-note index entry after publication."
+    );
+  }
   const operation = writeRecoveredCreatePageOperation({
     vaultPath: input.vaultPath,
     job: input.job,

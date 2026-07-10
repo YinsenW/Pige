@@ -415,13 +415,14 @@ Rules:
 - Job summaries may include source display name and source kind from the matching source record, but must not include source record paths, managed copy paths, original absolute paths, file bodies, prompts, model responses, or secrets.
 - Invalid job JSON is counted and skipped so Home can still open.
 - `jobs.cancel` directly cancels eligible queued/waiting/retryable work only with a
-  false/absent action-safety guard; active process-local parse/OCR becomes idempotent
-  `cancel_requested`.
+  false/absent action-safety guard; active process-local parse/OCR/Agent ingest becomes
+  idempotent `cancel_requested`. Running capture and `index_rebuild` remain non-cooperative.
 - `jobs.retry` updates eligible `failed_retryable`, `waiting_dependency`, or `cancelled` jobs back to `queued` for later processing.
 - Before a queued/waiting/retryable Job is written as `cancelled`,
   `durableWritesApplied: true` returns `not_allowed` unchanged; retry retains this guard.
-  Active parse/OCR may still become `cancel_requested` because its terminal outcome cannot
-  erase the guard. Abandon/archive is separate.
+  Active parse/OCR/Agent ingest may still become `cancel_requested`. Capture/parse/OCR/
+  Agent-ingest writers persist a real pre-publication checkpoint before their first
+  domain effect; the Job write must succeed before publication. Abandon/archive is separate.
 - `jobs.list` exposes persisted stage/progress by polling; numeric Home rendering and pushed progress events remain open.
 - Source-page creation for queued capture jobs is an internal main-process job action in this phase, not a renderer-exposed command. Text-readable captures may create excerpted source pages; preserved PDF/DOCX/PPTX/image captures create metadata-only source pages and internal parser/OCR jobs whose queued or dependency-waiting state follows local capability health.
 - Direct-image OCR uses the same durable Job actions: waiting jobs can be requeued when capability appears, interrupted running OCR is reconciled to queued, valid Artifacts are reused, and failures are mapped to safe retryable/waiting/final Job messages without returning private paths.
