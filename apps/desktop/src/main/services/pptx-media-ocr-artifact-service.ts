@@ -182,7 +182,8 @@ export class PptxMediaOcrArtifactService {
     vaultPath: string,
     sourceRecord: SourceRecord,
     sourceRecordPath: string,
-    job: JobRecord
+    job: JobRecord,
+    onPublicationStart?: () => void
   ): Promise<OcrSourceResult | undefined> {
     if (sourceRecord.kind !== "pptx_file") return undefined;
     const target = await this.resolveTarget(vaultPath, sourceRecord);
@@ -199,6 +200,7 @@ export class PptxMediaOcrArtifactService {
     const sidecar = await readVerifiedJsonArtifact(vaultPath, metadataArtifact, MAX_PPTX_MEDIA_OCR_SIDECAR_BYTES);
     if (!isReusableOcrSidecar(sidecar, sourceRecord, sourceFile.checksum, textArtifact, target)) return undefined;
 
+    onPublicationStart?.();
     const page = this.#sourcePages.refreshForSource(vaultPath, sourceRecord, sourceRecordPath, job.id);
     const storedWarnings = stringArray(sidecar.warnings);
     const warnings = page.conflict ? [...storedWarnings, sourcePageConflictWarning()] : storedWarnings;

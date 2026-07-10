@@ -5,6 +5,7 @@ import { Worker } from "node:worker_threads";
 import { PigeDomainError } from "@pige/domain";
 import { SourceRecordSchema, type JobRecord, type SourceKind, type SourceRecord } from "@pige/schemas";
 import { PDF_PARSER_WORKER_ENTRY_RELATIVE_PATH } from "../../shared/pdf-parser-entry";
+import { JobCancellationError, type JobExecutionControl } from "./job-execution-control";
 import {
   ParserArtifactService,
   type DocumentParseSourceResult
@@ -24,7 +25,7 @@ import {
 
 export interface PdfTextExtractor {
   isAvailable?(): boolean;
-  extract(filePath: string): Promise<PdfExtractionResult>;
+  extract(filePath: string, signal?: AbortSignal): Promise<PdfExtractionResult>;
 }
 
 export type PdfParseSourceResult = DocumentParseSourceResult;
@@ -55,7 +56,8 @@ export class PdfParserWorkerAdapter implements PdfTextExtractor {
     }
   }
 
-  extract(filePath: string): Promise<PdfExtractionResult> {
+  extract(filePath: string, signal?: AbortSignal): Promise<PdfExtractionResult> {
+    if (signal?.aborted) return Promise.reject(new JobCancellationError());
     const request: PdfParserRequest = {
       requestId: randomUUID(),
       filePath,
@@ -68,16 +70,22 @@ export class PdfParserWorkerAdapter implements PdfTextExtractor {
         resourceLimits: { maxOldGenerationSizeMb: 512 }
       });
       let settled = false;
+      let timeout: ReturnType<typeof setTimeout> | undefined;
       const finish = (callback: () => void): void => {
         if (settled) return;
         settled = true;
-        clearTimeout(timeout);
+        if (timeout) clearTimeout(timeout);
+        signal?.removeEventListener("abort", onAbort);
         void worker.terminate();
         callback();
       };
-      const timeout = setTimeout(() => {
+      const onAbort = (): void => {
+        finish(() => reject(new JobCancellationError()));
+      };
+      timeout = setTimeout(() => {
         finish(() => reject(new PigeDomainError("parser.pdf.timeout", "PDF text extraction exceeded the local time limit.")));
       }, this.#timeoutMs);
+      signal?.addEventListener("abort", onAbort, { once: true });
 
       worker.once("message", (message: PdfParserWorkerResponse) => {
         if (!message || message.requestId !== request.requestId) {
@@ -120,8 +128,10 @@ export class PdfParserService {
     vaultPath: string,
     sourceRecord: SourceRecord,
     sourceRecordPath: string,
-    job: JobRecord
+    job: JobRecord,
+    control?: JobExecutionControl
   ): Promise<PdfParseSourceResult> {
+    control?.throwIfCancellationRequested();
     const parsedSource = SourceRecordSchema.parse(sourceRecord);
     if (parsedSource.kind !== "pdf_file") {
       throw new PigeDomainError("parser.unsupported_source", "The PDF parser cannot process this source kind.");
@@ -130,16 +140,18 @@ export class PdfParserService {
       id: PDF_PARSER_ID,
       engine: PDF_PARSER_ENGINE,
       version: PDF_PARSER_VERSION
-    });
+    }, () => control?.markDurableCheckpoint("pdf_parser_artifact_publication_started"));
     if (existing) return existing;
 
+    control?.throwIfCancellationRequested();
     const sourceSnapshot = await createVerifiedSourceFileSnapshotAsync(vaultPath, parsedSource);
     let extraction: PdfExtractionResult;
     try {
-      extraction = await this.#extractor.extract(sourceSnapshot.absolutePath);
+      extraction = await this.#extractor.extract(sourceSnapshot.absolutePath, control?.signal);
     } finally {
       await sourceSnapshot.dispose();
     }
+    control?.throwIfCancellationRequested();
     return this.#artifacts.persist(vaultPath, parsedSource, sourceRecordPath, job, {
       format: "pdf",
       parser: {
@@ -177,6 +189,6 @@ export class PdfParserService {
         ocrCandidatePages: extraction.ocrCandidatePages
       },
       warnings: extraction.warnings
-    });
+    }, () => control?.markDurableCheckpoint("pdf_parser_artifact_publication_started"));
   }
 }

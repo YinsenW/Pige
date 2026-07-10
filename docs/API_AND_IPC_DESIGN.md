@@ -383,6 +383,8 @@ type JobSummary = {
   conversationEventId?: string;
   sourceDisplayName?: string;
   sourceKind?: SourceKind;
+  stage?: JobStage;
+  progress?: JobProgress;
   message: string;
   createdAt: string;
   updatedAt: string;
@@ -401,7 +403,7 @@ type JobActionRequest = {
 };
 
 type JobActionResult = {
-  status: "cancelled" | "requeued" | "not_found" | "not_allowed";
+  status: "cancel_requested" | "cancelled" | "requeued" | "not_found" | "not_allowed";
   reason?: string;
   job?: JobSummary;
 };
@@ -412,9 +414,15 @@ Rules:
 - `jobs.list` scans the active vault's durable `.pige/jobs/` records and returns safe summaries for Home status.
 - Job summaries may include source display name and source kind from the matching source record, but must not include source record paths, managed copy paths, original absolute paths, file bodies, prompts, model responses, or secrets.
 - Invalid job JSON is counted and skipped so Home can still open.
-- `jobs.cancel` updates eligible `queued`, `waiting_dependency`, `waiting_permission`, or `failed_retryable` jobs to `cancelled`. It does not delete source records, managed source copies, conversation events, proposals, operation records, or Markdown.
+- `jobs.cancel` directly cancels eligible queued/waiting/retryable work only with a
+  false/absent action-safety guard; active process-local parse/OCR becomes idempotent
+  `cancel_requested`.
 - `jobs.retry` updates eligible `failed_retryable`, `waiting_dependency`, or `cancelled` jobs back to `queued` for later processing.
-- `jobs.retry` and `jobs.cancel` return `not_allowed` rather than mutating completed, running, final-failed, compacted, or review-awaiting jobs in Phase 2.
+- Before a queued/waiting/retryable Job is written as `cancelled`,
+  `durableWritesApplied: true` returns `not_allowed` unchanged; retry retains this guard.
+  Active parse/OCR may still become `cancel_requested` because its terminal outcome cannot
+  erase the guard. Abandon/archive is separate.
+- `jobs.list` exposes persisted stage/progress by polling; numeric Home rendering and pushed progress events remain open.
 - Source-page creation for queued capture jobs is an internal main-process job action in this phase, not a renderer-exposed command. Text-readable captures may create excerpted source pages; preserved PDF/DOCX/PPTX/image captures create metadata-only source pages and internal parser/OCR jobs whose queued or dependency-waiting state follows local capability health.
 - Direct-image OCR uses the same durable Job actions: waiting jobs can be requeued when capability appears, interrupted running OCR is reconciled to queued, valid Artifacts are reused, and failures are mapped to safe retryable/waiting/final Job messages without returning private paths.
 

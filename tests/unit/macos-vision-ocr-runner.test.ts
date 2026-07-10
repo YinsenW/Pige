@@ -7,6 +7,7 @@ import {
   type OcrHelperRequest
 } from "../../apps/desktop/src/main/services/macos-vision-ocr-adapter";
 import type { MacOSVisionOcrHelperDescriptor } from "../../apps/desktop/src/main/services/ocr-types";
+import { JobCancellationError } from "../../apps/desktop/src/main/services/job-execution-control";
 
 const tempRoots: string[] = [];
 
@@ -59,6 +60,16 @@ describe("macOS Vision OCR helper runner", () => {
     await expect(new JsonOcrHelperRunner(1_000, 1024).run(helper, oversizedRequest)).rejects.toMatchObject({
       code: "ocr.helper_request_too_large"
     });
+  });
+
+  it("kills the local helper when cooperative job cancellation is requested", async () => {
+    const helper = makeHelper("setTimeout(() => {}, 10_000);\n");
+    const controller = new AbortController();
+    const running = new JsonOcrHelperRunner(10_000, 1024).run(helper, request(), controller.signal);
+
+    controller.abort();
+
+    await expect(running).rejects.toBeInstanceOf(JobCancellationError);
   });
 });
 

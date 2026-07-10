@@ -14,6 +14,12 @@ When implementation exposes powerful catalogs, provider ecosystems, package ecos
 
 For model/provider setup specifically, the default goal is only: connect one model service that Pi Agent can call and manage the models available on that service. Simplicity must not remove required controls. Support automatic model-list discovery when the provider exposes it, and manual model ID entry when it does not. One default model must be enough to run Pige. Do not expose Advanced Model, Fast Model, model-role assignment, or task-routing UI unless Pi Agent upstream provides a stable model-slot/routing API, or Pige implements and tests a real Model Routing Service that makes those settings effective. Do not expose provider capability matrices, routing internals, model marketplaces, data-boundary tables, advanced filters, or provider taxonomy in the default flow.
 
+### 0.1 Named Agent Roles
+
+Per `docs/AI_DEVELOPMENT_GUIDE.md`, Project Management owns delivery; Product Planning,
+contracts; UI Design, visual guidance; Development, code/evidence. Role crossing requires
+delegation, and design sync precedes closure.
+
 ## 1. First Reading Order
 
 For any non-trivial task, start small and expand only when needed:
@@ -114,13 +120,18 @@ Before finishing:
 - Treat completion criteria as internal work rules. Routine progress updates and automatic goal continuations must report only new work or changed state. A genuine handoff may list verification and open risks, but must not restate the completion rule or label the result with a recurring slogan.
 - Verify source-of-truth and rebuild behavior.
 - Verify no secret or large duplicated content is stored accidentally.
-- Update docs when behavior, schema, dependencies, permissions, or release assumptions change.
+- Hand changed behavior, schema, dependency, permission, or release facts to Product Planning for same-candidate synchronization; edit design only when delegated.
 
 ## 4. Documentation Update Rule
 
 PRD and subject owners form a bidirectional contract. The PRD owns user value, observable behavior, defaults, degradation, release scope, and acceptance intent; subject owners own implementation and boundary details. Semantic changes must propagate in both directions in the same change, including affected trace/acceptance projections and verification. Editorial or structural changes require a no-contract-impact rationale, not unrelated rewrites. Define facts once and reference them elsewhere; follow the impact classes and propagation matrix in `docs/AI_DEVELOPMENT_GUIDE.md`.
 
-Update design documents in the same change when you alter:
+This synchronization duty is not universal edit authority. Product Planning updates
+product, technical, development-management, and governance contracts; UI Design supplies
+detailed visual guidance. Development and Project Management hand off facts and edit
+those materials only under explicit, scoped delegation.
+
+Product Planning synchronizes affected design documents in the same candidate when implementation alters:
 
 - Data ownership or vault layout.
 - Source storage strategy, source ownership, source references, managed source copies, or source asset root behavior.
@@ -146,7 +157,7 @@ Update design documents in the same change when you alter:
 - UI workflows or user-visible product behavior.
 - Performance budgets, test gates, or platform support.
 
-If a decision is new and likely to matter later, add it to `docs/DECISION_LOG.md`.
+Product Planning records a new durable decision in `docs/DECISION_LOG.md`.
 
 ## 5. Stop Conditions
 

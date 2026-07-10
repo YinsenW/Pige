@@ -58,7 +58,7 @@ Integration tests:
 - Knowledge Tree aggregation against the governed fixture vaults.
 - Search indexing and results.
 - Confirmation proposal approve/reject.
-- Job retry, cancellation, checkpoint resume, and crash recovery.
+- Job retry/recovery, monotonic progress, cooperative cancellation, durable-output races, and worker termination.
 - Conversation history reference storage.
 - Agent memory creation/deletion.
 - Backup and restore into a new folder.

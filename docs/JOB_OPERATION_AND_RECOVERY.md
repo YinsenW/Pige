@@ -85,19 +85,17 @@ Phase 2 implementation note:
 
 - Capture jobs are written as JSON records under `.pige/jobs/YYYY/MM/`.
 - `jobs.list` provides a read-only Home status summary by scanning those durable records after launch.
-- Job summaries expose IDs, class, state, message, timestamps, source display name, and source kind only. They do not expose original paths, managed copy paths, file bodies, prompts, model responses, or secrets.
+- Job summaries expose safe identity/state plus optional stage/progress; they never expose paths, bodies, prompts, responses, or secrets.
 - Invalid job JSON is counted and skipped rather than blocking Home.
-- `jobs.cancel` can mark eligible queued/waiting/retryable jobs as `cancelled` without deleting preserved source data.
+- `jobs.cancel` directly cancels eligible non-running work only when its action-safety
+  guard is false/absent; active in-process parse/OCR becomes `cancel_requested`.
 - `jobs.retry` can mark eligible failed/waiting/cancelled jobs back to `queued` for later processing.
 - Queued text/Markdown/TXT capture jobs can create minimal no-model source pages. Success marks the job `completed`; failure marks it `failed_retryable` while preserving source records and managed source copies.
 - Queued PDF/DOCX/PPTX capture jobs create metadata-only source pages, then create queued `parse` jobs when the matching bundled adapter resolves. Image capture creates a queued `ocr` job when the verified macOS Vision helper is ready and otherwise stays `waiting_dependency`; matching waiting jobs are requeued when capability becomes available.
-- Document parse jobs transition through `queued` -> `running` -> `completed`/`completed_with_warnings`, preserve deterministic checksummed text/metadata artifacts, and create OCR jobs for sparse or image-bearing content. If local OCR is ready, eligible selected PDF/PPTX Agent ingest waits for enrichment; if OCR is unavailable or disappears before the Job runs, medium/high verified native text may proceed with a review warning while OCR stays `waiting_dependency`. Low/no coverage still waits for readable OCR.
-- Successful document parsing writes an idempotent `create_artifact` Operation Record containing references and warnings, never the extracted body. Retry verifies source/artifact/sidecar checksums and parser version, reuses valid artifacts, or regenerates stale derived artifacts without duplication.
-- Direct-image OCR transitions through `queued` -> `running` -> `completed`/`completed_with_warnings`, verifies the preserved source before and after recognition, stores deterministic OCR text plus a text-free locator/confidence sidecar, refreshes the Source Page, and creates one idempotent body-free `create_artifact` Operation Record. Empty output completes with warnings and does not create Agent ingest.
-- A fully inspected PDF with at most 20 verified parser-selected candidate pages can move directly from parse to a queued `ocr` Job when both the bounded page renderer and local OCR adapter are healthy. Image-only jobs target every page; mixed PDFs target only sparse pages. Parser-truncated, incomplete-target, oversized-candidate, or missing-capability cases remain visible with an explicit reason.
-- PDF OCR persists rendered-page Artifacts plus a text-free render manifest before Vision recognition, then persists one combined OCR body plus a text-free page/block sidecar. Both manifests bind parser-metadata identity, target mode, and exact page set. Rendering and recognition have separate deterministic body-free `create_artifact` Operation Records; the render Operation identity is derived from the rendered output set, so incomplete and completed retries remain distinct while equivalent output is idempotent. A crash after pixel persistence remains auditable and retryable.
-- Incomplete page rendering or per-page recognition failure leaves the Job `failed_retryable` and never creates Agent ingest. Complete checksummed output is reused after restart without another render or Vision call. A complete empty mixed-PDF OCR result may still release Agent ingest when verified native text was already sufficient; image-only empty output does not.
-- Interrupted OCR is idempotent: valid source/Artifact/sidecar checksums reuse existing output without another Vision call; stale derived output is regenerated; parser-sidecar/source/path validation failures fail final, while an unavailable referenced original waits for reconnection. Final persistence rereads the latest Source Record and compares its expected whole-file checksum immediately before replacement so a detected newer durable revision is not overwritten.
+- Parse/OCR routing and evidence gates are owned by `PARSER_INGEST_SPEC.md`; Artifact,
+  sidecar, and revision boundaries by `TECH_ARCHITECTURE.md` and
+  `SOURCE_STORAGE_STRATEGY.md`. Jobs wait on insufficient evidence, keep incomplete work
+  retryable, reuse verified output, and never start Agent ingest from unreadable evidence.
 - Parse and OCR runners persist their required OCR or Agent-ingest follow-up Jobs before those upstream Jobs leave their recoverable running state. If later logging or parent-state finalization fails, the continuation remains durable and the upstream Job remains retryable. This stage-handoff guarantee is separate from the still-deferred `capture_batch` parent hierarchy.
 - Startup and vault activation first reconcile interrupted jobs. Running capture/parse/OCR/Agent-ingest/index jobs already proven idempotent are requeued; cancellation-in-progress and unproven classes become `failed_retryable` with an explanation. Waiting Agent-ingest Jobs are reconsidered after model/OCR probes but remain waiting while selected PDF/PPTX OCR is runnable. The main-process scheduler drains queued capture, parse, OCR, and Agent ingest work in batches of 20, yields between batches, and coalesces schedule requests so larger drops do not stall.
 - Home's contextual processing strip includes active capture, parse, OCR, Agent ingest, and index jobs. It remains hidden when no work needs attention and uses compact localized status indicators rather than a new queue destination.
@@ -105,7 +103,14 @@ Phase 2 implementation note:
 - Phase 3 text-readable source-page completion creates a deterministic follow-up `agent_ingest` job per source. If no tested default model exists, the job enters `waiting_dependency`; after model setup, waiting ingest jobs can be requeued and processed without duplicating the source page.
 - Phase 3 `agent_ingest` writes simple wiki notes, operation records, `index.md`, and `log.md` after structured output validation. It hashes the full Source Record selected for Evidence Assembly and rechecks that revision before provider invocation, after the response, and after flushing a same-directory exclusive temporary note immediately before the create-only target commit. Detected source drift requeues or returns the Job to dependency waiting; a concurrent user/nonmatching page is preserved as a retryable conflict, while an existing same-source Pige note recovers idempotently without another overwrite. This is a pathname-bound final fence, not strict cross-process SourceRecord-to-note CAS; parent-swap resistance, the note/index/operation cross-file transaction, and packaged-platform proof remain open. Low-confidence or warning-bearing output marks the generated note `needs_review` and the job `completed_with_warnings`. Invalid model JSON or provider failures mark the job `failed_retryable`; API keys, raw prompts, raw provider responses, and large source bodies are not persisted.
 - Phase 4 `index_rebuild` is created by `maintenance.rebuildLocalDatabase` before SQLite page metadata and FTS are rebuilt from Markdown. Success marks the job `completed`, logs rebuild counts, and returns the job ID; failure marks the job `failed_retryable`. The current runner may execute synchronously after job creation, but large-vault release readiness requires moving the execution body to worker/job orchestration with progress and cancellation.
-- Full priority scheduling, cooperative in-worker `cancel_requested`, durable step/checkpoint arrays, parent/child batch jobs, progress reporting, and compaction remain later Job Queue Service work.
+- Process-local parse/OCR persists monotonic `stage`/`progress` (`document`, `image`,
+  `page`, or `media`) and shares cancellation across workers. Retry resets run metadata,
+  reuses verified Artifacts, and retains their action-safety guard.
+- Cooperative cancellation with a false/absent action-safety guard becomes `cancelled`;
+  once true it cannot end `cancelled`, and a final-publication race becomes
+  `completed_with_warnings`. Other classes and their action-safety propagation, durable
+  checkpoint arrays, cross-process/batch routing, pushed events, numeric Home UI, and
+  compaction remain open.
 
 ## 4. Job Classes
 
@@ -179,12 +184,13 @@ repairing
 
 Rules:
 
-- `queued` means no side effects have started except durable job creation.
+- `queued` means no execution is active. A fresh Job has only its durable record; a
+  retried Job may retain verified outputs and a true action-safety guard.
 - `running` means a worker, model call, tool, or write step is active.
 - `waiting_permission` pauses execution until the Permission Broker resolves the request.
 - `waiting_dependency` pauses execution until a missing model provider, local tool, local model, runtime capability, vault binding, or external source path is configured or repaired.
 - `awaiting_review` means a confirmation proposal is ready and no risky mutation should continue automatically.
-- `cancel_requested` is transitional; workers should checkpoint and exit safely.
+- `cancel_requested` is transitional; duplicate requests are idempotent and the active worker exits at a safe checkpoint.
 - `completed_with_warnings` is success with recoverable or explainable issues.
 - `failed_retryable` keeps enough checkpoint data to retry safely.
 - `failed_final` means retry requires changed input, missing dependency repair, or user decision.
@@ -196,7 +202,9 @@ Invalid shortcuts:
 - Do not move from `waiting_permission` to `running` without recording the permission decision.
 - Do not move from `waiting_dependency` to `running` without recording the dependency repair/configuration event or requeue reason.
 - Do not move from `awaiting_review` to `completed` without an approved proposal or explicit rejection result.
-- Do not mark a job `cancelled` if it already applied durable writes; mark it completed with warnings or failed with operation references.
+- Direct transition to `cancelled` requires `durableWritesApplied !== true`; active
+  parse/OCR may still accept `cancel_requested` and stop in a non-`cancelled` state.
+  Abandon/archive is separate.
 
 ## 6. Job Record Contract
 
@@ -205,6 +213,17 @@ Invalid shortcuts:
 `JobRecordSchema` and `OperationRecordSchema` reject undeclared root fields. Readers do not preserve or silently strip a legacy `status`, raw prompt, secret, provider response, source body, or other unversioned extension into an accepted schema-v1 record. A genuinely new durable field requires an explicit schema/version and migration decision.
 
 Schema-v1 accepts the already-implemented core fields and the optional orchestration fields below. New long-running, permissioned, backup, restore, and migration writers populate the orchestration fields they need. Existing minimal records remain readable and gain `schemaVersion: 1` on their next safe write; no bulk rewrite is required.
+
+Within `CancellationState`, paired `requestedAt`/`requestedBy` prove a cancel request;
+either both exist or neither does. `cancel_requested` requires the pair; legacy
+`cancelled` records may omit it.
+`durableWritesApplied` is a monotonic, fail-closed action-safety fact, not proof of a
+specific write: `true` means a retained durability boundary prevents proving a clean
+cancel; omission means `false`. It survives retry, and checkpoint names never derive it.
+The Job record, append-only audit/Operation entries, preserved input, and independently
+actionable follow-up Jobs do not set it by themselves; Artifact, Page, note, or other
+domain-output publication does.
+The schema rejects a half request pair and rejects `cancelled` with a true guard.
 
 ```ts
 type JobRecord = {

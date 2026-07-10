@@ -4,6 +4,7 @@ import path from "node:path";
 import { Worker, type WorkerOptions } from "node:worker_threads";
 import { PigeDomainError } from "@pige/domain";
 import { PDF_PAGE_RENDERER_WORKER_ENTRY_RELATIVE_PATH } from "../../shared/pdf-page-renderer-entry";
+import { JobCancellationError } from "./job-execution-control";
 import {
   PDF_PAGE_RENDERER_DEFAULT_LIMITS,
   PDF_PAGE_RENDERER_ERROR_MESSAGES,
@@ -34,7 +35,7 @@ const WORKER_ERROR_CODES = new Set<PdfPageRendererErrorCode>([
 
 export interface PdfPageRendererPort {
   isAvailable(): boolean;
-  renderPages(filePath: string, pageCandidates: readonly number[]): Promise<PdfPageRendererResult>;
+  renderPages(filePath: string, pageCandidates: readonly number[], signal?: AbortSignal): Promise<PdfPageRendererResult>;
 }
 
 export interface PdfPageRendererWorkerPort {
@@ -89,7 +90,8 @@ export class PdfPageRendererService implements PdfPageRendererPort {
     }
   }
 
-  renderPages(filePath: string, pageCandidates: readonly number[]): Promise<PdfPageRendererResult> {
+  renderPages(filePath: string, pageCandidates: readonly number[], signal?: AbortSignal): Promise<PdfPageRendererResult> {
+    if (signal?.aborted) return Promise.reject(new JobCancellationError());
     if (!this.isAvailable()) {
       return Promise.reject(rendererError("parser.pdf_page_renderer.unavailable"));
     }
@@ -129,17 +131,22 @@ export class PdfPageRendererService implements PdfPageRendererPort {
 
     return new Promise((resolve, reject) => {
       let settled = false;
-      let timeout: ReturnType<typeof setTimeout>;
+      let timeout: ReturnType<typeof setTimeout> | undefined;
       const finish = (callback: () => void): void => {
         if (settled) return;
         settled = true;
-        clearTimeout(timeout);
+        if (timeout) clearTimeout(timeout);
+        signal?.removeEventListener("abort", onAbort);
         void worker.terminate().then(callback, callback);
+      };
+      const onAbort = (): void => {
+        finish(() => reject(new JobCancellationError()));
       };
 
       timeout = setTimeout(() => {
         finish(() => reject(rendererError("parser.pdf_page_renderer.timeout")));
       }, this.#timeoutMs);
+      signal?.addEventListener("abort", onAbort, { once: true });
 
       worker.once("message", (message) => {
         let response: PdfPageRendererWorkerResponse;

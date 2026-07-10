@@ -6,7 +6,8 @@ Last revised: 2026-07-10
 
 ## 1. Purpose
 
-Pige is intended to be open source and heavily AI-developed. This guide defines how humans and AI agents should contribute without losing the product's local-first, AI-first shape.
+Pige is open source and Agent-authored. This guide defines how humans and AI Agents
+contribute without losing its local-first, AI-first shape.
 
 ## 2. Before Contributing
 
@@ -71,7 +72,13 @@ Use the private reporting path in `SECURITY.md`. Never publish secrets, exploit 
 
 ## 8. AI Agent Contributions
 
-AI-generated changes follow `AGENTS.md`, use the context-pack and handoff templates owned by `docs/AI_DEVELOPMENT_GUIDE.md`, preserve unrelated work, and add verification proportional to risk.
+AI Coding Agents author implementation code; humans direct, supply references, review,
+and authorize releases. Pull requests identify the Agent role/task, scoped delegation,
+and Product Planning design-sync status. Product, technical, governance, and
+development-management proposals route to Product Planning; detailed visual guidance
+routes to UI Design. Changes follow `AGENTS.md`, preserve unrelated work, and add
+risk-proportional verification; automation cannot remove product, safety, or release gates.
+Use the role-aware handoff in `docs/AI_DEVELOPMENT_GUIDE.md`.
 
 ## 9. License
 

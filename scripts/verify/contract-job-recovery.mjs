@@ -35,8 +35,58 @@ const schemas = read("packages/schemas/src/index.ts");
 if (/warnings:\s*z\.array\(z\.record/u.test(schemas) || /error:\s*z\.record/u.test(schemas)) {
   failures.push("JobRecord still accepts unstructured warnings or errors.");
 }
-const jobRecordBlock = schemas.slice(schemas.indexOf("export const JobRecordSchema"), schemas.indexOf("export const AgentIngestOutputSchema"));
-if (!jobRecordBlock.includes("}).strict();")) failures.push("JobRecordSchema must reject undeclared root fields, including status.");
+const jobRecordContractFailures = (source) => {
+  const contractFailures = [];
+  const start = source.indexOf("export const JobRecordSchema");
+  const end = source.indexOf("\nconst AgentIngestStatementSchema", start);
+  if (start < 0 || end < 0) return ["JobRecordSchema block could not be isolated."];
+
+  const block = source.slice(start, end);
+  if (!block.includes("}).strict().superRefine((job, context) => {")) {
+    contractFailures.push("JobRecordSchema must be root-strict before enforcing cross-field lifecycle rules.");
+  }
+  if (!block.includes("Cancellation requestedAt and requestedBy must both be present or both be absent.")) {
+    contractFailures.push("Cancellation request identity must remain paired.");
+  }
+  if (
+    !block.includes('job.state === "cancel_requested"') ||
+    !block.includes("A cancel_requested job must include requestedAt and requestedBy.")
+  ) {
+    contractFailures.push("cancel_requested must require complete request identity.");
+  }
+  if (
+    !block.includes('job.state === "cancelled" && job.cancellation?.durableWritesApplied === true') ||
+    !block.includes("A cancelled job cannot have durableWritesApplied set to true.")
+  ) {
+    contractFailures.push("cancelled must reject a true durable-write action-safety guard.");
+  }
+  return contractFailures;
+};
+
+for (const failure of jobRecordContractFailures(schemas)) failures.push(failure);
+
+const jobRecordNegativeMutations = [
+  {
+    label: "root strictness removed",
+    source: schemas.replace("}).strict().superRefine((job, context) => {", "}).superRefine((job, context) => {")
+  },
+  {
+    label: "cancel request identity rule removed",
+    source: schemas.replace('job.state === "cancel_requested"', 'job.state === "running"')
+  },
+  {
+    label: "durable cancelled-state rule removed",
+    source: schemas.replace(
+      'job.state === "cancelled" && job.cancellation?.durableWritesApplied === true',
+      'job.state === "completed" && job.cancellation?.durableWritesApplied === true'
+    )
+  }
+];
+for (const mutation of jobRecordNegativeMutations) {
+  if (jobRecordContractFailures(mutation.source).length === 0) {
+    failures.push(`JobRecord verifier accepted negative mutation: ${mutation.label}.`);
+  }
+}
 const operationBlock = schemas.slice(schemas.indexOf("export const OperationRecordSchema"), schemas.indexOf("export const DurableSchemaVersionRangeSchema"));
 if (!operationBlock.includes("}).strict().superRefine")) failures.push("OperationRecordSchema must be strict and enforce kind-specific audit fields.");
 
@@ -55,4 +105,4 @@ if (failures.length) {
   failures.forEach((failure) => console.error(`- ${failure}`));
   process.exit(1);
 }
-console.log("CON-002 OK: Job, error, operation, permission-reference, restore, and recovery contracts are typed and single-owned.");
+console.log(`CON-002 OK: Job, error, operation, permission-reference, restore, and recovery contracts are typed and single-owned; ${jobRecordNegativeMutations.length} JobRecord mutations rejected.`);

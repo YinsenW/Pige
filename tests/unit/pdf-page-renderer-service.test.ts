@@ -16,6 +16,7 @@ import {
   type PdfPageRendererRequest,
   type PdfPageRendererWorkerResponse
 } from "../../apps/desktop/src/main/services/pdf-page-renderer-types";
+import { JobCancellationError } from "../../apps/desktop/src/main/services/job-execution-control";
 
 const ONE_PIXEL_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
@@ -158,6 +159,18 @@ describe("PDF page renderer service", () => {
     const rejection = service.renderPages("/private/leaked-source.pdf", [1]);
     await expect(rejection).rejects.toMatchObject({ code: "parser.pdf_page_renderer.worker_protocol" });
     await expect(rejection).rejects.not.toThrow(/leaked-source/u);
+  });
+
+  it("terminates the renderer worker when cooperative cancellation aborts the request", async () => {
+    const workers: FakeWorker[] = [];
+    const service = serviceWithWorker(() => undefined, workers);
+    const controller = new AbortController();
+    const rendering = service.renderPages("/tmp/cancelled.pdf", [1], controller.signal);
+
+    controller.abort();
+
+    await expect(rendering).rejects.toBeInstanceOf(JobCancellationError);
+    expect(workers[0]?.terminated).toBe(true);
   });
 });
 

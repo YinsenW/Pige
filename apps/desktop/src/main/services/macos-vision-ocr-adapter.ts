@@ -19,6 +19,7 @@ import {
   type NativeOcrBlock,
   type NativeOcrResult
 } from "./ocr-types";
+import { JobCancellationError } from "./job-execution-control";
 
 export interface OcrHelperRequest {
   readonly schemaVersion: typeof MACOS_VISION_OCR_PROTOCOL_VERSION;
@@ -47,7 +48,7 @@ export interface MacOSVisionOcrProbe {
 }
 
 export interface OcrHelperRunner {
-  run(helper: MacOSVisionOcrHelperDescriptor, request: OcrHelperRequest): Promise<unknown>;
+  run(helper: MacOSVisionOcrHelperDescriptor, request: OcrHelperRequest, signal?: AbortSignal): Promise<unknown>;
 }
 
 export type OcrHelperLocator = () => MacOSVisionOcrHelperDescriptor | undefined;
@@ -82,7 +83,11 @@ export class MacOSVisionOcrAdapter {
     return parseProbeResponse(response, request.requestId);
   }
 
-  async recognize(inputPath: string, preferredLanguages: readonly string[]): Promise<NativeOcrResult> {
+  async recognize(
+    inputPath: string,
+    preferredLanguages: readonly string[],
+    signal?: AbortSignal
+  ): Promise<NativeOcrResult> {
     const helper = this.#requireHelper();
     const request: OcrHelperRequest = {
       schemaVersion: MACOS_VISION_OCR_PROTOCOL_VERSION,
@@ -100,7 +105,7 @@ export class MacOSVisionOcrAdapter {
         maxOutputCharacters: OCR_MAX_OUTPUT_CHARACTERS
       }
     };
-    const response = await this.#runner.run(helper, request);
+    const response = await this.#runner.run(helper, request, signal);
     return parseRecognitionResponse(response, request.requestId);
   }
 
@@ -125,7 +130,8 @@ export class JsonOcrHelperRunner implements OcrHelperRunner {
     this.#maxOutputBytes = maxOutputBytes;
   }
 
-  run(helper: MacOSVisionOcrHelperDescriptor, request: OcrHelperRequest): Promise<unknown> {
+  run(helper: MacOSVisionOcrHelperDescriptor, request: OcrHelperRequest, signal?: AbortSignal): Promise<unknown> {
+    if (signal?.aborted) return Promise.reject(new JobCancellationError());
     return new Promise((resolve, reject) => {
       const child = spawn(helper.binaryPath, [], {
         cwd: path.parse(helper.binaryPath).root,
@@ -139,16 +145,23 @@ export class JsonOcrHelperRunner implements OcrHelperRunner {
       let stderrBytes = 0;
       let settled = false;
       let timedOut = false;
+      let timeout: ReturnType<typeof setTimeout> | undefined;
       const finish = (callback: () => void): void => {
         if (settled) return;
         settled = true;
-        clearTimeout(timeout);
+        if (timeout) clearTimeout(timeout);
+        signal?.removeEventListener("abort", onAbort);
         callback();
       };
-      const timeout = setTimeout(() => {
+      const onAbort = (): void => {
+        child.kill("SIGKILL");
+        finish(() => reject(new JobCancellationError()));
+      };
+      timeout = setTimeout(() => {
         timedOut = true;
         child.kill("SIGKILL");
       }, this.#timeoutMs);
+      signal?.addEventListener("abort", onAbort, { once: true });
 
       child.stdout.on("data", (chunk: Buffer) => {
         stdoutBytes += chunk.byteLength;

@@ -892,8 +892,12 @@ export const JobRecordSchema = z.object({
   cancellation: z.object({
     requestedAt: z.string().datetime({ offset: true }).optional(),
     requestedBy: z.enum(["user", "system"]).optional(),
-    safeCheckpointId: z.string().min(1).optional()
-  }).optional(),
+    safeCheckpointId: z.string().min(1).optional(),
+    durableWritesApplied: z.boolean().optional()
+  }).refine(
+    (cancellation) => (cancellation.requestedAt === undefined) === (cancellation.requestedBy === undefined),
+    { message: "Cancellation requestedAt and requestedBy must both be present or both be absent." }
+  ).optional(),
   privacy: z.object({
     usedCloudModel: z.boolean(),
     usedNetwork: z.boolean(),
@@ -902,7 +906,25 @@ export const JobRecordSchema = z.object({
     permissionDecisionIds: z.array(PermissionDecisionIdSchema)
   }).optional(),
   message: z.string().min(1)
-}).strict();
+}).strict().superRefine((job, context) => {
+  if (
+    job.state === "cancel_requested" &&
+    (!job.cancellation?.requestedAt || !job.cancellation.requestedBy)
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["cancellation"],
+      message: "A cancel_requested job must include requestedAt and requestedBy."
+    });
+  }
+  if (job.state === "cancelled" && job.cancellation?.durableWritesApplied === true) {
+    context.addIssue({
+      code: "custom",
+      path: ["cancellation", "durableWritesApplied"],
+      message: "A cancelled job cannot have durableWritesApplied set to true."
+    });
+  }
+});
 
 const AgentIngestStatementSchema = z.object({
   text: z.string().trim().min(1).max(1600),

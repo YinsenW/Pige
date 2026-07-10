@@ -2,6 +2,7 @@
 
 Status: Draft baseline
 Date: 2026-07-09
+Last reviewed: 2026-07-10
 
 ## 1. Purpose
 
@@ -19,15 +20,15 @@ This document prevents three common implementation failures:
 
 ## 2. Upstream Facts Verified
 
-Current upstream facts, verified on 2026-07-09:
+Reviewed upstream snapshot: `v0.80.6`
+(`2b3fda9921b5590f285165287bd442a25817f17b`) on 2026-07-10.
 
-- Pi's repository is `earendil-works/pi`.
-- The repository includes `@earendil-works/pi-agent-core` for agent runtime, `@earendil-works/pi-ai` for multi-provider LLM access, and `@earendil-works/pi-coding-agent` for the CLI.
-- Pi supports many built-in providers and can switch models during a session.
-- Pi usage supports provider/model options, `--model`, `--thinking`, model lists, JSON mode, RPC mode, and tool allow/deny options.
-- Pi custom models can be configured with `~/.pi/agent/models.json`.
-- Pi extensions can register tools, intercept events, prompt users, append session entries, set models, and register providers.
-- Pi's public README states Pi does not include a built-in permission system for restricting filesystem, process, network, or credential access; stronger boundaries require sandboxing or external policy.
+- `pi-agent-core` owns the loop; `pi-ai` owns streaming; the CLI is separate.
+- Pi 0.80 introduced explicit `Models` collections, provider factories, and injectable
+  credentials/auth context; its temporary `/compat` global API will be removed.
+- `Agent` still defaults to `/compat` streaming unless the caller supplies `streamFn`.
+- New `max` thinking/pricing metadata creates no Pige setting or requirement.
+- Pi project trust is not a sandbox and Pi does not enforce Pige permissions.
 
 References are listed in section 17.
 
@@ -54,19 +55,17 @@ Pige should not expose by default:
 
 ## 4. Integration Modes
 
-Pige should prefer an embedded runtime adapter over shelling out to the Pi CLI.
-
-Recommended hierarchy:
-
-1. Embedded SDK adapter using Pi packages.
-2. RPC/JSON adapter if embedded SDK integration is temporarily blocked.
-3. CLI adapter only as a development fallback, not a product-default runtime.
+Pige uses only the embedded SDK. Pi RPC/CLI/binaries and
+`@earendil-works/pi-orchestrator` are manual references, never Pige runtime,
+dependencies, packages, or acceptance evidence.
 
 Rules:
 
 - Renderer never talks to Pi directly.
 - Main process or worker-owned Agent Orchestrator owns Pi lifecycle.
 - Pi runtime receives scoped Pige tools, not arbitrary filesystem/shell access.
+- A receiver-safe wrapper around isolated `Models.streamSimple` supplies `streamFn`;
+  imports exclude `/compat`, `providers/all`, global registry/config.
 - Pige stores its own job, conversation, proposal, operation, memory, and diagnostics records.
 - Pi session files are not Pige's durable source of truth.
 
@@ -77,11 +76,17 @@ Expected package roles:
 | Package | Pige use | Product boundary |
 | --- | --- | --- |
 | `@earendil-works/pi-agent-core` | Agent turn loop and tool-calling runtime. | Wrapped by Agent Orchestrator. |
-| `@earendil-works/pi-ai` | Provider/model invocation and streaming. | Called through Model Provider Registry and cloud-send policy. |
-| `@earendil-works/pi-coding-agent` | Reference CLI and development fallback. | Not a default user-facing dependency surface. |
+| `@earendil-works/pi-ai` | Isolated provider/model invocation and streaming. | Called through Model Provider Registry and cloud-send policy. |
+| `@earendil-works/pi-coding-agent` | Source reference only. | Never packaged or user-facing. |
 | Pi extension APIs | Future reference for Pige Skills/packages. | Not trusted by default; must pass Pige capability review. |
 
-Implementation must pin package versions or repository commits per release and record them in the external dependency registry.
+Each job receives an isolated `Models` set containing only its reviewed binding and Pige
+auth adapters. Ambient credentials, endpoints, and routing are forbidden; audit other
+adapter environment reads and isolate any remainder in a sanitized process.
+
+`v0.80.6` is review-only. Adoption requires exact dual-package manifest, integrity and
+provenance; root MIT notice/SBOM; hermetic catalogs; import gates; selected-binding
+fixtures; and pinned Electron/Node macOS/Windows smokes.
 
 ## 6. Provider Profile Model
 
@@ -147,17 +152,16 @@ Rules:
 - The Add Provider flow performs a low-cost connection check before saving a provider profile. OpenAI-format providers use `GET /v1/models` with Bearer auth; Anthropic-format providers use `GET /v1/models` with `x-api-key` and `anthropic-version`.
 - Official OpenAI and Anthropic providers should reject missing selected model IDs when their model list succeeds. Compatible/custom providers may fall back to manual model IDs when the endpoint explicitly does not support model listing.
 - Pi Agent calls must resolve through a selected `ModelProfile`, not a free-text runtime string.
+- Ignore upstream-only thinking levels until schema, migration, and compatibility tests
+  change together; `max` adds no visible setting.
 - Embedding and reranking models are not user BYOK provider roles in v0.1; they belong to Local Capabilities and local RAG.
 
 ## 8. Pi Custom Models Boundary
 
 Pi supports custom providers/models via `~/.pi/agent/models.json`, but Pige should not mutate the user's global Pi configuration by default.
 
-Pige options:
-
-- Generate an internal Pi provider config in app data.
-- Pass provider/model information through an embedded adapter.
-- Use isolated runtime config for a Pige-owned Pi process.
+Pige passes provider/model information through its embedded adapter; it does not create
+or depend on Pi global/process configuration.
 
 Rules:
 
@@ -237,6 +241,10 @@ Rules:
 - Disable or avoid Pi built-in tools unless Pige wraps them with scoped adapters.
 - Register Pige-owned tools only through Agent Orchestrator.
 - Every sensitive tool call goes through Permission Broker.
+- `beforeToolCall` is defense in depth: freeze its validated input, then revalidate and
+  authorize the same canonical input in the service handler before effects.
+- Side-effecting tools run sequentially; parallel tools require an explicit
+  read-only/idempotent contract plus ordering, cancellation, and audit tests.
 - Shell, filesystem, network, package, brokered credential use, provider, settings, delete, and external source actions require declared capabilities and permission policy. Raw key bytes are never a capability and are never exposed to Pi extensions or tools.
 - Pi extensions or tools cannot directly read/write vault files.
 - Pi extensions or tools cannot access raw API keys. A reviewed Pige adapter may request brokered credential use for a specific provider call; it receives the call result, never the credential bytes.
@@ -317,6 +325,8 @@ Required tests:
 - Local/self-hosted endpoint configuration still displays an explicit boundary state.
 - Official, verified-loopback, user-asserted, and unknown endpoint boundaries produce the expected fail-safe egress decision.
 - Provider profile persistence rejects arbitrary secret-bearing headers and base URLs containing userinfo or credential-bearing query parameters.
+- Adapter tests reject global imports/ambient routing, prove receiver-safe selected
+  streaming, revalidate mutated hook input, and serialize side effects.
 
 ## 16. Implementation Checklist
 
@@ -324,7 +334,8 @@ Phase 1 implementation note:
 
 - `agent.runtimeStatus` and the Agent Runtime Service may report `phase_1_stub` readiness using the active vault, default model profile, local database status, and a non-secret Agent Runtime Policy snapshot.
 - `phase_1_stub` proves that default model selection affects runtime readiness and policy context, but it does not run Pi Agent jobs or model calls.
-- Replacing the stub with an embedded SDK, RPC/JSON, or development CLI adapter must keep the same non-secret status boundary and add tests proving that selected model profiles affect actual Pi Agent calls.
+- Replacing the stub uses the embedded adapter, keeps the non-secret status boundary,
+  and proves selected profiles affect real calls.
 
 Phase 3 implementation note:
 
@@ -338,17 +349,12 @@ Phase 3 implementation note:
 
 Before implementing Pi or provider integration:
 
-1. Choose adapter mode: embedded SDK, RPC/JSON, or development CLI fallback.
-2. Pin Pi package versions or repository commit.
-3. Define provider profile storage and secret refs.
-4. Define model profile discovery/manual flow.
-5. Prove default model affects runtime calls.
-6. Disable or wrap Pi built-in tools.
-7. Route sensitive tools through Permission Broker.
-8. Define cloud-send indicator behavior.
-9. Add redacted diagnostics.
-10. Add tests for provider, model, tools, secrets, and prompt injection.
-11. Update this document when upstream Pi APIs change.
+1. Pin exact Pi packages/integrity and use the embedded adapter.
+2. Build an isolated `Models` set with Pige credentials/auth context and explicit `streamFn`.
+3. Prove selected profiles affect calls without ambient/global provider resolution.
+4. Wrap tools; keep side effects sequential and Permission Broker-authorized in handlers.
+5. Add cloud-send, redacted diagnostics, model, tool, secret, and injection tests.
+6. Re-review this contract whenever upstream Pi APIs change.
 
 ## 17. References
 

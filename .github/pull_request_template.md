@@ -9,6 +9,10 @@
 <!-- Name stable IDs and owner sources. Use Not applicable only for a tiny mechanical change. -->
 
 - Active phase or slice:
+- Agent task/provenance:
+- Agent role: Project Management | Product Planning | UI Design | Development
+- Cross-role delegation: None | Delegated by role/task for exact scope
+- Human role: direction | reference input | review | release authorization | not applicable
 - Build IDs:
 - Exit IDs:
 - Requirement IDs:
@@ -62,6 +66,7 @@
 ## Docs
 
 - Docs updated:
+- Product Planning design sync: Not required with reason | Pending task | Acknowledged task/snapshot
 - [ ] Relevant design docs updated.
 - [ ] `docs/DECISION_LOG.md` updated for durable decisions.
 - [ ] `docs/SPEC_TRACEABILITY.md` updated when requirement/test mapping changed.

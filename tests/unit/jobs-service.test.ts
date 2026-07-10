@@ -178,7 +178,15 @@ describe("jobs service", () => {
       { id: "job_20260710_ocr000001", class: "ocr", state: "running" },
       { id: "job_20260710_agent0001", class: "agent_ingest", state: "running" },
       { id: "job_20260710_restore01", class: "restore", state: "running" },
-      { id: "job_20260710_cancel001", class: "parse", state: "cancel_requested" }
+      {
+        id: "job_20260710_cancel001",
+        class: "parse",
+        state: "cancel_requested",
+        cancellation: {
+          requestedAt: "2026-07-10T01:01:00.000Z",
+          requestedBy: "user"
+        }
+      }
     ] as const;
     for (const record of records) {
       fs.writeFileSync(path.join(jobsPath, `${record.id}.json`), `${JSON.stringify({
@@ -201,6 +209,15 @@ describe("jobs service", () => {
       "job_20260710_restore01"
     ]);
     expect(retryable.every((job) => job.message.includes("explicit retry"))).toBe(true);
+
+    const retryableWithoutDurableOutput = requireValue(
+      retryable.find((job) => job.id === "job_20260710_restore01")
+    );
+    expect(jobs.cancel({ jobId: retryableWithoutDurableOutput.id })).toMatchObject({
+      status: "cancelled",
+      job: { id: retryableWithoutDurableOutput.id, state: "cancelled" }
+    });
+    expect(readJobCancellation(vaultPath, retryableWithoutDurableOutput.id)?.durableWritesApplied).toBe(false);
   });
 
   it("processes queued text captures into source pages and log entries", () => {
@@ -1663,6 +1680,7 @@ describe("jobs service", () => {
 
     expect(cancelResult.status).toBe("cancelled");
     expect(listedJob?.state).toBe("cancelled");
+    expect(readJobCancellation(vaultPath, captureResult.jobId)?.durableWritesApplied).toBe(false);
     expect(fs.existsSync(sourceRecordPath)).toBe(true);
     expect(fs.readFileSync(managedSourcePath, "utf8")).toBe("Preserved before cancellation.");
   });
@@ -1774,6 +1792,14 @@ function makeOfficeParser(): DocumentParserService {
 function requireValue<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("Expected value to exist.");
   return value;
+}
+
+function readJobCancellation(vaultPath: string, jobId: string): { readonly durableWritesApplied?: boolean } | undefined {
+  const jobPath = findFile(path.join(vaultPath, ".pige", "jobs"), `${jobId}.json`);
+  const job = JSON.parse(fs.readFileSync(jobPath, "utf8")) as {
+    readonly cancellation?: { readonly durableWritesApplied?: boolean };
+  };
+  return job.cancellation;
 }
 
 function findFileOptional(root: string, suffix: string): string | undefined {

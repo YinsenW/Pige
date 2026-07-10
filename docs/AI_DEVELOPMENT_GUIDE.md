@@ -6,7 +6,8 @@ Last revised: 2026-07-10
 
 ## 1. Purpose
 
-Pige is expected to be built with repeated AI-assisted development sessions. This guide tells future agents how to use the design baseline without losing the product shape as context changes.
+AI Agent tasks author Pige's implementation. This guide keeps those tasks aligned with
+the product baseline as context changes.
 
 The goal is not to make every task slow. The goal is to give each task the smallest complete context pack that prevents common AI failures:
 
@@ -20,6 +21,17 @@ The goal is not to make every task slow. The goal is to give each task the small
 
 ## 2. Agent Operating Loop
 
+### 2.1 Role Separation And Authorship
+
+Project Management owns delivery, risk, Git/CI, and releases; Product Planning owns
+contracts; UI Design owns visual/interaction guidance; Development owns executable
+code and evidence. Crossing roles requires delegation. Humans direct, review, and
+authorize Agent-authored implementation; full automation remains a goal.
+
+Role ownership governs every “update” instruction below. Development and Project
+Management record impact and hand off facts; only the owning role, or a task with explicit
+scoped delegation, edits another role's materials.
+
 Every non-trivial implementation task should follow this loop:
 
 1. Clarify the target slice.
@@ -27,7 +39,8 @@ Every non-trivial implementation task should follow this loop:
 3. Identify the owning service, durable data owner, and user-visible workflow.
 4. Implement the smallest vertical slice that can be tested.
 5. Add or update tests and fixtures.
-6. Update relevant design docs if behavior, dependencies, schemas, permissions, or release assumptions changed.
+6. Hand implementation facts, evidence, and gaps to Product Planning for required
+   design synchronization.
 7. Report what changed, what was verified, and what remains risky.
 
 Do not start with broad refactors. Pige should grow by vertical slices that preserve capture, data safety, and user trust.
@@ -58,6 +71,9 @@ This section is the single owner of the implementation context-pack fields. Befo
 
 ```txt
 Task:
+Agent role: Project Management | Product Planning | UI Design | Development
+Cross-role delegation: None | Delegated by role/task for exact scope
+Product Planning design sync: Not required with reason | Pending task | Acknowledged task/snapshot
 Active phase or slice:
 Build IDs:
 Exit IDs:
@@ -151,49 +167,26 @@ Before introducing a dependency:
 - Does it need checksum/signature verification?
 - What is the replacement path?
 
-If the dependency is not in the registry, update the registry before implementation.
+If the dependency is not in the registry, Development pauses and hands the evidence to
+Product Planning; Planning registers an accepted choice before implementation.
+
+External research defaults to rejection. Planning reviews fixed code, tests, philosophy,
+license, security, supply chain, and replacement cost; accepted insights are registered
+once and change product/acceptance only when promises or proof change.
 
 ## 9.1 UI Visual Fidelity Checklist
 
-For every renderer change that affects layout, type, color, motion, density, responsive
-behavior, or a visible state:
-
-- Read `docs/UI_PROTOTYPE.md` section 16 and identify the affected state and viewport.
-- Keep values behind Pige semantic tokens; do not paste third-party component CSS or
-  branded assets into the renderer.
-- Update `resources/ui-visual-contract.manifest.json` only when the owner contract changes,
-  not to accommodate accidental implementation drift.
-- Run `npm run verify:ui-visual`, renderer/component tests, I18N checks, and accessibility
-  checks before visual capture.
-- Capture every affected combination in the governed matrix using deterministic synthetic
-  fixtures. Include German for expansion pressure and CJK for line breaking and IME-facing
-  surfaces.
-- Inspect pixel difference, text clipping, hierarchy, focus, hover/active/disabled state,
-  contrast, reduced motion, and narrow-window behavior. A low pixel difference alone is
-  not approval.
-- Record a rationale for every accepted baseline update and identify whether the change is
-  intentional, platform text-rendering noise, or an unresolved defect.
-- Never generate or approve a baseline from private vault data, real credentials, account
-  content, or a third-party application's copyrighted screenshot.
-
-If the environment cannot launch the real packaged app, do not claim visual acceptance.
-Run the structural verifier and tests, then hand off the exact uncaptured matrix entries as
-an open manual/release evidence gap.
+UI Design owns detailed states and acceptance in `docs/UI_PROTOTYPE.md` section 16 and
+`resources/ui-visual-contract.manifest.json`. Development identifies affected rows, uses
+Pige semantic tokens and synthetic data, runs visual/I18N/accessibility gates, and records
+baseline rationale. Structural checks or a low pixel delta are not packaged visual
+acceptance; uncaptured matrix entries stay explicit and are handed to UI Design.
 
 ## 10. UI Implementation Rules
 
-Pige's UI should stay minimal, calm, and capture-first.
-
-Implementation rules:
-
-- The first screen should be the usable capture experience, not a landing page.
-- Whole-window drag-and-drop remains active in compact and expanded modes.
-- Compact capture mode should feel small enough for always-on-top use.
-- Full-screen reader should use width for side rails and context, not stretch prose endlessly.
-- Settings are for control, not product education.
-- Permission dialogs should be compact and elegant, not alarming system walls.
-- All user-visible strings must go through I18N catalogs.
-- Controls must remain usable in Chinese, English, Japanese, Korean, French, and German.
+`docs/UI_PROTOTYPE.md` owns the detailed minimal, calm, capture-first interaction contract.
+Development preserves its affected state/viewport matrix, routes strings through I18N,
+and does not invent new UI behavior to satisfy implementation convenience.
 
 ## 11. Testing Expectations
 
@@ -201,11 +194,17 @@ Implementation rules:
 
 ## 12. Documentation Drift Control
 
-When code diverges from docs, fix the code or owning contract in the same change. `AGENTS.md` owns the mandatory update triggers; the owner roles in `resources/documentation-quality/document-map.manifest.json` identify where each change belongs. Update `docs/DECISION_LOG.md` only for a durable decision, and update `docs/SPEC_TRACEABILITY.md` when requirement or evidence mapping changes.
+When code diverges from docs, Development fixes the code or hands exact implementation
+facts to Product Planning for same-candidate contract synchronization. `AGENTS.md` owns
+the triggers; `resources/documentation-quality/document-map.manifest.json` identifies the
+editing role. Only that role or an explicitly delegated task edits the owner, Decision Log,
+or trace projection.
 
 ### 12.1 PRD Impact Classification
 
-Classify every change using the highest applicable PRD impact before editing. Record the classification in the pull request or handoff:
+Classify every change using the highest applicable PRD impact before editing. Record it
+in the pull request or handoff; Product Planning applies the required owner/PRD/trace
+updates unless it explicitly delegates that scope.
 
 | PRD impact | Use when | Required treatment |
 | --- | --- | --- |
@@ -237,8 +236,8 @@ This matrix names likely owners, not a license to update all of them mechanicall
 1. State the semantic delta and choose the highest PRD impact class.
 2. Identify the product requirement IDs and the single owner for every affected fact.
 3. Use the matrix to select affected owners; keep full definitions in those owners and use references elsewhere.
-4. Apply PRD-to-owner and owner-to-PRD updates in the same change. Do not leave a temporary contract split across sessions.
-5. Update trace/acceptance projections and verification only when requirement meaning, mapping, scope, or evidence changes. Preserve stable IDs and status for editorial restructuring.
+4. Product Planning applies PRD-to-owner and owner-to-PRD updates in the same candidate; other roles hand off the delta unless delegated.
+5. Product Planning updates trace/acceptance projections only when meaning, mapping, scope, or evidence changes; editorial restructuring preserves stable IDs and status.
 6. Record the affected owners and trace/acceptance impact. For `none` or `editorial`, record a specific no-contract-impact rationale instead of rewriting unrelated documents.
 7. Run the applicable documentation, traceability, contract, fixture, and behavioral gates before handoff.
 
@@ -249,6 +248,9 @@ This section is the single owner of the internal development handoff fields. Eve
 ```txt
 Implemented:
 Files changed:
+Agent task/provenance:
+Agent role: Project Management | Product Planning | UI Design | Development
+Cross-role delegation: None | Delegated by role/task for exact scope
 Active phase or slice:
 Build IDs:
 Exit IDs:
@@ -258,6 +260,7 @@ Tests/evidence:
 Visual baseline impact/evidence: Not affected | Captured <matrix subset> | Open <matrix subset and reason>
 Known gaps:
 Docs updated:
+Product Planning design sync: Not required with reason | Pending task | Acknowledged task/snapshot
 Planning cost: None | Low | Medium | High
 Compatibility or migration impact:
 Coordination action: No action | Active-phase follow-up | Future-phase follow-up

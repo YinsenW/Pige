@@ -30,6 +30,7 @@ import {
 } from "./pptx-media-ocr-artifact-service";
 import { createVerifiedSourceFileSnapshotAsync } from "./source-file-access";
 import { createVerifiedFileSnapshot } from "./verified-file-snapshot";
+import { JobCancellationError, type JobExecutionControl } from "./job-execution-control";
 
 export interface OcrPort {
   canOcr(sourceKind: SourceKind): boolean;
@@ -38,7 +39,8 @@ export interface OcrPort {
     vaultPath: string,
     sourceRecord: SourceRecord,
     sourceRecordPath: string,
-    job: JobRecord
+    job: JobRecord,
+    control?: JobExecutionControl
   ): Promise<OcrSourceResult>;
 }
 
@@ -49,7 +51,11 @@ export interface OcrSourceCapability {
 
 export interface NativeImageOcrAdapterPort {
   isAvailable(): boolean;
-  recognize(inputPath: string, preferredLanguages: readonly string[]): ReturnType<MacOSVisionOcrAdapter["recognize"]>;
+  recognize(
+    inputPath: string,
+    preferredLanguages: readonly string[],
+    signal?: AbortSignal
+  ): ReturnType<MacOSVisionOcrAdapter["recognize"]>;
 }
 
 export class OcrService implements OcrPort {
@@ -147,17 +153,18 @@ export class OcrService implements OcrPort {
     vaultPath: string,
     sourceRecord: SourceRecord,
     sourceRecordPath: string,
-    job: JobRecord
+    job: JobRecord,
+    control?: JobExecutionControl
   ): Promise<OcrSourceResult> {
     const parsedSource = SourceRecordSchema.parse(sourceRecord);
     if (parsedSource.kind === "image_file") {
-      return this.#ocrImage(vaultPath, parsedSource, sourceRecordPath, job);
+      return this.#ocrImage(vaultPath, parsedSource, sourceRecordPath, job, control);
     }
     if (parsedSource.kind === "pdf_file") {
-      return this.#ocrPdf(vaultPath, parsedSource, sourceRecordPath, job);
+      return this.#ocrPdf(vaultPath, parsedSource, sourceRecordPath, job, control);
     }
     if (parsedSource.kind === "pptx_file") {
-      return this.#ocrPptx(vaultPath, parsedSource, sourceRecordPath, job);
+      return this.#ocrPptx(vaultPath, parsedSource, sourceRecordPath, job, control);
     }
     throw new PigeDomainError("ocr.source_unsupported", "No local OCR path supports this source kind.");
   }
@@ -166,16 +173,31 @@ export class OcrService implements OcrPort {
     vaultPath: string,
     sourceRecord: SourceRecord,
     sourceRecordPath: string,
-    job: JobRecord
+    job: JobRecord,
+    control?: JobExecutionControl
   ): Promise<OcrSourceResult> {
-    const existing = await this.#artifacts.readExisting(vaultPath, sourceRecord, sourceRecordPath, job);
+    control?.throwIfCancellationRequested();
+    control?.reportProgress({ completedUnits: 0, totalUnits: 1, unit: "image" });
+    const existing = await this.#artifacts.readExisting(
+      vaultPath,
+      sourceRecord,
+      sourceRecordPath,
+      job,
+      () => control?.markDurableCheckpoint("image_ocr_existing_publication_started")
+    );
     if (existing) return existing;
     if (!this.#adapter.isAvailable()) {
       throw new PigeDomainError("ocr.adapter_unavailable", "No available local OCR adapter supports this source.");
     }
     const snapshot = await createVerifiedSourceFileSnapshotAsync(vaultPath, sourceRecord);
     try {
-      const result = await this.#adapter.recognize(snapshot.absolutePath, preferredLanguages(sourceRecord));
+      const result = await this.#adapter.recognize(
+        snapshot.absolutePath,
+        preferredLanguages(sourceRecord),
+        control?.signal
+      );
+      control?.throwIfCancellationRequested();
+      control?.markDurableCheckpoint("image_ocr_commit_started");
       return this.#artifacts.persist(vaultPath, sourceRecord, sourceRecordPath, job, result);
     } finally {
       await snapshot.dispose();
@@ -186,21 +208,37 @@ export class OcrService implements OcrPort {
     vaultPath: string,
     sourceRecord: SourceRecord,
     sourceRecordPath: string,
-    job: JobRecord
+    job: JobRecord,
+    control?: JobExecutionControl
   ): Promise<OcrSourceResult> {
-    const existing = await this.#pdfArtifacts.readExisting(vaultPath, sourceRecord, sourceRecordPath, job);
+    control?.throwIfCancellationRequested();
+    const inspection = inspectPdfOcrTarget(sourceRecord);
+    if (inspection.ready) {
+      control?.reportProgress({ completedUnits: 0, totalUnits: inspection.pages.length, unit: "page" });
+    }
+    const existing = await this.#pdfArtifacts.readExisting(
+      vaultPath,
+      sourceRecord,
+      sourceRecordPath,
+      job,
+      () => control?.markDurableCheckpoint("pdf_ocr_existing_publication_started")
+    );
     if (existing) return existing;
     if (!this.#pdfRenderer.isAvailable() || !this.#adapter.isAvailable()) {
       throw new PigeDomainError("ocr.adapter_unavailable", this.inspectSource(sourceRecord).message);
     }
     const target = await this.#pdfArtifacts.resolveTarget(vaultPath, sourceRecord);
+    if (!inspection.ready) {
+      control?.reportProgress({ completedUnits: 0, totalUnits: target.pages.length, unit: "page" });
+    }
     const sourceSnapshot = await createVerifiedSourceFileSnapshotAsync(vaultPath, sourceRecord);
     let rendered: Awaited<ReturnType<PdfPageRendererPort["renderPages"]>>;
     try {
-      rendered = await this.#pdfRenderer.renderPages(sourceSnapshot.absolutePath, target.pages);
+      rendered = await this.#pdfRenderer.renderPages(sourceSnapshot.absolutePath, target.pages, control?.signal);
     } finally {
       await sourceSnapshot.dispose();
     }
+    control?.throwIfCancellationRequested();
     const renderInput: PdfRenderForOcrInput = {
       rendererId: rendered.rendererId,
       rendererVersion: rendered.rendererVersion,
@@ -216,6 +254,7 @@ export class OcrService implements OcrPort {
       warnings: rendered.warnings,
       truncated: rendered.truncated
     };
+    control?.markDurableCheckpoint("pdf_pages_staging_started");
     const staging = await this.#pdfArtifacts.stageRenderedPages(
       vaultPath,
       sourceRecord,
@@ -223,6 +262,7 @@ export class OcrService implements OcrPort {
       job,
       renderInput
     );
+    control?.throwIfCancellationRequested();
     if (rendered.truncated || rendered.pages.length !== target.pages.length) {
       throw new PigeDomainError(
         "ocr.pdf.render_incomplete",
@@ -231,6 +271,7 @@ export class OcrService implements OcrPort {
     }
     const pageResults: PdfPageOcrResult[] = [];
     for (const page of staging.pages) {
+      control?.throwIfCancellationRequested();
       const pageSnapshot = await createVerifiedFileSnapshot({
         sourcePath: page.absolutePath,
         expectedChecksum: page.checksum,
@@ -243,9 +284,15 @@ export class OcrService implements OcrPort {
         pageResults.push({
           page: page.page,
           locator: page.locator,
-          result: await this.#adapter.recognize(pageSnapshot.absolutePath, preferredLanguages(sourceRecord))
+          result: await this.#adapter.recognize(
+            pageSnapshot.absolutePath,
+            preferredLanguages(sourceRecord),
+            control?.signal
+          )
         });
       } catch (caught) {
+        if (caught instanceof JobCancellationError) throw caught;
+        if (control?.signal.aborted) control.throwIfCancellationRequested();
         if (isUnavailableOcrError(caught)) throw caught;
         if (isDeterministicMediaOcrError(caught)) throw caught;
         throw new PigeDomainError(
@@ -255,7 +302,13 @@ export class OcrService implements OcrPort {
       } finally {
         await pageSnapshot.dispose();
       }
+      control?.reportProgress({
+        completedUnits: pageResults.length,
+        totalUnits: staging.pages.length,
+        unit: "page"
+      });
     }
+    control?.throwIfCancellationRequested();
     return this.#pdfArtifacts.persistOcr(vaultPath, staging, sourceRecordPath, job, pageResults);
   }
 
@@ -263,26 +316,56 @@ export class OcrService implements OcrPort {
     vaultPath: string,
     sourceRecord: SourceRecord,
     sourceRecordPath: string,
-    job: JobRecord
+    job: JobRecord,
+    control?: JobExecutionControl
   ): Promise<OcrSourceResult> {
-    const existing = await this.#pptxArtifacts.readExisting(vaultPath, sourceRecord, sourceRecordPath, job);
+    control?.throwIfCancellationRequested();
+    const inspection = inspectPptxMediaOcrTarget(sourceRecord);
+    if (inspection.ready) {
+      control?.reportProgress({
+        completedUnits: 0,
+        totalUnits: inspection.materializableMediaCount,
+        unit: "media"
+      });
+    }
+    const existing = await this.#pptxArtifacts.readExisting(
+      vaultPath,
+      sourceRecord,
+      sourceRecordPath,
+      job,
+      () => control?.markDurableCheckpoint("pptx_media_ocr_existing_publication_started")
+    );
     if (existing) return existing;
     if (!this.#officeMedia.isAvailable() || !this.#adapter.isAvailable()) {
       throw new PigeDomainError("ocr.adapter_unavailable", this.inspectSource(sourceRecord).message);
     }
     const target = await this.#pptxArtifacts.resolveTarget(vaultPath, sourceRecord);
+    if (!inspection.ready) {
+      control?.reportProgress({ completedUnits: 0, totalUnits: target.targets.length, unit: "media" });
+    }
     const sourceSnapshot = await createVerifiedSourceFileSnapshotAsync(vaultPath, sourceRecord);
     let materialized: Awaited<ReturnType<OfficeMediaMaterializerPort["materialize"]>>;
     try {
-      materialized = await this.#officeMedia.materialize(sourceSnapshot.absolutePath, target.targets);
+      materialized = await this.#officeMedia.materialize(
+        sourceSnapshot.absolutePath,
+        target.targets,
+        control?.signal
+      );
     } finally {
       await sourceSnapshot.dispose();
     }
+    control?.throwIfCancellationRequested();
     const media = validateMaterializedMedia(target.targets, materialized);
     const results: PptxMediaOcrItemResult[] = [];
     for (const item of media) {
+      control?.throwIfCancellationRequested();
       try {
-        const result = await recognizePrivateMedia(this.#adapter, item, preferredLanguages(sourceRecord));
+        const result = await recognizePrivateMedia(
+          this.#adapter,
+          item,
+          preferredLanguages(sourceRecord),
+          control?.signal
+        );
         results.push({
           target: item,
           mediaChecksum: checksumBytes(item.bytes),
@@ -290,6 +373,8 @@ export class OcrService implements OcrPort {
           result
         });
       } catch (caught) {
+        if (caught instanceof JobCancellationError) throw caught;
+        if (control?.signal.aborted) control.throwIfCancellationRequested();
         if (isUnavailableOcrError(caught)) throw caught;
         if (isDeterministicMediaOcrError(caught)) throw caught;
         throw new PigeDomainError(
@@ -297,7 +382,14 @@ export class OcrService implements OcrPort {
           "Local OCR failed for selected PPTX media; preserved parser artifacts remain retryable."
         );
       }
+      control?.reportProgress({
+        completedUnits: results.length,
+        totalUnits: media.length,
+        unit: "media"
+      });
     }
+    control?.throwIfCancellationRequested();
+    control?.markDurableCheckpoint("pptx_media_ocr_commit_started");
     return this.#pptxArtifacts.persist(vaultPath, sourceRecord, sourceRecordPath, job, results);
   }
 }
@@ -350,14 +442,15 @@ function validateMaterializedMedia(
 async function recognizePrivateMedia(
   adapter: NativeImageOcrAdapterPort,
   media: MaterializedOfficeMedia,
-  languages: readonly string[]
+  languages: readonly string[],
+  signal?: AbortSignal
 ): ReturnType<NativeImageOcrAdapterPort["recognize"]> {
   const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "pige-pptx-media-"));
   const filePath = path.join(root, `media${media.extension}`);
   try {
     await fs.promises.chmod(root, 0o700).catch(() => undefined);
     await fs.promises.writeFile(filePath, media.bytes, { flag: "wx", mode: 0o600 });
-    return await adapter.recognize(filePath, languages);
+    return await adapter.recognize(filePath, languages, signal);
   } finally {
     await fs.promises.rm(root, { recursive: true, force: true });
   }

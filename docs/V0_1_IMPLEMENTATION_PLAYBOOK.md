@@ -37,7 +37,7 @@ Current implementation state, last reconciled 2026-07-10:
 | --- | --- | --- |
 | P0 | in progress | Repository and traceability foundations have current evidence; the full P0 exit set has not been re-run as a phase-completion claim. |
 | P1 | in progress | Desktop, vault, settings, diagnostics, and runtime foundations have evidence; the full mapped exit set remains open. |
-| P2 | in progress | Capture, durable-job, retry, and source-preservation slices have evidence; voice and the full mapped exit set remain open. |
+| P2 | in progress | Capture, durable jobs, retry, and process-local parse/OCR progress/cancel have evidence; visible UI, other classes, voice, and full exits remain open. |
 | P3 | in progress | BYOK and Agent-ingest foundations have evidence; complete provider, egress, output-summary, and exit evidence remain open. |
 | P4 | in progress | SQLite, lexical search, Library, and rebuild foundations have evidence; the full scale and relationship exit set remains open. |
 | P5 | in progress | PDF, Office, static-web, direct-image macOS Vision OCR, Artifact, and recovery slices have evidence; cross-platform/document OCR and remaining P5 exits are still open. |
@@ -366,7 +366,7 @@ B5.12/E5.04 evidence covers seven text, URL, PDF, PPTX, and image-OCR cases acro
 
 Evidence exists for startup reconciliation of interrupted idempotent document/OCR/Agent jobs.
 
-Still open before P5 completion: signed macOS helper and packaged PDF-renderer acceptance, Windows/Paddle OCR, full-slide/vector/chart/DOCX-media OCR, unsupported or oversized PPTX targets, full Pi-runtime injection coverage, visible progress, cooperative cancellation, and the remaining exits below.
+Still open before P5 completion: signed helper/packaged PDF acceptance, Windows/Paddle, full-slide/vector/chart/DOCX-media OCR, unsupported/oversized PPTX targets, full Pi-runtime injection, numeric/running-cancel UI, other-class action-safety/cancellation coverage, cross-process cancellation, and the exits below.
 
 Deferred from this phase:
 

@@ -1,5 +1,6 @@
 import { PigeDomainError } from "@pige/domain";
 import type { JobRecord, SourceKind, SourceRecord } from "@pige/schemas";
+import type { JobExecutionControl } from "./job-execution-control";
 import { OfficeParserService } from "./office-parser-service";
 import type { DocumentParseSourceResult } from "./parser-artifact-service";
 import { PdfParserService } from "./pdf-parser-service";
@@ -10,7 +11,8 @@ export interface DocumentParserPort {
     vaultPath: string,
     sourceRecord: SourceRecord,
     sourceRecordPath: string,
-    job: JobRecord
+    job: JobRecord,
+    control?: JobExecutionControl
   ): Promise<DocumentParseSourceResult>;
 }
 
@@ -29,12 +31,13 @@ export class DocumentParserService implements DocumentParserPort {
     vaultPath: string,
     sourceRecord: SourceRecord,
     sourceRecordPath: string,
-    job: JobRecord
+    job: JobRecord,
+    control?: JobExecutionControl
   ): Promise<DocumentParseSourceResult> {
     const parser = this.#parsers.find((candidate) => candidate.canParse(sourceRecord.kind));
     if (!parser) {
       throw new PigeDomainError("parser.unsupported_source", "No bundled document parser can process this source kind.");
     }
-    return parser.parseSource(vaultPath, sourceRecord, sourceRecordPath, job);
+    return parser.parseSource(vaultPath, sourceRecord, sourceRecordPath, job, control);
   }
 }

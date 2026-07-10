@@ -7,6 +7,8 @@ import type {
   ConfirmationProposal,
   Locale,
   JobClass,
+  JobRecord,
+  JobStage,
   JobState,
   MarkdownPageStatus,
   MarkdownPageType,
@@ -349,6 +351,8 @@ export interface JobSummary {
   readonly id: string;
   readonly class: JobClass;
   readonly state: JobState;
+  readonly stage?: JobStage;
+  readonly progress?: JobRecord["progress"];
   readonly sourceId?: string;
   readonly captureId?: string;
   readonly conversationEventId?: string;
@@ -372,7 +376,7 @@ export interface JobActionRequest {
 }
 
 export interface JobActionResult {
-  readonly status: "cancelled" | "requeued" | "not_found" | "not_allowed";
+  readonly status: "cancel_requested" | "cancelled" | "requeued" | "not_found" | "not_allowed";
   readonly reason?: string;
   readonly job?: JobSummary;
 }

@@ -100,6 +100,9 @@ function exactIsoDate(value) {
 const handoffOwnerFields = [
   "Implemented:",
   "Files changed:",
+  "Agent task/provenance:",
+  "Agent role: Project Management | Product Planning | UI Design | Development",
+  "Cross-role delegation: None | Delegated by role/task for exact scope",
   "Active phase or slice:",
   "Build IDs:",
   "Exit IDs:",
@@ -108,6 +111,7 @@ const handoffOwnerFields = [
   "Tests/evidence:",
   "Known gaps:",
   "Docs updated:",
+  "Product Planning design sync: Not required with reason | Pending task | Acknowledged task/snapshot",
   "Planning cost: None | Low | Medium | High",
   "Compatibility or migration impact:",
   "Coordination action: No action | Active-phase follow-up | Future-phase follow-up",
@@ -124,6 +128,9 @@ const pullRequestHandoffFields = handoffOwnerFields.filter((field) => ![
 
 const contextPackOwnerFields = [
   "Task:",
+  "Agent role: Project Management | Product Planning | UI Design | Development",
+  "Cross-role delegation: None | Delegated by role/task for exact scope",
+  "Product Planning design sync: Not required with reason | Pending task | Acknowledged task/snapshot",
   "Active phase or slice:",
   "Build IDs:",
   "Exit IDs:",
@@ -218,6 +225,7 @@ function templateOwnershipComplete() {
     ["START context-field copy", `${start}\nTask:\n`, guide, pullRequest],
     ["incomplete context owner", start, guide.replace("Exit condition:", "Exit gate:"), pullRequest],
     ["incomplete handoff owner", start, guide.replace("Next recommended task:", "Next task:"), pullRequest],
+    ["missing role/delegation intake", start, guide.replace("Agent role: Project Management | Product Planning | UI Design | Development", "Agent role:"), pullRequest],
     ["incomplete PR subset", start, guide, pullRequest.replace("Planning cost: None | Low | Medium | High", "Planning cost:")]
   ];
   for (const [label, mutatedStart, mutatedGuide, mutatedPullRequest] of negativeCases) {
@@ -226,7 +234,7 @@ function templateOwnershipComplete() {
     }
   }
   return failures.length === 0
-    ? { passed: true, detail: "AI Development Guide uniquely owns complete start/handoff templates; START contains references only; the PR keeps the required public subset; 4 negative cases passed." }
+    ? { passed: true, detail: `AI Development Guide uniquely owns complete role-aware start/handoff templates; START contains references only; the PR keeps the required public subset; ${negativeCases.length} negative cases passed.` }
     : { passed: false, detail: failures.join("; ") };
 }
 
@@ -377,10 +385,9 @@ function resourceLifecycleComplete() {
 
 function currentStatusComplete() {
   const failures = [];
-  const readmeStatus = sectionText("README.md", "## Current Status");
-  const readme = checkText("README current status", readmeStatus, [
+  const readme = checkText("README current status", read("README.md"), [
     "active pre-alpha development",
-    "current implementation includes"
+    "Today, the pre-alpha can:"
   ]);
   if (!readme.passed) failures.push(readme.detail);
 
@@ -417,8 +424,46 @@ function currentStatusComplete() {
     : { passed: false, detail: failures.join("; ") };
 }
 
+const roleRoutingRequirements = {
+  "AGENTS.md": [
+    "This synchronization duty is not universal edit authority.",
+    "Product Planning synchronizes affected design documents",
+    "only under explicit, scoped delegation"
+  ],
+  "docs/AI_DEVELOPMENT_GUIDE.md": [
+    "Role ownership governs every “update” instruction below.",
+    "Product Planning design sync:",
+    "Cross-role delegation:",
+    "Planning registers an accepted choice before implementation"
+  ],
+  "CONTRIBUTING.md": ["design changes to Product Planning", "detailed visual guidance to UI Design"],
+  "docs/CONTRIBUTING_GUIDE.md": ["Product Planning design-sync status", "detailed visual guidance"]
+};
+
+function evaluateRoleRouting(texts) {
+  const failures = [];
+  for (const [relativePath, markers] of Object.entries(roleRoutingRequirements)) {
+    const text = texts[relativePath] ?? "";
+    for (const marker of markers) if (!text.includes(marker)) failures.push(`${relativePath} is missing role-routing marker ${marker}`);
+  }
+  return failures;
+}
+
+function roleRoutingComplete() {
+  const texts = Object.fromEntries(Object.keys(roleRoutingRequirements).map((relativePath) => [relativePath, read(relativePath)]));
+  const failures = evaluateRoleRouting(texts);
+  for (const [relativePath, [first]] of Object.entries(roleRoutingRequirements)) {
+    const mutated = { ...texts, [relativePath]: texts[relativePath].replace(first, "removed-role-routing-marker") };
+    if (evaluateRoleRouting(mutated).length === 0) failures.push(`${relativePath} missing-role-routing mutation was accepted.`);
+  }
+  return failures.length === 0
+    ? { passed: true, detail: "Role-owned edits, scoped delegation, PR/handoff intake, and Product Planning synchronization are explicit across repository instructions and contribution workflow." }
+    : { passed: false, detail: failures.join("; ") };
+}
+
 function coordinationProtocolComplete() {
   const handoffs = templateOwnershipComplete();
+  const roles = roleRoutingComplete();
   const playbook = checkText(
     "Playbook coordination protocol",
     sectionText("docs/V0_1_IMPLEMENTATION_PLAYBOOK.md", "## 3.2 In-Flight Coordination And Adoption Cost"),
@@ -440,9 +485,9 @@ function coordinationProtocolComplete() {
       "Interrupt unrelated work only for security, privacy, durable-data, migration, or incompatible-contract risk"
     ]
   );
-  return handoffs.passed && playbook.passed && impact.passed
-    ? { passed: true, detail: "Concurrent work uses the single-owner handoff, Playbook delta notice, and a safety-only interruption threshold." }
-    : { passed: false, detail: `${handoffs.detail}; ${playbook.detail}; ${impact.detail}` };
+  return handoffs.passed && roles.passed && playbook.passed && impact.passed
+    ? { passed: true, detail: "Concurrent work uses role-owned edits, explicit delegation and Planning sync, the single-owner handoff, Playbook delta notice, and a safety-only interruption threshold." }
+    : { passed: false, detail: `${handoffs.detail}; ${roles.detail}; ${playbook.detail}; ${impact.detail}` };
 }
 
 function normalVerificationWiringComplete() {
@@ -595,13 +640,14 @@ const checks = {
   "DEV-001": () => currentStatusComplete(),
   "DEV-002": () => {
     const templates = templateOwnershipComplete();
+    const roles = roleRoutingComplete();
     const ownerReferences = ownerReferencesComplete();
     const routing = implementationRoutingComplete();
     const prdContract = runVerifier("scripts/verify/prd-contract.mjs");
     const prdMutations = runVerifier("scripts/verify/prd-contract-negative-cases.mjs");
-    return templates.passed && ownerReferences.passed && routing.passed && prdContract.passed && prdMutations.passed
-      ? { passed: true, detail: `${templates.detail} ${ownerReferences.detail} ${routing.detail} ${prdContract.detail} ${prdMutations.detail}` }
-      : { passed: false, detail: `${templates.detail}; ${ownerReferences.detail}; ${routing.detail}; ${prdContract.detail}; ${prdMutations.detail}` };
+    return templates.passed && roles.passed && ownerReferences.passed && routing.passed && prdContract.passed && prdMutations.passed
+      ? { passed: true, detail: `${templates.detail} ${roles.detail} ${ownerReferences.detail} ${routing.detail} ${prdContract.detail} ${prdMutations.detail}` }
+      : { passed: false, detail: `${templates.detail}; ${roles.detail}; ${ownerReferences.detail}; ${routing.detail}; ${prdContract.detail}; ${prdMutations.detail}` };
   },
   "DEV-003": () => coordinationProtocolComplete(),
   "DEV-004": () => normalVerificationWiringComplete(),

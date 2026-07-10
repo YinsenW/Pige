@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-10T13:29:07Z",
+  "reviewedAt": "2026-07-10T16:32:15Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,12 +30,12 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "9c9d6eaa96073f21ac7a08be84414a1866c1958e7e039623c6fba50ed38efdbf"
+    "reviewedSha256": "ecc7c3584985d0538036e47ec512107044141e19f1c6795768c0506f130c8c78"
   },
   "reviewers": [
     {
-      "reviewerId": "scratch-pptx-architecture-review",
-      "task": "/root/scratch_editor_architecture",
+      "reviewerId": "readme-role-job-architecture-review",
+      "task": "/root/pi_update_architecture",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -43,11 +43,11 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Fresh read-only reviewer of the exact 101-file candidate; independently checked Scratch single ownership, bounded PPTX-media-OCR implementation evidence and Owner propagation, manifest limits, private materialization, locator and evidence wiring, unchanged stable IDs and statuses, the 1,051-claim semantic lock, preserved residual gaps, budgets, and expected pre-binding TRC-005 staleness without editing files."
+      "independence": "Read-only architecture reviewer rejected the first candidate for two role-governance blockers, then independently verified their exact-candidate repair, README and Pi boundaries, Job Owner/acceptance consistency, semantic-lock stability, budgets, negative mutations, and zero-blocker score without editing files."
     },
     {
-      "reviewerId": "scratch-pptx-owner-development-review",
-      "task": "/root/scratch_pige_mapping",
+      "reviewerId": "readme-agent-governance-review",
+      "task": "/root/pi_update_architecture/final_readme_governance",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -55,11 +55,11 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Fresh read-only Owner and active-development reviewer on the exact 101-file candidate; independently checked the single Scratch projection, synchronized Tech/Parser/API/Job/Source/Security/Playbook/Quality/acceptance ownership of selected PPTX media OCR, the sole new evidence projection, unchanged partial states and stable IDs, the reviewed 1,051-claim lock, executable evidence, contracts, dependencies, and budgets without editing files."
+      "independence": "Fresh read-only public-entry and governance reviewer checked the exact 101-file snapshot after its own blockers were repaired: product copy, role-owned edits, delegation and Planning-sync intake, contribution routing, Pi review-only status, de-duplication, and executable governance markers; it made no file changes."
     },
     {
-      "reviewerId": "scratch-pptx-security-license-review",
-      "task": "/root/scratch_security_license",
+      "reviewerId": "job-trace-governance-risk-review",
+      "task": "/root/pi_update_risk",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -67,76 +67,66 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Fresh read-only source, license, security, implementation-boundary, and exact-candidate reviewer; independently verified Scratch's README-only MIT assertion and absent LICENSE, static clean-room boundary, zero runtime or acceptance projection, and the Pige-owned PPTX media limits, private inputs, locator/checksum/revision protection, exact evidence selector, unchanged partial states, no new dependency, and preserved security gaps without editing files."
+      "independence": "Read-only risk reviewer exhaustively checked action-safety state paths, evidence selectors, the repaired CON-002 source detector and mutations, role-routing intake, exact snapshot and semantic lock, test/build/smoke evidence, honest partial states, and residual gaps without editing files."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "scratch-pptx-architecture-review",
+      "reviewerId": "readme-role-job-architecture-review",
       "blockerCount": 0,
-      "summary": "All governed resources remain uniquely routed. Scratch has one fixed-release TECH row; PPTX capability facts stay in existing Tech, Parser, API, Job, Source, Security, Playbook, Quality, parser-manifest, fixture, and acceptance owners without creating an orphan document or resource."
+      "summary": "The concise public README, AI task router, 57-document inventory, two distribution files, 99 local links, 45 anchors, role-aware context pack, and resource review/reclamation metadata provide unique entry and lifecycle paths without a new document."
     },
     {
       "id": "cross_document_contract_consistency",
-      "score": 9.8,
-      "reviewerId": "scratch-pptx-owner-development-review",
+      "score": 9.7,
+      "reviewerId": "readme-role-job-architecture-review",
       "blockerCount": 0,
-      "summary": "Tech, Parser, API, Job, Source, Security, Playbook, Quality, parser manifest, smoke, code evidence, and acceptance agree on parser-selected PPTX raster OCR and on the residual full-slide, unsupported-media, cross-platform, packaging, progress, cancellation, CAS, and transaction gaps. Scratch remains one non-normative reference row."
+      "summary": "README, AGENTS, AI Guide, contribution workflow, Decision Log, Pi Owner/TECH projection, Job/API/Quality/Playbook contracts, executable schemas, and acceptance now agree on role authority, review-only dependencies, cancellation safety, and every retained open boundary."
     },
     {
       "id": "continuous_traceability_and_acceptance",
-      "score": 9.8,
-      "reviewerId": "scratch-pptx-owner-development-review",
+      "score": 9.7,
+      "reviewerId": "readme-role-job-architecture-review",
       "blockerCount": 0,
-      "summary": "One executable evidence ID is projected only to PIGE-INGEST-004 and E5.05; both remain partial and P5 remains in progress. All stable scope identities and statuses remain unchanged, and explicit semantic review advanced the lock from 1,050 to 1,051 claims before TRC-001 through TRC-005 passed."
+      "summary": "The 1,052-claim semantic lock has zero unexplained drift; the existing durable-cancel evidence now selects the general failure/wait/retry/cancel proof; PIGE-JOB-002 and E2.10 remain partial with exact non-parse/OCR and cross-process gaps; role, delegation, and Planning sync are checkable intake fields."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "scratch-pptx-owner-development-review",
+      "reviewerId": "readme-role-job-architecture-review",
       "blockerCount": 0,
-      "summary": "The bounded PPTX raster path is immediately usable by active P5 work while every unsupported and platform gap remains explicit. Scratch contributes source-mode continuity, command discovery, external-change, and tool-readiness comparisons but cannot alter the editor choice, Permission Broker, dependency set, or implementation order."
+      "summary": "Future Agents receive one-way Development-to-Planning synchronization, UI Design ownership, explicit dependency pause/transfer, role and delegation fields at context, handoff, and PR boundaries, exact Job action semantics, negative mutations, and current executable evidence without interrupting active implementation."
     },
     {
       "id": "documentation_leanness_and_maintainability",
-      "reviewerId": "scratch-pptx-architecture-review",
-      "blockerCount": 0,
       "score": 9.6,
-      "summary": "LEN-001 through LEN-005 pass with 4,190 entry words, 57 Markdown files, 22,813 lines, 162,938 words, 1,209,581 bytes, 5,487 trace lines, zero duplicate groups, and 14 mutation cases. Concise Owner replacements offset new semantics, though capacity remains extremely tight."
+      "reviewerId": "readme-role-job-architecture-review",
+      "blockerCount": 0,
+      "summary": "LEN-001 through LEN-005 pass with 57 Markdown files, 22,901 lines, 162,649 words, 1,207,965 bytes, 3,857 entry words, 5,497 trace lines, zero duplicate groups, 14 mutations, and an 8.67 percent line reduction from baseline."
     }
   ],
   "verification": [
     {
-      "command": "npm run verify:docs && npm run verify:decisions && npm run verify:ui-visual && npm run verify:contracts && npm run verify:dependencies",
+      "command": "npm run verify:docs && npm run verify:decisions && npm run verify:ui-visual && npm run verify:contracts && npm run verify:dependencies && npm run verify:fixtures && npm run verify:boundaries && npm run verify:source-artifacts",
       "status": "passed",
-      "evidence": "Document inventory, 114 local links, 45 anchors, whitespace, parser manifests, 76 decisions, 12 UI tokens, 8 structural rules, 448 visual combinations, CON-001 through CON-004, Owner-negative cases, and 45 dependency records with zero waivers passed."
+      "evidence": "All 57 Markdown files, 99 local links, 45 anchors, 77 decisions, 12 UI tokens, 8 structural rules, 448 capture combinations, CON-001 through CON-004, three JobRecord and four owner-routing negative mutations, 45 dependency records, two fixture manifests, import boundaries, and source-artifact checks passed."
     },
     {
-      "command": "npm run verify:prd-contract && npm run verify:traceability",
+      "command": "npm test && npm run typecheck && npm run build && npm run smoke:parser-workers && npm run smoke:macos-vision-ocr",
       "status": "passed",
-      "evidence": "The 151/9/10 scope baseline, 98 Requirements, 140 Builds, 96 Exits, 32 Deferred records, 1,051 semantic claims, 13 PRD negative cases, TRC-001 through TRC-005, and 22 traceability false-positive mutations passed; Scratch has no trace projection and PPTX evidence keeps partial states."
-    },
-    {
-      "command": "npm test && npm run typecheck",
-      "status": "passed",
-      "evidence": "All 54 test files and 318 tests passed; package and desktop type checks passed on the frozen implementation handoff."
-    },
-    {
-      "command": "npx vitest run tests/unit/pptx-media-ocr-artifact-service.test.ts tests/unit/jobs-service.test.ts tests/unit/evidence-assembly-service.test.ts tests/unit/macos-vision-ocr-adapter-smoke.test.ts",
-      "status": "passed",
-      "evidence": "The focused four-file, 48-test suite passed, including production-adapter PPTX media OCR, Job gating, evidence locators, private inputs, reuse, source revision, and referenced-original cases."
-    },
-    {
-      "command": "rm -f artifacts/documentation-quality/independent-review.json && npm run verify",
-      "status": "passed",
-      "evidence": "Root verification regenerated the ignored independent report before traceability consumed it, then passed TRC-001 through TRC-005, contracts, dependencies, fixtures, boundaries, source-artifact, leanness, and the final five-dimension scorecard after this binding."
+      "evidence": "All 56 test files and 334 tests, package and desktop type checks, production builds, PDF/Office/Web/PPTX worker smoke, PDF page rendering, and the real macOS Vision OCR helper and adapter smoke passed on the frozen candidate."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "All five leanness checks passed: 4,190 entry words, zero unapproved short-line/list/table/multiline/fenced/declaration/URL/near-prose groups, 14 mutation cases, 57 Markdown files, 5,487 trace lines, and 9.02% line reduction."
+      "evidence": "LEN-001 through LEN-005 passed: 3,857 of 4,200 entry words, zero duplicate groups, 14 mutations, 5,497 trace lines, 57 Markdown files, and an 8.67 percent line reduction from baseline."
+    },
+    {
+      "command": "node scripts/verify/independent-documentation-review.mjs --print-snapshot && explicit semantic-ledger comparison",
+      "status": "passed",
+      "evidence": "The governed snapshot is exactly ecc7c3584985d0538036e47ec512107044141e19f1c6795768c0506f130c8c78 across 101 files; the current and locked semantic ledgers both contain 1,052 claims with zero differing IDs or digests."
     }
   ],
   "coordination": {
@@ -145,32 +135,27 @@
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "P0-P9 phases, M0-M7 milestones, all stable Requirement/Build/Exit IDs, current statuses, and P5 open scope remain unchanged. The semantic lock advances to 1,051 only for one executable PPTX evidence claim and two acceptance digests. Scratch remains one static TECH reference with no dependency, acceptance, scope, or implementation-order effect.",
-    "acknowledgement": "The development task kept TECH §16.1 and the recipe frozen, delivered 54 files/318 tests plus build and real worker/OCR smokes, and then froze governed surfaces. Owner text and acceptance were synchronized by concise replacements; three fresh read-only reviewers checked the final 101-file combined snapshot before this single binding."
+    "compatibility": "README and four-role governance change public and workflow guidance without changing P0-P9, M0-M7, Requirement/Build/Exit IDs, PRD scope, or release states. Pi v0.80.6 remains review-only. Parse/OCR Job behavior gains executable progress, cooperative cancellation, and monotonic action-safety evidence while related requirement and exit states remain partial.",
+    "acknowledgement": "Development kept product and governance owners frozen, delivered the 56-file/334-test code evidence and precise selectors, accepted Product Planning's waiting/retry/cancel semantics, and froze implementation. Product Planning synchronized owners and acceptance, fixed verifier false-pass and role-intake gaps, then three read-only reviewers accepted the final exact snapshot."
   },
   "resolvedBlockers": [
-    "Removed the recurring quality-line slogan from repository guidance and kept completion criteria as internal verification rules rather than repeated response copy.",
-    "Recast the PRD as an AI Coding Agent product contract with explicit authority, optimization order, default user model, observable states, product scenarios, risks, and Owner references.",
-    "Added bidirectional PRD-impact classes and propagation controls, then preserved all 151 P0 items while removing implementation-detail leakage and duplicate future-scope prose.",
-    "Removed conflicting parser/runtime types, repeated technical limits, directory trees, Settings/SQLite/prompt blocks, copied policy/test lists, duplicate references, and repeated short normative sentences in favor of one Owner plus narrow projections.",
-    "Replaced the false-pass duplicate check with strict schema-v2 LEN-002 coverage for short lines, lists, tables, mixed blocks, fenced content, declarations, external URLs, and ordered near prose; zero unapproved groups and 14 mutation cases now pass.",
-    "Registered Paperling, Crawl4AI, Microsoft MarkItDown, OfficeCLI, LLM Wiki, AutoCLI, OpenDataLoader PDF, and Scratch once each as pinned static research; none enters dependency or acceptance manifests, and each retains explicit no-reuse/no-runtime boundaries.",
-    "Preserved and independently reviewed the Clean-Room Visual System, then made its machine manifest both an explicit snapshot root and a verifier-required root so the manual review cannot silently omit it; structural checks still do not claim packaged screenshot acceptance.",
-    "Aligned Source Storage, Parser, Job, Prompt, Playbook, Quality, and acceptance evidence with the implemented third SourceRecord check, create-only note publication, conflict preservation, same-source recovery, and strict untrusted output while preserving partial status and every residual commit window.",
-    "Corrected PDF/PPTX parser, OCR, revision, IPC, Job, Security, Playbook, Quality, and acceptance ownership as implementation evolved; explicit semantic review advanced the lock from 1,040 through 1,050 to 1,051 claims without changing stable IDs or partial states.",
-    "Completed the exact B5.12 deterministic contract with seven multilingual text/URL/PDF/PPTX/image-OCR cases and four negative controls, promoting only PIGE-EVAL-001 and E5.04 while preserving PIGE-PROMPT-001, E5.03, and P5 open scope.",
-    "Moved independent-report generation ahead of root traceability while retaining final scorecard regeneration, so a clean clone no longer fails TRC-005 merely because the ignored manual-review artifact has not yet been generated."
+    "Rewrote README as a 378-word product entry with user value, honest current capability, principles, v0.1 roadmap, and the Agent-authored automation goal instead of a technical inventory.",
+    "Made Product Planning the sole product, technical, development-management, and governance contract editor; kept detailed UI guidance with UI Design, code/evidence with Development, and delivery/Git/CI/releases with Project Management; cross-role edits require explicit scoped delegation.",
+    "Added Agent role, cross-role delegation, and Product Planning design-sync status to context, handoff, and PR intake; routed public design contributions to Planning or UI Design and added missing-field and missing-routing mutations.",
+    "Kept the PRD as the AI Coding Agent product contract and made PRD/Owner impact bidirectional without duplicating full definitions across documents.",
+    "Removed repeated parse/OCR and UI checklist prose in favor of exact Owner pointers; retained zero duplicate groups and reduced governed Markdown lines by 8.67 percent from baseline.",
+    "Deep-reviewed Pi v0.80.6 at a fixed commit and admitted only isolated selected-model binding and receiver-safe stream design as review-only guidance; no package, runtime, catalog, credential fallback, or dependency adoption occurred.",
+    "Synchronized process-local parse/OCR progress and cancellation, monotonic durable-write action safety, waiting and retry behavior, schema invariants, evidence, and open gaps without promoting partial states or adding a trace ID.",
+    "Repaired CON-002 so it isolates JobRecordSchema, checks root strictness and cross-field cancellation invariants, and rejects three in-memory false-positive mutations instead of matching a later unrelated schema."
   ],
   "nonBlockingRisks": [
-    "P5 remains in progress: strict cross-process SourceRecord CAS, parent-swap-resistant commits, cross-file transactions and orphan recovery, packaged/signed platform proof, Windows/Paddle, full-slide/vector/chart/DOCX-media and unsupported or oversized targets, full Pi-runtime proof, visible progress, and cooperative cancellation remain open.",
-    "The entry budget has only 10 words of headroom, trace manifests use 5,487 of 5,500 lines, and governed Markdown has only 562 words and 419 bytes of physical budget remaining; future additions must reclaim repetition or machine projection capacity in the same change.",
-    "TECH_ARCHITECTURE, PRD, and Decision Log remain large Owner documents; future Agents must continue section-targeted reads, while similarity checks remain complemented by Owner and focused contract gates.",
-    "External-reference pins are review-time facts; experiments must repeat license, provenance, SBOM, security, privacy, supply-chain, isolation, platform, and Permission Broker checks. Scratch v0.10.0 has only a README MIT claim and its tag lacks LICENSE; its code, styles, assets, TipTap/Tauri runtime, unsafe AI CLI/filesystem/Git/updater paths, and direct-write behavior are not authorized for reuse.",
-    "Root verification intentionally generates the ignored independent-review artifact before traceability and again inside the standalone documentation-quality sequence; the second write only refreshes generatedAt and is a small non-blocking runtime cost that preserves both clean-clone and standalone self-bootstrap behavior.",
-    "B5.12 is a synthetic deterministic evaluation over static model outputs; it verifies the exact E5.04 contract but does not prove arbitrary provider-model quality, real parser/OCR fidelity, or packaged-platform behavior. Public URL/DOCX/PDF/PPTX/image-OCR adversarial cases do not replace full Pi tool/Permission Broker runtime proof, so PIGE-PROMPT-001 and E5.03 remain partial.",
-    "The Clean-Room label records a repository implementation constraint, not a legal conclusion; future UI work must not reread or copy external code, branded assets, fonts, exact compositions, or other protected expression and may still require specialist legal review.",
-    "The focused evidence does not yet include an exact positive selector for PDF OCR merging into the latest Source Record, nor dedicated assertions for the 16 KiB preview limit and temporary-file flags; current status correctly remains partial.",
-    "The UI visual verifier checks governed structural markers, not semantic Owner equivalence, accessibility, or packaged fidelity; real macOS/Windows captures and human review remain open, and baseline PNG/sidecar retention or pruning must be defined when the capture runner is implemented.",
-    "Any intentional PRD scope, Owner contract, evidence, status, or semantic-claim change still requires readable impact review and explicit lock regeneration rather than mechanical acceptance."
+    "P5 remains in progress: non-parse/OCR Job-class action-safety propagation, other running-class cooperative cancellation, the domain-write-to-guard crash window, durable checkpoint arrays, strict cross-process CAS, parent-swap resistance, cross-file transactions, Windows/Paddle, packaged-platform proof, and visible progress/cancel UI remain open.",
+    "Pi v0.80.6 remains review-only until exact package pins, integrity/provenance, root MIT notice and SBOM, hermetic catalog/import gates, selected-binding fixtures, Permission Broker integration, and pinned Electron/Node platform smoke pass; the Owner and TECH pins are not yet cross-checked by a dedicated verifier.",
+    "Trace projections use 5,497 of 5,500 lines and the default entry uses 3,857 of 4,200 words; future semantic additions must reclaim projection or prose capacity in the same change instead of raising budgets.",
+    "Role ownership is enforced by instructions, templates, routing markers, and negative mutations rather than operating-system write permissions; reviewers must still detect semantically disguised role crossing and contributors must fill intake fields honestly.",
+    "PRD, TECH_ARCHITECTURE, and Decision Log remain large Owner documents; future Agents should continue section-targeted reads and define each fact once.",
+    "The concise pre-alpha README intentionally has no install button, screenshots, or release download; add those only when a usable signed build and governed visual evidence exist.",
+    "Structural UI gates do not prove packaged macOS/Windows fidelity, accessibility, or human visual approval; real capture and release evidence remain open.",
+    "External-reference pins are review-time facts. Any experiment must repeat license, provenance, supply-chain, privacy, isolation, platform, and replacement checks; no reviewed project is authorized for code or asset copying by its reference row."
   ]
 }

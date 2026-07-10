@@ -158,7 +158,7 @@ Rules:
 - Jobs must be idempotent or detect already-created outputs by ID/checksum.
 - Retry only safe operations automatically.
 - Never retry destructive actions without user confirmation.
-- User can cancel safe long jobs.
+- Process-local parse/OCR work checkpoints progress and cooperatively cancels; other Job classes and cross-process routing remain open.
 - Reopening the app resumes queued and retryable jobs.
 - Minimal source page generation must not read an entire large managed source just to create a preview. Read a bounded prefix for title/excerpt and keep the complete body in the managed source copy.
 - Markdown-scan Library fallback must read only bounded file prefixes for frontmatter. Full page body reads belong to note rendering, search indexing, or explicit open actions, not list queries.
@@ -270,7 +270,7 @@ Rules:
   verified outputs are reused rather than recomputed.
 - OCR work remains proportional to selected pages/images; exact sparse/image-only
   selection and snapshot integrity are Parser/Source Storage contracts.
-- Show progress for files expected to exceed 2 seconds.
+- Persist bounded progress for files expected to exceed 2 seconds; numeric Home display remains open.
 - Use the Job owner’s bounded, yielding scheduler rather than duplicating queue limits here.
 - Keep source records, source assets, and partial artifacts even if OCR fails.
 - Retry/recovery, Artifact integrity, Source Page conflict protection, and startup resume

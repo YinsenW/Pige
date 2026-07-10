@@ -292,14 +292,16 @@ Current implementation:
 
 - Capture Service writes queued capture job records under `.pige/jobs/YYYY/MM/`.
 - Jobs Service exposes `jobs.list` as a read-only safe-summary query for Home status after launch.
-- Jobs Service exposes `jobs.cancel` and `jobs.retry` as minimal durable-state updates for eligible non-running jobs.
+- Jobs Service exposes durable cancel/retry for eligible jobs; active process-local
+  parse/OCR uses `cancel_requested`, shared abort, and persisted stage/progress.
 - Jobs Service can synchronously process queued text/Markdown/TXT capture jobs into minimal source pages.
 - Jobs Service routes queued PDF/DOCX/PPTX sources through a document-parser registry into bounded worker-backed parse jobs, writes durable checksummed text/metadata artifacts, and gates Agent ingest on evidence quality. Direct images, verified PDF candidates, and parser-selected PPTX raster media run through `OcrPort`; runnable enrichment blocks first Agent ingest, while unavailable OCR may release useful native evidence with review warnings.
 - Parse and OCR runners write their OCR/Agent-ingest continuation Job before finalizing the upstream Job record, so a later parent-state or logging failure leaves a durable child plus a retryable parent.
 - Jobs Service can process queued Agent ingest jobs when a tested default model exists.
 - `maintenance.rebuildLocalDatabase` creates and completes an `index_rebuild` job before rebuilding SQLite metadata/FTS from Markdown.
 - Startup/vault activation reconciles interrupted idempotent capture/parse/OCR/Agent-ingest/index jobs, re-evaluates waiting Agent-ingest work against current model and runnable-PDF-OCR gates, resumes eligible work through coalesced background drainers, and marks uncertain interrupted work retryable with an explanation. Each service processes at most 20 jobs per batch and yields to the main loop before continuing, so multi-file drops are not silently capped by a query limit.
-- Full priority scheduling, cooperative worker cancellation, full-slide OCR, richer checkpoints, parent/child batch jobs, and compaction remain later work.
+- Running cancellation for other classes, cross-process routing, durable checkpoint
+  arrays, full-slide OCR, parent/child batches, priority scheduling, and compaction remain open.
 
 ### 5.1.3 Library Service
 
@@ -1858,9 +1860,8 @@ Waiver rules:
 | Vercel AI SDK | recommended | Provider registry pattern, model calls, streaming, tool use, structured output integration. | https://ai-sdk.dev | Pin npm packages per release; update provider support from official provider pages. | Calls may send selected source snippets to configured provider. |
 | AI SDK Providers list | reference | Source of supported provider families and capability metadata. | https://ai-sdk.dev/providers/ai-sdk-providers | Re-check during provider updates. | Do not expose every provider in default UI. |
 | Vercel AI Gateway model browser | reference | Upstream reference for provider/model catalog metadata; not a default Pige UI pattern. | https://vercel.com/ai-gateway/models | Re-check only when updating provider metadata assumptions. | Do not copy marketplace/table/filter complexity into Add Provider. |
-| Pi Agent framework | required | Agent orchestration layer, tool-call loop, state management, and model selection runtime. | https://github.com/earendil-works/pi | Pin npm package versions or repository commit per release; follow `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`; re-check model-routing APIs before exposing model-slot UI. | Pi itself does not enforce Pige permissions; route sensitive capabilities through Pige services. |
+| Pi Agent framework | required | Agent loop plus isolated provider/model runtime behind Pige adapters. | https://github.com/earendil-works/pi | Review-only at `v0.80.6`, commit `2b3fda9921b5590f285165287bd442a25817f17b`; adoption still requires the Pi Owner gates. | Exact dual-package manifest/integrity; no global imports, ambient credential/endpoint authority, CLI/RPC/binary, `@earendil-works/pi-orchestrator`, or Pi-owned permissions. |
 | Pi Custom Models docs | reference | Source for Pi provider/model configuration behavior, supported APIs, model fields, and thinking-level metadata. | https://pi.dev/docs/latest/models | Re-check during provider integration updates. | Supports model registration/selection, not a product-level Advanced/Fast routing UI by itself. |
-| Pi dual-model proposal | future | Track potential upstream support for separate reasoning/tool models. | https://github.com/earendil-works/pi/issues/2844 | Re-evaluate only if merged into a stable Pi release/API. | Do not expose user settings for this before supported by runtime code. |
 | OpenAI provider | required | BYOK generation provider option. | https://ai-sdk.dev/providers/ai-sdk-providers/openai | Pin SDK provider package if used. | Cloud boundary unless user points to local compatible service. |
 | OpenAI Models API (`provider.openai-models-api`) | required | Low-cost provider connection test and model-list discovery for OpenAI-format providers. | https://platform.openai.com/docs/api-reference/models/list | Re-check endpoint/auth behavior when updating provider integration. | User-supplied API key is sent only from the main process; no source content is sent during this test. |
 | OpenAI Chat Completions API (`provider.openai-chat-completions-api`) | required | Basic structured JSON Agent ingest generation for OpenAI-format providers before full Pi Agent orchestration. | https://platform.openai.com/docs/api-reference/chat/create | Re-check endpoint, JSON mode, and retention flags when updating provider integration. | Sends bounded redacted source previews to the configured provider from main process only. |
@@ -2018,6 +2019,8 @@ These exit paths must be considered before major dependency upgrades:
 - node:sqlite/better-sqlite3: keep `LocalDatabaseDriver` so Pige can switch drivers if runtime stability, packaging, or performance requires it.
 - SQLite FTS5/vector storage: keep indexes rebuildable so vector backend changes never rewrite durable knowledge.
 - Vercel AI SDK: keep Pige's provider registry and internal model call routing independent of any single SDK.
+- Pi Agent/AI: keep an app-owned adapter so Pi's runtime, provider factories, auth,
+  hooks, or breaking APIs can be replaced without changing Pige records or UI.
 - OpenAI/Anthropic providers: support compatible custom endpoints through the same provider abstraction.
 - Qwen3 Embedding GGUF: keep model manifest generic so another local embedding model can replace it after migration and index rebuild.
 - llama.cpp/node-llama-cpp: keep the Local RAG Engine behind an internal service boundary.

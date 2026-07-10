@@ -44,7 +44,8 @@ export class OcrArtifactService {
     vaultPath: string,
     sourceRecord: SourceRecord,
     sourceRecordPath: string,
-    job: JobRecord
+    job: JobRecord,
+    onPublicationStart?: () => void
   ): Promise<OcrSourceResult | undefined> {
     if (sourceRecord.kind !== "image_file") return undefined;
     const sourceFile = await tryVerifyReadableSourceFileAsync(vaultPath, sourceRecord);
@@ -60,6 +61,7 @@ export class OcrArtifactService {
     const sidecar = await readJsonObject(resolveVaultRelativePath(vaultPath, metadataArtifact.path));
     if (!isReusableSidecar(sidecar, sourceRecord, sourceFile.checksum, textArtifact)) return undefined;
 
+    onPublicationStart?.();
     const page = this.#sourcePages.refreshForSource(vaultPath, sourceRecord, sourceRecordPath, job.id);
     const storedWarnings = stringArray(sidecar.warnings);
     const warnings = page.conflict ? [...storedWarnings, sourcePageConflictWarning()] : storedWarnings;

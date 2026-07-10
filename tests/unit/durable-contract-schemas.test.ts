@@ -202,6 +202,65 @@ describe("durable contract schemas", () => {
     })).toThrow();
   });
 
+  it("pairs cancellation request identity while allowing a durable safety fact without a request", () => {
+    const base = {
+      id: "job_20260710_cancel12",
+      class: "ocr" as const,
+      state: "failed_retryable" as const,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      message: "Durable output remains retryable."
+    };
+
+    expect(JobRecordSchema.parse({
+      ...base,
+      cancellation: {
+        safeCheckpointId: "pdf_pages_staging_started",
+        durableWritesApplied: true
+      }
+    }).cancellation).toEqual({
+      safeCheckpointId: "pdf_pages_staging_started",
+      durableWritesApplied: true
+    });
+    expect(JobRecordSchema.parse({
+      ...base,
+      cancellation: { requestedAt: timestamp, requestedBy: "user", durableWritesApplied: false }
+    }).cancellation?.requestedBy).toBe("user");
+    expect(() => JobRecordSchema.parse({
+      ...base,
+      cancellation: { requestedAt: timestamp, durableWritesApplied: true }
+    })).toThrow("must both be present or both be absent");
+    expect(() => JobRecordSchema.parse({
+      ...base,
+      cancellation: { requestedBy: "system", durableWritesApplied: true }
+    })).toThrow("must both be present or both be absent");
+    expect(JobRecordSchema.parse({
+      ...base,
+      state: "cancelled",
+      cancellation: { durableWritesApplied: false }
+    }).state).toBe("cancelled");
+    expect(JobRecordSchema.parse({ ...base, state: "cancelled" }).state).toBe("cancelled");
+    expect(() => JobRecordSchema.parse({
+      ...base,
+      state: "cancelled",
+      cancellation: { durableWritesApplied: true }
+    })).toThrow("cannot have durableWritesApplied set to true");
+    expect(() => JobRecordSchema.parse({
+      ...base,
+      state: "cancel_requested"
+    })).toThrow("must include requestedAt and requestedBy");
+    expect(() => JobRecordSchema.parse({
+      ...base,
+      state: "cancel_requested",
+      cancellation: { durableWritesApplied: true }
+    })).toThrow("must include requestedAt and requestedBy");
+    expect(JobRecordSchema.parse({
+      ...base,
+      state: "cancel_requested",
+      cancellation: { requestedAt: timestamp, requestedBy: "user", durableWritesApplied: true }
+    }).state).toBe("cancel_requested");
+  });
+
   it("records lifecycle operations with policy-audit evidence", () => {
     const operation = OperationRecordSchema.parse({
       id: "op_20260710_abcdef12",

@@ -105,7 +105,8 @@ export class ParserArtifactService {
     sourceRecordPath: string,
     job: JobRecord,
     format: NormalizedParserExtraction["format"],
-    expectedParser: ParserDescriptor
+    expectedParser: ParserDescriptor,
+    onPublicationStart?: () => void
   ): DocumentParseSourceResult | undefined {
     const sourceFile = tryVerifyReadableSourceFile(vaultPath, sourceRecord);
     if (!sourceFile) return undefined;
@@ -122,6 +123,7 @@ export class ParserArtifactService {
     const sidecar = readJsonObject(resolveVaultRelativePath(vaultPath, metadataArtifact.path));
     if (!isReusableSidecar(sidecar, sourceRecord, sourceFile.checksum, format, expectedParser, extractedTextArtifact)) return undefined;
 
+    onPublicationStart?.();
     const page = this.#sourcePages.refreshForSource(vaultPath, sourceRecord, sourceRecordPath, job.id);
     const parserWarnings = stringArrayMetadata(sidecar.warnings);
     const warnings = page.conflict
@@ -148,7 +150,8 @@ export class ParserArtifactService {
     sourceRecord: SourceRecord,
     sourceRecordPath: string,
     job: JobRecord,
-    extraction: NormalizedParserExtraction
+    extraction: NormalizedParserExtraction,
+    onPublicationStart?: () => void
   ): DocumentParseSourceResult {
     const parsedSource = SourceRecordSchema.parse(sourceRecord);
     const sourceFile = verifyReadableSourceFile(vaultPath, parsedSource);
@@ -161,6 +164,7 @@ export class ParserArtifactService {
     }
     assertNoReservedMetadataKeys(extraction.sidecarMetadata, SIDECAR_RESERVED_KEYS, "sidecar");
     assertNoReservedMetadataKeys(extraction.sourceMetadata, SOURCE_METADATA_RESERVED_KEYS, "source");
+    onPublicationStart?.();
     const dateBucket = sourceDateBucket(parsedSource.id);
     const extractedTextArtifactPath = extraction.text.length > 0
       ? ["artifacts", "extracted-text", ...dateBucket, `${parsedSource.id}.txt`].join("/")

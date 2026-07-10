@@ -1553,19 +1553,24 @@ Supersedes: D-20260709-Phase-2-Read-Only-Job-Status-Recovery
 
 Decision:
 
-Phase 2 exposes safe read-only job recovery through `jobs.list` and implements `jobs.cancel` and `jobs.retry` as minimal durable-state transitions for eligible non-running persisted jobs.
+Phase 2 exposes safe recovery through `jobs.list`, durable cancel/retry for eligible
+persisted jobs, and process-local cooperative cancellation for active parse/OCR work.
 
 Rationale:
 
-Home status recovery is incomplete if preserved jobs can be seen but not acted on. The first implementation should let users cancel queued work without deleting sources and requeue safe failed/waiting/cancelled work without introducing a full worker scheduler too early.
+Users need safe action on preserved jobs without requiring a full scheduler.
 
 Consequences:
 
-- `jobs.cancel` can mark `queued`, `waiting_dependency`, `waiting_permission`, or `failed_retryable` jobs as `cancelled`.
+- `jobs.cancel` can directly cancel eligible non-running work only when
+  `durableWritesApplied !== true`; active parse/OCR enters idempotent `cancel_requested`.
 - `jobs.retry` can mark `failed_retryable`, `waiting_dependency`, or `cancelled` jobs as `queued`.
 - Cancelling a job does not delete source records, managed source copies, conversation events, proposals, operation records, memory, or Markdown.
-- Completed, running, final-failed, compacted, and review-awaiting jobs are not mutated by these Phase 2 actions.
-- Cooperative worker cancellation through `cancel_requested`, scheduling, parent/child batch jobs, and compaction are outside this minimal job-control decision.
+- A direct-to-`cancelled` state with a true action-safety guard returns `not_allowed`,
+  and retry keeps the guard. Active parse/OCR may request a safe cooperative stop;
+  unsupported running and final/review states reject cancellation.
+- Other running classes, cross-process routing, durable checkpoint arrays, scheduling,
+  parent/child batches, and compaction remain outside this decision.
 
 References:
 
@@ -2332,6 +2337,30 @@ References:
 - `docs/SPEC_TRACEABILITY.md`
 - `docs/QUALITY_AND_TEST_STRATEGY.md`
 - `resources/traceability/semantic-claims.manifest.json`
+
+### D-20260710-Agent-Authored-Role-Separation
+
+Status: Accepted
+Date: 2026-07-10
+
+Decision:
+
+Pige implementation is Agent-authored. Project Management owns delivery, Planning owns
+contracts, UI Design owns visual guidance, and Development owns code, tests, fixtures,
+and executable evidence; role crossing requires delegation.
+
+Rationale:
+
+Role separation limits drift while humans retain direction, review, and release authority.
+
+Consequences:
+
+- Handoffs name role/task, scoped delegation, and Product Planning sync status; gates remain mandatory.
+
+References:
+
+- `docs/AI_DEVELOPMENT_GUIDE.md`
+- `.github/pull_request_template.md`
 
 ## 4. Deferred Decisions
 

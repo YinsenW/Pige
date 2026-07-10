@@ -5,6 +5,7 @@ import { Worker } from "node:worker_threads";
 import { PigeDomainError } from "@pige/domain";
 import { SourceRecordSchema, type JobRecord, type SourceKind, type SourceRecord } from "@pige/schemas";
 import { OFFICE_PARSER_WORKER_ENTRY_RELATIVE_PATH } from "../../shared/office-parser-entry";
+import { JobCancellationError, type JobExecutionControl } from "./job-execution-control";
 import {
   ParserArtifactService,
   type DocumentParseSourceResult
@@ -34,7 +35,7 @@ type OfficeSourceKind = Extract<SourceKind, "docx_file" | "pptx_file">;
 
 export interface OfficeTextExtractor {
   isAvailable?(): boolean;
-  extract(filePath: string, sourceKind: OfficeSourceKind): Promise<OfficeExtractionResult>;
+  extract(filePath: string, sourceKind: OfficeSourceKind, signal?: AbortSignal): Promise<OfficeExtractionResult>;
 }
 
 export class OfficeParserWorkerAdapter implements OfficeTextExtractor {
@@ -64,7 +65,8 @@ export class OfficeParserWorkerAdapter implements OfficeTextExtractor {
     }
   }
 
-  extract(filePath: string, sourceKind: OfficeSourceKind): Promise<OfficeExtractionResult> {
+  extract(filePath: string, sourceKind: OfficeSourceKind, signal?: AbortSignal): Promise<OfficeExtractionResult> {
+    if (signal?.aborted) return Promise.reject(new JobCancellationError());
     const request: OfficeParserRequest = {
       requestId: randomUUID(),
       filePath,
@@ -86,16 +88,22 @@ export class OfficeParserWorkerAdapter implements OfficeTextExtractor {
         resourceLimits: { maxOldGenerationSizeMb: 512 }
       });
       let settled = false;
+      let timeout: ReturnType<typeof setTimeout> | undefined;
       const finish = (callback: () => void): void => {
         if (settled) return;
         settled = true;
-        clearTimeout(timeout);
+        if (timeout) clearTimeout(timeout);
+        signal?.removeEventListener("abort", onAbort);
         void worker.terminate();
         callback();
       };
-      const timeout = setTimeout(() => {
+      const onAbort = (): void => {
+        finish(() => reject(new JobCancellationError()));
+      };
+      timeout = setTimeout(() => {
         finish(() => reject(new PigeDomainError("parser.office.timeout", "Office text extraction exceeded the local time limit.")));
       }, this.#timeoutMs);
+      signal?.addEventListener("abort", onAbort, { once: true });
 
       worker.once("message", (message: OfficeParserWorkerResponse) => {
         if (!message || message.requestId !== request.requestId) {
@@ -138,24 +146,36 @@ export class OfficeParserService {
     vaultPath: string,
     sourceRecord: SourceRecord,
     sourceRecordPath: string,
-    job: JobRecord
+    job: JobRecord,
+    control?: JobExecutionControl
   ): Promise<DocumentParseSourceResult> {
+    control?.throwIfCancellationRequested();
     const parsedSource = SourceRecordSchema.parse(sourceRecord);
     if (parsedSource.kind !== "docx_file" && parsedSource.kind !== "pptx_file") {
       throw new PigeDomainError("parser.unsupported_source", "The Office parser cannot process this source kind.");
     }
     const format = parsedSource.kind === "docx_file" ? "docx" : "pptx";
     const parser = { id: OFFICE_PARSER_ID, engine: OFFICE_PARSER_ENGINE, version: OFFICE_PARSER_VERSION } as const;
-    const existing = this.#artifacts.readExisting(vaultPath, parsedSource, sourceRecordPath, job, format, parser);
+    const existing = this.#artifacts.readExisting(
+      vaultPath,
+      parsedSource,
+      sourceRecordPath,
+      job,
+      format,
+      parser,
+      () => control?.markDurableCheckpoint("office_parser_artifact_publication_started")
+    );
     if (existing) return existing;
 
+    control?.throwIfCancellationRequested();
     const sourceSnapshot = await createVerifiedSourceFileSnapshotAsync(vaultPath, parsedSource);
     let extraction: OfficeExtractionResult;
     try {
-      extraction = await this.#extractor.extract(sourceSnapshot.absolutePath, parsedSource.kind);
+      extraction = await this.#extractor.extract(sourceSnapshot.absolutePath, parsedSource.kind, control?.signal);
     } finally {
       await sourceSnapshot.dispose();
     }
+    control?.throwIfCancellationRequested();
     if (extraction.format !== format) {
       throw new PigeDomainError("parser.office.format_mismatch", "The Office parser returned the wrong document format.");
     }
@@ -204,6 +224,6 @@ export class OfficeParserService {
         officeStructure: extraction.structure
       },
       warnings: extraction.warnings
-    });
+    }, () => control?.markDurableCheckpoint("office_parser_artifact_publication_started"));
   }
 }

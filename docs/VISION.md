@@ -68,9 +68,10 @@ Extensibility must remain permissioned and product-scoped. Pige is a Personal Kn
 
 ### 3.7 AI-Native Development
 
-The repository should be designed for long-running AI-assisted development.
-
-Documents, names, module boundaries, contracts, tests, and decision logs should lower context cost for future AI Coding Agents.
+AI Coding Agents author and maintain Pige's implementation code; humans direct,
+provide references, review evidence, and authorize releases. Contracts, boundaries,
+tests, and decisions lower future Agent context cost. The goal is safe end-to-end
+maintenance automation without weakening evidence, security, or release gates.
 
 ### 3.8 Documentation Is For AI
 

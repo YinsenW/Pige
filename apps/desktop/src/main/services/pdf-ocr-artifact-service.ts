@@ -232,7 +232,8 @@ export class PdfOcrArtifactService {
     vaultPath: string,
     sourceRecord: SourceRecord,
     sourceRecordPath: string,
-    job: JobRecord
+    job: JobRecord,
+    onPublicationStart?: () => void
   ): Promise<OcrSourceResult | undefined> {
     if (sourceRecord.kind !== "pdf_file") return undefined;
     const target = await this.resolveTarget(vaultPath, sourceRecord);
@@ -266,6 +267,7 @@ export class PdfOcrArtifactService {
     ) || !isReusablePdfRenderSidecar(renderSidecar, sourceRecord, sourceFile.checksum, target)) return undefined;
     if (!await renderedArtifactsMatch(vaultPath, sourceRecord, sidecar.pages as readonly unknown[])) return undefined;
 
+    onPublicationStart?.();
     const page = this.#sourcePages.refreshForSource(vaultPath, sourceRecord, sourceRecordPath, job.id);
     const storedWarnings = stringArray(sidecar.warnings);
     const warnings = page.conflict ? [...storedWarnings, sourcePageConflictWarning()] : storedWarnings;

@@ -1344,12 +1344,13 @@
       "evidence": [
         "EV-JOB-DRAIN",
         "EV-JOB-CANCEL",
+        "EV-JOB-DURABLE-CANCEL",
         "EV-PDF-OCR-SOURCE-REVISION",
         "EV-PDF-RENDER-GENERATION"
       ],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-002",
-        "description": "Parser/model retries still need duplicate-page and duplicate-operation assertions.",
+        "description": "Non-parse/OCR Job-class action-safety propagation across queued, waiting, failed, and cancellation transitions; cooperative cancellation for other running classes; cross-process recovery between a durability boundary and its persisted guard; durable checkpoint arrays; and remaining retry assertions stay open.",
         "targetBuilds": [
           "B2.08",
           "B2.11"
@@ -1435,11 +1436,12 @@
       "status": "partial",
       "evidence": [
         "EV-JOB-STATUS",
-        "EV-JOB-WAIT"
+        "EV-JOB-WAIT",
+        "EV-JOB-CANCEL"
       ],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-007",
-        "description": "Waiting-permission, confirmation-needed, failure, and completion UI integration remains open.",
+        "description": "Numeric Home progress, running cancel controls, pushed events, waiting-permission, confirmation, failure, and completion UI remain open.",
         "targetBuilds": [
           "B2.10",
           "B2.12"
@@ -2955,11 +2957,12 @@
       "status": "partial",
       "evidence": [
         "EV-JOB-STATUS",
-        "EV-JOB-WAIT"
+        "EV-JOB-WAIT",
+        "EV-JOB-CANCEL"
       ],
       "open": {
         "id": "OPEN-EXIT-E2.09",
-        "description": "Full executable acceptance remains open for Exit E2.09: Home and timeline show durable, localized, redacted job state and progress without claiming completion early.",
+        "description": "Numeric localized Home/timeline progress, running cancel controls, and pushed progress events remain open for E2.09.",
         "targetBuilds": [
           "B2.10",
           "B2.12"
@@ -2973,12 +2976,13 @@
       "status": "partial",
       "evidence": [
         "EV-JOB-CANCEL",
+        "EV-JOB-DURABLE-CANCEL",
         "EV-PDF-OCR-SOURCE-REVISION",
         "EV-PDF-RENDER-GENERATION"
       ],
       "open": {
         "id": "OPEN-EXIT-E2.10",
-        "description": "Full executable acceptance remains open for Exit E2.10: Retry is idempotent; cancellation preserves sources and leaves no half-enabled UI or ambiguous durable state.",
+        "description": "Non-parse/OCR Job-class action-safety propagation across queued, waiting, failed, and cancellation transitions; cooperative cancellation for other running classes; cross-process routing/recovery; durable checkpoint arrays; abandon/archive; and visible cancellation UI remain open for E2.10.",
         "targetBuilds": [
           "B2.11"
         ],
@@ -3899,8 +3903,13 @@
     },
     "EV-JOB-CANCEL": {
       "kind": "test",
-      "path": "tests/unit/jobs-service.test.ts",
-      "selector": "cancels queued jobs without deleting preserved sources"
+      "path": "tests/unit/job-cooperative-cancellation.test.ts",
+      "selector": "cancels running image OCR before durable output and clears retry orchestration state"
+    },
+    "EV-JOB-DURABLE-CANCEL": {
+      "kind": "test",
+      "path": "tests/unit/job-cooperative-cancellation.test.ts",
+      "selector": "protects durable partial outputs across failure, dependency wait, retry, and cooperative cancellation"
     },
     "EV-JOB-DRAIN": {
       "kind": "test",

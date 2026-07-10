@@ -16,6 +16,7 @@ import {
   SourceRecordSchema,
   type JobClass,
   type JobRecord,
+  type JobStage,
   type JobState,
   type SourceKind,
   type SourceRecord
@@ -25,6 +26,13 @@ import type { DocumentParserPort } from "./document-parser-service";
 import { SourcePageService } from "./source-page-service";
 import type { LocalDatabaseService } from "./local-database-service";
 import type { OcrPort, OcrSourceCapability } from "./ocr-service";
+import {
+  JobCancellationError,
+  type JobCancellationBoundary,
+  type JobDurableWriteState,
+  type JobExecutionControl,
+  type JobProgressUpdate
+} from "./job-execution-control";
 
 export interface JobsVaultPort {
   current(): VaultSummary | undefined;
@@ -96,6 +104,7 @@ const DEFAULT_JOB_LIST_LIMIT = 20;
 const MAX_JOB_LIST_LIMIT = 100;
 const CANCELABLE_STATES = new Set<JobState>(["queued", "waiting_dependency", "waiting_permission", "failed_retryable"]);
 const RETRYABLE_STATES = new Set<JobState>(["failed_retryable", "waiting_dependency", "cancelled"]);
+const COOPERATIVELY_CANCELABLE_CLASSES = new Set<JobClass>(["parse", "ocr"]);
 
 export class JobsService {
   readonly #vaults: JobsVaultPort;
@@ -104,6 +113,7 @@ export class JobsService {
   readonly #database: LocalDatabaseService | undefined;
   readonly #documentParser: DocumentParserPort | undefined;
   readonly #ocr: OcrPort | undefined;
+  readonly #activeExecutions = new Map<string, AbortController>();
 
   constructor(
     vaults: JobsVaultPort,
@@ -154,6 +164,53 @@ export class JobsService {
       return { status: "not_found", reason: "Job record was not found." };
     }
 
+    if (jobFile.job.state === "cancel_requested") {
+      return {
+        status: "cancel_requested",
+        job: toJobSummary(vaultPath, jobFile.job)
+      };
+    }
+
+    if (jobFile.job.state === "running") {
+      const controller = this.#activeExecutions.get(jobFile.job.id);
+      if (!controller || !COOPERATIVELY_CANCELABLE_CLASSES.has(jobFile.job.class)) {
+        return {
+          status: "not_allowed",
+          reason: `Running ${jobFile.job.class} jobs do not support cooperative cancellation.`,
+          job: toJobSummary(vaultPath, jobFile.job)
+        };
+      }
+      const requestedAt = new Date().toISOString();
+      const updatedJob = JobRecordSchema.parse({
+        ...jobFile.job,
+        state: "cancel_requested",
+        updatedAt: requestedAt,
+        cancellation: {
+          ...jobFile.job.cancellation,
+          requestedAt,
+          requestedBy: "user"
+        },
+        message: "Cancellation requested; waiting for a safe local checkpoint."
+      });
+      writeJsonAtomic(jobFile.path, updatedJob);
+      controller.abort();
+      return {
+        status: "cancel_requested",
+        job: toJobSummary(vaultPath, updatedJob)
+      };
+    }
+
+    if (
+      CANCELABLE_STATES.has(jobFile.job.state) &&
+      jobFile.job.cancellation?.durableWritesApplied === true
+    ) {
+      return {
+        status: "not_allowed",
+        reason: "A retained action-safety guard prevents clean cancellation; the job remains retryable.",
+        job: toJobSummary(vaultPath, jobFile.job)
+      };
+    }
+
     if (!CANCELABLE_STATES.has(jobFile.job.state)) {
       return {
         status: "not_allowed",
@@ -162,10 +219,19 @@ export class JobsService {
       };
     }
 
+    const cancelledAt = new Date().toISOString();
     const updatedJob = JobRecordSchema.parse({
       ...jobFile.job,
       state: "cancelled",
-      updatedAt: new Date().toISOString(),
+      updatedAt: cancelledAt,
+      finishedAt: cancelledAt,
+      cancellation: {
+        ...jobFile.job.cancellation,
+        requestedAt: cancelledAt,
+        requestedBy: "user",
+        safeCheckpointId: "before_durable_write",
+        durableWritesApplied: false
+      },
       message: "Job cancelled. Preserved source data remains in the vault."
     });
     writeJsonAtomic(jobFile.path, updatedJob);
@@ -190,10 +256,22 @@ export class JobsService {
       };
     }
 
+    const preserveDurableWrites = jobFile.job.cancellation?.durableWritesApplied === true;
+    const {
+      stage: _stage,
+      startedAt: _startedAt,
+      finishedAt: _finishedAt,
+      progress: _progress,
+      cancellation: _cancellation,
+      error: _error,
+      waitingDependency: _waitingDependency,
+      ...retryableJob
+    } = jobFile.job;
     const updatedJob = JobRecordSchema.parse({
-      ...jobFile.job,
+      ...retryableJob,
       state: "queued",
       updatedAt: new Date().toISOString(),
+      ...(preserveDurableWrites ? { cancellation: { durableWritesApplied: true } } : {}),
       message: "Job requeued for later processing."
     });
     writeJsonAtomic(jobFile.path, updatedJob);
@@ -377,28 +455,32 @@ export class JobsService {
         continue;
       }
 
-      const runningJob = JobRecordSchema.parse({
-        ...jobFile.job,
-        state: "running",
-        updatedAt: new Date().toISOString(),
-        message: "Extracting document text in the local parser worker."
-      });
-      writeJsonAtomic(jobFile.path, runningJob);
+      const execution = this.#beginCooperativeExecution(
+        jobFile.path,
+        jobFile.job,
+        "parsing",
+        "Extracting document text in the local parser worker."
+      );
+      const runningJob = execution.job;
 
       try {
+        execution.control.reportProgress({ completedUnits: 0, totalUnits: 1, unit: "document" });
         const result = await parser.parseSource(
           vaultPath,
           sourceRecordFile.sourceRecord,
           sourceRecordFile.path,
-          runningJob
+          runningJob,
+          execution.control
         );
         const hasWarnings = result.needsOcr || result.sourcePageConflict || result.warnings.length > 0;
-        const completedJob = JobRecordSchema.parse({
-          ...runningJob,
-          state: hasWarnings ? "completed_with_warnings" : "completed",
-          updatedAt: new Date().toISOString(),
-          message: createParseCompletionMessage(result, sourceRecordFile.sourceRecord.kind)
-        });
+        const completedJob = this.#completeCooperativeExecution(
+          jobFile.path,
+          runningJob,
+          hasWarnings ? "completed_with_warnings" : "completed",
+          createParseCompletionMessage(result, sourceRecordFile.sourceRecord.kind),
+          "document",
+          execution.control.durableWriteState()
+        );
         const refreshedSource = readSourceRecord(vaultPath, sourceRecordFile.sourceRecord.id) ?? sourceRecordFile.sourceRecord;
         let ocrCapability: OcrSourceCapability | undefined;
         if (result.needsOcr) {
@@ -423,18 +505,24 @@ export class JobsService {
           vaultPath,
           `${new Date().toISOString()} Parsed ${documentLabel(refreshedSource.kind)} source \`${refreshedSource.id}\`: ${result.textCharacterCount} text characters, coverage ${result.textCoverage}.${result.needsOcr ? " OCR enrichment is waiting." : ""}`
         );
-        writeJsonAtomic(jobFile.path, completedJob);
         completed += 1;
       } catch (caught) {
-        const failure = parseFailure(caught, sourceRecordFile.sourceRecord.kind);
-        if (failure.waiting) {
-          markJobWaitingDependency(jobFile.path, runningJob, failure.message);
-        } else if (failure.final) {
-          markJobFailedFinal(jobFile.path, runningJob, failure.message);
+        const cancellation = resolveCancellation(execution.control, caught);
+        if (cancellation) {
+          markJobCancellationOutcome(jobFile.path, runningJob, cancellation);
         } else {
-          markJobFailedRetryable(jobFile.path, runningJob, failure.message);
+          const failure = parseFailure(caught, sourceRecordFile.sourceRecord.kind);
+          if (failure.waiting) {
+            markJobWaitingDependency(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
+          } else if (failure.final) {
+            markJobFailedFinal(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
+          } else {
+            markJobFailedRetryable(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
+          }
         }
         failed += 1;
+      } finally {
+        this.#finishCooperativeExecution(runningJob.id, execution.controller);
       }
     }
 
@@ -478,32 +566,39 @@ export class JobsService {
         continue;
       }
 
-      const runningJob = JobRecordSchema.parse({
-        ...jobFile.job,
-        state: "running",
-        updatedAt: new Date().toISOString(),
-        message: sourceRecordFile.sourceRecord.kind === "pdf_file"
+      const execution = this.#beginCooperativeExecution(
+        jobFile.path,
+        jobFile.job,
+        "ocr",
+        sourceRecordFile.sourceRecord.kind === "pdf_file"
           ? "Rendering verified PDF page targets and recognizing them with local OCR."
           : sourceRecordFile.sourceRecord.kind === "pptx_file"
             ? "Materializing verified PPTX media targets and recognizing them with local OCR."
             : "Recognizing image text with the local platform OCR helper."
-      });
-      writeJsonAtomic(jobFile.path, runningJob);
+      );
+      const runningJob = execution.job;
 
       try {
         const result = await ocr.ocrSource(
           vaultPath,
           sourceRecordFile.sourceRecord,
           sourceRecordFile.path,
-          runningJob
+          runningJob,
+          execution.control
         );
         const hasWarnings = !result.agentTextReady || result.sourcePageConflict || result.warnings.length > 0;
-        const completedJob = JobRecordSchema.parse({
-          ...runningJob,
-          state: hasWarnings ? "completed_with_warnings" : "completed",
-          updatedAt: new Date().toISOString(),
-          message: createOcrCompletionMessage(result, sourceRecordFile.sourceRecord.kind)
-        });
+        const completedJob = this.#completeCooperativeExecution(
+          jobFile.path,
+          runningJob,
+          hasWarnings ? "completed_with_warnings" : "completed",
+          createOcrCompletionMessage(result, sourceRecordFile.sourceRecord.kind),
+          sourceRecordFile.sourceRecord.kind === "pdf_file"
+            ? "page"
+            : sourceRecordFile.sourceRecord.kind === "pptx_file"
+              ? "media"
+              : "image",
+          execution.control.durableWriteState()
+        );
         if (result.agentTextReady) {
           ensureAgentIngestJob(vaultPath, completedJob, sourceRecordFile.sourceRecord.id, canRunAgentIngest(this.#agentIngest));
           agentReadySourceIds.push(sourceRecordFile.sourceRecord.id);
@@ -512,32 +607,38 @@ export class JobsService {
           vaultPath,
           `${new Date().toISOString()} OCR processed ${documentLabel(sourceRecordFile.sourceRecord.kind)} source \`${sourceRecordFile.sourceRecord.id}\`: ${result.textCharacterCount} text characters.${result.confidence !== undefined ? ` confidence ${result.confidence.toFixed(3)}.` : ""}`
         );
-        writeJsonAtomic(jobFile.path, completedJob);
         completed += 1;
       } catch (caught) {
-        const failure = ocrFailure(caught, sourceRecordFile.sourceRecord.kind);
-        if (failure.waiting) {
-          if (
-            sourceRecordFile.sourceRecord.metadata.agentTextReady === true &&
-            isOcrCapabilityUnavailableError(caught)
-          ) {
-            ensureAgentIngestJob(
-              vaultPath,
-              runningJob,
-              sourceRecordFile.sourceRecord.id,
-              canRunAgentIngest(this.#agentIngest)
-            );
-            if (!agentReadySourceIds.includes(sourceRecordFile.sourceRecord.id)) {
-              agentReadySourceIds.push(sourceRecordFile.sourceRecord.id);
-            }
-          }
-          markJobWaitingDependency(jobFile.path, runningJob, failure.message);
-        } else if (failure.final) {
-          markJobFailedFinal(jobFile.path, runningJob, failure.message);
+        const cancellation = resolveCancellation(execution.control, caught);
+        if (cancellation) {
+          markJobCancellationOutcome(jobFile.path, runningJob, cancellation);
         } else {
-          markJobFailedRetryable(jobFile.path, runningJob, failure.message);
+          const failure = ocrFailure(caught, sourceRecordFile.sourceRecord.kind);
+          if (failure.waiting) {
+            if (
+              sourceRecordFile.sourceRecord.metadata.agentTextReady === true &&
+              isOcrCapabilityUnavailableError(caught)
+            ) {
+              ensureAgentIngestJob(
+                vaultPath,
+                runningJob,
+                sourceRecordFile.sourceRecord.id,
+                canRunAgentIngest(this.#agentIngest)
+              );
+              if (!agentReadySourceIds.includes(sourceRecordFile.sourceRecord.id)) {
+                agentReadySourceIds.push(sourceRecordFile.sourceRecord.id);
+              }
+            }
+            markJobWaitingDependency(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
+          } else if (failure.final) {
+            markJobFailedFinal(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
+          } else {
+            markJobFailedRetryable(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
+          }
         }
         failed += 1;
+      } finally {
+        this.#finishCooperativeExecution(runningJob.id, execution.controller);
       }
     }
 
@@ -735,6 +836,228 @@ export class JobsService {
     }
     return vaultPath;
   }
+
+  #beginCooperativeExecution(
+    jobPath: string,
+    job: JobRecord,
+    stage: JobStage,
+    message: string
+  ): { readonly job: JobRecord; readonly controller: AbortController; readonly control: JobExecutionControl } {
+    const controller = new AbortController();
+    const startedAt = new Date().toISOString();
+    const preserveDurableWrites = job.cancellation?.durableWritesApplied === true;
+    const {
+      stage: _previousStage,
+      startedAt: _previousStartedAt,
+      finishedAt: _previousFinishedAt,
+      progress: _previousProgress,
+      cancellation: _previousCancellation,
+      ...jobBase
+    } = job;
+    const runningJob = JobRecordSchema.parse({
+      ...jobBase,
+      state: "running",
+      stage,
+      startedAt,
+      updatedAt: startedAt,
+      ...(preserveDurableWrites ? { cancellation: { durableWritesApplied: true } } : {}),
+      message
+    });
+    this.#activeExecutions.set(job.id, controller);
+    try {
+      writeJsonAtomic(jobPath, runningJob);
+    } catch (caught) {
+      this.#activeExecutions.delete(job.id);
+      throw caught;
+    }
+    return {
+      job: runningJob,
+      controller,
+      control: new FileBackedJobExecutionControl(jobPath, controller, {
+        durableWritesApplied: preserveDurableWrites
+      })
+    };
+  }
+
+  #completeCooperativeExecution(
+    jobPath: string,
+    fallback: JobRecord,
+    state: Extract<JobState, "completed" | "completed_with_warnings">,
+    message: string,
+    defaultUnit: string,
+    durableState: JobDurableWriteState
+  ): JobRecord {
+    const current = readJobRecordAtPath(jobPath) ?? fallback;
+    const cancellationArrivedBeforePublication = current.state === "cancel_requested";
+    const progress = completedProgress(current.progress, defaultUnit);
+    const finishedAt = new Date().toISOString();
+    const completedJob = JobRecordSchema.parse({
+      ...withDurableWriteState(current, durableState),
+      state: cancellationArrivedBeforePublication ? "completed_with_warnings" : state,
+      progress,
+      updatedAt: finishedAt,
+      finishedAt,
+      ...(cancellationArrivedBeforePublication ? {
+        cancellation: {
+          ...current.cancellation,
+          safeCheckpointId: "durable_output_committed",
+          durableWritesApplied: true
+        }
+      } : {}),
+      message: cancellationArrivedBeforePublication
+        ? "Durable output committed before cancellation could safely apply; the completed result was preserved."
+        : message
+    });
+    writeJsonAtomic(jobPath, completedJob);
+    return completedJob;
+  }
+
+  #finishCooperativeExecution(jobId: string, controller: AbortController): void {
+    if (this.#activeExecutions.get(jobId) === controller) this.#activeExecutions.delete(jobId);
+  }
+}
+
+class FileBackedJobExecutionControl implements JobExecutionControl {
+  readonly signal: AbortSignal;
+  readonly #jobPath: string;
+  #durableWritesApplied: boolean;
+  #durableCheckpointId: string | undefined;
+
+  constructor(jobPath: string, controller: AbortController, initialState: JobDurableWriteState) {
+    this.#jobPath = jobPath;
+    this.signal = controller.signal;
+    this.#durableWritesApplied = initialState.durableWritesApplied;
+    this.#durableCheckpointId = initialState.safeCheckpointId;
+  }
+
+  throwIfCancellationRequested(boundary: JobCancellationBoundary = {}): void {
+    const current = readJobRecordAtPath(this.#jobPath);
+    if (!this.signal.aborted && current?.state !== "cancel_requested") return;
+    const safeCheckpointId = boundary.safeCheckpointId ?? this.#durableCheckpointId;
+    throw new JobCancellationError({
+      durableWritesApplied: this.#durableWritesApplied || boundary.durableWritesApplied === true,
+      ...(safeCheckpointId ? { safeCheckpointId } : {})
+    });
+  }
+
+  reportProgress(progress: JobProgressUpdate, boundary: JobCancellationBoundary = {}): void {
+    this.throwIfCancellationRequested(boundary);
+    const current = readJobRecordAtPath(this.#jobPath);
+    if (!current || current.state !== "running") {
+      throw new Error("Job progress can only be recorded for the active running job.");
+    }
+    const nextProgress = normalizeProgress(current.progress, progress);
+    writeJsonAtomic(this.#jobPath, JobRecordSchema.parse({
+      ...current,
+      progress: nextProgress,
+      updatedAt: new Date().toISOString()
+    }));
+  }
+
+  markDurableCheckpoint(checkpointId: string): void {
+    if (!checkpointId) throw new Error("A durable checkpoint id is required.");
+    this.#durableWritesApplied = true;
+    this.#durableCheckpointId = checkpointId;
+  }
+
+  durableWriteState(): JobDurableWriteState {
+    return {
+      durableWritesApplied: this.#durableWritesApplied,
+      ...(this.#durableCheckpointId ? { safeCheckpointId: this.#durableCheckpointId } : {})
+    };
+  }
+}
+
+function normalizeProgress(
+  current: JobRecord["progress"],
+  update: JobProgressUpdate
+): NonNullable<JobRecord["progress"]> {
+  const totalUnits = update.totalUnits ?? current?.totalUnits;
+  const unit = update.unit ?? current?.unit;
+  const messageKey = update.messageKey ?? current?.messageKey;
+  if (!Number.isFinite(update.completedUnits) || update.completedUnits < 0) {
+    throw new Error("Job progress completed units must be finite and non-negative.");
+  }
+  if (totalUnits !== undefined && (
+    !Number.isFinite(totalUnits) ||
+    totalUnits <= 0 ||
+    update.completedUnits > totalUnits
+  )) {
+    throw new Error("Job progress must stay within its positive total-unit bound.");
+  }
+  if (current && update.completedUnits < current.completedUnits) {
+    throw new Error("Job progress must be monotonic.");
+  }
+  if (
+    current?.totalUnits !== undefined &&
+    update.totalUnits !== undefined &&
+    current.totalUnits !== update.totalUnits
+  ) {
+    throw new Error("Job progress total units cannot change during one execution.");
+  }
+  if (current?.unit && update.unit && current.unit !== update.unit) {
+    throw new Error("Job progress units cannot change during one execution.");
+  }
+  return {
+    completedUnits: update.completedUnits,
+    ...(totalUnits !== undefined ? { totalUnits } : {}),
+    ...(unit ? { unit } : {}),
+    ...(messageKey ? { messageKey } : {})
+  };
+}
+
+function completedProgress(
+  current: JobRecord["progress"],
+  defaultUnit: string
+): NonNullable<JobRecord["progress"]> {
+  const totalUnits = current?.totalUnits;
+  return {
+    completedUnits: totalUnits ?? Math.max(current?.completedUnits ?? 0, 1),
+    ...(totalUnits !== undefined ? { totalUnits } : {}),
+    unit: current?.unit ?? defaultUnit,
+    ...(current?.messageKey ? { messageKey: current.messageKey } : {})
+  };
+}
+
+function resolveCancellation(
+  control: JobExecutionControl,
+  caught: unknown
+): JobCancellationError | undefined {
+  try {
+    control.throwIfCancellationRequested();
+  } catch (cancellation) {
+    if (cancellation instanceof JobCancellationError) return cancellation;
+  }
+  return caught instanceof JobCancellationError ? caught : undefined;
+}
+
+function markJobCancellationOutcome(
+  filePath: string,
+  fallback: JobRecord,
+  cancellation: JobCancellationError
+): void {
+  const current = readJobRecordAtPath(filePath) ?? fallback;
+  const finishedAt = new Date().toISOString();
+  const durableWritesApplied = current.cancellation?.durableWritesApplied === true || cancellation.durableWritesApplied;
+  const safeCheckpointId = cancellation.safeCheckpointId ??
+    current.cancellation?.safeCheckpointId ??
+    (durableWritesApplied ? undefined : "before_durable_write");
+  writeJsonAtomic(filePath, JobRecordSchema.parse({
+    ...current,
+    state: durableWritesApplied ? "failed_retryable" : "cancelled",
+    updatedAt: finishedAt,
+    finishedAt,
+    cancellation: {
+      ...current.cancellation,
+      requestedAt: current.cancellation?.requestedAt ?? finishedAt,
+      requestedBy: current.cancellation?.requestedBy ?? "system",
+      ...(safeCheckpointId ? { safeCheckpointId } : {}),
+      durableWritesApplied
+    },
+    message: durableWritesApplied
+      ? "A retained action-safety guard prevents clean cancellation; the job remains retryable."
+      : "Job cancelled at a safe checkpoint. Preserved source data remains in the vault."
+  }));
 }
 
 function canRunAgentIngest(agentIngest: AgentIngestService | undefined): boolean {
@@ -908,6 +1231,15 @@ function readJobRecordFile(vaultPath: string, jobId: string): { path: string; jo
   }
 }
 
+function readJobRecordAtPath(jobPath: string): JobRecord | undefined {
+  try {
+    const parsed = JobRecordSchema.safeParse(JSON.parse(fs.readFileSync(jobPath, "utf8")));
+    return parsed.success ? parsed.data : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function listJsonFiles(root: string): string[] {
   const files: string[] = [];
   for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
@@ -929,6 +1261,8 @@ function toJobSummary(vaultPath: string, job: JobRecord): JobSummary {
     id: job.id,
     class: job.class,
     state: job.state,
+    ...(job.stage ? { stage: job.stage } : {}),
+    ...(job.progress ? { progress: job.progress } : {}),
     ...(job.sourceId ? { sourceId: job.sourceId } : {}),
     ...(job.captureId ? { captureId: job.captureId } : {}),
     ...(job.conversationEventId ? { conversationEventId: job.conversationEventId } : {}),
@@ -958,18 +1292,30 @@ function readSourceRecordFile(vaultPath: string, sourceId: string): { path: stri
   }
 }
 
-function markJobFailedRetryable(filePath: string, job: JobRecord, message: string): void {
+function markJobFailedRetryable(
+  filePath: string,
+  job: JobRecord,
+  message: string,
+  durableState?: JobDurableWriteState
+): void {
+  const current = readJobRecordAtPath(filePath) ?? job;
   writeJsonAtomic(filePath, JobRecordSchema.parse({
-    ...job,
+    ...withDurableWriteState(current, durableState),
     state: "failed_retryable",
     updatedAt: new Date().toISOString(),
     message
   }));
 }
 
-function markJobWaitingDependency(filePath: string, job: JobRecord, message: string): void {
+function markJobWaitingDependency(
+  filePath: string,
+  job: JobRecord,
+  message: string,
+  durableState?: JobDurableWriteState
+): void {
+  const current = readJobRecordAtPath(filePath) ?? job;
   writeJsonAtomic(filePath, JobRecordSchema.parse({
-    ...job,
+    ...withDurableWriteState(current, durableState),
     state: "waiting_dependency",
     updatedAt: new Date().toISOString(),
     message
@@ -977,21 +1323,41 @@ function markJobWaitingDependency(filePath: string, job: JobRecord, message: str
 }
 
 function markJobWaitingPermission(filePath: string, job: JobRecord, message: string): void {
+  const current = readJobRecordAtPath(filePath) ?? job;
   writeJsonAtomic(filePath, JobRecordSchema.parse({
-    ...job,
+    ...current,
     state: "waiting_permission",
     updatedAt: new Date().toISOString(),
     message
   }));
 }
 
-function markJobFailedFinal(filePath: string, job: JobRecord, message: string): void {
+function markJobFailedFinal(
+  filePath: string,
+  job: JobRecord,
+  message: string,
+  durableState?: JobDurableWriteState
+): void {
+  const current = readJobRecordAtPath(filePath) ?? job;
   writeJsonAtomic(filePath, JobRecordSchema.parse({
-    ...job,
+    ...withDurableWriteState(current, durableState),
     state: "failed_final",
     updatedAt: new Date().toISOString(),
     message
   }));
+}
+
+function withDurableWriteState(job: JobRecord, state?: JobDurableWriteState): JobRecord {
+  const durableWritesApplied = job.cancellation?.durableWritesApplied === true || state?.durableWritesApplied === true;
+  if (!durableWritesApplied) return job;
+  return JobRecordSchema.parse({
+    ...job,
+    cancellation: {
+      ...job.cancellation,
+      ...(state?.safeCheckpointId ? { safeCheckpointId: state.safeCheckpointId } : {}),
+      durableWritesApplied: true
+    }
+  });
 }
 
 function needsParserOrOcr(sourceKind: SourceKind): boolean {
