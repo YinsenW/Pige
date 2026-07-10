@@ -1978,6 +1978,7 @@ Reference-only capture, conversion, and local-tool evaluation:
 | pi-memory | reference | Markdown-first memory reference. | https://github.com/jayzeng/pi-memory | Reference only unless curated later. | Not default memory runtime. |
 | Engram | reference | Agent-agnostic memory reference. | https://github.com/Gentleman-Programming/engram | Reference only unless curated later. | Not default memory runtime. |
 | LLM Wiki (`reference.llm-wiki`) | reference | Adjacent implementation research for incremental Markdown-wiki maintenance and Pige-owned staged-ingest, graph-relevance, and Knowledge Health comparison fixtures. | https://github.com/nashsu/llm_wiki | Reviewed at `v0.6.1`, commit `5bd5efe9478496b20ff2195f0b59ceecc890b4eb`; repeat license and security review before reusing any idea. | GPL-3.0 upstream; static research only. No code, assets, fixtures, runtime, API/MCP/Skill/shell/cloud-parser reuse or acceptance role. |
+| AutoCLI (`reference.autocli`) | reference | Declarative adapter-to-command mapping, visual-selection recipe generation, and structured-output comparison for future reviewed runtime adapters. | https://github.com/nashsu/AutoCLI | Reviewed at `v0.3.8`, commit `c0969e2c83b29a7528452b1ba555085deca8e00d`; repeat license and security review before reusing an idea. | Root declares Apache-2.0 with NOTICE; static research only. No code, adapters, assets, binary/extension/daemon, cookies/sessions/CDP/page JS, external-CLI passthrough, cloud generation/sharing, or acceptance role. |
 
 ### 16.9 Internationalization And Format Standards
 

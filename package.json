@@ -23,7 +23,7 @@
     "test:eval": "vitest run tests/evals",
     "lint": "npm run verify:boundaries",
     "format:check": "npm run verify:whitespace",
-    "verify": "npm run verify:docs && npm run verify:decisions && npm run verify:ui-visual && npm run verify:traceability && npm run verify:contracts && npm run verify:dependencies && npm run verify:fixtures && npm run verify:boundaries && npm run verify:source-artifacts && npm run verify:documentation-leanness && npm run verify:documentation-quality",
+    "verify": "npm run verify:docs && npm run verify:decisions && npm run verify:ui-visual && npm run verify:independent-documentation-review && npm run verify:traceability && npm run verify:contracts && npm run verify:dependencies && npm run verify:fixtures && npm run verify:boundaries && npm run verify:source-artifacts && npm run verify:documentation-leanness && npm run verify:documentation-quality",
     "verify:docs": "npm run verify:links && npm run verify:whitespace && npm run verify:doc-map && npm run verify:parser-manifests && npm run verify:prd-contract",
     "verify:links": "node scripts/verify/markdown-links.mjs",
     "verify:whitespace": "node scripts/verify/trailing-whitespace.mjs",

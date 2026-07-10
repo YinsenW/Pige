@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-10T12:13:20Z",
+  "reviewedAt": "2026-07-10T12:33:54Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,12 +30,12 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "e5a6d5d312c3863a973eccf66e309bcc0e1d98e088e1b1a188d50977e4713dc4"
+    "reviewedSha256": "7820ac9808e76aa6fa91edd67921f13d612899a2b80361022f4b698ba402e531"
   },
   "reviewers": [
     {
-      "reviewerId": "llmwiki-final-docs-review",
-      "task": "/root/llmwiki_final_docs_review",
+      "reviewerId": "autocli-final-docs-review",
+      "task": "/root/autocli_final_docs_review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -43,21 +43,11 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Fresh read-only reviewer on the exact 101-file B5.12/LLM Wiki candidate; independently checked the TECH reference row, upstream tag/license/security surface, Owner/trace status changes, navigation and lifecycle controls, evidence selectors, budgets, and active-development compatibility without editing files."
+      "independence": "Fresh read-only reviewer on the exact 101-file AutoCLI and clean-clone-order candidate; independently checked the fixed upstream tag, license/NOTICE and security boundary, single TECH ownership, absence of dependency or acceptance projection, budgets, and package verification order without editing files."
     },
     {
-      "reviewerId": "llmwiki-final-trace-review",
-      "task": "/root/llmwiki_final_trace_review",
-      "independentDimensions": [
-        "cross_document_contract_consistency",
-        "continuous_traceability_and_acceptance",
-        "ongoing_development_support"
-      ],
-      "independence": "Fresh read-only PRD/trace/evidence reviewer on the exact 101-file candidate; independently traced B5.12 Owner wording, v3 fixtures, negative controls, executable selectors, status/open-gap boundaries, stable IDs, PRD scope, and the 1,050-claim semantic lock without editing files."
-    },
-    {
-      "reviewerId": "llmwiki-final-development-review",
-      "task": "/root/llmwiki_final_dev_review",
+      "reviewerId": "autocli-final-ci-review",
+      "task": "/root/autocli_final_ci_review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -65,44 +55,56 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Fresh read-only active-development and governance reviewer on the exact 101-file candidate; independently checked snapshot coverage, phase and stable-ID continuity, exact status-promotion scope, Owner separation, reference-only adoption cost, residual P5 work, and capacity without editing files."
+      "independence": "Fresh read-only CI and trace reviewer on the exact 101-file candidate; independently validated the missing-report clean-cache sequence in an isolated copy, TRC-005 artifact and recipe wiring, PRD and stable-ID continuity, contracts, dependencies, and the absence of semantic changes without editing the shared repository."
+    },
+    {
+      "reviewerId": "autocli-final-development-review",
+      "task": "/root/autocli_final_dev_review",
+      "independentDimensions": [
+        "navigation_and_resource_lifecycle",
+        "cross_document_contract_consistency",
+        "continuous_traceability_and_acceptance",
+        "ongoing_development_support",
+        "documentation_leanness_and_maintainability"
+      ],
+      "independence": "Fresh read-only active-development and governance reviewer on the exact 101-file candidate; independently checked snapshot coverage, P5 and D5.01 boundaries, phase and stable-ID continuity, AutoCLI no-runtime scope, package-only CI support, residual work, and capacity without editing files."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "llmwiki-final-docs-review",
+      "reviewerId": "autocli-final-docs-review",
       "blockerCount": 0,
-      "summary": "All 57 Markdown and two distribution files remain uniquely governed; 114 local links and 45 anchors resolve; LLM Wiki has one canonical TECH registry row and no dependency or trace projection, while task packs and lifecycle reclamation remain explicit."
+      "summary": "All 57 Markdown and two distribution files remain uniquely governed; 114 local links and 45 anchors resolve; AutoCLI has one canonical TECH registry row and no dependency or trace projection, while root verification now regenerates the ignored independent report before traceability consumes it."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "llmwiki-final-trace-review",
+      "reviewerId": "autocli-final-ci-review",
       "blockerCount": 0,
-      "summary": "Quality owns the executable B5.12 evaluation contract, the Playbook owns P5 phase state, acceptance owns Requirement/Exit status and evidence, and TECH owns the LLM Wiki reference row; CON-001 through CON-004 pass with no duplicated normative owner or incompatible projection."
+      "summary": "TECH alone owns the AutoCLI static-reference boundary, package scripts alone own verifier order, and existing PRD, Skill, Security, acceptance, trace, dependency, and P5 Owners remain unchanged; CON-001 through CON-004 and Owner-negative cases pass without duplicated normative ownership."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "llmwiki-final-trace-review",
+      "reviewerId": "autocli-final-ci-review",
       "blockerCount": 0,
-      "summary": "B5.12's seven deterministic multilingual cases and four negative controls precisely support PIGE-EVAL-001 and E5.04 as verified; PIGE-PROMPT-001 and E5.03 correctly remain partial pending full Pi tool/Permission Broker runtime proof. All 151 P0 items, 98 Requirements, 140 Builds, 96 Exits, stable IDs, and 1,050 semantic claims remain controlled."
+      "summary": "The clean-cache root sequence generates EV-DOCQUALITY-INDEPENDENT before TRC-005 and retains final scorecard regeneration; isolated missing-report verification passed TRC-001 through TRC-005 and 22 mutations. All 151 P0 items, 98 Requirements, 140 Builds, 96 Exits, statuses, stable IDs, and 1,050 semantic claims remain controlled."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "llmwiki-final-development-review",
+      "reviewerId": "autocli-final-development-review",
       "blockerCount": 0,
-      "summary": "The two exact status promotions close only B5.12/E5.04 and do not reorder P5, unlock later phases, change dependencies, or narrow remaining P5 work; the LLM Wiki row is static research with no manifest, package, runtime, fixture, or acceptance role."
+      "summary": "AutoCLI remains fixed-commit static research with no runtime, dependency, fixture, or acceptance role; P5 stays in progress and D5.01 stays deferred. The package-only ordering fix removes clean-clone CI friction without phase reordering, product behavior, evidence, or implementation-order change."
     },
     {
       "id": "documentation_leanness_and_maintainability",
-      "reviewerId": "llmwiki-final-docs-review",
+      "reviewerId": "autocli-final-docs-review",
       "blockerCount": 0,
       "score": 9.6,
-      "summary": "LEN-001 through LEN-005 pass with 4,190 entry words, 57 Markdown files, 22,810 lines, 162,804 words, 1,208,114 bytes, 5,479 trace lines, zero duplicate groups, and 14 mutation cases; the single compact LLM Wiki row adds no machine projection, though capacity remains tight."
+      "summary": "LEN-001 through LEN-005 pass with 4,190 entry words, 57 Markdown files, 22,811 lines, 162,865 words, 1,208,695 bytes, 5,479 trace lines, zero duplicate groups, and 14 mutation cases; the compact AutoCLI row adds no machine projection, though capacity remains tight."
     }
   ],
   "verification": [
@@ -114,7 +116,7 @@
     {
       "command": "npm run verify:prd-contract && npm run verify:traceability",
       "status": "passed",
-      "evidence": "The 151/9/10 scope baseline, 98 Requirements, 140 Builds, 96 Exits, 32 Deferred records, 1,050 semantic claims, 13 PRD negative cases, TRC-001 through TRC-005, and 22 traceability false-positive mutations passed; the exact B5.12 contract supports verified PIGE-EVAL-001 and E5.04 while adjacent prompt controls remain partial."
+      "evidence": "The 151/9/10 scope baseline, 98 Requirements, 140 Builds, 96 Exits, 32 Deferred records, 1,050 semantic claims, 13 PRD negative cases, TRC-001 through TRC-005, and 22 traceability false-positive mutations passed; AutoCLI has no trace projection."
     },
     {
       "command": "npm test && npm run typecheck",
@@ -127,9 +129,14 @@
       "evidence": "The focused two-file, seven-test B5.12 and untrusted-source evaluation passed on the exact reviewed candidate."
     },
     {
+      "command": "rm -f artifacts/documentation-quality/independent-review.json && npm run verify",
+      "status": "passed",
+      "evidence": "Root verification regenerated the missing ignored independent report before traceability consumed it, then passed TRC-001 through TRC-005, contracts, dependencies, fixtures, boundaries, source-artifact, leanness, and the final five-dimension scorecard."
+    },
+    {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "All five leanness checks passed: 4,190 entry words, zero unapproved short-line/list/table/multiline/fenced/declaration/URL/near-prose groups, 14 mutation cases, 57 Markdown files, 5,479 trace lines, and 9.04% line reduction."
+      "evidence": "All five leanness checks passed: 4,190 entry words, zero unapproved short-line/list/table/multiline/fenced/declaration/URL/near-prose groups, 14 mutation cases, 57 Markdown files, 5,479 trace lines, and 9.03% line reduction."
     }
   ],
   "coordination": {
@@ -138,8 +145,8 @@
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "P0-P9 phases, M0-M7 milestones, and all stable Requirement/Build/Exit IDs remain unchanged. PIGE-EVAL-001 and E5.04 moved from partial to verified only under the exact B5.12 deterministic contract; PIGE-PROMPT-001 and E5.03 remain partial, P5 remains in progress, and the LLM Wiki TECH row remains reference-only with no dependency, acceptance, scope, or implementation-order effect.",
-    "acknowledgement": "The development task acknowledged a one-row TECH §16.8 lock while B5.12 code, fixtures, tests, Quality, Playbook, acceptance, and semantic-lock work proceeded in disjoint ranges. The recipe stayed frozen until both slices reached one stable candidate; three fresh read-only reviewers then checked the exact 101-file snapshot before this single combined binding."
+    "compatibility": "P0-P9 phases, M0-M7 milestones, all stable Requirement/Build/Exit IDs, the 1,050-claim semantic lock, current statuses, and P5 open scope remain unchanged. AutoCLI is one static TECH reference with no dependency, acceptance, D5.01, scope, or implementation-order effect; the package-only verifier-order fix changes clean-clone CI sequencing but no product or contract semantics.",
+    "acknowledgement": "The development task acknowledged a one-row TECH §16.8 lock and contributed the disjoint package.json report-generation ordering fix while keeping all other governed files frozen. The recipe remained frozen until one exact candidate was available; three fresh read-only reviewers checked the 101-file snapshot, including an isolated missing-report root verification, before this single combined binding."
   },
   "resolvedBlockers": [
     "Removed the recurring quality-line slogan from repository guidance and kept completion criteria as internal verification rules rather than repeated response copy.",
@@ -147,17 +154,19 @@
     "Added bidirectional PRD-impact classes and propagation controls, then preserved all 151 P0 items while removing implementation-detail leakage and duplicate future-scope prose.",
     "Removed conflicting parser/runtime types, repeated technical limits, directory trees, Settings/SQLite/prompt blocks, copied policy/test lists, duplicate references, and repeated short normative sentences in favor of one Owner plus narrow projections.",
     "Replaced the false-pass duplicate check with strict schema-v2 LEN-002 coverage for short lines, lists, tables, mixed blocks, fenced content, declarations, external URLs, and ordered near prose; zero unapproved groups and 14 mutation cases now pass.",
-    "Registered Paperling, Crawl4AI, Microsoft MarkItDown, OfficeCLI, and LLM Wiki once each as pinned static research; none enters dependency or acceptance manifests, and each retains explicit no-reuse/no-runtime boundaries.",
+    "Registered Paperling, Crawl4AI, Microsoft MarkItDown, OfficeCLI, LLM Wiki, and AutoCLI once each as pinned static research; none enters dependency or acceptance manifests, and each retains explicit no-reuse/no-runtime boundaries.",
     "Preserved and independently reviewed the Clean-Room Visual System, then made its machine manifest both an explicit snapshot root and a verifier-required root so the manual review cannot silently omit it; structural checks still do not claim packaged screenshot acceptance.",
     "Aligned Source Storage, Parser, Job, Prompt, Playbook, Quality, and acceptance evidence with the implemented third SourceRecord check, create-only note publication, conflict preservation, same-source recovery, and strict untrusted output while preserving partial status and every residual commit window.",
     "Corrected the initial universal pre-Artifact-baseline wording for PDF OCR, accepted the reviewed semantic evolution from 1,040 through 1,046 to 1,050 claims, and restored dependency/UI checklist items to their proper Markdown section ownership before final review.",
-    "Completed the exact B5.12 deterministic contract with seven multilingual text/URL/PDF/PPTX/image-OCR cases and four negative controls, promoting only PIGE-EVAL-001 and E5.04 while preserving PIGE-PROMPT-001, E5.03, and P5 open scope."
+    "Completed the exact B5.12 deterministic contract with seven multilingual text/URL/PDF/PPTX/image-OCR cases and four negative controls, promoting only PIGE-EVAL-001 and E5.04 while preserving PIGE-PROMPT-001, E5.03, and P5 open scope.",
+    "Moved independent-report generation ahead of root traceability while retaining final scorecard regeneration, so a clean clone no longer fails TRC-005 merely because the ignored manual-review artifact has not yet been generated."
   ],
   "nonBlockingRisks": [
     "P5 remains in progress: Source Page and Agent evidence checks still lack strict cross-process SourceRecord-to-note CAS across the check-to-link window, parent-swap-resistant destination binding, true cross-file transactions, and packaged-platform hard-link proof; Windows/Paddle, slide/media OCR, visible progress, and cooperative cancellation also remain open.",
-    "The entry budget has only 10 words of headroom, trace manifests use 5,479 of 5,500 lines, and governed documentation has only 696 words and 1,886 bytes of physical budget remaining; future additions must reclaim repetition or machine projection capacity in the same change.",
+    "The entry budget has only 10 words of headroom, trace manifests use 5,479 of 5,500 lines, and governed documentation has only 635 words and 1,305 bytes of physical budget remaining; future additions must reclaim repetition or machine projection capacity in the same change.",
     "TECH_ARCHITECTURE, PRD, and Decision Log remain large Owner documents; future Agents must continue section-targeted reads, while similarity checks remain complemented by Owner and focused contract gates.",
-    "Paperling, Crawl4AI, MarkItDown, OfficeCLI, and LLM Wiki pins are review-time facts; any experiment must repeat license, security, supply-chain, isolation, and platform checks. LLM Wiki remains GPL-3.0 static research only, and its code, assets, fixtures, runtime, API/MCP/Skill/shell, cloud-parser, secret-storage, and deletion patterns are not authorized for reuse.",
+    "Paperling, Crawl4AI, MarkItDown, OfficeCLI, LLM Wiki, and AutoCLI pins are review-time facts; any experiment must repeat license, NOTICE/third-party provenance, security, privacy, supply-chain, isolation, platform, and Permission Broker checks. AutoCLI remains static research only: code, adapters, assets, binaries, extensions, daemon, cookies/sessions/CDP/page JS, external CLIs, cloud generation/sharing, and its separate Skill repository are not authorized for reuse.",
+    "Root verification intentionally generates the ignored independent-review artifact before traceability and again inside the standalone documentation-quality sequence; the second write only refreshes generatedAt and is a small non-blocking runtime cost that preserves both clean-clone and standalone self-bootstrap behavior.",
     "B5.12 is a synthetic deterministic evaluation over static model outputs; it verifies the exact E5.04 contract but does not prove arbitrary provider-model quality, real parser/OCR fidelity, or packaged-platform behavior. Public URL/DOCX/PDF/PPTX/image-OCR adversarial cases do not replace full Pi tool/Permission Broker runtime proof, so PIGE-PROMPT-001 and E5.03 remain partial.",
     "The Clean-Room label records a repository implementation constraint, not a legal conclusion; future UI work must not reread or copy external code, branded assets, fonts, exact compositions, or other protected expression and may still require specialist legal review.",
     "The focused evidence does not yet include an exact positive selector for PDF OCR merging into the latest Source Record, nor dedicated assertions for the 16 KiB preview limit and temporary-file flags; current status correctly remains partial.",
