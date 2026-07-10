@@ -1060,6 +1060,77 @@ describe("agent ingest service", () => {
     expect(operation).not.toContain(ocrText);
   });
 
+  it("renders PPTX embedded-media OCR citations with slide and media provenance", async () => {
+    const { vaultPath, vault } = makeVault();
+    const captured = makeCapture(vaultPath, vault).submitText({
+      text: "preserved PPTX placeholder",
+      inputKind: "typed_text",
+      userIntent: "capture",
+      locale: "en"
+    });
+    const sourceRecord = readJson<SourceRecord>(findFile(path.join(vaultPath, ".pige/source-records"), `${captured.sourceId}.json`));
+    const job = readJson<JobRecord>(findFile(path.join(vaultPath, ".pige/jobs"), `${captured.jobId}.json`));
+    const body = "Screenshot-only roadmap evidence.";
+    const header = "--- Slide 1 Media 1 ---\n";
+    const text = `${header}${body}`;
+    const textPath = `artifacts/ocr/2026/07/${captured.sourceId}.pptx-media.txt`;
+    const metadataPath = `artifacts/metadata/2026/07/${captured.sourceId}.pptx-media-ocr.json`;
+    const textChecksum = checksumText(text);
+    const metadataText = JSON.stringify({
+      schemaVersion: 1,
+      artifactId: "art_pptx_media_ocr_metadata",
+      sourceId: captured.sourceId,
+      kind: "pptx_media_ocr_metadata",
+      ocrTextChecksum: textChecksum,
+      units: [{
+        locator: "slide:1/media:1/ocr:block:1",
+        parentLocator: "slide:1",
+        characterStart: header.length,
+        characterEnd: header.length + body.length,
+        confidence: 0.95
+      }]
+    });
+    writeVaultFile(vaultPath, textPath, text);
+    writeVaultFile(vaultPath, metadataPath, metadataText);
+    const pptxSource: SourceRecord = {
+      ...sourceRecord,
+      kind: "pptx_file",
+      artifacts: [{
+        id: "art_pptx_media_ocr_text",
+        kind: "ocr",
+        path: textPath,
+        checksum: textChecksum,
+        size: Buffer.byteLength(text)
+      }, {
+        id: "art_pptx_media_ocr_metadata",
+        kind: "metadata",
+        path: metadataPath,
+        checksum: checksumText(metadataText),
+        size: Buffer.byteLength(metadataText)
+      }],
+      metadata: { ...sourceRecord.metadata, needsOcr: false, ocrConfidence: 0.95, ocrWarnings: [] }
+    };
+    const modelClient = new CapturingModelClient({
+      title: "PPTX screenshot evidence",
+      summary: { text: "The slide screenshot contains roadmap evidence.", evidenceRefs: ["ev_01"] },
+      keyPoints: [{ text: "The roadmap is visible only in embedded media.", evidenceRefs: ["ev_01"] }],
+      tags: [],
+      topics: [],
+      entities: [],
+      warnings: [],
+      confidence: "high"
+    });
+
+    const result = await new AgentIngestService(makeModelPort(), modelClient).ingestSource(vaultPath, pptxSource, job);
+    const note = fs.readFileSync(path.join(vaultPath, result.pagePath), "utf8");
+    const operation = requireOperation(readOperationFiles(vaultPath), '"kind": "create_page"').text;
+
+    expect(modelClient.lastUserPrompt).toContain('locator="slide:1/media:1/ocr:block:1"');
+    expect(note).toContain(`[source:${captured.sourceId}#slide1-media1-ocr1]`);
+    expect(operation).toContain('"id": "art_pptx_media_ocr_text"');
+    expect(operation).not.toContain(body);
+  });
+
   it("refuses a changed extracted artifact before any model call", async () => {
     const { vaultPath, vault } = makeVault();
     const capture = makeCapture(vaultPath, vault);

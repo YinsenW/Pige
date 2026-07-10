@@ -11,16 +11,20 @@ import { CaptureService, type SourceFetchPort } from "../../apps/desktop/src/mai
 import { DocumentParserService, type DocumentParserPort } from "../../apps/desktop/src/main/services/document-parser-service";
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
 import { LocalDatabaseService } from "../../apps/desktop/src/main/services/local-database-service";
+import type { OfficeMediaMaterializerPort } from "../../apps/desktop/src/main/services/office-media-materializer-service";
 import { extractOfficeText } from "../../apps/desktop/src/main/services/office-parser-core";
 import { OfficeParserService } from "../../apps/desktop/src/main/services/office-parser-service";
 import {
+  OFFICE_MEDIA_MATERIALIZER_ID,
+  OFFICE_MEDIA_MATERIALIZER_VERSION,
   OFFICE_PARSER_MAX_BYTES,
   OFFICE_PARSER_MAX_ENTRIES,
   OFFICE_PARSER_MAX_SELECTED_XML_BYTES,
   OFFICE_PARSER_MAX_SLIDES,
   OFFICE_PARSER_MAX_TEXT_CHARACTERS,
   OFFICE_PARSER_MAX_UNCOMPRESSED_BYTES,
-  OFFICE_PARSER_MAX_XML_ENTRY_BYTES
+  OFFICE_PARSER_MAX_XML_ENTRY_BYTES,
+  type OfficeMediaTarget
 } from "../../apps/desktop/src/main/services/office-parser-types";
 import { extractPdfText } from "../../apps/desktop/src/main/services/pdf-parser-core";
 import { PdfParserService } from "../../apps/desktop/src/main/services/pdf-parser-service";
@@ -40,7 +44,7 @@ import type { NativeOcrResult } from "../../apps/desktop/src/main/services/ocr-t
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
 import type { VaultSummary } from "@pige/contracts";
-import { createTestDocx, createTestPptx } from "./helpers/office-fixture";
+import { createTestDocx, createTestPptx, TINY_PNG } from "./helpers/office-fixture";
 import { createTestPdf } from "./helpers/pdf-fixture";
 import { createJpegScanPdf } from "./helpers/pdf-image-fixture";
 
@@ -1348,6 +1352,73 @@ describe("jobs service", () => {
     expect(jobs.list({ classes: ["parse"], states: ["completed_with_warnings"], limit: 10 }).jobs).toHaveLength(2);
   });
 
+  it("delays PPTX Agent ingest until selected embedded media completes local OCR", async () => {
+    const { vaultPath, vault } = makeVault();
+    const adapter = new StaticNativeOcrAdapter(validNativeOcrResult({
+      text: "Screenshot-only roadmap evidence",
+      blocks: [{
+        text: "Screenshot-only roadmap evidence",
+        kind: "line",
+        confidence: 0.95,
+        boundingBox: { x: 0.1, y: 0.2, width: 0.7, height: 0.12 },
+        languageHints: ["en"],
+        isTitle: false
+      }]
+    }));
+    const ocr = new OcrService(
+      adapter,
+      undefined,
+      undefined,
+      undefined,
+      new StaticOfficeMediaMaterializer()
+    );
+    const { capture, jobs } = makeServices(
+      vaultPath,
+      vault,
+      undefined,
+      undefined,
+      undefined,
+      makeOfficeParser(),
+      ocr
+    );
+    const pptxPath = path.join(path.dirname(vaultPath), "ocr-roadmap.pptx");
+    fs.writeFileSync(pptxPath, await createTestPptx());
+    const captured = await capture.submitFiles({
+      filePaths: [pptxPath],
+      inputKind: "file_drop",
+      userIntent: "capture",
+      locale: "en"
+    });
+    const sourceId = requireFirst(captured.sourceIds);
+    jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+
+    const parsed = await jobs.processQueuedParses({ sourceIds: [sourceId] });
+    expect(parsed).toMatchObject({ completed: 1, agentReadySourceIds: [], ocrWaitingSourceIds: [sourceId] });
+    expect(jobs.list({ classes: ["ocr"], states: ["queued"] }).jobs[0]?.sourceId).toBe(sourceId);
+    expect(jobs.list({ classes: ["agent_ingest"] }).jobs).toHaveLength(0);
+
+    const recognized = await jobs.processQueuedOcr({ sourceIds: [sourceId] });
+    const sourceRecord = JSON.parse(fs.readFileSync(
+      findFile(path.join(vaultPath, ".pige/source-records"), `${sourceId}.json`),
+      "utf8"
+    )) as { artifacts: { id: string; kind: string }[]; metadata: Record<string, unknown> };
+    expect(recognized).toEqual({
+      processed: 1,
+      completed: 1,
+      failed: 0,
+      agentReadySourceIds: [sourceId]
+    });
+    expect(adapter.callCount).toBe(1);
+    expect(sourceRecord.artifacts.some((artifact) => artifact.id.endsWith("_pptx_media_ocr_text"))).toBe(true);
+    expect(sourceRecord.metadata).toMatchObject({
+      ocrProcessedMediaCount: 1,
+      needsOcr: false,
+      agentTextReady: true
+    });
+    expect(jobs.list({ classes: ["ocr"], states: ["completed"] }).jobs[0]?.sourceId).toBe(sourceId);
+    expect(jobs.list({ classes: ["agent_ingest"], states: ["waiting_dependency"] }).jobs[0]?.sourceId).toBe(sourceId);
+  });
+
   it("processes queued Agent ingest jobs into wiki notes, operations, index, and log entries", async () => {
     const { vaultPath, vault } = makeVault();
     const agentIngest = new AgentIngestService(
@@ -1833,6 +1904,20 @@ class StaticNativeOcrAdapter implements NativeImageOcrAdapterPort {
     this.callCount += 1;
     this.inputPaths.push(inputPath);
     return this.result;
+  }
+}
+
+class StaticOfficeMediaMaterializer implements OfficeMediaMaterializerPort {
+  isAvailable(): boolean {
+    return true;
+  }
+
+  async materialize(_filePath: string, targets: readonly OfficeMediaTarget[]) {
+    return {
+      materializerId: OFFICE_MEDIA_MATERIALIZER_ID,
+      materializerVersion: OFFICE_MEDIA_MATERIALIZER_VERSION,
+      media: targets.map((target) => ({ ...target, bytes: Uint8Array.from(TINY_PNG) }))
+    };
   }
 }
 

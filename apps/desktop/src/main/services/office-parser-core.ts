@@ -7,9 +7,13 @@ import { readOpenXmlPackage, type OpenXmlPackage } from "./office-archive";
 import {
   OFFICE_PARSER_ENGINE,
   OFFICE_PARSER_ID,
+  OFFICE_MEDIA_MATERIALIZER_MAX_BYTES_PER_ITEM,
+  OFFICE_MEDIA_OCR_EXTENSIONS,
+  OFFICE_MEDIA_TARGET_SCHEMA_VERSION,
   OFFICE_PARSER_VERSION,
   type OfficeExtractionResult,
   type OfficeExtractionUnit,
+  type OfficeUnitMediaReference,
   type OfficeParserRequest
 } from "./office-parser-types";
 import type { ParserTextCoverage } from "./parser-artifact-service";
@@ -152,6 +156,10 @@ function extractPptx(request: OfficeParserRequest, packageData: OpenXmlPackage):
   let slidesWithNotes = 0;
   let slidesWithImages = 0;
   let outputLength = 0;
+  let ocrCandidateMediaCount = 0;
+  let ocrMaterializableMediaCount = 0;
+  let ocrMaterializableMediaBytes = 0;
+  const mediaByPath = new Map(packageData.mediaReferences.map((media) => [media.packagePath, media]));
 
   for (let index = 0; index < limitedSlideParts.length; index += 1) {
     const slidePart = limitedSlideParts[index];
@@ -170,12 +178,27 @@ function extractPptx(request: OfficeParserRequest, packageData: OpenXmlPackage):
       : [];
     externalRelationshipCount += slideRelations.filter((relation) => relation.external).length;
     const imageRelations = slideRelations.filter((relation) => relation.type.endsWith("/image") && !relation.external);
-    const imageCount = imageRelations.filter((relation) => {
+    const mediaReferences: OfficeUnitMediaReference[] = [];
+    const seenMediaPaths = new Set<string>();
+    for (const relation of imageRelations) {
       const imagePart = resolveRelationshipTarget(slidePart, relation.target, "pptx");
-      if (packageData.entryNames.has(imagePart)) return true;
-      warnings.push(`Slide ${index + 1} references a missing embedded image.`);
-      return false;
-    }).length;
+      const media = mediaByPath.get(imagePart);
+      if (!media) {
+        warnings.push(`Slide ${index + 1} references a missing embedded image.`);
+        continue;
+      }
+      if (seenMediaPaths.has(imagePart)) continue;
+      seenMediaPaths.add(imagePart);
+      const mediaIndex = mediaReferences.length + 1;
+      mediaReferences.push({
+        mediaIndex,
+        locator: `slide:${index + 1}/media:${mediaIndex}`,
+        packagePath: media.packagePath,
+        size: media.size,
+        extension: media.extension
+      });
+    }
+    const imageCount = mediaReferences.length;
     if (imageCount > 0) slidesWithImages += 1;
     const notesRelation = slideRelations.find((relation) => relation.type.endsWith("/notesSlide") && !relation.external);
     const notesPart = notesRelation ? resolveRelationshipTarget(slidePart, notesRelation.target, "pptx") : undefined;
@@ -186,7 +209,13 @@ function extractPptx(request: OfficeParserRequest, packageData: OpenXmlPackage):
     const visibleText = normalizeParagraphs(visibleParagraphs);
     const notesText = normalizeParagraphs(noteParagraphs);
     const needsOcr = imageCount > 0 && visibleText.length < 80;
-    if (needsOcr) ocrCandidateLocators.push(`slide:${index + 1}`);
+    if (needsOcr) {
+      ocrCandidateLocators.push(`slide:${index + 1}`);
+      ocrCandidateMediaCount += mediaReferences.length;
+      const materializable = mediaReferences.filter((media) => isMaterializableOfficeMedia(media.extension, media.size));
+      ocrMaterializableMediaCount += materializable.length;
+      ocrMaterializableMediaBytes += materializable.reduce((total, media) => total + media.size, 0);
+    }
     const slideBody = [
       `--- Slide ${index + 1} ---`,
       visibleText || "[No embedded slide text]",
@@ -211,6 +240,7 @@ function extractPptx(request: OfficeParserRequest, packageData: OpenXmlPackage):
       characterCount: visibleText.length + notesText.length,
       imageCount,
       ...(notesText ? { notesCharacterCount: notesText.length } : {}),
+      ...(mediaReferences.length > 0 ? { mediaReferences } : {}),
       needsOcr,
       warnings: needsOcr ? ["Slide has sparse text and image references; OCR may recover visible content."] : []
     });
@@ -253,15 +283,24 @@ function extractPptx(request: OfficeParserRequest, packageData: OpenXmlPackage):
     totalUncompressedBytes: packageData.totalUncompressedBytes,
     mediaReferences: [...packageData.mediaReferences].sort((left, right) => left.packagePath.localeCompare(right.packagePath)),
     structure: {
+      mediaTargetSchemaVersion: OFFICE_MEDIA_TARGET_SCHEMA_VERSION,
       slideCount: originalSlideCount,
       processedSlideCount: units.length,
       slidesWithNotes,
       slidesWithImages,
       imageCount: packageData.mediaReferences.length,
+      ocrCandidateMediaCount,
+      ocrMaterializableMediaCount,
+      ocrMaterializableMediaBytes,
       externalRelationshipCount
     },
     warnings: uniqueWarnings(warnings)
   };
+}
+
+function isMaterializableOfficeMedia(extension: string, size: number): boolean {
+  return size > 0 && size <= OFFICE_MEDIA_MATERIALIZER_MAX_BYTES_PER_ITEM &&
+    OFFICE_MEDIA_OCR_EXTENSIONS.includes(extension as typeof OFFICE_MEDIA_OCR_EXTENSIONS[number]);
 }
 
 class DocxHtmlRenderer {

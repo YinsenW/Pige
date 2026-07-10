@@ -11,6 +11,7 @@ import {
 } from "@pige/schemas";
 import { SourcePageService } from "./source-page-service";
 import { tryVerifyReadableSourceFile, verifyReadableSourceFile } from "./source-file-access";
+import { OFFICE_MEDIA_TARGET_SCHEMA_VERSION } from "./office-parser-types";
 
 export type ParserTextCoverage = "none" | "low" | "medium" | "high";
 
@@ -437,6 +438,9 @@ function isReusableSidecar(
     !Array.isArray(sidecar.warnings) ||
     sidecar.warnings.some((warning) => typeof warning !== "string")
   ) {
+    return false;
+  }
+  if (format === "pptx" && sidecar.mediaTargetSchemaVersion !== OFFICE_MEDIA_TARGET_SCHEMA_VERSION) {
     return false;
   }
   if (!extractedTextArtifact) {

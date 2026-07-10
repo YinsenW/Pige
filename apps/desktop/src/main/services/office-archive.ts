@@ -1,7 +1,13 @@
 import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
 import { openPromise, validateFileName, type Entry } from "yauzl";
-import type { OfficeMediaReference, OfficeParserLimits } from "./office-parser-types";
+import type {
+  MaterializedOfficeMedia,
+  OfficeMediaMaterializerLimits,
+  OfficeMediaReference,
+  OfficeMediaTarget,
+  OfficeParserLimits
+} from "./office-parser-types";
 
 const MAX_COMPRESSION_RATIO = 1_000;
 const COMPRESSION_RATIO_MIN_BYTES = 1024 * 1024;
@@ -93,7 +99,75 @@ export async function readOpenXmlPackage(
   }
 }
 
-function validateArchiveEntry(entry: Entry, format: "docx" | "pptx", limits: OfficeParserLimits): void {
+export async function readOpenXmlMedia(
+  filePath: string,
+  targets: readonly OfficeMediaTarget[],
+  limits: OfficeMediaMaterializerLimits
+): Promise<readonly MaterializedOfficeMedia[]> {
+  const requested = new Map<string, OfficeMediaTarget[]>();
+  for (const target of targets) {
+    requested.set(target.packagePath, [...(requested.get(target.packagePath) ?? []), target]);
+  }
+  if (targets.reduce((total, target) => total + target.size, 0) > limits.maxTotalBytes) {
+    throw new PigeDomainError("ocr.pptx.media_too_large", "Selected PPTX media exceeds the materializer output limit.");
+  }
+  let zipFile;
+  try {
+    zipFile = await openPromise(filePath, {
+      autoClose: false,
+      lazyEntries: true,
+      decodeStrings: true,
+      validateEntrySizes: true,
+      strictFileNames: true
+    });
+  } catch {
+    throw new PigeDomainError("ocr.pptx.invalid_archive", "The preserved PPTX file is not a valid OpenXML archive.");
+  }
+
+  try {
+    if (zipFile.entryCount > limits.maxEntries) {
+      throw new PigeDomainError("ocr.pptx.too_many_entries", "The PPTX package exceeds the media materializer entry limit.");
+    }
+    const entryNames = new Set<string>();
+    const materialized = new Map<string, Uint8Array>();
+    let entryCount = 0;
+    let totalUncompressedBytes = 0;
+    for await (const entry of zipFile.eachEntry()) {
+      entryCount += 1;
+      if (entryCount > limits.maxEntries) {
+        throw new PigeDomainError("ocr.pptx.too_many_entries", "The PPTX package exceeds the media materializer entry limit.");
+      }
+      validateArchiveEntry(entry, "pptx", { maxUncompressedBytes: limits.maxUncompressedBytes });
+      if (entryNames.has(entry.fileName)) {
+        throw new PigeDomainError("ocr.pptx.duplicate_entry", "The PPTX package contains duplicate parts.");
+      }
+      entryNames.add(entry.fileName);
+      totalUncompressedBytes += entry.uncompressedSize;
+      if (totalUncompressedBytes > limits.maxUncompressedBytes) {
+        throw new PigeDomainError("ocr.pptx.expanded_too_large", "The expanded PPTX package exceeds the media materializer limit.");
+      }
+      const pathTargets = requested.get(entry.fileName);
+      if (!pathTargets) continue;
+      if (pathTargets.some((target) => entry.uncompressedSize !== target.size) || entry.uncompressedSize > limits.maxBytesPerItem) {
+        throw new PigeDomainError("ocr.pptx.media_target_changed", "A selected PPTX media part no longer matches parser metadata.");
+      }
+      const bytes = await readEntryBytes(zipFile, entry, limits.maxBytesPerItem);
+      materialized.set(entry.fileName, bytes);
+    }
+    if (materialized.size !== requested.size) {
+      throw new PigeDomainError("ocr.pptx.media_target_changed", "A selected PPTX media part is missing from the verified archive.");
+    }
+    return targets.map((target) => ({ ...target, bytes: materialized.get(target.packagePath)! }));
+  } finally {
+    zipFile.close();
+  }
+}
+
+function validateArchiveEntry(
+  entry: Entry,
+  format: "docx" | "pptx",
+  limits: Pick<OfficeParserLimits, "maxUncompressedBytes">
+): void {
   const invalidName = validateFileName(entry.fileName);
   if (
     invalidName ||
@@ -171,4 +245,24 @@ async function readEntryText(
     chunks.push(buffer);
   }
   return Buffer.concat(chunks, total).toString("utf8");
+}
+
+async function readEntryBytes(
+  zipFile: Awaited<ReturnType<typeof openPromise>>,
+  entry: Entry,
+  maxBytes: number
+): Promise<Uint8Array> {
+  const stream = await zipFile.openReadStreamPromise(entry);
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for await (const chunk of stream) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array);
+    total += buffer.length;
+    if (total > maxBytes) {
+      stream.destroy();
+      throw new PigeDomainError("ocr.pptx.media_too_large", "A selected PPTX media part exceeds the materializer limit.");
+    }
+    chunks.push(buffer);
+  }
+  return Uint8Array.from(Buffer.concat(chunks, total));
 }

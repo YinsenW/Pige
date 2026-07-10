@@ -171,7 +171,7 @@ After a new document-parser or direct-image OCR Artifact is persisted, its owner
 
 - Extract headings, paragraphs, lists, tables, links, and images when feasible.
 - Preserve document structure without pretending layout is perfect.
-- DOCX and PPTX share one Office worker capped at 100 MiB input, 10,000 archive entries, 512 MiB expanded data, 10 MiB per selected XML part, 128 MiB selected XML in aggregate, 2,000 slides, 10,000,000 output characters, 60 seconds, and 512 MiB old-generation memory.
+- DOCX/PPTX parsing shares one Office worker capped at 100 MiB input, 10,000 archive entries, 512 MiB expanded data, 10 MiB per selected XML part, 128 MiB selected XML total, 2,000 slides, 10,000,000 output characters, 60 seconds, and 512 MiB old-generation memory. Selected PPTX media separately caps 20 targets, 16 MiB each, 64 MiB total, and 60 seconds.
 - Current Phase 5 adapter pins Mammoth `1.12.0`, performs bounded OpenXML ZIP preflight across every DOCX XML/relationship part with yauzl `3.4.0`, disables embedded style maps and external file access, replaces images with local references, and never renders converter HTML in the product UI.
 - DOCX output preserves heading/list/table/link structure as normalized text plus `block:N` units, redacts secret-like URL query values, records referenced embedded media, and emits `image:N` OCR candidates only for images reached from document content.
 - The adapter runs in the bounded Office worker and returns data only. Main-process Parser Service writes deterministic checksummed text/metadata artifacts, updates the Source Record, refreshes the source page without overwriting user edits, and creates OCR/Agent follow-up jobs according to quality.
@@ -180,9 +180,9 @@ After a new document-parser or direct-image OCR Artifact is persisted, its owner
 
 - Extract slide text, speaker notes, image references, and slide order.
 - OCR slide images when visible text is not otherwise recoverable.
-- Current Phase 5 adapter uses yauzl `3.4.0` plus fast-xml-parser `5.9.3` over selected bounded OpenXML parts. Slide order is resolved through presentation relationships rather than filenames; speaker notes, image relationships, external-relationship counts, and `slide:N` units are preserved.
+- Current Phase 5 adapter uses yauzl `3.4.0` plus fast-xml-parser `5.9.3` over selected bounded OpenXML parts. Presentation relationships determine slide order; speaker notes, external counts, `slide:N` units, and schema-v1 `slide:N/media:M` raster targets are preserved.
 - XML value coercion and entity processing are disabled, DOCTYPE is rejected, nesting is capped, internal relationship traversal is rejected, and external targets are recorded but never opened.
-- Image-bearing slides with sparse embedded text create OCR candidates while useful embedded text may still proceed to Agent ingest with an OCR-pending quality warning.
+- Image-bearing slides with sparse text create OCR candidates. Runnable selected-raster OCR delays Agent ingest; unavailable OCR may release useful native text with a review warning.
 
 ### 8.6 Images
 
@@ -194,7 +194,7 @@ After a new document-parser or direct-image OCR Artifact is persisted, its owner
 - Source checksum is verified before and after recognition. Valid deterministic Artifacts are reused after restart; stale derived output is regenerated; changed or path-escaping source evidence fails without invoking the adapter.
 - OCR text is stored once in `artifacts/ocr/`. A separate checksummed metadata sidecar stores engine/version, confidence, language hints, image dimensions, normalized bounding boxes, character spans, and warnings without copying the recognized body.
 - Source Page refresh and the body-free `create_artifact` Operation Record are idempotent. Empty OCR output completes with warnings and does not create Agent ingest.
-- PDF pages use the separate reviewed PDF materializer above and then the same native OCR adapter over verified pixel Artifacts. Presentation slides and embedded document media remain dependency-waiting until their own locator-correct materializers exist.
+- PDF pages use their reviewed materializer. PPTX uses the bounded Office worker to materialize only parser-selected raster media into private disposable inputs for the same native OCR adapter. Text and body-free metadata persist with `slide:N/media:M/ocr:block:K` locators, checksum reuse, Source Record revision checks, and Source Page/Agent handoff. Full-slide, vector/chart, DOCX-media, and unsupported or oversized targets remain waiting.
 
 ### 8.7 Folders, Archives, Git Repositories, Audio, Video
 
@@ -219,9 +219,9 @@ OCR output is an extracted artifact. It does not replace the source asset.
 
 Current implementation scope:
 
-- `macos_vision_document` and `macos_vision_text` are implemented for direct raster images and verified rendered pages from bounded image-only or mixed-text PDFs on supported macOS 26 systems.
-- Windows AI OCR, PaddleOCR install/repair, rendered slides, and extracted embedded-media OCR remain dependency-waiting work. Parser-selected mixed-PDF sparse-page routing and Multi-Artifact native/OCR evidence assembly are implemented.
-- OCR engine/confidence/warnings and bounded `ocr:block:N` or `page:N/ocr:block:M` locators enter Agent context as trusted quality metadata around an explicitly untrusted OCR body. Low confidence or truncation forces review.
+- `macos_vision_document` and `macos_vision_text` support direct rasters, bounded PDF candidates, and parser-selected PPTX raster media on macOS 26.
+- Full-slide, vector/chart and DOCX-media OCR, Windows AI, Paddle install/repair, and cross-platform packaged proof remain waiting.
+- Engine/confidence/warnings and bounded `ocr:block:N`, `page:N/ocr:block:M`, or `slide:N/media:M/ocr:block:K` locators wrap explicitly untrusted OCR text in Agent context. Low confidence or truncation forces review.
 
 ## 10. Parse Quality
 

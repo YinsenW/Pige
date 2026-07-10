@@ -13,6 +13,9 @@ import { createVerifiedSourceFileSnapshotAsync } from "./source-file-access";
 import {
   OFFICE_PARSER_ENGINE,
   OFFICE_PARSER_ID,
+  OFFICE_MEDIA_MATERIALIZER_MAX_BYTES_PER_ITEM,
+  OFFICE_MEDIA_OCR_EXTENSIONS,
+  OFFICE_MEDIA_TARGET_SCHEMA_VERSION,
   OFFICE_PARSER_MAX_BYTES,
   OFFICE_PARSER_MAX_ENTRIES,
   OFFICE_PARSER_MAX_SELECTED_XML_BYTES,
@@ -168,6 +171,7 @@ export class OfficeParserService {
       agentTextReady: extraction.agentTextReady,
       ocrCandidateLocators: extraction.ocrCandidateLocators,
       sidecarMetadata: {
+        mediaTargetSchemaVersion: OFFICE_MEDIA_TARGET_SCHEMA_VERSION,
         unitCount: extraction.unitCount,
         processedUnitCount: extraction.processedUnitCount,
         unitsWithText: extraction.unitsWithText,
@@ -182,6 +186,21 @@ export class OfficeParserService {
         processedUnitCount: extraction.processedUnitCount,
         unitsWithText: extraction.unitsWithText,
         mediaCount: extraction.mediaReferences.length,
+        ocrCandidateMediaCount: extraction.units
+          .filter((unit) => unit.needsOcr)
+          .reduce((total, unit) => total + (unit.mediaReferences?.length ?? 0), 0),
+        ocrMaterializableMediaCount: extraction.units
+          .filter((unit) => unit.needsOcr)
+          .flatMap((unit) => unit.mediaReferences ?? [])
+          .filter((media) => media.size > 0 && media.size <= OFFICE_MEDIA_MATERIALIZER_MAX_BYTES_PER_ITEM &&
+            OFFICE_MEDIA_OCR_EXTENSIONS.includes(media.extension as typeof OFFICE_MEDIA_OCR_EXTENSIONS[number]))
+          .length,
+        ocrMaterializableMediaBytes: extraction.units
+          .filter((unit) => unit.needsOcr)
+          .flatMap((unit) => unit.mediaReferences ?? [])
+          .filter((media) => media.size > 0 && media.size <= OFFICE_MEDIA_MATERIALIZER_MAX_BYTES_PER_ITEM &&
+            OFFICE_MEDIA_OCR_EXTENSIONS.includes(media.extension as typeof OFFICE_MEDIA_OCR_EXTENSIONS[number]))
+          .reduce((total, media) => total + media.size, 0),
         officeStructure: extraction.structure
       },
       warnings: extraction.warnings

@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
+import { ZipFile } from "yazl";
 
 const root = process.cwd();
 const pdfWorkerPath = path.join(root, "apps/desktop/out/main/workers/pdf-parser-worker.js");
@@ -71,6 +72,49 @@ await expectWorkerError(officeWorkerPath, {
   }
 }, "parser.office.source_missing");
 
+const officeMediaSmokeRoot = fs.mkdtempSync(path.join(os.tmpdir(), "pige-office-media-smoke-"));
+try {
+  const media = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+    "base64"
+  );
+  const pptxPath = path.join(officeMediaSmokeRoot, "media.pptx");
+  fs.writeFileSync(pptxPath, await createZip([{ name: "ppt/media/image1.png", data: media }]));
+  await expectWorkerSuccess(officeWorkerPath, {
+    operation: "materialize_pptx_media",
+    requestId: "office-media-worker-smoke",
+    filePath: pptxPath,
+    sourceKind: "pptx_file",
+    targets: [{
+      slide: 1,
+      parentLocator: "slide:1",
+      mediaIndex: 1,
+      locator: "slide:1/media:1",
+      packagePath: "ppt/media/image1.png",
+      size: media.length,
+      extension: ".png"
+    }],
+    limits: {
+      maxBytes: 1024 * 1024,
+      maxEntries: 10,
+      maxUncompressedBytes: 1024 * 1024,
+      maxTargets: 1,
+      maxBytesPerItem: 1024 * 1024,
+      maxTotalBytes: 1024 * 1024
+    }
+  }, (response) => {
+    const item = response.result?.media?.[0];
+    return response.operation === "materialize_pptx_media" &&
+      response.result?.materializerId === "office_openxml_media" &&
+      response.result?.materializerVersion === "1" &&
+      item?.locator === "slide:1/media:1" &&
+      item?.bytes instanceof Uint8Array &&
+      Buffer.from(item.bytes).equals(media);
+  });
+} finally {
+  fs.rmSync(officeMediaSmokeRoot, { recursive: true, force: true });
+}
+
 await expectWorkerSuccess(webWorkerPath, {
   requestId: "web-worker-smoke",
   html: "<!doctype html><html><head><title>Worker smoke</title></head><body><main><h1>Worker smoke</h1><p>The bundled web extractor returns local readable text without executing page scripts or loading resources.</p></main></body></html>",
@@ -83,7 +127,7 @@ await expectWorkerSuccess(webWorkerPath, {
   }
 }, (response) => response.result?.text?.includes("bundled web extractor"));
 
-console.log("Built document and web parser workers loaded and returned valid protocol responses. PDF page renderer also returned a validated PNG.");
+console.log("Built document and web parser workers loaded and returned valid protocol responses. PDF pages and selected PPTX media also materialized as bounded image bytes.");
 
 async function expectWorkerError(workerPath, request, expectedCode) {
   const worker = new Worker(pathToFileURL(workerPath), {
@@ -183,4 +227,21 @@ function createVectorPdf() {
 function hasPngSignature(value) {
   const signature = [137, 80, 78, 71, 13, 10, 26, 10];
   return value.byteLength >= signature.length && signature.every((byte, index) => value[index] === byte);
+}
+
+async function createZip(entries) {
+  const zip = new ZipFile();
+  for (const entry of entries) {
+    zip.addBuffer(entry.data, entry.name, {
+      compress: true,
+      mtime: new Date("2026-07-10T00:00:00.000Z"),
+      mode: 0o100644
+    });
+  }
+  zip.end();
+  const chunks = [];
+  for await (const chunk of zip.outputStream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
 }

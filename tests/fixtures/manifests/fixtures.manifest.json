@@ -18,7 +18,13 @@
       "path": "tests/unit/helpers/office-fixture.ts",
       "kind": "generated-docx-openxml",
       "license": "Apache-2.0 (Pige synthetic fixture)",
-      "expectedOutputRefs": ["tests/unit/office-parser-core.test.ts"],
+      "expectedOutputRefs": [
+        "tests/unit/office-parser-core.test.ts",
+        "tests/unit/office-media-materializer-core.test.ts",
+        "tests/unit/pptx-media-ocr-artifact-service.test.ts",
+        "tests/unit/jobs-service.test.ts",
+        "tests/unit/macos-vision-ocr-adapter-smoke.test.ts"
+      ],
       "redactionStatus": "synthetic_no_sensitive_data",
       "sizeClass": "small",
       "requiredPlatformCapabilities": [],
@@ -35,7 +41,7 @@
       "sizeClass": "small",
       "requiredPlatformCapabilities": [],
       "owner": "Ingest",
-      "updatePolicy": "Update with PPTX ordering, notes, and media-reference assertions."
+      "updatePolicy": "Update with PPTX ordering, notes, bounded media materialization, OCR provenance, and recovery assertions."
     },
     {
       "id": "generated-hostile-openxml",

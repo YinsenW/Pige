@@ -290,7 +290,11 @@ function sidecarMatchesArtifact(
     return typeof value.kind === "string" && value.kind.endsWith("_parse_metadata") &&
       Boolean(artifact.checksum) && value.extractedTextChecksum === artifact.checksum;
   }
-  return (value.kind === "image_ocr_metadata" || value.kind === "pdf_page_ocr_metadata") &&
+  return (
+    value.kind === "image_ocr_metadata" ||
+    value.kind === "pdf_page_ocr_metadata" ||
+    value.kind === "pptx_media_ocr_metadata"
+  ) &&
     Boolean(artifact.checksum) && value.ocrTextChecksum === artifact.checksum;
 }
 
@@ -509,6 +513,8 @@ function disambiguateCitationLocators(fragments: readonly EvidenceFragment[]): E
 }
 
 function citationLocator(locator: string, artifactId: string): string {
+  const slideMediaOcr = /^slide:(\d+)\/media:(\d+)\/ocr:block:(\d+)$/u.exec(locator);
+  if (slideMediaOcr) return `slide${slideMediaOcr[1]}-media${slideMediaOcr[2]}-ocr${slideMediaOcr[3]}`;
   const pageOcr = /^page:(\d+)\/ocr:block:(\d+)$/u.exec(locator);
   if (pageOcr) return `p${pageOcr[1]}-ocr${pageOcr[2]}`;
   const page = /^page:(\d+)$/u.exec(locator);

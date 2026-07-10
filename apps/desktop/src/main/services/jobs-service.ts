@@ -241,7 +241,7 @@ export class JobsService {
     for (const jobFile of readJobRecordFiles(path.join(vaultPath, ".pige", "jobs"))) {
       if (jobFile.job.class !== "agent_ingest" || jobFile.job.state !== "waiting_dependency") continue;
       const sourceRecord = jobFile.job.sourceId ? readSourceRecord(vaultPath, jobFile.job.sourceId) : undefined;
-      if (sourceRecord && shouldWaitForPdfOcr(this.#ocr, sourceRecord)) continue;
+      if (sourceRecord && shouldWaitForRunnableOcr(this.#ocr, sourceRecord)) continue;
       writeJsonAtomic(jobFile.path, JobRecordSchema.parse({
         ...jobFile.job,
         state: "queued",
@@ -484,7 +484,9 @@ export class JobsService {
         updatedAt: new Date().toISOString(),
         message: sourceRecordFile.sourceRecord.kind === "pdf_file"
           ? "Rendering verified PDF page targets and recognizing them with local OCR."
-          : "Recognizing image text with the local platform OCR helper."
+          : sourceRecordFile.sourceRecord.kind === "pptx_file"
+            ? "Materializing verified PPTX media targets and recognizing them with local OCR."
+            : "Recognizing image text with the local platform OCR helper."
       });
       writeJsonAtomic(jobFile.path, runningJob);
 
@@ -562,13 +564,11 @@ export class JobsService {
         failed += 1;
         continue;
       }
-      if (shouldWaitForPdfOcr(this.#ocr, sourceRecordFile.sourceRecord)) {
+      if (shouldWaitForRunnableOcr(this.#ocr, sourceRecordFile.sourceRecord)) {
         markJobWaitingDependency(
           jobFile.path,
           jobFile.job,
-          sourceRecordFile.sourceRecord.metadata.agentTextReady === true
-            ? "Waiting for selected PDF OCR enrichment before Agent ingest."
-            : "Waiting for readable PDF OCR evidence before Agent ingest."
+          createAgentOcrWaitMessage(sourceRecordFile.sourceRecord)
         );
         failed += 1;
         continue;
@@ -610,7 +610,7 @@ export class JobsService {
             if (
               !currentSource ||
               sourceRecordRevision(currentSource) !== sourceRevision ||
-              shouldWaitForPdfOcr(this.#ocr, currentSource)
+              shouldWaitForRunnableOcr(this.#ocr, currentSource)
             ) {
               throw new PigeDomainError(
                 "agent_ingest.source_changed",
@@ -645,11 +645,11 @@ export class JobsService {
           markJobFailedFinal(jobFile.path, activeJob, "Model egress is blocked by the current privacy policy; the preserved source remains local.");
         } else if (caught instanceof PigeDomainError && caught.code === "agent_ingest.source_changed") {
           const currentSource = activeJob.sourceId ? readSourceRecord(vaultPath, activeJob.sourceId) : undefined;
-          if (currentSource && shouldWaitForPdfOcr(this.#ocr, currentSource)) {
+          if (currentSource && shouldWaitForRunnableOcr(this.#ocr, currentSource)) {
             markJobWaitingDependency(
               jobFile.path,
               activeJob,
-              "Source evidence changed while Agent ingest was running; waiting for PDF OCR enrichment before retry."
+              `Source evidence changed while Agent ingest was running; waiting for ${documentLabel(currentSource.kind)} OCR enrichment before retry.`
             );
           } else {
             writeJsonAtomic(jobFile.path, JobRecordSchema.parse({
@@ -1113,10 +1113,17 @@ function inspectOcrSource(ocr: OcrPort | undefined, sourceRecord: SourceRecord):
     : { ready: false, message: createOcrDependencyMessage(sourceRecord.kind) };
 }
 
-function shouldWaitForPdfOcr(ocr: OcrPort | undefined, sourceRecord: SourceRecord): boolean {
-  if (sourceRecord.kind !== "pdf_file" || sourceRecord.metadata.needsOcr !== true) return false;
+function shouldWaitForRunnableOcr(ocr: OcrPort | undefined, sourceRecord: SourceRecord): boolean {
+  if (sourceRecord.metadata.needsOcr !== true) return false;
   if (sourceRecord.metadata.agentTextReady !== true) return true;
   return inspectOcrSource(ocr, sourceRecord).ready;
+}
+
+function createAgentOcrWaitMessage(sourceRecord: SourceRecord): string {
+  const label = documentLabel(sourceRecord.kind);
+  return sourceRecord.metadata.agentTextReady === true
+    ? `Waiting for selected ${label} OCR enrichment before Agent ingest.`
+    : `Waiting for readable ${label} OCR evidence before Agent ingest.`;
 }
 
 function sourceRecordRevision(sourceRecord: SourceRecord): string {
@@ -1135,7 +1142,8 @@ function ocrFailure(caught: unknown, sourceKind: SourceKind): { readonly final: 
   if (caught instanceof PigeDomainError) {
     if (
       /^ocr\.(?:adapter_unavailable|helper_unavailable|platform_unsupported)$/u.test(caught.code) ||
-      caught.code === "parser.pdf_page_renderer.unavailable"
+      caught.code === "parser.pdf_page_renderer.unavailable" ||
+      caught.code === "ocr.pptx.target_not_ready"
     ) {
       return { final: false, waiting: true, message: `Waiting for a healthy local OCR capability before retrying this preserved ${label}.` };
     }
@@ -1151,6 +1159,12 @@ function ocrFailure(caught: unknown, sourceKind: SourceKind): { readonly final: 
     if (/^ocr\.pdf\.(?:parser_metadata_invalid|source_record_invalid|render_result_invalid|rendered_page_invalid|rendered_pages_too_large|result_invalid)$/u.test(caught.code)) {
       return { final: true, waiting: false, message: "The verified PDF OCR target or derived page data failed validation. Re-parse or re-import the preserved PDF before retrying." };
     }
+    if (/^ocr\.pptx\.(?:parser_metadata_invalid|source_record_invalid|media_target_invalid|media_target_changed|materializer_result_invalid|result_invalid|invalid_archive|duplicate_entry|expanded_too_large|media_too_large)$/u.test(caught.code)) {
+      return { final: true, waiting: false, message: "The verified PPTX OCR target or embedded media failed validation. Re-parse or re-import the preserved presentation before retrying." };
+    }
+    if (sourceKind === "pptx_file" && isDeterministicParserInputFailure(caught.code)) {
+      return { final: true, waiting: false, message: "The preserved PPTX media cannot be materialized safely. Re-import it to create a verified source version." };
+    }
     if (/^ocr\.(?:source_checksum_mismatch|source_unavailable|source_unsupported|path_outside_vault|image\.(?:source_missing|not_regular|file_too_large|invalid|unsupported_format|multiframe_unsupported|dimensions_invalid|dimensions_too_large|decode_failed))$/u.test(caught.code)) {
       return { final: true, waiting: false, message: `The preserved ${label} cannot be processed safely in its current form. Re-import it to create a verified source version.` };
     }
@@ -1161,7 +1175,8 @@ function ocrFailure(caught: unknown, sourceKind: SourceKind): { readonly final: 
 function isOcrCapabilityUnavailableError(caught: unknown): boolean {
   return caught instanceof PigeDomainError && (
     /^ocr\.(?:adapter_unavailable|helper_unavailable|platform_unsupported)$/u.test(caught.code) ||
-    caught.code === "parser.pdf_page_renderer.unavailable"
+    caught.code === "parser.pdf_page_renderer.unavailable" ||
+    caught.code === "ocr.pptx.target_not_ready"
   );
 }
 

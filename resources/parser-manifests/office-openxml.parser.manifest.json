@@ -15,6 +15,8 @@
     "slide_order",
     "speaker_notes",
     "media_references",
+    "bounded_embedded_media_materialization",
+    "pptx_media_ocr_locators",
     "fragment_locators",
     "ocr_handoff"
   ],
@@ -30,6 +32,10 @@
     "maxSelectedXmlBytes": 134217728,
     "maxSlides": 2000,
     "maxTextCharacters": 10000000,
-    "timeoutMs": 60000
+    "timeoutMs": 60000,
+    "maxMediaTargets": 20,
+    "maxMediaBytesPerItem": 16777216,
+    "maxMediaTotalBytes": 67108864,
+    "mediaMaterializerTimeoutMs": 60000
   }
 }

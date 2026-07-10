@@ -99,6 +99,18 @@ describe("Office parser core", () => {
     expect(result.text).not.toContain("fixture-secret");
     expect(result.ocrCandidateLocators).toEqual(["slide:1"]);
     expect(result.units.map((unit) => unit.locator)).toEqual(["slide:1", "slide:2"]);
+    expect(result.units[0]?.mediaReferences).toEqual([{
+      mediaIndex: 1,
+      locator: "slide:1/media:1",
+      packagePath: "ppt/media/image1.png",
+      size: 68,
+      extension: ".png"
+    }]);
+    expect(result.structure).toMatchObject({
+      mediaTargetSchemaVersion: 1,
+      ocrCandidateMediaCount: 1,
+      ocrMaterializableMediaCount: 1
+    });
     expect(result.warnings.join(" ")).toContain("Ignored 1 external presentation relationship");
   });
 

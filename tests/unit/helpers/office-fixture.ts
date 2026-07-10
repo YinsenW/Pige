@@ -6,7 +6,7 @@ export interface OpenXmlFixtureEntry {
   readonly compress?: boolean;
 }
 
-const TINY_PNG = Buffer.from(
+export const TINY_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
   "base64"
 );
@@ -46,7 +46,7 @@ export async function createTestDocx(): Promise<Buffer> {
   ]);
 }
 
-export async function createTestPptx(): Promise<Buffer> {
+export async function createTestPptx(media: Buffer = TINY_PNG): Promise<Buffer> {
   return createOpenXmlZip([
     { name: "[Content_Types].xml", data: contentTypes([
       ["/ppt/presentation.xml", "application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"],
@@ -64,7 +64,7 @@ export async function createTestPptx(): Promise<Buffer> {
     { name: "ppt/slides/_rels/slide1.xml.rels", data: PPTX_SLIDE_ONE_RELATIONSHIPS },
     { name: "ppt/slides/_rels/slide2.xml.rels", data: PPTX_SLIDE_TWO_RELATIONSHIPS },
     { name: "ppt/notesSlides/notesSlide1.xml", data: notesXml("Speaker note: verify the local-first release gate.") },
-    { name: "ppt/media/image1.png", data: TINY_PNG }
+    { name: "ppt/media/image1.png", data: media }
   ]);
 }
 

@@ -1765,11 +1765,12 @@
         "EV-OCR",
         "EV-MIXED-PDF-OCR",
         "EV-PDF-OCR-WRITE-CONTAINMENT",
-        "EV-OCR-NATIVE-FALLBACK"
+        "EV-OCR-NATIVE-FALLBACK",
+        "EV-PPTX-EMBEDDED-MEDIA-OCR"
       ],
       "open": {
         "id": "OPEN-REQ-PIGE-INGEST-004",
-        "description": "Windows AI OCR, Paddle fallback, rendered slide/media pixels, packaged-platform proof, and cross-platform routing tests remain open.",
+        "description": "Windows/Paddle OCR, full-slide/vector/chart/DOCX-media OCR, unsupported or oversized PPTX targets, packaged-platform proof, and cross-platform routing remain open.",
         "targetBuilds": [
           "B5.07",
           "B5.08"
@@ -3296,11 +3297,12 @@
         "EV-OCR",
         "EV-MIXED-PDF-OCR",
         "EV-PDF-OCR-WRITE-CONTAINMENT",
-        "EV-OCR-NATIVE-FALLBACK"
+        "EV-OCR-NATIVE-FALLBACK",
+        "EV-PPTX-EMBEDDED-MEDIA-OCR"
       ],
       "open": {
         "id": "OPEN-EXIT-E5.05",
-        "description": "Rendered slide/media OCR, packaged-platform proof, and cross-platform fallback remain open.",
+        "description": "Full-slide/vector/chart/DOCX-media OCR, unsupported or oversized PPTX targets, packaged-platform proof, and cross-platform fallback remain open.",
         "targetBuilds": [
           "B5.07",
           "B5.08"
@@ -4034,6 +4036,11 @@
       "kind": "test",
       "path": "tests/unit/jobs-service.test.ts",
       "selector": "parses preserved DOCX and PPTX files into verified artifacts before OCR and Agent handoff"
+    },
+    "EV-PPTX-EMBEDDED-MEDIA-OCR": {
+      "kind": "test",
+      "path": "tests/unit/jobs-service.test.ts",
+      "selector": "delays PPTX Agent ingest until selected embedded media completes local OCR"
     },
     "EV-OCR": {
       "kind": "test",

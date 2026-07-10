@@ -116,7 +116,7 @@ Document fixtures:
 - Image-only PDF.
 - PDF with sparse embedded text and visible text in images.
 - DOCX with headings, lists, links, and tables.
-- PPTX with text boxes and images.
+- PPTX with text boxes and selected embedded-raster OCR.
 - Corrupt or unsupported file.
 
 Image/OCR fixtures:

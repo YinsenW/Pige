@@ -329,7 +329,7 @@ Implementation evidence snapshot; P5 remains in progress:
 
 Evidence exists for preserved PDF -> recoverable local worker -> deterministic text/metadata artifacts -> page locators -> checksum-safe source-page refresh -> OCR handoff -> Agent ingest when text coverage is useful.
 
-Evidence exists for preserved DOCX/PPTX -> bounded Office worker -> semantic block or relationship-ordered slide/notes extraction -> checksummed artifacts -> selective image OCR handoff -> locator-bearing Agent context -> crash-safe reuse/rebuild.
+Evidence exists for preserved DOCX/PPTX -> bounded Office worker -> semantic blocks or ordered slide/notes extraction -> selected PPTX raster materialization -> local OCR -> locator-bearing Agent context -> crash-safe reuse.
 
 PDF and Office parser adapters now create their worker input only after verified Artifact
 reuse misses, using private descriptor-derived snapshots for both managed and referenced
@@ -366,7 +366,7 @@ B5.12/E5.04 evidence covers seven text, URL, PDF, PPTX, and image-OCR cases acro
 
 Evidence exists for startup reconciliation of interrupted idempotent document/OCR/Agent jobs.
 
-Still open before P5 completion: packaged/signed macOS x64 and arm64 helper acceptance, packaged PDF page-renderer/native-module acceptance on supported targets, Windows native OCR, slide/media rendering or extraction for OCR, PaddleOCR install/repair, full Pi-runtime prompt-injection coverage, visible long-job progress, cooperative cancellation, and the remaining P5 exit criteria below.
+Still open before P5 completion: signed macOS helper and packaged PDF-renderer acceptance, Windows/Paddle OCR, full-slide/vector/chart/DOCX-media OCR, unsupported or oversized PPTX targets, full Pi-runtime injection coverage, visible progress, cooperative cancellation, and the remaining exits below.
 
 Deferred from this phase:
 

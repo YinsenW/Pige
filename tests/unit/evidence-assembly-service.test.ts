@@ -67,6 +67,52 @@ describe("evidence assembly service", () => {
     expect(pack.warnings).toEqual([]);
   });
 
+  it("pairs PPTX media OCR metadata and emits stable slide-media citation locators", async () => {
+    const vaultPath = makeVault();
+    const sourceId = "src_20260710_cdefab345678";
+    const body = "Screenshot-only roadmap evidence.";
+    const text = `--- Slide 3 Media 2 ---\n${body}`;
+    const textArtifact = artifact("art_pptx_media_ocr_text", "ocr", "artifacts/pptx-media.txt", text);
+    const start = "--- Slide 3 Media 2 ---\n".length;
+    const sidecarText = JSON.stringify({
+      schemaVersion: 1,
+      artifactId: "art_pptx_media_ocr_metadata",
+      sourceId,
+      kind: "pptx_media_ocr_metadata",
+      ocrTextChecksum: textArtifact.checksum,
+      units: [{
+        locator: "slide:3/media:2/ocr:block:1",
+        parentLocator: "slide:3",
+        characterStart: start,
+        characterEnd: start + body.length,
+        confidence: 0.95
+      }]
+    });
+    const metadataArtifact = artifact(
+      "art_pptx_media_ocr_metadata",
+      "metadata",
+      "artifacts/pptx-media.json",
+      sidecarText
+    );
+    write(vaultPath, textArtifact.path, text);
+    write(vaultPath, metadataArtifact.path, sidecarText);
+
+    const pack = await new EvidenceAssemblyService().assemble(
+      vaultPath,
+      makeSource(sourceId, "pptx_file", [metadataArtifact, textArtifact])
+    );
+
+    expect(pack.warnings).toEqual([]);
+    expect(pack.fragments).toEqual([expect.objectContaining({
+      artifactId: textArtifact.id,
+      locator: "slide:3/media:2/ocr:block:1",
+      parentLocator: "slide:3",
+      citationLocator: "slide3-media2-ocr1",
+      text: body,
+      confidence: 0.95
+    })]);
+  });
+
   it("deduplicates OCR text only when it repeats native text under the same parent locator", async () => {
     const vaultPath = makeVault();
     const sourceId = "src_20260710_bcdefa234567";
