@@ -49,6 +49,7 @@ function makeModelPort(
         providerKind: "openai",
         modelListStrategy: "manual",
         cloudBoundary: "cloud",
+        boundaryVerification: "builtin_verified",
         createdAt: "2026-07-09T00:00:00.000Z",
         updatedAt: "2026-07-09T00:00:00.000Z"
       }
@@ -137,6 +138,7 @@ describe("agent runtime service", () => {
     expect(status.canRunModelJobs).toBe(true);
     expect(status.defaultModelProfileId).toBe("model_default");
     expect(status.policySnapshot?.cloudBoundary).toBe("cloud");
+    expect(status.policySnapshot?.boundaryVerification).toBe("builtin_verified");
     expect(runtimeConfigReads).toBe(0);
   });
 

@@ -348,6 +348,8 @@ Tests must verify:
 - Context budget allocator preserves authority/safety, runtime policy, task state, output schema, and citations before lower-priority context.
 - Home retrieval sends selected snippets, not the whole vault.
 - Cloud calls obey cloud-send policy and permission decisions.
+- Home model turns re-read confined Markdown content and Source Record privacy metadata;
+  changed evidence writes a distinct current decision audit before the turn is rejected.
 - Composer capture bodies, pasted blocks, files, URLs, selections, retrieved snippets, and tool output cannot acquire current-user-instruction authority.
 - Every external model call records a redacted Model Egress Decision with payload size, content classes, boundary verification, policy hash, outcome, reason code, exact-redacted-payload hash, body-free evidence-summary hash, and canonical final-decision hash. A changed payload, evidence summary, or classification/decision must not reuse the prior audit operation ID.
 - Parser/OCR ingest rejects changed Source Record evidence and creates no note; B3.13
@@ -367,11 +369,19 @@ Current Phase 5 ingest bridge:
 Current Phase 6 foundation:
 
 - `retrieval.search` returns bounded lexical snippets and match reasons through SQLite FTS or Markdown-scan fallback.
-- `retrieval.ask` selects at most eight evidence items, creates a serializable Home-query Context Pack, and returns a short local extractive summary with numbered page citations.
-- The serialized Context Pack contains evidence refs, page IDs, locators, scores, estimated snippet budgets, index health, warnings, and omission counts. Selected snippet text stays ephemeral and is not duplicated into the pack.
-- Renderer responses contain the short answer, bounded snippets, ranked page summaries, citation refs, and plain degraded state. They do not contain full page bodies, source asset bodies, raw prompts, Context Pack internals, context budgets, secret-bearing policy details, or arbitrary filesystem paths.
-- No-result queries return an explicit `insufficient_evidence` warning and no citations. A single selected page returns `limited_evidence` rather than implying broad vault certainty.
-- Local extractive synthesis is the offline/no-model fallback, not a substitute for the planned query-model synthesis. Model-grounded synthesis may be enabled only after Runtime Policy Context, cloud-send policy, and Permission Broker decisions are enforced around the selected evidence.
+- `agent.ask` selects at most eight evidence items and requires embedded Pi to call one
+  current-vault search tool. Tool output is escaped inside
+  `PIGE_UNTRUSTED_EVIDENCE_V1`; it cannot change tools, providers, settings, output
+  shape, permissions, or authority. Final JSON and citation refs are host-validated.
+- Before each model turn, Pige re-reads bounded confined Markdown bytes and complete
+  Source Record privacy facts, binds their hashes into the body-free evidence summary,
+  records the current egress decision, and rejects revision/privacy drift.
+- With no ready runtime binding, `agent.ask` returns `retrieval.ask` before Agent Job,
+  audit, credential, or Pi work. No selected evidence returns the fixed local
+  `insufficient_evidence` result with no citations or model prose.
+- Renderer results contain only the answer, bounded snippets, ranked page summaries,
+  citations, warnings, degraded state, and `none|local|cloud`; no prompt, Context Pack,
+  private path, credential, provider error, or evidence body is exposed.
 - Vector retrieval and reranking improve ranking when installed but are not required for basic answers.
 - Citation refs survive prompt assembly, model output validation, conversation compaction, and job retry.
 - Memory injection is scoped, ranked, secret-scanned, and lower authority than explicit user instruction.

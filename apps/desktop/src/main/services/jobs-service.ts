@@ -88,6 +88,10 @@ export interface RecoverInterruptedJobsResult {
   readonly failedRetryable: number;
 }
 
+export interface CreateRetrievalQueryJobRequest {
+  readonly queryHash: string;
+}
+
 export interface ProcessQueuedIndexRebuildRequest {
   readonly jobIds?: readonly string[];
   readonly limit?: number;
@@ -265,6 +269,14 @@ export class JobsService {
       };
     }
 
+    if (jobFile.job.class === "retrieval_query") {
+      return {
+        status: "not_allowed",
+        reason: "Submit the Home question again to start a new bounded Agent turn.",
+        job: toJobSummary(vaultPath, jobFile.job)
+      };
+    }
+
     const preserveDurableWrites = jobFile.job.cancellation?.durableWritesApplied === true;
     const {
       stage: _stage,
@@ -288,6 +300,75 @@ export class JobsService {
       status: "requeued",
       job: toJobSummary(vaultPath, updatedJob)
     };
+  }
+
+  createRetrievalQueryJob(request: CreateRetrievalQueryJobRequest): JobRecord {
+    const activeVault = this.#vaults.current();
+    const vaultPath = this.#requireActiveVaultPath();
+    if (!activeVault || !/^sha256:[a-f0-9]{64}$/u.test(request.queryHash)) {
+      throw new PigeDomainError("rag.query_invalid", "The Home query identity is invalid.");
+    }
+
+    const now = new Date();
+    const timestamp = now.toISOString();
+    const dateKey = timestamp.slice(0, 10).replaceAll("-", "");
+    const jobId = `job_${dateKey}_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+    const job = JobRecordSchema.parse({
+      id: jobId,
+      class: "retrieval_query",
+      state: "queued",
+      priority: "interactive",
+      scope: "vault",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      activeVaultId: activeVault.vaultId,
+      actor: {
+        kind: "user",
+        runtimeKind: "desktop_local",
+        clientCapabilityTier: "desktop_full"
+      },
+      inputRefs: [{
+        kind: "tool",
+        id: "pige_home_query",
+        checksum: request.queryHash,
+        role: "query_hash"
+      }],
+      retry: {
+        retryCount: 0,
+        maxAutomaticRetries: 0,
+        requiresUserAction: true
+      },
+      privacy: {
+        usedCloudModel: false,
+        usedNetwork: false,
+        usedShell: false,
+        accessedExternalFiles: false,
+        permissionDecisionIds: []
+      },
+      message: "Home Agent question accepted."
+    });
+    writeJsonAtomic(createJobRecordPath(vaultPath, job.id), job);
+    return job;
+  }
+
+  writeRetrievalQueryJob(job: JobRecord): JobRecord {
+    const activeVault = this.#vaults.current();
+    const vaultPath = this.#requireActiveVaultPath();
+    const existing = readJobRecordFile(vaultPath, job.id);
+    if (
+      !activeVault ||
+      !existing ||
+      existing.job.class !== "retrieval_query" ||
+      job.class !== "retrieval_query" ||
+      job.createdAt !== existing.job.createdAt ||
+      job.activeVaultId !== activeVault.vaultId ||
+      existing.job.activeVaultId !== activeVault.vaultId
+    ) {
+      throw new PigeDomainError("rag.job_binding_invalid", "The Home Agent Job binding is invalid.");
+    }
+    const validated = JobRecordSchema.parse(job);
+    writeJsonAtomic(existing.path, validated);
+    return validated;
   }
 
   recoverInterruptedJobs(): RecoverInterruptedJobsResult {
@@ -1661,9 +1742,7 @@ function readJobRecordFiles(root: string): { path: string; job: JobRecord }[] {
 
 function readJobRecordFile(vaultPath: string, jobId: string): { path: string; job: JobRecord } | undefined {
   if (!/^job_\d{8}_[a-z0-9]{8,}$/.test(jobId)) return undefined;
-  const dateKey = /^job_(\d{8})_/.exec(jobId)?.[1];
-  if (!dateKey) return undefined;
-  const jobPath = path.join(vaultPath, ".pige", "jobs", dateKey.slice(0, 4), dateKey.slice(4, 6), `${jobId}.json`);
+  const jobPath = createJobRecordPath(vaultPath, jobId);
   if (!fs.existsSync(jobPath)) return undefined;
 
   try {
@@ -1672,6 +1751,14 @@ function readJobRecordFile(vaultPath: string, jobId: string): { path: string; jo
   } catch {
     return undefined;
   }
+}
+
+function createJobRecordPath(vaultPath: string, jobId: string): string {
+  const dateKey = /^job_(\d{8})_/.exec(jobId)?.[1];
+  if (!dateKey) {
+    throw new PigeDomainError("rag.job_binding_invalid", "The Home Agent Job ID is invalid.");
+  }
+  return path.join(vaultPath, ".pige", "jobs", dateKey.slice(0, 4), dateKey.slice(4, 6), `${jobId}.json`);
 }
 
 function readJobRecordAtPath(jobPath: string): JobRecord | undefined {

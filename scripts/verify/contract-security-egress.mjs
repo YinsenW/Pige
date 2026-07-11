@@ -76,7 +76,7 @@ if (
   method.includes("restrictedContent: false") ||
   !/createAgentIngestPromptContext\((?:currentSourceRecord|sourceRecord),\s*redaction\.pack,\s*policy\)/u.test(method) ||
   !method.includes("createModelEgressEvidencePayload(promptContextResult.context.evidence)") ||
-  !method.includes("containsRestrictedContent(evidencePayload) || containsRestrictedContent(promptMetadataPayload)")
+  !method.includes("containsRestrictedModelContent(evidencePayload) || containsRestrictedModelContent(promptMetadataPayload)")
 ) {
   failures.push("Agent ingest must derive restricted-content classification from the selected evidence and bounded dynamic prompt metadata.");
 }
@@ -98,7 +98,7 @@ for (const [key, requirement] of registryPermissions) {
 const main = read("apps/desktop/src/main/index.ts");
 for (const [startMarker, endMarker, mutationMarker] of [
   ['ipcMain.handle("maintenance.resetLocalDatabase"', 'ipcMain.handle("maintenance.localDatabaseStatus"', "getVaultService().resetLocalDatabase()"],
-  ['ipcMain.handle("models.addManualProvider"', 'ipcMain.handle("models.setDefaultModel"', "getModelProviderRegistry().addManualProvider(request)"]
+  ['ipcMain.handle("models.addManualProvider"', 'ipcMain.handle("models.setDefaultModel"', "getModelProviderRegistry().addManualProvider(validatedRequest)"]
 ]) {
   const block = main.slice(main.indexOf(startMarker), main.indexOf(endMarker));
   if (!(block.indexOf("confirmSettingAction") >= 0 && block.indexOf("confirmSettingAction") < block.indexOf(mutationMarker))) {

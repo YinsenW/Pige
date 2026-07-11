@@ -37,6 +37,73 @@ afterEach(() => {
 });
 
 describe("model provider registry", () => {
+  it("connects the reviewed OpenAI preset from an API key and creates one ready global default", async () => {
+    const { root, registry } = makeRegistry(okModelListFetch([
+      "text-embedding-3-small",
+      "gpt-realtime",
+      "gpt-5-mini",
+      "gpt-4.1"
+    ]));
+
+    const summary = await registry.addPresetProvider({
+      presetId: "openai",
+      apiKey: "sk-reviewed-preset-secret"
+    });
+
+    expect(summary.presets).toEqual([
+      expect.objectContaining({
+        presetId: "openai",
+        providerKind: "openai",
+        endpointProtocol: "openai_responses",
+        fixedBaseUrl: "https://api.openai.com/v1",
+        modelListStrategy: "list_models",
+        cloudBoundary: "cloud"
+      })
+    ]);
+    expect(summary.providers).toHaveLength(1);
+    expect(summary.providers[0]).toMatchObject({ presetId: "openai", providerKind: "openai" });
+    expect(summary.models.map((model) => model.modelId)).toEqual(["gpt-5-mini", "gpt-4.1"]);
+    expect(summary.models.find((model) => model.isDefault)?.modelId).toBe("gpt-5-mini");
+    expect(summary.hasDefaultModel).toBe(true);
+    expect(registry.hasDefaultRuntimeBinding()).toBe(true);
+    expect(registry.getDefaultRuntimeConfig()?.apiKey).toBe("sk-reviewed-preset-secret");
+    expect(fs.readFileSync(path.join(root, "provider-profiles.json"), "utf8")).not.toContain("sk-reviewed");
+    expect(fs.readFileSync(path.join(root, "model-profiles.json"), "utf8")).not.toContain("sk-reviewed");
+  });
+
+  it("preserves the known-good preset binding when reconnect discovery fails", async () => {
+    let modelIds = ["gpt-5-mini"];
+    const { root, registry } = makeRegistry(async () => okModelListFetch(modelIds)("https://example.invalid"));
+    const first = await registry.addPresetProvider({ presetId: "openai", apiKey: "first-secret" });
+    const beforeProviders = fs.readFileSync(path.join(root, "provider-profiles.json"), "utf8");
+    const beforeModels = fs.readFileSync(path.join(root, "model-profiles.json"), "utf8");
+    const beforeSecretRefs = registrySecretRefs(root);
+    modelIds = ["gpt-4o-mini"];
+
+    await expect(registry.addPresetProvider({ presetId: "openai", apiKey: "second-secret" }))
+      .rejects.toThrow("reviewed default model is unavailable");
+
+    expect(registry.summary()).toEqual(first);
+    expect(fs.readFileSync(path.join(root, "provider-profiles.json"), "utf8")).toBe(beforeProviders);
+    expect(fs.readFileSync(path.join(root, "model-profiles.json"), "utf8")).toBe(beforeModels);
+    expect(registrySecretRefs(root)).toEqual(beforeSecretRefs);
+    expect(registry.getDefaultRuntimeConfig()?.apiKey).toBe("first-secret");
+  });
+
+  it("reconnects a preset as one profile and removes the superseded secret", async () => {
+    const { root, registry } = makeRegistry(okModelListFetch(["gpt-5-mini", "gpt-4.1"]));
+    await registry.addPresetProvider({ presetId: "openai", apiKey: "first-secret" });
+    const firstRefs = registrySecretRefs(root);
+
+    const summary = await registry.addPresetProvider({ presetId: "openai", apiKey: "second-secret" });
+
+    expect(summary.providers).toHaveLength(1);
+    expect(summary.models.filter((model) => model.providerProfileId === summary.providers[0]?.id)).toHaveLength(2);
+    expect(registrySecretRefs(root)).toHaveLength(1);
+    expect(registrySecretRefs(root)).not.toEqual(firstRefs);
+    expect(registry.getDefaultRuntimeConfig()?.apiKey).toBe("second-secret");
+  });
+
   it("stores provider metadata and discovered model profiles without writing raw API keys to profile files", async () => {
     const { root, registry } = makeRegistry();
 
@@ -123,6 +190,39 @@ describe("model provider registry", () => {
       })
     ).rejects.toThrow("The provider rejected the API key.");
 
+    expect(fs.existsSync(path.join(root, "provider-profiles.json"))).toBe(false);
+    expect(fs.existsSync(path.join(root, "model-profiles.json"))).toBe(false);
+    expect(fs.existsSync(path.join(root, "secrets.json"))).toBe(false);
+  });
+
+  it("returns a fixed provider persistence error without exposing a private local path", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-model-registry-private-path-"));
+    tempRoots.push(root);
+    const crypto: SecretCryptoAdapter = {
+      ...fakeCrypto,
+      encryptString: () => {
+        throw new Error(`EACCES while writing ${path.join(root, "secrets.json")}`);
+      }
+    };
+    const registry = new ModelProviderRegistry(
+      root,
+      new JsonSecretStore(root, crypto),
+      new ModelProviderConnectionTester(okModelListFetch(["gpt-5-mini"]))
+    );
+
+    let caught: unknown;
+    try {
+      await registry.addPresetProvider({ presetId: "openai", apiKey: "opaque-provider-secret" });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toMatchObject({
+      code: "model_provider.persistence_failed",
+      message: "Provider setup could not be saved to protected local storage."
+    });
+    expect(String(caught)).not.toContain(root);
+    expect(String(caught)).not.toContain("secrets.json");
     expect(fs.existsSync(path.join(root, "provider-profiles.json"))).toBe(false);
     expect(fs.existsSync(path.join(root, "model-profiles.json"))).toBe(false);
     expect(fs.existsSync(path.join(root, "secrets.json"))).toBe(false);
@@ -233,4 +333,11 @@ function okModelListFetch(modelIds: readonly string[]): FetchLike {
       }),
       { status: 200 }
     );
+}
+
+function registrySecretRefs(root: string): string[] {
+  const file = JSON.parse(fs.readFileSync(path.join(root, "secrets.json"), "utf8")) as {
+    secrets: Array<{ ref: string }>;
+  };
+  return file.secrets.map((secret) => secret.ref);
 }

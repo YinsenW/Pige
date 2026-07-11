@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-11T13:37:22Z",
+  "reviewedAt": "2026-07-11T17:33:35Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,9 +30,21 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "cc010943300a5e98e11ee13350914979e1273f8cf7d76ce5afe45d963e4d6ff7"
+    "reviewedSha256": "ae6f08c16efecef1624d57d3aeb4ed6e91359a282cb15abcb21fb3dda2176a22"
   },
   "reviewers": [
+    {
+      "reviewerId": "provider-home-final-review",
+      "task": "/root/provider_home_independent_review",
+      "independentDimensions": [
+        "navigation_and_resource_lifecycle",
+        "cross_document_contract_consistency",
+        "continuous_traceability_and_acceptance",
+        "ongoing_development_support",
+        "documentation_leanness_and_maintainability"
+      ],
+      "independence": "Fresh read-only reviewer audited the exact 54-file Provider/Home candidate after four privacy repairs. It traced OpenAI key-only setup, global default, agent.ask/local fallback, query-hash Jobs, per-turn evidence audits, drift/confinement, UI/prototypes, exact evidence, unchanged statuses, residual gaps, 1,079 claims, screenshots, and budgets; all five dimensions passed with zero blockers and no edits."
+    },
     {
       "reviewerId": "pi-image-ocr-tool-recovery-review",
       "task": "/root/image_ocr_final_review",
@@ -170,59 +182,59 @@
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "pi-image-ocr-tool-recovery-review",
+      "reviewerId": "provider-home-final-review",
       "blockerCount": 0,
-      "summary": "The existing entry path now accurately includes direct images in the embedded Pi OCR spine across README, Pi, Parser, Jobs, Prompt, API, Technical Architecture, Playbook, Decision, and trace projections without adding an owner, schema, or public API."
+      "summary": "README, Home, Models, API, prototypes, and screenshots consistently expose one OpenAI key-only preset, a global default, Pi-grounded Home answers, no-model local fallback, typed states, and progressive custom setup."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "pi-image-ocr-tool-recovery-review",
+      "reviewerId": "provider-home-final-review",
       "blockerCount": 0,
-      "summary": "Owners agree that image capture preserves first and only a Pi OCR event creates its child. Capability recovery requeues first or waiting OCR, while completed-empty evidence stays parked across restart; retry reuses one child and cancellation reaches active OCR."
+      "summary": "agent.ask and models.addPresetProvider align across runtime, contracts, schemas, Owners, decisions, and UI: write-only key ingress, non-secret readiness, Job/audit ordering, evidence drift, untrusted data, and zero-evidence behavior agree."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "pi-image-ocr-tool-recovery-review",
+      "reviewerId": "provider-home-final-review",
       "blockerCount": 0,
-      "summary": "The 1,076-claim lock adds one exact image OCR tool-spine record, updates ten directly supported Requirement/Exit mappings, and preserves the E5.03 adversarial gap without renumbering IDs or promoting any status."
+      "summary": "Four exact Home/provider selectors support the changed mappings; the 1,079-claim lock is current, all statuses are unchanged, and catalog/custom/Broker/drainer/platform/CAS gaps stay open."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "pi-image-ocr-tool-recovery-review",
+      "reviewerId": "provider-home-final-review",
       "blockerCount": 0,
-      "summary": "Embedded Pi now executes inspect→OCR→inspect→publish for preserved images with no-model/capability wait, deterministic reuse, cancellation, empty-output stop, and managed/reference proof. B3.13/E3.08 stays partial for retrieval/proposals, metadata, recovery, Broker, Provider/Home, and packaged proof."
+      "summary": "Owners distinguish the executable OpenAI/Home vertical from provider breadth, ingest retrieval/proposals, conversation persistence, generic recovery, Broker continuation, packaged manual BYOK, and platform proof."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.6,
-      "reviewerId": "pi-image-ocr-tool-recovery-review",
+      "reviewerId": "provider-home-final-review",
       "blockerCount": 0,
-      "summary": "The candidate remains at 57 Markdown files and passes every leanness gate with 23,149 lines, 162,452 words, 1,208,790 bytes, 4,032 entry words, 5,432 trace lines, zero duplicate groups, and 14 mutations."
+      "summary": "All budgets pass without expansion: 57 Markdown files, 23,188 lines, 162,487 words, 1,209,473 bytes, 4,044 entry words, 5,409 trace lines, zero duplicate groups, and 14 mutations."
     }
   ],
   "verification": [
     {
       "command": "npm run verify:docs && npm run verify:decisions && npm run verify:ui-visual && npm run verify:contracts && npm run verify:dependencies && npm run verify:fixtures && npm run verify:boundaries && npm run verify:no-telemetry && npm run verify:source-artifacts",
       "status": "passed",
-      "evidence": "All 57 Markdown files, 98 local links, 45 anchors, 80 decisions, 12 UI tokens, 8 structural rules, 448 capture combinations, CON-001 through CON-004, dependencies, fixtures, boundaries, source artifacts, and no-telemetry mutations passed."
+      "evidence": "All 57 Markdown files, 98 local links, 45 anchors, 80 decisions, 12 UI tokens, 8 structural rules, 448 captures, CON-001 through CON-004, 49 dependencies, fixtures, boundaries, source artifacts, and no-telemetry mutations passed."
     },
     {
       "command": "npm test && npm run typecheck && npm run build && npm run smoke:pi-agent-runtime && npm run smoke:index-rebuild-worker && npm run smoke:parser-workers && npm run smoke:macos-vision-ocr",
       "status": "passed",
-      "evidence": "All 66 test files/466 tests, type checks, production build, assembled Electron Pi runtime, index-rebuild worker, parser workers, and real macOS Vision OCR for direct-image and PPTX Agent paths passed."
+      "evidence": "All 67 test files/495 tests, type checks, production build, Electron Pi/Home runtime, index worker, parser workers, and real macOS Vision OCR passed on the corrected candidate."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 passed: 4,032 of 4,200 entry words, zero duplicate groups, 14 mutations, 5,432 trace lines, 57 Markdown files, 1,208,790 bytes, and a 7.68 percent line reduction from baseline."
+      "evidence": "LEN-001 through LEN-005 passed: 4,044/4,200 entry words, zero duplicate groups, 14 mutations, 5,409 trace lines, 57 Markdown files, 1,209,473 bytes, and 7.53 percent line reduction."
     },
     {
       "command": "node scripts/verify/independent-documentation-review.mjs --print-snapshot && explicit semantic-ledger comparison",
       "status": "passed",
-      "evidence": "The governed snapshot is cc010943300a5e98e11ee13350914979e1273f8cf7d76ce5afe45d963e4d6ff7 across 109 files; current and locked semantic ledgers contain 1,076 claims with zero differences, and TRC-001 through TRC-005 pass."
+      "evidence": "The governed snapshot is ae6f08c16efecef1624d57d3aeb4ed6e91359a282cb15abcb21fb3dda2176a22 across 109 files; current and locked ledgers contain 1,079 claims with zero differences."
     }
   ],
   "coordination": {
@@ -231,8 +243,8 @@
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "No stable ID or status changed. Preserved text, supported documents, and direct images use embedded Pi tools; retrieval/proposals, Provider/Home, and remaining fixed routes stay open.",
-    "acknowledgement": "Development delivered the frozen Agent-selected direct-image OCR vertical and repaired completed-empty restart requeue; Product Planning synchronized exact Owner, acceptance, semantic, README, and residual-risk facts into this 20-file combined candidate."
+    "compatibility": "No stable ID or status changed. OpenAI preset A and bounded Home Pi/local retrieval are implemented; provider breadth, Broker continuation, drainer/retry/cancel, platforms, and cross-process guarantees remain open.",
+    "acknowledgement": "Development delivered 36 frozen Provider/Home files and four privacy repairs; UI Design supplied the minimal prototype delta; Product Planning synchronized 19 Owner/UI/acceptance/semantic/recipe files into this 55-file candidate."
   },
   "resolvedBlockers": [
     "Rewrote README as a concise product entry with user value, honest current capability, the Agent-first roadmap, privacy boundaries, and the Agent-authored automation goal instead of a technical inventory.",
@@ -255,7 +267,8 @@
     "Added an Agent-selected PDF parse tool whose deterministic child identity binds the semantic action while raw Pi call IDs remain non-durable and only capped parent-scoped hashes are retained as provenance.",
     "Added Agent-selected PDF OCR over parser-verified pages with one deterministic child, retry/wait reuse, cancellation propagation, empty-output stop, and re-inspection before cited publication.",
     "Moved DOCX/PPTX parse and parser-selected PPTX media OCR onto Pi tool events with deterministic children, idempotent retry, cancellation, no-readable-evidence stop, and capability recovery both before and after an OCR child exists.",
-    "Moved direct-image OCR onto Pi tool events with no pre-tool child, deterministic reuse, capability recovery, cancellation, empty-output parking across restart, wrong-tool rejection, and managed/reference source proof."
+    "Moved direct-image OCR onto Pi tool events with no pre-tool child, deterministic reuse, capability recovery, cancellation, empty-output parking across restart, wrong-tool rejection, and managed/reference source proof.",
+    "Added the reviewed OpenAI key-only preset and global default plus a Pi-grounded Home query vertical with no-model local fallback, body-free per-turn audits, exact Markdown/source privacy drift checks, confined records, untrusted evidence, fixed zero-evidence output, typed UI states, and no raw key/path/body/error exposure."
   ],
   "nonBlockingRisks": [
     "P5 remains in progress: remaining Job-class publishers, running capture/other-class cancellation, strict cross-process Job CAS and routing, parent-directory swap, guard-to-domain atomicity, guard-without-output recovery, checkpoint arrays, cross-file transactions, Windows/Paddle, packaged-filesystem proof, and visible progress/cancel UI remain open.",
@@ -263,10 +276,10 @@
     "The local-tool lifecycle remains a fake/local service foundation: real Paddle/Python/model/language-pack transport, ordinary-ingest no-hidden-install proof, production app-data/catalog/permission/pre-vault Job/Operation wiring, OCR/UI, supply chain, packaged platforms, cross-process locking, complete recovery/GC/quarantine purge, and background lifecycle controls remain open.",
     "The retrieval regression foundation remains lexical and synthetic: model-grounded summary/citation validation under cloud-send and Permission enforcement, tag/topic/entity and Knowledge Tree thresholds, vector/reranker ranking, 10k/100k and UI/packaged proof, and broader locale/query families remain open.",
     "The Knowledge Tree remains internal-only: broader relation and branch semantics, richer aggregate inputs, public IPC/preload/renderer navigation, localized empty state, 10k worker/incremental rebuild proof, packaged parity, and the separately owned visual/accessibility and Knowledge Health work remain open.",
-    "Pi remains partial: retrieval/proposal tools, complete registry metadata, remaining Jobs/main DAG and URL/renderer bypass removal, generic child pause/restart/continue, full persisted Permission Broker, the required read-to-retrieve-to-publish trace, continue/steer/follow-up/restart proof, Provider/Home usability, manual BYOK, signed installed macOS/Windows, and broader cross-process/cross-file recovery remain open.",
+    "Pi remains partial: ingest retrieval/proposals, complete provider catalog/custom protocols, remaining fixed routes, generic continuation, persisted Broker, Home drainer/retry/cancel/conversations, combined read-to-retrieve-to-publish, manual packaged BYOK, signed platforms, and broader cross-process/cross-file recovery remain open.",
     "No-telemetry is a static executable gate; unknown SDKs, computed endpoints, indirect transports, generated configuration, and crash-hook review remain open. Diagnostics still need broader stores, recovery correlation, user clear, export cancellation, selected-path UX, and crash recovery.",
     "Backup still needs backupId/domainSchemaVersions, release exclusion scans, external managed copies, include controls, durable Jobs/checkpoints, structured dependencies, and complete restore orchestration.",
-    "Trace projections use 5,432 of 5,500 lines and governed Markdown uses 1,208,790 of 1,210,000 bytes; future semantic additions must reclaim capacity in the same change instead of raising budgets.",
+    "Trace projections use 5,409 of 5,500 lines and governed Markdown uses 1,209,473 of 1,210,000 bytes; future semantic additions must reclaim capacity in the same change instead of raising budgets.",
     "PRD, TECH_ARCHITECTURE, and Decision Log remain large Owner documents; future Agents should continue section-targeted reads and define each fact once.",
     "The concise pre-alpha README intentionally has no install button, screenshots, or release download; add those only when a usable signed build and governed visual evidence exist.",
     "Structural UI gates do not prove packaged macOS/Windows fidelity, accessibility, or human visual approval; real capture and release evidence remain open.",

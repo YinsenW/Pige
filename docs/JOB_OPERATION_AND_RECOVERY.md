@@ -107,18 +107,23 @@ Phase 2 implementation note:
 - Capture, parse, and OCR runners persist and link each deterministic parse, OCR, or Agent-ingest child before parent terminalization. Interrupted `running` parents auto-requeue; handled finalization failures remain `failed_retryable` for explicit retry. Both reuse the linked child. This guarantee is separate from the deferred `capture_batch` hierarchy.
 - Startup and vault activation first reconcile interrupted jobs. Proven-idempotent capture/parse/OCR/Agent-ingest/index jobs are requeued; cancellation-in-progress and unproven classes become `failed_retryable`. Capture/parse/OCR/Agent ingest drain in batches of 20; index rebuild uses a coalesced limit-1 drainer. Waiting Agent ingest still honors current model/OCR readiness.
 - Home's contextual processing strip includes active capture, parse, OCR, Agent ingest, and index jobs. It remains hidden when no work needs attention and uses compact localized status indicators rather than a new queue destination.
+- Model-backed Home creates a query-hash-only `retrieval_query` before retrieval and links
+  body-free audits/citation refs. No-binding fallback creates none. Restart marks an
+  interrupted query `failed_retryable`; generic retry is rejected and resubmission starts
+  a new turn. Drainer, continuation, cancel/progress, and conversation persistence remain open.
 - Source-page writes use pending/previous/target checksums so a crash can be reconciled without confusing Pige's partial write with a user edit.
 - Phase 3 text/document pages create deterministic `agent_ingest`. Missing models wait.
   Document parse/OCR children key parent/tool/version/source revision/input, reuse across
   Pi call IDs, store capped call hashes, and resume through their Agent parent.
-- Phase 3 `agent_ingest` is process-locally cancellable through provider access and generated-note commit. It distinguishes user abort from provider timeout, fences the Source Record on both sides of a durable note-publication checkpoint, and uses create-only publication. Current-job note adoption requires bounded `last_job_id` provenance; otherwise only a new durable `index.md` entry starts a guard. Egress audit alone does not. Drift requeues or waits, user/nonmatching pages remain untouched, and same-job notes recover idempotently. Strict cross-process SourceRecord-to-note CAS, parent-swap resistance, note/index/operation transactions, and packaged-platform proof remain open.
+- Phase 3 `agent_ingest` is process-locally cancellable through provider and create-only
+  note commit, with Source Record fences and durable publication guard. Same-job note or
+  new-index adoption is provenance-checked and idempotent; drift waits/requeues. Strict
+  cross-process CAS, parent-swap, cross-file transactions, and packaged proof stay open.
 - Phase 4 `index_rebuild` runs in a bundled worker, enters `running/indexing`, persists monotonic `index_item` progress, serializes process-local writers, and cooperatively cancels. Failure rolls back to the prior committed index; clean cancellation preserves Markdown. Cross-process writer/CAS, kill/crash/stale-worker recovery, packaged paths, and implicit first-query workerization remain open.
-- Process-local parse/OCR/index rebuild persist monotonic progress; parse/OCR/Agent ingest/index
-  rebuild share cancellation. Capture/parse/OCR/Agent ingest implement the Section 6 publication guard; retry
-  retains it. Guard-first cancellation cannot end `cancelled`, and only a verified output
-  race becomes `completed_with_warnings`. Other writers, running capture/other-class
-  cancellation, strict cross-process routing/CAS, checkpoint arrays, pushed events, numeric
-  Home UI, and compaction remain open.
+- Parse/OCR/index rebuild persist monotonic progress; parse/OCR/Agent ingest/index share
+  cancellation. Capture/parse/OCR/Agent ingest retain the Section 6 guard across retry;
+  post-guard cancellation cannot become clean `cancelled`. Other writers/classes,
+  cross-process CAS, checkpoints, pushed/numeric UI, and compaction remain open.
 
 ## 4. Job Classes
 

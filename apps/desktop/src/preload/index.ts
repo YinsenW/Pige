@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type {
+  AddPresetProviderRequest,
   AddManualProviderRequest,
   AgentRuntimeStatus,
   AppHealth,
@@ -10,6 +11,8 @@ import type {
   CreateVaultRequest,
   DiagnosticsHealth,
   ExportSupportBundleRequest,
+  HomeAgentAskRequest,
+  HomeAgentAskResult,
   JobActionRequest,
   JobActionResult,
   JobsListRequest,
@@ -75,7 +78,9 @@ const api: PigeDesktopApi = {
   },
   agent: {
     runtimeStatus: async (): Promise<AgentRuntimeStatus> =>
-      ipcRenderer.invoke("agent.runtimeStatus") as Promise<AgentRuntimeStatus>
+      ipcRenderer.invoke("agent.runtimeStatus") as Promise<AgentRuntimeStatus>,
+    ask: async (request: HomeAgentAskRequest): Promise<HomeAgentAskResult> =>
+      ipcRenderer.invoke("agent.ask", request) as Promise<HomeAgentAskResult>
   },
   capture: {
     submitText: async (request: SubmitTextCaptureRequest): Promise<CaptureSubmitResult> =>
@@ -169,6 +174,8 @@ const api: PigeDesktopApi = {
   models: {
     summary: async (): Promise<ModelProviderSettingsSummary> =>
       ipcRenderer.invoke("models.summary") as Promise<ModelProviderSettingsSummary>,
+    addPresetProvider: async (request: AddPresetProviderRequest): Promise<ModelProviderSettingsSummary> =>
+      ipcRenderer.invoke("models.addPresetProvider", request) as Promise<ModelProviderSettingsSummary>,
     addManualProvider: async (request: AddManualProviderRequest): Promise<ModelProviderSettingsSummary> =>
       ipcRenderer.invoke("models.addManualProvider", request) as Promise<ModelProviderSettingsSummary>,
     setDefaultModel: async (request: SetDefaultModelRequest): Promise<ModelProviderSettingsSummary> =>

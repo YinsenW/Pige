@@ -62,6 +62,42 @@ export function findMarkdownPageById(vaultPath: string, pageId: string): Markdow
   return undefined;
 }
 
+export function readMarkdownPageByRelativePath(
+  vaultPath: string,
+  pagePath: string
+): MarkdownPageRecord | undefined {
+  if (
+    path.isAbsolute(pagePath) ||
+    pagePath.includes("\\") ||
+    pagePath.split("/").some((segment) => !segment || segment === "." || segment === "..") ||
+    !PAGE_ROOTS.some((root) => pagePath.startsWith(`${root}/`)) ||
+    !pagePath.toLowerCase().endsWith(".md")
+  ) {
+    return undefined;
+  }
+  const filePath = resolveVaultRelativePath(vaultPath, pagePath);
+  try {
+    const stat = fs.lstatSync(filePath);
+    if (stat.isSymbolicLink() || !stat.isFile()) return undefined;
+    const pageRoot = path.resolve(vaultPath, pagePath.split("/", 1)[0] ?? "");
+    let parentPath = path.dirname(filePath);
+    while (true) {
+      const parentStat = fs.lstatSync(parentPath);
+      if (parentStat.isSymbolicLink() || !parentStat.isDirectory()) return undefined;
+      if (parentPath === pageRoot) break;
+      const nextParent = path.dirname(parentPath);
+      if (nextParent === parentPath) return undefined;
+      parentPath = nextParent;
+    }
+    const realRoot = fs.realpathSync(pageRoot);
+    const realFile = fs.realpathSync(filePath);
+    if (!realFile.startsWith(`${realRoot}${path.sep}`)) return undefined;
+    return readMarkdownPageRecord(vaultPath, filePath);
+  } catch {
+    return undefined;
+  }
+}
+
 export function readMarkdownPageBody(filePath: string): string {
   const markdown = fs.readFileSync(filePath, "utf8");
   const parsed = parsePigeFrontmatter(markdown);

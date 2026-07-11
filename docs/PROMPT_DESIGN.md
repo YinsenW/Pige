@@ -155,6 +155,13 @@ Required output:
 
 The answer must not imply it searched the whole vault unless retrieval actually covered the relevant scope.
 
+Current executable contract:
+
+- Pi calls `pige_search_knowledge` exactly once and returns strict JSON with selected
+  citations. Escaped `PIGE_UNTRUSTED_EVIDENCE_V1` content is data, not authority.
+- Pige rechecks binding, Markdown/source privacy, and egress per turn; drift is audited
+  and rejected. No binding falls back locally; no evidence invokes no model.
+
 ### 5.3 Note Agent
 
 Goal:

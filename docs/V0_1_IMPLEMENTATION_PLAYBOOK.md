@@ -267,8 +267,9 @@ Build:
   preservation Pi Agent alone selects semantic tools, with no host-fixed/parallel path.
 
 Agent Spine Gate: text and preserved PDF/DOCX/PPTX/images run through embedded Pi,
-isolated model binding, inspection, parse/selected OCR, re-inspection, and cited publication.
-B3.13/E3.08 remains partial for retrieval/proposals, catalog
+isolated model binding, inspection, parse/selected OCR, re-inspection, cited publication,
+and one bounded Home search-tool path. B3.13/E3.08 remains partial for ingest retrieval,
+proposals, catalog
 metadata, generic recovery, permissions, platforms, and remaining fixed routes.
 The exact-`v0.80.6` exception keeps compat globals/default dispatch inert in the sole
 adapter and still forbids deep imports, forks, patches, and parallel loops.
@@ -277,7 +278,8 @@ Until E3.08 passes, pause non-blocking P4/P5/P6 breadth. Existing preservation,
 parser/OCR, Artifact, Job, recovery, policy, retrieval, and commit work remains substrate;
 security/data-loss repairs and spine dependencies may proceed.
 
-B3.05 evidence proves redaction before typed egress, body-free Provider/Model binding, and pre-render/pre-invocation drift checks. Confirmation resume and complete provider-path adoption remain open, so E3.03 is incomplete.
+B3.05 includes Home per-turn evidence classification/audits and drift rejection.
+Confirmation resume and complete provider adoption remain open, so E3.03 is incomplete.
 
 Deferred from this phase:
 
@@ -439,6 +441,10 @@ Build:
 - [B6.13 -> E6.08] Source-preserving Markdown editing with valid frontmatter, links, citations, and IME-safe input.
 - [B6.14 -> E6.09] Knowledge Tree visual semantics: domain/topic branch weight and fragment leaf quantity/density remain explainable, accessible, and source-backed.
 - [B6.15 -> E6.10] Executable retrieval, linking, and summarization regression fixtures for ranking, grounding, citations, related pages, and insufficient evidence.
+
+Current Home foundation is one cited Pi search-tool turn, no-binding local fallback, and
+fixed zero-evidence output. Regression, vector/reranker, Note Agent, save/conversation,
+Broker, platform, and 10k acceptance remain open.
 
 Deferred from this phase:
 

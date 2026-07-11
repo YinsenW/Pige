@@ -219,10 +219,10 @@ Tests must verify:
 
 Tests must verify:
 
-- Provider setup stores API keys only in the secret store.
-- Provider model-list discovery creates model profiles when supported.
-- Manual model ID entry works when discovery is unsupported or fails.
-- End-to-end ingest proves the default model changes an embedded Pi call and reaches validated durable output.
+- Provider setup keeps keys in the secret store, discovers bounded model profiles, and
+  permits manual ID only for explicit compatible-endpoint no-list support. The reviewed
+  OpenAI key-only preset proves global default, rollback, non-secret readiness/no key
+  return; end-to-end ingest proves that default reaches embedded Pi durable output.
 - Pi compatibility tests bind exact same-version packages; reject deep/compat/global or
   out-of-adapter imports; and cover event/tool order, validation, abort/continue,
   queues/context, selected auth, no ambient authority, and packaged runtime on update.
@@ -256,6 +256,8 @@ Tests must verify:
 
 - Context budget allocation preserves authority/safety, Runtime Policy Context, task state, output schema, and citations before lower-authority context.
 - Home retrieval sends selected snippets and citation refs to model calls, not the whole vault or large source bodies.
+- Home tests cover pre-Agent local fallback, evidence/privacy drift and replacement
+  audits, confinement/secret blocking, one untrusted tool, and fixed zero-evidence output.
 - Retrieval works through lexical/metadata fallback before local embeddings are installed.
 - CJK retrieval fixtures do not depend on whitespace-only tokenization.
 - Citation refs survive prompt assembly, structured output validation, conversation compaction, and retry.

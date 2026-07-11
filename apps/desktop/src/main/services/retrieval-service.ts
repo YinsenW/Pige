@@ -142,21 +142,28 @@ export class RetrievalService {
 
   ask(request: RetrievalAskRequest): RetrievalAskResult {
     const searchResult = this.search(request);
-    const context = buildHomeQueryContextPack(searchResult);
-    const answerEvidence = context.selectedEvidence.slice(0, MAX_ANSWER_EVIDENCE);
-    const confidence = answerEvidence.length === 0 ? "insufficient" : answerEvidence.length === 1 ? "limited" : "grounded";
-    const warnings = createAnswerWarnings(searchResult, confidence);
-
-    return {
-      ...searchResult,
-      answeredAt: new Date().toISOString(),
-      answer: createExtractiveAnswer(request.query, request.locale, answerEvidence),
-      answerMode: "local_extractive",
-      confidence,
-      citations: answerEvidence.map((evidence) => evidence.citation),
-      warnings
-    };
+    return buildLocalExtractiveAskResult(request, searchResult);
   }
+}
+
+export function buildLocalExtractiveAskResult(
+  request: RetrievalAskRequest,
+  searchResult: RetrievalSearchResult
+): RetrievalAskResult {
+  const context = buildHomeQueryContextPack(searchResult);
+  const answerEvidence = context.selectedEvidence.slice(0, MAX_ANSWER_EVIDENCE);
+  const confidence = answerEvidence.length === 0 ? "insufficient" : answerEvidence.length === 1 ? "limited" : "grounded";
+  const warnings = createAnswerWarnings(searchResult, confidence);
+
+  return {
+    ...searchResult,
+    answeredAt: new Date().toISOString(),
+    answer: createExtractiveAnswer(request.query, request.locale, answerEvidence),
+    answerMode: "local_extractive",
+    confidence,
+    citations: answerEvidence.map((evidence) => evidence.citation),
+    warnings
+  };
 }
 
 export function buildHomeQueryContextPack(result: RetrievalSearchResult): BuiltHomeQueryContext {

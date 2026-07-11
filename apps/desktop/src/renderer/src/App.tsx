@@ -10,6 +10,7 @@ import type {
   AppHealth,
   BackupRestoreStatus,
   DiagnosticsHealth,
+  HomeAgentModelUsage,
   JobSummary,
   LibraryListResult,
   LibraryPageSummary,
@@ -19,6 +20,7 @@ import type {
   ModelProviderSettingsSummary,
   NoteRenderResult,
   OnboardingStatus,
+  PigeErrorSummary,
   RecentVaultSummary,
   RetrievalAskResult,
   RetrievalSearchResultItem,
@@ -33,6 +35,7 @@ import type { CloudBoundary, JobState, Locale, ProviderKind, SourceStorageStrate
 type View = "home" | "library" | "settings" | "models";
 type CaptureToast = { readonly kind: "success" | "error"; readonly message: string };
 type NoteRelatedState = LibraryRelatedResult | "loading" | "unavailable" | null;
+type HomeAgentUiState = "idle" | "accepted" | "running" | "waiting" | "failed" | "completed";
 
 const initialVaultName = "Pige Vault";
 const localeLabels: Record<Locale, string> = {
@@ -473,6 +476,7 @@ export function App(): React.JSX.Element {
             onFilesSelected={(files) => submitFiles(files, "file_picker")}
             onCancelJob={cancelJob}
             onRetryJob={retryJob}
+            onOpenModels={() => setView("models")}
             t={t}
           />
         )}
@@ -852,23 +856,33 @@ function HomeComposer(props: {
   readonly onFilesSelected: (files: readonly File[]) => Promise<void>;
   readonly onCancelJob: (jobId: string) => Promise<void>;
   readonly onRetryJob: (jobId: string) => Promise<void>;
+  readonly onOpenModels: () => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const [text, setText] = useState("");
   const [captureStatus, setCaptureStatus] = useState<string | null>(null);
   const [captureError, setCaptureError] = useState<string | null>(null);
   const [retrievalResult, setRetrievalResult] = useState<RetrievalAskResult | null>(null);
-  const [retrievalLoading, setRetrievalLoading] = useState(false);
+  const [agentRunState, setAgentRunState] = useState<HomeAgentUiState>("idle");
+  const [agentError, setAgentError] = useState<PigeErrorSummary | null>(null);
+  const [agentModelUsage, setAgentModelUsage] = useState<HomeAgentModelUsage>("none");
   const [selectedNote, setSelectedNote] = useState<NoteRenderResult | null>(null);
   const [selectedNoteRelated, setSelectedNoteRelated] = useState<NoteRelatedState>(null);
   const [noteLoadingPageId, setNoteLoadingPageId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const noteOpenSequence = useRef(0);
   const agentStatusLabel = props.agentRuntimeStatus?.state === "ready" ? props.t("home.agentReady") : props.t("home.captureOnly");
+  const plannedModelUsage = homeRuntimeModelUsage(props.agentRuntimeStatus);
+  const cloudUsageMessageKey = agentRunState === "accepted" || agentRunState === "running"
+    ? plannedModelUsage === "cloud" ? "home.cloudSend" : null
+    : agentModelUsage === "cloud" ? "home.cloudCallAttempted" : null;
   const submitHomeInput = async (): Promise<void> => {
     if (!text.trim()) return;
     setCaptureError(null);
     setCaptureStatus(null);
+    setAgentError(null);
+    setAgentRunState("idle");
+    setAgentModelUsage("none");
     noteOpenSequence.current += 1;
     setSelectedNote(null);
     setSelectedNoteRelated(null);
@@ -878,7 +892,7 @@ function HomeComposer(props: {
       return;
     }
     if (isLikelyQuestion(text)) {
-      await submitRetrieval();
+      await submitAgentQuestion();
       return;
     }
 
@@ -913,16 +927,36 @@ function HomeComposer(props: {
     }
   };
 
-  const submitRetrieval = async (): Promise<void> => {
-    setRetrievalLoading(true);
+  const submitAgentQuestion = async (): Promise<void> => {
+    const query = text.trim();
+    setAgentError(null);
+    setRetrievalResult(null);
+    setAgentModelUsage("none");
+    setAgentRunState("accepted");
+    await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+    setAgentRunState("running");
     try {
-      const result = await window.pige.retrieval.ask({ query: text, limit: 8, locale: props.locale });
-      setRetrievalResult(result);
-      setText("");
-    } catch (caught) {
-      setCaptureError(caught instanceof Error ? caught.message : props.t("error.generic"));
-    } finally {
-      setRetrievalLoading(false);
+      const outcome = await window.pige.agent.ask({ query, limit: 8, locale: props.locale });
+      if (outcome.state === "completed") {
+        setRetrievalResult(outcome.result);
+        setAgentModelUsage(outcome.modelUsage);
+        setAgentRunState("completed");
+        setText("");
+        return;
+      }
+      setAgentModelUsage(outcome.modelUsage);
+      setAgentError(outcome.error);
+      setAgentRunState(outcome.state);
+    } catch {
+      setAgentError({
+        code: "model_provider.call_failed",
+        domain: "model_provider",
+        messageKey: "errors.model_provider.call_failed",
+        retryable: true,
+        severity: "error",
+        userAction: "retry"
+      });
+      setAgentRunState("failed");
     }
   };
 
@@ -974,7 +1008,7 @@ function HomeComposer(props: {
                 >
                   {props.t("home.cancelJob")}
                 </button>
-              ) : job.state === "failed_retryable" ? (
+              ) : job.state === "failed_retryable" && job.class !== "retrieval_query" ? (
                 <button
                   className="job-action"
                   type="button"
@@ -1013,6 +1047,7 @@ function HomeComposer(props: {
       ) : retrievalResult ? (
         <RetrievalResults
           result={retrievalResult}
+          modelUsage={agentModelUsage}
           noteLoadingPageId={noteLoadingPageId}
           onOpen={openResult}
           t={props.t}
@@ -1048,11 +1083,30 @@ function HomeComposer(props: {
           >
             +
           </button>
-          <button type="button" aria-label={props.t("home.send")} disabled={!text.trim() || retrievalLoading} onClick={() => void submitHomeInput()}>
-            {retrievalLoading ? props.t("retrieval.searching") : props.t("home.send")}
+          <button
+            type="button"
+            aria-label={props.t("home.send")}
+            disabled={!text.trim() || agentRunState === "accepted" || agentRunState === "running"}
+            onClick={() => void submitHomeInput()}
+          >
+            {agentRunState === "accepted" || agentRunState === "running" ? props.t("home.agentRunning") : props.t("home.send")}
           </button>
         </div>
         {captureStatus ? <p className="capture-status">{captureStatus}</p> : null}
+        {agentRunState !== "idle" ? (
+          <div className={`agent-run-state state-${agentRunState}`} role="status" aria-live="polite">
+            <span className="agent-run-dot" aria-hidden="true" />
+            <span>{agentError ? props.t(agentError.messageKey) : props.t(`home.agentState.${agentRunState}`)}</span>
+            {cloudUsageMessageKey ? (
+              <span className="agent-cloud-boundary">{props.t(cloudUsageMessageKey)}</span>
+            ) : null}
+            {agentError?.userAction === "configure_model" ? (
+              <button type="button" className="ghost" onClick={props.onOpenModels}>{props.t("home.openModels")}</button>
+            ) : agentError?.retryable ? (
+              <button type="button" className="ghost" onClick={() => void submitAgentQuestion()}>{props.t("home.retryAnswer")}</button>
+            ) : null}
+          </div>
+        ) : null}
         {captureError ? <p className="error">{captureError}</p> : null}
       </section>
     </section>
@@ -1068,6 +1122,7 @@ function jobStateMessageKey(state: JobState): string {
 
 function RetrievalResults(props: {
   readonly result: RetrievalAskResult;
+  readonly modelUsage: HomeAgentModelUsage;
   readonly noteLoadingPageId: string | null;
   readonly onOpen: (pageId: string) => Promise<void>;
   readonly t: (key: string) => string;
@@ -1077,6 +1132,9 @@ function RetrievalResults(props: {
       <section className="retrieval-answer" aria-label={props.t("retrieval.summary")}>
         <p className="retrieval-eyebrow">{props.t("retrieval.summary")}</p>
         <p className="retrieval-answer-text">{props.result.answer}</p>
+        {props.result.warnings.includes("insufficient_evidence") ? (
+          <p className="muted retrieval-warning">{props.t("retrieval.insufficientEvidence")}</p>
+        ) : null}
         {props.result.citations.length > 0 ? (
           <div className="retrieval-citations" aria-label={props.t("retrieval.citations")}>
             {props.result.citations.map((citation) => (
@@ -1103,8 +1161,11 @@ function RetrievalResults(props: {
         <div>
           <h2>{props.t("retrieval.results")}</h2>
           <p className="muted">
-            {props.t("retrieval.localOnly")} · {props.t("retrieval.total")}: {props.result.total}
+            {props.t(props.result.answerMode === "model_grounded" ? "retrieval.modelGrounded" : "retrieval.localOnly")} · {props.t("retrieval.total")}: {props.result.total}
           </p>
+          {props.modelUsage === "cloud" ? (
+            <p className="muted retrieval-cloud-boundary">{props.t("retrieval.cloudSent")}</p>
+          ) : null}
         </div>
       </header>
       {props.result.results.length === 0 ? (
@@ -1151,13 +1212,21 @@ function RetrievalResultRow(props: {
   );
 }
 
+function homeRuntimeModelUsage(status: AgentRuntimeStatus | null): HomeAgentModelUsage {
+  if (status?.state !== "ready") return "none";
+  return status.policySnapshot?.cloudBoundary === "local" &&
+    status.policySnapshot.boundaryVerification === "loopback_verified"
+    ? "local"
+    : "cloud";
+}
+
 function isLikelyQuestion(value: string): boolean {
   const text = value.trim();
   if (!text) return false;
   if (/[?？]$/u.test(text)) return true;
   const normalized = text.toLocaleLowerCase();
   return (
-    /^(what|why|how|who|where|when|which|find|search|show|tell me|summarize|explain|où|pourquoi|comment|was|warum|wie)\b/iu.test(normalized) ||
+    /^(what|why|how|who|where|when|which|find|search|show|tell me|summarize|explain|do|does|did|can|could|would|should|is|are|was|were|has|have|had|où|pourquoi|comment|warum|wie)\b/iu.test(normalized) ||
     /^(什么|为什么|为何|怎么|如何|谁|哪里|哪|请问|找|搜索|总结|解释|教えて|なぜ|どう|どこ|무엇|왜|어떻게)/u.test(normalized)
   );
 }
@@ -1475,6 +1544,7 @@ interface ModelSettingsPanelProps {
 }
 
 function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.Element {
+  const [presetApiKey, setPresetApiKey] = useState("");
   const [displayName, setDisplayName] = useState("OpenAI");
   const [providerKind, setProviderKind] = useState<ProviderKind>("openai");
   const [baseUrl, setBaseUrl] = useState("");
@@ -1485,6 +1555,20 @@ function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.Element {
   useEffect(() => {
     void props.onRefreshModels();
   }, []);
+
+  const connectPreset = async (presetId: string): Promise<void> => {
+    props.onBusy(true);
+    props.onError(null);
+    try {
+      await window.pige.models.addPresetProvider({ presetId, apiKey: presetApiKey });
+      setPresetApiKey("");
+      await Promise.all([props.onRefreshModels(), props.onRefreshVaultState()]);
+    } catch (caught) {
+      props.onError(caught instanceof Error ? caught.message : props.t("error.generic"));
+    } finally {
+      props.onBusy(false);
+    }
+  };
 
   const saveProvider = async (): Promise<void> => {
     props.onBusy(true);
@@ -1531,56 +1615,85 @@ function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.Element {
 
       <section className="settings-group">
         <h2>{props.t("models.addProvider")}</h2>
-        <label htmlFor="provider-name">{props.t("field.name")}</label>
-        <input id="provider-name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
+        {props.modelSummary?.presets.map((preset) => (
+          <div className="preset-provider" key={preset.presetId}>
+            <div>
+              <strong>{preset.displayName}</strong>
+              <span>{props.t("models.recommended")}</span>
+            </div>
+            <label htmlFor={`preset-key-${preset.presetId}`}>{props.t("models.apiKey")}</label>
+            <input
+              id={`preset-key-${preset.presetId}`}
+              value={presetApiKey}
+              type="password"
+              autoComplete="off"
+              onChange={(event) => setPresetApiKey(event.target.value)}
+            />
+            <button
+              type="button"
+              onClick={() => void connectPreset(preset.presetId)}
+              disabled={props.busy || !presetApiKey.trim()}
+            >
+              {props.t("models.connect")}
+            </button>
+          </div>
+        ))}
 
-        <label htmlFor="provider-kind">{props.t("models.serviceType")}</label>
-        <select
-          id="provider-kind"
-          value={providerKind}
-          onChange={(event) => setProviderKind(event.target.value as ProviderKind)}
-        >
-          <option value="openai">OpenAI</option>
-          <option value="anthropic">Anthropic</option>
-          <option value="openai_compatible">OpenAI-compatible</option>
-          <option value="anthropic_compatible">Anthropic-compatible</option>
-          <option value="custom">{props.t("models.customEndpoint")}</option>
-        </select>
+        <details className="custom-provider">
+          <summary>{props.t("models.customProvider")}</summary>
+          <div className="custom-provider-fields">
+            <label htmlFor="provider-name">{props.t("field.name")}</label>
+            <input id="provider-name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
 
-        <label htmlFor="provider-base-url">{props.t("models.baseUrl")}</label>
-        <input
-          id="provider-base-url"
-          value={baseUrl}
-          placeholder={props.t("models.optional")}
-          onChange={(event) => setBaseUrl(event.target.value)}
-        />
+            <label htmlFor="provider-kind">{props.t("models.serviceType")}</label>
+            <select
+              id="provider-kind"
+              value={providerKind}
+              onChange={(event) => setProviderKind(event.target.value as ProviderKind)}
+            >
+              <option value="openai">OpenAI</option>
+              <option value="anthropic">Anthropic</option>
+              <option value="openai_compatible">OpenAI-compatible</option>
+              <option value="anthropic_compatible">Anthropic-compatible</option>
+              <option value="custom">{props.t("models.customEndpoint")}</option>
+            </select>
 
-        <label htmlFor="provider-key">{props.t("models.apiKey")}</label>
-        <input
-          id="provider-key"
-          value={apiKey}
-          type="password"
-          onChange={(event) => setApiKey(event.target.value)}
-        />
+            <label htmlFor="provider-base-url">{props.t("models.baseUrl")}</label>
+            <input
+              id="provider-base-url"
+              value={baseUrl}
+              placeholder={props.t("models.optional")}
+              onChange={(event) => setBaseUrl(event.target.value)}
+            />
 
-        <label htmlFor="provider-model">{props.t("models.modelId")}</label>
-        <input id="provider-model" value={manualModelId} onChange={(event) => setManualModelId(event.target.value)} />
+            <label htmlFor="provider-key">{props.t("models.apiKey")}</label>
+            <input
+              id="provider-key"
+              value={apiKey}
+              type="password"
+              onChange={(event) => setApiKey(event.target.value)}
+            />
 
-        <label htmlFor="cloud-boundary">{props.t("models.boundary")}</label>
-        <select
-          id="cloud-boundary"
-          value={cloudBoundary}
-          onChange={(event) => setCloudBoundary(event.target.value as CloudBoundary)}
-        >
-          <option value="cloud">{props.t("models.cloud")}</option>
-          <option value="self_hosted">{props.t("models.selfHosted")}</option>
-          <option value="local">{props.t("models.local")}</option>
-          <option value="unknown">{props.t("models.unknown")}</option>
-        </select>
+            <label htmlFor="provider-model">{props.t("models.modelId")}</label>
+            <input id="provider-model" value={manualModelId} onChange={(event) => setManualModelId(event.target.value)} />
 
-        <button type="button" onClick={() => void saveProvider()} disabled={props.busy}>
-          {props.t("models.testAndSave")}
-        </button>
+            <label htmlFor="cloud-boundary">{props.t("models.boundary")}</label>
+            <select
+              id="cloud-boundary"
+              value={cloudBoundary}
+              onChange={(event) => setCloudBoundary(event.target.value as CloudBoundary)}
+            >
+              <option value="cloud">{props.t("models.cloud")}</option>
+              <option value="self_hosted">{props.t("models.selfHosted")}</option>
+              <option value="local">{props.t("models.local")}</option>
+              <option value="unknown">{props.t("models.unknown")}</option>
+            </select>
+
+            <button type="button" onClick={() => void saveProvider()} disabled={props.busy}>
+              {props.t("models.testAndSave")}
+            </button>
+          </div>
+        </details>
       </section>
 
       <section className="settings-group">
@@ -1591,7 +1704,10 @@ function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.Element {
               <div className="model-row" key={model.id}>
                 <div>
                   <strong>{model.displayName ?? model.modelId}</strong>
-                  <span>{model.isDefault ? props.t("models.default") : props.t("models.manual")}</span>
+                  <span>
+                    {summary.providers.find((provider) => provider.id === model.providerProfileId)?.displayName ?? props.t("models.unknown")}
+                    {model.isDefault ? ` · ${props.t("models.default")}` : ""}
+                  </span>
                 </div>
                 <button
                   type="button"

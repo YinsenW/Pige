@@ -174,6 +174,37 @@ describe("Pi Agent runtime adapter", () => {
     }));
   });
 
+  it("preserves a host policy failure raised before a later Pi model turn", async () => {
+    const policyFailure = new Error("host policy blocked the second model turn");
+    let checks = 0;
+    let toolExecuted = false;
+    const tools = makeTools([], []);
+    tools[0] = {
+      ...tools[0]!,
+      execute: async () => {
+        toolExecuted = true;
+        return { modelText: "Inspected.", details: {} };
+      }
+    };
+    const adapter = new PiAgentRuntimeAdapter({
+      fauxResponses: [
+        { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
+        { kind: "text", text: "Must not be returned." }
+      ]
+    });
+
+    const run = adapter.run({
+      ...makeRequest(tools),
+      beforeModelTurn: () => {
+        checks += 1;
+        if (toolExecuted) throw policyFailure;
+      }
+    });
+
+    await expect(run).rejects.toBe(policyFailure);
+    expect(checks).toBeGreaterThanOrEqual(2);
+  });
+
   it("passes a bounded opaque Pi tool call ID to authorization and execution without recording it", async () => {
     const toolCallId = `${"界".repeat(85)}x`;
     expect(new TextEncoder().encode(toolCallId)).toHaveLength(MAX_PIGE_TOOL_CALL_ID_UTF8_BYTES);

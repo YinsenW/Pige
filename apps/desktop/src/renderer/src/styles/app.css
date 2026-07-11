@@ -431,6 +431,11 @@ button.ghost {
   font-size: 12px;
 }
 
+.retrieval-cloud-boundary {
+  margin: 2px 0 0;
+  font-size: 12px;
+}
+
 .retrieval-header {
   min-width: 0;
   display: grid;
@@ -550,6 +555,58 @@ textarea {
 .capture-status {
   color: var(--accent);
   font-size: 12px;
+}
+
+.agent-run-state {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.agent-run-state > span:nth-child(2) {
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.agent-cloud-boundary {
+  flex: none;
+  color: var(--warning);
+  overflow-wrap: anywhere;
+}
+
+.agent-run-dot {
+  width: 7px;
+  min-width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+}
+
+.agent-run-state.state-accepted .agent-run-dot,
+.agent-run-state.state-running .agent-run-dot {
+  background: var(--accent);
+}
+
+.agent-run-state.state-completed .agent-run-dot {
+  background: var(--success);
+}
+
+.agent-run-state.state-waiting .agent-run-dot {
+  background: var(--warning);
+}
+
+.agent-run-state.state-failed .agent-run-dot {
+  background: var(--danger);
+}
+
+.agent-run-state button {
+  min-height: 26px;
+  white-space: nowrap;
 }
 
 .drop-overlay {
@@ -1017,6 +1074,39 @@ dd {
 .model-list {
   display: grid;
   gap: 8px;
+}
+
+.preset-provider,
+.custom-provider-fields {
+  display: grid;
+  gap: 10px;
+}
+
+.preset-provider > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.preset-provider > div span {
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.custom-provider {
+  border-top: 1px solid var(--border-light);
+  padding-top: 10px;
+}
+
+.custom-provider summary {
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.custom-provider-fields {
+  padding-top: 12px;
 }
 
 .model-row {

@@ -30,8 +30,8 @@ Individual screens:
 - `screens/07-selection-actions.png`: text selection action menu.
 - `screens/08-permission-dialog.png`: sensitive action permission dialog.
 - `screens/09-vault-settings.png`: local vault and note storage settings with recent vaults, backup, and restore.
-- `screens/10-model-settings.png`: grouped Settings sidebar with the Model Provider page limited to BYOK provider connection.
-- `screens/11-add-provider.png`: simple Add Provider dialog for connecting a model service and managing its model list.
+- `screens/10-model-settings.png`: Models page with one reviewed OpenAI API-key preset, collapsed custom-provider details, and a global model list.
+- `screens/11-add-provider.png`: Progressively disclosed custom-provider setup; full catalog, API-key help, and three-protocol polish remain open.
 - `screens/12-knowledge-tree.png`: tree-style knowledge visualization with trunk, branches, leaves, and growth suggestions.
 
 Design intent:
