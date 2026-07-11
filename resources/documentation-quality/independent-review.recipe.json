@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-11T21:32:16Z",
+  "reviewedAt": "2026-07-11T22:18:48Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,9 +30,21 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "024004f8afccf058c41ace7b3341da10513e6e67edeb90e9d55b4edd486fd14f"
+    "reviewedSha256": "a03b3ef75a3c3badbc2312d89d8ff8ab71a4ec12a7100e98fbf1c6aa51cabcda"
   },
   "reviewers": [
+    {
+      "reviewerId": "pi-ingest-retrieval-final-review",
+      "task": "/root/final_independent_governed_review",
+      "independentDimensions": [
+        "navigation_and_resource_lifecycle",
+        "cross_document_contract_consistency",
+        "continuous_traceability_and_acceptance",
+        "ongoing_development_support",
+        "documentation_leanness_and_maintainability"
+      ],
+      "independence": "Fresh read-only reviewer audited the exact 6-Development plus 8-governed pre-recipe candidate. It traced optional local ingest retrieval, current Markdown/SourceRecord revalidation, opaque related refs versus current-source citations, ordinary_allowed and higher-risk gates, terminal failure/publication fences, exact evidence, unchanged states, retained replay/cancellation/Broker/recovery/platform gaps, semantic lock, and budgets; all five dimensions were CLEAR with no edits."
+    },
     {
       "reviewerId": "ordinary-allowed-default-review",
       "task": "/root/ordinary_default_independent_review",
@@ -206,37 +218,37 @@
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "ordinary-allowed-default-review",
+      "reviewerId": "pi-ingest-retrieval-final-review",
       "blockerCount": 0,
-      "summary": "The existing Home and Provider flow now executes its governed exact-destination disclosure and quiet ordinary_allowed default without adding a page, wizard, IPC, renderer setting, or resource lifecycle."
+      "summary": "No owner document, public surface, or retrieval Job was added. Existing Pi/Context/TECH routes own the optional local search, stable related_page_ids, body-free Operation refs, and post-publication recovery."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "ordinary-allowed-default-review",
+      "reviewerId": "pi-ingest-retrieval-final-review",
       "blockerCount": 0,
-      "summary": "Builder, policy matrix, Connect handlers, Home behavior, exact runtime identity, Decision, Playbook, and acceptance agree on known-boundary allow, higher-risk gates, and optional stricter modes."
+      "summary": "Pi, TECH, Prompt, Context, Decision, Playbook, and acceptance agree on bounded inspect-to-search-to-publish, current evidence revalidation, related IDs versus citations, policy gates, terminal fences, and open gaps."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "ordinary-allowed-default-review",
+      "reviewerId": "pi-ingest-retrieval-final-review",
       "blockerCount": 0,
-      "summary": "One new EV-MODEL-EGRESS-POLICY selector and reused policy/disclosure/Home evidence bind the 1,080-claim lock. PIGE-SEC-005/E3.03 remain partial with persistence/IPC/UI and confirmation resume open."
+      "summary": "EV-PI-INGEST-RETRIEVAL binds the exact 23-test suite only to relevant Pi, context, prompt, and security requirements/exits. The 1,081-claim lock is current and every state remains partial/in_progress."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "ordinary-allowed-default-review",
+      "reviewerId": "pi-ingest-retrieval-final-review",
       "blockerCount": 0,
-      "summary": "The bounded option preserves future stricter-policy wiring without claiming persistence. Exact selectors distinguish implemented default/disclosure/matrix from remaining Broker and Provider work."
+      "summary": "Tool/version, query/result/type limits, current-vault and no-authority rules, replacement audits, fixed failure, terminal publication, stable related refs, and recovery are executable and directly discoverable."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.6,
-      "reviewerId": "ordinary-allowed-default-review",
+      "reviewerId": "pi-ingest-retrieval-final-review",
       "blockerCount": 0,
-      "summary": "No document or status was added: 57 Markdown files, 23,222 lines, 162,333 words, 1,209,150 bytes, 4,014 entry words, 5,411 trace lines, zero duplicate groups, and 14 mutations."
+      "summary": "No document or state was added: 57 Markdown files, 23,230 lines, 162,410 words, 1,209,872 bytes, 4,014 entry words, 5,413 trace lines, zero duplicate groups, and 14 mutations."
     }
   ],
   "verification": [
@@ -248,17 +260,17 @@
     {
       "command": "npm test && npm run typecheck && npm run build && npm run smoke:pi-agent-runtime && npm run smoke:index-rebuild-worker && npm run smoke:parser-workers && npm run smoke:macos-vision-ocr",
       "status": "passed",
-      "evidence": "All 68 test files/521 tests, typecheck, production build, Electron Pi/Home, parser/index workers, and real macOS Vision OCR passed on the exact candidate."
+      "evidence": "All 69 test files/544 tests, typecheck, production build, Electron Pi/Home, parser/index workers, and real macOS Vision OCR passed on the exact candidate."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 passed: 4,014/4,200 entry words, zero duplicate groups, 14 mutations, 5,411 trace lines, 57 Markdown files, 1,209,150 bytes, and 7.39 percent line reduction."
+      "evidence": "LEN-001 through LEN-005 passed: 4,014/4,200 entry words, zero duplicate groups, 14 mutations, 5,413 trace lines, 57 Markdown files, 1,209,872 bytes, and 7.36 percent line reduction."
     },
     {
       "command": "node scripts/verify/independent-documentation-review.mjs --print-snapshot && explicit semantic-ledger comparison",
       "status": "passed",
-      "evidence": "The governed snapshot is 024004f8afccf058c41ace7b3341da10513e6e67edeb90e9d55b4edd486fd14f across 109 files; current and locked ledgers contain 1,080 claims with zero differences."
+      "evidence": "The governed snapshot is a03b3ef75a3c3badbc2312d89d8ff8ab71a4ec12a7100e98fbf1c6aa51cabcda across 109 files; current and locked ledgers contain 1,081 claims with zero differences."
     }
   ],
   "coordination": {
@@ -267,8 +279,8 @@
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "No stable ID or status changed. ordinary_allowed and exact Connect disclosure are executable; stricter-policy persistence/IPC/UI, confirmation resume, provider breadth, and platform proof stay open.",
-    "acknowledgement": "Development delivered six frozen implementation/test files on governed main; Product Planning updated Decision, Playbook, acceptance, semantic lock, and recipe only, and an independent reviewer accepted the exact combined candidate."
+    "compatibility": "No stable ID, schema, IPC, UI, Job class, or status changed. One bounded local ingest-retrieval path is executable; proposals, pre-publication replay, in-call cancellation, Broker, generic recovery, platform, and CAS guarantees stay open.",
+    "acknowledgement": "Development delivered six frozen implementation/test files on governed main; Product Planning synchronized six existing Owner/management documents plus acceptance, semantic lock, and recipe, and an independent reviewer accepted the exact 15-file combined candidate."
   },
   "resolvedBlockers": [
     "Implemented the governed ordinary_allowed default and exact Connect disclosure, with matrix, policy-hash, Home private/sensitive, restricted, unknown/local, and Profile-switch evidence while keeping persistence/IPC/UI and confirmation resume open.",
@@ -294,7 +306,8 @@
     "Added Agent-selected PDF OCR over parser-verified pages with one deterministic child, retry/wait reuse, cancellation propagation, empty-output stop, and re-inspection before cited publication.",
     "Moved DOCX/PPTX parse and parser-selected PPTX media OCR onto Pi tool events with deterministic children, idempotent retry, cancellation, no-readable-evidence stop, and capability recovery both before and after an OCR child exists.",
     "Moved direct-image OCR onto Pi tool events with no pre-tool child, deterministic reuse, capability recovery, cancellation, empty-output parking across restart, wrong-tool rejection, and managed/reference source proof.",
-    "Added the reviewed OpenAI key-only preset and global default plus a Pi-grounded Home query vertical with no-model local fallback, body-free per-turn audits, exact Markdown/source privacy drift checks, confined records, untrusted evidence, fixed zero-evidence output, typed UI states, and no raw key/path/body/error exposure."
+    "Added the reviewed OpenAI key-only preset and global default plus a Pi-grounded Home query vertical with no-model local fallback, body-free per-turn audits, exact Markdown/source privacy drift checks, confined records, untrusted evidence, fixed zero-evidence output, typed UI states, and no raw key/path/body/error exposure.",
+    "Added one optional Agent-selected local ingest search with bounded opaque refs, current Markdown/SourceRecord revalidation, per-turn drift audits, terminal failure/publication fences, stable related_page_ids, and post-publication Operation recovery without a retrieval Job or state promotion."
   ],
   "nonBlockingRisks": [
     "P5 remains in progress: remaining Job-class publishers, running capture/other-class cancellation, strict cross-process Job CAS and routing, parent-directory swap, guard-to-domain atomicity, guard-without-output recovery, checkpoint arrays, cross-file transactions, Windows/Paddle, packaged-filesystem proof, and visible progress/cancel UI remain open.",
@@ -302,10 +315,10 @@
     "The local-tool lifecycle remains a fake/local service foundation: real Paddle/Python/model/language-pack transport, ordinary-ingest no-hidden-install proof, production app-data/catalog/permission/pre-vault Job/Operation wiring, OCR/UI, supply chain, packaged platforms, cross-process locking, complete recovery/GC/quarantine purge, and background lifecycle controls remain open.",
     "The retrieval regression foundation remains lexical and synthetic: model-grounded summary/citation validation under cloud-send and Permission enforcement, tag/topic/entity and Knowledge Tree thresholds, vector/reranker ranking, 10k/100k and UI/packaged proof, and broader locale/query families remain open.",
     "The Knowledge Tree remains internal-only: broader relation and branch semantics, richer aggregate inputs, public IPC/preload/renderer navigation, localized empty state, 10k worker/incremental rebuild proof, packaged parity, and the separately owned visual/accessibility and Knowledge Health work remain open.",
-    "Pi remains partial: ingest retrieval/proposals, complete provider catalog/custom protocols, remaining fixed routes, generic continuation, persisted Broker, Home drainer/retry/cancel/conversations, combined read-to-retrieve-to-publish, manual packaged BYOK, signed platforms, and broader cross-process/cross-file recovery remain open.",
+    "Pi remains partial: proposal tools, complete provider catalog/custom protocols, remaining fixed routes, pre-publication search replay, cancellation inside synchronous retrieval, generic continuation, persisted Broker, Home drainer/retry/cancel/conversations, manual packaged BYOK, signed platforms, and broader cross-process/cross-file recovery remain open.",
     "No-telemetry is a static executable gate; unknown SDKs, computed endpoints, indirect transports, generated configuration, and crash-hook review remain open. Diagnostics still need broader stores, recovery correlation, user clear, export cancellation, selected-path UX, and crash recovery.",
     "Backup still needs backupId/domainSchemaVersions, release exclusion scans, external managed copies, include controls, durable Jobs/checkpoints, structured dependencies, and complete restore orchestration.",
-    "Trace projections use 5,409 of 5,500 lines and governed Markdown uses 1,209,473 of 1,210,000 bytes; future semantic additions must reclaim capacity in the same change instead of raising budgets.",
+    "Trace projections use 5,413 of 5,500 lines and governed Markdown uses 1,209,872 of 1,210,000 bytes; future semantic additions must reclaim capacity in the same change instead of raising budgets.",
     "PRD, TECH_ARCHITECTURE, and Decision Log remain large Owner documents; future Agents should continue section-targeted reads and define each fact once.",
     "The concise pre-alpha README intentionally has no install button, screenshots, or release download; add those only when a usable signed build and governed visual evidence exist.",
     "Structural UI gates do not prove packaged macOS/Windows fidelity, accessibility, or human visual approval; real capture and release evidence remain open.",

@@ -20,7 +20,6 @@ import {
   MarkdownPageTypeSchema,
   OperationRecordSchema,
   PigeErrorSummarySchema,
-  SourceRecordSchema,
   type JobRecord,
   type ModelEgressDecision,
   type OperationRecord,
@@ -29,7 +28,6 @@ import {
 import { z } from "zod";
 import { buildAgentRuntimePolicyContext } from "./agent-policy-context";
 import type { AgentIngestCapabilityPort } from "./agent-ingest-service";
-import { readMarkdownPageByRelativePath } from "./markdown-page-index";
 import { containsRestrictedModelContent } from "./model-egress-content";
 import { createModelEgressDecision } from "./model-egress-policy";
 import type { ModelProviderRuntimeConfig } from "./model-provider-registry";
@@ -46,6 +44,11 @@ import {
   type PiAgentRunResult,
   type PigeAgentToolDefinition
 } from "./pi-agent-runtime-adapter";
+import {
+  createRetrievalEvidencePrivacyHash,
+  readRetrievalEvidencePrivacySnapshot,
+  type RetrievalEvidencePrivacySnapshot
+} from "./retrieval-evidence-boundary";
 import { buildHomeQueryContextPack, buildLocalExtractiveAskResult } from "./retrieval-service";
 
 export interface HomeAgentVaultPort {
@@ -80,33 +83,10 @@ interface HomeAgentJobSession {
   modelUsage: HomeAgentModelUsage;
 }
 
-interface HomeEvidencePrivacySourceFact {
-  readonly sourceId: string;
-  readonly revisionHash: string;
-  readonly updatedAt: string;
-  readonly private: boolean;
-  readonly sensitive: boolean;
-}
-
-interface HomeEvidencePrivacySnapshot {
-  readonly privateContent: boolean;
-  readonly sensitiveContent: boolean;
-  readonly pages: readonly {
-    readonly pageId: string;
-    readonly updatedAt: string;
-    readonly sourceIds: readonly string[];
-    readonly contentHash: string;
-  }[];
-  readonly sources: readonly HomeEvidencePrivacySourceFact[];
-}
-
 const HOME_SEARCH_TOOL_NAME = "pige_search_knowledge";
 const MAX_QUERY_CHARACTERS = 8_000;
 const MAX_ANSWER_CHARACTERS = 8_000;
 const MAX_MODEL_PAYLOAD_CHARACTERS = 12_000;
-const MAX_HOME_SOURCE_REFS = 64;
-const MAX_SOURCE_RECORD_BYTES = 1024 * 1024;
-const MAX_HOME_MARKDOWN_PAGE_BYTES = 4 * 1024 * 1024;
 const UNTRUSTED_EVIDENCE_START = "<PIGE_UNTRUSTED_EVIDENCE_V1>";
 const UNTRUSTED_EVIDENCE_END = "</PIGE_UNTRUSTED_EVIDENCE_V1>";
 
@@ -254,10 +234,15 @@ export class HomeAgentService {
     const authorizeCurrentModelTurn = (): void => {
       assertCurrentBindingAndVault();
       const payload = createHomeModelPayload(query, searchResult);
-      const evidencePrivacy = readHomeEvidencePrivacySnapshot(vaultPath, searchResult);
+      const evidencePrivacy = readRetrievalEvidencePrivacySnapshot(
+        vaultPath,
+        searchResult
+          ? buildHomeQueryContextPack(searchResult).selectedEvidence.map(({ item }) => item)
+          : []
+      );
       let evidenceDrifted = false;
       if (searchResult) {
-        const currentEvidencePrivacyHash = createHomeEvidencePrivacyHash(evidencePrivacy);
+        const currentEvidencePrivacyHash = createRetrievalEvidencePrivacyHash(evidencePrivacy);
         evidenceDrifted =
           approvedEvidencePrivacyHash !== undefined &&
           currentEvidencePrivacyHash !== approvedEvidencePrivacyHash;
@@ -570,154 +555,10 @@ function createUntrustedEvidenceEnvelope(searchResult: RetrievalSearchResult): s
   return `${UNTRUSTED_EVIDENCE_START}\n${serialized}\n${UNTRUSTED_EVIDENCE_END}`;
 }
 
-function readHomeEvidencePrivacySnapshot(
-  vaultPath: string,
-  searchResult: RetrievalSearchResult | undefined
-): HomeEvidencePrivacySnapshot {
-  if (!searchResult) {
-    return { privateContent: false, sensitiveContent: false, pages: [], sources: [] };
-  }
-  const selectedEvidence = buildHomeQueryContextPack(searchResult).selectedEvidence;
-  const pages = selectedEvidence.map(({ item }) => {
-    const currentPage = readMarkdownPageByRelativePath(vaultPath, item.summary.pagePath);
-    const expectedSourceIds = [...new Set(item.summary.sourceIds)].sort();
-    const currentSourceIds = currentPage ? [...new Set(currentPage.summary.sourceIds)].sort() : [];
-    if (
-      !currentPage ||
-      currentPage.summary.pageId !== item.summary.pageId ||
-      currentPage.summary.pageType !== item.summary.pageType ||
-      currentPage.summary.updatedAt !== item.summary.updatedAt ||
-      JSON.stringify(currentSourceIds) !== JSON.stringify(expectedSourceIds)
-    ) {
-      throw evidencePrivacyUnavailableError();
-    }
-    return {
-      pageId: currentPage.summary.pageId,
-      updatedAt: currentPage.summary.updatedAt,
-      sourceIds: currentSourceIds,
-      contentHash: readBoundedMarkdownPageContentHash(currentPage.absolutePath)
-    };
-  });
-  const sourceIds = Array.from(new Set(pages.flatMap((page) => page.sourceIds))).sort();
-  if (sourceIds.length > MAX_HOME_SOURCE_REFS) {
-    throw evidencePrivacyUnavailableError();
-  }
-  const sources = sourceIds.map((sourceId) => readCurrentSourcePrivacyFact(vaultPath, sourceId));
-  return {
-    privateContent: sources.some((source) => source.private),
-    sensitiveContent: sources.some((source) => source.sensitive),
-    pages,
-    sources
-  };
-}
-
-function readBoundedMarkdownPageContentHash(filePath: string): string {
-  let descriptor: number | undefined;
-  try {
-    descriptor = fs.openSync(filePath, "r");
-    const before = fs.fstatSync(descriptor);
-    if (!before.isFile() || before.size > MAX_HOME_MARKDOWN_PAGE_BYTES) {
-      throw evidencePrivacyUnavailableError();
-    }
-    const bytes = Buffer.alloc(before.size);
-    let offset = 0;
-    while (offset < bytes.length) {
-      const bytesRead = fs.readSync(descriptor, bytes, offset, bytes.length - offset, offset);
-      if (bytesRead <= 0) throw evidencePrivacyUnavailableError();
-      offset += bytesRead;
-    }
-    const after = fs.fstatSync(descriptor);
-    const currentPath = fs.lstatSync(filePath);
-    if (
-      currentPath.isSymbolicLink() ||
-      !currentPath.isFile() ||
-      after.dev !== before.dev ||
-      after.ino !== before.ino ||
-      after.size !== before.size ||
-      after.mtimeMs !== before.mtimeMs ||
-      after.ctimeMs !== before.ctimeMs ||
-      currentPath.dev !== after.dev ||
-      currentPath.ino !== after.ino ||
-      currentPath.size !== after.size ||
-      currentPath.mtimeMs !== after.mtimeMs ||
-      currentPath.ctimeMs !== after.ctimeMs
-    ) {
-      throw evidencePrivacyUnavailableError();
-    }
-    return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
-  } catch (caught) {
-    if (caught instanceof PigeDomainError) throw caught;
-    throw evidencePrivacyUnavailableError();
-  } finally {
-    if (descriptor !== undefined) fs.closeSync(descriptor);
-  }
-}
-
-function readCurrentSourcePrivacyFact(vaultPath: string, sourceId: string): HomeEvidencePrivacySourceFact {
-  const match = /^src_(\d{8})_[a-z0-9]{8,}$/u.exec(sourceId);
-  if (!match) throw evidencePrivacyUnavailableError();
-  const dateKey = match[1];
-  if (!dateKey) throw evidencePrivacyUnavailableError();
-  const pigeRoot = path.resolve(vaultPath, ".pige");
-  const sourceRoot = path.resolve(pigeRoot, "source-records");
-  const yearRoot = path.resolve(sourceRoot, dateKey.slice(0, 4));
-  const monthRoot = path.resolve(yearRoot, dateKey.slice(4, 6));
-  const sourcePath = path.resolve(
-    monthRoot,
-    `${sourceId}.json`
-  );
-  if (!sourcePath.startsWith(`${sourceRoot}${path.sep}`)) throw evidencePrivacyUnavailableError();
-  try {
-    for (const directoryPath of [pigeRoot, sourceRoot, yearRoot, monthRoot]) {
-      const directory = fs.lstatSync(directoryPath);
-      if (directory.isSymbolicLink() || !directory.isDirectory()) {
-        throw evidencePrivacyUnavailableError();
-      }
-    }
-    const stat = fs.lstatSync(sourcePath);
-    if (stat.isSymbolicLink() || !stat.isFile() || stat.size > MAX_SOURCE_RECORD_BYTES) {
-      throw evidencePrivacyUnavailableError();
-    }
-    const realVaultRoot = fs.realpathSync(path.resolve(vaultPath));
-    const realPigeRoot = fs.realpathSync(pigeRoot);
-    const realRoot = fs.realpathSync(sourceRoot);
-    const realPath = fs.realpathSync(sourcePath);
-    if (!realPigeRoot.startsWith(`${realVaultRoot}${path.sep}`)) throw evidencePrivacyUnavailableError();
-    if (!realRoot.startsWith(`${realPigeRoot}${path.sep}`)) throw evidencePrivacyUnavailableError();
-    if (!realPath.startsWith(`${realRoot}${path.sep}`)) throw evidencePrivacyUnavailableError();
-    const record = SourceRecordSchema.parse(JSON.parse(fs.readFileSync(realPath, "utf8")));
-    if (record.id !== sourceId) throw evidencePrivacyUnavailableError();
-    return {
-      sourceId,
-      revisionHash: hashValue(JSON.stringify(record)),
-      updatedAt: record.updatedAt,
-      private: record.metadata.private === true || record.metadata.privacy === "private",
-      sensitive: record.metadata.sensitive === true
-    };
-  } catch (caught) {
-    if (caught instanceof PigeDomainError) throw caught;
-    throw evidencePrivacyUnavailableError();
-  }
-}
-
-function evidencePrivacyUnavailableError(): PigeDomainError {
-  return new PigeDomainError(
-    "rag.evidence_privacy_unavailable",
-    "Current evidence privacy metadata could not be verified."
-  );
-}
-
-function createHomeEvidencePrivacyHash(snapshot: HomeEvidencePrivacySnapshot): string {
-  return hashValue(JSON.stringify({
-    pages: snapshot.pages,
-    sources: snapshot.sources
-  }));
-}
-
 function createHomeEvidenceSummaryHash(
   searchResult: RetrievalSearchResult | undefined,
   binding: ModelRuntimeBindingIdentity,
-  evidencePrivacy: HomeEvidencePrivacySnapshot
+  evidencePrivacy: RetrievalEvidencePrivacySnapshot
 ): string {
   return hashValue(JSON.stringify({
     schemaVersion: 1,

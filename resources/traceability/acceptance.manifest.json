@@ -1521,10 +1521,10 @@
     },
     "PIGE-SEC-005": {
       "status": "partial",
-      "evidence": ["EV-EGRESS", "EV-MODEL-EGRESS-POLICY", "EV-POLICY", "EV-DESKTOP-SETTING-GUARD", "EV-EGRESS-SERVICE", "EV-EGRESS-PROFILE-BINDING", "EV-EGRESS-RUNTIME-BINDING", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-HOME-AGENT"],
+      "evidence": ["EV-EGRESS", "EV-MODEL-EGRESS-POLICY", "EV-POLICY", "EV-DESKTOP-SETTING-GUARD", "EV-EGRESS-SERVICE", "EV-EGRESS-PROFILE-BINDING", "EV-EGRESS-RUNTIME-BINDING", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-HOME-AGENT", "EV-PI-INGEST-RETRIEVAL"],
       "open": {
         "id": "OPEN-REQ-PIGE-SEC-005",
-        "description": "The ordinary_allowed default, exact connection disclosure, Home private allow/sensitive pre-credential gate, matrix and audit/drift are enforced. Stricter-policy persistence/IPC/UI, confirmation resume, and remaining provider paths stay open.",
+        "description": "The ordinary_allowed default, exact connection disclosure, Home and bounded ingest-retrieval private-allow/sensitive-pre-credential gates, matrix, and audit/drift are enforced. Stricter-policy persistence/IPC/UI, confirmation resume, and remaining provider paths stay open.",
         "targetBuilds": [
           "B3.05"
         ],
@@ -1567,10 +1567,10 @@
     },
     "PIGE-PI-001": {
       "status": "partial",
-      "evidence": ["EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-BOUNDARY", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE"],
+      "evidence": ["EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-BOUNDARY", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-RETRIEVAL", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE"],
       "open": {
         "id": "OPEN-REQ-PIGE-PI-001",
-        "description": "Pi text/document/image and Home search traces are implemented. Ingest retrieval/proposals, complete catalog, remaining fixed routes, generic recovery, Broker, signed/manual BYOK, and combined read→retrieve→publish stay open.",
+        "description": "Pi text/document/image, Home search, and one bounded ingest read→retrieve→publish path are implemented. Proposal tools, complete catalog, remaining fixed routes, pre-publication replay, in-call retrieval cancellation, generic recovery, Broker, and signed/manual BYOK stay open.",
         "targetBuilds": [
           "B3.06",
           "B3.13"
@@ -1753,10 +1753,10 @@
     },
     "PIGE-PROMPT-001": {
       "status": "partial",
-      "evidence": ["EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-UNTRUSTED-SOURCE-BOUNDARY", "EV-UNTRUSTED-OUTPUT-SCHEMA"],
+      "evidence": ["EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-PI-INGEST-RETRIEVAL", "EV-UNTRUSTED-SOURCE-BOUNDARY", "EV-UNTRUSTED-OUTPUT-SCHEMA"],
       "open": {
         "id": "OPEN-REQ-PIGE-PROMPT-001",
-        "description": "Public ingest and Home untrusted retrieval are executable; remaining tool adversarial and persisted Broker coverage stays open.",
+        "description": "Public ingest, Home retrieval, and bounded ingest related-evidence envelopes are executable; remaining tool adversarial and persisted Broker coverage stays open.",
         "targetBuilds": [
           "B5.11"
         ],
@@ -1783,10 +1783,10 @@
     },
     "PIGE-CONTEXT-001": {
       "status": "partial",
-      "evidence": ["EV-CONTEXT", "EV-AGENT-EVIDENCE-REVISION", "EV-HOME-AGENT"],
+      "evidence": ["EV-CONTEXT", "EV-AGENT-EVIDENCE-REVISION", "EV-HOME-AGENT", "EV-PI-INGEST-RETRIEVAL"],
       "open": {
         "id": "OPEN-REQ-PIGE-CONTEXT-001",
-        "description": "Home is integrated; Note Agent, selection, memory, and compaction paths remain.",
+        "description": "Home and one bounded ingest-retrieval path are integrated; Note Agent, selection, memory, and compaction paths remain.",
         "targetBuilds": [
           "B6.04"
         ],
@@ -1797,10 +1797,10 @@
     },
     "PIGE-CONTEXT-002": {
       "status": "partial",
-      "evidence": ["EV-CONTEXT", "EV-HOME-AGENT"],
+      "evidence": ["EV-CONTEXT", "EV-HOME-AGENT", "EV-PI-INGEST-RETRIEVAL"],
       "open": {
         "id": "OPEN-REQ-PIGE-CONTEXT-002",
-        "description": "Home is integrated; Note Agent, selection, memory, and compaction paths remain.",
+        "description": "Home and one bounded ingest-retrieval path are integrated; Note Agent, selection, memory, and compaction paths remain.",
         "targetBuilds": [
           "B6.04"
         ],
@@ -2958,10 +2958,10 @@
     },
     "E3.03": {
       "status": "partial",
-      "evidence": ["EV-EGRESS", "EV-MODEL-EGRESS-POLICY", "EV-POLICY", "EV-DESKTOP-SETTING-GUARD", "EV-EGRESS-SERVICE", "EV-EGRESS-PROFILE-BINDING", "EV-EGRESS-RUNTIME-BINDING", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-HOME-AGENT"],
+      "evidence": ["EV-EGRESS", "EV-MODEL-EGRESS-POLICY", "EV-POLICY", "EV-DESKTOP-SETTING-GUARD", "EV-EGRESS-SERVICE", "EV-EGRESS-PROFILE-BINDING", "EV-EGRESS-RUNTIME-BINDING", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-HOME-AGENT", "EV-PI-INGEST-RETRIEVAL"],
       "open": {
         "id": "OPEN-EXIT-E3.03",
-        "description": "The ordinary_allowed default, disclosure, Home behavior, matrix and audit/drift are proven. Stricter-policy persistence/IPC/UI, confirmation resume, and remaining provider adoption stay open.",
+        "description": "The ordinary_allowed default, disclosure, Home and bounded ingest-retrieval policy gates, matrix, and audit/drift are proven. Stricter-policy persistence/IPC/UI, confirmation resume, and remaining provider adoption stay open.",
         "targetBuilds": [
           "B3.05"
         ],
@@ -3040,10 +3040,10 @@
     },
     "E3.08": {
       "status": "partial",
-      "evidence": ["EV-BOUNDARY", "EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE"],
+      "evidence": ["EV-BOUNDARY", "EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-RETRIEVAL", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE"],
       "open": {
         "id": "OPEN-EXIT-E3.08",
-        "description": "Embedded Pi proves ingest tools and Home read→retrieve→answer. Ingest retrieval/proposals, complete catalog, remaining routes, generic recovery, combined read→retrieve→publish, Broker, and signed/manual BYOK remain.",
+        "description": "Embedded Pi proves ingest tools, Home read→retrieve→answer, and one bounded ingest read→retrieve→publish path. Proposal tools, complete catalog, remaining routes, pre-publication replay, in-call retrieval cancellation, generic recovery, Broker, and signed/manual BYOK remain.",
         "targetBuilds": [
           "B3.13"
         ],
@@ -3153,10 +3153,10 @@
     },
     "E5.03": {
       "status": "partial",
-      "evidence": ["EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-PI-AGENT-SPINE", "EV-PI-RUNTIME-BOUNDARY", "EV-UNTRUSTED-SOURCE-BOUNDARY", "EV-UNTRUSTED-OUTPUT-SCHEMA"],
+      "evidence": ["EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-PI-AGENT-SPINE", "EV-PI-INGEST-RETRIEVAL", "EV-PI-RUNTIME-BOUNDARY", "EV-UNTRUSTED-SOURCE-BOUNDARY", "EV-UNTRUSTED-OUTPUT-SCHEMA"],
       "open": {
         "id": "OPEN-EXIT-E5.03",
-        "description": "Public ingest and Home retrieval adversarial boundaries pass; remaining tool cases and persisted Broker stay open.",
+        "description": "Public ingest, Home retrieval, and bounded ingest related-evidence adversarial boundaries pass; remaining tool cases and persisted Broker stay open.",
         "targetBuilds": [
           "B5.11"
         ],
@@ -3209,10 +3209,10 @@
     },
     "E6.03": {
       "status": "partial",
-      "evidence": ["EV-CONTEXT", "EV-AGENT-EVIDENCE-REVISION", "EV-HOME-AGENT"],
+      "evidence": ["EV-CONTEXT", "EV-AGENT-EVIDENCE-REVISION", "EV-HOME-AGENT", "EV-PI-INGEST-RETRIEVAL"],
       "open": {
         "id": "OPEN-EXIT-E6.03",
-        "description": "Home selected evidence/privacy is bounded; Note Agent, selection, memory, compaction, and remote packs remain open.",
+        "description": "Home and one bounded ingest-retrieval selected-evidence/privacy path are proven; Note Agent, selection, memory, compaction, and remote packs remain open.",
         "targetBuilds": [
           "B6.04"
         ],
@@ -3807,6 +3807,7 @@
     "EV-PI-PDF-OCR-TOOL": { "kind": "test", "path": "tests/unit/agent-led-pdf-ocr.test.ts", "selector": "Agent-led PDF OCR tool" },
     "EV-PI-OFFICE-PARSE-OCR-TOOL": { "kind": "test", "path": "tests/unit/agent-led-office-parse.test.ts", "selector": "Agent-led Office parse tool" },
     "EV-PI-IMAGE-OCR-TOOL": { "kind": "test", "path": "tests/unit/agent-led-image-ocr.test.ts", "selector": "Agent-led image OCR tool" },
+    "EV-PI-INGEST-RETRIEVAL": { "kind": "test", "path": "tests/unit/agent-led-ingest-retrieval.test.ts", "selector": "Agent-selected ingest retrieval tool" },
     "EV-PI-TOOL-CALL-ID": { "kind": "test", "path": "tests/unit/pi-agent-runtime-adapter.test.ts", "selector": "passes a bounded opaque Pi tool call ID to authorization and execution without recording it" },
     "EV-PI-PROVIDER-BINDING": { "kind": "test", "path": "tests/unit/pi-agent-provider-binding.test.ts", "selector": "Pi AI provider binding" },
     "EV-PI-RUNTIME-BOUNDARY": { "kind": "verifier", "path": "scripts/verify/pi-runtime-boundary.mjs", "selector": "Pi runtime boundary OK: one contained adapter owns official Pi imports, isolated auth/models, and sequential Pige tools." },

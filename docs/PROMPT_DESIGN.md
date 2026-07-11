@@ -102,6 +102,7 @@ type AgentIngestOutput = {
   tags: string[];
   topics: string[];
   entities: string[];
+  relatedPageRefs?: string[];
   warnings: string[];
   confidence: "low" | "medium" | "high";
 };
@@ -109,10 +110,10 @@ type AgentIngestOutput = {
 
 Rules:
 
-- This four-tool slice preserves evidence; selected source parse/OCR requires re-inspection
-  before publication. It cannot close B3.13/E3.08 or write from final text.
+- The current tool set preserves evidence; selected parse/OCR requires re-inspection
+  before publication and final text cannot write.
 - The main-process Evidence Assembly Service verifies selected source/artifact integrity, pairs parser/OCR text with its own metadata sidecar by source ID, sidecar Artifact ID, kind, and text checksum, then packages at most 24 fragments and 18,000 evidence characters inside one explicit `<untrusted_source_evidence>` block. It does not send vault paths or metadata sidecar bodies.
-- Each packaged fragment receives an ephemeral ordered `ev_NN` ref plus its durable source/Artifact locator. Native extracted text is ordered before OCR; same-parent OCR text is removed only when it repeats native text. The merged prompt representation is ephemeral and is never persisted as a second body Artifact.
+- Each packaged fragment receives an ephemeral ordered `ev_NN` ref plus its durable source/Artifact locator. Native extracted text is ordered before OCR; same-parent OCR text is removed only when it repeats native text. The merged prompt representation is ephemeral and is never persisted as a second body Artifact. Optional `related_NN` search refs may populate `related_page_ids`; claims still cite current-source `ev_NN` evidence.
 - Parser coverage, truncation, OCR-pending state, and bounded parser warnings are trusted source-quality metadata outside the untrusted body. Before egress, Pige bounds and redacts every dynamic metadata string, freezes the typed prompt context, and includes only a non-secret policy summary. The prompt tells the model not to imply complete-document coverage when these fields are limited.
 - Validated OCR handoff adds engine, normalized confidence, bounded warning codes, OCR Artifact IDs, and bounded `ocr:block:N` or `page:N/ocr:block:M` locators as trusted evidence metadata. Recognized text remains inside fragment-level evidence delimiters.
 - Obvious secret-like strings are redacted before cloud model calls.

@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, safeStorage, type WebContents } from "electron";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { PigeDomainError } from "@pige/domain";
 import type {
   AddPresetProviderRequest,
   AddManualProviderRequest,
@@ -42,7 +43,8 @@ import {
 import { PRELOAD_ENTRY_FILENAME } from "../shared/preload-entry";
 import {
   AgentIngestService,
-  type AgentIngestCapabilitySnapshot
+  type AgentIngestCapabilitySnapshot,
+  type AgentIngestRetrievalPort
 } from "./services/agent-ingest-service";
 import { AgentRuntimeService } from "./services/agent-runtime-service";
 import { AppearanceService } from "./services/appearance-service";
@@ -244,10 +246,29 @@ const getAgentIngestService = (): AgentIngestService => {
   if (!agentIngestService) {
     agentIngestService = new AgentIngestService(getModelProviderRegistry(), undefined, {
       snapshot: getAgentCapabilitySnapshot
-    });
+    }, undefined, undefined, createAgentIngestRetrievalPort());
   }
   return agentIngestService;
 };
+
+const createAgentIngestRetrievalPort = (): AgentIngestRetrievalPort => ({
+  search: (vaultPath, request) => {
+    if (getVaultService().activeVaultPath() !== vaultPath) {
+      throw new PigeDomainError(
+        "vault.binding_changed",
+        "The active vault changed before Agent-selected retrieval."
+      );
+    }
+    const result = getRetrievalService().search(request);
+    if (getVaultService().activeVaultPath() !== vaultPath) {
+      throw new PigeDomainError(
+        "vault.binding_changed",
+        "The active vault changed during Agent-selected retrieval."
+      );
+    }
+    return result;
+  }
+});
 
 const getHomeAgentService = (): HomeAgentService => {
   if (!homeAgentService) {
@@ -711,7 +732,7 @@ app.whenReady().then(() => {
   );
   agentIngestService = new AgentIngestService(getModelProviderRegistry(), undefined, {
     snapshot: getAgentCapabilitySnapshot
-  });
+  }, undefined, undefined, createAgentIngestRetrievalPort());
   documentParserService = new DocumentParserService();
   ocrService = new OcrService();
   toolchainService = new ToolchainService(resolveToolchainManifestPath());
