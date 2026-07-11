@@ -597,7 +597,7 @@ ipcMain.handle("models.addPresetProvider", async (event, request: AddPresetProvi
   const validatedRequest = AddPresetProviderRequestSchema.parse(request);
   await confirmSettingAction(event.sender, ["models.providerProfiles", "models.providerApiKeys"], {
     title: "Connect this model service?",
-    message: "Pige will contact the reviewed model service to discover models and store the API key in the protected local secret store.",
+    message: "Pige will test this exact reviewed service and may send selected context, including ordinary, private, and bounded large content, to this Provider Profile and endpoint for ongoing model calls. Sensitive content still asks each time; restricted content is never sent. If the endpoint or trust boundary changes or becomes unknown, Pige asks again. The API key stays in protected local storage.",
     confirmLabel: "Connect service"
   });
   return getModelProviderRegistry().addPresetProvider(validatedRequest).then((summary) => {
@@ -609,7 +609,7 @@ ipcMain.handle("models.addManualProvider", async (event, request: AddManualProvi
   const validatedRequest = AddManualProviderRequestSchema.parse(request) as AddManualProviderRequest;
   await confirmSettingAction(event.sender, ["models.providerProfiles", "models.providerApiKeys"], {
     title: "Connect this model service?",
-    message: "Pige will contact the configured model service to test the connection and store the API key in the protected local secret store.",
+    message: "Pige will test this exact configured service and may send selected context, including ordinary, private, and bounded large content, to this Provider Profile and endpoint for ongoing model calls. Sensitive content still asks each time; restricted content is never sent. If the endpoint or trust boundary changes or becomes unknown, Pige asks again. The API key stays in protected local storage.",
     confirmLabel: "Connect service"
   });
   return getModelProviderRegistry().addManualProvider(validatedRequest).then((summary) => {

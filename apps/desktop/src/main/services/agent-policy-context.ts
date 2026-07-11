@@ -6,6 +6,7 @@ export interface BuildAgentRuntimePolicyContextOptions {
   readonly jobId?: string;
   readonly defaultModel?: ModelProfileSummary;
   readonly defaultProvider?: ProviderProfileSummary;
+  readonly cloudSendPolicy?: AgentRuntimePolicyContext["model"]["cloudSendPolicy"];
   readonly localDatabaseStatus?: AgentRuntimePolicyContext["localCapabilities"]["localDatabase"];
   readonly parserToolchainReady?: boolean;
   readonly ocrEngines?: AgentRuntimePolicyContext["localCapabilities"]["ocrEngines"];
@@ -37,7 +38,7 @@ export function buildAgentRuntimePolicyContext(
       modelConfigured: Boolean(options.defaultModel),
       cloudBoundary: options.defaultProvider?.cloudBoundary ?? "unknown",
       boundaryVerification: options.defaultProvider?.boundaryVerification ?? "unknown",
-      cloudSendPolicy: "confirm_private_or_large" as const,
+      cloudSendPolicy: options.cloudSendPolicy ?? "ordinary_allowed",
       modelRoutingMode: "default_model_only" as const
     },
     permissions: {

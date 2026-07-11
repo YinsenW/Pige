@@ -347,39 +347,49 @@ describe("Home Pi Agent service", () => {
     ]);
   });
 
-  it("classifies current private SourceRecord metadata before credentials or a model call", async () => {
+  it.each([
+    { label: "private flag", sourceId: "src_20260711_privateaa", metadata: { private: true } },
+    { label: "privacy alias", sourceId: "src_20260711_privacyal", metadata: { privacy: "private" } }
+  ] as const)("allows bounded selected context marked by the $label after Provider connection", async (testCase) => {
     const fixture = makeFixture();
-    const sourceId = "src_20260711_privateaa";
-    writeSourceRecord(fixture.vaultPath, sourceId, { private: true });
-    writeKnowledgePage(fixture.vaultPath, [sourceId]);
-    expect(readMarkdownPageByRelativePath(fixture.vaultPath, "wiki/launch.md")?.summary.sourceIds).toEqual([sourceId]);
+    writeSourceRecord(fixture.vaultPath, testCase.sourceId, testCase.metadata);
+    writeKnowledgePage(fixture.vaultPath, [testCase.sourceId]);
+    expect(readMarkdownPageByRelativePath(fixture.vaultPath, "wiki/launch.md")?.summary.sourceIds)
+      .toEqual([testCase.sourceId]);
+    const result = makeSearchResult(fixture.vault.vaultId, { sourceIds: [testCase.sourceId] });
     let runtimeConfigReads = 0;
     let runtimeCalls = 0;
-    const result = makeSearchResult(fixture.vault.vaultId, { sourceIds: [sourceId] });
+    const adapter = new PiAgentRuntimeAdapter({
+      fauxResponses: [
+        { kind: "tool_call", toolName: "pige_search_knowledge", args: {} },
+        { kind: "text", text: JSON.stringify({ answer: "The launch date is July 18. [1]", citationRefs: ["citation_1"] }) }
+      ]
+    });
     const outcome = await new HomeAgentService(
       fixture.vaults,
       makeModels(() => { runtimeConfigReads += 1; }),
       makeRetrievalPort(fixture.vault.vaultId, { result }),
       new JobsService(fixture.vaults),
-      { run: async () => { runtimeCalls += 1; throw new Error("A private source must not reach Pi."); } }
+      { run: async (request) => {
+        runtimeCalls += 1;
+        return adapter.run(request);
+      } }
     ).ask({ query: result.query });
+
     expect(outcome).toMatchObject({
-      state: "waiting",
-      modelUsage: "none",
-      error: {
-        code: "model_provider.egress_confirmation_required",
-        messageKey: "errors.model_provider.egress_confirmation_required"
-      }
+      state: "completed",
+      modelUsage: "cloud",
+      result: { answerMode: "model_grounded" }
     });
-    expect(runtimeConfigReads).toBe(0);
-    expect(runtimeCalls).toBe(0);
+    expect(runtimeConfigReads).toBe(1);
+    expect(runtimeCalls).toBe(1);
     const operations = readRecords<OperationRecord>(path.join(fixture.vaultPath, ".pige", "operations"));
     expect(operations).toHaveLength(2);
-    expect(operations.find((operation) => operation.modelEgressAudit?.outcome === "confirm")).toMatchObject({
+    expect(operations.find((operation) => operation.modelEgressAudit?.contentClasses.includes("private"))).toMatchObject({
       kind: "model_egress_decision",
       modelEgressAudit: {
-        outcome: "confirm",
-        reasonCode: "private_or_large_confirmation",
+        outcome: "allow",
+        reasonCode: "ordinary_external_allowed",
         contentClasses: ["private"]
       }
     });
@@ -388,53 +398,41 @@ describe("Home Pi Agent service", () => {
     expect(durableAudit).not.toContain(fixture.vaultPath);
   });
 
-  it("honors the durable SourceRecord privacy alias and sensitive flag before egress", async () => {
-    const cases = [
-      {
-        sourceId: "src_20260711_privacyal",
-        metadata: { privacy: "private" },
-        contentClass: "private",
-        reasonCode: "private_or_large_confirmation"
-      },
-      {
-        sourceId: "src_20260711_sensitive",
-        metadata: { sensitive: true },
-        contentClass: "sensitive",
+  it("still requires a current-action confirmation for sensitive selected context", async () => {
+    const testCase = {
+      sourceId: "src_20260711_sensitive",
+      metadata: { sensitive: true }
+    } as const;
+    const fixture = makeFixture();
+    writeSourceRecord(fixture.vaultPath, testCase.sourceId, testCase.metadata);
+    writeKnowledgePage(fixture.vaultPath, [testCase.sourceId]);
+    const result = makeSearchResult(fixture.vault.vaultId, { sourceIds: [testCase.sourceId] });
+    let runtimeConfigReads = 0;
+    let runtimeCalls = 0;
+    const outcome = await new HomeAgentService(
+      fixture.vaults,
+      makeModels(() => { runtimeConfigReads += 1; }),
+      makeRetrievalPort(fixture.vault.vaultId, { result }),
+      new JobsService(fixture.vaults),
+      { run: async () => { runtimeCalls += 1; throw new Error("Classified evidence must not reach Pi."); } }
+    ).ask({ query: result.query });
+
+    expect(outcome).toMatchObject({
+      state: "waiting",
+      modelUsage: "none",
+      error: { code: "model_provider.egress_confirmation_required" }
+    });
+    expect(runtimeConfigReads).toBe(0);
+    expect(runtimeCalls).toBe(0);
+    const operation = readRecords<OperationRecord>(path.join(fixture.vaultPath, ".pige", "operations"))
+      .find((candidate) => candidate.modelEgressAudit?.outcome === "confirm");
+    expect(operation).toMatchObject({
+      modelEgressAudit: {
+        contentClasses: ["sensitive"],
+        outcome: "confirm",
         reasonCode: "sensitive_confirmation"
       }
-    ] as const;
-
-    for (const testCase of cases) {
-      const fixture = makeFixture();
-      writeSourceRecord(fixture.vaultPath, testCase.sourceId, testCase.metadata);
-      writeKnowledgePage(fixture.vaultPath, [testCase.sourceId]);
-      const result = makeSearchResult(fixture.vault.vaultId, { sourceIds: [testCase.sourceId] });
-      let runtimeConfigReads = 0;
-      let runtimeCalls = 0;
-      const outcome = await new HomeAgentService(
-        fixture.vaults,
-        makeModels(() => { runtimeConfigReads += 1; }),
-        makeRetrievalPort(fixture.vault.vaultId, { result }),
-        new JobsService(fixture.vaults),
-        { run: async () => { runtimeCalls += 1; throw new Error("Classified evidence must not reach Pi."); } }
-      ).ask({ query: result.query });
-
-      expect(outcome).toMatchObject({
-        state: "waiting",
-        modelUsage: "none",
-        error: { code: "model_provider.egress_confirmation_required" }
-      });
-      expect(runtimeConfigReads).toBe(0);
-      expect(runtimeCalls).toBe(0);
-      const operation = readRecords<OperationRecord>(path.join(fixture.vaultPath, ".pige", "operations"))
-        .find((candidate) => candidate.modelEgressAudit?.outcome === "confirm");
-      expect(operation).toMatchObject({
-        modelEgressAudit: {
-          contentClasses: [testCase.contentClass],
-          reasonCode: testCase.reasonCode
-        }
-      });
-    }
+    });
   });
 
   it("fails closed before credentials when indexed page source refs differ from current Markdown", async () => {
@@ -504,7 +502,7 @@ describe("Home Pi Agent service", () => {
         provider: DEFAULT_PROVIDER,
         model: DEFAULT_MODEL,
         runtimeConfig: RUNTIME_CONFIG,
-        driftOutcome: "confirm" as const
+        driftOutcome: "allow" as const
       },
       {
         modelUsage: "local" as const,

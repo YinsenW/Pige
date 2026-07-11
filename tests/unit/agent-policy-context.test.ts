@@ -38,6 +38,7 @@ describe("agent runtime policy context", () => {
     expect(policy.sourceStorage.allowPerCaptureOverride).toBe(false);
     expect(policy.model.modelConfigured).toBe(false);
     expect(policy.model.modelRoutingMode).toBe("default_model_only");
+    expect(policy.model.cloudSendPolicy).toBe("ordinary_allowed");
     expect(policy.permissions.defaultMode).toBe("ask_every_time");
     expect(policy.permissions.yoloEnabled).toBe(false);
     expect(policy.retrieval.maxSnippetsForCloudSynthesis).toBe(8);
@@ -54,6 +55,19 @@ describe("agent runtime policy context", () => {
 
     expect(after).not.toBe(before);
   });
+
+  it.each(["confirm_private_or_large", "confirm_all", "local_only"] as const)(
+    "accepts the explicit stricter %s cloud-send policy and binds it into the policy hash",
+    (cloudSendPolicy) => {
+      const vaultPath = makeVault();
+      const ordinary = buildAgentRuntimePolicyContext(vaultPath);
+      const stricter = buildAgentRuntimePolicyContext(vaultPath, { cloudSendPolicy });
+
+      expect(stricter.model.cloudSendPolicy).toBe(cloudSendPolicy);
+      expect(stricter.policyHash).not.toBe(ordinary.policyHash);
+      expect(stricter.policyContextId).not.toBe(ordinary.policyContextId);
+    }
+  );
 
   it("includes the effective default model profile when provided by the model registry", () => {
     const vaultPath = makeVault();

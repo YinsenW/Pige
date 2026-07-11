@@ -61,6 +61,11 @@ describe("desktop shell build contract", () => {
     expect(providerHandler.indexOf("confirmSettingAction")).toBeLessThan(providerHandler.indexOf("getModelProviderRegistry().addManualProvider(validatedRequest)"));
     expect(presetHandler.indexOf("AddPresetProviderRequestSchema.parse(request)")).toBeLessThan(presetHandler.indexOf("confirmSettingAction"));
     expect(presetHandler.indexOf("confirmSettingAction")).toBeLessThan(presetHandler.indexOf("getModelProviderRegistry().addPresetProvider(validatedRequest)"));
+    for (const handler of [presetHandler, providerHandler]) {
+      expect(handler).toContain("ordinary, private, and bounded large content");
+      expect(handler).toContain("Sensitive content still asks each time; restricted content is never sent.");
+      expect(handler).toContain("endpoint or trust boundary changes or becomes unknown");
+    }
   });
 
   it("wires Home questions through Pi with visible typed outcomes and no raw provider error surface", () => {

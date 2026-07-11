@@ -2499,7 +2499,7 @@ Consequences:
 
 - Trust grants no tool, setting, permission, extension, or destructive authority.
 - Send selected context directly, never the whole vault or a Pige cloud proxy.
-- The old default remains open until code/UI/tests change; stricter modes remain.
+- Default/disclosure are executable; persisted stricter settings and confirmation resume remain open.
 
 References:
 
