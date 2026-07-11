@@ -469,6 +469,8 @@ Current Phase 4 foundation:
 - Repeated links from one page to the same target are shown as one related page in Library-facing APIs.
 - Unresolved targets stay rebuildable and can later power Knowledge Health; they do not authorize arbitrary renderer filesystem access.
 
+B6.12: rev2 rebuilds on first query. Body-free tree resolves ID/title/alias; root topic→domain; `has_topic`>`links_to`; primary=stable, others=related, cycles=cut, depth=iterative; Unassigned. weight=structural+fragment+unique-source; leaf=fragment-ref+source-leaf; sourcePages≠fragments. No public DTO/IPC/UI.
+
 ## 13. Prompt And Agent Output Contract
 
 Agent ingest and repair prompts must ask for structured outputs that separate:

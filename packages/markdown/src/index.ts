@@ -23,6 +23,8 @@ export interface PigeFrontmatter {
   readonly updated_at?: string;
   readonly status?: string;
   readonly language?: string;
+  readonly aliases?: readonly string[];
+  readonly topics?: readonly string[];
   readonly source_ids?: readonly string[];
 }
 
@@ -160,6 +162,8 @@ function isKnownFrontmatterKey(key: string): key is keyof PigeFrontmatter {
     "updated_at",
     "status",
     "language",
+    "aliases",
+    "topics",
     "source_ids"
   ].includes(key);
 }

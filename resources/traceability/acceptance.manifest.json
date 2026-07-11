@@ -1256,12 +1256,10 @@
     },
     "PIGE-KNOW-002": {
       "status": "partial",
-      "evidence": [
-        "EV-DB-LINKS"
-      ],
+      "evidence": ["EV-DB-LINKS", "EV-KNOWLEDGE-TREE-AGGREGATE"],
       "open": {
         "id": "OPEN-REQ-PIGE-KNOW-002",
-        "description": "Knowledge Tree aggregate rebuild and source-backed navigation acceptance remain open.",
+        "description": "Broader relationship and branch semantics, chunk/citation/recency/confidence/growth aggregate inputs, 10k worker-backed and incremental rebuild proof, and packaged-platform aggregate parity remain open.",
         "targetBuilds": [
           "B6.09",
           "B6.12"
@@ -1292,7 +1290,7 @@
     },
     "PIGE-KNOW-004": {
       "status": "planned",
-      "plannedTarget": "Semantic-tree aggregate, navigation, empty-state, and accessibility tests."
+      "plannedTarget": "Public Knowledge Tree IPC/renderer navigation, Library-tree distinction, localized empty state, and packaged UI integration tests."
     },
     "PIGE-KNOW-005": {
       "status": "planned",
@@ -3384,12 +3382,10 @@
     },
     "E6.07": {
       "status": "partial",
-      "evidence": [
-        "EV-DB-LINKS"
-      ],
+      "evidence": ["EV-DB-LINKS", "EV-KNOWLEDGE-TREE-AGGREGATE"],
       "open": {
         "id": "OPEN-EXIT-E6.07",
-        "description": "Knowledge Tree UI and aggregate acceptance remain open.",
+        "description": "Public Knowledge Tree IPC/preload/renderer and source-backed navigation, broader relationship/branch aggregate semantics, 10k worker-backed and incremental rebuild performance, and packaged-platform aggregate parity remain open.",
         "targetBuilds": [
           "B6.09",
           "B6.12"
@@ -3997,6 +3993,7 @@
       "path": "tests/unit/local-database-service.test.ts",
       "selector": "indexes wiki links and local Markdown links as rebuildable related pages"
     },
+    "EV-KNOWLEDGE-TREE-AGGREGATE": { "kind": "test", "path": "tests/unit/knowledge-tree-aggregate.test.ts", "selector": "rebuilds an explainable domain, topic, concept, and source tree from durable Markdown" },
     "EV-DB-DRIVER": {
       "kind": "test",
       "path": "tests/unit/local-database-service.test.ts",

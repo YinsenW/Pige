@@ -12,6 +12,8 @@ created_at: "2026-07-09T12:00:00.000Z"
 updated_at: "2026-07-09T12:00:00.000Z"
 status: "active"
 language: "en"
+aliases: ["Captured Evidence", "Imported Source"]
+topics: ["Local RAG", "page_20260709_topic123"]
 source_ids: ["src_20260709_abcd1234"]
 source:
   managed_copy_path: "raw/files/2026/07/source.md"
@@ -29,6 +31,8 @@ source:
       updated_at: "2026-07-09T12:00:00.000Z",
       status: "active",
       language: "en",
+      aliases: ["Captured Evidence", "Imported Source"],
+      topics: ["Local RAG", "page_20260709_topic123"],
       source_ids: ["src_20260709_abcd1234"]
     });
   });

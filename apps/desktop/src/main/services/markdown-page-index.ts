@@ -11,6 +11,12 @@ import {
 export interface MarkdownPageRecord {
   readonly summary: LibraryPageSummary;
   readonly absolutePath: string;
+  readonly knowledge: MarkdownPageKnowledgeFields;
+}
+
+export interface MarkdownPageKnowledgeFields {
+  readonly aliases: readonly string[];
+  readonly topics: readonly string[];
 }
 
 export interface MarkdownPageScanResult {
@@ -66,7 +72,14 @@ function readMarkdownPageRecord(vaultPath: string, filePath: string): MarkdownPa
   const parsed = parsePigeFrontmatter(readFilePrefix(filePath));
   if (!parsed) return undefined;
   const summary = frontmatterToSummary(vaultPath, filePath, parsed.frontmatter);
-  return summary ? { summary, absolutePath: filePath } : undefined;
+  return summary ? {
+    summary,
+    absolutePath: filePath,
+    knowledge: {
+      aliases: sanitizeKnowledgeRefs(parsed.frontmatter.aliases),
+      topics: sanitizeKnowledgeRefs(parsed.frontmatter.topics)
+    }
+  } : undefined;
 }
 
 function frontmatterToSummary(
@@ -128,6 +141,13 @@ function readFilePrefix(filePath: string): string {
 
 function sanitizeSourceIds(sourceIds: readonly string[]): readonly string[] {
   return sourceIds.filter((sourceId) => /^src_\d{8}_[a-z0-9]{8,}$/u.test(sourceId));
+}
+
+function sanitizeKnowledgeRefs(values: readonly string[] | undefined): readonly string[] {
+  const normalized = (values ?? [])
+    .map(normalizeTitle)
+    .filter((value) => value.length > 0 && value.length <= 256);
+  return Array.from(new Set(normalized)).slice(0, 64);
 }
 
 function normalizeTitle(title: string): string {

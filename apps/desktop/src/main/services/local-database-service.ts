@@ -14,6 +14,11 @@ import type {
 } from "@pige/contracts";
 import { extractPigeMarkdownLinkRefs, type PigeMarkdownLinkRef } from "@pige/markdown";
 import { LocalDatabaseSchemaStateSchema, type LocalDatabaseSchemaState, type MarkdownPageType } from "@pige/schemas";
+import {
+  buildKnowledgeTreeSnapshot,
+  type KnowledgeTreeRelationInput,
+  type KnowledgeTreeSnapshot
+} from "./knowledge-tree-aggregate";
 import { readMarkdownPageBody, scanMarkdownPages, type MarkdownPageRecord } from "./markdown-page-index";
 import {
   createCjkSearchAugmentation,
@@ -31,6 +36,7 @@ export interface LocalDatabaseDriver {
   readonly listPages: (vaultPath: string, request?: LibraryListRequest) => LocalDatabasePageList | undefined;
   readonly relatedPages: (vaultPath: string, request: LibraryRelatedRequest) => LocalDatabaseRelatedPages | undefined;
   readonly searchPages: (vaultPath: string, request: RetrievalSearchRequest) => LocalDatabaseSearchResult | undefined;
+  readonly knowledgeTree: (vaultPath: string) => KnowledgeTreeSnapshot | undefined;
 }
 
 export class PendingSqliteDriver implements LocalDatabaseDriver {
@@ -66,6 +72,10 @@ export class PendingSqliteDriver implements LocalDatabaseDriver {
   }
 
   relatedPages(): undefined {
+    return undefined;
+  }
+
+  knowledgeTree(): undefined {
     return undefined;
   }
 }
@@ -175,11 +185,13 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
           indexedPages.push({ page, body: safeBody });
         }
 
+        indexPageKnowledge(db, indexedPages);
         indexPageLinks(db, indexedPages);
         db.prepare(
           "INSERT OR REPLACE INTO index_state(id, invalid_page_count, rebuilt_at) VALUES (1, ?, ?)"
         ).run(scanned.invalidPageCount, rebuiltAt);
       });
+      db.exec(`PRAGMA user_version = ${CURRENT_INDEX_REVISION}`);
     } finally {
       db.close();
     }
@@ -256,6 +268,25 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
     }
   }
 
+  knowledgeTree(vaultPath: string): KnowledgeTreeSnapshot | undefined {
+    if (!this.ensureReady(vaultPath)) return undefined;
+    const db = openVaultDatabase(vaultPath);
+    try {
+      const pages = db.prepare("SELECT * FROM pages ORDER BY title ASC, page_id ASC").all().map(rowToSummary);
+      const relations = db.prepare(`
+        SELECT from_page_id, to_page_id, relation_type
+        FROM relation_edges
+        WHERE relation_type IN ('has_topic', 'links_to')
+          AND from_page_id IS NOT NULL
+          AND to_page_id IS NOT NULL
+        ORDER BY relation_type ASC, from_page_id ASC, to_page_id ASC
+      `).all().map(rowToKnowledgeTreeRelation);
+      return buildKnowledgeTreeSnapshot(pages, relations, readInvalidPageCount(db));
+    } finally {
+      db.close();
+    }
+  }
+
   searchPages(vaultPath: string, request: RetrievalSearchRequest): LocalDatabaseSearchResult | undefined {
     if (!this.ensureReady(vaultPath)) return undefined;
     const terms = createQueryTerms(request.query);
@@ -313,6 +344,8 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
     const db = openVaultDatabase(vaultPath);
     try {
       migrate(db);
+      const indexRevision = toNumber(db.prepare("PRAGMA user_version").all()[0]?.user_version);
+      if (indexRevision !== CURRENT_INDEX_REVISION) return true;
       const stateRows = db.prepare("SELECT invalid_page_count FROM index_state WHERE id = 1").all();
       if (stateRows.length === 0) return true;
       const invalidPageCount = toNumber(stateRows[0]?.invalid_page_count);
@@ -370,6 +403,10 @@ export class LocalDatabaseService {
   relatedPages(vaultPath: string, request: LibraryRelatedRequest): LocalDatabaseRelatedPages | undefined {
     return this.#driver.relatedPages(vaultPath, request);
   }
+
+  knowledgeTree(vaultPath: string): KnowledgeTreeSnapshot | undefined {
+    return this.#driver.knowledgeTree(vaultPath);
+  }
 }
 
 export function createEmptySchemaState(): LocalDatabaseSchemaState {
@@ -412,6 +449,7 @@ function getDatabasePath(vaultPath: string): string {
 }
 
 const INITIAL_MIGRATION_ID = "001_node_sqlite_initial_index";
+const CURRENT_INDEX_REVISION = 2;
 const DEFAULT_LIBRARY_LIMIT = 50;
 const MAX_LIBRARY_LIMIT = 200;
 const DEFAULT_SEARCH_LIMIT = 8;
@@ -598,6 +636,8 @@ function clearRebuildableRows(db: DatabaseSync): void {
     DELETE FROM pages_fts;
     DELETE FROM page_tags;
     DELETE FROM tags;
+    DELETE FROM topics;
+    DELETE FROM entities;
     DELETE FROM relation_edges;
     DELETE FROM links;
     DELETE FROM backlinks;
@@ -612,6 +652,40 @@ function clearRebuildableRows(db: DatabaseSync): void {
 interface IndexedPage {
   readonly page: MarkdownPageRecord;
   readonly body: string;
+}
+
+function indexPageKnowledge(db: DatabaseSync, pages: readonly IndexedPage[]): void {
+  const records = pages.map((entry) => entry.page);
+  const pageById = new Map(records.map((page) => [page.summary.pageId, page]));
+  const lookup = createPageLookup(records);
+  const insertTopic = db.prepare(`
+    INSERT OR REPLACE INTO topics(topic_id, page_id, title)
+    VALUES (?, ?, ?)
+  `);
+  const insertRelation = db.prepare(`
+    INSERT OR IGNORE INTO relation_edges(edge_id, from_page_id, to_page_id, relation_type, evidence_json)
+    VALUES (?, ?, ?, 'has_topic', ?)
+  `);
+
+  for (const page of records) {
+    if (page.summary.pageType === "topic") {
+      insertTopic.run(page.summary.pageId, page.summary.pageId, page.summary.title);
+    }
+  }
+
+  for (const page of records) {
+    for (const topicRef of page.knowledge.topics) {
+      const targetId = lookup.get(normalizeLinkTarget(topicRef));
+      const target = targetId ? pageById.get(targetId) : undefined;
+      if (!target || target.summary.pageType !== "topic" || target.summary.pageId === page.summary.pageId) continue;
+      insertRelation.run(
+        createRelationEdgeId("has_topic", page.summary.pageId, target.summary.pageId, target.summary.pageId),
+        page.summary.pageId,
+        target.summary.pageId,
+        JSON.stringify([{ source: "frontmatter", field: "topics", target: topicRef }])
+      );
+    }
+  }
 }
 
 function indexPageLinks(db: DatabaseSync, pages: readonly IndexedPage[]): void {
@@ -630,7 +704,7 @@ function indexPageLinks(db: DatabaseSync, pages: readonly IndexedPage[]): void {
       if (resolvedPageId) {
         insertBacklink.run(resolvedPageId, entry.page.summary.pageId);
         insertRelation.run(
-          createRelationEdgeId(entry.page.summary.pageId, resolvedPageId, link.target),
+          createRelationEdgeId("links_to", entry.page.summary.pageId, resolvedPageId, link.target),
           entry.page.summary.pageId,
           resolvedPageId,
           JSON.stringify([{ source: link.kind, target: link.target, label: link.label }])
@@ -642,9 +716,17 @@ function indexPageLinks(db: DatabaseSync, pages: readonly IndexedPage[]): void {
 
 function createPageLookup(pages: readonly MarkdownPageRecord[]): Map<string, string> {
   const lookup = new Map<string, string>();
-  for (const page of pages) {
+  const sortedPages = [...pages].sort((left, right) => {
+    const leftPath = left.summary.pagePath.normalize("NFKC").toLocaleLowerCase("en-US");
+    const rightPath = right.summary.pagePath.normalize("NFKC").toLocaleLowerCase("en-US");
+    if (leftPath !== rightPath) return leftPath < rightPath ? -1 : 1;
+    return left.summary.pageId < right.summary.pageId ? -1 : left.summary.pageId > right.summary.pageId ? 1 : 0;
+  });
+  for (const page of sortedPages) {
     const keys = [
+      page.summary.pageId,
       page.summary.title,
+      ...page.knowledge.aliases,
       page.summary.pagePath,
       page.summary.pagePath.replace(/\.md$/iu, ""),
       path.basename(page.summary.pagePath),
@@ -740,6 +822,14 @@ function rowToSummary(row: Record<string, unknown>): LibraryPageSummary {
   };
 }
 
+function rowToKnowledgeTreeRelation(row: Record<string, unknown>): KnowledgeTreeRelationInput {
+  return {
+    fromPageId: String(row.from_page_id),
+    toPageId: String(row.to_page_id),
+    relationType: String(row.relation_type) as KnowledgeTreeRelationInput["relationType"]
+  };
+}
+
 function rowToSearchResult(row: Record<string, unknown>, query: QueryTerms): RetrievalSearchResultItem {
   const summary = rowToSummary(row);
   const snippet = String(row.snippet ?? "").trim();
@@ -793,8 +883,13 @@ function pageExists(db: DatabaseSync, pageId: string): boolean {
   return db.prepare("SELECT page_id FROM pages WHERE page_id = ?").all(pageId).length > 0;
 }
 
-function createRelationEdgeId(fromPageId: string, toPageId: string, target: string): string {
-  return `edge_${stableHash(`${fromPageId}:${toPageId}:${target}`).slice(0, 24)}`;
+function createRelationEdgeId(
+  relationType: KnowledgeTreeRelationInput["relationType"],
+  fromPageId: string,
+  toPageId: string,
+  target: string
+): string {
+  return `edge_${stableHash(`${relationType}:${fromPageId}:${toPageId}:${target}`).slice(0, 24)}`;
 }
 
 function stableHash(value: string): string {
