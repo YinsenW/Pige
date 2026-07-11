@@ -293,17 +293,17 @@ Current implementation:
 - Capture Service writes queued capture job records under `.pige/jobs/YYYY/MM/`.
 - Jobs Service exposes `jobs.list` as a read-only safe-summary query for Home status after launch.
 - Jobs Service exposes durable cancel/retry for eligible jobs; active process-local
-  parse/OCR/Agent ingest uses `cancel_requested` and shared abort.
+  parse/OCR/Agent ingest/index rebuild uses `cancel_requested` and shared abort.
 - Non-cooperative capture uses `capturing_source` and persists its guard before the first Source Record/Page projection.
 - Jobs Service routes queued PDF/DOCX/PPTX sources through a document-parser registry into bounded worker-backed parse jobs, writes durable checksummed text/metadata artifacts, and gates Agent ingest on evidence quality. Direct images, verified PDF candidates, and parser-selected PPTX raster media run through `OcrPort`; runnable enrichment blocks first Agent ingest, while unavailable OCR may release useful native evidence with review warnings.
 - Parse and OCR runners write their OCR/Agent-ingest continuation Job before finalizing the upstream Job record, so a later parent-state or logging failure leaves a durable child plus a retryable parent.
 - Agent ingest distinguishes provider abort/timeout and guards fenced note, current-job adoption, or missing-index repair for an existing same-source Pige note.
-- `maintenance.rebuildLocalDatabase` creates and completes an `index_rebuild` job before rebuilding SQLite metadata/FTS from Markdown.
+- `maintenance.rebuildLocalDatabase` creates an `index_rebuild` Job whose bundled worker rebuilds SQLite metadata/FTS from Markdown with bounded progress; startup/retry use a coalesced limit-1 drainer.
 - Startup/vault activation reconciles interrupted idempotent capture/parse/OCR/Agent-ingest/index jobs, re-evaluates waiting Agent-ingest work against current model and runnable-PDF-OCR gates, resumes eligible work through coalesced background drainers, and marks uncertain interrupted work retryable with an explanation. Each service processes at most 20 jobs per batch and yields to the main loop before continuing, so multi-file drops are not silently capped by a query limit.
 - Job guards use unique no-follow temporary files, file flush, supported directory flush,
   and atomic replacement before publication. Strict cross-process Job revision CAS/lost-update,
   parent-directory swap, guard-to-domain atomicity/guard-without-output recovery, packaged-filesystem proof,
-  running capture/index_rebuild/other-class cancellation, checkpoint arrays, full-slide OCR,
+  running capture/other-class cancellation, checkpoint arrays, full-slide OCR,
   parent/child batches, priority scheduling, and compaction remain open.
 
 ### 5.1.3 Library Service
@@ -367,7 +367,7 @@ Driver plan:
 - Access through a `LocalDatabaseDriver` interface.
 - Database work runs in Electron main process or a dedicated worker/utility process.
 - Long rebuilds, large search indexing, and embedding metadata writes should not block renderer interactions.
-- The current implementation creates an `index_rebuild` job before rebuilding, but may run the rebuild body synchronously for small vaults. The 10,000-page gate requires worker-backed execution with progress/cancellation before claiming release readiness.
+- Explicit Job rebuilds use the bundled v1 request-bound worker at `out/main/workers/local-database-rebuild-worker.js`, with bounded progress/result, a 15-minute timeout, 512 MiB V8 old-generation limit, termination on every settlement, and built-artifact smoke. Implicit first-query rebuild remains synchronous; strict cross-process writer/CAS and packaged-platform proof remain open.
 
 Driver contract:
 

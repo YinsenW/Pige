@@ -141,7 +141,7 @@ The main risks are API maturity and runtime coupling:
 - `node:sqlite` is still experimental in Node 24.
 - Pige depends on the SQLite build bundled with the selected Electron/Node runtime.
 - Vector extension behavior remains unproven and is not part of this initial driver decision.
-- The current Phase 4 rebuild path creates a durable `index_rebuild` job before running the rebuild body, but the execution body is still synchronous and suitable only for the foundation slice. Large rebuilds must move to worker execution before the 10,000-page performance gate.
+- Explicit Phase 4 maintenance rebuilds use a dedicated worker; implicit first-query rebuild remains synchronous. The 10,000-page budget, packaged platforms, strict cross-process writer/CAS, and complete crash/stale-worker recovery remain open.
 
 Mitigations:
 
@@ -258,8 +258,8 @@ Phase 4 implementation note:
 - It indexes sanitized/redacted Markdown bodies and CJK 2/3-gram augmentation so Chinese, Japanese, and Korean queries do not depend only on whitespace tokenization.
 - It parses durable Markdown wiki links and local Markdown links into `links`, `backlinks`, and resolved `relation_edges` rows. Unresolved link targets remain rebuildable graph metadata for future Knowledge Health.
 - Library and retrieval use SQLite when ready and fall back to Markdown scanning when the database is unavailable.
-- `maintenance.rebuildLocalDatabase` creates an `index_rebuild` job before rebuilding, writes completion/failure state to the job record, and returns the completed job ID with rebuild counts.
-- Database deletion is repaired by rebuilding from Markdown. Large-vault rebuilds must move from the current synchronous job runner to a worker-backed job with progress/cancellation before the 10,000-page performance gate is claimed.
+- `maintenance.rebuildLocalDatabase` creates an `index_rebuild` Job; a bundled worker reports progress/counts. Failure rolls back to the prior WAL-committed index; safe cancellation preserves Markdown.
+- Rebuild uses bounded two-pass, one-body-at-a-time reads. Implicit first-query rebuild stays synchronous; 10,000-page, incremental/staging-swap, packaged-platform, cross-process, and complete recovery proof remain open.
 
 ## 11. References
 

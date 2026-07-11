@@ -37,9 +37,9 @@ Current implementation state, last reconciled 2026-07-10:
 | --- | --- | --- |
 | P0 | in progress | Repository and traceability foundations have current evidence; the full P0 exit set has not been re-run as a phase-completion claim. |
 | P1 | in progress | Desktop, vault, settings, diagnostics, and runtime foundations have evidence; the full mapped exit set remains open. |
-| P2 | in progress | Capture publication guards plus process-local parse/OCR/Agent-ingest progress or cancellation have evidence; running capture, `index_rebuild`, remaining classes, visible UI, voice, and full exits remain open. |
+| P2 | in progress | Capture guards plus process-local parse/OCR/Agent-ingest/index progress or cancellation have evidence; running capture, remaining classes, visible UI, voice, and full exits remain open. |
 | P3 | in progress | BYOK and Agent-ingest foundations have evidence; complete provider, egress, output-summary, and exit evidence remain open. |
-| P4 | in progress | SQLite, lexical search, Library, and rebuild foundations have evidence; the full scale and relationship exit set remains open. |
+| P4 | in progress | SQLite, lexical search, Library, and worker-backed rebuild foundations have evidence; the full scale and relationship exit set remains open. |
 | P5 | in progress | PDF, Office, static-web, direct-image macOS Vision OCR, Artifact, and recovery slices have evidence; cross-platform/document OCR and remaining P5 exits are still open. |
 | P6 | in progress | Lexical retrieval, cited Home answers, Reader, backlinks, and related-context foundations exist; local RAG, editing, Knowledge Tree, and full exits remain open. |
 | P7 | planned | Foundations may exist, but confirmation, memory, and conversation-lifecycle acceptance remains assigned below. |
@@ -238,8 +238,8 @@ Exit criteria:
 - [E2.11] Missing model, tool, path, or runtime dependencies enter visible retryable `waiting_dependency` with a structured repair/retry action and no source loss.
 
 Current B2.08/B2.11 evidence covers first-wins guards for capture/parse/OCR/agent_ingest,
-process-local parse/OCR/agent_ingest cancellation, restart retention, and verified note
-races. Running capture/`index_rebuild` cancellation,
+process-local parse/OCR/agent_ingest/index_rebuild cancellation, index progress,
+restart retention, and verified note races. Running capture/other-class cancellation,
 strict cross-process Job revision CAS, and guard-to-domain atomicity remain open.
 
 ## 8. Phase 3: BYOK And Basic Agent Ingest
@@ -375,7 +375,7 @@ B5.12/E5.04 evidence covers seven text, URL, PDF, PPTX, and image-OCR cases acro
 
 Evidence exists for startup reconciliation of interrupted idempotent document/OCR/Agent jobs.
 
-Still open before P5 completion: signed helper/packaged PDF acceptance, Windows/Paddle, full-slide/vector/chart/DOCX-media OCR, unsupported/oversized PPTX targets, full Pi-runtime injection, numeric/running-cancel UI, remaining Job-class domain publishers, running capture/`index_rebuild`/other-class cancellation, and strict cross-process cancellation/CAS.
+Still open before P5 completion: signed helper/packaged PDF acceptance, Windows/Paddle, full-slide/vector/chart/DOCX-media OCR, unsupported/oversized PPTX targets, full Pi-runtime injection, numeric/running-cancel UI, remaining Job-class domain publishers, running capture/other-class cancellation, and strict cross-process cancellation/CAS.
 
 Deferred from this phase:
 

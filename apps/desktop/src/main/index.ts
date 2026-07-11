@@ -47,10 +47,12 @@ import { DocumentParserService } from "./services/document-parser-service";
 import {
   JobsService,
   type ProcessQueuedCapturesResult,
+  type ProcessQueuedIndexRebuildResult,
   type ProcessQueuedOcrResult,
   type ProcessQueuedParsesResult
 } from "./services/jobs-service";
 import { LibraryService } from "./services/library-service";
+import { LocalDatabaseRebuildWorkerService } from "./services/local-database-rebuild-worker-service";
 import { LocalDatabaseService } from "./services/local-database-service";
 import { LocalSettingsStore } from "./services/local-settings";
 import { ModelProviderRegistry } from "./services/model-provider-registry";
@@ -112,6 +114,7 @@ let captureDrainer: CoalescedBatchDrainer<ProcessQueuedCapturesResult> | undefin
 let parseDrainer: CoalescedBatchDrainer<ProcessQueuedParsesResult> | undefined;
 let ocrDrainer: CoalescedBatchDrainer<ProcessQueuedOcrResult> | undefined;
 let agentIngestDrainer: CoalescedBatchDrainer<ProcessQueuedCapturesResult> | undefined;
+let indexRebuildDrainer: CoalescedBatchDrainer<ProcessQueuedIndexRebuildResult> | undefined;
 
 const createMainWindow = (): void => {
   const browserWindow = new BrowserWindow({
@@ -290,7 +293,7 @@ const getDiagnosticsService = (): DiagnosticsService => {
 
 const getLocalDatabaseService = (): LocalDatabaseService => {
   if (!localDatabaseService) {
-    localDatabaseService = new LocalDatabaseService();
+    localDatabaseService = new LocalDatabaseService(undefined, new LocalDatabaseRebuildWorkerService());
   }
   return localDatabaseService;
 };
@@ -372,6 +375,18 @@ const scheduleAgentIngestProcessing = (): void => {
   agentIngestDrainer.schedule();
 };
 
+const scheduleIndexRebuildProcessing = (): void => {
+  indexRebuildDrainer ??= new CoalescedBatchDrainer({
+    runBatch: () => getJobsService().processQueuedIndexRebuild({ limit: 1 }),
+    onError: (caught) => recordBackgroundFailure(
+      "database.index_rebuild.background_failed",
+      "Background local index rebuild failed.",
+      caught
+    )
+  });
+  indexRebuildDrainer.schedule();
+};
+
 const recordBackgroundFailure = (code: string, fallback: string, caught: unknown): void => {
   getDiagnosticsService().recordEvent({
     level: "warning",
@@ -397,6 +412,7 @@ const resumeBackgroundJobs = (): void => {
     scheduleParseProcessing();
     scheduleOcrProcessing();
     scheduleAgentIngestProcessing();
+    scheduleIndexRebuildProcessing();
   } catch (caught) {
     getDiagnosticsService().recordEvent({
       level: "warning",
@@ -455,7 +471,7 @@ ipcMain.handle("capture.submitFiles", async (_event, request: SubmitFilesCapture
 });
 ipcMain.handle("jobs.list", (_event, request?: JobsListRequest) => getJobsService().list(request));
 ipcMain.handle("jobs.cancel", (_event, request: JobActionRequest) => getJobsService().cancel(request));
-ipcMain.handle("jobs.retry", (_event, request: JobActionRequest) => {
+ipcMain.handle("jobs.retry", async (_event, request: JobActionRequest) => {
   const result = getJobsService().retry(request);
   if (result.status === "requeued" && result.job?.class === "capture") {
     scheduleCaptureProcessing();
@@ -470,7 +486,7 @@ ipcMain.handle("jobs.retry", (_event, request: JobActionRequest) => {
     scheduleAgentIngestProcessing();
   }
   if (result.status === "requeued" && result.job?.class === "index_rebuild") {
-    getJobsService().processQueuedIndexRebuild({ jobIds: [result.job.id] });
+    scheduleIndexRebuildProcessing();
   }
   return result;
 });
@@ -517,9 +533,7 @@ ipcMain.handle("vault.updateSourceStoragePolicy", (_event, request: UpdateSource
   getVaultService().updateSourceStoragePolicy(request)
 );
 ipcMain.handle("vault.removeRecent", (_event, vaultId: string) => getVaultService().removeRecent(vaultId));
-ipcMain.handle("maintenance.rebuildLocalDatabase", () => {
-  return getJobsService().requestIndexRebuild();
-});
+ipcMain.handle("maintenance.rebuildLocalDatabase", () => getJobsService().requestIndexRebuild());
 ipcMain.handle("maintenance.resetLocalDatabase", async (event) => {
   await confirmSettingAction(event.sender, ["maintenance.localDatabaseReset"], {
     title: "Reset local index data?",

@@ -158,7 +158,7 @@ Rules:
 - Jobs must be idempotent or detect already-created outputs by ID/checksum.
 - Retry only safe operations automatically.
 - Never retry destructive actions without user confirmation.
-- Process-local parse/OCR work checkpoints progress and cooperatively cancels; other Job classes and cross-process routing remain open.
+- Process-local parse/OCR/index work checkpoints progress; parse/OCR/Agent ingest/index rebuild cooperatively cancels. Other classes and cross-process routing remain open.
 - Reopening the app resumes queued and retryable jobs.
 - Minimal source page generation must not read an entire large managed source just to create a preview. Read a bounded prefix for title/excerpt and keep the complete body in the managed source copy.
 - Markdown-scan Library fallback must read only bounded file prefixes for frontmatter. Full page body reads belong to note rendering, search indexing, or explicit open actions, not list queries.
@@ -180,7 +180,7 @@ Rules:
 - A new capture should not wait behind a full index rebuild.
 - Search should return lexical results even if semantic index is rebuilding.
 - Phase 2/3 Markdown-scan retrieval is a bridge before SQLite/FTS. It must return bounded snippets only and keep full page bodies out of renderer state; Phase 4 indexing owns the 10k-page performance target.
-- Phase 4 foundation uses SQLite FTS5 for DB-backed Library and lexical retrieval when ready, with Markdown scan fallback for degraded mode. The manual rebuild path now creates an `index_rebuild` job before execution, but the rebuild body may still run synchronously for small vaults; before claiming the 10,000-page target, full rebuild must move to a worker and expose progress/cancellation.
+- Explicit Phase 4 rebuild is worker-backed, process-local serialized, cancellable, and bounded by a 15-minute timeout plus 512 MiB V8 old-generation limit; two-pass indexing retains bounded metadata and one capped body. Formal 10k CPU/RSS/latency, incremental/staging-swap, implicit first-query workerization, cross-process locking, crash fencing, and packaged-platform proof remain open.
 - OCR and embedding workers should pause or reduce concurrency when the user is actively interacting.
 
 ## 7. Indexing Strategy

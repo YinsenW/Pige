@@ -1,8 +1,12 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
-import { LocalDatabaseService } from "../../apps/desktop/src/main/services/local-database-service";
+import {
+  LocalDatabaseService,
+  NodeSqliteDriver
+} from "../../apps/desktop/src/main/services/local-database-service";
 
 const tempRoots: string[] = [];
 
@@ -121,6 +125,45 @@ describe("local database service", () => {
     expect(result?.pages[0]?.title).toBe("Rebuildable Knowledge");
   });
 
+  it("keeps the previous committed index readable when rebuild progress fails", () => {
+    const vaultPath = makeVaultRoot();
+    const driver = new NodeSqliteDriver();
+    writePage(vaultPath, "wiki/transaction.md", {
+      id: "page_20260709_transaction",
+      title: "Committed Before Rebuild",
+      body: "Readers keep using this committed index while a replacement transaction is running."
+    });
+    driver.rebuild(vaultPath);
+    writePage(vaultPath, "wiki/transaction.md", {
+      id: "page_20260709_transaction",
+      title: "Uncommitted Replacement",
+      body: "This replacement must roll back when the rebuild worker fails."
+    });
+
+    let observedDuringRebuild: string | undefined;
+    expect(() => driver.rebuild(vaultPath, {
+      onProgress: (progress) => {
+        if (progress.completedUnits !== 1) return;
+        const reader = openReadOnlyDatabase(vaultPath);
+        try {
+          observedDuringRebuild = String(reader.prepare("SELECT title FROM pages").get()?.title ?? "");
+        } finally {
+          reader.close();
+        }
+        throw new Error("injected rebuild failure");
+      }
+    })).toThrow("injected rebuild failure");
+
+    const reader = openReadOnlyDatabase(vaultPath);
+    try {
+      expect(observedDuringRebuild).toBe("Committed Before Rebuild");
+      expect(reader.prepare("SELECT title FROM pages").get()?.title).toBe("Committed Before Rebuild");
+      expect(reader.prepare("SELECT COUNT(*) AS count FROM pages_fts").get()?.count).toBe(1);
+    } finally {
+      reader.close();
+    }
+  });
+
   it("detects external Markdown edits and refreshes the FTS index", () => {
     const vaultPath = makeVaultRoot();
     const service = new LocalDatabaseService();
@@ -142,6 +185,13 @@ describe("local database service", () => {
     expect(result?.results[0]?.snippets[0]).toContain("nebula retrieval");
   });
 });
+
+function openReadOnlyDatabase(vaultPath: string): DatabaseSync {
+  return new DatabaseSync(path.join(vaultPath, ".pige/db/vault.sqlite"), {
+    readOnly: true,
+    allowExtension: false
+  });
+}
 
 function writePage(vaultPath: string, relativePath: string, input: {
   readonly id: string;

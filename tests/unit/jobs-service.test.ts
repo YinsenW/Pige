@@ -9,8 +9,13 @@ import {
 } from "../../apps/desktop/src/main/services/agent-ingest-service";
 import { CaptureService, type SourceFetchPort } from "../../apps/desktop/src/main/services/capture-service";
 import { DocumentParserService, type DocumentParserPort } from "../../apps/desktop/src/main/services/document-parser-service";
+import { JobCancellationError } from "../../apps/desktop/src/main/services/job-execution-control";
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
-import { LocalDatabaseService } from "../../apps/desktop/src/main/services/local-database-service";
+import type { LocalDatabaseRebuildPort } from "../../apps/desktop/src/main/services/local-database-rebuild-types";
+import {
+  LocalDatabaseService,
+  NodeSqliteDriver
+} from "../../apps/desktop/src/main/services/local-database-service";
 import type { OfficeMediaMaterializerPort } from "../../apps/desktop/src/main/services/office-media-materializer-service";
 import { extractOfficeText } from "../../apps/desktop/src/main/services/office-parser-core";
 import { OfficeParserService } from "../../apps/desktop/src/main/services/office-parser-service";
@@ -2022,9 +2027,9 @@ describe("jobs service", () => {
     expect(listedJob?.state).toBe("queued");
   });
 
-  it("records index rebuild as a durable job before rebuilding SQLite search", () => {
+  it("records worker-backed index progress before completing SQLite search rebuild", async () => {
     const { vaultPath, vault } = makeVault();
-    const database = new LocalDatabaseService();
+    const database = makeInlineWorkerDatabase();
     const { jobs } = makeServices(vaultPath, vault, undefined, database);
     writePage(vaultPath, "wiki/index-job.md", {
       id: "page_20260710_indexjob",
@@ -2032,7 +2037,7 @@ describe("jobs service", () => {
       body: "Durable index rebuild jobs make local search recoverable."
     });
 
-    const rebuild = jobs.requestIndexRebuild();
+    const rebuild = await jobs.requestIndexRebuild();
     const listedJob = jobs.list({ classes: ["index_rebuild"], states: ["completed"] }).jobs[0];
     const search = database.searchPages(vaultPath, { query: "recoverable search" });
     const log = fs.readFileSync(path.join(vaultPath, "log.md"), "utf8");
@@ -2042,9 +2047,87 @@ describe("jobs service", () => {
     expect(rebuild.pageCount).toBe(1);
     expect(listedJob?.id).toBe(rebuild.jobId);
     expect(listedJob?.message).toContain("Index rebuilt from Markdown");
+    expect(listedJob?.progress).toEqual({
+      completedUnits: 3,
+      totalUnits: 3,
+      unit: "index_item"
+    });
     expect(readJobCancellation(vaultPath, rebuild.jobId)).toBeUndefined();
     expect(search?.results[0]?.summary.title).toBe("Index Job");
     expect(log).toContain("Rebuilt local database index from Markdown");
+  });
+
+  it("cooperatively cancels a running index worker without changing durable Markdown", async () => {
+    const { vaultPath, vault } = makeVault();
+    let markStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const rebuilder: LocalDatabaseRebuildPort = {
+      rebuild: (_activeVaultPath, options = {}) => new Promise((_resolve, reject) => {
+        options.onProgress?.({ completedUnits: 0, totalUnits: 5, unit: "index_item" });
+        options.signal?.addEventListener("abort", () => reject(new JobCancellationError()), { once: true });
+        markStarted?.();
+      })
+    };
+    const database = new LocalDatabaseService(new NodeSqliteDriver(), rebuilder);
+    const { jobs } = makeServices(vaultPath, vault, undefined, database);
+    writePage(vaultPath, "wiki/cancel-index.md", {
+      id: "page_20260711_cancelindex",
+      title: "Cancel Index",
+      body: "Durable Markdown remains untouched when its derived index worker is cancelled."
+    });
+
+    const rebuilding = jobs.requestIndexRebuild();
+    await started;
+    const runningJob = jobs.list({ classes: ["index_rebuild"], states: ["running"] }).jobs[0];
+    expect(runningJob?.progress).toEqual({ completedUnits: 0, totalUnits: 5, unit: "index_item" });
+    expect(jobs.cancel({ jobId: requireValue(runningJob).id }).status).toBe("cancel_requested");
+
+    await expect(rebuilding).rejects.toMatchObject({ code: "index_rebuild_failed" });
+    const cancelled = jobs.list({ classes: ["index_rebuild"], states: ["cancelled"] }).jobs[0];
+    expect(cancelled?.id).toBe(runningJob?.id);
+    expect(readJobCancellation(vaultPath, requireValue(cancelled).id)).toMatchObject({
+      requestedBy: "user",
+      safeCheckpointId: "before_durable_write",
+      durableWritesApplied: false
+    });
+    expect(fs.readFileSync(path.join(vaultPath, "wiki/cancel-index.md"), "utf8"))
+      .toContain("Durable Markdown remains untouched");
+  });
+
+  it("serializes concurrent index rebuild requests through one process-local writer", async () => {
+    const { vaultPath, vault } = makeVault();
+    let active = 0;
+    let maxActive = 0;
+    let sequence = 0;
+    const rebuilder: LocalDatabaseRebuildPort = {
+      rebuild: async (_activeVaultPath, options = {}) => {
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        const current = ++sequence;
+        options.onProgress?.({ completedUnits: 0, totalUnits: 1, unit: "index_item" });
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        options.onProgress?.({ completedUnits: 1, totalUnits: 1, unit: "index_item" });
+        active -= 1;
+        return {
+          rebuiltAt: `2026-07-11T00:00:0${current}.000Z`,
+          pageCount: 0,
+          invalidPageCount: 0
+        };
+      }
+    };
+    const database = new LocalDatabaseService(new NodeSqliteDriver(), rebuilder);
+    const { jobs } = makeServices(vaultPath, vault, undefined, database);
+
+    const results = await Promise.all([
+      jobs.requestIndexRebuild(),
+      jobs.requestIndexRebuild()
+    ]);
+
+    expect(maxActive).toBe(1);
+    expect(results.map((result) => result.pageCount)).toEqual([0, 0]);
+    expect(jobs.list({ classes: ["index_rebuild"], states: ["completed"] }).jobs).toHaveLength(2);
   });
 });
 
@@ -2104,6 +2187,19 @@ function makeOfficeParser(): DocumentParserService {
       })
     })
   ]);
+}
+
+function makeInlineWorkerDatabase(): LocalDatabaseService {
+  const driver = new NodeSqliteDriver();
+  const rebuilder: LocalDatabaseRebuildPort = {
+    rebuild: async (vaultPath, options = {}) => {
+      options.signal?.throwIfAborted();
+      const result = driver.rebuild(vaultPath, { onProgress: options.onProgress });
+      options.signal?.throwIfAborted();
+      return result;
+    }
+  };
+  return new LocalDatabaseService(driver, rebuilder);
 }
 
 function requireValue<T>(value: T | undefined): T {

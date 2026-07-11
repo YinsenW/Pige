@@ -1339,10 +1339,10 @@
     },
     "PIGE-JOB-002": {
       "status": "partial",
-      "evidence": ["EV-JOB-DRAIN", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION"],
+      "evidence": ["EV-JOB-DRAIN", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-002",
-        "description": "Action-safety propagation remains open beyond capture/parse/OCR/agent_ingest; running capture and other classes still lack cooperative cancellation; strict cross-process Job-record CAS, parent-directory swap, guard-to-domain atomicity, guard-without-output recovery, packaged filesystem proof, checkpoint arrays, and remaining retry assertions stay open.",
+        "description": "Action-safety propagation remains open beyond capture/parse/OCR/agent_ingest; index_rebuild cancellation and serialization are process-local and rebuildable-only; running capture and remaining classes still lack cooperative cancellation; strict cross-process Job/index-writer CAS and routing, parent-directory swap, guard-to-domain atomicity, guard-without-output recovery, complete kill/crash/stale-worker recovery, packaged filesystems, checkpoint arrays, visible progress/cancel UI, and remaining retry assertions stay open.",
         "targetBuilds": [
           "B2.08",
           "B2.11"
@@ -1473,10 +1473,7 @@
     },
     "PIGE-DB-001": {
       "status": "verified",
-      "evidence": [
-        "EV-DB-REBUILD",
-        "EV-DB-EXTERNAL-EDIT"
-      ]
+      "evidence": ["EV-DB-REBUILD", "EV-DB-EXTERNAL-EDIT", "EV-INDEX-REBUILD-WORKER"]
     },
     "PIGE-DB-002": {
       "status": "partial",
@@ -2970,11 +2967,12 @@
         "EV-CAPTURE-PUBLICATION-GUARD",
         "EV-AGENT-PUBLICATION-CANCEL",
         "EV-PDF-OCR-SOURCE-REVISION",
-        "EV-PDF-RENDER-GENERATION"
+        "EV-PDF-RENDER-GENERATION",
+        "EV-INDEX-REBUILD-WORKER"
       ],
       "open": {
         "id": "OPEN-EXIT-E2.10",
-        "description": "Running capture, index_rebuild, and remaining Job classes still lack cooperative cancellation and complete cross-process routing; strict cross-process cancel/guard linearization, parent-directory swap, guard-to-domain atomicity, guard-without-output recovery, packaged filesystem proof, checkpoint arrays, abandon/archive, and visible cancellation UI remain open for E2.10.",
+        "description": "Running capture and remaining Job classes still lack cooperative cancellation and complete cross-process routing; strict cross-process cancel/guard/index-writer linearization, parent-directory swap, guard-to-domain atomicity, guard-without-output recovery, complete kill/crash/stale-worker recovery, packaged filesystems, checkpoint arrays, abandon/archive, and visible cancellation UI remain open for E2.10.",
         "targetBuilds": [
           "B2.11"
         ],
@@ -3162,9 +3160,7 @@
     },
     "E4.02": {
       "status": "verified",
-      "evidence": [
-        "EV-DB-REBUILD"
-      ]
+      "evidence": ["EV-DB-REBUILD", "EV-INDEX-REBUILD-WORKER"]
     },
     "E4.03": {
       "status": "verified",
@@ -3983,6 +3979,7 @@
       "path": "tests/unit/local-database-service.test.ts",
       "selector": "rebuilds after database deletion without losing Markdown knowledge"
     },
+    "EV-INDEX-REBUILD-WORKER": { "kind": "test", "path": "tests/unit/jobs-service.test.ts", "selector": "cooperatively cancels a running index worker without changing durable Markdown" },
     "EV-DB-EXTERNAL-EDIT": {
       "kind": "test",
       "path": "tests/unit/local-database-service.test.ts",

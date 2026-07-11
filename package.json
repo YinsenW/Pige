@@ -43,6 +43,7 @@
     "verify:boundaries": "node scripts/verify/import-boundaries.mjs",
     "verify:source-artifacts": "node scripts/verify/source-artifacts.mjs",
     "smoke:parser-workers": "node scripts/verify/parser-worker-smoke.mjs",
+    "smoke:index-rebuild-worker": "node scripts/verify/local-database-rebuild-worker-smoke.mjs",
     "smoke:macos-vision-ocr": "node scripts/build/macos-vision-ocr-helper.mjs && node scripts/verify/macos-vision-ocr-helper-smoke.mjs && vitest run tests/unit/macos-vision-ocr-adapter-smoke.test.ts"
   },
   "dependencies": {

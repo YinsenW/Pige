@@ -1,6 +1,7 @@
 import { fileURLToPath, URL } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "electron-vite";
+import { LOCAL_DATABASE_REBUILD_WORKER_ENTRY_NAME } from "./src/shared/local-database-rebuild-entry";
 import { OFFICE_PARSER_WORKER_ENTRY_NAME } from "./src/shared/office-parser-entry";
 import { PDF_PAGE_RENDERER_WORKER_ENTRY_NAME } from "./src/shared/pdf-page-renderer-entry";
 import { PRELOAD_ENTRY_FILENAME } from "./src/shared/preload-entry";
@@ -15,6 +16,7 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: alias("./src/main/index.ts"),
+          [LOCAL_DATABASE_REBUILD_WORKER_ENTRY_NAME]: alias("./src/main/workers/local-database-rebuild-worker.ts"),
           [OFFICE_PARSER_WORKER_ENTRY_NAME]: alias("./src/main/workers/office-parser-worker.ts"),
           [PDF_PAGE_RENDERER_WORKER_ENTRY_NAME]: alias("./src/main/workers/pdf-page-renderer-worker.ts"),
           [PDF_PARSER_WORKER_ENTRY_NAME]: alias("./src/main/workers/pdf-parser-worker.ts"),

@@ -12,6 +12,7 @@ import type {
   RetrievalSearchRequest,
   RetrievalSearchResultItem
 } from "@pige/contracts";
+import { PigeDomainError } from "@pige/domain";
 import { extractPigeMarkdownLinkRefs, type PigeMarkdownLinkRef } from "@pige/markdown";
 import { LocalDatabaseSchemaStateSchema, type LocalDatabaseSchemaState, type MarkdownPageType } from "@pige/schemas";
 import {
@@ -20,6 +21,12 @@ import {
   type KnowledgeTreeSnapshot
 } from "./knowledge-tree-aggregate";
 import { readMarkdownPageBody, scanMarkdownPages, type MarkdownPageRecord } from "./markdown-page-index";
+import {
+  LOCAL_DATABASE_REBUILD_ERROR_MESSAGES,
+  type LocalDatabaseRebuildExecutionOptions,
+  type LocalDatabaseRebuildPort,
+  type LocalDatabaseRebuildProgress
+} from "./local-database-rebuild-types";
 import {
   createCjkSearchAugmentation,
   createQueryTerms,
@@ -32,11 +39,18 @@ export interface LocalDatabaseDriver {
   readonly id: "pending_sqlite_driver" | "better_sqlite3" | "node_sqlite";
   readonly initialize: (vaultPath: string) => LocalDatabaseSchemaState;
   readonly status: (vaultPath: string) => LocalDatabaseStatus;
-  readonly rebuild: (vaultPath: string) => LocalDatabaseRebuildResult | undefined;
+  readonly rebuild: (
+    vaultPath: string,
+    callbacks?: LocalDatabaseRebuildCallbacks
+  ) => LocalDatabaseRebuildResult | undefined;
   readonly listPages: (vaultPath: string, request?: LibraryListRequest) => LocalDatabasePageList | undefined;
   readonly relatedPages: (vaultPath: string, request: LibraryRelatedRequest) => LocalDatabaseRelatedPages | undefined;
   readonly searchPages: (vaultPath: string, request: RetrievalSearchRequest) => LocalDatabaseSearchResult | undefined;
   readonly knowledgeTree: (vaultPath: string) => KnowledgeTreeSnapshot | undefined;
+}
+
+export interface LocalDatabaseRebuildCallbacks {
+  readonly onProgress?: (progress: LocalDatabaseRebuildProgress) => void;
 }
 
 export class PendingSqliteDriver implements LocalDatabaseDriver {
@@ -138,10 +152,13 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
     }
   }
 
-  rebuild(vaultPath: string): LocalDatabaseRebuildResult {
+  rebuild(vaultPath: string, callbacks: LocalDatabaseRebuildCallbacks = {}): LocalDatabaseRebuildResult {
     this.initialize(vaultPath);
     const scanned = scanMarkdownPages(vaultPath);
     const rebuiltAt = new Date().toISOString();
+    const totalUnits = Math.max(1, (scanned.pages.length * 2) + 1);
+    let completedUnits = 0;
+    reportRebuildProgress(callbacks, completedUnits, totalUnits);
     const db = openVaultDatabase(vaultPath);
     try {
       transaction(db, () => {
@@ -160,11 +177,12 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
           INSERT OR IGNORE INTO sources(source_id, page_id, created_at, updated_at)
           VALUES (?, ?, ?, ?)
         `);
-        const indexedPages: IndexedPage[] = [];
+        const signatures = new Map<string, PageSignature>();
 
         for (const page of scanned.pages) {
-          const signature = getPageSignature(page);
-          const safeBody = sanitizeSearchBody(readMarkdownPageBody(page.absolutePath)).slice(0, MAX_INDEXED_BODY_CHARS);
+          const stablePage = readStableIndexedBody(page);
+          const signature = stablePage.signature;
+          const safeBody = stablePage.body;
           const grams = createCjkSearchAugmentation(`${page.summary.title}\n${safeBody}`);
           insertVaultFile.run(page.summary.pagePath, page.summary.pageId, signature.sizeBytes, signature.mtimeMs);
           insertPage.run(
@@ -182,11 +200,16 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
           for (const sourceId of page.summary.sourceIds) {
             insertSource.run(sourceId, page.summary.pageId, page.summary.createdAt, page.summary.updatedAt);
           }
-          indexedPages.push({ page, body: safeBody });
+          signatures.set(page.summary.pageId, signature);
+          completedUnits += 1;
+          reportRebuildProgress(callbacks, completedUnits, totalUnits);
         }
 
-        indexPageKnowledge(db, indexedPages);
-        indexPageLinks(db, indexedPages);
+        indexPageKnowledge(db, scanned.pages);
+        indexPageLinks(db, scanned.pages, signatures, () => {
+          completedUnits += 1;
+          reportRebuildProgress(callbacks, completedUnits, totalUnits);
+        });
         db.prepare(
           "INSERT OR REPLACE INTO index_state(id, invalid_page_count, rebuilt_at) VALUES (1, ?, ?)"
         ).run(scanned.invalidPageCount, rebuiltAt);
@@ -197,6 +220,8 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
     }
     const state = createSchemaState("node_sqlite", 1, [INITIAL_MIGRATION_ID]);
     writeSchemaState(vaultPath, state);
+    completedUnits = totalUnits;
+    reportRebuildProgress(callbacks, completedUnits, totalUnits);
     return { rebuiltAt, pageCount: scanned.pages.length, invalidPageCount: scanned.invalidPageCount };
   }
 
@@ -373,10 +398,15 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
 }
 
 export class LocalDatabaseService {
+  readonly #backgroundRebuilder: LocalDatabaseRebuildPort | undefined;
   readonly #driver: LocalDatabaseDriver;
 
-  constructor(driver: LocalDatabaseDriver = new NodeSqliteDriver()) {
+  constructor(
+    driver: LocalDatabaseDriver = new NodeSqliteDriver(),
+    backgroundRebuilder?: LocalDatabaseRebuildPort
+  ) {
     this.#driver = driver;
+    this.#backgroundRebuilder = backgroundRebuilder;
   }
 
   initialize(vaultPath: string): LocalDatabaseStatus {
@@ -390,6 +420,19 @@ export class LocalDatabaseService {
 
   rebuild(vaultPath: string): LocalDatabaseRebuildResult | undefined {
     return this.#driver.rebuild(vaultPath);
+  }
+
+  rebuildInWorker(
+    vaultPath: string,
+    options: LocalDatabaseRebuildExecutionOptions = {}
+  ): Promise<LocalDatabaseRebuildResult> {
+    if (!this.#backgroundRebuilder) {
+      return Promise.reject(new PigeDomainError(
+        "database.index_rebuild.worker_failed",
+        LOCAL_DATABASE_REBUILD_ERROR_MESSAGES["database.index_rebuild.worker_failed"]
+      ));
+    }
+    return this.#backgroundRebuilder.rebuild(vaultPath, options);
   }
 
   listPages(vaultPath: string, request?: LibraryListRequest): LocalDatabasePageList | undefined {
@@ -457,6 +500,7 @@ const MAX_SEARCH_LIMIT = 20;
 const DEFAULT_RELATED_LIMIT = 12;
 const MAX_RELATED_LIMIT = 50;
 const MAX_INDEXED_BODY_CHARS = 500_000;
+const REBUILD_PROGRESS_INTERVAL = 100;
 
 function openVaultDatabase(vaultPath: string): DatabaseSync {
   const databasePath = getDatabasePath(vaultPath);
@@ -649,15 +693,9 @@ function clearRebuildableRows(db: DatabaseSync): void {
   `);
 }
 
-interface IndexedPage {
-  readonly page: MarkdownPageRecord;
-  readonly body: string;
-}
-
-function indexPageKnowledge(db: DatabaseSync, pages: readonly IndexedPage[]): void {
-  const records = pages.map((entry) => entry.page);
-  const pageById = new Map(records.map((page) => [page.summary.pageId, page]));
-  const lookup = createPageLookup(records);
+function indexPageKnowledge(db: DatabaseSync, pages: readonly MarkdownPageRecord[]): void {
+  const pageById = new Map(pages.map((page) => [page.summary.pageId, page]));
+  const lookup = createPageLookup(pages);
   const insertTopic = db.prepare(`
     INSERT OR REPLACE INTO topics(topic_id, page_id, title)
     VALUES (?, ?, ?)
@@ -667,13 +705,13 @@ function indexPageKnowledge(db: DatabaseSync, pages: readonly IndexedPage[]): vo
     VALUES (?, ?, ?, 'has_topic', ?)
   `);
 
-  for (const page of records) {
+  for (const page of pages) {
     if (page.summary.pageType === "topic") {
       insertTopic.run(page.summary.pageId, page.summary.pageId, page.summary.title);
     }
   }
 
-  for (const page of records) {
+  for (const page of pages) {
     for (const topicRef of page.knowledge.topics) {
       const targetId = lookup.get(normalizeLinkTarget(topicRef));
       const target = targetId ? pageById.get(targetId) : undefined;
@@ -688,8 +726,13 @@ function indexPageKnowledge(db: DatabaseSync, pages: readonly IndexedPage[]): vo
   }
 }
 
-function indexPageLinks(db: DatabaseSync, pages: readonly IndexedPage[]): void {
-  const lookup = createPageLookup(pages.map((entry) => entry.page));
+function indexPageLinks(
+  db: DatabaseSync,
+  pages: readonly MarkdownPageRecord[],
+  expectedSignatures: ReadonlyMap<string, PageSignature>,
+  onPageIndexed: () => void
+): void {
+  const lookup = createPageLookup(pages);
   const insertLink = db.prepare("INSERT OR IGNORE INTO links(from_page_id, to_page_id, target) VALUES (?, ?, ?)");
   const insertBacklink = db.prepare("INSERT OR IGNORE INTO backlinks(to_page_id, from_page_id) VALUES (?, ?)");
   const insertRelation = db.prepare(`
@@ -697,20 +740,24 @@ function indexPageLinks(db: DatabaseSync, pages: readonly IndexedPage[]): void {
     VALUES (?, ?, ?, 'links_to', ?)
   `);
 
-  for (const entry of pages) {
-    for (const link of extractPigeMarkdownLinkRefs(entry.body)) {
-      const resolvedPageId = resolveLinkedPageId(lookup, entry.page.summary.pagePath, link);
-      insertLink.run(entry.page.summary.pageId, resolvedPageId, link.target);
+  for (const page of pages) {
+    const expectedSignature = expectedSignatures.get(page.summary.pageId);
+    if (!expectedSignature) throw new Error("Indexed page signature is missing during link rebuild.");
+    const body = readStableIndexedBody(page, expectedSignature).body;
+    for (const link of extractPigeMarkdownLinkRefs(body)) {
+      const resolvedPageId = resolveLinkedPageId(lookup, page.summary.pagePath, link);
+      insertLink.run(page.summary.pageId, resolvedPageId, link.target);
       if (resolvedPageId) {
-        insertBacklink.run(resolvedPageId, entry.page.summary.pageId);
+        insertBacklink.run(resolvedPageId, page.summary.pageId);
         insertRelation.run(
-          createRelationEdgeId("links_to", entry.page.summary.pageId, resolvedPageId, link.target),
-          entry.page.summary.pageId,
+          createRelationEdgeId("links_to", page.summary.pageId, resolvedPageId, link.target),
+          page.summary.pageId,
           resolvedPageId,
           JSON.stringify([{ source: link.kind, target: link.target, label: link.label }])
         );
       }
     }
+    onPageIndexed();
   }
 }
 
@@ -775,9 +822,50 @@ function hasInitialMigration(vaultPath: string): boolean {
   }
 }
 
-function getPageSignature(page: MarkdownPageRecord): { readonly sizeBytes: number; readonly mtimeMs: number } {
+interface PageSignature {
+  readonly sizeBytes: number;
+  readonly mtimeMs: number;
+}
+
+function getPageSignature(page: MarkdownPageRecord): PageSignature {
   const stat = fs.statSync(page.absolutePath);
   return { sizeBytes: stat.size, mtimeMs: Math.round(stat.mtimeMs) };
+}
+
+function readStableIndexedBody(page: MarkdownPageRecord, expected?: PageSignature): {
+  readonly body: string;
+  readonly signature: PageSignature;
+} {
+  const before = getPageSignature(page);
+  if (expected && !samePageSignature(before, expected)) {
+    throw new Error("Markdown changed while the local index was rebuilding.");
+  }
+  const body = sanitizeSearchBody(readMarkdownPageBody(page.absolutePath)).slice(0, MAX_INDEXED_BODY_CHARS);
+  const after = getPageSignature(page);
+  if (!samePageSignature(before, after)) {
+    throw new Error("Markdown changed while the local index was rebuilding.");
+  }
+  return { body, signature: after };
+}
+
+function samePageSignature(left: PageSignature, right: PageSignature): boolean {
+  return left.sizeBytes === right.sizeBytes && left.mtimeMs === right.mtimeMs;
+}
+
+function reportRebuildProgress(
+  callbacks: LocalDatabaseRebuildCallbacks,
+  completedUnits: number,
+  totalUnits: number
+): void {
+  if (
+    completedUnits !== 0 &&
+    completedUnits !== totalUnits &&
+    totalUnits > REBUILD_PROGRESS_INTERVAL &&
+    completedUnits % REBUILD_PROGRESS_INTERVAL !== 0
+  ) {
+    return;
+  }
+  callbacks.onProgress?.({ completedUnits, totalUnits, unit: "index_item" });
 }
 
 function sanitizePageTypes(pageTypes: readonly MarkdownPageType[] | undefined): readonly MarkdownPageType[] {

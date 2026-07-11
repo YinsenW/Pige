@@ -104,7 +104,7 @@ const DEFAULT_JOB_LIST_LIMIT = 20;
 const MAX_JOB_LIST_LIMIT = 100;
 const CANCELABLE_STATES = new Set<JobState>(["queued", "waiting_dependency", "waiting_permission", "failed_retryable"]);
 const RETRYABLE_STATES = new Set<JobState>(["failed_retryable", "waiting_dependency", "cancelled"]);
-const COOPERATIVELY_CANCELABLE_CLASSES = new Set<JobClass>(["parse", "ocr", "agent_ingest"]);
+const COOPERATIVELY_CANCELABLE_CLASSES = new Set<JobClass>(["parse", "ocr", "agent_ingest", "index_rebuild"]);
 
 export class JobsService {
   readonly #vaults: JobsVaultPort;
@@ -114,6 +114,7 @@ export class JobsService {
   readonly #documentParser: DocumentParserPort | undefined;
   readonly #ocr: OcrPort | undefined;
   readonly #activeExecutions = new Map<string, AbortController>();
+  #indexRebuildTail: Promise<void> = Promise.resolve();
 
   constructor(
     vaults: JobsVaultPort,
@@ -374,10 +375,10 @@ export class JobsService {
     return { requeued };
   }
 
-  requestIndexRebuild(): LocalDatabaseRebuildResult {
+  async requestIndexRebuild(): Promise<LocalDatabaseRebuildResult> {
     const vaultPath = this.#requireActiveVaultPath();
     const job = createIndexRebuildJob(vaultPath);
-    const result = this.processQueuedIndexRebuild({ jobIds: [job.id] });
+    const result = await this.processQueuedIndexRebuild({ jobIds: [job.id] });
     if (!result.lastRebuild) {
       throw new PigeDomainError("index_rebuild_failed", "Index rebuild failed. The job remains retryable.");
     }
@@ -826,7 +827,17 @@ export class JobsService {
     };
   }
 
-  processQueuedIndexRebuild(request: ProcessQueuedIndexRebuildRequest = {}): ProcessQueuedIndexRebuildResult {
+  processQueuedIndexRebuild(
+    request: ProcessQueuedIndexRebuildRequest = {}
+  ): Promise<ProcessQueuedIndexRebuildResult> {
+    const next = this.#indexRebuildTail.then(() => this.#processQueuedIndexRebuild(request));
+    this.#indexRebuildTail = next.then(() => undefined, () => undefined);
+    return next;
+  }
+
+  async #processQueuedIndexRebuild(
+    request: ProcessQueuedIndexRebuildRequest
+  ): Promise<ProcessQueuedIndexRebuildResult> {
     const vaultPath = this.#requireActiveVaultPath();
     const jobFiles = findQueuedIndexRebuildJobFiles(vaultPath, request);
     let completed = 0;
@@ -841,35 +852,56 @@ export class JobsService {
         continue;
       }
 
-      const runningJob = JobRecordSchema.parse({
-        ...jobFile.job,
-        state: "running",
-        updatedAt: new Date().toISOString(),
-        message: "Rebuilding local database index from Markdown."
-      });
-      writeJsonAtomic(jobFile.path, runningJob);
-
+      const execution = this.#beginCooperativeExecution(
+        jobFile.path,
+        jobFile.job,
+        "indexing",
+        "Rebuilding local database index from Markdown in a local worker."
+      );
+      const runningJob = execution.job;
       try {
-        const rebuild = database.rebuild(vaultPath);
-        if (!rebuild) {
-          markJobFailedRetryable(jobFile.path, runningJob, "Local database rebuild is unavailable. Index rebuild remains retryable.");
+        const rebuild = await database.rebuildInWorker(vaultPath, {
+          signal: execution.control.signal,
+          onProgress: (progress) => execution.control.reportProgress(progress)
+        });
+        execution.control.throwIfCancellationRequested();
+        let completionState: Extract<JobState, "completed" | "completed_with_warnings"> = "completed";
+        let message = `Index rebuilt from Markdown: ${rebuild.pageCount} pages, ${rebuild.invalidPageCount} invalid pages skipped.`;
+        try {
+          appendLog(vaultPath, `${new Date().toISOString()} Rebuilt local database index from Markdown: ${rebuild.pageCount} pages, ${rebuild.invalidPageCount} invalid pages skipped.`);
+        } catch {
+          completionState = "completed_with_warnings";
+          message = `${message} Local activity log update needs repair.`;
+        }
+        const completedJob = this.#completeCooperativeExecution(
+          jobFile.path,
+          runningJob,
+          completionState,
+          message,
+          "index_item",
+          execution.control.durableWriteState()
+        );
+        if (completedJob.state === "cancelled") {
           failed += 1;
           continue;
         }
-
-        const completedJob = JobRecordSchema.parse({
-          ...runningJob,
-          state: "completed",
-          updatedAt: new Date().toISOString(),
-          message: `Index rebuilt from Markdown: ${rebuild.pageCount} pages, ${rebuild.invalidPageCount} invalid pages skipped.`
-        });
-        writeJsonAtomic(jobFile.path, completedJob);
-        appendLog(vaultPath, `${new Date().toISOString()} Rebuilt local database index from Markdown: ${rebuild.pageCount} pages, ${rebuild.invalidPageCount} invalid pages skipped.`);
-        lastRebuild = { ...rebuild, jobId: runningJob.id, state: "completed" };
+        lastRebuild = { ...rebuild, jobId: runningJob.id, state: completedJob.state };
         completed += 1;
-      } catch {
-        markJobFailedRetryable(jobFile.path, runningJob, "Index rebuild failed. Markdown knowledge remains intact and the job is retryable.");
+      } catch (caught) {
+        const cancellation = resolveCancellation(execution.control, caught);
+        if (cancellation) {
+          markJobCancellationOutcome(jobFile.path, runningJob, cancellation);
+        } else {
+          markJobFailedRetryable(
+            jobFile.path,
+            runningJob,
+            "Index rebuild failed. Markdown knowledge and the previous committed index remain intact; the job is retryable.",
+            execution.control.durableWriteState()
+          );
+        }
         failed += 1;
+      } finally {
+        this.#finishCooperativeExecution(runningJob.id, execution.controller);
       }
     }
 

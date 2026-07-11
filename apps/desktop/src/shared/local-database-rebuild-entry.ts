@@ -1,0 +1,3 @@
+export const LOCAL_DATABASE_REBUILD_WORKER_ENTRY_NAME = "workers/local-database-rebuild-worker";
+export const LOCAL_DATABASE_REBUILD_WORKER_ENTRY_RELATIVE_PATH =
+  `./${LOCAL_DATABASE_REBUILD_WORKER_ENTRY_NAME}.js`;

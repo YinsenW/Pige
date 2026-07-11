@@ -88,7 +88,7 @@ Phase 2 implementation note:
 - Job summaries expose safe identity/state plus optional stage/progress; they never expose paths, bodies, prompts, responses, or secrets.
 - Invalid job JSON is counted and skipped rather than blocking Home.
 - `jobs.cancel` directly cancels eligible non-running work only when its action-safety
-  guard is false/absent; active in-process parse/OCR/Agent ingest becomes `cancel_requested`.
+  guard is false/absent; active in-process parse/OCR/Agent ingest/index rebuild becomes `cancel_requested`.
 - `jobs.retry` can mark eligible failed/waiting/cancelled jobs back to `queued` for later processing.
 - Capture enters `running/capturing_source`; source preservation does not set the guard.
   A once-only checkpoint precedes its first Source Record/Page projection; running capture cancellation remains open.
@@ -98,16 +98,16 @@ Phase 2 implementation note:
   `SOURCE_STORAGE_STRATEGY.md`. Jobs wait on insufficient evidence, keep incomplete work
   retryable, reuse verified output, and never start Agent ingest from unreadable evidence.
 - Parse and OCR runners persist their required OCR or Agent-ingest follow-up Jobs before those upstream Jobs leave their recoverable running state. If later logging or parent-state finalization fails, the continuation remains durable and the upstream Job remains retryable. This stage-handoff guarantee is separate from the still-deferred `capture_batch` parent hierarchy.
-- Startup and vault activation first reconcile interrupted jobs. Running capture/parse/OCR/Agent-ingest/index jobs already proven idempotent are requeued; cancellation-in-progress and unproven classes become `failed_retryable` with an explanation. Waiting Agent-ingest Jobs are reconsidered after model/OCR probes but remain waiting while selected PDF/PPTX OCR is runnable. The main-process scheduler drains queued capture, parse, OCR, and Agent ingest work in batches of 20, yields between batches, and coalesces schedule requests so larger drops do not stall.
+- Startup and vault activation first reconcile interrupted jobs. Proven-idempotent capture/parse/OCR/Agent-ingest/index jobs are requeued; cancellation-in-progress and unproven classes become `failed_retryable`. Capture/parse/OCR/Agent ingest drain in batches of 20; index rebuild uses a coalesced limit-1 drainer. Waiting Agent ingest still honors current model/OCR readiness.
 - Home's contextual processing strip includes active capture, parse, OCR, Agent ingest, and index jobs. It remains hidden when no work needs attention and uses compact localized status indicators rather than a new queue destination.
 - Source-page writes use pending/previous/target checksums so a crash can be reconciled without confusing Pige's partial write with a user edit.
 - Phase 3 text-readable source-page completion creates a deterministic follow-up `agent_ingest` job per source. If no tested default model exists, the job enters `waiting_dependency`; after model setup, waiting ingest jobs can be requeued and processed without duplicating the source page.
 - Phase 3 `agent_ingest` is process-locally cancellable through provider access and generated-note commit. It distinguishes user abort from provider timeout, fences the Source Record on both sides of a durable note-publication checkpoint, and uses create-only publication. Current-job note adoption requires bounded `last_job_id` provenance; otherwise only a new durable `index.md` entry starts a guard. Egress audit alone does not. Drift requeues or waits, user/nonmatching pages remain untouched, and same-job notes recover idempotently. Strict cross-process SourceRecord-to-note CAS, parent-swap resistance, note/index/operation transactions, and packaged-platform proof remain open.
-- Phase 4 `index_rebuild` is created by `maintenance.rebuildLocalDatabase` before SQLite page metadata and FTS are rebuilt from Markdown. Success marks the job `completed`, logs rebuild counts, and returns the job ID; failure marks the job `failed_retryable`. The current runner may execute synchronously after job creation, but large-vault release readiness requires moving the execution body to worker/job orchestration with progress and cancellation.
-- Process-local parse/OCR persists monotonic progress and shares cancellation with Agent
-  ingest. Capture/parse/OCR/Agent ingest implement the Section 6 publication guard; retry
+- Phase 4 `index_rebuild` runs in a bundled worker, enters `running/indexing`, persists monotonic `index_item` progress, serializes process-local writers, and cooperatively cancels. Failure rolls back to the prior committed index; clean cancellation preserves Markdown. Cross-process writer/CAS, kill/crash/stale-worker recovery, packaged paths, and implicit first-query workerization remain open.
+- Process-local parse/OCR/index rebuild persist monotonic progress; parse/OCR/Agent ingest/index
+  rebuild share cancellation. Capture/parse/OCR/Agent ingest implement the Section 6 publication guard; retry
   retains it. Guard-first cancellation cannot end `cancelled`, and only a verified output
-  race becomes `completed_with_warnings`. Other writers, running capture/index_rebuild/other-class
+  race becomes `completed_with_warnings`. Other writers, running capture/other-class
   cancellation, strict cross-process routing/CAS, checkpoint arrays, pushed events, numeric
   Home UI, and compaction remain open.
 
