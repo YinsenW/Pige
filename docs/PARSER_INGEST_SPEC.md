@@ -173,7 +173,9 @@ After a new document-parser or direct-image OCR Artifact is persisted, its owner
 - DOCX/PPTX parsing shares one Office worker capped at 100 MiB input, 10,000 archive entries, 512 MiB expanded data, 10 MiB per selected XML part, 128 MiB selected XML total, 2,000 slides, 10,000,000 output characters, 60 seconds, and 512 MiB old-generation memory. Selected PPTX media separately caps 20 targets, 16 MiB each, 64 MiB total, and 60 seconds.
 - Current Phase 5 adapter pins Mammoth `1.12.0`, performs bounded OpenXML ZIP preflight across every DOCX XML/relationship part with yauzl `3.4.0`, disables embedded style maps and external file access, replaces images with local references, and never renders converter HTML in the product UI.
 - DOCX output preserves heading/list/table/link structure as normalized text plus `block:N` units, redacts secret-like URL query values, records referenced embedded media, and emits `image:N` OCR candidates only for images reached from document content.
-- The adapter runs in the bounded Office worker and returns data only. Main-process Parser Service writes deterministic checksummed text/metadata artifacts, updates the Source Record, refreshes the source page without overwriting user edits, and creates OCR/Agent follow-up jobs according to quality.
+- The bounded worker returns data only. Main-process Parser Service writes checksummed
+  text/metadata Artifacts and safely refreshes the source projection. Only the enclosing
+  Pi tool event creates or reuses its parse child and selects any supported follow-up OCR.
 
 ### 8.5 PPTX
 
@@ -285,10 +287,10 @@ Current handoff contract:
 - Every fragment has one ephemeral `ev_NN` ref and one durable locator. Native text precedes OCR; duplicate suppression is limited to repeated text under the same parent locator.
 - Structured output represents the summary and each key point as `{ text, evidenceRefs }`. Unknown refs abort before write; empty refs force review; canonical Markdown citations are rendered by Pige rather than accepted from the model.
 - Agent ingest hashes the complete Source Record used for the Evidence Pack and rechecks it before model invocation, after the response, and after flushing the exclusive temporary note immediately before create-only publication. Drift requeues or waits; concurrent targets are preserved or same-source recovered. Strict cross-process SourceRecord-to-note CAS, parent-swap resistance, cross-file transactions, and packaged-platform proof remain open.
-- Text and preserved-PDF spines inspect evidence and write only through validated
-  publication. PDF parse/OCR are registered tools with deterministic children; changed
-  evidence requires re-inspection. Unavailable or empty OCR waits without a note.
-  Office, direct-image, and PPTX OCR remain host-routed until B3.13.
+- Text and preserved-document spines inspect evidence and write only through validated
+  publication. PDF/DOCX/PPTX parse and selected PDF/PPTX OCR are registered effects with
+  deterministic children; changed evidence requires re-inspection. Unavailable or empty
+  evidence waits without a note. Direct-image OCR remains host-routed.
 
 ## 14. Required Tests
 

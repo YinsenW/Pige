@@ -3,9 +3,15 @@ import os from "node:os";
 import path from "node:path";
 import { createCanvas } from "@napi-rs/canvas";
 import { describe, expect, it } from "vitest";
+import {
+  AgentIngestService,
+  type AgentIngestModelConfigPort
+} from "../../apps/desktop/src/main/services/agent-ingest-service";
 import { CaptureService } from "../../apps/desktop/src/main/services/capture-service";
+import { DocumentParserService } from "../../apps/desktop/src/main/services/document-parser-service";
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
 import { MacOSVisionOcrAdapter } from "../../apps/desktop/src/main/services/macos-vision-ocr-adapter";
+import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
 import { materializeOfficeMedia } from "../../apps/desktop/src/main/services/office-media-materializer-core";
 import type { OfficeMediaMaterializerPort } from "../../apps/desktop/src/main/services/office-media-materializer-service";
 import { OcrService } from "../../apps/desktop/src/main/services/ocr-service";
@@ -24,6 +30,7 @@ import {
   OFFICE_PARSER_MAX_XML_ENTRY_BYTES,
   type OfficeMediaTarget
 } from "../../apps/desktop/src/main/services/office-parser-types";
+import { PiAgentRuntimeAdapter } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
 import { createTestPptx } from "./helpers/office-fixture";
 
@@ -34,6 +41,39 @@ const helperPath = path.join(
   "pige-vision-ocr"
 );
 const hasBuiltHelper = process.platform === "darwin" && fs.existsSync(helperPath);
+
+const runtimeConfig: ModelProviderRuntimeConfig = {
+  provider: {
+    id: "provider_pptx_vision_smoke",
+    displayName: "PPTX Vision Smoke Faux Provider",
+    providerKind: "openai_compatible",
+    baseUrl: "http://127.0.0.1:43123/v1",
+    authSecretRef: "provider_secret_pptx_vision_smoke",
+    modelListStrategy: "manual",
+    cloudBoundary: "local",
+    boundaryVerification: "loopback_verified",
+    createdAt: "2026-07-11T00:00:00.000Z",
+    updatedAt: "2026-07-11T00:00:00.000Z"
+  },
+  model: {
+    id: "model_pptx_vision_smoke",
+    providerProfileId: "provider_pptx_vision_smoke",
+    modelId: "pptx-vision-smoke-model",
+    displayName: "PPTX Vision Smoke Model",
+    source: "manual",
+    enabled: true,
+    createdAt: "2026-07-11T00:00:00.000Z",
+    updatedAt: "2026-07-11T00:00:00.000Z"
+  },
+  apiKey: "synthetic-pptx-vision-smoke-key"
+};
+
+const modelPort: AgentIngestModelConfigPort = {
+  getDefaultModel: () => ({ ...runtimeConfig.model, isDefault: true }),
+  getDefaultProvider: () => runtimeConfig.provider,
+  hasDefaultRuntimeBinding: () => true,
+  getDefaultRuntimeConfig: () => runtimeConfig
+};
 
 describe.runIf(hasBuiltHelper)("macOS Vision OCR production adapter smoke", () => {
   it("locates the verified helper and recognizes generated text through the production adapter", async () => {
@@ -92,7 +132,7 @@ describe.runIf(hasBuiltHelper)("macOS Vision OCR production adapter smoke", () =
       const vaultPath = path.join(root, "Vault");
       const vault = loadVaultSummary(vaultPath);
       const vaultPort = { current: () => vault, activeVaultPath: () => vaultPath };
-      const parser = new OfficeParserService({
+      const parser = new DocumentParserService([new OfficeParserService({
         isAvailable: () => true,
         extract: (filePath, sourceKind) => extractOfficeText({
           requestId: "pptx-vision-smoke",
@@ -100,7 +140,7 @@ describe.runIf(hasBuiltHelper)("macOS Vision OCR production adapter smoke", () =
           sourceKind,
           limits: parserLimits()
         })
-      });
+      })]);
       const ocr = new OcrService(
         new MacOSVisionOcrAdapter(),
         undefined,
@@ -109,7 +149,42 @@ describe.runIf(hasBuiltHelper)("macOS Vision OCR production adapter smoke", () =
         new InlineOfficeMediaMaterializer()
       );
       const capture = new CaptureService(vaultPort);
-      const jobs = new JobsService(vaultPort, undefined, undefined, parser, ocr);
+      const runtime = new PiAgentRuntimeAdapter({
+        fauxResponses: [
+          { kind: "tool_call", toolName: "pige_inspect_source", args: {}, toolCallId: "vision_pptx_inspect_before" },
+          { kind: "tool_call", toolName: "pige_parse_source", args: {}, toolCallId: "vision_pptx_parse" },
+          { kind: "tool_call", toolName: "pige_ocr_source", args: {}, toolCallId: "vision_pptx_ocr" },
+          { kind: "tool_call", toolName: "pige_inspect_source", args: {}, toolCallId: "vision_pptx_inspect_after" },
+          {
+            kind: "tool_call",
+            toolName: "pige_create_knowledge_note",
+            toolCallId: "vision_pptx_publish",
+            args: {
+              title: "PPTX Vision OCR smoke",
+              summary: { text: "The embedded presentation media was recognized locally.", evidenceRefs: ["ev_01"] },
+              keyPoints: [{ text: "Pige preserved the presentation before OCR.", evidenceRefs: ["ev_01"] }],
+              tags: ["ocr"],
+              topics: ["PPTX"],
+              entities: [],
+              warnings: [],
+              confidence: "high"
+            }
+          }
+        ]
+      });
+      const agentIngest = new AgentIngestService(modelPort, runtime, {
+        snapshot: () => ({
+          localDatabaseStatus: "not_initialized",
+          parserToolchainReady: true,
+          ocrEngines: ["apple_vision"],
+          speechInputAvailable: false,
+          embeddingModelInstalled: false,
+          lexicalSearchAvailable: false,
+          vectorSearchAvailable: false,
+          rerankerAvailable: false
+        })
+      });
+      const jobs = new JobsService(vaultPort, agentIngest, undefined, parser, ocr);
       const captured = await capture.submitFiles({
         filePaths: [pptxPath],
         inputKind: "file_drop",
@@ -119,8 +194,7 @@ describe.runIf(hasBuiltHelper)("macOS Vision OCR production adapter smoke", () =
       const sourceId = captured.sourceIds[0];
       expect(sourceId).toBeTruthy();
       jobs.processQueuedCaptures({ jobIds: captured.jobIds });
-      await jobs.processQueuedParses({ sourceIds: captured.sourceIds });
-      const result = await jobs.processQueuedOcr({ sourceIds: captured.sourceIds });
+      const result = await jobs.processQueuedAgentIngest({ sourceIds: captured.sourceIds });
       const sourceRecordPath = findFile(path.join(vaultPath, ".pige", "source-records"), `${sourceId}.json`);
       const sourceRecord = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as {
         artifacts: Array<{ id: string; kind: string; path: string }>;
@@ -129,7 +203,7 @@ describe.runIf(hasBuiltHelper)("macOS Vision OCR production adapter smoke", () =
       expect(textArtifact).toBeTruthy();
       const text = fs.readFileSync(path.join(vaultPath, textArtifact!.path), "utf8").replace(/\s+/gu, " ").toLocaleUpperCase();
 
-      expect(result).toMatchObject({ completed: 1, failed: 0, agentReadySourceIds: [sourceId] });
+      expect(result).toMatchObject({ processed: 1, completed: 1, failed: 0 });
       expect(text).toContain("PIGE");
       expect(text).toContain("OCR");
     } finally {

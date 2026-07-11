@@ -252,9 +252,8 @@ Current implementation:
 
 - Text and supported files are preserved as managed sources or verified references;
   bounded metadata-only/direct-text source projections may follow.
-- The bridge still direct-routes Office/image kinds to parse/OCR Jobs. Preserved PDFs
-  queue Agent ingest; Pi parse/OCR calls persist deterministic children. Remaining host
-  routes do not satisfy B3.13/E3.08.
+- PDF/DOCX/PPTX queue Agent ingest; Pi parse/OCR calls persist deterministic children.
+  Direct images retain host-routed OCR and do not satisfy B3.13/E3.08.
 
 ### 5.1.1 Source Storage Service
 
@@ -1423,10 +1422,10 @@ type AgentIngestStart = {
 ```
 
 The initial Agent input contains preserved-source identity, bounded safe metadata,
-policy, and tool contracts—not host-preselected text. Evidence and quality metadata
-enter later as bounded tool results with durable Artifact/locator refs. The text/PDF
-vertical freezes source/job scope and exposes inspect, PDF parse/OCR, and publication;
-Office, direct-image/PPTX OCR, and retrieval remain B3.13/E3.08 work.
+policy, and tool contracts—not host-preselected text. Evidence enters as bounded tool
+results with durable Artifact/locator refs. Text/document verticals freeze source/job
+scope and expose inspect, parse, selected OCR, and publication; direct-image processing
+and retrieval remain B3.13/E3.08 work.
 
 ### 9.2 Knowledge Publication Boundary
 
@@ -1505,12 +1504,12 @@ Model list behavior:
 
 Current embedded Agent ingest spine:
 
-- Normal text/PDF ingest runs through the sole embedded Pi adapter with one selected
+- Normal text/document ingest runs through the sole embedded Pi adapter with one selected
   provider/model binding and no direct-provider fallback.
-- `pige_inspect_source` returns bounded verified evidence; PDF parse/OCR tools create or
-  reuse bound children and refresh evidence; publication revalidates refs and revision.
-- Office, direct-image/PPTX OCR, retrieval, generic recovery, full Broker, and fixed
-  routing stay open.
+- Inspect returns verified evidence; PDF/DOCX/PPTX parse and selected PDF/PPTX OCR create
+  or reuse bound children; publication revalidates refs and revision.
+- Direct-image processing, retrieval/proposals, generic recovery, full Broker, and
+  remaining fixed routing stay open.
 
 The v0.1 UI exposes only the P0 provider modes defined in `docs/PRD.md`, through the
 compact Add Provider flow owned by the Pi integration contract.

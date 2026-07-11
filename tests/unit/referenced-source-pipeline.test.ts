@@ -34,7 +34,7 @@ import {
   updateVaultSourceStorageStrategy
 } from "../../apps/desktop/src/main/services/vault-layout";
 import type { VaultSummary } from "@pige/contracts";
-import type { SourceRecord } from "@pige/schemas";
+import { JobRecordSchema, type SourceRecord } from "@pige/schemas";
 
 const tempRoots: string[] = [];
 
@@ -136,10 +136,27 @@ describe("referenced-original source pipeline", () => {
     const jobs = new JobsService(fixture.vaultPort, new AgentIngestService(modelPort, model), undefined, parser);
 
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
-    await jobs.processQueuedParses();
+    const sourceId = captured.sourceIds[0] ?? "";
+    const sourceRecordPath = requireValue(
+      findFiles(path.join(fixture.vaultPath, ".pige", "source-records"), `${sourceId}.json`)[0]
+    );
+    await parser.parseSource(
+      fixture.vaultPath,
+      readSourceRecord(fixture.vaultPath, sourceId),
+      sourceRecordPath,
+      JobRecordSchema.parse({
+        id: `job_20260710_${"refdocx".padEnd(12, "0")}`,
+        class: "parse",
+        state: "running",
+        sourceId,
+        createdAt: "2026-07-10T00:00:00.000Z",
+        updatedAt: "2026-07-10T00:00:00.000Z",
+        message: "Explicit referenced DOCX parser substrate test"
+      })
+    );
     await jobs.processQueuedAgentIngest();
 
-    const record = readSourceRecord(fixture.vaultPath, captured.sourceIds[0] ?? "");
+    const record = readSourceRecord(fixture.vaultPath, sourceId);
     expect(record.storageStrategy).toBe("reference_original");
     expect(record.managedCopy).toBeUndefined();
     expect(record.artifacts.some((artifact) => artifact.kind === "extracted_text")).toBe(true);

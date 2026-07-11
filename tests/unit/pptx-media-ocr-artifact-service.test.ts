@@ -313,7 +313,7 @@ async function makeParsedPptx(): Promise<{
       }
     })
   });
-  const jobs = new JobsService(vaultPort, undefined, undefined, parser);
+  const jobs = new JobsService(vaultPort);
   const originalPath = path.join(root, "roadmap.pptx");
   fs.writeFileSync(originalPath, await createTestPptx());
   const captured = await capture.submitFiles({
@@ -324,8 +324,21 @@ async function makeParsedPptx(): Promise<{
   });
   const sourceId = requireValue(captured.sourceIds[0]);
   jobs.processQueuedCaptures({ jobIds: captured.jobIds });
-  await jobs.processQueuedParses({ sourceIds: [sourceId] });
   const sourceRecordPath = requireValue(listFiles(path.join(vaultPath, ".pige", "source-records"), `${sourceId}.json`)[0]);
+  await parser.parseSource(
+    vaultPath,
+    readSourceRecord(sourceRecordPath),
+    sourceRecordPath,
+    JobRecordSchema.parse({
+      id: `job_20260710_${"pptxparse".padEnd(12, "0")}`,
+      class: "parse",
+      state: "running",
+      sourceId,
+      createdAt: "2026-07-10T08:00:30.000Z",
+      updatedAt: "2026-07-10T08:00:30.000Z",
+      message: "Explicit persisted PPTX parser substrate test"
+    })
+  );
   return {
     vaultPath,
     originalPath,
