@@ -12,9 +12,9 @@ Pige's product goal is simple:
 
 > The user connects one model service that Pi Agent can call. Pige handles the rest.
 
-Pi Agent is the mandatory v0.1 core. Text, PDF/Office parse, and selected PDF/PPTX/image
-OCR run through embedded Pi tools. Phase 3 remains partial for retrieval/proposals,
-generic recovery, permissions, and packaged paths.
+Pi Agent is the mandatory v0.1 core. Text, document parse, selected OCR, and bounded
+related-knowledge retrieval run through embedded Pi tools. Phase 3 remains partial for
+proposals, generic recovery, permissions, and packaged paths.
 
 Adopt, do not imitate: where Pi exposes a supported generic runtime surface,
 Pige integrates it through a thin adapter instead of copying, forking, or
@@ -326,10 +326,12 @@ The model sees only bounded descriptors. Calls bind run/call, catalog/policy/sou
 tool-version, and input hashes; results carry typed refs, warnings, and provenance while
 large bodies remain Artifacts. Host validation precedes every result or effect.
 
-The current slice exposes inspect, cited publication, PDF/DOCX/PPTX parse, and selected
-PDF/PPTX/image OCR. Children bind parent/tool/version/source revision/input; only capped
-Pi-call hashes persist. Retrieval/proposals, complete registry metadata, permissions,
-and generic child recovery remain open.
+The current slice exposes inspect, parse/selected OCR, one optional local
+`pige_search_knowledge@1`, and cited publication. Search bounds, evidence revalidation,
+terminal fences, and `related_page_ids` resolution follow
+`CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`. Calls bind catalog/policy/source/input and
+capped call hashes. Proposals, full catalog, pre-publication replay, in-call cancellation,
+Broker integration, and generic recovery remain open.
 
 Source inspection, extraction, OCR, retrieval, and knowledge publication remain
 separate tools. Recommendations cannot invoke another tool. Runtime may keep only a

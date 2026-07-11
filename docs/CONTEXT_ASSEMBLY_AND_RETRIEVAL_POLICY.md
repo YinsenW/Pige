@@ -123,6 +123,11 @@ Home retrieval and Agent retrieval should follow this local-first pipeline:
 
 Rules:
 
+- Ingest permits one current-vault search after readable-source inspection (query <=320;
+  <=6 fixed-type opaque refs). Before each turn/publication, Pige rebuilds bounded
+  current-Markdown text and rechecks page/source privacy hashes; bodies neither persist
+  nor egress. Drift writes a replacement body-free audit and fails closed. Publication
+  alone resolves page IDs and fences sibling effects.
 - Lexical and metadata retrieval must work before embedding model download.
 - Vector retrieval improves ranking but is not the only retrieval path.
 - The answer must not imply full-vault certainty unless the retrieval scope and index health support that claim.
@@ -348,8 +353,8 @@ Tests must verify:
 - Context budget allocator preserves authority/safety, runtime policy, task state, output schema, and citations before lower-priority context.
 - Home retrieval sends selected snippets, not the whole vault.
 - Cloud calls obey cloud-send policy and permission decisions.
-- Home model turns re-read confined Markdown content and Source Record privacy metadata;
-  changed evidence writes a distinct current decision audit before the turn is rejected.
+- Home and ingest retrieval re-read confined Markdown and Source Record privacy; drift
+  writes a new audit before rejecting turn/publication.
 - Composer capture bodies, pasted blocks, files, URLs, selections, retrieved snippets, and tool output cannot acquire current-user-instruction authority.
 - Every external model call records a redacted Model Egress Decision with payload size, content classes, boundary verification, policy hash, outcome, reason code, exact-redacted-payload hash, body-free evidence-summary hash, and canonical final-decision hash. A changed payload, evidence summary, or classification/decision must not reuse the prior audit operation ID.
 - Parser/OCR ingest rejects changed Source Record evidence and creates no note; B3.13

@@ -847,10 +847,11 @@ Retrieval pipeline:
 Context assembly rule: the retrieval pipeline produces selected evidence for an Agent Context Pack. It must follow `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`; retrieval never hands the model the whole vault, full source asset bodies, or unbounded conversation history.
 
 Current implementation uses SQLite FTS5 with CJK augmentation and bounded Markdown
-fallback, redacts snippets, and builds a body-free Context Pack from at most eight
-evidence items. Home uses one Pi search tool with per-turn evidence/egress revalidation;
-`retrieval.ask` is the no-binding fallback. Vector/reranking, answer saving, conversation
-persistence, and jump-to-snippet remain open.
+fallback. Home uses one Pi search tool with per-turn evidence/egress revalidation;
+`retrieval.ask` is its no-binding fallback. Ingest optionally uses one local read-only
+search after source inspection and resolves validated opaque refs only at publication;
+the Context Policy owns its bounds and drift fences. Vector/reranking, answer saving,
+conversation persistence, and jump-to-snippet remain open.
 
 Retrieval result contract:
 
@@ -1423,9 +1424,8 @@ type AgentIngestStart = {
 The initial Agent input contains preserved-source identity, bounded safe metadata,
 policy, and tool contracts—not host-preselected text. Evidence enters as bounded tool
 results with durable Artifact/locator refs. Text/document/image verticals freeze
-source/job scope and expose inspect, parse, selected OCR, and publication; retrieval
-is now proven for the bounded Home query path, while ingest retrieval/proposals remain
-B3.13/E3.08 work.
+source/job scope and expose inspect, parse, selected OCR, optional bounded local
+retrieval, and publication; proposal tools remain B3.13/E3.08 work.
 
 ### 9.2 Knowledge Publication Boundary
 

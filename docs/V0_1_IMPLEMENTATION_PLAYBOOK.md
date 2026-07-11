@@ -266,11 +266,11 @@ Build:
 - [B3.13 -> E3.08] Embedded Pi plus a schema-complete Pige Tool Registry; after source
   preservation Pi Agent alone selects semantic tools, with no host-fixed/parallel path.
 
-Agent Spine Gate: text and preserved PDF/DOCX/PPTX/images run through embedded Pi,
-isolated model binding, inspection, parse/selected OCR, re-inspection, cited publication,
-and one bounded Home search-tool path. B3.13/E3.08 remains partial for ingest retrieval,
-proposals, catalog
-metadata, generic recovery, permissions, platforms, and remaining fixed routes.
+Agent Spine Gate: embedded Pi handles preserved text/PDF/DOCX/PPTX/images, isolated model
+binding, inspection, parse/selected OCR, re-inspection, cited publication, bounded Home
+search, and optional ingest search→related-page publication.
+B3.13/E3.08 remains partial for proposals, catalog metadata, pre-publication search
+replay/cancellation, generic recovery, permissions, platforms, and remaining fixed routes.
 The exact-`v0.80.6` exception keeps compat globals/default dispatch inert in the sole
 adapter and still forbids deep imports, forks, patches, and parallel loops.
 

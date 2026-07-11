@@ -11,12 +11,15 @@ export const PARSE_SOURCE_TOOL_NAME = "pige_parse_source";
 export const PARSE_SOURCE_TOOL_VERSION = "1";
 export const OCR_SOURCE_TOOL_NAME = "pige_ocr_source";
 export const OCR_SOURCE_TOOL_VERSION = "1";
+export const SEARCH_KNOWLEDGE_TOOL_NAME = "pige_search_knowledge";
+export const SEARCH_KNOWLEDGE_TOOL_VERSION = "1";
 export const CREATE_KNOWLEDGE_NOTE_TOOL_NAME = "pige_create_knowledge_note";
 
 export type AgentIngestToolCapability =
   | "read_current_source"
   | "parse_current_source"
   | "ocr_current_source"
+  | "read_current_vault_knowledge"
   | "write_generated_note";
 
 export interface AgentIngestToolAuthorizationRequest {
@@ -24,6 +27,7 @@ export interface AgentIngestToolAuthorizationRequest {
     | typeof INSPECT_SOURCE_TOOL_NAME
     | typeof PARSE_SOURCE_TOOL_NAME
     | typeof OCR_SOURCE_TOOL_NAME
+    | typeof SEARCH_KNOWLEDGE_TOOL_NAME
     | typeof CREATE_KNOWLEDGE_NOTE_TOOL_NAME;
   readonly capability: AgentIngestToolCapability;
   readonly jobId: string;
@@ -44,23 +48,40 @@ export interface AgentIngestInspectToolResult {
 export interface AgentIngestParseToolResult {
   readonly modelText: string;
   readonly details: Readonly<Record<string, unknown>>;
+  readonly terminate?: boolean;
 }
 
 export interface AgentIngestOcrToolResult {
   readonly modelText: string;
   readonly details: Readonly<Record<string, unknown>>;
+  readonly terminate?: boolean;
+}
+
+export interface AgentIngestSearchToolResult {
+  readonly modelText: string;
+  readonly details: Readonly<Record<string, unknown>>;
+  readonly terminate?: boolean;
 }
 
 export interface AgentIngestPublishToolResult {
   readonly modelText: string;
   readonly details: Readonly<Record<string, unknown>>;
+  readonly terminate?: boolean;
 }
+
+export type AgentIngestToolOutput = AgentIngestOutput & {
+  readonly relatedPageRefs?: readonly string[];
+};
 
 export interface AgentIngestToolHost {
   inspect(signal: AbortSignal): Promise<AgentIngestInspectToolResult>;
   parse?(context: PigeAgentToolCallContext): Promise<AgentIngestParseToolResult>;
   ocr?(context: PigeAgentToolCallContext): Promise<AgentIngestOcrToolResult>;
-  publish(output: AgentIngestOutput, signal: AbortSignal): Promise<AgentIngestPublishToolResult>;
+  search?(
+    input: { readonly query: string },
+    context: PigeAgentToolCallContext
+  ): Promise<AgentIngestSearchToolResult>;
+  publish(output: AgentIngestToolOutput, signal: AbortSignal): Promise<AgentIngestPublishToolResult>;
 }
 
 export function createAgentIngestToolRegistry(input: {
@@ -173,6 +194,50 @@ export function createAgentIngestToolRegistry(input: {
         return input.host.ocr(context);
       }
     },
+    ...(input.host.search ? [{
+      name: SEARCH_KNOWLEDGE_TOOL_NAME,
+      label: "Search related local knowledge",
+      description: "Search the current Pige vault for bounded related knowledge after inspecting the preserved source. Takes one query and no path, page ID, source ID, or model authority.",
+      parameters: RELATED_KNOWLEDGE_QUERY_SCHEMA,
+      version: SEARCH_KNOWLEDGE_TOOL_VERSION,
+      capability: "read_current_vault_knowledge",
+      outputSchema: TOOL_RESULT_OUTPUT_SCHEMA,
+      effect: "read_only",
+      inputTrust: "model_generated",
+      outputTrust: "untrusted_source",
+      dataBoundary: CURRENT_VAULT_DATA_BOUNDARY,
+      execution: "sequential",
+      idempotency: CURRENT_VAULT_IDEMPOTENCY,
+      limits: {
+        maxInputBytes: 2_048,
+        maxOutputBytes: 65_536,
+        timeoutMs: 30_000
+      },
+      ownerService: "RetrievalService",
+      authorize: (_args, context) => input.authorization.authorize({
+        toolName: SEARCH_KNOWLEDGE_TOOL_NAME,
+        capability: "read_current_vault_knowledge",
+        jobId: input.jobId,
+        sourceId: input.sourceId,
+        toolCallId: context.toolCallId
+      }),
+      execute: async (args, _signal, context): Promise<PigeAgentToolResult> => {
+        if (
+          !context ||
+          !input.host.search ||
+          typeof args !== "object" ||
+          args === null ||
+          Array.isArray(args) ||
+          typeof (args as { readonly query?: unknown }).query !== "string"
+        ) {
+          throw new PigeDomainError(
+            "agent_runtime.search_tool_unavailable",
+            "The current-vault retrieval tool is unavailable."
+          );
+        }
+        return input.host.search({ query: (args as { readonly query: string }).query }, context);
+      }
+    } satisfies PigeAgentToolDescriptor] : []),
     {
       name: CREATE_KNOWLEDGE_NOTE_TOOL_NAME,
       label: "Create grounded knowledge note",
@@ -201,7 +266,7 @@ export function createAgentIngestToolRegistry(input: {
         toolCallId: context.toolCallId
       }),
       execute: async (args, signal): Promise<PigeAgentToolResult> => input.host.publish(
-        args as AgentIngestOutput,
+        args as AgentIngestToolOutput,
         signal
       ).then((result) => ({ ...result, terminate: true }))
     }
@@ -218,6 +283,9 @@ export const allowCurrentAgentIngestTools: AgentIngestToolAuthorizationPort = {
     }
     if (request.toolName === OCR_SOURCE_TOOL_NAME) {
       return request.capability === "ocr_current_source";
+    }
+    if (request.toolName === SEARCH_KNOWLEDGE_TOOL_NAME) {
+      return request.capability === "read_current_vault_knowledge";
     }
     return request.toolName === CREATE_KNOWLEDGE_NOTE_TOOL_NAME &&
       request.capability === "write_generated_note";
@@ -236,6 +304,18 @@ const CURRENT_SOURCE_IDEMPOTENCY = {
   scope: "current_source"
 } as const;
 
+const CURRENT_VAULT_DATA_BOUNDARY = {
+  resourceScope: "current_vault",
+  pathAuthority: "host_only",
+  sourceIdAuthority: "host_only",
+  modelAuthority: "none"
+} as const;
+
+const CURRENT_VAULT_IDEMPOTENCY = {
+  mode: "idempotent",
+  scope: "current_vault"
+} as const;
+
 const TOOL_RESULT_OUTPUT_SCHEMA = {
   type: "object",
   properties: {
@@ -250,6 +330,15 @@ const TOOL_RESULT_OUTPUT_SCHEMA = {
 const EMPTY_OBJECT_SCHEMA = {
   type: "object",
   properties: {},
+  additionalProperties: false
+} as const;
+
+const RELATED_KNOWLEDGE_QUERY_SCHEMA = {
+  type: "object",
+  properties: {
+    query: { type: "string", minLength: 1, maxLength: 320 }
+  },
+  required: ["query"],
   additionalProperties: false
 } as const;
 
@@ -288,6 +377,11 @@ const AGENT_INGEST_OUTPUT_SCHEMA = {
     tags: { type: "array", items: { type: "string", minLength: 1, maxLength: 48 }, maxItems: 12 },
     topics: { type: "array", items: { type: "string", minLength: 1, maxLength: 80 }, maxItems: 8 },
     entities: { type: "array", items: { type: "string", minLength: 1, maxLength: 80 }, maxItems: 12 },
+    relatedPageRefs: {
+      type: "array",
+      items: { type: "string", pattern: "^related_[0-9]{2}$" },
+      maxItems: 6
+    },
     warnings: { type: "array", items: { type: "string", minLength: 1, maxLength: 240 }, maxItems: 8 },
     confidence: { type: "string", enum: ["low", "medium", "high"] }
   },
