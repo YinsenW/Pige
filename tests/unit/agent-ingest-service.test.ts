@@ -6,14 +6,14 @@ import { afterEach, describe, expect, it } from "vitest";
 import { PigeDomainError } from "@pige/domain";
 import {
   AgentIngestService,
-  type AgentIngestModelConfigPort,
-  type AgentIngestModelClient
+  type AgentIngestModelConfigPort
 } from "../../apps/desktop/src/main/services/agent-ingest-service";
 import { CaptureService, type SourceFetchPort } from "../../apps/desktop/src/main/services/capture-service";
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
 import type { JobRecord, SourceRecord } from "@pige/schemas";
 import type { VaultSummary } from "@pige/contracts";
+import { ScriptedAgentIngestRuntime } from "../helpers/scripted-agent-ingest-runtime";
 
 const tempRoots: string[] = [];
 
@@ -67,6 +67,7 @@ function makeModelPort(
       return config ? { ...config.model, isDefault: true } : undefined;
     },
     getDefaultProvider: () => getConfig()?.provider,
+    hasDefaultRuntimeBinding: () => getConfig() !== undefined,
     getDefaultRuntimeConfig: getConfig
   };
 }
@@ -99,6 +100,27 @@ afterEach(() => {
 });
 
 describe("agent ingest service", () => {
+  it("checks model readiness without resolving runtime credentials", () => {
+    let runtimeConfigReads = 0;
+    expect(new AgentIngestService({
+      getDefaultModel: () => ({ ...runtimeConfig.model, isDefault: true }),
+      getDefaultProvider: () => runtimeConfig.provider,
+      hasDefaultRuntimeBinding: () => true,
+      getDefaultRuntimeConfig: () => {
+        runtimeConfigReads += 1;
+        return runtimeConfig;
+      }
+    }).hasDefaultModel()).toBe(true);
+    expect(runtimeConfigReads).toBe(0);
+    expect(new AgentIngestService(makeModelPort(() => undefined)).hasDefaultModel()).toBe(false);
+    expect(new AgentIngestService({
+      getDefaultModel: () => ({ ...runtimeConfig.model, isDefault: true }),
+      getDefaultProvider: () => runtimeConfig.provider,
+      hasDefaultRuntimeBinding: () => false,
+      getDefaultRuntimeConfig: () => undefined
+    }).hasDefaultModel()).toBe(false);
+  });
+
   it("turns a preserved source into a wiki note, index entry, and operation record without storing prompts or secrets", async () => {
     const { vaultPath, vault } = makeVault();
     const capture = makeCapture(vaultPath, vault);
@@ -183,6 +205,7 @@ describe("agent ingest service", () => {
     const service = new AgentIngestService({
       getDefaultModel: () => ({ ...runtimeConfig.model, isDefault: true }),
       getDefaultProvider: () => provider,
+      hasDefaultRuntimeBinding: () => true,
       getDefaultRuntimeConfig: () => {
         credentialLookups += 1;
         return { ...runtimeConfig, provider };
@@ -282,6 +305,7 @@ describe("agent ingest service", () => {
         providerReads += 1;
         return providerReads === 1 ? verifiedLocalCompatibleRuntimeConfig.provider : changedProvider;
       },
+      hasDefaultRuntimeBinding: () => true,
       getDefaultRuntimeConfig: () => {
         credentialLookups += 1;
         return { ...verifiedLocalCompatibleRuntimeConfig, provider: changedProvider };
@@ -335,6 +359,7 @@ describe("agent ingest service", () => {
     const service = new AgentIngestService({
       getDefaultModel: () => ({ ...verifiedLocalCompatibleRuntimeConfig.model, isDefault: true }),
       getDefaultProvider: () => verifiedLocalCompatibleRuntimeConfig.provider,
+      hasDefaultRuntimeBinding: () => true,
       getDefaultRuntimeConfig: () => {
         credentialLookups += 1;
         return {
@@ -428,6 +453,7 @@ describe("agent ingest service", () => {
     const service = new AgentIngestService({
       getDefaultModel: () => ({ ...verifiedLocalCompatibleRuntimeConfig.model, isDefault: true }),
       getDefaultProvider: () => verifiedLocalCompatibleRuntimeConfig.provider,
+      hasDefaultRuntimeBinding: () => true,
       getDefaultRuntimeConfig: () => {
         credentialLookups += 1;
         return verifiedLocalCompatibleRuntimeConfig;
@@ -457,6 +483,7 @@ describe("agent ingest service", () => {
     const service = new AgentIngestService({
       getDefaultModel: () => ({ ...runtimeConfig.model, isDefault: true }),
       getDefaultProvider: () => runtimeConfig.provider,
+      hasDefaultRuntimeBinding: () => true,
       getDefaultRuntimeConfig: () => {
         credentialLookups += 1;
         return runtimeConfig;
@@ -637,7 +664,7 @@ describe("agent ingest service", () => {
         assertSourceCurrent: () => {
           currentChecks += 1;
           fenceEvents.push(`source-${currentChecks}`);
-          if (currentChecks === 4) {
+          if (currentChecks === 7) {
             throw new PigeDomainError("agent_ingest.source_changed", "Source evidence changed at commit.");
           }
         },
@@ -645,13 +672,16 @@ describe("agent ingest service", () => {
       }
     )).rejects.toMatchObject({ code: "agent_ingest.source_changed" });
 
-    expect(currentChecks).toBe(4);
+    expect(currentChecks).toBe(7);
     expect(fenceEvents).toEqual([
       "source-1",
       "source-2",
       "source-3",
+      "source-4",
+      "source-5",
+      "source-6",
       "agent_note_publication_started",
-      "source-4"
+      "source-7"
     ]);
     expect(listFiles(path.join(vaultPath, "wiki", "generated"), ".md")).toEqual([]);
     expect(readOperationFiles(vaultPath).some((operation) => operation.text.includes('"kind": "create_page"'))).toBe(false);
@@ -1458,20 +1488,16 @@ describe("agent ingest service", () => {
   });
 });
 
-class CapturingModelClient implements AgentIngestModelClient {
-  callCount = 0;
-  lastUserPrompt = "";
-
+class CapturingModelClient extends ScriptedAgentIngestRuntime {
   constructor(
-    private readonly output: unknown,
-    private readonly onGenerate?: () => void
-  ) {}
+    output: unknown,
+    onGenerate?: () => void
+  ) {
+    super(output, onGenerate);
+  }
 
-  async generateJson(_config: ModelProviderRuntimeConfig, request: { readonly user: string }): Promise<{ readonly text: string }> {
-    this.callCount += 1;
-    this.lastUserPrompt = request.user;
-    this.onGenerate?.();
-    return { text: JSON.stringify(this.output) };
+  get lastUserPrompt(): string {
+    return this.userPrompt;
   }
 }
 

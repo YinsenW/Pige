@@ -4,7 +4,6 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   AgentIngestService,
-  type AgentIngestModelClient,
   type AgentIngestModelConfigPort
 } from "../../apps/desktop/src/main/services/agent-ingest-service";
 import { CaptureService } from "../../apps/desktop/src/main/services/capture-service";
@@ -19,6 +18,7 @@ import {
   type OfficeExtractionResult
 } from "../../apps/desktop/src/main/services/office-parser-types";
 import { PdfParserService } from "../../apps/desktop/src/main/services/pdf-parser-service";
+import { ScriptedAgentIngestRuntime } from "../helpers/scripted-agent-ingest-runtime";
 import {
   PDF_PARSER_ENGINE,
   PDF_PARSER_ID,
@@ -198,19 +198,22 @@ const runtimeConfig: ModelProviderRuntimeConfig = {
 const modelPort: AgentIngestModelConfigPort = {
   getDefaultModel: () => ({ ...runtimeConfig.model, isDefault: true }),
   getDefaultProvider: () => runtimeConfig.provider,
+  hasDefaultRuntimeBinding: () => true,
   getDefaultRuntimeConfig: () => runtimeConfig
 };
 
-class CapturingModelClient implements AgentIngestModelClient {
-  lastUserPrompt = "";
-  async generateJson(_config: ModelProviderRuntimeConfig, request: { readonly user: string }): Promise<{ readonly text: string }> {
-    this.lastUserPrompt = request.user;
-    return { text: JSON.stringify({
+class CapturingModelClient extends ScriptedAgentIngestRuntime {
+  constructor() {
+    super({
       title: "Referenced knowledge",
       summary: { text: "Verified referenced evidence.", evidenceRefs: ["ev_01"] },
       keyPoints: [{ text: "Verified", evidenceRefs: ["ev_01"] }],
       tags: [], topics: [], entities: [], warnings: [], confidence: "high"
-    }) };
+    });
+  }
+
+  get lastUserPrompt(): string {
+    return this.userPrompt;
   }
 }
 

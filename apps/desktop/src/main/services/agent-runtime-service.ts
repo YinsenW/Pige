@@ -16,6 +16,7 @@ export interface AgentRuntimeVaultPort {
 export interface AgentRuntimeModelPort {
   getDefaultModel(): ModelProfileSummary | undefined;
   getDefaultProvider(): ProviderProfileSummary | undefined;
+  hasDefaultRuntimeBinding(): boolean;
 }
 
 export interface AgentRuntimeDatabasePort {
@@ -51,8 +52,9 @@ export class AgentRuntimeService {
       });
     }
 
-    const defaultModel = this.#models.getDefaultModel();
-    const defaultProvider = this.#models.getDefaultProvider();
+    const runtimeBinding = resolveReadyRuntimeBinding(this.#models);
+    const defaultModel = runtimeBinding?.model;
+    const defaultProvider = runtimeBinding?.provider;
     const localDatabase = this.#database.status(activeVaultPath).status;
     const policy = buildAgentRuntimePolicyContext(activeVaultPath, {
       ...(defaultModel ? { defaultModel } : {}),
@@ -78,6 +80,30 @@ export class AgentRuntimeService {
   }
 }
 
+function resolveReadyRuntimeBinding(models: AgentRuntimeModelPort): {
+  readonly model: ModelProfileSummary;
+  readonly provider: ProviderProfileSummary;
+} | undefined {
+  try {
+    const model = models.getDefaultModel();
+    const provider = models.getDefaultProvider();
+    const runtimeBindingAvailable = models.hasDefaultRuntimeBinding();
+    if (
+      !model ||
+      !provider ||
+      !runtimeBindingAvailable ||
+      !model.enabled ||
+      !model.isDefault ||
+      model.providerProfileId !== provider.id
+    ) {
+      return undefined;
+    }
+    return { model, provider };
+  } catch {
+    return undefined;
+  }
+}
+
 function createBaseStatus(
   status: Pick<AgentRuntimeStatus, "state" | "canRunModelJobs" | "missingDependencies"> &
     Partial<Pick<AgentRuntimeStatus, "defaultModelProfileId" | "policySnapshot">>
@@ -85,7 +111,7 @@ function createBaseStatus(
   return {
     runtimeKind: "desktop_local",
     clientCapabilityTier: "desktop_full",
-    adapterMode: "phase_1_stub",
+    adapterMode: "embedded_pi_sdk",
     ...status
   };
 }

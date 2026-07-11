@@ -65,6 +65,12 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain("{ snapshot: getAgentCapabilitySnapshot }");
   });
 
+  it("wires onboarding readiness to the non-secret provider runtime binding check", () => {
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    expect(mainSource.match(/getModelProviderRegistry\(\)\.hasDefaultRuntimeBinding\(\)/gu)).toHaveLength(2);
+    expect(mainSource).not.toContain("getModelProviderRegistry().hasDefaultModel()");
+  });
+
   it("does not forward dynamic caught messages into persisted diagnostics", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     expect(mainSource).not.toContain("caught instanceof Error ? caught.message");

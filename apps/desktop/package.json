@@ -8,9 +8,12 @@
     "dev": "node ../../scripts/build/macos-vision-ocr-helper.mjs && electron-vite dev",
     "build": "node ../../scripts/build/macos-vision-ocr-helper.mjs && electron-vite build",
     "smoke:electron-undici-transport": "electron scripts/electron-undici-transport-smoke.mjs",
+    "smoke:electron-pi-agent": "electron scripts/electron-pi-agent-runtime-smoke.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit --pretty false"
   },
   "dependencies": {
+    "@earendil-works/pi-agent-core": "0.80.6",
+    "@earendil-works/pi-ai": "0.80.6",
     "@mozilla/readability": "0.6.0",
     "@napi-rs/canvas": "1.0.2",
     "@pige/contracts": "0.0.0",

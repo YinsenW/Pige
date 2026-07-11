@@ -18,7 +18,8 @@ The core rule:
 This document covers:
 
 - Home questions and knowledge retrieval.
-- Agent ingest after source preservation and parsing.
+- Agent ingest after source preservation, including Agent-selected parser/OCR/retrieval
+  tool results and replanning context.
 - Note Agent conversations.
 - Selection actions such as translate, polish, explain, summarize, and expand.
 - Agent memory injection.
@@ -99,7 +100,12 @@ Forbidden context inputs:
 - Large source bodies duplicated from source storage.
 - Arbitrary renderer filesystem paths or database handles.
 
-## 5. Retrieval Pipeline
+## 5. Retrieval Tool Internal Pipeline
+
+This deterministic pipeline executes inside a scoped retrieval tool after Pi Agent asks
+for retrieval, or directly for the explicit no-model search fallback. It ranks and
+packages evidence; it does not decide the wider Agent workflow or automatically trigger
+a knowledge write.
 
 Home retrieval and Agent retrieval should follow this local-first pipeline:
 
@@ -112,7 +118,8 @@ Home retrieval and Agent retrieval should follow this local-first pipeline:
 7. Enforce diversity by page, source, topic, and time where useful.
 8. Select snippets with locators and citation references.
 9. Build a grounded answer context pack.
-10. Call the configured language model only with selected snippets, citations, summaries, task state, and policy context.
+10. Return the bounded evidence/context pack to Pi Agent; the retrieval tool never calls
+    a model or another tool.
 
 Rules:
 
@@ -141,7 +148,9 @@ Rules:
 - Home questions default to vault scope.
 - Note Agent questions default to current-note scope plus related-note expansion.
 - Selection actions default to selection scope and may retrieve local neighbors only when useful.
-- Ingest uses the current source plus related existing page summaries.
+- Ingest starts with the current preserved source. Related summaries enter only after
+  the Agent selects a retrieval tool; parser/OCR evidence enters only from its selected
+  tool result.
 - Permissions and cloud-send policy can further narrow what may be sent to a cloud model.
 
 ## 7. Context Budget Classes
@@ -289,7 +298,11 @@ Cloud model calls must not receive:
 
 The Model Egress Decision contract in `docs/AGENT_RUNTIME_POLICY_CONTEXT.md` classifies the exact planned payload and combines its content classes, provider-boundary verification, and cloud-send policy into `allow`, `confirm`, or `block`. Context assembly must obtain that decision before prompt rendering or provider credential lookup. `unknown` boundaries fail safe, restricted content is always blocked, and general YOLO permission mode cannot weaken a stricter egress outcome.
 
-For parser/OCR-backed Agent ingest, the call-scoped Evidence Pack is also guarded by a hash of the complete Source Record revision from which its Artifact set and quality metadata were selected. The orchestrator rechecks that revision immediately before prompt rendering/model invocation and again after the response, before entering the note-write path. A detected change invalidates the response and requeues with current evidence or waits for runnable enrichment; the Source Record body and revision guard are not added to the model payload. A final compare-and-swap at note commit remains required to close the residual post-check write window.
+For parser/OCR-backed Agent ingest, the call-scoped Evidence Pack is guarded by the
+complete Source Record revision. The current bridge rechecks before/after the model and
+requeues on drift. Under B3.13, a stale tool result is returned to Pi Agent for replan or
+stop; the host cannot choose replacement evidence or the next semantic call. Revision
+data stays outside the model payload, and the write tool rechecks at commit.
 
 ## 12. Context Compaction
 
@@ -337,7 +350,8 @@ Tests must verify:
 - Cloud calls obey cloud-send policy and permission decisions.
 - Composer capture bodies, pasted blocks, files, URLs, selections, retrieved snippets, and tool output cannot acquire current-user-instruction authority.
 - Every external model call records a redacted Model Egress Decision with payload size, content classes, boundary verification, policy hash, outcome, reason code, exact-redacted-payload hash, body-free evidence-summary hash, and canonical final-decision hash. A changed payload, evidence summary, or classification/decision must not reuse the prior audit operation ID.
-- Parser/OCR ingest rejects a model response when the complete Source Record evidence revision is detected to have changed before invocation or during the call, creates no note from that response, and resumes with the latest eligible evidence.
+- Parser/OCR ingest rejects changed Source Record evidence and creates no note; B3.13
+  returns a typed stale result and requires an Agent replan before another side effect.
 - Source content cannot change settings, storage strategy, provider, permissions, or `PIGE.md`.
 - Retrieval works through lexical/metadata fallback without local embeddings.
 - CJK retrieval fixtures work without whitespace-only assumptions.

@@ -272,7 +272,7 @@ requireText("docs/JOB_OPERATION_AND_RECOVERY.md", [
   "canonical `permreq_` request IDs or `permdec_` decision IDs"
 ]);
 requireText("apps/desktop/src/main/services/model-provider-connection.ts", ["normalizeProviderBaseUrl"]);
-requireText("apps/desktop/src/main/services/model-json-client.ts", ["normalizeProviderBaseUrl"]);
+requireText("apps/desktop/src/main/services/pi-agent-runtime-adapter.ts", ["normalizeProviderBaseUrl"]);
 requireText("apps/desktop/src/main/services/model-provider-registry.ts", [
   "normalizeProviderBaseUrl",
   "isProviderLoopbackHostname"
@@ -308,9 +308,9 @@ forbid(
   "provider-connection-only base URL validator"
 );
 forbid(
-  "apps/desktop/src/main/services/model-json-client.ts",
+  "apps/desktop/src/main/services/pi-agent-runtime-adapter.ts",
   /function normalizeBaseUrl/u,
-  "model-call-only base URL validator"
+  "Pi-adapter-only base URL validator"
 );
 
 const normativeFiles = [

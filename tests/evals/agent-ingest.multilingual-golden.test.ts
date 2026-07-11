@@ -11,12 +11,12 @@ import type { JobRecord, SourceRecord } from "@pige/schemas";
 import type { VaultSummary } from "@pige/contracts";
 import {
   AgentIngestService,
-  type AgentIngestModelClient,
   type AgentIngestModelConfigPort
 } from "../../apps/desktop/src/main/services/agent-ingest-service";
 import { CaptureService } from "../../apps/desktop/src/main/services/capture-service";
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
+import { ScriptedAgentIngestRuntime } from "../helpers/scripted-agent-ingest-runtime";
 
 const roots: string[] = [];
 const golden = JSON.parse(fs.readFileSync(
@@ -332,15 +332,11 @@ const runtimeConfig: ModelProviderRuntimeConfig = {
 const modelPort: AgentIngestModelConfigPort = {
   getDefaultModel: () => ({ ...runtimeConfig.model, isDefault: true }),
   getDefaultProvider: () => runtimeConfig.provider,
+  hasDefaultRuntimeBinding: () => true,
   getDefaultRuntimeConfig: () => runtimeConfig
 };
 
-class StaticFixtureModelClient implements AgentIngestModelClient {
-  constructor(private readonly output: unknown) {}
-  async generateJson(): Promise<{ readonly text: string }> {
-    return { text: JSON.stringify(this.output) };
-  }
-}
+class StaticFixtureModelClient extends ScriptedAgentIngestRuntime {}
 
 function requireFixture(id: string): AgentIngestGoldenFixture {
   const fixture = golden.fixtures.find((candidate) => candidate.id === id);

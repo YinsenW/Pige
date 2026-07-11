@@ -21,6 +21,9 @@ Third-party software bundled by Pige includes:
   licensed under the MIT License. https://github.com/jsdom/jsdom
 - Undici, Copyright Node.js contributors,
   licensed under the MIT License. https://github.com/nodejs/undici
+- Pi Agent Core and Pi AI (`@earendil-works/pi-agent-core`, `@earendil-works/pi-ai`),
+  Copyright 2025 Mario Zechner, licensed under the MIT License.
+  https://github.com/earendil-works/pi
 
 Release packages must also preserve the complete license texts shipped with
 their corresponding dependency packages.

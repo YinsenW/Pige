@@ -5,23 +5,19 @@ Date: 2026-07-09
 
 ## 1. Purpose
 
-This document defines how Pige turns captured inputs into source records, source assets, extracted artifacts, source pages, and wiki updates.
+This document defines the deterministic source-preservation, parser, OCR, and Artifact
+tools Pige exposes to Agent-orchestrated ingest. It does not own the semantic workflow.
 
 Use it when implementing capture, URL fetch, file ingest, OCR routing, parser adapters, source preservation, or Agent ingest.
 
 ## 2. Pipeline
 
-The ingest pipeline has five stages:
+Pige preserves the Source Record and asset/reference first. Pi Agent then selects and
+replans bounded parser, OCR, retrieval, and write tools; host services enforce each
+call's policy, limits, provenance, Jobs, validation, and commit.
 
-1. Capture.
-2. Source preservation.
-3. Parse and extract.
-4. Compile into Markdown.
-5. Index and report.
-
-Critical rule:
-
-Source record creation and source asset preservation happen before parsing, OCR, model calls, or wiki compilation.
+Parser/OCR may resume the same call but cannot choose the next semantic step. Current
+direct capture-to-parse/OCR routing is transitional and does not satisfy B3.13/E3.08.
 
 ## 3. Capture Request
 
@@ -33,6 +29,9 @@ NOT merge them into one union.
 Parser work begins from a durable Job plus a preserved Source Record or scoped source
 handle. Requests carry references and bounded metadata, never a second copy of a large
 source body.
+
+Under B3.13, only a validated Pi tool event creates `ParseRequest`; format detection may
+choose its adapter, not another tool.
 
 ## 4. Source Preservation
 
@@ -209,6 +208,9 @@ Minimum behavior:
 
 ## 9. OCR Routing
 
+The following policy runs inside an Agent-selected OCR tool. Parser quality may
+recommend OCR but cannot invoke it.
+
 OCR priority:
 
 1. Native macOS OCR on supported macOS 26+.
@@ -234,7 +236,7 @@ type ParseQuality = {
 };
 ```
 
-Quality affects Agent confidence and whether changes can auto-apply.
+Quality informs Agent replanning; host policy still enforces safe publication.
 
 ## 11. Failure Behavior
 
@@ -265,14 +267,9 @@ Failures must not:
 
 ## 13. Agent Ingest Handoff
 
-The Agent receives:
-
-- Source page draft context.
-- Extracted text fragments.
-- Artifact metadata.
-- Retrieval-selected summaries of related pages.
-- Explicit untrusted-source delimiters.
-- The allowed output schema.
+An Agent-selected parser/OCR tool returns bounded fragments, Artifact metadata,
+locators, quality, warnings, provenance, and optional next-capability recommendations
+inside the untrusted-evidence boundary. Recommendations never execute themselves.
 
 The Agent does not receive:
 
@@ -288,6 +285,9 @@ Current handoff contract:
 - Every fragment has one ephemeral `ev_NN` ref and one durable locator. Native text precedes OCR; duplicate suppression is limited to repeated text under the same parent locator.
 - Structured output represents the summary and each key point as `{ text, evidenceRefs }`. Unknown refs abort before write; empty refs force review; canonical Markdown citations are rendered by Pige rather than accepted from the model.
 - Agent ingest hashes the complete Source Record used for the Evidence Pack and rechecks it before model invocation, after the response, and after flushing the exclusive temporary note immediately before create-only publication. Drift requeues or waits; concurrent targets are preserved or same-source recovered. Strict cross-process SourceRecord-to-note CAS, parent-swap resistance, cross-file transactions, and packaged-platform proof remain open.
+- For the first text-source spine, the host-assembled Evidence Pack is returned only by
+  `pige_inspect_source`, and cited publication occurs only through the validated write
+  tool. PDF/Office/OCR continuations remain host-routed until their B3.13 migration.
 
 ## 14. Required Tests
 
@@ -304,3 +304,5 @@ Current handoff contract:
 - No task-time dependency download.
 - Partial artifact recovery.
 - Citation locator stability.
+- Parser/OCR stays idle before its Pi event; different quality results yield different
+  Agent traces, and no-model capture performs no semantic work.

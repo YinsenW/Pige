@@ -337,9 +337,13 @@ Rules:
 - File bodies are never copied into conversation history; conversation events reference source IDs, display names, and source kinds.
 - The renderer receives IDs and status, not arbitrary filesystem paths or file handles.
 - After preservation, desktop main may immediately process queued text/Markdown/TXT/URL capture jobs into minimal source pages. The capture return value still reports preservation status; Home observes source-page completion through `jobs.list`.
-- Preserved PDF/DOCX/PPTX/image sources create metadata-only source pages and a `parse` or `ocr` job. Document jobs queue when a bundled adapter resolves. Direct images and supported PDF/PPTX targets queue when their reviewed materializer and local Vision helper resolve; other OCR targets remain `waiting_dependency`. No source may create `agent_ingest` until a parser/OCR adapter writes and validates an `extracted_text` or `ocr` Artifact.
+- Preserved PDF/DOCX/PPTX/image sources create metadata-only projections. The current
+  bridge also creates direct parse/OCR Jobs; this is transitional. B3.13 instead exposes
+  one waiting Agent Job, and parser/OCR children begin only from its tool events.
 - OCR execution is internal main-to-helper orchestration behind `OcrPort`; no new renderer command exposes a native path, raw OCR request, helper response, image bytes, or Artifact body. Home observes only the existing safe Job summaries.
-- In Phase 3, text-readable source-page completion also creates a follow-up `agent_ingest` job. If a tested default model is configured, desktop main may process that job in the background into a simple wiki note. If no default model exists, the job stays `waiting_dependency`.
+- `agent_ingest` now uses embedded Pi for the first text-source vertical and waits
+  without semantic work when no model exists. Format-driven parser/OCR continuations
+  remain transitional until they are invoked as Agent-selected tools.
 
 ### 6.3 Jobs
 
@@ -424,7 +428,8 @@ Rules:
   Agent-ingest writers persist a real pre-publication checkpoint before their first
   domain effect; the Job write must succeed before publication. Abandon/archive is separate.
 - `jobs.list` exposes persisted stage/progress by polling; numeric Home rendering and pushed progress events remain open.
-- Source-page creation for queued capture jobs is an internal main-process job action in this phase, not a renderer-exposed command. Text-readable captures may create excerpted source pages; preserved PDF/DOCX/PPTX/image captures create metadata-only source pages and internal parser/OCR jobs whose queued or dependency-waiting state follows local capability health.
+- Source-page projection is internal, not renderer-exposed. Current internal parser/OCR
+  continuations are transitional; target child Jobs require Pi tool events.
 - Direct-image OCR uses the same durable Job actions: waiting jobs can be requeued when capability appears, interrupted running OCR is reconciled to queued, valid Artifacts are reused, and failures are mapped to safe retryable/waiting/final Job messages without returning private paths.
 
 ### 6.4 Confirmation Proposals
@@ -616,7 +621,7 @@ Rules:
 - `models.addManualProvider` tests the provider connection before persisting profiles, attempts model-list discovery, stores raw API keys only through the secret store, and returns redacted profile/model summaries. It must not persist provider, model, or secret records when authentication or validation fails.
 - `models.addManualProvider` and `maintenance.resetLocalDatabase` consume their Settings Registry permission requirement in the main process. A native confirmation must succeed before provider network/secret work or local-database deletion begins; renderer invocation alone is not authorization. Canceling returns a stable permission error and leaves state unchanged.
 - If model-list discovery succeeds, returned model summaries use `source: "provider_list"`; if a compatible endpoint explicitly does not support listing, Pige stores the submitted manual model ID with `source: "manual"` and `modelListStrategy: "failed_then_manual"`.
-- `agent.runtimeStatus` reports desktop-local Agent adapter readiness, default model dependency state, and non-secret policy snapshot identifiers. Phase 1 uses `phase_1_stub`; real Pi job execution remains later Agent workflow work.
+- `agent.runtimeStatus` reports embedded Pi readiness and non-secret policy IDs. It uses profile summaries and presence-only binding metadata, never credential resolution/decryption; production emits only `embedded_pi_sdk`.
 - v0.1 exposes one effective default Pi Agent model; Advanced/Fast model slots must not appear unless runtime routing support is real and tested.
 - Sensitive setting changes route through Permission Broker or confirmation proposals.
 - Settings updates include expected versions where concurrent edits or external vault changes are possible.

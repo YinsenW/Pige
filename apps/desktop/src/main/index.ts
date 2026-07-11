@@ -153,7 +153,10 @@ const getLocalSettingsStore = (): LocalSettingsStore => {
 
 const getVaultService = (): VaultService => {
   if (!vaultService) {
-    vaultService = new VaultService(getLocalSettingsStore(), () => getModelProviderRegistry().hasDefaultModel());
+    vaultService = new VaultService(
+      getLocalSettingsStore(),
+      () => getModelProviderRegistry().hasDefaultRuntimeBinding()
+    );
   }
   return vaultService;
 };
@@ -656,7 +659,10 @@ app.whenReady().then(() => {
     app.getPath("userData"),
     new JsonSecretStore(app.getPath("userData"), safeStorage)
   );
-  vaultService = new VaultService(getLocalSettingsStore(), () => getModelProviderRegistry().hasDefaultModel());
+  vaultService = new VaultService(
+    getLocalSettingsStore(),
+    () => getModelProviderRegistry().hasDefaultRuntimeBinding()
+  );
   windowModeService = new WindowModeService(getLocalSettingsStore());
   localDatabaseService = new LocalDatabaseService();
   backupRestoreService = new BackupRestoreService();

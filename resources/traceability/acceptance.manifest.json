@@ -1339,7 +1339,7 @@
     },
     "PIGE-JOB-002": {
       "status": "partial",
-      "evidence": ["EV-JOB-DRAIN", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER"],
+      "evidence": ["EV-JOB-DRAIN", "EV-JOB-RECOVERY", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-002",
         "description": "Action-safety propagation remains open beyond capture/parse/OCR/agent_ingest; index_rebuild cancellation and serialization are process-local and rebuildable-only; running capture and remaining classes still lack cooperative cancellation; strict cross-process Job/index-writer CAS and routing, parent-directory swap, guard-to-domain atomicity, guard-without-output recovery, complete kill/crash/stale-worker recovery, packaged filesystems, checkpoint arrays, visible progress/cancel UI, and remaining retry assertions stay open.",
@@ -1533,12 +1533,7 @@
     },
     "PIGE-SEC-005": {
       "status": "partial",
-      "evidence": [
-        "EV-EGRESS",
-        "EV-EGRESS-SERVICE",
-        "EV-EGRESS-PROFILE-BINDING",
-        "EV-EGRESS-RUNTIME-BINDING"
-      ],
+      "evidence": ["EV-EGRESS", "EV-EGRESS-SERVICE", "EV-EGRESS-PROFILE-BINDING", "EV-EGRESS-RUNTIME-BINDING", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS"],
       "open": {
         "id": "OPEN-REQ-PIGE-SEC-005",
         "description": "User-confirmation resume and complete provider-path adoption remain open.",
@@ -1584,14 +1579,10 @@
     },
     "PIGE-PI-001": {
       "status": "partial",
-      "evidence": [
-        "EV-RUNTIME",
-        "EV-AGENT-INGEST",
-        "EV-BOUNDARY"
-      ],
+      "evidence": ["EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-BOUNDARY", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE"],
       "open": {
         "id": "OPEN-REQ-PIGE-PI-001",
-        "description": "The normal Agent path still uses transitional direct provider generation. Pi v0.80.6 has no official compat-free Agent entry, so exact upstream adoption, one mediated Pige tool, packaged proof, and rejection of parallel/direct Agent or provider loops remain open; deep imports, forks, patches, and copied loops are not substitutes.",
+        "description": "Exact Pi v0.80.6 pins, bundled license, sole-adapter containment, isolated selected provider/model binding, real preserved-text inspect-to-publication tool events, unavailable-tool replanning, per-turn egress checks, direct-bridge removal, no-model preserve-and-wait, bypass mutations, and assembled Electron smoke are implemented. Schema-complete parser/OCR/retrieval/proposal tools, host-fixed routing removal, durable child-tool pause/restart/continue, full Permission Broker, signed packaged platforms, manual BYOK smoke, and a second distinct semantic trace remain open.",
         "targetBuilds": [
           "B3.06",
           "B3.13"
@@ -1605,11 +1596,12 @@
     "PIGE-PI-002": {
       "status": "partial",
       "evidence": [
-        "EV-PROVIDER"
+        "EV-PROVIDER",
+        "EV-PI-PROVIDER-BINDING"
       ],
       "open": {
         "id": "OPEN-REQ-PIGE-PI-002",
-        "description": "The selected default model affects the transitional provider bridge but has not yet been proven to bind an embedded Pi Agent call; Advanced/Fast UI remains gated.",
+        "description": "The selected default profile now binds isolated embedded Pi calls for OpenAI-compatible and Anthropic-compatible protocols without ambient or cross-profile credentials. Built-in provider packaged/manual BYOK acceptance and the full supported-provider matrix remain open; Advanced/Fast UI stays gated.",
         "targetBuilds": [
           "B3.04"
         ],
@@ -2895,7 +2887,7 @@
       ],
       "open": {
         "id": "OPEN-EXIT-E2.06",
-        "description": "Full executable acceptance remains open for Exit E2.06: PDF, DOCX, PPTX, and image capture preserves evidence before processing and creates visible retryable parser/OCR dependency jobs.",
+        "description": "Full executable acceptance remains open for Exit E2.06: PDF, DOCX, PPTX, and image capture preserves evidence before processing, creates a visible retryable Agent dependency job, and does not start parser/OCR work before an Agent tool call.",
         "targetBuilds": [
           "B2.04"
         ],
@@ -2962,15 +2954,7 @@
     },
     "E2.10": {
       "status": "partial",
-      "evidence": [
-        "EV-JOB-CANCEL",
-        "EV-JOB-DURABLE-CANCEL",
-        "EV-CAPTURE-PUBLICATION-GUARD",
-        "EV-AGENT-PUBLICATION-CANCEL",
-        "EV-PDF-OCR-SOURCE-REVISION",
-        "EV-PDF-RENDER-GENERATION",
-        "EV-INDEX-REBUILD-WORKER"
-      ],
+      "evidence": ["EV-JOB-RECOVERY", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER"],
       "open": {
         "id": "OPEN-EXIT-E2.10",
         "description": "Running capture and remaining Job classes still lack cooperative cancellation and complete cross-process routing; strict cross-process cancel/guard/index-writer linearization, parent-directory swap, guard-to-domain atomicity, guard-without-output recovery, complete kill/crash/stale-worker recovery, packaged filesystems, checkpoint arrays, abandon/archive, and visible cancellation UI remain open for E2.10.",
@@ -3002,10 +2986,7 @@
     },
     "E3.01": {
       "status": "partial",
-      "evidence": [
-        "EV-PROVIDER",
-        "EV-RUNTIME"
-      ],
+      "evidence": ["EV-PROVIDER", "EV-RUNTIME", "EV-PI-PROVIDER-BINDING"],
       "open": {
         "id": "OPEN-EXIT-E3.01",
         "description": "Full executable acceptance remains open for Exit E3.01: Each supported provider profile can be connection-tested, can discover or accept model IDs, and resolves one effective default model used by Agent ingest.",
@@ -3037,12 +3018,7 @@
     },
     "E3.03": {
       "status": "partial",
-      "evidence": [
-        "EV-EGRESS",
-        "EV-EGRESS-SERVICE",
-        "EV-EGRESS-PROFILE-BINDING",
-        "EV-EGRESS-RUNTIME-BINDING"
-      ],
+      "evidence": ["EV-EGRESS", "EV-EGRESS-SERVICE", "EV-EGRESS-PROFILE-BINDING", "EV-EGRESS-RUNTIME-BINDING", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS"],
       "open": {
         "id": "OPEN-EXIT-E3.03",
         "description": "A user-confirmation resume path for waiting_permission model egress remains open.",
@@ -3124,14 +3100,10 @@
     },
     "E3.08": {
       "status": "partial",
-      "evidence": [
-        "EV-BOUNDARY",
-        "EV-RUNTIME",
-        "EV-AGENT-INGEST"
-      ],
+      "evidence": ["EV-BOUNDARY", "EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE"],
       "open": {
         "id": "OPEN-EXIT-E3.08",
-        "description": "Pi v0.80.6 has no official compat-free Agent entry. A deterministic supported-upstream loop with a mediated tool, selected model, durable output, recovery, packaged Electron proof, and import gates rejecting parallel/direct loops remains open; a contained compat exception needs explicit user approval.",
+        "description": "The first embedded Pi vertical now proves selected-profile binding, no-model preserve-and-wait, preserved-text inspection, validated cited publication, unavailable-tool replanning, authorization denial before effects, no direct-provider fallback, and an assembled Electron loop under sole-adapter containment. E3.08 remains partial until parser/OCR/retrieval/proposal tools use the complete registry, host-fixed routing and renderer bypass are removed, durable child-tool pause/restart/continue is proven, a second distinct trace passes, and signed packaged-platform/manual BYOK acceptance is available.",
         "targetBuilds": [
           "B3.13"
         ],
@@ -3258,14 +3230,10 @@
     },
     "E5.03": {
       "status": "partial",
-      "evidence": [
-        "EV-AGENT-INGEST",
-        "EV-UNTRUSTED-SOURCE-BOUNDARY",
-        "EV-UNTRUSTED-OUTPUT-SCHEMA"
-      ],
+      "evidence": ["EV-AGENT-INGEST", "EV-PI-AGENT-SPINE", "EV-PI-RUNTIME-BOUNDARY", "EV-UNTRUSTED-SOURCE-BOUNDARY", "EV-UNTRUSTED-OUTPUT-SCHEMA"],
       "open": {
         "id": "OPEN-EXIT-E5.03",
-        "description": "URL/DOCX/PDF/PPTX/image-OCR public-ingest adversarial cases pass; full Pi tool/Permission Broker proof remains open for Exit E5.03.",
+        "description": "The preserved-text Pi tool boundary and URL/DOCX/PDF/PPTX/image-OCR adversarial public-ingest cases pass. Document/OCR/retrieval tools and the full persisted Permission Broker remain open for E5.03.",
         "targetBuilds": [
           "B5.11"
         ],
@@ -3835,8 +3803,10 @@
     "EV-RUNTIME": {
       "kind": "test",
       "path": "tests/unit/agent-runtime-service.test.ts",
-      "selector": "becomes ready when a default model profile is available"
+      "selector": "becomes ready without resolving credential-bearing runtime configuration"
     },
+    "EV-RUNTIME-NONSECRET-BINDING": { "kind": "test", "path": "tests/unit/model-provider-registry.test.ts", "selector": "checks the selected runtime binding by secret reference without decrypting credentials" },
+    "EV-JOB-NONSECRET-READINESS": { "kind": "test", "path": "tests/unit/jobs-service.test.ts", "selector": "schedules Agent ingest readiness without resolving runtime credentials" },
     "EV-RUNTIME-CONTRACT": {
       "kind": "implementation",
       "path": "packages/contracts/src/index.ts",
@@ -3875,7 +3845,7 @@
     "EV-JOB-RECOVERY": {
       "kind": "test",
       "path": "tests/unit/jobs-service.test.ts",
-      "selector": "reconciles interrupted jobs conservatively on startup"
+      "selector": "recovers a parent crash after durable child handoff without duplicating the child"
     },
     "EV-JOB-WAIT": {
       "kind": "test",
@@ -3919,6 +3889,12 @@
       "path": "tests/unit/agent-ingest-service.test.ts",
       "selector": "turns a preserved source into a wiki note, index entry, and operation record without storing prompts or secrets"
     },
+    "EV-PI-AGENT-SPINE": { "kind": "test", "path": "tests/unit/agent-led-ingest.test.ts", "selector": "Agent-led knowledge spine" },
+    "EV-PI-PROVIDER-BINDING": { "kind": "test", "path": "tests/unit/pi-agent-provider-binding.test.ts", "selector": "Pi AI provider binding" },
+    "EV-PI-RUNTIME-BOUNDARY": { "kind": "verifier", "path": "scripts/verify/pi-runtime-boundary.mjs", "selector": "Pi runtime boundary OK: one contained adapter owns official Pi imports, isolated auth/models, and sequential Pige tools." },
+    "EV-PI-RUNTIME-MUTATIONS": { "kind": "verifier", "path": "scripts/verify/pi-runtime-boundary-negative-cases.mjs", "selector": "Pi runtime boundary mutations OK:" },
+    "EV-PI-IMPORT-SNAPSHOT": { "kind": "verifier", "path": "scripts/verify/pi-import-side-effects.mjs", "selector": "Pi import side-effect snapshot OK:" },
+    "EV-PI-ELECTRON-SMOKE": { "kind": "implementation", "path": "apps/desktop/scripts/electron-pi-agent-runtime-smoke.mjs", "selector": "Electron Pi runtime smoke OK:" },
     "EV-GENERATED-NOTE-FINAL-FENCE": {
       "kind": "test",
       "path": "tests/unit/jobs-service.test.ts",

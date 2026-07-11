@@ -1,72 +1,85 @@
 # Pige
 
-## Drop it in. Keep the knowledge.
+## Drop it in. Get connected knowledge back.
 
-Pige is a local-first Personal Knowledge Agent that turns text, web pages,
-documents, and images into a living Markdown knowledge base.
+Pige is a local-first Personal Knowledge Agent for notes, links, documents,
+screenshots, and half-finished thoughts that are worth keeping.
 
-Capture without choosing a folder, tag, or title. Pige preserves provenance, connects
-ideas, and returns them with citations as portable, inspectable Markdown. Files use a
-managed copy or verified original reference.
+Paste an idea, save a web page, or drop a PDF, Office document, or image. Pige is being
+built to preserve the source, let its Agent choose bounded tools, turn useful material
+into connected Markdown, and bring it back with citations.
 
-> Pige is in active pre-alpha development. It is not yet ready to be the only copy
-> of important knowledge.
+**Your files remain sources. Markdown becomes your knowledge.** No folder, tag, title,
+or capture mode is required before you begin—just one calm doorway into what you know.
+
+> Pige is in **active pre-alpha development**. There is no public installer yet. Do
+> not use it as the only copy of important knowledge.
+
+## From capture to durable knowledge
+
+**Capture → Preserve → Understand → Connect → Retrieve → Reuse**
+
+Pige preserves local inputs before expensive work; explicit URL capture first performs
+the bounded fetch needed to create its source snapshot. The first embedded Pi Agent
+path now moves preserved text through bounded tools into cited Markdown.
 
 ## Why Pige
 
-Collecting information is easy. Maintaining useful knowledge is not.
+Note apps ask you to organize too early; document chat buries useful answers. Pige is a
+**Markdown knowledge compiler** whose Agent maintains a wiki beyond one conversation.
 
-Note apps organize too early; AI chat buries answers. Pige turns synthesis into durable
-knowledge that grows with every source and question.
+- **Durable knowledge, not disposable chat.** Valuable synthesis returns to Markdown.
+- **Inspectable and portable.** Sources and citations stay attached; Markdown is the
+  long-term truth, while indexes and caches are rebuildable.
+- **Calm outside, strong inside.** Complex tools and safeguards stay behind useful defaults.
 
 ## Current Status
 
 Today, the pre-alpha can:
 
-- Save text and web pages; keep source files as managed copies or verified references;
-  read web, PDF, DOCX, PPTX, and image content.
-- Use local OCR for supported macOS images, selected PDF pages, and selected images
-  inside PPTX files.
-- Build source-backed Markdown pages and return cited answers from Home.
-- Rebuild local search state and create local backups.
+- Capture text, web pages, Markdown, TXT, PDF, DOCX, PPTX, and images while preserving
+  files as managed copies or verified references.
+- Extract structured document content and run supported macOS Vision OCR paths.
+- Run a preserved-text vertical through the embedded Pi Agent, isolated BYOK model
+  binding, source-inspection tool, and validated knowledge-publication tool.
+- Generate source-backed Markdown; search locally with citations, backlinks, and related pages.
+- Use persistent-job recovery and local-backup foundations.
 
-Cross-platform OCR, smarter retrieval, full editing/confirmation, trusted extensions,
-and release packaging remain on the `v0.1` roadmap.
+These are foundations, not a finished release. See the [implementation playbook](docs/V0_1_IMPLEMENTATION_PLAYBOOK.md).
 
-Local-first is not network-free: BYOK model calls, explicit URL capture, updates,
-optional downloads, and permissioned extensions may use the network.
+## Road to `v0.1 Public Alpha`
 
-## Product Principles
+- **Extend the Agent path:** move PDF, Office, OCR, retrieval, recovery, and permissioned
+  actions onto the proven embedded Pi tool-loop spine.
+- **Expand the proven tool spine:** cross-platform document/OCR and stronger local retrieval.
+- **Ship a trustworthy alpha:** reviewable changes, backup/restore, accessibility,
+  localization, packaging, signing, and updates.
 
-- **Capture first.** Record the input and storage strategy before processing.
-- **Calm outside, powerful inside.** Hide infrastructure behind useful defaults.
-- **Local, portable ownership.** Sources stay yours; knowledge stays readable.
-- **Evidence before automation.** Prefer citations, recovery, and user control.
+Sync, mobile, and collaboration come later. See the [roadmap](docs/MILESTONES.md) and
+[product requirements](docs/PRD.md).
 
-## Roadmap
+## Local-first, with honest boundaries
 
-The `v0.1 Public Alpha` targets reliable capture, retrieval, editing, linking,
-reviewable Agent actions, extensions, backup, accessibility, and packaging.
+No cloud account, product analytics, background telemetry, or automatic diagnostic
+upload is required. Explicit URL capture, BYOK calls, updates, optional downloads, and
+permissioned extensions may use the network; model calls send selected evidence, not
+the whole vault by default.
 
-Later clients, sync, and collaboration must preserve the local Markdown foundation.
+## Built and maintained by AI Agents
 
-See the [roadmap](docs/MILESTONES.md) and [product requirements](docs/PRD.md).
+**Built by Agents. Directed by humans.**
 
-## Built By AI Agents
+AI Coding Agents author and maintain Pige's implementation code. Humans set direction,
+review evidence, and authorize releases. Contracts, tests, traceability, and CI are the
+project memory on the path toward safe planning-to-release automation.
 
-**Built by Agents, directed by humans.**
+## Follow the build
 
-By project policy, AI Coding Agents author implementation code; humans set goals,
-provide references, review evidence, and authorize releases. The workflow is not yet
-fully autonomous; the goal is safe end-to-end automation without weaker gates.
+Watch for the first Public Alpha, explore the [vision](docs/VISION.md), or help through
+[Contributing](CONTRIBUTING.md).
 
-## Explore
-
-- [Vision](docs/VISION.md) · [Product requirements](docs/PRD.md) ·
-  [Roadmap](docs/MILESTONES.md)
-- [Contributing](CONTRIBUTING.md)
-- AI Coding Agents: [repository instructions](AGENTS.md) and
-  [task router](docs/START_HERE_FOR_AI_AGENTS.md)
+For AI Coding Agents: start with [repository instructions](AGENTS.md) and the
+[task router](docs/START_HERE_FOR_AI_AGENTS.md).
 
 [Security](SECURITY.md) · [Privacy](PRIVACY.md) · [Support](SUPPORT.md) ·
 [Code of Conduct](CODE_OF_CONDUCT.md) · [Apache 2.0](LICENSE)

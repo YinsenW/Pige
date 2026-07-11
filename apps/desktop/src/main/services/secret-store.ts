@@ -59,6 +59,10 @@ export class JsonSecretStore {
     return this.#read().secrets.map((secret) => secret.ref);
   }
 
+  hasProviderSecret(ref: string): boolean {
+    return this.#crypto.isEncryptionAvailable() && this.#read().secrets.some((secret) => secret.ref === ref);
+  }
+
   readProviderSecret(ref: string): string {
     const record = this.#read().secrets.find((secret) => secret.ref === ref);
     if (!record) {

@@ -103,6 +103,7 @@ flowchart LR
   Main --> Parser["Parser Service"]
   Main --> Jobs["Job Queue"]
   Main --> Agent["Agent Orchestrator"]
+  Main --> Tools["Pige Tool Registry"]
   Main --> Runtime["Runtime Capability Service"]
   Main --> Skills["Skill Registry Service"]
   Main --> Permission["Permission Broker Service"]
@@ -123,16 +124,21 @@ flowchart LR
   Capture --> Vault
   Capture --> SourceStorage
   Vault --> LocalDB
-  Jobs --> Parser
   Jobs --> LocalDB
   Parser --> SourceStorage
   Parser --> Vault
   Jobs --> Agent
   Jobs --> Runtime
+  Agent --> Tools
+  Tools --> Jobs
+  Tools --> Parser
+  Tools --> Retrieval
+  Tools --> Compiler
+  Tools --> Permission
   Agent --> Skills
   Agent --> Runtime
   Agent --> Permission
-  Agent --> Proposals
+  Tools --> Proposals
   Proposals --> Compiler
   Proposals --> Vault
   Compiler --> Vault
@@ -140,16 +146,12 @@ flowchart LR
   Agent --> Memory
   Retrieval --> Vault
   Retrieval --> LocalDB
-  Retrieval --> Models
   Retrieval --> Runtime
   Memory --> Vault
   Memory --> LocalDB
   Memory --> Retrieval
-  NoteAgent --> Retrieval
-  NoteAgent --> Memory
-  NoteAgent --> Proposals
-  Selection --> NoteAgent
-  Selection --> Proposals
+  NoteAgent --> Agent
+  Selection --> Agent
   Speech --> Capture
   Backup --> Vault
   Backup --> SourceStorage
@@ -222,11 +224,12 @@ The main process owns trusted local capabilities:
 
 Responsibilities:
 
-- Detect capture type.
+- Classify the capture envelope only as needed for safe preservation and capability
+  discovery; do not choose the downstream semantic plan.
 - Create an ingest job.
 - Ask Source Storage Service to create a source record and preserve the input according to storage strategy.
 - Emit job progress events.
-- Enqueue parser and Agent workflow through the job queue.
+- Enqueue or wake the Agent orchestration job after preservation.
 - Guarantee that the user's original capture is preserved before model or parser work begins.
 - Accept files dropped anywhere on the main window through the typed preload boundary.
 - Accept voice transcripts from the native speech input service as editable capture input.
@@ -247,11 +250,10 @@ Capture types:
 
 Current implementation:
 
-- `capture.submitText` preserves typed/pasted text into `raw/text/YYYY/MM/`.
-- `capture.submitDroppedFiles`/`capture.submitFiles` preserves `.md`, `.markdown`, `.txt`, `.pdf`, `.docx`, `.pptx`, and common image files as verified managed copies or original references according to the selected v0.1 strategy.
-- Queued text/Markdown/TXT capture jobs can create minimal no-model source pages under `sources/text/YYYY/` or `sources/files/YYYY/`.
-- Queued PDF/DOCX/PPTX capture jobs create metadata-only source pages plus queued local `parse` jobs when their bundled adapters are healthy. Image capture creates a queued `ocr` job when the verified macOS Vision helper is available and otherwise remains `waiting_dependency`.
-- PDF page locators, DOCX blocks, relationship-ordered PPTX slide/notes locators, checksummed parser artifacts, direct-image OCR, bounded PDF-page OCR, and selected PPTX embedded-raster OCR on macOS 26 now exist. Full-slide rendering, unsupported or oversized media, Windows/Paddle OCR, and richer image ingest remain open.
+- Text and supported files are preserved as managed sources or verified references;
+  bounded metadata-only/direct-text source projections may follow.
+- The recoverable bridge still routes file kinds directly to parse/OCR/Agent Jobs.
+  Its artifacts remain tool substrate, but its routing does not satisfy B3.13/E3.08.
 
 ### 5.1.1 Source Storage Service
 
@@ -276,8 +278,9 @@ Responsibilities:
 
 - Persist ingest jobs before running them.
 - Track job state, progress, warnings, and errors.
-- Orchestrate parser and Agent stages after source record creation and source preservation.
-- Persist parse/OCR continuation Jobs before those upstream Jobs can leave their recoverable running state.
+- Schedule, execute, and recover Agent-selected tool-call Jobs without deciding which
+  semantic step should run next.
+- Persist child tool Jobs before their parent Agent Job can leave a recoverable state.
 - Support retry, cancel, and resume after app restart.
 - Prevent concurrent writes from corrupting the same page.
 - Group multi-file drops into a parent capture batch.
@@ -290,21 +293,13 @@ Completed job records may eventually be compacted after their durable effects ar
 
 Current implementation:
 
-- Capture Service writes queued capture job records under `.pige/jobs/YYYY/MM/`.
-- Jobs Service exposes `jobs.list` as a read-only safe-summary query for Home status after launch.
-- Jobs Service exposes durable cancel/retry for eligible jobs; active process-local
-  parse/OCR/Agent ingest/index rebuild uses `cancel_requested` and shared abort.
-- Non-cooperative capture uses `capturing_source` and persists its guard before the first Source Record/Page projection.
-- Jobs Service routes queued PDF/DOCX/PPTX sources through a document-parser registry into bounded worker-backed parse jobs, writes durable checksummed text/metadata artifacts, and gates Agent ingest on evidence quality. Direct images, verified PDF candidates, and parser-selected PPTX raster media run through `OcrPort`; runnable enrichment blocks first Agent ingest, while unavailable OCR may release useful native evidence with review warnings.
-- Parse and OCR runners write their OCR/Agent-ingest continuation Job before finalizing the upstream Job record, so a later parent-state or logging failure leaves a durable child plus a retryable parent.
-- Agent ingest distinguishes provider abort/timeout and guards fenced note, current-job adoption, or missing-index repair for an existing same-source Pige note.
-- `maintenance.rebuildLocalDatabase` creates an `index_rebuild` Job whose bundled worker rebuilds SQLite metadata/FTS from Markdown with bounded progress; startup/retry use a coalesced limit-1 drainer.
-- Startup/vault activation reconciles interrupted idempotent capture/parse/OCR/Agent-ingest/index jobs, re-evaluates waiting Agent-ingest work against current model and runnable-PDF-OCR gates, resumes eligible work through coalesced background drainers, and marks uncertain interrupted work retryable with an explanation. Each service processes at most 20 jobs per batch and yields to the main loop before continuing, so multi-file drops are not silently capped by a query limit.
-- Job guards use unique no-follow temporary files, file flush, supported directory flush,
-  and atomic replacement before publication. Strict cross-process Job revision CAS/lost-update,
-  parent-directory swap, guard-to-domain atomicity/guard-without-output recovery, packaged-filesystem proof,
-  running capture/other-class cancellation, checkpoint arrays, full-slide OCR,
-  parent/child batches, priority scheduling, and compaction remain open.
+- Durable records expose safe summaries, retry/cancel, monotonic progress, action-safety
+  guards, bounded drainers, and conservative restart recovery for implemented classes.
+- Worker-backed parse/OCR/index and fenced Agent writes preserve validated partial
+  output. Exact evidence and remaining cross-process, platform, batch, scheduling, and
+  compaction gaps are owned by the Job contract and acceptance manifest.
+- Current direct continuations are transitional; B3.13 replaces new branching with an
+  Agent parent and tool-call children while recovery resumes only selected calls.
 
 ### 5.1.3 Library Service
 
@@ -477,38 +472,25 @@ Vault location and note storage rule:
 
 Responsibilities:
 
-- Fetch web pages using `fetch`.
-- Enforce URL security rules.
-- Store raw HTML snapshots.
-- Extract readable content.
-- Extract metadata: title, canonical URL, site name, author, publish date, language, image references.
-- Return a normalized source artifact.
+- Fetch and preserve a bounded raw web snapshot under URL security rules.
+- Execute readable-content/metadata extraction only from an Agent-selected web tool and
+  return a normalized Artifact.
 
-Current URL implementation:
-
-- Home detects a single HTTP/HTTPS URL and calls `capture.submitUrl`; renderer code does not fetch the page.
-- Source Fetch Service and its per-request transport stay in the main process; article extraction runs in a disposable bounded worker and never returns trusted HTML to the renderer.
-- SSRF/DNS validation is owned by `docs/SECURITY_THREAT_MODEL.md`; exact redirects, byte/time/DOM/output limits, charset handling, Artifact/Source Record fields, redaction, and fallback are owned by `docs/PARSER_INGEST_SPEC.md#82-url`.
-- Browser-rendered JavaScript-heavy capture remains deferred; v0.1 does not execute page scripts to improve extraction.
-
-v0.1 extraction path:
-
-- Main-process Undici fetch with validated-address pinning.
-- Inert jsdom parse in a bounded worker.
-- Mozilla Readability article extraction with structured-text fallback.
-
-Future fallback:
-
-- Browser-rendered extraction for JavaScript-heavy pages.
+The current bridge performs main-process pinned Undici fetch plus bounded inert
+Readability extraction in one capture path. Its security and preservation evidence
+remain valid, but automatic extraction is transitional under B3.13. Exact behavior and
+the deferred browser-rendered fallback are owned by the Parser and Security contracts.
 
 ### 5.3 Parser Service
 
 Responsibilities:
 
-- Convert files into normalized textual and asset artifacts.
+- Execute an Agent-selected, format-neutral extraction tool call and convert the source
+  into normalized textual and asset artifacts.
 - Read source assets through Source Storage Service handles.
 - Keep page/slide references where possible.
-- Invoke OCR when native extraction is missing, sparse, or image-only.
+- Return bounded quality, warnings, and OCR candidates; do not invoke OCR or choose the
+  next semantic step on the Agent's behalf.
 - Fail gracefully with partial extraction.
 
 `docs/PARSER_INGEST_SPEC.md` is the detailed contract for capture, parser requests/results, artifacts, OCR routing, failures, and Agent ingest handoff.
@@ -532,27 +514,13 @@ Parser rules:
 
 Current document-parser implementation:
 
-- `PdfParserService` owns the adapter boundary; `PdfParserWorkerAdapter` launches the separately built `workers/pdf-parser-worker.js` entry with a 60-second timeout and bounded old-generation heap.
-- The worker receives only a preserved PDF path plus byte/page limits, passes in-memory bytes to PDF.js, disables network/resource fetching, and returns normalized text plus page-level locator/quality metadata. It cannot write the vault.
-- Main-process Parser Service writes deterministic extracted-text and metadata sidecar paths atomically, then updates the Source Record and source page.
-- Parser Service also writes one deterministic `create_artifact` Operation Record with job/source/artifact references and no duplicated extracted body; retries can repair a missing record idempotently.
-- The metadata sidecar deliberately stores counts, locators, quality, warnings, and checksums rather than duplicating page text.
-- Page-limit truncation and OCR-pending quality flow into Agent ingest as trusted metadata; service-side guards add warnings and prevent a `high`-confidence clean note from being written for incomplete visible evidence.
-- Source-page refresh uses a durable pending record with previous and target checksums. Recovery can finalize an interrupted Pige write; checksum divergence preserves user edits and marks a conflict.
-- `pdfjs-dist` `6.1.200` and `@napi-rs/canvas` `1.0.2` are exact runtime dependencies represented in dependency/toolchain manifests. Neither is downloaded during ingest.
-- `PdfPageRendererService` launches the separately built `workers/pdf-page-renderer-worker.js` only for parser-confirmed candidate pages. The worker returns bounded PNG bytes and page locators; it cannot write the vault, while main-process `PdfOcrArtifactService` writes deterministic rendered-page/render-metadata Artifacts.
-- PDF page materialization is a separate worker boundary; exact limits and disabled PDF.js features are owned by `docs/PARSER_INGEST_SPEC.md#83-pdf`.
-- `DocumentParserService`, PDF page rendering, and native OCR obtain disposable verified
-  input snapshots from the Source Storage boundary before invoking external adapters;
-  only the private snapshot path crosses the process boundary. Snapshot integrity and
-  lifecycle are owned by `docs/SOURCE_STORAGE_STRATEGY.md`, while parser/renderer/OCR
-  limits remain with `docs/PARSER_INGEST_SPEC.md`.
-- `DocumentParserService` registers PDF and Office adapters so Jobs Service depends on one parser port rather than format-specific service types.
-- `OfficeParserWorkerAdapter` launches the separately built worker with no vault-write authority; exact archive/XML/slide/text/time/memory limits are owned by the Parser specification.
-- DOCX uses exact Mammoth `1.12.0` after bounded yauzl package preflight across all DOCX XML/relationship parts. Embedded style maps and external-file access are disabled, converter HTML is normalized to text/locators and is never rendered, and only referenced images become OCR candidates.
-- PPTX uses exact yauzl `3.4.0` and fast-xml-parser `5.9.3`; presentation relationships determine slide order, notes and media relationships are resolved relative to their owning parts, external targets are never opened, XML entities/value coercion are disabled, and unsafe paths/DOCTYPE/deep nesting are rejected.
-- Shared Parser Artifact Service stores checksum and size on artifact references, verifies source/artifact/sidecar checksums and parser versions before reuse, rejects adapter attempts to override parser-owned provenance fields, and regenerates stale derived artifacts.
-- PDF.js page rendering is an explicit OCR pixel-materializer adapter with its own port, manifest, worker entry, limits, protocol validation, and release smoke. It is not treated as an OCR engine. Poppler/PDFium remains a future replacement if platform packaging, fidelity, or hostile-input evidence is insufficient.
+- `DocumentParserService` exposes one PDF/Office port; bounded workers cannot write the
+  vault and receive only disposable verified source snapshots.
+- Main-process owners validate and atomically publish checksummed text/metadata/rendered
+  Artifacts, Source Record/Page projections, and body-free Operation provenance.
+- Exact adapters, limits, locators, reuse, OCR-candidate, conflict, and recovery behavior
+  live in `docs/PARSER_INGEST_SPEC.md` and `docs/SOURCE_STORAGE_STRATEGY.md`; dependency
+  pins live in section 16 and machine-readable manifests.
 
 Parser Service exposes one format-neutral result boundary. Its durable outcome and
 worker-protocol ownership are defined in
@@ -581,18 +549,13 @@ Engine routing:
 
 Current macOS image, PDF, and PPTX implementation:
 
-- `OcrService` accepts direct images, parser-verified PDF candidate sets of at most 20 pages, and parser-selected PPTX raster media. PDFs retain all-page image-only or sparse mixed-text routing. PPTX materialization uses Parser-owned bounds, private disposable inputs, and `slide:N/media:M/ocr:block:K` locators. Truncated, oversized, full-slide, and unsupported-media cases remain waiting; locators never masquerade as pixels.
-- An app-owned Swift helper targets macOS 26, uses `RecognizeDocumentsRequest(.revision1)` first, and falls back to accurate `RecognizeTextRequest(.revision3)` with automatic language detection and correction.
-- The helper is a separate native process with one schema-versioned JSON request on stdin and one bounded JSON response on stdout. No source path is passed in argv, the environment is reduced, shell execution is disabled, and OCR execution has no network path or task-time download.
-- Runtime limits are 50 MiB source bytes, 40 million source pixels, 20,000 pixels per source dimension, a 4,096-pixel decoded long edge, one frame, 10,000 blocks, 1,000,000 output characters, 8 MiB protocol output, and 60 seconds.
-- ImageIO and Uniform Type Identifiers preflight the real file type, frame count, dimensions, and bounded thumbnail decode before Vision runs. Animated or multi-frame images are rejected for this adapter.
-- The build emits one architecture-specific helper plus an adjacent manifest containing helper/protocol versions, source/compiler/target metadata, binary byte size, and exact SHA-256. The runtime verifies the executable bit, regular-file status, architecture, size, versions, and checksum before reporting the capability ready.
-- Main-process source and Artifact integrity reads are asynchronous and streamed. The preserved source checksum is verified before and after recognition; stale OCR artifacts are regenerated, while changed source evidence fails final without calling the adapter.
-- OCR text is stored once under `artifacts/ocr/`; a text-free metadata sidecar stores engine/version, confidence, language hints, image dimensions, top-left normalized bounding boxes, character spans, warnings, and checksums. Source Page refresh and `create_artifact` Operation Records remain idempotent and never duplicate the OCR body.
-- Empty direct-image recognition completes with warnings and no Agent job. A complete empty mixed-PDF enrichment may still release sufficient verified native text with an OCR-pending review warning; image-only empty output does not. Readable OCR creates Agent ingest only after Artifact validation. OCR engine/confidence/warnings and bounded block locators enter the untrusted evidence prompt; low confidence or truncation forces review.
-- PDF rendering stores checksummed `rendered_page` Artifacts and a text-free render manifest before recognition. The manifest binds source checksum, parser-metadata Artifact ID/checksum, target mode, native readiness, and exact requested pages. Each page is sent to the verified Vision helper only by its app-owned Artifact path.
-- PDF OCR keeps parser provenance unchanged, stores the combined OCR body once, and records target binding, page/block locators, spans, geometry, confidence, language, engine, and rendered-Artifact checksums in a text-free sidecar. It rejects vault-parent symlink escapes and unsafe existing Artifact/sidecar/operation targets, revalidates source, parser target, staged pixels, and the latest Source Record, then checks the expected whole-file revision immediately before replacement. Separate output-generation-specific render and deterministic OCR Operation Records make incomplete-to-complete retries and crashes after pixel persistence auditable without stale provenance.
-- Multi-Artifact Evidence Assembly preserves, budgets, deduplicates, and cites native and OCR evidence without a merged durable body. Complete empty enrichment still releases an Agent-ready native artifact; empty image-only OCR does not create Agent ingest.
+- The verified bounded Swift helper serves direct images and selected PDF/PPTX raster
+  targets through one schema-versioned, local-only process boundary.
+- Main-process owners verify sources and pixels, persist independent checksummed OCR
+  Artifacts/sidecars and provenance, and keep empty/partial/low-confidence states honest.
+- Exact recognition limits, locators, materialization, reuse, Evidence Assembly, and
+  open Windows/Paddle/full-slide cases are owned by `docs/PARSER_INGEST_SPEC.md` and
+  `docs/PERFORMANCE_AND_RELIABILITY.md`.
 
 Windows note:
 
@@ -652,15 +615,36 @@ OCR merge rules:
 
 ### 5.4 Agent Orchestrator
 
+After Source Storage has durably preserved the capture, Agent Orchestrator is the sole
+owner of semantic sequencing. Pi Agent chooses, calls, evaluates, and may replan bounded
+Pige tools for inspection, extraction, OCR, retrieval, organization, analysis, and
+knowledge change. Capture, Jobs, Parser, OCR, Retrieval, and Compiler services may
+enforce or resume a selected call, but must not maintain a parallel format-driven
+knowledge pipeline.
+
+The boundary has three planes:
+
+- **Agent control plane:** Pi Agent owns semantic tool selection and replanning.
+- **Tool execution plane:** the Pige Tool Registry exposes narrow typed capabilities
+  backed by deterministic services and bounded results.
+- **Host policy and commit plane:** Pige owns preservation, permissions, egress, limits,
+  Jobs, provenance, validation, confirmation, and atomic publication.
+
+Agent decisions never weaken the host plane. Mechanical index/log refresh follows the
+validated tool result; it is neither a second semantic orchestrator nor an atomic
+cross-file claim.
+
 Responsibilities:
 
 - Load `PIGE.md` schema.
 - Build Agent Runtime Policy Context from settings, vault policy, permissions, provider state, and local capabilities.
 - Build workflow prompts.
 - Select an internal model call profile from app defaults.
-- Call Pi Agent and model provider tools.
+- Run the embedded Pi Agent loop through the one approved adapter.
+- Present only the task-scoped Pige tool catalog and dispatch validated tool calls.
 - Plan wiki changes.
-- Apply file changes transactionally.
+- Submit structured change requests through registered proposal/publication tools; the
+  owning host service validates and applies them transactionally.
 - Report created, updated, and flagged pages.
 - Treat extracted source content as untrusted data.
 - Produce structured change plans rather than writing files directly when changes are risky.
@@ -689,7 +673,8 @@ Agent safety boundary:
 - The Agent should receive source text in clearly delimited untrusted blocks.
 - Tool calls should be scoped to the active vault and current job.
 - Any instruction found inside a source that appears to target the Agent should be ignored and optionally recorded as a warning.
-- The Agent can only call tools declared in the bundled toolchain or local capability registry.
+- The Agent can only call tools in the task-scoped Pige Tool Registry; bundled/local
+  capability state determines whether each registered tool is runnable.
 - The Agent cannot install executables, update tool versions, or invoke package-manager downloads during a job.
 
 Agent policy snapshot rules:
@@ -796,12 +781,8 @@ Rules:
 
 Current implementation:
 
-- Confirmation Proposal schema is shared through `packages/schemas`.
-- Proposal Service stages durable `ready` proposal records under `.pige/proposals/YYYY/MM/`.
-- Proposal list APIs return safe summaries only and omit proposed Markdown bodies.
-- Proposal detail APIs read by stable proposal ID for a future review surface.
-- Approve/reject APIs record user decisions for `ready` proposals only.
-- Applying approved change operations, rechecking base hashes, writing operation records, and conflict proposal creation remain later Change Proposal Service slices.
+- Shared schemas support durable ready proposals, safe list/detail, and approve/reject;
+  transactional apply, conflict, and Operation completion remain open.
 
 ### 5.5.2 Markdown Rendering And Editing Surface
 
@@ -826,17 +807,9 @@ Candidate implementation:
 
 Current implementation:
 
-- `NotesService` opens Markdown pages by stable page ID, not renderer-provided filesystem paths.
-- `notes.get` returns frontmatter-derived metadata and Markdown body without frontmatter.
-- `notes.render` uses the `packages/markdown` unified/remark/rehype pipeline and returns sanitized HTML.
-- Library rows can open a minimal Note Reader with compact metadata and rendered Markdown.
-
-Current reader-context implementation:
-
-- Library rows and Home retrieval results open the same source-safe Note Reader.
-- The reader calls `library.related` for resolved outgoing links and backlinks and renders safe related-page summaries.
-- Wide layouts can place related context in a right rail; narrow layouts stack it below the Markdown body.
-- Editing, save validation, source reveal/open actions, Note Agent, selection actions, and chunked rendering for very long pages remain later reader slices.
+- `NotesService` opens by stable ID and renders sanitized structured Markdown; Library
+  and retrieval use the same reader with safe related links. Editing, source actions,
+  Note Agent, selection actions, and long-page rendering remain open.
 
 ### 5.6 Search And Retrieval Service
 
@@ -849,7 +822,7 @@ v0.1:
 - Generate embeddings locally with the Pige-managed local RAG model when installed.
 - Use local reranking when a supported local reranker is installed.
 - Return ranked results with snippets and match reasons.
-- Produce grounded summaries from retrieved pages.
+- Return a bounded cited Context Pack to Pi Agent; the tool does not call a model.
 - Keep search usable through lexical and metadata ranking when the local RAG model is not installed.
 
 P1:
@@ -870,22 +843,15 @@ Retrieval pipeline:
 4. Combine lexical ranking, vector ranking, metadata boosts, recency, backlinks, relationship paths, citations, and page type signals.
 5. Apply local reranking when the local reranker is available and fast enough.
 6. Select top results and snippets.
-7. Ask the query model for a concise grounded synthesis over selected context only.
-8. Return answer, ranked results, citations, suggested filters, and follow-up questions.
+7. Return ranked evidence and a bounded cited Context Pack to Pi Agent.
 
 Context assembly rule: the retrieval pipeline produces selected evidence for an Agent Context Pack. It must follow `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`; retrieval never hands the model the whole vault, full source asset bodies, or unbounded conversation history.
 
-Current implementation:
-
-- `RetrievalService.search` uses the Local Database Service's SQLite FTS5 index when ready.
-- SQLite FTS rows include sanitized/redacted Markdown body text plus CJK 2/3-gram augmentation so Chinese, Japanese, and Korean lexical search works before embeddings are installed.
-- If SQLite is unavailable, stale, or fails, retrieval falls back to the bounded Markdown-scan path rather than blocking local search.
-- Results include safe page summaries, scores, bounded snippets, match reasons, and degraded search state only when running in fallback mode.
-- Snippet generation filters internal source-storage reference lines such as managed copy and source-record paths and redacts likely secrets before indexing or fallback snippets.
-- Home routes clearly question/search-like composer input to `retrieval.ask`; other text remains capture.
-- `RetrievalService.ask` selects at most eight evidence items and builds an internal serializable Home-query Context Pack containing refs, page IDs, safe locators, scores, estimated snippet budgets, index health, warnings, and omission counts. It does not serialize selected snippet bodies or raw prompts.
-- The current no-model path returns a concise local extractive summary with numbered page citations. Missing evidence and single-page evidence are explicit insufficient/limited-confidence states.
-- Model-grounded synthesis remains gated on Runtime Policy Context, cloud-send policy, and Permission Broker enforcement. Vector search, reranking, answer saving, and jump-to-snippet remain later retrieval slices.
+Current implementation uses SQLite FTS5 with CJK augmentation and bounded Markdown
+fallback, redacts snippets, and builds a body-free Context Pack from at most eight
+evidence items. `retrieval.ask` currently adds a deterministic local extractive summary
+as the explicit no-model fallback; model synthesis moves to the Pi loop. Vector search,
+reranking, answer saving, and jump-to-snippet remain open.
 
 Retrieval result contract:
 
@@ -1094,9 +1060,10 @@ Responsibilities:
 
 - Receive selected text and action type from renderer.
 - Run local clipboard actions without model calls when possible.
-- Route transform/understand/organize actions through Note Agent or internal model call profiles.
+- Route transform/understand/organize actions through Pi Agent with task-scoped tools;
+  feature-level direct model profiles are not an alternate runtime.
 - Return read-only results inline or in the Note Agent panel.
-- Create ChangeSets for mutating actions.
+- Create ChangeSets only through the registered proposal/publication tool boundary.
 
 Selection actions:
 
@@ -1392,12 +1359,10 @@ Responsibilities:
 
 Current implementation:
 
-- `BackupRestoreService` runs in the Electron main process and uses `yazl`/`yauzl` for local ZIP backup creation, preview, validation, and restore.
-- `backup.create` writes `.pige-backup.zip` through an OS save dialog. It includes durable vault roots and root files, excludes rebuildable roots and secrets, and records per-file SHA-256 checksums.
-- `restore.preview` reads `pige-backup-manifest.json`, validates safe ZIP entry names, detects missing/unexpected entries, checks sizes and checksums, and returns a localized-renderer-friendly manifest summary plus warnings.
-- `restore.apply` extracts only manifest-listed `vault/` entries into a staging folder, rejects path traversal, verifies the result as a Pige vault, moves it into a new restored folder, activates it through Vault Service, and rebuilds the local database.
-- Renderer and preload expose only typed backup/restore commands; they do not receive arbitrary filesystem read/write capability.
-- Progress events, include/exclude option controls, external-original copying, encrypted provider export/import, and fast-restore database cache remain later Backup Service slices.
+- Main-process ZIP create/preview/staged-restore verifies safe paths, manifests, sizes,
+  checksums, durable-root inclusion, and exclusions before activating a new folder and
+  rebuilding derived state. Renderer receives typed commands only; broader controls,
+  external copies, secret import/export, and progress remain open.
 
 ### 5.11 Diagnostics Service
 
@@ -1446,31 +1411,31 @@ Architectural requirements:
 ### 9.1 Ingest Input
 
 ```ts
-type IngestInput = {
+type AgentIngestStart = {
   jobId: string;
   sourceId: string;
   sourceType: SourceType;
-  extractedText: string;
-  metadata: SourceMetadata;
-  existingIndex: string;
-  relevantPages: WikiPageSummary[];
+  metadata: BoundedSourceMetadata;
+  policyContextRef: string;
+  availableToolIds: string[];
 };
 ```
 
-### 9.2 Ingest Output
+The initial Agent input contains preserved-source identity, bounded safe metadata,
+policy, and tool contracts—not host-preselected extracted text. Evidence fragments,
+retrieved pages, and quality metadata enter later as bounded tool results with durable
+Artifact/locator references. The first embedded text-source vertical freezes source/job
+scope in the host and exposes only inspect and publication tools; expanding the catalog
+and replacing format-driven continuations remain B3.13/E3.08 work.
 
-```ts
-type IngestOutput = {
-  sourcePage: MarkdownWrite;
-  wikiWrites: MarkdownWrite[];
-  changeSet: ChangeSet;
-  indexPatch: string;
-  logEntry: string;
-  suggestedLinks: LinkSuggestion[];
-  conflicts: ConflictNotice[];
-  userMessage: string;
-};
-```
+### 9.2 Knowledge Publication Boundary
+
+The first `pige_create_knowledge_note` tool accepts the strict `AgentIngestOutput` owned
+by `docs/PROMPT_DESIGN.md`. Source, Job, and destination scope are frozen Host context,
+not model arguments. The Host derives paths and projections, validates citations and
+conflicts, commits, then returns the typed result. A future multi-write proposal may
+compile a Host-owned change envelope after validation; it is not raw Pi input. Final
+assistant text is never interpreted as a write request.
 
 ### 9.3 Query Output
 
@@ -1480,14 +1445,17 @@ type QueryOutput = {
   rankedResults: RankedResult[];
   citations: CitationRef[];
   followUps: string[];
-  proposedWikiPage?: MarkdownWrite;
+  proposalRef?: string;
 };
 ```
+
+`proposalRef` can only reference a validated proposal/publication tool result; query
+text is never converted directly into a Markdown write.
 
 ## 10. Model Provider Architecture
 
 Pige owns provider/profile metadata and policy; reviewed Pi AI provider factories,
-models, protocol adapters, and streams are the sole planned execution layer.
+models, protocol adapters, and streams are the sole execution layer.
 
 The user-facing Add Provider flow must stay minimal. It is a connection form for a model service Pi Agent can call, not a provider browser or model marketplace.
 
@@ -1531,29 +1499,19 @@ Provider metadata stores an `authSecretRef`, never a key or arbitrary authentica
 
 Model list behavior:
 
-- Provider adapters should expose a `listModels()` capability when the upstream service supports it.
-- Add Provider should test credentials and attempt model-list discovery after the connection succeeds.
-- If model-list discovery succeeds, Pige stores discovered models as `ModelProfile` records with `source: "provider_list"`.
-- If model-list discovery is explicitly unsupported by a compatible/custom endpoint, the UI may let the user manually add model IDs as `ModelProfile` records with `source: "manual"` and `modelListStrategy: "failed_then_manual"`. Authentication, network, timeout, malformed-payload, and official-provider failures do not fall back to manual IDs.
-- Authentication failures, invalid base URLs, invalid model-list payloads, and selected model IDs missing from a successful official provider list fail the Add Provider flow before provider, model, or secret records are persisted.
-- OpenAI-format providers use the upstream `/v1/models` list endpoint with Bearer auth. Anthropic-format providers use `/v1/models` with `x-api-key` and `anthropic-version`.
-- Pi Agent calls must resolve through the selected default `ModelProfile`, not an untracked free-text model string.
-- Advanced/Fast model slots must not be exposed until the deferred model routing gate is satisfied.
-- The UI must not expose arbitrary per-workflow model routing in v0.1.
+- The Pi integration owner defines connection tests, discovery, manual fallback, and
+  failure semantics. Architecture requires one selected `ModelProfile`, no untracked
+  model string, and no Advanced/Fast or per-workflow routing before its runtime gate.
 
-Current basic Agent ingest bridge:
+Current embedded Agent ingest spine:
 
-- Capture creates the Source Page and deterministic ingest Job. Evidence Assembly
-  verifies locators/sidecars and selects 24 fragments/18,000 characters; validated
-  ephemeral refs become service-owned citations. Without a model, ingest waits.
-- Egress binds/rechecks redacted evidence metadata and Provider/Model identities. Source
-  and cancellation checks surround model access and the durable create-only note fence;
-  drift waits/requeues and conflicts remain untouched. Raw bodies, prompts, responses,
-  and keys are not persisted. Cross-process CAS, parent-swap, transactions, and packaged
-  proof remain open.
-- The current OpenAI/Anthropic JSON bridge is transitional. It must be removed as the
-  normal path when the reviewed Pi adapter lands, not retained as a parallel Agent or
-  silent fallback.
+- Normal text-source ingest runs through the sole embedded Pi adapter with one selected
+  provider/model binding and no direct-provider fallback.
+- `pige_inspect_source` returns bounded verified evidence for the frozen source context;
+  `pige_create_knowledge_note` revalidates strict output, evidence refs, source revision,
+  cancellation, and create-only fence after pre-handler authorization.
+- PDF/Office/OCR/retrieval tools, recovery, full Broker, and fixed-routing
+  removal remain open.
 
 The v0.1 UI exposes only the P0 provider modes defined in `docs/PRD.md`, through the
 compact Add Provider flow owned by the Pi integration contract.
@@ -1838,14 +1796,16 @@ Waiver rules:
 
 | Dependency | Status | Pige usage | Upstream source | Pin/update policy | Data boundary and notes |
 | --- | --- | --- | --- | --- | --- |
-| Pi Agent framework | required | Upstream generic Agent loop/tool/events plus isolated Pi AI model runtime behind one thin Pige adapter. | https://github.com/earendil-works/pi | `v0.80.6` (`2b3fda9…`) is review-only: official core entries load `/compat`; wait for a compat-free Agent export unless the user approves a contained exception. | Exact same-version dual pins/integrity; no deep import, fork, vendor, parallel runtime, ambient authority, CLI/RPC/orchestrator, or Pi-owned permissions. |
+| `@earendil-works/pi-agent-core` (`runtime.pi-agent-core`) | required | Official Pi Agent loop, events, queues, and tool lifecycle behind the sole Pige adapter. | https://github.com/earendil-works/pi/tree/v0.80.6/packages/agent | Exact `0.80.6`; move in lockstep with `runtime.pi-ai` only after import/API/license/runtime review. | Bundled MIT runtime. Its unavoidable `/compat` initialization is contained; no deep import, fork, patch, parallel loop, ambient authority, Pi CLI/RPC/orchestrator, or Pi-owned permissions. |
+| `@earendil-works/pi-ai` (`runtime.pi-ai`) | required | Official provider/model factories and streaming for the embedded Pi Agent. | https://github.com/earendil-works/pi/tree/v0.80.6/packages/ai | Exact `0.80.6`; remove the temporary exception when an official compat-free Agent entry is reviewed. | Bundled MIT runtime. Pige creates one isolated model collection with scoped credentials; transitive `@opentelemetry/api` is inert because Pige installs no provider/exporter and selects no observability module. |
 | Pi Custom Models docs | reference | Source for Pi provider/model configuration behavior, supported APIs, model fields, and thinking-level metadata. | https://pi.dev/docs/latest/models | Re-check during provider integration updates. | Supports model registration/selection, not a product-level Advanced/Fast routing UI by itself. |
 | OpenAI provider | required | BYOK generation through reviewed Pi AI APIs. | https://github.com/earendil-works/pi/blob/v0.80.6/packages/ai/src/providers/openai.ts | Pin with the Pi runtime. | Cloud boundary unless user points to local compatible service. |
 | OpenAI Models API (`provider.openai-models-api`) | required | Low-cost provider connection test and model-list discovery for OpenAI-format providers. | https://platform.openai.com/docs/api-reference/models/list | Re-check endpoint/auth behavior when updating provider integration. | User-supplied API key is sent only from the main process; no source content is sent during this test. |
-| OpenAI Chat Completions API (`provider.openai-chat-completions-api`) | required | Basic structured JSON Agent ingest generation for OpenAI-format providers before full Pi Agent orchestration. | https://platform.openai.com/docs/api-reference/chat/create | Re-check endpoint, JSON mode, and retention flags when updating provider integration. | Sends bounded redacted source previews to the configured provider from main process only. |
+| OpenAI Responses API (`provider.openai-responses-api`) | required | Embedded Pi Agent turns for built-in OpenAI profiles. | https://platform.openai.com/docs/api-reference/responses | Re-check protocol, tool-call, retention, and error behavior with each Pi update. | Sends only selected bounded evidence through the configured BYOK profile from main process. |
+| OpenAI Chat Completions API (`provider.openai-chat-completions-api`) | required | Embedded Pi Agent turns for OpenAI-compatible/custom profiles. | https://platform.openai.com/docs/api-reference/chat/create | Re-check tool-call and compatible-endpoint behavior when updating Pi. | Sends only selected bounded evidence to the user-configured endpoint from main process. |
 | Anthropic provider | required | BYOK generation through reviewed Pi AI APIs. | https://github.com/earendil-works/pi/blob/v0.80.6/packages/ai/src/providers/anthropic.ts | Pin with the Pi runtime. | Cloud boundary. |
 | Anthropic Models API (`provider.anthropic-models-api`) | required | Low-cost provider connection test and model-list discovery for Anthropic-format providers. | https://docs.anthropic.com/en/api/models-list | Re-check endpoint/auth headers when updating provider integration. | User-supplied API key is sent only from the main process with `anthropic-version`; no source content is sent during this test. |
-| Anthropic Messages API (`provider.anthropic-messages-api`) | required | Basic structured JSON Agent ingest generation for Anthropic-format providers before full Pi Agent orchestration. | https://docs.anthropic.com/en/api/messages | Re-check endpoint and required version headers when updating provider integration. | Sends bounded redacted source previews to the configured provider from main process only. |
+| Anthropic Messages API (`provider.anthropic-messages-api`) | required | Embedded Pi Agent turns for Anthropic and Anthropic-compatible profiles. | https://docs.anthropic.com/en/api/messages | Re-check tool-call behavior and required version headers when updating Pi. | Sends only selected bounded evidence to the configured BYOK endpoint from main process. |
 | OpenAI-compatible provider | required | Custom BYOK endpoint through reviewed Pi AI APIs. | https://github.com/earendil-works/pi/tree/v0.80.6/packages/ai/src/providers | Pin with the Pi runtime. | Endpoint location depends on user configuration; show simple cloud-use status inline, not a model-page configuration matrix. |
 | Anthropic-compatible provider | required | Custom BYOK endpoint through reviewed Pi AI APIs. | https://docs.anthropic.com | Pin with the Pi runtime. | Endpoint location depends on user configuration; show simple cloud-use status inline, not a model-page configuration matrix. |
 

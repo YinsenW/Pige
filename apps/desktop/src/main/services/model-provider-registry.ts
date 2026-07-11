@@ -70,6 +70,22 @@ export class ModelProviderRegistry {
     return summary.providers.find((provider) => provider.id === defaultModel.providerProfileId);
   }
 
+  hasDefaultRuntimeBinding(): boolean {
+    try {
+      const modelFile = this.#readModels();
+      const defaultModel = modelFile.models.find(
+        (model) => model.id === modelFile.defaultModelProfileId && model.enabled
+      );
+      if (!defaultModel) return false;
+      const provider = this.#readProviders().providers.find(
+        (profile) => profile.id === defaultModel.providerProfileId
+      );
+      return Boolean(provider && this.#secrets.hasProviderSecret(provider.authSecretRef));
+    } catch {
+      return false;
+    }
+  }
+
   getDefaultRuntimeConfig(): ModelProviderRuntimeConfig | undefined {
     const modelFile = this.#readModels();
     const defaultModel = modelFile.models.find((model) => model.id === modelFile.defaultModelProfileId && model.enabled);

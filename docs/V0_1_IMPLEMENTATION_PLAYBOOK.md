@@ -31,14 +31,14 @@ Phase completion rule:
 - Completion must not leave half-enabled product surfaces, partially exposed contracts, or documentation that implies unavailable behavior is ready.
 - Non-blocking improvements belong to later-phase work; the number of work rounds neither proves completion nor requires a phase to continue.
 
-Current implementation state, last reconciled 2026-07-10:
+Current implementation state, last reconciled 2026-07-11:
 
 | Phase | State | Interpretation |
 | --- | --- | --- |
 | P0 | in progress | Repository and traceability foundations have current evidence; the full P0 exit set has not been re-run as a phase-completion claim. |
 | P1 | in progress | Desktop, vault, settings, diagnostics, and runtime foundations have evidence; the full mapped exit set remains open. |
 | P2 | in progress | Capture guards plus process-local parse/OCR/Agent-ingest/index progress or cancellation have evidence; running capture, remaining classes, visible UI, voice, and full exits remain open. |
-| P3 | in progress | BYOK and Agent-ingest foundations have evidence; complete provider, egress, output-summary, and exit evidence remain open. |
+| P3 | in progress | BYOK and the first embedded Pi text-source spine have evidence; complete tool breadth, provider, recovery, permission, and exit evidence remain open. |
 | P4 | in progress | SQLite, lexical search, Library, and worker-backed rebuild foundations have evidence; the full scale and relationship exit set remains open. |
 | P5 | in progress | PDF, Office, static-web, direct-image macOS Vision OCR, Artifact, and recovery slices have evidence; cross-platform/document OCR and remaining P5 exits are still open. |
 | P6 | in progress | Lexical retrieval, cited Home answers, Reader, backlinks, and related-context foundations exist; local RAG, editing, Knowledge Tree, and full exits remain open. |
@@ -149,7 +149,7 @@ Build:
 - [B1.10 -> E1.05] Local settings without secrets.
 - [B1.11 -> E1.05] Settings registry and typed scopes for vault-portable, machine-local, machine-vault binding, secret, permission, and derived values.
 - [B1.12 -> E1.06] Agent Runtime Policy Context builder for storage, model, cloud-send, confirmation, permission, language, memory, retrieval, and capability status.
-- [B1.13 -> E1.12] Pi Agent adapter stub, provider/model profile storage, and one effective default-model contract without Advanced/Fast routing UI.
+- [B1.13 -> E1.12] Agent runtime-status foundation, provider/model profile storage, and one effective default-model contract without Advanced/Fast routing UI.
 - [B1.14 -> E1.07] Bounded local diagnostics, redaction, health summary, and user-initiated support-bundle preview/export.
 - [B1.15 -> E1.08] Local SQLite abstraction and empty migration system.
 - [B1.16 -> E1.09] Reset Local Database repair action.
@@ -205,7 +205,9 @@ Build:
 - [B2.01 -> E2.02] Text capture.
 - [B2.02 -> E2.04] Local macOS voice dictation when supported, with explicit unavailable states elsewhere.
 - [B2.03 -> E2.05] Markdown and TXT file capture.
-- [B2.04 -> E2.06] PDF, DOCX, PPTX, and common-image preservation with metadata-only source pages and parser/OCR waiting jobs.
+- [B2.04 -> E2.06] PDF, DOCX, PPTX, and common-image preservation with metadata-only
+  source projections and one visible Agent dependency job; parser/OCR child Jobs begin
+  only from later Agent tool calls.
 - [B2.05 -> E2.07] Whole-window drop hot zone.
 - [B2.06 -> E2.08] Stable source ID generation.
 - [B2.07 -> E2.08] Source-record creation and policy-driven source-asset preservation.
@@ -230,7 +232,8 @@ Exit criteria:
 - [E2.03] Capture events are durable and reference sources/jobs; only bounded short chat text may remain inline.
 - [E2.04] Supported macOS dictation inserts local transcript text after on-demand microphone permission; unsupported platforms show a clear state and no dictation audio is sent to model providers.
 - [E2.05] Markdown and TXT capture preserves the original source, creates one source record, and does not duplicate large bodies into conversation events.
-- [E2.06] PDF, DOCX, PPTX, and image capture preserves evidence before processing and creates visible retryable parser/OCR dependency jobs.
+- [E2.06] PDF, DOCX, PPTX, and image capture preserves evidence before processing and
+  creates a visible retryable Agent dependency job without starting parser/OCR work.
 - [E2.07] Whole-window drop validates files, preserves accepted items, and reports rejected display names without exposing private paths.
 - [E2.08] Source IDs remain stable across retry, and the selected copy/reference strategy affects new captures through the Source Storage Service.
 - [E2.09] Home and timeline show durable, localized, redacted job state and progress without claiming completion early.
@@ -260,12 +263,19 @@ Build:
 - [B3.10 -> E3.04] Append-only `log.md` update.
 - [B3.11 -> E3.06] Change Proposal Service foundation.
 - [B3.12 -> E3.07] Complete Agent output and change-summary contract for title, summary, tags, topic, entities, related notes, Markdown/source pages, citations, index/log updates, and created/updated/skipped/failed/confirmation-needed results.
-- [B3.13 -> E3.08] Embedded upstream Pi runtime through one thin adapter, reusing its reviewed loop/event/tool/provider behavior inside Pige-owned policy and storage boundaries; no direct bypass or parallel Pige runtime.
+- [B3.13 -> E3.08] Embedded Pi plus a schema-complete Pige Tool Registry; after source
+  preservation Pi Agent alone selects semantic tools, with no host-fixed/parallel path.
 
-Core-path priority: embedded Pi is the next mainline after the active handoff. The
-direct bridge and `phase_1_stub` do not satisfy B3.13. `v0.80.6` lacks the required
-official compat-free Agent entry; request that entry rather than deep-importing,
-forking, patching, or copying Pi. A contained exception requires user approval.
+Agent Spine Gate: the first preserved-text vertical now runs through exact embedded Pi,
+an isolated selected model, source inspection, and validated cited publication. The
+direct provider bridge is removed. B3.13/E3.08 remains partial because the catalog is
+not schema-complete and host-fixed PDF/Office/OCR/retrieval paths are not migrated.
+The exact-`v0.80.6` exception keeps compat globals/default dispatch inert in the sole
+adapter and still forbids deep imports, forks, patches, and parallel loops.
+
+Until E3.08 passes, pause non-blocking P4/P5/P6 breadth. Existing preservation,
+parser/OCR, Artifact, Job, recovery, policy, retrieval, and commit work remains substrate;
+security/data-loss repairs and spine dependencies may proceed.
 
 B3.05 evidence proves redaction before typed egress, body-free Provider/Model binding, and pre-render/pre-invocation drift checks. Confirmation resume and complete provider-path adoption remain open, so E3.03 is incomplete.
 
@@ -285,7 +295,11 @@ Exit criteria:
 - [E3.05] Invalid, unsupported, low-confidence, or hostile structured output is rejected or routed to warning/proposal without an unsafe durable write.
 - [E3.06] A risky generated change can be staged durably as a redacted proposal without being silently applied.
 - [E3.07] Agent ingest emits the required structured knowledge fields, traceable citations, source/wiki/index/log writes, and a deterministic action summary separating created, updated, skipped, failed, and confirmation-needed outcomes.
-- [E3.08] A deterministic flow runs the supported upstream Pi loop plus a non-sensitive typed Pige tool to validated durable output; import gates reject a parallel/custom loop and renderer or feature bypass. Sensitive-tool Permission Broker acceptance remains Phase 8.
+- [E3.08] One preserved-source Pi vertical uses the selected model and registered tools
+  to cited Markdown. One Host/catalog proves distinct Agent-chosen traces and replan;
+  parser/OCR stays idle before its event, no-model preserves only, writes are tool-caused
+  and retry-safe, and mutation gates reject direct/fixed/bypass paths. Sensitive-tool
+  Permission Broker acceptance remains Phase 8.
 
 ## 9. Phase 4: Local Database And Search Foundation
 
@@ -335,7 +349,8 @@ Build:
 - [B5.11 -> E5.03] Untrusted-source boundary enforcement across URL, document, image, OCR, and extracted-artifact Agent handoff.
 - [B5.12 -> E5.04] Multilingual source-to-note golden fixtures and executable citation, unsupported-claim, and low-confidence assertions.
 
-Implementation evidence snapshot; P5 remains in progress:
+Transitional implementation evidence/tool substrate snapshot; P5 remains in progress.
+The arrows below describe tested bridge behavior, not target semantic orchestration:
 
 Current B5.10 evidence covers only Technical Architecture section 5.8's fake/local
 foundation: explicit-user gates, non-networked staged and record commits, independent packs,

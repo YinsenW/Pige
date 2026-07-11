@@ -1,7 +1,7 @@
 # Decision Log
 
 Status: Active decision ledger
-Last reviewed: 2026-07-10
+Last reviewed: 2026-07-11
 
 ## 1. Purpose
 
@@ -1933,7 +1933,7 @@ References:
 
 Status: Accepted
 Date: 2026-07-10
-Revised: 2026-07-10
+Revised: 2026-07-11
 
 Decision:
 
@@ -1945,12 +1945,12 @@ PDF.js is Apache-2.0, works with Pige's Node 24 baseline, avoids a hidden task-t
 
 Consequences:
 
-- PDF capture can progress immediately to a durable `parse` job when both bundled modules resolve. DOCX/PPTX parsing is governed separately by `D-20260710-Bounded-Office-Openxml-Worker`; this decision owns only the PDF path.
-- Capture, parse, and Agent ingest queues drain in coalesced batches of 20 with event-loop yields, so large drops remain responsive and continue beyond the first query batch.
+- The adapter is exposed to Pi Agent as a bounded PDF inspect/extract tool when both bundled modules resolve. DOCX/PPTX parsing is governed separately by `D-20260710-Bounded-Office-Openxml-Worker`; this decision owns only the PDF adapter.
+- Source preservation and durable queueing remain host responsibilities. Any current format-triggered parse/Agent continuation is a transitional bridge and does not define the target orchestration contract.
 - The worker gets one preserved PDF path and byte/page limits, has no artifact-write authority, and runs with timeout/heap limits.
 - Text and metadata use deterministic paths. The sidecar stores locators, counts, warnings, quality, checksums, and OCR candidates without duplicating page text.
 - One deterministic `create_artifact` Operation Record preserves audit references and warnings without duplicating the extracted body; retry can repair it idempotently.
-- Medium/high text coverage can enter Agent ingest; low/no coverage waits for OCR, while sparse pages in an otherwise useful PDF also create an OCR enrichment job.
+- The tool returns coverage, OCR candidates, warnings, and locators to Pi Agent; Pi Agent decides whether to inspect further, invoke OCR, continue with bounded evidence, or wait for a capability.
 - Page-limit truncation and OCR-pending state are included in trusted ingest quality metadata; service-side guards force review and cap high confidence so partial extraction cannot masquerade as complete evidence.
 - Source-page refresh uses durable previous/target checksums so interrupted Pige writes are recoverable and external user edits are never silently overwritten.
 - Release packaging must prove the platform-specific native canvas binary and worker entry are present on every supported macOS/Windows target.
@@ -1967,6 +1967,7 @@ References:
 
 Status: Accepted
 Date: 2026-07-10
+Revised: 2026-07-11
 
 Decision:
 
@@ -1982,8 +1983,8 @@ Consequences:
 - DOCX conversion disables embedded style maps and external-file access, replaces images with local references, and never renders converter HTML.
 - PPTX parsing rejects unsafe paths, duplicate parts/relationships, suspicious compression, DOCTYPE, invalid/deep XML, and unsafe internal relationships; external targets are counted but never opened.
 - Deterministic text and text-free metadata artifacts carry checksum/size references. Source, parser version, sidecar, and text integrity are verified before reuse or Agent handoff.
-- Useful text may proceed to Agent ingest while image-bearing or sparse content also waits for OCR. Evidence prompts carry artifact IDs and bounded locators.
-- Interrupted idempotent parse/Agent jobs are requeued on startup; uncertain or cancellation-in-progress work becomes explicitly retryable.
+- The tool returns text quality, media/OCR candidates, Artifact IDs, warnings, and bounded locators to Pi Agent; Pi Agent chooses the next tool call or a visible dependency wait.
+- Interrupted idempotent tool Jobs are recoverable child work of the Agent Job; uncertain or cancellation-in-progress work becomes explicitly retryable without inventing a host-fixed next step.
 - Dependency updates require real semantic DOCX, relationship-ordered PPTX, hostile archive/XML, worker packaging, artifact integrity, and restart recovery gates.
 
 References:
@@ -1998,10 +1999,11 @@ References:
 
 Status: Accepted
 Date: 2026-07-10
+Revised: 2026-07-11
 
 Decision:
 
-Pige uses an app-owned, schema-versioned Swift helper for direct raster-image OCR on macOS 26+. The helper tries Apple Vision `RecognizeDocumentsRequest` revision 1 and falls back to accurate `RecognizeTextRequest` revision 3. It runs as a bounded child process behind `OcrPort`; main-process services own source validation, deterministic Artifact writes, Source Page refresh, Job state, Operation Records, and Agent handoff.
+Pige uses an app-owned, schema-versioned Swift helper for direct raster-image OCR on macOS 26+. The helper tries Apple Vision `RecognizeDocumentsRequest` revision 1 and falls back to accurate `RecognizeTextRequest` revision 3. It runs as a bounded child process behind `OcrPort`; main-process services own source validation, deterministic Artifact writes, Source Page refresh, Job state, Operation Records, and the typed OCR tool-result boundary returned to Pi Agent.
 
 Rationale:
 
@@ -2013,7 +2015,7 @@ Consequences:
 - Runtime verifies an adjacent helper manifest and exact binary checksum before declaring the capability available. Release builds must compile each architecture, sign the nested helper, package its manifest, and prove packaged recognition before notarization.
 - Direct `image_file` OCR is implemented. PDF pages, slide images, and embedded Office media stay dependency-waiting until reviewed render/materialization adapters produce bounded pixel Artifacts; locator strings are not image inputs.
 - OCR text and metadata remain derived, checksummed, rebuildable Artifacts. The metadata sidecar contains locators, geometry, confidence, language/image metadata, warnings, and checksums without copying the recognized body.
-- Preserved source integrity is checked before and after recognition. Valid artifacts are reused after restart, stale derived artifacts are regenerated, source/path integrity failures do not invoke Vision, and empty recognition does not create Agent ingest.
+- Preserved source integrity is checked before and after recognition. Valid artifacts are reused after restart, stale derived artifacts are regenerated, source/path integrity failures do not invoke Vision, and empty recognition returns an explicit empty tool result for Pi Agent to replan without a knowledge write.
 - Low-confidence or truncated OCR is retained as evidence with warnings and forces Agent-generated knowledge into review.
 - Windows AI OCR and user-consented PaddleOCR fallback remain separate future slices behind the same capability boundary.
 
@@ -2225,6 +2227,7 @@ References:
 
 Status: Accepted
 Date: 2026-07-10
+Revised: 2026-07-11
 
 Decision:
 
@@ -2238,8 +2241,8 @@ Consequences:
 
 - The renderer has independent file/page/pixel/PNG/aggregate/heap/time limits, no network path, strict worker-response validation, symlink rejection, and an installed-worker smoke requirement.
 - Main-process `PdfOcrArtifactService` owns deterministic rendered-page, render-manifest, OCR-text, and OCR-metadata writes; source bytes remain immutable and may be a managed copy or verified referenced original. Render/OCR manifests bind parser-metadata identity and the exact candidate-page set, and persistence rereads the latest Source Record before merge.
-- Rendering and recognition use separate idempotent body-free Operation Records. Complete checksummed output is reused; incomplete render/recognition remains retryable without scheduling Agent ingest.
-- When local OCR is runnable, Jobs Service withholds the first mixed-PDF Agent job until enrichment finishes. Complete empty enrichment can still release independently verified native text; an unavailable OCR capability may allow useful native text to proceed with an explicit review warning.
+- Rendering and recognition use separate idempotent body-free Operation Records. Complete checksummed output is reused; incomplete render/recognition returns a retryable or dependency-waiting tool result to the Agent Job.
+- Pi Agent decides whether a mixed PDF needs bounded OCR enrichment before synthesis. Complete empty enrichment preserves independently verified native evidence; unavailable OCR is surfaced as a capability result so Pi Agent may wait or continue with an explicit review warning under policy.
 - The native Canvas worker requires macOS arm64/x64 and Windows x64 installed-package startup and crash-soak evidence. The port can move to an Electron utility process, Poppler, PDFium, or another reviewed renderer if worker-thread/native-module evidence is insufficient.
 - B5.08 and E5.05 remain partial until slide/media materialization, Windows/PaddleOCR fallback, progress/cancellation, and supported-package evidence are complete.
 
@@ -2262,10 +2265,11 @@ References:
 
 Status: Accepted
 Date: 2026-07-10
+Revised: 2026-07-11
 
 Decision:
 
-Pige v0.1 assembles Agent ingest evidence in a main-process, call-scoped `EvidencePack` instead of selecting one preferred Artifact or persisting a merged body. Every eligible extracted-text/OCR Artifact is verified and paired only with its own metadata sidecar by Source ID, sidecar Artifact ID, sidecar kind, and body checksum. The model returns summary and key-point statements as `{ text, evidenceRefs }`, where refs are ephemeral ordered `ev_NN` values supplied by Pige. Pige alone resolves valid refs into canonical Markdown citations.
+Pige v0.1 assembles tool-selected evidence in a main-process, call-scoped `EvidencePack` instead of selecting one preferred Artifact or persisting a merged body. Every eligible extracted-text/OCR Artifact is verified and paired only with its own metadata sidecar by Source ID, sidecar Artifact ID, sidecar kind, and body checksum. Pi Agent receives the bounded pack through the registered evidence tool and produces summary and key-point statements as `{ text, evidenceRefs }`, where refs are ephemeral ordered `ev_NN` values supplied by Pige. Pige alone resolves valid refs into canonical Markdown citations through a validated publication tool call.
 
 Rationale:
 
@@ -2277,7 +2281,7 @@ Consequences:
 - Current ingest caps the pack at 24 fragments and 18,000 evidence characters. Citation-locator collisions across distinct Artifacts receive deterministic Artifact-qualified suffixes. Truncation, unpaired metadata, low OCR confidence, and missing refs force review-quality warnings.
 - Unknown refs fail before Markdown write. Empty refs remain visible only as review-required statements. Model-authored citation tokens are stripped; Pige renders `[source:<source-id>#<locator>]` from validated refs.
 - PDF parser sidecars include exact page character spans for new output. Legacy one-page/marker-based sidecars remain readable, but cannot override a checksum-matched structured span.
-- Model Egress still occurs before prompt rendering or credential lookup. The audit binds the ordered redacted evidence selection, bounded/redacted dynamic prompt metadata, and concrete non-secret Provider/Model routing identities; same-ID endpoint or model changes fail closed before model invocation.
+- Pi runtime Model Egress still occurs before prompt rendering or credential lookup. The audit binds the ordered redacted evidence selection, bounded/redacted dynamic prompt metadata, and concrete non-secret Provider/Model routing identities; same-ID endpoint or model changes fail closed before model invocation.
 - The deterministic B5.12 seed covers English direct text and Simplified Chinese low-confidence OCR plus fabricated-claim, cited-body-support, missing-ref, and unavailable-ref negative controls. E5.04 remains partial until all required fixture families and thresholds are present.
 
 References:
@@ -2388,6 +2392,75 @@ References:
 
 - `docs/AI_DEVELOPMENT_GUIDE.md`
 - `.github/pull_request_template.md`
+
+### D-20260711-Agent-Orchestrated-Tool-Constrained-Pipeline
+
+Status: Accepted
+Date: 2026-07-11
+
+Decision:
+
+After source preservation, Pi Agent alone selects, sequences, evaluates, and replans
+semantic tool use. Tools perform one bounded capability; host services enforce policy,
+permissions, limits, provenance, Jobs, validation, confirmation, and commits.
+
+Rationale:
+
+A fixed Capture→Parser→OCR→Agent→Write chain duplicates Agent planning. Narrow tools
+reduce uncertainty without creating a second workflow.
+
+Consequences:
+
+- Existing parser/OCR/Artifact/Job/recovery work is retained as tool substrate.
+- Capture preserves evidence first; missing Agent/model state pauses semantic work.
+- The first preserved-text vertical uses real Pi tool events for bounded inspection and
+  cited publication; remaining format/retrieval routes stay explicitly incomplete.
+- B3.13/E3.08 becomes the Agent Spine Gate before non-blocking format/platform breadth.
+- Static and behavioral tests must reject direct provider paths, host-fixed tool order,
+  and durable writes not caused by a validated tool call.
+- The PDF.js, bounded Office, macOS Vision, bounded PDF OCR, and Multi-Artifact entries
+  are revised in place to retain their adapter, safety, Artifact, and citation choices
+  while removing stale host-fixed scheduling and direct-model handoff consequences.
+
+References:
+
+- `docs/VISION.md`
+- `docs/PRD.md`
+- `docs/TECH_ARCHITECTURE.md`
+- `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`
+- `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
+
+### D-20260711-Pi-Compat-Containment-Exception
+
+Status: Accepted
+Date: 2026-07-11
+
+Decision:
+
+Pige may temporarily adopt exact official Pi core/AI `0.80.6` packages despite the
+core's transitive `pi-ai/compat` load. The sole adapter uses isolated `Models` and a
+receiver-bound stream; compat globals/catalog/default dispatch remain unused. Deep
+imports, patches, forks, and vendoring remain banned.
+
+Rationale:
+
+No official compat-free entry exists; reimplementation or a fork would cost more. The
+user approved this narrow exception after its side effects were audited.
+
+Consequences:
+
+- Exact dual pins, bundled license text, a sole-adapter import gate, scoped model/auth
+  tests, import-side-effect snapshot, and assembled Electron Agent-loop smoke implement
+  the bounded exception; signed packaged-platform and full-tool-path proof remain open.
+- The exception ends when a reviewed official compat-free Agent entry is available.
+- `@earendil-works/pi-ai` remains the official provider/model package in the same Pi
+  project; Pige does not add Vercel AI SDK or another provider runtime.
+
+References:
+
+- `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`
+- `docs/TECH_ARCHITECTURE.md`
+- `docs/QUALITY_AND_TEST_STRATEGY.md`
 
 ## 4. Deferred Decisions
 
