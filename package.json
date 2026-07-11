@@ -21,6 +21,7 @@
     "typecheck": "tsc -b tsconfig.packages.json --pretty false && npm run typecheck --workspace @pige/desktop",
     "test": "vitest run",
     "test:eval": "vitest run tests/evals",
+    "test:eval:report": "node scripts/evals/retrieval-regression-report.mjs",
     "lint": "npm run verify:boundaries",
     "format:check": "npm run verify:whitespace",
     "verify": "npm run verify:docs && npm run verify:decisions && npm run verify:ui-visual && npm run verify:independent-documentation-review && npm run verify:traceability && npm run verify:contracts && npm run verify:dependencies && npm run verify:fixtures && npm run verify:boundaries && npm run verify:source-artifacts && npm run verify:documentation-leanness && npm run verify:documentation-quality",

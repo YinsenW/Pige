@@ -155,10 +155,8 @@ AI evaluation fixtures:
 
 Current deterministic suite:
 
-- `multilingual-golden.v3` contains seven synthetic text, URL, PDF, PPTX, and image-OCR cases across six locales, including mixed-language and contradictory evidence.
-- Its eval gates schema, citations, support, recall, language, review routing, and locators; negative controls reject fabricated, unsupported, and missing-ref claims.
-- It runs under `npm test` and `npm run test:eval` and completes B5.12/E5.04.
-- Retrieval v1 runs real SQLite FTS, local extractive ask, and related/backlinks; six metrics, adversarial mutations, and a deterministic body-free report below 16 KiB form B6.15/E6.10 foundation evidence only.
+- `multilingual-golden.v3`: seven synthetic multi-format cases across six locales, with mixed/contradictory evidence; schema/citation/support/recall/language/review/locator and negative gates in `npm test`/`test:eval` complete B5.12/E5.04.
+- Retrieval v1 B6.15/E6.10: real SQLite FTS, extractive ask, related/backlinks, six metric/adversarial gates, and a canonical body-free CI report under 16 KiB via `npm run test:eval:report`.
 
 Current adversarial boundary seed:
 

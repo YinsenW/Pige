@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-11T02:43:14Z",
+  "reviewedAt": "2026-07-11T03:10:58Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,7 +30,7 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "b55c5091d3a0b8f7ec7adb9be3ba1deb2641a3a361d285419cc831830a26e475"
+    "reviewedSha256": "9684eb645eca706501704a4631556c320321ad3487b0e04371bdf656672977a2"
   },
   "reviewers": [
     {
@@ -91,7 +91,7 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Read-only delta reviewer checked the exact Quality Owner, selector and acceptance projection, required cloud/Permission and broader-retrieval gaps, unchanged partial/in-progress states, 1,056-claim semantic lock, leanness, and stale-snapshot-only gate before accepting the repaired candidate without editing files."
+      "independence": "Read-only delta reviewer rejected the mutable action pin and non-minimal registry edits, then accepted the repaired full-SHA CI report boundary, exact Quality/TECH/dependency/acceptance projection, unchanged partial/in-progress states, complete retrieval gaps, 1,058-claim semantic delta, and budgets without editing files."
     },
     {
       "reviewerId": "b612-knowledge-tree-delta-review",
@@ -112,57 +112,57 @@
       "score": 9.8,
       "reviewerId": "readme-role-job-architecture-review",
       "blockerCount": 0,
-      "summary": "The concise public README, AI task router, 57-document inventory, two distribution files, 99 local links, 45 anchors, role-aware context pack, and resource review/reclamation metadata remain unique and current without a new document."
+      "summary": "The concise public README, AI task router, 57-document inventory, two distribution files, 99 local links, 45 anchors, governed ignored report path, and resource review/reclamation metadata remain unique and current without a new document."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.7,
       "reviewerId": "readme-role-job-architecture-review",
       "blockerCount": 0,
-      "summary": "Knowledge Model, executable SQLite/Markdown behavior, existing B6.12/E6.07 definitions, and acceptance agree that the internal body-free tree is rebuildable, deterministic, source-navigable, and not a public DTO, UI, durable graph, or hidden state."
+      "summary": "Quality, CI, the exact-SHA Technical dependency registry, machine manifest, fixture manifest, and acceptance agree that B6.15 emits only a canonical synthetic body-free retrieval report; it adds no runtime, model, UI, IPC, durable-schema, or product-flow behavior."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.7,
       "reviewerId": "readme-role-job-architecture-review",
       "blockerCount": 0,
-      "summary": "The 1,057-claim semantic lock has zero unexplained drift. One exact aggregate selector augments PIGE-KNOW-002 and E6.07; both remain partial, PIGE-KNOW-004 remains planned, and P6 remains in progress with broader semantic, public-navigation, scale, and platform gaps."
+      "summary": "The 1,058-claim semantic lock has zero unexplained drift. One exact CI upload selector augments PIGE-EVAL-004 and E6.10; both remain partial and P6 remains in progress with model-grounding, linking, vector, locale, scale, UI, and platform gaps."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
       "reviewerId": "readme-role-job-architecture-review",
       "blockerCount": 0,
-      "summary": "Development receives one consolidated B6.12 projection after code and focused tests stabilized: one Knowledge Model Owner update, one selector, unchanged delivery states, retained Phase 4 rules, and no PRD, UI, IPC, durable-schema, or production-contract churn."
+      "summary": "Development receives one consolidated B6.15 projection after the report runner and focused tests stabilized: one compact Quality update, one CI evidence selector, one exact-SHA CI dependency record, unchanged delivery states, and no PRD or runtime-contract churn."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.6,
       "reviewerId": "readme-role-job-architecture-review",
       "blockerCount": 0,
-      "summary": "LEN-001 through LEN-005 pass with 57 Markdown files, 22,929 lines, 162,830 words, 1,209,995 bytes, 3,857 entry words, 5,492 trace lines, zero duplicate groups, 14 mutations, and an 8.56 percent line reduction from baseline."
+      "summary": "LEN-001 through LEN-005 pass with 57 Markdown files, 22,928 lines, 162,811 words, 1,209,975 bytes, 3,857 entry words, 5,494 trace lines, zero duplicate groups, 14 mutations, and an 8.57 percent line reduction from baseline."
     }
   ],
   "verification": [
     {
       "command": "npm run verify:docs && npm run verify:decisions && npm run verify:ui-visual && npm run verify:contracts && npm run verify:dependencies && npm run verify:fixtures && npm run verify:boundaries && npm run verify:source-artifacts",
       "status": "passed",
-      "evidence": "All 57 Markdown files, 99 local links, 45 anchors, 77 decisions, 12 UI tokens, 8 structural rules, 448 capture combinations, CON-001 through CON-004, three JobRecord and four owner-routing negative mutations, 45 dependency records, two fixture manifests, import boundaries, and source-artifact checks passed."
+      "evidence": "All 57 Markdown files, 99 local links, 45 anchors, 77 decisions, 12 UI tokens, 8 structural rules, 448 capture combinations, CON-001 through CON-004, three JobRecord and four owner-routing negative mutations, 46 dependency records, two fixture manifests, import boundaries, and source-artifact checks passed."
     },
     {
-      "command": "npm test && npm run typecheck && npm run build && npm run smoke:parser-workers && npm run smoke:macos-vision-ocr",
+      "command": "npm run test:eval:report && npm test && npm run typecheck && npm run build && npm run smoke:parser-workers && npm run smoke:macos-vision-ocr",
       "status": "passed",
-      "evidence": "All 59 test files and 400 tests, including the focused three-file/fourteen-test Knowledge Tree set, package and desktop type checks, production builds, PDF/Office/Web/PPTX worker smoke, PDF page rendering, and the real macOS Vision OCR helper and adapter smoke passed on the frozen candidate."
+      "evidence": "The body-free report command passed 1 file/3 tests and reproduced the 2,016-byte canonical report; all 59 test files/401 tests, type checks, production builds, parser-worker smoke, and real macOS Vision OCR smoke passed on the frozen candidate."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 passed: 3,857 of 4,200 entry words, zero duplicate groups, 14 mutations, 5,492 trace lines, 57 Markdown files, and an 8.56 percent line reduction from baseline."
+      "evidence": "LEN-001 through LEN-005 passed: 3,857 of 4,200 entry words, zero duplicate groups, 14 mutations, 5,494 trace lines, 57 Markdown files, and an 8.57 percent line reduction from baseline."
     },
     {
       "command": "node scripts/verify/independent-documentation-review.mjs --print-snapshot && explicit semantic-ledger comparison",
       "status": "passed",
-      "evidence": "The governed snapshot is exactly b55c5091d3a0b8f7ec7adb9be3ba1deb2641a3a361d285419cc831830a26e475 across 101 files; the current and locked semantic ledgers both contain 1,057 claims with zero differing IDs or digests."
+      "evidence": "The governed snapshot is exactly 9684eb645eca706501704a4631556c320321ad3487b0e04371bdf656672977a2 across 101 files; the current and locked semantic ledgers both contain 1,058 claims with zero differing IDs or digests."
     }
   ],
   "coordination": {
@@ -171,8 +171,8 @@
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The B6.12 delta changes only rebuildable SQLite/Markdown-derived internal aggregate semantics; it adds no PRD, UI, IPC, public DTO, durable schema, network/model behavior, stable Requirement/Build/Exit ID, or release-state change. PIGE-KNOW-002 and E6.07 stay partial; PIGE-KNOW-004 stays planned; P6 stays in progress.",
-    "acknowledgement": "Development froze six code/test files after focused 3/14, full 59/400, typecheck, build, full verify, parser-worker, and real macOS OCR checks passed. Product Planning made the minimal Knowledge Model/acceptance sync; a read-only delta reviewer accepted the exact repaired candidate before this one-time snapshot bind."
+    "compatibility": "The B6.15 delta adds only a CI-produced synthetic body-free retrieval report and its exact-SHA CI dependency registration; it adds no PRD, runtime, UI, IPC, durable schema, model call, stable Requirement/Build/Exit ID, or release-state change. PIGE-EVAL-004 and E6.10 stay partial; P6 stays in progress.",
+    "acknowledgement": "Development froze five code/test/CI files after the focused 1/3 report run, full 59/401, typecheck, build, dependency/fixture gates, parser-worker, and real macOS OCR checks passed. Product Planning made the minimal Quality/TECH/dependency/acceptance sync; a read-only delta reviewer accepted the repaired immutable-pin candidate before this one-time snapshot bind."
   },
   "resolvedBlockers": [
     "Rewrote README as a 378-word product entry with user value, honest current capability, principles, v0.1 roadmap, and the Agent-authored automation goal instead of a technical inventory.",
@@ -183,17 +183,17 @@
     "Deep-reviewed Pi v0.80.6 at a fixed commit and admitted only isolated selected-model binding and receiver-safe stream design as review-only guidance; no package, runtime, catalog, credential fallback, or dependency adoption occurred.",
     "Synchronized single-writer pre-publication guard persistence, capture projection fencing, process-local Agent-ingest cancellation, monotonic restart recovery, and exact evidence without promoting partial states.",
     "Synchronized the B5.10 fake/local lifecycle foundation, one exact E5.02 selector, honest planned/partial states, and complete production gaps without expanding PRD or Parser ownership.",
-    "Synchronized the B6.15 deterministic retrieval-regression foundation, one exact selector, honest partial states, private-report boundaries, and complete model/linking/vector/scale/platform gaps without changing runtime behavior.",
+    "Synchronized the B6.15 CI-produced body-free retrieval report, one exact upload selector, immutable upload-action pin, honest partial states, and complete model/linking/vector/locale/scale/platform gaps without changing runtime behavior.",
     "Synchronized the B6.12 rebuildable Knowledge Tree aggregate foundation, one exact selector, honest partial/planned states, preserved Phase 4 link boundaries, and correct UI/Health ownership without exposing a public tree contract.",
     "Repaired CON-002 so it isolates JobRecordSchema, checks root strictness and cross-field cancellation invariants, and rejects three in-memory false-positive mutations instead of matching a later unrelated schema."
   ],
   "nonBlockingRisks": [
     "P5 remains in progress: remaining Job-class publishers, running capture/index_rebuild/other-class cancellation, strict cross-process Job CAS and routing, parent-directory swap, guard-to-domain atomicity, guard-without-output recovery, checkpoint arrays, cross-file transactions, Windows/Paddle, packaged-filesystem proof, and visible progress/cancel UI remain open.",
     "The local-tool lifecycle remains a fake/local service foundation: real Paddle/Python/model/language-pack transport, ordinary-ingest no-hidden-install proof, production app-data/catalog/permission/pre-vault Job/Operation wiring, OCR/UI, supply chain, packaged platforms, cross-process locking, complete recovery/GC/quarantine purge, and background lifecycle controls remain open.",
-    "The retrieval regression foundation remains lexical and synthetic: model-grounded summary/citation validation under cloud-send and Permission enforcement, tag/topic/entity and Knowledge Tree thresholds, vector/reranker ranking, 10k/100k and UI/packaged proof, checked-in or CI-produced body-free reports, and broader locale/query families remain open.",
+    "The retrieval regression foundation remains lexical and synthetic: model-grounded summary/citation validation under cloud-send and Permission enforcement, tag/topic/entity and Knowledge Tree thresholds, vector/reranker ranking, 10k/100k and UI/packaged proof, and broader locale/query families remain open.",
     "The Knowledge Tree remains internal-only: broader relation and branch semantics, richer aggregate inputs, public IPC/preload/renderer navigation, localized empty state, 10k worker/incremental rebuild proof, packaged parity, and the separately owned visual/accessibility and Knowledge Health work remain open.",
     "Pi v0.80.6 remains review-only until exact package pins, integrity/provenance, root MIT notice and SBOM, hermetic catalog/import gates, selected-binding fixtures, Permission Broker integration, and pinned Electron/Node platform smoke pass; the Owner and TECH pins are not yet cross-checked by a dedicated verifier.",
-    "Trace projections use 5,492 of 5,500 lines and the default entry uses 3,857 of 4,200 words; future semantic additions must reclaim projection or prose capacity in the same change instead of raising budgets.",
+    "Trace projections use 5,494 of 5,500 lines and the default entry uses 3,857 of 4,200 words; future semantic additions must reclaim projection or prose capacity in the same change instead of raising budgets.",
     "Role ownership is enforced by instructions, templates, routing markers, and negative mutations rather than operating-system write permissions; reviewers must still detect semantically disguised role crossing and contributors must fill intake fields honestly.",
     "PRD, TECH_ARCHITECTURE, and Decision Log remain large Owner documents; future Agents should continue section-targeted reads and define each fact once.",
     "The concise pre-alpha README intentionally has no install button, screenshots, or release download; add those only when a usable signed build and governed visual evidence exist.",

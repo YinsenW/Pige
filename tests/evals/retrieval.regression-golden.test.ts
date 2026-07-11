@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   evaluateRetrievalGoldenFixture,
+  type RetrievalEvalReport,
   type RetrievalGoldenFixture,
   type RetrievalQueryObservation,
   type RetrievalRelatedObservation
@@ -54,13 +55,15 @@ describe("retrieval regression golden evaluation", () => {
       observations.related
     ).report);
 
-    const serializedReport = JSON.stringify(evaluation.report);
+    const serializedReport = serializeReport(evaluation.report);
     for (const sentinel of fixture.privateSentinels) expect(serializedReport).not.toContain(sentinel);
     expect(serializedReport).not.toContain("pagePath");
     expect(serializedReport).not.toContain("snippets");
     expect(serializedReport).not.toContain("title");
     expect(serializedReport).not.toContain("query\"");
     expect(Buffer.byteLength(serializedReport)).toBeLessThan(16 * 1024);
+
+    writeRequestedReport(serializedReport);
   });
 
   it("fails the same metrics for a distractor, fabricated citation, missing link, and false confident answer", () => {
@@ -101,6 +104,17 @@ describe("retrieval regression golden evaluation", () => {
     expect(evaluation.metrics.relatedPageRecall).toBeLessThan(1);
     expect(evaluation.metrics.insufficientEvidenceAccuracy).toBe(0);
     expect(evaluation.errors.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it("rejects report output outside the governed artifact directory", () => {
+    const artifactRoot = path.join(process.cwd(), "artifacts/test-reports/retrieval-regression");
+    const validPath = path.join(artifactRoot, "test-platform", "test-build", "report.json");
+
+    expect(resolveRequestedReportPath(validPath)).toBe(path.resolve(validPath));
+    expect(() => resolveRequestedReportPath(path.join(os.tmpdir(), "report.json")))
+      .toThrow("Retrieval report path must stay inside");
+    expect(() => resolveRequestedReportPath(path.join(artifactRoot, "report.txt")))
+      .toThrow("Retrieval report filename must be report.json");
   });
 });
 
@@ -178,4 +192,48 @@ ${page.body}
 function requireValue<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("Expected fixture value is missing.");
   return value;
+}
+
+function serializeReport(report: RetrievalEvalReport): string {
+  return `${JSON.stringify(report, null, 2)}\n`;
+}
+
+function writeRequestedReport(serializedReport: string): void {
+  const requestedPath = process.env.PIGE_RETRIEVAL_REPORT_PATH;
+  if (!requestedPath) return;
+
+  const reportPath = resolveRequestedReportPath(requestedPath);
+  fs.mkdirSync(path.dirname(reportPath), { recursive: true, mode: 0o700 });
+  const temporaryPath = `${reportPath}.${process.pid}.tmp`;
+  const noFollow = fs.constants.O_NOFOLLOW ?? 0;
+  let descriptor: number | undefined;
+  try {
+    descriptor = fs.openSync(
+      temporaryPath,
+      fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY | noFollow,
+      0o600
+    );
+    fs.writeFileSync(descriptor, serializedReport, "utf8");
+    fs.fsyncSync(descriptor);
+    fs.closeSync(descriptor);
+    descriptor = undefined;
+    fs.renameSync(temporaryPath, reportPath);
+  } catch (error) {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
+    fs.rmSync(temporaryPath, { force: true });
+    throw error;
+  }
+}
+
+function resolveRequestedReportPath(requestedPath: string): string {
+  const artifactRoot = path.resolve(process.cwd(), "artifacts/test-reports/retrieval-regression");
+  const reportPath = path.resolve(requestedPath);
+  const relativePath = path.relative(artifactRoot, reportPath);
+  if (relativePath.length === 0 || relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+    throw new Error("Retrieval report path must stay inside artifacts/test-reports/retrieval-regression.");
+  }
+  if (path.basename(reportPath) !== "report.json") {
+    throw new Error("Retrieval report filename must be report.json.");
+  }
+  return reportPath;
 }

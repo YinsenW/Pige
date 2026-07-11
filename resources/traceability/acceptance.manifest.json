@@ -1913,10 +1913,10 @@
     },
     "PIGE-EVAL-004": {
       "status": "partial",
-      "evidence": ["EV-RETRIEVAL", "EV-DB-LINKS", "EV-RETRIEVAL-REGRESSION-GOLDEN"],
+      "evidence": ["EV-RETRIEVAL", "EV-DB-LINKS", "EV-RETRIEVAL-REGRESSION-GOLDEN", "EV-RETRIEVAL-REGRESSION-REPORT"],
       "open": {
         "id": "OPEN-REQ-PIGE-EVAL-004",
-        "description": "Model-grounded summarization, citation-output validation, and cloud-send/Permission enforcement; unified tag/topic/entity/Knowledge Tree thresholds beyond wiki links/backlinks; vector/embedding/reranker ranking; broader locale/query families; 10k/100k and UI/packaged acceptance; and checked-in or CI-generated regression artifacts remain open.",
+        "description": "Model-grounded summarization, citation-output validation, and cloud-send/Permission enforcement; unified tag/topic/entity/Knowledge Tree thresholds beyond wiki links/backlinks; vector/embedding/reranker ranking; broader locale/query families; and 10k/100k plus UI/packaged acceptance remain open.",
         "targetBuilds": [
           "B6.15"
         ],
@@ -3405,10 +3405,10 @@
     },
     "E6.10": {
       "status": "partial",
-      "evidence": ["EV-RETRIEVAL", "EV-DB-LINKS", "EV-RETRIEVAL-REGRESSION-GOLDEN"],
+      "evidence": ["EV-RETRIEVAL", "EV-DB-LINKS", "EV-RETRIEVAL-REGRESSION-GOLDEN", "EV-RETRIEVAL-REGRESSION-REPORT"],
       "open": {
         "id": "OPEN-EXIT-E6.10",
-        "description": "The deterministic foundation still lacks model-grounded summary/citation validation and cloud-send/Permission enforcement, linking metrics beyond wiki links/backlinks, vector/reranker coverage, large-scale and packaged/UI proof, broader locales and Knowledge Tree cases, and a checked-in or CI-produced body-free report artifact.",
+        "description": "The deterministic foundation still lacks model-grounded summary/citation validation and cloud-send/Permission enforcement, linking metrics beyond wiki links/backlinks, vector/reranker coverage, large-scale and packaged/UI proof, and broader locales and Knowledge Tree cases.",
         "targetBuilds": [
           "B6.15"
         ],
@@ -4015,6 +4015,7 @@
       "selector": "answers from bounded local evidence with citations and ranked pages"
     },
     "EV-RETRIEVAL-REGRESSION-GOLDEN": { "kind": "test", "path": "tests/evals/retrieval.regression-golden.test.ts", "selector": "passes deterministic ranking, citation, distractor, related-page, and insufficient-evidence gates" },
+    "EV-RETRIEVAL-REGRESSION-REPORT": { "kind": "contract", "path": ".github/workflows/ci.yml", "selector": "Upload retrieval regression report" },
     "EV-CONTEXT": {
       "kind": "test",
       "path": "tests/unit/retrieval-service.test.ts",
