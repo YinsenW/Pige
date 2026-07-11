@@ -66,6 +66,7 @@ Historical/audit/research documents such as `docs/DESIGN_REVIEW.md`, `docs/DESIG
 ## 2. Non-Negotiable Invariants
 
 - Simplicity is a product invariant: default UI should minimize decisions, labels, modes, and visible technical metadata.
+- After source preservation, Pi Agent alone orchestrates multi-step knowledge work; parsers, OCR, retrieval, and writers are typed tools, not a fixed parallel workflow.
 - Documentation simplicity is also an engineering invariant: add a new design document only when an existing owner document cannot hold the decision cleanly; prefer task-specific section reads over loading the full documentation library.
 - PRD P0 is the `v0.1 Public Alpha` release acceptance scope, not a single task scope. Implementation work must follow Milestones and the v0.1 Implementation Playbook phase boundaries unless those owner docs are deliberately updated.
 - Markdown knowledge files are the durable knowledge source of truth.

@@ -18,7 +18,7 @@ requireAll("packages/schemas/src/index.ts", [
 for (const service of [
   "apps/desktop/src/main/services/model-provider-connection.ts",
   "apps/desktop/src/main/services/model-provider-registry.ts",
-  "apps/desktop/src/main/services/model-json-client.ts"
+  "apps/desktop/src/main/services/pi-agent-runtime-adapter.ts"
 ]) requireAll(service, ["normalizeProviderBaseUrl"]);
 requireAll("packages/contracts/src/index.ts", [
   "readonly permissionRequirement: SettingPermissionRequirement", "readonly defaultMode:", "readonly yoloEnabled:",
@@ -64,7 +64,7 @@ requireAll("apps/desktop/src/main/services/agent-ingest-service.ts", [
 ]);
 
 const ingest = read("apps/desktop/src/main/services/agent-ingest-service.ts");
-const method = ingest.slice(ingest.indexOf("async ingestSource"), ingest.indexOf("async #requestStructuredIngest"));
+const method = ingest.slice(ingest.indexOf("async ingestSource"), ingest.indexOf("const unavailableCapabilityPort"));
 const decision = method.indexOf("createModelEgressDecision");
 const durableDecision = method.indexOf("writeModelEgressDecisionOperation");
 const prompt = method.indexOf("createSystemPrompt()");
@@ -116,10 +116,10 @@ const integration = spawnSync("npx", ["vitest", "run",
   "tests/unit/setting-action-guard.test.ts",
   "tests/unit/agent-policy-context.test.ts",
   "tests/unit/agent-ingest-service.test.ts",
+  "tests/unit/pi-agent-runtime-adapter.test.ts",
   "tests/unit/desktop-shell-contract.test.ts",
   "tests/unit/model-provider-connection.test.ts",
-  "tests/unit/model-provider-registry.test.ts",
-  "tests/unit/model-json-client.test.ts"
+  "tests/unit/model-provider-registry.test.ts"
 ], { cwd: root, encoding: "utf8", maxBuffer: 6 * 1024 * 1024 });
 if (integration.status !== 0) failures.push(`security/egress integration tests failed: ${(integration.stderr || integration.stdout).trim()}`);
 

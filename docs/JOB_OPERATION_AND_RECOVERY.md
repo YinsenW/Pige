@@ -36,6 +36,10 @@ The core rule:
 5. Recovery must be boring.
    After restart, Pige scans durable job/proposal/operation records, reconciles files, and resumes or explains without drama.
 
+6. Jobs execute decisions; they do not make semantic decisions.
+   Pi Agent chooses tool order; Jobs persist, dispatch, cancel, retry, and recover those
+   calls without inferring another semantic step.
+
 ## 3. Durable Locations
 
 Pige has two job scopes:
@@ -97,7 +101,7 @@ Phase 2 implementation note:
   sidecar, and revision boundaries by `TECH_ARCHITECTURE.md` and
   `SOURCE_STORAGE_STRATEGY.md`. Jobs wait on insufficient evidence, keep incomplete work
   retryable, reuse verified output, and never start Agent ingest from unreadable evidence.
-- Parse and OCR runners persist their required OCR or Agent-ingest follow-up Jobs before those upstream Jobs leave their recoverable running state. If later logging or parent-state finalization fails, the continuation remains durable and the upstream Job remains retryable. This stage-handoff guarantee is separate from the still-deferred `capture_batch` parent hierarchy.
+- Capture, parse, and OCR runners persist and link each deterministic parse, OCR, or Agent-ingest child before parent terminalization. Interrupted `running` parents auto-requeue; handled finalization failures remain `failed_retryable` for explicit retry. Both reuse the linked child. This guarantee is separate from the deferred `capture_batch` hierarchy.
 - Startup and vault activation first reconcile interrupted jobs. Proven-idempotent capture/parse/OCR/Agent-ingest/index jobs are requeued; cancellation-in-progress and unproven classes become `failed_retryable`. Capture/parse/OCR/Agent ingest drain in batches of 20; index rebuild uses a coalesced limit-1 drainer. Waiting Agent ingest still honors current model/OCR readiness.
 - Home's contextual processing strip includes active capture, parse, OCR, Agent ingest, and index jobs. It remains hidden when no work needs attention and uses compact localized status indicators rather than a new queue destination.
 - Source-page writes use pending/previous/target checksums so a crash can be reconciled without confusing Pige's partial write with a user edit.
@@ -136,10 +140,16 @@ Required v0.1 job classes:
 Jobs may have parent-child structure:
 
 - A multi-file drop creates one parent `capture_batch` job and one child job per source.
-- A capture job can enqueue parse/OCR/agent/index jobs.
+- Capture preserves the source and wakes one `agent_ingest` parent; Agent tool calls may
+  create child Jobs with `parentJobId` and Pi run/call provenance.
+- Recovery may resume that child, not invent another call. Its mechanical index/log
+  projection may finish inside the approved write recovery boundary.
 - Backup/restore may create child jobs for scan, manifest, compression, extraction, and rebuild.
 
 Current implementation boundary: multi-file capture currently groups child `capture` jobs with one `captureId` but does not yet persist the `capture_batch` parent. That bridge stays readable; the parent record and aggregate recovery semantics are required before the batch contract is claimed complete.
+
+Current format/quality continuations are transitional; B3.13 replaces their branching
+with Pi tool-call children while retaining durability.
 
 ## 5. Job State Machine
 

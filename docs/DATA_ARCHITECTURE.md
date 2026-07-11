@@ -472,7 +472,7 @@ Rules:
 2. Persist input, managed copy, or original file reference immediately according to source storage strategy.
 3. Create source record and conversation event.
 4. Create durable job record.
-5. Start parser/model work asynchronously.
+5. Start one Agent Job asynchronously; its selected tools create later artifacts and writes.
 
 Capture must prioritize preservation over intelligence.
 
@@ -480,25 +480,20 @@ The source-record sidecar is committed atomically before any source-page project
 
 Phase 2 Home status can be rebuilt from `.pige/jobs/` plus source records. The read model may show source display names and job states, but not source paths, managed copy paths, file bodies, prompts, or model responses.
 
-Phase 2/3 bridge source page creation:
-
-- Text/Markdown/TXT capture jobs can create minimal source pages under `sources/text/YYYY/` or `sources/files/YYYY/`.
-- PDF/DOCX/PPTX/image capture jobs create metadata-only source pages under `sources/files/YYYY/`. PDF/DOCX/PPTX create queued `parse` jobs when their bundled adapter resolves; images create `ocr` `waiting_dependency` jobs until local OCR is available.
-- Source records store `knowledgePageId` and `knowledgePagePath` after the page is created.
-- Source pages may inline short captured text for readability, but long source bodies stay in managed source copies and are represented by previews.
-- Source pages for preserved documents/images must not decode managed binary copies as text; they show source metadata and a waiting-parser/OCR status until an `extracted_text` or `ocr` artifact exists.
-- Parser artifact references carry checksum and size when created by current adapters. Parser reuse and Agent handoff verify those values; SQLite and derived artifacts remain rebuildable from preserved sources.
-- Job records do not store source bodies; successful source-page creation appends a human-readable entry to `log.md`.
+Capture may create a minimal direct-text or metadata-only source projection and store its
+page ID/path on the Source Record; it never decodes binary bodies or copies large bodies
+into Jobs. Current direct parse/OCR continuations are transitional. Under B3.13,
+checksummed artifacts and later knowledge projections originate from Agent tool calls;
+SQLite remains rebuildable.
 
 ### 10.2 Ingest
 
 1. Ensure the source record and storage strategy are durable.
-2. Generate extracted artifacts.
-3. Create Markdown source page.
-4. Create or update wiki pages.
-5. Append operation summary.
-6. Update `index.md` and `log.md`.
-7. Update database and indexes.
+2. Start Pi Agent with bounded source metadata and tool contracts.
+3. Persist validated Artifacts from Agent-selected tools.
+4. Commit an approved proposal/publication tool atomically.
+5. Derive source-page/index/log projections and append Operation provenance.
+6. Update database and indexes.
 
 If the app crashes after step 1, Pige can resume or explain exactly which source asset/reference needs repair.
 
@@ -506,11 +501,12 @@ Detailed job checkpoint, retry, cancellation, proposal, and operation recovery r
 
 ### 10.3 Query
 
-1. Read from database/indexes when available.
-2. Fall back to Markdown scan when indexes are missing.
-3. Send only selected snippets and citations to the configured generation model.
-4. Save answer to conversation history.
-5. Save answer to wiki only when the user or workflow asks.
+1. Pi Agent selects a scoped retrieval tool.
+2. The tool reads indexes or falls back to Markdown and returns a bounded cited Context Pack.
+3. Pi Agent synthesizes through the selected provider; an explicit no-model path returns
+   a local extractive answer without Agent-model synthesis.
+4. Save the answer to conversation history.
+5. Save to the wiki only through a validated tool call when requested.
 
 Phase 2/3 bridge Library query:
 

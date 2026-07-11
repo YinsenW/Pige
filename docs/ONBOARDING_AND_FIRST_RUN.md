@@ -148,9 +148,8 @@ Allowed in `capture_only`:
 - Voice transcript capture when supported.
 - Source record creation.
 - Managed source copy or external reference creation.
-- Parser extraction when bundled tools are available.
-- OCR when a local engine is available.
-- Source page creation when deterministic extraction is enough.
+- Metadata-only source projection and direct bounded text projection when neither
+  requires parser/OCR, model inference, or semantic organization.
 - Conversation event creation with references, not duplicated source bodies.
 - Library browsing of created source pages.
 - Backup and restore.
@@ -159,6 +158,8 @@ Allowed in `capture_only`:
 
 Queued or waiting in `capture_only`:
 
+- Agent selection of parser, OCR, retrieval, and knowledge-write tools for new sources,
+  even when a local parser/OCR capability is installed.
 - Agent ingest that requires a generation model.
 - Title/summarization/tagging/linking that requires a generation model.
 - Home knowledge answers that require synthesis.
@@ -176,6 +177,8 @@ Available without model:
 Rules:
 
 - Capture-only mode must still preserve sources before any parsing or model-dependent work.
+- Capture-only mode must not run a hidden format-driven parser/OCR/knowledge pipeline;
+  configuring a model resumes the preserved source through Pi Agent orchestration.
 - Model-dependent jobs use `waiting_dependency` with `dependencyKind: "model_provider"`.
 - Configuring a valid default model should resume waiting jobs after user-visible confirmation or a clear "process saved captures" action.
 - Resuming jobs must not duplicate source records, managed source copies, conversation events, or source pages.

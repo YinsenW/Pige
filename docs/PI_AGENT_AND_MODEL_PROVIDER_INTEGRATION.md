@@ -12,9 +12,9 @@ Pige's product goal is simple:
 
 > The user connects one model service that Pi Agent can call. Pige handles the rest.
 
-Pi Agent is the mandatory v0.1 execution core. The direct provider bridge is
-transitional; Phase 3 exits only after an embedded Pi flow returns through
-Pige-owned policy, tool, validation, storage, and recovery boundaries.
+Pi Agent is the mandatory v0.1 core. The first preserved-text vertical runs through
+embedded Pi and Pige tools. Phase 3 remains partial until parser, OCR, retrieval,
+recovery, permission, and packaged paths leave host-fixed/parallel workflows.
 
 Adopt, do not imitate: where Pi exposes a supported generic runtime surface,
 Pige integrates it through a thin adapter instead of copying, forking, or
@@ -24,6 +24,10 @@ maintaining a parallel Agent runtime. Pige still owns product policy and data.
 
 Reviewed upstream snapshot: `v0.80.6`
 (`2b3fda9921b5590f285165287bd442a25817f17b`) on 2026-07-10.
+
+`@earendil-works/pi-ai` is the official provider/model package inside the same Pi
+monorepo, not a second Agent framework. Pige does not add Vercel AI SDK or another
+parallel provider runtime.
 
 - `pi-agent-core` owns Agent mechanics; the side-effect-free `pi-ai` root provides
   isolated `Models`, provider factories, injected auth, and streaming.
@@ -48,6 +52,9 @@ parallel when a reviewed public Pi surface covers them.
 
 Pige owns UI; profiles/secrets; evidence, prompts, citations and validation; egress,
 permissions and tools; and all durable product records.
+
+After source preservation, Pi Agent alone selects and replans semantic tool use; host
+services gate calls and each tool executes one bounded capability.
 
 “Complete Pi integration” means the relevant generic `pi-agent-core` and `pi-ai`
 SDK surfaces. It does not mean packaging Pi's coding-agent product, TUI, CLI/RPC,
@@ -76,11 +83,12 @@ Rules:
 - Do not deep-import, alias, patch, vendor, or fork Pi, and do not preserve the
   transitional direct provider bridge as a silent fallback after Pi adoption.
 
-Checkpoint A: `v0.80.6` remains review-only because no official Agent entry satisfies
-the side-effect boundary above. Default action is to request and adopt an official
-compat-free entry; absence of that entry is not permission to recreate Pi. A temporary
-containment exception requires an explicit user-approved architecture decision and
-proof that the transitive compat registry is inert.
+Checkpoint A implementation: the user approved and Pige adopted exact `v0.80.6`.
+The sole adapter uses isolated `Models`, a receiver-bound stream, scoped credentials,
+and no ambient auth; compat globals/catalog/default dispatch remain unused. Mutations,
+an import snapshot, protocol tests, and an Electron smoke prove containment. Deep
+imports, patches, forks, and copied loops remain forbidden. Replace the exception when
+an official compat-free entry passes review; other Agent tool paths remain separate work.
 
 ## 5. Package Boundary
 
@@ -259,27 +267,61 @@ Rules:
 
 - Disable or avoid Pi built-in tools unless Pige wraps them with scoped adapters.
 - Register Pige-owned tools only through Agent Orchestrator.
-- Every sensitive tool call goes through Permission Broker.
-- `beforeToolCall` is defense in depth: freeze its validated input, then revalidate and
-  authorize the same canonical input in the service handler before effects.
+- Sensitive tools use Permission Broker. The first create-only note tool uses a bounded
+  current-job authorization port; it is not persisted Broker evidence.
+- `beforeToolCall` freezes and authorizes scoped input; handlers revalidate canonical
+  input and effect guards. Brokered tools reauthorize scope before effects.
 - Side-effecting tools run sequentially; parallel tools require an explicit
   read-only/idempotent contract plus ordering, cancellation, and audit tests.
 - Shell, filesystem, network, package, brokered credential use, provider, settings, delete, and external source actions require declared capabilities and permission policy. Raw key bytes are never a capability and are never exposed to Pi extensions or tools.
 - Pi extensions or tools cannot directly read/write vault files.
 - Pi extensions or tools cannot access raw API keys. A reviewed Pige adapter may request brokered credential use for a specific provider call; it receives the call result, never the credential bytes.
 - Pi tool output is treated as untrusted tool output and sanitized before display, logging, or model reuse.
+- A tool implements one bounded deterministic capability. It cannot call a model,
+  another tool, or hide a composite semantic workflow.
+- Final assistant text never causes a durable knowledge write. A write occurs only from
+  a validated registered tool call, except deterministic source preservation and
+  mechanical projections owned by the same approved commit.
 
-Recommended Pige tool pattern:
+The Pige Tool Registry is the only product-capability surface visible to Pi Agent.
+Each registry entry MUST declare at least:
 
 ```ts
 type PigeAgentTool = {
-  name: string;
+  id: string;
+  version: string;
+  description: string;
   capability: string;
-  inputSchema: unknown;
-  permissionScope: PermissionScope;
+  inputSchema: RuntimeSchema;
+  outputSchema: RuntimeSchema;
+  effect: "read_only" | "compute" | "proposal" | "idempotent_write" | "destructive";
+  inputTrust: TrustClass;
+  outputTrust: TrustClass;
+  requiredCapabilities: string[];
+  resolveResourceScope: (input: unknown, context: PigeToolContext) => ResourceScope;
+  permission: "none_current_job" | "broker" | "always_confirm";
+  dataBoundary: DataBoundary;
+  execution: "sequential" | "parallel_read_only";
+  idempotency: IdempotencyContract;
+  limits: ToolExecutionLimits;
+  ownerService: string;
   handler: (input: unknown, context: PigeToolContext) => Promise<PigeToolResult>;
 };
 ```
+
+The model sees only bounded descriptors. Calls bind run/call, catalog/policy/source,
+tool-version, and input hashes; results carry typed refs, warnings, and provenance while
+large bodies remain Artifacts. Host validation precedes every result or effect.
+
+The first slice exposes only `pige_inspect_source` and `pige_create_knowledge_note`.
+It proves the real Pi loop and bounded host handlers; the complete descriptor, parser,
+OCR, retrieval, permissions, and durable child-tool identity remain B3.13/E3.08 work.
+
+Source inspection, extraction, OCR, retrieval, and knowledge publication remain
+separate tools. Recommendations cannot invoke another tool. Runtime may keep only a
+bounded objective/evidence-gap/next-intent/stop-condition `PlanSummary`, never private
+chain of thought; it is ephemeral and restart requires replanning. Stale, denied,
+partial, or unavailable results require revision before another side effect.
 
 ## 12. Sessions, Memory, And Durable State
 
@@ -343,37 +385,47 @@ Required tests:
 - Cloud-send indicator appears when content is sent to a cloud-hosted provider.
 - Official, loopback, asserted, and unknown endpoints fail safe; confirmation resumes the same Job once without duplicate effects.
 - Provider profile persistence rejects arbitrary secret-bearing headers and base URLs containing userinfo or credential-bearing query parameters.
-- Adapter tests reject global/direct calls and ambient routing; one deterministic
-  `agent_ingest` case runs selected-model Pi streaming plus a non-sensitive typed
-  Pige tool to validated durable output, with drift, injection, cancellation,
-  retry/restart, and packaged-runtime negatives. Sensitive tools remain Phase 8.
+- The Agent Spine test matrix is owned by `docs/QUALITY_AND_TEST_STRATEGY.md` section
+  6.1; it must prove containment, distinct Agent-chosen traces, replanning, tool-caused
+  idempotent writes, no-model preservation, and bypass mutations. Sensitive-tool
+  acceptance remains Phase 8.
 
 ## 16. Implementation Checklist
 
-Phase 1 implementation note:
+Runtime implementation note:
 
-- `agent.runtimeStatus` and the Agent Runtime Service may report `phase_1_stub` readiness using the active vault, default model profile, local database status, and a non-secret Agent Runtime Policy snapshot.
-- `phase_1_stub` proves that default model selection affects runtime readiness and policy context, but it does not run Pi Agent jobs or model calls.
-- Replacing the stub uses the embedded adapter, keeps the non-secret status boundary,
-  and proves selected profiles affect real calls.
+- Production `agent.runtimeStatus` reports `embedded_pi_sdk`. Status, onboarding, and
+  Job readiness require an enabled default model, matching provider, and presence-only
+  secret-binding metadata; they never resolve or decrypt provider credentials.
+- Each Agent run resolves the selected Pige provider/model profile into one isolated Pi
+  model collection; local protocol tests prove scoped model and credential binding.
+- The shared DTO retains legacy adapter-mode values for compatibility, but production
+  emits only `embedded_pi_sdk`; no alternate RPC/CLI runtime is enabled.
 
 Phase 3 implementation note:
 
-- Current `agent_ingest` uses selected `ModelProfile` calls to OpenAI/Anthropic-format
-  JSON endpoints. It is transitional evidence, not the Pi runtime.
-- Egress binds and rechecks non-secret Provider/Model identities; delimited source is
-  redacted and raw prompts, keys, and responses are not persisted by default.
-- Success writes the wiki/index/log/operation projection; invalid output retries. With
-  no model, the useful Source Page remains and ingest waits for dependency recovery.
+- Normal `agent_ingest` now uses the embedded Pi Agent; the former direct
+  `ProviderModelJsonClient` path is deleted rather than retained as a fallback.
+- The preserved-text trace calls inspection, then strict cited publication. Unknown,
+  unavailable, malformed, or unauthorized calls may let Pi replan before effects;
+  source drift and cancellation abort or fail closed.
+- Egress is decided before credentials and rechecked before every model turn. Provider,
+  model, source revision, evidence refs, cancellation, and publication fences are
+  revalidated by Pige; raw prompts, responses, sessions, and keys are not persisted.
+- With no model, source preservation remains useful and Agent work waits. Existing
+  host-routed PDF/Office/OCR continuations and renderer retrieval bypass are still open
+  migrations, not evidence of Agent-led orchestration.
 
-Before implementing Pi or provider integration:
+Delivered foundation and next steps:
 
-1. Pin exact Pi packages/integrity and use the embedded adapter.
-2. Build an isolated `Models` set with Pige credentials/auth context and explicit `streamFn`.
-3. Prove selected profiles affect calls without ambient/global provider resolution.
-4. Wrap tools; keep side effects sequential and Permission Broker-authorized in handlers.
-5. Run the deterministic Pi vertical acceptance plus cloud-send, redaction, tool, secret, injection, recovery, direct-call, and packaged-runtime tests.
-6. Re-review this contract whenever upstream Pi APIs change.
+1. Exact pins, the embedded adapter, isolated models/auth, profile protocol proof, the
+   first two tools, and direct-bridge removal are delivered.
+2. Wrap parser, OCR, retrieval, and remaining publication/proposal capabilities as
+   separate registered effects; remove host-fixed semantic routing.
+3. Add durable child-tool pause/resume, restart, continue/steer/follow-up, complete
+   Permission Broker, signed macOS/Windows packaging, and manual BYOK smoke evidence.
+4. Re-review imports, side effects, license, protocols, and containment whenever either
+   exact Pi package changes; both pins move or roll back together.
 
 ## 17. References
 

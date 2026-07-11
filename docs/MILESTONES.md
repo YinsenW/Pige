@@ -2,7 +2,7 @@
 
 Status: Active release plan
 Baseline date: 2026-07-09
-Last revised: 2026-07-10
+Last revised: 2026-07-11
 
 ## 1. Release Philosophy
 
@@ -47,9 +47,9 @@ The relationship is intentionally not one-to-one: M5 requires four implementatio
 | P0 | M0 | Repository and verification foundation |
 | P1 | M1 | Desktop shell, vault, settings, and runtime foundations |
 | P2 | M2 | Capture preservation, local dictation, jobs, retry, and progress |
-| P3 | M3 | BYOK, one effective default model, and basic Agent ingest |
+| P3 | M3 | BYOK, one effective default model, and the Pi Agent tool-loop spine |
 | P4 | M5 | Rebuildable database, lexical search, Library, and graph foundations |
-| P5 | M4 | URL, document, image, parser, artifact, and OCR ingest |
+| P5 | M4 | URL, document, image, parser, artifact, and OCR tool breadth |
 | P6 | M5 | Retrieval, local RAG, reader/editing, backlinks, and Knowledge Tree |
 | P7 | M5 | Confirmation, operations, memory, and conversation lifecycle |
 | P8 | M5 | Skills, complete curated Pi package lifecycle, and permissions |
@@ -100,17 +100,22 @@ Acceptance:
 
 Outcome:
 
-- Pige can turn captured text into useful Markdown with a configured model.
+- Pige can turn a preserved source into useful Markdown through the embedded Pi Agent
+  control loop and bounded Pige tools using the configured default model.
 
 Acceptance:
 
-- Pasted text becomes a source page, a Markdown note, an index update, and a log entry.
+- A deterministic vertical fixture proves Pi Agent chooses an inspection/extraction
+  tool, evaluates its typed result, and triggers a validated cited Markdown write.
+- With no Agent/model, Pige preserves the source and waits; parser, OCR, provider, and
+  knowledge writes do not run through a hidden substitute workflow.
 
 ### M4: Web And Document Ingest
 
 Outcome:
 
-- Pige handles the common real-world inputs users throw at it.
+- Pige expands the proven Agent tool spine to the common real-world inputs users throw
+  at it; format breadth does not create another semantic orchestration layer.
 
 Acceptance:
 

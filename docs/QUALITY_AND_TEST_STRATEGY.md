@@ -226,6 +226,15 @@ Tests must verify:
 - Pi compatibility tests bind exact same-version packages; reject deep/compat/global or
   out-of-adapter imports; and cover event/tool order, validation, abort/continue,
   queues/context, selected auth, no ambient authority, and packaged runtime on update.
+- `v0.80.6` tests keep transitive compat globals/catalog/default dispatch inert and use
+  only isolated `Models` through the sole adapter.
+- One Host/catalog proves read→publish and read→retrieve→publish plus stale-result replan.
+- Initial context has source metadata/tool schemas; parser/OCR stays idle before its
+  event and no-model capture performs no semantic work.
+- Only registered tool calls write; retry/restart reuses call/Operation identity.
+- Static plus mutation gates reject direct feature/provider loops, host-fixed tool
+  order, unregistered or incomplete tools, nested tool/model execution, final-text
+  writes, policy/catalog/source drift, and renderer bypass.
 - No Advanced/Fast model assignment UI exists in v0.1 unless a real routing service is implemented and tested.
 - Pi built-in tools or extensions cannot bypass Permission Broker.
 - Pige does not mutate the user's global `~/.pi/agent/models.json` during normal provider setup.

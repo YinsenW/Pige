@@ -1,7 +1,7 @@
 # Pige Vision
 
 Status: Active product vision
-Last reviewed: 2026-07-10
+Last reviewed: 2026-07-11
 
 ## 1. Vision
 
@@ -48,11 +48,20 @@ Supported source ownership patterns:
 - Use a link strategy such as symlink or alias only when safe, supported, and explicit.
 - Add future storage adapters without rewriting the knowledge layer.
 
-### 3.4 AI First
+### 3.4 Agent-Orchestrated, Tool-Constrained
 
-Design decisions should optimize for AI understanding, retrieval, synthesis, linking, and long-term maintenance.
+After Pige deterministically preserves a capture, Pi Agent owns the semantic plan across
+inspection, extraction, OCR, retrieval, organization, analysis, and knowledge change.
+Pige exposes bounded typed tools; the Agent selects, sequences, evaluates, and replans
+their use instead of following a format-driven workflow fixed by product services.
 
-Folder management is secondary. Pige's main artifact is an AI-readable, user-readable Markdown knowledge base with provenance.
+The Agent owns semantic decisions, not safety boundaries. Pige still enforces source
+preservation, permissions, egress, resource limits, provenance, durable Jobs, validation,
+confirmation, and atomic publication. If the Agent or model is unavailable, Pige keeps
+the source and waits visibly rather than running a hidden substitute pipeline.
+
+Folder management is secondary. Pige's main artifact is an AI-readable, user-readable
+Markdown knowledge base with provenance.
 
 ### 3.5 Open By Default
 

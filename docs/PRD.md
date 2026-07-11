@@ -143,13 +143,15 @@ order. A lower group cannot weaken a higher group merely to simplify implementat
 
 1. The default experience is capture-first: one calm Home composer accepts knowledge
    and questions without requiring a type, folder, tag, or mode choice.
-2. The Agent maintains naming, linking, filing, summaries, and bookkeeping. Users guide
+2. After source preservation, the Agent chooses bounded knowledge tools; product
+   services enforce safety and persistence without replacing its semantic plan.
+3. The Agent maintains naming, linking, filing, summaries, and bookkeeping. Users guide
    intent and correct outcomes; they do not maintain a taxonomy before capture.
-3. Chat and activity are operational surfaces, not the final knowledge artifact. Useful
+4. Chat and activity are operational surfaces, not the final knowledge artifact. Useful
    knowledge and reusable answers belong in the Markdown wiki.
-4. Retrieval is a first-class experience: natural-language questions return grounded
+5. Retrieval is a first-class experience: natural-language questions return grounded
    synthesis plus ranked inspectable notes and sources, not answer-only chat.
-5. The interface MUST be keyboard usable, screen-reader understandable, contrast-safe,
+6. The interface MUST be keyboard usable, screen-reader understandable, contrast-safe,
    IME-safe, and usable with larger text. Simplicity cannot depend on tiny controls or
    visual-only cues.
 
@@ -838,6 +840,9 @@ Safety and trust:
 
 ## 10. Input Handling Requirements
 
+Sections 10.1–10.6 define bounded capabilities, not a fixed workflow; section 11.1 owns
+Agent selection and degraded behavior.
+
 ### 10.1 Text
 
 Plain text entered in the capture box MUST first be saved as a managed text source. When
@@ -1002,19 +1007,22 @@ owned by `docs/PARSER_INGEST_SPEC.md`, `docs/PERFORMANCE_AND_RELIABILITY.md`,
 
 The ingest workflow happens when a new source enters Pige.
 
-Required steps:
+Required invariants and outcomes:
 
-1. Create a source record.
-2. Preserve the source as a managed copy or verified original reference according to the
-   v0.1 source-storage contract.
-3. Extract readable content and metadata.
-4. Ask the Agent to classify and summarize when a valid model dependency is available;
-   otherwise keep the preserved source visibly paused and resumable.
-5. Generate or update Markdown wiki pages.
-6. Update `index.md`.
-7. Append to `log.md`.
-8. Report changes back in the home timeline.
-9. Stage risky changes for confirmation instead of applying them silently.
+1. Pige validates the capture envelope, creates a Source Record, and preserves a managed
+   copy or verified original reference before expensive work.
+2. After preservation, Pi Agent is the sole semantic orchestrator. It receives bounded
+   source metadata and available-tool contracts, then chooses inspection, extraction,
+   OCR, retrieval, organization, analysis, and knowledge-write calls from their results.
+3. Parser, OCR, retrieval, and write services execute only an Agent-selected scoped tool
+   call or resume that same authorized call. They enforce deterministic limits, policy,
+   validation, provenance, and commit fences, and can refuse unsafe work.
+4. The result is source-backed, schema-valid Markdown plus citations, index/log
+   projections, an operation summary, and visible created/updated/skipped/failed or
+   confirmation-needed status.
+5. Risky changes are staged for confirmation. If the Agent, model, or required tool is
+   unavailable, the preserved source remains visible and resumable; no hidden semantic
+   pipeline substitutes for the Agent.
 
 Example result:
 
@@ -1022,20 +1030,23 @@ Example result:
 
 ### 11.2 Home Query
 
-The home query workflow is an enhanced search workflow over the maintained Markdown knowledge base first, then source records, artifacts, and available original sources if needed. It is triggered from the same Home Composer used for capture.
+The home query workflow is Agent-orchestrated over the maintained Markdown knowledge
+base first, then source records, artifacts, and available original sources if needed.
+It is triggered from the same Home Composer used for capture. Local search may still
+serve a direct deterministic fallback when no model is configured, but it does not
+pretend to be Agent synthesis.
 
-Required steps:
+Required outcomes:
 
-1. Interpret the user's natural language question.
-2. Search titles, aliases, tags, frontmatter, backlinks, source pages, and body text through local lexical and metadata ranking.
-3. Use local embeddings when the local RAG model is installed.
-4. Use local reranking when the local reranker is available; otherwise fall back to hybrid lexical/vector scoring.
-5. Build a bounded Agent Context Pack with selected snippets, policy context, citations, scoped memory, and compact conversation refs.
-6. Return ranked notes and source pages with snippets, match reasons, and citations.
-7. Produce a concise synthesis grounded in the retrieved pages.
-8. Let the user open any result directly.
-9. Offer follow-up questions and related queries.
-10. Offer to save valuable answers as wiki pages or append them to an existing note.
+1. Pi Agent interprets the request and chooses scoped retrieval tools; tool-internal
+   lexical, metadata, vector, and reranking policy remains deterministic and locally
+   available according to capability state.
+2. The Agent can inspect ranked results, request another bounded retrieval when useful,
+   and build a cited Context Pack without receiving the whole vault.
+3. The product returns ranked inspectable notes and sources plus a concise grounded
+   synthesis, visible limitations, follow-ups, and an optional validated knowledge write.
+4. Users can open any result directly, and valuable answers can become cited Markdown
+   only through the same bounded write/confirmation boundary as other Agent changes.
 
 Query output should feel closer to "search results plus summary" than "chat answer only."
 
@@ -1523,6 +1534,9 @@ Current pass/fail status and evidence remain only in the acceptance manifest.
 
 - Across the public-alpha mixed-source scenario, text, URL, PDF, DOCX, PPTX, image, and
   supported voice inputs preserve evidence before downstream work.
+- The same Pi Agent control loop selects bounded source-inspection, extraction, OCR,
+  retrieval, and knowledge-write tools from intermediate results; a format switch or
+  service chain cannot silently choose the semantic plan in its place.
 - Parser/OCR limitations produce bounded partial results, visible warnings, or a safe
   paused state rather than disappearing captures or unsupported certainty.
 - Repeated sources on a related topic can update existing knowledge with citations; the

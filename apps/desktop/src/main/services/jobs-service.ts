@@ -420,7 +420,23 @@ export class JobsService {
             )
           }
         );
-        const updatedJob = this.#completeCooperativeExecution(
+        if (needsParserOrOcr(sourceRecordFile.sourceRecord.kind)) {
+          ensureParserOrOcrJob(
+            vaultPath,
+            captureExecution.job,
+            sourceRecordFile.sourceRecord,
+            Boolean(this.#documentParser?.canParse(sourceRecordFile.sourceRecord.kind)),
+            inspectOcrSource(this.#ocr, sourceRecordFile.sourceRecord)
+          );
+        } else {
+          ensureAgentIngestJob(
+            vaultPath,
+            captureExecution.job,
+            sourceRecordFile.sourceRecord.id,
+            canRunAgentIngest(this.#agentIngest)
+          );
+        }
+        this.#completeCooperativeExecution(
           jobFile.path,
           captureExecution.job,
           "completed",
@@ -430,17 +446,6 @@ export class JobsService {
           "source",
           captureExecution.control.durableWriteState()
         );
-        if (needsParserOrOcr(sourceRecordFile.sourceRecord.kind)) {
-          ensureParserOrOcrJob(
-            vaultPath,
-            updatedJob,
-            sourceRecordFile.sourceRecord,
-            Boolean(this.#documentParser?.canParse(sourceRecordFile.sourceRecord.kind)),
-            inspectOcrSource(this.#ocr, sourceRecordFile.sourceRecord)
-          );
-        } else {
-          ensureAgentIngestJob(vaultPath, updatedJob, sourceRecordFile.sourceRecord.id, canRunAgentIngest(this.#agentIngest));
-        }
         appendLog(vaultPath, `${new Date().toISOString()} Created source page [${page.title}](${page.pagePath}) for source \`${jobFile.job.sourceId}\`.`);
         completed += 1;
       } catch (caught) {
@@ -505,22 +510,13 @@ export class JobsService {
           runningJob,
           execution.control
         );
-        const hasWarnings = result.needsOcr || result.sourcePageConflict || result.warnings.length > 0;
-        const completedJob = this.#completeCooperativeExecution(
-          jobFile.path,
-          runningJob,
-          hasWarnings ? "completed_with_warnings" : "completed",
-          createParseCompletionMessage(result, sourceRecordFile.sourceRecord.kind),
-          "document",
-          execution.control.durableWriteState()
-        );
         const refreshedSource = readSourceRecord(vaultPath, sourceRecordFile.sourceRecord.id) ?? sourceRecordFile.sourceRecord;
         let ocrCapability: OcrSourceCapability | undefined;
         if (result.needsOcr) {
           ocrCapability = inspectOcrSource(this.#ocr, refreshedSource);
           ensureOcrWaitingJob(
             vaultPath,
-            completedJob,
+            runningJob,
             refreshedSource,
             ocrCapability
           );
@@ -531,9 +527,18 @@ export class JobsService {
           result.agentTextReady &&
           (!result.needsOcr || ocrCapability?.ready !== true)
         ) {
-          ensureAgentIngestJob(vaultPath, completedJob, refreshedSource.id, canRunAgentIngest(this.#agentIngest));
+          ensureAgentIngestJob(vaultPath, runningJob, refreshedSource.id, canRunAgentIngest(this.#agentIngest));
           agentReadySourceIds.push(refreshedSource.id);
         }
+        const hasWarnings = result.needsOcr || result.sourcePageConflict || result.warnings.length > 0;
+        this.#completeCooperativeExecution(
+          jobFile.path,
+          runningJob,
+          hasWarnings ? "completed_with_warnings" : "completed",
+          createParseCompletionMessage(result, sourceRecordFile.sourceRecord.kind),
+          "document",
+          execution.control.durableWriteState()
+        );
         appendLog(
           vaultPath,
           `${new Date().toISOString()} Parsed ${documentLabel(refreshedSource.kind)} source \`${refreshedSource.id}\`: ${result.textCharacterCount} text characters, coverage ${result.textCoverage}.${result.needsOcr ? " OCR enrichment is waiting." : ""}`
@@ -619,8 +624,12 @@ export class JobsService {
           runningJob,
           execution.control
         );
+        if (result.agentTextReady) {
+          ensureAgentIngestJob(vaultPath, runningJob, sourceRecordFile.sourceRecord.id, canRunAgentIngest(this.#agentIngest));
+          agentReadySourceIds.push(sourceRecordFile.sourceRecord.id);
+        }
         const hasWarnings = !result.agentTextReady || result.sourcePageConflict || result.warnings.length > 0;
-        const completedJob = this.#completeCooperativeExecution(
+        this.#completeCooperativeExecution(
           jobFile.path,
           runningJob,
           hasWarnings ? "completed_with_warnings" : "completed",
@@ -632,10 +641,6 @@ export class JobsService {
               : "image",
           execution.control.durableWriteState()
         );
-        if (result.agentTextReady) {
-          ensureAgentIngestJob(vaultPath, completedJob, sourceRecordFile.sourceRecord.id, canRunAgentIngest(this.#agentIngest));
-          agentReadySourceIds.push(sourceRecordFile.sourceRecord.id);
-        }
         appendLog(
           vaultPath,
           `${new Date().toISOString()} OCR processed ${documentLabel(sourceRecordFile.sourceRecord.kind)} source \`${sourceRecordFile.sourceRecord.id}\`: ${result.textCharacterCount} text characters.${result.confidence !== undefined ? ` confidence ${result.confidence.toFixed(3)}.` : ""}`
@@ -1566,16 +1571,14 @@ function ensureParserOrOcrFollowUpJob(
   message: string
 ): void {
   const jobId = createParserOrOcrJobId(sourceRecord.id, jobClass);
-  const existing = readJobRecordFile(vaultPath, jobId);
-  if (existing) return;
-  const dateKey = /^job_(\d{8})_/.exec(jobId)?.[1] ?? new Date().toISOString().slice(0, 10).replaceAll("-", "");
-  const jobPath = path.join(vaultPath, ".pige", "jobs", dateKey.slice(0, 4), dateKey.slice(4, 6), `${jobId}.json`);
-  writeJsonAtomic(jobPath, JobRecordSchema.parse({
+  const now = new Date().toISOString();
+  ensureRequiredChildJob(vaultPath, parentJob, JobRecordSchema.parse({
     id: jobId,
     class: jobClass,
     state,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    parentJobId: parentJob.id,
+    createdAt: now,
+    updatedAt: now,
     sourceId: sourceRecord.id,
     ...(parentJob.captureId ? { captureId: parentJob.captureId } : {}),
     ...(parentJob.conversationEventId ? { conversationEventId: parentJob.conversationEventId } : {}),
@@ -1737,40 +1740,91 @@ function documentLabel(sourceKind: SourceKind): string {
   return "PDF";
 }
 
-function ensureAgentIngestJob(vaultPath: string, captureJob: JobRecord, sourceId: string, canRun: boolean): void {
+function ensureAgentIngestJob(vaultPath: string, parentJob: JobRecord, sourceId: string, canRun: boolean): void {
   const jobId = createAgentIngestJobId(sourceId);
-  const existing = readJobRecordFile(vaultPath, jobId);
   const nextState: JobState = canRun ? "queued" : "waiting_dependency";
   const nextMessage = canRun
     ? "Source page ready; Agent ingest queued."
     : "Source page ready; waiting for a tested default model before Agent ingest.";
-
-  if (existing) {
-    if (existing.job.state === "waiting_dependency" && canRun) {
-      writeJsonAtomic(existing.path, JobRecordSchema.parse({
-        ...existing.job,
-        state: nextState,
-        updatedAt: new Date().toISOString(),
-        message: nextMessage
-      }));
-    }
-    return;
-  }
-
-  const dateKey = /^job_(\d{8})_/.exec(jobId)?.[1] ?? new Date().toISOString().slice(0, 10).replaceAll("-", "");
-  const jobPath = path.join(vaultPath, ".pige", "jobs", dateKey.slice(0, 4), dateKey.slice(4, 6), `${jobId}.json`);
+  const now = new Date().toISOString();
   const jobRecord = JobRecordSchema.parse({
     id: jobId,
     class: "agent_ingest",
     state: nextState,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    parentJobId: parentJob.id,
+    createdAt: now,
+    updatedAt: now,
     sourceId,
-    ...(captureJob.captureId ? { captureId: captureJob.captureId } : {}),
-    ...(captureJob.conversationEventId ? { conversationEventId: captureJob.conversationEventId } : {}),
+    ...(parentJob.captureId ? { captureId: parentJob.captureId } : {}),
+    ...(parentJob.conversationEventId ? { conversationEventId: parentJob.conversationEventId } : {}),
     message: nextMessage
   });
-  writeJsonAtomic(jobPath, jobRecord);
+  ensureRequiredChildJob(
+    vaultPath,
+    parentJob,
+    jobRecord,
+    (existing) => existing.state === "waiting_dependency" && canRun
+      ? JobRecordSchema.parse({
+          ...existing,
+          state: nextState,
+          updatedAt: new Date().toISOString(),
+          message: nextMessage
+        })
+      : existing
+  );
+}
+
+function ensureRequiredChildJob(
+  vaultPath: string,
+  parentJob: JobRecord,
+  requestedChild: JobRecord,
+  reconcileExisting: (existing: JobRecord) => JobRecord = (existing) => existing
+): JobRecord {
+  const existing = readJobRecordFile(vaultPath, requestedChild.id);
+  let child: JobRecord;
+  if (existing) {
+    if (
+      existing.job.class !== requestedChild.class ||
+      existing.job.sourceId !== requestedChild.sourceId
+    ) {
+      throw new Error("A deterministic required child Job conflicts with its persisted identity.");
+    }
+    child = JobRecordSchema.parse({
+      ...reconcileExisting(existing.job),
+      parentJobId: existing.job.parentJobId ?? parentJob.id
+    });
+    if (JSON.stringify(child) !== JSON.stringify(existing.job)) {
+      writeJsonAtomic(existing.path, child);
+    }
+  } else {
+    child = JobRecordSchema.parse({
+      ...requestedChild,
+      parentJobId: parentJob.id
+    });
+    const dateKey = /^job_(\d{8})_/.exec(child.id)?.[1] ?? new Date().toISOString().slice(0, 10).replaceAll("-", "");
+    const childPath = path.join(
+      vaultPath,
+      ".pige",
+      "jobs",
+      dateKey.slice(0, 4),
+      dateKey.slice(4, 6),
+      `${child.id}.json`
+    );
+    writeJsonAtomic(childPath, child);
+  }
+
+  const parentFile = readJobRecordFile(vaultPath, parentJob.id);
+  if (!parentFile) {
+    throw new Error("The required child Job was persisted, but its parent Job is unavailable for linkage.");
+  }
+  if (!(parentFile.job.childJobIds ?? []).includes(child.id)) {
+    writeJsonAtomic(parentFile.path, JobRecordSchema.parse({
+      ...parentFile.job,
+      childJobIds: Array.from(new Set([...(parentFile.job.childJobIds ?? []), child.id])),
+      updatedAt: new Date().toISOString()
+    }));
+  }
+  return child;
 }
 
 function createParserOrOcrJobId(sourceId: string, jobClass: "parse" | "ocr"): string {

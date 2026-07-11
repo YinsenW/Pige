@@ -4,7 +4,6 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   AgentIngestService,
-  type AgentIngestModelClient,
   type AgentIngestModelConfigPort
 } from "../../apps/desktop/src/main/services/agent-ingest-service";
 import { CaptureService, type SourceFetchPort } from "../../apps/desktop/src/main/services/capture-service";
@@ -47,9 +46,12 @@ import {
 } from "../../apps/desktop/src/main/services/ocr-service";
 import type { NativeOcrResult } from "../../apps/desktop/src/main/services/ocr-types";
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
+import type { PiAgentRunRequest, PiAgentRunResult } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
+import { ScriptedAgentIngestRuntime } from "../helpers/scripted-agent-ingest-runtime";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
 import type { VaultSummary } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
+import type { JobRecord } from "@pige/schemas";
 import { createTestDocx, createTestPptx, TINY_PNG } from "./helpers/office-fixture";
 import { createTestPdf } from "./helpers/pdf-fixture";
 import { createJpegScanPdf } from "./helpers/pdf-image-fixture";
@@ -102,6 +104,7 @@ function makeModelPort(
       return config ? { ...config.model, isDefault: true } : undefined;
     },
     getDefaultProvider: () => getConfig()?.provider,
+    hasDefaultRuntimeBinding: () => getConfig() !== undefined,
     getDefaultRuntimeConfig: getConfig
   };
 }
@@ -409,6 +412,36 @@ describe("jobs service", () => {
     expect(waiting?.message).toContain("waiting for a tested default model");
   });
 
+  it("schedules Agent ingest readiness without resolving runtime credentials", () => {
+    const { vaultPath, vault } = makeVault();
+    let runtimeConfigReads = 0;
+    const agentIngest = new AgentIngestService({
+      getDefaultModel: () => ({ ...runtimeConfig.model, isDefault: true }),
+      getDefaultProvider: () => runtimeConfig.provider,
+      hasDefaultRuntimeBinding: () => true,
+      getDefaultRuntimeConfig: () => {
+        runtimeConfigReads += 1;
+        return runtimeConfig;
+      }
+    });
+    const { capture, jobs } = makeServices(vaultPath, vault, agentIngest);
+    const captureResult = capture.submitText({
+      text: "Readiness scheduling must not resolve provider credentials.",
+      inputKind: "typed_text",
+      userIntent: "capture",
+      locale: "en"
+    });
+
+    expect(jobs.processQueuedCaptures({ jobIds: [captureResult.jobId] })).toEqual({
+      processed: 1,
+      completed: 1,
+      failed: 0
+    });
+    expect(jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]?.sourceId)
+      .toBe(captureResult.sourceId);
+    expect(runtimeConfigReads).toBe(0);
+  });
+
   it("creates a metadata-only source page and waiting parser job for preserved PDFs", async () => {
     const { vaultPath, vault } = makeVault();
     const { capture, jobs } = makeServices(vaultPath, vault);
@@ -438,7 +471,59 @@ describe("jobs service", () => {
     expect(sourcePage).not.toContain("Do not treat this binary as text.");
     expect(waitingParser?.sourceId).toBe(sourceId);
     expect(waitingParser?.message).toContain("waiting for local parser capability");
+    const captureJob = readJobRecord(vaultPath, jobId);
+    const parserJob = readJobRecord(vaultPath, requireValue(waitingParser).id);
+    expect(captureJob.childJobIds).toEqual([parserJob.id]);
+    expect(parserJob.parentJobId).toBe(captureJob.id);
     expect(jobs.list({ classes: ["agent_ingest"], states: ["waiting_dependency"] }).jobs).toHaveLength(0);
+  });
+
+  it("recovers a parent crash after durable child handoff without duplicating the child", () => {
+    const { vaultPath, vault } = makeVault();
+    const { capture, jobs } = makeServices(vaultPath, vault);
+    const captured = capture.submitText({
+      text: "A deterministic child survives a crash before its capture parent becomes terminal.",
+      inputKind: "typed_text",
+      userIntent: "capture",
+      locale: "en"
+    });
+    const originalRename = fs.renameSync.bind(fs);
+    const renameSpy = vi.spyOn(fs, "renameSync").mockImplementation((source, target) => {
+      if (String(target).endsWith(`${captured.jobId}.json`)) {
+        const candidate = JSON.parse(fs.readFileSync(String(source), "utf8")) as JobRecord;
+        if (candidate.state !== "running") {
+          const childIds = listJobRecords(vaultPath)
+            .filter((job) => job.parentJobId === captured.jobId)
+            .map((job) => job.id);
+          expect(childIds).toHaveLength(1);
+          expect(candidate.childJobIds).toEqual(childIds);
+          throw new Error("Synthetic crash before parent terminalization.");
+        }
+      }
+      return originalRename(source, target);
+    });
+
+    try {
+      expect(() => jobs.processQueuedCaptures({ jobIds: [captured.jobId] }))
+        .toThrow("Synthetic crash before parent terminalization.");
+    } finally {
+      renameSpy.mockRestore();
+    }
+
+    const interrupted = readJobRecord(vaultPath, captured.jobId);
+    const childId = requireValue(interrupted.childJobIds?.[0]);
+    expect(interrupted.state).toBe("running");
+    expect(readJobRecord(vaultPath, childId).parentJobId).toBe(interrupted.id);
+    expect(jobs.recoverInterruptedJobs()).toEqual({ requeued: 1, failedRetryable: 0 });
+    expect(jobs.processQueuedCaptures({ jobIds: [captured.jobId] })).toEqual({
+      processed: 1,
+      completed: 1,
+      failed: 0
+    });
+    const completedParent = readJobRecord(vaultPath, captured.jobId);
+    expect(completedParent.state).toBe("completed");
+    expect(completedParent.childJobIds).toEqual([childId]);
+    expect(listJobRecords(vaultPath).filter((job) => job.id === childId)).toHaveLength(1);
   });
 
   it("parses preserved PDFs into durable text artifacts before Agent ingest", async () => {
@@ -1050,16 +1135,33 @@ describe("jobs service", () => {
     });
     const sourceId = requireFirst(captured.sourceIds);
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    const queuedParse = requireValue(jobs.list({ classes: ["parse"], states: ["queued"] }).jobs[0]);
+    const terminalObservation = observeRequiredChildBeforeParentTerminal(
+      vaultPath,
+      queuedParse.id,
+      "ocr"
+    );
     replaceLogWithDirectory(vaultPath);
 
-    expect(await jobs.processQueuedParses({ sourceIds: [sourceId] })).toMatchObject({
+    let parseResult;
+    try {
+      parseResult = await jobs.processQueuedParses({ sourceIds: [sourceId] });
+    } finally {
+      terminalObservation.restore();
+    }
+    expect(parseResult).toMatchObject({
       processed: 1,
       completed: 0,
       failed: 1,
       ocrWaitingSourceIds: [sourceId]
     });
-    expect(jobs.list({ classes: ["parse"], states: ["failed_retryable"] }).jobs[0]?.sourceId).toBe(sourceId);
-    expect(jobs.list({ classes: ["ocr"], states: ["queued"] }).jobs[0]?.sourceId).toBe(sourceId);
+    expect(terminalObservation.wasObserved()).toBe(true);
+    const parseJob = requireValue(jobs.list({ classes: ["parse"], states: ["failed_retryable"] }).jobs[0]);
+    const ocrJob = requireValue(jobs.list({ classes: ["ocr"], states: ["queued"] }).jobs[0]);
+    expect(parseJob.sourceId).toBe(sourceId);
+    expect(ocrJob.sourceId).toBe(sourceId);
+    expect(readJobRecord(vaultPath, parseJob.id).childJobIds).toContain(ocrJob.id);
+    expect(readJobRecord(vaultPath, ocrJob.id).parentJobId).toBe(parseJob.id);
   });
 
   it("persists Agent follow-up before an OCR parent can leave its recoverable state", async () => {
@@ -1094,16 +1196,33 @@ describe("jobs service", () => {
     const sourceId = requireFirst(captured.sourceIds);
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
     await jobs.processQueuedParses({ sourceIds: [sourceId] });
+    const queuedOcr = requireValue(jobs.list({ classes: ["ocr"], states: ["queued"] }).jobs[0]);
+    const terminalObservation = observeRequiredChildBeforeParentTerminal(
+      vaultPath,
+      queuedOcr.id,
+      "agent_ingest"
+    );
     replaceLogWithDirectory(vaultPath);
 
-    expect(await jobs.processQueuedOcr({ sourceIds: [sourceId] })).toEqual({
+    let ocrResult;
+    try {
+      ocrResult = await jobs.processQueuedOcr({ sourceIds: [sourceId] });
+    } finally {
+      terminalObservation.restore();
+    }
+    expect(ocrResult).toEqual({
       processed: 1,
       completed: 0,
       failed: 1,
       agentReadySourceIds: [sourceId]
     });
-    expect(jobs.list({ classes: ["ocr"], states: ["failed_retryable"] }).jobs[0]?.sourceId).toBe(sourceId);
-    expect(jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]?.sourceId).toBe(sourceId);
+    expect(terminalObservation.wasObserved()).toBe(true);
+    const ocrJob = requireValue(jobs.list({ classes: ["ocr"], states: ["failed_retryable"] }).jobs[0]);
+    const agentJob = requireValue(jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]);
+    expect(ocrJob.sourceId).toBe(sourceId);
+    expect(agentJob.sourceId).toBe(sourceId);
+    expect(readJobRecord(vaultPath, ocrJob.id).childJobIds).toContain(agentJob.id);
+    expect(readJobRecord(vaultPath, agentJob.id).parentJobId).toBe(ocrJob.id);
   });
 
   it("keeps incomplete PDF rendering retryable without scheduling Agent ingest", async () => {
@@ -2207,6 +2326,42 @@ function requireValue<T>(value: T | undefined): T {
   return value;
 }
 
+function readJobRecord(vaultPath: string, jobId: string): JobRecord {
+  const jobPath = findFile(path.join(vaultPath, ".pige", "jobs"), `${jobId}.json`);
+  return JSON.parse(fs.readFileSync(jobPath, "utf8")) as JobRecord;
+}
+
+function listJobRecords(vaultPath: string): JobRecord[] {
+  return listFiles(path.join(vaultPath, ".pige", "jobs"))
+    .filter((filePath) => filePath.endsWith(".json"))
+    .map((filePath) => JSON.parse(fs.readFileSync(filePath, "utf8")) as JobRecord);
+}
+
+function observeRequiredChildBeforeParentTerminal(
+  vaultPath: string,
+  parentJobId: string,
+  requiredChildClass: JobRecord["class"]
+): { readonly restore: () => void; readonly wasObserved: () => boolean } {
+  const originalRename = fs.renameSync.bind(fs);
+  let observed = false;
+  const spy = vi.spyOn(fs, "renameSync").mockImplementation((source, target) => {
+    if (String(target).endsWith(`${parentJobId}.json`)) {
+      const candidate = JSON.parse(fs.readFileSync(String(source), "utf8")) as JobRecord;
+      if (candidate.state === "completed" || candidate.state === "completed_with_warnings") {
+        const children = (candidate.childJobIds ?? []).map((childId) => readJobRecord(vaultPath, childId));
+        const requiredChild = children.find((child) => child.class === requiredChildClass);
+        expect(requiredChild?.parentJobId).toBe(parentJobId);
+        observed = true;
+      }
+    }
+    return originalRename(source, target);
+  });
+  return {
+    restore: () => spy.mockRestore(),
+    wasObserved: () => observed
+  };
+}
+
 function readJobCancellation(vaultPath: string, jobId: string): {
   readonly requestedAt?: string;
   readonly requestedBy?: string;
@@ -2283,31 +2438,29 @@ ${input.body}
 `, "utf8");
 }
 
-class StaticModelClient implements AgentIngestModelClient {
-  readonly requests: Parameters<AgentIngestModelClient["generateJson"]>[1][] = [];
+class StaticModelClient extends ScriptedAgentIngestRuntime {
+  readonly requests: Array<{ readonly user: string; readonly signal?: AbortSignal }> = [];
 
   constructor(
-    private readonly output: unknown,
-    private readonly onRequest?: () => void | Promise<void>
-  ) {}
+    output: unknown,
+    onRequest?: () => void | Promise<void>
+  ) {
+    super(output, onRequest);
+  }
 
-  async generateJson(
-    _config: ModelProviderRuntimeConfig,
-    request: Parameters<AgentIngestModelClient["generateJson"]>[1]
-  ): Promise<{ readonly text: string }> {
-    this.requests.push(request);
-    await this.onRequest?.();
-    return { text: JSON.stringify(this.output) };
+  protected override async onInspectionReady(request: PiAgentRunRequest): Promise<void> {
+    this.requests.push({
+      user: this.userPrompt,
+      ...(request.signal ? { signal: request.signal } : {})
+    });
   }
 }
 
-class BlockingModelClient implements AgentIngestModelClient {
+class BlockingModelClient {
   readonly started = deferred<void>();
 
-  async generateJson(
-    _config: ModelProviderRuntimeConfig,
-    request: Parameters<AgentIngestModelClient["generateJson"]>[1]
-  ): Promise<{ readonly text: string }> {
+  async run(request: PiAgentRunRequest): Promise<PiAgentRunResult> {
+    await request.beforeModelTurn?.();
     this.started.resolve();
     return new Promise((_resolve, reject) => {
       const rejectAbort = (): void => {

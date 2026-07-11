@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-11T06:04:44Z",
+  "reviewedAt": "2026-07-11T08:31:21Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,9 +30,21 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "fb2e1d2cd1b118e5cf397313c6a8bc55493c4d7d166136cb56c8634f33265a11"
+    "reviewedSha256": "6d278dac3eca2802b1c8267e410a32251cb1e6b8332f70322bfb98ccf19c36ea"
   },
   "reviewers": [
+    {
+      "reviewerId": "pi-agent-spine-combined-review",
+      "task": "/root/pi_spine_planning_audit",
+      "independentDimensions": [
+        "navigation_and_resource_lifecycle",
+        "cross_document_contract_consistency",
+        "continuous_traceability_and_acceptance",
+        "ongoing_development_support",
+        "documentation_leanness_and_maintainability"
+      ],
+      "independence": "Fresh read-only combined reviewer independently traced the frozen 58-file candidate (35 Development and 23 Planning) through Agent/Host/Tool owners, dependency/license governance, Job handoff recovery, non-secret readiness, egress ordering, acceptance, README claims, and remaining fixed orchestration paths without editing files. It rejected intermediate candidates for terminal-before-child persistence, pre-egress credential resolution, credential-usability overclaim, and conflated automatic versus explicit parent retry. After repair it verified exact executable selectors, 1,071 locked claims, unchanged statuses, explicit residual gaps, and zero remaining blockers across all five dimensions."
+    },
     {
       "reviewerId": "readme-role-job-architecture-review",
       "task": "/root/pi_update_architecture",
@@ -55,7 +67,19 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Fresh read-only public-entry and governance reviewer checked the exact 101-file snapshot after its own blockers were repaired: product copy, role-owned edits, delegation and Planning-sync intake, contribution routing, Pi review-only status, de-duplication, and executable governance markers; it made no file changes."
+      "independence": "At the pre-implementation checkpoint, this read-only reviewer challenged semantic-lock drift, document-budget overflow, no-model onboarding, legacy runtime wording, tool contracts, and fixed host sequencing; after repair it accepted that earlier approved-but-unimplemented exception without editing files."
+    },
+    {
+      "reviewerId": "agent-pipeline-final-consistency",
+      "task": "/root/agent_pipeline_final_consistency",
+      "independentDimensions": [
+        "navigation_and_resource_lifecycle",
+        "cross_document_contract_consistency",
+        "continuous_traceability_and_acceptance",
+        "ongoing_development_support",
+        "documentation_leanness_and_maintainability"
+      ],
+      "independence": "Independent read-only final reviewer traced the current diff across product, architecture, Pi, parser, jobs, prompt, context, onboarding, API/data, milestones, decisions, playbook, quality, and acceptance. It found and required repair of nested-model retrieval, final-text write, capture-only, URL, selection-action, legacy-decision, and size conflicts, then reported no remaining status promotion or implementation overclaim."
     },
     {
       "reviewerId": "job-trace-governance-risk-review",
@@ -146,59 +170,59 @@
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "undici-8-7-dependency-review",
+      "reviewerId": "pi-agent-spine-combined-review",
       "blockerCount": 0,
-      "summary": "The existing Source Fetch owner, dependency registry row, machine manifest, and Decision Log now route one exact Undici pin without adding a document or duplicating URL-capture requirements."
+      "summary": "The core philosophy is discoverable from AGENTS, Vision, PRD, and the task router, while Technical Architecture remains the detailed orchestration owner and Pi, Parser, Jobs, Prompt, Context, API/Data, and control documents keep scoped projections rather than a new document."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "undici-8-7-dependency-review",
+      "reviewerId": "pi-agent-spine-combined-review",
       "blockerCount": 0,
-      "summary": "TECH, the 46-record manifest, package and lock edges, the revised extractor decision, and the new Undici pin decision agree on 8.7.0, manual per-hop validation, fresh pinned Agents, HTTP/1.1, and no ambient proxy dispatcher."
+      "summary": "Owners agree that capture preserves first, Pi Agent chooses semantic tools, and Host gates effects. Required children are durable before parent terminalization; readiness uses presence-only binding metadata, while credentials remain after egress allow."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "undici-8-7-dependency-review",
+      "reviewerId": "pi-agent-spine-combined-review",
       "blockerCount": 0,
-      "summary": "The dependency-only delta changes no PRD, Requirement, Build, Exit, acceptance, phase, status, or stable ID; the existing 1,063-claim semantic lock remains aligned with zero differences."
+      "summary": "The 1,071-claim lock adds two exact non-secret-readiness evidence records, strengthens runtime and Job-recovery selectors, and updates six existing acceptance mappings without renumbering IDs or promoting any phase, requirement, or exit."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "undici-8-7-dependency-review",
+      "reviewerId": "pi-agent-spine-combined-review",
       "blockerCount": 0,
-      "summary": "Future dependency work now has workspace-aware direct-edge and installed-entry verification, four executable multi-version cases, a real assembled Electron-main smoke, and explicit packaged-platform and HTTP/2 follow-up boundaries."
+      "summary": "The embedded text-source Pi vertical, deterministic required-child handoff, and non-secret readiness path are executable. B3.13/E3.08 remains partial for parser/OCR/retrieval tools, fixed-route removal, recovery, permissions, a second trace, and packaged proof."
     },
     {
       "id": "documentation_leanness_and_maintainability",
-      "score": 9.7,
-      "reviewerId": "undici-8-7-dependency-review",
+      "score": 9.6,
+      "reviewerId": "pi-agent-spine-combined-review",
       "blockerCount": 0,
-      "summary": "LEN-001 through LEN-005 pass with 57 Markdown files, 22,951 lines, 162,616 words, 1,208,870 bytes, 3,857 entry words, 5,497 trace lines, zero duplicate groups, and 14 mutations."
+      "summary": "The candidate remains at 57 Markdown files and passes every leanness gate with 23,137 lines, 162,641 words, 1,209,956 bytes, 4,039 entry words, 5,481 trace lines, zero duplicate groups, and 14 mutations."
     }
   ],
   "verification": [
     {
       "command": "npm run verify:docs && npm run verify:decisions && npm run verify:ui-visual && npm run verify:contracts && npm run verify:dependencies && npm run verify:fixtures && npm run verify:boundaries && npm run verify:no-telemetry && npm run verify:source-artifacts",
       "status": "passed",
-      "evidence": "All 57 Markdown files, 99 local links, 45 anchors, 78 decisions, 12 UI tokens, 8 structural rules, 448 capture combinations, CON-001 through CON-004, 46 dependencies plus four workspace-lock cases, two fixture manifests, boundaries, source artifacts, and the no-telemetry gate plus 11 mutations passed."
+      "evidence": "All 57 Markdown files, 98 local links, 45 anchors, 80 decisions, 12 UI tokens, 8 structural rules, 448 capture combinations, CON-001 through CON-004, dependencies, fixtures, boundaries, source artifacts, and no-telemetry mutations passed."
     },
     {
-      "command": "npm test && npm run typecheck && npm run build && npm run smoke:electron-undici-transport --workspace @pige/desktop && npm run smoke:index-rebuild-worker && npm run smoke:parser-workers && npm run smoke:macos-vision-ocr",
+      "command": "npm test && npm run typecheck && npm run build && npm run smoke:pi-agent-runtime && npm run smoke:index-rebuild-worker && npm run smoke:parser-workers && npm run smoke:macos-vision-ocr",
       "status": "passed",
-      "evidence": "All 60 test files/418 tests, focused Source Fetch 1 file/16 tests, type checks, production build, the Electron 43.1.0 / Node 24.18.0 / Undici 8.7.0 local TLS transport smoke, parser-worker smoke, and no-telemetry mutations passed."
+      "evidence": "All 62 test files/429 tests, type checks, production build, the assembled Electron Pi inspect-to-publication loop, index-rebuild worker, parser workers, real macOS Vision OCR, and no-telemetry mutations passed."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 passed: 3,857 of 4,200 entry words, zero duplicate groups, 14 mutations, 5,497 trace lines, 57 Markdown files, 1,208,870 bytes, and an 8.47 percent line reduction from baseline."
+      "evidence": "LEN-001 through LEN-005 passed: 4,039 of 4,200 entry words, zero duplicate groups, 14 mutations, 5,481 trace lines, 57 Markdown files, 1,209,956 bytes, and a 7.73 percent line reduction from baseline."
     },
     {
       "command": "node scripts/verify/independent-documentation-review.mjs --print-snapshot && explicit semantic-ledger comparison",
       "status": "passed",
-      "evidence": "The governed snapshot is fb2e1d2cd1b118e5cf397313c6a8bc55493c4d7d166136cb56c8634f33265a11 across 106 files; current and locked semantic ledgers contain 1,063 claims with zero differing IDs or digests, and TRC-001 through TRC-004 pass."
+      "evidence": "The governed snapshot is 6d278dac3eca2802b1c8267e410a32251cb1e6b8332f70322bfb98ccf19c36ea across 109 files; current and locked semantic ledgers contain 1,071 claims with zero differences, and TRC-001 through TRC-005 pass."
     }
   ],
   "coordination": {
@@ -207,25 +231,28 @@
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Undici 8.7 preserves the existing Source Fetch product and SSRF contract: no P0-P9, stable ID, status, acceptance, UI, IPC, durable schema, data boundary, or URL-capture behavior changed.",
-    "acknowledgement": "Development froze the isolated Source Fetch, dependency, lockfile, smoke, and workspace-aware verifier changes after focused 1/16, full 60/418, typecheck, build, transport smoke, and invariant gates. Product Planning made the minimum TECH/manifest/Decision projection and obtained an independent zero-blocker review before binding once."
+    "compatibility": "No stable ID or status changed. Existing parser/OCR/retrieval/Job work remains tool substrate; the first text-source path now uses embedded Pi while format-driven continuations stay explicitly open.",
+    "acknowledgement": "Development delivered the frozen embedded Pi vertical plus required-child and non-secret-readiness repairs; Product Planning synchronized the exact Owner, acceptance, semantic, and residual-risk facts into this 58-file combined candidate."
   },
   "resolvedBlockers": [
-    "Rewrote README as a 378-word product entry with user value, honest current capability, principles, v0.1 roadmap, and the Agent-authored automation goal instead of a technical inventory.",
+    "Rewrote README as a concise product entry with user value, honest current capability, the Agent-first roadmap, privacy boundaries, and the Agent-authored automation goal instead of a technical inventory.",
     "Made Product Planning the sole product, technical, development-management, and governance contract editor; kept detailed UI guidance with UI Design, code/evidence with Development, and delivery/Git/CI/releases with Project Management; cross-role edits require explicit scoped delegation.",
     "Added Agent role, cross-role delegation, and Product Planning design-sync status to context, handoff, and PR intake; routed public design contributions to Planning or UI Design and added missing-field and missing-routing mutations.",
     "Kept the PRD as the AI Coding Agent product contract and made PRD/Owner impact bidirectional without duplicating full definitions across documents.",
     "Removed repeated parse/OCR and UI checklist prose in favor of exact Owner pointers; retained zero duplicate groups and reduced governed Markdown lines by 8.67 percent from baseline.",
-    "Deep-reviewed Pi v0.80.6 at a fixed commit and admitted only isolated selected-model binding and receiver-safe stream design as review-only guidance; no package, runtime, catalog, credential fallback, or dependency adoption occurred.",
+    "Adopted exact Pi v0.80.6 core/AI under the approved containment exception with bundled license text, isolated models/auth, one importer, inert compat defaults, import-side-effect and mutation gates, and no second AI SDK.",
     "Synchronized single-writer pre-publication guard persistence, capture projection fencing, process-local Agent-ingest cancellation, monotonic restart recovery, and exact evidence without promoting partial states.",
     "Synchronized the B5.10 fake/local lifecycle foundation, one exact E5.02 selector, honest planned/partial states, and complete production gaps without expanding PRD or Parser ownership.",
     "Synchronized the B6.15 CI-produced body-free retrieval report, one exact upload selector, immutable upload-action pin, honest partial states, and complete model/linking/vector/locale/scale/platform gaps without changing runtime behavior.",
     "Synchronized the B6.12 rebuildable Knowledge Tree aggregate foundation, one exact selector, honest partial/planned states, preserved Phase 4 link boundaries, and correct UI/Health ownership without exposing a public tree contract.",
     "Synchronized the explicit P4 index-rebuild worker, process-local progress/cancellation, bounded resource protocol, rollback semantics, one exact selector, unchanged verified/partial states, and complete scale/cross-process/recovery/platform gaps.",
-    "Made upstream Pi Agent plus Pi AI the sole Phase 3 Agent/provider runtime behind one thin adapter, removed the mistaken AI SDK path, mapped P0 output and deterministic tool acceptance, and kept v0.80.6 compat-free entry absence and the direct bridge explicit without promotion.",
+    "Made Pi Agent the sole post-preservation semantic orchestrator, defined schema-complete single-effect Pige tools and Host gates, removed the mistaken AI SDK path, and kept the direct bridge and fixed parser/OCR continuations explicitly transitional without promotion.",
+    "Reconciled capture-only, URL extraction, parser/OCR, retrieval, selection, publication, prompt/context, Jobs, API/data, milestones, and legacy decisions with the Agent-led contract; implemented its first text-source vertical while keeping B3.13/E3.08 partial.",
     "Bound fail-closed diagnostic detail and top-level-message persistence/export, retention, rotation, and 11-case no-telemetry evidence; scoped backup evidence to current registered in-vault roots while preserving every broader gap.",
     "Repaired CON-002 so it isolates JobRecordSchema, checks root strictness and cross-field cancellation invariants, and rejects three in-memory false-positive mutations instead of matching a later unrelated schema.",
-    "Upgraded the direct desktop runtime to Undici 8.7.0 while preserving manual per-hop validation, fresh address-pinned Agents and explicit HTTP/1.1; added workspace-aware lock verification and four multi-version cases without changing acceptance or product status."
+    "Upgraded the direct desktop runtime to Undici 8.7.0 while preserving manual per-hop validation, fresh address-pinned Agents and explicit HTTP/1.1; added workspace-aware lock verification and four multi-version cases without changing acceptance or product status.",
+    "Persisted and linked deterministic capture/parse/OCR children before parent terminalization, with crash recovery reusing one child instead of losing or duplicating semantic continuation.",
+    "Separated non-secret runtime readiness from credential-bearing runtime resolution; status, onboarding, and scheduling now prove zero decryption before model-egress allow."
   ],
   "nonBlockingRisks": [
     "P5 remains in progress: remaining Job-class publishers, running capture/other-class cancellation, strict cross-process Job CAS and routing, parent-directory swap, guard-to-domain atomicity, guard-without-output recovery, checkpoint arrays, cross-file transactions, Windows/Paddle, packaged-filesystem proof, and visible progress/cancel UI remain open.",
@@ -233,11 +260,10 @@
     "The local-tool lifecycle remains a fake/local service foundation: real Paddle/Python/model/language-pack transport, ordinary-ingest no-hidden-install proof, production app-data/catalog/permission/pre-vault Job/Operation wiring, OCR/UI, supply chain, packaged platforms, cross-process locking, complete recovery/GC/quarantine purge, and background lifecycle controls remain open.",
     "The retrieval regression foundation remains lexical and synthetic: model-grounded summary/citation validation under cloud-send and Permission enforcement, tag/topic/entity and Knowledge Tree thresholds, vector/reranker ranking, 10k/100k and UI/packaged proof, and broader locale/query families remain open.",
     "The Knowledge Tree remains internal-only: broader relation and branch semantics, richer aggregate inputs, public IPC/preload/renderer navigation, localized empty state, 10k worker/incremental rebuild proof, packaged parity, and the separately owned visual/accessibility and Knowledge Health work remain open.",
-    "Pi v0.80.6 remains review-only: no package, compat containment, embedded loop/tool, selected binding, direct-call gate, or packaged proof exists. Pi AI transitively names an inert telemetry API at the reviewed tag, so adoption must repeat dependency, runtime-network, and no-upload review; the direct JSON bridge and phase_1_stub are not completion evidence.",
+    "Pi remains partial: PDF/Office/OCR/retrieval/proposal tools, complete registry metadata, fixed Jobs/main DAG and URL/renderer bypass removal, child pause/restart/continue, full persisted Permission Broker, a second semantic trace, continue/steer/follow-up/restart proof, manual BYOK, signed installed macOS/Windows, and strict cross-file atomicity beyond required-child handoff remain open.",
     "No-telemetry is a static executable gate; unknown SDKs, computed endpoints, indirect transports, generated configuration, and crash-hook review remain open. Diagnostics still need broader stores, recovery correlation, user clear, export cancellation, selected-path UX, and crash recovery.",
     "Backup still needs backupId/domainSchemaVersions, release exclusion scans, external managed copies, include controls, durable Jobs/checkpoints, structured dependencies, and complete restore orchestration.",
-    "Trace projections use 5,497 of 5,500 lines and governed Markdown uses 1,208,870 of 1,210,000 bytes; future semantic additions must reclaim capacity in the same change instead of raising budgets.",
-    "Role ownership is enforced by instructions, templates, routing markers, and negative mutations rather than operating-system write permissions; reviewers must still detect semantically disguised role crossing and contributors must fill intake fields honestly.",
+    "Trace projections use 5,481 of 5,500 lines and governed Markdown uses 1,209,956 of 1,210,000 bytes; future semantic additions must reclaim capacity in the same change instead of raising budgets.",
     "PRD, TECH_ARCHITECTURE, and Decision Log remain large Owner documents; future Agents should continue section-targeted reads and define each fact once.",
     "The concise pre-alpha README intentionally has no install button, screenshots, or release download; add those only when a usable signed build and governed visual evidence exist.",
     "Structural UI gates do not prove packaged macOS/Windows fidelity, accessibility, or human visual approval; real capture and release evidence remain open.",

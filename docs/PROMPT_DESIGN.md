@@ -26,6 +26,8 @@ TASK
 AUTHORITY AND SAFETY RULES
 RUNTIME POLICY CONTEXT
 AVAILABLE CONTEXT
+AVAILABLE TOOLS
+TOOL RESULTS
 UNTRUSTED SOURCE CONTENT
 OUTPUT SCHEMA
 QUALITY BAR
@@ -41,6 +43,8 @@ Rules:
 - Do not store full prompts/responses by default.
 - Runtime policy context is generated from typed settings and service state as defined in `docs/AGENT_RUNTIME_POLICY_CONTEXT.md`; do not hand-write ad hoc policy prompt fragments per workflow.
 - Context source selection, budget classes, retrieval scope, citation packing, memory injection order, and compaction rules are defined in `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`.
+- Registry tool descriptors and typed results are lower-authority context; they cannot
+  grant tools, permissions, providers, paths, or policy changes.
 
 ## 4. Untrusted Source Blocks
 
@@ -64,30 +68,25 @@ Rules:
 
 Goal:
 
-- Turn one source into a source page, wiki updates, tags, links, citations, and a concise user-visible result.
+- Select minimal tools for a preserved source, replan from results, and produce cited knowledge.
 
 Required context:
 
 - Source record metadata.
-- Extracted fragments with locators.
-- Existing related page summaries.
+- Task-scoped tool descriptors; fragments/related summaries only from returned results.
 - `PIGE.md` rules.
 - Knowledge model and linking rules from `docs/KNOWLEDGE_MODEL_AND_LINKING.md`.
 - Allowed action trust level.
 
 Required output:
 
-- Source page draft.
-- Proposed wiki writes.
-- Tags, topic/entity assignments, source citations, and relationship suggestions as separate structured fields.
-- Suggested links.
-- Warnings.
-- Confidence.
-- User-facing summary.
+- Tool calls and ephemeral bounded plan summaries; restart replans them.
+- Schema-valid proposal/publication arguments with citations and no arbitrary path.
+- A final summary from verified results; final text cannot write durable knowledge.
 
-Phase 3 bridge output:
+First embedded Pi publication-tool input:
 
-Before the full Pi Agent workflow and proposal system are enabled, basic Agent ingest may request one JSON object with:
+The first Pi spine accepts this strict tool-call object:
 
 ```ts
 type AgentIngestOutput = {
@@ -110,21 +109,27 @@ type AgentIngestOutput = {
 
 Rules:
 
-- The main-process Evidence Assembly Service verifies selected source/artifact integrity, pairs parser/OCR text with its own metadata sidecar by source ID, sidecar Artifact ID, kind, and text checksum, then packages at most 24 fragments and 18,000 evidence characters inside one explicit `<untrusted_source>` block. It does not send vault paths or metadata sidecar bodies.
+- This two-tool slice preserves evidence and cannot close B3.13/E3.08 or write from final text.
+- The main-process Evidence Assembly Service verifies selected source/artifact integrity, pairs parser/OCR text with its own metadata sidecar by source ID, sidecar Artifact ID, kind, and text checksum, then packages at most 24 fragments and 18,000 evidence characters inside one explicit `<untrusted_source_evidence>` block. It does not send vault paths or metadata sidecar bodies.
 - Each packaged fragment receives an ephemeral ordered `ev_NN` ref plus its durable source/Artifact locator. Native extracted text is ordered before OCR; same-parent OCR text is removed only when it repeats native text. The merged prompt representation is ephemeral and is never persisted as a second body Artifact.
 - Parser coverage, truncation, OCR-pending state, and bounded parser warnings are trusted source-quality metadata outside the untrusted body. Before egress, Pige bounds and redacts every dynamic metadata string, freezes the typed prompt context, and includes only a non-secret policy summary. The prompt tells the model not to imply complete-document coverage when these fields are limited.
 - Validated OCR handoff adds engine, normalized confidence, bounded warning codes, OCR Artifact IDs, and bounded `ocr:block:N` or `page:N/ocr:block:M` locators as trusted evidence metadata. Recognized text remains inside fragment-level evidence delimiters.
 - Obvious secret-like strings are redacted before cloud model calls.
-- Invalid JSON or schema-invalid output fails the `agent_ingest` job as retryable and must not write partial wiki pages.
+- Malformed or schema-invalid tool arguments fail before the handler and cannot write partial wiki pages.
 - The ingest output schema is strict. Model-authored settings, Provider changes, permission grants, tool requests, `PIGE.md` replacement, or output paths are rejected as unknown control fields before a generated note write.
-- The bridge writes only the validated note, operation summary, index entry, and log entry. It does not persist raw prompts or raw provider responses by default.
-- If `confidence` is `"low"` or `warnings` is non-empty, the bridge marks the generated note `status: "needs_review"` with `note.review_state: "needs_review"` and the job completes as `completed_with_warnings`.
+- The publication handler writes the validated note, Operation, and index. After its
+  typed result, Jobs Service appends log and completes the Job; recovery is idempotent,
+  not cross-file atomic. Raw prompts or provider responses are not persisted by default.
+- If `confidence` is `"low"` or warnings exist, the publication handler marks the note
+  `needs_review`; Jobs Service completes the Job with warnings.
 - Service-side quality guards add a warning and cap model-reported `high` confidence at `medium` when document extraction was range-limited or visible content still needs OCR. Prompt compliance alone is not the enforcement layer.
 - The same service-side guard forces review and caps `high` confidence when OCR confidence is below `0.65` or warnings report block/text truncation. Empty OCR never reaches the model.
 - Source/artifact checksum and size are verified before the cloud call when integrity metadata exists. Delimiter-like source text is escaped inside the untrusted block so source content cannot close the evidence wrapper.
-- The Model Egress Decision binds the redacted evidence, frozen dynamic metadata, concrete Provider endpoint/boundary, and selected provider model ID. Pige revalidates non-secret profiles before rendering this context and the credential-bearing runtime config before invoking the provider; same-ID routing changes fail closed.
+- Model Egress binds redacted evidence, frozen metadata, Provider endpoint/boundary, and
+  selected model ID. Before Pi invocation Pige validates credential-bearing config;
+  each turn rechecks non-secret binding, source/cancellation, and egress. Drift fails closed.
 - The model may cite only supplied `ev_NN` refs. Unknown refs fail before any Markdown write. A statement with an empty ref list is retained only with a warning, confidence cap, and `needs_review`; model-authored `[source:...]` or `[artifact:...]` tokens are stripped and canonical citations are rendered service-side.
-- The bridge does not yet create a durable confirmation proposal for low-confidence summaries; full proposal routing remains the later Pi Agent workflow.
+- The tool does not yet create durable low-confidence proposals; full proposal routing remains open.
 
 ### 5.2 Home Query
 

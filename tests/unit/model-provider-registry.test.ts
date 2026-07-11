@@ -14,14 +14,17 @@ const fakeCrypto: SecretCryptoAdapter = {
   decryptString: (encrypted) => encrypted.toString("utf8").replace(/^encrypted:/u, "")
 };
 
-function makeRegistry(fetchImpl: FetchLike = okModelListFetch(["gpt-4.1"])): { root: string; registry: ModelProviderRegistry } {
+function makeRegistry(
+  fetchImpl: FetchLike = okModelListFetch(["gpt-4.1"]),
+  crypto: SecretCryptoAdapter = fakeCrypto
+): { root: string; registry: ModelProviderRegistry } {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-model-registry-test-"));
   tempRoots.push(root);
   return {
     root,
     registry: new ModelProviderRegistry(
       root,
-      new JsonSecretStore(root, fakeCrypto),
+      new JsonSecretStore(root, crypto),
       new ModelProviderConnectionTester(fetchImpl)
     )
   };
@@ -58,6 +61,35 @@ describe("model provider registry", () => {
     expect(modelProfiles).not.toContain("sk-test-secret");
     expect(secrets).not.toContain("sk-test-secret-123456789");
     expect(secrets).toContain(Buffer.from("encrypted:sk-test-secret-123456789", "utf8").toString("base64"));
+  });
+
+  it("checks the selected runtime binding by secret reference without decrypting credentials", async () => {
+    let decryptCalls = 0;
+    const crypto: SecretCryptoAdapter = {
+      ...fakeCrypto,
+      decryptString: (encrypted) => {
+        decryptCalls += 1;
+        return fakeCrypto.decryptString(encrypted);
+      }
+    };
+    const { root, registry } = makeRegistry(okModelListFetch(["gpt-4.1"]), crypto);
+
+    await registry.addManualProvider({
+      displayName: "OpenAI",
+      providerKind: "openai",
+      apiKey: "sk-runtime-secret",
+      manualModelId: "gpt-4.1",
+      cloudBoundary: "cloud"
+    });
+
+    expect(registry.hasDefaultRuntimeBinding()).toBe(true);
+    expect(decryptCalls).toBe(0);
+    expect(registry.getDefaultRuntimeConfig()?.apiKey).toBe("sk-runtime-secret");
+    expect(decryptCalls).toBe(1);
+
+    fs.writeFileSync(path.join(root, "secrets.json"), '{"schemaVersion":1,"secrets":[]}\n', "utf8");
+    expect(registry.hasDefaultRuntimeBinding()).toBe(false);
+    expect(decryptCalls).toBe(1);
   });
 
   it("falls back to manual model storage when a compatible provider does not expose a model list", async () => {
