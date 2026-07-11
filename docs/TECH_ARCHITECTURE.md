@@ -253,7 +253,7 @@ Current implementation:
 - Text and supported files are preserved as managed sources or verified references;
   bounded metadata-only/direct-text source projections may follow.
 - The bridge still direct-routes Office/image kinds to parse/OCR Jobs. Preserved PDFs
-  queue Agent ingest; a Pi parse call persists its deterministic child. Remaining host
+  queue Agent ingest; Pi parse/OCR calls persist deterministic children. Remaining host
   routes do not satisfy B3.13/E3.08.
 
 ### 5.1.1 Source Storage Service
@@ -550,8 +550,8 @@ Engine routing:
 
 Current macOS image, PDF, and PPTX implementation:
 
-- The verified bounded Swift helper serves direct images and selected PDF/PPTX raster
-  targets through one schema-versioned, local-only process boundary.
+- The verified bounded Swift helper serves direct images, Pi-selected PDF pages, and
+  selected PPTX media through one schema-versioned, local-only process boundary.
 - Main-process owners verify sources and pixels, persist independent checksummed OCR
   Artifacts/sidecars and provenance, and keep empty/partial/low-confidence states honest.
 - Exact recognition limits, locators, materialization, reuse, Evidence Assembly, and
@@ -1425,8 +1425,8 @@ type AgentIngestStart = {
 The initial Agent input contains preserved-source identity, bounded safe metadata,
 policy, and tool contracts—not host-preselected text. Evidence and quality metadata
 enter later as bounded tool results with durable Artifact/locator refs. The text/PDF
-vertical freezes source/job scope and exposes inspect, PDF parse, and publication;
-Office/OCR/retrieval expansion remains B3.13/E3.08 work.
+vertical freezes source/job scope and exposes inspect, PDF parse/OCR, and publication;
+Office, direct-image/PPTX OCR, and retrieval remain B3.13/E3.08 work.
 
 ### 9.2 Knowledge Publication Boundary
 
@@ -1507,10 +1507,9 @@ Current embedded Agent ingest spine:
 
 - Normal text/PDF ingest runs through the sole embedded Pi adapter with one selected
   provider/model binding and no direct-provider fallback.
-- `pige_inspect_source` returns bounded verified evidence for the frozen source context;
-  `pige_parse_source` creates/reuses one bound PDF child and refreshes evidence; the note
-  tool revalidates output, refs, revision, cancellation, and create-only publication.
-- Office/OCR/retrieval tools, generic child recovery, full Broker, and remaining fixed
+- `pige_inspect_source` returns bounded verified evidence; PDF parse/OCR tools create or
+  reuse bound children and refresh evidence; publication revalidates refs and revision.
+- Office, direct-image/PPTX OCR, retrieval, generic recovery, full Broker, and fixed
   routing stay open.
 
 The v0.1 UI exposes only the P0 provider modes defined in `docs/PRD.md`, through the
