@@ -1286,7 +1286,12 @@ Responsibilities:
 - Block task-time downloads for core toolchain dependencies.
 - Keep network access off during OCR execution unless a future tool explicitly declares and requests it.
 
-The current desktop implementation exposes `system.toolchainHealth` as a read-only status query over `resources/toolchain-manifest/toolchain.manifest.json`. It reports missing bundled tools as repair-needed and never downloads tools during health checks.
+Current desktop code keeps `system.toolchainHealth` read-only and adds a service-local,
+non-networked fake-package lifecycle under trusted app data. Catalog-bound checksummed
+staging atomically publishes relative-only records; tests cover user/permission/Job
+gates, side-by-side recovery, independent packs, and vault invariance. Production
+wiring, Paddle/OCR, UI/platform, cross-process, and full recovery proof remain open;
+no `LocalToolPlugin` contract is frozen.
 
 Toolchain manifest:
 

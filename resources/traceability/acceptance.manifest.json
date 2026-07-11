@@ -1717,7 +1717,7 @@
     },
     "PIGE-INGEST-002": {
       "status": "planned",
-      "plannedTarget": "PaddleOCR install, verify, test, update, disable, remove, repair, language-pack, and no-hidden-install integration tests."
+      "plannedTarget": "Real PaddleOCR/Python/model/language-pack transport, ordinary-ingest no-hidden-install integration, production app-data/catalog/permission/pre-vault Job/Operation wiring, OCR routing, UI/platform, supply-chain, and recovery acceptance."
     },
     "PIGE-INGEST-003": {
       "status": "partial",
@@ -3252,12 +3252,10 @@
     },
     "E5.02": {
       "status": "partial",
-      "evidence": [
-        "EV-PARSER-SMOKE"
-      ],
+      "evidence": ["EV-PARSER-SMOKE", "EV-LOCAL-TOOL-LIFECYCLE-FOUNDATION"],
       "open": {
         "id": "OPEN-EXIT-E5.02",
-        "description": "The complete optional PaddleOCR lifecycle remains open.",
+        "description": "Packaged proof that core parsers and ordinary ingest never install dependencies implicitly; real PaddleOCR/Python/model/language-pack transport; production app-data/catalog/Permission Broker/machine-local pre-vault JobStore/OperationKind wiring; OCR routing/inference/reprocessing; public IPC/UI/consent copy; supply-chain/SBOM/NOTICE and packaged-platform proof; cross-process locking/CAS; complete crash/restart/GC/quarantine purge; background update, progress/cooperative cancellation, and final engine-pack removal UX remain open.",
         "targetBuilds": [
           "B5.10"
         ],
@@ -4040,6 +4038,7 @@
       "path": "scripts/verify/parser-worker-smoke.mjs",
       "selector": "Built document and web parser workers loaded and returned valid protocol responses."
     },
+    "EV-LOCAL-TOOL-LIFECYCLE-FOUNDATION": { "kind": "test", "path": "tests/unit/local-tool-manager-service.test.ts", "selector": "installs an explicit local fixture and derives a ready capability without network access" },
     "EV-DOCUMENT-PIPELINE": {
       "kind": "test",
       "path": "tests/unit/jobs-service.test.ts",

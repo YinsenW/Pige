@@ -332,6 +332,11 @@ Build:
 
 Implementation evidence snapshot; P5 remains in progress:
 
+Current B5.10 evidence covers only Technical Architecture section 5.8's fake/local
+foundation: explicit-user gates, non-networked staged and record commits, independent packs,
+recovery, and vault invariance. Production transport/wiring, OCR/UI, supply-chain,
+platform, cross-process, and full recovery proof remain open.
+
 Evidence exists for preserved PDF -> recoverable local worker -> deterministic text/metadata artifacts -> page locators -> checksum-safe source-page refresh -> OCR handoff -> Agent ingest when text coverage is useful.
 
 Evidence exists for preserved DOCX/PPTX -> bounded Office worker -> semantic blocks or ordered slide/notes extraction -> selected PPTX raster materialization -> local OCR -> locator-bearing Agent context -> crash-safe reuse.
