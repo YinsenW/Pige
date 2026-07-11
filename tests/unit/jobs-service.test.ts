@@ -1307,7 +1307,7 @@ describe("jobs service", () => {
     expect(jobs.list({ classes: ["parse"], states: ["completed_with_warnings"] }).jobs[0]?.message).toContain("edited source page was preserved");
   });
 
-  it("routes preserved Office documents to parser jobs and images to OCR jobs", async () => {
+  it("routes preserved Office documents to Agent jobs while direct images retain host OCR", async () => {
     const { vaultPath, vault } = makeVault();
     const { capture, jobs } = makeServices(vaultPath, vault);
     const sourceRoot = path.dirname(vaultPath);
@@ -1331,14 +1331,15 @@ describe("jobs service", () => {
     const processResult = jobs.processQueuedCaptures({ jobIds: captureResult.jobIds });
     const parserJobs = jobs.list({ classes: ["parse"], states: ["waiting_dependency"], limit: 10 }).jobs;
     const ocrJobs = jobs.list({ classes: ["ocr"], states: ["waiting_dependency"], limit: 10 }).jobs;
+    const agentJobs = jobs.list({ classes: ["agent_ingest"], states: ["waiting_dependency"], limit: 10 }).jobs;
 
     expect(processResult).toEqual({ processed: 3, completed: 3, failed: 0 });
-    expect(parserJobs.map((job) => job.sourceKind).sort()).toEqual(["docx_file", "pptx_file"]);
-    expect(parserJobs.every((job) => job.message.includes("waiting for local parser capability"))).toBe(true);
+    expect(parserJobs).toEqual([]);
+    expect(agentJobs.map((job) => job.sourceKind).sort()).toEqual(["docx_file", "pptx_file"]);
+    expect(agentJobs.every((job) => job.message.includes("waiting for a tested default model"))).toBe(true);
     expect(ocrJobs).toHaveLength(1);
     expect(ocrJobs[0]?.sourceKind).toBe("image_file");
     expect(ocrJobs[0]?.message).toContain("waiting for local OCR capability");
-    expect(jobs.list({ classes: ["agent_ingest"], states: ["waiting_dependency"], limit: 10 }).jobs).toHaveLength(0);
   });
 
   it("persists image OCR artifacts, refreshes the source page, and reuses validated output after recovery", async () => {
@@ -1566,6 +1567,7 @@ describe("jobs service", () => {
       locale: "en"
     });
     jobs.processQueuedCaptures({ jobIds: captureResult.jobIds });
+    for (const sourceId of captureResult.sourceIds) seedExplicitPdfParseJob(vaultPath, sourceId);
     expect(jobs.list({ classes: ["parse"], states: ["queued"], limit: 10 }).jobs).toHaveLength(2);
 
     const parseResult = await jobs.processQueuedParses({ sourceIds: captureResult.sourceIds, limit: 10 });
@@ -1647,11 +1649,12 @@ describe("jobs service", () => {
     });
     const sourceId = requireFirst(captured.sourceIds);
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    seedExplicitPdfParseJob(vaultPath, sourceId);
 
     const parsed = await jobs.processQueuedParses({ sourceIds: [sourceId] });
     expect(parsed).toMatchObject({ completed: 1, agentReadySourceIds: [], ocrWaitingSourceIds: [sourceId] });
     expect(jobs.list({ classes: ["ocr"], states: ["queued"] }).jobs[0]?.sourceId).toBe(sourceId);
-    expect(jobs.list({ classes: ["agent_ingest"] }).jobs).toHaveLength(0);
+    expect(jobs.list({ classes: ["agent_ingest"], states: ["waiting_dependency"] }).jobs[0]?.sourceId).toBe(sourceId);
 
     const recognized = await jobs.processQueuedOcr({ sourceIds: [sourceId] });
     const sourceRecord = JSON.parse(fs.readFileSync(

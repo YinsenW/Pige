@@ -137,8 +137,8 @@ export function createAgentIngestToolRegistry(input: {
     },
     {
       name: OCR_SOURCE_TOOL_NAME,
-      label: "Recognize preserved PDF pages",
-      description: "Run bounded local OCR for the parser-selected pages of the current preserved PDF. Takes no path, source ID, page list, or model authority.",
+      label: "Recognize selected document visuals",
+      description: "Run bounded local OCR for parser-selected pages or presentation media of the current preserved source. Takes no path, source ID, target list, or model authority.",
       parameters: EMPTY_OBJECT_SCHEMA,
       version: OCR_SOURCE_TOOL_VERSION,
       capability: "ocr_current_source",

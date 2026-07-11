@@ -328,17 +328,22 @@ export class JobsService {
     for (const jobFile of readJobRecordFiles(path.join(vaultPath, ".pige", "jobs"))) {
       if (jobFile.job.class !== "agent_ingest" || jobFile.job.state !== "waiting_dependency") continue;
       const sourceRecord = jobFile.job.sourceId ? readSourceRecord(vaultPath, jobFile.job.sourceId) : undefined;
-      const waitingAgentOcr = sourceRecord?.kind === "pdf_file" &&
+      const agentSelectedOcr = Boolean(sourceRecord && supportsAgentSelectedOcr(sourceRecord.kind));
+      const waitingAgentOcr = agentSelectedOcr &&
         hasWaitingAgentOcrChild(vaultPath, jobFile.job);
-      if (waitingAgentOcr) {
+      const agentOcrRequiredBeforePublication = agentSelectedOcr &&
+        sourceRecord?.metadata.needsOcr === true &&
+        sourceRecord.metadata.agentTextReady !== true;
+      if (waitingAgentOcr || agentOcrRequiredBeforePublication) {
         if (!sourceRecord || !inspectOcrSource(this.#ocr, sourceRecord).ready) continue;
-      } else if (sourceRecord && shouldWaitForRunnableOcr(this.#ocr, sourceRecord)) {
+      } else if (!agentSelectedOcr && sourceRecord && shouldWaitForRunnableOcr(this.#ocr, sourceRecord)) {
         continue;
       }
       if (
-        sourceRecord?.kind === "pdf_file" &&
+        sourceRecord &&
+        supportsAgentSelectedParser(sourceRecord.kind) &&
         hasWaitingAgentParseChild(vaultPath, jobFile.job) &&
-        !this.#documentParser?.canParse("pdf_file")
+        !this.#documentParser?.canParse(sourceRecord.kind)
       ) continue;
       writeJsonAtomic(jobFile.path, JobRecordSchema.parse({
         ...jobFile.job,
@@ -441,19 +446,18 @@ export class JobsService {
             )
           }
         );
-        if (sourceRecordFile.sourceRecord.kind === "pdf_file") {
+        if (supportsAgentSelectedParser(sourceRecordFile.sourceRecord.kind)) {
           ensureAgentIngestJob(
             vaultPath,
             captureExecution.job,
             sourceRecordFile.sourceRecord.id,
             canRunAgentIngest(this.#agentIngest)
           );
-        } else if (needsParserOrOcr(sourceRecordFile.sourceRecord.kind)) {
-          ensureParserOrOcrJob(
+        } else if (sourceRecordFile.sourceRecord.kind === "image_file") {
+          ensureHostRoutedImageOcrJob(
             vaultPath,
             captureExecution.job,
             sourceRecordFile.sourceRecord,
-            Boolean(this.#documentParser?.canParse(sourceRecordFile.sourceRecord.kind)),
             inspectOcrSource(this.#ocr, sourceRecordFile.sourceRecord)
           );
         } else {
@@ -748,7 +752,7 @@ export class JobsService {
         continue;
       }
       if (
-        sourceRecordFile.sourceRecord.kind !== "pdf_file" &&
+        !supportsAgentSelectedOcr(sourceRecordFile.sourceRecord.kind) &&
         shouldWaitForRunnableOcr(this.#ocr, sourceRecordFile.sourceRecord)
       ) {
         markJobWaitingDependency(
@@ -794,7 +798,7 @@ export class JobsService {
             if (
               !currentSource ||
               sourceRecordRevision(currentSource) !== sourceRecordRevision(expectedSource) ||
-              (currentSource.kind !== "pdf_file" && shouldWaitForRunnableOcr(this.#ocr, currentSource))
+              (!supportsAgentSelectedParser(currentSource.kind) && shouldWaitForRunnableOcr(this.#ocr, currentSource))
             ) {
               throw new PigeDomainError(
                 "agent_ingest.source_changed",
@@ -847,7 +851,7 @@ export class JobsService {
           markJobWaitingDependency(
             jobFile.path,
             runningJob,
-            "Agent-selected PDF processing is waiting for a registered local capability.",
+            "Agent-selected document processing is waiting for a registered local capability.",
             durableState
           );
         } else if (caught instanceof PigeDomainError && caught.code === "source.external_unavailable") {
@@ -930,11 +934,12 @@ export class JobsService {
     ) {
       throw new PigeDomainError("agent_ingest.source_changed", "The selected source changed before parser dispatch.");
     }
-    if (sourceFile.sourceRecord.kind !== "pdf_file") {
-      throw new PigeDomainError("parser.unsupported_source", "The first Agent-selected parser tool supports preserved PDF sources only.");
+    if (!supportsAgentSelectedParser(sourceFile.sourceRecord.kind)) {
+      throw new PigeDomainError("parser.unsupported_source", "The Agent-selected parser tool does not support this preserved source type.");
     }
 
     const parserReady = Boolean(this.#documentParser?.canParse(sourceFile.sourceRecord.kind));
+    const dependencyCode = parserDependencyCode(sourceFile.sourceRecord.kind);
     let child = ensureAgentParseToolJob(
       vaultPath,
       currentParent.job,
@@ -945,17 +950,21 @@ export class JobsService {
     const reused = child.state === "completed" || child.state === "completed_with_warnings";
     if (reused) {
       parentControl.markDurableCheckpoint("agent_parse_child_output_adoption_started");
-      return createAgentParseToolExecution(child, sourceFile.sourceRecord, "reused");
+      return createAgentParseToolExecution(
+        child,
+        sourceFile.sourceRecord,
+        sourceFile.sourceRecord.metadata.needsOcr === true ? "needs_ocr" : "reused"
+      );
     }
     if (!parserReady) {
-      return createAgentParseToolExecution(child, sourceFile.sourceRecord, "waiting_dependency", "pdf_parser_unavailable");
+      return createAgentParseToolExecution(child, sourceFile.sourceRecord, "waiting_dependency", dependencyCode);
     }
 
     if (child.state === "failed_final") {
-      throw new PigeDomainError("parser.tool_failed_final", "The durable PDF parse child cannot be retried safely.");
+      throw new PigeDomainError("parser.tool_failed_final", "The durable document parse child cannot be retried safely.");
     }
     if (child.state === "running" || child.state === "cancel_requested") {
-      throw new PigeDomainError("parser.tool_recovery_required", "The durable PDF parse child requires startup recovery before reuse.");
+      throw new PigeDomainError("parser.tool_recovery_required", "The durable document parse child requires startup recovery before reuse.");
     }
     if (child.state !== "queued") {
       const retry = this.retry({ jobId: child.id });
@@ -980,7 +989,7 @@ export class JobsService {
       return createAgentParseToolExecution(child, refreshedSource, status);
     }
     if (child.state === "waiting_dependency") {
-      return createAgentParseToolExecution(child, refreshedSource, "waiting_dependency", "pdf_parser_unavailable");
+      return createAgentParseToolExecution(child, refreshedSource, "waiting_dependency", dependencyCode);
     }
     if (request.signal.aborted || child.state === "cancelled" || child.state === "cancel_requested") {
       throw new JobCancellationError({
@@ -989,9 +998,9 @@ export class JobsService {
       });
     }
     if (child.state === "failed_final") {
-      throw new PigeDomainError("parser.tool_failed_final", "The durable PDF parse child failed validation.");
+      throw new PigeDomainError("parser.tool_failed_final", "The durable document parse child failed validation.");
     }
-    throw new PigeDomainError("parser.tool_failed_retryable", "The durable PDF parse child remains retryable.");
+    throw new PigeDomainError("parser.tool_failed_retryable", "The durable document parse child remains retryable.");
   }
 
   async #runAgentSelectedOcrTool(
@@ -1027,11 +1036,12 @@ export class JobsService {
     ) {
       throw new PigeDomainError("agent_ingest.source_changed", "The selected source changed before OCR dispatch.");
     }
-    if (sourceFile.sourceRecord.kind !== "pdf_file") {
-      throw new PigeDomainError("ocr.source_unsupported", "The first Agent-selected OCR tool supports preserved PDF sources only.");
+    if (!supportsAgentSelectedOcr(sourceFile.sourceRecord.kind)) {
+      throw new PigeDomainError("ocr.source_unsupported", "The Agent-selected OCR tool does not support this preserved source type.");
     }
 
     const capability = inspectOcrSource(this.#ocr, sourceFile.sourceRecord);
+    const dependencyCode = ocrDependencyCode(sourceFile.sourceRecord.kind);
     let child = ensureAgentOcrToolJob(
       vaultPath,
       currentParent.job,
@@ -1053,15 +1063,15 @@ export class JobsService {
         child,
         sourceFile.sourceRecord,
         "waiting_dependency",
-        "pdf_ocr_unavailable"
+        dependencyCode
       );
     }
 
     if (child.state === "failed_final") {
-      throw new PigeDomainError("ocr.tool_failed_final", "The durable PDF OCR child cannot be retried safely.");
+      throw new PigeDomainError("ocr.tool_failed_final", "The durable document OCR child cannot be retried safely.");
     }
     if (child.state === "running" || child.state === "cancel_requested") {
-      throw new PigeDomainError("ocr.tool_recovery_required", "The durable PDF OCR child requires startup recovery before reuse.");
+      throw new PigeDomainError("ocr.tool_recovery_required", "The durable document OCR child requires startup recovery before reuse.");
     }
     if (child.state !== "queued") {
       const retry = this.retry({ jobId: child.id });
@@ -1084,11 +1094,11 @@ export class JobsService {
         child,
         refreshedSource,
         refreshedSource.metadata.agentTextReady === true ? "processed" : "no_readable_evidence",
-        refreshedSource.metadata.agentTextReady === true ? undefined : "pdf_ocr_no_readable_evidence"
+        refreshedSource.metadata.agentTextReady === true ? undefined : ocrNoReadableEvidenceCode(sourceFile.sourceRecord.kind)
       );
     }
     if (child.state === "waiting_dependency") {
-      return createAgentOcrToolExecution(child, refreshedSource, "waiting_dependency", "pdf_ocr_unavailable");
+      return createAgentOcrToolExecution(child, refreshedSource, "waiting_dependency", dependencyCode);
     }
     if (request.signal.aborted || child.state === "cancelled" || child.state === "cancel_requested") {
       throw new JobCancellationError({
@@ -1097,9 +1107,9 @@ export class JobsService {
       });
     }
     if (child.state === "failed_final") {
-      throw new PigeDomainError("ocr.tool_failed_final", "The durable PDF OCR child failed validation.");
+      throw new PigeDomainError("ocr.tool_failed_final", "The durable document OCR child failed validation.");
     }
-    throw new PigeDomainError("ocr.tool_failed_retryable", "The durable PDF OCR child remains retryable.");
+    throw new PigeDomainError("ocr.tool_failed_retryable", "The durable document OCR child remains retryable.");
   }
 
   processQueuedIndexRebuild(
@@ -1865,8 +1875,8 @@ function ensureAgentParseToolJob(
       provenanceHash
     }),
     message: state === "queued"
-      ? "Agent selected the bounded PDF parser tool; durable parse child queued."
-      : "Agent selected PDF parsing; waiting for the bundled parser capability."
+      ? `Agent selected the bounded ${documentLabel(sourceRecord.kind)} parser tool; durable parse child queued.`
+      : `Agent selected ${documentLabel(sourceRecord.kind)} parsing; waiting for the bundled parser capability.`
   });
   return ensureRequiredChildJob(vaultPath, parentJob, requested, (existing) => {
     assertAgentToolChildBinding(existing, requested);
@@ -1919,8 +1929,8 @@ function ensureAgentOcrToolJob(
       provenanceHash
     }),
     message: state === "queued"
-      ? "Agent selected bounded OCR for parser-verified PDF pages; durable OCR child queued."
-      : "Agent selected PDF OCR; waiting for the reviewed local OCR capability."
+      ? `Agent selected bounded OCR for parser-verified ${documentLabel(sourceRecord.kind)} targets; durable OCR child queued.`
+      : `Agent selected ${documentLabel(sourceRecord.kind)} OCR; waiting for the reviewed local OCR capability.`
   });
   return ensureRequiredChildJob(vaultPath, parentJob, requested, (existing) => {
     assertAgentToolChildBinding(existing, requested);
@@ -2198,29 +2208,42 @@ function isSha256(value: string): boolean {
   return /^sha256:[a-f0-9]{64}$/u.test(value);
 }
 
-function needsParserOrOcr(sourceKind: SourceKind): boolean {
-  return sourceKind === "pdf_file" ||
-    sourceKind === "docx_file" ||
-    sourceKind === "pptx_file" ||
-    sourceKind === "image_file";
+function supportsAgentSelectedParser(sourceKind: SourceKind): boolean {
+  return sourceKind === "pdf_file" || sourceKind === "docx_file" || sourceKind === "pptx_file";
 }
 
-function ensureParserOrOcrJob(
+function supportsAgentSelectedOcr(sourceKind: SourceKind): boolean {
+  return sourceKind === "pdf_file" || sourceKind === "pptx_file";
+}
+
+function parserDependencyCode(sourceKind: SourceKind): string {
+  if (sourceKind === "docx_file") return "docx_parser_unavailable";
+  if (sourceKind === "pptx_file") return "pptx_parser_unavailable";
+  return "pdf_parser_unavailable";
+}
+
+function ocrDependencyCode(sourceKind: SourceKind): string {
+  return sourceKind === "pptx_file" ? "pptx_ocr_unavailable" : "pdf_ocr_unavailable";
+}
+
+function ocrNoReadableEvidenceCode(sourceKind: SourceKind): string {
+  return sourceKind === "pptx_file" ? "pptx_ocr_no_readable_evidence" : "pdf_ocr_no_readable_evidence";
+}
+
+function ensureHostRoutedImageOcrJob(
   vaultPath: string,
   captureJob: JobRecord,
   sourceRecord: SourceRecord,
-  parserCanRun: boolean,
   ocrCapability: OcrSourceCapability
 ): void {
-  const jobClass: JobClass = sourceRecord.kind === "image_file" ? "ocr" : "parse";
-  const canRun = jobClass === "parse" ? parserCanRun : ocrCapability.ready;
-  const state: JobState = canRun ? "queued" : "waiting_dependency";
-  const message = jobClass === "ocr"
-    ? ocrCapability.message
-    : parserCanRun
-      ? "Document source preserved; local parser job queued."
-      : "Document source preserved; waiting for local parser capability before text extraction.";
-  ensureParserOrOcrFollowUpJob(vaultPath, captureJob, sourceRecord, jobClass, state, message);
+  ensureParserOrOcrFollowUpJob(
+    vaultPath,
+    captureJob,
+    sourceRecord,
+    "ocr",
+    ocrCapability.ready ? "queued" : "waiting_dependency",
+    ocrCapability.message
+  );
 }
 
 function ensureOcrWaitingJob(
@@ -2289,7 +2312,11 @@ function createOcrCompletionMessage(result: {
   readonly agentTextReady: boolean;
   readonly sourcePageConflict: boolean;
 }, sourceKind: SourceKind): string {
-  const label = sourceKind === "pdf_file" ? "PDF page OCR" : "Image OCR";
+  const label = sourceKind === "pdf_file"
+    ? "PDF page OCR"
+    : sourceKind === "pptx_file"
+      ? "PPTX media OCR"
+      : "Image OCR";
   if (result.sourcePageConflict) {
     return `${label} completed; the edited source page was preserved and requires review before refresh.`;
   }

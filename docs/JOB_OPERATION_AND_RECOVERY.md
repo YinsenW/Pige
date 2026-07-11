@@ -96,7 +96,10 @@ Phase 2 implementation note:
 - `jobs.retry` can mark eligible failed/waiting/cancelled jobs back to `queued` for later processing.
 - Capture enters `running/capturing_source`; source preservation does not set the guard.
   A once-only checkpoint precedes its first Source Record/Page projection; running capture cancellation remains open.
-- Queued DOCX/PPTX captures create metadata-only pages then parse Jobs. Preserved PDFs create metadata-only pages and Agent-ingest Jobs; Pi may persist deterministic parse/OCR children. Images queue OCR when the verified helper is ready and otherwise wait for that dependency.
+- Preserved PDF/DOCX/PPTX captures create metadata-only pages and Agent-ingest Jobs; Pi
+  may persist deterministic parse/OCR children. Images retain host-routed OCR and wait
+  when its verified capability is unavailable. Already-persisted schema-compatible
+  Office parse/OCR Jobs remain processable; ordinary capture does not recreate that route.
 - Parse/OCR routing and evidence gates are owned by `PARSER_INGEST_SPEC.md`; Artifact,
   sidecar, and revision boundaries by `TECH_ARCHITECTURE.md` and
   `SOURCE_STORAGE_STRATEGY.md`. Jobs wait on insufficient evidence, keep incomplete work
@@ -105,7 +108,9 @@ Phase 2 implementation note:
 - Startup and vault activation first reconcile interrupted jobs. Proven-idempotent capture/parse/OCR/Agent-ingest/index jobs are requeued; cancellation-in-progress and unproven classes become `failed_retryable`. Capture/parse/OCR/Agent ingest drain in batches of 20; index rebuild uses a coalesced limit-1 drainer. Waiting Agent ingest still honors current model/OCR readiness.
 - Home's contextual processing strip includes active capture, parse, OCR, Agent ingest, and index jobs. It remains hidden when no work needs attention and uses compact localized status indicators rather than a new queue destination.
 - Source-page writes use pending/previous/target checksums so a crash can be reconciled without confusing Pige's partial write with a user edit.
-- Phase 3 text/PDF pages create deterministic `agent_ingest`. Missing models wait. PDF parse/OCR children key parent/tool/version/source revision/input, reuse across Pi call IDs, and store only capped call hashes; OCR capability recovery resumes the linked child.
+- Phase 3 text/document pages create deterministic `agent_ingest`. Missing models wait.
+  Document parse/OCR children key parent/tool/version/source revision/input, reuse across
+  Pi call IDs, store capped call hashes, and resume through their Agent parent.
 - Phase 3 `agent_ingest` is process-locally cancellable through provider access and generated-note commit. It distinguishes user abort from provider timeout, fences the Source Record on both sides of a durable note-publication checkpoint, and uses create-only publication. Current-job note adoption requires bounded `last_job_id` provenance; otherwise only a new durable `index.md` entry starts a guard. Egress audit alone does not. Drift requeues or waits, user/nonmatching pages remain untouched, and same-job notes recover idempotently. Strict cross-process SourceRecord-to-note CAS, parent-swap resistance, note/index/operation transactions, and packaged-platform proof remain open.
 - Phase 4 `index_rebuild` runs in a bundled worker, enters `running/indexing`, persists monotonic `index_item` progress, serializes process-local writers, and cooperatively cancels. Failure rolls back to the prior committed index; clean cancellation preserves Markdown. Cross-process writer/CAS, kill/crash/stale-worker recovery, packaged paths, and implicit first-query workerization remain open.
 - Process-local parse/OCR/index rebuild persist monotonic progress; parse/OCR/Agent ingest/index
