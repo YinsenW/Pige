@@ -780,7 +780,8 @@ Rules:
 
 Current implementation:
 
-- Shared schemas support durable ready proposals, safe list/detail, and approve/reject;
+- Shared schemas support confined durable proposals and safe list/detail. Pi may stage
+  one deterministic create-note proposal; approve/reject are state-only. Review UI,
   transactional apply, conflict, and Operation completion remain open.
 
 ### 5.5.2 Markdown Rendering And Editing Surface
@@ -1425,16 +1426,16 @@ The initial Agent input contains preserved-source identity, bounded safe metadat
 policy, and tool contracts—not host-preselected text. Evidence enters as bounded tool
 results with durable Artifact/locator refs. Text/document/image verticals freeze
 source/job scope and expose inspect, parse, selected OCR, optional bounded local
-retrieval, and publication; proposal tools remain B3.13/E3.08 work.
+retrieval, publication, and one terminal create-note proposal stage.
 
 ### 9.2 Knowledge Publication Boundary
 
-The first `pige_create_knowledge_note` tool accepts the strict `AgentIngestOutput` owned
-by `docs/PROMPT_DESIGN.md`. Source, Job, and destination scope are frozen Host context,
-not model arguments. The Host derives paths and projections, validates citations and
-conflicts, commits, then returns the typed result. A future multi-write proposal may
-compile a Host-owned change envelope after validation; it is not raw Pi input. Final
-assistant text is never interpreted as a write request.
+The publish and proposal tools accept the strict `AgentIngestOutput` owned by
+`docs/PROMPT_DESIGN.md`; source, Job, destination, trust, refs, and operation shape are
+Host context. Publish commits the validated note. Proposal staging compiles exactly one
+create operation and writes only its durable proposal before body-free Job linkage; it
+writes no Markdown, Operation, index, or log. Multi-write/apply remains open, and final
+assistant text never becomes a write request.
 
 ### 9.3 Query Output
 
@@ -1512,8 +1513,8 @@ Current embedded Agent ingest spine:
 - Inspect returns verified evidence; PDF/DOCX/PPTX parse and selected PDF/PPTX/image OCR create
   or reuse bound children; publication revalidates refs and revision.
 - Home retrieval uses one bounded search tool with per-turn evidence/egress revalidation.
-  Ingest retrieval/proposals, generic recovery, full Broker, and remaining fixed routing
-  stay open.
+  Ingest adds bounded retrieval and one terminal proposal stage; review/apply, generic
+  recovery, full Broker, and remaining fixed routing stay open.
 
 The v0.1 UI exposes only the P0 provider modes defined in `docs/PRD.md`, through the
 compact Add Provider flow owned by the Pi integration contract.

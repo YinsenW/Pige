@@ -12,9 +12,9 @@ Pige's product goal is simple:
 
 > The user connects one model service that Pi Agent can call. Pige handles the rest.
 
-Pi Agent is the mandatory v0.1 core. Text, document parse, selected OCR, and bounded
-related-knowledge retrieval run through embedded Pi tools. Phase 3 remains partial for
-proposals, generic recovery, permissions, and packaged paths.
+Pi Agent is the mandatory v0.1 core. Text, document parse, selected OCR, bounded
+retrieval, and one terminal proposal stage run through embedded Pi tools. Phase 3 remains
+partial for review/apply, broader routing, recovery, permissions, and packaged paths.
 
 Adopt, do not imitate: where Pi exposes a supported generic runtime surface,
 Pige integrates it through a thin adapter instead of copying, forking, or
@@ -326,12 +326,13 @@ The model sees only bounded descriptors. Calls bind run/call, catalog/policy/sou
 tool-version, and input hashes; results carry typed refs, warnings, and provenance while
 large bodies remain Artifacts. Host validation precedes every result or effect.
 
-The current slice exposes inspect, parse/selected OCR, one optional local
-`pige_search_knowledge@1`, and cited publication. Search bounds, evidence revalidation,
-terminal fences, and `related_page_ids` resolution follow
-`CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`. Calls bind catalog/policy/source/input and
-capped call hashes. Proposals, full catalog, pre-publication replay, in-call cancellation,
-Broker integration, and generic recovery remain open.
+The current slice exposes inspect, parse/selected OCR, optional local search, and one
+terminal cited publication or `pige_stage_knowledge_note_proposal@1`. The strict proposal
+input cannot choose target, trust, refs, policy, permissions, or operation shape; Host
+derives one create operation and stages it before body-free parent review linkage. Search
+rules follow `CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`; all calls bind catalog/policy/
+source/input and capped call hashes. Full risk routing, review/apply, catalog, Broker,
+generic/cross-process recovery, and packaged paths remain open.
 
 Source inspection, extraction, OCR, retrieval, and knowledge publication remain
 separate tools. Recommendations cannot invoke another tool. Runtime may keep only a
@@ -435,16 +436,9 @@ Phase 3 implementation note:
   and strict citations. No binding falls back locally before Agent work; no evidence
   returns the fixed result without a model call.
 
-Delivered foundation and next steps:
-
-1. Exact pins, embedded adapter, isolated auth/models, and text/document/image plus Home
-   retrieval verticals are delivered.
-2. Broaden retrieval and add proposal capabilities as registered effects; remove
-   remaining host-fixed semantic routing.
-3. Add durable child-tool pause/resume, restart, continue/steer/follow-up, complete
-   Permission Broker, signed macOS/Windows packaging, and manual BYOK smoke evidence.
-4. Re-review imports, side effects, license, protocols, and containment whenever either
-   exact Pi package changes; both pins move or roll back together.
+Remaining work: finish catalog/risk routing/review/apply, remove fixed semantic routes,
+add Broker/generic recovery and packaged/manual BYOK proof, and re-review both exact Pi
+pins together whenever either changes.
 
 ## 17. References
 

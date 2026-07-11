@@ -261,22 +261,18 @@ Build:
 - [B3.08 -> E3.04] Source-page generation.
 - [B3.09 -> E3.04] Simple wiki-page generation.
 - [B3.10 -> E3.04] Append-only `log.md` update.
-- [B3.11 -> E3.06] Change Proposal Service foundation.
+- [B3.11 -> E3.06] Deterministic Agent-selected proposal staging foundation; apply remains open.
 - [B3.12 -> E3.07] Complete Agent output and change-summary contract for title, summary, tags, topic, entities, related notes, Markdown/source pages, citations, index/log updates, and created/updated/skipped/failed/confirmation-needed results.
 - [B3.13 -> E3.08] Embedded Pi plus a schema-complete Pige Tool Registry; after source
   preservation Pi Agent alone selects semantic tools, with no host-fixed/parallel path.
 
-Agent Spine Gate: embedded Pi handles preserved text/PDF/DOCX/PPTX/images, isolated model
-binding, inspection, parse/selected OCR, re-inspection, cited publication, bounded Home
-search, and optional ingest search→related-page publication.
-B3.13/E3.08 remains partial for proposals, catalog metadata, pre-publication search
-replay/cancellation, generic recovery, permissions, platforms, and remaining fixed routes.
-The exact-`v0.80.6` exception keeps compat globals/default dispatch inert in the sole
-adapter and still forbids deep imports, forks, patches, and parallel loops.
-
-Until E3.08 passes, pause non-blocking P4/P5/P6 breadth. Existing preservation,
-parser/OCR, Artifact, Job, recovery, policy, retrieval, and commit work remains substrate;
-security/data-loss repairs and spine dependencies may proceed.
+Agent Spine Gate: embedded Pi handles preserved text/documents/images, inspect,
+parse/selected OCR, bounded Home/ingest retrieval, and terminal cited publish/proposal
+stage. B3.13/E3.08 remains partial for catalog/risk routing, proposal review/apply,
+pre-publication replay/in-call cancellation, generic recovery, Broker, platforms, and
+remaining fixed routes. The v0.80.6 exception still forbids deep imports/forks/patches/
+parallel loops. Until E3.08 passes, pause non-blocking breadth; existing safe substrate
+and security/data-loss repairs may proceed.
 
 B3.05 has the default, exact-destination disclosure, Home private allow/sensitive wait,
 matrix/profile-switch tests, and per-turn audits/drift rejection. Persisted stricter

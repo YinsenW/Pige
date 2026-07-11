@@ -44,6 +44,7 @@ import { PRELOAD_ENTRY_FILENAME } from "../shared/preload-entry";
 import {
   AgentIngestService,
   type AgentIngestCapabilitySnapshot,
+  type AgentIngestProposalPort,
   type AgentIngestRetrievalPort
 } from "./services/agent-ingest-service";
 import { AgentRuntimeService } from "./services/agent-runtime-service";
@@ -246,7 +247,7 @@ const getAgentIngestService = (): AgentIngestService => {
   if (!agentIngestService) {
     agentIngestService = new AgentIngestService(getModelProviderRegistry(), undefined, {
       snapshot: getAgentCapabilitySnapshot
-    }, undefined, undefined, createAgentIngestRetrievalPort());
+    }, undefined, undefined, createAgentIngestRetrievalPort(), createAgentIngestProposalPort());
   }
   return agentIngestService;
 };
@@ -269,6 +270,30 @@ const createAgentIngestRetrievalPort = (): AgentIngestRetrievalPort => ({
     return result;
   }
 });
+
+const createAgentIngestProposalPort = (): AgentIngestProposalPort => ({
+  findForJob: (vaultPath, jobId) => {
+    assertAgentIngestVaultBinding(vaultPath, "before durable proposal recovery");
+    const proposal = getProposalService().findForJob(jobId);
+    assertAgentIngestVaultBinding(vaultPath, "during durable proposal recovery");
+    return proposal;
+  },
+  stage: (vaultPath, request) => {
+    assertAgentIngestVaultBinding(vaultPath, "before proposal staging");
+    const result = getProposalService().stage(request);
+    assertAgentIngestVaultBinding(vaultPath, "during proposal staging");
+    return result;
+  }
+});
+
+const assertAgentIngestVaultBinding = (vaultPath: string, boundary: string): void => {
+  if (getVaultService().activeVaultPath() !== vaultPath) {
+    throw new PigeDomainError(
+      "vault.binding_changed",
+      `The active vault changed ${boundary}.`
+    );
+  }
+};
 
 const getHomeAgentService = (): HomeAgentService => {
   if (!homeAgentService) {
@@ -730,9 +755,10 @@ app.whenReady().then(() => {
     getLocalDatabaseService(),
     { snapshot: getAgentCapabilitySnapshot }
   );
+  proposalService = new ProposalService(getVaultService());
   agentIngestService = new AgentIngestService(getModelProviderRegistry(), undefined, {
     snapshot: getAgentCapabilitySnapshot
-  }, undefined, undefined, createAgentIngestRetrievalPort());
+  }, undefined, undefined, createAgentIngestRetrievalPort(), createAgentIngestProposalPort());
   documentParserService = new DocumentParserService();
   ocrService = new OcrService();
   toolchainService = new ToolchainService(resolveToolchainManifestPath());
@@ -744,7 +770,6 @@ app.whenReady().then(() => {
     getDocumentParserService(),
     getOcrService()
   );
-  proposalService = new ProposalService(getVaultService());
   initializeActiveDatabase();
   diagnosticsService = new DiagnosticsService(app.getPath("userData"));
   diagnosticsService.recordEvent({ level: "info", code: "app.ready", message: "App ready." });

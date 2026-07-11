@@ -14,12 +14,15 @@ export const OCR_SOURCE_TOOL_VERSION = "1";
 export const SEARCH_KNOWLEDGE_TOOL_NAME = "pige_search_knowledge";
 export const SEARCH_KNOWLEDGE_TOOL_VERSION = "1";
 export const CREATE_KNOWLEDGE_NOTE_TOOL_NAME = "pige_create_knowledge_note";
+export const STAGE_KNOWLEDGE_NOTE_PROPOSAL_TOOL_NAME = "pige_stage_knowledge_note_proposal";
+export const STAGE_KNOWLEDGE_NOTE_PROPOSAL_TOOL_VERSION = "1";
 
 export type AgentIngestToolCapability =
   | "read_current_source"
   | "parse_current_source"
   | "ocr_current_source"
   | "read_current_vault_knowledge"
+  | "stage_generated_note_proposal"
   | "write_generated_note";
 
 export interface AgentIngestToolAuthorizationRequest {
@@ -28,6 +31,7 @@ export interface AgentIngestToolAuthorizationRequest {
     | typeof PARSE_SOURCE_TOOL_NAME
     | typeof OCR_SOURCE_TOOL_NAME
     | typeof SEARCH_KNOWLEDGE_TOOL_NAME
+    | typeof STAGE_KNOWLEDGE_NOTE_PROPOSAL_TOOL_NAME
     | typeof CREATE_KNOWLEDGE_NOTE_TOOL_NAME;
   readonly capability: AgentIngestToolCapability;
   readonly jobId: string;
@@ -69,6 +73,12 @@ export interface AgentIngestPublishToolResult {
   readonly terminate?: boolean;
 }
 
+export interface AgentIngestStageProposalToolResult {
+  readonly modelText: string;
+  readonly details: Readonly<Record<string, unknown>>;
+  readonly terminate?: boolean;
+}
+
 export type AgentIngestToolOutput = AgentIngestOutput & {
   readonly relatedPageRefs?: readonly string[];
 };
@@ -81,6 +91,10 @@ export interface AgentIngestToolHost {
     input: { readonly query: string },
     context: PigeAgentToolCallContext
   ): Promise<AgentIngestSearchToolResult>;
+  stageProposal?(
+    output: AgentIngestToolOutput,
+    context: PigeAgentToolCallContext
+  ): Promise<AgentIngestStageProposalToolResult>;
   publish(output: AgentIngestToolOutput, signal: AbortSignal): Promise<AgentIngestPublishToolResult>;
 }
 
@@ -91,6 +105,44 @@ export function createAgentIngestToolRegistry(input: {
   readonly host: AgentIngestToolHost;
 }): readonly PigeAgentToolDescriptor[] {
   return [
+    ...(input.host.stageProposal ? [{
+      name: STAGE_KNOWLEDGE_NOTE_PROPOSAL_TOOL_NAME,
+      label: "Stage grounded knowledge note for review",
+      description: "Validate and durably stage one grounded Markdown note proposal for the current preserved source. Pige owns the target path, trust level, references, and proposed operation.",
+      parameters: AGENT_INGEST_OUTPUT_SCHEMA,
+      version: STAGE_KNOWLEDGE_NOTE_PROPOSAL_TOOL_VERSION,
+      capability: "stage_generated_note_proposal",
+      outputSchema: TOOL_RESULT_OUTPUT_SCHEMA,
+      effect: "proposal",
+      inputTrust: "model_generated",
+      outputTrust: "host_validated",
+      dataBoundary: CURRENT_SOURCE_DATA_BOUNDARY,
+      execution: "sequential",
+      idempotency: CURRENT_SOURCE_IDEMPOTENCY,
+      limits: {
+        maxInputBytes: 131_072,
+        maxOutputBytes: 32_768,
+        timeoutMs: 30_000
+      },
+      ownerService: "ProposalService",
+      authorize: (_args, context) => input.authorization.authorize({
+        toolName: STAGE_KNOWLEDGE_NOTE_PROPOSAL_TOOL_NAME,
+        capability: "stage_generated_note_proposal",
+        jobId: input.jobId,
+        sourceId: input.sourceId,
+        toolCallId: context.toolCallId
+      }),
+      execute: async (args, _signal, context): Promise<PigeAgentToolResult> => {
+        if (!input.host.stageProposal) {
+          throw new PigeDomainError(
+            "agent_runtime.proposal_tool_unavailable",
+            "The proposal staging tool is unavailable."
+          );
+        }
+        const result = await input.host.stageProposal(args as AgentIngestToolOutput, context);
+        return { ...result, terminate: true };
+      }
+    } satisfies PigeAgentToolDescriptor] : []),
     {
       name: INSPECT_SOURCE_TOOL_NAME,
       label: "Inspect preserved source",
@@ -286,6 +338,9 @@ export const allowCurrentAgentIngestTools: AgentIngestToolAuthorizationPort = {
     }
     if (request.toolName === SEARCH_KNOWLEDGE_TOOL_NAME) {
       return request.capability === "read_current_vault_knowledge";
+    }
+    if (request.toolName === STAGE_KNOWLEDGE_NOTE_PROPOSAL_TOOL_NAME) {
+      return request.capability === "stage_generated_note_proposal";
     }
     return request.toolName === CREATE_KNOWLEDGE_NOTE_TOOL_NAME &&
       request.capability === "write_generated_note";

@@ -26,7 +26,8 @@ import {
   type AgentIngestOcrToolExecution,
   type AgentIngestOcrToolRequest,
   type AgentIngestParseToolExecution,
-  type AgentIngestParseToolRequest
+  type AgentIngestParseToolRequest,
+  type AgentIngestProposalBinding
 } from "./agent-ingest-service";
 import type { DocumentParserPort } from "./document-parser-service";
 import { SourcePageService } from "./source-page-service";
@@ -823,7 +824,8 @@ export class JobsService {
 
     for (const jobFile of jobFiles) {
       const agentIngest = this.#agentIngest;
-      if (!agentIngest || !canRunAgentIngest(agentIngest)) {
+      const durableProposalAvailable = agentIngest?.hasDurableProposal(vaultPath, jobFile.job.id) === true;
+      if (!agentIngest || (!durableProposalAvailable && !canRunAgentIngest(agentIngest))) {
         markJobWaitingDependency(jobFile.path, jobFile.job, "Waiting for a tested default model before Agent ingest.");
         failed += 1;
         continue;
@@ -908,8 +910,32 @@ export class JobsService {
           ),
           throwIfCancellationRequested: () => execution.control.throwIfCancellationRequested(),
           onPublicationStart: (checkpointId) => execution.control.markDurableCheckpoint(checkpointId),
+          onProposalStaged: (proposalResult) => {
+            markAgentProposalAwaitingReview(
+              jobFile.path,
+              runningJob,
+              proposalResult.proposalId,
+              proposalResult.proposalBinding,
+              proposalResult.operationIds,
+              proposalResult.pageId,
+              proposalResult.pagePath
+            );
+          },
           signal: execution.control.signal
         });
+        if (result.outcome === "confirmation_needed") {
+          markAgentProposalAwaitingReview(
+            jobFile.path,
+            runningJob,
+            result.proposalId,
+            result.proposalBinding,
+            result.operationIds,
+            result.pageId,
+            result.pagePath
+          );
+          completed += 1;
+          continue;
+        }
         const completedJob = this.#completeCooperativeExecution(
           jobFile.path,
           runningJob,
@@ -929,6 +955,14 @@ export class JobsService {
           completed += 1;
         }
       } catch (caught) {
+        const durableProposalParent = readJobRecordAtPath(jobFile.path);
+        if (
+          durableProposalParent?.state === "awaiting_review" &&
+          (durableProposalParent.proposalIds?.length ?? 0) > 0
+        ) {
+          completed += 1;
+          continue;
+        }
         const cancellation = resolveCancellation(execution.control, caught);
         const durableState = execution.control.durableWriteState();
         if (cancellation) {
@@ -1895,11 +1929,113 @@ function withDurableWriteState(job: JobRecord, state?: JobDurableWriteState): Jo
   });
 }
 
+function markAgentProposalAwaitingReview(
+  jobPath: string,
+  fallback: JobRecord,
+  proposalId: string,
+  binding: AgentIngestProposalBinding,
+  operationIds: readonly string[],
+  pageId: string,
+  pagePath: string
+): JobRecord {
+  const current = readJobRecordAtPath(jobPath) ?? fallback;
+  const sourceId = current.sourceId;
+  if (
+    !sourceId ||
+    current.class !== "agent_ingest" ||
+    sourceId !== binding.sourceId ||
+    !["running", "cancel_requested", "awaiting_review"].includes(current.state) ||
+    current.policyHash !== binding.policyHash
+  ) {
+    throw new PigeDomainError(
+      "agent_runtime.proposal_binding_invalid",
+      "The active Agent parent state, source, or policy does not match the durable proposal."
+    );
+  }
+  const requiredRefs: NonNullable<JobRecord["inputRefs"]> = [
+    {
+      kind: "source",
+      id: sourceId,
+      checksum: binding.sourceBindingHash,
+      role: AGENT_TOOL_SOURCE_ROLE
+    },
+    {
+      kind: "tool",
+      id: `${binding.toolId}@${binding.toolVersion}`,
+      checksum: binding.canonicalInputHash,
+      role: AGENT_TOOL_INPUT_ROLE
+    },
+    {
+      kind: "tool",
+      id: "pige_agent_tool_catalog",
+      checksum: binding.catalogHash,
+      role: AGENT_TOOL_CATALOG_ROLE
+    }
+  ];
+  let inputRefs = [...(current.inputRefs ?? [])];
+  for (const required of requiredRefs) {
+    const existing = inputRefs.find((ref) => ref.role === required.role);
+    if (existing) {
+      if (
+        existing.kind !== required.kind ||
+        existing.id !== required.id ||
+        existing.checksum !== required.checksum
+      ) {
+        throw new PigeDomainError(
+          "agent_runtime.proposal_binding_changed",
+          "The durable Agent proposal input binding changed before parent linkage."
+        );
+      }
+      continue;
+    }
+    inputRefs.push(required);
+  }
+  if (binding.toolCallProvenanceHash) {
+    inputRefs = mergeAgentToolCallProvenance(inputRefs, binding.toolCallProvenanceHash);
+  }
+  const outputRefs = [...(current.outputRefs ?? [])];
+  if (!outputRefs.some((ref) => ref.kind === "proposal" && ref.id === proposalId)) {
+    outputRefs.push({ kind: "proposal", id: proposalId, role: "awaiting_review" });
+  }
+  if (!outputRefs.some((ref) => ref.kind === "page" && ref.id === pageId && ref.path === pagePath)) {
+    outputRefs.push({ kind: "page", id: pageId, path: pagePath, role: "proposed_target" });
+  }
+  const durable = withDurableWriteState(current, {
+    durableWritesApplied: true,
+    safeCheckpointId: AGENT_PROPOSAL_STAGED_CHECKPOINT
+  });
+  const {
+    finishedAt: _finishedAt,
+    error: _error,
+    waitingDependency: _waitingDependency,
+    ...jobBase
+  } = durable;
+  const awaitingReview = JobRecordSchema.parse({
+    ...jobBase,
+    state: "awaiting_review",
+    stage: "planning",
+    updatedAt: new Date().toISOString(),
+    inputRefs,
+    outputRefs,
+    proposalIds: Array.from(new Set([...(current.proposalIds ?? []), proposalId])),
+    operationIds: Array.from(new Set([...(current.operationIds ?? []), ...operationIds])),
+    progress: {
+      completedUnits: 1,
+      totalUnits: 1,
+      unit: "proposal"
+    },
+    message: "Agent ingest staged a grounded knowledge proposal for explicit review. No proposed Markdown was applied."
+  });
+  writeJsonAtomic(jobPath, awaitingReview);
+  return awaitingReview;
+}
+
 const AGENT_TOOL_SOURCE_ROLE = "agent_tool_source_revision";
 const AGENT_TOOL_INPUT_ROLE = "agent_tool_canonical_input";
 const AGENT_TOOL_CATALOG_ROLE = "agent_tool_catalog";
 const AGENT_TOOL_CALL_ROLE = "agent_tool_call_provenance";
 const MAX_AGENT_TOOL_CALL_PROVENANCE_REFS = 16;
+const AGENT_PROPOSAL_STAGED_CHECKPOINT = "agent_knowledge_proposal_staged";
 
 function assertAgentParseToolRequest(parentJob: JobRecord, request: AgentIngestParseToolRequest): void {
   if (
