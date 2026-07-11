@@ -1,5 +1,5 @@
 import type { ModelProviderRuntimeConfig } from "../services/model-provider-registry";
-import { PiAgentRuntimeAdapter, type PigeAgentToolDefinition } from "../services/pi-agent-runtime-adapter";
+import { PiAgentRuntimeAdapter, type PigeAgentToolDescriptor } from "../services/pi-agent-runtime-adapter";
 
 export async function runPiAgentRuntimeSmoke(): Promise<{
   readonly adapterMode: "embedded_pi_sdk";
@@ -8,8 +8,9 @@ export async function runPiAgentRuntimeSmoke(): Promise<{
   readonly publicationCount: number;
 }> {
   let publicationCount = 0;
-  const tools: PigeAgentToolDefinition[] = [
+  const tools: PigeAgentToolDescriptor[] = [
     {
+      ...SMOKE_TOOL_DESCRIPTOR,
       name: "pige_inspect_source",
       label: "Inspect",
       description: "Inspect synthetic evidence.",
@@ -17,6 +18,10 @@ export async function runPiAgentRuntimeSmoke(): Promise<{
       execute: async () => ({ modelText: "Synthetic verified evidence.", details: { fragmentCount: 1 } })
     },
     {
+      ...SMOKE_TOOL_DESCRIPTOR,
+      capability: "write_generated_note",
+      effect: "idempotent_write",
+      outputTrust: "host_validated",
       name: "pige_create_knowledge_note",
       label: "Publish",
       description: "Publish a synthetic validated note.",
@@ -51,6 +56,34 @@ export async function runPiAgentRuntimeSmoke(): Promise<{
     publicationCount
   };
 }
+
+const SMOKE_TOOL_DESCRIPTOR = {
+  version: "1",
+  capability: "read_current_source",
+  outputSchema: {
+    type: "object",
+    properties: {
+      modelText: { type: "string" },
+      details: { type: "object" },
+      terminate: { type: "boolean" }
+    },
+    required: ["modelText", "details"],
+    additionalProperties: false
+  },
+  effect: "read_only",
+  inputTrust: "model_generated",
+  outputTrust: "untrusted_source",
+  dataBoundary: {
+    resourceScope: "current_source",
+    pathAuthority: "host_only",
+    sourceIdAuthority: "host_only",
+    modelAuthority: "none"
+  },
+  execution: "sequential",
+  idempotency: { mode: "idempotent", scope: "current_source" },
+  limits: { maxInputBytes: 1_024, maxOutputBytes: 32_768, timeoutMs: 10_000 },
+  ownerService: "PiAgentRuntimeSmoke"
+} as const;
 
 const runtimeConfig: ModelProviderRuntimeConfig = {
   provider: {

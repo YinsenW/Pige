@@ -1323,12 +1323,13 @@
       "status": "partial",
       "evidence": [
         "EV-JOB-RECOVERY",
+        "EV-PI-PDF-PARSE-TOOL",
         "EV-PARSE-FOLLOWUP-DURABILITY",
         "EV-OCR-FOLLOWUP-DURABILITY"
       ],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-001",
-        "description": "Every expensive parser, model, permission, backup, and migration path still needs pre-work job assertions.",
+        "description": "Remaining parser, model, permission, backup, and migration paths still need pre-work Job assertions.",
         "targetBuilds": [
           "B2.08"
         ],
@@ -1339,7 +1340,7 @@
     },
     "PIGE-JOB-002": {
       "status": "partial",
-      "evidence": ["EV-JOB-DRAIN", "EV-JOB-RECOVERY", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER"],
+      "evidence": ["EV-JOB-DRAIN", "EV-JOB-RECOVERY", "EV-PI-PDF-PARSE-TOOL", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-002",
         "description": "Action-safety propagation remains open beyond capture/parse/OCR/agent_ingest; index_rebuild cancellation and serialization are process-local and rebuildable-only; running capture and remaining classes still lack cooperative cancellation; strict cross-process Job/index-writer CAS and routing, parent-directory swap, guard-to-domain atomicity, guard-without-output recovery, complete kill/crash/stale-worker recovery, packaged filesystems, checkpoint arrays, visible progress/cancel UI, and remaining retry assertions stay open.",
@@ -1376,6 +1377,7 @@
       "status": "partial",
       "evidence": [
         "EV-JOB-WAIT",
+        "EV-PI-PDF-PARSE-TOOL",
         "EV-WAITING-AGENT-REQUEUE",
         "EV-OCR-NATIVE-FALLBACK"
       ],
@@ -1579,10 +1581,10 @@
     },
     "PIGE-PI-001": {
       "status": "partial",
-      "evidence": ["EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-BOUNDARY", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE"],
+      "evidence": ["EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-BOUNDARY", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE"],
       "open": {
         "id": "OPEN-REQ-PIGE-PI-001",
-        "description": "Exact Pi v0.80.6 pins, bundled license, sole-adapter containment, isolated selected provider/model binding, real preserved-text inspect-to-publication tool events, unavailable-tool replanning, per-turn egress checks, direct-bridge removal, no-model preserve-and-wait, bypass mutations, and assembled Electron smoke are implemented. Schema-complete parser/OCR/retrieval/proposal tools, host-fixed routing removal, durable child-tool pause/restart/continue, full Permission Broker, signed packaged platforms, manual BYOK smoke, and a second distinct semantic trace remain open.",
+        "description": "Exact Pi v0.80.6 containment, isolated provider/model binding, real text and preserved-PDF tool traces, deterministic parse-child identity, capped hashed call provenance, per-turn egress, no-model wait, bypass mutations, and Electron smoke are implemented. Agent-selected Office/OCR/retrieval/proposal tools, complete registry metadata, remaining host-fixed routing, generic child pause/restart/continue, full Permission Broker, signed platforms, manual BYOK, and the required read→retrieve→publish trace remain open.",
         "targetBuilds": [
           "B3.06",
           "B3.13"
@@ -1709,6 +1711,7 @@
     "PIGE-INGEST-003": {
       "status": "partial",
       "evidence": [
+        "EV-PI-PDF-PARSE-TOOL",
         "EV-DOCUMENT-PIPELINE",
         "EV-PARSER-SMOKE",
         "EV-MIXED-PDF-OCR",
@@ -2883,11 +2886,12 @@
     "E2.06": {
       "status": "partial",
       "evidence": [
+        "EV-PI-PDF-PARSE-TOOL",
         "EV-DOCUMENT-CAPTURE"
       ],
       "open": {
         "id": "OPEN-EXIT-E2.06",
-        "description": "Full executable acceptance remains open for Exit E2.06: PDF, DOCX, PPTX, and image capture preserves evidence before processing, creates a visible retryable Agent dependency job, and does not start parser/OCR work before an Agent tool call.",
+        "description": "PDF now proves preservation, a visible Agent Job, and no parse before its Pi tool call. Equivalent DOCX, PPTX, and image families remain open for E2.06.",
         "targetBuilds": [
           "B2.04"
         ],
@@ -2954,7 +2958,7 @@
     },
     "E2.10": {
       "status": "partial",
-      "evidence": ["EV-JOB-RECOVERY", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER"],
+      "evidence": ["EV-JOB-RECOVERY", "EV-PI-PDF-PARSE-TOOL", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER"],
       "open": {
         "id": "OPEN-EXIT-E2.10",
         "description": "Running capture and remaining Job classes still lack cooperative cancellation and complete cross-process routing; strict cross-process cancel/guard/index-writer linearization, parent-directory swap, guard-to-domain atomicity, guard-without-output recovery, complete kill/crash/stale-worker recovery, packaged filesystems, checkpoint arrays, abandon/archive, and visible cancellation UI remain open for E2.10.",
@@ -2970,6 +2974,7 @@
       "status": "partial",
       "evidence": [
         "EV-JOB-WAIT",
+        "EV-PI-PDF-PARSE-TOOL",
         "EV-WAITING-AGENT-REQUEUE",
         "EV-OCR-NATIVE-FALLBACK"
       ],
@@ -3100,10 +3105,10 @@
     },
     "E3.08": {
       "status": "partial",
-      "evidence": ["EV-BOUNDARY", "EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE"],
+      "evidence": ["EV-BOUNDARY", "EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE"],
       "open": {
         "id": "OPEN-EXIT-E3.08",
-        "description": "The first embedded Pi vertical now proves selected-profile binding, no-model preserve-and-wait, preserved-text inspection, validated cited publication, unavailable-tool replanning, authorization denial before effects, no direct-provider fallback, and an assembled Electron loop under sole-adapter containment. E3.08 remains partial until parser/OCR/retrieval/proposal tools use the complete registry, host-fixed routing and renderer bypass are removed, durable child-tool pause/restart/continue is proven, a second distinct trace passes, and signed packaged-platform/manual BYOK acceptance is available.",
+        "description": "Embedded Pi now proves selected-profile binding, no-model wait, text publication, preserved-PDF inspect-parse-inspect-publication, deterministic child reuse, bounded hashed call provenance, stale-binding rejection, cancellation, no direct fallback, and Electron smoke. E3.08 remains partial until Office/OCR/retrieval/proposal tools, complete registry metadata, remaining route removal, generic child pause/restart/continue, the required read→retrieve→publish trace, and signed-platform/manual BYOK acceptance pass.",
         "targetBuilds": [
           "B3.13"
         ],
@@ -3180,6 +3185,7 @@
     "E5.01": {
       "status": "partial",
       "evidence": [
+        "EV-PI-PDF-PARSE-TOOL",
         "EV-PARSER",
         "EV-PARSER-SMOKE",
         "EV-MIXED-PDF-OCR",
@@ -3233,7 +3239,7 @@
       "evidence": ["EV-AGENT-INGEST", "EV-PI-AGENT-SPINE", "EV-PI-RUNTIME-BOUNDARY", "EV-UNTRUSTED-SOURCE-BOUNDARY", "EV-UNTRUSTED-OUTPUT-SCHEMA"],
       "open": {
         "id": "OPEN-EXIT-E5.03",
-        "description": "The preserved-text Pi tool boundary and URL/DOCX/PDF/PPTX/image-OCR adversarial public-ingest cases pass. Document/OCR/retrieval tools and the full persisted Permission Broker remain open for E5.03.",
+        "description": "The text Pi tool boundary and URL/DOCX/PDF/PPTX/image-OCR adversarial ingest pass. PDF parsing is evidenced under E3.08/E5.01; Office/OCR/retrieval and the full persisted Permission Broker remain open.",
         "targetBuilds": [
           "B5.11"
         ],
@@ -3890,6 +3896,8 @@
       "selector": "turns a preserved source into a wiki note, index entry, and operation record without storing prompts or secrets"
     },
     "EV-PI-AGENT-SPINE": { "kind": "test", "path": "tests/unit/agent-led-ingest.test.ts", "selector": "Agent-led knowledge spine" },
+    "EV-PI-PDF-PARSE-TOOL": { "kind": "test", "path": "tests/unit/agent-led-pdf-parse.test.ts", "selector": "Agent-led PDF parse tool" },
+    "EV-PI-TOOL-CALL-ID": { "kind": "test", "path": "tests/unit/pi-agent-runtime-adapter.test.ts", "selector": "passes a bounded opaque Pi tool call ID to authorization and execution without recording it" },
     "EV-PI-PROVIDER-BINDING": { "kind": "test", "path": "tests/unit/pi-agent-provider-binding.test.ts", "selector": "Pi AI provider binding" },
     "EV-PI-RUNTIME-BOUNDARY": { "kind": "verifier", "path": "scripts/verify/pi-runtime-boundary.mjs", "selector": "Pi runtime boundary OK: one contained adapter owns official Pi imports, isolated auth/models, and sequential Pige tools." },
     "EV-PI-RUNTIME-MUTATIONS": { "kind": "verifier", "path": "scripts/verify/pi-runtime-boundary-negative-cases.mjs", "selector": "Pi runtime boundary mutations OK:" },

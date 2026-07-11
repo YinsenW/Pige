@@ -337,13 +337,12 @@ Rules:
 - File bodies are never copied into conversation history; conversation events reference source IDs, display names, and source kinds.
 - The renderer receives IDs and status, not arbitrary filesystem paths or file handles.
 - After preservation, desktop main may immediately process queued text/Markdown/TXT/URL capture jobs into minimal source pages. The capture return value still reports preservation status; Home observes source-page completion through `jobs.list`.
-- Preserved PDF/DOCX/PPTX/image sources create metadata-only projections. The current
-  bridge also creates direct parse/OCR Jobs; this is transitional. B3.13 instead exposes
-  one waiting Agent Job, and parser/OCR children begin only from its tool events.
+- Preserved PDF/DOCX/PPTX/image sources create metadata-only projections. PDF now queues
+  one Agent Job and only its Pi parse event creates a child; DOCX/PPTX/image still use
+  transitional direct parse/OCR bridges.
 - OCR execution is internal main-to-helper orchestration behind `OcrPort`; no new renderer command exposes a native path, raw OCR request, helper response, image bytes, or Artifact body. Home observes only the existing safe Job summaries.
-- `agent_ingest` now uses embedded Pi for the first text-source vertical and waits
-  without semantic work when no model exists. Format-driven parser/OCR continuations
-  remain transitional until they are invoked as Agent-selected tools.
+- `agent_ingest` uses embedded Pi for text and preserved-PDF parsing, and waits without
+  semantic work when no model exists. Office/OCR continuations remain transitional.
 
 ### 6.3 Jobs
 

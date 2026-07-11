@@ -51,7 +51,7 @@ import { ScriptedAgentIngestRuntime } from "../helpers/scripted-agent-ingest-run
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
 import type { VaultSummary } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
-import type { JobRecord } from "@pige/schemas";
+import { JobRecordSchema, type JobRecord } from "@pige/schemas";
 import { createTestDocx, createTestPptx, TINY_PNG } from "./helpers/office-fixture";
 import { createTestPdf } from "./helpers/pdf-fixture";
 import { createJpegScanPdf } from "./helpers/pdf-image-fixture";
@@ -442,7 +442,7 @@ describe("jobs service", () => {
     expect(runtimeConfigReads).toBe(0);
   });
 
-  it("creates a metadata-only source page and waiting parser job for preserved PDFs", async () => {
+  it("creates a metadata-only source page and waits for the Agent before any PDF parser job exists", async () => {
     const { vaultPath, vault } = makeVault();
     const { capture, jobs } = makeServices(vaultPath, vault);
     const sourcePath = path.join(path.dirname(vaultPath), "research.pdf");
@@ -462,20 +462,20 @@ describe("jobs service", () => {
       knowledgePagePath: string;
     };
     const sourcePage = fs.readFileSync(path.join(vaultPath, sourceRecord.knowledgePagePath), "utf8");
-    const waitingParser = jobs.list({ classes: ["parse"], states: ["waiting_dependency"] }).jobs[0];
+    const waitingAgent = jobs.list({ classes: ["agent_ingest"], states: ["waiting_dependency"] }).jobs[0];
 
     expect(processResult).toEqual({ processed: 1, completed: 1, failed: 0 });
     expect(sourceRecord.knowledgePagePath).toMatch(/^sources\/files\/\d{4}\/src_/u);
     expect(sourcePage).toContain("No extracted text preview is available yet");
     expect(sourcePage).toContain("Source kind: `pdf_file`");
     expect(sourcePage).not.toContain("Do not treat this binary as text.");
-    expect(waitingParser?.sourceId).toBe(sourceId);
-    expect(waitingParser?.message).toContain("waiting for local parser capability");
+    expect(jobs.list({ classes: ["parse"] }).jobs).toHaveLength(0);
+    expect(waitingAgent?.sourceId).toBe(sourceId);
+    expect(waitingAgent?.message).toContain("waiting for a tested default model");
     const captureJob = readJobRecord(vaultPath, jobId);
-    const parserJob = readJobRecord(vaultPath, requireValue(waitingParser).id);
-    expect(captureJob.childJobIds).toEqual([parserJob.id]);
-    expect(parserJob.parentJobId).toBe(captureJob.id);
-    expect(jobs.list({ classes: ["agent_ingest"], states: ["waiting_dependency"] }).jobs).toHaveLength(0);
+    const agentJob = readJobRecord(vaultPath, requireValue(waitingAgent).id);
+    expect(captureJob.childJobIds).toEqual([agentJob.id]);
+    expect(agentJob.parentJobId).toBe(captureJob.id);
   });
 
   it("recovers a parent crash after durable child handoff without duplicating the child", () => {
@@ -542,6 +542,7 @@ describe("jobs service", () => {
     });
     const sourceId = requireFirst(captureResult.sourceIds);
     jobs.processQueuedCaptures({ jobIds: captureResult.jobIds });
+    seedExplicitPdfParseJob(vaultPath, sourceId);
     expect(jobs.list({ classes: ["parse"], states: ["queued"] }).jobs[0]?.sourceId).toBe(sourceId);
 
     const parseResult = await jobs.processQueuedParses({ sourceIds: [sourceId] });
@@ -587,7 +588,7 @@ describe("jobs service", () => {
     expect(jobs.list({ classes: ["agent_ingest"], states: ["waiting_dependency"] }).jobs[0]?.sourceId).toBe(sourceId);
   });
 
-  it("hands image-only PDFs to OCR without creating an empty Agent ingest job", async () => {
+  it("keeps the Agent continuation waiting while explicit PDF parsing hands image-only evidence to OCR", async () => {
     const { vaultPath, vault } = makeVault();
     const { capture, jobs } = makeServices(vaultPath, vault, undefined, undefined, undefined, makePdfParser());
     const sourcePath = path.join(path.dirname(vaultPath), "scan.pdf");
@@ -601,6 +602,7 @@ describe("jobs service", () => {
     const sourceId = requireFirst(captureResult.sourceIds);
 
     jobs.processQueuedCaptures({ jobIds: captureResult.jobIds });
+    seedExplicitPdfParseJob(vaultPath, sourceId);
     const parseResult = await jobs.processQueuedParses({ sourceIds: [sourceId] });
     const sourceRecordPath = findFile(path.join(vaultPath, ".pige/source-records"), `${sourceId}.json`);
     const sourceRecord = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as {
@@ -614,7 +616,8 @@ describe("jobs service", () => {
     expect(sourceRecord.metadata).toMatchObject({ parserStatus: "parsed_needs_ocr", textCoverage: "none", agentTextReady: false });
     expect(jobs.list({ classes: ["parse"], states: ["completed_with_warnings"] }).jobs[0]?.sourceId).toBe(sourceId);
     expect(jobs.list({ classes: ["ocr"], states: ["waiting_dependency"] }).jobs[0]?.sourceId).toBe(sourceId);
-    expect(jobs.list({ classes: ["agent_ingest"] }).jobs).toHaveLength(0);
+    expect(jobs.list({ classes: ["agent_ingest"], states: ["waiting_dependency"] }).jobs[0]?.sourceId)
+      .toBe(sourceId);
   });
 
   it("uses source-aware OCR readiness after PDF parsing", async () => {
@@ -654,6 +657,7 @@ describe("jobs service", () => {
     });
 
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    for (const sourceId of captured.sourceIds) seedExplicitPdfParseJob(vaultPath, sourceId);
     await jobs.processQueuedParses({ sourceIds: captured.sourceIds, limit: 10 });
 
     const queued = jobs.list({ classes: ["ocr"], states: ["queued"], limit: 10 }).jobs;
@@ -700,6 +704,7 @@ describe("jobs service", () => {
     const sourceId = requireFirst(captured.sourceIds);
 
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    seedExplicitPdfParseJob(vaultPath, sourceId);
     const parsed = await jobs.processQueuedParses({ sourceIds: [sourceId] });
     expect(parsed.ocrWaitingSourceIds).toEqual([sourceId]);
     expect(jobs.list({ classes: ["ocr"], states: ["queued"] }).jobs[0]?.sourceId).toBe(sourceId);
@@ -796,6 +801,7 @@ describe("jobs service", () => {
     const sourceId = requireFirst(captured.sourceIds);
 
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    seedExplicitPdfParseJob(vaultPath, sourceId);
     const parsed = await jobs.processQueuedParses({ sourceIds: [sourceId] });
 
     expect(parsed).toMatchObject({
@@ -805,7 +811,8 @@ describe("jobs service", () => {
       agentReadySourceIds: [],
       ocrWaitingSourceIds: [sourceId]
     });
-    expect(jobs.list({ classes: ["agent_ingest"] }).jobs).toHaveLength(0);
+    expect(jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]?.sourceId)
+      .toBe(sourceId);
     expect(jobs.list({ classes: ["ocr"], states: ["queued"] }).jobs[0]?.sourceId).toBe(sourceId);
 
     const ocrResult = await jobs.processQueuedOcr({ sourceIds: [sourceId] });
@@ -843,14 +850,13 @@ describe("jobs service", () => {
     expect(note).toContain(`[source:${sourceId}#p2-ocr1]`);
   });
 
-  it("pauses a native-text Agent job when PDF OCR becomes ready before it starts", async () => {
+  it("does not reintroduce a host-owned PDF OCR pause after explicit parsing", async () => {
     const { vaultPath, vault } = makeVault();
     const modelClient = new StaticModelClient({
       title: "Late OCR enrichment",
-      summary: { text: "Native and recovered text were joined before ingest.", evidenceRefs: ["ev_01", "ev_02"] },
+      summary: { text: "Verified native text remains usable while optional OCR proceeds separately.", evidenceRefs: ["ev_01"] },
       keyPoints: [
-        { text: "Native evidence", evidenceRefs: ["ev_01"] },
-        { text: "Recovered evidence", evidenceRefs: ["ev_02"] }
+        { text: "Native evidence", evidenceRefs: ["ev_01"] }
       ],
       tags: [],
       topics: ["Evidence"],
@@ -893,6 +899,7 @@ describe("jobs service", () => {
     });
     const sourceId = requireFirst(captured.sourceIds);
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    seedExplicitPdfParseJob(vaultPath, sourceId);
     const parsed = await jobs.processQueuedParses({ sourceIds: [sourceId] });
 
     expect(parsed.agentReadySourceIds).toEqual([sourceId]);
@@ -903,25 +910,19 @@ describe("jobs service", () => {
     expect(jobs.requeueWaitingOcr()).toEqual({ requeued: 1 });
     expect(await jobs.processQueuedAgentIngest({ sourceIds: [sourceId] })).toEqual({
       processed: 1,
-      completed: 0,
-      failed: 1
+      completed: 1,
+      failed: 0
     });
-    expect(modelClient.requests).toHaveLength(0);
-    expect(jobs.list({ classes: ["agent_ingest"], states: ["waiting_dependency"] }).jobs[0]?.message).toContain(
-      "Waiting for selected PDF OCR enrichment"
-    );
-    expect(jobs.requeueWaitingAgentIngest()).toEqual({ requeued: 0 });
+    expect(modelClient.requests).toHaveLength(1);
+    expect(jobs.list({ classes: ["agent_ingest"], states: ["completed_with_warnings"] }).jobs[0]?.sourceId)
+      .toBe(sourceId);
+    const noteBeforeOcr = fs.readFileSync(findFile(path.join(vaultPath, "wiki"), ".md"), "utf8");
+    expect(noteBeforeOcr).toContain("Some visible document content may still be waiting for local OCR enrichment.");
 
     expect(await jobs.processQueuedOcr({ sourceIds: [sourceId] })).toMatchObject({
       completed: 1,
       failed: 0,
       agentReadySourceIds: [sourceId]
-    });
-    expect(jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]?.sourceId).toBe(sourceId);
-    expect(await jobs.processQueuedAgentIngest({ sourceIds: [sourceId] })).toEqual({
-      processed: 1,
-      completed: 1,
-      failed: 0
     });
     expect(modelClient.requests).toHaveLength(1);
     expect(renderer.requestedPageSets).toEqual([[2]]);
@@ -962,8 +963,10 @@ describe("jobs service", () => {
     });
     const sourceId = requireFirst(captured.sourceIds);
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    seedExplicitPdfParseJob(vaultPath, sourceId);
     expect((await jobs.processQueuedParses({ sourceIds: [sourceId] })).agentReadySourceIds).toEqual([]);
-    expect(jobs.list({ classes: ["agent_ingest"] }).jobs).toHaveLength(0);
+    expect(jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]?.sourceId)
+      .toBe(sourceId);
 
     adapter.available = false;
     expect(await jobs.processQueuedOcr({ sourceIds: [sourceId] })).toEqual({
@@ -1042,6 +1045,7 @@ describe("jobs service", () => {
     });
     const sourceId = requireFirst(captured.sourceIds);
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    seedExplicitPdfParseJob(vaultPath, sourceId);
     await jobs.processQueuedParses({ sourceIds: [sourceId] });
 
     expect(await jobs.processQueuedAgentIngest({ sourceIds: [sourceId] })).toEqual({
@@ -1091,6 +1095,7 @@ describe("jobs service", () => {
     });
     const sourceId = requireFirst(captured.sourceIds);
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    seedExplicitPdfParseJob(vaultPath, sourceId);
     await jobs.processQueuedParses({ sourceIds: [sourceId] });
     const sourceRecordPath = findFile(path.join(vaultPath, ".pige/source-records"), `${sourceId}.json`);
     const sourceRecord = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as {
@@ -1107,7 +1112,8 @@ describe("jobs service", () => {
     expect(renderer.callCount).toBe(0);
     expect(adapter.callCount).toBe(0);
     expect(jobs.list({ classes: ["ocr"], states: ["failed_final"] }).jobs[0]?.message).toContain("failed validation");
-    expect(jobs.list({ classes: ["agent_ingest"] }).jobs).toHaveLength(0);
+    expect(jobs.list({ classes: ["agent_ingest"], states: ["waiting_dependency"] }).jobs[0]?.sourceId)
+      .toBe(sourceId);
   });
 
   it("persists parse follow-up jobs before the parent can leave its recoverable state", async () => {
@@ -1135,6 +1141,7 @@ describe("jobs service", () => {
     });
     const sourceId = requireFirst(captured.sourceIds);
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    seedExplicitPdfParseJob(vaultPath, sourceId);
     const queuedParse = requireValue(jobs.list({ classes: ["parse"], states: ["queued"] }).jobs[0]);
     const terminalObservation = observeRequiredChildBeforeParentTerminal(
       vaultPath,
@@ -1195,12 +1202,14 @@ describe("jobs service", () => {
     });
     const sourceId = requireFirst(captured.sourceIds);
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    seedExplicitPdfParseJob(vaultPath, sourceId);
     await jobs.processQueuedParses({ sourceIds: [sourceId] });
     const queuedOcr = requireValue(jobs.list({ classes: ["ocr"], states: ["queued"] }).jobs[0]);
     const terminalObservation = observeRequiredChildBeforeParentTerminal(
       vaultPath,
       queuedOcr.id,
-      "agent_ingest"
+      "agent_ingest",
+      true
     );
     replaceLogWithDirectory(vaultPath);
 
@@ -1222,7 +1231,10 @@ describe("jobs service", () => {
     expect(ocrJob.sourceId).toBe(sourceId);
     expect(agentJob.sourceId).toBe(sourceId);
     expect(readJobRecord(vaultPath, ocrJob.id).childJobIds).toContain(agentJob.id);
-    expect(readJobRecord(vaultPath, agentJob.id).parentJobId).toBe(ocrJob.id);
+    const captureJob = requireValue(listJobRecords(vaultPath).find((job) =>
+      job.class === "capture" && job.sourceId === sourceId
+    ));
+    expect(readJobRecord(vaultPath, agentJob.id).parentJobId).toBe(captureJob.id);
   });
 
   it("keeps incomplete PDF rendering retryable without scheduling Agent ingest", async () => {
@@ -1248,6 +1260,7 @@ describe("jobs service", () => {
     });
     const sourceId = requireFirst(captured.sourceIds);
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    seedExplicitPdfParseJob(vaultPath, sourceId);
     await jobs.processQueuedParses({ sourceIds: [sourceId] });
 
     const result = await jobs.processQueuedOcr({ sourceIds: [sourceId] });
@@ -1255,7 +1268,8 @@ describe("jobs service", () => {
     expect(result).toEqual({ processed: 1, completed: 0, failed: 1, agentReadySourceIds: [] });
     expect(adapter.callCount).toBe(0);
     expect(jobs.list({ classes: ["ocr"], states: ["failed_retryable"] }).jobs[0]?.message).toContain("validated artifacts remain retryable");
-    expect(jobs.list({ classes: ["agent_ingest"] }).jobs).toHaveLength(0);
+    expect(jobs.list({ classes: ["agent_ingest"], states: ["waiting_dependency"] }).jobs[0]?.sourceId)
+      .toBe(sourceId);
   });
 
   it("preserves a user-edited source page while keeping validated PDF artifacts", async () => {
@@ -1273,6 +1287,7 @@ describe("jobs service", () => {
     });
     const sourceId = requireFirst(captureResult.sourceIds);
     jobs.processQueuedCaptures({ jobIds: captureResult.jobIds });
+    seedExplicitPdfParseJob(vaultPath, sourceId);
     const beforeRecordPath = findFile(path.join(vaultPath, ".pige/source-records"), `${sourceId}.json`);
     const beforeRecord = JSON.parse(fs.readFileSync(beforeRecordPath, "utf8")) as { knowledgePagePath: string };
     const sourcePagePath = path.join(vaultPath, beforeRecord.knowledgePagePath);
@@ -2326,6 +2341,51 @@ function requireValue<T>(value: T | undefined): T {
   return value;
 }
 
+function seedExplicitPdfParseJob(vaultPath: string, sourceId: string): JobRecord {
+  const parent = requireValue(listJobRecords(vaultPath).find((job) =>
+    job.class === "capture" && job.sourceId === sourceId
+  ));
+  const dateKey = /^src_(\d{8})_/u.exec(sourceId)?.[1] ?? "20260711";
+  const suffix = sourceId.replace(/^src_\d{8}_/u, "").slice(0, 10);
+  const jobId = `job_${dateKey}_${suffix}pa`;
+  const now = "2026-07-11T00:00:00.000Z";
+  const existing = listJobRecords(vaultPath).find((job) => job.id === jobId);
+  const child = existing ?? JobRecordSchema.parse({
+    id: jobId,
+    class: "parse",
+    state: "queued",
+    parentJobId: parent.id,
+    createdAt: now,
+    updatedAt: now,
+    sourceId,
+    ...(parent.captureId ? { captureId: parent.captureId } : {}),
+    ...(parent.conversationEventId ? { conversationEventId: parent.conversationEventId } : {}),
+    message: "Explicit parser-substrate test Job queued."
+  });
+  if (!existing) {
+    const childPath = path.join(
+      vaultPath,
+      ".pige",
+      "jobs",
+      dateKey.slice(0, 4),
+      dateKey.slice(4, 6),
+      `${jobId}.json`
+    );
+    fs.mkdirSync(path.dirname(childPath), { recursive: true });
+    fs.writeFileSync(childPath, `${JSON.stringify(child, null, 2)}\n`, "utf8");
+  }
+  if (!(parent.childJobIds ?? []).includes(child.id)) {
+    const parentPath = findFile(path.join(vaultPath, ".pige", "jobs"), `${parent.id}.json`);
+    const linkedParent = JobRecordSchema.parse({
+      ...parent,
+      childJobIds: [...(parent.childJobIds ?? []), child.id],
+      updatedAt: now
+    });
+    fs.writeFileSync(parentPath, `${JSON.stringify(linkedParent, null, 2)}\n`, "utf8");
+  }
+  return child;
+}
+
 function readJobRecord(vaultPath: string, jobId: string): JobRecord {
   const jobPath = findFile(path.join(vaultPath, ".pige", "jobs"), `${jobId}.json`);
   return JSON.parse(fs.readFileSync(jobPath, "utf8")) as JobRecord;
@@ -2340,7 +2400,8 @@ function listJobRecords(vaultPath: string): JobRecord[] {
 function observeRequiredChildBeforeParentTerminal(
   vaultPath: string,
   parentJobId: string,
-  requiredChildClass: JobRecord["class"]
+  requiredChildClass: JobRecord["class"],
+  allowPrelinkedParent = false
 ): { readonly restore: () => void; readonly wasObserved: () => boolean } {
   const originalRename = fs.renameSync.bind(fs);
   let observed = false;
@@ -2350,7 +2411,8 @@ function observeRequiredChildBeforeParentTerminal(
       if (candidate.state === "completed" || candidate.state === "completed_with_warnings") {
         const children = (candidate.childJobIds ?? []).map((childId) => readJobRecord(vaultPath, childId));
         const requiredChild = children.find((child) => child.class === requiredChildClass);
-        expect(requiredChild?.parentJobId).toBe(parentJobId);
+        expect(requiredChild).toBeDefined();
+        if (!allowPrelinkedParent) expect(requiredChild?.parentJobId).toBe(parentJobId);
         observed = true;
       }
     }

@@ -21,7 +21,11 @@ import {
   type SourceKind,
   type SourceRecord
 } from "@pige/schemas";
-import { AgentIngestService } from "./agent-ingest-service";
+import {
+  AgentIngestService,
+  type AgentIngestParseToolExecution,
+  type AgentIngestParseToolRequest
+} from "./agent-ingest-service";
 import type { DocumentParserPort } from "./document-parser-service";
 import { SourcePageService } from "./source-page-service";
 import type { LocalDatabaseService } from "./local-database-service";
@@ -62,6 +66,7 @@ export interface ProcessQueuedParsesRequest {
   readonly jobIds?: readonly string[];
   readonly sourceIds?: readonly string[];
   readonly limit?: number;
+  readonly abortSignal?: AbortSignal;
 }
 
 export interface ProcessQueuedParsesResult extends ProcessQueuedCapturesResult {
@@ -321,6 +326,11 @@ export class JobsService {
       if (jobFile.job.class !== "agent_ingest" || jobFile.job.state !== "waiting_dependency") continue;
       const sourceRecord = jobFile.job.sourceId ? readSourceRecord(vaultPath, jobFile.job.sourceId) : undefined;
       if (sourceRecord && shouldWaitForRunnableOcr(this.#ocr, sourceRecord)) continue;
+      if (
+        sourceRecord?.kind === "pdf_file" &&
+        hasWaitingAgentParseChild(vaultPath, jobFile.job) &&
+        !this.#documentParser?.canParse("pdf_file")
+      ) continue;
       writeJsonAtomic(jobFile.path, JobRecordSchema.parse({
         ...jobFile.job,
         state: "queued",
@@ -341,6 +351,7 @@ export class JobsService {
     let requeued = 0;
     for (const jobFile of readJobRecordFiles(path.join(vaultPath, ".pige", "jobs"))) {
       if (jobFile.job.class !== "parse" || jobFile.job.state !== "waiting_dependency" || !jobFile.job.sourceId) continue;
+      if (isAgentSelectedParseJob(jobFile.job)) continue;
       const sourceRecord = readSourceRecord(vaultPath, jobFile.job.sourceId);
       if (!sourceRecord || !parser.canParse(sourceRecord.kind)) continue;
       writeJsonAtomic(jobFile.path, JobRecordSchema.parse({
@@ -420,7 +431,14 @@ export class JobsService {
             )
           }
         );
-        if (needsParserOrOcr(sourceRecordFile.sourceRecord.kind)) {
+        if (sourceRecordFile.sourceRecord.kind === "pdf_file") {
+          ensureAgentIngestJob(
+            vaultPath,
+            captureExecution.job,
+            sourceRecordFile.sourceRecord.id,
+            canRunAgentIngest(this.#agentIngest)
+          );
+        } else if (needsParserOrOcr(sourceRecordFile.sourceRecord.kind)) {
           ensureParserOrOcrJob(
             vaultPath,
             captureExecution.job,
@@ -500,6 +518,12 @@ export class JobsService {
         "Extracting document text in the local parser worker."
       );
       const runningJob = execution.job;
+      const agentSelected = isAgentSelectedParseJob(runningJob);
+      const detachParentAbort = bridgeParentAbortToChild(
+        jobFile.path,
+        execution.controller,
+        request.abortSignal
+      );
 
       try {
         execution.control.reportProgress({ completedUnits: 0, totalUnits: 1, unit: "document" });
@@ -512,7 +536,7 @@ export class JobsService {
         );
         const refreshedSource = readSourceRecord(vaultPath, sourceRecordFile.sourceRecord.id) ?? sourceRecordFile.sourceRecord;
         let ocrCapability: OcrSourceCapability | undefined;
-        if (result.needsOcr) {
+        if (!agentSelected && result.needsOcr) {
           ocrCapability = inspectOcrSource(this.#ocr, refreshedSource);
           ensureOcrWaitingJob(
             vaultPath,
@@ -523,6 +547,7 @@ export class JobsService {
           ocrWaitingSourceIds.push(refreshedSource.id);
         }
         if (
+          !agentSelected &&
           result.extractedTextArtifactPath &&
           result.agentTextReady &&
           (!result.needsOcr || ocrCapability?.ready !== true)
@@ -560,6 +585,7 @@ export class JobsService {
         }
         failed += 1;
       } finally {
+        detachParentAbort();
         this.#finishCooperativeExecution(runningJob.id, execution.controller);
       }
     }
@@ -703,7 +729,10 @@ export class JobsService {
         failed += 1;
         continue;
       }
-      if (shouldWaitForRunnableOcr(this.#ocr, sourceRecordFile.sourceRecord)) {
+      if (
+        sourceRecordFile.sourceRecord.kind !== "pdf_file" &&
+        shouldWaitForRunnableOcr(this.#ocr, sourceRecordFile.sourceRecord)
+      ) {
         markJobWaitingDependency(
           jobFile.path,
           jobFile.job,
@@ -712,7 +741,6 @@ export class JobsService {
         failed += 1;
         continue;
       }
-      const sourceRevision = sourceRecordRevision(sourceRecordFile.sourceRecord);
       const execution = this.#beginCooperativeExecution(
         jobFile.path,
         jobFile.job,
@@ -743,12 +771,12 @@ export class JobsService {
             });
             writeJsonAtomic(jobFile.path, activeJob);
           },
-          assertSourceCurrent: () => {
+          assertSourceCurrent: (expectedSource) => {
             const currentSource = readSourceRecord(vaultPath, sourceRecordFile.sourceRecord.id);
             if (
               !currentSource ||
-              sourceRecordRevision(currentSource) !== sourceRevision ||
-              shouldWaitForRunnableOcr(this.#ocr, currentSource)
+              sourceRecordRevision(currentSource) !== sourceRecordRevision(expectedSource) ||
+              (currentSource.kind !== "pdf_file" && shouldWaitForRunnableOcr(this.#ocr, currentSource))
             ) {
               throw new PigeDomainError(
                 "agent_ingest.source_changed",
@@ -756,6 +784,12 @@ export class JobsService {
               );
             }
           },
+          parseCurrentSource: (parseRequest) => this.#runAgentSelectedParseTool(
+            vaultPath,
+            runningJob,
+            parseRequest,
+            execution.control
+          ),
           throwIfCancellationRequested: () => execution.control.throwIfCancellationRequested(),
           onPublicationStart: (checkpointId) => execution.control.markDurableCheckpoint(checkpointId),
           signal: execution.control.signal
@@ -785,6 +819,13 @@ export class JobsService {
           markJobCancellationOutcome(jobFile.path, runningJob, cancellation);
         } else if (caught instanceof PigeDomainError && caught.code === "model_provider.default_model_missing") {
           markJobWaitingDependency(jobFile.path, runningJob, "Waiting for a tested default model before Agent ingest.", durableState);
+        } else if (caught instanceof PigeDomainError && caught.code === "agent_runtime.tool_dependency_waiting") {
+          markJobWaitingDependency(
+            jobFile.path,
+            runningJob,
+            "Agent-selected PDF processing is waiting for a registered local capability.",
+            durableState
+          );
         } else if (caught instanceof PigeDomainError && caught.code === "source.external_unavailable") {
           markJobWaitingDependency(jobFile.path, runningJob, "Waiting for the referenced original source to be reconnected before Agent ingest can continue.", durableState);
         } else if (caught instanceof PigeDomainError && /^source\.(?:checksum_mismatch|managed_unavailable|path_outside_vault|reference_invalid)$/u.test(caught.code)) {
@@ -830,6 +871,103 @@ export class JobsService {
       completed,
       failed
     };
+  }
+
+  async #runAgentSelectedParseTool(
+    vaultPath: string,
+    parentJob: JobRecord,
+    request: AgentIngestParseToolRequest,
+    parentControl: JobExecutionControl
+  ): Promise<AgentIngestParseToolExecution> {
+    assertAgentParseToolRequest(parentJob, request);
+    const currentParent = readJobRecordFile(vaultPath, parentJob.id);
+    if (!currentParent) {
+      throw new PigeDomainError("agent_runtime.tool_parent_missing", "The active Agent Job is unavailable.");
+    }
+    if (currentParent.job.state === "cancel_requested" || currentParent.job.state === "cancelled") {
+      throw new JobCancellationError({
+        durableWritesApplied: currentParent.job.cancellation?.durableWritesApplied === true,
+        ...(currentParent.job.cancellation?.safeCheckpointId
+          ? { safeCheckpointId: currentParent.job.cancellation.safeCheckpointId }
+          : {})
+      });
+    }
+    if (currentParent.job.state !== "running" || currentParent.job.class !== "agent_ingest") {
+      throw new PigeDomainError("agent_runtime.tool_parent_inactive", "The Agent tool parent is not the active ingest Job.");
+    }
+    if (currentParent.job.policyHash !== request.policyHash) {
+      throw new PigeDomainError("agent_runtime.tool_binding_changed", "The Agent policy binding changed before tool dispatch.");
+    }
+
+    const sourceFile = readSourceRecordFile(vaultPath, request.sourceRecord.id);
+    if (
+      !sourceFile ||
+      sourceRecordRevision(sourceFile.sourceRecord) !== sourceRecordRevision(request.sourceRecord)
+    ) {
+      throw new PigeDomainError("agent_ingest.source_changed", "The selected source changed before parser dispatch.");
+    }
+    if (sourceFile.sourceRecord.kind !== "pdf_file") {
+      throw new PigeDomainError("parser.unsupported_source", "The first Agent-selected parser tool supports preserved PDF sources only.");
+    }
+
+    const parserReady = Boolean(this.#documentParser?.canParse(sourceFile.sourceRecord.kind));
+    let child = ensureAgentParseToolJob(
+      vaultPath,
+      currentParent.job,
+      sourceFile.sourceRecord,
+      request,
+      parserReady ? "queued" : "waiting_dependency"
+    );
+    const reused = child.state === "completed" || child.state === "completed_with_warnings";
+    if (reused) {
+      parentControl.markDurableCheckpoint("agent_parse_child_output_adoption_started");
+      return createAgentParseToolExecution(child, sourceFile.sourceRecord, "reused");
+    }
+    if (!parserReady) {
+      return createAgentParseToolExecution(child, sourceFile.sourceRecord, "waiting_dependency", "pdf_parser_unavailable");
+    }
+
+    if (child.state === "failed_final") {
+      throw new PigeDomainError("parser.tool_failed_final", "The durable PDF parse child cannot be retried safely.");
+    }
+    if (child.state === "running" || child.state === "cancel_requested") {
+      throw new PigeDomainError("parser.tool_recovery_required", "The durable PDF parse child requires startup recovery before reuse.");
+    }
+    if (child.state !== "queued") {
+      const retry = this.retry({ jobId: child.id });
+      if (retry.status !== "requeued" || !retry.job) {
+        throw new PigeDomainError("parser.tool_retry_failed", "The durable PDF parse child could not be requeued.");
+      }
+      child = readJobRecordFile(vaultPath, child.id)?.job ?? child;
+    }
+    parentControl.markDurableCheckpoint("agent_parse_child_publication_started");
+    await this.processQueuedParses({
+      jobIds: [child.id],
+      limit: 1,
+      abortSignal: request.signal
+    });
+    child = readJobRecordFile(vaultPath, child.id)?.job ?? child;
+
+    const refreshedSource = readSourceRecord(vaultPath, sourceFile.sourceRecord.id) ?? sourceFile.sourceRecord;
+    if (child.state === "completed" || child.state === "completed_with_warnings") {
+      const status = refreshedSource.metadata.needsOcr === true
+        ? "needs_ocr"
+        : "parsed";
+      return createAgentParseToolExecution(child, refreshedSource, status);
+    }
+    if (child.state === "waiting_dependency") {
+      return createAgentParseToolExecution(child, refreshedSource, "waiting_dependency", "pdf_parser_unavailable");
+    }
+    if (request.signal.aborted || child.state === "cancelled" || child.state === "cancel_requested") {
+      throw new JobCancellationError({
+        durableWritesApplied: child.cancellation?.durableWritesApplied === true,
+        ...(child.cancellation?.safeCheckpointId ? { safeCheckpointId: child.cancellation.safeCheckpointId } : {})
+      });
+    }
+    if (child.state === "failed_final") {
+      throw new PigeDomainError("parser.tool_failed_final", "The durable PDF parse child failed validation.");
+    }
+    throw new PigeDomainError("parser.tool_failed_retryable", "The durable PDF parse child remains retryable.");
   }
 
   processQueuedIndexRebuild(
@@ -1521,6 +1659,301 @@ function withDurableWriteState(job: JobRecord, state?: JobDurableWriteState): Jo
   });
 }
 
+const AGENT_PARSE_TOOL_SOURCE_ROLE = "agent_tool_source_revision";
+const AGENT_PARSE_TOOL_INPUT_ROLE = "agent_tool_canonical_input";
+const AGENT_PARSE_TOOL_CATALOG_ROLE = "agent_tool_catalog";
+const AGENT_PARSE_TOOL_CALL_ROLE = "agent_tool_call_provenance";
+const MAX_AGENT_TOOL_CALL_PROVENANCE_REFS = 16;
+
+function assertAgentParseToolRequest(parentJob: JobRecord, request: AgentIngestParseToolRequest): void {
+  if (
+    request.sourceRecord.id !== parentJob.sourceId ||
+    !/^[a-z][a-z0-9_]{2,63}$/u.test(request.toolId) ||
+    !/^[a-z0-9][a-z0-9._-]{0,31}$/u.test(request.toolVersion) ||
+    !isSha256(request.canonicalInputHash) ||
+    !isSha256(request.catalogHash) ||
+    !isSha256(request.policyHash)
+  ) {
+    throw new PigeDomainError("agent_runtime.tool_binding_invalid", "The Agent parser tool binding is invalid.");
+  }
+}
+
+function ensureAgentParseToolJob(
+  vaultPath: string,
+  parentJob: JobRecord,
+  sourceRecord: SourceRecord,
+  request: AgentIngestParseToolRequest,
+  state: Extract<JobState, "queued" | "waiting_dependency">
+): JobRecord {
+  const sourceRevision = sourceInputRevision(sourceRecord);
+  const actionDigest = createAgentParseActionDigest({
+    identityVersion: 1,
+    parentJobId: parentJob.id,
+    toolId: request.toolId,
+    toolVersion: request.toolVersion,
+    sourceId: sourceRecord.id,
+    sourceRevision,
+    canonicalInputHash: request.canonicalInputHash
+  });
+  const jobId = createAgentToolParseJobId(parentJob.id, actionDigest);
+  const provenanceHash = createToolCallProvenanceHash(parentJob.id, request.toolCallId);
+  const now = new Date().toISOString();
+  const requested = JobRecordSchema.parse({
+    id: jobId,
+    class: "parse",
+    state,
+    parentJobId: parentJob.id,
+    createdAt: now,
+    updatedAt: now,
+    sourceId: sourceRecord.id,
+    ...(parentJob.captureId ? { captureId: parentJob.captureId } : {}),
+    ...(parentJob.conversationEventId ? { conversationEventId: parentJob.conversationEventId } : {}),
+    policyContextId: parentJob.policyContextId,
+    policyHash: request.policyHash,
+    inputRefs: createAgentParseToolInputRefs({
+      sourceRecord,
+      sourceRevision,
+      toolId: request.toolId,
+      toolVersion: request.toolVersion,
+      canonicalInputHash: request.canonicalInputHash,
+      catalogHash: request.catalogHash,
+      provenanceHash
+    }),
+    message: state === "queued"
+      ? "Agent selected the bounded PDF parser tool; durable parse child queued."
+      : "Agent selected PDF parsing; waiting for the bundled parser capability."
+  });
+  return ensureRequiredChildJob(vaultPath, parentJob, requested, (existing) => {
+    assertAgentParseChildBinding(existing, requested);
+    return JobRecordSchema.parse({
+      ...existing,
+      inputRefs: mergeAgentToolCallProvenance(existing.inputRefs ?? [], provenanceHash)
+    });
+  });
+}
+
+function createAgentParseToolInputRefs(input: {
+  readonly sourceRecord: SourceRecord;
+  readonly sourceRevision: string;
+  readonly toolId: string;
+  readonly toolVersion: string;
+  readonly canonicalInputHash: string;
+  readonly catalogHash: string;
+  readonly provenanceHash: string;
+}): NonNullable<JobRecord["inputRefs"]> {
+  return [
+    {
+      kind: "source",
+      id: input.sourceRecord.id,
+      checksum: input.sourceRevision,
+      role: AGENT_PARSE_TOOL_SOURCE_ROLE
+    },
+    {
+      kind: "tool",
+      id: `${input.toolId}@${input.toolVersion}`,
+      checksum: input.canonicalInputHash,
+      role: AGENT_PARSE_TOOL_INPUT_ROLE
+    },
+    {
+      kind: "tool",
+      id: "pige_agent_tool_catalog",
+      checksum: input.catalogHash,
+      role: AGENT_PARSE_TOOL_CATALOG_ROLE
+    },
+    {
+      kind: "tool",
+      id: input.toolId,
+      checksum: input.provenanceHash,
+      role: AGENT_PARSE_TOOL_CALL_ROLE
+    }
+  ];
+}
+
+function assertAgentParseChildBinding(existing: JobRecord, requested: JobRecord): void {
+  if (
+    existing.id !== requested.id ||
+    existing.class !== "parse" ||
+    existing.parentJobId !== requested.parentJobId ||
+    existing.sourceId !== requested.sourceId ||
+    existing.policyHash !== requested.policyHash
+  ) {
+    throw new PigeDomainError("agent_runtime.tool_binding_changed", "The durable parser child binding changed before reuse.");
+  }
+  for (const role of [
+    AGENT_PARSE_TOOL_SOURCE_ROLE,
+    AGENT_PARSE_TOOL_INPUT_ROLE,
+    AGENT_PARSE_TOOL_CATALOG_ROLE
+  ]) {
+    const existingRef = existing.inputRefs?.find((ref) => ref.role === role);
+    const requestedRef = requested.inputRefs?.find((ref) => ref.role === role);
+    if (
+      !existingRef ||
+      !requestedRef ||
+      existingRef.kind !== requestedRef.kind ||
+      existingRef.id !== requestedRef.id ||
+      existingRef.checksum !== requestedRef.checksum
+    ) {
+      throw new PigeDomainError("agent_runtime.tool_binding_changed", "The durable parser child input binding changed before reuse.");
+    }
+  }
+}
+
+function mergeAgentToolCallProvenance(
+  refs: NonNullable<JobRecord["inputRefs"]>,
+  provenanceHash: string
+): NonNullable<JobRecord["inputRefs"]> {
+  const provenance = refs.filter((ref) => ref.role === AGENT_PARSE_TOOL_CALL_ROLE);
+  if (provenance.some((ref) => ref.checksum === provenanceHash)) return refs;
+  if (provenance.length >= MAX_AGENT_TOOL_CALL_PROVENANCE_REFS) return refs;
+  const toolId = refs.find((ref) => ref.role === AGENT_PARSE_TOOL_INPUT_ROLE)?.id?.split("@", 1)[0];
+  if (!toolId) {
+    throw new PigeDomainError("agent_runtime.tool_binding_invalid", "The parser child tool identity is unavailable.");
+  }
+  return [
+    ...refs,
+    {
+      kind: "tool",
+      id: toolId,
+      checksum: provenanceHash,
+      role: AGENT_PARSE_TOOL_CALL_ROLE
+    }
+  ];
+}
+
+function createAgentParseActionDigest(input: {
+  readonly identityVersion: 1;
+  readonly parentJobId: string;
+  readonly toolId: string;
+  readonly toolVersion: string;
+  readonly sourceId: string;
+  readonly sourceRevision: string;
+  readonly canonicalInputHash: string;
+}): string {
+  const canonical = JSON.stringify({
+    identityVersion: input.identityVersion,
+    parentJobId: input.parentJobId,
+    toolId: input.toolId,
+    toolVersion: input.toolVersion,
+    sourceId: input.sourceId,
+    sourceRevision: input.sourceRevision,
+    canonicalInputHash: input.canonicalInputHash
+  });
+  return createHash("sha256").update("pige:agent-tool-child:v1\0", "utf8").update(canonical, "utf8").digest("hex");
+}
+
+function createToolCallProvenanceHash(parentJobId: string, toolCallId: string): string {
+  return `sha256:${createHash("sha256")
+    .update("pige:pi-tool-call-provenance:v1\0", "utf8")
+    .update(parentJobId, "utf8")
+    .update("\0", "utf8")
+    .update(toolCallId, "utf8")
+    .digest("hex")}`;
+}
+
+function createAgentToolParseJobId(parentJobId: string, actionDigest: string): string {
+  return createParserOrOcrJobId(parentJobId, "parse", actionDigest);
+}
+
+function isAgentSelectedParseJob(job: JobRecord): boolean {
+  return job.class === "parse" &&
+    job.inputRefs?.some((ref) => ref.kind === "tool" && ref.role === AGENT_PARSE_TOOL_INPUT_ROLE) === true;
+}
+
+function hasWaitingAgentParseChild(vaultPath: string, parent: JobRecord): boolean {
+  return (parent.childJobIds ?? []).some((childId) => {
+    const child = readJobRecordFile(vaultPath, childId)?.job;
+    return child?.state === "waiting_dependency" && isAgentSelectedParseJob(child);
+  });
+}
+
+function bridgeParentAbortToChild(
+  jobPath: string,
+  controller: AbortController,
+  parentSignal: AbortSignal | undefined
+): () => void {
+  if (!parentSignal) return () => undefined;
+  const abort = (): void => {
+    const current = readJobRecordAtPath(jobPath);
+    if (current?.state === "running") {
+      const requestedAt = new Date().toISOString();
+      writeJsonAtomic(jobPath, JobRecordSchema.parse({
+        ...current,
+        state: "cancel_requested",
+        updatedAt: requestedAt,
+        cancellation: {
+          ...current.cancellation,
+          requestedAt,
+          requestedBy: "system"
+        },
+        message: "Parent Agent cancellation requested; stopping the active parser child."
+      }));
+    }
+    controller.abort();
+  };
+  if (parentSignal.aborted) abort();
+  else parentSignal.addEventListener("abort", abort, { once: true });
+  return () => parentSignal.removeEventListener("abort", abort);
+}
+
+function createAgentParseToolExecution(
+  child: JobRecord,
+  sourceRecord: SourceRecord,
+  status: AgentIngestParseToolExecution["status"],
+  dependencyCode?: string
+): AgentIngestParseToolExecution {
+  const parserWarnings = Array.isArray(sourceRecord.metadata.parserWarnings)
+    ? sourceRecord.metadata.parserWarnings.filter((value): value is string => typeof value === "string").slice(0, 16)
+    : [];
+  return {
+    status,
+    childJobId: child.id,
+    sourceRecord,
+    artifactIds: sourceRecord.artifacts
+      .filter((artifact) => artifact.kind === "extracted_text" || artifact.kind === "metadata")
+      .map((artifact) => artifact.id),
+    textCharacterCount: safeNonNegativeInteger(sourceRecord.metadata.textCharacterCount),
+    textCoverage: typeof sourceRecord.metadata.textCoverage === "string"
+      ? sourceRecord.metadata.textCoverage
+      : "none",
+    needsOcr: sourceRecord.metadata.needsOcr === true,
+    agentTextReady: sourceRecord.metadata.agentTextReady === true,
+    warnings: parserWarnings,
+    ...(dependencyCode ? { dependencyCode } : {})
+  };
+}
+
+function safeNonNegativeInteger(value: unknown): number {
+  return Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : 0;
+}
+
+function sourceInputRevision(sourceRecord: SourceRecord): string {
+  const preservedChecksum = sourceRecord.managedCopy?.checksum ?? sourceRecord.original?.checksum;
+  if (preservedChecksum) return preservedChecksum;
+  const fallback = JSON.stringify({
+    sourceId: sourceRecord.id,
+    kind: sourceRecord.kind,
+    storageStrategy: sourceRecord.storageStrategy,
+    original: sourceRecord.original ? {
+      uri: sourceRecord.original.uri,
+      lastKnownMtime: sourceRecord.original.lastKnownMtime ?? null,
+      lastKnownSize: sourceRecord.original.lastKnownSize ?? null
+    } : null,
+    managedCopy: sourceRecord.managedCopy ? {
+      rootId: sourceRecord.managedCopy.rootId ?? null,
+      pathBasis: sourceRecord.managedCopy.pathBasis ?? null,
+      size: sourceRecord.managedCopy.size
+    } : null
+  });
+  return `sha256:${createHash("sha256")
+    .update("pige:source-input-revision:v1\0", "utf8")
+    .update(fallback, "utf8")
+    .digest("hex")}`;
+}
+
+function isSha256(value: string): boolean {
+  return /^sha256:[a-f0-9]{64}$/u.test(value);
+}
+
 function needsParserOrOcr(sourceKind: SourceKind): boolean {
   return sourceKind === "pdf_file" ||
     sourceKind === "docx_file" ||
@@ -1827,9 +2260,14 @@ function ensureRequiredChildJob(
   return child;
 }
 
-function createParserOrOcrJobId(sourceId: string, jobClass: "parse" | "ocr"): string {
-  const dateKey = /^src_(\d{8})_/.exec(sourceId)?.[1] ?? new Date().toISOString().slice(0, 10).replaceAll("-", "");
-  const suffix = sourceId.replace(/^src_\d{8}_/u, "");
+function createParserOrOcrJobId(
+  datedIdentityId: string,
+  jobClass: "parse" | "ocr",
+  semanticDigest?: string
+): string {
+  const dateKey = /^(?:src|job)_(\d{8})_/u.exec(datedIdentityId)?.[1] ??
+    new Date().toISOString().slice(0, 10).replaceAll("-", "");
+  const suffix = semanticDigest ?? datedIdentityId.replace(/^(?:src|job)_\d{8}_/u, "");
   return `job_${dateKey}_${suffix.slice(0, 10)}${jobClass === "parse" ? "pa" : "oc"}`;
 }
 

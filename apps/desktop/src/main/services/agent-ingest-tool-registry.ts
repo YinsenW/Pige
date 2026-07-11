@@ -1,16 +1,30 @@
+import { PigeDomainError } from "@pige/domain";
 import type { AgentIngestOutput } from "@pige/schemas";
-import type { PigeAgentToolDefinition, PigeAgentToolResult } from "./pi-agent-runtime-adapter";
+import type {
+  PigeAgentToolCallContext,
+  PigeAgentToolDescriptor,
+  PigeAgentToolResult
+} from "./pi-agent-runtime-adapter";
 
 export const INSPECT_SOURCE_TOOL_NAME = "pige_inspect_source";
+export const PARSE_SOURCE_TOOL_NAME = "pige_parse_source";
+export const PARSE_SOURCE_TOOL_VERSION = "1";
 export const CREATE_KNOWLEDGE_NOTE_TOOL_NAME = "pige_create_knowledge_note";
 
-export type AgentIngestToolCapability = "read_current_source" | "write_generated_note";
+export type AgentIngestToolCapability =
+  | "read_current_source"
+  | "parse_current_source"
+  | "write_generated_note";
 
 export interface AgentIngestToolAuthorizationRequest {
-  readonly toolName: typeof INSPECT_SOURCE_TOOL_NAME | typeof CREATE_KNOWLEDGE_NOTE_TOOL_NAME;
+  readonly toolName:
+    | typeof INSPECT_SOURCE_TOOL_NAME
+    | typeof PARSE_SOURCE_TOOL_NAME
+    | typeof CREATE_KNOWLEDGE_NOTE_TOOL_NAME;
   readonly capability: AgentIngestToolCapability;
   readonly jobId: string;
   readonly sourceId: string;
+  readonly toolCallId: string;
 }
 
 export interface AgentIngestToolAuthorizationPort {
@@ -22,6 +36,11 @@ export interface AgentIngestInspectToolResult {
   readonly details: Readonly<Record<string, unknown>>;
 }
 
+export interface AgentIngestParseToolResult {
+  readonly modelText: string;
+  readonly details: Readonly<Record<string, unknown>>;
+}
+
 export interface AgentIngestPublishToolResult {
   readonly modelText: string;
   readonly details: Readonly<Record<string, unknown>>;
@@ -29,6 +48,7 @@ export interface AgentIngestPublishToolResult {
 
 export interface AgentIngestToolHost {
   inspect(signal: AbortSignal): Promise<AgentIngestInspectToolResult>;
+  parse?(context: PigeAgentToolCallContext): Promise<AgentIngestParseToolResult>;
   publish(output: AgentIngestOutput, signal: AbortSignal): Promise<AgentIngestPublishToolResult>;
 }
 
@@ -37,31 +57,100 @@ export function createAgentIngestToolRegistry(input: {
   readonly sourceId: string;
   readonly authorization: AgentIngestToolAuthorizationPort;
   readonly host: AgentIngestToolHost;
-}): readonly PigeAgentToolDefinition[] {
+}): readonly PigeAgentToolDescriptor[] {
   return [
     {
       name: INSPECT_SOURCE_TOOL_NAME,
       label: "Inspect preserved source",
       description: "Inspect Pige-verified evidence for the current preserved source. Takes no source path or source ID.",
       parameters: EMPTY_OBJECT_SCHEMA,
-      authorize: () => input.authorization.authorize({
+      version: "1",
+      capability: "read_current_source",
+      outputSchema: TOOL_RESULT_OUTPUT_SCHEMA,
+      effect: "read_only",
+      inputTrust: "model_generated",
+      outputTrust: "untrusted_source",
+      dataBoundary: CURRENT_SOURCE_DATA_BOUNDARY,
+      execution: "sequential",
+      idempotency: CURRENT_SOURCE_IDEMPOTENCY,
+      limits: {
+        maxInputBytes: 2,
+        maxOutputBytes: 131_072,
+        timeoutMs: 10_000
+      },
+      ownerService: "AgentIngestService",
+      authorize: (_args, context) => input.authorization.authorize({
         toolName: INSPECT_SOURCE_TOOL_NAME,
         capability: "read_current_source",
         jobId: input.jobId,
-        sourceId: input.sourceId
+        sourceId: input.sourceId,
+        toolCallId: context.toolCallId
       }),
       execute: async (_args, signal): Promise<PigeAgentToolResult> => input.host.inspect(signal)
+    },
+    {
+      name: PARSE_SOURCE_TOOL_NAME,
+      label: "Parse preserved source",
+      description: "Parse the current preserved source through Pige-owned local parser services. Takes no path, source ID, or model authority.",
+      parameters: EMPTY_OBJECT_SCHEMA,
+      version: PARSE_SOURCE_TOOL_VERSION,
+      capability: "parse_current_source",
+      outputSchema: TOOL_RESULT_OUTPUT_SCHEMA,
+      effect: "idempotent_write",
+      inputTrust: "model_generated",
+      outputTrust: "host_validated",
+      dataBoundary: CURRENT_SOURCE_DATA_BOUNDARY,
+      execution: "sequential",
+      idempotency: CURRENT_SOURCE_IDEMPOTENCY,
+      limits: {
+        maxInputBytes: 2,
+        maxOutputBytes: 262_144,
+        timeoutMs: 120_000
+      },
+      ownerService: "DocumentParserService",
+      authorize: (_args, context) => input.authorization.authorize({
+        toolName: PARSE_SOURCE_TOOL_NAME,
+        capability: "parse_current_source",
+        jobId: input.jobId,
+        sourceId: input.sourceId,
+        toolCallId: context.toolCallId
+      }),
+      execute: async (_args, _signal, context): Promise<PigeAgentToolResult> => {
+        if (!context || !input.host.parse) {
+          throw new PigeDomainError(
+            "agent_runtime.parse_tool_unavailable",
+            "The current-source parser tool is unavailable."
+          );
+        }
+        return input.host.parse(context);
+      }
     },
     {
       name: CREATE_KNOWLEDGE_NOTE_TOOL_NAME,
       label: "Create grounded knowledge note",
       description: "Validate and publish one grounded Markdown note for the current preserved source through Pige's durable write boundary.",
       parameters: AGENT_INGEST_OUTPUT_SCHEMA,
-      authorize: () => input.authorization.authorize({
+      version: "1",
+      capability: "write_generated_note",
+      outputSchema: TOOL_RESULT_OUTPUT_SCHEMA,
+      effect: "idempotent_write",
+      inputTrust: "model_generated",
+      outputTrust: "host_validated",
+      dataBoundary: CURRENT_SOURCE_DATA_BOUNDARY,
+      execution: "sequential",
+      idempotency: CURRENT_SOURCE_IDEMPOTENCY,
+      limits: {
+        maxInputBytes: 131_072,
+        maxOutputBytes: 32_768,
+        timeoutMs: 30_000
+      },
+      ownerService: "AgentIngestService",
+      authorize: (_args, context) => input.authorization.authorize({
         toolName: CREATE_KNOWLEDGE_NOTE_TOOL_NAME,
         capability: "write_generated_note",
         jobId: input.jobId,
-        sourceId: input.sourceId
+        sourceId: input.sourceId,
+        toolCallId: context.toolCallId
       }),
       execute: async (args, signal): Promise<PigeAgentToolResult> => input.host.publish(
         args as AgentIngestOutput,
@@ -72,11 +161,40 @@ export function createAgentIngestToolRegistry(input: {
 }
 
 export const allowCurrentAgentIngestTools: AgentIngestToolAuthorizationPort = {
-  authorize: (request) =>
-    request.toolName === INSPECT_SOURCE_TOOL_NAME
-      ? request.capability === "read_current_source"
-      : request.toolName === CREATE_KNOWLEDGE_NOTE_TOOL_NAME && request.capability === "write_generated_note"
+  authorize: (request) => {
+    if (request.toolName === INSPECT_SOURCE_TOOL_NAME) {
+      return request.capability === "read_current_source";
+    }
+    if (request.toolName === PARSE_SOURCE_TOOL_NAME) {
+      return request.capability === "parse_current_source";
+    }
+    return request.toolName === CREATE_KNOWLEDGE_NOTE_TOOL_NAME &&
+      request.capability === "write_generated_note";
+  }
 };
+
+const CURRENT_SOURCE_DATA_BOUNDARY = {
+  resourceScope: "current_source",
+  pathAuthority: "host_only",
+  sourceIdAuthority: "host_only",
+  modelAuthority: "none"
+} as const;
+
+const CURRENT_SOURCE_IDEMPOTENCY = {
+  mode: "idempotent",
+  scope: "current_source"
+} as const;
+
+const TOOL_RESULT_OUTPUT_SCHEMA = {
+  type: "object",
+  properties: {
+    modelText: { type: "string" },
+    details: { type: "object" },
+    terminate: { type: "boolean" }
+  },
+  required: ["modelText", "details"],
+  additionalProperties: false
+} as const;
 
 const EMPTY_OBJECT_SCHEMA = {
   type: "object",

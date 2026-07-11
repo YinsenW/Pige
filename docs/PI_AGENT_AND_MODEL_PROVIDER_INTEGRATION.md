@@ -12,9 +12,9 @@ Pige's product goal is simple:
 
 > The user connects one model service that Pi Agent can call. Pige handles the rest.
 
-Pi Agent is the mandatory v0.1 core. The first preserved-text vertical runs through
-embedded Pi and Pige tools. Phase 3 remains partial until parser, OCR, retrieval,
-recovery, permission, and packaged paths leave host-fixed/parallel workflows.
+Pi Agent is the mandatory v0.1 core. Text and preserved-PDF verticals run through
+embedded Pi and Pige tools. Phase 3 remains partial until Office/OCR/retrieval,
+generic child recovery, permissions, and packaged paths leave fixed workflows.
 
 Adopt, do not imitate: where Pi exposes a supported generic runtime surface,
 Pige integrates it through a thin adapter instead of copying, forking, or
@@ -313,9 +313,10 @@ The model sees only bounded descriptors. Calls bind run/call, catalog/policy/sou
 tool-version, and input hashes; results carry typed refs, warnings, and provenance while
 large bodies remain Artifacts. Host validation precedes every result or effect.
 
-The first slice exposes only `pige_inspect_source` and `pige_create_knowledge_note`.
-It proves the real Pi loop and bounded host handlers; the complete descriptor, parser,
-OCR, retrieval, permissions, and durable child-tool identity remain B3.13/E3.08 work.
+The current slice exposes inspect, cited publication, and preserved-PDF parsing. The
+PDF child binds parent/tool/version/source revision/input; only capped Pi-call hashes
+persist. OCR, Office, retrieval, complete registry metadata, permissions, and generic
+child recovery remain open.
 
 Source inspection, extraction, OCR, retrieval, and knowledge publication remain
 separate tools. Recommendations cannot invoke another tool. Runtime may keep only a
@@ -406,21 +407,21 @@ Phase 3 implementation note:
 
 - Normal `agent_ingest` now uses the embedded Pi Agent; the former direct
   `ProviderModelJsonClient` path is deleted rather than retained as a fallback.
-- The preserved-text trace calls inspection, then strict cited publication. Unknown,
-  unavailable, malformed, or unauthorized calls may let Pi replan before effects;
-  source drift and cancellation abort or fail closed.
+- Text calls inspect→publish; preserved PDFs call inspect→parse→inspect→publish.
+  Unknown, stale, unavailable, malformed, or unauthorized calls replan or fail before
+  effects.
 - Egress is decided before credentials and rechecked before every model turn. Provider,
   model, source revision, evidence refs, cancellation, and publication fences are
   revalidated by Pige; raw prompts, responses, sessions, and keys are not persisted.
-- With no model, source preservation remains useful and Agent work waits. Existing
-  host-routed PDF/Office/OCR continuations and renderer retrieval bypass are still open
-  migrations, not evidence of Agent-led orchestration.
+- With no model, preservation stays useful and Agent work waits. Sparse/image-only PDFs
+  stop at typed `needs_ocr` without a note or hidden OCR; Office/OCR and renderer
+  retrieval remain host-routed migrations.
 
 Delivered foundation and next steps:
 
 1. Exact pins, the embedded adapter, isolated models/auth, profile protocol proof, the
-   first two tools, and direct-bridge removal are delivered.
-2. Wrap parser, OCR, retrieval, and remaining publication/proposal capabilities as
+   first three tools, and direct-bridge removal are delivered.
+2. Wrap OCR, Office, retrieval, and remaining publication/proposal capabilities as
    separate registered effects; remove host-fixed semantic routing.
 3. Add durable child-tool pause/resume, restart, continue/steer/follow-up, complete
    Permission Broker, signed macOS/Windows packaging, and manual BYOK smoke evidence.

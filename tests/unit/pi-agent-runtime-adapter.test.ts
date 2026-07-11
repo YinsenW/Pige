@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { PiAgentRuntimeAdapter, type PigeAgentToolDefinition } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
+import {
+  MAX_PIGE_TOOL_CALL_ID_UTF8_BYTES,
+  PiAgentRuntimeAdapter,
+  createPigeAgentToolCatalogHash,
+  type PigeAgentToolDefinition
+} from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
 
 const runtimeConfig: ModelProviderRuntimeConfig = {
@@ -27,6 +32,36 @@ const runtimeConfig: ModelProviderRuntimeConfig = {
   },
   apiKey: "synthetic-pi-key"
 };
+
+const TOOL_RESULT_OUTPUT_SCHEMA = {
+  type: "object",
+  properties: {
+    modelText: { type: "string" },
+    details: { type: "object" },
+    terminate: { type: "boolean" }
+  },
+  required: ["modelText", "details"],
+  additionalProperties: false
+} as const;
+
+const BASE_TOOL_DESCRIPTOR = {
+  version: "1",
+  capability: "read_current_source",
+  outputSchema: TOOL_RESULT_OUTPUT_SCHEMA,
+  effect: "read_only",
+  inputTrust: "model_generated",
+  outputTrust: "untrusted_source",
+  dataBoundary: {
+    resourceScope: "current_source",
+    pathAuthority: "host_only",
+    sourceIdAuthority: "host_only",
+    modelAuthority: "none"
+  },
+  execution: "sequential",
+  idempotency: { mode: "idempotent", scope: "current_source" },
+  limits: { maxInputBytes: 131_072, maxOutputBytes: 131_072, timeoutMs: 120_000 },
+  ownerService: "AgentIngestService"
+} as const;
 
 describe("Pi Agent runtime adapter", () => {
   it("runs the real Pi loop through ordered Pige-owned inspect and durable action tools", async () => {
@@ -139,11 +174,126 @@ describe("Pi Agent runtime adapter", () => {
     }));
   });
 
+  it("passes a bounded opaque Pi tool call ID to authorization and execution without recording it", async () => {
+    const toolCallId = `${"界".repeat(85)}x`;
+    expect(new TextEncoder().encode(toolCallId)).toHaveLength(MAX_PIGE_TOOL_CALL_ID_UTF8_BYTES);
+    const authorizedIds: string[] = [];
+    const executedIds: string[] = [];
+    const tools = makeTools([], []);
+    tools[0] = {
+      ...tools[0]!,
+      authorize: (_args, context) => {
+        authorizedIds.push(context.toolCallId);
+        return true;
+      },
+      execute: async (_args, _signal, context) => {
+        executedIds.push(context.toolCallId);
+        return { modelText: "Inspected.", details: {} };
+      }
+    };
+    const adapter = new PiAgentRuntimeAdapter({
+      fauxResponses: [
+        { kind: "tool_call", toolName: "pige_inspect_source", args: {}, toolCallId },
+        { kind: "text", text: "Done." }
+      ]
+    });
+
+    const result = await adapter.run(makeRequest(tools));
+
+    expect(authorizedIds).toEqual([toolCallId]);
+    expect(executedIds).toEqual([toolCallId]);
+    expect(result.events.every((event) => !("toolCallId" in event))).toBe(true);
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["blank", " \t\n "],
+    ["oversized UTF-8", "界".repeat(86)],
+    ["non-string", 42]
+  ])("rejects a %s Pi tool call ID before authorization or execution", async (_case, toolCallId) => {
+    let authorizationCalls = 0;
+    let handlerCalls = 0;
+    const tools = makeTools([], []);
+    tools[0] = {
+      ...tools[0]!,
+      authorize: () => {
+        authorizationCalls += 1;
+        return true;
+      },
+      execute: async () => {
+        handlerCalls += 1;
+        return { modelText: "should not run", details: {} };
+      }
+    };
+    const adapter = new PiAgentRuntimeAdapter({
+      fauxResponses: [
+        { kind: "tool_call", toolName: "pige_inspect_source", args: {}, toolCallId },
+        { kind: "text", text: "Pige rejected the malformed call." }
+      ]
+    });
+
+    const result = await adapter.run(makeRequest(tools));
+
+    expect(authorizationCalls).toBe(0);
+    expect(handlerCalls).toBe(0);
+    expect(result.events).toContainEqual(expect.objectContaining({
+      type: "tool_execution_end",
+      toolName: "pige_inspect_source",
+      isError: true
+    }));
+  });
+
+  it("rejects an invalid Pige descriptor before a model turn, authorization, or handler", async () => {
+    let authorizationCalls = 0;
+    let handlerCalls = 0;
+    const tools = makeTools([], []);
+    tools[0] = {
+      ...tools[0]!,
+      limits: { maxInputBytes: 0, maxOutputBytes: 1_024, timeoutMs: 1_000 },
+      authorize: () => {
+        authorizationCalls += 1;
+        return true;
+      },
+      execute: async () => {
+        handlerCalls += 1;
+        return { modelText: "should not run", details: {} };
+      }
+    };
+    const adapter = new PiAgentRuntimeAdapter({
+      fauxResponses: [{ kind: "tool_call", toolName: "pige_inspect_source", args: {} }]
+    });
+
+    await expect(adapter.run(makeRequest(tools))).rejects.toMatchObject({
+      code: "agent_runtime.tool_registry_invalid"
+    });
+    expect(authorizationCalls).toBe(0);
+    expect(handlerCalls).toBe(0);
+  });
+
+  it("hashes the validated semantic tool catalog deterministically without handler identity", () => {
+    const tools = makeTools([], []);
+    const sameSemantics = tools.map((tool) => ({
+      ...tool,
+      execute: async () => ({ modelText: "different handler instance", details: {} })
+    }));
+    const changedVersion = tools.map((tool, index) => index === 0
+      ? { ...tool, version: "2" }
+      : tool);
+
+    const first = createPigeAgentToolCatalogHash(tools);
+
+    expect(first).toMatch(/^sha256:[a-f0-9]{64}$/u);
+    expect(createPigeAgentToolCatalogHash(tools)).toBe(first);
+    expect(createPigeAgentToolCatalogHash(sameSemantics)).toBe(first);
+    expect(createPigeAgentToolCatalogHash(changedVersion)).not.toBe(first);
+  });
+
   it("propagates external cancellation through the Pi run and active tool signal", async () => {
     const controller = new AbortController();
     let toolStarted!: () => void;
     const started = new Promise<void>((resolve) => { toolStarted = resolve; });
     const tools: PigeAgentToolDefinition[] = [{
+      ...BASE_TOOL_DESCRIPTOR,
       name: "pige_inspect_source",
       label: "Inspect",
       description: "Wait for cancellation.",
@@ -201,6 +351,7 @@ function makeRequest(tools: readonly PigeAgentToolDefinition[]) {
 function makeTools(calls: string[], published: unknown[]): PigeAgentToolDefinition[] {
   return [
     {
+      ...BASE_TOOL_DESCRIPTOR,
       name: "pige_inspect_source",
       label: "Inspect",
       description: "Inspect current source evidence.",
@@ -215,6 +366,10 @@ function makeTools(calls: string[], published: unknown[]): PigeAgentToolDefiniti
       }
     },
     {
+      ...BASE_TOOL_DESCRIPTOR,
+      capability: "write_generated_note",
+      effect: "idempotent_write",
+      outputTrust: "host_validated",
       name: "pige_create_knowledge_note",
       label: "Publish",
       description: "Publish a validated note.",

@@ -108,6 +108,7 @@ describe("cooperative durable job cancellation", () => {
     });
     const sourceId = requireFirst(captured.sourceIds);
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    seedExplicitPdfParseJob(fixture.vaultPath, requireFirst(captured.jobIds), sourceId);
 
     const processing = jobs.processQueuedParses({ sourceIds: [sourceId] });
     await extractor.started.promise;
@@ -191,6 +192,7 @@ describe("cooperative durable job cancellation", () => {
     });
     const sourceId = requireFirst(captured.sourceIds);
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    seedExplicitPdfParseJob(fixture.vaultPath, requireFirst(captured.jobIds), sourceId);
     await jobs.processQueuedParses({ sourceIds: [sourceId] });
 
     const processing = jobs.processQueuedOcr({ sourceIds: [sourceId] });
@@ -339,6 +341,7 @@ describe("cooperative durable job cancellation", () => {
     });
     const sourceId = requireFirst(captured.sourceIds);
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    seedExplicitPdfParseJob(fixture.vaultPath, requireFirst(captured.jobIds), sourceId);
 
     expect(await jobs.processQueuedParses({ sourceIds: [sourceId] })).toMatchObject({
       processed: 1,
@@ -382,6 +385,7 @@ describe("cooperative durable job cancellation", () => {
     });
     const sourceId = requireFirst(captured.sourceIds);
     initialServices.jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    seedExplicitPdfParseJob(fixture.vaultPath, requireFirst(captured.jobIds), sourceId);
     expect(await initialServices.jobs.processQueuedParses({ sourceIds: [sourceId] })).toMatchObject({
       processed: 1,
       completed: 1,
@@ -751,6 +755,7 @@ async function prepareParsedPdfOcr(
   });
   const sourceId = requireFirst(captured.sourceIds);
   services.jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+  seedExplicitPdfParseJob(fixture.vaultPath, requireFirst(captured.jobIds), sourceId);
   await services.jobs.processQueuedParses({ sourceIds: [sourceId] });
   return { jobs: services.jobs, sourceId };
 }
@@ -807,6 +812,28 @@ function readSourceRecord(vaultPath: string, sourceId: string): SourceRecord {
 
 function readJobRecord(vaultPath: string, jobId: string): JobRecord {
   return JSON.parse(fs.readFileSync(findFile(path.join(vaultPath, ".pige", "jobs"), `${jobId}.json`), "utf8")) as JobRecord;
+}
+
+function seedExplicitPdfParseJob(vaultPath: string, parentJobId: string, sourceId: string): void {
+  const parent = JobRecordSchema.parse(readJobRecord(vaultPath, parentJobId));
+  const dateKey = requireValue(/^src_(\d{8})_/u.exec(sourceId)?.[1]);
+  const suffix = sourceId.replace(/^src_\d{8}_/u, "").slice(0, 10);
+  const child = JobRecordSchema.parse({
+    id: `job_${dateKey}_${suffix}pa`,
+    class: "parse",
+    state: "queued",
+    parentJobId,
+    createdAt: "2026-07-10T12:00:00.000Z",
+    updatedAt: "2026-07-10T12:00:00.000Z",
+    sourceId,
+    ...(parent.captureId ? { captureId: parent.captureId } : {}),
+    message: "Explicit parser-substrate fixture queued."
+  });
+  writeJobRecord(vaultPath, child);
+  writeJobRecord(vaultPath, JobRecordSchema.parse({
+    ...parent,
+    childJobIds: [...(parent.childJobIds ?? []), child.id]
+  }));
 }
 
 function writeJobRecord(vaultPath: string, job: JobRecord): string {

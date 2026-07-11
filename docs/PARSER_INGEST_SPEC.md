@@ -158,7 +158,7 @@ After a new document-parser or direct-image OCR Artifact is persisted, its owner
 - The embedded-text worker caps input at 200 MiB, pages at 2,000, execution at 60 seconds, and old-generation memory at 512 MiB.
 - The parser writes one normalized `artifacts/extracted-text/YYYY/MM/<source-id>.txt` file and one text-free `artifacts/metadata/YYYY/MM/<source-id>.pdf.json` sidecar containing parser version, page locators, exact `characterStart`/`characterEnd` spans for text-bearing pages, page character counts, warnings, coverage, page-limit truncation, and OCR candidate pages. Evidence Assembly uses offsets first; marker-based splitting is legacy compatibility only.
 - A deterministic, idempotent `create_artifact` Operation Record references the parse job, source, and artifact paths without copying PDF text into operational history.
-- Medium/high embedded-text coverage may proceed to Agent ingest. When parser-selected OCR pages can run locally, Jobs Service delays the first Agent ingest until enrichment completes; if OCR is unavailable, useful native text may proceed with an OCR-pending review warning. Low/no coverage waits until OCR produces readable evidence. Native and OCR bodies remain separate checksummed Artifacts.
+- Medium/high native coverage returns to the same Agent run. Sparse/image-only or low/no coverage returns typed `needs_ocr`; it writes no note and does not silently start OCR. Agent-selected OCR recovery remains open. Native and OCR bodies remain separate checksummed Artifacts.
 - Source-page refresh uses stored checksums and a durable pending checksum record. A restart can finish Pige's own interrupted write, while a user-edited Markdown source page is preserved and marked conflicted instead of overwritten.
 - On supported macOS 26 systems, a fully inspected PDF with at most 20 ordered parser-selected OCR candidates can continue through `PdfPageRendererService` to Apple Vision OCR. Image-only targets must cover every page; mixed-text targets render only sparse candidate pages. Parser-truncated PDFs, incomplete or changed target lists, and larger candidate sets remain visibly waiting or fail closed rather than replacing or omitting native evidence.
 - The materializer caps the source at 200 MiB, selected pages at 20, each edge at 3,072 pixels, each page at 9,437,184 pixels and 16 MiB encoded PNG, aggregate PNG output at 64 MiB, worker old-generation memory at 512 MiB, and execution at 120 seconds. It disables PDF.js network fetch, XFA, system fonts, range/stream/autofetch, annotations, and WASM, rejects symlinks, and returns pixel data only; the main process owns Artifact writes.
@@ -285,9 +285,10 @@ Current handoff contract:
 - Every fragment has one ephemeral `ev_NN` ref and one durable locator. Native text precedes OCR; duplicate suppression is limited to repeated text under the same parent locator.
 - Structured output represents the summary and each key point as `{ text, evidenceRefs }`. Unknown refs abort before write; empty refs force review; canonical Markdown citations are rendered by Pige rather than accepted from the model.
 - Agent ingest hashes the complete Source Record used for the Evidence Pack and rechecks it before model invocation, after the response, and after flushing the exclusive temporary note immediately before create-only publication. Drift requeues or waits; concurrent targets are preserved or same-source recovered. Strict cross-process SourceRecord-to-note CAS, parent-swap resistance, cross-file transactions, and packaged-platform proof remain open.
-- For the first text-source spine, the host-assembled Evidence Pack is returned only by
-  `pige_inspect_source`, and cited publication occurs only through the validated write
-  tool. PDF/Office/OCR continuations remain host-routed until their B3.13 migration.
+- Text and preserved-PDF spines expose Evidence Pack through inspection and write only
+  through validated publication. PDF parse is a registered tool with one deterministic
+  child; changed evidence requires re-inspection. Sparse PDFs stop at `needs_ocr`.
+  Office/OCR remain host-routed until B3.13.
 
 ## 14. Required Tests
 

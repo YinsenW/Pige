@@ -38,7 +38,7 @@ Current implementation state, last reconciled 2026-07-11:
 | P0 | in progress | Repository and traceability foundations have current evidence; the full P0 exit set has not been re-run as a phase-completion claim. |
 | P1 | in progress | Desktop, vault, settings, diagnostics, and runtime foundations have evidence; the full mapped exit set remains open. |
 | P2 | in progress | Capture guards plus process-local parse/OCR/Agent-ingest/index progress or cancellation have evidence; running capture, remaining classes, visible UI, voice, and full exits remain open. |
-| P3 | in progress | BYOK and the first embedded Pi text-source spine have evidence; complete tool breadth, provider, recovery, permission, and exit evidence remain open. |
+| P3 | in progress | BYOK and embedded Pi text/PDF-parse spines have evidence; tool breadth, provider, recovery, permission, and exits remain open. |
 | P4 | in progress | SQLite, lexical search, Library, and worker-backed rebuild foundations have evidence; the full scale and relationship exit set remains open. |
 | P5 | in progress | PDF, Office, static-web, direct-image macOS Vision OCR, Artifact, and recovery slices have evidence; cross-platform/document OCR and remaining P5 exits are still open. |
 | P6 | in progress | Lexical retrieval, cited Home answers, Reader, backlinks, and related-context foundations exist; local RAG, editing, Knowledge Tree, and full exits remain open. |
@@ -266,10 +266,10 @@ Build:
 - [B3.13 -> E3.08] Embedded Pi plus a schema-complete Pige Tool Registry; after source
   preservation Pi Agent alone selects semantic tools, with no host-fixed/parallel path.
 
-Agent Spine Gate: the first preserved-text vertical now runs through exact embedded Pi,
-an isolated selected model, source inspection, and validated cited publication. The
-direct provider bridge is removed. B3.13/E3.08 remains partial because the catalog is
-not schema-complete and host-fixed PDF/Office/OCR/retrieval paths are not migrated.
+Agent Spine Gate: text and preserved-PDF paths run through exact embedded Pi, an
+isolated model, bounded inspection, PDF parsing, re-inspection, and cited publication.
+The direct bridge is removed. B3.13/E3.08 remains partial because Office/OCR/retrieval,
+the complete catalog, generic child recovery, and remaining fixed routes are open.
 The exact-`v0.80.6` exception keeps compat globals/default dispatch inert in the sole
 adapter and still forbids deep imports, forks, patches, and parallel loops.
 
