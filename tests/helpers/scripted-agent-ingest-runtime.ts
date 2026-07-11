@@ -28,16 +28,18 @@ export class ScriptedAgentIngestRuntime implements AgentIngestRuntimePort {
     throwIfAborted(signal);
     await request.beforeModelTurn?.();
     const inspect = requireTool(request, INSPECT_SOURCE_TOOL_NAME);
-    if (inspect.authorize && !(await inspect.authorize({}))) throw permissionDenied();
-    const inspection = await inspect.execute({}, signal);
+    const inspectContext = Object.freeze({ toolCallId: "scripted_inspect_1", signal });
+    if (inspect.authorize && !(await inspect.authorize({}, inspectContext))) throw permissionDenied();
+    const inspection = await inspect.execute({}, signal, inspectContext);
     this.userPrompt = `${request.userPrompt}\n${inspection.modelText}`;
     await this.onInspectionReady(request);
     await this.onModelTurn?.();
     throwIfAborted(signal);
     await request.beforeModelTurn?.();
     const publish = requireTool(request, CREATE_KNOWLEDGE_NOTE_TOOL_NAME);
-    if (publish.authorize && !(await publish.authorize(this.output))) throw permissionDenied();
-    await publish.execute(this.output, signal);
+    const publishContext = Object.freeze({ toolCallId: "scripted_publish_1", signal });
+    if (publish.authorize && !(await publish.authorize(this.output, publishContext))) throw permissionDenied();
+    await publish.execute(this.output, signal, publishContext);
     return {
       adapterMode: "embedded_pi_sdk",
       providerProfileId: request.runtimeConfig.provider.id,

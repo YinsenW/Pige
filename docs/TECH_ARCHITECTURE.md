@@ -252,8 +252,9 @@ Current implementation:
 
 - Text and supported files are preserved as managed sources or verified references;
   bounded metadata-only/direct-text source projections may follow.
-- The recoverable bridge still routes file kinds directly to parse/OCR/Agent Jobs.
-  Its artifacts remain tool substrate, but its routing does not satisfy B3.13/E3.08.
+- The bridge still direct-routes Office/image kinds to parse/OCR Jobs. Preserved PDFs
+  queue Agent ingest; a Pi parse call persists its deterministic child. Remaining host
+  routes do not satisfy B3.13/E3.08.
 
 ### 5.1.1 Source Storage Service
 
@@ -1422,11 +1423,10 @@ type AgentIngestStart = {
 ```
 
 The initial Agent input contains preserved-source identity, bounded safe metadata,
-policy, and tool contracts—not host-preselected extracted text. Evidence fragments,
-retrieved pages, and quality metadata enter later as bounded tool results with durable
-Artifact/locator references. The first embedded text-source vertical freezes source/job
-scope in the host and exposes only inspect and publication tools; expanding the catalog
-and replacing format-driven continuations remain B3.13/E3.08 work.
+policy, and tool contracts—not host-preselected text. Evidence and quality metadata
+enter later as bounded tool results with durable Artifact/locator refs. The text/PDF
+vertical freezes source/job scope and exposes inspect, PDF parse, and publication;
+Office/OCR/retrieval expansion remains B3.13/E3.08 work.
 
 ### 9.2 Knowledge Publication Boundary
 
@@ -1505,13 +1505,13 @@ Model list behavior:
 
 Current embedded Agent ingest spine:
 
-- Normal text-source ingest runs through the sole embedded Pi adapter with one selected
+- Normal text/PDF ingest runs through the sole embedded Pi adapter with one selected
   provider/model binding and no direct-provider fallback.
 - `pige_inspect_source` returns bounded verified evidence for the frozen source context;
-  `pige_create_knowledge_note` revalidates strict output, evidence refs, source revision,
-  cancellation, and create-only fence after pre-handler authorization.
-- PDF/Office/OCR/retrieval tools, recovery, full Broker, and fixed-routing
-  removal remain open.
+  `pige_parse_source` creates/reuses one bound PDF child and refreshes evidence; the note
+  tool revalidates output, refs, revision, cancellation, and create-only publication.
+- Office/OCR/retrieval tools, generic child recovery, full Broker, and remaining fixed
+  routing stay open.
 
 The v0.1 UI exposes only the P0 provider modes defined in `docs/PRD.md`, through the
 compact Add Provider flow owned by the Pi integration contract.

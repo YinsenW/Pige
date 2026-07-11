@@ -20,8 +20,8 @@ or capture mode is required before you begin—just one calm doorway into what y
 **Capture → Preserve → Understand → Connect → Retrieve → Reuse**
 
 Pige preserves local inputs before expensive work; explicit URL capture first performs
-the bounded fetch needed to create its source snapshot. The first embedded Pi Agent
-path now moves preserved text through bounded tools into cited Markdown.
+the bounded fetch needed to create its source snapshot. Embedded Pi Agent paths now
+move preserved text and native-text PDFs through bounded tools into cited Markdown.
 
 ## Why Pige
 
@@ -40,8 +40,8 @@ Today, the pre-alpha can:
 - Capture text, web pages, Markdown, TXT, PDF, DOCX, PPTX, and images while preserving
   files as managed copies or verified references.
 - Extract structured document content and run supported macOS Vision OCR paths.
-- Run a preserved-text vertical through the embedded Pi Agent, isolated BYOK model
-  binding, source-inspection tool, and validated knowledge-publication tool.
+- Run preserved text and native-text PDFs through embedded Pi, isolated BYOK binding,
+  bounded inspection/PDF-parse tools, and validated knowledge publication.
 - Generate source-backed Markdown; search locally with citations, backlinks, and related pages.
 - Use persistent-job recovery and local-backup foundations.
 
@@ -49,7 +49,7 @@ These are foundations, not a finished release. See the [implementation playbook]
 
 ## Road to `v0.1 Public Alpha`
 
-- **Extend the Agent path:** move PDF, Office, OCR, retrieval, recovery, and permissioned
+- **Extend the Agent path:** move Office, OCR recovery, retrieval, and permissioned
   actions onto the proven embedded Pi tool-loop spine.
 - **Expand the proven tool spine:** cross-platform document/OCR and stronger local retrieval.
 - **Ship a trustworthy alpha:** reviewable changes, backup/restore, accessibility,

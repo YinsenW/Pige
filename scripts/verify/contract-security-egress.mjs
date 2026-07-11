@@ -74,7 +74,7 @@ if (!(decision >= 0 && durableDecision > decision && prompt > durableDecision &&
 }
 if (
   method.includes("restrictedContent: false") ||
-  !method.includes("createAgentIngestPromptContext(sourceRecord, redaction.pack, policy)") ||
+  !/createAgentIngestPromptContext\((?:currentSourceRecord|sourceRecord),\s*redaction\.pack,\s*policy\)/u.test(method) ||
   !method.includes("createModelEgressEvidencePayload(promptContextResult.context.evidence)") ||
   !method.includes("containsRestrictedContent(evidencePayload) || containsRestrictedContent(promptMetadataPayload)")
 ) {

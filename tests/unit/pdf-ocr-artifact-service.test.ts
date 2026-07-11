@@ -422,6 +422,7 @@ async function makeParsedPdf(bytes: Uint8Array, fileName: string): Promise<{
   });
   const sourceId = requireValue(captured.sourceIds[0]);
   jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+  seedExplicitPdfParseJob(vaultPath, requireValue(captured.jobIds[0]), sourceId);
   await jobs.processQueuedParses({ sourceIds: [sourceId] });
   const sourceRecordPath = requireValue(listFiles(path.join(vaultPath, ".pige", "source-records"), `${sourceId}.json`)[0]);
   const sourceRecord = readSourceRecord(sourceRecordPath);
@@ -486,6 +487,32 @@ function pageOcr(page: number, text: string): PdfPageOcrResult {
 
 function readSourceRecord(filePath: string): SourceRecord {
   return SourceRecordSchema.parse(JSON.parse(fs.readFileSync(filePath, "utf8")));
+}
+
+function seedExplicitPdfParseJob(vaultPath: string, parentJobId: string, sourceId: string): void {
+  const parentPath = requireValue(
+    listFiles(path.join(vaultPath, ".pige", "jobs"), `${parentJobId}.json`)[0]
+  );
+  const parent = JobRecordSchema.parse(JSON.parse(fs.readFileSync(parentPath, "utf8")));
+  const suffix = sourceId.replace(/^src_\d{8}_/u, "").slice(0, 10);
+  const jobId = `job_20260710_${suffix}pa`;
+  const child = JobRecordSchema.parse({
+    id: jobId,
+    class: "parse",
+    state: "queued",
+    parentJobId,
+    createdAt: "2026-07-10T08:00:00.000Z",
+    updatedAt: "2026-07-10T08:00:00.000Z",
+    sourceId,
+    ...(parent.captureId ? { captureId: parent.captureId } : {}),
+    message: "Explicit parser-substrate fixture queued."
+  });
+  const childPath = path.join(vaultPath, ".pige", "jobs", "2026", "07", `${jobId}.json`);
+  fs.writeFileSync(childPath, `${JSON.stringify(child, null, 2)}\n`, "utf8");
+  fs.writeFileSync(parentPath, `${JSON.stringify(JobRecordSchema.parse({
+    ...parent,
+    childJobIds: [...(parent.childJobIds ?? []), child.id]
+  }), null, 2)}\n`, "utf8");
 }
 
 function listFiles(root: string, suffix: string): string[] {

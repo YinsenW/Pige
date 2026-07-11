@@ -18,6 +18,7 @@ import {
   type OfficeExtractionResult
 } from "../../apps/desktop/src/main/services/office-parser-types";
 import { PdfParserService } from "../../apps/desktop/src/main/services/pdf-parser-service";
+import { PiAgentRuntimeAdapter } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
 import { ScriptedAgentIngestRuntime } from "../helpers/scripted-agent-ingest-runtime";
 import {
   PDF_PARSER_ENGINE,
@@ -50,7 +51,6 @@ describe("referenced-original source pipeline", () => {
     const captured = await capture.submitFiles({
       filePaths: [originalPath], inputKind: "file_picker", userIntent: "capture", locale: "en"
     });
-    const model = new CapturingModelClient();
     let parserInputPath: string | undefined;
     const parser = new DocumentParserService([new PdfParserService({
       extract: async (filePath) => {
@@ -59,18 +59,36 @@ describe("referenced-original source pipeline", () => {
         return pdfExtraction;
       }
     })]);
-    const jobs = new JobsService(fixture.vaultPort, new AgentIngestService(modelPort, model), undefined, parser);
+    const runtime = new PiAgentRuntimeAdapter({
+      fauxResponses: [
+        { kind: "tool_call", toolName: "pige_inspect_source", args: {}, toolCallId: "pi_ref_inspect_before" },
+        { kind: "tool_call", toolName: "pige_parse_source", args: {}, toolCallId: "pi_ref_parse" },
+        { kind: "tool_call", toolName: "pige_inspect_source", args: {}, toolCallId: "pi_ref_inspect_after" },
+        {
+          kind: "tool_call",
+          toolName: "pige_create_knowledge_note",
+          args: referencedOutput,
+          toolCallId: "pi_ref_publish"
+        }
+      ]
+    });
+    const jobs = new JobsService(
+      fixture.vaultPort,
+      new AgentIngestService(modelPort, runtime, parserCapabilityPort),
+      undefined,
+      parser
+    );
 
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
-    await jobs.processQueuedParses();
     await jobs.processQueuedAgentIngest();
 
     const record = readSourceRecord(fixture.vaultPath, captured.sourceIds[0] ?? "");
     expect(record.storageStrategy).toBe("reference_original");
     expect(record.managedCopy).toBeUndefined();
     expect(record.artifacts.some((artifact) => artifact.kind === "extracted_text")).toBe(true);
-    expect(model.lastUserPrompt).toContain('"locator":"page:1"');
     expect(findFiles(path.join(fixture.vaultPath, "wiki"), ".md")).toHaveLength(1);
+    expect(fs.readFileSync(requireValue(findFiles(path.join(fixture.vaultPath, "wiki"), ".md")[0]), "utf8"))
+      .toContain(`[source:${captured.sourceIds[0]}#p1]`);
     const capturedParserInputPath = requireValue(parserInputPath);
     expect(capturedParserInputPath).not.toBe(originalPath);
     expect(fs.existsSync(capturedParserInputPath)).toBe(false);
@@ -201,6 +219,30 @@ const modelPort: AgentIngestModelConfigPort = {
   hasDefaultRuntimeBinding: () => true,
   getDefaultRuntimeConfig: () => runtimeConfig
 };
+
+const parserCapabilityPort = {
+  snapshot: () => ({
+    localDatabaseStatus: "not_initialized" as const,
+    parserToolchainReady: true,
+    ocrEngines: [],
+    speechInputAvailable: false,
+    embeddingModelInstalled: false,
+    lexicalSearchAvailable: false,
+    vectorSearchAvailable: false,
+    rerankerAvailable: false
+  })
+};
+
+const referencedOutput = {
+  title: "Referenced knowledge",
+  summary: { text: "Verified referenced evidence.", evidenceRefs: ["ev_01"] },
+  keyPoints: [{ text: "Verified", evidenceRefs: ["ev_01"] }],
+  tags: [],
+  topics: [],
+  entities: [],
+  warnings: [],
+  confidence: "high"
+} as const;
 
 class CapturingModelClient extends ScriptedAgentIngestRuntime {
   constructor() {
