@@ -157,8 +157,9 @@ order. A lower group cannot weaken a higher group merely to simplify implementat
 
 ### 5.3 Hide Runtime Complexity Behind Effective Defaults
 
-1. BYOK is available from the first release, but one connected provider and one default
-   model are enough to run Pige.
+1. BYOK is available from the first release. One provider and one default model are
+   enough; after one boundary disclosure, routine bounded calls to that selected
+   destination run without repeated prompts and use calm status instead.
 2. Agent-affecting settings compile into typed runtime policy and are enforced by the
    owning services; prompt text alone is not enforcement.
 3. Retrieval indexes, embeddings, and reranking run locally by default. Missing optional
@@ -705,7 +706,7 @@ Models:
 - Anthropic-compatible provider.
 - No user-facing per-workflow model selection in v0.1. Pige uses sensible internal defaults after one provider is connected.
 - No required user-facing embedding or reranker provider setup. Local RAG uses Pige-managed local models.
-- After BYOK setup, ordinary content may be sent to the configured cloud provider with visible cloud-send status; large/private content confirmation remains configurable.
+- After BYOK setup, bounded selected context uses the configured provider with visible status; stricter confirmation remains configurable.
 - API keys are stored encrypted by default through OS keychain or encrypted local storage; plaintext portable/developer mode is explicit and warned.
 
 Local RAG:
@@ -1398,42 +1399,20 @@ behavior are owned by `docs/I18N_DESIGN.md`, `docs/MARKDOWN_SCHEMA.md`, and
 
 Pige must support BYOK as a product requirement, not a later extension.
 
-v0.1 provider modes:
+v0.1 supports OpenAI, Anthropic, OpenAI-compatible, and Anthropic-compatible profiles.
+Models uses a short connection flow—not a marketplace or capability table—to collect
+endpoint/key data when needed, discover or accept model IDs, test, and select one default.
 
-- OpenAI.
-- Anthropic.
-- OpenAI-compatible.
-- Anthropic-compatible.
+Connecting and selecting a Provider Profile is the user's standing choice for ordinary,
+private, and larger bounded calls to that exact destination. Setup explains once that
+selected context may leave the device; routine calls then proceed without per-call
+confirmation and show calm non-blocking status. Users may choose a stricter policy.
+Sensitive, restricted, unknown, or changed boundaries follow the Model Egress contract.
 
-The runtime may support additional compatible services internally, but the default
-Models page exposes one Add Provider action and a short connection flow—not a provider
-marketplace, model browser, or capability comparison table. The product goal is simply
-to connect one model service that Pi Agent can call.
-
-The flow collects the service type, endpoint and key when applicable, a discovered or
-manually entered model list, one default model, and an explicit connection test before
-save. Exact profile fields and discovery states are owned by the Pi integration contract;
-the visible form and state transitions are owned by `docs/UI_PROTOTYPE.md`.
-
-Do not show provider matrices, pricing, capability comparisons, routing details,
-per-workflow model assignment, or advanced filters in the default flow. Cloud-send
-status and privacy controls belong to inline status and Permissions & Privacy.
-
-The default Models UI shows only the connected service, add/edit action, safe key state,
-model-list/default state, and connection-test result. It does not expose routing internals.
-
-Pige runs with one selected default model. v0.1 does not expose Model Assignment,
-Advanced/Fast roles, or per-workflow routing. A later simple routing surface is allowed
-only after an effective upstream model-slot API or a tested Pige routing service makes
-the visible setting change real runtime behavior.
-
-Embedding and reranking model settings should not appear as ordinary BYOK provider roles in v0.1. They belong to Local Capabilities and the local RAG pack.
-
-Provider dependencies, profile fields, discovery/manual-entry states, endpoint
-normalization, credentials, Pi adapter behavior, capability metadata, connection tests,
-future routing gates, and visible state transitions are owned by
-`docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`, `docs/TECH_ARCHITECTURE.md`,
-`docs/SETTINGS_AND_PREFERENCES.md`, and `docs/UI_PROTOTYPE.md`.
+Models shows connection, safe key state, model list/default, and test result. Hide pricing,
+matrices, routing, per-workflow choices, and Advanced/Fast roles until a tested runtime
+makes them effective. Embedding/reranking stays in Local Capabilities. Profile/runtime
+details are owned by the Pi integration, Settings, Technical Architecture, and UI owners.
 
 ## 21. Backup And Restore
 
@@ -1456,13 +1435,14 @@ Privacy promises:
 - User data is local-first.
 - Pige does not require a Pige cloud account for v0.1.
 - User chooses model provider.
-- API keys stay on the local machine and are not written into Markdown pages.
+- API keys are stored only on the local machine, presented only to the configured
+  provider for authentication, and never written into Markdown pages.
 - API keys are encrypted by default through OS keychain or encrypted local storage.
 - Plaintext secret storage is allowed only as an explicit portable/developer mode with warning.
-- Ordinary content may be sent to the configured BYOK model provider after setup; large/private confirmation is configurable.
-- Provider setup explains that eligible content may leave the machine. Model calls show
-  a visible cloud/provider boundary, while cancellation, denial, or provider failure
-  leaves the source safely preserved.
+- Connecting and selecting a BYOK Provider Profile authorizes ordinary, private, and
+  larger bounded calls to that destination. Setup discloses the boundary once; routine
+  calls use non-blocking status instead of repeated prompts. Stricter policy remains
+  available; sensitive content may require confirmation and restricted content is blocked.
 - Agent memory is inspectable, reversible, and can be disabled or reset.
 - Memory candidates are scanned for secrets before persistence.
 - Skill content is untrusted until installed and still cannot weaken permissions, privacy settings, prompt-injection defenses, or confirmation gates.
@@ -1587,7 +1567,7 @@ default telemetry contrary to `PRIVACY.md`.
 | Capture, write, crash, external edit, backup, or restore loses durable evidence/knowledge or silently overwrites a newer version. | Preserve-before-work fixtures, restart/idempotency tests, external-change conflicts, source checksums, and backup/restore manifest validation. | Preserve durable input before expensive work; use recoverable writes, explicit conflicts, and validated restore. Any unexplained loss or silent overwrite blocks release. | Data Architecture, Source Storage, Job/Recovery, Sync/Migration |
 | Over-created, duplicate, or weakly connected pages make the wiki noisier than the captured material. | Golden ingest/linking evaluation, duplicate/noise review, rejected or reversed proposals. | Require evidence and incremental value for durable structure; stage broad merges/reshaping. Block release when output quality gates fail. | Knowledge Model, Prompt, Quality |
 | Bad extraction or OCR creates plausible but wrong knowledge. | Multilingual parser/OCR fixtures, low-confidence and unsupported-claim checks, source-locator inspection. | Preserve native and OCR evidence separately, expose partial/low-confidence results, and prevent unsupported claims from auto-applying. | Parser Ingest, Context, Quality |
-| BYOK setup or cloud-send behavior surprises or blocks users. | First-run/capture-only scenarios, provider failure tests, cloud-boundary UI review. | Keep model setup optional, one default model sufficient, and preserved capture usable when a provider is absent or denied. Revisit the default only if users cannot identify the boundary. | Onboarding, Pi Integration, Privacy |
+| BYOK setup or cloud use surprises or blocks users. | First-run/capture-only scenarios, provider tests, cloud-status UI review. | Disclose the selected destination once, make routine bounded calls seamless, retain stricter policy, and preserve captures when unavailable or denied. | Onboarding, Pi Integration, Privacy |
 | Weak retrieval, large local assets, or slow indexing makes answers worse than simple search. | Retrieval relevance fixtures, lexical-fallback tests, disk/index/performance budgets. | Keep lexical results available, make optional assets explicit/removable, and admit reranking only when it improves the owner-defined quality/performance gate. | Context, Local Database, Performance |
 | Cross-platform parsers, bundled tools, optional OCR, installer size, licensing, or security updates become fragile. | Platform smoke matrix, dependency checksums/licenses, installer and update evidence. | Keep no-download ordinary workflows, visible repair/fallback, pinned release inputs, and a replacement path. Re-scope a dependency when release gates cannot be met safely. | Tech Architecture, Release Engineering |
 | Hostile sources, weak provenance, or automatic edits undermine trust. | Prompt-injection fixtures, citation checks, operation/proposal audit, security negative cases. | Treat sources as data, keep provenance inspectable, mediate tools, and stage risky changes. No quality gain justifies weakening the boundary. | Security, Prompt, Job/Recovery |

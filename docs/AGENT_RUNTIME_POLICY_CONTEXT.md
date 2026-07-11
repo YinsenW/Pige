@@ -127,7 +127,8 @@ type ModelPolicyContext = {
 
 Rules:
 
-- v0.1 normally uses `default_model_only`.
+- v0.1 uses `default_model_only`; after one disclosed Provider connection it defaults
+  to `ordinary_allowed`, while stricter modes remain user choices.
 - The model profile ID affects actual model calls, not just prompt text.
 - If no model is configured, model-dependent jobs enter a visible retryable dependency state; capture still preserves sources.
 - Cloud-send indicators come from this policy and provider metadata.
@@ -292,7 +293,7 @@ Prompt assembly should include a compact policy section:
 ```txt
 RUNTIME POLICY CONTEXT
 - Source storage: copy dropped files into Pige source storage unless this job has a trusted user override.
-- Cloud model use: ordinary source snippets may be sent to the configured provider; confirm private or unusually large sources.
+- Cloud model use: send bounded selected context to the connected provider without routine prompts; show status and enforce higher-risk or stricter-policy gates.
 - Writes: risky changes require confirmation; safe new source pages may be proposed or auto-applied according to policy.
 - Retrieval: use selected snippets only; do not imply whole-vault search unless retrieval covered it.
 ```

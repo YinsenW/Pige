@@ -141,8 +141,15 @@ Rules:
   construct auth at call time; metadata cannot persist arbitrary `defaultHeaders`.
 - `ProviderProfileSchema` in `packages/schemas/src/index.ts` is the executable profile contract. Profiles are excluded from default vault
   backup; records use redacted IDs, and UI shows cloud/local only when relevant.
-- Official OpenAI and Anthropic provider kinds use their fixed built-in endpoints, do not persist `baseUrl`, and are `cloud` with required `builtin_verified` boundary metadata. `ProviderProfileSchema` rejects missing or non-`builtin_verified` boundary metadata for these built-in kinds. A proxy, compatible endpoint, or custom base URL must use a compatible/custom provider kind. Only a canonical loopback URL on such a profile can be `local` with `loopback_verified`; the executable profile schema rejects both directions of a mismatch. A non-loopback compatible/custom endpoint is `unknown` until the user explicitly classifies it; a user assertion is recorded as `user_asserted`, not treated as network proof.
-- `ProviderBaseUrlSchema` is the single persisted and runtime-call URL contract. It permits HTTPS endpoints and HTTP only for canonical loopback hosts (`localhost`, `127.0.0.1`, or `::1`), rejects every other protocol, URL userinfo, query, and fragment, and canonicalizes whitespace/trailing slashes before persistence. Connection tests, profile reads/writes, boundary classification, and model calls must use that same schema; a manually edited profile cannot enter a weaker runtime path. `unknown` is handled conservatively by the Model Egress Decision contract in `docs/AGENT_RUNTIME_POLICY_CONTEXT.md`.
+- Built-in OpenAI/Anthropic use their fixed built-in endpoints, do not persist `baseUrl`,
+  and require `cloud` + `builtin_verified`; schema rejects missing or non-`builtin_verified` boundary metadata. Compatible/custom profiles use their URL. Only canonical loopback can be `local` +
+  `loopback_verified`; schema rejects both directions of a mismatch.
+- `ProviderBaseUrlSchema` is the single persisted and runtime-call URL contract: HTTPS,
+  or HTTP only for canonical loopback; no userinfo, query, fragment, or weaker edited path.
+- The final disclosed `Connect` authorizes routine egress only to that exact Profile and
+  canonical endpoint. Unknown or changed boundary/endpoint confirms again. This grants
+  no tool, setting, permission, extension, filesystem, or secret authority; the typed
+  matrix remains owned by `docs/AGENT_RUNTIME_POLICY_CONTEXT.md`.
 
 ## 7. Model Profile Model
 

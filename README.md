@@ -61,10 +61,10 @@ Sync, mobile, and collaboration come later. See the [roadmap](docs/MILESTONES.md
 
 ## Local-first, with honest boundaries
 
-No cloud account, product analytics, background telemetry, or automatic diagnostic
-upload is required. Explicit URL capture, BYOK calls, updates, optional downloads, and
-permissioned extensions may use the network; model calls send selected evidence, not
-the whole vault by default.
+Your vault and durable knowledge remain local; Pige requires no cloud account, product
+analytics, background telemetry, or automatic diagnostic upload. Once you connect a
+BYOK provider, ordinary Agent calls use it seamlessly with quiet status and selected
+evidence—not the whole vault by default.
 
 ## Built and maintained by AI Agents
 

@@ -1524,7 +1524,7 @@
       "evidence": ["EV-EGRESS", "EV-EGRESS-SERVICE", "EV-EGRESS-PROFILE-BINDING", "EV-EGRESS-RUNTIME-BINDING", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-HOME-AGENT"],
       "open": {
         "id": "OPEN-REQ-PIGE-SEC-005",
-        "description": "Home per-turn audit/drift is enforced; confirmation resume and remaining provider paths stay open.",
+        "description": "Home audit/drift is enforced. The ordinary_allowed default, persisted stricter policy, confirmation resume, and remaining provider paths stay open.",
         "targetBuilds": [
           "B3.05"
         ],
@@ -2961,7 +2961,7 @@
       "evidence": ["EV-EGRESS", "EV-EGRESS-SERVICE", "EV-EGRESS-PROFILE-BINDING", "EV-EGRESS-RUNTIME-BINDING", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-HOME-AGENT"],
       "open": {
         "id": "OPEN-EXIT-E3.03",
-        "description": "Home audit/drift is proven; persisted confirmation grant/resume and remaining provider adoption stay open.",
+        "description": "Home audit/drift is proven. The ordinary_allowed default, persisted stricter policy, confirmation resume, and remaining provider adoption stay open.",
         "targetBuilds": [
           "B3.05"
         ],

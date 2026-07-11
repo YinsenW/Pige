@@ -162,6 +162,7 @@ This table is the v0.1 baseline. Implementation can split storage files differen
 | Provider model list cache | Models | `derived_status` | Model Provider Registry | OS app data/cache | No | `none` | Refreshable |
 | Manually added model ID | Models | `machine_local` | Model Provider Registry | OS app data | No by default | `none` | Immediate after validation |
 | Default Pi Agent model | Models | `machine_local` | Model Provider Registry, Agent Orchestrator | OS app data | No by default | `none` | New model calls |
+| Cloud-send policy (`ordinary_allowed` default) | Permissions & Privacy | `machine_local` | Settings Service, Model Egress Policy | OS app data | No | `explicit_confirmation` | New model calls |
 | Local embedding model status | Local Capabilities | `derived_status` plus machine asset | Local RAG Engine, Local Tool Service | OS app data | No | `permission_and_confirmation` | After download/remove job |
 | OCR engine preference | Local Capabilities | `machine_local` | OCR Service | OS app data | No | `none` | New OCR jobs |
 | OCR language hints | Local Capabilities | `machine_local` | OCR Service, I18N Service | OS app data | No | `none` | New OCR jobs |
@@ -175,7 +176,6 @@ This table is the v0.1 baseline. Implementation can split storage files differen
 | Default permission mode | Permissions & Privacy | `machine_local` | Permission Broker | OS app data | No | `explicit_confirmation` | Immediate |
 | Saved scoped grants | Permissions & Privacy | `permission_grant` | Permission Broker | Machine-local permission store | No | `explicit_confirmation` | Immediate |
 | YOLO Full Access | Permissions & Privacy | `permission_grant` | Permission Broker | Machine-local permission store | No | `explicit_confirmation` | Immediate, visible indicator |
-| Cloud-send policy | Permissions & Privacy | `machine_local` | Permission Broker, Model Provider Registry | OS app data | No | `explicit_confirmation` | New model calls |
 | Secret storage mode | Permissions & Privacy | `machine_local` plus `secret` | Settings and Secrets Service | OS app data + secret store | No | `explicit_warning` | Requires explicit warning |
 | Secret redaction policy | Permissions & Privacy | `machine_local` | Diagnostics Service | OS app data | No | `explicit_confirmation` | Immediate |
 | Vault-scoped Skill enablement | Skills | `vault_portable` | Skill Registry Service | `.pige/skills/` metadata or `.pige/config.json` | Yes | `permission_broker` | New Agent runs |
@@ -226,7 +226,7 @@ Agent-affecting settings are not free-form prompt snippets. They compile into ty
 | External managed-copy root binding | `sourceStorage.sourceAssetRootKind` plus stable root binding availability | Sometimes | Source Storage Service, Permission Broker | New managed sources and source availability checks; existing sources resolve their recorded root ID |
 | Default Pi Agent model | `model.defaultModelProfileId` | Yes | Model Provider Registry, Agent Orchestrator | New model calls |
 | Provider profile metadata | `model.cloudBoundary` and provider availability | Yes, redacted | Model Provider Registry | New model calls |
-| Cloud-send policy | `model.cloudSendPolicy` | Yes | Permission Broker, Model Provider Registry | New model calls and queued model jobs |
+| Cloud-send policy (`ordinary_allowed` default) | `model.cloudSendPolicy` | Yes | Model Egress Policy, Model Provider Registry | New model calls and queued model jobs |
 | Default permission mode | `permissions.defaultMode` | Yes | Permission Broker | Next sensitive action |
 | Saved scoped grants | `permissions.savedGrantSummaryRefs` | No raw details | Permission Broker | Next sensitive action |
 | YOLO Full Access | `permissions.yoloEnabled` | Yes, as status only | Permission Broker | Next covered sensitive action |

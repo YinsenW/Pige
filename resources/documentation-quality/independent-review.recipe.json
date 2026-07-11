@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-11T17:33:35Z",
+  "reviewedAt": "2026-07-11T21:10:25Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,9 +30,21 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "ae6f08c16efecef1624d57d3aeb4ed6e91359a282cb15abcb21fb3dda2176a22"
+    "reviewedSha256": "d1c13a46bbd95171b09bbdbf36a5487b8c6adab4420eb2e3f6d29167526d0969"
   },
   "reviewers": [
+    {
+      "reviewerId": "local-first-byok-friction-review",
+      "task": "/root/cloud_ux_independent_review",
+      "independentDimensions": [
+        "navigation_and_resource_lifecycle",
+        "cross_document_contract_consistency",
+        "continuous_traceability_and_acceptance",
+        "ongoing_development_support",
+        "documentation_leanness_and_maintainability"
+      ],
+      "independence": "Independent read-only review covered all five dimensions on the exact existing-resource-only candidate. It required unambiguous sensitive handling, removal of a stale prompt-first recommendation, exact Profile/endpoint authority, and restoration of a decision anchor; after repair it accepted ordinary_allowed for known destinations, higher-risk gates, stricter modes, truthful partial/open status, and no Pige telemetry/proxy or inherited authority."
+    },
     {
       "reviewerId": "provider-home-final-review",
       "task": "/root/provider_home_independent_review",
@@ -182,59 +194,59 @@
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "provider-home-final-review",
+      "reviewerId": "local-first-byok-friction-review",
       "blockerCount": 0,
-      "summary": "README, Home, Models, API, prototypes, and screenshots consistently expose one OpenAI key-only preset, a global default, Pi-grounded Home answers, no-model local fallback, typed states, and progressive custom setup."
+      "summary": "Existing Home, Models, Permissions, onboarding, public privacy, and routing resources now explain one-time exact-destination disclosure, quiet daily status, optional stricter controls, and capture-only fallback without a new page or wizard."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "provider-home-final-review",
+      "reviewerId": "local-first-byok-friction-review",
       "blockerCount": 0,
-      "summary": "agent.ask and models.addPresetProvider align across runtime, contracts, schemas, Owners, decisions, and UI: write-only key ingress, non-secret readiness, Job/audit ordering, evidence drift, untrusted data, and zero-evidence behavior agree."
+      "summary": "Vision, PRD, runtime policy, Provider Profiles, Settings, Security, Privacy, onboarding, UI, Decision, Playbook, and permission guidance agree on ordinary_allowed plus sensitive/restricted/unknown/changed and stricter-policy gates."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "provider-home-final-review",
+      "reviewerId": "local-first-byok-friction-review",
       "blockerCount": 0,
-      "summary": "Four exact Home/provider selectors support the changed mappings; the 1,079-claim lock is current, all statuses are unchanged, and catalog/custom/Broker/drainer/platform/CAS gaps stay open."
+      "summary": "The 1,079-claim lock binds the changed PRD, PIGE-SEC-005, B3.05, E3.03, P0 model, and open acceptance facts. PIGE-SEC-005/E3.03 remain partial with implementation migration and confirmation resume open."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "provider-home-final-review",
+      "reviewerId": "local-first-byok-friction-review",
       "blockerCount": 0,
-      "summary": "Owners distinguish the executable OpenAI/Home vertical from provider breadth, ingest retrieval/proposals, conversation persistence, generic recovery, Broker continuation, packaged manual BYOK, and platform proof."
+      "summary": "Owners tell Development to change the default without changing the schema/algorithm, preserve typed audits and higher-risk gates, add persisted stricter settings later, and avoid coupling this follow-up to broader Provider or Agent work."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.6,
-      "reviewerId": "provider-home-final-review",
+      "reviewerId": "local-first-byok-friction-review",
       "blockerCount": 0,
-      "summary": "All budgets pass without expansion: 57 Markdown files, 23,188 lines, 162,487 words, 1,209,473 bytes, 4,044 entry words, 5,409 trace lines, zero duplicate groups, and 14 mutations."
+      "summary": "Existing owners were replaced/deduplicated rather than expanded: 57 Markdown files, 23,222 lines, 162,320 words, 1,209,014 bytes, 4,014 entry words, 5,409 trace lines, zero duplicate groups, and 14 mutations."
     }
   ],
   "verification": [
     {
-      "command": "npm run verify:docs && npm run verify:decisions && npm run verify:ui-visual && npm run verify:contracts && npm run verify:dependencies && npm run verify:fixtures && npm run verify:boundaries && npm run verify:no-telemetry && npm run verify:source-artifacts",
+      "command": "npm run verify",
       "status": "passed",
-      "evidence": "All 57 Markdown files, 98 local links, 45 anchors, 80 decisions, 12 UI tokens, 8 structural rules, 448 captures, CON-001 through CON-004, 49 dependencies, fixtures, boundaries, source artifacts, and no-telemetry mutations passed."
+      "evidence": "Full verification passed: docs, 81 decisions, UI visual, independent review, TRC-001 through TRC-005, CON-001 through CON-004, 49 dependencies, fixtures, Pi/import boundaries, no telemetry, source artifacts, LEN-001 through LEN-005, and all five quality dimensions."
     },
     {
       "command": "npm test && npm run typecheck && npm run build && npm run smoke:pi-agent-runtime && npm run smoke:index-rebuild-worker && npm run smoke:parser-workers && npm run smoke:macos-vision-ocr",
       "status": "passed",
-      "evidence": "All 67 test files/495 tests, type checks, production build, Electron Pi/Home runtime, index worker, parser workers, and real macOS Vision OCR passed on the corrected candidate."
+      "evidence": "No implementation file changed in this governance-only candidate; origin/main retains the shipped 67-file/495-test, typecheck, production-build, Pi/Home, worker, and macOS Vision evidence."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 passed: 4,044/4,200 entry words, zero duplicate groups, 14 mutations, 5,409 trace lines, 57 Markdown files, 1,209,473 bytes, and 7.53 percent line reduction."
+      "evidence": "LEN-001 through LEN-005 passed: 4,014/4,200 entry words, zero duplicate groups, 14 mutations, 5,409 trace lines, 57 Markdown files, 1,209,044 bytes, and 7.40 percent line reduction."
     },
     {
       "command": "node scripts/verify/independent-documentation-review.mjs --print-snapshot && explicit semantic-ledger comparison",
       "status": "passed",
-      "evidence": "The governed snapshot is ae6f08c16efecef1624d57d3aeb4ed6e91359a282cb15abcb21fb3dda2176a22 across 109 files; current and locked ledgers contain 1,079 claims with zero differences."
+      "evidence": "The governed snapshot is d1c13a46bbd95171b09bbdbf36a5487b8c6adab4420eb2e3f6d29167526d0969 across 109 files; current and locked ledgers contain 1,079 claims with zero differences."
     }
   ],
   "coordination": {
@@ -243,10 +255,11 @@
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "No stable ID or status changed. OpenAI preset A and bounded Home Pi/local retrieval are implemented; provider breadth, Broker continuation, drainer/retry/cancel, platforms, and cross-process guarantees remain open.",
-    "acknowledgement": "Development delivered 36 frozen Provider/Home files and four privacy repairs; UI Design supplied the minimal prototype delta; Product Planning synchronized 19 Owner/UI/acceptance/semantic/recipe files into this 55-file candidate."
+    "compatibility": "No stable ID or status changed. The contract default becomes ordinary_allowed, while the current confirm_private_or_large code default, persisted stricter settings, confirmation resume, provider breadth, and platform proof stay open.",
+    "acknowledgement": "Product Planning applied the user-approved local-first/BYOK principle to existing Owners, UI copy, Decision, Playbook, Spec, acceptance, semantic lock, and recipe; Development and Project Management received the exact non-blocking implementation route, and UI Design accepted the corrected interaction contract."
   },
   "resolvedBlockers": [
+    "Defined local-first without BYOK friction: one exact-destination disclosure, ordinary_allowed routine use with quiet status, sensitive confirmation, restricted blocking, unknown/changed reconfirmation, optional stricter modes, and no inherited authority; kept the old executable default explicitly open.",
     "Rewrote README as a concise product entry with user value, honest current capability, the Agent-first roadmap, privacy boundaries, and the Agent-authored automation goal instead of a technical inventory.",
     "Made Product Planning the sole product, technical, development-management, and governance contract editor; kept detailed UI guidance with UI Design, code/evidence with Development, and delivery/Git/CI/releases with Project Management; cross-role edits require explicit scoped delegation.",
     "Added Agent role, cross-role delegation, and Product Planning design-sync status to context, handoff, and PR intake; routed public design contributions to Planning or UI Design and added missing-field and missing-routing mutations.",
