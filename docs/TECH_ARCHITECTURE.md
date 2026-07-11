@@ -1875,7 +1875,7 @@ Waiver rules:
 
 | Dependency | Status | Pige usage | Upstream source | Pin/update policy | Data boundary and notes |
 | --- | --- | --- | --- | --- | --- |
-| Undici (`web.undici`) | required | Main-process HTTP(S) URL capture with validated-address connection pinning. | https://github.com/nodejs/undici | Pin `7.28.0`; rerun SSRF, redirect, body-timeout, decompression-size, proxy/TLS, and packaged runtime smoke tests on update. | Network use occurs only for an explicit URL capture. Never expose the dispatcher to renderer or Skills. |
+| Undici (`web.undici`) | required | Main-process HTTP(S) URL capture with validated-address connection pinning. | https://github.com/nodejs/undici | Pin `8.7.0`; Node `>=22.19.0`; rerun SSRF, redirect, body-timeout, decompression-size, proxy/TLS, and packaged runtime smoke tests on update. | Explicit HTTP/1.1 (`allowH2: false`), manual per-hop redirects, and a fresh pinned Agent preserve the reviewed boundary; never expose the dispatcher to renderer or Skills. |
 | `@mozilla/readability` (`web.mozilla-readability`) | required | Clean article text and metadata extraction from fetched web pages. | https://github.com/mozilla/readability | Pin `0.6.0`; rerun representative/malformed/hostile/large-page and packaged-worker fixtures on update. | Apache-2.0; raw snapshot stays immutable and article HTML is never rendered as trusted UI. |
 | jsdom (`web.jsdom`; types `types.jsdom`) | required | Inert DOM runtime for Readability in the bounded web-extractor worker. | https://github.com/jsdom/jsdom | Pin runtime `29.1.1` and types `28.0.3`; review parser/security and Node-engine changes before update. | MIT; scripts and subresources remain disabled; local worker only. |
 | `pdfjs-dist` (`parser.pdfjs-dist`) | required | Default v0.1 embedded-text extraction, PDF metadata/page locators, and bounded rasterization of verified OCR candidate pages through separate worker adapters. | https://github.com/mozilla/pdf.js | Pin `6.1.200`; update only after corrupt/encrypted/multilingual/image-only/large-page fixtures and Electron worker packaging tests. | Apache-2.0; bundled local dependency; text extraction and pixel materialization have independent protocols and limits. |
@@ -2019,7 +2019,7 @@ The design choices above are sufficient to start scaffold planning. Before code 
 Pin before implementing:
 
 - Markdown stack: CodeMirror 6 plus unified/remark/rehype packages.
-- Web extraction: exact `@mozilla/readability` `0.6.0`, jsdom `29.1.1`, Undici `7.28.0`, and `@types/jsdom` `28.0.3`.
+- Web extraction: exact `@mozilla/readability` `0.6.0`, jsdom `29.1.1`, Undici `8.7.0`, and `@types/jsdom` `28.0.3`.
 - PPTX extraction: yauzl `3.4.0` plus fast-xml-parser `5.9.3`; JSZip remains Mammoth-transitive only.
 - Backup/restore archive engine: yazl/yauzl.
 - Secret storage: Electron `safeStorage` encrypted local store, including unavailable-encryption behavior.

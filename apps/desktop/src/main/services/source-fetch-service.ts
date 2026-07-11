@@ -246,6 +246,7 @@ export class SourceFetchService {
     const timeout = setTimeout(() => controller.abort(), this.#timeoutMs);
     const dispatcher = this.#pinValidatedAddresses
       ? new Agent({
+        allowH2: false,
         connections: 1,
         pipelining: 1,
         autoSelectFamily: target.addresses.some((address) => net.isIP(address) === 4) &&

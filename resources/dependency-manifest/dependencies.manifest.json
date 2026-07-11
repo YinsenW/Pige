@@ -1034,7 +1034,7 @@
       "usage": "Perform main-process HTTP(S) URL capture with a per-request dispatcher that pins already validated DNS addresses.",
       "packageManager": "npm",
       "packageId": "undici",
-      "version": "7.28.0",
+      "version": "8.7.0",
       "upstreamUrl": "https://github.com/nodejs/undici",
       "license": "MIT",
       "noticeRequired": true,
@@ -1047,9 +1047,9 @@
       "sizeClass": "small",
       "updatePolicy": "security-update",
       "replacementPath": "Keep transport behind SourceFetchImplementation so a platform-reviewed HTTP client can replace it without changing capture contracts.",
-      "lastReviewedAt": "2026-07-10",
+      "lastReviewedAt": "2026-07-11",
       "reviewedBy": "Codex",
-      "notes": "The direct dependency is pinned to the lockfile-deduplicated runtime version. Redirect targets are revalidated and each connection resolves only to the previously approved address set."
+      "notes": "The direct desktop dependency resolves its nested 8.7.0 runtime under Electron 43.1.0 / Node 24.18.0; transitive tooling may retain Undici 7. Redirect targets are manually revalidated, each hop receives a fresh address-pinned Agent, HTTP/2 stays disabled, and ambient proxy variables are not adopted."
     },
     {
       "registryRef": "types.jsdom",

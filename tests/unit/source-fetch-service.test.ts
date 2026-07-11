@@ -107,15 +107,48 @@ describe("source fetch service", () => {
   });
 
   it("revalidates redirects before following them", async () => {
+    const requests: { readonly url: string; readonly redirect: RequestRedirect | undefined }[] = [];
     const service = new SourceFetchService({
       lookup: async (hostname) => (hostname === "example.com" ? ["93.184.216.34"] : ["169.254.169.254"]),
-      fetchImpl: async () => new Response("", { status: 302, headers: { location: "http://metadata.local/latest" } })
+      fetchImpl: async (url, init) => {
+        requests.push({ url: url.toString(), redirect: init?.redirect });
+        return new Response("", { status: 302, headers: { location: "http://metadata.local/latest" } });
+      }
     });
 
     await expect(service.fetchSnapshot("https://example.com")).rejects.toMatchObject({
       name: "PigeDomainError",
       code: "url_fetch.private_network_blocked"
     } satisfies Partial<PigeDomainError>);
+    expect(requests).toEqual([{ url: "https://example.com/", redirect: "manual" }]);
+  });
+
+  it("uses manual redirect handling after revalidating every fetch hop", async () => {
+    const lookups: string[] = [];
+    const requests: { readonly url: string; readonly redirect: RequestRedirect | undefined }[] = [];
+    const service = new SourceFetchService({
+      lookup: async (hostname) => {
+        lookups.push(hostname);
+        return [hostname === "example.com" ? "93.184.216.34" : "93.184.216.35"];
+      },
+      fetchImpl: async (url, init) => {
+        requests.push({ url: url.toString(), redirect: init?.redirect });
+        if (requests.length === 1) {
+          return new Response("", { status: 302, headers: { location: "https://redirect.example/final" } });
+        }
+        return new Response("done", { headers: { "content-type": "text/plain" } });
+      }
+    });
+
+    const result = await service.fetchSnapshot("https://example.com/start");
+
+    expect(result.finalUrl).toBe("https://redirect.example/final");
+    expect(result.extractedText).toBe("done");
+    expect(lookups).toEqual(["example.com", "redirect.example"]);
+    expect(requests).toEqual([
+      { url: "https://example.com/start", redirect: "manual" },
+      { url: "https://redirect.example/final", redirect: "manual" }
+    ]);
   });
 
   it("rejects declared and streamed response bodies above the capture byte limit", async () => {
