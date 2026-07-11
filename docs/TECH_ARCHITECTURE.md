@@ -47,7 +47,7 @@ TypeScript toolchain:
 AI:
 
 - Pi Agent framework as the Agent orchestration layer.
-- Vercel AI SDK style provider registry for model access.
+- Pige-owned provider profiles mapped into Pi AI's provider/model runtime.
 - BYOK settings stored locally.
 
 Storage:
@@ -1486,53 +1486,31 @@ type QueryOutput = {
 
 ## 10. Model Provider Architecture
 
-Pige should implement a provider registry inspired by Vercel AI SDK provider management.
+Pige owns provider/profile metadata and policy; reviewed Pi AI provider factories,
+models, protocol adapters, and streams are the sole planned execution layer.
 
 The user-facing Add Provider flow must stay minimal. It is a connection form for a model service Pi Agent can call, not a provider browser or model marketplace.
 
 The [Pi Agent and model-provider contract](PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md) is the sole human-readable owner of provider/profile semantics, model-routing policy, and Pi tool mediation. This architecture section owns only the service placement, process boundary, and dependency relationship; it intentionally does not maintain parallel profile or routing enums.
 
-The AI SDK Providers page is the upstream catalog source. Pige should ingest or manually snapshot it as catalog metadata, then classify providers by product relevance before exposing them.
+Pi AI's reviewed provider/model catalog is the upstream source. Pige adds only
+product visibility and compatible-endpoint metadata.
 
 ```ts
 type ProviderCatalogEntry = {
   id: string;
   label: string;
-  upstream:
-    | "ai_sdk_official"
-    | "ai_sdk_community"
-    | "custom";
-  internalCatalogTier:
-    | "recommended"
-    | "local_self_hosted"
-    | "advanced_cloud"
-    | "future_hidden";
-  relevance:
-    | "core_generation"
-    | "local_runtime"
-    | "media_audio"
-    | "knowledge_memory_rag"
-    | "agent_protocol"
-    | "observability"
-    | "adapter";
-  capabilityTags: Array<
-    | "text"
-    | "vision"
-    | "tool_use"
-    | "structured_output"
-    | "image_generation"
-    | "speech"
-    | "transcription"
-    | "embedding"
-    | "reranking"
-  >;
+  source: "pi_builtin" | "pige_compatible_endpoint";
+  capabilityTags: Array<"text" | "vision" | "tool_use" | "structured_output">;
   requiresCloudDisclosure: boolean;
   defaultVisible: boolean;
   docsUrl?: string;
 };
 ```
 
-Catalog rule: v0.1 can know about many AI SDK providers internally, but the default UI should expose only the fields needed to connect one service and manage that service's model IDs. Do not render provider capability matrices, taxonomy, pricing, context windows, routing metadata, data-boundary columns, or advanced provider filters in the default Add Provider flow. Media/audio, observability, agent-protocol, memory, vectorstore, and adapter entries remain hidden until Pige has a dedicated feature surface for them.
+Catalog rule: Pige does not copy Pi's full catalog or expose it as a marketplace. The
+default flow connects one service and manages its model IDs without capability tables,
+pricing, routing metadata, boundary columns, or advanced filters.
 
 Model-routing architecture boundary:
 
@@ -1565,29 +1543,24 @@ Model list behavior:
 
 Current basic Agent ingest bridge:
 
-- Capture jobs create source pages first, then a deterministic `agent_ingest` job per source.
-- If a tested default model exists, main process runs a background structured JSON model call and writes a simple wiki note under `wiki/generated/YYYY/`.
-- If no tested default model exists, `agent_ingest` waits in `waiting_dependency` and can be requeued after model setup.
-- If the structured output has `confidence: "low"` or warnings, the generated note is marked `needs_review` and the job completes as `completed_with_warnings`.
-- Main-process `EvidenceAssemblyService` reads every eligible extracted-text/OCR Artifact for the source, verifies integrity, pairs each body with its own checksummed sidecar, preserves page/block/slide/OCR spans, orders native evidence before OCR, and applies a 24-fragment/18,000-character budget. Its merged Evidence Pack is call-scoped and is not another durable body.
-- Structured summary and key-point statements carry only ephemeral `ev_NN` refs. Unknown refs fail before write; empty refs force review; service-side rendering emits canonical source citations and strips model-authored citation syntax.
-- Model egress follows `docs/AGENT_RUNTIME_POLICY_CONTEXT.md`: the audit binds ordered evidence, redacted dynamic prompt metadata, and concrete non-secret Provider/Model routing identities while storing only hashes and Artifact refs. The bridge revalidates those identities before prompt rendering and again before model invocation.
-- Agent ingest composes Job abort with provider timeout, rechecks Source Record and cancellation around model access, then uses two final Source Record checks around a durably persisted `agent_note_publication_started` guard before create-only publication. Bounded `last_job_id` attributes same-job recovery; other-job/legacy same-source Pige notes set a guard only before repairing a genuinely missing `index.md` entry. Drift requeues or waits, and conflicting targets remain untouched. Strict cross-process SourceRecord-to-note CAS, parent-swap resistance, cross-file transactions, and packaged-platform proof remain open.
-- OpenAI-format generation uses `/v1/chat/completions` with JSON response mode. Anthropic-format generation uses `/v1/messages` and requests JSON-only output through prompt/schema validation.
-- The bridge is a Pige-owned provider adapter, not direct renderer access and not global Pi config mutation.
-- The model receives bounded, redacted evidence fragments inside an untrusted-source block. Raw prompts, raw provider responses, API keys, sidecar bodies, merged evidence bodies, and large source bodies are not persisted by default.
+- Capture creates the Source Page and deterministic ingest Job. Evidence Assembly
+  verifies locators/sidecars and selects 24 fragments/18,000 characters; validated
+  ephemeral refs become service-owned citations. Without a model, ingest waits.
+- Egress binds/rechecks redacted evidence metadata and Provider/Model identities. Source
+  and cancellation checks surround model access and the durable create-only note fence;
+  drift waits/requeues and conflicts remain untouched. Raw bodies, prompts, responses,
+  and keys are not persisted. Cross-process CAS, parent-swap, transactions, and packaged
+  proof remain open.
+- The current OpenAI/Anthropic JSON bridge is transitional. It must be removed as the
+  normal path when the reviewed Pi adapter lands, not retained as a parallel Agent or
+  silent fallback.
 
 The v0.1 UI exposes only the P0 provider modes defined in `docs/PRD.md`, through the
 compact Add Provider flow owned by the Pi integration contract.
 
-Architecture should reserve room for AI SDK v6 built-in and community provider packages, including:
-
-- Core generation: AI Gateway, Vercel, OpenAI, Azure OpenAI, Anthropic, Open Responses, Amazon Bedrock, Google Generative AI, Google Vertex AI, xAI, Mistral, DeepSeek, Moonshot AI, Alibaba/Qwen, Groq, Together.ai, Cohere, Fireworks, Cerebras, Perplexity, Baseten, DeepInfra, Hugging Face, OpenRouter, and compatible generation services.
-- Local/self-hosted and compatibility: OpenAI-compatible providers, custom providers, LM Studio, NVIDIA NIM, Ollama, llama.cpp, Browser AI, Cloudflare Workers AI, Runpod, SambaNova, Clarifai, Heroku, and similar endpoints.
-- Future media/audio: Fal, Black Forest Labs, Replicate, Prodia, Luma, ByteDance, Kling AI, ElevenLabs, AssemblyAI, Deepgram, Gladia, LMNT, Hume, Rev.ai, Soniox, and similar providers.
-- Future knowledge/memory/RAG ecosystem: Jina AI, Voyage AI, Mixedbread, Mem0, Letta, Supermemory, vectorstores, and similar integrations.
-- Future Agent/developer ecosystem: A2A, ACP, MCP Sampling AI Provider, Claude Code, Codex CLI, Gemini CLI, OpenCode, Dify, Flowise, LangChain, LlamaIndex, and similar adapters.
-- Future observability: Helicone, Langfuse, LangSmith, Braintrust, Arize AX, Axiom, Laminar, LangWatch, MLflow, Traceloop, Weave, and similar integrations. These must remain opt-in.
+Future provider families are reference metadata, not a roadmap or second runtime.
+Adding one requires a product need, a reviewed Pi AI path, dependency registration,
+and an explicit privacy boundary; observability integrations remain opt-in.
 
 ## 11. Web Fetch Security
 
@@ -1865,20 +1838,16 @@ Waiver rules:
 
 | Dependency | Status | Pige usage | Upstream source | Pin/update policy | Data boundary and notes |
 | --- | --- | --- | --- | --- | --- |
-| Vercel AI SDK | recommended | Provider registry pattern, model calls, streaming, tool use, structured output integration. | https://ai-sdk.dev | Pin npm packages per release; update provider support from official provider pages. | Calls may send selected source snippets to configured provider. |
-| AI SDK Providers list | reference | Source of supported provider families and capability metadata. | https://ai-sdk.dev/providers/ai-sdk-providers | Re-check during provider updates. | Do not expose every provider in default UI. |
-| Vercel AI Gateway model browser | reference | Upstream reference for provider/model catalog metadata; not a default Pige UI pattern. | https://vercel.com/ai-gateway/models | Re-check only when updating provider metadata assumptions. | Do not copy marketplace/table/filter complexity into Add Provider. |
-| Pi Agent framework | required | Agent loop plus isolated provider/model runtime behind Pige adapters. | https://github.com/earendil-works/pi | Review-only at `v0.80.6`, commit `2b3fda9921b5590f285165287bd442a25817f17b`; adoption still requires the Pi Owner gates. | Exact dual-package manifest/integrity; no global imports, ambient credential/endpoint authority, CLI/RPC/binary, `@earendil-works/pi-orchestrator`, or Pi-owned permissions. |
+| Pi Agent framework | required | Upstream generic Agent loop/tool/events plus isolated Pi AI model runtime behind one thin Pige adapter. | https://github.com/earendil-works/pi | `v0.80.6` (`2b3fda9…`) is review-only: official core entries load `/compat`; wait for a compat-free Agent export unless the user approves a contained exception. | Exact same-version dual pins/integrity; no deep import, fork, vendor, parallel runtime, ambient authority, CLI/RPC/orchestrator, or Pi-owned permissions. |
 | Pi Custom Models docs | reference | Source for Pi provider/model configuration behavior, supported APIs, model fields, and thinking-level metadata. | https://pi.dev/docs/latest/models | Re-check during provider integration updates. | Supports model registration/selection, not a product-level Advanced/Fast routing UI by itself. |
-| OpenAI provider | required | BYOK generation provider option. | https://ai-sdk.dev/providers/ai-sdk-providers/openai | Pin SDK provider package if used. | Cloud boundary unless user points to local compatible service. |
+| OpenAI provider | required | BYOK generation through reviewed Pi AI APIs. | https://github.com/earendil-works/pi/blob/v0.80.6/packages/ai/src/providers/openai.ts | Pin with the Pi runtime. | Cloud boundary unless user points to local compatible service. |
 | OpenAI Models API (`provider.openai-models-api`) | required | Low-cost provider connection test and model-list discovery for OpenAI-format providers. | https://platform.openai.com/docs/api-reference/models/list | Re-check endpoint/auth behavior when updating provider integration. | User-supplied API key is sent only from the main process; no source content is sent during this test. |
 | OpenAI Chat Completions API (`provider.openai-chat-completions-api`) | required | Basic structured JSON Agent ingest generation for OpenAI-format providers before full Pi Agent orchestration. | https://platform.openai.com/docs/api-reference/chat/create | Re-check endpoint, JSON mode, and retention flags when updating provider integration. | Sends bounded redacted source previews to the configured provider from main process only. |
-| Anthropic provider | required | BYOK generation provider option. | https://ai-sdk.dev/providers/ai-sdk-providers/anthropic | Pin SDK provider package if used. | Cloud boundary. |
+| Anthropic provider | required | BYOK generation through reviewed Pi AI APIs. | https://github.com/earendil-works/pi/blob/v0.80.6/packages/ai/src/providers/anthropic.ts | Pin with the Pi runtime. | Cloud boundary. |
 | Anthropic Models API (`provider.anthropic-models-api`) | required | Low-cost provider connection test and model-list discovery for Anthropic-format providers. | https://docs.anthropic.com/en/api/models-list | Re-check endpoint/auth headers when updating provider integration. | User-supplied API key is sent only from the main process with `anthropic-version`; no source content is sent during this test. |
 | Anthropic Messages API (`provider.anthropic-messages-api`) | required | Basic structured JSON Agent ingest generation for Anthropic-format providers before full Pi Agent orchestration. | https://docs.anthropic.com/en/api/messages | Re-check endpoint and required version headers when updating provider integration. | Sends bounded redacted source previews to the configured provider from main process only. |
-| OpenAI-compatible provider | required | Custom BYOK endpoint mode. | https://ai-sdk.dev/providers/ai-sdk-providers/openai-compatible | Pin SDK provider package if used. | Endpoint location depends on user configuration; show simple cloud-use status inline, not a model-page configuration matrix. |
-| Anthropic-compatible provider | required | Custom BYOK endpoint mode. | https://docs.anthropic.com | Implement behind provider abstraction. | Endpoint location depends on user configuration; show simple cloud-use status inline, not a model-page configuration matrix. |
-| AI Gateway and other AI SDK built-ins | future | Advanced provider expansion after v0.1. | https://ai-sdk.dev/providers/ai-sdk-providers/ai-gateway | Add individual provider entries before exposing them. | Keep default UI sparse. |
+| OpenAI-compatible provider | required | Custom BYOK endpoint through reviewed Pi AI APIs. | https://github.com/earendil-works/pi/tree/v0.80.6/packages/ai/src/providers | Pin with the Pi runtime. | Endpoint location depends on user configuration; show simple cloud-use status inline, not a model-page configuration matrix. |
+| Anthropic-compatible provider | required | Custom BYOK endpoint through reviewed Pi AI APIs. | https://docs.anthropic.com | Pin with the Pi runtime. | Endpoint location depends on user configuration; show simple cloud-use status inline, not a model-page configuration matrix. |
 
 ### 16.4 Local RAG And Model Assets
 
@@ -2027,9 +1996,9 @@ These exit paths must be considered before major dependency upgrades:
 - TypeScript 7: keep TypeScript 6 compatibility only where ecosystem tools still need old compiler APIs.
 - node:sqlite/better-sqlite3: keep `LocalDatabaseDriver` so Pige can switch drivers if runtime stability, packaging, or performance requires it.
 - SQLite FTS5/vector storage: keep indexes rebuildable so vector backend changes never rewrite durable knowledge.
-- Vercel AI SDK: keep Pige's provider registry and internal model call routing independent of any single SDK.
-- Pi Agent/AI: keep an app-owned adapter so Pi's runtime, provider factories, auth,
-  hooks, or breaking APIs can be replaced without changing Pige records or UI.
+- Pi Agent/AI: the thin anti-corruption adapter isolates upstream churn while reusing
+  public Pi loop, event, tool, and provider behavior; it is not permission to recreate
+  that runtime. Pi upgrades must not change Pige records or UI.
 - OpenAI/Anthropic providers: support compatible custom endpoints through the same provider abstraction.
 - Qwen3 Embedding GGUF: keep model manifest generic so another local embedding model can replace it after migration and index rebuild.
 - llama.cpp/node-llama-cpp: keep the Local RAG Engine behind an internal service boundary.

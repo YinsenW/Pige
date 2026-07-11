@@ -2,7 +2,7 @@
 
 Status: Draft baseline
 Date: 2026-07-09
-Last reviewed: 2026-07-10
+Last reviewed: 2026-07-11
 
 ## 1. Purpose
 
@@ -12,23 +12,27 @@ Pige's product goal is simple:
 
 > The user connects one model service that Pi Agent can call. Pige handles the rest.
 
-This document prevents three common implementation failures:
+Pi Agent is the mandatory v0.1 execution core. The direct provider bridge is
+transitional; Phase 3 exits only after an embedded Pi flow returns through
+Pige-owned policy, tool, validation, storage, and recovery boundaries.
 
-- Exposing Pi's full model/provider/extension complexity as Pige's UI.
-- Adding Advanced/Fast model settings that do not change runtime behavior.
-- Letting Pi tools, extensions, global config, or shell access bypass Pige's Permission Broker and storage rules.
+Adopt, do not imitate: where Pi exposes a supported generic runtime surface,
+Pige integrates it through a thin adapter instead of copying, forking, or
+maintaining a parallel Agent runtime. Pige still owns product policy and data.
 
 ## 2. Upstream Facts Verified
 
 Reviewed upstream snapshot: `v0.80.6`
 (`2b3fda9921b5590f285165287bd442a25817f17b`) on 2026-07-10.
 
-- `pi-agent-core` owns the loop; `pi-ai` owns streaming; the CLI is separate.
-- Pi 0.80 introduced explicit `Models` collections, provider factories, and injectable
-  credentials/auth context; its temporary `/compat` global API will be removed.
-- `Agent` still defaults to `/compat` streaming unless the caller supplies `streamFn`.
-- New `max` thinking/pricing metadata creates no Pige setting or requirement.
-- Pi project trust is not a sandbox and Pi does not enforce Pige permissions.
+- `pi-agent-core` owns Agent mechanics; the side-effect-free `pi-ai` root provides
+  isolated `Models`, provider factories, injected auth, and streaming.
+- In `v0.80.6`, both official `pi-agent-core` entries still load `pi-ai/compat`;
+  that import registers APIs and constructs the broad catalog. No official
+  compat-free Agent subpath exists.
+- Supplying an explicit receiver-bound `streamFn` avoids using the compat dispatcher,
+  but does not remove its import-time global registry/catalog side effects.
+- Pi is not a sandbox and does not enforce Pige permissions.
 
 References are listed in section 17.
 
@@ -36,22 +40,21 @@ References are listed in section 17.
 
 Pige is not a Pi terminal UI wrapper.
 
-Pige should use Pi as:
+Pi owns the generic machinery: Agent state and turn loop, lifecycle/event ordering,
+tool argument validation and execution lifecycle, abort/continue, steering and
+follow-up queues, compatible context/compaction helpers, and provider streaming,
+usage, retry, overflow, and normalized errors. Pige must not rebuild these in
+parallel when a reviewed public Pi surface covers them.
 
-- Agent loop/runtime.
-- Tool-calling orchestration layer.
-- Model/provider execution layer through `pi-ai` or a Pige adapter.
-- Optional extension inspiration for future advanced integrations.
+Pige owns UI; profiles/secrets; evidence, prompts, citations and validation; egress,
+permissions and tools; and all durable product records.
 
-Pige should not expose by default:
+“Complete Pi integration” means the relevant generic `pi-agent-core` and `pi-ai`
+SDK surfaces. It does not mean packaging Pi's coding-agent product, TUI, CLI/RPC,
+experimental orchestrator, global configuration, or unrestricted coding tools.
 
-- Pi's model picker.
-- Pi's session tree.
-- Pi's global extension directories.
-- Pi's full provider catalog.
-- Pi's CLI flags.
-- Pi's built-in coding tools as unrestricted tools.
-- Pi's global `~/.pi/agent/models.json` as the primary user-facing configuration.
+The default UI does not expose Pi's model picker, session tree, global extension
+directories/config, full provider catalog, CLI flags, or unrestricted coding tools.
 
 ## 4. Integration Modes
 
@@ -62,12 +65,22 @@ dependencies, packages, or acceptance evidence.
 Rules:
 
 - Renderer never talks to Pi directly.
-- Main process or worker-owned Agent Orchestrator owns Pi lifecycle.
+- One main-process or worker-owned anti-corruption adapter is the only Pige module
+  allowed to import Pi; Agent Orchestrator owns its lifecycle.
 - Pi runtime receives scoped Pige tools, not arbitrary filesystem/shell access.
-- A receiver-safe wrapper around isolated `Models.streamSimple` supplies `streamFn`;
-  imports exclude `/compat`, `providers/all`, global registry/config.
+- Every Agent receives an explicit receiver-safe wrapper around its isolated
+  `Models.streamSimple`; Pige code never calls `/compat`, `providers/all`, global
+  registries/config, or the default compat dispatcher.
 - Pige stores its own job, conversation, proposal, operation, memory, and diagnostics records.
 - Pi session files are not Pige's durable source of truth.
+- Do not deep-import, alias, patch, vendor, or fork Pi, and do not preserve the
+  transitional direct provider bridge as a silent fallback after Pi adoption.
+
+Checkpoint A: `v0.80.6` remains review-only because no official Agent entry satisfies
+the side-effect boundary above. Default action is to request and adopt an official
+compat-free entry; absence of that entry is not permission to recreate Pi. A temporary
+containment exception requires an explicit user-approved architecture decision and
+proof that the transitive compat registry is inert.
 
 ## 5. Package Boundary
 
@@ -75,18 +88,21 @@ Expected package roles:
 
 | Package | Pige use | Product boundary |
 | --- | --- | --- |
-| `@earendil-works/pi-agent-core` | Agent turn loop and tool-calling runtime. | Wrapped by Agent Orchestrator. |
-| `@earendil-works/pi-ai` | Isolated provider/model invocation and streaming. | Called through Model Provider Registry and cloud-send policy. |
+| `@earendil-works/pi-agent-core` | Upstream Agent loop, events, queues, and tool lifecycle. | Thin adapter; no Pige parallel loop. |
+| `@earendil-works/pi-ai` | Isolated model/provider invocation and streaming. | Selected binding only; Pige owns auth and egress. |
 | `@earendil-works/pi-coding-agent` | Source reference only. | Never packaged or user-facing. |
 | Pi extension APIs | Future reference for Pige Skills/packages. | Not trusted by default; must pass Pige capability review. |
 
-Each job receives an isolated `Models` set containing only its reviewed binding and Pige
-auth adapters. Ambient credentials, endpoints, and routing are forbidden; audit other
-adapter environment reads and isolate any remainder in a sanitized process.
+Each Job receives isolated `Models` and Agent instances containing only its reviewed
+binding and Pige auth adapters. Ambient credentials, endpoints, and routing are forbidden.
 
-`v0.80.6` is review-only. Adoption requires exact dual-package manifest, integrity and
-provenance; root MIT notice/SBOM; hermetic catalogs; import gates; selected-binding
-fixtures; and pinned Electron/Node macOS/Windows smokes.
+Adoption pins both generic packages to the same exact version and integrity in one
+lock graph. Every Pi `0.x` update is a compatibility change: review release/API and
+import-graph diffs, then rerun faux-provider, selected-binding, event/tool order,
+validation, abort/continue, queue/context/compaction, ambient-authority, and packaged
+Electron macOS/Windows tests. Updates are repository changes, never runtime auto-updates;
+both pins advance or roll back together. The bundle supplies the root MIT license text,
+SBOM, and notices when npm tarballs omit them.
 
 ## 6. Provider Profile Model
 
@@ -148,6 +164,9 @@ Rules:
 
 - v0.1 requires one effective default model.
 - If provider model listing succeeds, Pige stores discovered model profiles.
+- Where a Pi provider catalog is static, Pige supplies only the bounded model-list
+  callback and registers its results into the Job's isolated Pi `Models`; it does not
+  introduce another provider SDK or copy Pi's protocol/catalog runtime.
 - Compatible/custom endpoints may use manual model ID entry only when their model-list route explicitly reports unsupported behavior. Authentication, network, timeout, invalid payload, and official-provider list failures remain failures and do not fall back to an unverified model ID.
 - The Add Provider flow performs a low-cost connection check before saving a provider profile. OpenAI-format providers use `GET /v1/models` with Bearer auth; Anthropic-format providers use `GET /v1/models` with `x-api-key` and `anthropic-version`.
 - Official OpenAI and Anthropic providers should reject missing selected model IDs when their model list succeeds. Compatible/custom providers may fall back to manual model IDs when the endpoint explicitly does not support model listing.
@@ -322,11 +341,12 @@ Required tests:
 - Provider diagnostics contain redacted profile/model references only.
 - No global `~/.pi/agent/models.json` mutation occurs during normal Pige provider setup.
 - Cloud-send indicator appears when content is sent to a cloud-hosted provider.
-- Local/self-hosted endpoint configuration still displays an explicit boundary state.
-- Official, verified-loopback, user-asserted, and unknown endpoint boundaries produce the expected fail-safe egress decision.
+- Official, loopback, asserted, and unknown endpoints fail safe; confirmation resumes the same Job once without duplicate effects.
 - Provider profile persistence rejects arbitrary secret-bearing headers and base URLs containing userinfo or credential-bearing query parameters.
-- Adapter tests reject global imports/ambient routing, prove receiver-safe selected
-  streaming, revalidate mutated hook input, and serialize side effects.
+- Adapter tests reject global/direct calls and ambient routing; one deterministic
+  `agent_ingest` case runs selected-model Pi streaming plus a non-sensitive typed
+  Pige tool to validated durable output, with drift, injection, cancellation,
+  retry/restart, and packaged-runtime negatives. Sensitive tools remain Phase 8.
 
 ## 16. Implementation Checklist
 
@@ -339,13 +359,12 @@ Phase 1 implementation note:
 
 Phase 3 implementation note:
 
-- Basic Agent ingest uses the selected default `ModelProfile` through a Pige-owned provider adapter before full Pi Agent orchestration is enabled.
-- The bridge calls OpenAI-format `/v1/chat/completions` or Anthropic-format `/v1/messages` for structured JSON ingest output.
-- Each egress approval is bound to the non-secret Provider routing identity (kind, canonical endpoint, boundary, profile revision) and Model routing identity (profile/provider IDs, provider model ID, enabled state, revision). Pige rechecks profile summaries before prompt rendering and the credential-bearing runtime config before invocation, so reusing an ID for a changed endpoint or model cannot reuse the prior approval.
-- Source text is wrapped as untrusted data and obvious secret-like strings are redacted before the model call.
-- Raw prompts, API keys, and raw provider responses are not written to Markdown, job records, operation records, diagnostics, or backups by default.
-- Successful Agent ingest writes a simple wiki note, an operation record, `index.md`, and `log.md`; failed structured output leaves the `agent_ingest` job retryable.
-- Capture-only source pages remain useful when no model exists; the follow-up `agent_ingest` job waits in `waiting_dependency` and is requeued after a default model becomes ready.
+- Current `agent_ingest` uses selected `ModelProfile` calls to OpenAI/Anthropic-format
+  JSON endpoints. It is transitional evidence, not the Pi runtime.
+- Egress binds and rechecks non-secret Provider/Model identities; delimited source is
+  redacted and raw prompts, keys, and responses are not persisted by default.
+- Success writes the wiki/index/log/operation projection; invalid output retries. With
+  no model, the useful Source Page remains and ingest waits for dependency recovery.
 
 Before implementing Pi or provider integration:
 
@@ -353,7 +372,7 @@ Before implementing Pi or provider integration:
 2. Build an isolated `Models` set with Pige credentials/auth context and explicit `streamFn`.
 3. Prove selected profiles affect calls without ambient/global provider resolution.
 4. Wrap tools; keep side effects sequential and Permission Broker-authorized in handlers.
-5. Add cloud-send, redacted diagnostics, model, tool, secret, and injection tests.
+5. Run the deterministic Pi vertical acceptance plus cloud-send, redaction, tool, secret, injection, recovery, direct-call, and packaged-runtime tests.
 6. Re-review this contract whenever upstream Pi APIs change.
 
 ## 17. References

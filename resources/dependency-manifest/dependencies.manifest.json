@@ -671,8 +671,8 @@
       "platforms": ["all"],
       "sizeClass": "tiny",
       "updatePolicy": "provider-api-review",
-      "replacementPath": "Use Vercel AI SDK or Pi provider adapter once Pige pins a concrete provider package.",
-      "lastReviewedAt": "2026-07-09",
+      "replacementPath": "Replace the transitional direct call with the reviewed Pi AI path through Pige's thin adapter.",
+      "lastReviewedAt": "2026-07-11",
       "reviewedBy": "Codex",
       "notes": "Used only from the main process; raw prompts and raw provider responses are not persisted by default."
     },
@@ -696,8 +696,8 @@
       "platforms": ["all"],
       "sizeClass": "tiny",
       "updatePolicy": "provider-api-review",
-      "replacementPath": "Use Vercel AI SDK or Pi provider adapter once Pige pins a concrete provider package.",
-      "lastReviewedAt": "2026-07-09",
+      "replacementPath": "Replace the transitional direct call with the reviewed Pi AI path through Pige's thin adapter.",
+      "lastReviewedAt": "2026-07-11",
       "reviewedBy": "Codex",
       "notes": "Used only from the main process with the required API-version header; raw prompts and raw provider responses are not persisted by default."
     },

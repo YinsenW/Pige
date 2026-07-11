@@ -461,7 +461,7 @@ Top Results
 
 1. BYOK Model Requirements
    PRD · 92% match
-   "...Provider design must stay compatible with Vercel AI SDK provider patterns..."
+   "...Provider design follows the Pi AI provider/model catalog and Pige Provider Profiles..."
 
 2. Model Provider Architecture
    Architecture · 86% match
@@ -896,7 +896,7 @@ Default Add Provider content:
   - Let the user choose one default model for Pi Agent.
 - Test and save.
 
-Do not show provider capability columns, model marketplace rows, routing details, data-boundary tables, pricing, context window, feature tags, per-workflow model matrices, or advanced filters in the default Add Provider flow. AI SDK official and community providers may exist as internal compatibility metadata, but they should not expand the visible UI unless a future explicit feature needs them.
+Do not show provider capability columns, model marketplace rows, routing details, data-boundary tables, pricing, context window, feature tags, per-workflow model matrices, or advanced filters in the default Add Provider flow. The Pi AI provider/model catalog and Pige Provider Profiles may supply internal compatibility metadata, but they should not expand the visible UI unless a future explicit feature needs them.
 
 ### Deferred Model Routing Settings
 

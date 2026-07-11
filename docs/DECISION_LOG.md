@@ -1320,7 +1320,7 @@ Pige's external dependency registry remains human-readable in Technical Architec
 
 Rationale:
 
-Pige depends on a broad supply chain: Electron, React, TypeScript, AI SDK providers, Pi Agent, local parser/OCR tools, optional model downloads, bundled runtimes, GitHub Actions, signing/update tooling, and security scanners. Future AI agents need a strict path for adding or updating dependencies without hiding licensing, checksum, data-boundary, or packaging risk.
+Pige depends on a broad supply chain: Electron, React, TypeScript, Pi Agent/AI, local parser/OCR tools, optional model downloads, bundled runtimes, GitHub Actions, signing/update tooling, and security scanners. Future AI agents need a strict path for adding or updating dependencies without hiding licensing, checksum, data-boundary, or packaging risk.
 
 Consequences:
 

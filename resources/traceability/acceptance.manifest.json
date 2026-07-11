@@ -1591,7 +1591,7 @@
       ],
       "open": {
         "id": "OPEN-REQ-PIGE-PI-001",
-        "description": "Embedded Pi integration and direct-call rejection across every product feature remain open.",
+        "description": "The normal Agent path still uses transitional direct provider generation. Pi v0.80.6 has no official compat-free Agent entry, so exact upstream adoption, one mediated Pige tool, packaged proof, and rejection of parallel/direct Agent or provider loops remain open; deep imports, forks, patches, and copied loops are not substitutes.",
         "targetBuilds": [
           "B3.06",
           "B3.13"
@@ -1609,7 +1609,7 @@
       ],
       "open": {
         "id": "OPEN-REQ-PIGE-PI-002",
-        "description": "Stable upstream Pi routing-slot detection remains open while Advanced/Fast UI stays gated.",
+        "description": "The selected default model affects the transitional provider bridge but has not yet been proven to bind an embedded Pi Agent call; Advanced/Fast UI remains gated.",
         "targetBuilds": [
           "B3.04"
         ],
@@ -1959,11 +1959,11 @@
     "PIGE-BACKUP-001": {
       "status": "partial",
       "evidence": [
-        "EV-BACKUP"
+        "EV-BACKUP", "EV-BACKUP-DURABLE-COVERAGE"
       ],
       "open": {
         "id": "OPEN-REQ-PIGE-BACKUP-001",
-        "description": "Explicit include/exclude controls and complete memory/conversation fixtures remain open.",
+        "description": "Current registered in-vault durable roots and root files are covered; backupId/domainSchemaVersions, external managed copies, include controls, and complete memory/conversation fixtures remain open.",
         "targetBuilds": [
           "B9.02"
         ],
@@ -2138,11 +2138,12 @@
       "status": "partial",
       "evidence": [
         "EV-DIAGNOSTICS",
+        "EV-NO-TELEMETRY",
         "EV-PRIVACY-POLICY"
       ],
       "open": {
         "id": "OPEN-REQ-PIGE-DIAG-001",
-        "description": "A repository-level no-telemetry/no-auto-upload verifier and crash-hook review remain open.",
+        "description": "Static no-telemetry/no-auto-upload enforcement is executable; crash-hook review and future unknown SDKs, computed endpoints, indirect transports, and generated configuration remain open.",
         "targetBuilds": [
           "B1.23"
         ],
@@ -2171,11 +2172,11 @@
       "status": "partial",
       "evidence": [
         "EV-DIAGNOSTICS",
-        "EV-DIAG-ROTATION"
+        "EV-DIAG-ROTATION", "EV-DIAG-RETENTION", "EV-DIAG-PERSISTENCE-SAFETY"
       ],
       "open": {
         "id": "OPEN-REQ-PIGE-DIAG-003",
-        "description": "Rotation/retention thresholds and every prohibited private-content class need direct tests.",
+        "description": "Broader diagnostic stores, crash-recovery correlation, and user-clear semantics remain open.",
         "targetBuilds": [
           "B1.23"
         ],
@@ -2770,11 +2771,11 @@
       "status": "partial",
       "evidence": [
         "EV-DIAGNOSTICS",
-        "EV-DIAG-ROTATION"
+        "EV-DIAG-ROTATION", "EV-DIAG-RETENTION", "EV-DIAG-PERSISTENCE-SAFETY", "EV-NO-TELEMETRY"
       ],
       "open": {
         "id": "OPEN-EXIT-E1.19",
-        "description": "No-telemetry scanning, crash-hook review, and rotation/retention tests remain open.",
+        "description": "Crash-hook review, broader-store coverage, recovery correlation, user-clear semantics, export cancellation, and selected-path UX remain open.",
         "targetBuilds": [
           "B1.23"
         ],
@@ -3130,7 +3131,7 @@
       ],
       "open": {
         "id": "OPEN-EXIT-E3.08",
-        "description": "Embedded Pi and complete direct-call rejection across product features remain open.",
+        "description": "Pi v0.80.6 has no official compat-free Agent entry. A deterministic supported-upstream loop with a mediated tool, selected model, durable output, recovery, packaged Electron proof, and import gates rejecting parallel/direct loops remains open; a contained compat exception needs explicit user approval.",
         "targetBuilds": [
           "B3.13"
         ],
@@ -3480,11 +3481,11 @@
     "E9.01": {
       "status": "partial",
       "evidence": [
-        "EV-BACKUP"
+        "EV-BACKUP", "EV-BACKUP-DURABLE-COVERAGE"
       ],
       "open": {
         "id": "OPEN-EXIT-E9.01",
-        "description": "Full executable acceptance remains open for Exit E9.01: Backup includes required durable vault data, trash/tombstones, vault Skills, memory, conversations, proposals, operations, and non-secret settings; it excludes secrets, models, tools, database, indexes, and caches by default and reports external dependencies.",
+        "description": "backupId/domainSchemaVersions, release exclusion scans, external managed-copy transport, user include controls, durable backup Jobs/checkpoints, and structured external dependencies remain open.",
         "targetBuilds": [
           "B9.01",
           "B9.02"
@@ -3810,13 +3811,12 @@
     "EV-DIAGNOSTICS": {
       "kind": "test",
       "path": "tests/unit/diagnostics-service.test.ts",
-      "selector": "exports only redacted local support bundle content"
+      "selector": "exports only bounded redacted local support bundle content"
     },
-    "EV-DIAG-ROTATION": {
-      "kind": "implementation",
-      "path": "apps/desktop/src/main/services/diagnostics-service.ts",
-      "selector": "#rotateIfNeeded(): void"
-    },
+    "EV-NO-TELEMETRY": { "kind": "verifier", "path": "scripts/verify/no-telemetry.mjs", "selector": "No-telemetry policy OK" },
+    "EV-DIAG-PERSISTENCE-SAFETY": { "kind": "test", "path": "tests/unit/diagnostics-service.test.ts", "selector": "replaces opaque top-level diagnostic messages while preserving safe evidence" },
+    "EV-DIAG-RETENTION": { "kind": "test", "path": "tests/unit/diagnostics-service.test.ts", "selector": "retains non-error events for 14 days and error events for 30 days at exact boundaries" },
+    "EV-DIAG-ROTATION": { "kind": "test", "path": "tests/unit/diagnostics-service.test.ts", "selector": "repeatedly rotates within one total budget and preserves the newest useful evidence" },
     "EV-TOOLCHAIN": {
       "kind": "test",
       "path": "tests/unit/toolchain-service.test.ts",
@@ -4119,6 +4119,7 @@
       "path": "tests/unit/backup-service.test.ts",
       "selector": "creates a zip backup with durable vault files and restores it into a new vault without rebuildable cache files"
     },
+    "EV-BACKUP-DURABLE-COVERAGE": { "kind": "test", "path": "tests/unit/backup-service.test.ts", "selector": "body-free path-safe manifest aligned with ZIP entries" },
     "EV-RESTORE-CONFLICT": {
       "kind": "test",
       "path": "tests/unit/backup-service.test.ts",

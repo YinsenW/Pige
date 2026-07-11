@@ -244,7 +244,7 @@ strict cross-process Job revision CAS, and guard-to-domain atomicity remain open
 
 ## 8. Phase 3: BYOK And Basic Agent Ingest
 
-Context pack: `docs/PRD.md` BYOK and Agent workflow sections; `docs/TECH_ARCHITECTURE.md` model provider and Agent contracts; `docs/PROMPT_DESIGN.md`; `docs/MARKDOWN_SCHEMA.md`; `docs/KNOWLEDGE_MODEL_AND_LINKING.md`; `docs/JOB_OPERATION_AND_RECOVERY.md`; `docs/SECURITY_THREAT_MODEL.md`; `docs/DATA_ARCHITECTURE.md`.
+Context pack: `docs/PRD.md` BYOK and Agent workflow sections; `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`; `docs/TECH_ARCHITECTURE.md`; `docs/PROMPT_DESIGN.md`; `docs/MARKDOWN_SCHEMA.md`; `docs/KNOWLEDGE_MODEL_AND_LINKING.md`; `docs/JOB_OPERATION_AND_RECOVERY.md`; `docs/SECURITY_THREAT_MODEL.md`; `docs/DATA_ARCHITECTURE.md`.
 
 Build:
 
@@ -260,13 +260,18 @@ Build:
 - [B3.10 -> E3.04] Append-only `log.md` update.
 - [B3.11 -> E3.06] Change Proposal Service foundation.
 - [B3.12 -> E3.07] Complete Agent output and change-summary contract for title, summary, tags, topic, entities, related notes, Markdown/source pages, citations, index/log updates, and created/updated/skipped/failed/confirmation-needed results.
-- [B3.13 -> E3.08] Pige-owned Pi Agent service boundary preventing renderer or unmediated product code from calling Pi directly.
+- [B3.13 -> E3.08] Embedded upstream Pi runtime through one thin adapter, reusing its reviewed loop/event/tool/provider behavior inside Pige-owned policy and storage boundaries; no direct bypass or parallel Pige runtime.
 
-Implementation evidence exists for B3.05's Agent-ingest path: selected evidence and bounded dynamic prompt metadata are redacted before a typed egress decision, the body-free audit binds the concrete non-secret Provider endpoint/boundary and Model ID, non-secret summaries are rechecked before prompt rendering, and the credential-bearing runtime config is rechecked before model invocation. Same-ID endpoint/model drift fails closed. User-confirmation resume and complete provider-path adoption remain open, so E3.03 is not complete.
+Core-path priority: embedded Pi is the next mainline after the active handoff. The
+direct bridge and `phase_1_stub` do not satisfy B3.13. `v0.80.6` lacks the required
+official compat-free Agent entry; request that entry rather than deep-importing,
+forking, patching, or copying Pi. A contained exception requires user approval.
+
+B3.05 evidence proves redaction before typed egress, body-free Provider/Model binding, and pre-render/pre-invocation drift checks. Confirmation resume and complete provider-path adoption remain open, so E3.03 is incomplete.
 
 Deferred from this phase:
 
-- [D3.01] Every AI SDK provider in the default UI; not required for v0.1.
+- [D3.01] Pi's full provider catalog or a provider marketplace in default UI; not required for v0.1.
 - [D3.02] Advanced/Fast model routing UI; deferred until effective runtime routing exists.
 - [D3.03] User-configured embedding providers; local RAG is assigned to P6.
 - [D3.04] External Skill execution; assigned to P8.
@@ -280,7 +285,7 @@ Exit criteria:
 - [E3.05] Invalid, unsupported, low-confidence, or hostile structured output is rejected or routed to warning/proposal without an unsafe durable write.
 - [E3.06] A risky generated change can be staged durably as a redacted proposal without being silently applied.
 - [E3.07] Agent ingest emits the required structured knowledge fields, traceable citations, source/wiki/index/log writes, and a deterministic action summary separating created, updated, skipped, failed, and confirmation-needed outcomes.
-- [E3.08] Renderer and product features reach Pi Agent only through typed Pige services and cannot bypass Pige-owned storage, policy, egress, or secret boundaries.
+- [E3.08] A deterministic flow runs the supported upstream Pi loop plus a non-sensitive typed Pige tool to validated durable output; import gates reject a parallel/custom loop and renderer or feature bypass. Sensitive-tool Permission Broker acceptance remains Phase 8.
 
 ## 9. Phase 4: Local Database And Search Foundation
 

@@ -222,7 +222,10 @@ Tests must verify:
 - Provider setup stores API keys only in the secret store.
 - Provider model-list discovery creates model profiles when supported.
 - Manual model ID entry works when discovery is unsupported or fails.
-- Changing the default model changes new Pi Agent model calls.
+- End-to-end ingest proves the default model changes an embedded Pi call and reaches validated durable output.
+- Pi compatibility tests bind exact same-version packages; reject deep/compat/global or
+  out-of-adapter imports; and cover event/tool order, validation, abort/continue,
+  queues/context, selected auth, no ambient authority, and packaged runtime on update.
 - No Advanced/Fast model assignment UI exists in v0.1 unless a real routing service is implemented and tested.
 - Pi built-in tools or extensions cannot bypass Permission Broker.
 - Pige does not mutate the user's global `~/.pi/agent/models.json` during normal provider setup.

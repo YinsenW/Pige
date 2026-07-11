@@ -44,5 +44,5 @@ Design intent:
 - The reader uses wide screens for navigation, content, and a scoped Note Agent.
 - Permission prompts use clear one-time and permanent scoped choices; no session-based permission mode.
 - Vault & Note Storage is a first-class Knowledge Base settings page because Pige stores notes as local files and lets users see the active vault path, note/knowledge root, source asset root, and default source storage strategy.
-- The Models settings page and Add Provider flow stay minimal; AI SDK provider catalogs are internal reference data, not a reason to expose a model marketplace.
+- The Models settings page and Add Provider flow stay minimal; the Pi AI provider/model catalog and Pige Provider Profiles are internal reference data, not a reason to expose a model marketplace.
 - Advanced/Fast model assignment is not shown in v0.1. It is gated until Pi Agent upstream or Pige runtime code makes model routing real.

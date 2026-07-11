@@ -64,4 +64,10 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain('lexicalSearchAvailable: localDatabaseStatus === "ready"');
     expect(mainSource).toContain("{ snapshot: getAgentCapabilitySnapshot }");
   });
+
+  it("does not forward dynamic caught messages into persisted diagnostics", () => {
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    expect(mainSource).not.toContain("caught instanceof Error ? caught.message");
+    expect(mainSource).not.toMatch(/recordEvent\([\s\S]{0,240}message:\s*caught\.message/);
+  });
 });

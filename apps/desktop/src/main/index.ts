@@ -323,10 +323,9 @@ const scheduleCaptureProcessing = (): void => {
       scheduleOcrProcessing();
       scheduleAgentIngestProcessing();
     },
-    onError: (caught) => recordBackgroundFailure(
+    onError: () => recordBackgroundFailure(
       "capture.background_failed",
-      "Background capture processing failed.",
-      caught
+      "Background capture processing failed."
     )
   });
   captureDrainer.schedule();
@@ -339,10 +338,9 @@ const scheduleParseProcessing = (): void => {
       if (result.agentReadySourceIds.length > 0) scheduleAgentIngestProcessing();
       if (result.ocrWaitingSourceIds.length > 0) scheduleOcrProcessing();
     },
-    onError: (caught) => recordBackgroundFailure(
+    onError: () => recordBackgroundFailure(
       "parser.document.background_failed",
-      "Background document parsing failed.",
-      caught
+      "Background document parsing failed."
     )
   });
   parseDrainer.schedule();
@@ -354,10 +352,9 @@ const scheduleOcrProcessing = (): void => {
     onBatch: (result) => {
       if (result.agentReadySourceIds.length > 0) scheduleAgentIngestProcessing();
     },
-    onError: (caught) => recordBackgroundFailure(
+    onError: () => recordBackgroundFailure(
       "ocr.image.background_failed",
-      "Background image OCR failed.",
-      caught
+      "Background image OCR failed."
     )
   });
   ocrDrainer.schedule();
@@ -366,10 +363,9 @@ const scheduleOcrProcessing = (): void => {
 const scheduleAgentIngestProcessing = (): void => {
   agentIngestDrainer ??= new CoalescedBatchDrainer({
     runBatch: () => getJobsService().processQueuedAgentIngest({ limit: 20 }),
-    onError: (caught) => recordBackgroundFailure(
+    onError: () => recordBackgroundFailure(
       "agent_ingest.background_failed",
-      "Background Agent ingest failed.",
-      caught
+      "Background Agent ingest failed."
     )
   });
   agentIngestDrainer.schedule();
@@ -378,20 +374,19 @@ const scheduleAgentIngestProcessing = (): void => {
 const scheduleIndexRebuildProcessing = (): void => {
   indexRebuildDrainer ??= new CoalescedBatchDrainer({
     runBatch: () => getJobsService().processQueuedIndexRebuild({ limit: 1 }),
-    onError: (caught) => recordBackgroundFailure(
+    onError: () => recordBackgroundFailure(
       "database.index_rebuild.background_failed",
-      "Background local index rebuild failed.",
-      caught
+      "Background local index rebuild failed."
     )
   });
   indexRebuildDrainer.schedule();
 };
 
-const recordBackgroundFailure = (code: string, fallback: string, caught: unknown): void => {
+const recordBackgroundFailure = (code: string, fallback: string): void => {
   getDiagnosticsService().recordEvent({
     level: "warning",
     code,
-    message: caught instanceof Error ? caught.message : fallback
+    message: fallback
   });
 };
 
@@ -413,11 +408,11 @@ const resumeBackgroundJobs = (): void => {
     scheduleOcrProcessing();
     scheduleAgentIngestProcessing();
     scheduleIndexRebuildProcessing();
-  } catch (caught) {
+  } catch {
     getDiagnosticsService().recordEvent({
       level: "warning",
       code: "jobs.resume_failed",
-      message: caught instanceof Error ? caught.message : "Durable background job recovery failed."
+      message: "Durable background job recovery failed."
     });
   }
 };
@@ -428,11 +423,11 @@ const scheduleWaitingAgentIngestAfterModelReady = (): void => {
     if (result.requeued > 0) {
       scheduleAgentIngestProcessing();
     }
-  } catch (caught) {
+  } catch {
     getDiagnosticsService().recordEvent({
       level: "warning",
       code: "agent_ingest.requeue_failed",
-      message: caught instanceof Error ? caught.message : "Waiting Agent ingest requeue failed."
+      message: "Waiting Agent ingest requeue failed."
     });
   }
 };

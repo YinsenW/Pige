@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-11T03:51:51Z",
+  "reviewedAt": "2026-07-11T05:08:23Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,7 +30,7 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "cbcc2b388f084ab0181c819140f8f24881eccc8554e02f047ea90a71c5c5369d"
+    "reviewedSha256": "888947e4e39937850eef375e8fee0ec0fe31825df27cd40742caf6f2026adb82"
   },
   "reviewers": [
     {
@@ -116,65 +116,77 @@
         "documentation_leanness_and_maintainability"
       ],
       "independence": "Read-only delta reviewer rejected an inaccurate maintenance/drainer claim, ambiguous RSS limit, incorrect action-safety propagation, weak smoke-only cancellation evidence, and stale Playbook wording; it then accepted the exact repaired worker/cancellation/recovery candidate with unchanged states and complete residual gaps without editing files."
+    },
+    {
+      "reviewerId": "pi-core-diagnostics-backup-review",
+      "task": "/root/pi_contract_audit",
+      "independentDimensions": [
+        "navigation_and_resource_lifecycle",
+        "cross_document_contract_consistency",
+        "continuous_traceability_and_acceptance",
+        "ongoing_development_support",
+        "documentation_leanness_and_maintainability"
+      ],
+      "independence": "Read-only reviewer rejected Pi completion without a real upstream loop, unsafe diagnostic details and top-level messages, overbroad backup evidence, and a conflicting AI SDK runtime path; after repair it accepted the exact 104-file candidate, 1,063-claim lock, unchanged states, and explicit residual gaps without editing files."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "readme-role-job-architecture-review",
+      "reviewerId": "pi-core-diagnostics-backup-review",
       "blockerCount": 0,
-      "summary": "The concise public README, AI task router, 57-document inventory, two distribution files, 99 local links, 45 anchors, bundled index-worker output/smoke route, and resource review/reclamation metadata remain discoverable without a new document."
+      "summary": "The existing Pi Owner remains the single detailed runtime owner in the Phase 3 context pack; provider terminology now resolves to Pi AI and Pige Profiles without adding a document, while diagnostic and backup evidence reuse existing owners."
     },
     {
       "id": "cross_document_contract_consistency",
-      "score": 9.7,
-      "reviewerId": "readme-role-job-architecture-review",
+      "score": 9.8,
+      "reviewerId": "pi-core-diagnostics-backup-review",
       "blockerCount": 0,
-      "summary": "Local Database, Job, Performance, Technical Architecture, Playbook, CI smoke, and acceptance agree that only explicit index rebuild is worker-backed and process-locally cancellable; implicit first-query rebuild and cross-process/platform guarantees remain open."
+      "summary": "Pi Owner, TECH, Spec, Playbook, Quality, UI guidance, dependency replacements, P0, and acceptance agree that Pi Agent plus Pi AI are the sole runtime behind one thin adapter; no AI SDK or parallel loop remains."
     },
     {
       "id": "continuous_traceability_and_acceptance",
-      "score": 9.7,
-      "reviewerId": "readme-role-job-architecture-review",
+      "score": 9.8,
+      "reviewerId": "pi-core-diagnostics-backup-review",
       "blockerCount": 0,
-      "summary": "The 1,059-claim semantic lock has zero unexplained drift. One exact index-worker cancellation selector augments PIGE-DB-001, PIGE-JOB-002, E4.02, and E2.10; verified/partial states and P2/P4 in-progress states remain unchanged with every residual gap explicit."
+      "summary": "The 1,063-claim lock has zero drift and exactly 31 reviewed differences from baseline: four added evidence claims plus 27 Pi, diagnostics, backup, P0, Build, Exit, acceptance, and deferred-projection changes."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "readme-role-job-architecture-review",
+      "reviewerId": "pi-core-diagnostics-backup-review",
       "blockerCount": 0,
-      "summary": "Development receives one consolidated P4 projection after 15 code/test/CI files stabilized: five existing Owner/control documents, one exact evidence selector, unchanged delivery states, and no PRD, UI, IPC, durable-schema, or public-contract churn."
+      "summary": "Development receives one actionable Pi path: upstream loop/provider reuse, isolated Models, no substitute SDK, no direct bridge fallback, and explicit checkpoint-A or user-approved containment gates; the repaired diagnostic slice stayed independently frozen."
     },
     {
       "id": "documentation_leanness_and_maintainability",
-      "score": 9.6,
-      "reviewerId": "readme-role-job-architecture-review",
+      "score": 9.7,
+      "reviewerId": "pi-core-diagnostics-backup-review",
       "blockerCount": 0,
-      "summary": "LEN-001 through LEN-005 pass with 57 Markdown files, 22,928 lines, 162,752 words, 1,209,955 bytes, 3,857 entry words, 5,492 trace lines, zero duplicate groups, 14 mutations, and an 8.57 percent line reduction from baseline."
+      "summary": "LEN-001 through LEN-005 pass with 57 Markdown files, 22,924 lines, 162,419 words, 1,207,253 bytes, 3,857 entry words, 5,497 trace lines, zero duplicate groups, and 14 mutations."
     }
   ],
   "verification": [
     {
-      "command": "npm run verify:docs && npm run verify:decisions && npm run verify:ui-visual && npm run verify:contracts && npm run verify:dependencies && npm run verify:fixtures && npm run verify:boundaries && npm run verify:source-artifacts",
+      "command": "npm run verify:docs && npm run verify:decisions && npm run verify:ui-visual && npm run verify:contracts && npm run verify:dependencies && npm run verify:fixtures && npm run verify:boundaries && npm run verify:no-telemetry && npm run verify:source-artifacts",
       "status": "passed",
-      "evidence": "All 57 Markdown files, 99 local links, 45 anchors, 77 decisions, 12 UI tokens, 8 structural rules, 448 capture combinations, CON-001 through CON-004, three JobRecord and four owner-routing negative mutations, 46 dependency records, two fixture manifests, import boundaries, and source-artifact checks passed."
+      "evidence": "All 57 Markdown files, 99 local links, 45 anchors, 77 decisions, 12 UI tokens, 8 structural rules, 448 capture combinations, CON-001 through CON-004, 46 dependencies, two fixture manifests, boundaries, source artifacts, and the no-telemetry gate plus 11 mutations passed."
     },
     {
       "command": "npm test && npm run typecheck && npm run build && npm run smoke:index-rebuild-worker && npm run smoke:parser-workers && npm run smoke:macos-vision-ocr",
       "status": "passed",
-      "evidence": "All 60 test files/408 tests, including the focused four-file/fifty-five-test index set, type checks, production build with the 2.54 kB bundled worker, built index-worker smoke, parser-worker smoke, and real macOS Vision OCR smoke passed on the frozen candidate."
+      "evidence": "All 60 test files/417 tests, including focused diagnostics/desktop-shell/backup 3 files/26 tests, type checks, production build, built index-worker and parser-worker smokes, and real macOS Vision OCR 1 file/2 tests passed."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 passed: 3,857 of 4,200 entry words, zero duplicate groups, 14 mutations, 5,492 trace lines, 57 Markdown files, and an 8.57 percent line reduction from baseline."
+      "evidence": "LEN-001 through LEN-005 passed: 3,857 of 4,200 entry words, zero duplicate groups, 14 mutations, 5,497 trace lines, 57 Markdown files, 1,207,253 bytes, and an 8.58 percent line reduction from baseline."
     },
     {
       "command": "node scripts/verify/independent-documentation-review.mjs --print-snapshot && explicit semantic-ledger comparison",
       "status": "passed",
-      "evidence": "The governed snapshot is exactly cbcc2b388f084ab0181c819140f8f24881eccc8554e02f047ea90a71c5c5369d across 102 files; the current and locked semantic ledgers both contain 1,059 claims with zero differing IDs or digests."
+      "evidence": "The governed snapshot is 888947e4e39937850eef375e8fee0ec0fe31825df27cd40742caf6f2026adb82 across 104 files; current and locked semantic ledgers contain 1,063 claims with zero differing IDs or digests, and TRC-001 through TRC-004 pass."
     }
   ],
   "coordination": {
@@ -183,8 +195,8 @@
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The P4 delta moves only explicit maintenance/index_rebuild execution into a bounded worker with process-local serialization, progress, and cancellation; it adds no PRD, UI, IPC, durable schema, vector/model behavior, stable Requirement/Build/Exit ID, or release-state change. PIGE-DB-001/E4.02 stay verified, PIGE-JOB-002/E2.10 stay partial, and P4 stays in progress.",
-    "acknowledgement": "Development froze fifteen code/test/CI files after focused 4/55, full 60/408, typecheck, build, built index-worker smoke, parser-worker smoke, real macOS OCR, and focused gates passed. Product Planning made the minimal five-Owner/acceptance sync; a read-only delta reviewer accepted the exact repaired candidate before this one-time snapshot bind."
+    "compatibility": "Pi was already the required P3 core; this delta makes upstream Pi Agent plus Pi AI the sole non-substitutable runtime, removes the mistaken AI SDK path, and adds diagnostic/backup evidence without changing P0-P9, stable IDs, UI behavior, durable schemas, or status.",
+    "acknowledgement": "Development froze eight diagnostic/backup code-test-verifier files after focused 3/26, full 60/417, typecheck, build, and smokes. UI Design completed a scoped copy-only provider terminology sync; Product Planning made the minimum Owner/trace/dependency projection and obtained an independent zero-blocker review before binding once."
   },
   "resolvedBlockers": [
     "Rewrote README as a 378-word product entry with user value, honest current capability, principles, v0.1 roadmap, and the Agent-authored automation goal instead of a technical inventory.",
@@ -198,6 +210,8 @@
     "Synchronized the B6.15 CI-produced body-free retrieval report, one exact upload selector, immutable upload-action pin, honest partial states, and complete model/linking/vector/locale/scale/platform gaps without changing runtime behavior.",
     "Synchronized the B6.12 rebuildable Knowledge Tree aggregate foundation, one exact selector, honest partial/planned states, preserved Phase 4 link boundaries, and correct UI/Health ownership without exposing a public tree contract.",
     "Synchronized the explicit P4 index-rebuild worker, process-local progress/cancellation, bounded resource protocol, rollback semantics, one exact selector, unchanged verified/partial states, and complete scale/cross-process/recovery/platform gaps.",
+    "Made upstream Pi Agent plus Pi AI the sole Phase 3 Agent/provider runtime behind one thin adapter, removed the mistaken AI SDK path, mapped P0 output and deterministic tool acceptance, and kept v0.80.6 compat-free entry absence and the direct bridge explicit without promotion.",
+    "Bound fail-closed diagnostic detail and top-level-message persistence/export, retention, rotation, and 11-case no-telemetry evidence; scoped backup evidence to current registered in-vault roots while preserving every broader gap.",
     "Repaired CON-002 so it isolates JobRecordSchema, checks root strictness and cross-field cancellation invariants, and rejects three in-memory false-positive mutations instead of matching a later unrelated schema."
   ],
   "nonBlockingRisks": [
@@ -206,8 +220,10 @@
     "The local-tool lifecycle remains a fake/local service foundation: real Paddle/Python/model/language-pack transport, ordinary-ingest no-hidden-install proof, production app-data/catalog/permission/pre-vault Job/Operation wiring, OCR/UI, supply chain, packaged platforms, cross-process locking, complete recovery/GC/quarantine purge, and background lifecycle controls remain open.",
     "The retrieval regression foundation remains lexical and synthetic: model-grounded summary/citation validation under cloud-send and Permission enforcement, tag/topic/entity and Knowledge Tree thresholds, vector/reranker ranking, 10k/100k and UI/packaged proof, and broader locale/query families remain open.",
     "The Knowledge Tree remains internal-only: broader relation and branch semantics, richer aggregate inputs, public IPC/preload/renderer navigation, localized empty state, 10k worker/incremental rebuild proof, packaged parity, and the separately owned visual/accessibility and Knowledge Health work remain open.",
-    "Pi v0.80.6 remains review-only until exact package pins, integrity/provenance, root MIT notice and SBOM, hermetic catalog/import gates, selected-binding fixtures, Permission Broker integration, and pinned Electron/Node platform smoke pass; the Owner and TECH pins are not yet cross-checked by a dedicated verifier.",
-    "Trace projections use 5,492 of 5,500 lines and the default entry uses 3,857 of 4,200 words; future semantic additions must reclaim projection or prose capacity in the same change instead of raising budgets.",
+    "Pi v0.80.6 remains review-only: no package, compat containment, embedded loop/tool, selected binding, direct-call gate, or packaged proof exists. Pi AI transitively names an inert telemetry API at the reviewed tag, so adoption must repeat dependency, runtime-network, and no-upload review; the direct JSON bridge and phase_1_stub are not completion evidence.",
+    "No-telemetry is a static executable gate; unknown SDKs, computed endpoints, indirect transports, generated configuration, and crash-hook review remain open. Diagnostics still need broader stores, recovery correlation, user clear, export cancellation, selected-path UX, and crash recovery.",
+    "Backup still needs backupId/domainSchemaVersions, release exclusion scans, external managed copies, include controls, durable Jobs/checkpoints, structured dependencies, and complete restore orchestration.",
+    "Trace projections use 5,497 of 5,500 lines and governed Markdown uses 1,207,253 of 1,210,000 bytes; future semantic additions must reclaim capacity in the same change instead of raising budgets.",
     "Role ownership is enforced by instructions, templates, routing markers, and negative mutations rather than operating-system write permissions; reviewers must still detect semantically disguised role crossing and contributors must fill intake fields honestly.",
     "PRD, TECH_ARCHITECTURE, and Decision Log remain large Owner documents; future Agents should continue section-targeted reads and define each fact once.",
     "The concise pre-alpha README intentionally has no install button, screenshots, or release download; add those only when a usable signed build and governed visual evidence exist.",

@@ -29,7 +29,7 @@
       "name": "Agent output",
       "expectedItems": 12,
       "coverage": [
-        { "range": [1, 12], "requirements": ["PIGE-KNOW-006"], "capabilities": ["knowledge.agent-output"] }
+        { "range": [1, 12], "requirements": ["PIGE-KNOW-006", "PIGE-PI-001"], "capabilities": ["knowledge.agent-output", "pi.service-boundary"] }
       ]
     },
     {

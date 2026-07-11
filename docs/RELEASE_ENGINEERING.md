@@ -290,7 +290,7 @@ Special cases:
 - `@mozilla/readability`, `jsdom`, or `undici` updates require representative and malformed article fixtures; inert script/subresource evidence; private/non-public/mapped-IP and redirect SSRF tests; validated-address pinning; charset, declared/streamed/decompressed size, body-deadline, element/output/image bounds; fallback quality propagation; and packaged web-worker startup checks on supported macOS/Windows targets.
 - Apple Vision/ImageIO or Swift/Xcode updates require rebuilding each macOS architecture, protocol and helper-manifest checks, valid/invalid/oversized/multi-frame image fixtures, geometry/output bounds, source and Artifact integrity/recovery tests, packaged helper discovery, nested signing, and notarized-app startup smoke.
 - PaddleOCR/Qwen model updates require model manifest and index rebuild tests.
-- AI SDK provider update requires BYOK provider compatibility tests.
+- Pi Agent/AI provider update requires BYOK and Agent compatibility tests.
 
 ## 12. Model And Tool Downloads
 
