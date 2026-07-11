@@ -1307,7 +1307,7 @@ describe("jobs service", () => {
     expect(jobs.list({ classes: ["parse"], states: ["completed_with_warnings"] }).jobs[0]?.message).toContain("edited source page was preserved");
   });
 
-  it("routes preserved Office documents to Agent jobs while direct images retain host OCR", async () => {
+  it("routes preserved Office documents and direct images to Agent jobs without host parse or OCR children", async () => {
     const { vaultPath, vault } = makeVault();
     const { capture, jobs } = makeServices(vaultPath, vault);
     const sourceRoot = path.dirname(vaultPath);
@@ -1335,11 +1335,9 @@ describe("jobs service", () => {
 
     expect(processResult).toEqual({ processed: 3, completed: 3, failed: 0 });
     expect(parserJobs).toEqual([]);
-    expect(agentJobs.map((job) => job.sourceKind).sort()).toEqual(["docx_file", "pptx_file"]);
+    expect(agentJobs.map((job) => job.sourceKind).sort()).toEqual(["docx_file", "image_file", "pptx_file"]);
     expect(agentJobs.every((job) => job.message.includes("waiting for a tested default model"))).toBe(true);
-    expect(ocrJobs).toHaveLength(1);
-    expect(ocrJobs[0]?.sourceKind).toBe("image_file");
-    expect(ocrJobs[0]?.message).toContain("waiting for local OCR capability");
+    expect(ocrJobs).toEqual([]);
   });
 
   it("persists image OCR artifacts, refreshes the source page, and reuses validated output after recovery", async () => {
@@ -1358,6 +1356,7 @@ describe("jobs service", () => {
     const sourceId = requireFirst(captured.sourceIds);
 
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    seedExplicitImageOcrJob(vaultPath, sourceId, "waiting_dependency");
     expect(jobs.list({ classes: ["ocr"], states: ["waiting_dependency"] }).jobs[0]?.sourceId).toBe(sourceId);
 
     adapter.available = true;
@@ -1450,6 +1449,7 @@ describe("jobs service", () => {
     });
     const sourceId = requireFirst(captured.sourceIds);
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    seedExplicitImageOcrJob(vaultPath, sourceId);
     const sourceRecordPath = findFile(path.join(vaultPath, ".pige/source-records"), `${sourceId}.json`);
     const sourceRecord = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as { managedCopy: { path: string } };
     const changed = Buffer.from(original);
@@ -1486,6 +1486,7 @@ describe("jobs service", () => {
     });
     const sourceId = requireFirst(captured.sourceIds);
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    seedExplicitImageOcrJob(vaultPath, sourceId);
     const sourceRecordPath = findFile(path.join(vaultPath, ".pige/source-records"), `${sourceId}.json`);
     const sourceRecord = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as {
       managedCopy: { path: string; checksum: string; size: number };
@@ -1529,6 +1530,7 @@ describe("jobs service", () => {
     });
     const sourceId = requireFirst(captured.sourceIds);
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    seedExplicitImageOcrJob(vaultPath, sourceId);
 
     const result = await jobs.processQueuedOcr({ sourceIds: [sourceId] });
     const sourceRecordPath = findFile(path.join(vaultPath, ".pige/source-records"), `${sourceId}.json`);
@@ -1548,7 +1550,8 @@ describe("jobs service", () => {
       ocrWarnings: ["ocr_empty_text"]
     });
     expect(jobs.list({ classes: ["ocr"], states: ["completed_with_warnings"] }).jobs[0]?.sourceId).toBe(sourceId);
-    expect(jobs.list({ classes: ["agent_ingest"] }).jobs).toHaveLength(0);
+    expect(jobs.list({ classes: ["agent_ingest"], states: ["waiting_dependency"] }).jobs[0]?.sourceId)
+      .toBe(sourceId);
   });
 
   it("parses preserved DOCX and PPTX files into verified artifacts before OCR and Agent handoff", async () => {
@@ -2364,6 +2367,57 @@ function seedExplicitPdfParseJob(vaultPath: string, sourceId: string): JobRecord
     ...(parent.captureId ? { captureId: parent.captureId } : {}),
     ...(parent.conversationEventId ? { conversationEventId: parent.conversationEventId } : {}),
     message: "Explicit parser-substrate test Job queued."
+  });
+  if (!existing) {
+    const childPath = path.join(
+      vaultPath,
+      ".pige",
+      "jobs",
+      dateKey.slice(0, 4),
+      dateKey.slice(4, 6),
+      `${jobId}.json`
+    );
+    fs.mkdirSync(path.dirname(childPath), { recursive: true });
+    fs.writeFileSync(childPath, `${JSON.stringify(child, null, 2)}\n`, "utf8");
+  }
+  if (!(parent.childJobIds ?? []).includes(child.id)) {
+    const parentPath = findFile(path.join(vaultPath, ".pige", "jobs"), `${parent.id}.json`);
+    const linkedParent = JobRecordSchema.parse({
+      ...parent,
+      childJobIds: [...(parent.childJobIds ?? []), child.id],
+      updatedAt: now
+    });
+    fs.writeFileSync(parentPath, `${JSON.stringify(linkedParent, null, 2)}\n`, "utf8");
+  }
+  return child;
+}
+
+function seedExplicitImageOcrJob(
+  vaultPath: string,
+  sourceId: string,
+  state: "queued" | "waiting_dependency" = "queued"
+): JobRecord {
+  const parent = requireValue(listJobRecords(vaultPath).find((job) =>
+    job.class === "capture" && job.sourceId === sourceId
+  ));
+  const dateKey = /^src_(\d{8})_/u.exec(sourceId)?.[1] ?? "20260711";
+  const suffix = sourceId.replace(/^src_\d{8}_/u, "").slice(0, 10);
+  const jobId = `job_${dateKey}_${suffix}oa`;
+  const now = "2026-07-11T00:00:00.000Z";
+  const existing = listJobRecords(vaultPath).find((job) => job.id === jobId);
+  const child = existing ?? JobRecordSchema.parse({
+    id: jobId,
+    class: "ocr",
+    state,
+    parentJobId: parent.id,
+    createdAt: now,
+    updatedAt: now,
+    sourceId,
+    ...(parent.captureId ? { captureId: parent.captureId } : {}),
+    ...(parent.conversationEventId ? { conversationEventId: parent.conversationEventId } : {}),
+    message: state === "waiting_dependency"
+      ? "Persisted image OCR fixture is waiting for local OCR capability."
+      : "Persisted image OCR fixture queued."
   });
   if (!existing) {
     const childPath = path.join(

@@ -38,7 +38,7 @@ Current implementation state, last reconciled 2026-07-11:
 | P0 | in progress | Repository and traceability foundations have current evidence; the full P0 exit set has not been re-run as a phase-completion claim. |
 | P1 | in progress | Desktop, vault, settings, diagnostics, and runtime foundations have evidence; the full mapped exit set remains open. |
 | P2 | in progress | Capture guards plus process-local parse/OCR/Agent-ingest/index progress or cancellation have evidence; running capture, remaining classes, visible UI, voice, and full exits remain open. |
-| P3 | in progress | BYOK and embedded Pi text/document parse+selected-OCR spines have evidence; tool breadth, provider, recovery, permission, and exits remain open. |
+| P3 | in progress | BYOK and embedded Pi text/document/image tool spines have evidence; tool breadth, provider, recovery, permission, and exits remain open. |
 | P4 | in progress | SQLite, lexical search, Library, and worker-backed rebuild foundations have evidence; the full scale and relationship exit set remains open. |
 | P5 | in progress | PDF, Office, static-web, direct-image macOS Vision OCR, Artifact, and recovery slices have evidence; cross-platform/document OCR and remaining P5 exits are still open. |
 | P6 | in progress | Lexical retrieval, cited Home answers, Reader, backlinks, and related-context foundations exist; local RAG, editing, Knowledge Tree, and full exits remain open. |
@@ -266,9 +266,9 @@ Build:
 - [B3.13 -> E3.08] Embedded Pi plus a schema-complete Pige Tool Registry; after source
   preservation Pi Agent alone selects semantic tools, with no host-fixed/parallel path.
 
-Agent Spine Gate: text and preserved PDF/DOCX/PPTX run through embedded Pi, isolated
-model binding, inspection, parse/selected OCR, re-inspection, and cited publication.
-B3.13/E3.08 remains partial for direct-image processing, retrieval/proposals, catalog
+Agent Spine Gate: text and preserved PDF/DOCX/PPTX/images run through embedded Pi,
+isolated model binding, inspection, parse/selected OCR, re-inspection, and cited publication.
+B3.13/E3.08 remains partial for retrieval/proposals, catalog
 metadata, generic recovery, permissions, platforms, and remaining fixed routes.
 The exact-`v0.80.6` exception keeps compat globals/default dispatch inert in the sole
 adapter and still forbids deep imports, forks, patches, and parallel loops.
@@ -388,7 +388,7 @@ note/index/operation transactions, and packaged-platform proof remain open.
 
 Evidence exists for validated-address-pinned static URL fetch -> bounded response -> charset-aware snapshot -> serial Readability/jsdom worker -> checksummed article text and redacted metadata -> quality-aware Agent handoff.
 
-Evidence exists for preserved raster image -> verified architecture-specific macOS 26 Swift helper -> bounded Apple Vision document/text recognition -> deterministic OCR text and text-free locator sidecar -> checksum-safe Source Page refresh -> quality-aware Agent handoff. Native smoke covers helper manifest integrity, capability probe, visible-text recognition, and invalid-image rejection; unit/integration tests cover protocol bounds, timeout, path escape, source/Artifact tampering, empty output, and crash-safe reuse/regeneration.
+Raster images now run Pi inspect→OCR→inspect→publish over the verified macOS helper, with no-model/capability and empty-output wait, deterministic child/Operation reuse, cancellation, wrong-tool rejection, and managed/reference source proof. Existing tests retain protocol, path, tamper, and reuse coverage.
 
 PDF OCR evidence covers real Pi inspect→parse(`needs_ocr`)→OCR→inspect→publish, parser-selected pages, deterministic reuse, wait/resume, parent cancellation, empty-output stop, and separate native/OCR provenance. Existing renderer/OCR fixtures retain tamper, drift, incomplete-render, referenced-source, and recovery coverage; built-worker smoke rasterizes a real no-text page.
 
@@ -401,8 +401,8 @@ B5.12/E5.04 evidence covers seven text, URL, PDF, PPTX, and image-OCR cases acro
 Evidence exists for startup reconciliation of interrupted idempotent document/OCR/Agent jobs.
 
 Still open before P5 completion: signed packaged proof, Windows/Paddle,
-full-slide/vector/chart/DOCX-media OCR, unsupported/oversized PPTX targets, direct-image
-Agent migration, progress/cancel UI, other Job classes, and strict cross-process CAS.
+full-slide/vector/chart/DOCX-media OCR, unsupported/oversized PPTX targets,
+progress/cancel UI, other Job classes, and strict cross-process CAS.
 
 Deferred from this phase:
 

@@ -96,10 +96,10 @@ Phase 2 implementation note:
 - `jobs.retry` can mark eligible failed/waiting/cancelled jobs back to `queued` for later processing.
 - Capture enters `running/capturing_source`; source preservation does not set the guard.
   A once-only checkpoint precedes its first Source Record/Page projection; running capture cancellation remains open.
-- Preserved PDF/DOCX/PPTX captures create metadata-only pages and Agent-ingest Jobs; Pi
-  may persist deterministic parse/OCR children. Images retain host-routed OCR and wait
-  when its verified capability is unavailable. Already-persisted schema-compatible
-  Office parse/OCR Jobs remain processable; ordinary capture does not recreate that route.
+- Preserved PDF/DOCX/PPTX/image captures create metadata-only pages and Agent-ingest Jobs;
+  Pi may persist deterministic parse/OCR children. Already-persisted schema-compatible
+  Office parse/OCR and image OCR Jobs remain processable; ordinary capture does not
+  recreate their host routes.
 - Parse/OCR routing and evidence gates are owned by `PARSER_INGEST_SPEC.md`; Artifact,
   sidecar, and revision boundaries by `TECH_ARCHITECTURE.md` and
   `SOURCE_STORAGE_STRATEGY.md`. Jobs wait on insufficient evidence, keep incomplete work

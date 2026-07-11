@@ -12,9 +12,9 @@ Pige's product goal is simple:
 
 > The user connects one model service that Pi Agent can call. Pige handles the rest.
 
-Pi Agent is the mandatory v0.1 core. Text, PDF, and Office parse plus selected PDF/PPTX
-OCR run through embedded Pi tools. Phase 3 remains partial for direct-image processing,
-retrieval/proposals, generic recovery, permissions, and packaged paths.
+Pi Agent is the mandatory v0.1 core. Text, PDF/Office parse, and selected PDF/PPTX/image
+OCR run through embedded Pi tools. Phase 3 remains partial for retrieval/proposals,
+generic recovery, permissions, and packaged paths.
 
 Adopt, do not imitate: where Pi exposes a supported generic runtime surface,
 Pige integrates it through a thin adapter instead of copying, forking, or
@@ -314,9 +314,9 @@ tool-version, and input hashes; results carry typed refs, warnings, and provenan
 large bodies remain Artifacts. Host validation precedes every result or effect.
 
 The current slice exposes inspect, cited publication, PDF/DOCX/PPTX parse, and selected
-PDF/PPTX OCR. Children bind parent/tool/version/source revision/input; only capped
-Pi-call hashes persist. Direct-image processing, retrieval/proposals, complete registry
-metadata, permissions, and generic child recovery remain open.
+PDF/PPTX/image OCR. Children bind parent/tool/version/source revision/input; only capped
+Pi-call hashes persist. Retrieval/proposals, complete registry metadata, permissions,
+and generic child recovery remain open.
 
 Source inspection, extraction, OCR, retrieval, and knowledge publication remain
 separate tools. Recommendations cannot invoke another tool. Runtime may keep only a
@@ -413,15 +413,15 @@ Phase 3 implementation note:
 - Egress is decided before credentials and rechecked before every model turn. Provider,
   model, source revision, evidence refs, cancellation, and publication fences are
   revalidated by Pige; raw prompts, responses, sessions, and keys are not persisted.
-- With no model, preservation stays useful and Agent work waits. Sparse/image-only PDF
-  and parser-selected PPTX media use bounded Agent-selected OCR; unavailable or empty
-  evidence waits without a note. Direct-image processing and retrieval remain fixed routes.
+- With no model, preservation stays useful and Agent work waits. Sparse/image-only PDF,
+  parser-selected PPTX media, and direct images use bounded Agent-selected OCR;
+  unavailable or empty evidence waits without a note. Retrieval remains a fixed route.
 
 Delivered foundation and next steps:
 
-1. Exact pins, embedded adapter, isolated auth/models, four tools, and text/PDF/Office
+1. Exact pins, embedded adapter, isolated auth/models, four tools, and text/document/image
    verticals are delivered.
-2. Wrap direct-image processing, retrieval, and proposal capabilities as registered
+2. Wrap retrieval and proposal capabilities as registered
    effects; remove remaining host-fixed semantic routing.
 3. Add durable child-tool pause/resume, restart, continue/steer/follow-up, complete
    Permission Broker, signed macOS/Windows packaging, and manual BYOK smoke evidence.

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-11T12:45:32Z",
+  "reviewedAt": "2026-07-11T13:37:22Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,12 +30,12 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "b2107ed2b5579ed0077d13278f4b17b780d8e171208c7ef3795b3b0b84a7f542"
+    "reviewedSha256": "cc010943300a5e98e11ee13350914979e1273f8cf7d76ce5afe45d963e4d6ff7"
   },
   "reviewers": [
     {
-      "reviewerId": "pi-office-tool-recovery-review",
-      "task": "/root/office_repair_final_review",
+      "reviewerId": "pi-image-ocr-tool-recovery-review",
+      "task": "/root/image_ocr_final_review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -43,7 +43,7 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Fresh read-only reviewer re-audited the exact 19-file candidate after both recovery repairs without editing files. It traced ordinary Office capture into Pi, DOCX/PPTX parser readiness, PPTX OCR recovery with and without a pre-existing child, the PDF/PPTX host-gate exemption, deterministic reuse, schema-compatible historical Job processing, Owner/acceptance projections, unchanged statuses, E5.03 exclusions, residual gaps, semantic lock, and budgets; all five dimensions have zero blockers."
+      "independence": "Fresh read-only reviewer audited the exact direct-image candidate without editing files, rejected an engine-ownership phrase and an overbroad E2.06 projection, then accepted the repaired wording. It traced preservation into Pi-selected OCR, no-child/waiting-child recovery, completed-empty parking across restart, deterministic reuse, cancellation, reference-original and legacy compatibility, Owner/acceptance mappings, unchanged statuses, residual gaps, semantic lock, and budgets; all five dimensions have zero blockers."
     },
     {
       "reviewerId": "readme-role-job-architecture-review",
@@ -170,37 +170,37 @@
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "pi-office-tool-recovery-review",
+      "reviewerId": "pi-image-ocr-tool-recovery-review",
       "blockerCount": 0,
-      "summary": "The existing entry path now accurately covers PDF/DOCX/PPTX Agent tools across README, Pi, Parser, Jobs, Prompt, API, Technical Architecture, Playbook, Decision, and trace projections without adding an owner, schema, or public API."
+      "summary": "The existing entry path now accurately includes direct images in the embedded Pi OCR spine across README, Pi, Parser, Jobs, Prompt, API, Technical Architecture, Playbook, Decision, and trace projections without adding an owner, schema, or public API."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "pi-office-tool-recovery-review",
+      "reviewerId": "pi-image-ocr-tool-recovery-review",
       "blockerCount": 0,
-      "summary": "Owners agree that Office capture preserves first and only Pi events create parse/PPTX OCR children. Parser and OCR capability recovery requeues the Agent parent, reuses any semantic child, and keeps unavailable or unreadable evidence waiting without a hidden host continuation."
+      "summary": "Owners agree that image capture preserves first and only a Pi OCR event creates its child. Capability recovery requeues first or waiting OCR, while completed-empty evidence stays parked across restart; retry reuses one child and cancellation reaches active OCR."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "pi-office-tool-recovery-review",
+      "reviewerId": "pi-image-ocr-tool-recovery-review",
       "blockerCount": 0,
-      "summary": "The 1,075-claim lock adds one exact Office tool-spine record, updates twelve directly supported Requirement/Exit mappings, and preserves the E5.03 adversarial gap without renumbering IDs or promoting any status."
+      "summary": "The 1,076-claim lock adds one exact image OCR tool-spine record, updates ten directly supported Requirement/Exit mappings, and preserves the E5.03 adversarial gap without renumbering IDs or promoting any status."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "pi-office-tool-recovery-review",
+      "reviewerId": "pi-image-ocr-tool-recovery-review",
       "blockerCount": 0,
-      "summary": "Embedded Pi now executes useful DOCX/PPTX parse and parser-selected PPTX OCR with deterministic reuse and both capability-recovery paths. B3.13/E3.08 stays partial for direct-image, retrieval/proposals, catalog metadata, generic recovery, Broker, Provider/Home, and packaged proof."
+      "summary": "Embedded Pi now executes inspect→OCR→inspect→publish for preserved images with no-model/capability wait, deterministic reuse, cancellation, empty-output stop, and managed/reference proof. B3.13/E3.08 stays partial for retrieval/proposals, metadata, recovery, Broker, Provider/Home, and packaged proof."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.6,
-      "reviewerId": "pi-office-tool-recovery-review",
+      "reviewerId": "pi-image-ocr-tool-recovery-review",
       "blockerCount": 0,
-      "summary": "The candidate remains at 57 Markdown files and passes every leanness gate with 23,152 lines, 162,537 words, 1,209,527 bytes, 4,034 entry words, 5,430 trace lines, zero duplicate groups, and 14 mutations."
+      "summary": "The candidate remains at 57 Markdown files and passes every leanness gate with 23,149 lines, 162,452 words, 1,208,790 bytes, 4,032 entry words, 5,432 trace lines, zero duplicate groups, and 14 mutations."
     }
   ],
   "verification": [
@@ -212,17 +212,17 @@
     {
       "command": "npm test && npm run typecheck && npm run build && npm run smoke:pi-agent-runtime && npm run smoke:index-rebuild-worker && npm run smoke:parser-workers && npm run smoke:macos-vision-ocr",
       "status": "passed",
-      "evidence": "All 65 test files/458 tests, type checks, production build, assembled Electron Pi runtime, index-rebuild worker, parser workers, real macOS Vision OCR plus Agent-led PPTX smoke, and no-telemetry mutations passed."
+      "evidence": "All 66 test files/466 tests, type checks, production build, assembled Electron Pi runtime, index-rebuild worker, parser workers, and real macOS Vision OCR for direct-image and PPTX Agent paths passed."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 passed: 4,034 of 4,200 entry words, zero duplicate groups, 14 mutations, 5,430 trace lines, 57 Markdown files, 1,209,527 bytes, and a 7.67 percent line reduction from baseline."
+      "evidence": "LEN-001 through LEN-005 passed: 4,032 of 4,200 entry words, zero duplicate groups, 14 mutations, 5,432 trace lines, 57 Markdown files, 1,208,790 bytes, and a 7.68 percent line reduction from baseline."
     },
     {
       "command": "node scripts/verify/independent-documentation-review.mjs --print-snapshot && explicit semantic-ledger comparison",
       "status": "passed",
-      "evidence": "The governed snapshot is b2107ed2b5579ed0077d13278f4b17b780d8e171208c7ef3795b3b0b84a7f542 across 109 files; current and locked semantic ledgers contain 1,075 claims with zero differences, and TRC-001 through TRC-005 pass."
+      "evidence": "The governed snapshot is cc010943300a5e98e11ee13350914979e1273f8cf7d76ce5afe45d963e4d6ff7 across 109 files; current and locked semantic ledgers contain 1,076 claims with zero differences, and TRC-001 through TRC-005 pass."
     }
   ],
   "coordination": {
@@ -231,8 +231,8 @@
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "No stable ID or status changed. Preserved text and supported PDF/DOCX/PPTX use embedded Pi; direct-image, retrieval/proposals, Provider/Home, and remaining fixed routes stay open.",
-    "acknowledgement": "Development delivered the frozen Agent-selected Office parse/PPTX OCR vertical and repaired both capability-recovery gaps; Product Planning synchronized exact Owner, acceptance, semantic, README, and residual-risk facts into this 20-file combined candidate."
+    "compatibility": "No stable ID or status changed. Preserved text, supported documents, and direct images use embedded Pi tools; retrieval/proposals, Provider/Home, and remaining fixed routes stay open.",
+    "acknowledgement": "Development delivered the frozen Agent-selected direct-image OCR vertical and repaired completed-empty restart requeue; Product Planning synchronized exact Owner, acceptance, semantic, README, and residual-risk facts into this 20-file combined candidate."
   },
   "resolvedBlockers": [
     "Rewrote README as a concise product entry with user value, honest current capability, the Agent-first roadmap, privacy boundaries, and the Agent-authored automation goal instead of a technical inventory.",
@@ -254,7 +254,8 @@
     "Separated non-secret runtime readiness from credential-bearing runtime resolution; status, onboarding, and scheduling now prove zero decryption before model-egress allow.",
     "Added an Agent-selected PDF parse tool whose deterministic child identity binds the semantic action while raw Pi call IDs remain non-durable and only capped parent-scoped hashes are retained as provenance.",
     "Added Agent-selected PDF OCR over parser-verified pages with one deterministic child, retry/wait reuse, cancellation propagation, empty-output stop, and re-inspection before cited publication.",
-    "Moved DOCX/PPTX parse and parser-selected PPTX media OCR onto Pi tool events with deterministic children, idempotent retry, cancellation, no-readable-evidence stop, and capability recovery both before and after an OCR child exists."
+    "Moved DOCX/PPTX parse and parser-selected PPTX media OCR onto Pi tool events with deterministic children, idempotent retry, cancellation, no-readable-evidence stop, and capability recovery both before and after an OCR child exists.",
+    "Moved direct-image OCR onto Pi tool events with no pre-tool child, deterministic reuse, capability recovery, cancellation, empty-output parking across restart, wrong-tool rejection, and managed/reference source proof."
   ],
   "nonBlockingRisks": [
     "P5 remains in progress: remaining Job-class publishers, running capture/other-class cancellation, strict cross-process Job CAS and routing, parent-directory swap, guard-to-domain atomicity, guard-without-output recovery, checkpoint arrays, cross-file transactions, Windows/Paddle, packaged-filesystem proof, and visible progress/cancel UI remain open.",
@@ -262,10 +263,10 @@
     "The local-tool lifecycle remains a fake/local service foundation: real Paddle/Python/model/language-pack transport, ordinary-ingest no-hidden-install proof, production app-data/catalog/permission/pre-vault Job/Operation wiring, OCR/UI, supply chain, packaged platforms, cross-process locking, complete recovery/GC/quarantine purge, and background lifecycle controls remain open.",
     "The retrieval regression foundation remains lexical and synthetic: model-grounded summary/citation validation under cloud-send and Permission enforcement, tag/topic/entity and Knowledge Tree thresholds, vector/reranker ranking, 10k/100k and UI/packaged proof, and broader locale/query families remain open.",
     "The Knowledge Tree remains internal-only: broader relation and branch semantics, richer aggregate inputs, public IPC/preload/renderer navigation, localized empty state, 10k worker/incremental rebuild proof, packaged parity, and the separately owned visual/accessibility and Knowledge Health work remain open.",
-    "Pi remains partial: direct-image processing, retrieval/proposal tools, complete registry metadata, remaining Jobs/main DAG and URL/renderer bypass removal, generic child pause/restart/continue, full persisted Permission Broker, the required read-to-retrieve-to-publish trace, continue/steer/follow-up/restart proof, Provider/Home usability, manual BYOK, signed installed macOS/Windows, and broader cross-process/cross-file recovery remain open.",
+    "Pi remains partial: retrieval/proposal tools, complete registry metadata, remaining Jobs/main DAG and URL/renderer bypass removal, generic child pause/restart/continue, full persisted Permission Broker, the required read-to-retrieve-to-publish trace, continue/steer/follow-up/restart proof, Provider/Home usability, manual BYOK, signed installed macOS/Windows, and broader cross-process/cross-file recovery remain open.",
     "No-telemetry is a static executable gate; unknown SDKs, computed endpoints, indirect transports, generated configuration, and crash-hook review remain open. Diagnostics still need broader stores, recovery correlation, user clear, export cancellation, selected-path UX, and crash recovery.",
     "Backup still needs backupId/domainSchemaVersions, release exclusion scans, external managed copies, include controls, durable Jobs/checkpoints, structured dependencies, and complete restore orchestration.",
-    "Trace projections use 5,430 of 5,500 lines and governed Markdown uses 1,209,527 of 1,210,000 bytes; future semantic additions must reclaim capacity in the same change instead of raising budgets.",
+    "Trace projections use 5,432 of 5,500 lines and governed Markdown uses 1,208,790 of 1,210,000 bytes; future semantic additions must reclaim capacity in the same change instead of raising budgets.",
     "PRD, TECH_ARCHITECTURE, and Decision Log remain large Owner documents; future Agents should continue section-targeted reads and define each fact once.",
     "The concise pre-alpha README intentionally has no install button, screenshots, or release download; add those only when a usable signed build and governed visual evidence exist.",
     "Structural UI gates do not prove packaged macOS/Windows fidelity, accessibility, or human visual approval; real capture and release evidence remain open.",

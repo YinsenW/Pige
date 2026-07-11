@@ -103,25 +103,38 @@ describe("referenced-original source pipeline", () => {
     const captured = await capture.submitFiles({
       filePaths: [originalPath], inputKind: "file_drop", userIntent: "capture", locale: "en"
     });
-    const model = new CapturingModelClient();
+    const runtime = new PiAgentRuntimeAdapter({
+      fauxResponses: [
+        { kind: "tool_call", toolName: "pige_inspect_source", args: {}, toolCallId: "pi_ref_image_inspect_before" },
+        { kind: "tool_call", toolName: "pige_ocr_source", args: {}, toolCallId: "pi_ref_image_ocr" },
+        { kind: "tool_call", toolName: "pige_inspect_source", args: {}, toolCallId: "pi_ref_image_inspect_after" },
+        {
+          kind: "tool_call",
+          toolName: "pige_create_knowledge_note",
+          args: referencedOutput,
+          toolCallId: "pi_ref_image_publish"
+        }
+      ]
+    });
     const jobs = new JobsService(
       fixture.vaultPort,
-      new AgentIngestService(modelPort, model),
+      new AgentIngestService(modelPort, runtime, imageOcrCapabilityPort),
       undefined,
       undefined,
       new OcrService(new StaticOcrAdapter())
     );
 
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
-    await jobs.processQueuedOcr();
+    expect(jobs.list({ classes: ["ocr"] }).jobs).toEqual([]);
     await jobs.processQueuedAgentIngest();
 
     const record = readSourceRecord(fixture.vaultPath, captured.sourceIds[0] ?? "");
     expect(record.storageStrategy).toBe("reference_original");
     expect(record.managedCopy).toBeUndefined();
     expect(record.artifacts.some((artifact) => artifact.kind === "ocr")).toBe(true);
-    expect(model.lastUserPrompt).toContain("ocr_engine: macos_vision_document");
+    expect(jobs.list({ classes: ["ocr"], states: ["completed"] }).jobs).toHaveLength(1);
     expect(findFiles(path.join(fixture.vaultPath, "wiki"), ".md")).toHaveLength(1);
+    expect(fs.readFileSync(originalPath)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x01]));
   });
 
   it("runs a referenced DOCX through the Office parser and Agent ingest without a managed copy", async () => {
@@ -242,6 +255,19 @@ const parserCapabilityPort = {
     localDatabaseStatus: "not_initialized" as const,
     parserToolchainReady: true,
     ocrEngines: [],
+    speechInputAvailable: false,
+    embeddingModelInstalled: false,
+    lexicalSearchAvailable: false,
+    vectorSearchAvailable: false,
+    rerankerAvailable: false
+  })
+};
+
+const imageOcrCapabilityPort = {
+  snapshot: () => ({
+    localDatabaseStatus: "not_initialized" as const,
+    parserToolchainReady: false,
+    ocrEngines: ["apple_vision"],
     speechInputAvailable: false,
     embeddingModelInstalled: false,
     lexicalSearchAvailable: false,

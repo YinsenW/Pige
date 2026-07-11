@@ -2413,9 +2413,8 @@ Consequences:
 
 - Existing parser/OCR/Artifact/Job/recovery work is retained as tool substrate.
 - Capture preserves evidence first; missing Agent/model state pauses semantic work.
-- Text and preserved PDF/DOCX/PPTX verticals use Pi tool events for inspect, document
-  parse, selected PDF/PPTX OCR, re-inspect, and cited publication; direct-image and
-  retrieval/proposals remain.
+- Preserved text/document/image verticals use Pi events for inspect, applicable parse,
+  selected PDF/PPTX/image OCR, re-inspect, and cited publication; retrieval/proposals remain.
 - B3.13/E3.08 becomes the Agent Spine Gate before non-blocking format/platform breadth.
 - Static and behavioral tests must reject direct provider paths, host-fixed tool order,
   and durable writes not caused by a validated tool call.

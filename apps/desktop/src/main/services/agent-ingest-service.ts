@@ -280,7 +280,10 @@ export class AgentIngestService {
     let currentEvidencePack = await this.#evidence.assemble(vaultPath, currentSourceRecord);
     if (
       currentEvidencePack.fragments.length === 0 &&
-      !(supportsAgentSelectedParser(currentSourceRecord.kind) && hooks.parseCurrentSource)
+      !(
+        (supportsAgentSelectedParser(currentSourceRecord.kind) && hooks.parseCurrentSource) ||
+        (supportsAgentSelectedOcr(currentSourceRecord.kind) && hooks.ocrCurrentSource)
+      )
     ) {
       throw new PigeDomainError("agent_ingest.empty_source", "No source text is available for Agent ingest.");
     }
@@ -391,11 +394,21 @@ export class AgentIngestService {
           hooks.throwIfCancellationRequested?.();
           await refreshEvidence();
           inspectedEvidenceBinding = createEvidenceInspectionBinding(currentSourceRecord, currentEvidencePack);
+          const parserAvailable = supportsAgentSelectedParser(currentSourceRecord.kind) &&
+            capabilitySnapshot.parserToolchainReady;
+          const ocrAvailable = supportsAgentSelectedOcr(currentSourceRecord.kind) &&
+            capabilitySnapshot.ocrEngines.length > 0;
+          const waitingForDirectImageOcr = currentSourceRecord.kind === "image_file" &&
+            currentEvidencePack.fragments.length === 0 &&
+            !ocrAvailable;
+          if (waitingForDirectImageOcr) {
+            dependencyWait = { status: "waiting_dependency", dependencyCode: "image_ocr_unavailable" };
+          }
           return {
             modelText: createInspectToolPayload(
               currentPromptContext,
-              capabilitySnapshot.parserToolchainReady,
-              supportsAgentSelectedOcr(currentSourceRecord.kind) && capabilitySnapshot.ocrEngines.length > 0
+              parserAvailable,
+              ocrAvailable
             ),
             details: {
               sourceId: currentSourceRecord.id,
@@ -403,11 +416,12 @@ export class AgentIngestService {
               fragmentCount: currentEvidencePack.fragments.length,
               truncated: currentEvidencePack.truncated,
               evidenceReady: currentEvidencePack.fragments.length > 0,
-              parserAvailable: capabilitySnapshot.parserToolchainReady,
-              ocrAvailable: supportsAgentSelectedOcr(currentSourceRecord.kind) && capabilitySnapshot.ocrEngines.length > 0,
+              parserAvailable,
+              ocrAvailable,
               policyContextId: policy.policyContextId,
               policyHash: policy.policyHash
-            }
+            },
+            ...(waitingForDirectImageOcr ? { terminate: true } : {})
           };
         },
         parse: async (context) => {
@@ -641,6 +655,7 @@ function createSystemPrompt(): string {
     "Use only the Pige-owned tools registered for this run.",
     "First call pige_inspect_source with no arguments. Evaluate its typed evidence and warnings.",
     "Choose the next registered tool from the inspected evidence. A preserved PDF, DOCX, or PPTX with no readable evidence may require pige_parse_source.",
+    "A preserved direct image with no readable evidence requires pige_ocr_source only when inspect reports bounded OCR available.",
     "When parsing returns needs_ocr, evaluate that typed result. Call pige_ocr_source only when the tool reports bounded OCR available for this source; otherwise use readable native evidence or stop.",
     "After a tool changes source evidence, inspect again before any knowledge action. If a required capability is unavailable, stop without inventing output.",
     "Call pige_create_knowledge_note only when the latest inspected evidence supports one grounded note proposal.",
@@ -763,6 +778,7 @@ function createParseToolResult(
 }
 
 function createAgentOcrCanonicalInputHash(sourceRecord: SourceRecord): string {
+  if (sourceRecord.kind === "image_file") return createAgentImageOcrCanonicalInputHash(sourceRecord);
   if (sourceRecord.kind === "pptx_file") return createAgentPptxOcrCanonicalInputHash(sourceRecord);
   const metadataArtifact = sourceRecord.artifacts.find((artifact) =>
     artifact.kind === "metadata" && artifact.path.endsWith(`/${sourceRecord.id}.pdf.json`)
@@ -805,6 +821,23 @@ function createAgentOcrCanonicalInputHash(sourceRecord: SourceRecord): string {
     processedPageCount,
     candidatePages,
     candidateLocators
+  }));
+}
+
+function createAgentImageOcrCanonicalInputHash(sourceRecord: SourceRecord): string {
+  const checksum = sourceRecord.managedCopy?.checksum ?? sourceRecord.original?.checksum;
+  const size = sourceRecord.managedCopy?.size ?? sourceRecord.original?.lastKnownSize;
+  if (!checksum || !/^sha256:[a-f0-9]{64}$/u.test(checksum) || !Number.isSafeInteger(size) || Number(size) < 0) {
+    throw new PigeDomainError(
+      "agent_runtime.ocr_tool_binding_invalid",
+      "The current image has no complete preserved-source OCR binding."
+    );
+  }
+  return createModelEgressPayloadHash(JSON.stringify({
+    identityVersion: 1,
+    sourceKind: "image_file",
+    sourceChecksum: checksum,
+    sourceSize: size
   }));
 }
 
@@ -863,7 +896,7 @@ function supportsAgentSelectedParser(sourceKind: SourceRecord["kind"]): boolean 
 }
 
 function supportsAgentSelectedOcr(sourceKind: SourceRecord["kind"]): boolean {
-  return sourceKind === "pdf_file" || sourceKind === "pptx_file";
+  return sourceKind === "image_file" || sourceKind === "pdf_file" || sourceKind === "pptx_file";
 }
 
 function createOcrToolResult(

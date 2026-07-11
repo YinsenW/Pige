@@ -131,7 +131,7 @@ After a new document-parser or direct-image OCR Artifact is persisted, its owner
 - Keep line numbers when useful.
 - Phase 2 implementation preserves typed/pasted text and `.md`, `.markdown`, and `.txt` files before parser/model work. Typed/pasted text necessarily uses a managed source; file capture follows the selected managed-copy or reference-original strategy, writes a checksummed source record, and creates reference-based conversation events and queued capture jobs.
 - Phase 2/3 bridge implementation can create minimal no-model source pages for text/Markdown/TXT sources. These pages provide frontmatter, provenance, source references, and a short trusted wrapper around untrusted source excerpts. Markdown structure extraction, AI summaries, and wiki compilation remain later parser/Agent stages.
-- Current file-capture foundation preserves or verifiably references `.pdf`, `.docx`, `.pptx`, and common image files before parser/OCR work. PDF, DOCX, PPTX, image OCR, and direct Agent text readers share `verifyReadableSourceFile`, so a missing referenced original waits for reconnection while a checksum or path-integrity failure stops safely. On macOS 26+, direct raster images queue through the verified Apple Vision helper; other platforms or unavailable helpers remain `waiting_dependency`.
+- Current file capture preserves or verifiably references `.pdf`, `.docx`, `.pptx`, and common images before parser/OCR work. PDF, Office, image OCR, and Agent text readers share `verifyReadableSourceFile`, so a missing reference waits for reconnection and checksum/path failures stop safely. Direct images queue Agent work; only a Pi OCR event invokes the verified Apple Vision helper, while missing model or capability stays waiting.
 - Agent ingest must treat PDF/DOCX/PPTX/image sources without `extracted_text` or `ocr` artifacts as unavailable text, not as raw UTF-8 input.
 
 ### 8.2 URL
@@ -187,14 +187,14 @@ After a new document-parser or direct-image OCR Artifact is persisted, its owner
 
 ### 8.6 Images
 
-- Route to OCR when a supported local engine is available.
+- Preserve first; run OCR only after the Agent selects OCR and a supported local engine is available.
 - Store OCR confidence and engine metadata.
 - If OCR is unavailable, keep the source and mark it searchable by filename/metadata only.
 - Current macOS 26 adapter accepts preserved direct `image_file` sources only. It preflights actual image type, one-frame support, source dimensions/pixels, and bounded decode before Apple Vision document recognition with text-recognition fallback.
 - The app-owned helper runs in a separate native process with a versioned bounded stdin/stdout protocol, no shell, no OCR network access, and a reduced environment. It caps source bytes at 50 MiB, source pixels at 40 million, each dimension at 20,000, decoded long edge at 4,096, frames at one, blocks at 10,000, recognized characters at 1,000,000, protocol output at 8 MiB, and execution at 60 seconds.
 - Source checksum is verified before and after recognition. Valid deterministic Artifacts are reused after restart; stale derived output is regenerated; changed or path-escaping source evidence fails without invoking the adapter.
 - OCR text is stored once in `artifacts/ocr/`. A separate checksummed metadata sidecar stores engine/version, confidence, language hints, image dimensions, normalized bounding boxes, character spans, and warnings without copying the recognized body.
-- Source Page refresh and the body-free `create_artifact` Operation Record are idempotent. Empty OCR output completes with warnings and does not create Agent ingest.
+- Source Page refresh and the body-free `create_artifact` Operation Record are idempotent. Empty OCR completes its child with warnings and leaves the Agent parent waiting without a note.
 - PDF pages use their reviewed materializer. PPTX uses the bounded Office worker to materialize only parser-selected raster media into private disposable inputs for the same native OCR adapter. Text and body-free metadata persist with `slide:N/media:M/ocr:block:K` locators, checksum reuse, Source Record revision checks, and Source Page/Agent handoff. Full-slide, vector/chart, DOCX-media, and unsupported or oversized targets remain waiting.
 
 ### 8.7 Folders, Archives, Git Repositories, Audio, Video
@@ -287,10 +287,10 @@ Current handoff contract:
 - Every fragment has one ephemeral `ev_NN` ref and one durable locator. Native text precedes OCR; duplicate suppression is limited to repeated text under the same parent locator.
 - Structured output represents the summary and each key point as `{ text, evidenceRefs }`. Unknown refs abort before write; empty refs force review; canonical Markdown citations are rendered by Pige rather than accepted from the model.
 - Agent ingest hashes the complete Source Record used for the Evidence Pack and rechecks it before model invocation, after the response, and after flushing the exclusive temporary note immediately before create-only publication. Drift requeues or waits; concurrent targets are preserved or same-source recovered. Strict cross-process SourceRecord-to-note CAS, parent-swap resistance, cross-file transactions, and packaged-platform proof remain open.
-- Text and preserved-document spines inspect evidence and write only through validated
-  publication. PDF/DOCX/PPTX parse and selected PDF/PPTX OCR are registered effects with
-  deterministic children; changed evidence requires re-inspection. Unavailable or empty
-  evidence waits without a note. Direct-image OCR remains host-routed.
+- Text and preserved-source spines inspect evidence and write only through validated
+  publication. PDF/DOCX/PPTX parse and selected PDF/PPTX/direct-image OCR are registered
+  effects with deterministic children; changed evidence requires re-inspection.
+  Unavailable or empty evidence waits without a note.
 
 ## 14. Required Tests
 
