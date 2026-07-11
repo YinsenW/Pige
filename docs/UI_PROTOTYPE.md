@@ -493,6 +493,9 @@ Current Home foundation:
 - With a ready model, Pi Agent calls one Pige-owned current-vault search tool and may return only citations from the selected evidence. Empty evidence produces a visible insufficient-evidence result with no model prose or citations.
 - One compact inline status may move through Accepted, Running, Waiting, Failed, and Completed. A model-required wait offers Configure Models; retryable failure offers Retry. Copy is localized and never exposes a raw provider error or creates a new dashboard.
 - While work is active, the UI labels a planned cloud send only for a cloud boundary. Afterward it labels an actual cloud attempt/result only when a cloud model turn occurred; local or no-model results are never described as cloud use.
+- After the exact Profile/endpoint is connected, ordinary Home and Agent calls do not
+  interrupt for confirmation. A quiet localized status such as `Using OpenAI · selected
+  context` or `Answered with OpenAI` remains inline and never becomes a dashboard.
 - Results retain bounded title, snippet, page type, citation, and open action. Ordinary non-question text remains capture input.
 - Broader semantic/vector retrieval, follow-ups, save-answer proposals, and jump-to-snippet opening remain later slices.
 
@@ -877,37 +880,35 @@ gpt-5-mini     OpenAI     Global Default
 gpt-4.1-mini   OpenAI     Set as Global Default
 ```
 
-The default path is one reviewed OpenAI preset with fixed endpoint/protocol metadata. It asks only for an API key, discovers a bounded model list, and establishes one Global Default. Custom provider setup stays collapsed; only after expansion may it show name, protocol/service type, Base URL, API key, manual model ID, and boundary.
+The reviewed OpenAI preset asks only for a key, discovers models, and establishes one Global Default. Immediately above `Connect Provider`, disclose once that ordinary, private, and bounded large selected context may go to this exact Profile/endpoint; sensitive content asks, restricted content never sends, and an unknown or changed boundary asks again. Custom setup stays collapsed.
 
-Models from every connected Provider Profile appear in one global list with their provider label. Exactly one model is Global Default; model selection does not live inside a provider card. Full preset catalogs, API-key help links, and polished OpenAI-compatible, Anthropic-compatible, and Responses-compatible custom setup remain open.
-
-Do not show provider capability matrices, marketplaces, routing details, pricing, context windows, feature tags, per-workflow model choices, Advanced/Fast assignments, OCR, local embeddings, tools, Skills, backup, or memory controls here. Pi AI catalog metadata remains internal unless a later workflow needs it.
+All connected models appear in one provider-labeled list with exactly one Global Default. Keep full catalogs/help/custom-protocol polish open; hide matrices, pricing, routing, Advanced/Fast roles, local tools, Skills, backup, and memory.
 
 ### Deferred Model Routing Settings
 
-Do not show a Model Assignment settings entry in v0.1.
-
-Pige should expose one effective default model until runtime support exists for real model routing. Advanced/Fast model assignment may become visible only after Pi Agent upstream provides stable model-slot routing APIs, or after Pige implements a tested Model Routing Service that maps task classes to actual Pi Agent or Pi AI calls. The UI must never present a model slot that does not change runtime behavior.
+Show one effective default model. Do not show Model Assignment or Advanced/Fast roles
+until Pi or a tested Pige routing service makes them change real calls.
 
 ### Permissions And Privacy Settings
 
 ```txt
 Permissions & Privacy
 
-Cloud model use
-Pige shows a visible indicator when content is sent to the configured provider.
+Model use
+Default: Allow selected context for connected providers
+Ordinary Home and Agent calls continue without confirmation.
 
-API keys
-Encrypted storage: On
-Plaintext portable/developer mode: Off
+▸ Stricter cloud-send controls
 
-Before sending to a model
-[x] Ask for confirmation on large sources
-[x] Ask for confirmation on sources marked private
-[x] Redact obvious secrets before model calls
+( ) Confirm private or large content
+( ) Confirm every cloud send
+( ) Local only
+
+Sensitive content: Confirm each time
+Restricted content: Never send
 ```
 
-v0.1 must include these privacy controls as first-class settings under Permissions & Privacy, not inside Models. Provider setup, capture processing, and home knowledge retrieval must also show a visible cloud-send indicator whenever source content is sent to a cloud-hosted model. Plaintext secret storage is an advanced escape hatch only; enabling it should show a calm but explicit warning that API keys may be readable from local files.
+Provider setup discloses the destination once. Saved authority is exact to that reviewed Profile/endpoint; routine calls do not open a permission dialog, while an unknown or changed boundary asks again. Stricter controls stay collapsed. Plaintext secret storage remains an advanced warned escape hatch.
 
 Voice input, OCR, local RAG, parser health, and bundled toolchain status belong to Local Capabilities. Models should not contain those controls.
 
@@ -1240,9 +1241,11 @@ Step 1: Welcome.
 
 Step 2: Model setup.
 
-- Choose provider.
-- Enter API key.
-- Test connection.
+- Show the reviewed provider preset and request its API key.
+- Before `Connect Provider`, explain once that ordinary, private, and bounded large
+  selected context may go to this exact Profile/endpoint; sensitive content still asks
+  and restricted content never sends.
+- Test and connect.
 - Allow skip into capture-only mode: Pige preserves source records/source assets and queues Agent processing until a model is configured.
 
 Step 3: Start capture.

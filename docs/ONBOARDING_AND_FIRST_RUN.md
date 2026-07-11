@@ -97,12 +97,10 @@ The model step is optional.
 
 Default path:
 
-- Show a compact Add Provider form.
-- Let the user connect OpenAI, Anthropic, OpenAI-compatible, or Anthropic-compatible service.
-- Test credentials.
-- Discover models when the provider supports model listing.
-- Let the user manually add model IDs when listing is unsupported or fails.
-- Select one default Pi Agent model.
+- Connect a supported provider, test credentials, discover or manually add models, and
+  select one default Pi Agent model.
+- Immediately above `Connect Provider`, disclose the exact destination and standing
+  authorization for ordinary, private, and bounded large selected context.
 
 Skip path:
 
@@ -112,11 +110,10 @@ Skip path:
 
 Rules:
 
-- API keys go only to the secret store.
-- Provider and model behavior follows `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`.
-- No Advanced/Fast model routing appears in first run.
-- No provider marketplace or capability table appears in first run.
-- No cloud-send policy wizard appears in first run; use the default privacy policy and expose settings later.
+- Keys go only to the secret store; provider/model behavior follows the Pi owner.
+- Sensitive content still asks, restricted content never sends, and unknown or changed
+  boundaries ask again. Add no routing, marketplace, second wizard, or routine prompt;
+  expose stricter policy later.
 
 ## 6. Step 3: Home
 
@@ -291,7 +288,8 @@ Required copy:
 
 - Local vault path is visible.
 - Capture-only mode says captures are saved locally.
-- Model setup says ordinary content may be sent to the configured provider after setup.
+- Model setup says the connection authorizes ordinary, private, and bounded large
+  selected context without asking again on every routine call.
 
 Accessibility:
 

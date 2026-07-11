@@ -25,23 +25,28 @@ Pige may store these on your machine:
 
 ## Secrets
 
-- API keys and provider tokens are secrets.
-- Secrets must not be written to Markdown, SQLite, logs, prompts, operation records, conversation logs, diagnostics, or backups by default.
-- v0.1 stores secrets in OS keychain or encrypted local storage by default.
+- API keys and tokens are secrets. Store them in the local OS keychain or encrypted
+  store and present them only to the configured provider for authentication.
+- Never write secrets to Markdown, SQLite, logs, prompts, operations, conversations,
+  diagnostics, or default backups.
 - Plaintext portable/developer mode is allowed only as an explicit advanced choice with a warning.
 - Default backups exclude secrets.
 
 ## Data That May Leave The Device
 
-Pige is local-first, not network-free. These actions may contact external services:
+Pige is local-first, not network-free: durable knowledge remains under local user
+ownership, while explicitly selected services may receive bounded inputs.
 
-- BYOK model calls: after you configure a model provider, ordinary content may be sent to that provider for Agent processing. Pige should send selected context, snippets, citations, and compact references rather than the whole vault by default.
-- URL capture: when you paste a web link, Pige fetches that URL and stores the result locally as a source.
-- Optional model/tool downloads: local embedding models, OCR models, package assets, or repair assets may be downloaded only through explicit flows.
-- Update checks and downloads: public alpha builds may check GitHub Releases or configured update metadata.
-- Explicit Skill/package actions: installed Skills or packages may use network access only through declared capabilities and Permission Broker decisions.
+- BYOK: selecting a provider authorizes routine calls to it. Pige explains this once,
+  sends selected context—not the whole vault—and shows quiet status. Stricter settings
+  remain; sensitive content confirms and restricted content is blocked.
+- URL capture fetches a pasted link and stores the result locally as a source.
+- Model/tool assets download only through explicit flows.
+- Public alpha may check GitHub Releases or configured update metadata.
+- Skills/packages use network access only through declared, brokered capabilities.
 
-Pige should show or explain the local, network, self-hosted, or cloud boundary for user-visible capabilities that depend on model providers, external tools, OS APIs, package downloads, or network access.
+Providers process received data under their own terms. Pige does not proxy calls through
+a Pige cloud service; other network features still disclose their boundary.
 
 ## Diagnostics And Support Bundles
 

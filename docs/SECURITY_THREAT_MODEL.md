@@ -134,14 +134,15 @@ Threat:
 
 Product decision:
 
-- After the user configures BYOK, ordinary content may be sent to the configured provider for Agent processing.
+- Connecting and selecting a Provider Profile is the standing authorization for
+  ordinary, private, and larger bounded Agent calls to that exact destination.
 
 Mitigations:
 
-- Provider setup explains local/self-hosted/cloud boundary.
-- Home composer, Home knowledge retrieval, and Note Agent show a visible cloud-send indicator.
-- Large or private sources can require confirmation depending on provider settings.
-- User can configure stricter confirmation behavior.
+- Explain the boundary once; routine Home and Agent calls show non-blocking cloud status.
+- Sensitive content still confirms, restricted content blocks, and unknown or changed
+  destinations confirm. Users can choose stricter behavior.
+- Provider trust grants no tool, setting, extension, filesystem, or destructive authority.
 - Do not send full vault for retrieval.
 - Context assembly and cloud-send boundaries follow `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`: selected snippets, citations, scoped memory, and compact refs only by default.
 
@@ -239,7 +240,7 @@ Sensitive capabilities:
 - Network access beyond current source fetch.
 - Run shell commands.
 - Install/update packages or local tools.
-- Call cloud model with large/private content.
+- Skill/package model use or egress requiring a sensitive, unknown-boundary, or stricter-policy decision.
 - Use a brokered credential for a declared provider action; raw-secret read is never an extension capability.
 - Change `PIGE.md`, provider settings, privacy settings, or update settings.
 - Spawn sub-agents or long-running background tasks.
@@ -441,7 +442,7 @@ Rules:
 - Failed provider authentication or selected-model validation must not persist provider profiles, model profiles, or secret records.
 - Ordinary content can be sent to configured BYOK provider after setup.
 - Phase 3 basic Agent ingest sends only bounded, redacted managed-source previews to the configured provider, wraps the source as untrusted data, and persists only validated Markdown/operation summaries rather than raw prompts or raw provider responses.
-- Large/private source confirmation is configurable and recommended.
+- Private/large confirmation is an optional stricter user policy, not the default.
 - Model call logs store metadata and summaries, not full prompts/responses by default.
 - Pi Agent, Pi tools, and Pi extensions must be mediated through Pige-owned adapters and Permission Broker rules from `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`.
 - Local-only processing mode can be added later.

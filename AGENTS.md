@@ -12,7 +12,13 @@ Pige is a personal knowledge management Agent, not a general-purpose AI platform
 
 When implementation exposes powerful catalogs, provider ecosystems, package ecosystems, model capabilities, permissions, indexes, local tools, or Agent internals, hide that complexity behind sensible defaults, progressive disclosure, or internal metadata. Do not turn upstream complexity into visible product complexity unless a user-facing workflow truly needs it.
 
-For model/provider setup specifically, the default goal is only: connect one model service that Pi Agent can call and manage the models available on that service. Simplicity must not remove required controls. Support automatic model-list discovery when the provider exposes it, and manual model ID entry when it does not. One default model must be enough to run Pige. Do not expose Advanced Model, Fast Model, model-role assignment, or task-routing UI unless Pi Agent upstream provides a stable model-slot/routing API, or Pige implements and tests a real Model Routing Service that makes those settings effective. Do not expose provider capability matrices, routing internals, model marketplaces, data-boundary tables, advanced filters, or provider taxonomy in the default flow.
+For model setup, connect one service Pi Agent can call. After one boundary disclosure,
+`Connect` authorizes routine bounded calls to that exact Profile; show calm status, not
+repeat prompts. Local-first means local ownership, no Pige cloud account, and no product
+telemetry—not cloud friction. Sensitive, restricted, unknown/changed, or stricter-policy
+cases keep their gates; Provider trust grants no tool, setting, permission, or destructive
+authority. Support discovery/manual model IDs and one default model. Hide routing,
+matrices, marketplaces, and taxonomy until a tested runtime needs them.
 
 ### 0.1 Named Agent Roles
 

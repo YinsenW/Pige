@@ -255,7 +255,7 @@ Build:
 - [B3.02 -> E3.02] Encrypted-by-default API-key storage.
 - [B3.03 -> E3.01] Provider connection test before persistence.
 - [B3.04 -> E3.01] Model-list discovery, manual model IDs, and one effective default model.
-- [B3.05 -> E3.03] Typed pre-prompt/pre-credential model-egress decision with cloud-send indicator and configured confirmation behavior.
+- [B3.05 -> E3.03] Typed pre-prompt/pre-credential egress decision with `ordinary_allowed` default, non-blocking cloud status, and user-selected stricter behavior.
 - [B3.06 -> E3.04] Basic ingest prompt path with untrusted-source boundaries.
 - [B3.07 -> E3.05] Structured output validation and low-confidence routing.
 - [B3.08 -> E3.04] Source-page generation.
@@ -278,8 +278,8 @@ Until E3.08 passes, pause non-blocking P4/P5/P6 breadth. Existing preservation,
 parser/OCR, Artifact, Job, recovery, policy, retrieval, and commit work remains substrate;
 security/data-loss repairs and spine dependencies may proceed.
 
-B3.05 includes Home per-turn evidence classification/audits and drift rejection.
-Confirmation resume and complete provider adoption remain open, so E3.03 is incomplete.
+B3.05 has Home per-turn audits/drift rejection. Default migration, persisted stricter
+policy, confirmation resume, and provider adoption remain open; E3.03 is incomplete.
 
 Deferred from this phase:
 
@@ -292,7 +292,7 @@ Exit criteria:
 
 - [E3.01] Each supported provider profile can be connection-tested, can discover or accept model IDs, and resolves one effective default model used by Agent ingest.
 - [E3.02] API keys do not appear in vault files, SQLite, logs, persisted prompts, diagnostics, operations, or backups.
-- [E3.03] Every external model attempt obtains a typed allow/confirm/block decision before prompt assembly or credential lookup; unknown policy fails safe, and indicators/settings change actual runtime behavior.
+- [E3.03] Every external model attempt obtains a typed pre-prompt/pre-credential decision. Connected known destinations default to uninterrupted ordinary/private/bounded-large use with visible status; sensitive, restricted, unknown, changed, and stricter-policy cases enforce their gates.
 - [E3.04] Pasted text can become a source page, schema-valid wiki note, index update, and append-only log entry with source citations.
 - [E3.05] Invalid, unsupported, low-confidence, or hostile structured output is rejected or routed to warning/proposal without an unsafe durable write.
 - [E3.06] A risky generated change can be staged durably as a redacted proposal without being silently applied.

@@ -275,7 +275,7 @@ Sensitive capabilities:
 - External network.
 - Shell execution.
 - Package or local tool install/update.
-- Cloud model call with large/private source.
+- Sensitive, unknown-destination, or stricter-policy model egress.
 - Secret access.
 - Settings or schema change.
 - Spawn Agent/background task.

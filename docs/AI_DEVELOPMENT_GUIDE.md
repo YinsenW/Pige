@@ -135,7 +135,7 @@ Route through Permission Broker when an action does any of these:
 - Uses external network access beyond ordinary user-initiated URL capture.
 - Runs shell commands, package-backed tools, or external/Web Skill code.
 - Installs or updates packages, local tools, models, or runtime assets.
-- Sends large/private content to a cloud model.
+- Sends sensitive content, changes destination, or crosses a stricter cloud-send gate.
 - Accesses API keys, tokens, or secret storage.
 - Changes provider profiles, privacy settings, update settings, or `PIGE.md`.
 - Spawns another Agent or long-running background process.

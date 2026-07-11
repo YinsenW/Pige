@@ -2479,6 +2479,35 @@ References:
 - `docs/TECH_ARCHITECTURE.md`
 - `docs/QUALITY_AND_TEST_STRATEGY.md`
 
+### D-20260712-Local-First-Without-BYOK-Friction
+
+Status: Accepted
+Date: 2026-07-12
+
+Decision:
+
+After one disclosure, selecting a Profile authorizes ordinary/private/bounded-large
+calls to that destination. `ordinary_allowed` is default with non-blocking status;
+sensitive confirms, restricted blocks, and unknown/changed destinations confirm.
+
+Rationale:
+
+Local ownership, no Pige cloud account, and no telemetry define local-first; repeated
+BYOK prompts add only friction.
+
+Consequences:
+
+- Trust grants no tool, setting, permission, extension, or destructive authority.
+- Send selected context directly, never the whole vault or a Pige cloud proxy.
+- The old default remains open until code/UI/tests change; stricter modes remain.
+
+References:
+
+- `docs/AGENT_RUNTIME_POLICY_CONTEXT.md`
+- `docs/PRD.md`
+- `docs/SECURITY_THREAT_MODEL.md`
+- `PRIVACY.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

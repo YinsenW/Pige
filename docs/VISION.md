@@ -17,9 +17,12 @@ In Pige, files are sources. Markdown is the knowledge layer.
 
 ## 2. Core Product Statement
 
-Pige turns the user's digital materials into an AI-maintained local Markdown knowledge base.
+Pige turns user-owned materials into an Agent-maintained local Markdown knowledge base without reorganizing the user's files.
 
-The original files remain owned by the user. Pige may reference them, link to them, or store managed copies according to explicit storage strategy. It must not force users to reorganize their existing filesystem just to gain knowledge value from those files.
+Local-first means durable local ownership, not network-free. After one disclosure,
+selecting a BYOK Profile authorizes routine bounded calls to that exact destination with
+quiet status. Higher-risk, unknown/changed, or stricter-policy gates remain; Provider
+trust grants no tool, setting, or source-policy authority.
 
 ## 3. Non-Negotiable Principles
 
