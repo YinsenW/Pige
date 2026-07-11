@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-11T21:10:25Z",
+  "reviewedAt": "2026-07-11T21:32:16Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,9 +30,21 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "d1c13a46bbd95171b09bbdbf36a5487b8c6adab4420eb2e3f6d29167526d0969"
+    "reviewedSha256": "024004f8afccf058c41ace7b3341da10513e6e67edeb90e9d55b4edd486fd14f"
   },
   "reviewers": [
+    {
+      "reviewerId": "ordinary-allowed-default-review",
+      "task": "/root/ordinary_default_independent_review",
+      "independentDimensions": [
+        "navigation_and_resource_lifecycle",
+        "cross_document_contract_consistency",
+        "continuous_traceability_and_acceptance",
+        "ongoing_development_support",
+        "documentation_leanness_and_maintainability"
+      ],
+      "independence": "Independent read-only review accepted the exact 6-Development plus 4-Planning delta. It verified the default and stricter-policy hash binding, exact Connect disclosure, full known/unknown/local/content matrix, Home private allow and sensitive pre-credential stop, Profile-switch isolation, unchanged partial states, and explicit persistence/IPC/UI and confirmation-resume gaps with no edits."
+    },
     {
       "reviewerId": "local-first-byok-friction-review",
       "task": "/root/cloud_ux_independent_review",
@@ -194,37 +206,37 @@
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "local-first-byok-friction-review",
+      "reviewerId": "ordinary-allowed-default-review",
       "blockerCount": 0,
-      "summary": "Existing Home, Models, Permissions, onboarding, public privacy, and routing resources now explain one-time exact-destination disclosure, quiet daily status, optional stricter controls, and capture-only fallback without a new page or wizard."
+      "summary": "The existing Home and Provider flow now executes its governed exact-destination disclosure and quiet ordinary_allowed default without adding a page, wizard, IPC, renderer setting, or resource lifecycle."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "local-first-byok-friction-review",
+      "reviewerId": "ordinary-allowed-default-review",
       "blockerCount": 0,
-      "summary": "Vision, PRD, runtime policy, Provider Profiles, Settings, Security, Privacy, onboarding, UI, Decision, Playbook, and permission guidance agree on ordinary_allowed plus sensitive/restricted/unknown/changed and stricter-policy gates."
+      "summary": "Builder, policy matrix, Connect handlers, Home behavior, exact runtime identity, Decision, Playbook, and acceptance agree on known-boundary allow, higher-risk gates, and optional stricter modes."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "local-first-byok-friction-review",
+      "reviewerId": "ordinary-allowed-default-review",
       "blockerCount": 0,
-      "summary": "The 1,079-claim lock binds the changed PRD, PIGE-SEC-005, B3.05, E3.03, P0 model, and open acceptance facts. PIGE-SEC-005/E3.03 remain partial with implementation migration and confirmation resume open."
+      "summary": "One new EV-MODEL-EGRESS-POLICY selector and reused policy/disclosure/Home evidence bind the 1,080-claim lock. PIGE-SEC-005/E3.03 remain partial with persistence/IPC/UI and confirmation resume open."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "local-first-byok-friction-review",
+      "reviewerId": "ordinary-allowed-default-review",
       "blockerCount": 0,
-      "summary": "Owners tell Development to change the default without changing the schema/algorithm, preserve typed audits and higher-risk gates, add persisted stricter settings later, and avoid coupling this follow-up to broader Provider or Agent work."
+      "summary": "The bounded option preserves future stricter-policy wiring without claiming persistence. Exact selectors distinguish implemented default/disclosure/matrix from remaining Broker and Provider work."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.6,
-      "reviewerId": "local-first-byok-friction-review",
+      "reviewerId": "ordinary-allowed-default-review",
       "blockerCount": 0,
-      "summary": "Existing owners were replaced/deduplicated rather than expanded: 57 Markdown files, 23,222 lines, 162,320 words, 1,209,014 bytes, 4,014 entry words, 5,409 trace lines, zero duplicate groups, and 14 mutations."
+      "summary": "No document or status was added: 57 Markdown files, 23,222 lines, 162,333 words, 1,209,150 bytes, 4,014 entry words, 5,411 trace lines, zero duplicate groups, and 14 mutations."
     }
   ],
   "verification": [
@@ -236,17 +248,17 @@
     {
       "command": "npm test && npm run typecheck && npm run build && npm run smoke:pi-agent-runtime && npm run smoke:index-rebuild-worker && npm run smoke:parser-workers && npm run smoke:macos-vision-ocr",
       "status": "passed",
-      "evidence": "No implementation file changed in this governance-only candidate; origin/main retains the shipped 67-file/495-test, typecheck, production-build, Pi/Home, worker, and macOS Vision evidence."
+      "evidence": "All 68 test files/521 tests, typecheck, production build, Electron Pi/Home, parser/index workers, and real macOS Vision OCR passed on the exact candidate."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 passed: 4,014/4,200 entry words, zero duplicate groups, 14 mutations, 5,409 trace lines, 57 Markdown files, 1,209,044 bytes, and 7.40 percent line reduction."
+      "evidence": "LEN-001 through LEN-005 passed: 4,014/4,200 entry words, zero duplicate groups, 14 mutations, 5,411 trace lines, 57 Markdown files, 1,209,150 bytes, and 7.39 percent line reduction."
     },
     {
       "command": "node scripts/verify/independent-documentation-review.mjs --print-snapshot && explicit semantic-ledger comparison",
       "status": "passed",
-      "evidence": "The governed snapshot is d1c13a46bbd95171b09bbdbf36a5487b8c6adab4420eb2e3f6d29167526d0969 across 109 files; current and locked ledgers contain 1,079 claims with zero differences."
+      "evidence": "The governed snapshot is 024004f8afccf058c41ace7b3341da10513e6e67edeb90e9d55b4edd486fd14f across 109 files; current and locked ledgers contain 1,080 claims with zero differences."
     }
   ],
   "coordination": {
@@ -255,10 +267,11 @@
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "No stable ID or status changed. The contract default becomes ordinary_allowed, while the current confirm_private_or_large code default, persisted stricter settings, confirmation resume, provider breadth, and platform proof stay open.",
-    "acknowledgement": "Product Planning applied the user-approved local-first/BYOK principle to existing Owners, UI copy, Decision, Playbook, Spec, acceptance, semantic lock, and recipe; Development and Project Management received the exact non-blocking implementation route, and UI Design accepted the corrected interaction contract."
+    "compatibility": "No stable ID or status changed. ordinary_allowed and exact Connect disclosure are executable; stricter-policy persistence/IPC/UI, confirmation resume, provider breadth, and platform proof stay open.",
+    "acknowledgement": "Development delivered six frozen implementation/test files on governed main; Product Planning updated Decision, Playbook, acceptance, semantic lock, and recipe only, and an independent reviewer accepted the exact combined candidate."
   },
   "resolvedBlockers": [
+    "Implemented the governed ordinary_allowed default and exact Connect disclosure, with matrix, policy-hash, Home private/sensitive, restricted, unknown/local, and Profile-switch evidence while keeping persistence/IPC/UI and confirmation resume open.",
     "Defined local-first without BYOK friction: one exact-destination disclosure, ordinary_allowed routine use with quiet status, sensitive confirmation, restricted blocking, unknown/changed reconfirmation, optional stricter modes, and no inherited authority; kept the old executable default explicitly open.",
     "Rewrote README as a concise product entry with user value, honest current capability, the Agent-first roadmap, privacy boundaries, and the Agent-authored automation goal instead of a technical inventory.",
     "Made Product Planning the sole product, technical, development-management, and governance contract editor; kept detailed UI guidance with UI Design, code/evidence with Development, and delivery/Git/CI/releases with Project Management; cross-role edits require explicit scoped delegation.",

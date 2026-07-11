@@ -278,8 +278,9 @@ Until E3.08 passes, pause non-blocking P4/P5/P6 breadth. Existing preservation,
 parser/OCR, Artifact, Job, recovery, policy, retrieval, and commit work remains substrate;
 security/data-loss repairs and spine dependencies may proceed.
 
-B3.05 has Home per-turn audits/drift rejection. Default migration, persisted stricter
-policy, confirmation resume, and provider adoption remain open; E3.03 is incomplete.
+B3.05 has the default, exact-destination disclosure, Home private allow/sensitive wait,
+matrix/profile-switch tests, and per-turn audits/drift rejection. Persisted stricter
+policy, confirmation resume, and remaining provider adoption keep E3.03 incomplete.
 
 Deferred from this phase:
 

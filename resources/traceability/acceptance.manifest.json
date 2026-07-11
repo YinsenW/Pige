@@ -1521,10 +1521,10 @@
     },
     "PIGE-SEC-005": {
       "status": "partial",
-      "evidence": ["EV-EGRESS", "EV-EGRESS-SERVICE", "EV-EGRESS-PROFILE-BINDING", "EV-EGRESS-RUNTIME-BINDING", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-HOME-AGENT"],
+      "evidence": ["EV-EGRESS", "EV-MODEL-EGRESS-POLICY", "EV-POLICY", "EV-DESKTOP-SETTING-GUARD", "EV-EGRESS-SERVICE", "EV-EGRESS-PROFILE-BINDING", "EV-EGRESS-RUNTIME-BINDING", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-HOME-AGENT"],
       "open": {
         "id": "OPEN-REQ-PIGE-SEC-005",
-        "description": "Home audit/drift is enforced. The ordinary_allowed default, persisted stricter policy, confirmation resume, and remaining provider paths stay open.",
+        "description": "The ordinary_allowed default, exact connection disclosure, Home private allow/sensitive pre-credential gate, matrix and audit/drift are enforced. Stricter-policy persistence/IPC/UI, confirmation resume, and remaining provider paths stay open.",
         "targetBuilds": [
           "B3.05"
         ],
@@ -2958,10 +2958,10 @@
     },
     "E3.03": {
       "status": "partial",
-      "evidence": ["EV-EGRESS", "EV-EGRESS-SERVICE", "EV-EGRESS-PROFILE-BINDING", "EV-EGRESS-RUNTIME-BINDING", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-HOME-AGENT"],
+      "evidence": ["EV-EGRESS", "EV-MODEL-EGRESS-POLICY", "EV-POLICY", "EV-DESKTOP-SETTING-GUARD", "EV-EGRESS-SERVICE", "EV-EGRESS-PROFILE-BINDING", "EV-EGRESS-RUNTIME-BINDING", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-HOME-AGENT"],
       "open": {
         "id": "OPEN-EXIT-E3.03",
-        "description": "Home audit/drift is proven. The ordinary_allowed default, persisted stricter policy, confirmation resume, and remaining provider adoption stay open.",
+        "description": "The ordinary_allowed default, disclosure, Home behavior, matrix and audit/drift are proven. Stricter-policy persistence/IPC/UI, confirmation resume, and remaining provider adoption stay open.",
         "targetBuilds": [
           "B3.05"
         ],
@@ -3848,6 +3848,7 @@
       "path": "tests/unit/security-contract-schemas.test.ts",
       "selector": "enforces fail-safe model-egress outcomes from boundary, policy, and content class"
     },
+    "EV-MODEL-EGRESS-POLICY": { "kind": "test", "path": "tests/unit/model-egress-policy.test.ts", "selector": "model egress policy" },
     "EV-EGRESS-SERVICE": {
       "kind": "test",
       "path": "tests/unit/agent-ingest-service.test.ts",
