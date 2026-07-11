@@ -2428,16 +2428,12 @@ reduce uncertainty without creating a second workflow.
 
 Consequences:
 
-- Existing parser/OCR/Artifact/Job/recovery work is retained as tool substrate.
-- Capture preserves evidence first; missing Agent/model state pauses semantic work.
-- Preserved sources use Pi events for inspect, parse/selected OCR, optional bounded
-  retrieval, re-inspect, and cited publication; proposal tools remain.
-- B3.13/E3.08 becomes the Agent Spine Gate before non-blocking format/platform breadth.
-- Static and behavioral tests must reject direct provider paths, host-fixed tool order,
-  and durable writes not caused by a validated tool call.
-- The PDF.js, bounded Office, macOS Vision, bounded PDF OCR, and Multi-Artifact entries
-  are revised in place to retain their adapter, safety, Artifact, and citation choices
-  while removing stale host-fixed scheduling and direct-model handoff consequences.
+- Parser/OCR/Artifact/Job/recovery remains tool substrate; capture preserves first and
+  missing Agent/model state pauses semantic work.
+- Pi events drive inspect, parse/selected OCR, bounded retrieval, cited publication, or
+  one terminal proposal stage; Host owns proposal target, identity, and review boundary.
+- B3.13/E3.08 remains the spine gate; tests reject direct/fixed/bypass writes. Existing
+  adapter, Artifact, safety, and citation decisions stay in force.
 
 References:
 

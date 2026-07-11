@@ -27,6 +27,7 @@ import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
 import { extractPdfText } from "../../apps/desktop/src/main/services/pdf-parser-core";
 import { PdfParserService } from "../../apps/desktop/src/main/services/pdf-parser-service";
+import { ProposalService } from "../../apps/desktop/src/main/services/proposal-service";
 import {
   PiAgentRuntimeAdapter,
   type PigeAgentToolDefinition,
@@ -998,6 +999,49 @@ describe("Agent-selected ingest retrieval tool", () => {
     });
     expect(generatedNotes(fixture.vaultPath)).toEqual([]);
     expect(readOperations(fixture.vaultPath).filter((operation) => operation.kind === "create_page")).toEqual([]);
+  });
+
+  it("revalidates related Markdown after an approved model turn and before proposal staging", async () => {
+    const fixture = makeVault();
+    const retrieval = new RecordingRetrievalPort(fixture, (request) => makeSearchResult(fixture, request.query));
+    const proposals = new ProposalService(fixture.vaultPort);
+    const runtime = new FunctionalRuntime(async (request) => {
+      await invokeTool(request, "pige_inspect_source", {}, "inspect_proposal_drift");
+      await invokeTool(request, "pige_search_knowledge", { query: "related launch" }, "search_proposal_drift");
+      await request.beforeModelTurn?.();
+      mutateRelatedPage(fixture.vaultPath, "body");
+      await invokeTool(
+        request,
+        "pige_stage_knowledge_note_proposal",
+        groundedOutput("Must not stage stale related evidence", ["related_01"]),
+        "stage_proposal_drift"
+      );
+      return runtimeResult(request, []);
+    });
+    const prepared = prepareAgentSource(fixture, "Proposal staging must recheck exact related-page bytes.");
+
+    await expect(new AgentIngestService(
+      modelPort(),
+      runtime,
+      undefined,
+      undefined,
+      undefined,
+      retrieval,
+      {
+        findForJob: (vaultPath, jobId) => {
+          if (vaultPath !== fixture.vaultPath) throw new Error("Proposal recovery escaped the active test vault.");
+          return proposals.findForJob(jobId);
+        },
+        stage: (vaultPath, request) => {
+          if (vaultPath !== fixture.vaultPath) throw new Error("Proposal staging escaped the active test vault.");
+          return proposals.stage(request);
+        }
+      }
+    ).ingestSource(fixture.vaultPath, prepared.source, prepared.parent)).rejects.toMatchObject({
+      code: "agent_ingest.related_evidence_changed"
+    });
+    expect(proposals.list().total).toBe(0);
+    expect(generatedNotes(fixture.vaultPath)).toEqual([]);
   });
 
   it("recovers a post-publication failure idempotently with one note, one Operation, and unchanged related IDs", async () => {

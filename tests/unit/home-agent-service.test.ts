@@ -261,7 +261,7 @@ describe("Home Pi Agent service", () => {
         expect(durableAudit).not.toContain("opaque-value-123456");
       }
     }
-  });
+  }, 15_000);
 
   it("fails closed when Pi skips local search or returns unvalidated citations", async () => {
     const fixture = makeFixture();

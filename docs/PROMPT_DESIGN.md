@@ -84,9 +84,9 @@ Required output:
 - Schema-valid proposal/publication arguments with citations and no arbitrary path.
 - A final summary from verified results; final text cannot write durable knowledge.
 
-Embedded Pi publication-tool input:
+Embedded Pi terminal knowledge-tool input:
 
-The publication tool accepts this strict object:
+The publish and proposal-stage tools accept this strict object:
 
 ```ts
 type AgentIngestOutput = {
@@ -118,7 +118,7 @@ Rules:
 - Validated OCR handoff adds engine, normalized confidence, bounded warning codes, OCR Artifact IDs, and bounded `ocr:block:N` or `page:N/ocr:block:M` locators as trusted evidence metadata. Recognized text remains inside fragment-level evidence delimiters.
 - Obvious secret-like strings are redacted before cloud model calls.
 - Malformed or schema-invalid tool arguments fail before the handler and cannot write partial wiki pages.
-- The ingest output schema is strict. Model-authored settings, Provider changes, permission grants, tool requests, `PIGE.md` replacement, or output paths are rejected as unknown control fields before a generated note write.
+- The ingest output schema is strict. Model-authored settings, Provider changes, permission grants, tool requests, `PIGE.md` replacement, output paths, proposal trust, refs, or operation shape are rejected before any terminal effect.
 - The publication handler writes the validated note, Operation, and index. After its
   typed result, Jobs Service appends log and completes the Job; recovery is idempotent,
   not cross-file atomic. Raw prompts or provider responses are not persisted by default.
@@ -131,7 +131,7 @@ Rules:
   selected model ID. Before Pi invocation Pige validates credential-bearing config;
   each turn rechecks non-secret binding, source/cancellation, and egress. Drift fails closed.
 - The model may cite only supplied `ev_NN` refs. Unknown refs fail before any Markdown write. A statement with an empty ref list is retained only with a warning, confidence cap, and `needs_review`; model-authored `[source:...]` or `[artifact:...]` tokens are stripped and canonical citations are rendered service-side.
-- The tool does not yet create durable low-confidence proposals; full proposal routing remains open.
+- The Agent may explicitly choose one terminal durable proposal stage. Automatic low-confidence/risk routing and review/apply remain open.
 
 ### 5.2 Home Query
 

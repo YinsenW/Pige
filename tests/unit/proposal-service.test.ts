@@ -80,6 +80,51 @@ describe("proposal service", () => {
     expect(fetched.proposal.proposedOperations[0]).toMatchObject({ kind: "update", path: "wiki/note.md" });
   });
 
+  it("reuses a deterministic job-scoped proposal across retries and service restart", () => {
+    const { vaultPath, vault } = makeVault();
+    const request = {
+      jobId: "job_20260709_abcdef123456",
+      trustLevel: "review_required" as const,
+      summary: "Review generated note",
+      reason: "The Agent produced a low-confidence note.",
+      sourceRefs: [{ kind: "job" as const, id: "job_20260709_abcdef123456" }],
+      targetRefs: [{ kind: "page" as const, id: "page_20260709_abcdef123456", path: "wiki/generated.md" }],
+      proposedOperations: [{ kind: "create" as const, path: "wiki/generated.md", content: "# Generated\n" }],
+      requiredPermissionIds: ["permreq_20260709_abcdef123456"]
+    };
+
+    const first = makeService(vaultPath, vault).stage(request);
+    const retried = makeService(vaultPath, vault).stage(request);
+    const records = listFiles(path.join(vaultPath, ".pige", "proposals"));
+
+    expect(first.proposal.id).toBe(retried.proposal.id);
+    expect(first.proposal.createdAt).toBe(retried.proposal.createdAt);
+    expect(first.proposal.id).toMatch(/^proposal_20260709_[a-f0-9]{16}$/u);
+    expect(records.filter((filePath) => filePath.endsWith(".json"))).toHaveLength(1);
+  });
+
+  it("fails closed when one job tries to replace its deterministic proposal intent", () => {
+    const { vaultPath, vault } = makeVault();
+    const service = makeService(vaultPath, vault);
+    const base = {
+      jobId: "job_20260709_abcdef123456",
+      trustLevel: "review_required" as const,
+      summary: "Review generated note",
+      reason: "The Agent produced a low-confidence note."
+    };
+    const first = service.stage({
+      ...base,
+      proposedOperations: [{ kind: "create", path: "wiki/first.md", content: "# First\n" }]
+    });
+    expect(() => service.stage({
+      ...base,
+      proposedOperations: [{ kind: "create", path: "wiki/second.md", content: "# Second\n" }]
+    })).toThrow("deterministic identity for different content");
+    expect(service.list().proposals).toHaveLength(1);
+    expect(service.get({ proposalId: first.proposal.id }).proposal.proposedOperations[0])
+      .toMatchObject({ kind: "create", path: "wiki/first.md" });
+  });
+
   it("approves and rejects only ready proposals", () => {
     const { vaultPath, vault } = makeVault();
     const service = makeService(vaultPath, vault);
@@ -116,6 +161,8 @@ describe("proposal service", () => {
     expect(rejected.proposal?.state).toBe("rejected");
     expect(repeatApprove.status).toBe("not_allowed");
     expect(repeatApprove.proposal?.state).toBe("approved");
+    expect(fs.existsSync(path.join(vaultPath, "wiki", "old.md"))).toBe(false);
+    expect(fs.existsSync(path.join(vaultPath, "wiki", "new.md"))).toBe(false);
   });
 
   it("counts invalid proposal records without failing lists", () => {
@@ -140,16 +187,180 @@ describe("proposal service", () => {
       summary: "Unsafe update",
       reason: "Should be blocked.",
       proposedOperations: [{ kind: "create", path: "../outside.md", content: "# Escape\n" }]
-    })).toThrow("Proposal paths must stay inside the active vault");
+    })).toThrow("Proposal paths must stay canonically inside the active vault");
 
     expect(() => service.stage({
       trustLevel: "review_required",
       summary: "Unsafe Windows path",
       reason: "Should be blocked.",
       proposedOperations: [{ kind: "create", path: "C:\\Users\\source.md", content: "# Escape\n" }]
-    })).toThrow("Proposal paths must be safe vault-relative paths");
+    })).toThrow("Proposal paths must be canonical vault-relative paths");
+
+    for (const unsafePath of ["wiki\\note.md", "wiki/./note.md", "wiki//note.md", "wiki/note.md/"]) {
+      expect(() => service.stage({
+        trustLevel: "review_required",
+        summary: "Ambiguous path",
+        reason: "Should be blocked.",
+        proposedOperations: [{ kind: "create", path: unsafePath, content: "# Escape\n" }]
+      })).toThrow("Proposal paths must");
+    }
+
+    expect(() => service.stage({
+      trustLevel: "review_required",
+      summary: "Unsafe ref",
+      reason: "Should be blocked.",
+      sourceRefs: [{ kind: "page", id: "page_20260709_abcdef123456", path: "/Users/example/private.md" }],
+      proposedOperations: [{ kind: "create", path: "wiki/note.md", content: "# Note\n" }]
+    })).toThrow("Proposal paths must");
+
+    expect(() => service.stage({
+      trustLevel: "review_required",
+      summary: "Unsafe base hash",
+      reason: "Should be blocked.",
+      proposedOperations: [{ kind: "update", path: "wiki/note.md", beforeSha256: sha("a"), content: "# Note\n" }],
+      baseHashes: { "wiki/./note.md": sha("a") }
+    })).toThrow("Proposal paths must");
+  });
+
+  it("rejects restricted secrets and private paths before proposal persistence", () => {
+    const { vaultPath, vault } = makeVault();
+    const service = makeService(vaultPath, vault);
+    const cases = [
+      { summary: "apiKey=opaque-value-123456", reason: "Unsafe summary", content: "# Safe\n" },
+      { summary: "Unsafe reason", reason: "See file:///Users/alice/vault/private.md", content: "# Safe\n" },
+      { summary: "Unsafe content", reason: "Should be blocked", content: '{"apiKey":"opaque-value-123456"}' }
+    ];
+
+    for (const [index, fixture] of cases.entries()) {
+      expect(() => service.stage({
+        jobId: `job_20260709_abcdef12345${index}`,
+        trustLevel: "review_required",
+        summary: fixture.summary,
+        reason: fixture.reason,
+        proposedOperations: [{ kind: "create", path: `wiki/note-${index}.md`, content: fixture.content }]
+      })).toThrow(/Restricted paths|Restricted paths or secret-like values/u);
+    }
+
+    expect(() => service.stage({
+      jobId: "job_20260709_abcdef123459",
+      trustLevel: "review_required",
+      summary: "Unsafe ref",
+      reason: "Should be blocked",
+      sourceRefs: [{ kind: "source", id: "file:///Users/alice/vault/private.md" }],
+      proposedOperations: [{ kind: "create", path: "wiki/ref.md", content: "# Safe\n" }]
+    })).toThrow("Restricted paths or secret-like values");
+
+    expect(service.list().proposals).toHaveLength(0);
+  });
+
+  it("rejects restricted decision reasons without changing the ready proposal", () => {
+    const { vaultPath, vault } = makeVault();
+    const service = makeService(vaultPath, vault);
+    const staged = service.stage({
+      trustLevel: "review_required",
+      summary: "Review generated note",
+      reason: "The generated note needs review.",
+      proposedOperations: [{ kind: "create", path: "wiki/note.md", content: "# Safe\n" }]
+    });
+
+    expect(() => service.approve({
+      proposalId: staged.proposal.id,
+      reason: "apiKey=opaque-value-123456"
+    })).toThrow("Restricted paths or secret-like values");
+    expect(service.get({ proposalId: staged.proposal.id }).proposal.state).toBe("ready");
+  });
+
+  it("quarantines externally edited records whose safe summary contains a secret", () => {
+    const { vaultPath, vault } = makeVault();
+    const service = makeService(vaultPath, vault);
+    const staged = service.stage({
+      trustLevel: "review_required",
+      summary: "Review generated note",
+      reason: "The generated note needs review.",
+      proposedOperations: [{ kind: "create", path: "wiki/note.md", content: "# Safe\n" }]
+    });
+    const recordPath = findFile(path.join(vaultPath, ".pige", "proposals"), `${staged.proposal.id}.json`);
+    fs.writeFileSync(recordPath, `${JSON.stringify({
+      ...staged.proposal,
+      summary: "apiKey=opaque-value-123456"
+    }, null, 2)}\n`, "utf8");
+
+    const listed = service.list();
+
+    expect(listed.proposals).toHaveLength(0);
+    expect(listed.invalidProposalCount).toBe(1);
+    expect(JSON.stringify(listed)).not.toContain("opaque-value-123456");
+    expect(() => service.get({ proposalId: staged.proposal.id })).toThrow("Restricted paths or secret-like values");
+  });
+
+  it.skipIf(process.platform === "win32")("rejects a symlinked proposal root without writing outside the vault", () => {
+    const { vaultPath, vault } = makeVault();
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "pige-proposal-outside-"));
+    tempRoots.push(outside);
+    const proposalRoot = path.join(vaultPath, ".pige", "proposals");
+    fs.rmSync(proposalRoot, { recursive: true, force: true });
+    fs.symlinkSync(outside, proposalRoot, "dir");
+
+    expect(() => makeService(vaultPath, vault).stage({
+      jobId: "job_20260709_abcdef123456",
+      trustLevel: "review_required",
+      summary: "Review generated note",
+      reason: "Should remain confined.",
+      proposedOperations: [{ kind: "create", path: "wiki/note.md", content: "# Note\n" }]
+    })).toThrow("Proposal paths cannot traverse symbolic links");
+    expect(fs.readdirSync(outside)).toHaveLength(0);
+  });
+
+  it.skipIf(process.platform === "win32")("counts a symlinked proposal record without reading external content", () => {
+    const { vaultPath, vault } = makeVault();
+    const outside = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "pige-proposal-record-")), "external.json");
+    tempRoots.push(path.dirname(outside));
+    fs.writeFileSync(outside, JSON.stringify({ privateCanary: "external-proposal-body" }), "utf8");
+    const recordRoot = path.join(vaultPath, ".pige", "proposals", "2026", "07");
+    fs.mkdirSync(recordRoot, { recursive: true });
+    const proposalId = "proposal_20260709_abcdef123456";
+    fs.symlinkSync(outside, path.join(recordRoot, `${proposalId}.json`), "file");
+
+    const listed = makeService(vaultPath, vault).list();
+
+    expect(listed.proposals).toHaveLength(0);
+    expect(listed.invalidProposalCount).toBe(1);
+    expect(JSON.stringify(listed)).not.toContain("external-proposal-body");
+    expect(() => makeService(vaultPath, vault).get({ proposalId })).toThrow("regular file");
+  });
+
+  it.skipIf(process.platform === "win32")("rejects a hard-linked external proposal record", () => {
+    const { vaultPath, vault } = makeVault();
+    const outside = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "pige-proposal-hardlink-")), "external.json");
+    tempRoots.push(path.dirname(outside));
+    fs.writeFileSync(outside, JSON.stringify({ privateCanary: "hardlink-proposal-body" }), "utf8");
+    const recordRoot = path.join(vaultPath, ".pige", "proposals", "2026", "07");
+    fs.mkdirSync(recordRoot, { recursive: true });
+    const proposalId = "proposal_20260709_abcdef123456";
+    fs.linkSync(outside, path.join(recordRoot, `${proposalId}.json`));
+
+    const listed = makeService(vaultPath, vault).list();
+
+    expect(listed.proposals).toHaveLength(0);
+    expect(listed.invalidProposalCount).toBe(1);
+    expect(JSON.stringify(listed)).not.toContain("hardlink-proposal-body");
+    expect(() => makeService(vaultPath, vault).get({ proposalId })).toThrow("regular file");
   });
 });
+
+function sha(character: string): string {
+  return `sha256:${character.repeat(64)}`;
+}
+
+function listFiles(root: string): string[] {
+  const files: string[] = [];
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    const fullPath = path.join(root, entry.name);
+    if (entry.isDirectory()) files.push(...listFiles(fullPath));
+    if (entry.isFile()) files.push(fullPath);
+  }
+  return files;
+}
 
 function findFile(root: string, suffix: string): string {
   for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
