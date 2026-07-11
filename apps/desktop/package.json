@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "node ../../scripts/build/macos-vision-ocr-helper.mjs && electron-vite dev",
     "build": "node ../../scripts/build/macos-vision-ocr-helper.mjs && electron-vite build",
+    "smoke:electron-undici-transport": "electron scripts/electron-undici-transport-smoke.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit --pretty false"
   },
   "dependencies": {
@@ -22,7 +23,7 @@
     "pdfjs-dist": "6.1.200",
     "react": "19.2.7",
     "react-dom": "19.2.7",
-    "undici": "7.28.0",
+    "undici": "8.7.0",
     "yauzl": "3.4.0",
     "yazl": "3.3.1"
   }

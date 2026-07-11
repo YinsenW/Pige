@@ -38,7 +38,7 @@
     "verify:independent-documentation-review": "node scripts/verify/independent-documentation-review.mjs",
     "verify:documentation-leanness": "node scripts/verify/documentation-leanness.mjs",
     "verify:documentation-quality": "npm run verify:independent-documentation-review && node scripts/verify/documentation-quality.mjs",
-    "verify:dependencies": "node scripts/verify/dependency-manifest.mjs",
+    "verify:dependencies": "node scripts/verify/dependency-manifest.mjs && node scripts/verify/dependency-manifest-negative-cases.mjs",
     "verify:fixtures": "node scripts/verify/fixture-manifest.mjs",
     "verify:boundaries": "node scripts/verify/import-boundaries.mjs",
     "verify:no-telemetry": "node scripts/verify/no-telemetry.mjs && node scripts/verify/no-telemetry-negative-cases.mjs",

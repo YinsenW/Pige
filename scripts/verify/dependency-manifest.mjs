@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { verifyWorkspaceLockUsage } from "./dependency-workspace-lock.mjs";
 
 const root = process.cwd();
 const manifestPath = path.join(root, "resources/dependency-manifest/dependencies.manifest.json");
@@ -19,7 +20,7 @@ if (manifest.schemaVersion !== 1 || !Array.isArray(manifest.records)) {
 
 const registryRefs = new Set();
 const packageRecords = new Map();
-const usedNpmPackages = new Map();
+const usedNpmPackages = [];
 
 for (const record of manifest.records) {
   const required = [
@@ -65,9 +66,9 @@ for (const file of workspacePackageJsons) {
   for (const section of ["dependencies", "devDependencies"]) {
     for (const [name, version] of Object.entries(pkg[section] ?? {})) {
       if (name.startsWith("@pige/")) continue;
-      usedNpmPackages.set(name, { file, version });
       if (!packageRecords.has(name)) fail(`${file} uses ${name} without dependency manifest record.`);
       if (packageRecords.get(name) !== version) fail(`${file} uses ${name}@${version}, manifest has ${packageRecords.get(name)}.`);
+      usedNpmPackages.push({ file, section, name, version });
     }
   }
 }
@@ -82,12 +83,15 @@ if (!lockfile.packages || typeof lockfile.packages !== "object") {
   fail("package-lock.json must contain a packages object.");
 }
 
-for (const [name, usage] of usedNpmPackages.entries()) {
-  const lockEntry = lockfile.packages[`node_modules/${name}`];
-  if (!lockEntry) fail(`package-lock.json is missing ${name} used by ${usage.file}.`);
-  const expected = packageRecords.get(name)?.replace(/^[~^]/, "");
-  if (lockEntry.version !== expected) {
-    fail(`package-lock.json has ${name}@${lockEntry.version}, manifest expects ${expected}.`);
+for (const usage of usedNpmPackages) {
+  try {
+    verifyWorkspaceLockUsage({
+      lockfile,
+      manifestVersion: packageRecords.get(usage.name),
+      ...usage
+    });
+  } catch (caught) {
+    fail(caught instanceof Error ? caught.message : String(caught));
   }
 }
 

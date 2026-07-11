@@ -1818,14 +1818,15 @@ References:
 
 Status: Accepted
 Date: 2026-07-10
+Revised: 2026-07-11
 
 Decision:
 
-Pige uses exact `@mozilla/readability` `0.6.0` plus jsdom `29.1.1` in a separately built, serial, bounded web-extractor worker. Main-process URL transport uses exact Undici `7.28.0`; after DNS policy validation, each request dispatcher can resolve only to the already approved address set. The response deadline covers body consumption, and the decompressed body, redirects, worker input/elements/output/images, heap, and extraction time are bounded. Source Fetch Service persists decoded snapshots and plain extracted text; it never renders Readability HTML. Browser-rendered page execution is not a v0.1 fallback.
+Pige uses exact `@mozilla/readability` `0.6.0` plus jsdom `29.1.1` in a separately built, serial, bounded web-extractor worker. Main-process URL transport uses the exact reviewed Undici pin owned by `D-20260711-Undici-8-7-Transport-Pin`; after DNS policy validation, each request dispatcher can resolve only to the already approved address set. The response deadline covers body consumption, and the decompressed body, redirects, worker input/elements/output/images, heap, and extraction time are bounded. Source Fetch Service persists decoded snapshots and plain extracted text; it never renders Readability HTML. Browser-rendered page execution is not a v0.1 fallback.
 
 Rationale:
 
-Readability's supported Node path needs a DOM implementation, while jsdom gives higher compatibility than an approximate DOM adapter. Running both outside the main event loop contains parser memory and CPU risk. Using an explicit Undici dispatcher closes the DNS validation-to-connection gap that a separate lookup plus global fetch would leave. Preserving the fetched snapshot and a reduced DOM-less fallback keeps capture useful when extraction fails without hiding lower evidence quality.
+Readability's supported Node path needs a DOM implementation, while jsdom gives higher compatibility than an approximate DOM adapter. Running both outside the main event loop contains parser memory and CPU risk. Using an explicit Undici dispatcher closes the DNS validation-to-connection gap that a separate lookup plus global fetch would leave. Preserving the fetched snapshot and a reduced DOM-less fallback keeps capture useful when extraction fails without hiding lower evidence quality. The 2026-07-11 revision moves the evolving transport pin into its own decision without changing this extractor architecture.
 
 Consequences:
 
@@ -1844,6 +1845,32 @@ References:
 - `docs/RELEASE_ENGINEERING.md`
 - `docs/SECURITY_THREAT_MODEL.md`
 - `docs/TECH_ARCHITECTURE.md`
+
+### D-20260711-Undici-8-7-Transport-Pin
+
+Status: Accepted
+Date: 2026-07-11
+
+Decision:
+
+Pige pins the direct desktop runtime to Undici `8.7.0`. Source Fetch keeps redirects manual, revalidates every hop, creates a fresh validated-address-pinned Agent per hop, sets `allowH2: false`, and does not install a global or ambient proxy dispatcher. The HTTP/1.1 boundary stays in force until HTTP/2 receives separate pinning evidence.
+
+Rationale:
+
+The major upgrade is compatible with Electron `43.1.0` / Node `24.18.0`, but transport defaults must not silently broaden the reviewed SSRF and connection boundary. Exact lock, license, Node-engine, focused Source Fetch, and assembled Electron-main transport evidence justify replacing the former `7.28.0` pin without changing URL-capture behavior.
+
+Consequences:
+
+- The direct workspace edge and nested production package must resolve to `8.7.0`; unrelated toolchain copies may retain Undici 7.
+- The local synthetic Electron-main smoke proves the assembled ABI and transport invariants, not signed/packaged macOS or Windows parity.
+- Signed/packaged platform proof and any future HTTP/2 enablement remain release work.
+
+References:
+
+- `docs/TECH_ARCHITECTURE.md`
+- `docs/RELEASE_ENGINEERING.md`
+- `docs/SECURITY_THREAT_MODEL.md`
+- `resources/dependency-manifest/dependencies.manifest.json`
 
 ### D-20260710-Window-Preferences-And-Backup-Service-Boundary
 
