@@ -102,6 +102,18 @@
       "requiredPlatformCapabilities": [],
       "owner": "Agent Runtime and Quality",
       "updatePolicy": "Version the fixture when claim text, evidence refs, citation semantics, or language policy changes."
+    },
+    {
+      "id": "eval-retrieval-regression-v1",
+      "path": "tests/fixtures/evals/retrieval/retrieval-golden.v1.json",
+      "kind": "deterministic-retrieval-related-page-regression-golden",
+      "license": "Apache-2.0 (Pige synthetic fixture)",
+      "expectedOutputRefs": ["tests/evals/retrieval.regression-golden.test.ts"],
+      "redactionStatus": "synthetic_no_sensitive_data",
+      "sizeClass": "small",
+      "requiredPlatformCapabilities": [],
+      "owner": "Retrieval and Quality",
+      "updatePolicy": "Version the fixture when ranking, citation, related-page, or insufficient-evidence expectations change."
     }
   ]
 }

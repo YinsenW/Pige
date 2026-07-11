@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 1,
+  "id": "retrieval-regression-golden-v1",
+  "version": "1.0.0",
+  "pages": [
+    {
+      "pageId": "page_20260711_ocrprimary",
+      "pagePath": "wiki/local-ocr-fallback.md",
+      "title": "Local OCR Fallback",
+      "pageType": "note",
+      "language": "en",
+      "body": "Local OCR fallback prefers a supported platform OCR adapter. PaddleOCR is used only after an explicit, verified local install when platform support is unavailable. Ordinary ingest never installs OCR tools.\n\nFULL_BODY_SENTINEL_PRIVATE\n/Users/private-owner/knowledge-secret.txt"
+    },
+    {
+      "pageId": "page_20260711_ocrrepair",
+      "pagePath": "wiki/ocr-repair-workflow.md",
+      "title": "OCR Repair Workflow",
+      "pageType": "note",
+      "language": "en",
+      "body": "Local OCR fallback repair is user initiated and checksummed. Local OCR fallback repair preserves source evidence and previously generated OCR artifacts."
+    },
+    {
+      "pageId": "page_20260711_ocrprivacy",
+      "pagePath": "wiki/ocr-privacy-boundary.md",
+      "title": "OCR Privacy Boundary",
+      "pageType": "note",
+      "language": "en",
+      "body": "Local OCR fallback executes with network access disabled. Local OCR fallback keeps source bytes on the user's machine."
+    },
+    {
+      "pageId": "page_20260711_clouddistract",
+      "pagePath": "wiki/archived-cloud-vendor.md",
+      "title": "Archived Vendor Memo",
+      "pageType": "note",
+      "language": "en",
+      "body": "An obsolete vendor memo repeats the phrase local OCR fallback while recommending cloud processing. It is not the Pige design."
+    },
+    {
+      "pageId": "page_20260711_treeprimary",
+      "pagePath": "wiki/knowledge-tree-rebuild.md",
+      "title": "知识树重建",
+      "pageType": "note",
+      "language": "zh-Hans",
+      "body": "知识树重建从 Markdown、链接和来源记录生成可重建聚合。知识树重建不会把索引当成原始知识。"
+    },
+    {
+      "pageId": "page_20260711_treeaccess",
+      "pagePath": "wiki/knowledge-tree-accessibility.md",
+      "title": "知识树可访问性",
+      "pageType": "note",
+      "language": "zh-Hans",
+      "body": "知识树重建后的分支权重必须可解释，并支持键盘和屏幕阅读器。"
+    },
+    {
+      "pageId": "page_20260711_treedistract",
+      "pagePath": "wiki/garden-tree-maintenance.md",
+      "title": "园艺树木养护",
+      "pageType": "note",
+      "language": "zh-Hans",
+      "body": "这份园艺记录偶然提到知识树重建几个字，但内容只讨论浇水和修枝。"
+    },
+    {
+      "pageId": "page_20260711_navigation",
+      "pagePath": "wiki/retrieval-navigation.md",
+      "title": "Retrieval Navigation",
+      "pageType": "note",
+      "language": "en",
+      "body": "Supporting pages: [[Local OCR Fallback]] and [[知识树重建]]."
+    }
+  ],
+  "queries": [
+    {
+      "id": "query-local-ocr-fallback",
+      "query": "local OCR fallback",
+      "locale": "en",
+      "limit": 5,
+      "expected": {
+        "topPageId": "page_20260711_ocrprimary",
+        "requiredCitationPageIds": ["page_20260711_ocrprimary"],
+        "allowedCitationPageIds": [
+          "page_20260711_ocrprimary",
+          "page_20260711_ocrrepair",
+          "page_20260711_ocrprivacy",
+          "page_20260711_navigation"
+        ],
+        "knownDistractorPageIds": ["page_20260711_clouddistract"],
+        "confidence": "grounded"
+      }
+    },
+    {
+      "id": "query-knowledge-tree-rebuild",
+      "query": "知识树重建",
+      "locale": "zh-Hans",
+      "limit": 5,
+      "expected": {
+        "topPageId": "page_20260711_treeprimary",
+        "requiredCitationPageIds": ["page_20260711_treeprimary"],
+        "allowedCitationPageIds": [
+          "page_20260711_treeprimary",
+          "page_20260711_treeaccess",
+          "page_20260711_navigation"
+        ],
+        "knownDistractorPageIds": ["page_20260711_treedistract"],
+        "confidence": "grounded"
+      }
+    },
+    {
+      "id": "query-insufficient-lunar-orchard",
+      "query": "lunar orchard quantum treaty",
+      "locale": "en",
+      "limit": 5,
+      "expected": {
+        "requiredCitationPageIds": [],
+        "allowedCitationPageIds": [],
+        "knownDistractorPageIds": [],
+        "confidence": "insufficient",
+        "warning": "insufficient_evidence"
+      }
+    }
+  ],
+  "relatedCases": [
+    {
+      "id": "related-navigation-outgoing",
+      "pageId": "page_20260711_navigation",
+      "expectedOutgoingPageIds": [
+        "page_20260711_ocrprimary",
+        "page_20260711_treeprimary"
+      ],
+      "expectedBacklinkPageIds": []
+    },
+    {
+      "id": "related-ocr-backlink",
+      "pageId": "page_20260711_ocrprimary",
+      "expectedOutgoingPageIds": [],
+      "expectedBacklinkPageIds": ["page_20260711_navigation"]
+    }
+  ],
+  "privateSentinels": [
+    "FULL_BODY_SENTINEL_PRIVATE",
+    "/Users/private-owner/knowledge-secret.txt"
+  ]
+}

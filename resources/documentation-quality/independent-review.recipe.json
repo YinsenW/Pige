@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-11T01:27:49Z",
+  "reviewedAt": "2026-07-11T01:55:07Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,7 +30,7 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "416ab1ad4010a959abd33eccc8721280832ae1c23ef3d781933b7ee9d799762d"
+    "reviewedSha256": "83f735669ef45417607e96ec874d096eeeab478185203f646c9e3ae9457bf8ba"
   },
   "reviewers": [
     {
@@ -80,6 +80,18 @@
         "documentation_leanness_and_maintainability"
       ],
       "independence": "Read-only delta reviewer challenged an initial status interpretation and missing open facts, then accepted the exact minimal repair: fake/local-only Owner wording, one E5.02 evidence projection, unchanged planned/partial/in-progress states, complete production gaps, and current semantic lock without editing files."
+    },
+    {
+      "reviewerId": "b615-retrieval-regression-delta-review",
+      "task": "/root/b615_delta_map",
+      "independentDimensions": [
+        "navigation_and_resource_lifecycle",
+        "cross_document_contract_consistency",
+        "continuous_traceability_and_acceptance",
+        "ongoing_development_support",
+        "documentation_leanness_and_maintainability"
+      ],
+      "independence": "Read-only delta reviewer checked the exact Quality Owner, selector and acceptance projection, required cloud/Permission and broader-retrieval gaps, unchanged partial/in-progress states, 1,056-claim semantic lock, leanness, and stale-snapshot-only gate before accepting the repaired candidate without editing files."
     }
   ],
   "dimensions": [
@@ -95,28 +107,28 @@
       "score": 9.7,
       "reviewerId": "readme-role-job-architecture-review",
       "blockerCount": 0,
-      "summary": "Technical Architecture, Playbook, executable behavior, and acceptance agree that B5.10 currently provides only a service-local fake-package lifecycle; real Paddle transport, production wiring, OCR routing, UI, platforms, supply chain, and recovery remain open."
+      "summary": "Quality Strategy, executable fixtures, existing B6.15/E6.10 definitions, and acceptance agree that the current deterministic foundation covers lexical ranking, citations, distractors, wiki-link relations, insufficient evidence, and body-free reporting without claiming model, vector, UI, or production behavior."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.7,
       "reviewerId": "readme-role-job-architecture-review",
       "blockerCount": 0,
-      "summary": "The 1,055-claim semantic lock has zero unexplained drift. One exact local-tool selector augments E5.02 while PIGE-INGEST-002 remains planned, E5.02 partial, and P5 in progress with explicit production, no-hidden-install, platform, supply-chain, and recovery gaps."
+      "summary": "The 1,056-claim semantic lock has zero unexplained drift. One exact retrieval-regression selector augments PIGE-EVAL-004 and E6.10; both remain partial and P6 remains in progress with model, linking, vector, scale, UI/platform, artifact, locale, and Knowledge Tree gaps."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
       "reviewerId": "readme-role-job-architecture-review",
       "blockerCount": 0,
-      "summary": "Development receives one consolidated B5.10 projection after code and focused tests stabilized: precise fake/local evidence, unchanged delivery states, production boundaries, and no PRD, Parser, UI, release, or unrelated trace churn."
+      "summary": "Development receives one consolidated B6.15 projection after code and focused tests stabilized: one Quality Owner update, one selector, unchanged delivery states, complete remaining dimensions, and no PRD, UI, runtime-schema, or production-contract churn."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.6,
       "reviewerId": "readme-role-job-architecture-review",
       "blockerCount": 0,
-      "summary": "LEN-001 through LEN-005 pass with 57 Markdown files, 22,927 lines, 162,830 words, 1,209,929 bytes, 3,857 entry words, 5,498 trace lines, zero duplicate groups, 14 mutations, and an 8.57 percent line reduction from baseline."
+      "summary": "LEN-001 through LEN-005 pass with 57 Markdown files, 22,927 lines, 162,806 words, 1,209,679 bytes, 3,857 entry words, 5,494 trace lines, zero duplicate groups, 14 mutations, and an 8.57 percent line reduction from baseline."
     }
   ],
   "verification": [
@@ -128,17 +140,17 @@
     {
       "command": "npm test && npm run typecheck && npm run build && npm run smoke:parser-workers && npm run smoke:macos-vision-ocr",
       "status": "passed",
-      "evidence": "All 57 test files and 391 tests, package and desktop type checks, production builds, PDF/Office/Web/PPTX worker smoke, PDF page rendering, and the real macOS Vision OCR helper and adapter smoke passed on the frozen candidate."
+      "evidence": "All 58 test files and 393 tests, including three eval files and nine eval tests, package and desktop type checks, production builds, PDF/Office/Web/PPTX worker smoke, PDF page rendering, and the real macOS Vision OCR helper and adapter smoke passed on the frozen candidate."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 passed: 3,857 of 4,200 entry words, zero duplicate groups, 14 mutations, 5,498 trace lines, 57 Markdown files, and an 8.57 percent line reduction from baseline."
+      "evidence": "LEN-001 through LEN-005 passed: 3,857 of 4,200 entry words, zero duplicate groups, 14 mutations, 5,494 trace lines, 57 Markdown files, and an 8.57 percent line reduction from baseline."
     },
     {
       "command": "node scripts/verify/independent-documentation-review.mjs --print-snapshot && explicit semantic-ledger comparison",
       "status": "passed",
-      "evidence": "The governed snapshot is exactly 416ab1ad4010a959abd33eccc8721280832ae1c23ef3d781933b7ee9d799762d across 101 files; the current and locked semantic ledgers both contain 1,055 claims with zero differing IDs or digests."
+      "evidence": "The governed snapshot is exactly 83f735669ef45417607e96ec874d096eeeab478185203f646c9e3ae9457bf8ba across 101 files; the current and locked semantic ledgers both contain 1,056 claims with zero differing IDs or digests."
     }
   ],
   "coordination": {
@@ -147,8 +159,8 @@
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The B5.10 delta adds a fake/local, service-only lifecycle foundation without real Paddle transport, OCR routing, public IPC/UI, production wiring, or any P0-P9, M0-M7, Requirement/Build/Exit ID, PRD-scope, or release-state change. PIGE-INGEST-002 stays planned; E5.02 stays partial; P5 stays in progress.",
-    "acknowledgement": "Development froze six new code/test/fixture files after 57 files/391 tests plus typecheck, build, full verify, parser-worker, and real macOS OCR smoke passed. Product Planning made the minimal Owner/E5.02 sync; a read-only delta reviewer accepted the exact repaired candidate before this one-time snapshot bind."
+    "compatibility": "The B6.15 delta adds only deterministic test-fixture and evaluation evidence; it changes no PRD, UI, runtime schema, network/model behavior, durable vault schema, stable Requirement/Build/Exit IDs, or release states. PIGE-EVAL-004 and E6.10 stay partial; P6 stays in progress.",
+    "acknowledgement": "Development froze five test-fixture/eval files after focused 1/2, eval 3/9, full 58/393, typecheck, build, full verify, fixture, parser-worker, and real macOS OCR checks passed. Product Planning made the minimal Quality/acceptance sync; a read-only delta reviewer accepted the exact repaired candidate before this one-time snapshot bind."
   },
   "resolvedBlockers": [
     "Rewrote README as a 378-word product entry with user value, honest current capability, principles, v0.1 roadmap, and the Agent-authored automation goal instead of a technical inventory.",
@@ -159,13 +171,15 @@
     "Deep-reviewed Pi v0.80.6 at a fixed commit and admitted only isolated selected-model binding and receiver-safe stream design as review-only guidance; no package, runtime, catalog, credential fallback, or dependency adoption occurred.",
     "Synchronized single-writer pre-publication guard persistence, capture projection fencing, process-local Agent-ingest cancellation, monotonic restart recovery, and exact evidence without promoting partial states.",
     "Synchronized the B5.10 fake/local lifecycle foundation, one exact E5.02 selector, honest planned/partial states, and complete production gaps without expanding PRD or Parser ownership.",
+    "Synchronized the B6.15 deterministic retrieval-regression foundation, one exact selector, honest partial states, private-report boundaries, and complete model/linking/vector/scale/platform gaps without changing runtime behavior.",
     "Repaired CON-002 so it isolates JobRecordSchema, checks root strictness and cross-field cancellation invariants, and rejects three in-memory false-positive mutations instead of matching a later unrelated schema."
   ],
   "nonBlockingRisks": [
     "P5 remains in progress: remaining Job-class publishers, running capture/index_rebuild/other-class cancellation, strict cross-process Job CAS and routing, parent-directory swap, guard-to-domain atomicity, guard-without-output recovery, checkpoint arrays, cross-file transactions, Windows/Paddle, packaged-filesystem proof, and visible progress/cancel UI remain open.",
     "The local-tool lifecycle remains a fake/local service foundation: real Paddle/Python/model/language-pack transport, ordinary-ingest no-hidden-install proof, production app-data/catalog/permission/pre-vault Job/Operation wiring, OCR/UI, supply chain, packaged platforms, cross-process locking, complete recovery/GC/quarantine purge, and background lifecycle controls remain open.",
+    "The retrieval regression foundation remains lexical and synthetic: model-grounded summary/citation validation under cloud-send and Permission enforcement, tag/topic/entity and Knowledge Tree thresholds, vector/reranker ranking, 10k/100k and UI/packaged proof, checked-in or CI-produced body-free reports, and broader locale/query families remain open.",
     "Pi v0.80.6 remains review-only until exact package pins, integrity/provenance, root MIT notice and SBOM, hermetic catalog/import gates, selected-binding fixtures, Permission Broker integration, and pinned Electron/Node platform smoke pass; the Owner and TECH pins are not yet cross-checked by a dedicated verifier.",
-    "Trace projections use 5,498 of 5,500 lines and the default entry uses 3,857 of 4,200 words; future semantic additions must reclaim projection or prose capacity in the same change instead of raising budgets.",
+    "Trace projections use 5,494 of 5,500 lines and the default entry uses 3,857 of 4,200 words; future semantic additions must reclaim projection or prose capacity in the same change instead of raising budgets.",
     "Role ownership is enforced by instructions, templates, routing markers, and negative mutations rather than operating-system write permissions; reviewers must still detect semantically disguised role crossing and contributors must fill intake fields honestly.",
     "PRD, TECH_ARCHITECTURE, and Decision Log remain large Owner documents; future Agents should continue section-targeted reads and define each fact once.",
     "The concise pre-alpha README intentionally has no install button, screenshots, or release download; add those only when a usable signed build and governed visual evidence exist.",

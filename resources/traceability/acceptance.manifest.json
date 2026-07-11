@@ -1915,13 +1915,10 @@
     },
     "PIGE-EVAL-004": {
       "status": "partial",
-      "evidence": [
-        "EV-RETRIEVAL",
-        "EV-DB-LINKS"
-      ],
+      "evidence": ["EV-RETRIEVAL", "EV-DB-LINKS", "EV-RETRIEVAL-REGRESSION-GOLDEN"],
       "open": {
         "id": "OPEN-REQ-PIGE-EVAL-004",
-        "description": "Unified retrieval/linking/summarization golden thresholds and generated regression report remain open.",
+        "description": "Model-grounded summarization, citation-output validation, and cloud-send/Permission enforcement; unified tag/topic/entity/Knowledge Tree thresholds beyond wiki links/backlinks; vector/embedding/reranker ranking; broader locale/query families; 10k/100k and UI/packaged acceptance; and checked-in or CI-generated regression artifacts remain open.",
         "targetBuilds": [
           "B6.15"
         ],
@@ -3412,13 +3409,10 @@
     },
     "E6.10": {
       "status": "partial",
-      "evidence": [
-        "EV-RETRIEVAL",
-        "EV-DB-LINKS"
-      ],
+      "evidence": ["EV-RETRIEVAL", "EV-DB-LINKS", "EV-RETRIEVAL-REGRESSION-GOLDEN"],
       "open": {
         "id": "OPEN-EXIT-E6.10",
-        "description": "Unified retrieval/linking/summarization thresholds and generated regression report remain open.",
+        "description": "The deterministic foundation still lacks model-grounded summary/citation validation and cloud-send/Permission enforcement, linking metrics beyond wiki links/backlinks, vector/reranker coverage, large-scale and packaged/UI proof, broader locales and Knowledge Tree cases, and a checked-in or CI-produced body-free report artifact.",
         "targetBuilds": [
           "B6.15"
         ],
@@ -4023,6 +4017,7 @@
       "path": "tests/unit/retrieval-service.test.ts",
       "selector": "answers from bounded local evidence with citations and ranked pages"
     },
+    "EV-RETRIEVAL-REGRESSION-GOLDEN": { "kind": "test", "path": "tests/evals/retrieval.regression-golden.test.ts", "selector": "passes deterministic ranking, citation, distractor, related-page, and insufficient-evidence gates" },
     "EV-CONTEXT": {
       "kind": "test",
       "path": "tests/unit/retrieval-service.test.ts",

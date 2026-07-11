@@ -155,10 +155,10 @@ AI evaluation fixtures:
 
 Current deterministic suite:
 
-- `tests/fixtures/evals/agent-ingest/multilingual-golden.v3.json` contains seven synthetic text, URL, PDF, PPTX, and image-OCR cases across English, Simplified Chinese, Japanese, Korean, French, and German, including mixed-language and contradictory evidence.
-- `tests/evals/agent-ingest.multilingual-golden.test.ts` enforces schema-valid rate `1`, citation coverage `1`, unsupported-claim count `0`, expected-claim recall `1`, language-policy match `1`, expected review routing, and canonical rendered locators for the positive cases.
-- Negative controls reject a fabricated claim reusing a valid ref, a third date invented from contradictory PDF pages, cited evidence missing required support terms, and missing or unavailable refs.
-- The suite is required by `npm test`, can run alone with `npm run test:eval`, and completes the deterministic B5.12/E5.04 golden family.
+- `multilingual-golden.v3` contains seven synthetic text, URL, PDF, PPTX, and image-OCR cases across six locales, including mixed-language and contradictory evidence.
+- Its eval gates schema, citations, support, recall, language, review routing, and locators; negative controls reject fabricated, unsupported, and missing-ref claims.
+- It runs under `npm test` and `npm run test:eval` and completes B5.12/E5.04.
+- Retrieval v1 runs real SQLite FTS, local extractive ask, and related/backlinks; six metrics, adversarial mutations, and a deterministic body-free report below 16 KiB form B6.15/E6.10 foundation evidence only.
 
 Current adversarial boundary seed:
 
