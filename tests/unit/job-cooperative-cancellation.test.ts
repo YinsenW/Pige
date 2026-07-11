@@ -57,6 +57,7 @@ describe("cooperative durable job cancellation", () => {
     });
     const sourceId = requireFirst(captured.sourceIds);
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    seedExplicitImageOcrJob(fixture.vaultPath, requireFirst(captured.jobIds), sourceId);
 
     const processing = jobs.processQueuedOcr({ sourceIds: [sourceId] });
     await adapter.started.promise;
@@ -150,6 +151,7 @@ describe("cooperative durable job cancellation", () => {
     });
     const sourceId = requireFirst(captured.sourceIds);
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    seedExplicitImageOcrJob(fixture.vaultPath, requireFirst(captured.jobIds), sourceId);
 
     const processing = jobs.processQueuedOcr({ sourceIds: [sourceId] });
     await started.promise;
@@ -312,6 +314,12 @@ describe("cooperative durable job cancellation", () => {
       locale: "en"
     });
     cleanWaitingServices.jobs.processQueuedCaptures({ jobIds: cleanCaptured.jobIds });
+    seedExplicitImageOcrJob(
+      cleanWaitingFixture.vaultPath,
+      requireFirst(cleanCaptured.jobIds),
+      requireFirst(cleanCaptured.sourceIds),
+      "waiting_dependency"
+    );
     const cleanWaiting = requireValue(cleanWaitingServices.jobs.list({
       classes: ["ocr"],
       states: ["waiting_dependency"]
@@ -443,6 +451,7 @@ describe("cooperative durable job cancellation", () => {
     });
     const sourceId = requireFirst(captured.sourceIds);
     initialServices.jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    seedExplicitImageOcrJob(fixture.vaultPath, requireFirst(captured.jobIds), sourceId);
     expect(await initialServices.jobs.processQueuedOcr({ sourceIds: [sourceId] })).toMatchObject({
       processed: 1,
       completed: 1,
@@ -570,6 +579,7 @@ describe("cooperative durable job cancellation", () => {
     });
     const sourceId = requireFirst(captured.sourceIds);
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+    seedExplicitImageOcrJob(fixture.vaultPath, requireFirst(captured.jobIds), sourceId);
 
     const result = await jobs.processQueuedOcr({ sourceIds: [sourceId] });
     const completed = requireValue(jobs.list({ classes: ["ocr"], states: ["completed_with_warnings"] }).jobs[0]);
@@ -828,6 +838,35 @@ function seedExplicitPdfParseJob(vaultPath: string, parentJobId: string, sourceI
     sourceId,
     ...(parent.captureId ? { captureId: parent.captureId } : {}),
     message: "Explicit parser-substrate fixture queued."
+  });
+  writeJobRecord(vaultPath, child);
+  writeJobRecord(vaultPath, JobRecordSchema.parse({
+    ...parent,
+    childJobIds: [...(parent.childJobIds ?? []), child.id]
+  }));
+}
+
+function seedExplicitImageOcrJob(
+  vaultPath: string,
+  parentJobId: string,
+  sourceId: string,
+  state: "queued" | "waiting_dependency" = "queued"
+): void {
+  const parent = JobRecordSchema.parse(readJobRecord(vaultPath, parentJobId));
+  const dateKey = requireValue(/^src_(\d{8})_/u.exec(sourceId)?.[1]);
+  const suffix = sourceId.replace(/^src_\d{8}_/u, "").slice(0, 10);
+  const child = JobRecordSchema.parse({
+    id: `job_${dateKey}_${suffix}oa`,
+    class: "ocr",
+    state,
+    parentJobId,
+    createdAt: "2026-07-10T12:00:00.000Z",
+    updatedAt: "2026-07-10T12:00:00.000Z",
+    sourceId,
+    ...(parent.captureId ? { captureId: parent.captureId } : {}),
+    message: state === "waiting_dependency"
+      ? "Persisted image OCR fixture is waiting for local OCR capability."
+      : "Persisted image OCR fixture queued."
   });
   writeJobRecord(vaultPath, child);
   writeJobRecord(vaultPath, JobRecordSchema.parse({

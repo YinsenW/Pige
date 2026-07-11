@@ -110,6 +110,102 @@ describe.runIf(hasBuiltHelper)("macOS Vision OCR production adapter smoke", () =
     }
   });
 
+  it("recognizes a preserved image through the Agent-selected production OCR tool", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-image-agent-vision-smoke-"));
+    try {
+      const canvas = createCanvas(1600, 500);
+      const context = canvas.getContext("2d");
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = "#111111";
+      context.font = "bold 112px Helvetica";
+      context.fillText("PIGE IMAGE OCR", 90, 300);
+      const imagePath = path.join(root, "image-ocr.png");
+      fs.writeFileSync(imagePath, canvas.toBuffer("image/png"));
+      createVaultOnDisk({
+        parentDirectory: root,
+        vaultName: "Vault",
+        appDataPath: path.join(root, "app-data"),
+        tempPath: path.join(root, "temp"),
+        now: new Date("2026-07-10T08:00:00.000Z")
+      });
+      const vaultPath = path.join(root, "Vault");
+      const vault = loadVaultSummary(vaultPath);
+      const vaultPort = { current: () => vault, activeVaultPath: () => vaultPath };
+      const runtime = new PiAgentRuntimeAdapter({
+        fauxResponses: [
+          { kind: "tool_call", toolName: "pige_inspect_source", args: {}, toolCallId: "vision_image_inspect_before" },
+          { kind: "tool_call", toolName: "pige_ocr_source", args: {}, toolCallId: "vision_image_ocr" },
+          { kind: "tool_call", toolName: "pige_inspect_source", args: {}, toolCallId: "vision_image_inspect_after" },
+          {
+            kind: "tool_call",
+            toolName: "pige_create_knowledge_note",
+            toolCallId: "vision_image_publish",
+            args: {
+              title: "Image Vision OCR smoke",
+              summary: { text: "The preserved image was recognized locally.", evidenceRefs: ["ev_01"] },
+              keyPoints: [{ text: "Pi selected the bounded image OCR tool.", evidenceRefs: ["ev_01"] }],
+              tags: ["ocr"],
+              topics: ["Images"],
+              entities: [],
+              warnings: [],
+              confidence: "high"
+            }
+          }
+        ]
+      });
+      const agentIngest = new AgentIngestService(modelPort, runtime, {
+        snapshot: () => ({
+          localDatabaseStatus: "not_initialized",
+          parserToolchainReady: false,
+          ocrEngines: ["apple_vision"],
+          speechInputAvailable: false,
+          embeddingModelInstalled: false,
+          lexicalSearchAvailable: false,
+          vectorSearchAvailable: false,
+          rerankerAvailable: false
+        })
+      });
+      const jobs = new JobsService(
+        vaultPort,
+        agentIngest,
+        undefined,
+        undefined,
+        new OcrService(new MacOSVisionOcrAdapter())
+      );
+      const captured = await new CaptureService(vaultPort).submitFiles({
+        filePaths: [imagePath],
+        inputKind: "file_drop",
+        userIntent: "capture",
+        locale: "en"
+      });
+      const sourceId = captured.sourceIds[0];
+      expect(sourceId).toBeTruthy();
+      jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+      expect(jobs.list({ classes: ["ocr"] }).jobs).toEqual([]);
+
+      const result = await jobs.processQueuedAgentIngest({ sourceIds: captured.sourceIds });
+      const sourceRecordPath = findFile(path.join(vaultPath, ".pige", "source-records"), `${sourceId}.json`);
+      const sourceRecord = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as {
+        artifacts: Array<{ kind: string; path: string }>;
+      };
+      const textArtifact = sourceRecord.artifacts.find((artifact) => artifact.kind === "ocr");
+      expect(textArtifact).toBeTruthy();
+      const text = fs.readFileSync(path.join(vaultPath, textArtifact!.path), "utf8")
+        .replace(/\s+/gu, " ")
+        .toLocaleUpperCase();
+      const ocrJobs = jobs.list({ classes: ["ocr"] }).jobs;
+
+      expect(result).toMatchObject({ processed: 1, completed: 1, failed: 0 });
+      expect(ocrJobs).toHaveLength(1);
+      expect(["completed", "completed_with_warnings"]).toContain(ocrJobs[0]?.state);
+      expect(text).toContain("PIGE");
+      expect(text).toContain("OCR");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("recognizes parser-selected embedded PPTX media through the source-to-artifact pipeline", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-pptx-vision-smoke-"));
     try {

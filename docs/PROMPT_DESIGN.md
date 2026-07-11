@@ -109,7 +109,7 @@ type AgentIngestOutput = {
 
 Rules:
 
-- This four-tool slice preserves evidence; document parse/OCR requires re-inspection
+- This four-tool slice preserves evidence; selected source parse/OCR requires re-inspection
   before publication. It cannot close B3.13/E3.08 or write from final text.
 - The main-process Evidence Assembly Service verifies selected source/artifact integrity, pairs parser/OCR text with its own metadata sidecar by source ID, sidecar Artifact ID, kind, and text checksum, then packages at most 24 fragments and 18,000 evidence characters inside one explicit `<untrusted_source_evidence>` block. It does not send vault paths or metadata sidecar bodies.
 - Each packaged fragment receives an ephemeral ordered `ev_NN` ref plus its durable source/Artifact locator. Native extracted text is ordered before OCR; same-parent OCR text is removed only when it repeats native text. The merged prompt representation is ephemeral and is never persisted as a second body Artifact.

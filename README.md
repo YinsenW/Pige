@@ -40,7 +40,7 @@ Today, the pre-alpha can:
 - Capture text, web pages, Markdown, TXT, PDF, DOCX, PPTX, and images while preserving
   files as managed copies or verified references.
 - Extract structured document content and run supported macOS Vision OCR paths.
-- Run preserved text and supported PDF/DOCX/PPTX through embedded Pi, isolated BYOK binding,
+- Run preserved text and supported PDF/DOCX/PPTX/images through embedded Pi, isolated BYOK binding,
   bounded inspect/parse/OCR tools, and validated knowledge publication.
 - Generate source-backed Markdown; search locally with citations, backlinks, and related pages.
 - Use persistent-job recovery and local-backup foundations.
@@ -49,7 +49,7 @@ These are foundations, not a finished release. See the [implementation playbook]
 
 ## Road to `v0.1 Public Alpha`
 
-- **Extend the Agent path:** move retrieval, direct-image processing, and permissioned
+- **Extend the Agent path:** move retrieval and permissioned
   actions onto the embedded Pi tool-loop spine.
 - **Expand the proven tool spine:** cross-platform document/OCR and stronger local retrieval.
 - **Ship a trustworthy alpha:** reviewable changes, backup/restore, accessibility,

@@ -337,12 +337,11 @@ Rules:
 - File bodies are never copied into conversation history; conversation events reference source IDs, display names, and source kinds.
 - The renderer receives IDs and status, not arbitrary filesystem paths or file handles.
 - After preservation, desktop main may immediately process queued text/Markdown/TXT/URL capture jobs into minimal source pages. The capture return value still reports preservation status; Home observes source-page completion through `jobs.list`.
-- Preserved PDF/DOCX/PPTX/image sources create metadata-only projections. Documents
-  queue Agent work; only Pi parse/OCR events create document children. Direct images
-  retain the transitional OCR bridge.
+- Preserved PDF/DOCX/PPTX/image sources create metadata-only projections and queue Agent
+  work; only Pi parse/OCR events create document or image children.
 - OCR execution is internal main-to-helper orchestration behind `OcrPort`; no new renderer command exposes a native path, raw OCR request, helper response, image bytes, or Artifact body. Home observes only the existing safe Job summaries.
-- `agent_ingest` uses embedded Pi for text and document parse/selected OCR, and waits
-  without semantic work when no model exists. Direct-image OCR remains transitional.
+- `agent_ingest` uses embedded Pi for text and selected document/image parse or OCR, and
+  waits without semantic work when no model exists.
 
 ### 6.3 Jobs
 
@@ -427,9 +426,9 @@ Rules:
   Agent-ingest writers persist a real pre-publication checkpoint before their first
   domain effect; the Job write must succeed before publication. Abandon/archive is separate.
 - `jobs.list` exposes persisted stage/progress by polling; numeric Home rendering and pushed progress events remain open.
-- Source-page projection is internal, not renderer-exposed. Document parse/OCR children
-  require Pi tool events; direct-image OCR remains transitional.
-- Direct-image OCR uses the same durable Job actions: waiting jobs can be requeued when capability appears, interrupted running OCR is reconciled to queued, valid Artifacts are reused, and failures are mapped to safe retryable/waiting/final Job messages without returning private paths.
+- Source-page projection is internal, not renderer-exposed. Document/image parse or OCR
+  children require Pi tool events.
+- Direct-image OCR uses the same durable Job actions: no-capability parents wait without a child, recovery requeues them, retry reuses one child, cancellation reaches active OCR, and safe summaries never return private paths.
 
 ### 6.4 Confirmation Proposals
 

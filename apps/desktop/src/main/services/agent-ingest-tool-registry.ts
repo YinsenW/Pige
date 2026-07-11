@@ -38,6 +38,7 @@ export interface AgentIngestToolAuthorizationPort {
 export interface AgentIngestInspectToolResult {
   readonly modelText: string;
   readonly details: Readonly<Record<string, unknown>>;
+  readonly terminate?: boolean;
 }
 
 export interface AgentIngestParseToolResult {
@@ -137,8 +138,8 @@ export function createAgentIngestToolRegistry(input: {
     },
     {
       name: OCR_SOURCE_TOOL_NAME,
-      label: "Recognize selected document visuals",
-      description: "Run bounded local OCR for parser-selected pages or presentation media of the current preserved source. Takes no path, source ID, target list, or model authority.",
+      label: "Recognize preserved source visuals",
+      description: "Run bounded local OCR for the current preserved image or parser-selected document visuals. Takes no path, source ID, target list, or model authority.",
       parameters: EMPTY_OBJECT_SCHEMA,
       version: OCR_SOURCE_TOOL_VERSION,
       capability: "ocr_current_source",

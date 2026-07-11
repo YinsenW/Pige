@@ -331,9 +331,16 @@ export class JobsService {
       const agentSelectedOcr = Boolean(sourceRecord && supportsAgentSelectedOcr(sourceRecord.kind));
       const waitingAgentOcr = agentSelectedOcr &&
         hasWaitingAgentOcrChild(vaultPath, jobFile.job);
+      const completedEmptyAgentOcr = Boolean(
+        sourceRecord &&
+        sourceRecord.metadata.agentTextReady !== true &&
+        sourceRecord.metadata.ocrStatus === "completed_empty" &&
+        hasCompletedEmptyAgentOcrChild(vaultPath, jobFile.job, sourceRecord)
+      );
+      if (completedEmptyAgentOcr) continue;
       const agentOcrRequiredBeforePublication = agentSelectedOcr &&
-        sourceRecord?.metadata.needsOcr === true &&
-        sourceRecord.metadata.agentTextReady !== true;
+        sourceRecord?.metadata.agentTextReady !== true &&
+        (sourceRecord?.kind === "image_file" || sourceRecord?.metadata.needsOcr === true);
       if (waitingAgentOcr || agentOcrRequiredBeforePublication) {
         if (!sourceRecord || !inspectOcrSource(this.#ocr, sourceRecord).ready) continue;
       } else if (!agentSelectedOcr && sourceRecord && shouldWaitForRunnableOcr(this.#ocr, sourceRecord)) {
@@ -446,19 +453,15 @@ export class JobsService {
             )
           }
         );
-        if (supportsAgentSelectedParser(sourceRecordFile.sourceRecord.kind)) {
+        if (
+          supportsAgentSelectedParser(sourceRecordFile.sourceRecord.kind) ||
+          supportsAgentSelectedOcr(sourceRecordFile.sourceRecord.kind)
+        ) {
           ensureAgentIngestJob(
             vaultPath,
             captureExecution.job,
             sourceRecordFile.sourceRecord.id,
             canRunAgentIngest(this.#agentIngest)
-          );
-        } else if (sourceRecordFile.sourceRecord.kind === "image_file") {
-          ensureHostRoutedImageOcrJob(
-            vaultPath,
-            captureExecution.job,
-            sourceRecordFile.sourceRecord,
-            inspectOcrSource(this.#ocr, sourceRecordFile.sourceRecord)
           );
         } else {
           ensureAgentIngestJob(
@@ -798,7 +801,11 @@ export class JobsService {
             if (
               !currentSource ||
               sourceRecordRevision(currentSource) !== sourceRecordRevision(expectedSource) ||
-              (!supportsAgentSelectedParser(currentSource.kind) && shouldWaitForRunnableOcr(this.#ocr, currentSource))
+              (
+                !supportsAgentSelectedParser(currentSource.kind) &&
+                !supportsAgentSelectedOcr(currentSource.kind) &&
+                shouldWaitForRunnableOcr(this.#ocr, currentSource)
+              )
             ) {
               throw new PigeDomainError(
                 "agent_ingest.source_changed",
@@ -851,7 +858,7 @@ export class JobsService {
           markJobWaitingDependency(
             jobFile.path,
             runningJob,
-            "Agent-selected document processing is waiting for a registered local capability.",
+            "Agent-selected source processing is waiting for a registered local capability.",
             durableState
           );
         } else if (caught instanceof PigeDomainError && caught.code === "source.external_unavailable") {
@@ -1068,15 +1075,15 @@ export class JobsService {
     }
 
     if (child.state === "failed_final") {
-      throw new PigeDomainError("ocr.tool_failed_final", "The durable document OCR child cannot be retried safely.");
+      throw new PigeDomainError("ocr.tool_failed_final", "The durable source OCR child cannot be retried safely.");
     }
     if (child.state === "running" || child.state === "cancel_requested") {
-      throw new PigeDomainError("ocr.tool_recovery_required", "The durable document OCR child requires startup recovery before reuse.");
+      throw new PigeDomainError("ocr.tool_recovery_required", "The durable source OCR child requires startup recovery before reuse.");
     }
     if (child.state !== "queued") {
       const retry = this.retry({ jobId: child.id });
       if (retry.status !== "requeued" || !retry.job) {
-        throw new PigeDomainError("ocr.tool_retry_failed", "The durable PDF OCR child could not be requeued.");
+        throw new PigeDomainError("ocr.tool_retry_failed", "The durable source OCR child could not be requeued.");
       }
       child = readJobRecordFile(vaultPath, child.id)?.job ?? child;
     }
@@ -1107,9 +1114,9 @@ export class JobsService {
       });
     }
     if (child.state === "failed_final") {
-      throw new PigeDomainError("ocr.tool_failed_final", "The durable document OCR child failed validation.");
+      throw new PigeDomainError("ocr.tool_failed_final", "The durable source OCR child failed validation.");
     }
-    throw new PigeDomainError("ocr.tool_failed_retryable", "The durable document OCR child remains retryable.");
+    throw new PigeDomainError("ocr.tool_failed_retryable", "The durable source OCR child remains retryable.");
   }
 
   processQueuedIndexRebuild(
@@ -1929,7 +1936,9 @@ function ensureAgentOcrToolJob(
       provenanceHash
     }),
     message: state === "queued"
-      ? `Agent selected bounded OCR for parser-verified ${documentLabel(sourceRecord.kind)} targets; durable OCR child queued.`
+      ? sourceRecord.kind === "image_file"
+        ? "Agent selected bounded OCR for the verified preserved image; durable OCR child queued."
+        : `Agent selected bounded OCR for parser-verified ${documentLabel(sourceRecord.kind)} targets; durable OCR child queued.`
       : `Agent selected ${documentLabel(sourceRecord.kind)} OCR; waiting for the reviewed local OCR capability.`
   });
   return ensureRequiredChildJob(vaultPath, parentJob, requested, (existing) => {
@@ -2091,6 +2100,19 @@ function hasWaitingAgentOcrChild(vaultPath: string, parent: JobRecord): boolean 
   });
 }
 
+function hasCompletedEmptyAgentOcrChild(
+  vaultPath: string,
+  parent: JobRecord,
+  sourceRecord: SourceRecord
+): boolean {
+  return (parent.childJobIds ?? []).some((childId) => {
+    const child = readJobRecordFile(vaultPath, childId)?.job;
+    return child?.state === "completed_with_warnings" &&
+      isAgentSelectedOcrJob(child) &&
+      sourceRecord.metadata.ocrJobId === child.id;
+  });
+}
+
 function bridgeParentAbortToChild(
   jobPath: string,
   controller: AbortController,
@@ -2213,7 +2235,7 @@ function supportsAgentSelectedParser(sourceKind: SourceKind): boolean {
 }
 
 function supportsAgentSelectedOcr(sourceKind: SourceKind): boolean {
-  return sourceKind === "pdf_file" || sourceKind === "pptx_file";
+  return sourceKind === "image_file" || sourceKind === "pdf_file" || sourceKind === "pptx_file";
 }
 
 function parserDependencyCode(sourceKind: SourceKind): string {
@@ -2223,27 +2245,13 @@ function parserDependencyCode(sourceKind: SourceKind): string {
 }
 
 function ocrDependencyCode(sourceKind: SourceKind): string {
+  if (sourceKind === "image_file") return "image_ocr_unavailable";
   return sourceKind === "pptx_file" ? "pptx_ocr_unavailable" : "pdf_ocr_unavailable";
 }
 
 function ocrNoReadableEvidenceCode(sourceKind: SourceKind): string {
+  if (sourceKind === "image_file") return "image_ocr_no_readable_evidence";
   return sourceKind === "pptx_file" ? "pptx_ocr_no_readable_evidence" : "pdf_ocr_no_readable_evidence";
-}
-
-function ensureHostRoutedImageOcrJob(
-  vaultPath: string,
-  captureJob: JobRecord,
-  sourceRecord: SourceRecord,
-  ocrCapability: OcrSourceCapability
-): void {
-  ensureParserOrOcrFollowUpJob(
-    vaultPath,
-    captureJob,
-    sourceRecord,
-    "ocr",
-    ocrCapability.ready ? "queued" : "waiting_dependency",
-    ocrCapability.message
-  );
 }
 
 function ensureOcrWaitingJob(
