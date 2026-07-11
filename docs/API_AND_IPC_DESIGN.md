@@ -337,12 +337,12 @@ Rules:
 - File bodies are never copied into conversation history; conversation events reference source IDs, display names, and source kinds.
 - The renderer receives IDs and status, not arbitrary filesystem paths or file handles.
 - After preservation, desktop main may immediately process queued text/Markdown/TXT/URL capture jobs into minimal source pages. The capture return value still reports preservation status; Home observes source-page completion through `jobs.list`.
-- Preserved PDF/DOCX/PPTX/image sources create metadata-only projections. PDF now queues
-  one Agent Job and only its Pi parse event creates a child; DOCX/PPTX/image still use
+- Preserved PDF/DOCX/PPTX/image sources create metadata-only projections. PDF queues one
+  Agent Job and only its Pi parse/OCR events create children; DOCX/PPTX/image still use
   transitional direct parse/OCR bridges.
 - OCR execution is internal main-to-helper orchestration behind `OcrPort`; no new renderer command exposes a native path, raw OCR request, helper response, image bytes, or Artifact body. Home observes only the existing safe Job summaries.
-- `agent_ingest` uses embedded Pi for text and preserved-PDF parsing, and waits without
-  semantic work when no model exists. Office/OCR continuations remain transitional.
+- `agent_ingest` uses embedded Pi for text and preserved-PDF parse/OCR, and waits without
+  semantic work when no model exists. Office/direct-image/PPTX OCR remains transitional.
 
 ### 6.3 Jobs
 
@@ -427,8 +427,8 @@ Rules:
   Agent-ingest writers persist a real pre-publication checkpoint before their first
   domain effect; the Job write must succeed before publication. Abandon/archive is separate.
 - `jobs.list` exposes persisted stage/progress by polling; numeric Home rendering and pushed progress events remain open.
-- Source-page projection is internal, not renderer-exposed. Current internal parser/OCR
-  continuations are transitional; target child Jobs require Pi tool events.
+- Source-page projection is internal, not renderer-exposed. Office/direct-image/PPTX
+  continuations remain transitional; PDF parse/OCR children require Pi tool events.
 - Direct-image OCR uses the same durable Job actions: waiting jobs can be requeued when capability appears, interrupted running OCR is reconciled to queued, valid Artifacts are reused, and failures are mapped to safe retryable/waiting/final Job messages without returning private paths.
 
 ### 6.4 Confirmation Proposals

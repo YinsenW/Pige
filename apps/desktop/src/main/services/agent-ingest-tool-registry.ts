@@ -9,17 +9,21 @@ import type {
 export const INSPECT_SOURCE_TOOL_NAME = "pige_inspect_source";
 export const PARSE_SOURCE_TOOL_NAME = "pige_parse_source";
 export const PARSE_SOURCE_TOOL_VERSION = "1";
+export const OCR_SOURCE_TOOL_NAME = "pige_ocr_source";
+export const OCR_SOURCE_TOOL_VERSION = "1";
 export const CREATE_KNOWLEDGE_NOTE_TOOL_NAME = "pige_create_knowledge_note";
 
 export type AgentIngestToolCapability =
   | "read_current_source"
   | "parse_current_source"
+  | "ocr_current_source"
   | "write_generated_note";
 
 export interface AgentIngestToolAuthorizationRequest {
   readonly toolName:
     | typeof INSPECT_SOURCE_TOOL_NAME
     | typeof PARSE_SOURCE_TOOL_NAME
+    | typeof OCR_SOURCE_TOOL_NAME
     | typeof CREATE_KNOWLEDGE_NOTE_TOOL_NAME;
   readonly capability: AgentIngestToolCapability;
   readonly jobId: string;
@@ -41,6 +45,11 @@ export interface AgentIngestParseToolResult {
   readonly details: Readonly<Record<string, unknown>>;
 }
 
+export interface AgentIngestOcrToolResult {
+  readonly modelText: string;
+  readonly details: Readonly<Record<string, unknown>>;
+}
+
 export interface AgentIngestPublishToolResult {
   readonly modelText: string;
   readonly details: Readonly<Record<string, unknown>>;
@@ -49,6 +58,7 @@ export interface AgentIngestPublishToolResult {
 export interface AgentIngestToolHost {
   inspect(signal: AbortSignal): Promise<AgentIngestInspectToolResult>;
   parse?(context: PigeAgentToolCallContext): Promise<AgentIngestParseToolResult>;
+  ocr?(context: PigeAgentToolCallContext): Promise<AgentIngestOcrToolResult>;
   publish(output: AgentIngestOutput, signal: AbortSignal): Promise<AgentIngestPublishToolResult>;
 }
 
@@ -126,6 +136,43 @@ export function createAgentIngestToolRegistry(input: {
       }
     },
     {
+      name: OCR_SOURCE_TOOL_NAME,
+      label: "Recognize preserved PDF pages",
+      description: "Run bounded local OCR for the parser-selected pages of the current preserved PDF. Takes no path, source ID, page list, or model authority.",
+      parameters: EMPTY_OBJECT_SCHEMA,
+      version: OCR_SOURCE_TOOL_VERSION,
+      capability: "ocr_current_source",
+      outputSchema: TOOL_RESULT_OUTPUT_SCHEMA,
+      effect: "idempotent_write",
+      inputTrust: "model_generated",
+      outputTrust: "host_validated",
+      dataBoundary: CURRENT_SOURCE_DATA_BOUNDARY,
+      execution: "sequential",
+      idempotency: CURRENT_SOURCE_IDEMPOTENCY,
+      limits: {
+        maxInputBytes: 2,
+        maxOutputBytes: 262_144,
+        timeoutMs: 300_000
+      },
+      ownerService: "OcrService",
+      authorize: (_args, context) => input.authorization.authorize({
+        toolName: OCR_SOURCE_TOOL_NAME,
+        capability: "ocr_current_source",
+        jobId: input.jobId,
+        sourceId: input.sourceId,
+        toolCallId: context.toolCallId
+      }),
+      execute: async (_args, _signal, context): Promise<PigeAgentToolResult> => {
+        if (!context || !input.host.ocr) {
+          throw new PigeDomainError(
+            "agent_runtime.ocr_tool_unavailable",
+            "The current-source OCR tool is unavailable."
+          );
+        }
+        return input.host.ocr(context);
+      }
+    },
+    {
       name: CREATE_KNOWLEDGE_NOTE_TOOL_NAME,
       label: "Create grounded knowledge note",
       description: "Validate and publish one grounded Markdown note for the current preserved source through Pige's durable write boundary.",
@@ -167,6 +214,9 @@ export const allowCurrentAgentIngestTools: AgentIngestToolAuthorizationPort = {
     }
     if (request.toolName === PARSE_SOURCE_TOOL_NAME) {
       return request.capability === "parse_current_source";
+    }
+    if (request.toolName === OCR_SOURCE_TOOL_NAME) {
+      return request.capability === "ocr_current_source";
     }
     return request.toolName === CREATE_KNOWLEDGE_NOTE_TOOL_NAME &&
       request.capability === "write_generated_note";

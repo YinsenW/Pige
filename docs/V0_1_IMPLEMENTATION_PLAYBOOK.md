@@ -38,7 +38,7 @@ Current implementation state, last reconciled 2026-07-11:
 | P0 | in progress | Repository and traceability foundations have current evidence; the full P0 exit set has not been re-run as a phase-completion claim. |
 | P1 | in progress | Desktop, vault, settings, diagnostics, and runtime foundations have evidence; the full mapped exit set remains open. |
 | P2 | in progress | Capture guards plus process-local parse/OCR/Agent-ingest/index progress or cancellation have evidence; running capture, remaining classes, visible UI, voice, and full exits remain open. |
-| P3 | in progress | BYOK and embedded Pi text/PDF-parse spines have evidence; tool breadth, provider, recovery, permission, and exits remain open. |
+| P3 | in progress | BYOK and embedded Pi text/PDF parse+OCR spines have evidence; tool breadth, provider, recovery, permission, and exits remain open. |
 | P4 | in progress | SQLite, lexical search, Library, and worker-backed rebuild foundations have evidence; the full scale and relationship exit set remains open. |
 | P5 | in progress | PDF, Office, static-web, direct-image macOS Vision OCR, Artifact, and recovery slices have evidence; cross-platform/document OCR and remaining P5 exits are still open. |
 | P6 | in progress | Lexical retrieval, cited Home answers, Reader, backlinks, and related-context foundations exist; local RAG, editing, Knowledge Tree, and full exits remain open. |
@@ -267,9 +267,10 @@ Build:
   preservation Pi Agent alone selects semantic tools, with no host-fixed/parallel path.
 
 Agent Spine Gate: text and preserved-PDF paths run through exact embedded Pi, an
-isolated model, bounded inspection, PDF parsing, re-inspection, and cited publication.
-The direct bridge is removed. B3.13/E3.08 remains partial because Office/OCR/retrieval,
-the complete catalog, generic child recovery, and remaining fixed routes are open.
+isolated model, bounded inspection, PDF parse/optional OCR, re-inspection, and cited
+publication. The direct bridge is removed. B3.13/E3.08 remains partial because Office,
+direct-image/PPTX OCR, retrieval, the complete catalog, generic child recovery, and
+remaining fixed routes are open.
 The exact-`v0.80.6` exception keeps compat globals/default dispatch inert in the sole
 adapter and still forbids deep imports, forks, patches, and parallel loops.
 
@@ -385,7 +386,7 @@ Evidence exists for validated-address-pinned static URL fetch -> bounded respons
 
 Evidence exists for preserved raster image -> verified architecture-specific macOS 26 Swift helper -> bounded Apple Vision document/text recognition -> deterministic OCR text and text-free locator sidecar -> checksum-safe Source Page refresh -> quality-aware Agent handoff. Native smoke covers helper manifest integrity, capability probe, visible-text recognition, and invalid-image rejection; unit/integration tests cover protocol bounds, timeout, path escape, source/Artifact tampering, empty output, and crash-safe reuse/regeneration.
 
-Evidence exists for fully inspected image-only or mixed-text PDF (up to 20 verified parser-selected pages) -> separately built bounded PDF.js/native-Canvas page worker -> deterministic rendered-page/render-manifest Artifacts -> macOS Vision page OCR -> independent native/OCR bodies plus text-free page/block provenance -> checksum-safe Source Page and Agent handoff. Sidecars bind parser metadata and exact page targets; tests cover sparse-page-only routing, native-plus-OCR citations, parser/source/rendered-Artifact tampering, empty enrichment fallback, stale Source Record merge, incomplete-render retry, referenced originals, and crash-safe reuse. Built-worker smoke rasterizes a real no-text PDF page.
+PDF OCR evidence covers real Pi inspect→parse(`needs_ocr`)→OCR→inspect→publish, parser-selected pages, deterministic reuse, wait/resume, parent cancellation, empty-output stop, and separate native/OCR provenance. Existing renderer/OCR fixtures retain tamper, drift, incomplete-render, referenced-source, and recovery coverage; built-worker smoke rasterizes a real no-text page.
 
 Evidence exists for page-aware multi-Artifact Agent handoff -> independently checksummed native/OCR bodies -> sidecar pairing by Source ID, sidecar Artifact ID, kind, and body checksum -> bounded ordered Evidence Pack with supplemental-OCR reserve -> same-parent duplicate suppression -> collision-safe canonical locators -> statement-level `ev_NN` refs -> canonical Markdown citations. PDF parser sidecars now provide exact page character spans; unknown refs fail before write and missing refs force review without a fabricated locator.
 
@@ -395,7 +396,7 @@ B5.12/E5.04 evidence covers seven text, URL, PDF, PPTX, and image-OCR cases acro
 
 Evidence exists for startup reconciliation of interrupted idempotent document/OCR/Agent jobs.
 
-Still open before P5 completion: signed helper/packaged PDF acceptance, Windows/Paddle, full-slide/vector/chart/DOCX-media OCR, unsupported/oversized PPTX targets, full Pi-runtime injection, numeric/running-cancel UI, remaining Job-class domain publishers, running capture/other-class cancellation, and strict cross-process cancellation/CAS.
+Still open before P5 completion: signed helper/packaged PDF acceptance, Windows/Paddle, full-slide/vector/chart/DOCX-media OCR, unsupported/oversized PPTX targets, remaining-format Agent migration, numeric/running-cancel UI, other Job publishers/cancellation, and strict cross-process cancellation/CAS.
 
 Deferred from this phase:
 
