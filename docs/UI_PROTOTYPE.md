@@ -487,14 +487,14 @@ Behavior:
 - Saving an answer creates a proposed note or appends to an existing note after confirmation.
 - There is no separate default "Ask" entry in navigation; this behavior lives inside Home.
 
-Current Phase 6 foundation:
+Current Home foundation:
 
-- Clearly question/search-like Home input returns a local evidence summary plus ranked lexical results before semantic retrieval or query-model synthesis exists.
-- The summary uses numbered citations that open the referenced Markdown pages. No-result and one-result states communicate insufficient or limited evidence.
-- Result rows show title, bounded snippet, page type, citation number, and an open action. Raw ranking scores, match internals, context budgets, and retrieval-mode controls stay out of the default UI.
-- Degraded index state is shown in plain language only when it affects completeness.
-- Ordinary non-question text continues to be captured without forcing the user to choose a mode.
-- Grounded synthesis, citations, follow-up questions, save-answer proposals, and jump-to-snippet opening remain later retrieval slices.
+- Without a ready model, question-like input returns the bounded local extractive answer and ranked lexical results before any Agent job, credential read, or cloud call.
+- With a ready model, Pi Agent calls one Pige-owned current-vault search tool and may return only citations from the selected evidence. Empty evidence produces a visible insufficient-evidence result with no model prose or citations.
+- One compact inline status may move through Accepted, Running, Waiting, Failed, and Completed. A model-required wait offers Configure Models; retryable failure offers Retry. Copy is localized and never exposes a raw provider error or creates a new dashboard.
+- While work is active, the UI labels a planned cloud send only for a cloud boundary. Afterward it labels an actual cloud attempt/result only when a cloud model turn occurred; local or no-model results are never described as cloud use.
+- Results retain bounded title, snippet, page type, citation, and open action. Ordinary non-question text remains capture input.
+- Broader semantic/vector retrieval, follow-ups, save-answer proposals, and jump-to-snippet opening remain later slices.
 
 ## 8. Note Reader
 
@@ -866,37 +866,22 @@ Reset Local Database should be framed as a repair action under Index & Maintenan
 ```txt
 Models
 
-Provider Profiles
-
+Recommended
 OpenAI
-  API key: •••••••••••
-  Status: Connected
+API key  [Connect]
 
-OpenAI Compatible
-  Base URL: https://api.example.com/v1
-  API key: •••••••••••
-  Models: 2 fetched, 1 manual
-  Default model: gpt-4.1-mini
+▸ Custom provider
 
-Test Connection
+Models
+gpt-5-mini     OpenAI     Global Default
+gpt-4.1-mini   OpenAI     Set as Global Default
 ```
 
-The default page should show the current provider and a single top-right "Add Provider" action. Provider choices such as OpenAI-compatible, Anthropic-compatible, or custom endpoint belong inside the add-provider dialog, not as cards on the default page. Model Settings must not include per-workflow model selection, Advanced/Fast model assignment, advanced provider matrices, permissions, OCR, local embeddings, bundled tools, Skills, Packages, backup, or memory controls. Embedding and reranking are handled by Local Capabilities.
+The default path is one reviewed OpenAI preset with fixed endpoint/protocol metadata. It asks only for an API key, discovers a bounded model list, and establishes one Global Default. Custom provider setup stays collapsed; only after expansion may it show name, protocol/service type, Base URL, API key, manual model ID, and boundary.
 
-The Add Provider flow should be a short connection form, not a provider marketplace. Its only job is to connect a model service that Pi Agent can call.
+Models from every connected Provider Profile appear in one global list with their provider label. Exactly one model is Global Default; model selection does not live inside a provider card. Full preset catalogs, API-key help links, and polished OpenAI-compatible, Anthropic-compatible, and Responses-compatible custom setup remain open.
 
-Default Add Provider content:
-
-- Service type: OpenAI-compatible, OpenAI, Anthropic, or custom endpoint.
-- Base URL when applicable.
-- API key.
-- Model list:
-  - Automatically fetch and refresh when the provider exposes a ModelList/list-models API.
-  - Allow manual model ID entry when the provider does not expose model listing or listing fails.
-  - Let the user choose one default model for Pi Agent.
-- Test and save.
-
-Do not show provider capability columns, model marketplace rows, routing details, data-boundary tables, pricing, context window, feature tags, per-workflow model matrices, or advanced filters in the default Add Provider flow. The Pi AI provider/model catalog and Pige Provider Profiles may supply internal compatibility metadata, but they should not expand the visible UI unless a future explicit feature needs them.
+Do not show provider capability matrices, marketplaces, routing details, pricing, context windows, feature tags, per-workflow model choices, Advanced/Fast assignments, OCR, local embeddings, tools, Skills, backup, or memory controls here. Pi AI catalog metadata remains internal unless a later workflow needs it.
 
 ### Deferred Model Routing Settings
 

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  AddManualProviderRequestSchema,
+  AddPresetProviderRequestSchema,
   ModelEgressDecisionSchema,
   PermissionDecisionRecordSchema,
   PermissionRequestSchema,
@@ -180,6 +182,26 @@ describe("security-sensitive shared contracts", () => {
     });
 
     expect(parsed).not.toHaveProperty("defaultHeaders");
+  });
+
+  it("accepts only bounded provider connection request fields", () => {
+    expect(AddPresetProviderRequestSchema.parse({
+      presetId: "openai",
+      apiKey: "synthetic-key"
+    })).toEqual({ presetId: "openai", apiKey: "synthetic-key" });
+    expect(() => AddPresetProviderRequestSchema.parse({
+      presetId: "openai",
+      apiKey: "synthetic-key",
+      baseUrl: "https://attacker.example/v1"
+    })).toThrow();
+    expect(() => AddManualProviderRequestSchema.parse({
+      displayName: "Compatible",
+      providerKind: "openai_compatible",
+      baseUrl: "https://models.example.com/v1",
+      apiKey: "x".repeat(16_385),
+      manualModelId: "model",
+      cloudBoundary: "unknown"
+    })).toThrow();
   });
 
   it("normalizes safe provider URLs and rejects unsafe URLs in persisted metadata", () => {

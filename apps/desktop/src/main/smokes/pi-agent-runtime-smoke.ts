@@ -1,5 +1,13 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import type { ModelProfileSummary, ProviderProfileSummary, RetrievalSearchResult } from "@pige/contracts";
+import { HomeAgentService } from "../services/home-agent-service";
+import { JobsService } from "../services/jobs-service";
 import type { ModelProviderRuntimeConfig } from "../services/model-provider-registry";
 import { PiAgentRuntimeAdapter, type PigeAgentToolDescriptor } from "../services/pi-agent-runtime-adapter";
+import { buildLocalExtractiveAskResult } from "../services/retrieval-service";
+import { createVaultOnDisk, loadVaultSummary } from "../services/vault-layout";
 
 export async function runPiAgentRuntimeSmoke(): Promise<{
   readonly adapterMode: "embedded_pi_sdk";
@@ -57,6 +65,53 @@ export async function runPiAgentRuntimeSmoke(): Promise<{
   };
 }
 
+export async function runHomeAgentRuntimeSmoke(): Promise<{
+  readonly state: "completed" | "waiting" | "failed";
+  readonly answerMode?: "local_extractive" | "model_grounded";
+  readonly citationCount: number;
+}> {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-home-agent-smoke-"));
+  try {
+    createVaultOnDisk({
+      parentDirectory: root,
+      vaultName: "Home Smoke",
+      appDataPath: path.join(root, "app-data"),
+      tempPath: path.join(root, "temp"),
+      now: new Date("2026-07-11T00:00:00.000Z")
+    });
+    const vaultPath = path.join(root, "Home Smoke");
+    const vault = loadVaultSummary(vaultPath);
+    writeHomeSmokePage(vaultPath);
+    const vaults = { current: () => vault, activeVaultPath: () => vaultPath };
+    const service = new HomeAgentService(
+      vaults,
+      {
+        getDefaultModel: () => smokeModelSummary,
+        getDefaultProvider: () => smokeProviderSummary,
+        hasDefaultRuntimeBinding: () => true,
+        getDefaultRuntimeConfig: () => runtimeConfig
+      },
+      {
+        search: () => createSmokeSearchResult(vault.vaultId),
+        ask: (request) => buildLocalExtractiveAskResult(request, createSmokeSearchResult(vault.vaultId))
+      },
+      new JobsService(vaults),
+      new PiAgentRuntimeAdapter({
+        fauxResponses: [
+          { kind: "tool_call", toolName: "pige_search_knowledge", args: {} },
+          { kind: "text", text: JSON.stringify({ answer: "Smoke evidence is grounded. [1]", citationRefs: ["citation_1"] }) }
+        ]
+      })
+    );
+    const result = await service.ask({ query: "What does the smoke evidence say?", locale: "en" });
+    return result.state === "completed"
+      ? { state: result.state, answerMode: result.result.answerMode, citationCount: result.result.citations.length }
+      : { state: result.state, citationCount: 0 };
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
 const SMOKE_TOOL_DESCRIPTOR = {
   version: "1",
   capability: "read_current_source",
@@ -109,3 +164,77 @@ const runtimeConfig: ModelProviderRuntimeConfig = {
   },
   apiKey: "synthetic-smoke-key"
 };
+
+const smokeProviderSummary: ProviderProfileSummary = {
+  id: runtimeConfig.provider.id,
+  displayName: runtimeConfig.provider.displayName,
+  providerKind: runtimeConfig.provider.providerKind,
+  ...(runtimeConfig.provider.baseUrl ? { baseUrl: runtimeConfig.provider.baseUrl } : {}),
+  modelListStrategy: runtimeConfig.provider.modelListStrategy,
+  cloudBoundary: runtimeConfig.provider.cloudBoundary,
+  ...(runtimeConfig.provider.boundaryVerification
+    ? { boundaryVerification: runtimeConfig.provider.boundaryVerification }
+    : {}),
+  createdAt: runtimeConfig.provider.createdAt,
+  updatedAt: runtimeConfig.provider.updatedAt
+};
+
+const smokeModelSummary: ModelProfileSummary = {
+  id: runtimeConfig.model.id,
+  providerProfileId: runtimeConfig.model.providerProfileId,
+  modelId: runtimeConfig.model.modelId,
+  ...(runtimeConfig.model.displayName ? { displayName: runtimeConfig.model.displayName } : {}),
+  source: runtimeConfig.model.source,
+  enabled: runtimeConfig.model.enabled,
+  isDefault: true,
+  createdAt: runtimeConfig.model.createdAt,
+  updatedAt: runtimeConfig.model.updatedAt
+};
+
+const HOME_SMOKE_PAGE_ID = "page_20260711_homesmoke";
+
+function createSmokeSearchResult(vaultId: string): RetrievalSearchResult {
+  return {
+    searchedAt: "2026-07-11T00:00:00.000Z",
+    activeVaultId: vaultId,
+    query: "What does the smoke evidence say?",
+    mode: "lexical_sqlite_fts",
+    total: 1,
+    invalidPageCount: 0,
+    degraded: false,
+    results: [{
+      summary: {
+        pageId: HOME_SMOKE_PAGE_ID,
+        title: "Home smoke",
+        pageType: "note",
+        status: "active",
+        pagePath: "wiki/home-smoke.md",
+        createdAt: "2026-07-11T00:00:00.000Z",
+        updatedAt: "2026-07-11T00:00:00.000Z",
+        sourceIds: []
+      },
+      score: 10,
+      snippets: ["Smoke evidence is grounded."],
+      matchReasons: ["body"]
+    }]
+  };
+}
+
+function writeHomeSmokePage(vaultPath: string): void {
+  const pagePath = path.join(vaultPath, "wiki", "home-smoke.md");
+  fs.mkdirSync(path.dirname(pagePath), { recursive: true });
+  fs.writeFileSync(pagePath, `---
+id: "${HOME_SMOKE_PAGE_ID}"
+schema_version: 1
+title: "Home smoke"
+type: "note"
+created_at: "2026-07-11T00:00:00.000Z"
+updated_at: "2026-07-11T00:00:00.000Z"
+status: "active"
+language: "en"
+source_ids: []
+---
+
+Smoke evidence is grounded.
+`, "utf8");
+}

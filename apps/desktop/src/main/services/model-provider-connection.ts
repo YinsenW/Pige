@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { isBuiltInProviderKind, type CloudBoundary, type ModelListStrategy, type ProviderKind } from "@pige/schemas";
 import { PigeDomainError } from "@pige/domain";
 import { normalizeProviderBaseUrl } from "./provider-base-url";
@@ -27,6 +28,10 @@ export type FetchLike = typeof fetch;
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_ANTHROPIC_BASE_URL = "https://api.anthropic.com/v1";
 const DEFAULT_TIMEOUT_MS = 10_000;
+const MAX_MODEL_LIST_BYTES = 1024 * 1024;
+const MAX_DISCOVERED_MODELS = 500;
+const MAX_MODEL_ID_BYTES = 200;
+const MAX_MODEL_DISPLAY_NAME_BYTES = 200;
 const MODEL_LIST_UNSUPPORTED_STATUSES = new Set([404, 405, 501]);
 
 export class ModelProviderConnectionTester {
@@ -62,7 +67,7 @@ export class ModelProviderConnectionTester {
     });
 
     if (response.ok) {
-      const discoveredModels = parseModelList(await response.json());
+      const discoveredModels = parseModelList(await readBoundedJson(response, this.#timeoutMs));
       if (discoveredModels.length === 0) {
         throw new PigeDomainError("model_provider.no_models", "The provider did not return any models.");
       }
@@ -138,22 +143,90 @@ function parseModelList(value: unknown): DiscoveredModel[] {
   if (!isRecord(value) || !Array.isArray(value.data)) {
     throw new PigeDomainError("model_provider.model_list_invalid", "The provider returned an invalid model list.");
   }
+  if (value.data.length > MAX_DISCOVERED_MODELS) {
+    throw new PigeDomainError("model_provider.model_list_too_large", "The provider returned too many models.");
+  }
 
   const seen = new Set<string>();
   const models: DiscoveredModel[] = [];
   for (const item of value.data) {
-    if (!isRecord(item) || typeof item.id !== "string" || !item.id.trim()) continue;
+    if (!isRecord(item) || typeof item.id !== "string" || !item.id.trim()) {
+      throw new PigeDomainError("model_provider.model_list_invalid", "The provider returned an invalid model entry.");
+    }
     const modelId = item.id.trim();
+    if (
+      Buffer.byteLength(modelId, "utf8") > MAX_MODEL_ID_BYTES ||
+      !/^[A-Za-z0-9][A-Za-z0-9._:/-]*$/u.test(modelId)
+    ) {
+      throw new PigeDomainError("model_provider.model_list_invalid", "The provider returned an invalid model identifier.");
+    }
     if (seen.has(modelId)) continue;
     seen.add(modelId);
-    const displayName =
-      typeof item.display_name === "string" && item.display_name.trim() ? item.display_name.trim() : undefined;
+    const displayName = typeof item.display_name === "string" && item.display_name.trim()
+      ? item.display_name.trim().replace(/\s+/gu, " ")
+      : undefined;
+    if (
+      displayName &&
+      (Buffer.byteLength(displayName, "utf8") > MAX_MODEL_DISPLAY_NAME_BYTES || /[\u0000-\u001f\u007f]/u.test(displayName))
+    ) {
+      throw new PigeDomainError("model_provider.model_list_invalid", "The provider returned an invalid model display name.");
+    }
     models.push({
       modelId,
       ...(displayName ? { displayName } : {})
     });
   }
   return models;
+}
+
+async function readBoundedJson(response: Response, timeoutMs: number): Promise<unknown> {
+  const declaredLength = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_MODEL_LIST_BYTES) {
+    throw new PigeDomainError("model_provider.model_list_too_large", "The provider model list exceeded the response limit.");
+  }
+  if (!response.body) {
+    throw new PigeDomainError("model_provider.model_list_invalid", "The provider returned an empty model list response.");
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    void reader.cancel();
+  }, timeoutMs);
+  try {
+    while (true) {
+      const chunk = await reader.read();
+      if (timedOut) {
+        throw new PigeDomainError("model_provider.timeout", "The provider model list timed out while reading.");
+      }
+      if (chunk.done) break;
+      total += chunk.value.byteLength;
+      if (total > MAX_MODEL_LIST_BYTES) {
+        await reader.cancel();
+        throw new PigeDomainError("model_provider.model_list_too_large", "The provider model list exceeded the response limit.");
+      }
+      chunks.push(chunk.value);
+    }
+  } catch (caught) {
+    if (caught instanceof PigeDomainError) throw caught;
+    if (timedOut) {
+      throw new PigeDomainError("model_provider.timeout", "The provider model list timed out while reading.");
+    }
+    throw new PigeDomainError("model_provider.network_failed", "The provider model list could not be read.");
+  } finally {
+    clearTimeout(timeout);
+    reader.releaseLock();
+  }
+
+  try {
+    return JSON.parse(Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString("utf8"));
+  } catch (caught) {
+    if (caught instanceof PigeDomainError) throw caught;
+    throw new PigeDomainError("model_provider.model_list_invalid", "The provider returned invalid model list JSON.");
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

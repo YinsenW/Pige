@@ -32,6 +32,14 @@ import {
 } from "./agent-ingest-tool-registry";
 import { buildAgentRuntimePolicyContext } from "./agent-policy-context";
 import { createModelEgressDecision } from "./model-egress-policy";
+import { containsRestrictedModelContent } from "./model-egress-content";
+import {
+  assertApprovedModelProviderBinding,
+  assertApprovedRuntimeBinding,
+  assertModelProviderPair,
+  createModelRuntimeBindingIdentity,
+  type ModelRuntimeBindingIdentity
+} from "./model-runtime-binding";
 import {
   EVIDENCE_CONTEXT_CHARACTER_LIMIT,
   EvidenceAssemblyService,
@@ -185,30 +193,6 @@ interface AgentIngestPromptContextResult {
   readonly metadataRedacted: boolean;
 }
 
-interface ModelEgressProviderIdentityInput {
-  readonly id: string;
-  readonly providerKind: ProviderProfileSummary["providerKind"];
-  readonly baseUrl?: string | undefined;
-  readonly modelListStrategy: ProviderProfileSummary["modelListStrategy"];
-  readonly cloudBoundary: ProviderProfileSummary["cloudBoundary"];
-  readonly boundaryVerification?: ProviderProfileSummary["boundaryVerification"] | undefined;
-  readonly updatedAt: string;
-}
-
-interface ModelEgressModelIdentityInput {
-  readonly id: string;
-  readonly providerProfileId: string;
-  readonly modelId: string;
-  readonly source: ModelProfileSummary["source"];
-  readonly enabled: boolean;
-  readonly updatedAt: string;
-}
-
-interface ModelEgressBinding {
-  readonly providerIdentityHash: string;
-  readonly modelIdentityHash: string;
-}
-
 const AGENT_NOTE_PUBLICATION_CHECKPOINT = "agent_note_publication_started";
 const AGENT_EXISTING_NOTE_ADOPTION_CHECKPOINT = "agent_existing_note_adoption_started";
 const AGENT_INDEX_PUBLICATION_CHECKPOINT = "agent_index_publication_started";
@@ -274,7 +258,7 @@ export class AgentIngestService {
       throw new PigeDomainError("model_provider.default_model_missing", "No default model is configured.");
     }
     assertModelProviderPair(defaultModel, defaultProvider);
-    const approvedBinding = createModelEgressBinding(defaultModel, defaultProvider);
+    const approvedBinding = createModelRuntimeBindingIdentity(defaultModel, defaultProvider);
 
     let currentSourceRecord = SourceRecordSchema.parse(sourceRecord);
     let currentEvidencePack = await this.#evidence.assemble(vaultPath, currentSourceRecord);
@@ -329,7 +313,7 @@ export class AgentIngestService {
         normalPayloadCharacterLimit: EVIDENCE_CONTEXT_CHARACTER_LIMIT,
         privateContent: currentSourceRecord.metadata.private === true || currentSourceRecord.metadata.privacy === "private",
         sensitiveContent: redaction.changed || promptContextResult.metadataRedacted || currentSourceRecord.metadata.sensitive === true,
-        restrictedContent: containsRestrictedContent(evidencePayload) || containsRestrictedContent(promptMetadataPayload)
+        restrictedContent: containsRestrictedModelContent(evidencePayload) || containsRestrictedModelContent(promptMetadataPayload)
       });
       const operation = writeModelEgressDecisionOperation({
         vaultPath,
@@ -1472,14 +1456,6 @@ function createModelEgressEvidencePayload(evidencePack: EvidencePack): string {
   return evidencePack.fragments.map((fragment) => fragment.text).join("");
 }
 
-function containsRestrictedContent(value: string): boolean {
-  return /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/u.test(value) ||
-    /\bBearer\s+[A-Za-z0-9._~+/=-]{12,}\b/iu.test(value) ||
-    /\bAKIA[A-Z0-9]{16}\b/u.test(value) ||
-    /\b(?:sk-ant-|sk-)[A-Za-z0-9_-]{12,}\b/u.test(value) ||
-    /\b(?:api[_-]?key|token|secret|password)\s*[:=]\s*(?!\[redacted-secret\])\S+/iu.test(value);
-}
-
 function normalizeList(values: readonly string[]): string[] {
   const seen = new Set<string>();
   const normalized: string[] = [];
@@ -1690,7 +1666,7 @@ function createModelEgressEvidenceSummaryHash(
   evidencePack: EvidencePack,
   payloadHash: string,
   promptMetadataHash: string,
-  binding: ModelEgressBinding
+  binding: ModelRuntimeBindingIdentity
 ): string {
   const summary = JSON.stringify({
     sourceId: evidencePack.sourceId,
@@ -1712,92 +1688,6 @@ function createModelEgressEvidenceSummaryHash(
     modelIdentityHash: binding.modelIdentityHash
   });
   return `sha256:${createHash("sha256").update(summary, "utf8").digest("hex")}`;
-}
-
-function createModelEgressBinding(
-  model: ModelEgressModelIdentityInput,
-  provider: ModelEgressProviderIdentityInput
-): ModelEgressBinding {
-  return {
-    providerIdentityHash: createModelEgressIdentityHash(createProviderEgressIdentity(provider)),
-    modelIdentityHash: createModelEgressIdentityHash(createModelEgressIdentity(model))
-  };
-}
-
-function createProviderEgressIdentity(provider: ModelEgressProviderIdentityInput): Readonly<Record<string, unknown>> {
-  return {
-    id: provider.id,
-    providerKind: provider.providerKind,
-    baseUrl: provider.baseUrl ?? null,
-    modelListStrategy: provider.modelListStrategy,
-    cloudBoundary: provider.cloudBoundary,
-    boundaryVerification: provider.boundaryVerification ?? "unknown",
-    updatedAt: provider.updatedAt
-  };
-}
-
-function createModelEgressIdentity(model: ModelEgressModelIdentityInput): Readonly<Record<string, unknown>> {
-  return {
-    id: model.id,
-    providerProfileId: model.providerProfileId,
-    modelId: model.modelId,
-    source: model.source,
-    enabled: model.enabled,
-    updatedAt: model.updatedAt
-  };
-}
-
-function createModelEgressIdentityHash(identity: Readonly<Record<string, unknown>>): string {
-  return `sha256:${createHash("sha256").update(JSON.stringify(identity), "utf8").digest("hex")}`;
-}
-
-function assertModelProviderPair(model: ModelProfileSummary, provider: ProviderProfileSummary): void {
-  if (!model.enabled || !model.isDefault || model.providerProfileId !== provider.id) {
-    throw new PigeDomainError(
-      "model_provider.runtime_config_changed",
-      "The selected default model and provider are not one valid enabled binding."
-    );
-  }
-}
-
-function assertApprovedModelProviderBinding(
-  model: ModelProfileSummary | undefined,
-  provider: ProviderProfileSummary | undefined,
-  approved: ModelEgressBinding,
-  message: string
-): void {
-  if (!model || !provider || model.providerProfileId !== provider.id) {
-    throw new PigeDomainError("model_provider.runtime_config_changed", message);
-  }
-  const current = createModelEgressBinding(model, provider);
-  if (
-    current.modelIdentityHash !== approved.modelIdentityHash ||
-    current.providerIdentityHash !== approved.providerIdentityHash
-  ) {
-    throw new PigeDomainError("model_provider.runtime_config_changed", message);
-  }
-}
-
-function assertApprovedRuntimeBinding(
-  runtimeConfig: ModelProviderRuntimeConfig | undefined,
-  approved: ModelEgressBinding
-): asserts runtimeConfig is ModelProviderRuntimeConfig {
-  if (!runtimeConfig || runtimeConfig.model.providerProfileId !== runtimeConfig.provider.id) {
-    throw new PigeDomainError(
-      "model_provider.runtime_config_changed",
-      "The provider runtime binding changed before the approved model call could start."
-    );
-  }
-  const current = createModelEgressBinding(runtimeConfig.model, runtimeConfig.provider);
-  if (
-    current.modelIdentityHash !== approved.modelIdentityHash ||
-    current.providerIdentityHash !== approved.providerIdentityHash
-  ) {
-    throw new PigeDomainError(
-      "model_provider.runtime_config_changed",
-      "The provider endpoint or model changed before the approved model call could start."
-    );
-  }
 }
 
 function createModelEgressDecisionHash(decision: ModelEgressDecision): string {

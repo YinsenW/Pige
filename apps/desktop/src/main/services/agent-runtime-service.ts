@@ -74,6 +74,7 @@ export class AgentRuntimeService {
         builtAt: policy.builtAt,
         vaultId: policy.vaultId,
         cloudBoundary: policy.model.cloudBoundary,
+        boundaryVerification: policy.model.boundaryVerification,
         localDatabase: policy.localCapabilities.localDatabase
       }
     });

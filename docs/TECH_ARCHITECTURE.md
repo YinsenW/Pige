@@ -848,9 +848,9 @@ Context assembly rule: the retrieval pipeline produces selected evidence for an 
 
 Current implementation uses SQLite FTS5 with CJK augmentation and bounded Markdown
 fallback, redacts snippets, and builds a body-free Context Pack from at most eight
-evidence items. `retrieval.ask` currently adds a deterministic local extractive summary
-as the explicit no-model fallback; model synthesis moves to the Pi loop. Vector search,
-reranking, answer saving, and jump-to-snippet remain open.
+evidence items. Home uses one Pi search tool with per-turn evidence/egress revalidation;
+`retrieval.ask` is the no-binding fallback. Vector/reranking, answer saving, conversation
+persistence, and jump-to-snippet remain open.
 
 Retrieval result contract:
 
@@ -1424,7 +1424,8 @@ The initial Agent input contains preserved-source identity, bounded safe metadat
 policy, and tool contracts—not host-preselected text. Evidence enters as bounded tool
 results with durable Artifact/locator refs. Text/document/image verticals freeze
 source/job scope and expose inspect, parse, selected OCR, and publication; retrieval
-remains B3.13/E3.08 work.
+is now proven for the bounded Home query path, while ingest retrieval/proposals remain
+B3.13/E3.08 work.
 
 ### 9.2 Knowledge Publication Boundary
 
@@ -1500,6 +1501,9 @@ Model list behavior:
 - The Pi integration owner defines connection tests, discovery, manual fallback, and
   failure semantics. Architecture requires one selected `ModelProfile`, no untracked
   model string, and no Advanced/Fast or per-workflow routing before its runtime gate.
+- The reviewed OpenAI preset fixes endpoint/protocol, asks only for a key, bounds
+  discovery, and fills the global model list/default; broader catalog/custom/platform
+  acceptance stays open.
 
 Current embedded Agent ingest spine:
 
@@ -1507,8 +1511,9 @@ Current embedded Agent ingest spine:
   provider/model binding and no direct-provider fallback.
 - Inspect returns verified evidence; PDF/DOCX/PPTX parse and selected PDF/PPTX/image OCR create
   or reuse bound children; publication revalidates refs and revision.
-- Retrieval/proposals, generic recovery, full Broker, and
-  remaining fixed routing stay open.
+- Home retrieval uses one bounded search tool with per-turn evidence/egress revalidation.
+  Ingest retrieval/proposals, generic recovery, full Broker, and remaining fixed routing
+  stay open.
 
 The v0.1 UI exposes only the P0 provider modes defined in `docs/PRD.md`, through the
 compact Add Provider flow owned by the Pi integration contract.

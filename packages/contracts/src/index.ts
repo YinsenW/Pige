@@ -13,6 +13,7 @@ import type {
   MarkdownPageStatus,
   MarkdownPageType,
   ModelListStrategy,
+  PigeErrorSummary,
   ProposalState,
   ProposalTrustLevel,
   ProviderKind,
@@ -156,6 +157,7 @@ export interface AgentRuntimeStatus {
     readonly builtAt: string;
     readonly vaultId: string;
     readonly cloudBoundary: AgentRuntimePolicyContext["model"]["cloudBoundary"];
+    readonly boundaryVerification: AgentRuntimePolicyContext["model"]["boundaryVerification"];
     readonly localDatabase: AgentRuntimePolicyContext["localCapabilities"]["localDatabase"];
   };
 }
@@ -224,6 +226,7 @@ export interface LocalDatabaseStatus {
 
 export interface ProviderProfileSummary {
   readonly id: string;
+  readonly presetId?: string;
   readonly displayName: string;
   readonly providerKind: ProviderKind;
   readonly baseUrl?: string;
@@ -232,6 +235,17 @@ export interface ProviderProfileSummary {
   readonly boundaryVerification?: BoundaryVerification;
   readonly createdAt: string;
   readonly updatedAt: string;
+}
+
+export interface ProviderPresetSummary {
+  readonly presetId: string;
+  readonly displayName: string;
+  readonly providerKind: ProviderKind;
+  readonly endpointProtocol: "openai_responses";
+  readonly fixedBaseUrl: string;
+  readonly modelListStrategy: "list_models";
+  readonly cloudBoundary: "cloud";
+  readonly apiKeyManagementUrl: string;
 }
 
 export interface ModelProfileSummary {
@@ -247,10 +261,16 @@ export interface ModelProfileSummary {
 }
 
 export interface ModelProviderSettingsSummary {
+  readonly presets: readonly ProviderPresetSummary[];
   readonly providers: readonly ProviderProfileSummary[];
   readonly models: readonly ModelProfileSummary[];
   readonly defaultModelProfileId?: string;
   readonly hasDefaultModel: boolean;
+}
+
+export interface AddPresetProviderRequest {
+  readonly presetId: string;
+  readonly apiKey: string;
 }
 
 export interface AddManualProviderRequest {
@@ -565,6 +585,24 @@ export interface RetrievalAskResult extends RetrievalSearchResult {
   readonly warnings: readonly RetrievalAnswerWarning[];
 }
 
+export interface HomeAgentAskRequest extends RetrievalAskRequest {}
+
+export type HomeAgentModelUsage = "none" | "local" | "cloud";
+
+export type HomeAgentAskResult =
+  | {
+      readonly requestId: string;
+      readonly state: "completed";
+      readonly modelUsage: HomeAgentModelUsage;
+      readonly result: RetrievalAskResult;
+    }
+  | {
+      readonly requestId: string;
+      readonly state: "waiting" | "failed";
+      readonly modelUsage: HomeAgentModelUsage;
+      readonly error: PigeErrorSummary;
+    };
+
 export interface ToolchainToolStatus {
   readonly id: string;
   readonly name: string;
@@ -695,6 +733,7 @@ export interface PigeDesktopApi {
   };
   readonly agent: {
     readonly runtimeStatus: () => Promise<AgentRuntimeStatus>;
+    readonly ask: (request: HomeAgentAskRequest) => Promise<HomeAgentAskResult>;
   };
   readonly capture: {
     readonly submitText: (request: SubmitTextCaptureRequest) => Promise<CaptureSubmitResult>;
@@ -750,6 +789,7 @@ export interface PigeDesktopApi {
   };
   readonly models: {
     readonly summary: () => Promise<ModelProviderSettingsSummary>;
+    readonly addPresetProvider: (request: AddPresetProviderRequest) => Promise<ModelProviderSettingsSummary>;
     readonly addManualProvider: (request: AddManualProviderRequest) => Promise<ModelProviderSettingsSummary>;
     readonly setDefaultModel: (request: SetDefaultModelRequest) => Promise<ModelProviderSettingsSummary>;
   };

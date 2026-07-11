@@ -153,6 +153,58 @@ describe("model provider connection tester", () => {
 
     expect(seenUrl).toBe("http://[::1]:11434/v1/models");
   });
+
+  it("fails closed on oversized or unbounded model-list responses", async () => {
+    const request = {
+      providerKind: "openai" as const,
+      apiKey: "test-key",
+      manualModelId: "gpt-5-mini",
+      cloudBoundary: "cloud" as const
+    };
+    const declared = new ModelProviderConnectionTester(async () => new Response("{}", {
+      status: 200,
+      headers: { "content-length": String(1024 * 1024 + 1) }
+    }));
+    const streamed = new ModelProviderConnectionTester(async () => new Response("x".repeat(1024 * 1024 + 1), {
+      status: 200
+    }));
+
+    await expect(declared.testManualProvider(request)).rejects.toThrow("exceeded the response limit");
+    await expect(streamed.testManualProvider(request)).rejects.toThrow("exceeded the response limit");
+  });
+
+  it("bounds discovered model counts and model metadata", async () => {
+    const request = {
+      providerKind: "openai" as const,
+      apiKey: "test-key",
+      manualModelId: "gpt-5-mini",
+      cloudBoundary: "cloud" as const
+    };
+    const tooMany = new ModelProviderConnectionTester(async () => jsonResponse({
+      data: Array.from({ length: 501 }, (_, index) => ({ id: `model-${index}` }))
+    }));
+    const oversizedId = new ModelProviderConnectionTester(async () => jsonResponse({
+      data: [{ id: "m".repeat(201) }]
+    }));
+
+    await expect(tooMany.testManualProvider(request)).rejects.toThrow("too many models");
+    await expect(oversizedId.testManualProvider(request)).rejects.toThrow("invalid model identifier");
+  });
+
+  it("applies a bounded read deadline after response headers arrive", async () => {
+    const tester = new ModelProviderConnectionTester(async () => new Response(new ReadableStream({
+      start() {
+        // Intentionally leave the body open to prove the read deadline.
+      }
+    }), { status: 200 }), 5);
+
+    await expect(tester.testManualProvider({
+      providerKind: "openai",
+      apiKey: "test-key",
+      manualModelId: "gpt-5-mini",
+      cloudBoundary: "cloud"
+    })).rejects.toThrow("timed out while reading");
+  });
 });
 
 function jsonResponse(value: unknown): Response {

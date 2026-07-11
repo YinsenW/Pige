@@ -518,6 +518,7 @@ Current bridge queries:
 
 Commands:
 
+- `agent.ask`
 - `retrieval.ask`
 - `retrieval.saveAnswer`
 
@@ -529,15 +530,22 @@ Retrieval DTOs and internal context-pack refs must follow `docs/CONTEXT_ASSEMBLY
 
 Current retrieval queries:
 
-- `retrieval.search({ query, limit?, pageTypes? })` uses SQLite FTS5 when the Local Database Service index is ready.
-- It falls back to local lexical Markdown scan over `sources/` and `wiki/` when the database is unavailable, stale, or unhealthy.
-- It returns page summaries, scores, bounded snippets, match reasons, invalid frontmatter count, and a degraded state such as `local_database_not_ready` only for fallback mode.
-- It must not return full page bodies, source record paths, managed copy paths, original absolute paths, raw vector data, prompts, context packs, model responses, or secrets.
-- `retrieval.ask({ query, limit?, pageTypes?, locale? })` runs the same local retrieval, selects a maximum of eight evidence items, builds an internal Home-query Context Pack, and returns a short local extractive answer plus numbered citations and ranked results.
-- The internal Context Pack serializes refs, page IDs, safe locators, scores, budget estimates, index health, warnings, and omission counts only. It is not exposed to the renderer and does not duplicate selected snippet text or page bodies.
-- `retrieval.ask` returns `insufficient_evidence` with no citations when no local evidence exists, and `limited_evidence` when only one page supports the answer.
-- Home calls `retrieval.ask` when the composer input is clearly question/search-like. Non-question inputs remain ordinary capture.
-- Query-model synthesis remains gated on enforced Runtime Policy Context, cloud-send policy, and Permission Broker decisions. `retrieval.saveAnswer` remains a later slice.
+- `retrieval.search({ query, limit?, pageTypes? })` uses ready SQLite FTS5 or bounded
+  `sources/`/`wiki/` lexical fallback. It returns safe summaries, scores, snippets,
+  reasons, invalid count, and fallback degradation—never bodies, private paths, raw
+  vectors, prompts, Context Packs, responses, or secrets.
+- `retrieval.ask({ query, limit?, pageTypes?, locale? })` selects at most eight items,
+  builds an internal ref/locator/budget/health Context Pack, and returns local extractive
+  text, citations, and ranked results. Zero evidence has no citations; one page is limited.
+- Home calls `agent.ask` for clearly question/search-like input. With no ready non-secret
+  runtime binding it returns `retrieval.ask` before any Agent Job, egress audit,
+  credential read, or Pi call; non-question input remains capture.
+- With a ready binding, `agent.ask` creates a query-hash-only `retrieval_query`, lets Pi
+  call one bounded search tool, rechecks Markdown/source privacy per turn, and links each
+  body-free egress audit. Drift fails closed; zero evidence returns the fixed no-citation
+  result. Its DTO exposes only request/state, `none|local|cloud`, safe retrieval output or
+  shared error—never prompts, credentials, paths, endpoints, evidence bodies, or raw errors.
+  `retrieval.saveAnswer` remains open.
 
 ### 6.7 Permissions
 
@@ -563,6 +571,7 @@ Commands:
 - `settings.setLocale`
 - `agentPolicy.preview`
 - `agent.runtimeStatus`
+- `models.addPresetProvider`
 - `models.addManualProvider`
 - `models.setDefaultModel`
 - `tools.install`
@@ -578,35 +587,13 @@ Queries:
 Provider/model DTOs:
 
 ```ts
-type ModelProviderSettingsSummary = {
-  providers: ProviderProfileSummary[];
-  models: ModelProfileSummary[];
-  defaultModelProfileId?: string;
-  hasDefaultModel: boolean;
-};
+type ModelProviderSettingsSummary = { presets: ProviderPresetSummary[]; providers: ProviderProfileSummary[]; models: ModelProfileSummary[]; defaultModelProfileId?: string; hasDefaultModel: boolean };
 
-type ProviderProfileSummary = {
-  id: string;
-  displayName: string;
-  providerKind: ProviderKind;
-  baseUrl?: string;
-  modelListStrategy: ModelListStrategy;
-  cloudBoundary: CloudBoundary;
-  createdAt: string;
-  updatedAt: string;
-};
+type ProviderPresetSummary = { presetId: string; displayName: string; providerKind: ProviderKind; endpointProtocol: "openai_responses"; fixedBaseUrl: string; modelListStrategy: "list_models"; cloudBoundary: "cloud"; apiKeyManagementUrl: string };
 
-type ModelProfileSummary = {
-  id: string;
-  providerProfileId: string;
-  modelId: string;
-  displayName?: string;
-  source: "provider_list" | "manual";
-  enabled: boolean;
-  isDefault: boolean;
-  createdAt: string;
-  updatedAt: string;
-};
+type ProviderProfileSummary = { id: string; displayName: string; providerKind: ProviderKind; baseUrl?: string; modelListStrategy: ModelListStrategy; cloudBoundary: CloudBoundary; createdAt: string; updatedAt: string };
+
+type ModelProfileSummary = { id: string; providerProfileId: string; modelId: string; displayName?: string; source: "provider_list" | "manual"; enabled: boolean; isDefault: boolean; createdAt: string; updatedAt: string };
 ```
 
 Secrets are passed only to the Settings and Secrets Service and are never echoed back.
@@ -616,9 +603,14 @@ Rules:
 - Settings APIs return redacted page DTOs, not raw storage files.
 - `settings.appearance` returns the current app locale and supported locale list. `settings.setLocale` stores the user override in machine-local settings and applies it without writing to the vault.
 - Secret writes use dedicated secret handling and return secret references only.
-- `models.addManualProvider` tests the provider connection before persisting profiles, attempts model-list discovery, stores raw API keys only through the secret store, and returns redacted profile/model summaries. It must not persist provider, model, or secret records when authentication or validation fails.
-- `models.addManualProvider` and `maintenance.resetLocalDatabase` consume their Settings Registry permission requirement in the main process. A native confirmation must succeed before provider network/secret work or local-database deletion begins; renderer invocation alone is not authorization. Canceling returns a stable permission error and leaves state unchanged.
-- If model-list discovery succeeds, returned model summaries use `source: "provider_list"`; if a compatible endpoint explicitly does not support listing, Pige stores the submitted manual model ID with `source: "manual"` and `modelListStrategy: "failed_then_manual"`.
+- `models.addPresetProvider({ presetId, apiKey })` is write-only toward main; validation
+  and native confirmation precede effects, and no key returns. The reviewed `openai`
+  preset fixes endpoint/protocol, bounds discovery, selects its default, and restores the
+  known-good provider/model/secret binding on failure.
+- `models.addManualProvider` confirms/tests before persistence, discovers models when
+  supported, writes keys only through the secret store, and returns redacted summaries.
+  Auth/validation failure or canceled main-process confirmation leaves state unchanged;
+  only explicit compatible-endpoint listing absence permits a manual model ID.
 - `agent.runtimeStatus` reports embedded Pi readiness and non-secret policy IDs. It uses profile summaries and presence-only binding metadata, never credential resolution/decryption; production emits only `embedded_pi_sdk`.
 - v0.1 exposes one effective default Pi Agent model; Advanced/Fast model slots must not appear unless runtime routing support is real and tested.
 - Sensitive setting changes route through Permission Broker or confirmation proposals.

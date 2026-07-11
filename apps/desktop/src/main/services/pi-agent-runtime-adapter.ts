@@ -46,7 +46,7 @@ export type PigeAgentToolTrust = "model_generated" | "untrusted_source" | "host_
 export type PigeAgentToolExecution = "sequential" | "parallel_read_only";
 
 export interface PigeAgentToolDataBoundary {
-  readonly resourceScope: "current_source";
+  readonly resourceScope: "current_source" | "current_vault";
   readonly pathAuthority: "host_only";
   readonly sourceIdAuthority: "host_only";
   readonly modelAuthority: "none";
@@ -54,7 +54,7 @@ export interface PigeAgentToolDataBoundary {
 
 export interface PigeAgentToolIdempotency {
   readonly mode: "idempotent" | "non_idempotent";
-  readonly scope: "current_source" | "tool_call" | "none";
+  readonly scope: "current_source" | "current_vault" | "tool_call" | "none";
 }
 
 export interface PigeAgentToolExecutionLimits {
@@ -188,6 +188,17 @@ export class PiAgentRuntimeAdapter {
     const toolsByName = new Map(tools.map((tool) => [tool.name, tool]));
     const events: PiAgentEventRecord[] = [];
     const invokedTools: string[] = [];
+    let hasBeforeModelTurnFailure = false;
+    let beforeModelTurnFailure: unknown;
+    const runBeforeModelTurn = async (): Promise<void> => {
+      try {
+        await request.beforeModelTurn?.();
+      } catch (caught) {
+        hasBeforeModelTurnFailure = true;
+        beforeModelTurnFailure = caught;
+        throw caught;
+      }
+    };
     const agent = new Agent({
       initialState: {
         systemPrompt: request.systemPrompt,
@@ -201,7 +212,7 @@ export class PiAgentRuntimeAdapter {
       followUpMode: "one-at-a-time",
       toolExecution: "sequential",
       prepareNextTurnWithContext: async () => {
-        await request.beforeModelTurn?.();
+        await runBeforeModelTurn();
         return undefined;
       },
       beforeToolCall: async ({ toolCall, args }) => {
@@ -237,10 +248,11 @@ export class PiAgentRuntimeAdapter {
     }
 
     try {
-      await request.beforeModelTurn?.();
+      await runBeforeModelTurn();
       if (request.signal?.aborted) throw createAbortError();
       await agent.prompt(request.userPrompt);
       if (request.signal?.aborted) throw createAbortError();
+      if (hasBeforeModelTurnFailure) throw beforeModelTurnFailure;
       if (agent.state.errorMessage) {
         throw new PigeDomainError("model_provider.call_failed", "The embedded Pi Agent turn failed.");
       }
@@ -534,7 +546,7 @@ function isPigeAgentToolExecution(value: unknown): value is PigeAgentToolExecuti
 
 function isPigeAgentToolDataBoundary(value: unknown): value is PigeAgentToolDataBoundary {
   return isExactRecord(value, ["resourceScope", "pathAuthority", "sourceIdAuthority", "modelAuthority"]) &&
-    value.resourceScope === "current_source" &&
+    (value.resourceScope === "current_source" || value.resourceScope === "current_vault") &&
     value.pathAuthority === "host_only" &&
     value.sourceIdAuthority === "host_only" &&
     value.modelAuthority === "none";
@@ -543,7 +555,7 @@ function isPigeAgentToolDataBoundary(value: unknown): value is PigeAgentToolData
 function isPigeAgentToolIdempotency(value: unknown): value is PigeAgentToolIdempotency {
   if (!isExactRecord(value, ["mode", "scope"])) return false;
   return value.mode === "idempotent"
-    ? value.scope === "current_source" || value.scope === "tool_call"
+    ? value.scope === "current_source" || value.scope === "current_vault" || value.scope === "tool_call"
     : value.mode === "non_idempotent" && value.scope === "none";
 }
 

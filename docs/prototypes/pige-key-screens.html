@@ -2325,7 +2325,7 @@
     </section>
 
     <section class="prototype-screen" id="screen-model-settings" data-screen="model-settings">
-      <div class="screen-caption"><span class="screen-index">10</span>设置：清晰分组后的模型页</div>
+      <div class="screen-caption"><span class="screen-index">10</span>模型：推荐预设与全局默认</div>
       <div class="app-window settings-window">
         <div class="settings-layout">
           <aside class="sidebar">
@@ -2367,28 +2367,41 @@
             <div class="content-topbar">
               <div>
                 <div class="page-title">模型服务商</div>
-                <div class="page-subtitle">连接一个可用的语言模型服务即可；Pige 会自动选择合适的调用方式</div>
+                <div class="page-subtitle">连接一个 Pi Agent 可调用的模型服务</div>
               </div>
-              <button class="text-button primary">添加提供商</button>
             </div>
             <div class="settings-grid">
               <section class="setting-card">
-                <h3>当前提供商</h3>
-                <p>第一版只要求配置一个可用的 BYOK 服务。</p>
+                <h3>推荐</h3>
+                <p>使用已审核的 OpenAI 预设，只需填写 API Key。</p>
                 <div class="provider-row">
                   <div class="provider-mark"><svg class="icon"><use href="#i-key"/></svg></div>
-                  <div><strong style="color:var(--text);">OpenAI 兼容</strong><br/>api.example.com/v1</div>
-                  <span class="badge green">已启用</span>
+                  <div><strong style="color:var(--text);">OpenAI</strong><br/>固定端点 · 自动发现模型</div>
+                  <span class="badge green">推荐</span>
                 </div>
                 <div class="provider-row">
                   <div class="provider-mark"><svg class="icon"><use href="#i-shield"/></svg></div>
-                  <div><strong style="color:var(--text);">API Key</strong><br/>已加密保存</div>
-                  <span class="badge green">正常</span>
+                  <div><strong style="color:var(--text);">API Key</strong><br/>sk-••••••••••••••••</div>
+                  <button class="text-button primary">连接</button>
                 </div>
                 <div class="provider-row">
-                  <div class="provider-mark"><svg class="icon"><use href="#i-check"/></svg></div>
-                  <div><strong style="color:var(--text);">测试连接</strong><br/>上次测试：刚刚</div>
-                  <span class="badge green">可用</span>
+                  <div class="provider-mark"><svg class="icon"><use href="#i-chevron"/></svg></div>
+                  <div><strong style="color:var(--text);">自定义服务商</strong><br/>按需展开高级连接字段</div>
+                  <span class="badge">展开</span>
+                </div>
+              </section>
+              <section class="setting-card">
+                <h3>模型</h3>
+                <p>所有 Provider Profile 的模型集中管理；一个默认模型即可运行 Pige。</p>
+                <div class="model-list-card">
+                  <div class="model-list-head">
+                    <div>
+                      <div class="model-list-title">全局模型列表</div>
+                      <div class="model-list-hint">每行保留服务商标签，且只有一个 Global Default。</div>
+                    </div>
+                  </div>
+                  <div class="model-row"><span>gpt-5-mini · OpenAI</span><span class="badge green">Global Default</span></div>
+                  <div class="model-row"><span>gpt-4.1-mini · OpenAI</span><span class="badge">设为 Global Default</span></div>
                 </div>
               </section>
             </div>
@@ -2398,7 +2411,7 @@
     </section>
 
     <section class="prototype-screen" id="screen-add-provider" data-screen="add-provider">
-      <div class="screen-caption"><span class="screen-index">11</span>添加服务商：接通 Pi Agent 的模型服务</div>
+      <div class="screen-caption"><span class="screen-index">11</span>自定义服务商：按需展开高级字段</div>
       <div class="app-window provider-browser-window">
         <div class="settings-layout">
           <aside class="sidebar">
@@ -2426,9 +2439,9 @@
             <div class="content-topbar">
               <div>
                 <div class="page-title">模型服务商</div>
-                <div class="page-subtitle">只需要连接一个可用服务，Pige 会自动调用</div>
+                <div class="page-subtitle">推荐预设留在模型页；这里仅展示自定义配置</div>
               </div>
-              <button class="text-button primary">添加提供商</button>
+              <button class="text-button">返回模型</button>
             </div>
           </main>
         </div>
@@ -2436,22 +2449,27 @@
         <div class="provider-dialog">
           <div class="provider-dialog-header">
             <div>
-              <div class="provider-dialog-title">添加模型服务商</div>
-              <div class="provider-dialog-subtitle">只填写 Pi Agent 调用模型所需的信息。</div>
+              <div class="provider-dialog-title">自定义服务商</div>
+              <div class="provider-dialog-subtitle">仅在默认 OpenAI 预设不适用时展开。</div>
             </div>
             <div class="icon-button subtle"><svg class="icon"><use href="#i-check"/></svg></div>
           </div>
           <div class="provider-simple-body">
             <div class="provider-type-list">
-              <div class="provider-type-row active"><span class="provider-type-dot">OC</span><span>OpenAI 兼容</span></div>
-              <div class="provider-type-row"><span class="provider-type-dot">OA</span><span>OpenAI</span></div>
-              <div class="provider-type-row"><span class="provider-type-dot">A</span><span>Anthropic</span></div>
-              <div class="provider-type-row"><span class="provider-type-dot">C</span><span>自定义端点</span></div>
+              <div class="provider-type-row active"><span class="provider-type-dot">C</span><span>自定义端点</span></div>
             </div>
             <aside class="provider-setup">
-              <h3>OpenAI 兼容</h3>
-              <p>适合 OpenRouter、硅基流动、自托管服务等兼容接口。支持 ModelList 时会自动拉取模型。</p>
+              <h3>自定义服务商（已展开）</h3>
+              <p>当前只展示必要连接字段；完整三协议体验仍待后续完善。</p>
               <div class="provider-form-grid">
+                <div>
+                  <div class="field-label">名称</div>
+                  <div class="field-box">我的服务</div>
+                </div>
+                <div>
+                  <div class="field-label">协议 / 服务类型</div>
+                  <div class="field-box">OpenAI 兼容（当前）</div>
+                </div>
                 <div class="wide">
                   <div class="field-label">Base URL</div>
                   <div class="field-box">https://api.example.com/v1</div>
@@ -2461,30 +2479,18 @@
                   <div class="field-box">sk-••••••••••••••••••••</div>
                 </div>
                 <div>
-                  <div class="field-label">名称</div>
-                  <div class="field-box">默认</div>
+                  <div class="field-label">手动模型 ID</div>
+                  <div class="field-box">model-id</div>
                 </div>
                 <div>
-                  <div class="field-label">模型来源</div>
-                  <div class="field-box">自动拉取</div>
+                  <div class="field-label">数据边界</div>
+                  <div class="field-box">云端或本地</div>
                 </div>
-              </div>
-              <div class="model-list-card">
-                <div class="model-list-head">
-                  <div>
-                    <div class="model-list-title">模型列表</div>
-                    <div class="model-list-hint">拉取失败时可以手动添加模型 ID。</div>
-                  </div>
-                  <button class="text-button">刷新</button>
-                </div>
-                <div class="model-row"><span>gpt-4.1-mini</span><span class="badge green">默认</span></div>
-                <div class="model-row"><span>gpt-4.1</span><span class="badge">设为默认</span></div>
-                <div class="model-row muted"><span>手动添加模型 ID</span><span>+</span></div>
               </div>
             </aside>
           </div>
           <div class="provider-dialog-footer">
-            <div class="provider-footnote">保存后，Pi Agent 会自动使用默认模型。</div>
+            <div class="provider-footnote">完整预设目录、API Key 帮助与三协议体验仍在后续。</div>
             <div class="row-actions">
               <button class="text-button">取消</button>
               <button class="text-button primary">测试并保存</button>

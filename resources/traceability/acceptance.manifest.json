@@ -1321,10 +1321,10 @@
     },
     "PIGE-JOB-001": {
       "status": "partial",
-      "evidence": ["EV-JOB-RECOVERY", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PARSE-FOLLOWUP-DURABILITY", "EV-OCR-FOLLOWUP-DURABILITY"],
+      "evidence": ["EV-JOB-RECOVERY", "EV-HOME-AGENT", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PARSE-FOLLOWUP-DURABILITY", "EV-OCR-FOLLOWUP-DURABILITY"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-001",
-        "description": "Remaining parser, model, permission, backup, and migration paths still need pre-work Job assertions.",
+        "description": "Home model work is Job-first; remaining parser, permission, backup, and migration paths need assertions.",
         "targetBuilds": [
           "B2.08"
         ],
@@ -1335,10 +1335,10 @@
     },
     "PIGE-JOB-002": {
       "status": "partial",
-      "evidence": ["EV-JOB-DRAIN", "EV-JOB-RECOVERY", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER"],
+      "evidence": ["EV-JOB-DRAIN", "EV-JOB-RECOVERY", "EV-HOME-JOB-RECOVERY", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-002",
-        "description": "Action-safety propagation remains open beyond capture/parse/OCR/agent_ingest; index_rebuild cancellation and serialization are process-local and rebuildable-only; running capture and remaining classes still lack cooperative cancellation; strict cross-process Job/index-writer CAS and routing, parent-directory swap, guard-to-domain atomicity, guard-without-output recovery, complete kill/crash/stale-worker recovery, packaged filesystems, checkpoint arrays, visible progress/cancel UI, and remaining retry assertions stay open.",
+        "description": "Home interruption becomes retryable; no drainer/generic retry exists. Other-class cancellation, cross-process CAS/routing, swaps/atomicity, kill recovery, packaged filesystems, checkpoints, and visible progress/cancel remain open.",
         "targetBuilds": [
           "B2.08",
           "B2.11"
@@ -1418,14 +1418,10 @@
     },
     "PIGE-JOB-007": {
       "status": "partial",
-      "evidence": [
-        "EV-JOB-STATUS",
-        "EV-JOB-WAIT",
-        "EV-JOB-CANCEL"
-      ],
+      "evidence": ["EV-JOB-STATUS", "EV-JOB-WAIT", "EV-JOB-CANCEL", "EV-HOME-UI"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-007",
-        "description": "Numeric Home progress, running cancel controls, pushed events, waiting-permission, confirmation, failure, and completion UI remain open.",
+        "description": "Home question states are visible; numeric progress, running cancel, pushed events, and waiting-permission confirmation remain open.",
         "targetBuilds": [
           "B2.10",
           "B2.12"
@@ -1525,10 +1521,10 @@
     },
     "PIGE-SEC-005": {
       "status": "partial",
-      "evidence": ["EV-EGRESS", "EV-EGRESS-SERVICE", "EV-EGRESS-PROFILE-BINDING", "EV-EGRESS-RUNTIME-BINDING", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS"],
+      "evidence": ["EV-EGRESS", "EV-EGRESS-SERVICE", "EV-EGRESS-PROFILE-BINDING", "EV-EGRESS-RUNTIME-BINDING", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-HOME-AGENT"],
       "open": {
         "id": "OPEN-REQ-PIGE-SEC-005",
-        "description": "User-confirmation resume and complete provider-path adoption remain open.",
+        "description": "Home per-turn audit/drift is enforced; confirmation resume and remaining provider paths stay open.",
         "targetBuilds": [
           "B3.05"
         ],
@@ -1571,10 +1567,10 @@
     },
     "PIGE-PI-001": {
       "status": "partial",
-      "evidence": ["EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-BOUNDARY", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE"],
+      "evidence": ["EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-BOUNDARY", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE"],
       "open": {
         "id": "OPEN-REQ-PIGE-PI-001",
-        "description": "Exact Pi containment, isolated binding, text plus PDF/DOCX/PPTX parse and selected PDF/PPTX/image OCR traces, deterministic child reuse, wait/cancel/empty-output handling, per-turn egress, no-model wait, bypass mutations, and Electron smoke are implemented. Retrieval/proposal tools, complete registry metadata, remaining fixed routes, generic recovery, full Permission Broker, signed platforms, manual BYOK, and the required read→retrieve→publish trace remain open.",
+        "description": "Pi text/document/image and Home search traces are implemented. Ingest retrieval/proposals, complete catalog, remaining fixed routes, generic recovery, Broker, signed/manual BYOK, and combined read→retrieve→publish stay open.",
         "targetBuilds": [
           "B3.06",
           "B3.13"
@@ -1593,7 +1589,7 @@
       ],
       "open": {
         "id": "OPEN-REQ-PIGE-PI-002",
-        "description": "The selected default profile now binds isolated embedded Pi calls for OpenAI-compatible and Anthropic-compatible protocols without ambient or cross-profile credentials. Built-in provider packaged/manual BYOK acceptance and the full supported-provider matrix remain open; Advanced/Fast UI stays gated.",
+        "description": "The reviewed OpenAI preset and isolated compatible bindings work; full catalog/provider matrix and packaged manual BYOK remain open, with Advanced/Fast hidden.",
         "targetBuilds": [
           "B3.04"
         ],
@@ -1614,7 +1610,7 @@
       ],
       "open": {
         "id": "OPEN-REQ-PIGE-PI-004",
-        "description": "Live connection/discovery acceptance for all four provider classes remains open.",
+        "description": "OpenAI preset connection/discovery is proven; remaining provider classes and packaged manual acceptance are open.",
         "targetBuilds": [
           "B3.01",
           "B3.03",
@@ -1757,14 +1753,10 @@
     },
     "PIGE-PROMPT-001": {
       "status": "partial",
-      "evidence": [
-        "EV-AGENT-INGEST",
-        "EV-UNTRUSTED-SOURCE-BOUNDARY",
-        "EV-UNTRUSTED-OUTPUT-SCHEMA"
-      ],
+      "evidence": ["EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-UNTRUSTED-SOURCE-BOUNDARY", "EV-UNTRUSTED-OUTPUT-SCHEMA"],
       "open": {
         "id": "OPEN-REQ-PIGE-PROMPT-001",
-        "description": "URL Readability, DOCX, PDF, PPTX, and image-OCR public-ingest adversarial cases are executable; the full Pi tool/Permission Broker runtime remains open.",
+        "description": "Public ingest and Home untrusted retrieval are executable; remaining tool adversarial and persisted Broker coverage stays open.",
         "targetBuilds": [
           "B5.11"
         ],
@@ -1791,13 +1783,10 @@
     },
     "PIGE-CONTEXT-001": {
       "status": "partial",
-      "evidence": [
-        "EV-CONTEXT",
-        "EV-AGENT-EVIDENCE-REVISION"
-      ],
+      "evidence": ["EV-CONTEXT", "EV-AGENT-EVIDENCE-REVISION", "EV-HOME-AGENT"],
       "open": {
         "id": "OPEN-REQ-PIGE-CONTEXT-001",
-        "description": "All Home, Note Agent, selection, memory, and compaction context-pack paths remain to be integrated.",
+        "description": "Home is integrated; Note Agent, selection, memory, and compaction paths remain.",
         "targetBuilds": [
           "B6.04"
         ],
@@ -1808,12 +1797,10 @@
     },
     "PIGE-CONTEXT-002": {
       "status": "partial",
-      "evidence": [
-        "EV-CONTEXT"
-      ],
+      "evidence": ["EV-CONTEXT", "EV-HOME-AGENT"],
       "open": {
         "id": "OPEN-REQ-PIGE-CONTEXT-002",
-        "description": "All Home, Note Agent, selection, memory, and compaction context-pack paths remain to be integrated.",
+        "description": "Home is integrated; Note Agent, selection, memory, and compaction paths remain.",
         "targetBuilds": [
           "B6.04"
         ],
@@ -1886,12 +1873,10 @@
     },
     "PIGE-SEARCH-001": {
       "status": "partial",
-      "evidence": [
-        "EV-RETRIEVAL"
-      ],
+      "evidence": ["EV-RETRIEVAL", "EV-HOME-AGENT", "EV-HOME-UI"],
       "open": {
         "id": "OPEN-REQ-PIGE-SEARCH-001",
-        "description": "The 10,000-page budget and complete grounded-summary UI acceptance remain open.",
+        "description": "Local fallback and Pi-grounded Home work; 10k, broader regression, and packaged UI acceptance remain open.",
         "targetBuilds": [
           "B6.01",
           "B6.02",
@@ -2791,15 +2776,10 @@
     },
     "E2.01": {
       "status": "partial",
-      "evidence": [
-        "EV-JOB-RECOVERY",
-        "EV-CAPTURE-PUBLICATION-GUARD",
-        "EV-PARSE-FOLLOWUP-DURABILITY",
-        "EV-OCR-FOLLOWUP-DURABILITY"
-      ],
+      "evidence": ["EV-JOB-RECOVERY", "EV-HOME-JOB-RECOVERY", "EV-CAPTURE-PUBLICATION-GUARD", "EV-PARSE-FOLLOWUP-DURABILITY", "EV-OCR-FOLLOWUP-DURABILITY"],
       "open": {
         "id": "OPEN-EXIT-E2.01",
-        "description": "Full executable acceptance remains open for Exit E2.01: Killing and reopening the app does not lose queued or partially processed captures; durable jobs reconcile to retryable states.",
+        "description": "Interrupted Home queries become retryable; full kill/reopen and resumable drainer coverage remains open.",
         "targetBuilds": [
           "B2.08"
         ],
@@ -2903,14 +2883,10 @@
     },
     "E2.09": {
       "status": "partial",
-      "evidence": [
-        "EV-JOB-STATUS",
-        "EV-JOB-WAIT",
-        "EV-JOB-CANCEL"
-      ],
+      "evidence": ["EV-JOB-STATUS", "EV-JOB-WAIT", "EV-JOB-CANCEL", "EV-HOME-UI"],
       "open": {
         "id": "OPEN-EXIT-E2.09",
-        "description": "Numeric localized Home/timeline progress, running cancel controls, and pushed progress events remain open for E2.09.",
+        "description": "Typed Home question states exist; numeric progress, running cancel, permission confirmation, and pushed events remain open.",
         "targetBuilds": [
           "B2.10",
           "B2.12"
@@ -2953,7 +2929,7 @@
       "evidence": ["EV-PROVIDER", "EV-RUNTIME", "EV-PI-PROVIDER-BINDING"],
       "open": {
         "id": "OPEN-EXIT-E3.01",
-        "description": "Full executable acceptance remains open for Exit E3.01: Each supported provider profile can be connection-tested, can discover or accept model IDs, and resolves one effective default model used by Agent ingest.",
+        "description": "One reviewed OpenAI preset/default is executable; full catalog/provider matrix and packaged manual BYOK remain open.",
         "targetBuilds": [
           "B3.01",
           "B3.03",
@@ -2971,7 +2947,7 @@
       ],
       "open": {
         "id": "OPEN-EXIT-E3.02",
-        "description": "Full executable acceptance remains open for Exit E3.02: API keys do not appear in vault files, SQLite, logs, persisted prompts, diagnostics, operations, or backups.",
+        "description": "OpenAI key ingress/rollback is redacted; full packaged exclusion and remaining provider acceptance stay open.",
         "targetBuilds": [
           "B3.02"
         ],
@@ -2982,10 +2958,10 @@
     },
     "E3.03": {
       "status": "partial",
-      "evidence": ["EV-EGRESS", "EV-EGRESS-SERVICE", "EV-EGRESS-PROFILE-BINDING", "EV-EGRESS-RUNTIME-BINDING", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS"],
+      "evidence": ["EV-EGRESS", "EV-EGRESS-SERVICE", "EV-EGRESS-PROFILE-BINDING", "EV-EGRESS-RUNTIME-BINDING", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-HOME-AGENT"],
       "open": {
         "id": "OPEN-EXIT-E3.03",
-        "description": "A user-confirmation resume path for waiting_permission model egress remains open.",
+        "description": "Home audit/drift is proven; persisted confirmation grant/resume and remaining provider adoption stay open.",
         "targetBuilds": [
           "B3.05"
         ],
@@ -3064,10 +3040,10 @@
     },
     "E3.08": {
       "status": "partial",
-      "evidence": ["EV-BOUNDARY", "EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE"],
+      "evidence": ["EV-BOUNDARY", "EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE"],
       "open": {
         "id": "OPEN-EXIT-E3.08",
-        "description": "Embedded Pi proves selected-profile binding, no-model wait, text publication, PDF/DOCX/PPTX inspect-parse-selected-OCR and image inspect-OCR paths through re-inspection/publication, deterministic child reuse, wait/cancel/empty-output handling, stale-binding rejection, no direct fallback, and Electron smoke. E3.08 remains partial until retrieval/proposal tools, complete registry metadata, remaining route removal, generic recovery, the required read→retrieve→publish trace, and signed-platform/manual BYOK acceptance pass.",
+        "description": "Embedded Pi proves ingest tools and Home read→retrieve→answer. Ingest retrieval/proposals, complete catalog, remaining routes, generic recovery, combined read→retrieve→publish, Broker, and signed/manual BYOK remain.",
         "targetBuilds": [
           "B3.13"
         ],
@@ -3177,10 +3153,10 @@
     },
     "E5.03": {
       "status": "partial",
-      "evidence": ["EV-AGENT-INGEST", "EV-PI-AGENT-SPINE", "EV-PI-RUNTIME-BOUNDARY", "EV-UNTRUSTED-SOURCE-BOUNDARY", "EV-UNTRUSTED-OUTPUT-SCHEMA"],
+      "evidence": ["EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-PI-AGENT-SPINE", "EV-PI-RUNTIME-BOUNDARY", "EV-UNTRUSTED-SOURCE-BOUNDARY", "EV-UNTRUSTED-OUTPUT-SCHEMA"],
       "open": {
         "id": "OPEN-EXIT-E5.03",
-        "description": "The text Pi boundary and URL/DOCX/PDF/PPTX/image-OCR adversarial ingest pass. PDF/Office parse and document/image selected-OCR functional traces are evidenced under E3.08/E5.01/E5.05; adversarial coverage for the document/image/retrieval tools and full persisted Permission Broker remains open.",
+        "description": "Public ingest and Home retrieval adversarial boundaries pass; remaining tool cases and persisted Broker stay open.",
         "targetBuilds": [
           "B5.11"
         ],
@@ -3214,12 +3190,10 @@
     },
     "E6.01": {
       "status": "partial",
-      "evidence": [
-        "EV-RETRIEVAL"
-      ],
+      "evidence": ["EV-RETRIEVAL", "EV-HOME-AGENT", "EV-HOME-UI"],
       "open": {
         "id": "OPEN-EXIT-E6.01",
-        "description": "Full executable acceptance remains open for Exit E6.01: Home retrieval works before model download through lexical/metadata search and returns ranked notes rather than answer-only chat.",
+        "description": "Ranked local fallback and Pi-grounded Home work; 10k and packaged UI acceptance remain open.",
         "targetBuilds": [
           "B6.01",
           "B6.02"
@@ -3235,13 +3209,10 @@
     },
     "E6.03": {
       "status": "partial",
-      "evidence": [
-        "EV-CONTEXT",
-        "EV-AGENT-EVIDENCE-REVISION"
-      ],
+      "evidence": ["EV-CONTEXT", "EV-AGENT-EVIDENCE-REVISION", "EV-HOME-AGENT"],
       "open": {
         "id": "OPEN-EXIT-E6.03",
-        "description": "Full executable acceptance remains open for Exit E6.03: Model calls receive selected snippets, policy/budget metadata, and citation refs, not the full vault or unbounded conversation history.",
+        "description": "Home selected evidence/privacy is bounded; Note Agent, selection, memory, compaction, and remote packs remain open.",
         "targetBuilds": [
           "B6.04"
         ],
@@ -3734,12 +3705,12 @@
     "EV-PROVIDER": {
       "kind": "test",
       "path": "tests/unit/model-provider-registry.test.ts",
-      "selector": "stores provider metadata and discovered model profiles without writing raw API keys to profile files"
+      "selector": "model provider registry"
     },
     "EV-PROVIDER-CONNECTION": {
       "kind": "test",
       "path": "tests/unit/model-provider-connection.test.ts",
-      "selector": "uses Anthropic-compatible model list headers"
+      "selector": "model provider connection tester"
     },
     "EV-RUNTIME": {
       "kind": "test",
@@ -3788,6 +3759,7 @@
       "path": "tests/unit/jobs-service.test.ts",
       "selector": "recovers a parent crash after durable child handoff without duplicating the child"
     },
+    "EV-HOME-JOB-RECOVERY": { "kind": "test", "path": "tests/unit/jobs-service.test.ts", "selector": "marks an interrupted Home retrieval query retryable without queuing an unsupported generic retry" },
     "EV-JOB-WAIT": {
       "kind": "test",
       "path": "tests/unit/jobs-service.test.ts",
@@ -3933,6 +3905,8 @@
       "path": "tests/unit/retrieval-service.test.ts",
       "selector": "answers from bounded local evidence with citations and ranked pages"
     },
+    "EV-HOME-AGENT": { "kind": "test", "path": "tests/unit/home-agent-service.test.ts", "selector": "Home Pi Agent service" },
+    "EV-HOME-UI": { "kind": "test", "path": "tests/unit/desktop-shell-contract.test.ts", "selector": "wires Home questions through Pi with visible typed outcomes and no raw provider error surface" },
     "EV-RETRIEVAL-REGRESSION-GOLDEN": { "kind": "test", "path": "tests/evals/retrieval.regression-golden.test.ts", "selector": "passes deterministic ranking, citation, distractor, related-page, and insufficient-evidence gates" },
     "EV-RETRIEVAL-REGRESSION-REPORT": { "kind": "contract", "path": ".github/workflows/ci.yml", "selector": "Upload retrieval regression report" },
     "EV-CONTEXT": {

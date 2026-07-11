@@ -1615,16 +1615,22 @@ References:
 
 Status: Accepted
 Date: 2026-07-10
-Revised: 2026-07-10
+Revised: 2026-07-12
 Supersedes: D-20260709-Phase-2-3-Home-Lexical-Retrieval
 
 Decision:
 
-Home question input now uses `retrieval.ask`. The service performs local retrieval, selects at most eight evidence items, builds an internal ref-only Home-query Context Pack, and returns a short local extractive summary with numbered page citations. No-result and one-result queries are explicit insufficient- or limited-evidence states.
+Home question input now uses `agent.ask`. With a ready runtime it retrieves locally and
+requires embedded Pi to call one bounded search tool; with no binding it returns
+`retrieval.ask` before Agent work. No selected evidence returns the fixed local
+insufficient result without a model call.
 
 Rationale:
 
-Pige needs an answer-shaped retrieval experience before the optional local embedding model and before cloud synthesis can be safely enabled. A deterministic local evidence summary closes the capture-to-retrieval loop while preserving the core privacy boundary. A ref-only Context Pack also establishes the serialization contract needed by later query-model synthesis, Note Agent workflows, retry, diagnostics, and the future remote Agent backend without duplicating note bodies.
+Pige needs an answer-shaped retrieval experience before optional embeddings while
+keeping Pi, local-first retrieval, and model egress enforceable as one path. The bounded
+Context Pack supports current Home synthesis and later Note Agent/remote clients without
+duplicating bodies.
 
 Consequences:
 
@@ -1632,7 +1638,11 @@ Consequences:
 - Renderer responses include a short answer, ranked page summaries, bounded snippets, citation refs, and plain degraded state; they do not receive Context Pack internals, full bodies, raw prompts, context budgets, secret-bearing policy, or arbitrary filesystem paths.
 - Serialized Context Packs contain refs, page IDs, safe locators, scores, estimated snippet budgets, index health, warnings, and omission counts. Selected snippet text remains ephemeral.
 - The default result UI hides raw ranking scores and match internals while retaining title, snippet, page type, citation, and open-page actions.
-- Local extractive synthesis is a fallback, not the final query-model path. Cloud/self-hosted model synthesis remains gated on Runtime Policy Context, cloud-send policy, and Permission Broker enforcement.
+- Model turns receive escaped untrusted evidence and strict citation refs. Current
+  Markdown bytes and Source Record privacy facts are re-read per turn; each changed
+  classification gets a distinct body-free audit before drift is rejected.
+- Results expose only bounded retrieval output and `none|local|cloud`; model prompts,
+  credentials, endpoints, private paths, and raw errors remain internal.
 
 References:
 
@@ -1645,11 +1655,14 @@ References:
 
 Status: Accepted
 Date: 2026-07-09
-Revised: 2026-07-10
+Revised: 2026-07-12
 
 Decision:
 
-Phase 3 Provider setup performs a low-cost provider connection test before persisting provider profiles, model profiles, or encrypted secret records. Successful model-list discovery stores provider-returned models; compatible/custom endpoints that explicitly do not support listing may save the submitted manual model ID.
+Phase 3 Provider setup tests before persistence. The current recommended path is the
+reviewed OpenAI preset: API key only, fixed endpoint/Responses protocol, bounded model
+discovery, reviewed default, and one global model list. Compatible/custom endpoints that
+explicitly lack listing may use a manual model ID.
 
 Rationale:
 
@@ -1658,11 +1671,15 @@ The Models page says "Test and Save", so saving invalid credentials would create
 Consequences:
 
 - API keys are used only in the main process for the connection test and secret-store write.
+- `models.addPresetProvider` is write-only toward main, requires validation/confirmation,
+  never returns the key, and restores the known-good binding on failure.
 - Authentication failures, invalid base URLs, invalid model-list payloads, and missing selected models fail before any provider/model/secret records are persisted.
 - `ProviderBaseUrlSchema` is shared by persistence, connection tests, boundary classification, and model calls; it canonicalizes safe URLs and rejects non-loopback HTTP, non-HTTP(S) protocols, credentials, queries, and fragments before credentials are accessed or sent.
 - Built-in OpenAI/Anthropic profiles use fixed official endpoints and cannot persist a custom `baseUrl`; compatible/custom profiles may claim `local`/`loopback_verified` only when the canonical URL is actually loopback. Schema reads reject edited metadata that could disguise a cloud call as verified local.
 - OpenAI-format providers use `/v1/models` with Bearer auth; Anthropic-format providers use `/v1/models` with `x-api-key` and `anthropic-version`.
 - Renderer receives only redacted provider/model summaries, never API keys, request headers, raw provider responses, or secret refs.
+- Catalog/help action/custom protocol polish, durable preset identity/replacement policy,
+  multi-provider lifecycle, and packaged manual BYOK acceptance remain open.
 - This provider-setup decision does not itself authorize model-call execution; the implemented basic execution bridge is governed by `D-20260709-Phase-3-Basic-Agent-Ingest-Bridge`.
 
 References:

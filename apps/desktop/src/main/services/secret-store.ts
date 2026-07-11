@@ -74,6 +74,15 @@ export class JsonSecretStore {
     return this.#crypto.decryptString(Buffer.from(record.encryptedValue, "base64"));
   }
 
+  deleteProviderSecret(ref: string): void {
+    const file = this.#read();
+    if (!file.secrets.some((secret) => secret.ref === ref)) return;
+    this.#write({
+      schemaVersion: 1,
+      secrets: file.secrets.filter((secret) => secret.ref !== ref)
+    });
+  }
+
   #read(): SecretStoreFile {
     if (!fs.existsSync(this.#secretsPath)) {
       return { schemaVersion: 1, secrets: [] };

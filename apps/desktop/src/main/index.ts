@@ -2,11 +2,13 @@ import { app, BrowserWindow, dialog, ipcMain, safeStorage, type WebContents } fr
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type {
+  AddPresetProviderRequest,
   AddManualProviderRequest,
   AppHealth,
   BackupCreateResult,
   CreateVaultRequest,
   ExportSupportBundleRequest,
+  HomeAgentAskRequest,
   JobActionRequest,
   JobsListRequest,
   LibraryListRequest,
@@ -32,6 +34,11 @@ import type {
   SupportBundlePreview,
   UpdateSourceStoragePolicyRequest
 } from "@pige/contracts";
+import {
+  AddManualProviderRequestSchema,
+  AddPresetProviderRequestSchema,
+  SetDefaultModelRequestSchema
+} from "@pige/schemas";
 import { PRELOAD_ENTRY_FILENAME } from "../shared/preload-entry";
 import {
   AgentIngestService,
@@ -52,6 +59,7 @@ import {
   type ProcessQueuedParsesResult
 } from "./services/jobs-service";
 import { LibraryService } from "./services/library-service";
+import { HomeAgentService } from "./services/home-agent-service";
 import { LocalDatabaseRebuildWorkerService } from "./services/local-database-rebuild-worker-service";
 import { LocalDatabaseService } from "./services/local-database-service";
 import { LocalSettingsStore } from "./services/local-settings";
@@ -76,6 +84,7 @@ let windowModeService: WindowModeService | undefined;
 let backupRestoreService: BackupRestoreService | undefined;
 let agentRuntimeService: AgentRuntimeService | undefined;
 let agentIngestService: AgentIngestService | undefined;
+let homeAgentService: HomeAgentService | undefined;
 let appearanceService: AppearanceService | undefined;
 let toolchainService: ToolchainService | undefined;
 let captureService: CaptureService | undefined;
@@ -238,6 +247,20 @@ const getAgentIngestService = (): AgentIngestService => {
     });
   }
   return agentIngestService;
+};
+
+const getHomeAgentService = (): HomeAgentService => {
+  if (!homeAgentService) {
+    homeAgentService = new HomeAgentService(
+      getVaultService(),
+      getModelProviderRegistry(),
+      getRetrievalService(),
+      getJobsService(),
+      undefined,
+      { snapshot: getAgentCapabilitySnapshot }
+    );
+  }
+  return homeAgentService;
 };
 
 const getAgentCapabilitySnapshot = (): AgentIngestCapabilitySnapshot => {
@@ -452,6 +475,7 @@ ipcMain.handle("window.setSidebarOpen", (event, request: SetSidebarOpenRequest) 
   getWindowModeService().setSidebarOpen(requireWindow(event.sender), request)
 );
 ipcMain.handle("agent.runtimeStatus", () => getAgentRuntimeService().runtimeStatus());
+ipcMain.handle("agent.ask", (_event, request: HomeAgentAskRequest) => getHomeAgentService().ask(request));
 ipcMain.handle("capture.submitText", (_event, request: SubmitTextCaptureRequest) => {
   const result = getCaptureService().submitText(request);
   scheduleCaptureProcessing();
@@ -569,20 +593,33 @@ ipcMain.handle("diagnostics.exportSupportBundle", async (event, request: ExportS
   return getDiagnosticsService().exportSupportBundle(selection.filePath, latestSupportBundlePreview);
 });
 ipcMain.handle("models.summary", () => getModelProviderRegistry().summary());
+ipcMain.handle("models.addPresetProvider", async (event, request: AddPresetProviderRequest) => {
+  const validatedRequest = AddPresetProviderRequestSchema.parse(request);
+  await confirmSettingAction(event.sender, ["models.providerProfiles", "models.providerApiKeys"], {
+    title: "Connect this model service?",
+    message: "Pige will contact the reviewed model service to discover models and store the API key in the protected local secret store.",
+    confirmLabel: "Connect service"
+  });
+  return getModelProviderRegistry().addPresetProvider(validatedRequest).then((summary) => {
+    scheduleWaitingAgentIngestAfterModelReady();
+    return summary;
+  });
+});
 ipcMain.handle("models.addManualProvider", async (event, request: AddManualProviderRequest) => {
+  const validatedRequest = AddManualProviderRequestSchema.parse(request) as AddManualProviderRequest;
   await confirmSettingAction(event.sender, ["models.providerProfiles", "models.providerApiKeys"], {
     title: "Connect this model service?",
     message: "Pige will contact the configured model service to test the connection and store the API key in the protected local secret store.",
     confirmLabel: "Connect service"
   });
-  return getModelProviderRegistry().addManualProvider(request).then((summary) => {
+  return getModelProviderRegistry().addManualProvider(validatedRequest).then((summary) => {
     scheduleWaitingAgentIngestAfterModelReady();
     return summary;
   });
 });
 ipcMain.handle("models.setDefaultModel", (_event, request: SetDefaultModelRequest) =>
   {
-    const summary = getModelProviderRegistry().setDefaultModel(request);
+    const summary = getModelProviderRegistry().setDefaultModel(SetDefaultModelRequestSchema.parse(request));
     scheduleWaitingAgentIngestAfterModelReady();
     return summary;
   }

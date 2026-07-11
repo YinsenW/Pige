@@ -243,6 +243,30 @@ describe("jobs service", () => {
     expect(readJobCancellation(vaultPath, retryableWithoutDurableOutput.id)?.durableWritesApplied).toBe(false);
   });
 
+  it("marks an interrupted Home retrieval query retryable without queuing an unsupported generic retry", () => {
+    const { vaultPath, vault } = makeVault();
+    const vaults = { current: () => vault, activeVaultPath: () => vaultPath };
+    const jobs = new JobsService(vaults);
+    const created = jobs.createRetrievalQueryJob({ queryHash: `sha256:${"a".repeat(64)}` });
+    jobs.writeRetrievalQueryJob(JobRecordSchema.parse({
+      ...created,
+      state: "running",
+      stage: "retrieving",
+      startedAt: "2026-07-11T01:00:00.000Z",
+      updatedAt: "2026-07-11T01:00:00.000Z",
+      message: "Home Agent is retrieving bounded local evidence."
+    }));
+
+    const restarted = new JobsService(vaults);
+    expect(restarted.recoverInterruptedJobs()).toEqual({ requeued: 0, failedRetryable: 1 });
+    const recovered = requireValue(restarted.list({ classes: ["retrieval_query"] }).jobs[0]);
+    expect(recovered).toMatchObject({ id: created.id, state: "failed_retryable" });
+    expect(restarted.retry({ jobId: created.id })).toMatchObject({
+      status: "not_allowed",
+      job: { id: created.id, state: "failed_retryable" }
+    });
+  });
+
   it("processes queued text captures into source pages and log entries", () => {
     const { vaultPath, vault } = makeVault();
     const { capture, jobs } = makeServices(vaultPath, vault);

@@ -137,13 +137,10 @@ profile does not own parallel enum lists.
 
 Rules:
 
-- Raw API keys live only in the secret store.
-- Provider profiles store `authSecretRef`, not keys.
-- `ProviderProfileSchema` in `packages/schemas/src/index.ts` is the executable profile contract. Other documents link to this section and that schema instead of defining a second profile shape.
-- Provider adapters construct authentication and required protocol headers at call time from `authSecretRef`. v0.1 provider metadata cannot persist arbitrary `defaultHeaders`; future custom headers must use an explicit non-secret allowlist plus separate secret references.
-- Provider profiles are excluded from default vault backup.
-- Provider IDs may appear in operation/diagnostic records only as redacted references.
-- Cloud/local boundary is shown inline when content may leave the machine, but not as a provider capability matrix.
+- Keys live only in the secret store; profiles hold `authSecretRef`. Reviewed adapters
+  construct auth at call time; metadata cannot persist arbitrary `defaultHeaders`.
+- `ProviderProfileSchema` in `packages/schemas/src/index.ts` is the executable profile contract. Profiles are excluded from default vault
+  backup; records use redacted IDs, and UI shows cloud/local only when relevant.
 - Official OpenAI and Anthropic provider kinds use their fixed built-in endpoints, do not persist `baseUrl`, and are `cloud` with required `builtin_verified` boundary metadata. `ProviderProfileSchema` rejects missing or non-`builtin_verified` boundary metadata for these built-in kinds. A proxy, compatible endpoint, or custom base URL must use a compatible/custom provider kind. Only a canonical loopback URL on such a profile can be `local` with `loopback_verified`; the executable profile schema rejects both directions of a mismatch. A non-loopback compatible/custom endpoint is `unknown` until the user explicitly classifies it; a user assertion is recorded as `user_asserted`, not treated as network proof.
 - `ProviderBaseUrlSchema` is the single persisted and runtime-call URL contract. It permits HTTPS endpoints and HTTP only for canonical loopback hosts (`localhost`, `127.0.0.1`, or `::1`), rejects every other protocol, URL userinfo, query, and fragment, and canonicalizes whitespace/trailing slashes before persistence. Connection tests, profile reads/writes, boundary classification, and model calls must use that same schema; a manually edited profile cannot enter a weaker runtime path. `unknown` is handled conservatively by the Model Egress Decision contract in `docs/AGENT_RUNTIME_POLICY_CONTEXT.md`.
 
@@ -175,13 +172,22 @@ Rules:
 - Where a Pi provider catalog is static, Pige supplies only the bounded model-list
   callback and registers its results into the Job's isolated Pi `Models`; it does not
   introduce another provider SDK or copy Pi's protocol/catalog runtime.
-- Compatible/custom endpoints may use manual model ID entry only when their model-list route explicitly reports unsupported behavior. Authentication, network, timeout, invalid payload, and official-provider list failures remain failures and do not fall back to an unverified model ID.
-- The Add Provider flow performs a low-cost connection check before saving a provider profile. OpenAI-format providers use `GET /v1/models` with Bearer auth; Anthropic-format providers use `GET /v1/models` with `x-api-key` and `anthropic-version`.
-- Official OpenAI and Anthropic providers should reject missing selected model IDs when their model list succeeds. Compatible/custom providers may fall back to manual model IDs when the endpoint explicitly does not support model listing.
+- Add Provider tests before save: OpenAI-format uses Bearer `/v1/models`; Anthropic-format
+  uses `x-api-key`, `anthropic-version`, and `/v1/models`. Authentication, network, timeout, invalid payload, and official-provider list failures remain failures; only an explicitly unsupported compatible
+  list route permits manual ID, and successful lists require a selected returned ID.
 - Pi Agent calls must resolve through a selected `ModelProfile`, not a free-text runtime string.
 - Ignore upstream-only thinking levels until schema, migration, and compatibility tests
   change together; `max` adds no visible setting.
 - Embedding and reranking models are not user BYOK provider roles in v0.1; they belong to Local Capabilities and local RAG.
+
+Current preset foundation:
+
+- `openai` fixes the official endpoint, Pi Responses protocol, bounded discovery, and
+  reviewed `gpt-5-mini`; its default UI asks only for the key. Confirmation precedes
+  mutation and failure restores the prior binding.
+- Models share one global list/default. Full catalog/help action/custom protocol polish,
+  durable preset identity/replacement policy, multi-provider lifecycle, and packaged
+  manual BYOK proof remain open.
 
 ## 8. Pi Custom Models Boundary
 
@@ -415,14 +421,17 @@ Phase 3 implementation note:
   revalidated by Pige; raw prompts, responses, sessions, and keys are not persisted.
 - With no model, preservation stays useful and Agent work waits. Sparse/image-only PDF,
   parser-selected PPTX media, and direct images use bounded Agent-selected OCR;
-  unavailable or empty evidence waits without a note. Retrieval remains a fixed route.
+  unavailable or empty evidence waits without a note.
+- Home uses one Pi search tool with per-turn Markdown/source-privacy/egress revalidation
+  and strict citations. No binding falls back locally before Agent work; no evidence
+  returns the fixed result without a model call.
 
 Delivered foundation and next steps:
 
-1. Exact pins, embedded adapter, isolated auth/models, four tools, and text/document/image
-   verticals are delivered.
-2. Wrap retrieval and proposal capabilities as registered
-   effects; remove remaining host-fixed semantic routing.
+1. Exact pins, embedded adapter, isolated auth/models, and text/document/image plus Home
+   retrieval verticals are delivered.
+2. Broaden retrieval and add proposal capabilities as registered effects; remove
+   remaining host-fixed semantic routing.
 3. Add durable child-tool pause/resume, restart, continue/steer/follow-up, complete
    Permission Broker, signed macOS/Windows packaging, and manual BYOK smoke evidence.
 4. Re-review imports, side effects, license, protocols, and containment whenever either

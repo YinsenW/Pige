@@ -1227,6 +1227,24 @@ export const ProviderBaseUrlSchema = z.string()
     return parsed.pathname === "/" ? normalized.slice(0, -1) : normalized;
   });
 
+export const AddPresetProviderRequestSchema = z.object({
+  presetId: z.string().trim().min(1).max(64).regex(/^[a-z][a-z0-9_-]*$/u),
+  apiKey: z.string().trim().min(1).max(16_384)
+}).strict();
+
+export const AddManualProviderRequestSchema = z.object({
+  displayName: z.string().trim().min(1).max(80),
+  providerKind: ProviderKindSchema,
+  baseUrl: ProviderBaseUrlSchema.optional(),
+  apiKey: z.string().trim().min(1).max(16_384),
+  manualModelId: z.string().trim().min(1).max(200),
+  cloudBoundary: CloudBoundarySchema
+}).strict();
+
+export const SetDefaultModelRequestSchema = z.object({
+  modelProfileId: z.string().regex(/^model_[a-z0-9_]+$/)
+}).strict();
+
 export const ProviderProfileSchema = z.object({
   id: z.string().regex(/^provider_[a-z0-9_]+$/),
   displayName: z.string().min(1),
