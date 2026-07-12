@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
+import { ProposalReviewPanel } from "./components/ProposalReviewPanel";
 import deMessages from "./locales/de/messages.json";
 import enMessages from "./locales/en/messages.json";
 import frMessages from "./locales/fr/messages.json";
@@ -21,6 +22,8 @@ import type {
   NoteRenderResult,
   OnboardingStatus,
   PigeErrorSummary,
+  ProposalDecisionResult,
+  ProposalSummary,
   RecentVaultSummary,
   RetrievalAskResult,
   RetrievalSearchResultItem,
@@ -30,7 +33,15 @@ import type {
   VaultSummary,
   WindowState
 } from "@pige/contracts";
-import type { CloudBoundary, JobState, Locale, ProviderKind, SourceStorageStrategy, WindowLayoutMode } from "@pige/schemas";
+import type {
+  CloudBoundary,
+  ConfirmationProposal,
+  JobState,
+  Locale,
+  ProviderKind,
+  SourceStorageStrategy,
+  WindowLayoutMode
+} from "@pige/schemas";
 
 type View = "home" | "library" | "settings" | "models";
 type CaptureToast = { readonly kind: "success" | "error"; readonly message: string };
@@ -76,6 +87,7 @@ export function App(): React.JSX.Element {
   const [dropActive, setDropActive] = useState(false);
   const [captureToast, setCaptureToast] = useState<CaptureToast | null>(null);
   const [recentJobs, setRecentJobs] = useState<readonly JobSummary[]>([]);
+  const [readyProposals, setReadyProposals] = useState<readonly ProposalSummary[]>([]);
   const [libraryList, setLibraryList] = useState<LibraryListResult | null>(null);
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [selectedNote, setSelectedNote] = useState<NoteRenderResult | null>(null);
@@ -109,18 +121,26 @@ export function App(): React.JSX.Element {
       window.pige.backup.status(),
       window.pige.agent.runtimeStatus()
     ]);
-    const nextJobs = nextOnboarding.activeVault
-      ? await window.pige.jobs.list({
-        limit: 6,
-        classes: ["capture", "parse", "ocr", "agent_ingest", "index_rebuild"],
-        states: ["queued", "running", "waiting_dependency", "failed_retryable", "failed_final"]
-      }).catch(() => undefined)
-      : undefined;
+    const homeJobStateFilter = {
+      states: ["queued", "running", "waiting_dependency", "failed_retryable", "failed_final"] as JobState[]
+    };
+    homeJobStateFilter.states.push("awaiting_review");
+    const [nextJobs, nextProposals] = nextOnboarding.activeVault
+      ? await Promise.all([
+        window.pige.jobs.list({
+          limit: 6,
+          classes: ["capture", "parse", "ocr", "agent_ingest", "index_rebuild"],
+          ...homeJobStateFilter
+        }).catch(() => undefined),
+        window.pige.proposals.list({ limit: 100, states: ["ready"] }).catch(() => undefined)
+      ])
+      : [undefined, undefined];
     setOnboarding(nextOnboarding);
     setRecentVaults(nextRecentVaults);
     setBackupStatus(nextBackupStatus);
     setAgentRuntimeStatus(nextAgentRuntimeStatus);
     setRecentJobs(nextJobs?.jobs ?? []);
+    setReadyProposals(nextProposals?.proposals ?? []);
   };
 
   const runVaultAction = async (action: () => Promise<void>): Promise<void> => {
@@ -472,10 +492,12 @@ export function App(): React.JSX.Element {
             captureOnly={onboarding?.state === "capture_only"}
             agentRuntimeStatus={agentRuntimeStatus}
             recentJobs={recentJobs}
+            readyProposals={readyProposals}
             locale={locale}
             onFilesSelected={(files) => submitFiles(files, "file_picker")}
             onCancelJob={cancelJob}
             onRetryJob={retryJob}
+            onProposalChanged={refreshVaultState}
             onOpenModels={() => setView("models")}
             t={t}
           />
@@ -852,10 +874,12 @@ function HomeComposer(props: {
   readonly captureOnly: boolean;
   readonly agentRuntimeStatus: AgentRuntimeStatus | null;
   readonly recentJobs: readonly JobSummary[];
+  readonly readyProposals: readonly ProposalSummary[];
   readonly locale: Locale;
   readonly onFilesSelected: (files: readonly File[]) => Promise<void>;
   readonly onCancelJob: (jobId: string) => Promise<void>;
   readonly onRetryJob: (jobId: string) => Promise<void>;
+  readonly onProposalChanged: () => Promise<void>;
   readonly onOpenModels: () => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
@@ -866,11 +890,24 @@ function HomeComposer(props: {
   const [agentRunState, setAgentRunState] = useState<HomeAgentUiState>("idle");
   const [agentError, setAgentError] = useState<PigeErrorSummary | null>(null);
   const [agentModelUsage, setAgentModelUsage] = useState<HomeAgentModelUsage>("none");
+  const [selectedProposal, setSelectedProposal] = useState<ConfirmationProposal | null>(null);
+  const [proposalBusy, setProposalBusy] = useState(false);
+  const [openingProposalId, setOpeningProposalId] = useState<string | null>(null);
+  const [proposalListExpanded, setProposalListExpanded] = useState(false);
+  const [proposalOutcome, setProposalOutcome] = useState<ProposalDecisionResult["status"] | null>(null);
+  const [proposalDecisionStateUnknown, setProposalDecisionStateUnknown] = useState(false);
+  const [proposalErrorMessageKey, setProposalErrorMessageKey] = useState<string | null>(null);
   const [selectedNote, setSelectedNote] = useState<NoteRenderResult | null>(null);
   const [selectedNoteRelated, setSelectedNoteRelated] = useState<NoteRelatedState>(null);
   const [noteLoadingPageId, setNoteLoadingPageId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
   const noteOpenSequence = useRef(0);
+  const proposalDecisionInFlight = useRef(false);
+  const proposalReviewTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
+  const proposalFocusReturnId = useRef<string | null>(null);
+  const proposalFocusReturnPending = useRef(false);
+  const proposalQueueHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const agentStatusLabel = props.agentRuntimeStatus?.state === "ready" ? props.t("home.agentReady") : props.t("home.captureOnly");
   const plannedModelUsage = homeRuntimeModelUsage(props.agentRuntimeStatus);
   const cloudUsageMessageKey = agentRunState === "accepted" || agentRunState === "running"
@@ -960,6 +997,86 @@ function HomeComposer(props: {
     }
   };
 
+  const openProposal = async (proposalId: string): Promise<void> => {
+    proposalFocusReturnId.current = proposalId;
+    setOpeningProposalId(proposalId);
+    setProposalOutcome(null);
+    setProposalDecisionStateUnknown(false);
+    setProposalErrorMessageKey(null);
+    try {
+      const result = await window.pige.proposals.get({ proposalId });
+      setSelectedProposal(result.proposal);
+    } catch {
+      setProposalErrorMessageKey("proposal.error.load");
+    } finally {
+      setOpeningProposalId(null);
+    }
+  };
+
+  const decideProposal = async (decision: "approve" | "reject"): Promise<void> => {
+    if (!selectedProposal || proposalDecisionInFlight.current) return;
+    const proposalId = selectedProposal.id;
+    proposalDecisionInFlight.current = true;
+    setProposalBusy(true);
+    setProposalDecisionStateUnknown(false);
+    setProposalErrorMessageKey(null);
+    try {
+      const result = await window.pige.proposals[decision]({ proposalId });
+      setProposalOutcome(result.status);
+      if (result.proposal) setSelectedProposal(result.proposal);
+      await props.onProposalChanged().catch(() => undefined);
+    } catch {
+      try {
+        const current = await window.pige.proposals.get({ proposalId });
+        if (current.proposal.id !== proposalId) throw new Error("Proposal identity changed.");
+        const durableOutcome = proposalOutcomeForDurableState(current.proposal.state);
+        setSelectedProposal(current.proposal);
+        if (durableOutcome === null) {
+          setProposalOutcome(null);
+          setProposalErrorMessageKey("proposal.error.decision");
+        } else if (durableOutcome !== undefined) {
+          setProposalOutcome(durableOutcome);
+          setProposalErrorMessageKey(null);
+          await props.onProposalChanged().catch(() => undefined);
+        } else {
+          setProposalOutcome(null);
+          setProposalDecisionStateUnknown(true);
+          setProposalErrorMessageKey(null);
+        }
+      } catch {
+        setProposalOutcome(null);
+        setProposalDecisionStateUnknown(true);
+        setProposalErrorMessageKey(null);
+      }
+    } finally {
+      proposalDecisionInFlight.current = false;
+      setProposalBusy(false);
+    }
+  };
+
+  const closeProposal = (): void => {
+    if (proposalBusy) return;
+    proposalFocusReturnPending.current = true;
+    setSelectedProposal(null);
+    setProposalOutcome(null);
+    setProposalDecisionStateUnknown(false);
+    setProposalErrorMessageKey(null);
+  };
+
+  useEffect(() => {
+    if (selectedProposal !== null || !proposalFocusReturnPending.current) return;
+    proposalFocusReturnPending.current = false;
+    const exactTrigger = proposalFocusReturnId.current
+      ? proposalReviewTriggerRefs.current.get(proposalFocusReturnId.current)
+      : undefined;
+    const firstTrigger = Array.from(proposalReviewTriggerRefs.current.values())
+      .find((trigger) => trigger.isConnected && !trigger.disabled);
+    const focusTarget = exactTrigger?.isConnected
+      ? exactTrigger
+      : firstTrigger ?? proposalQueueHeadingRef.current ?? composerInputRef.current;
+    focusTarget?.focus();
+  }, [selectedProposal, props.readyProposals]);
+
   const openResult = async (pageId: string): Promise<void> => {
     const requestId = noteOpenSequence.current + 1;
     noteOpenSequence.current = requestId;
@@ -978,6 +1095,24 @@ function HomeComposer(props: {
       if (requestId === noteOpenSequence.current) setNoteLoadingPageId(null);
     }
   };
+
+  if (selectedProposal) {
+    return (
+      <section className="home proposal-review-home" aria-label={props.t("nav.home")}>
+        <ProposalReviewPanel
+          proposal={selectedProposal}
+          busy={proposalBusy}
+          outcome={proposalOutcome}
+          decisionStateUnknown={proposalDecisionStateUnknown}
+          errorMessageKey={proposalErrorMessageKey}
+          onApprove={() => void decideProposal("approve")}
+          onReject={() => void decideProposal("reject")}
+          onClose={closeProposal}
+          t={props.t}
+        />
+      </section>
+    );
+  }
 
   return (
     <section className="home" aria-label={props.t("nav.home")}>
@@ -1023,6 +1158,56 @@ function HomeComposer(props: {
           ))}
         </section>
       ) : null}
+      {props.readyProposals.length > 0 ? (
+        <section className="proposal-strip" aria-label={props.t("proposal.queueTitle")}>
+          <header className="proposal-strip-header">
+            <h2 ref={proposalQueueHeadingRef} tabIndex={-1}>{props.t("proposal.queueTitle")}</h2>
+            <div className="proposal-strip-meta">
+              <span>{props.readyProposals.length}</span>
+              {props.readyProposals.length > 3 ? (
+                <button
+                  type="button"
+                  className="ghost"
+                  aria-expanded={proposalListExpanded}
+                  aria-controls="home-proposal-summary-list"
+                  onClick={() => setProposalListExpanded((expanded) => !expanded)}
+                >
+                  {props.t(proposalListExpanded ? "proposal.showLess" : "proposal.showAll")}
+                </button>
+              ) : null}
+            </div>
+          </header>
+          <div className="proposal-summary-list" id="home-proposal-summary-list">
+            {props.readyProposals.slice(0, proposalListExpanded ? props.readyProposals.length : 3).map((proposal, index) => {
+              const accessibleProposalLabel = `${proposal.summary} (${index + 1})`;
+              return (
+                <article className="proposal-summary-card" key={proposal.id} aria-label={accessibleProposalLabel}>
+                  <div>
+                    <strong>{proposal.summary}</strong>
+                    <p>{proposal.reason}</p>
+                  </div>
+                  <button
+                    ref={(element) => {
+                      if (element) proposalReviewTriggerRefs.current.set(proposal.id, element);
+                      else proposalReviewTriggerRefs.current.delete(proposal.id);
+                    }}
+                    type="button"
+                    className="secondary"
+                    aria-label={`${props.t("proposal.review")}: ${accessibleProposalLabel}`}
+                    disabled={openingProposalId !== null}
+                    onClick={() => void openProposal(proposal.id)}
+                  >
+                    {props.t(openingProposalId === proposal.id ? "proposal.opening" : "proposal.review")}
+                  </button>
+                </article>
+              );
+            })}
+          </div>
+          {proposalErrorMessageKey ? (
+            <p className="error" role="alert">{props.t(proposalErrorMessageKey)}</p>
+          ) : null}
+        </section>
+      ) : null}
       {selectedNote ? (
         <section className="home-reader">
           <button
@@ -1055,6 +1240,7 @@ function HomeComposer(props: {
       ) : null}
       <section className="composer">
         <textarea
+          ref={composerInputRef}
           aria-label={props.t("home.composerAria")}
           placeholder={props.t("home.placeholder")}
           rows={4}
@@ -1117,7 +1303,16 @@ function jobStateMessageKey(state: JobState): string {
   if (state === "queued") return "home.jobQueued";
   if (state === "running") return "home.jobRunning";
   if (state === "waiting_dependency") return "home.jobWaiting";
+  if (state === "awaiting_review") return "home.jobReview";
   return "home.jobFailed";
+}
+
+function proposalOutcomeForDurableState(
+  state: ConfirmationProposal["state"]
+): ProposalDecisionResult["status"] | null | undefined {
+  if (state === "ready") return null;
+  if (state === "approved" || state === "applied" || state === "rejected" || state === "conflicted") return state;
+  return undefined;
 }
 
 function RetrievalResults(props: {

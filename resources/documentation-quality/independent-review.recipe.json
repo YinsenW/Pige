@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-12T00:57:07Z",
+  "reviewedAt": "2026-07-12T02:59:22Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,9 +30,21 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "9bcf64eff56f1b4c72415c2e947b339ab52a19ff015497535f2ea2f0ac9b618b"
+    "reviewedSha256": "34c6e85ffc85dd2875d76b08ce76fc73db772bf587c7a66f2d832afcb4d80c58"
   },
   "reviewers": [
+    {
+      "reviewerId": "proposal-home-review-ui-final-review",
+      "task": "/root/proposal_ui_final_review",
+      "independentDimensions": [
+        "navigation_and_resource_lifecycle",
+        "cross_document_contract_consistency",
+        "continuous_traceability_and_acceptance",
+        "ongoing_development_support",
+        "documentation_leanness_and_maintainability"
+      ],
+      "independence": "Fresh read-only reviewer audited the repaired 12-Development plus 10-governed pre-recipe candidate. It rejected one stale Prompt claim, then accepted exact Home cards/focused review, durable rejected-call reconciliation, ready retry, unknown fail-closed, escaped Markdown, localized outcomes, ARIA/focus behavior, existing IPC, exact evidence, unchanged states, residual generic/platform gaps, semantic lock, and budgets with no reviewer edits."
+    },
     {
       "reviewerId": "proposal-review-apply-final-review",
       "task": "/root/proposal_apply_final_review",
@@ -242,37 +254,37 @@
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "proposal-review-apply-final-review",
+      "reviewerId": "proposal-home-review-ui-final-review",
       "blockerCount": 0,
-      "summary": "Proposal record, decision, confined page/index/Operation, state, log, parent, and restart reconciliation are navigable; generic operations, UI, replacement conflicts, CAS/TOCTOU, and platform proof remain open."
+      "summary": "Home exposes at most three ready cards, progressive expansion, focused review through existing proposal APIs, durable terminal refresh, and useful focus restoration without a new navigation destination."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "proposal-review-apply-final-review",
+      "reviewerId": "proposal-home-review-ui-final-review",
       "blockerCount": 0,
-      "summary": "API, Job, TECH, Pi, Prompt, Playbook, and Decision agree on exact-create scope, applied/conflicted results, approved-to-parent ordering, non-model recovery, and a non-transactional boundary."
+      "summary": "UI, API, Job, TECH, Pi, Prompt, Playbook, and Decision agree on exact Home review, durable reread truth, existing channels, and open automatic routing/unified/generic proposal UX."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "proposal-review-apply-final-review",
+      "reviewerId": "proposal-home-review-ui-final-review",
       "blockerCount": 0,
-      "summary": "EV-PROPOSAL-REVIEW-LIFECYCLE binds the exact 20-test suite minimally to Job/proposal requirements and exits. The 1,083-claim lock is current and every state remains partial/in_progress."
+      "summary": "EV-PROPOSAL-UI and the awaiting-review EV-JOB-STATUS selector bind Home review only to existing Job/proposal requirements and exits. The 1,084-claim lock is current; P7 stays planned and mapped states stay partial."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "proposal-review-apply-final-review",
+      "reviewerId": "proposal-home-review-ui-final-review",
       "blockerCount": 0,
-      "summary": "Approved, page-first, applied, rejected, and conflicted-parent restart windows are executable without model/credential reads; generic apply is denied and generic reject remains state-only."
+      "summary": "Post-commit approve/reject rejection, exact-ID reread, ready retry, unknown lock, double-action guard, escaped preview, six locales, disclosure ARIA, and Back/Escape focus fallbacks are executable."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.6,
-      "reviewerId": "proposal-review-apply-final-review",
+      "reviewerId": "proposal-home-review-ui-final-review",
       "blockerCount": 0,
-      "summary": "No document or state was added: 57 Markdown files, 1,209,851/1,210,000 bytes, 4,014 entry words, 5,408/5,500 trace lines, 249,930/250,000 trace bytes, zero duplicate groups, and 14 mutations."
+      "summary": "No document or state was added: 57 Markdown files, 1,209,913/1,210,000 bytes, 4,014 entry words, 5,410/5,500 trace lines, 249,982/250,000 trace bytes, zero duplicate groups, and 14 mutations."
     }
   ],
   "verification": [
@@ -284,17 +296,17 @@
     {
       "command": "npm test && npm run typecheck && npm run build && npm run smoke:pi-agent-runtime && npm run smoke:index-rebuild-worker && npm run smoke:parser-workers && npm run smoke:macos-vision-ocr",
       "status": "passed",
-      "evidence": "All 71 test files/589 tests, typecheck, production build, Electron Pi/Home, parser/index workers, and real macOS Vision OCR passed on the exact candidate."
+      "evidence": "All 73 test files/612 tests, typecheck, production build, Electron Pi/Home, parser/index workers, and real macOS Vision OCR passed on the exact candidate."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 passed: 4,014/4,200 entry words, zero duplicate groups, 14 mutations, 5,408 trace lines, 57 Markdown files, 1,209,851 bytes, and 7.31 percent line reduction."
+      "evidence": "LEN-001 through LEN-005 passed: 4,014/4,200 entry words, zero duplicate groups, 14 mutations, 5,410 trace lines, 57 Markdown files, 1,209,913 bytes, and 7.35 percent line reduction."
     },
     {
       "command": "node scripts/verify/independent-documentation-review.mjs --print-snapshot && explicit semantic-ledger comparison",
       "status": "passed",
-      "evidence": "The governed snapshot is 9bcf64eff56f1b4c72415c2e947b339ab52a19ff015497535f2ea2f0ac9b618b across 109 files; current and locked ledgers contain 1,083 claims with zero differences."
+      "evidence": "The governed snapshot is 34c6e85ffc85dd2875d76b08ce76fc73db772bf587c7a66f2d832afcb4d80c58 across 109 files; current and locked ledgers contain 1,084 claims with zero differences."
     }
   ],
   "coordination": {
@@ -303,8 +315,8 @@
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "No stable ID, Job class, public channel, durable schema, UI, or status changed. Existing ProposalDecisionResult adds applied/conflicted; generic operations, review UI, replacement conflicts, CAS/atomicity/TOCTOU, and platform guarantees stay open.",
-    "acknowledgement": "Development delivered ten frozen implementation/test files on governed main; Product Planning synchronized seven existing Owner/management documents plus acceptance, semantic lock, and recipe, and an independent reviewer accepted the exact 20-file combined candidate."
+    "compatibility": "No stable ID, Job class, public channel, durable schema, navigation destination, or status changed. Existing proposal APIs now have a bounded Home review consumer; unified/generic/replacement UX, CAS/atomicity/TOCTOU, and platform guarantees stay open.",
+    "acknowledgement": "Development delivered twelve frozen renderer/locale/test files on governed main; Product Planning synchronized eight existing Owner/management documents plus acceptance, semantic lock, and recipe, and independent UI/code/document reviewers accepted the exact 23-file combined candidate."
   },
   "resolvedBlockers": [
     "Implemented the governed ordinary_allowed default and exact Connect disclosure, with matrix, policy-hash, Home private/sensitive, restricted, unknown/local, and Profile-switch evidence while keeping persistence/IPC/UI and confirmation resume open.",
@@ -332,7 +344,7 @@
     "Moved direct-image OCR onto Pi tool events with no pre-tool child, deterministic reuse, capability recovery, cancellation, empty-output parking across restart, wrong-tool rejection, and managed/reference source proof.",
     "Added the reviewed OpenAI key-only preset and global default plus a Pi-grounded Home query vertical with no-model local fallback, body-free per-turn audits, exact Markdown/source privacy drift checks, confined records, untrusted evidence, fixed zero-evidence output, typed UI states, and no raw key/path/body/error exposure.",
     "Added one optional Agent-selected local ingest search with bounded opaque refs, current Markdown/SourceRecord revalidation, per-turn drift audits, terminal failure/publication fences, stable related_page_ids, and post-publication Operation recovery without a retrieval Job or state promotion.",
-    "Added exact Pi-staged create-note approve/apply/reject/conflict handling with confined page/index/body-free Operation/log effects, no-model restart reconciliation through conflicted-parent windows, and explicit non-transactional/generic/UI/CAS limits."
+    "Added Home proposal cards and focused escaped review over the exact Pi create-note lifecycle, with durable rejected-call reconciliation, ready retry, unknown fail-closed, localized outcomes, double-action guards, and bounded ARIA/focus behavior."
   ],
   "nonBlockingRisks": [
     "P5 remains in progress: remaining Job-class publishers, running capture/other-class cancellation, strict cross-process Job CAS and routing, parent-directory swap, guard-to-domain atomicity, guard-without-output recovery, checkpoint arrays, cross-file transactions, Windows/Paddle, packaged-filesystem proof, and visible progress/cancel UI remain open.",
@@ -340,10 +352,10 @@
     "The local-tool lifecycle remains a fake/local service foundation: real Paddle/Python/model/language-pack transport, ordinary-ingest no-hidden-install proof, production app-data/catalog/permission/pre-vault Job/Operation wiring, OCR/UI, supply chain, packaged platforms, cross-process locking, complete recovery/GC/quarantine purge, and background lifecycle controls remain open.",
     "The retrieval regression foundation remains lexical and synthetic: model-grounded summary/citation validation under cloud-send and Permission enforcement, tag/topic/entity and Knowledge Tree thresholds, vector/reranker ranking, 10k/100k and UI/packaged proof, and broader locale/query families remain open.",
     "The Knowledge Tree remains internal-only: broader relation and branch semantics, richer aggregate inputs, public IPC/preload/renderer navigation, localized empty state, 10k worker/incremental rebuild proof, packaged parity, and the separately owned visual/accessibility and Knowledge Health work remain open.",
-    "Pi remains partial: proposal risk routing/review UI/generic apply/replacement conflicts, complete provider catalog/custom protocols, remaining fixed routes, pre-publication search replay, synchronous retrieval cancellation, persisted Broker, Home drainer/retry/cancel/conversations, packaged BYOK, signed platforms, and broader cross-process/cross-file recovery remain open.",
+    "Pi remains partial: automatic proposal risk routing, unified/generic/replacement UX, dedicated/bulk review, persisted Provider-to-Home roundtrip/tool-capability proof, hard-coded Home intent routing, complete provider protocols, remaining fixed routes, Broker, packaged BYOK, signed platforms, and broader cross-process/cross-file recovery remain open.",
     "No-telemetry is a static executable gate; unknown SDKs, computed endpoints, indirect transports, generated configuration, and crash-hook review remain open. Diagnostics still need broader stores, recovery correlation, user clear, export cancellation, selected-path UX, and crash recovery.",
     "Backup still needs backupId/domainSchemaVersions, release exclusion scans, external managed copies, include controls, durable Jobs/checkpoints, structured dependencies, and complete restore orchestration.",
-    "Trace projections use 5,408 of 5,500 lines and 249,930 of 250,000 bytes; governed Markdown uses 1,209,851 of 1,210,000 bytes. Future additions must reclaim capacity instead of raising budgets.",
+    "Trace projections use 5,410 of 5,500 lines and 249,982 of 250,000 bytes; governed Markdown uses 1,209,913 of 1,210,000 bytes. Future additions must reclaim capacity instead of raising budgets.",
     "PRD, TECH_ARCHITECTURE, and Decision Log remain large Owner documents; future Agents should continue section-targeted reads and define each fact once.",
     "The concise pre-alpha README intentionally has no install button, screenshots, or release download; add those only when a usable signed build and governed visual evidence exist.",
     "Structural UI gates do not prove packaged macOS/Windows fidelity, accessibility, or human visual approval; real capture and release evidence remain open.",

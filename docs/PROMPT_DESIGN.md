@@ -132,7 +132,7 @@ Rules:
   each turn rechecks non-secret binding, source/cancellation, and egress. Drift fails closed.
 - The model may cite only supplied `ev_NN` refs. Unknown refs fail before any Markdown write. A statement with an empty ref list is retained only with a warning, confidence cap, and `needs_review`; model-authored `[source:...]` or `[artifact:...]` tokens are stripped and canonical citations are rendered service-side.
 - The Agent may stage one terminal durable proposal; explicit review may apply only its
-  exact create note or reject it. Automatic risk routing, review UI, and generic operations remain open.
+  exact create note or reject it. Automatic risk routing and generic proposal UX/operations remain open.
 
 ### 5.2 Home Query
 
