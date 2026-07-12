@@ -255,13 +255,12 @@ actionable follow-up Jobs do not set it by themselves; Artifact, Page, note, or 
 domain-output publication does.
 The schema rejects a half request pair and rejects `cancelled` with a true guard.
 
-Before first publication, current capture/parse/OCR/Agent-ingest writers reread the Job.
-An earlier cancellation wins; otherwise a unique no-follow temporary write, file flush,
-directory flush where supported, and atomic replacement persist `true` plus a real
-`*_publication_started` checkpoint before a second cancellation check. Failure blocks
-publication; a later first-write failure retains `true`. This closes only the
-single-active-writer ordering window; cross-process revision CAS, parent-directory swap,
-guard-to-domain atomicity, guard-without-output recovery, and packaged filesystem proof stay open.
+Before publication, capture/parse/OCR/Agent-ingest rereads Job; cancellation wins. An
+exclusive no-follow temp write + file/directory flush and atomic replace persists `true`
+plus a checkpoint before another cancellation check; failure leaves `true`. This proves
+single-writer ordering and Section 11's exact same-Job page recovery only. Other guard-
+without-output, completion-time Job/Operation tampering, cross-process revision CAS/parent
+swap, cross-file atomicity, and packaged proof remain open.
 
 ```ts
 type JobRecord = {
@@ -533,11 +532,13 @@ Rules:
 
 Current Phase 3 implementation is narrower and transitional:
 
-- Exact proposals remain confined, ordered, restart-reconciled support. Fresh direct/
-  proposal creates bind Markdown hash/path; hashless recovery stays non-undoable.
-- Activity admits one reversible generated-page create. Undo rechecks page/index/audit;
-  private trash and deterministic `trash_page` precede rebuild.
-- Proposal routing, non-create, generic exceptions, restore/redo, CAS/TOCTOU, broad Activity/platforms remain open.
+- Exact proposals remain confined/ordered/restart-reconciled. Fresh direct/proposal and
+  checkpoint-proven same-Job recovered creates bind hash/path/policy/source revision. Before targets
+  exist only content hash may refresh; page-first adoption rechecks bytes. Legacy unbound/
+  hashless recovery stays non-undoable.
+- Activity admits one reversible generated-page create; Undo rechecks page/index/audit,
+  then private trash + `trash_page` precede rebuild.
+- Non-create/generic/restore/redo, completion tampering, CAS/TOCTOU, broad Activity/platforms remain open.
 - `requiredPermissionIds` is a compatibility field for permission prerequisites and may contain canonical `permreq_` request IDs or `permdec_` decision IDs; a later schema may split, not reinterpret, it.
 
 ## 12. Operation Record Lifecycle

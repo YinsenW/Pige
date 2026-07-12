@@ -943,23 +943,12 @@
     },
     "PIGE-VAULT-006": {
       "status": "partial",
-      "evidence": [
-        "EV-MARKDOWN-ATOMIC",
-        "EV-DB-EXTERNAL-EDIT",
-        "EV-SOURCE-PAGE-CONFLICT-PRESERVATION",
-        "EV-SOURCE-PAGE-SOURCE-REVISION",
-        "EV-GENERATED-NOTE-FINAL-FENCE",
-        "EV-GENERATED-NOTE-CONFLICT-PRESERVATION"
-      ],
+      "evidence": ["EV-MARKDOWN-ATOMIC", "EV-DB-EXTERNAL-EDIT", "EV-SOURCE-PAGE-CONFLICT-PRESERVATION", "EV-SOURCE-PAGE-SOURCE-REVISION", "EV-GENERATED-NOTE-FINAL-FENCE", "EV-GENERATED-NOTE-CONFLICT-PRESERVATION"],
       "open": {
         "id": "OPEN-REQ-PIGE-VAULT-006",
         "description": "User-visible conflict resolution, strict cross-process commit-fence proof, and parent-swap-resistant destination binding remain open.",
-        "targetBuilds": [
-          "B1.25"
-        ],
-        "targetExits": [
-          "E1.21"
-        ]
+        "targetBuilds": ["B1.25"],
+        "targetExits": ["E1.21"]
       }
     },
     "PIGE-VAULT-007": {
@@ -1065,25 +1054,12 @@
     },
     "PIGE-KNOW-006": {
       "status": "partial",
-      "evidence": [
-        "EV-AGENT-INGEST"
-      ],
+      "evidence": ["EV-AGENT-INGEST", "EV-CREATE-RECOVERY"],
       "open": {
         "id": "OPEN-REQ-PIGE-KNOW-006",
-        "description": "Complete autonomous outcome-summary/recovery-ref coverage remains open.",
-        "targetBuilds": [
-          "B3.06",
-          "B3.07",
-          "B3.08",
-          "B3.09",
-          "B3.10",
-          "B3.12"
-        ],
-        "targetExits": [
-          "E3.04",
-          "E3.05",
-          "E3.07"
-        ]
+        "description": "Other outcomes and non-create recovery refs remain.",
+        "targetBuilds": ["B3.06", "B3.07", "B3.08", "B3.09", "B3.10", "B3.12"],
+        "targetExits": ["E3.04", "E3.05", "E3.07"]
       }
     },
     "PIGE-JOB-001": {
@@ -1102,18 +1078,12 @@
     },
     "PIGE-JOB-002": {
       "status": "partial",
-      "evidence": ["EV-JOB-DRAIN", "EV-JOB-RECOVERY", "EV-HOME-JOB-RECOVERY", "EV-HOME-AGENT", "EV-HOME-FOLLOWUP", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-ACTIVITY-UNDO", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER"],
+      "evidence": ["EV-JOB-DRAIN", "EV-JOB-RECOVERY", "EV-HOME-JOB-RECOVERY", "EV-HOME-AGENT", "EV-HOME-FOLLOWUP", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-002",
         "description": "Other Job classes, cross-process CAS, kill/reopen, packaged, and checkpoint proof remain.",
-        "targetBuilds": [
-          "B2.08",
-          "B2.11"
-        ],
-        "targetExits": [
-          "E2.01",
-          "E2.10"
-        ]
+        "targetBuilds": ["B2.08", "B2.11"],
+        "targetExits": ["E2.01", "E2.10"]
       }
     },
     "PIGE-JOB-003": {
@@ -1149,10 +1119,10 @@
     },
     "PIGE-JOB-005": {
       "status": "partial",
-      "evidence": ["EV-AGENT-INGEST", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-ACTIVITY-UNDO"],
+      "evidence": ["EV-AGENT-INGEST", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-005",
-        "description": "Hashless recovery plus non-create Agent-write Operations remain.",
+        "description": "Historical hashless recovery and non-create Agent-write Operations remain.",
         "targetBuilds": ["B7.04"],
         "targetExits": ["E7.01"]
       }
@@ -1319,10 +1289,10 @@
     },
     "PIGE-PI-001": {
       "status": "partial",
-      "evidence": ["EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-BOUNDARY", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-RETRIEVAL", "EV-PI-INGEST-PROPOSAL", "EV-PI-URL-INGRESS", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE", "EV-ACTIVITY-UNDO"],
+      "evidence": ["EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-BOUNDARY", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-RETRIEVAL", "EV-PI-INGEST-PROPOSAL", "EV-PI-URL-INGRESS", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY"],
       "open": {
         "id": "OPEN-REQ-PIGE-PI-001",
-        "description": "Exact-create Activity/Undo works; broader eligibility, routes, Broker, recovery, and packaged BYOK remain.",
+        "description": "Hash-bound exact-create recovery/Undo works; broader eligibility, routes, Broker, and packaged BYOK remain.",
         "targetBuilds": ["B3.06", "B3.13"],
         "targetExits": ["E3.04", "E3.08"]
       }
@@ -2468,23 +2438,12 @@
     },
     "E1.21": {
       "status": "partial",
-      "evidence": [
-        "EV-MARKDOWN-ATOMIC",
-        "EV-DB-EXTERNAL-EDIT",
-        "EV-SOURCE-PAGE-CONFLICT-PRESERVATION",
-        "EV-SOURCE-PAGE-SOURCE-REVISION",
-        "EV-GENERATED-NOTE-FINAL-FENCE",
-        "EV-GENERATED-NOTE-CONFLICT-PRESERVATION"
-      ],
+      "evidence": ["EV-MARKDOWN-ATOMIC", "EV-DB-EXTERNAL-EDIT", "EV-SOURCE-PAGE-CONFLICT-PRESERVATION", "EV-SOURCE-PAGE-SOURCE-REVISION", "EV-GENERATED-NOTE-FINAL-FENCE", "EV-GENERATED-NOTE-CONFLICT-PRESERVATION"],
       "open": {
         "id": "OPEN-EXIT-E1.21",
         "description": "User-visible conflict resolution, strict cross-process commit-fence proof, and parent-swap-resistant destination binding remain open.",
-        "targetBuilds": [
-          "B1.25"
-        ],
-        "targetExits": [
-          "E1.21"
-        ]
+        "targetBuilds": ["B1.25"],
+        "targetExits": ["E1.21"]
       }
     },
     "E1.22": {
@@ -2612,16 +2571,12 @@
     },
     "E2.10": {
       "status": "partial",
-      "evidence": ["EV-JOB-RECOVERY", "EV-HOME-AGENT", "EV-HOME-FOLLOWUP", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER"],
+      "evidence": ["EV-JOB-RECOVERY", "EV-HOME-AGENT", "EV-HOME-FOLLOWUP", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-CREATE-RECOVERY", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER"],
       "open": {
         "id": "OPEN-EXIT-E2.10",
         "description": "Other Job classes, cross-process CAS, kill/reopen, packaged, and checkpoint proof remain.",
-        "targetBuilds": [
-          "B2.11"
-        ],
-        "targetExits": [
-          "E2.10"
-        ]
+        "targetBuilds": ["B2.11"],
+        "targetExits": ["E2.10"]
       }
     },
     "E2.11": {
@@ -2736,26 +2691,20 @@
     },
     "E3.07": {
       "status": "partial",
-      "evidence": [
-        "EV-AGENT-INGEST"
-      ],
+      "evidence": ["EV-AGENT-INGEST", "EV-CREATE-RECOVERY"],
       "open": {
         "id": "OPEN-EXIT-E3.07",
-        "description": "Complete autonomous outcome/recovery-ref coverage remains open.",
-        "targetBuilds": [
-          "B3.12"
-        ],
-        "targetExits": [
-          "E3.07"
-        ]
+        "description": "Other outcomes and non-create recovery refs remain.",
+        "targetBuilds": ["B3.12"],
+        "targetExits": ["E3.07"]
       }
     },
     "E3.08": {
       "status": "partial",
-      "evidence": ["EV-BOUNDARY", "EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-RETRIEVAL", "EV-PI-INGEST-PROPOSAL", "EV-PI-URL-INGRESS", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE", "EV-ACTIVITY-UNDO"],
+      "evidence": ["EV-BOUNDARY", "EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-RETRIEVAL", "EV-PI-INGEST-PROPOSAL", "EV-PI-URL-INGRESS", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY"],
       "open": {
         "id": "OPEN-EXIT-E3.08",
-        "description": "Exact-create Activity/Undo works; broader eligibility, routes, Broker, recovery, and packaged BYOK remain.",
+        "description": "Hash-bound exact-create recovery/Undo works; broader eligibility, routes, Broker, and packaged BYOK remain.",
         "targetBuilds": ["B3.13"],
         "targetExits": ["E3.08"]
       }
@@ -2992,7 +2941,7 @@
     },
     "E7.01": {
       "status": "partial",
-      "evidence": ["EV-PROPOSAL", "EV-AGENT-INGEST", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-PROPOSAL-UI", "EV-ACTIVITY-UNDO"],
+      "evidence": ["EV-PROPOSAL", "EV-AGENT-INGEST", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-PROPOSAL-UI", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY"],
       "open": {
         "id": "OPEN-EXIT-E7.01",
         "description": "Exact-create Undo works; non-create operations, generic exceptions, CAS/TOCTOU, and platform proof remain.",
@@ -3476,6 +3425,7 @@
       "selector": "turns a preserved source into a wiki note, index entry, and operation record without storing prompts or secrets"
     },
     "EV-ACTIVITY-UNDO": { "kind": "test", "path": "tests/unit/knowledge-activity-service.test.ts", "selector": "Knowledge Activity and Undo" },
+    "EV-CREATE-RECOVERY": { "kind": "test", "path": "tests/unit/jobs-service.test.ts", "selector": "reuses a same-job committed note with a real recovery checkpoint" },
     "EV-PI-AGENT-SPINE": { "kind": "test", "path": "tests/unit/agent-led-ingest.test.ts", "selector": "Agent-led knowledge spine" },
     "EV-PI-PDF-PARSE-TOOL": { "kind": "test", "path": "tests/unit/agent-led-pdf-parse.test.ts", "selector": "Agent-led PDF parse tool" },
     "EV-PI-PDF-OCR-TOOL": { "kind": "test", "path": "tests/unit/agent-led-pdf-ocr.test.ts", "selector": "Agent-led PDF OCR tool" },

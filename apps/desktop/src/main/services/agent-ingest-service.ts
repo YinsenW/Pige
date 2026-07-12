@@ -119,12 +119,27 @@ export interface AgentIngestPolicySnapshot {
   readonly policyHash: string;
 }
 
+export interface AgentIngestPublicationBinding {
+  readonly sourceId: string;
+  readonly pageId: string;
+  readonly pagePath: string;
+  readonly contentHash: string;
+  readonly sourceRevisionHash: string;
+  readonly policyContextId: string;
+  readonly policyHash: string;
+  readonly operationId: string;
+  readonly operationPath: string;
+}
+
 export interface AgentIngestHooks {
   readonly onPolicyResolved?: (snapshot: AgentIngestPolicySnapshot) => void;
   readonly onEgressRecorded?: (operationId: string) => void;
   readonly assertSourceCurrent?: (expected: SourceRecord) => void;
   readonly throwIfCancellationRequested?: () => void;
-  readonly onPublicationStart?: (checkpointId: string) => void;
+  readonly onPublicationStart?: (
+    checkpointId: string,
+    binding?: AgentIngestPublicationBinding
+  ) => void;
   readonly onProposalStaged?: (result: AgentIngestProposalResult) => void;
   readonly parseCurrentSource?: (
     request: AgentIngestParseToolRequest
@@ -1251,6 +1266,8 @@ export class AgentIngestService {
           const terminalResult = existingTerminalToolResult();
           if (terminalResult) return terminalResult;
           const prepared = await prepareKnowledgeAction(modelOutput, signal);
+          const contentHash = createModelEgressPayloadHash(prepared.noteMarkdown);
+          const operationId = createOperationId(job.id, pageId);
           const commitResult = createGeneratedNoteExclusive(
             vaultPath,
             absolutePagePath,
@@ -1264,7 +1281,20 @@ export class AgentIngestService {
                 assertSourceCurrent: () => hooks.assertSourceCurrent?.(currentSourceRecord)
               } : {}),
               ...(hooks.onPublicationStart ? {
-                onPublicationStart: () => hooks.onPublicationStart?.(AGENT_NOTE_PUBLICATION_CHECKPOINT)
+                onPublicationStart: () => hooks.onPublicationStart?.(
+                  AGENT_NOTE_PUBLICATION_CHECKPOINT,
+                  {
+                    sourceId: currentSourceRecord.id,
+                    pageId,
+                    pagePath,
+                    contentHash,
+                    sourceRevisionHash: createModelEgressPayloadHash(JSON.stringify(currentSourceRecord)),
+                    policyContextId: policy.policyContextId,
+                    policyHash: policy.policyHash,
+                    operationId,
+                    operationPath: createOperationPath(operationId)
+                  }
+                )
               } : {})
             }
           );
@@ -1300,7 +1330,7 @@ export class AgentIngestService {
               output: prepared.output,
               evidencePack: currentEvidencePack,
               relatedPageIds: prepared.relatedPageIds,
-              contentHash: createModelEgressPayloadHash(prepared.noteMarkdown),
+              contentHash,
               now: prepared.now
             });
             publication = {
@@ -3009,6 +3039,10 @@ function writeRecoveredCreatePageOperation(input: {
   readonly title: string;
   readonly reviewRequired: boolean;
   readonly relatedPageIds: readonly string[];
+  readonly contentHash?: string;
+  readonly sourceRevisionHash?: string;
+  readonly policyContextId?: string;
+  readonly policyHash?: string;
   readonly modelProfileId?: string;
 }): OperationRecord {
   const operationId = createOperationId(input.job.id, input.pageId);
@@ -3028,6 +3062,13 @@ function writeRecoveredCreatePageOperation(input: {
     },
     ...(input.modelProfileId ? { modelProfileId: input.modelProfileId } : {}),
     permissionDecisionIds: [],
+    ...(input.policyContextId && input.policyHash ? {
+      policyAudit: {
+        policyContextId: input.policyContextId,
+        policyHash: input.policyHash,
+        enforcementOwners: ["Agent Orchestrator", "Model Egress Policy", "Model Provider Registry"]
+      }
+    } : {}),
     kind: "create_page",
     targetRefs: [{ kind: "page", id: input.pageId, path: input.pagePath }],
     sourceRefs: [
@@ -3038,7 +3079,12 @@ function writeRecoveredCreatePageOperation(input: {
         id: pageId
       }))
     ],
-    summary: `Recovered operation metadata for existing Agent note "${input.title}" from source ${input.sourceRecord.id}.`,
+    ...(input.contentHash ? {
+      after: { kind: "page", id: input.contentHash, path: input.pagePath }
+    } : {}),
+    summary: `Recovered operation metadata for existing Agent note "${input.title}" from source ${input.sourceRecord.id}${
+      input.sourceRevisionHash ? ` at revision ${input.sourceRevisionHash}` : ""
+    }.`,
     reversible: "best_effort",
     rollbackHint: "Move the generated wiki page to trash after checking that it has not been edited.",
     warnings: input.reviewRequired ? ["The recovered generated note remains marked for review."] : []
@@ -3423,6 +3469,15 @@ function recoverExistingGeneratedNote(input: {
   }
   input.hooks?.assertSourceCurrent?.(input.sourceRecord);
   input.hooks?.throwIfCancellationRequested?.();
+  const recoveredBinding = input.existing.lastJobId === input.job.id
+    ? verifyRecoveredCreatePageBinding({
+        vaultPath: input.vaultPath,
+        job: input.job,
+        pageId: input.pageId,
+        pagePath: input.pagePath,
+        sourceRecord: input.sourceRecord
+      })
+    : undefined;
   const title = input.existing.title ?? "Generated Note";
   const indexWriteRequired = !indexContainsPage(input.vaultPath, input.pagePath);
   if (input.existing.lastJobId === input.job.id) {
@@ -3448,6 +3503,12 @@ function recoverExistingGeneratedNote(input: {
     title,
     reviewRequired: input.existing.reviewRequired,
     relatedPageIds: input.existing.relatedPageIds,
+    ...(recoveredBinding ? {
+      contentHash: recoveredBinding.contentHash,
+      sourceRevisionHash: recoveredBinding.sourceRevisionHash,
+      policyContextId: recoveredBinding.policyContextId,
+      policyHash: recoveredBinding.policyHash
+    } : {}),
     ...(input.existing.modelProfileId ? { modelProfileId: input.existing.modelProfileId } : {})
   });
   return {
@@ -3460,6 +3521,99 @@ function recoverExistingGeneratedNote(input: {
     warnings: [],
     operationId: operation.id,
     operationIds: [...(input.precedingOperationIds ?? []), operation.id]
+  };
+}
+
+function verifyRecoveredCreatePageBinding(input: {
+  readonly vaultPath: string;
+  readonly job: JobRecord;
+  readonly pageId: string;
+  readonly pagePath: string;
+  readonly sourceRecord: SourceRecord;
+}): {
+  readonly contentHash: string;
+  readonly sourceRevisionHash: string;
+  readonly policyContextId: string;
+  readonly policyHash: string;
+} | undefined {
+  const checkpoints = input.job.checkpoints?.filter(
+    (checkpoint) => checkpoint.id === AGENT_NOTE_PUBLICATION_CHECKPOINT
+  ) ?? [];
+  if (checkpoints.length === 0) return undefined;
+  if (checkpoints.length !== 1) {
+    throw new PigeDomainError(
+      "agent_ingest.page_conflict",
+      "The generated-note publication checkpoint is ambiguous."
+    );
+  }
+  const checkpoint = checkpoints[0];
+  if (!checkpoint) {
+    throw new PigeDomainError(
+      "agent_ingest.page_conflict",
+      "The generated-note publication checkpoint is unavailable."
+    );
+  }
+  const pageRefs = checkpoint.outputRefs.filter((ref) => ref.role === "expected_generated_note");
+  const pageRef = pageRefs[0];
+  const sourceRefs = checkpoint.inputRefs.filter((ref) => ref.role === "publication_source_revision");
+  const sourceRef = sourceRefs[0];
+  const policyRefs = checkpoint.inputRefs.filter((ref) => ref.role === "publication_policy");
+  const policyRef = policyRefs[0];
+  const operationRefs = checkpoint.outputRefs.filter((ref) => ref.role === "expected_create_operation");
+  const operationRef = operationRefs[0];
+  const expectedOperationId = createOperationId(input.job.id, input.pageId);
+  const expectedOperationPath = createOperationPath(expectedOperationId);
+  if (
+    checkpoint.step !== AGENT_NOTE_PUBLICATION_CHECKPOINT ||
+    !["running", "done"].includes(checkpoint.state) ||
+    !checkpoint.checksumAfter ||
+    !input.job.sourceId ||
+    !input.job.policyHash ||
+    checkpoint.inputRefs.length !== 2 ||
+    sourceRefs.length !== 1 ||
+    sourceRef?.kind !== "source" ||
+    sourceRef.id !== input.job.sourceId ||
+    sourceRef.checksum !== createModelEgressPayloadHash(JSON.stringify(input.sourceRecord)) ||
+    policyRefs.length !== 1 ||
+    policyRef?.kind !== "tool" ||
+    !input.job.policyContextId ||
+    policyRef.id !== input.job.policyContextId ||
+    policyRef.checksum !== input.job.policyHash ||
+    checkpoint.outputRefs.length !== 2 ||
+    pageRefs.length !== 1 ||
+    pageRef?.kind !== "page" ||
+    pageRef.id !== input.pageId ||
+    pageRef.path !== input.pagePath ||
+    pageRef.checksum !== checkpoint.checksumAfter ||
+    operationRefs.length !== 1 ||
+    operationRef?.kind !== "operation" ||
+    operationRef.id !== expectedOperationId ||
+    operationRef.path !== expectedOperationPath
+  ) {
+    throw new PigeDomainError(
+      "agent_ingest.page_conflict",
+      "The generated-note publication checkpoint no longer matches its durable target."
+    );
+  }
+  const committedContent = readGeneratedNoteExact(
+    input.vaultPath,
+    resolveVaultRelativePath(input.vaultPath, input.pagePath),
+    MAX_PROPOSAL_APPLY_CONTENT_BYTES
+  );
+  if (
+    committedContent === undefined ||
+    createModelEgressPayloadHash(committedContent) !== checkpoint.checksumAfter
+  ) {
+    throw new PigeDomainError(
+      "agent_ingest.page_conflict",
+      "The generated note changed after its durable publication checkpoint."
+    );
+  }
+  return {
+    contentHash: checkpoint.checksumAfter,
+    sourceRevisionHash: sourceRef.checksum,
+    policyContextId: policyRef.id,
+    policyHash: policyRef.checksum
   };
 }
 

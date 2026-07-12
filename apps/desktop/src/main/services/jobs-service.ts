@@ -33,6 +33,7 @@ import {
   type AgentIngestOcrToolRequest,
   type AgentIngestParseToolExecution,
   type AgentIngestParseToolRequest,
+  type AgentIngestPublicationBinding,
   type AgentIngestPublishedResult,
   type AgentIngestProposalBinding
 } from "./agent-ingest-service";
@@ -1762,7 +1763,17 @@ export class JobsService {
             execution.control
           ),
           throwIfCancellationRequested: () => execution.control.throwIfCancellationRequested(),
-          onPublicationStart: (checkpointId) => execution.control.markDurableCheckpoint(checkpointId),
+          onPublicationStart: (checkpointId, publicationBinding) => {
+            if (publicationBinding) {
+              recordAgentNotePublicationCheckpoint(
+                vaultPath,
+                jobFile.path,
+                checkpointId,
+                publicationBinding
+              );
+            }
+            execution.control.markDurableCheckpoint(checkpointId);
+          },
           onProposalStaged: (proposalResult) => {
             markAgentProposalAwaitingReview(
               jobFile.path,
@@ -1841,6 +1852,7 @@ export class JobsService {
           completed += 1;
           continue;
         }
+        completeAgentNotePublicationCheckpoint(jobFile.path, result);
         if (preservedAgentTurn) {
           const conversations = new AgentTurnConversationStore();
           const assistantEvent = conversations.findAssistantTurn(
@@ -3282,6 +3294,236 @@ function assertProposalParentJob(
       "The proposal no longer matches its active vault, parent Job, source, or target."
     );
   }
+}
+
+function recordAgentNotePublicationCheckpoint(
+  vaultPath: string,
+  jobPath: string,
+  checkpointId: string,
+  binding: AgentIngestPublicationBinding
+): void {
+  const current = readJobRecordAtPath(jobPath);
+  if (
+    !current ||
+    current.state !== "running" ||
+    current.sourceId !== binding.sourceId ||
+    current.policyContextId !== binding.policyContextId ||
+    current.policyHash !== binding.policyHash
+  ) {
+    throw new PigeDomainError(
+      "agent_ingest.page_conflict",
+      "The active Agent Job cannot bind its generated-note publication."
+    );
+  }
+  const matches = current.checkpoints?.filter((checkpoint) => checkpoint.id === checkpointId) ?? [];
+  if (matches.length > 1) {
+    throw new PigeDomainError(
+      "agent_ingest.page_conflict",
+      "The generated-note publication checkpoint is ambiguous."
+    );
+  }
+  const existing = matches[0];
+  const expectedInputRefs = [
+    {
+      kind: "source" as const,
+      id: binding.sourceId,
+      checksum: binding.sourceRevisionHash,
+      role: "publication_source_revision"
+    },
+    {
+      kind: "tool" as const,
+      id: binding.policyContextId,
+      checksum: binding.policyHash,
+      role: "publication_policy"
+    }
+  ];
+  const expectedOutputRefs = [
+    {
+      kind: "page" as const,
+      id: binding.pageId,
+      path: binding.pagePath,
+      checksum: binding.contentHash,
+      role: "expected_generated_note"
+    },
+    {
+      kind: "operation" as const,
+      id: binding.operationId,
+      path: binding.operationPath,
+      role: "expected_create_operation"
+    }
+  ];
+  const exactExisting = existing && matchesAgentNotePublicationCheckpoint(
+    existing,
+    checkpointId,
+    expectedInputRefs,
+    expectedOutputRefs,
+    binding.contentHash
+  );
+  const replaceUncommitted = existing && !exactExisting && canReplaceUncommittedAgentNoteCheckpoint(
+    vaultPath,
+    existing,
+    checkpointId,
+    expectedInputRefs,
+    expectedOutputRefs,
+    binding
+  );
+  if (existing && !exactExisting && !replaceUncommitted) {
+    throw new PigeDomainError(
+      "agent_ingest.page_conflict",
+      "The generated-note publication checkpoint changed before commit."
+    );
+  }
+  const now = new Date().toISOString();
+  const checkpoint = {
+    id: checkpointId,
+    step: checkpointId,
+    state: "running" as const,
+    startedAt: replaceUncommitted ? now : existing?.startedAt ?? now,
+    inputRefs: expectedInputRefs,
+    outputRefs: expectedOutputRefs,
+    checksumAfter: binding.contentHash,
+    resumeHint: "Verify the exact generated-note bytes before adopting its create Operation."
+  };
+  writeJsonAtomic(jobPath, JobRecordSchema.parse({
+    ...current,
+    checkpoints: [
+      ...(current.checkpoints ?? []).filter((candidate) => candidate.id !== checkpointId),
+      checkpoint
+    ],
+    updatedAt: now
+  }));
+}
+
+function canReplaceUncommittedAgentNoteCheckpoint(
+  vaultPath: string,
+  checkpoint: NonNullable<JobRecord["checkpoints"]>[number],
+  checkpointId: string,
+  expectedInputRefs: readonly NonNullable<JobRecord["inputRefs"]>[number][],
+  expectedOutputRefs: readonly NonNullable<JobRecord["outputRefs"]>[number][],
+  binding: AgentIngestPublicationBinding
+): boolean {
+  const existingPageRef = checkpoint.outputRefs.find((ref) => ref.role === "expected_generated_note");
+  const existingOperationRef = checkpoint.outputRefs.find((ref) => ref.role === "expected_create_operation");
+  const expectedPageRef = expectedOutputRefs.find((ref) => ref.role === "expected_generated_note");
+  const expectedOperationRef = expectedOutputRefs.find((ref) => ref.role === "expected_create_operation");
+  return checkpoint.step === checkpointId &&
+    checkpoint.state === "running" &&
+    checkpoint.inputRefs.length === expectedInputRefs.length &&
+    expectedInputRefs.every((expected, index) => sameJobRef(checkpoint.inputRefs[index], expected)) &&
+    checkpoint.outputRefs.length === expectedOutputRefs.length &&
+    sameJobRefIgnoringChecksum(existingPageRef, expectedPageRef) &&
+    expectedOperationRef !== undefined &&
+    sameJobRef(existingOperationRef, expectedOperationRef) &&
+    !fs.existsSync(resolveCheckpointPath(vaultPath, binding.pagePath)) &&
+    !fs.existsSync(resolveCheckpointPath(vaultPath, binding.operationPath));
+}
+
+function resolveCheckpointPath(vaultPath: string, relativePath: string): string {
+  if (
+    !relativePath ||
+    path.isAbsolute(relativePath) ||
+    relativePath.includes("\\") ||
+    relativePath.split("/").some((part) => !part || part === "." || part === "..")
+  ) {
+    throw new PigeDomainError(
+      "agent_ingest.page_conflict",
+      "The generated-note checkpoint path is invalid."
+    );
+  }
+  const resolvedVault = path.resolve(vaultPath);
+  const resolvedTarget = path.resolve(resolvedVault, ...relativePath.split("/"));
+  if (!resolvedTarget.startsWith(`${resolvedVault}${path.sep}`)) {
+    throw new PigeDomainError(
+      "agent_ingest.page_conflict",
+      "The generated-note checkpoint path escapes the active vault."
+    );
+  }
+  return resolvedTarget;
+}
+
+function matchesAgentNotePublicationCheckpoint(
+  checkpoint: NonNullable<JobRecord["checkpoints"]>[number],
+  checkpointId: string,
+  expectedInputRefs: readonly NonNullable<JobRecord["inputRefs"]>[number][],
+  expectedOutputRefs: readonly NonNullable<JobRecord["outputRefs"]>[number][],
+  contentHash: string
+): boolean {
+  return checkpoint.step === checkpointId &&
+    ["running", "done"].includes(checkpoint.state) &&
+    checkpoint.checksumAfter === contentHash &&
+    checkpoint.inputRefs.length === expectedInputRefs.length &&
+    checkpoint.outputRefs.length === expectedOutputRefs.length &&
+    expectedInputRefs.every((expected, index) => sameJobRef(checkpoint.inputRefs[index], expected)) &&
+    expectedOutputRefs.every((expected, index) => sameJobRef(checkpoint.outputRefs[index], expected));
+}
+
+function completeAgentNotePublicationCheckpoint(
+  jobPath: string,
+  publication: AgentIngestPublishedResult
+): void {
+  const current = readJobRecordAtPath(jobPath);
+  if (!current) {
+    throw new PigeDomainError(
+      "agent_ingest.page_conflict",
+      "The Agent Job disappeared before its generated-note checkpoint completed."
+    );
+  }
+  const matches = current.checkpoints?.filter(
+    (checkpoint) => checkpoint.id === "agent_note_publication_started"
+  ) ?? [];
+  if (matches.length === 0) return;
+  const checkpoint = matches[0];
+  const pageRef = checkpoint?.outputRefs.find((ref) => ref.role === "expected_generated_note");
+  if (
+    matches.length !== 1 ||
+    !checkpoint ||
+    checkpoint.checksumAfter === undefined ||
+    pageRef?.kind !== "page" ||
+    pageRef.id !== publication.pageId ||
+    pageRef.path !== publication.pagePath ||
+    pageRef.checksum !== checkpoint.checksumAfter
+  ) {
+    throw new PigeDomainError(
+      "agent_ingest.page_conflict",
+      "The generated-note checkpoint changed before Job completion."
+    );
+  }
+  if (checkpoint.state === "done") return;
+  const now = new Date().toISOString();
+  writeJsonAtomic(jobPath, JobRecordSchema.parse({
+    ...current,
+    checkpoints: [
+      ...(current.checkpoints ?? []).filter((candidate) => candidate.id !== checkpoint.id),
+      { ...checkpoint, state: "done", finishedAt: now }
+    ],
+    updatedAt: now
+  }));
+}
+
+function sameJobRef(
+  actual: NonNullable<JobRecord["inputRefs"]>[number] | undefined,
+  expected: NonNullable<JobRecord["inputRefs"]>[number]
+): boolean {
+  return actual?.kind === expected.kind &&
+    actual.id === expected.id &&
+    actual.path === expected.path &&
+    actual.uri === expected.uri &&
+    actual.checksum === expected.checksum &&
+    actual.locator === expected.locator &&
+    actual.role === expected.role;
+}
+
+function sameJobRefIgnoringChecksum(
+  actual: NonNullable<JobRecord["inputRefs"]>[number] | undefined,
+  expected: NonNullable<JobRecord["inputRefs"]>[number] | undefined
+): boolean {
+  return actual !== undefined && expected !== undefined &&
+    actual.kind === expected.kind &&
+    actual.id === expected.id &&
+    actual.path === expected.path &&
+    actual.uri === expected.uri &&
+    actual.locator === expected.locator &&
+    actual.role === expected.role;
 }
 
 function markProposalApplyStarted(
