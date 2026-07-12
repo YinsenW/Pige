@@ -18,6 +18,8 @@ export const RESPOND_TO_USER_TOOL_VERSION = "1";
 export const CREATE_KNOWLEDGE_NOTE_TOOL_NAME = "pige_create_knowledge_note";
 export const UPDATE_KNOWLEDGE_NOTE_TOOL_NAME = "pige_update_knowledge_note";
 export const UPDATE_KNOWLEDGE_NOTE_TOOL_VERSION = "1";
+export const LINK_KNOWLEDGE_NOTES_TOOL_NAME = "pige_link_knowledge_notes";
+export const LINK_KNOWLEDGE_NOTES_TOOL_VERSION = "1";
 export const STAGE_KNOWLEDGE_NOTE_PROPOSAL_TOOL_NAME = "pige_stage_knowledge_note_proposal";
 export const STAGE_KNOWLEDGE_NOTE_PROPOSAL_TOOL_VERSION = "1";
 
@@ -28,6 +30,7 @@ export type AgentIngestToolCapability =
   | "read_current_vault_knowledge"
   | "respond_current_source"
   | "stage_generated_note_proposal"
+  | "link_existing_notes"
   | "update_existing_note"
   | "write_generated_note";
 
@@ -39,6 +42,7 @@ export interface AgentIngestToolAuthorizationRequest {
     | typeof SEARCH_KNOWLEDGE_TOOL_NAME
     | typeof RESPOND_TO_USER_TOOL_NAME
     | typeof STAGE_KNOWLEDGE_NOTE_PROPOSAL_TOOL_NAME
+    | typeof LINK_KNOWLEDGE_NOTES_TOOL_NAME
     | typeof UPDATE_KNOWLEDGE_NOTE_TOOL_NAME
     | typeof CREATE_KNOWLEDGE_NOTE_TOOL_NAME;
   readonly capability: AgentIngestToolCapability;
@@ -104,6 +108,13 @@ export interface AgentIngestUpdateToolInput {
   readonly confidence: AgentIngestOutput["confidence"];
 }
 
+export interface AgentIngestLinkToolInput {
+  readonly fromPageRef: string;
+  readonly toPageRef: string;
+  readonly reason: AgentIngestOutput["summary"];
+  readonly confidence: AgentIngestOutput["confidence"];
+}
+
 export interface AgentIngestToolHost {
   inspect(signal: AbortSignal): Promise<AgentIngestInspectToolResult>;
   parse?(context: PigeAgentToolCallContext): Promise<AgentIngestParseToolResult>;
@@ -120,6 +131,10 @@ export interface AgentIngestToolHost {
     output: AgentIngestToolOutput,
     context: PigeAgentToolCallContext
   ): Promise<AgentIngestStageProposalToolResult>;
+  link?(
+    input: AgentIngestLinkToolInput,
+    context: PigeAgentToolCallContext
+  ): Promise<AgentIngestPublishToolResult>;
   update?(
     input: AgentIngestUpdateToolInput,
     context: PigeAgentToolCallContext
@@ -356,6 +371,46 @@ export function createAgentIngestToolRegistry(input: {
         }));
       }
     } satisfies PigeAgentToolDescriptor] : []),
+    ...(input.host.link ? [{
+      name: LINK_KNOWLEDGE_NOTES_TOOL_NAME,
+      label: "Link related knowledge notes",
+      description: "Add one evidence-cited directed links_to edge from one eligible Pige-managed note to another selected from the current related_NN retrieval results. Takes no path, page ID, base hash, relation type, or Operation authority.",
+      parameters: AGENT_NOTE_LINK_SCHEMA,
+      version: LINK_KNOWLEDGE_NOTES_TOOL_VERSION,
+      capability: "link_existing_notes",
+      outputSchema: TOOL_RESULT_OUTPUT_SCHEMA,
+      effect: "idempotent_write",
+      inputTrust: "model_generated",
+      outputTrust: "host_validated",
+      dataBoundary: CURRENT_VAULT_DATA_BOUNDARY,
+      execution: "sequential",
+      idempotency: CURRENT_VAULT_IDEMPOTENCY,
+      limits: {
+        maxInputBytes: 16_384,
+        maxOutputBytes: 32_768,
+        timeoutMs: 30_000
+      },
+      ownerService: "KnowledgeCompiler",
+      authorize: (_args, context) => input.authorization.authorize({
+        toolName: LINK_KNOWLEDGE_NOTES_TOOL_NAME,
+        capability: "link_existing_notes",
+        jobId: input.jobId,
+        sourceId: input.sourceId,
+        toolCallId: context.toolCallId
+      }),
+      execute: async (args, _signal, context): Promise<PigeAgentToolResult> => {
+        if (!context || !input.host.link) {
+          throw new PigeDomainError(
+            "agent_runtime.link_tool_unavailable",
+            "The knowledge-note link tool is unavailable."
+          );
+        }
+        return input.host.link(args as AgentIngestLinkToolInput, context).then((result) => ({
+          ...result,
+          terminate: true
+        }));
+      }
+    } satisfies PigeAgentToolDescriptor] : []),
     ...(input.host.update ? [{
       name: UPDATE_KNOWLEDGE_NOTE_TOOL_NAME,
       label: "Update related knowledge note",
@@ -450,6 +505,9 @@ export const allowCurrentAgentIngestTools: AgentIngestToolAuthorizationPort = {
     }
     if (request.toolName === STAGE_KNOWLEDGE_NOTE_PROPOSAL_TOOL_NAME) {
       return request.capability === "stage_generated_note_proposal";
+    }
+    if (request.toolName === LINK_KNOWLEDGE_NOTES_TOOL_NAME) {
+      return request.capability === "link_existing_notes";
     }
     if (request.toolName === UPDATE_KNOWLEDGE_NOTE_TOOL_NAME) {
       return request.capability === "update_existing_note";
@@ -585,5 +643,17 @@ const AGENT_NOTE_UPDATE_SCHEMA = {
     confidence: { type: "string", enum: ["low", "medium", "high"] }
   },
   required: ["targetPageRef", "summary", "keyPoints", "warnings", "confidence"],
+  additionalProperties: false
+} as const;
+
+const AGENT_NOTE_LINK_SCHEMA = {
+  type: "object",
+  properties: {
+    fromPageRef: { type: "string", pattern: "^related_[0-9]{2}$" },
+    toPageRef: { type: "string", pattern: "^related_[0-9]{2}$" },
+    reason: EVIDENCE_STATEMENT_SCHEMA,
+    confidence: { type: "string", enum: ["low", "medium", "high"] }
+  },
+  required: ["fromPageRef", "toPageRef", "reason", "confidence"],
   additionalProperties: false
 } as const;

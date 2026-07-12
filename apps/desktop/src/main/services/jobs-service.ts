@@ -1889,8 +1889,10 @@ export class JobsService {
           result.reviewRequired ? "completed_with_warnings" : "completed",
           result.reviewRequired
             ? "Agent ingest created a wiki note that needs review."
-            : result.mutationKind === "update_page"
-              ? "Agent ingest updated an existing wiki note."
+            : result.knowledgeAction === "linked"
+              ? "Agent ingest linked two existing wiki notes."
+              : result.mutationKind === "update_page"
+                ? "Agent ingest updated an existing wiki note."
               : result.created ? "Agent ingest created a wiki note." : "Agent ingest wiki note already exists.",
           "source",
           execution.control.durableWriteState(),
@@ -1902,7 +1904,7 @@ export class JobsService {
           const warningSuffix = result.reviewRequired ? " Review is needed before treating it as clean knowledge." : "";
           appendLog(
             vaultPath,
-            `${new Date().toISOString()} ${result.mutationKind === "update_page" ? "Updated" : "Created"} wiki note [${result.title}](${result.pagePath}) from source \`${sourceRecordFile.sourceRecord.id}\`.${warningSuffix}`
+            `${new Date().toISOString()} ${result.knowledgeAction === "linked" ? "Linked related knowledge from" : result.mutationKind === "update_page" ? "Updated" : "Created"} wiki note [${result.title}](${result.pagePath}) from source \`${sourceRecordFile.sourceRecord.id}\`.${warningSuffix}`
           );
           completed += 1;
         }
@@ -3461,6 +3463,13 @@ function recordAgentPageUpdateCheckpoint(
       checksum: binding.beforeContentHash,
       role: "update_target_base"
     },
+    ...(binding.relationshipTarget ? [{
+      kind: "page" as const,
+      id: binding.relationshipTarget.pageId,
+      path: binding.relationshipTarget.pagePath,
+      checksum: binding.relationshipTarget.contentHash,
+      role: "relationship_target"
+    }] : []),
     {
       kind: "tool" as const,
       id: binding.modelProfileId,
