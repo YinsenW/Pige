@@ -12,9 +12,9 @@ Pige's product goal is simple:
 
 > The user connects one model service that Pi Agent can call. Pige handles the rest.
 
-Pi Agent is the mandatory v0.1 core. Text, document parse, selected OCR, bounded
-retrieval, publication, and exact create-note proposal stage/review run on the Pi spine.
-Broader routing, UI, generic recovery, permissions, and packaged paths remain partial.
+Pi Agent is the mandatory v0.1 core. Text, document parse, OCR, retrieval, publication,
+and exact create-note stage/review/apply plus Home review run on its spine. Broader
+routing, generic UX/recovery, permissions, and packaged paths remain partial.
 
 Adopt, do not imitate: where Pi exposes a supported generic runtime surface,
 Pige integrates it through a thin adapter instead of copying, forking, or
@@ -328,8 +328,8 @@ large bodies remain Artifacts. Host validation precedes every result or effect.
 
 The current slice exposes inspect, parse/OCR, search, cited publication, or terminal
 `pige_stage_knowledge_note_proposal@1`. Host owns proposal target/trust/refs/operation,
-then explicit review may apply only that exact create note without another Pi/model turn;
-reject applies nothing. Full risk routing, review UI, generic operations, catalog, Broker,
+then Home review may apply only that exact create note without another Pi/model turn;
+reject applies nothing. Full risk routing, unified/generic proposal UX, catalog, Broker,
 cross-process recovery, and packaged paths remain open.
 
 Source inspection, extraction, OCR, retrieval, and knowledge publication remain
@@ -434,7 +434,7 @@ Phase 3 implementation note:
   and strict citations. No binding falls back locally before Agent work; no evidence
   returns the fixed result without a model call.
 
-Remaining work: finish catalog/risk routing/review UI/generic apply, remove fixed routes,
+Remaining work: finish catalog/risk routing/unified and generic proposal UX, remove fixed routes,
 add Broker/cross-process recovery and packaged BYOK proof, and re-review both Pi pins
 together whenever either changes.
 

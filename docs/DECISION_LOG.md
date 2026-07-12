@@ -505,7 +505,8 @@ Consequences:
 
 - Existing IPC adds `applied`/`conflicted`; startup reconciles supported decisions without
   model/credentials. This is not cross-file atomic.
-- Generic operations, UI, replacement conflicts, CAS/TOCTOU, and platform proof stay open.
+- Home cards and focused review are current; generic operations, unified diff/replacement
+  UX, dedicated/bulk management, CAS/TOCTOU, and platform proof stay open.
 
 References:
 

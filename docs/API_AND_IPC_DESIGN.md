@@ -480,7 +480,9 @@ Rules:
 - Approve applies only the exact Job-scoped Pi create note under `wiki/generated/`:
   `approved` -> page/index/Operation -> `applied` -> idempotent log -> parent. Generic
   apply is `not_allowed`; generic reject remains state-only.
-- Startup reconciles supported decisions without model/credentials. Files are ordered, not transactional; UI, generic apply, replacement conflicts, CAS/TOCTOU, and platform proof remain open.
+- Home uses safe list/detail for focused review; rejected calls re-read durable state and
+  lock unknown outcomes. Writes are ordered, not transactional; unified diff, generic
+  apply, replacement UX, CAS/TOCTOU, and platform proof remain open.
 
 ### 6.5 Library And Notes
 

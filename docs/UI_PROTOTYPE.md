@@ -419,29 +419,14 @@ Processing states:
 - Needs confirmation.
 - Completed with warnings.
 
-Confirmation items should show what Pige wants to change before the user approves it.
+Current Home foundation:
 
-```txt
-Needs Confirmation
+- Show up to three ready cards with progressive expansion and no new top-level destination.
+- Review opens exact summary, reason, targets, warnings, and bounded escaped create-note Markdown.
+- Localized actions lock in-flight, terminal, or unknown state; rejected calls re-read durable truth, and Back/Escape restores useful focus.
+- `awaiting_review` stays visible in Home.
 
-2 proposed updates
-
-Update Concept
-Agent-maintained Wiki
-Reason: new source adds a stronger definition
-Changes: 2 paragraphs, 3 links
-
-Approve   View Diff   Reject
-
-Merge Topics
-Agent Notes -> Agent Workflows
-Reason: likely duplicate topic
-Changes: rename and backlink updates
-
-Approve   View Diff   Reject
-```
-
-v0.1 confirmation should show a unified text diff for updates to existing pages. New pages can use a compact summary plus Markdown preview. A richer side-by-side diff editor can wait.
+Unified update diff, generic apply, replacement UX, bulk/dedicated management, and packaged visual proof remain open.
 
 ## 7. Home Knowledge Retrieval
 

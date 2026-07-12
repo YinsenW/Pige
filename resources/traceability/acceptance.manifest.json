@@ -1351,10 +1351,10 @@
     },
     "PIGE-JOB-003": {
       "status": "partial",
-      "evidence": ["EV-PROPOSAL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE"],
+      "evidence": ["EV-PROPOSAL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-PROPOSAL-UI"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-003",
-        "description": "Exact create-note proposals stage, decide, apply, conflict, and recover; generic operations, UI, replacements, and cross-process safety remain open.",
+        "description": "Exact create-note/Home review works; unified, generic, replacement, and cross-process work remains.",
         "targetBuilds": [
           "B7.01",
           "B7.02",
@@ -1417,7 +1417,7 @@
       "evidence": ["EV-JOB-STATUS", "EV-JOB-WAIT", "EV-JOB-CANCEL", "EV-HOME-UI"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-007",
-        "description": "Home question states are visible; numeric progress, running cancel, pushed events, and waiting-permission confirmation remain open.",
+        "description": "Home question/review states show; progress, cancel, push, and permission UI remain.",
         "targetBuilds": [
           "B2.10",
           "B2.12"
@@ -2882,7 +2882,7 @@
       "evidence": ["EV-JOB-STATUS", "EV-JOB-WAIT", "EV-JOB-CANCEL", "EV-HOME-UI"],
       "open": {
         "id": "OPEN-EXIT-E2.09",
-        "description": "Typed Home question states exist; numeric progress, running cancel, permission confirmation, and pushed events remain open.",
+        "description": "Typed Home question/review states show; progress, cancel, push, and permission UI remain.",
         "targetBuilds": [
           "B2.10",
           "B2.12"
@@ -3290,10 +3290,10 @@
     },
     "E7.01": {
       "status": "partial",
-      "evidence": ["EV-PROPOSAL", "EV-AGENT-INGEST", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE"],
+      "evidence": ["EV-PROPOSAL", "EV-AGENT-INGEST", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-PROPOSAL-UI"],
       "open": {
         "id": "OPEN-EXIT-E7.01",
-        "description": "Exact create-note decisions/apply/conflict/Operation/recovery work; generic operations, UI, replacements, CAS/TOCTOU/platform remain open.",
+        "description": "Exact create-note/Home review works; unified/generic/replacement and CAS/TOCTOU/platform remain.",
         "targetBuilds": [
           "B7.01",
           "B7.02",
@@ -3776,7 +3776,7 @@
     "EV-JOB-STATUS": {
       "kind": "implementation",
       "path": "apps/desktop/src/renderer/src/App.tsx",
-      "selector": "states: [\"queued\", \"running\", \"waiting_dependency\", \"failed_retryable\", \"failed_final\"]"
+      "selector": "homeJobStateFilter.states.push(\"awaiting_review\")"
     },
     "EV-DURABLE-VOCAB": {
       "kind": "verifier",
@@ -4005,6 +4005,7 @@
       "path": "tests/unit/proposal-service.test.ts",
       "selector": "stages durable proposals and lists safe summaries without proposed content"
     },
+    "EV-PROPOSAL-UI": { "kind": "test", "path": "tests/unit/proposal-review-home.test.ts", "selector": "Home proposal review" },
     "EV-BACKUP": {
       "kind": "test",
       "path": "tests/unit/backup-service.test.ts",

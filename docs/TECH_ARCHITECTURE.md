@@ -780,9 +780,8 @@ Rules:
 
 Current implementation:
 
-- Shared schemas support confined durable proposals and safe list/detail. The exact
-  Pi-staged create-note shape supports approve/apply/reject, deterministic Operation,
-  conflict closure, and restart reconciliation. Generic operations and review UI remain open.
+- Confined proposals expose safe list/detail. Home reviews the exact Pi create note as
+  escaped text and reconciles rejected calls; generic apply, unified diff, and replacement UX remain open.
 
 ### 5.5.2 Markdown Rendering And Editing Surface
 
@@ -1513,8 +1512,8 @@ Current embedded Agent ingest spine:
 - Inspect returns verified evidence; PDF/DOCX/PPTX parse and selected PDF/PPTX/image OCR create
   or reuse bound children; publication revalidates refs and revision.
 - Home retrieval uses one bounded search tool with per-turn evidence/egress revalidation.
-  Ingest adds bounded retrieval plus exact create-note stage/review/apply/reject; review
-  UI, generic proposals/recovery, full Broker, and remaining fixed routing stay open.
+  Ingest adds bounded retrieval plus exact create-note stage/review/apply/reject and Home
+  review; generic proposals/recovery, full Broker, and remaining fixed routing stay open.
 
 The v0.1 UI exposes only the P0 provider modes defined in `docs/PRD.md`, through the
 compact Add Provider flow owned by the Pi integration contract.

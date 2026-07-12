@@ -118,6 +118,52 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain("recoverProposalDecisions(getProposalService())");
   });
 
+  it("surfaces ready proposals in Home with a focused escaped preview before durable decisions", () => {
+    const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
+    const panelSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/renderer/src/components/ProposalReviewPanel.tsx"),
+      "utf8"
+    );
+    const styles = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/styles/app.css"), "utf8");
+    const homeComposer = rendererSource.slice(
+      rendererSource.indexOf("function HomeComposer"),
+      rendererSource.indexOf("function jobStateMessageKey")
+    );
+    const openProposal = homeComposer.slice(
+      homeComposer.indexOf("const openProposal"),
+      homeComposer.indexOf("const openResult")
+    );
+
+    expect(rendererSource).toContain(
+      'states: ["queued", "running", "waiting_dependency", "failed_retryable", "failed_final"]'
+    );
+    expect(rendererSource).toContain('homeJobStateFilter.states.push("awaiting_review")');
+    expect(rendererSource).toContain("...homeJobStateFilter");
+    expect(rendererSource).toContain('window.pige.proposals.list({ limit: 100, states: ["ready"] })');
+    expect(homeComposer).toContain("window.pige.proposals.get({ proposalId })");
+    expect(homeComposer).toContain('window.pige.proposals[decision]({ proposalId })');
+    expect(homeComposer).toContain("proposalOutcomeForDurableState(current.proposal.state)");
+    expect(homeComposer).toContain("setProposalDecisionStateUnknown(true)");
+    expect(homeComposer).toContain("proposalReviewTriggerRefs.current.get(proposalFocusReturnId.current)");
+    expect(homeComposer).toContain("aria-expanded={proposalListExpanded}");
+    expect(homeComposer).toContain('aria-controls="home-proposal-summary-list"');
+    expect(homeComposer).toContain('aria-label={`${props.t("proposal.review")}: ${accessibleProposalLabel}`}');
+    expect(homeComposer).toContain("<ProposalReviewPanel");
+    expect(openProposal).not.toContain("caught instanceof Error ? caught.message");
+    expect(panelSource).toContain("<pre aria-label={t(\"proposal.markdownPreview\")}>{operation.content}</pre>");
+    expect(panelSource).not.toContain("dangerouslySetInnerHTML");
+    const proposalStyles = styles.slice(
+      styles.indexOf(".proposal-strip"),
+      styles.indexOf(".retrieval-results")
+    );
+    expect(proposalStyles).toContain("min-width: 0;");
+    expect(proposalStyles).toContain("overflow-wrap: anywhere;");
+    expect(proposalStyles).toContain("max-height: min(46vh, 30rem);");
+    expect(proposalStyles).toContain("position: sticky;");
+    expect(rendererSource).toContain('type View = "home" | "library" | "settings" | "models";');
+    expect(rendererSource).not.toContain('type View = "review"');
+  });
+
   it("keeps the reviewed Provider path API-key-only and the custom form progressively disclosed", () => {
     const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
     const styles = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/styles/app.css"), "utf8");

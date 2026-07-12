@@ -521,7 +521,9 @@ Current Phase 3 foundation implementation:
 - Pi stages before body-free parent linkage. Approval runs `approved` -> exact page/index/
   deterministic body-free Operation -> `applied` -> idempotent log -> parent completion;
   rejection applies nothing, while conflict becomes `conflicted` plus `failed_final`.
-- Startup reconciles supported decisions without model/runtime/credentials across decision-, page-, and parent-link windows. The sequence is not transactional; generic operations, UI, replacement conflicts, CAS/TOCTOU, and platform proof remain open.
+- Startup reconciles without model/credentials; Home re-reads durable state after rejected
+  calls and locks unknown outcomes. The sequence is not transactional; generic operations,
+  unified/replacement UX, CAS/TOCTOU, and platform proof remain open.
 - `requiredPermissionIds` is a compatibility field for permission prerequisites and may contain canonical `permreq_` request IDs or `permdec_` decision IDs; a later schema may split, not reinterpret, it.
 
 ## 12. Operation Record Lifecycle
