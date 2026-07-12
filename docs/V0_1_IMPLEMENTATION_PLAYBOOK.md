@@ -273,14 +273,10 @@ Build:
   ordinary/no-evidence conversation, optional local retrieval, source tools, durable
   waiting/resume, and no renderer/Host intent heuristic.
 
-Agent Spine Gate: embedded Pi handles preserved text/documents/images, inspect,
-parse/selected OCR, bounded Home/ingest retrieval, cited publish, and exact create-note
-proposal stage/review/apply plus Home review. That proposal path is transitional;
-B3.13/E3.08 remains partial despite exact-create Undo/page-first recovery; broader eligibility/catalog/routes,
-pre-publication replay/in-call cancellation, generic proposals/recovery, Broker, and
-remaining fixed routes. The v0.80.6 exception still forbids deep imports/forks/patches/
-parallel loops. Until E3.08 passes, pause non-blocking breadth; existing safe substrate
-and security/data-loss repairs may proceed.
+Agent Spine Gate: embedded Pi handles preserved inputs, selected parse/OCR/retrieval,
+cited create, one `related_NN` cited append, and transitional create review. B3.13/E3.08
+remains partial: broader eligibility/catalog/routes, replay/cancellation, exceptions,
+Broker, and fixed routes remain. Pi v0.80.6 still forbids deep imports/forks/parallel loops.
 
 B3.14/E3.09 now proves direct/retrieved/file turns, waiting/resume, explicit protocol,
 no Host bypass, Pi-selected URL fetch/preserve, exact-tail follow-up, bounded history,
@@ -490,10 +486,10 @@ Context pack: `docs/AGENT_MEMORY_DESIGN.md`; `docs/DATA_ARCHITECTURE.md`; `docs/
 
 Build:
 
-- [B7.01 -> E7.01] Exact-create Activity/Undo plus transitional exception review.
+- [B7.01 -> E7.01] Exact create and one cited generated-note append Activity/Undo plus transitional exception review.
 - [B7.02 -> E7.01] Bounded escaped exceptional preview; unified conflict diff remains open.
 - [B7.03 -> E7.01] Exact create-note review/apply/conflict recovery foundation; autonomous eligibility and generic operations remain open.
-- [B7.04 -> E7.01] Hash-bound direct/proposal/checkpoint recovery plus `trash_page`; unbound/non-create open.
+- [B7.04 -> E7.01] Hash-bound create/update checkpoint recovery plus `trash_page` or inverse `update_page`; other mutations open.
 - [B7.05 -> E7.02] Explicit "remember this" flow with provenance.
 - [B7.06 -> E7.02] Memory inspection, disable, delete, export, and reset.
 - [B7.07 -> E7.05] Secret scanning before memory persistence.
@@ -507,10 +503,11 @@ Deferred from this phase:
 
 Exit criteria:
 
-- [E7.01] Eligible evidence-bound recoverable edits auto-apply with redacted Operations and
-  Undo; irreversible/security/destination/unresolved-conflict/stricter-policy exceptions
-  use durable decisions and stale checks. Evidence is exact-create only; non-create,
-  restore/redo, generic exceptions, CAS/TOCTOU, and platforms remain open.
+- [E7.01] Evidence-bound reversible edits auto-apply with Operation/Undo; irreversible/
+  security/destination/conflict/stricter-policy exceptions use durable stale-checked
+  decisions. Evidence covers exact create plus one cited generated-note append; general
+  patch/rename/link/organize/merge/delete, restore/redo, exceptions, CAS/transactions,
+  and platforms remain open.
 - [E7.02] Memory is inspectable, provenance-linked, scoped, reversible, exportable, and independent from note/source deletion.
 - [E7.03] Conversation history remains readable and restart-safe without duplicating large source assets or saved note bodies.
 - [E7.04] Compaction preserves event identity, source/job/operation references, decisions, and user-visible summaries while discarding only rebuildable detail.

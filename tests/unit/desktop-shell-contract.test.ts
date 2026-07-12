@@ -160,6 +160,7 @@ describe("desktop shell build contract", () => {
   });
 
   it("routes compact Activity and checksum-bound Undo through preload and main recovery", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
     const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
@@ -180,8 +181,12 @@ describe("desktop shell build contract", () => {
     expect(mainUndoHandler).not.toContain("getLocalDatabaseService().rebuild");
     expect(preloadSource).toContain('ipcRenderer.invoke("activity.list", request)');
     expect(preloadSource).toContain('ipcRenderer.invoke("activity.undo", request)');
+    expect(contractsSource).toContain('readonly kind: "create_page" | "update_page";');
     expect(rendererSource).toContain('window.pige.activity.list({ limit: 5 })');
     expect(rendererSource).toContain('className="activity-strip"');
+    expect(rendererSource).toContain('activity.kind === "update_page"');
+    expect(rendererSource).toContain('"activity.updatedPage"');
+    expect(rendererSource).toContain('"activity.createdPage"');
     expect(rendererSource).toContain('props.onUndoActivity(activity.operationId)');
     expect(undoHandler).toContain('window.pige.activity.list({ limit: 20 })');
     expect(undoHandler).toContain('t("activity.undoStateUnknown")');

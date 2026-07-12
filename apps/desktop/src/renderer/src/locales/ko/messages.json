@@ -1,6 +1,7 @@
 {
   "activity.alreadyUndone": "이 변경은 이미 실행 취소되었습니다.",
   "activity.createdPage": "지식 노트 생성됨",
+  "activity.updatedPage": "지식 노트 업데이트됨",
   "activity.statusApplied": "적용됨",
   "activity.statusUndone": "실행 취소됨",
   "activity.title": "활동",

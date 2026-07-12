@@ -417,9 +417,9 @@ Processing states:
 - Needs attention.
 - Completed with warnings.
 
-Current code auto-applies fresh direct creates; three Activity rows offer exact-page Undo
-for checksum-bound created pages. Hashless/changed/missing targets are ineligible; proposals stay transitional.
-Non-create/restore/redo, broad Activity, and packaged proof remain open.
+Current Home Activity distinguishes created from updated. Checksum-current exact create/
+cited append offers non-confirming Undo; changed/hashless/missing fails closed. Proposals
+stay transitional; general update, restore/redo, broad history, and packaged proof remain open.
 
 ## 7. Home Conversation And Optional Local Knowledge
 

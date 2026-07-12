@@ -786,9 +786,10 @@ Rules:
 
 Current implementation:
 
-- Direct/proposal and checkpoint-proven same-Job recovered creates bind hashes; bounded
-  Activity offers exact-page Undo. Activity owns recovery, Job rebuild. Non-create/generic/
-  restore/redo/CAS, batched scan, broader Activity, and packaging remain open.
+- Exact create plus one Pi-selected cited append to an eligible retrieved generated note
+  are current. Host owns target/base; Activity owns checksum-bound create/update recovery
+  and Undo. General patch/rename/link/organize/merge/delete, restore/redo, CAS/transactions,
+  broad history, and packaging remain open.
 
 ### 5.5.2 Markdown Rendering And Editing Surface
 

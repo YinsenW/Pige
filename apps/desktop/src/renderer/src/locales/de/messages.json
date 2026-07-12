@@ -1,6 +1,7 @@
 {
   "activity.alreadyUndone": "Diese Änderung wurde bereits rückgängig gemacht.",
   "activity.createdPage": "Wissensnotiz erstellt",
+  "activity.updatedPage": "Wissensnotiz aktualisiert",
   "activity.statusApplied": "Angewendet",
   "activity.statusUndone": "Rückgängig gemacht",
   "activity.title": "Aktivität",

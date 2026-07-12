@@ -15,177 +15,78 @@
   "capabilities": {
     "capture.preserve-source": {
       "requirement": "PIGE-CAP-001",
-      "builds": [
-        "B2.01",
-        "B2.03",
-        "B2.04",
-        "B2.06",
-        "B2.07"
-      ],
-      "exits": [
-        "E2.02",
-        "E2.05",
-        "E2.06",
-        "E2.08"
-      ]
+      "builds": ["B2.01", "B2.03", "B2.04", "B2.06", "B2.07"],
+      "exits": ["E2.02", "E2.05", "E2.06", "E2.08"]
     },
     "capture.large-paste-reference": {
       "requirement": "PIGE-CAP-002",
-      "builds": [
-        "B2.01",
-        "B2.09"
-      ],
-      "exits": [
-        "E2.02",
-        "E2.03"
-      ]
+      "builds": ["B2.01", "B2.09"],
+      "exits": ["E2.02", "E2.03"]
     },
     "capture.local-voice": {
       "requirement": "PIGE-CAP-003",
-      "builds": [
-        "B2.02"
-      ],
-      "exits": [
-        "E2.04"
-      ]
+      "builds": ["B2.02"],
+      "exits": ["E2.04"]
     },
     "capture.whole-window-drop": {
       "requirement": "PIGE-CAP-004",
-      "builds": [
-        "B2.05"
-      ],
-      "exits": [
-        "E2.07"
-      ]
+      "builds": ["B2.05"],
+      "exits": ["E2.07"]
     },
     "vault.markdown-truth": {
       "requirement": "PIGE-VAULT-001",
-      "builds": [
-        "B1.02",
-        "B1.05",
-        "B1.06",
-        "B1.15",
-        "B1.16"
-      ],
-      "exits": [
-        "E1.01",
-        "E1.03",
-        "E1.08",
-        "E1.09"
-      ]
+      "builds": ["B1.02", "B1.05", "B1.06", "B1.15", "B1.16"],
+      "exits": ["E1.01", "E1.03", "E1.08", "E1.09"]
     },
     "vault.path-independent-id": {
       "requirement": "PIGE-VAULT-002",
-      "builds": [
-        "B1.21"
-      ],
-      "exits": [
-        "E1.17"
-      ]
+      "builds": ["B1.21"],
+      "exits": ["E1.17"]
     },
     "vault.source-ownership": {
       "requirement": "PIGE-VAULT-003",
-      "builds": [
-        "B2.03",
-        "B2.04",
-        "B2.06",
-        "B2.07"
-      ],
-      "exits": [
-        "E2.05",
-        "E2.06",
-        "E2.08"
-      ]
+      "builds": ["B2.03", "B2.04", "B2.06", "B2.07"],
+      "exits": ["E2.05", "E2.06", "E2.08"]
     },
     "vault.trash-first": {
       "requirement": "PIGE-VAULT-004",
-      "builds": [
-        "B9.07",
-        "B9.08"
-      ],
-      "exits": [
-        "E9.03",
-        "E9.04"
-      ]
+      "builds": ["B9.07", "B9.08"],
+      "exits": ["E9.03", "E9.04"]
     },
     "vault.storage-settings-layout": {
       "requirement": "PIGE-VAULT-005",
-      "builds": [
-        "B1.02",
-        "B1.04",
-        "B1.05",
-        "B1.06"
-      ],
-      "exits": [
-        "E1.01",
-        "E1.03",
-        "E1.04"
-      ]
+      "builds": ["B1.02", "B1.04", "B1.05", "B1.06"],
+      "exits": ["E1.01", "E1.03", "E1.04"]
     },
     "vault.atomic-conflict": {
       "requirement": "PIGE-VAULT-006",
-      "builds": [
-        "B1.25"
-      ],
-      "exits": [
-        "E1.21"
-      ]
+      "builds": ["B1.25"],
+      "exits": ["E1.21"]
     },
     "vault.sync-conflict-metadata": {
       "requirement": "PIGE-VAULT-007",
-      "builds": [
-        "B1.21"
-      ],
-      "exits": [
-        "E1.17"
-      ]
+      "builds": ["B1.21"],
+      "exits": ["E1.17"]
     },
     "markdown.frontmatter": {
       "requirement": "PIGE-SCHEMA-001",
-      "builds": [
-        "B3.08",
-        "B3.09"
-      ],
-      "exits": [
-        "E3.04"
-      ]
+      "builds": ["B3.08", "B3.09"],
+      "exits": ["E3.04"]
     },
     "knowledge.facets-pages": {
       "requirement": "PIGE-KNOW-001",
-      "builds": [
-        "B4.01",
-        "B4.06",
-        "B4.07",
-        "B4.08"
-      ],
-      "exits": [
-        "E4.01",
-        "E4.04",
-        "E4.05",
-        "E4.06"
-      ]
+      "builds": ["B4.01", "B4.06", "B4.07", "B4.08"],
+      "exits": ["E4.01", "E4.04", "E4.05", "E4.06"]
     },
     "knowledge.rebuildable-graph": {
       "requirement": "PIGE-KNOW-002",
-      "builds": [
-        "B6.09",
-        "B6.12"
-      ],
-      "exits": [
-        "E6.07"
-      ]
+      "builds": ["B6.09", "B6.12"],
+      "exits": ["E6.07"]
     },
     "knowledge.risky-relations": {
       "requirement": "PIGE-KNOW-003",
-      "builds": [
-        "B7.01",
-        "B7.02",
-        "B7.03",
-        "B7.04"
-      ],
-      "exits": [
-        "E7.01"
-      ]
+      "builds": ["B7.01", "B7.02", "B7.03", "B7.04"],
+      "exits": ["E7.01"]
     },
     "knowledge.simple-tree": {
       "requirement": "PIGE-KNOW-004",
@@ -232,171 +133,88 @@
     },
     "job.idempotent-recovery": {
       "requirement": "PIGE-JOB-002",
-      "builds": [
-        "B2.08",
-        "B2.11"
-      ],
-      "exits": [
-        "E2.01",
-        "E2.10"
-      ]
+      "builds": ["B2.08", "B2.11"],
+      "exits": ["E2.01", "E2.10"]
     },
     "job.risky-proposals": {
       "requirement": "PIGE-JOB-003",
-      "builds": [
-        "B7.01",
-        "B7.02",
-        "B7.03",
-        "B7.04"
-      ],
-      "exits": [
-        "E7.01"
-      ]
+      "builds": ["B7.01", "B7.02", "B7.03", "B7.04"],
+      "exits": ["E7.01"]
     },
     "job.waiting-dependency": {
       "requirement": "PIGE-JOB-004",
-      "builds": [
-        "B2.13"
-      ],
-      "exits": [
-        "E2.11"
-      ]
+      "builds": ["B2.13"],
+      "exits": ["E2.11"]
     },
     "job.agent-write-operation": {
       "requirement": "PIGE-JOB-005",
-      "builds": [
-        "B7.04"
-      ],
-      "exits": [
-        "E7.01"
-      ]
+      "builds": ["B7.04"],
+      "exits": ["E7.01"]
     },
     "job.conversation-history": {
       "requirement": "PIGE-JOB-006",
-      "builds": [
-        "B7.08",
-        "B7.09"
-      ],
-      "exits": [
-        "E7.03",
-        "E7.04"
-      ]
+      "builds": ["B7.08", "B7.09"],
+      "exits": ["E7.03", "E7.04"]
     },
     "job.visible-status": {
       "requirement": "PIGE-JOB-007",
-      "builds": [
-        "B2.10",
-        "B2.12"
-      ],
-      "exits": [
-        "E2.09"
-      ]
+      "builds": ["B2.10", "B2.12"],
+      "exits": ["E2.09"]
     },
     "job.durable-vocabulary": {
       "requirement": "PIGE-JOB-008",
-      "builds": [
-        "B1.26"
-      ],
-      "exits": [
-        "E1.22"
-      ]
+      "builds": ["B1.26"],
+      "exits": ["E1.22"]
     },
     "api.renderer-boundary": {
       "requirement": "PIGE-API-001",
-      "builds": [
-        "B1.01"
-      ],
-      "exits": [
-        "E1.10"
-      ]
+      "builds": ["B1.01"],
+      "exits": ["E1.10"]
     },
     "api.shared-error-taxonomy": {
       "requirement": "PIGE-API-002",
-      "builds": [
-        "B1.20"
-      ],
-      "exits": [
-        "E1.16"
-      ]
+      "builds": ["B1.20"],
+      "exits": ["E1.16"]
     },
     "database.rebuildable": {
       "requirement": "PIGE-DB-001",
-      "builds": [
-        "B4.01",
-        "B4.04",
-        "B4.05"
-      ],
-      "exits": [
-        "E4.02",
-        "E4.03",
-        "E4.05"
-      ]
+      "builds": ["B4.01", "B4.04", "B4.05"],
+      "exits": ["E4.02", "E4.03", "E4.05"]
     },
     "database.driver-domains": {
       "requirement": "PIGE-DB-002",
-      "builds": [
-        "B4.01"
-      ],
-      "exits": [
-        "E4.05"
-      ]
+      "builds": ["B4.01"],
+      "exits": ["E4.05"]
     },
     "security.secret-storage": {
       "requirement": "PIGE-SEC-001",
-      "builds": [
-        "B3.02"
-      ],
-      "exits": [
-        "E3.02"
-      ]
+      "builds": ["B3.02"],
+      "exits": ["E3.02"]
     },
     "security.permission-broker": {
       "requirement": "PIGE-SEC-002",
-      "builds": [
-        "B8.01",
-        "B8.02",
-        "B8.08"
-      ],
-      "exits": [
-        "E8.02"
-      ]
+      "builds": ["B8.01", "B8.02", "B8.08"],
+      "exits": ["E8.02"]
     },
     "security.permission-modes": {
       "requirement": "PIGE-SEC-003",
-      "builds": [
-        "B8.03",
-        "B8.04"
-      ],
-      "exits": [
-        "E8.03"
-      ]
+      "builds": ["B8.03", "B8.04"],
+      "exits": ["E8.03"]
     },
     "security.private-disclosure": {
       "requirement": "PIGE-SEC-004",
-      "builds": [
-        "B9.17"
-      ],
-      "exits": [
-        "E9.11"
-      ]
+      "builds": ["B9.17"],
+      "exits": ["E9.11"]
     },
     "security.model-egress": {
       "requirement": "PIGE-SEC-005",
-      "builds": [
-        "B3.05"
-      ],
-      "exits": [
-        "E3.03"
-      ]
+      "builds": ["B3.05"],
+      "exits": ["E3.03"]
     },
     "security.secret-adapter": {
       "requirement": "PIGE-SEC-006",
-      "builds": [
-        "B1.19"
-      ],
-      "exits": [
-        "E1.15"
-      ]
+      "builds": ["B1.19"],
+      "exits": ["E1.15"]
     },
     "privacy.public-copy": { "requirement": "PIGE-PRIV-001", "builds": ["B9.17"], "exits": ["E9.11"] },
     "pi.service-boundary": { "requirement": "PIGE-PI-001", "builds": ["B3.06", "B3.13"], "exits": ["E3.04", "E3.08"] },
@@ -1054,10 +872,10 @@
     },
     "PIGE-KNOW-006": {
       "status": "partial",
-      "evidence": ["EV-AGENT-INGEST", "EV-CREATE-RECOVERY"],
+      "evidence": ["EV-AGENT-INGEST", "EV-CREATE-RECOVERY", "EV-PI-INGEST-UPDATE", "EV-UPDATE-RECOVERY"],
       "open": {
         "id": "OPEN-REQ-PIGE-KNOW-006",
-        "description": "Other outcomes and non-create recovery refs remain.",
+        "description": "Outcomes and recovery refs beyond exact create/additive update remain.",
         "targetBuilds": ["B3.06", "B3.07", "B3.08", "B3.09", "B3.10", "B3.12"],
         "targetExits": ["E3.04", "E3.05", "E3.07"]
       }
@@ -1078,7 +896,7 @@
     },
     "PIGE-JOB-002": {
       "status": "partial",
-      "evidence": ["EV-JOB-DRAIN", "EV-JOB-RECOVERY", "EV-HOME-JOB-RECOVERY", "EV-HOME-AGENT", "EV-HOME-FOLLOWUP", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER"],
+      "evidence": ["EV-JOB-DRAIN", "EV-JOB-RECOVERY", "EV-HOME-JOB-RECOVERY", "EV-HOME-AGENT", "EV-HOME-FOLLOWUP", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY", "EV-UPDATE-RECOVERY", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-002",
         "description": "Other Job classes, cross-process CAS, kill/reopen, packaged, and checkpoint proof remain.",
@@ -1119,10 +937,10 @@
     },
     "PIGE-JOB-005": {
       "status": "partial",
-      "evidence": ["EV-AGENT-INGEST", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY"],
+      "evidence": ["EV-AGENT-INGEST", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY", "EV-PI-INGEST-UPDATE", "EV-UPDATE-RECOVERY"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-005",
-        "description": "Historical hashless recovery and non-create Agent-write Operations remain.",
+        "description": "Legacy hashless create recovery and Agent writes beyond exact create/additive update remain.",
         "targetBuilds": ["B7.04"],
         "targetExits": ["E7.01"]
       }
@@ -1289,10 +1107,10 @@
     },
     "PIGE-PI-001": {
       "status": "partial",
-      "evidence": ["EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-BOUNDARY", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-RETRIEVAL", "EV-PI-INGEST-PROPOSAL", "EV-PI-URL-INGRESS", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY"],
+      "evidence": ["EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-BOUNDARY", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-RETRIEVAL", "EV-PI-INGEST-UPDATE", "EV-UPDATE-RECOVERY", "EV-PI-INGEST-PROPOSAL", "EV-PI-URL-INGRESS", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY"],
       "open": {
         "id": "OPEN-REQ-PIGE-PI-001",
-        "description": "Hash-bound exact-create recovery/Undo works; broader eligibility, routes, Broker, and packaged BYOK remain.",
+        "description": "Hash-bound exact create/additive-update recovery/Undo works; broader eligibility, routes, Broker, and packaged BYOK remain.",
         "targetBuilds": ["B3.06", "B3.13"],
         "targetExits": ["E3.04", "E3.08"]
       }
@@ -2544,7 +2362,7 @@
     },
     "E2.10": {
       "status": "partial",
-      "evidence": ["EV-JOB-RECOVERY", "EV-HOME-AGENT", "EV-HOME-FOLLOWUP", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-CREATE-RECOVERY", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER"],
+      "evidence": ["EV-JOB-RECOVERY", "EV-HOME-AGENT", "EV-HOME-FOLLOWUP", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-CREATE-RECOVERY", "EV-UPDATE-RECOVERY", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER"],
       "open": {
         "id": "OPEN-EXIT-E2.10",
         "description": "Other Job classes, cross-process CAS, kill/reopen, packaged, and checkpoint proof remain.",
@@ -2664,20 +2482,20 @@
     },
     "E3.07": {
       "status": "partial",
-      "evidence": ["EV-AGENT-INGEST", "EV-CREATE-RECOVERY"],
+      "evidence": ["EV-AGENT-INGEST", "EV-CREATE-RECOVERY", "EV-PI-INGEST-UPDATE", "EV-UPDATE-RECOVERY"],
       "open": {
         "id": "OPEN-EXIT-E3.07",
-        "description": "Other outcomes and non-create recovery refs remain.",
+        "description": "Outcomes and recovery refs beyond exact create/additive update remain.",
         "targetBuilds": ["B3.12"],
         "targetExits": ["E3.07"]
       }
     },
     "E3.08": {
       "status": "partial",
-      "evidence": ["EV-BOUNDARY", "EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-RETRIEVAL", "EV-PI-INGEST-PROPOSAL", "EV-PI-URL-INGRESS", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY"],
+      "evidence": ["EV-BOUNDARY", "EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-RETRIEVAL", "EV-PI-INGEST-UPDATE", "EV-UPDATE-RECOVERY", "EV-PI-INGEST-PROPOSAL", "EV-PI-URL-INGRESS", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY"],
       "open": {
         "id": "OPEN-EXIT-E3.08",
-        "description": "Hash-bound exact-create recovery/Undo works; broader eligibility, routes, Broker, and packaged BYOK remain.",
+        "description": "Hash-bound exact create/additive-update recovery/Undo works; broader eligibility, routes, Broker, and packaged BYOK remain.",
         "targetBuilds": ["B3.13"],
         "targetExits": ["E3.08"]
       }
@@ -2914,10 +2732,10 @@
     },
     "E7.01": {
       "status": "partial",
-      "evidence": ["EV-PROPOSAL", "EV-AGENT-INGEST", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-PROPOSAL-UI", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY"],
+      "evidence": ["EV-PROPOSAL", "EV-AGENT-INGEST", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-PROPOSAL-UI", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY", "EV-PI-INGEST-UPDATE", "EV-UPDATE-RECOVERY"],
       "open": {
         "id": "OPEN-EXIT-E7.01",
-        "description": "Exact-create Undo works; non-create operations, generic exceptions, CAS/TOCTOU, and platform proof remain.",
+        "description": "Exact create/additive-update Undo works; link/organize/merge/rename/delete/restore/redo, generic exceptions, CAS/TOCTOU, and platform proof remain.",
         "targetBuilds": ["B7.01", "B7.02", "B7.03", "B7.04"],
         "targetExits": ["E7.01"]
       }
@@ -3345,6 +3163,8 @@
     "EV-PI-OFFICE-PARSE-OCR-TOOL": { "kind": "test", "path": "tests/unit/agent-led-office-parse.test.ts", "selector": "Agent-led Office parse tool" },
     "EV-PI-IMAGE-OCR-TOOL": { "kind": "test", "path": "tests/unit/agent-led-image-ocr.test.ts", "selector": "Agent-led image OCR tool" },
     "EV-PI-INGEST-RETRIEVAL": { "kind": "test", "path": "tests/unit/agent-led-ingest-retrieval.test.ts", "selector": "Agent-selected ingest retrieval tool" },
+    "EV-PI-INGEST-UPDATE": { "kind": "test", "path": "tests/unit/agent-led-ingest-retrieval.test.ts", "selector": "lets real Pi select one related managed note update with a durable checkpoint and no create fallback" },
+    "EV-UPDATE-RECOVERY": { "kind": "test", "path": "tests/unit/agent-led-ingest-retrieval.test.ts", "selector": "retries a page-first Agent update through Jobs without runtime config, credentials, or another Pi turn" },
     "EV-PI-INGEST-PROPOSAL": { "kind": "test", "path": "tests/unit/agent-led-ingest-proposal.test.ts", "selector": "Agent-selected ingest proposal tool" },
     "EV-PROPOSAL-REVIEW-LIFECYCLE": { "kind": "test", "path": "tests/unit/proposal-review-lifecycle.test.ts", "selector": "proposal review lifecycle" },
     "EV-PI-TOOL-CALL-ID": { "kind": "test", "path": "tests/unit/pi-agent-runtime-adapter.test.ts", "selector": "passes a bounded opaque Pi tool call ID to authorization and execution without recording it" },

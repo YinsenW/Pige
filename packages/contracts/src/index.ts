@@ -462,7 +462,7 @@ export type KnowledgeActivityUndoUnavailableReason =
 
 export interface KnowledgeActivitySummary {
   readonly operationId: string;
-  readonly kind: "create_page";
+  readonly kind: "create_page" | "update_page";
   readonly createdAt: string;
   readonly targetLabel?: string;
   readonly status: "applied" | "undone";

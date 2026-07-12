@@ -16,6 +16,8 @@ export const SEARCH_KNOWLEDGE_TOOL_VERSION = "1";
 export const RESPOND_TO_USER_TOOL_NAME = "pige_respond_to_user";
 export const RESPOND_TO_USER_TOOL_VERSION = "1";
 export const CREATE_KNOWLEDGE_NOTE_TOOL_NAME = "pige_create_knowledge_note";
+export const UPDATE_KNOWLEDGE_NOTE_TOOL_NAME = "pige_update_knowledge_note";
+export const UPDATE_KNOWLEDGE_NOTE_TOOL_VERSION = "1";
 export const STAGE_KNOWLEDGE_NOTE_PROPOSAL_TOOL_NAME = "pige_stage_knowledge_note_proposal";
 export const STAGE_KNOWLEDGE_NOTE_PROPOSAL_TOOL_VERSION = "1";
 
@@ -26,6 +28,7 @@ export type AgentIngestToolCapability =
   | "read_current_vault_knowledge"
   | "respond_current_source"
   | "stage_generated_note_proposal"
+  | "update_existing_note"
   | "write_generated_note";
 
 export interface AgentIngestToolAuthorizationRequest {
@@ -36,6 +39,7 @@ export interface AgentIngestToolAuthorizationRequest {
     | typeof SEARCH_KNOWLEDGE_TOOL_NAME
     | typeof RESPOND_TO_USER_TOOL_NAME
     | typeof STAGE_KNOWLEDGE_NOTE_PROPOSAL_TOOL_NAME
+    | typeof UPDATE_KNOWLEDGE_NOTE_TOOL_NAME
     | typeof CREATE_KNOWLEDGE_NOTE_TOOL_NAME;
   readonly capability: AgentIngestToolCapability;
   readonly jobId: string;
@@ -92,6 +96,14 @@ export type AgentIngestToolOutput = AgentIngestOutput & {
   readonly relatedPageRefs?: readonly string[];
 };
 
+export interface AgentIngestUpdateToolInput {
+  readonly targetPageRef: string;
+  readonly summary: AgentIngestOutput["summary"];
+  readonly keyPoints: AgentIngestOutput["keyPoints"];
+  readonly warnings: AgentIngestOutput["warnings"];
+  readonly confidence: AgentIngestOutput["confidence"];
+}
+
 export interface AgentIngestToolHost {
   inspect(signal: AbortSignal): Promise<AgentIngestInspectToolResult>;
   parse?(context: PigeAgentToolCallContext): Promise<AgentIngestParseToolResult>;
@@ -108,6 +120,10 @@ export interface AgentIngestToolHost {
     output: AgentIngestToolOutput,
     context: PigeAgentToolCallContext
   ): Promise<AgentIngestStageProposalToolResult>;
+  update?(
+    input: AgentIngestUpdateToolInput,
+    context: PigeAgentToolCallContext
+  ): Promise<AgentIngestPublishToolResult>;
   publish(output: AgentIngestToolOutput, signal: AbortSignal): Promise<AgentIngestPublishToolResult>;
 }
 
@@ -340,6 +356,46 @@ export function createAgentIngestToolRegistry(input: {
         }));
       }
     } satisfies PigeAgentToolDescriptor] : []),
+    ...(input.host.update ? [{
+      name: UPDATE_KNOWLEDGE_NOTE_TOOL_NAME,
+      label: "Update related knowledge note",
+      description: "Append one evidence-cited Pige-managed update to an eligible existing note selected from the current related_NN retrieval results. Takes no path, page ID, base hash, or Operation authority.",
+      parameters: AGENT_NOTE_UPDATE_SCHEMA,
+      version: UPDATE_KNOWLEDGE_NOTE_TOOL_VERSION,
+      capability: "update_existing_note",
+      outputSchema: TOOL_RESULT_OUTPUT_SCHEMA,
+      effect: "idempotent_write",
+      inputTrust: "model_generated",
+      outputTrust: "host_validated",
+      dataBoundary: CURRENT_VAULT_DATA_BOUNDARY,
+      execution: "sequential",
+      idempotency: CURRENT_VAULT_IDEMPOTENCY,
+      limits: {
+        maxInputBytes: 65_536,
+        maxOutputBytes: 32_768,
+        timeoutMs: 30_000
+      },
+      ownerService: "KnowledgeCompiler",
+      authorize: (_args, context) => input.authorization.authorize({
+        toolName: UPDATE_KNOWLEDGE_NOTE_TOOL_NAME,
+        capability: "update_existing_note",
+        jobId: input.jobId,
+        sourceId: input.sourceId,
+        toolCallId: context.toolCallId
+      }),
+      execute: async (args, _signal, context): Promise<PigeAgentToolResult> => {
+        if (!context || !input.host.update) {
+          throw new PigeDomainError(
+            "agent_runtime.update_tool_unavailable",
+            "The existing-note update tool is unavailable."
+          );
+        }
+        return input.host.update(args as AgentIngestUpdateToolInput, context).then((result) => ({
+          ...result,
+          terminate: true
+        }));
+      }
+    } satisfies PigeAgentToolDescriptor] : []),
     {
       name: CREATE_KNOWLEDGE_NOTE_TOOL_NAME,
       label: "Create grounded knowledge note",
@@ -394,6 +450,9 @@ export const allowCurrentAgentIngestTools: AgentIngestToolAuthorizationPort = {
     }
     if (request.toolName === STAGE_KNOWLEDGE_NOTE_PROPOSAL_TOOL_NAME) {
       return request.capability === "stage_generated_note_proposal";
+    }
+    if (request.toolName === UPDATE_KNOWLEDGE_NOTE_TOOL_NAME) {
+      return request.capability === "update_existing_note";
     }
     return request.toolName === CREATE_KNOWLEDGE_NOTE_TOOL_NAME &&
       request.capability === "write_generated_note";
@@ -509,5 +568,22 @@ const AGENT_INGEST_OUTPUT_SCHEMA = {
     confidence: { type: "string", enum: ["low", "medium", "high"] }
   },
   required: ["title", "summary", "keyPoints", "tags", "topics", "entities", "warnings", "confidence"],
+  additionalProperties: false
+} as const;
+
+const AGENT_NOTE_UPDATE_SCHEMA = {
+  type: "object",
+  properties: {
+    targetPageRef: { type: "string", pattern: "^related_[0-9]{2}$" },
+    summary: EVIDENCE_STATEMENT_SCHEMA,
+    keyPoints: {
+      type: "array",
+      items: EVIDENCE_KEY_POINT_SCHEMA,
+      maxItems: 8
+    },
+    warnings: { type: "array", items: { type: "string", minLength: 1, maxLength: 240 }, maxItems: 8 },
+    confidence: { type: "string", enum: ["low", "medium", "high"] }
+  },
+  required: ["targetPageRef", "summary", "keyPoints", "warnings", "confidence"],
   additionalProperties: false
 } as const;
