@@ -17,7 +17,8 @@ Technical goals:
 - Make future sync possible without making it part of v0.1.
 - Reserve a future remote Agent backend path for Web/mobile clients without making it part of v0.1.
 - Make Agent operations auditable and reversible enough for user trust.
-- Keep extension architecture focused on personal knowledge management rather than becoming a general-purpose Agent platform.
+- Support a general personal Agent while keeping provider, tool, and extension machinery
+  behind a product experience rather than a runtime platform console.
 
 ## 2. Proposed Stack
 
@@ -226,10 +227,10 @@ Responsibilities:
 
 - Classify the capture envelope only as needed for safe preservation and capability
   discovery; do not choose the downstream semantic plan.
-- Create an ingest job.
+- Create only the durable preservation work required by source-bearing evidence.
 - Ask Source Storage Service to create a source record and preserve the input according to storage strategy.
 - Emit job progress events.
-- Enqueue or wake the Agent orchestration job after preservation.
+- Enqueue or wake the same Agent ingress with preserved references.
 - Guarantee that the user's original capture is preserved before model or parser work begins.
 - Accept files dropped anywhere on the main window through the typed preload boundary.
 - Accept voice transcripts from the native speech input service as editable capture input.
@@ -471,14 +472,14 @@ Vault location and note storage rule:
 
 Responsibilities:
 
-- Fetch and preserve a bounded raw web snapshot under URL security rules.
+- Validate URL evidence without choosing a semantic route.
+- Fetch and preserve a bounded raw snapshot only from an Agent-selected web call.
 - Execute readable-content/metadata extraction only from an Agent-selected web tool and
   return a normalized Artifact.
 
-The current bridge performs main-process pinned Undici fetch plus bounded inert
-Readability extraction in one capture path. Its security and preservation evidence
-remain valid, but automatic extraction is transitional under B3.13. Exact behavior and
-the deferred browser-rendered fallback are owned by the Parser and Security contracts.
+The current bridge still couples pinned Undici fetch and inert extraction to URL
+capture. Its safety evidence remains valid, but that pre-Agent route is transitional
+under B3.13; the target preserves the submitted task first and lets Pi select fetch.
 
 ### 5.3 Parser Service
 
@@ -614,12 +615,12 @@ OCR merge rules:
 
 ### 5.4 Agent Orchestrator
 
-After Source Storage has durably preserved the capture, Agent Orchestrator is the sole
-owner of semantic sequencing. Pi Agent chooses, calls, evaluates, and may replan bounded
-Pige tools for inspection, extraction, OCR, retrieval, organization, analysis, and
-knowledge change. Capture, Jobs, Parser, OCR, Retrieval, and Compiler services may
-enforce or resume a selected call, but must not maintain a parallel format-driven
-knowledge pipeline.
+All semantic Home and note submissions enter Agent Orchestrator through the approved Pi
+adapter. Pure questions enter directly; source-bearing turns first preserve evidence.
+Pi may answer without tools or select, evaluate, and replan bounded Pige tools for fetch,
+inspection, extraction, OCR, retrieval, organization, analysis, and knowledge change.
+Host services may constrain, execute, persist, refuse, or resume an already selected
+call, but never classify a turn into a fixed route or choose a replacement step.
 
 The boundary has three planes:
 
@@ -629,7 +630,8 @@ The boundary has three planes:
 - **Host policy and commit plane:** Pige owns preservation, permissions, egress, limits,
   Jobs, provenance, validation, confirmation, and atomic publication.
 
-Agent decisions never weaken the host plane. Mechanical index/log refresh follows the
+Agent decisions never weaken the host plane. A refusal returns a typed result to Pi or
+stops safely; it does not authorize a Host-selected fallback. Mechanical refresh follows the
 validated tool result; it is neither a second semantic orchestrator nor an atomic
 cross-file claim.
 
@@ -812,6 +814,9 @@ Current implementation:
 
 ### 5.6 Search And Retrieval Service
 
+Search is a scoped read-only Pi tool plus an explicitly selected deterministic no-model
+fallback. It is not Home's semantic ingress and does not decide whether a turn retrieves.
+
 v0.1:
 
 - Read `index.md`.
@@ -847,11 +852,11 @@ Retrieval pipeline:
 Context assembly rule: the retrieval pipeline produces selected evidence for an Agent Context Pack. It must follow `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`; retrieval never hands the model the whole vault, full source asset bodies, or unbounded conversation history.
 
 Current implementation uses SQLite FTS5 with CJK augmentation and bounded Markdown
-fallback. Home uses one Pi search tool with per-turn evidence/egress revalidation;
-`retrieval.ask` is its no-binding fallback. Ingest optionally uses one local read-only
-search after source inspection and resolves validated opaque refs only at publication;
-the Context Policy owns its bounds and drift fences. Vector/reranking, answer saving,
-conversation persistence, and jump-to-snippet remain open.
+fallback. Home still routes question-like input into one mandatory Pi search and uses
+`retrieval.ask` when unbound; zero evidence ends without Pi prose. This narrower bridge
+does not satisfy unified Agent ingress. Ingest's optional read-only search is already
+Agent-selected. Vector/reranking, answer saving, conversation persistence, and
+jump-to-snippet remain open.
 
 Retrieval result contract:
 
@@ -1449,7 +1454,9 @@ type QueryOutput = {
 ```
 
 `proposalRef` can only reference a validated proposal/publication tool result; query
-text is never converted directly into a Markdown write.
+text is never converted directly into a Markdown write. Ranked results and citations
+may be empty for a general answer. Local evidence requires citations; zero retrieval
+results return control to Pi unless the user required vault-only grounding.
 
 ## 10. Model Provider Architecture
 

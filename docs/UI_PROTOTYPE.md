@@ -21,11 +21,14 @@ Prototype fidelity boundary:
 
 ## 1. Experience Goal
 
-Pige should feel extremely simple at first touch: a quiet window with one obvious bottom composer where the user can type, ask, paste, speak, or drop files. It should feel closer to ChatGPT's calm input surface than a document manager.
+Pige should feel like a general-purpose personal Agent with one calm Home composer. The
+user can talk, request work, paste, speak, or add files; local knowledge strengthens Pi
+when useful but is not required to begin.
 
 The interface should make one promise:
 
-> Put it into Pige, or ask Pige. Pige will preserve sources, retrieve your knowledge, and maintain the wiki.
+> Ask anything, or put something in. Pige answers directly, uses your knowledge when it
+> helps, and can keep valuable results as durable Markdown.
 
 The user should not need to understand tags, folders, topics, sources, or wiki structure before using Pige.
 
@@ -39,7 +42,8 @@ Default desktop window:
 - Almost empty by default.
 - Single bottom home composer as the main interaction surface.
 - The same composer supports capture, retrieval questions, lightweight conversation, URL paste, file attach, drag-and-drop, and voice input.
-- Retrieval-oriented answers should be grounded in the local knowledge base by default, not generic open-ended chat.
+- Ordinary conversation needs no vault match. When Pi uses local knowledge, show the
+  evidence and citations without turning Home into a search dashboard.
 - Sidebar hidden by default, not merely collapsed into visual noise.
 - Recent activity appears only after the user has active capture, parser, OCR, Agent ingest, or index jobs. The compact Home strip uses localized status dots and at most three visible source names; it is not a second Inbox or Review destination.
 - Home refreshes the strip while a job is queued or running, then stops polling for dependency-waiting or terminal jobs to keep idle work low.
@@ -68,7 +72,7 @@ Pige should feel like a small capture companion most of the day and a spacious k
 
 Purpose:
 
-- Fast capture and knowledge-base questions while working in other apps.
+- Fast general conversation and source work beside other apps.
 - Low screen footprint.
 - Suitable for always-on-top usage.
 
@@ -99,7 +103,8 @@ Behavior:
 - The user can drag files anywhere onto the window.
 - Sidebar and Library are hidden unless explicitly opened.
 - Resizing wider should not immediately clutter the capture experience; exploration chrome appears only after the user opens it.
-- The user should not choose between "capture" and "ask" before typing. Pige infers intent from input and attached context.
+- The user should not choose between capture and ask. The same Pi turn decides whether
+  to answer, retrieve, preserve, use a tool, or clarify.
 
 ### Expanded Workspace
 
@@ -207,7 +212,8 @@ Behavior:
 - Recent activity appears above the composer only after there is something useful to show.
 - The same input supports capture and retrieval questions. User should not see separate "Capture" and "Ask" modes.
 - The composer must not show mode chips such as "Deep Organize" or "Smart Search"; Agent intent routing decides whether to capture, organize, retrieve, answer, or ask for confirmation.
-- If the input is a question, Pige should first retrieve from the local knowledge base and then answer with ranked notes and citations where possible.
+- Host UI does not classify by punctuation, URL, attachment, or file type. Pi may answer
+  directly or retrieve; citations appear only when local evidence is used.
 
 The timeline is not the permanent knowledge store. Important outputs should be written to Markdown pages, source pages, `index.md`, and `log.md`.
 
@@ -295,14 +301,11 @@ Behavior:
 Input states:
 
 - Empty.
-- Question draft.
-- Source draft.
-- Text draft.
+- Composing.
 - Voice recording.
 - Voice unsupported.
-- URL detected.
-- Files attached.
-- Processing.
+- Attachments present.
+- Submitted/running.
 - Error.
 
 ### 5.1 Empty
@@ -335,21 +338,18 @@ Behavior:
 - Stop recording does not automatically submit unless the user chooses that behavior later.
 - On unsupported platforms, the microphone button is hidden or disabled with a short tooltip.
 
-### 5.2 URL Detected
+### 5.2 URL Present
 
 ```txt
 ┌────────────────────────────────────┐
 │ https://example.com/article        │
 │                                    │
-│ Web page detected             ↑   │
+│ Link included                 ↑   │
 └────────────────────────────────────┘
 ```
 
-On submit:
-
-- Create job.
-- Fetch page.
-- Show progress in timeline.
+URL styling is a lightweight affordance, not a route. The URL enters the same Pi turn;
+fetching begins only if Pi selects the bounded web tool.
 
 ### 5.3 Files Attached
 
@@ -365,8 +365,8 @@ On submit:
 
 On submit:
 
-- Create one job per file.
-- Group them visually if dropped together.
+- Validate and preserve accepted files, attach their refs to one Pi turn, and group
+  preservation status. File type does not select the semantic workflow.
 
 ## 6. Processing Timeline
 
@@ -428,9 +428,12 @@ Current Home foundation:
 
 Unified update diff, generic apply, replacement UX, bulk/dedicated management, and packaged visual proof remain open.
 
-## 7. Home Knowledge Retrieval
+## 7. Home Conversation And Optional Local Knowledge
 
-Home knowledge retrieval is the default answer behavior when the user asks a question in the home composer. It should accept natural language and return a grounded synthesis plus ranked notes, not just a generic chat answer.
+Home behaves like ordinary Agent conversation. Pi retrieves local knowledge when a
+request benefits from it; retrieved evidence remains visible and cited. With irrelevant
+or empty evidence, Pi may answer normally without local citations. An explicit
+vault-only request instead reports insufficient evidence.
 
 Prototype:
 
@@ -472,17 +475,11 @@ Behavior:
 - Saving an answer creates a proposed note or appends to an existing note after confirmation.
 - There is no separate default "Ask" entry in navigation; this behavior lives inside Home.
 
-Current Home foundation:
-
-- Without a ready model, question-like input returns the bounded local extractive answer and ranked lexical results before any Agent job, credential read, or cloud call.
-- With a ready model, Pi Agent calls one Pige-owned current-vault search tool and may return only citations from the selected evidence. Empty evidence produces a visible insufficient-evidence result with no model prose or citations.
-- One compact inline status may move through Accepted, Running, Waiting, Failed, and Completed. A model-required wait offers Configure Models; retryable failure offers Retry. Copy is localized and never exposes a raw provider error or creates a new dashboard.
-- While work is active, the UI labels a planned cloud send only for a cloud boundary. Afterward it labels an actual cloud attempt/result only when a cloud model turn occurred; local or no-model results are never described as cloud use.
-- After the exact Profile/endpoint is connected, ordinary Home and Agent calls do not
-  interrupt for confirmation. A quiet localized status such as `Using OpenAI · selected
-  context` or `Answered with OpenAI` remains inline and never becomes a dashboard.
-- Results retain bounded title, snippet, page type, citation, and open action. Ordinary non-question text remains capture input.
-- Broader semantic/vector retrieval, follow-ups, save-answer proposals, and jump-to-snippet opening remain later slices.
+Current implementation is narrower: question-like text may use bounded local/Pi
+retrieval while other input follows capture handling. Unified Pi ingress, optional
+retrieval, and general empty/no-evidence conversation remain open; do not turn that gap
+into a new mode, status, or navigation destination. Existing localized states, quiet
+provider status, non-raw errors, and exact-destination cloud behavior remain required.
 
 ## 8. Note Reader
 
@@ -1245,7 +1242,7 @@ First-run should be short. The app should not become a marketing landing page.
 
 Message:
 
-> Put things in, or ask directly.
+> Talk to Pige, or add something to work with.
 
 Actions:
 
@@ -1267,7 +1264,7 @@ Action:
 
 Message:
 
-> Add a model provider to process saved captures and new captures.
+> Connect a model for Agent conversation. Saved sources remain safe meanwhile.
 
 Action:
 
@@ -1569,13 +1566,15 @@ Can wait:
 ## 19. UI Acceptance Criteria
 
 - The app is useful on a narrow vertical window.
-- The first screen supports capture and knowledge questions without navigating elsewhere.
+- The first screen supports ordinary conversation, source work, and knowledge-enhanced
+  answers without navigation or a mode choice.
 - Sidebar expansion does not obscure the home composer.
 - Text never overflows buttons or compact cards.
 - Processing state is visible within one second after submit.
 - A completed ingest clearly shows durable vault changes.
 - Notes can be opened and read without knowing where files are stored.
-- Home knowledge retrieval returns ranked notes plus a grounded synthesis.
+- Home answers without local evidence when appropriate; when retrieval is used, ranked
+  notes and grounded citations remain visible.
 - Opened notes can show a contextual Agent panel.
 - Selected text exposes common actions without leaving the note.
 - Settings make BYOK setup understandable without exposing unnecessary advanced options.

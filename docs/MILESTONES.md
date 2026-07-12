@@ -6,9 +6,10 @@ Last revised: 2026-07-11
 
 ## 1. Release Philosophy
 
-Pige's first public version should be a highly usable local-first Agent note app, not a thin proof of concept.
+Pige's first public version is a usable local-first general personal Agent, not a thin proof.
 
-The target is `v0.1 Public Alpha`: early, honest, and still improving, but strong enough that a real user can run it as a side-window, capture real material for several days, recover from failures, inspect generated Markdown, and trust that their source records and source assets are preserved according to the selected storage strategy.
+`v0.1 Public Alpha` must converse through a real Provider/Pi path, use personal knowledge
+when relevant, preserve real sources for several days, recover, and expose owned Markdown.
 
 Quality bar:
 
@@ -32,7 +33,9 @@ Scope discipline:
 
 `docs/PRD.md` owns the complete P0 feature scope, and `docs/SPEC_TRACEABILITY.md` plus the acceptance manifest own its stable requirement, delivery, status, and evidence mapping. This release plan does not copy those lists.
 
-For milestone planning, v0.1 remains a local-first desktop Public Alpha: capture must survive downstream failure; durable knowledge remains portable Markdown with preserved source evidence; BYOK model use and local retrieval stay policy-bound; risky edits and extension actions remain reviewable; and backup, restore, localization, accessibility, packaging, and release evidence close the release. Section 4 expresses these outcomes by milestone, while the canonical Playbook owns their implementation sequence.
+For milestone planning, v0.1 is a local-first desktop Agent: BYOK/Pi conversation and
+optional local knowledge must work; sources survive failure; Markdown stays portable;
+risky actions remain reviewable; release hardening closes the product.
 
 Platform scope remains macOS 26+, Windows 11, and Windows 10 when release tests pass; Linux and the items in section 5 remain deferred.
 
@@ -47,7 +50,7 @@ The relationship is intentionally not one-to-one: M5 requires four implementatio
 | P0 | M0 | Repository and verification foundation |
 | P1 | M1 | Desktop shell, vault, settings, and runtime foundations |
 | P2 | M2 | Capture preservation, local dictation, jobs, retry, and progress |
-| P3 | M3 | BYOK, one effective default model, and the Pi Agent tool-loop spine |
+| P3 | M3 | BYOK, unified Home ingress, and the Pi Agent tool-loop spine |
 | P4 | M5 | Rebuildable database, lexical search, Library, and graph foundations |
 | P5 | M4 | URL, document, image, parser, artifact, and OCR tool breadth |
 | P6 | M5 | Retrieval, local RAG, reader/editing, backlinks, and Knowledge Tree |
@@ -75,7 +78,7 @@ Outcome:
 
 Acceptance:
 
-- A user can install/run the app, create a vault, see a minimal capture screen, and see the vault files on disk.
+- A user can install/run the app, create a vault, see minimal Home, and inspect vault files.
 - A user can find the local note storage location from Settings and reveal it in Finder/File Explorer.
 - The app can create, migrate, reset, and rebuild the local vault database without deleting Markdown knowledge files, source records, or source assets.
 - The app can report that the bundled core toolchain is ready or needs repair.
@@ -96,19 +99,20 @@ Acceptance:
 
 - Killing and reopening the app does not lose queued or partially processed captures.
 
-### M3: BYOK And Agent Ingest
+### M3: BYOK And General Agent Spine
 
 Outcome:
 
-- Pige can turn a preserved source into useful Markdown through the embedded Pi Agent
-  control loop and bounded Pige tools using the configured default model.
+- One configured Provider/Global Default powers ordinary Home conversation,
+  knowledge-enhanced answers, and preserved-source tools through embedded Pi.
 
 Acceptance:
 
 - A deterministic vertical fixture proves Pi Agent chooses an inspection/extraction
   tool, evaluates its typed result, and triggers a validated cited Markdown write.
-- With no Agent/model, Pige preserves the source and waits; parser, OCR, provider, and
-  knowledge writes do not run through a hidden substitute workflow.
+- Empty-vault chat can answer without tools; a relevant prompt triggers cited local
+  retrieval; text/URL/file input uses the same Pi ingress without Host heuristics.
+- Without a model, the user turn and sources wait durably; no substitute workflow runs.
 
 ### M4: Web And Document Ingest
 

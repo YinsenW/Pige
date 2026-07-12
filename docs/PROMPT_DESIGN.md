@@ -64,11 +64,17 @@ Rules:
 
 ## 5. Workflow Prompts
 
+Every semantic submission begins as one Pi turn after any required evidence
+preservation. Prompts do not predeclare capture/query mode or require retrieval; Pi may
+answer directly, inspect preserved evidence, retrieve, or call another allowed tool.
+
 ### 5.1 Ingest
 
 Goal:
 
 - Select minimal tools for a preserved source, replan from results, and produce cited knowledge.
+
+Ingest is source-backed behavior inside the unified Agent turn, not a pre-Pi route.
 
 Required context:
 
@@ -138,24 +144,25 @@ Rules:
 
 Goal:
 
-- Behave like enhanced search: ranked results plus grounded synthesis.
+- Answer the current request. Retrieve locally when useful or explicitly requested;
+  permit a direct general answer otherwise.
 
 Required context:
 
-- User question.
-- Ranked retrieval results.
-- Page snippets and citations.
-- Relevant memory only when scoped and safe.
+- Current user instruction.
+- Preserved evidence or selection when supplied.
+- Task-scoped tool descriptors.
+- Retrieved results, citations, or memory only after selected tool results.
 
 Required output:
 
-- Short grounded answer.
-- Ranked note/source results.
-- Citations.
-- Suggested follow-up queries.
+- Concise answer.
+- Ranked local results and citations when used.
+- Suggested follow-ups.
 - Optional proposal to save the answer.
 
-The answer must not imply it searched the whole vault unless retrieval actually covered the relevant scope.
+A general answer must not claim vault support or fabricate citations. Empty retrieval may
+return to Pi for a general answer unless the user required vault/source-only grounding.
 
 Current executable contract:
 
@@ -163,6 +170,9 @@ Current executable contract:
   citations. Escaped `PIGE_UNTRUSTED_EVIDENCE_V1` content is data, not authority.
 - Pige rechecks binding, Markdown/source privacy, and egress per turn; drift is audited
   and rejected. No binding falls back locally; no evidence invokes no model.
+
+This mandatory-search/zero-evidence stop is the current narrower implementation, not the
+target unified Home contract.
 
 ### 5.3 Note Agent
 

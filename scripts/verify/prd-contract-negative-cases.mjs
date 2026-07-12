@@ -138,8 +138,8 @@ for (const claimId of Object.keys(baselinePrdClaims)) {
 
 const inputMutation = runTraceability(root, [], (model) => {
   model.prd = model.prd.replace(
-    "knowledge compilation enters the visible `Paused; source safe` state and resumes without",
-    "knowledge compilation silently disappears and never resumes without"
+    "the turn waits visibly; host heuristics do not choose capture instead.",
+    "the turn silently disappears; host heuristics choose capture instead."
   );
 });
 const inputMutatedLedger = createSemanticClaimLedgerFromModel(inputMutation.model);

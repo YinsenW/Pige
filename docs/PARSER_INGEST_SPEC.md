@@ -12,9 +12,9 @@ Use it when implementing capture, URL fetch, file ingest, OCR routing, parser ad
 
 ## 2. Pipeline
 
-Pige preserves the Source Record and asset/reference first. Pi Agent then selects and
-replans bounded parser, OCR, retrieval, and write tools; host services enforce each
-call's policy, limits, provenance, Jobs, validation, and commit.
+Source-bearing Home turns preserve the Source Record and asset/reference first. Pi then
+selects and replans parser, OCR, retrieval, and write tools; Host services enforce each
+call but never choose the semantic route.
 
 Parser/OCR may resume the same call but cannot choose the next semantic step. Current
 direct capture-to-parse/OCR routing is transitional and does not satisfy B3.13/E3.08.
@@ -54,7 +54,6 @@ type ParseRequest = {
   sourceKind: SourceKind;
   sourceHandle: SourceHandle;
   preferredLanguages: string[];
-  ocrPolicy: "auto" | "force" | "never";
   maxBytes: number;
   timeoutMs: number;
 };
@@ -74,6 +73,8 @@ Rules:
 - Parser workers cannot modify managed source copies or referenced originals.
 - Parser jobs must not download parser binaries or package dependencies at task time.
 - Missing parser tools produce a repair-needed state and retry path.
+- Parse returns quality and OCR candidates but never invokes OCR; only a later Pi OCR
+  event may recognize them.
 
 ## 6. Parse Result
 
@@ -136,11 +137,12 @@ After a new document-parser or direct-image OCR Artifact is persisted, its owner
 
 ### 8.2 URL
 
-- Fetch through the Source Fetch Service.
+- Fetch only through an Agent-selected Source Fetch tool.
 - Block local/private network targets unless explicitly allowed.
 - Store canonical URL, final URL, capture timestamp, content type, and extraction warnings.
 - Preserve a readable snapshot when feasible.
-- Current Phase 5 implementation fetches HTTP/HTTPS URLs in the main process with Undici, rejects embedded credentials and non-public targets, revalidates every redirect, pins each connection to the DNS addresses already approved for that target, and enforces the deadline through streamed body consumption.
+- Current Phase 5 still auto-fetches URL capture through pinned Undici before the Agent;
+  the SSRF/redirect/body safety remains valid, but that semantic route is transitional.
 - Declared and decompressed streamed response bodies are capped at 2 MiB. Charset is detected from HTTP metadata, BOM, or leading HTML metadata before the decoded snapshot is preserved under `raw/web/YYYY/MM/` as untrusted source evidence.
 - HTML article extraction runs in the bounded `workers/web-extractor-worker.js` entry with exact Mozilla Readability and jsdom dependencies. Script execution and external resource loading are not enabled. The worker returns plain text and selected metadata, never trusted article HTML.
 - The serial worker allows eight pending requests, a 5-second deadline, 256 MiB old-generation heap, 2,097,152 decoded input characters, 20,000 inspected elements, 1,000,000 output characters, and 64 HTTP(S) image references. A worker/dependency failure terminates the worker, falls back to bounded DOM-less extraction, and records a reduced-extraction warning.
@@ -183,7 +185,8 @@ After a new document-parser or direct-image OCR Artifact is persisted, its owner
 - OCR slide images when visible text is not otherwise recoverable.
 - Current Phase 5 adapter uses yauzl `3.4.0` plus fast-xml-parser `5.9.3` over selected bounded OpenXML parts. Presentation relationships determine slide order; speaker notes, external counts, `slide:N` units, and schema-v1 `slide:N/media:M` raster targets are preserved.
 - XML value coercion and entity processing are disabled, DOCTYPE is rejected, nesting is capped, internal relationship traversal is rejected, and external targets are recorded but never opened.
-- Image-bearing slides with sparse text create OCR candidates. Runnable selected-raster OCR delays Agent ingest; unavailable OCR may release useful native text with a review warning.
+- Image-bearing slides with sparse text return OCR candidates to Pi; they do not execute
+  or delay another semantic step themselves.
 
 ### 8.6 Images
 
@@ -272,6 +275,7 @@ Failures must not:
 An Agent-selected parser/OCR tool returns bounded fragments, Artifact metadata,
 locators, quality, warnings, provenance, and optional next-capability recommendations
 inside the untrusted-evidence boundary. Recommendations never execute themselves.
+They cannot create a child Job; Pi must select the next call.
 
 The Agent does not receive:
 

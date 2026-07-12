@@ -619,30 +619,25 @@ References:
 
 ### D-20260709-Home-Composer-Unified-Entry
 
-Status: Accepted
+Status: Superseded
 Date: 2026-07-09
+Superseded by: D-20260712-General-Purpose-Agent-Unified-Ingress
 
 Decision:
 
-Pige's default entry is a bottom-docked Home composer. The same composer supports capture, URL/file paste, voice input, lightweight dialogue, and knowledge-base questions. v0.1 should not expose separate default navigation entries for Capture, Ask/Search, Inbox, or Review.
+Home uses one composer without Capture/Ask/Search mode selection.
 
 Rationale:
 
-The product promise is low-friction knowledge capture and retrieval. Splitting capture and asking into separate entry points makes the app feel more complex and forces users to classify their intent before acting. Processing status and risky changes still matter, but they should appear as Home status cards, notifications, or confirmation proposals only when relevant.
+Users should not classify intent before acting.
 
 Consequences:
 
-- The first screen keeps a mostly empty canvas with the Home composer fixed near the bottom.
-- Question-like input triggers Home knowledge retrieval: local retrieval first, then a grounded summary with ranked notes.
-- File/link/text input triggers capture and ingest without requiring mode selection.
-- Processing, failed, and confirmation-needed work appears in Home status surfaces instead of default Inbox/Review navigation.
-- Sidebar defaults to Home, Library, Knowledge Tree, and Settings.
+- The calm single-entry UI survives; its old question/capture routing is superseded.
 
 References:
 
-- `docs/PRD.md`
 - `docs/UI_PROTOTYPE.md`
-- `docs/prototypes/README.md`
 
 ### D-20260709-Simplicity-First-Default-UI
 
@@ -1612,65 +1607,43 @@ References:
 
 Status: Superseded
 Date: 2026-07-09
-Superseded by: D-20260710-Home-Context-Pack-And-Local-Evidence-Summary
+Superseded by: D-20260712-General-Purpose-Agent-Unified-Ingress
 
 Decision:
 
-Phase 2/3 implements `retrieval.search` as a local lexical Markdown scan and routes clearly question/search-like Home composer input to ranked local results before model synthesis, SQLite FTS, vector search, or local reranking are available.
+The first Home bridge routes question-like text to local lexical retrieval.
 
 Rationale:
 
-Pige's core product promise requires knowledge to come back out through natural questions, not only manual browsing. A local lexical fallback proves the Home retrieval loop without requiring model setup, local embedding downloads, or the later SQLite indexing phase. It also preserves the local-first context boundary: selected snippets are surfaced, not full vault contents.
+It proved local evidence retrieval before unified Pi ingress existed.
 
 Consequences:
 
-- Home remains one composer; there is no separate Ask/Search mode.
-- Ordinary non-question input remains capture.
-- Retrieval responses contain safe page summaries, scores, bounded snippets, match reasons, and degraded-search state.
-- CJK queries use character bigram/trigram fallback instead of whitespace-only matching.
-- Internal source-storage reference lines are filtered from snippets.
-- Grounded synthesis, citations over selected evidence, context-pack serialization, SQLite FTS, vector search, reranking, answer saving, and jump-to-snippet behavior remain later retrieval slices.
+- Bounded lexical/CJK evidence remains valid; its Host intent split is superseded.
 
 References:
 
-- `docs/API_AND_IPC_DESIGN.md`
 - `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`
-- `docs/PERFORMANCE_AND_RELIABILITY.md`
-- `docs/TECH_ARCHITECTURE.md`
-- `docs/UI_PROTOTYPE.md`
 
 ### D-20260710-Home-Context-Pack-And-Local-Evidence-Summary
 
-Status: Accepted
+Status: Superseded
 Date: 2026-07-10
 Revised: 2026-07-12
-Supersedes: D-20260709-Phase-2-3-Home-Lexical-Retrieval
+Superseded by: D-20260712-General-Purpose-Agent-Unified-Ingress
 
 Decision:
 
-Home question input now uses `agent.ask`. With a ready runtime it retrieves locally and
-requires embedded Pi to call one bounded search tool; with no binding it returns
-`retrieval.ask` before Agent work. No selected evidence returns the fixed local
-insufficient result without a model call.
+The first Home foundation routes question-like text through one bounded search and fixed
+no-evidence result.
 
 Rationale:
 
-Pige needs an answer-shaped retrieval experience before optional embeddings while
-keeping Pi, local-first retrieval, and model egress enforceable as one path. The bounded
-Context Pack supports current Home synthesis and later Note Agent/remote clients without
-duplicating bodies.
+It proved bounded local evidence and egress before unified Agent ingress existed.
 
 Consequences:
 
-- Home stays one composer and does not expose a retrieval mode selector.
-- Renderer responses include a short answer, ranked page summaries, bounded snippets, citation refs, and plain degraded state; they do not receive Context Pack internals, full bodies, raw prompts, context budgets, secret-bearing policy, or arbitrary filesystem paths.
-- Serialized Context Packs contain refs, page IDs, safe locators, scores, estimated snippet budgets, index health, warnings, and omission counts. Selected snippet text remains ephemeral.
-- The default result UI hides raw ranking scores and match internals while retaining title, snippet, page type, citation, and open-page actions.
-- Model turns receive escaped untrusted evidence and strict citation refs. Current
-  Markdown bytes and Source Record privacy facts are re-read per turn; each changed
-  classification gets a distinct body-free audit before drift is rejected.
-- Results expose only bounded retrieval output and `none|local|cloud`; model prompts,
-  credentials, endpoints, private paths, and raw errors remain internal.
+- Its evidence/privacy boundaries remain; mandatory retrieval and fixed insufficiency do not.
 
 References:
 
@@ -2445,31 +2418,56 @@ Date: 2026-07-11
 
 Decision:
 
-After source preservation, Pi Agent alone selects, sequences, evaluates, and replans
-semantic tool use. Tools perform one bounded capability; host services enforce policy,
-permissions, limits, provenance, Jobs, validation, confirmation, and commits.
+Pi selects post-preservation semantic tools; Host services enforce safety and commits.
 
 Rationale:
 
-A fixed Capture→Parser→OCR→Agent→Write chain duplicates Agent planning. Narrow tools
-reduce uncertainty without creating a second workflow.
+Fixed service chains duplicate Agent planning.
 
 Consequences:
 
-- Parser/OCR/Artifact/Job/recovery remains tool substrate; capture preserves first and
-  missing Agent/model state pauses semantic work.
-- Pi events drive inspect, parse/selected OCR, bounded retrieval, cited publication, or
-  one terminal proposal stage; Host owns proposal target, identity, and review boundary.
-- B3.13/E3.08 remains the spine gate; tests reject direct/fixed/bypass writes. Existing
-  adapter, Artifact, safety, and citation decisions stay in force.
+- Its tool/Host boundary survives; the replacement extends Pi control to every turn.
 
 References:
 
-- `docs/VISION.md`
+- `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`
+
+### D-20260712-General-Purpose-Agent-Unified-Ingress
+
+Status: Accepted
+Date: 2026-07-12
+Supersedes: D-20260709-Home-Composer-Unified-Entry, D-20260709-Phase-2-3-Home-Lexical-Retrieval, D-20260710-Home-Context-Pack-And-Local-Evidence-Summary
+
+Decision:
+
+Pige is a general-purpose personal Agent enhanced by local knowledge. Every semantic
+Home turn enters Pi after any required evidence preservation. Pi may answer directly or
+select retrieval/source/action tools; Host heuristics and fixed workflows cannot choose
+intent. Local evidence is preferred when relevant, not required for every answer.
+
+Rationale:
+
+Knowledge capture is Pige's differentiator, not its product limit. Separate query,
+capture, and format routes duplicate Pi planning and block ordinary conversation.
+
+Consequences:
+
+- Host owns preservation, policy, permission, egress, bounds, durability, validation,
+  confirmation, and commits; it never substitutes a semantic step.
+- The versioned target uses one `agent.submitTurn` and durable `agent_turn`; no model
+  waits/resumes the same turn instead of silent capture, retrieval, or local fallback.
+- Provider profiles gain explicit protocol, pre-save Pi probe, tri-state binding, and
+  safe staged commit; legacy kinds map without silent Responses reinterpretation.
+- B3.14/E3.09 and PIGE-PI-005 stay unproven until real ordinary, knowledge-enhanced,
+  source-tool, migration, and Provider-to-Home evidence passes.
+
+References:
+
 - `docs/PRD.md`
 - `docs/TECH_ARCHITECTURE.md`
 - `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`
-- `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
+- `docs/UI_PROTOTYPE.md`
 
 ### D-20260711-Pi-Compat-Containment-Exception
 

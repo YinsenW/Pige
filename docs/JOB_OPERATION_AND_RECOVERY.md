@@ -22,7 +22,8 @@ The core rule:
 ## 2. Product Principles
 
 1. Preservation before intelligence.
-   Capture must preserve the source record and source asset or source reference before parsing, OCR, model calls, or Agent compilation.
+   Source-bearing evidence is preserved before parsing, OCR, model calls, or compilation;
+   pure conversation creates no artificial Source Record.
 
 2. Durable work before expensive work.
    Any expensive, asynchronous, permissioned, or failure-prone action must create a durable job record before it starts.
@@ -145,6 +146,14 @@ Required v0.1 job classes:
 | `maintenance` | compaction, cleanup, health check | compacted job refs, repair proposals | Yes | Yes |
 
 `packages/schemas/src/index.ts` owns the executable `JobClassSchema`. This table explains those exact values; no document or DTO may introduce aliases such as `capture_preserve`, `parse_source`, `backup_create`, or `restore_validate`.
+
+Unified ingress requires a versioned shared-schema migration adding `agent_turn`; it
+must not overload query-hash-only `retrieval_query`. Main first appends the bounded user
+conversation event, then creates one `agent_turn` linked to that event and any preserved
+source refs. Without a model it waits at `waiting_dependency/waiting_for_model` and
+resumes the same identity. Short chat creates no Source Record; large/attached evidence
+is stored once. Existing `retrieval_query` and `agent_ingest` records remain readable
+compatibility records until migration; no implementation may emit `agent_turn` early.
 
 Jobs may have parent-child structure:
 
@@ -631,7 +640,7 @@ Recovery decisions:
 
 | Situation | Recovery behavior |
 | --- | --- |
-| Source preserved, parse not started | Resume parse. |
+| Source preserved, no selected child | Wake the Agent parent; never infer parse/OCR/retrieval from source shape. |
 | Source copied, source record missing | Create repair proposal or source record if checksum/path proves source. |
 | Parse artifact exists, source page missing | Resume source page creation. |
 | Proposal ready, app crashed before display | Show proposal in Home status. |

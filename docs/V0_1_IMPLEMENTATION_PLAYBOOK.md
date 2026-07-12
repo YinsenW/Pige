@@ -10,11 +10,14 @@ This document is the sole owner of P0-P9 phase numbers, stable Build commitments
 
 ## 2. Product North Star For v0.1
 
-The complete product scope remains in `docs/PRD.md`. The phase sequence below must compose into one usable local-first journey: install, create a vault, capture preserved sources, optionally configure BYOK, produce portable Markdown, retrieve and read grounded knowledge, review risky changes, and complete backup/restore without weakening secret or permission boundaries.
+The PRD owns scope. Phases must compose into one usable journey: install, open a vault,
+connect BYOK, converse through Pi, preserve sources, use local knowledge when relevant,
+produce portable Markdown, review risky changes, and back up/restore safely.
 
 ## 3. Implementation Strategy
 
-Build the numbered phases below as vertical slices. Do not pull isolated advanced features ahead of the capture-to-Markdown path merely because their design is nearby.
+Build vertical slices. Do not pull isolated breadth ahead of the Provider-to-Pi-to-Home
+turn and Agent-selected capture-to-Markdown path merely because its design is nearby.
 
 Scope discipline for AI agents:
 
@@ -153,7 +156,7 @@ Build:
 - [B1.14 -> E1.07] Bounded local diagnostics, redaction, health summary, and user-initiated support-bundle preview/export.
 - [B1.15 -> E1.08] Local SQLite abstraction and empty migration system.
 - [B1.16 -> E1.09] Reset Local Database repair action.
-- [B1.17 -> E1.13] Capture-first Home and navigation contract: essential empty state, no mode chips, collapsible sidebar, compact/expanded/full-screen context continuity, and a directly browsable three-level Library tree when data permits.
+- [B1.17 -> E1.13] Agent-first Home/navigation contract: essential empty state, no modes, collapsible sidebar, layout continuity, and a browsable three-level Library tree.
 - [B1.18 -> E1.14] Version-pinned bundled core toolchain manifest, readiness check, and visible repair path for missing or damaged tools.
 - [B1.19 -> E1.15] Machine-local secret-storage adapter foundation that can protect values without writing them to the vault; provider API-key use remains a P3 concern.
 - [B1.20 -> E1.16] Shared namespaced error schemas for API/IPC, durable Job warnings/errors, diagnostics, localization, and retry/repair actions.
@@ -185,7 +188,7 @@ Exit criteria:
 - [E1.10] Renderer reaches privileged capabilities only through typed preload IPC.
 - [E1.11] Compact and expanded shell modes retain current context and remain usable in the six catalog locales.
 - [E1.12] One default model profile can be stored and resolved through the adapter contract without exposing ineffective Advanced/Fast controls.
-- [E1.13] Home opens capture-first with the essential empty state and no mode chips; compact, expanded, and full-screen reading preserve context, and the sidebar exposes the Library tree directly to at least three levels when available.
+- [E1.13] Home opens Agent-first with an essential mode-free empty state; layout changes preserve context and the sidebar exposes three Library levels when available.
 - [E1.14] Packaged core tools are version-pinned, report ready/missing/damaged state, and expose a user-visible repair path without an ordinary job improvising a download.
 - [E1.15] The secret-storage adapter protects a synthetic value outside vault files, SQLite, logs, diagnostics, and backups; P3 proves provider-key integration.
 - [E1.16] API errors, durable Job warnings/errors, diagnostics, and UI failure actions validate against one shared taxonomy; malformed codes or unstructured private details are rejected, and every locale covers release-visible message keys.
@@ -265,6 +268,9 @@ Build:
 - [B3.12 -> E3.07] Complete Agent output and change-summary contract for title, summary, tags, topic, entities, related notes, Markdown/source pages, citations, index/log updates, and created/updated/skipped/failed/confirmation-needed results.
 - [B3.13 -> E3.08] Embedded Pi plus a schema-complete Pige Tool Registry; after source
   preservation Pi Agent alone selects semantic tools, with no host-fixed/parallel path.
+- [B3.14 -> E3.09] Versioned unified `agent_turn` ingress: probed explicit-protocol Provider binding,
+  ordinary/no-evidence conversation, optional local retrieval, source tools, durable
+  waiting/resume, and no renderer/Host intent heuristic.
 
 Agent Spine Gate: embedded Pi handles preserved text/documents/images, inspect,
 parse/selected OCR, bounded Home/ingest retrieval, cited publish, and exact create-note
@@ -273,6 +279,10 @@ pre-publication replay/in-call cancellation, generic proposals/recovery, Broker,
 remaining fixed routes. The v0.80.6 exception still forbids deep imports/forks/patches/
 parallel loops. Until E3.08 passes, pause non-blocking breadth; existing safe substrate
 and security/data-loss repairs may proceed.
+
+B3.14/E3.09 is the next integration gate. Current question-like routing, mandatory Home
+search, fixed zero-evidence output, query-hash-only Job, and inferred provider protocol
+do not satisfy it. Existing records remain readable until versioned migration.
 
 B3.05 has the default, exact-destination disclosure, Home private allow/sensitive wait,
 matrix/profile-switch tests, and per-turn audits/drift rejection. Persisted stricter
@@ -299,6 +309,10 @@ Exit criteria:
   parser/OCR stays idle before its event, no-model preserves only, writes are tool-caused
   and retry-safe, and mutation gates reject direct/fixed/bypass paths. Sensitive-tool
   Permission Broker acceptance remains Phase 8.
+- [E3.09] One real app path persists the user turn and `agent_turn`, uses the selected
+  probed Provider/Global Default with truthful binding status, waits/resumes without a model, answers an
+  ordinary empty-vault prompt without tools, retrieves cited local knowledge when Pi
+  chooses, and lets Pi choose file/URL tools without heuristic or silent fallback.
 
 ## 9. Phase 4: Local Database And Search Foundation
 
@@ -417,16 +431,16 @@ Exit criteria:
 - [E5.04] Multilingual source-to-note golden fixtures pass schema, citation, unsupported-claim, and low-confidence routing checks.
 - [E5.05] Images, screenshots, image-only PDF pages, and image-heavy slides become searchable when a supported local OCR capability is available, otherwise jobs remain visibly retryable.
 
-## 11. Phase 6: Home Knowledge Retrieval, Local RAG, And Reader
+## 11. Phase 6: Home Conversation, Local Knowledge, RAG, And Reader
 
 Context pack: `docs/PRD.md` retrieval and reader sections; `docs/PROMPT_DESIGN.md`; `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`; `docs/MARKDOWN_SCHEMA.md`; `docs/KNOWLEDGE_MODEL_AND_LINKING.md`; `docs/UI_PROTOTYPE.md`; `docs/PERFORMANCE_AND_RELIABILITY.md`; `docs/I18N_DESIGN.md`.
 
 Build:
 
-- [B6.01 -> E6.01] Home knowledge-retrieval UI.
+- [B6.01 -> E6.01] Unified Home conversation UI with optional local retrieval.
 - [B6.02 -> E6.01] Ranked lexical and metadata results.
-- [B6.03 -> E6.04] Grounded summary with numbered citations and insufficient-evidence behavior.
-- [B6.04 -> E6.03] Bounded Agent Context Pack builder for Home query, Note Agent, and selection actions.
+- [B6.03 -> E6.04] Grounded citations when evidence is used; no fabricated citations for general answers.
+- [B6.04 -> E6.03] Optional bounded Context Pack for Home, Note Agent, and selection actions.
 - [B6.05 -> E6.02] Explicit Qwen3 embedding-model download, verification, disable/remove, and status flow.
 - [B6.06 -> E6.02] Local RAG engine integration.
 - [B6.07 -> E6.02] Chunk indexing and rebuild status.
@@ -439,9 +453,9 @@ Build:
 - [B6.14 -> E6.09] Knowledge Tree visual semantics: domain/topic branch weight and fragment leaf quantity/density remain explainable, accessible, and source-backed.
 - [B6.15 -> E6.10] Executable retrieval, linking, and summarization regression fixtures for ranking, grounding, citations, related pages, and insufficient evidence.
 
-Current Home foundation is one cited Pi search-tool turn, no-binding local fallback, and
-fixed zero-evidence output. Regression, vector/reranker, Note Agent, save/conversation,
-Broker, platform, and 10k acceptance remain open.
+Current Home is one mandatory cited search turn, a no-binding fallback, and fixed
+zero-evidence output. Unified intent, ordinary conversation, optional retrieval,
+regression, RAG, Note Agent, conversation, Broker, platform, and 10k proof remain open.
 
 Deferred from this phase:
 
@@ -451,7 +465,9 @@ Deferred from this phase:
 
 Exit criteria:
 
-- [E6.01] Home retrieval works before model download through lexical/metadata search and returns ranked notes rather than answer-only chat.
+- [E6.01] Home supports ordinary Agent conversation with or without retrieval; selected
+  local evidence stays ranked and cited, and explicit no-model search remains clearly
+  distinct from Agent synthesis.
 - [E6.02] Semantic retrieval works after an explicit verified local-model download and index rebuild; disable/remove leaves lexical fallback intact.
 - [E6.03] Model calls receive selected snippets, policy/budget metadata, and citation refs, not the full vault or unbounded conversation history.
 - [E6.04] Retrieval fixtures pass expected top-result, grounded-summary, citation-coverage, and insufficient-evidence checks.

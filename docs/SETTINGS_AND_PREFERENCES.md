@@ -157,7 +157,7 @@ This table is the v0.1 baseline. Implementation can split storage files differen
 | Trash/archive policy | Vault & Note Storage | `vault_portable` | Vault Runtime Service | `.pige/config.json` | Yes | `explicit_confirmation` | Immediate for future deletes |
 | Index rebuild requested | Index & Maintenance | `runtime_transient` job | Local Database Service | job record | Job backup policy | `none` | Starts a rebuildable `index_rebuild` job; unlike Reset Local Database, this does not delete derived state first |
 | Index/chunk health status | Index & Maintenance | `derived_status` | Local Database Service | SQLite/app data | No | `none` | Recomputed |
-| Provider profile metadata | Models | `machine_local` | Model Provider Registry | OS app data | No by default | `explicit_confirmation` | Immediate after validation; main process confirms before network test or secret lookup |
+| Provider profile metadata and explicit endpoint protocol | Models | `machine_local` | Model Provider Registry | OS app data | No by default | `explicit_confirmation` | New calls after validation; changing protocol reconnects and retests |
 | Provider API key | Models | `secret` | Settings and Secrets Service | OS keychain/encrypted store | No | `explicit_warning` | Immediate after test/save |
 | Provider model list cache | Models | `derived_status` | Model Provider Registry | OS app data/cache | No | `none` | Refreshable |
 | Manually added model ID | Models | `machine_local` | Model Provider Registry | OS app data | No by default | `none` | Immediate after validation |
@@ -386,9 +386,14 @@ Required tests:
 - External managed-copy root binding is machine-local, has a stable `root_` ID, appears as an external dependency in backup/restore preview, and never retargets existing sidecars when the default root changes.
 - Agent-affecting settings appear in the Agent Policy Effect Registry and compile into Agent Runtime Policy Context.
 - Provider model list refresh does not expose API keys to renderer.
-- Provider connection failures do not persist provider profiles, model profiles, or encrypted secret records.
+- Provider Connect performs the exact-protocol Pi generation/tool probe before writes;
+  failure persists nothing, and staged rollback/readback cannot delete a still-referenced secret.
 - Provider setup stores discovered models when model listing succeeds and falls back to manual model IDs only when compatible/custom endpoints explicitly do not support listing.
-- Changing default model affects new model calls.
+- The next profile revision stores an explicit Responses, Chat Completions, or Anthropic
+  Messages protocol. New custom setup requires a choice; legacy compatible/custom
+  records migrate by the Pi Owner mapping and are never inferred from URL.
+- Default binding reports not-configured/ready/configured-unusable without secret reads;
+  changing it affects new Pi calls.
 - Changing source storage strategy affects new file captures only; typed/pasted text and fetched URL snapshots remain managed copies.
 - Revoking permission grants takes effect immediately.
 - YOLO can only be enabled through explicit Settings action and remains visible/revocable.

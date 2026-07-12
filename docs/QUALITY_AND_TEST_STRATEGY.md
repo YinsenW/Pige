@@ -219,18 +219,17 @@ Tests must verify:
 
 Tests must verify:
 
-- Provider setup keeps keys in the secret store, discovers bounded model profiles, and
-  permits manual ID only for explicit compatible-endpoint no-list support. The reviewed
-  OpenAI key-only preset proves global default, rollback, non-secret readiness/no key
-  return; end-to-end ingest proves that default reaches embedded Pi durable output.
+- Provider setup proves explicit protocol, real Pi generation/tool probe before writes,
+  secret-only storage, bounded discovery/manual fallback, tri-state binding, atomic
+  restore/readback, and the selected default reaching real Home and ingest turns.
 - Pi compatibility tests bind exact same-version packages; reject deep/compat/global or
   out-of-adapter imports; and cover event/tool order, validation, abort/continue,
   queues/context, selected auth, no ambient authority, and packaged runtime on update.
 - `v0.80.6` tests keep transitive compat globals/catalog/default dispatch inert and use
   only isolated `Models` through the sole adapter.
-- One Host/catalog proves read→publish and read→retrieve→publish plus stale-result replan.
-- Initial context has source metadata/tool schemas; parser/OCR stays idle before its
-  event and no-model capture performs no semantic work.
+- One Host/catalog proves direct answer, retrieve→answer, source-tool→publish, and replan.
+- Initial context has instruction/policy/tools; evidence follows selected calls. Without
+  a model, one durable turn waits and performs no semantic work.
 - Only registered tool calls write; retry/restart reuses call/Operation identity.
 - Static plus mutation gates reject direct feature/provider loops, host-fixed tool
   order, unregistered or incomplete tools, nested tool/model execution, final-text
@@ -256,8 +255,9 @@ Tests must verify:
 
 - Context budget allocation preserves authority/safety, Runtime Policy Context, task state, output schema, and citations before lower-authority context.
 - Home retrieval sends selected snippets and citation refs to model calls, not the whole vault or large source bodies.
-- Home tests cover pre-Agent local fallback, evidence/privacy drift and replacement
-  audits, confinement/secret blocking, one untrusted tool, and fixed zero-evidence output.
+- Home tests cover ordinary empty-vault answer, Pi-selected retrieval, zero-result
+  replan, vault-only insufficiency, no Host heuristic, evidence/privacy drift,
+  confinement/secret blocking, and untrusted tool output.
 - Retrieval works through lexical/metadata fallback before local embeddings are installed.
 - CJK retrieval fixtures do not depend on whitespace-only tokenization.
 - Citation refs survive prompt assembly, structured output validation, conversation compaction, and retry.
@@ -275,7 +275,8 @@ Tests and evaluation fixtures must verify:
 - Low-confidence parsing, OCR, classification, or linking produces warnings or confirmation proposals instead of silent confident writes.
 - Home retrieval meets fixture-level relevance targets such as expected relevant pages in top results and no known distractor outranking the primary evidence.
 - Grounded summaries answer only from selected snippets and cite the evidence used.
-- When evidence is missing or contradictory, the Agent says so instead of fabricating a clean answer.
+- Grounded/vault-only answers expose missing or contradictory evidence; general answers
+  use no fabricated vault citations.
 - Note Agent and selection actions preserve selected spans and do not rewrite unrelated frontmatter or managed blocks.
 - Multilingual fixtures preserve source language metadata and answer Home queries in the query language where required.
 
