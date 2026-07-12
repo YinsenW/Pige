@@ -16,6 +16,8 @@ import type {
   PigeErrorSummary,
   ProposalState,
   ProposalTrustLevel,
+  ProviderAuthRequirement,
+  ProviderEndpointProtocol,
   ProviderKind,
   SettingApplyBehavior,
   SettingPermissionRequirement,
@@ -229,6 +231,8 @@ export interface ProviderProfileSummary {
   readonly presetId?: string;
   readonly displayName: string;
   readonly providerKind: ProviderKind;
+  readonly endpointProtocol: ProviderEndpointProtocol;
+  readonly authRequirement: ProviderAuthRequirement;
   readonly baseUrl?: string;
   readonly modelListStrategy: ModelListStrategy;
   readonly cloudBoundary: CloudBoundary;
@@ -241,11 +245,12 @@ export interface ProviderPresetSummary {
   readonly presetId: string;
   readonly displayName: string;
   readonly providerKind: ProviderKind;
-  readonly endpointProtocol: "openai_responses";
+  readonly endpointProtocol: ProviderEndpointProtocol;
+  readonly authRequirement: ProviderAuthRequirement;
   readonly fixedBaseUrl: string;
-  readonly modelListStrategy: "list_models";
-  readonly cloudBoundary: "cloud";
-  readonly apiKeyManagementUrl: string;
+  readonly modelListStrategy: ModelListStrategy;
+  readonly cloudBoundary: CloudBoundary;
+  readonly apiKeyManagementUrl?: string;
 }
 
 export interface ModelProfileSummary {
@@ -266,24 +271,68 @@ export interface ModelProviderSettingsSummary {
   readonly models: readonly ModelProfileSummary[];
   readonly defaultModelProfileId?: string;
   readonly hasDefaultModel: boolean;
+  readonly defaultBinding: DefaultModelBindingSummary;
 }
+
+export interface ProviderConnectNeedsManualModel {
+  readonly status: "needs_manual_model";
+  readonly reason: "select_bootstrap_model" | "discovery_unavailable" | "discovery_failed";
+  readonly discoveredModels: readonly {
+    readonly modelId: string;
+    readonly displayName?: string;
+  }[];
+  readonly error?: PigeErrorSummary;
+}
+
+export type ProviderConnectResult = ModelProviderSettingsSummary | ProviderConnectNeedsManualModel;
+
+export type DefaultModelBindingSummary =
+  | { readonly state: "not_configured" }
+  | {
+      readonly state: "ready";
+      readonly providerProfileId: string;
+      readonly modelProfileId: string;
+    }
+  | {
+      readonly state: "configured_unusable";
+      readonly providerProfileId?: string;
+      readonly modelProfileId?: string;
+      readonly error: PigeErrorSummary;
+    };
 
 export interface AddPresetProviderRequest {
   readonly presetId: string;
-  readonly apiKey: string;
+  readonly apiKey?: string;
 }
 
 export interface AddManualProviderRequest {
   readonly displayName: string;
   readonly providerKind: ProviderKind;
+  readonly endpointProtocol: ProviderEndpointProtocol;
   readonly baseUrl?: string;
   readonly apiKey: string;
-  readonly manualModelId: string;
+  readonly manualModelId?: string;
   readonly cloudBoundary: CloudBoundary;
 }
 
 export interface SetDefaultModelRequest {
   readonly modelProfileId: string;
+}
+
+export interface RefreshProviderModelsRequest {
+  readonly providerProfileId: string;
+}
+
+export interface AddManualModelRequest {
+  readonly providerProfileId: string;
+  readonly modelId: string;
+  readonly displayName?: string;
+}
+
+export interface UpdateModelRequest {
+  readonly modelProfileId: string;
+  readonly enabled?: boolean;
+  readonly displayName?: string | null;
 }
 
 export interface SettingRegistryEntry {
@@ -603,6 +652,60 @@ export type HomeAgentAskResult =
       readonly error: PigeErrorSummary;
     };
 
+export type AgentTurnInputKind =
+  | "typed_text"
+  | "pasted_text"
+  | "typed_url"
+  | "pasted_url"
+  | "file_drop"
+  | "file_picker"
+  | "follow_up";
+
+export type AgentTurnObjective = "auto" | "capture" | "vault_only";
+
+export interface AgentSubmitTurnRequest {
+  readonly text?: string;
+  readonly inputKind: AgentTurnInputKind;
+  readonly objective?: AgentTurnObjective;
+  readonly locale: Locale;
+}
+
+export interface AgentTurnAnswer {
+  readonly answer: string;
+  readonly grounding: "general" | "local_knowledge" | "source" | "insufficient_evidence";
+  readonly citations: readonly RetrievalAnswerCitation[];
+  readonly retrieval?: RetrievalSearchResult;
+}
+
+export type AgentSubmitTurnResult =
+  | {
+      readonly requestId: string;
+      readonly jobId: string;
+      readonly conversationEventId: string;
+      readonly state: "completed";
+      readonly modelUsage: HomeAgentModelUsage;
+      readonly sourceIds: readonly string[];
+      readonly answer: AgentTurnAnswer;
+    }
+  | {
+      readonly requestId: string;
+      readonly jobId: string;
+      readonly conversationEventId: string;
+      readonly state: "waiting";
+      readonly modelUsage: HomeAgentModelUsage;
+      readonly sourceIds: readonly string[];
+      readonly error: PigeErrorSummary;
+    }
+  | {
+      readonly requestId: string;
+      readonly jobId?: string;
+      readonly conversationEventId?: string;
+      readonly state: "failed";
+      readonly modelUsage: HomeAgentModelUsage;
+      readonly sourceIds: readonly string[];
+      readonly error: PigeErrorSummary;
+    };
+
 export interface ToolchainToolStatus {
   readonly id: string;
   readonly name: string;
@@ -734,14 +837,10 @@ export interface PigeDesktopApi {
   readonly agent: {
     readonly runtimeStatus: () => Promise<AgentRuntimeStatus>;
     readonly ask: (request: HomeAgentAskRequest) => Promise<HomeAgentAskResult>;
-  };
-  readonly capture: {
-    readonly submitText: (request: SubmitTextCaptureRequest) => Promise<CaptureSubmitResult>;
-    readonly submitUrl: (request: SubmitUrlCaptureRequest) => Promise<CaptureSubmitResult>;
-    readonly submitDroppedFiles: (
-      files: readonly File[],
-      request: SubmitDroppedFilesCaptureRequest
-    ) => Promise<CaptureFilesSubmitResult>;
+    readonly submitTurn: (
+      request: AgentSubmitTurnRequest,
+      files?: readonly File[]
+    ) => Promise<AgentSubmitTurnResult>;
   };
   readonly jobs: {
     readonly list: (request?: JobsListRequest) => Promise<JobsListResult>;
@@ -764,7 +863,6 @@ export interface PigeDesktopApi {
   };
   readonly retrieval: {
     readonly search: (request: RetrievalSearchRequest) => Promise<RetrievalSearchResult>;
-    readonly ask: (request: RetrievalAskRequest) => Promise<RetrievalAskResult>;
   };
   readonly vault: {
     readonly current: () => Promise<VaultSummary | undefined>;
@@ -789,8 +887,11 @@ export interface PigeDesktopApi {
   };
   readonly models: {
     readonly summary: () => Promise<ModelProviderSettingsSummary>;
-    readonly addPresetProvider: (request: AddPresetProviderRequest) => Promise<ModelProviderSettingsSummary>;
-    readonly addManualProvider: (request: AddManualProviderRequest) => Promise<ModelProviderSettingsSummary>;
+    readonly addPresetProvider: (request: AddPresetProviderRequest) => Promise<ProviderConnectResult>;
+    readonly addManualProvider: (request: AddManualProviderRequest) => Promise<ProviderConnectResult>;
+    readonly refreshProviderModels: (request: RefreshProviderModelsRequest) => Promise<ModelProviderSettingsSummary>;
+    readonly addManualModel: (request: AddManualModelRequest) => Promise<ModelProviderSettingsSummary>;
+    readonly updateModel: (request: UpdateModelRequest) => Promise<ModelProviderSettingsSummary>;
     readonly setDefaultModel: (request: SetDefaultModelRequest) => Promise<ModelProviderSettingsSummary>;
   };
   readonly settings: {

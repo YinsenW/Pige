@@ -646,26 +646,21 @@ Date: 2026-07-09
 
 Decision:
 
-Pige's default user-facing UI must stay radically simple. Upstream catalogs, provider ecosystems, package ecosystems, model capabilities, data-boundary metadata, routing rules, and Agent internals can exist as implementation metadata, but they must not automatically become visible UI.
+Default UI hides implementation catalogs, boundaries, routing, and Agent internals unless
+a user task needs them.
 
 Rationale:
 
-Pige's core product promise is low-friction personal knowledge capture and retrieval. Exposing technical catalogs and capability matrices makes the app feel like an admin console and forces users to reason about implementation details before they can use it.
+Minimize learning cost.
 
 Consequences:
 
-- Model setup is a short connection form whose job is only to connect one model service Pi Agent can call.
-- Simplicity does not mean removing required controls: model list management is required, including automatic provider ModelList discovery when available and manual model ID entry when unavailable.
-- One default model must be enough to run Pige. Advanced/Fast model-slot settings must not be exposed until Pi Agent upstream or Pige's own runtime layer makes those settings effective.
-- Add Provider must not show provider marketplaces, capability columns, access-method columns, data-boundary columns, pricing, context windows, routing internals, or advanced filters by default.
-- Pi package, Skill, provider, and local tool catalogs should be curated or hidden behind progressive disclosure.
-- Future AI agents should remove visible complexity when a workflow can be served by defaults, inference, or internal metadata.
+- Curated defaults and disclosure expose required discovery/manual fallback and one
+  Global Default, not marketplaces, matrices, routing, boundary columns, or untested slots.
 
 References:
 
 - `AGENTS.md`
-- `docs/START_HERE_FOR_AI_AGENTS.md`
-- `docs/PRD.md`
 - `docs/UI_PROTOTYPE.md`
 
 ### D-20260709-Agent-Affecting-Settings-Use-Policy-Context
@@ -705,28 +700,20 @@ Date: 2026-07-09
 
 Decision:
 
-Pige v0.1 exposes one effective default Pi Agent model. Advanced Model, Fast Model, tool model, or task-class model-routing settings are deferred and hidden unless a real runtime support gate is satisfied.
+v0.1 exposes one Global Default; other routing needs stable Pi or a tested Pige service.
 
 Rationale:
 
-Pi's current public model surface supports model registration, selection, scoped model lists, and thinking levels, but not a stable product-level Advanced/Fast automatic routing strategy. A visible setting that does not affect Agent behavior would be worse than no setting.
+Visible settings that do not change Pi behavior are false controls.
 
 Consequences:
 
-- Add Provider still manages provider connection, model-list discovery, manual model IDs, and one default model.
-- The Settings sidebar must not show Model Assignment or Model Routing in v0.1.
-- Future model routing requires either stable Pi upstream support or a Pige-owned Model Routing Service with tests proving runtime model selection changes.
-- If future routing ships, the UI may expose at most Default, Advanced, and Fast slots; it must not become a per-task routing table.
+- Future UI never becomes a per-task routing grid.
 
 References:
 
 - `AGENTS.md`
-- `docs/PRD.md`
 - `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`
-- `docs/TECH_ARCHITECTURE.md`
-- `docs/UI_PROTOTYPE.md`
-- Pi Custom Models docs: https://pi.dev/docs/latest/models
-- Pi dual-model proposal: https://github.com/earendil-works/pi/issues/2844
 
 ### D-20260709-Local-RAG-Default
 
@@ -1455,30 +1442,23 @@ Revised: 2026-07-10
 
 Decision:
 
-Phase 1 stores BYOK provider metadata and model profiles as machine-local records, stores API keys through encrypted secret storage, exposes one effective default Pi Agent model through redacted `models.*` IPC, and classifies implemented user-visible settings through a Settings Registry.
+Provider/model metadata is local, keys encrypted, IPC redacted, one default drives Pi,
+and Settings Registry classifies visible state.
 
 Rationale:
 
-Pige must leave capture-only mode only when there is a real default model profile contract the Agent runtime can resolve. At the same time, provider setup must stay simple and must not leak upstream provider complexity or raw keys into renderer DTOs, vault files, SQLite, diagnostics, or backups.
+Readiness needs a resolvable binding without leaking keys or upstream complexity.
 
 Consequences:
 
-- `provider-profiles.json` stores provider metadata and `authSecretRef`, not API keys.
-- `model-profiles.json` stores manual/discovered model profiles and the selected default model.
-- `secrets.json` stores encrypted secret blobs in machine-local app data through Electron safeStorage; this decision does not authorize plaintext mode without its explicit warning flow.
-- Renderer receives `ProviderProfileSummary` and `ModelProfileSummary`, never raw API keys.
-- Onboarding state becomes `ready` only when an active vault and default model profile exist; otherwise an active vault remains `capture_only`.
-- Agent Runtime Policy Context includes `defaultModelProfileId` and `modelConfigured` when a default model is selected.
-- The Models UI remains a short connection form and does not expose Advanced/Fast model routing, provider marketplaces, capability matrices, pricing, context windows, or per-workflow routing.
-- The Settings Registry classifies implemented settings by scope, owner, storage, backup behavior, apply behavior, and agent policy effect when relevant.
+- Files hold metadata, conditional secret refs, inventory, and default; secret blobs never
+  enter renderer, vault, SQLite, logs, or backups.
+- `ready` needs active vault plus usable default; policy and Registry metadata stay redacted.
 
 References:
 
 - `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`
 - `docs/SETTINGS_AND_PREFERENCES.md`
-- `docs/API_AND_IPC_DESIGN.md`
-- `docs/SECURITY_THREAT_MODEL.md`
-- `docs/UI_PROTOTYPE.md`
 
 ### D-20260709-Phase-1-Pending-Sqlite-Driver
 
@@ -1654,42 +1634,54 @@ References:
 
 ### D-20260709-Provider-Setup-Tests-Before-Save
 
-Status: Accepted
+Status: Superseded
 Date: 2026-07-09
-Revised: 2026-07-12
+Superseded by: D-20260712-Preset-First-Provider-And-Unified-Model-Inventory
 
 Decision:
 
-Phase 3 Provider setup tests before persistence. The current recommended path is the
-reviewed OpenAI preset: API key only, fixed endpoint/Responses protocol, bounded model
-discovery, reviewed default, and one global model list. Compatible/custom endpoints that
-explicitly lack listing may use a manual model ID.
+Provider setup tests credentials and model listing before persistence.
 
 Rationale:
 
-The Models page says "Test and Save", so saving invalid credentials would create a false-ready Agent runtime state. Pige also needs to support both official providers with model-list APIs and self-hosted or compatible endpoints that require manual model IDs.
+Invalid credentials must not create a false-ready runtime.
 
 Consequences:
 
-- API keys are used only in the main process for the connection test and secret-store write.
-- `models.addPresetProvider` is write-only toward main, requires validation/confirmation,
-  never returns the key, and restores the known-good binding on failure.
-- Authentication failures, invalid base URLs, invalid model-list payloads, and missing selected models fail before any provider/model/secret records are persisted.
-- `ProviderBaseUrlSchema` is shared by persistence, connection tests, boundary classification, and model calls; it canonicalizes safe URLs and rejects non-loopback HTTP, non-HTTP(S) protocols, credentials, queries, and fragments before credentials are accessed or sent.
-- Built-in OpenAI/Anthropic profiles use fixed official endpoints and cannot persist a custom `baseUrl`; compatible/custom profiles may claim `local`/`loopback_verified` only when the canonical URL is actually loopback. Schema reads reject edited metadata that could disguise a cloud call as verified local.
-- OpenAI-format providers use `/v1/models` with Bearer auth; Anthropic-format providers use `/v1/models` with `x-api-key` and `anthropic-version`.
-- Renderer receives only redacted provider/model summaries, never API keys, request headers, raw provider responses, or secret refs.
-- Catalog/help action/custom protocol polish, durable preset identity/replacement policy,
-  multi-provider lifecycle, and packaged manual BYOK acceptance remain open.
-- This provider-setup decision does not itself authorize model-call execution; the implemented basic execution bridge is governed by `D-20260709-Phase-3-Basic-Agent-Ingest-Bridge`.
+- Its fail-before-save and redacted-secret boundary survives in the replacement.
 
 References:
 
-- `docs/API_AND_IPC_DESIGN.md`
 - `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`
-- `docs/SECURITY_THREAT_MODEL.md`
+
+### D-20260712-Preset-First-Provider-And-Unified-Model-Inventory
+
+Status: Accepted
+Date: 2026-07-12
+Supersedes: D-20260709-Provider-Setup-Tests-Before-Save
+
+Decision:
+
+Provider setup is preset-first: templates own protocol/Endpoint, Custom alone exposes
+protocol, discovery/manual fallback share one Provider inventory, and enabled models feed
+one Provider-grouped Global Default.
+
+Rationale:
+
+Users choose services/models, not overlapping protocol fields, duplicate lists, or raw defaults.
+
+Consequences:
+
+- Connect discovers and probes before all-or-restore commit; exact Provider + Model ID
+  merges records while Refresh/failure preserves choices and exposes typed repair.
+- Manual ID is fallback; boundary taxonomy stays internal; DeepSeek real BYOK—not
+  synthetic-only evidence—is the first acceptance.
+
+References:
+
+- `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`
 - `docs/SETTINGS_AND_PREFERENCES.md`
-- `docs/TECH_ARCHITECTURE.md`
+- `docs/API_AND_IPC_DESIGN.md`
 
 ### D-20260709-Node-Sqlite-Initial-Local-Database-Driver
 
@@ -2508,26 +2500,21 @@ Date: 2026-07-12
 
 Decision:
 
-After one disclosure, selecting a Profile authorizes ordinary/private/bounded-large
-calls to that destination. `ordinary_allowed` is default with non-blocking status;
-sensitive confirms, restricted blocks, and unknown/changed destinations confirm.
+One exact-destination disclosure authorizes routine selected context; sensitive confirms,
+restricted blocks, and unknown/changed destinations reconfirm.
 
 Rationale:
 
-Local ownership, no Pige cloud account, and no telemetry define local-first; repeated
-BYOK prompts add only friction.
+Local ownership and no telemetry define local-first; repeated BYOK prompts add friction.
 
 Consequences:
 
-- Trust grants no tool, setting, permission, extension, or destructive authority.
-- Send selected context directly, never the whole vault or a Pige cloud proxy.
-- Default/disclosure are executable; persisted stricter settings and confirmation resume remain open.
+- Trust grants no other authority or whole-vault/proxy send; `ordinary_allowed` has quiet
+  status while stricter persisted policy/resume stays open.
 
 References:
 
 - `docs/AGENT_RUNTIME_POLICY_CONTEXT.md`
-- `docs/PRD.md`
-- `docs/SECURITY_THREAT_MODEL.md`
 - `PRIVACY.md`
 
 ## 4. Deferred Decisions

@@ -5,7 +5,13 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ModelProfileSummary, ProviderProfileSummary, VaultSummary } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
-import { JobRecordSchema, type JobRecord, type OperationRecord, type SourceRecord } from "@pige/schemas";
+import {
+  JobRecordSchema,
+  type ConfirmationProposal,
+  type JobRecord,
+  type OperationRecord,
+  type SourceRecord
+} from "@pige/schemas";
 import {
   AgentIngestService,
   type AgentIngestModelConfigPort,
@@ -17,12 +23,14 @@ import { EvidenceAssemblyService } from "../../apps/desktop/src/main/services/ev
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
 import {
+  createPigeAgentToolCatalogHash,
   PiAgentRuntimeAdapter,
   type PigeAgentToolResult,
   type PiAgentRunRequest,
   type PiAgentRunResult,
   type PiFauxResponse
 } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
+import { RESPOND_TO_USER_TOOL_NAME } from "../../apps/desktop/src/main/services/agent-ingest-tool-registry";
 import { ProposalService } from "../../apps/desktop/src/main/services/proposal-service";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
 
@@ -284,8 +292,12 @@ describe("Agent-selected ingest proposal tool", () => {
     const fixture = makeVault();
     const proposals = new ProposalService(fixture.vaultPort);
     let firstRuntimeCalls = 0;
+    let legacyCatalogHash = "";
     const firstRuntime = new FunctionalRuntime(async (request) => {
       firstRuntimeCalls += 1;
+      legacyCatalogHash = createPigeAgentToolCatalogHash(
+        request.tools.filter((tool) => tool.name !== RESPOND_TO_USER_TOOL_NAME)
+      );
       await invokeTool(request, "pige_inspect_source", {}, "inspect_before_crash");
       await invokeTool(
         request,
@@ -357,6 +369,19 @@ describe("Agent-selected ingest proposal tool", () => {
     )).rejects.toThrow("Synthetic process failure");
     const parentId = parent.id;
     const stagedId = requireValue(proposals.findForJob(parentId)?.id);
+    const proposalPath = requireValue(listFiles(
+      path.join(fixture.vaultPath, ".pige", "proposals"),
+      `${stagedId}.json`
+    )[0]);
+    const legacyProposal = JSON.parse(fs.readFileSync(proposalPath, "utf8")) as ConfirmationProposal;
+    fs.writeFileSync(proposalPath, `${JSON.stringify({
+      ...legacyProposal,
+      sourceRefs: legacyProposal.sourceRefs.map((ref) => (
+        ref.kind === "tool" && ref.id.startsWith("agent_proposal_catalog_binding:")
+          ? { ...ref, id: `agent_proposal_catalog_binding:${legacyCatalogHash}` }
+          : ref
+      ))
+    }, null, 2)}\n`, "utf8");
     const interruptedParent = readJob(fixture.vaultPath, parentId);
     expect(interruptedParent.state).toBe("running");
     expect(interruptedParent.proposalIds).toBeUndefined();

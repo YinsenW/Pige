@@ -2,6 +2,7 @@ import http, { type IncomingMessage, type Server, type ServerResponse } from "no
 import { afterEach, describe, expect, it } from "vitest";
 import { PiAgentRuntimeAdapter } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
+import { createModelRuntimeBindingIdentity } from "../../apps/desktop/src/main/services/model-runtime-binding";
 
 const servers: Server[] = [];
 
@@ -10,10 +11,15 @@ afterEach(async () => {
 });
 
 describe("Pi AI provider binding", () => {
-  it("uses the selected OpenAI-compatible profile through Pi AI with no ambient dispatcher", async () => {
+  it("dispatches OpenAI Chat Completions by explicit protocol rather than compatible kind", async () => {
     const requests: CapturedRequest[] = [];
     const baseUrl = await startServer(requests, respondOpenAi);
-    const config = makeConfig("openai_compatible", `${baseUrl}/v1`, "openai-selected");
+    const config = makeConfig(
+      "openai_chat_completions",
+      "anthropic_compatible",
+      `${baseUrl}/v1`,
+      "openai-selected"
+    );
 
     const result = await new PiAgentRuntimeAdapter().run({
       runtimeConfig: config,
@@ -30,10 +36,44 @@ describe("Pi AI provider binding", () => {
     expect(requests[0]?.body).toContain('"model":"openai-selected"');
   });
 
-  it("uses the selected Anthropic-compatible profile through Pi AI with scoped x-api-key auth", async () => {
+  it("runs an explicit no-auth local provider without Authorization or ambient credentials", async () => {
+    const requests: CapturedRequest[] = [];
+    const baseUrl = await startServer(requests, respondOpenAi);
+    const keyed = makeConfig(
+      "openai_chat_completions",
+      "openai_compatible",
+      `${baseUrl}/v1`,
+      "ollama-selected",
+      "ollama"
+    );
+    const { authSecretRef: _authSecretRef, ...provider } = keyed.provider;
+
+    const result = await new PiAgentRuntimeAdapter().run({
+      runtimeConfig: {
+        provider: { ...provider, authRequirement: "none" },
+        model: keyed.model
+      },
+      jobId: "job_20260712_pinoauth",
+      systemPrompt: "Return a bounded acknowledgement.",
+      userPrompt: "Acknowledge this synthetic local request.",
+      tools: []
+    });
+
+    expect(result.assistantText).toBe("openai binding ok");
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.authorization).toBeUndefined();
+    expect(requests[0]?.apiKey).toBeUndefined();
+  });
+
+  it("dispatches Anthropic Messages by explicit protocol rather than compatible kind", async () => {
     const requests: CapturedRequest[] = [];
     const baseUrl = await startServer(requests, respondAnthropic);
-    const config = makeConfig("anthropic_compatible", baseUrl, "anthropic-selected");
+    const config = makeConfig(
+      "anthropic_messages",
+      "openai_compatible",
+      baseUrl,
+      "anthropic-selected"
+    );
 
     const result = await new PiAgentRuntimeAdapter().run({
       runtimeConfig: config,
@@ -53,8 +93,22 @@ describe("Pi AI provider binding", () => {
   it("keeps two same-vendor profiles isolated by selected model and scoped credential", async () => {
     const requests: CapturedRequest[] = [];
     const baseUrl = await startServer(requests, respondOpenAi);
-    const first = makeConfig("openai_compatible", `${baseUrl}/v1`, "same-vendor-a", "a", "profile-key-a");
-    const second = makeConfig("openai_compatible", `${baseUrl}/v1`, "same-vendor-b", "b", "profile-key-b");
+    const first = makeConfig(
+      "openai_chat_completions",
+      "custom",
+      `${baseUrl}/v1`,
+      "same-vendor-a",
+      "a",
+      "profile-key-a"
+    );
+    const second = makeConfig(
+      "openai_chat_completions",
+      "custom",
+      `${baseUrl}/v1`,
+      "same-vendor-b",
+      "b",
+      "profile-key-b"
+    );
 
     const firstResult = await new PiAgentRuntimeAdapter().run({
       runtimeConfig: first,
@@ -78,6 +132,91 @@ describe("Pi AI provider binding", () => {
     ]);
     expect(requests[0]?.body).toContain('"model":"same-vendor-a"');
     expect(requests[1]?.body).toContain('"model":"same-vendor-b"');
+  });
+
+  it("preserves DeepSeek-compatible OpenAI and Anthropic generation path prefixes", async () => {
+    const openAiRequests: CapturedRequest[] = [];
+    const openAiBaseUrl = await startServer(openAiRequests, respondOpenAi);
+    const anthropicRequests: CapturedRequest[] = [];
+    const anthropicBaseUrl = await startServer(anthropicRequests, respondAnthropic);
+
+    await new PiAgentRuntimeAdapter().run({
+      runtimeConfig: makeConfig(
+        "openai_chat_completions",
+        "openai_compatible",
+        openAiBaseUrl,
+        "openai-selected",
+        "deepseek_openai",
+        "synthetic-openai-compatible-key"
+      ),
+      jobId: "job_20260712_deepseekopenai",
+      systemPrompt: "Return a bounded acknowledgement.",
+      userPrompt: "Acknowledge this synthetic local request.",
+      tools: []
+    });
+    await new PiAgentRuntimeAdapter().run({
+      runtimeConfig: makeConfig(
+        "anthropic_messages",
+        "anthropic_compatible",
+        `${anthropicBaseUrl}/anthropic`,
+        "anthropic-selected",
+        "deepseek_anthropic",
+        "synthetic-anthropic-compatible-key"
+      ),
+      jobId: "job_20260712_deepseekanthropic",
+      systemPrompt: "Return a bounded acknowledgement.",
+      userPrompt: "Acknowledge this synthetic local request.",
+      tools: []
+    });
+
+    expect(openAiRequests).toEqual([
+      expect.objectContaining({
+        path: "/chat/completions",
+        authorization: "Bearer synthetic-openai-compatible-key"
+      })
+    ]);
+    expect(anthropicRequests).toEqual([
+      expect.objectContaining({
+        path: "/anthropic/v1/messages",
+        apiKey: "synthetic-anthropic-compatible-key"
+      })
+    ]);
+  });
+
+  it("treats endpoint protocol changes as binding identity drift", () => {
+    const config = makeConfig(
+      "openai_chat_completions",
+      "custom",
+      "https://models.example.com/v1",
+      "identity-model"
+    );
+    const model = { ...config.model, isDefault: true };
+    const original = createModelRuntimeBindingIdentity(model, config.provider);
+    const changed = createModelRuntimeBindingIdentity(model, {
+      ...config.provider,
+      endpointProtocol: "openai_responses"
+    });
+
+    expect(changed.providerIdentityHash).not.toBe(original.providerIdentityHash);
+    expect(changed.modelIdentityHash).toBe(original.modelIdentityHash);
+  });
+
+  it("fails closed before dispatch when a compatible runtime binding omits its Base URL", async () => {
+    const config = makeConfig(
+      "openai_chat_completions",
+      "custom",
+      "https://must-not-be-used.example/v1",
+      "missing-base-model"
+    );
+    const { baseUrl: _baseUrl, ...providerWithoutBaseUrl } = config.provider;
+
+    await expect(new PiAgentRuntimeAdapter().run({
+      runtimeConfig: { ...config, provider: providerWithoutBaseUrl },
+      jobId: "job_20260712_missingbase",
+      systemPrompt: "Do not dispatch.",
+      userPrompt: "Do not dispatch.",
+      tools: []
+    })).rejects.toMatchObject({ code: "model_provider.base_url_missing" });
   });
 });
 
@@ -176,7 +315,8 @@ async function readBody(request: IncomingMessage): Promise<string> {
 }
 
 function makeConfig(
-  providerKind: "openai_compatible" | "anthropic_compatible",
+  endpointProtocol: ModelProviderRuntimeConfig["provider"]["endpointProtocol"],
+  providerKind: ModelProviderRuntimeConfig["provider"]["providerKind"],
   baseUrl: string,
   modelId: string,
   suffix = providerKind,
@@ -187,6 +327,8 @@ function makeConfig(
       id: `provider_${suffix}`,
       displayName: providerKind,
       providerKind,
+      endpointProtocol,
+      authRequirement: "api_key",
       baseUrl,
       authSecretRef: `provider_secret_${suffix}`,
       modelListStrategy: "manual",

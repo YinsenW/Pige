@@ -121,34 +121,32 @@ fields; this owner defines protocol, boundary, migration, and secret-reference m
 
 ```ts
 type ProviderProfile = {
-  id: string; providerKind: ProviderKind;
+  id: string; presetId?: string; displayName: string; providerKind: ProviderKind;
   endpointProtocol: "openai_responses" | "openai_chat_completions" | "anthropic_messages";
-  baseUrl?: string; authSecretRef: string; cloudBoundary: CloudBoundary;
+  baseUrl?: string; authRequirement: "api_key" | "optional_api_key" | "none";
+  authSecretRef?: string; modelListStrategy: ModelListStrategy;
+  cloudBoundary: CloudBoundary; boundaryVerification?: BoundaryVerification;
 };
 ```
 
 Rules:
 
-- `endpointProtocol`, not Provider kind or URL, is the target runtime-dispatch authority.
-  New manual profiles use `custom` plus an explicit protocol. A versioned migration maps
-  `openai` to Responses, `anthropic`/`anthropic_compatible` to Messages, and
-  `openai_compatible`/legacy `custom` to Chat Completions. Legacy kinds stay readable
-  and are never silently reinterpreted as Responses. This profile/schema migration and
-  three-protocol UI/runtime proof remain open.
+- Presets are reviewed Pige metadata over Pi AI: stable ID, kind, protocol, Endpoint,
+  auth, discovery, help URL, and bootstrap model. UI asks service plus credentials only;
+  Custom alone asks one of the three protocols, Base URL, and credentials.
+- `endpointProtocol`, never URL/kind, dispatches calls. Migration maps `openai` to
+  Responses, `anthropic` kinds to Messages, and compatible/legacy `custom` to Chat
+  Completions without reinterpretation.
+- Keys live only in the secret store. Required auth needs a reference, optional auth
+  stores one only when supplied, and `none` forbids one. Pi AI 0.80.6 gets an in-memory
+  non-secret token sentinel for `none`; adapters strip auth headers.
+- `ProviderProfileSchema` rejects missing or non-`builtin_verified` boundary metadata;
+  custom URLs are canonical HTTPS or loopback HTTP without userinfo/query/fragment. Profiles stay out of backup;
+  cloud/self-hosted/local is internal egress metadata, not setup taxonomy.
+- `Connect` authorizes only the disclosed Profile/Endpoint. Changed/unknown boundaries
+  reconfirm; auth/network/timeout/payload/list failures return typed repair, never empty success.
 
-- Keys live only in the secret store; profiles hold `authSecretRef`. Reviewed adapters
-  construct auth at call time; metadata cannot persist arbitrary `defaultHeaders`.
-- `ProviderProfileSchema` in `packages/schemas/src/index.ts` is the executable profile contract. Profiles are excluded from default vault
-  backup; records use redacted IDs, and UI shows cloud/local only when relevant.
-- Built-in OpenAI/Anthropic use their fixed built-in endpoints, do not persist `baseUrl`,
-  and require `cloud` + `builtin_verified`; schema rejects missing or non-`builtin_verified` boundary metadata. Compatible/custom profiles use their URL. Only canonical loopback can be `local` +
-  `loopback_verified`; schema rejects both directions of a mismatch.
-- `ProviderBaseUrlSchema` is the single persisted and runtime-call URL contract: HTTPS,
-  or HTTP only for canonical loopback; no userinfo, query, fragment, or weaker edited path.
-- The final disclosed `Connect` authorizes routine egress only to that exact Profile and
-  canonical endpoint. Unknown or changed boundary/endpoint confirms again. This grants
-  no tool, setting, permission, extension, filesystem, or secret authority; the typed
-  matrix remains owned by `docs/AGENT_RUNTIME_POLICY_CONTEXT.md`.
+`ProviderProfileSchema` in `packages/schemas/src/index.ts` is the executable profile contract. Built-ins use their fixed built-in endpoints, do not persist `baseUrl`; `ProviderBaseUrlSchema` is the single persisted and runtime-call URL contract and rejects both directions of a mismatch. Profiles cannot persist arbitrary `defaultHeaders`. Authentication, network, timeout, invalid payload, and official-provider list failures remain failures and return typed repair.
 
 ## 7. Model Profile Model
 
@@ -158,27 +156,23 @@ executable fields live in `ModelProfileSchema`; this owner defines runtime meani
 ```ts
 type ModelProfile = {
   id: string; providerProfileId: string; modelId: string;
-  source: "provider_list" | "manual"; enabled: boolean;
+  displayName?: string; source: "provider_list" | "manual"; enabled: boolean;
+  supportsTools?: boolean; supportsVision?: boolean;
 };
 ```
 
 Rules:
 
-- v0.1 requires one effective default model.
-- If provider model listing succeeds, Pige stores discovered model profiles.
-- Where a Pi provider catalog is static, Pige supplies only the bounded model-list
-  callback and registers its results into the Job's isolated Pi `Models`; it does not
-  introduce another provider SDK or copy Pi's protocol/catalog runtime.
-- Add Provider tests before save: OpenAI-format uses Bearer `/v1/models`; Anthropic-format
-  uses `x-api-key`, `anthropic-version`, and `/v1/models`. Authentication, network, timeout, invalid payload, and official-provider list failures remain failures; only an explicitly unsupported compatible
-  list route permits manual ID, and successful lists require a selected returned ID.
-- Pi Agent calls must resolve through a selected `ModelProfile`, not a free-text runtime string.
-- Connect runs one synthetic real Pi generation/tool round trip with the exact protocol,
-  model, endpoint, and key before persisting anything. Model-list success alone is not
-  readiness. Probe health is transient and contains no user/vault content.
-- Provider, model, and secret writes stage, read back, and commit as one recoverable
-  change or restore the prior set. Recovery never deletes a secret referenced by restored
-  metadata.
+- One inventory keys exact `(providerProfileId, modelId)`; discovery/manual records merge
+  while preserving alias, enabled state, and Global Default. Missing/new refresh IDs are
+  retained/disabled respectively; failed discovery preserves inventory and offers typed
+  Retry/manual fallback rather than empty success.
+- First Connect enables its validated bootstrap model and sets it as Global Default only
+  when none exists. Default selects an enabled model across Providers; disabling it needs
+  an atomic replacement, and unusable bindings stay visible without auto-switch/free text.
+- Connect discovers non-durably, selects or requests a bootstrap ID, runs a real synthetic
+  Pi generation/tool probe, then readback-commits all or restores all.
+- Pi AI remains the provider runtime; Pige neither copies its catalog nor adds a parallel SDK.
 - Redacted summaries distinguish `not_configured`, `ready`, and
   `configured_unusable`; the last carries a typed repair action rather than looking
   unconfigured or exposing endpoint, secret ref, or raw failure.
@@ -188,12 +182,16 @@ Rules:
 
 Current preset foundation:
 
-- `openai` fixes the official endpoint, Pi Responses protocol, bounded discovery, and
-  reviewed `gpt-5-mini`; its default UI asks only for the key. Confirmation precedes
-  mutation and failure restores the prior binding.
-- Models share one global list/default. Full catalog/help action/custom protocol polish,
-  durable preset identity/replacement policy, multi-provider lifecycle, and packaged
-  manual BYOK proof remain open.
+- Presets implement OpenAI/Responses, Anthropic/Messages, Gemini and DeepSeek/Chat, plus
+  no-auth loopback Ollama; Custom exposes all three protocols. Optional-key UI proof is open.
+- `presetId` reconnect preserves identity/choices and cannot replace same-Endpoint Custom.
+  Connect journals Provider/model/secret; Refresh journals Provider/model. Startup rolls
+  back incomplete state and removes old secrets only after journal removal.
+- Assembled loopback proves renderer-to-Pi connect/restart. A real legacy Custom DeepSeek
+  profile proves secret resolution, Chat direct/restart-cited Home, and clean diagnostics,
+  not fresh DeepSeek preset Connect.
+- Full catalog/help/delete, durable sync health, live DeepSeek preset/Anthropic, URL fetch,
+  durable follow-up, and signed packaged platforms remain open.
 
 ## 8. Pi Custom Models Boundary
 
@@ -383,8 +381,8 @@ Required tests:
 
 ## 16. Implementation Checklist
 
-Runtime currently reports only `embedded_pi_sdk`; non-secret readiness checks an enabled
-default model/provider/secret presence, and each run creates one isolated Pi model
+Runtime reports only `embedded_pi_sdk`; non-secret readiness checks an enabled default
+model/provider and required-auth satisfaction, and each run creates one isolated Pi model
 collection. Legacy DTO values remain readable; no alternate runtime is enabled.
 
 Phase 3 implementation note:
@@ -393,12 +391,12 @@ Phase 3 implementation note:
   retrieval/write tools replan or fail before effects. Egress, binding, evidence,
   cancellation, and commit are rechecked; raw prompts/responses/keys do not persist.
 - No model preserves sources and waits; unavailable/empty document evidence writes no note.
-- Home currently requires one Pi search tool, routes question-like input separately,
-  and stops on empty evidence. These are explicit B3.13/E3.08 gaps; ordinary chat,
-  optional retrieval, unified input, and real Provider-to-Home proof remain open.
+- Home text uses durable `agent.submitTurn`: Pi may answer directly or select cited local
+  retrieval; one preserved file carries the same draft; missing/broken bindings wait with
+  typed repair and no silent fallback. Legacy handlers stay readable.
 
-Remaining work: unify ingress, remove fixed routes, prove Provider-to-Home general and
-knowledge-enhanced turns, finish catalog/risk/proposal/Broker/recovery/packaging, and
+Remaining work: Agent-selected URL fetch, durable follow-up/multi-source recovery,
+catalog/help/delete/sync polish, Broker/packaging, and
 re-review both Pi pins together whenever either changes.
 
 ## 17. References

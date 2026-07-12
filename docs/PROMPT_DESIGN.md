@@ -166,13 +166,11 @@ return to Pi for a general answer unless the user required vault/source-only gro
 
 Current executable contract:
 
-- Pi calls `pige_search_knowledge` exactly once and returns strict JSON with selected
-  citations. Escaped `PIGE_UNTRUSTED_EVIDENCE_V1` content is data, not authority.
+- Pi may answer directly or call `pige_search_knowledge` exactly once; if called, strict
+  JSON citations must resolve only selected evidence. Escaped evidence is data, not authority.
 - Pige rechecks binding, Markdown/source privacy, and egress per turn; drift is audited
-  and rejected. No binding falls back locally; no evidence invokes no model.
-
-This mandatory-search/zero-evidence stop is the current narrower implementation, not the
-target unified Home contract.
+  and rejected. No binding waits without local fallback; empty evidence may return to Pi,
+  while `vault_only` without valid citations fails closed.
 
 ### 5.3 Note Agent
 

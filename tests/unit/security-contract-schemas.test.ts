@@ -194,6 +194,15 @@ describe("security-sensitive shared contracts", () => {
       apiKey: "synthetic-key",
       baseUrl: "https://attacker.example/v1"
     })).toThrow();
+    expect(AddPresetProviderRequestSchema.parse({ presetId: "ollama" })).toEqual({ presetId: "ollama" });
+    expect(AddManualProviderRequestSchema.parse({
+      displayName: "Discover first",
+      providerKind: "custom",
+      endpointProtocol: "openai_chat_completions",
+      baseUrl: "https://models.example.com/v1",
+      apiKey: "synthetic-key",
+      cloudBoundary: "unknown"
+    })).not.toHaveProperty("manualModelId");
     expect(() => AddManualProviderRequestSchema.parse({
       displayName: "Compatible",
       providerKind: "openai_compatible",
@@ -202,6 +211,31 @@ describe("security-sensitive shared contracts", () => {
       manualModelId: "model",
       cloudBoundary: "unknown"
     })).toThrow();
+  });
+
+  it("binds required, optional, and no-auth Provider Profiles without dummy secret references", () => {
+    const common = {
+      id: "provider_keyless",
+      displayName: "Keyless",
+      providerKind: "openai_compatible" as const,
+      endpointProtocol: "openai_chat_completions" as const,
+      baseUrl: "http://127.0.0.1:11434/v1",
+      modelListStrategy: "list_models" as const,
+      cloudBoundary: "local" as const,
+      boundaryVerification: "loopback_verified" as const,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    };
+
+    expect(ProviderProfileSchema.parse({ ...common, authRequirement: "none" })).not.toHaveProperty("authSecretRef");
+    expect(ProviderProfileSchema.parse({ ...common, authRequirement: "optional_api_key" })).not.toHaveProperty("authSecretRef");
+    expect(() => ProviderProfileSchema.parse({
+      ...common,
+      authRequirement: "none",
+      authSecretRef: "provider_secret_forbidden"
+    })).toThrow("cannot persist a secret reference");
+    expect(() => ProviderProfileSchema.parse({ ...common, authRequirement: "api_key" }))
+      .toThrow("require a secret reference");
   });
 
   it("normalizes safe provider URLs and rejects unsafe URLs in persisted metadata", () => {

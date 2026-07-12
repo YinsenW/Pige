@@ -18,11 +18,13 @@ import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/ser
 import { extractPdfText } from "../../apps/desktop/src/main/services/pdf-parser-core";
 import { PdfParserService } from "../../apps/desktop/src/main/services/pdf-parser-service";
 import {
+  createPigeAgentToolCatalogHash,
   PiAgentRuntimeAdapter,
   type PiFauxResponse,
   type PiAgentRunRequest,
   type PiAgentRunResult
 } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
+import { RESPOND_TO_USER_TOOL_NAME } from "../../apps/desktop/src/main/services/agent-ingest-tool-registry";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
 import { createTestPdf } from "./helpers/pdf-fixture";
 
@@ -283,7 +285,7 @@ describe("Agent-led PDF parse tool", () => {
     )).toContain("# Retried Agent-selected PDF knowledge");
   });
 
-  it("reuses one waiting parse child across genuine Pi call IDs and stores capped hashed provenance", async () => {
+  it("reuses one waiting parse child across a known prior catalog generation and genuine Pi call IDs", async () => {
     const fixture = makeVault();
     const sourceBody = "This preserved PDF waits safely when its local parser dependency is unavailable.";
     const captured = await preservePdf(fixture, "waiting-parser.pdf", sourceBody);
@@ -322,6 +324,15 @@ describe("Agent-led PDF parse tool", () => {
         });
         const waitingChildren = readJobs(fixture.vaultPath).filter((job) => job.class === "parse");
         expect(waitingChildren).toHaveLength(1);
+        if (index === 0) {
+          const firstChild = requireValue(waitingChildren[0]);
+          writeJob(fixture.vaultPath, {
+            ...firstChild,
+            inputRefs: firstChild.inputRefs?.map((ref) => ref.role === "agent_tool_catalog"
+              ? { ...ref, checksum: runtime.legacyCatalogHash }
+              : ref)
+          });
+        }
         observedChildIds.push(requireValue(waitingChildren[0]).id);
         expect(readJob(fixture.vaultPath, parentId).state).toBe("waiting_dependency");
         if (index < parseCallIds.length - 1) {
@@ -590,11 +601,15 @@ class RecordingRuntime implements AgentIngestRuntimePort {
 
 class SequencedWaitingParseRuntime implements AgentIngestRuntimePort {
   readonly results: PiAgentRunResult[] = [];
+  legacyCatalogHash = "";
   #nextCall = 0;
 
   constructor(private readonly parseCallIds: readonly string[]) {}
 
   async run(request: PiAgentRunRequest): Promise<PiAgentRunResult> {
+    this.legacyCatalogHash ||= createPigeAgentToolCatalogHash(
+      request.tools.filter((tool) => tool.name !== RESPOND_TO_USER_TOOL_NAME)
+    );
     const parseCallId = requireValue(this.parseCallIds[this.#nextCall]);
     const callNumber = this.#nextCall + 1;
     this.#nextCall += 1;

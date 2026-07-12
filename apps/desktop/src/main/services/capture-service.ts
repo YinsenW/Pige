@@ -34,6 +34,11 @@ export interface SourceFetchPort {
   readonly fetchSnapshot: (url: string) => Promise<SourceFetchSnapshot>;
 }
 
+export interface AgentTurnFilePreservationBinding {
+  readonly jobId: string;
+  readonly sourceId: string;
+}
+
 const SHORT_CONVERSATION_TEXT_LIMIT = 500;
 const FILE_KIND_BY_EXTENSION = new Map<string, SourceKind>([
   [".md", "markdown_file"],
@@ -289,6 +294,29 @@ export class CaptureService {
   }
 
   async submitFiles(request: SubmitFilesCaptureRequest): Promise<CaptureFilesSubmitResult> {
+    return this.#preserveFiles(request, true);
+  }
+
+  async preserveFilesForAgentTurn(
+    request: SubmitFilesCaptureRequest,
+    binding?: AgentTurnFilePreservationBinding
+  ): Promise<CaptureFilesSubmitResult> {
+    if (
+      binding &&
+      (!/^job_\d{8}_[a-z0-9]{8,}$/u.test(binding.jobId) ||
+        !/^src_\d{8}_[a-z0-9]{8,}$/u.test(binding.sourceId) ||
+        request.filePaths.length !== 1)
+    ) {
+      throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The source preservation binding is invalid.");
+    }
+    return this.#preserveFiles(request, false, binding);
+  }
+
+  async #preserveFiles(
+    request: SubmitFilesCaptureRequest,
+    createCaptureJobs: boolean,
+    agentTurnBinding?: AgentTurnFilePreservationBinding
+  ): Promise<CaptureFilesSubmitResult> {
     const vaultPath = this.#vaults.activeVaultPath();
     const vault = this.#vaults.current();
     if (!vault || !vaultPath) {
@@ -328,7 +356,7 @@ export class CaptureService {
         continue;
       }
 
-      const sourceId = createDatedId("src", dateKey);
+      const sourceId = agentTurnBinding?.sourceId ?? createDatedId("src", dateKey);
       const jobId = createDatedId("job", dateKey);
       const eventId = createDatedId("evt", dateKey);
       const managedCopyPath = vaultRelativePath("raw", "files", monthKey, `${sourceId}${extension}`);
@@ -365,6 +393,7 @@ export class CaptureService {
             userIntent: request.userIntent,
             locale: request.locale,
             captureId,
+            ...(agentTurnBinding ? { agentTurnJobId: agentTurnBinding.jobId } : {}),
             originalExtension: extension,
             parserStatus: isTextLikeFileSource(sourceKind) ? "text_ready" : "waiting_parser_or_ocr",
             parserRequired: !isTextLikeFileSource(sourceKind)
@@ -377,7 +406,7 @@ export class CaptureService {
         const conversationEvent: ConversationEvent = ConversationEventSchema.parse({
           id: eventId,
           conversationId,
-          type: "capture_reference",
+          type: createCaptureJobs ? "capture_reference" : "attachment_reference",
           createdAt: timestamp,
           sourceId,
           captureId,
@@ -386,21 +415,23 @@ export class CaptureService {
         });
         appendConversationEvent(resolveVaultPath(vaultPath, conversationPath), conversationEvent);
 
-        const jobRecord: JobRecord = JobRecordSchema.parse({
-          id: jobId,
-          class: "capture",
-          state: "queued",
-          createdAt: timestamp,
-          updatedAt: timestamp,
-          sourceId,
-          captureId,
-          conversationEventId: eventId,
-          message: "File capture preserved and queued for later processing."
-        });
-        writeJsonAtomic(resolveVaultPath(vaultPath, jobRecordPath), jobRecord);
+        if (createCaptureJobs) {
+          const jobRecord: JobRecord = JobRecordSchema.parse({
+            id: jobId,
+            class: "capture",
+            state: "queued",
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            sourceId,
+            captureId,
+            conversationEventId: eventId,
+            message: "File capture preserved and queued for later processing."
+          });
+          writeJsonAtomic(resolveVaultPath(vaultPath, jobRecordPath), jobRecord);
+        }
 
         sourceIds.push(sourceId);
-        jobIds.push(jobId);
+        if (createCaptureJobs) jobIds.push(jobId);
         conversationEventIds.push(eventId);
       } catch {
         rejectedFiles.push({ displayName, reason: "copy_failed" });

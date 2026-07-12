@@ -46,7 +46,7 @@ export type PigeAgentToolTrust = "model_generated" | "untrusted_source" | "host_
 export type PigeAgentToolExecution = "sequential" | "parallel_read_only";
 
 export interface PigeAgentToolDataBoundary {
-  readonly resourceScope: "current_source" | "current_vault";
+  readonly resourceScope: "none" | "current_source" | "current_vault";
   readonly pathAuthority: "host_only";
   readonly sourceIdAuthority: "host_only";
   readonly modelAuthority: "none";
@@ -153,6 +153,7 @@ interface ScopedPiBinding {
 
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_ANTHROPIC_BASE_URL = "https://api.anthropic.com";
+const KEYLESS_PROVIDER_TRANSPORT_SENTINEL = "pige-keyless-provider";
 const MAX_TURN_EVENTS = 512;
 export const MAX_PIGE_TOOL_CALL_ID_UTF8_BYTES = 256;
 
@@ -310,18 +311,11 @@ export function createPigeAgentToolCatalogHash(
 }
 
 function createProviderBinding(config: ModelProviderRuntimeConfig): ScopedPiBinding {
-  const anthropic = config.provider.providerKind === "anthropic" ||
-    config.provider.providerKind === "anthropic_compatible";
-  const api = anthropic
-    ? "anthropic-messages"
-    : config.provider.providerKind === "openai"
-      ? "openai-responses"
-      : "openai-completions";
-  const baseUrl = normalizeProviderBaseUrl(
-    config.provider.baseUrl ?? (anthropic ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_OPENAI_BASE_URL)
-  );
+  const api = toPiApi(config.provider.endpointProtocol);
+  const baseUrl = resolveProviderBaseUrl(config);
   const providerId = `pige:${config.provider.id}`;
-  const model: Model<typeof api> = {
+  const keyless = config.apiKey === undefined && config.provider.authRequirement !== "api_key";
+  const model: Model<Api> = {
     id: config.model.modelId,
     name: config.model.displayName ?? config.model.modelId,
     api,
@@ -339,20 +333,27 @@ function createProviderBinding(config: ModelProviderRuntimeConfig): ScopedPiBind
     id: providerId,
     name: config.provider.displayName,
     baseUrl,
-    auth: {
-      apiKey: {
-        name: "Pige brokered provider credential",
-        resolve: async ({ credential }) => credential?.key
-          ? { auth: { apiKey: credential.key }, source: "pige_credential_store" }
-          : undefined
-      }
-    },
+    auth: config.apiKey ? {
+        apiKey: {
+          name: "Pige brokered provider credential",
+          resolve: async ({ credential }) => credential?.key
+            ? { auth: { apiKey: credential.key }, source: "pige_credential_store" }
+            : undefined
+        }
+      } : keyless ? {
+        apiKey: {
+          name: "Pige keyless provider",
+          resolve: async () => ({
+            auth: {
+              apiKey: KEYLESS_PROVIDER_TRANSPORT_SENTINEL,
+              headers: { Authorization: null, "x-api-key": null }
+            },
+            source: "pige_keyless_provider"
+          })
+        }
+      } : {},
     models: [model],
-    api: (anthropic
-      ? anthropicMessagesApi()
-      : config.provider.providerKind === "openai"
-        ? openAIResponsesApi()
-        : openAICompletionsApi()) as ProviderStreams
+    api: providerStreams(config.provider.endpointProtocol)
   }));
   const selected = models.getModel(providerId, config.model.modelId);
   if (!selected) {
@@ -362,6 +363,60 @@ function createProviderBinding(config: ModelProviderRuntimeConfig): ScopedPiBind
     model: selected,
     streamSimple: (model, context, options) => models.streamSimple(model, context, options)
   };
+}
+
+function resolveProviderBaseUrl(config: ModelProviderRuntimeConfig): string {
+  if (config.provider.baseUrl) return normalizeProviderBaseUrl(config.provider.baseUrl);
+  if (config.provider.providerKind === "openai" || config.provider.providerKind === "anthropic") {
+    return defaultBaseUrl(config.provider.endpointProtocol);
+  }
+  throw new PigeDomainError(
+    "model_provider.base_url_missing",
+    "Compatible and custom providers require an explicit endpoint."
+  );
+}
+
+function toPiApi(endpointProtocol: ModelProviderRuntimeConfig["provider"]["endpointProtocol"]): Api {
+  switch (endpointProtocol) {
+    case "openai_responses":
+      return "openai-responses";
+    case "openai_chat_completions":
+      return "openai-completions";
+    case "anthropic_messages":
+      return "anthropic-messages";
+    default:
+      throw unsupportedEndpointProtocolError();
+  }
+}
+
+function defaultBaseUrl(
+  endpointProtocol: ModelProviderRuntimeConfig["provider"]["endpointProtocol"]
+): string {
+  return endpointProtocol === "anthropic_messages"
+    ? DEFAULT_ANTHROPIC_BASE_URL
+    : DEFAULT_OPENAI_BASE_URL;
+}
+
+function providerStreams(
+  endpointProtocol: ModelProviderRuntimeConfig["provider"]["endpointProtocol"]
+): ProviderStreams {
+  switch (endpointProtocol) {
+    case "openai_responses":
+      return openAIResponsesApi();
+    case "openai_chat_completions":
+      return openAICompletionsApi();
+    case "anthropic_messages":
+      return anthropicMessagesApi();
+    default:
+      throw unsupportedEndpointProtocolError();
+  }
+}
+
+function unsupportedEndpointProtocolError(): PigeDomainError {
+  return new PigeDomainError(
+    "model_provider.protocol_unsupported",
+    "The selected provider endpoint protocol is unavailable."
+  );
 }
 
 function createFauxBinding(
@@ -397,11 +452,11 @@ function createFauxBinding(
 
 class ScopedCredentialStore implements CredentialStore {
   readonly #providerId: string;
-  readonly #credential: Credential;
+  readonly #credential: Credential | undefined;
 
-  constructor(providerId: string, apiKey: string) {
+  constructor(providerId: string, apiKey: string | undefined) {
     this.#providerId = providerId;
-    this.#credential = { type: "api_key", key: apiKey };
+    this.#credential = apiKey ? { type: "api_key", key: apiKey } : undefined;
   }
 
   async read(providerId: string): Promise<Credential | undefined> {
@@ -546,7 +601,7 @@ function isPigeAgentToolExecution(value: unknown): value is PigeAgentToolExecuti
 
 function isPigeAgentToolDataBoundary(value: unknown): value is PigeAgentToolDataBoundary {
   return isExactRecord(value, ["resourceScope", "pathAuthority", "sourceIdAuthority", "modelAuthority"]) &&
-    (value.resourceScope === "current_source" || value.resourceScope === "current_vault") &&
+    (value.resourceScope === "none" || value.resourceScope === "current_source" || value.resourceScope === "current_vault") &&
     value.pathAuthority === "host_only" &&
     value.sourceIdAuthority === "host_only" &&
     value.modelAuthority === "none";
@@ -555,7 +610,7 @@ function isPigeAgentToolDataBoundary(value: unknown): value is PigeAgentToolData
 function isPigeAgentToolIdempotency(value: unknown): value is PigeAgentToolIdempotency {
   if (!isExactRecord(value, ["mode", "scope"])) return false;
   return value.mode === "idempotent"
-    ? value.scope === "current_source" || value.scope === "current_vault" || value.scope === "tool_call"
+    ? value.scope === "none" || value.scope === "current_source" || value.scope === "current_vault" || value.scope === "tool_call"
     : value.mode === "non_idempotent" && value.scope === "none";
 }
 

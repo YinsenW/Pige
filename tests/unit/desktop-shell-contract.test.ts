@@ -77,9 +77,11 @@ describe("desktop shell build contract", () => {
       rendererSource.indexOf("function jobStateMessageKey")
     );
 
-    expect(mainSource).toContain('ipcMain.handle("agent.ask"');
-    expect(preloadSource).toContain('ipcRenderer.invoke("agent.ask", request)');
-    expect(homeComposer).toContain("window.pige.agent.ask");
+    expect(mainSource).toContain('ipcMain.handle("agent.submitTurn"');
+    expect(preloadSource).toContain('ipcRenderer.invoke("agent.submitTurn", { request, filePaths })');
+    expect(preloadSource).not.toContain('ipcRenderer.invoke("capture.submit');
+    expect(preloadSource).not.toContain('ipcRenderer.invoke("retrieval.ask"');
+    expect(homeComposer).toContain("window.pige.agent.submitTurn");
     expect(homeComposer).toContain('setAgentRunState("accepted")');
     expect(homeComposer).toContain('setAgentRunState("running")');
     expect(homeComposer).toContain("outcome.error");
@@ -92,13 +94,28 @@ describe("desktop shell build contract", () => {
     expect(rendererSource).toContain('props.result.warnings.includes("insufficient_evidence")');
     expect(rendererSource).toContain('props.result.answerMode === "model_grounded" ? "retrieval.modelGrounded" : "retrieval.localOnly"');
     expect(rendererSource).toContain('props.t("retrieval.cloudSent")');
-    expect(rendererSource).toContain("do|does|did|can|could|would|should");
+    expect(rendererSource).not.toContain("function isLikelyQuestion");
+    expect(rendererSource).not.toContain("function extractSingleCaptureUrl");
+    expect(homeComposer).not.toContain("window.pige.capture.submitText");
+    expect(homeComposer).not.toContain("window.pige.capture.submitUrl");
+    expect(homeComposer).toContain("classifyTextTransportKind(turnText)");
+    expect(rendererSource).toContain('view === "home" ? homeDraftText : undefined');
+    expect(homeComposer).toContain("const text = props.draftText");
+    expect(homeComposer).toContain("props.onDraftChange(event.target.value)");
     expect(homeComposer).toContain('job.class !== "retrieval_query"');
-    const submitAgentQuestion = homeComposer.slice(
-      homeComposer.indexOf("const submitAgentQuestion"),
-      homeComposer.indexOf("const openResult")
+    expect(rendererSource).toContain('classes: ["capture", "parse", "ocr", "agent_ingest", "agent_turn", "index_rebuild"]');
+    const submitHomeInput = homeComposer.slice(
+      homeComposer.indexOf("const submitHomeInput"),
+      homeComposer.indexOf("const openProposal")
     );
-    expect(submitAgentQuestion).not.toContain("caught instanceof Error ? caught.message");
+    expect(submitHomeInput).not.toContain("caught instanceof Error ? caught.message");
+    const retryHandler = mainSource.slice(
+      mainSource.indexOf('ipcMain.handle("jobs.retry"'),
+      mainSource.indexOf('ipcMain.handle("library.list"')
+    );
+    expect(retryHandler).toContain('result.job?.class === "agent_turn"');
+    expect(retryHandler).toContain("scheduleAgentIngestProcessing()");
+    expect(retryHandler).toContain("scheduleAgentTurnProcessing()");
   });
 
   it("routes proposal decisions through durable Job apply and startup recovery", () => {
@@ -164,7 +181,9 @@ describe("desktop shell build contract", () => {
     expect(rendererSource).not.toContain('type View = "review"');
   });
 
-  it("keeps the reviewed Provider path API-key-only and the custom form progressively disclosed", () => {
+  it("keeps reviewed preset credentials scoped and the custom form discovery-first", () => {
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
     const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
     const styles = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/styles/app.css"), "utf8");
     const panel = rendererSource.slice(
@@ -177,10 +196,29 @@ describe("desktop shell build contract", () => {
     );
 
     expect(presetSurface).toContain('type="password"');
+    expect(presetSurface).toContain('preset.authRequirement !== "none"');
+    expect(presetSurface).toContain('preset.authRequirement === "api_key"');
     expect(panel).toContain("addPresetProvider");
     expect(presetSurface).not.toContain("manualModelId");
     expect(presetSurface).not.toContain("baseUrl");
     expect(panel).toContain('<details className="custom-provider">');
+    expect(panel).toContain('id="provider-protocol"');
+    expect(panel).toContain('manualBootstrap ? { manualModelId: manualModelId.trim() } : {}');
+    expect(panel).toContain("setManualBootstrap(result)");
+    expect(panel).toContain("result.discoveredModels");
+    expect(panel).toContain('id="global-default-model"');
+    expect(panel).toContain("refreshProviderModels");
+    expect(panel).toContain("providerSyncFailures.has(provider.id)");
+    expect(panel).toContain('role="alert"');
+    expect(panel).toContain("addManualModel");
+    expect(panel).toContain("setModelEnabled");
+    expect(panel).toContain("setModelDisplayName");
+    expect(panel).not.toContain('id="cloud-boundary"');
+    expect(panel).not.toContain('id="provider-kind"');
+    for (const channel of ["models.refreshProviderModels", "models.addManualModel", "models.updateModel"]) {
+      expect(mainSource).toContain(`ipcMain.handle("${channel}"`);
+      expect(preloadSource).toContain(`ipcRenderer.invoke("${channel}"`);
+    }
     expect(styles).toContain(".agent-run-state > span:nth-child(2)");
     expect(styles).toContain("overflow-wrap: anywhere");
   });

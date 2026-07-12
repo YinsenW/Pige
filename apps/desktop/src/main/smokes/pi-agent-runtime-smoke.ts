@@ -86,6 +86,18 @@ export async function runHomeAgentRuntimeSmoke(): Promise<{
     const service = new HomeAgentService(
       vaults,
       {
+        summary: () => ({
+          presets: [],
+          providers: [smokeProviderSummary],
+          models: [smokeModelSummary],
+          defaultModelProfileId: smokeModelSummary.id,
+          hasDefaultModel: true,
+          defaultBinding: {
+            state: "ready",
+            providerProfileId: smokeProviderSummary.id,
+            modelProfileId: smokeModelSummary.id
+          }
+        }),
         getDefaultModel: () => smokeModelSummary,
         getDefaultProvider: () => smokeProviderSummary,
         hasDefaultRuntimeBinding: () => true,
@@ -99,7 +111,15 @@ export async function runHomeAgentRuntimeSmoke(): Promise<{
       new PiAgentRuntimeAdapter({
         fauxResponses: [
           { kind: "tool_call", toolName: "pige_search_knowledge", args: {} },
-          { kind: "text", text: JSON.stringify({ answer: "Smoke evidence is grounded. [1]", citationRefs: ["citation_1"] }) }
+          {
+            kind: "tool_call",
+            toolName: "pige_finish_home_turn",
+            args: {
+              answer: "Smoke evidence is grounded. [1]",
+              citationRefs: ["citation_1"],
+              grounding: "local_knowledge"
+            }
+          }
         ]
       })
     );
@@ -145,6 +165,8 @@ const runtimeConfig: ModelProviderRuntimeConfig = {
     id: "provider_pi_smoke",
     displayName: "Pi Smoke",
     providerKind: "openai_compatible",
+    endpointProtocol: "openai_responses",
+    authRequirement: "api_key",
     baseUrl: "http://127.0.0.1:43123/v1",
     authSecretRef: "provider_secret_pi_smoke",
     modelListStrategy: "manual",
@@ -169,6 +191,8 @@ const smokeProviderSummary: ProviderProfileSummary = {
   id: runtimeConfig.provider.id,
   displayName: runtimeConfig.provider.displayName,
   providerKind: runtimeConfig.provider.providerKind,
+  endpointProtocol: runtimeConfig.provider.endpointProtocol,
+  authRequirement: runtimeConfig.provider.authRequirement,
   ...(runtimeConfig.provider.baseUrl ? { baseUrl: runtimeConfig.provider.baseUrl } : {}),
   modelListStrategy: runtimeConfig.provider.modelListStrategy,
   cloudBoundary: runtimeConfig.provider.cloudBoundary,

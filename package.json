@@ -23,6 +23,8 @@
     "test:eval": "vitest run tests/evals",
     "test:eval:report": "node scripts/evals/retrieval-regression-report.mjs",
     "smoke:pi-agent-runtime": "npm run smoke:electron-pi-agent --workspace @pige/desktop",
+    "smoke:persisted-provider-canary": "npm run smoke:electron-persisted-provider --workspace @pige/desktop",
+    "smoke:unified-agent-roundtrip": "npm run smoke:electron-unified-agent-roundtrip --workspace @pige/desktop",
     "lint": "npm run verify:boundaries",
     "format:check": "npm run verify:whitespace",
     "verify": "npm run verify:docs && npm run verify:decisions && npm run verify:ui-visual && npm run verify:independent-documentation-review && npm run verify:traceability && npm run verify:contracts && npm run verify:dependencies && npm run verify:fixtures && npm run verify:boundaries && npm run verify:no-telemetry && npm run verify:source-artifacts && npm run verify:documentation-leanness && npm run verify:documentation-quality",

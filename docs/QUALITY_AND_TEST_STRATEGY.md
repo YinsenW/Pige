@@ -219,15 +219,20 @@ Tests must verify:
 
 Tests must verify:
 
-- Provider setup proves explicit protocol, real Pi generation/tool probe before writes,
-  secret-only storage, bounded discovery/manual fallback, tri-state binding, atomic
-  restore/readback, and the selected default reaching real Home and ingest turns.
+- Provider gates prove five presets, Custom-only protocols, API-key/no-auth execution plus
+  optional-auth schema/adapter, real pre-write Pi probe, unified inventory/Refresh/manual
+  merge, grouped default, transaction-journal recovery, redacted binding, and readback.
+- Assembled loopback proves renderer→preload→main→Registry→Pi direct/cited/source turns
+  and restart. A real legacy Custom DeepSeek Chat canary proves normal secret resolution,
+  direct/restart-cited Home, and 14 clean diagnostics; it does not prove fresh DeepSeek
+  preset Connect. Live preset/Anthropic and signed packaged matrices remain open.
 - Pi compatibility tests bind exact same-version packages; reject deep/compat/global or
   out-of-adapter imports; and cover event/tool order, validation, abort/continue,
   queues/context, selected auth, no ambient authority, and packaged runtime on update.
 - `v0.80.6` tests keep transitive compat globals/catalog/default dispatch inert and use
   only isolated `Models` through the sole adapter.
-- One Host/catalog proves direct answer, retrieve→answer, source-tool→publish, and replan.
+- Renderer→preload→main proves direct, Pi-selected retrieve, preserve-first source,
+  wait/resume, and removal of capture/retrieval semantic bypass from the Home renderer.
 - Initial context has instruction/policy/tools; evidence follows selected calls. Without
   a model, one durable turn waits and performs no semantic work.
 - Only registered tool calls write; retry/restart reuses call/Operation identity.

@@ -17,6 +17,7 @@ export default defineConfig({
         input: {
           index: alias("./src/main/index.ts"),
           "pi-agent-runtime-smoke": alias("./src/main/smokes/pi-agent-runtime-smoke.ts"),
+          "unified-agent-roundtrip-smoke": alias("./src/main/smokes/unified-agent-roundtrip-smoke.ts"),
           [LOCAL_DATABASE_REBUILD_WORKER_ENTRY_NAME]: alias("./src/main/workers/local-database-rebuild-worker.ts"),
           [OFFICE_PARSER_WORKER_ENTRY_NAME]: alias("./src/main/workers/office-parser-worker.ts"),
           [PDF_PAGE_RENDERER_WORKER_ENTRY_NAME]: alias("./src/main/workers/pdf-page-renderer-worker.ts"),

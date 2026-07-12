@@ -69,6 +69,14 @@ export const ProviderKindSchema = z.enum([
   "custom"
 ]);
 
+export const ProviderEndpointProtocolSchema = z.enum([
+  "openai_responses",
+  "openai_chat_completions",
+  "anthropic_messages"
+]);
+
+export const ProviderAuthRequirementSchema = z.enum(["api_key", "optional_api_key", "none"]);
+
 export const ModelListStrategySchema = z.enum(["list_models", "manual", "failed_then_manual"]);
 
 export const CloudBoundarySchema = z.enum(["cloud", "self_hosted", "local", "unknown"]);
@@ -706,6 +714,7 @@ export const JobClassSchema = z.enum([
   "capture",
   "parse",
   "ocr",
+  "agent_turn",
   "agent_ingest",
   "retrieval_query",
   "index_rebuild",
@@ -1229,36 +1238,96 @@ export const ProviderBaseUrlSchema = z.string()
 
 export const AddPresetProviderRequestSchema = z.object({
   presetId: z.string().trim().min(1).max(64).regex(/^[a-z][a-z0-9_-]*$/u),
-  apiKey: z.string().trim().min(1).max(16_384)
+  apiKey: z.string().trim().min(1).max(16_384).optional()
 }).strict();
 
 export const AddManualProviderRequestSchema = z.object({
   displayName: z.string().trim().min(1).max(80),
   providerKind: ProviderKindSchema,
+  endpointProtocol: ProviderEndpointProtocolSchema,
   baseUrl: ProviderBaseUrlSchema.optional(),
   apiKey: z.string().trim().min(1).max(16_384),
-  manualModelId: z.string().trim().min(1).max(200),
+  manualModelId: z.string().trim().min(1).max(200).optional(),
   cloudBoundary: CloudBoundarySchema
-}).strict();
+}).strict().superRefine((request, context) => {
+  if (!isBuiltInProviderKind(request.providerKind) && request.baseUrl === undefined) {
+    context.addIssue({
+      code: "custom",
+      message: "Compatible and custom providers require an explicit base URL.",
+      path: ["baseUrl"],
+      params: { pigeErrorCode: "model_provider.base_url_missing" }
+    });
+  }
+});
 
 export const SetDefaultModelRequestSchema = z.object({
   modelProfileId: z.string().regex(/^model_[a-z0-9_]+$/)
 }).strict();
 
-export const ProviderProfileSchema = z.object({
+export const RefreshProviderModelsRequestSchema = z.object({
+  providerProfileId: z.string().regex(/^provider_[a-z0-9_]+$/)
+}).strict();
+
+export const AddManualModelRequestSchema = z.object({
+  providerProfileId: z.string().regex(/^provider_[a-z0-9_]+$/),
+  modelId: z.string().trim().min(1).max(200).regex(/^[A-Za-z0-9][A-Za-z0-9._:/-]*$/u),
+  displayName: z.string().trim().min(1).max(200).optional()
+}).strict();
+
+export const UpdateModelRequestSchema = z.object({
+  modelProfileId: z.string().regex(/^model_[a-z0-9_]+$/),
+  enabled: z.boolean().optional(),
+  displayName: z.string().trim().min(1).max(200).nullable().optional()
+}).strict().refine(
+  (request) => request.enabled !== undefined || request.displayName !== undefined,
+  { message: "Model update requires an enabled state or display name." }
+);
+
+const ProviderProfileCurrentSchema = z.object({
   id: z.string().regex(/^provider_[a-z0-9_]+$/),
+  presetId: z.string().trim().min(1).max(64).regex(/^[a-z][a-z0-9_-]*$/u).optional(),
   displayName: z.string().min(1),
   providerKind: ProviderKindSchema,
+  endpointProtocol: ProviderEndpointProtocolSchema,
   baseUrl: ProviderBaseUrlSchema.optional(),
-  authSecretRef: z.string().regex(/^provider_secret_[a-z0-9_]+$/),
+  authRequirement: ProviderAuthRequirementSchema,
+  authSecretRef: z.string().regex(/^provider_secret_[a-z0-9_]+$/).optional(),
   modelListStrategy: ModelListStrategySchema,
   cloudBoundary: CloudBoundarySchema,
   boundaryVerification: BoundaryVerificationSchema.optional(),
   createdAt: z.string().datetime({ offset: true }),
   updatedAt: z.string().datetime({ offset: true })
 }).superRefine((profile, context) => {
+  if (profile.authRequirement === "api_key" && profile.authSecretRef === undefined) {
+    context.addIssue({
+      code: "custom",
+      message: "API-key Provider Profiles require a secret reference.",
+      path: ["authSecretRef"]
+    });
+  }
+  if (profile.authRequirement === "none" && profile.authSecretRef !== undefined) {
+    context.addIssue({
+      code: "custom",
+      message: "No-auth Provider Profiles cannot persist a secret reference.",
+      path: ["authSecretRef"]
+    });
+  }
   const builtIn = isBuiltInProviderKind(profile.providerKind);
   const loopback = profile.baseUrl !== undefined && isProviderLoopbackHostname(new URL(profile.baseUrl).hostname);
+
+  const requiredBuiltInProtocol = profile.providerKind === "openai"
+    ? "openai_responses"
+    : profile.providerKind === "anthropic"
+      ? "anthropic_messages"
+      : undefined;
+  if (requiredBuiltInProtocol && profile.endpointProtocol !== requiredBuiltInProtocol) {
+    context.addIssue({
+      code: "custom",
+      message: "The built-in provider protocol does not match its reviewed endpoint.",
+      path: ["endpointProtocol"],
+      params: { pigeErrorCode: "model_provider.protocol_mismatch" }
+    });
+  }
 
   if (builtIn) {
     if (profile.baseUrl !== undefined) {
@@ -1282,6 +1351,16 @@ export const ProviderProfileSchema = z.object({
         path: ["boundaryVerification"]
       });
     }
+    return;
+  }
+
+  if (profile.baseUrl === undefined) {
+    context.addIssue({
+      code: "custom",
+      message: "Compatible and custom provider profiles require an explicit base URL.",
+      path: ["baseUrl"],
+      params: { pigeErrorCode: "model_provider.base_url_missing" }
+    });
     return;
   }
 
@@ -1311,6 +1390,23 @@ export const ProviderProfileSchema = z.object({
     });
   }
 });
+
+export const ProviderProfileSchema = z.preprocess((value) => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return value;
+  const providerKind = "providerKind" in value ? value.providerKind : undefined;
+  const endpointProtocol = "endpointProtocol" in value
+    ? value.endpointProtocol
+    : providerKind === "openai"
+      ? "openai_responses"
+      : providerKind === "anthropic" || providerKind === "anthropic_compatible"
+        ? "anthropic_messages"
+        : "openai_chat_completions";
+  return {
+    ...value,
+    endpointProtocol,
+    authRequirement: "authRequirement" in value ? value.authRequirement : "api_key"
+  };
+}, ProviderProfileCurrentSchema);
 
 export const ModelProfileSchema = z.object({
   id: z.string().regex(/^model_[a-z0-9_]+$/),
@@ -1422,6 +1518,8 @@ export type PermissionRequest = z.infer<typeof PermissionRequestSchema>;
 export type ProposalState = z.infer<typeof ProposalStateSchema>;
 export type ProposalTrustLevel = z.infer<typeof ProposalTrustLevelSchema>;
 export type ProviderKind = z.infer<typeof ProviderKindSchema>;
+export type ProviderEndpointProtocol = z.infer<typeof ProviderEndpointProtocolSchema>;
+export type ProviderAuthRequirement = z.infer<typeof ProviderAuthRequirementSchema>;
 export type ProviderProfile = z.infer<typeof ProviderProfileSchema>;
 export type ProviderProfilesFile = z.infer<typeof ProviderProfilesFileSchema>;
 export type SettingApplyBehavior = z.infer<typeof SettingApplyBehaviorSchema>;

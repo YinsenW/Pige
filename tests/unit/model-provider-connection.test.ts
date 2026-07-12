@@ -12,6 +12,7 @@ describe("model provider connection tester", () => {
 
     const result = await tester.testManualProvider({
       providerKind: "openai",
+      endpointProtocol: "openai_responses",
       apiKey: "sk-test",
       manualModelId: "gpt-4.1",
       cloudBoundary: "cloud"
@@ -35,6 +36,7 @@ describe("model provider connection tester", () => {
 
     const result = await tester.testManualProvider({
       providerKind: "anthropic",
+      endpointProtocol: "anthropic_messages",
       apiKey: "sk-ant-test",
       manualModelId: "claude-sonnet-test",
       cloudBoundary: "cloud"
@@ -51,6 +53,7 @@ describe("model provider connection tester", () => {
 
     const result = await tester.testManualProvider({
       providerKind: "openai_compatible",
+      endpointProtocol: "openai_chat_completions",
       baseUrl: "https://models.example.com/v1/",
       apiKey: "test-key",
       manualModelId: "private-model",
@@ -68,6 +71,7 @@ describe("model provider connection tester", () => {
     await expect(
       tester.testManualProvider({
         providerKind: "openai",
+        endpointProtocol: "openai_responses",
         apiKey: "test-key",
         manualModelId: "unverified-model",
         cloudBoundary: "cloud"
@@ -80,6 +84,7 @@ describe("model provider connection tester", () => {
 
     await expect(tester.testManualProvider({
       providerKind: "openai",
+      endpointProtocol: "openai_responses",
       baseUrl: "https://proxy.example.com/v1",
       apiKey: "test-key",
       manualModelId: "model",
@@ -93,6 +98,7 @@ describe("model provider connection tester", () => {
     await expect(
       tester.testManualProvider({
         providerKind: "openai",
+        endpointProtocol: "openai_responses",
         apiKey: "test-key",
         manualModelId: "missing-model",
         cloudBoundary: "cloud"
@@ -107,6 +113,7 @@ describe("model provider connection tester", () => {
     await expect(
       tester.testManualProvider({
         providerKind: "openai_compatible",
+        endpointProtocol: "openai_chat_completions",
         baseUrl: "http://models.example.com/v1",
         apiKey: "test-key",
         manualModelId: "model",
@@ -127,6 +134,7 @@ describe("model provider connection tester", () => {
       await expect(
         tester.testManualProvider({
           providerKind: "openai_compatible",
+          endpointProtocol: "openai_chat_completions",
           baseUrl,
           apiKey: "test-key",
           manualModelId: "model",
@@ -145,6 +153,7 @@ describe("model provider connection tester", () => {
 
     await tester.testManualProvider({
       providerKind: "openai_compatible",
+      endpointProtocol: "openai_chat_completions",
       baseUrl: " HTTP://[::1]:11434/v1/// ",
       apiKey: "local-placeholder",
       manualModelId: "local-model",
@@ -157,6 +166,7 @@ describe("model provider connection tester", () => {
   it("fails closed on oversized or unbounded model-list responses", async () => {
     const request = {
       providerKind: "openai" as const,
+      endpointProtocol: "openai_responses" as const,
       apiKey: "test-key",
       manualModelId: "gpt-5-mini",
       cloudBoundary: "cloud" as const
@@ -176,6 +186,7 @@ describe("model provider connection tester", () => {
   it("bounds discovered model counts and model metadata", async () => {
     const request = {
       providerKind: "openai" as const,
+      endpointProtocol: "openai_responses" as const,
       apiKey: "test-key",
       manualModelId: "gpt-5-mini",
       cloudBoundary: "cloud" as const
@@ -200,10 +211,116 @@ describe("model provider connection tester", () => {
 
     await expect(tester.testManualProvider({
       providerKind: "openai",
+      endpointProtocol: "openai_responses",
       apiKey: "test-key",
       manualModelId: "gpt-5-mini",
       cloudBoundary: "cloud"
     })).rejects.toThrow("timed out while reading");
+  });
+
+  it("uses the explicit protocol for model-list auth without inferring it from compatible kind", async () => {
+    let authorization: string | null = null;
+    let apiKey: string | null = null;
+    const tester = new ModelProviderConnectionTester(async (_url, init) => {
+      const headers = new Headers(init?.headers);
+      authorization = headers.get("authorization");
+      apiKey = headers.get("x-api-key");
+      return jsonResponse({ data: [{ id: "selected-model" }] });
+    });
+
+    await tester.testManualProvider({
+      providerKind: "anthropic_compatible",
+      endpointProtocol: "openai_chat_completions",
+      baseUrl: "https://models.example.com/v1",
+      apiKey: "protocol-key",
+      manualModelId: "selected-model",
+      cloudBoundary: "self_hosted"
+    });
+
+    expect(authorization).toBe("Bearer protocol-key");
+    expect(apiKey).toBeNull();
+  });
+
+  it.each([
+    {
+      label: "OpenAI-compatible",
+      providerKind: "openai_compatible" as const,
+      endpointProtocol: "openai_chat_completions" as const,
+      baseUrl: "https://api.deepseek.com",
+      expectedUrl: "https://api.deepseek.com/models",
+      expectedHeader: "authorization",
+      absentHeader: "x-api-key"
+    },
+    {
+      label: "Anthropic-compatible",
+      providerKind: "anthropic_compatible" as const,
+      endpointProtocol: "anthropic_messages" as const,
+      baseUrl: "https://api.deepseek.com/anthropic",
+      expectedUrl: "https://api.deepseek.com/anthropic/models",
+      expectedHeader: "x-api-key",
+      absentHeader: "authorization"
+    }
+  ])("keeps the DeepSeek $label model-list path and auth explicit", async (testCase) => {
+    let seenUrl = "";
+    let selectedHeader: string | null = null;
+    let absentHeader: string | null = null;
+    const tester = new ModelProviderConnectionTester(async (url, init) => {
+      const headers = new Headers(init?.headers);
+      seenUrl = String(url);
+      selectedHeader = headers.get(testCase.expectedHeader);
+      absentHeader = headers.get(testCase.absentHeader);
+      return jsonResponse({ data: [{ id: "deepseek-chat" }] });
+    });
+
+    await tester.testManualProvider({
+      providerKind: testCase.providerKind,
+      endpointProtocol: testCase.endpointProtocol,
+      baseUrl: testCase.baseUrl,
+      apiKey: "synthetic-deepseek-key",
+      manualModelId: "deepseek-chat",
+      cloudBoundary: "cloud"
+    });
+
+    expect(seenUrl).toBe(testCase.expectedUrl);
+    expect(selectedHeader).toMatch(/synthetic-deepseek-key$/u);
+    expect(absentHeader).toBeNull();
+  });
+
+  it("omits every credential header for an explicit no-auth provider", async () => {
+    let seenHeaders: Headers | undefined;
+    const tester = new ModelProviderConnectionTester(async (_url, init) => {
+      seenHeaders = new Headers(init?.headers);
+      return jsonResponse({ data: [{ id: "llama3.2" }] });
+    });
+
+    const result = await tester.discoverModels({
+      providerKind: "openai_compatible",
+      endpointProtocol: "openai_chat_completions",
+      authRequirement: "none",
+      baseUrl: "http://127.0.0.1:11434/v1",
+      cloudBoundary: "local"
+    });
+
+    expect(result.discoveredModels).toEqual([{ modelId: "llama3.2" }]);
+    expect(seenHeaders?.has("authorization")).toBe(false);
+    expect(seenHeaders?.has("x-api-key")).toBe(false);
+  });
+
+  it("rejects a mismatched built-in protocol before making a request", async () => {
+    let requests = 0;
+    const tester = new ModelProviderConnectionTester(async () => {
+      requests += 1;
+      return jsonResponse({ data: [{ id: "model" }] });
+    });
+
+    await expect(tester.testManualProvider({
+      providerKind: "openai",
+      endpointProtocol: "openai_chat_completions",
+      apiKey: "test-key",
+      manualModelId: "model",
+      cloudBoundary: "cloud"
+    })).rejects.toMatchObject({ code: "model_provider.protocol_mismatch" });
+    expect(requests).toBe(0);
   });
 });
 

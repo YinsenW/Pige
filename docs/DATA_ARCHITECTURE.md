@@ -503,8 +503,8 @@ Detailed job checkpoint, retry, cancellation, proposal, and operation recovery r
 
 1. Pi Agent selects a scoped retrieval tool.
 2. The tool reads indexes or falls back to Markdown and returns a bounded cited Context Pack.
-3. Pi Agent synthesizes through the selected provider; an explicit no-model path returns
-   a local extractive answer without Agent-model synthesis.
+3. Pi Agent may answer directly or synthesize selected evidence; without a usable model,
+   the same durable `agent_turn` waits instead of returning a silent local answer.
 4. Save the answer to conversation history.
 5. Save to the wiki only through a validated tool call when requested.
 

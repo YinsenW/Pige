@@ -13,6 +13,8 @@ export const OCR_SOURCE_TOOL_NAME = "pige_ocr_source";
 export const OCR_SOURCE_TOOL_VERSION = "1";
 export const SEARCH_KNOWLEDGE_TOOL_NAME = "pige_search_knowledge";
 export const SEARCH_KNOWLEDGE_TOOL_VERSION = "1";
+export const RESPOND_TO_USER_TOOL_NAME = "pige_respond_to_user";
+export const RESPOND_TO_USER_TOOL_VERSION = "1";
 export const CREATE_KNOWLEDGE_NOTE_TOOL_NAME = "pige_create_knowledge_note";
 export const STAGE_KNOWLEDGE_NOTE_PROPOSAL_TOOL_NAME = "pige_stage_knowledge_note_proposal";
 export const STAGE_KNOWLEDGE_NOTE_PROPOSAL_TOOL_VERSION = "1";
@@ -22,6 +24,7 @@ export type AgentIngestToolCapability =
   | "parse_current_source"
   | "ocr_current_source"
   | "read_current_vault_knowledge"
+  | "respond_current_source"
   | "stage_generated_note_proposal"
   | "write_generated_note";
 
@@ -31,6 +34,7 @@ export interface AgentIngestToolAuthorizationRequest {
     | typeof PARSE_SOURCE_TOOL_NAME
     | typeof OCR_SOURCE_TOOL_NAME
     | typeof SEARCH_KNOWLEDGE_TOOL_NAME
+    | typeof RESPOND_TO_USER_TOOL_NAME
     | typeof STAGE_KNOWLEDGE_NOTE_PROPOSAL_TOOL_NAME
     | typeof CREATE_KNOWLEDGE_NOTE_TOOL_NAME;
   readonly capability: AgentIngestToolCapability;
@@ -79,6 +83,11 @@ export interface AgentIngestStageProposalToolResult {
   readonly terminate?: boolean;
 }
 
+export interface AgentIngestRespondToolInput {
+  readonly answer: string;
+  readonly evidenceRefs: readonly string[];
+}
+
 export type AgentIngestToolOutput = AgentIngestOutput & {
   readonly relatedPageRefs?: readonly string[];
 };
@@ -91,6 +100,10 @@ export interface AgentIngestToolHost {
     input: { readonly query: string },
     context: PigeAgentToolCallContext
   ): Promise<AgentIngestSearchToolResult>;
+  respond?(
+    input: AgentIngestRespondToolInput,
+    context: PigeAgentToolCallContext
+  ): Promise<AgentIngestPublishToolResult>;
   stageProposal?(
     output: AgentIngestToolOutput,
     context: PigeAgentToolCallContext
@@ -290,6 +303,43 @@ export function createAgentIngestToolRegistry(input: {
         return input.host.search({ query: (args as { readonly query: string }).query }, context);
       }
     } satisfies PigeAgentToolDescriptor] : []),
+    ...(input.host.respond ? [{
+      name: RESPOND_TO_USER_TOOL_NAME,
+      label: "Respond about preserved source",
+      description: "Return one bounded user-facing answer grounded in evidence from the current preserved source, without publishing or staging a note.",
+      parameters: SOURCE_RESPONSE_SCHEMA,
+      version: RESPOND_TO_USER_TOOL_VERSION,
+      capability: "respond_current_source",
+      outputSchema: TOOL_RESULT_OUTPUT_SCHEMA,
+      effect: "compute",
+      inputTrust: "model_generated",
+      outputTrust: "host_validated",
+      dataBoundary: CURRENT_SOURCE_DATA_BOUNDARY,
+      execution: "sequential",
+      idempotency: { mode: "idempotent", scope: "tool_call" },
+      limits: {
+        maxInputBytes: 65_536,
+        maxOutputBytes: 4_096,
+        timeoutMs: 10_000
+      },
+      ownerService: "AgentIngestService",
+      authorize: (_args, context) => input.authorization.authorize({
+        toolName: RESPOND_TO_USER_TOOL_NAME,
+        capability: "respond_current_source",
+        jobId: input.jobId,
+        sourceId: input.sourceId,
+        toolCallId: context.toolCallId
+      }),
+      execute: async (args, _signal, context): Promise<PigeAgentToolResult> => {
+        if (!input.host.respond) {
+          throw new PigeDomainError("agent_runtime.response_tool_unavailable", "The source response tool is unavailable.");
+        }
+        return input.host.respond(args as AgentIngestRespondToolInput, context).then((result) => ({
+          ...result,
+          terminate: true
+        }));
+      }
+    } satisfies PigeAgentToolDescriptor] : []),
     {
       name: CREATE_KNOWLEDGE_NOTE_TOOL_NAME,
       label: "Create grounded knowledge note",
@@ -338,6 +388,9 @@ export const allowCurrentAgentIngestTools: AgentIngestToolAuthorizationPort = {
     }
     if (request.toolName === SEARCH_KNOWLEDGE_TOOL_NAME) {
       return request.capability === "read_current_vault_knowledge";
+    }
+    if (request.toolName === RESPOND_TO_USER_TOOL_NAME) {
+      return request.capability === "respond_current_source";
     }
     if (request.toolName === STAGE_KNOWLEDGE_NOTE_PROPOSAL_TOOL_NAME) {
       return request.capability === "stage_generated_note_proposal";
@@ -394,6 +447,21 @@ const RELATED_KNOWLEDGE_QUERY_SCHEMA = {
     query: { type: "string", minLength: 1, maxLength: 320 }
   },
   required: ["query"],
+  additionalProperties: false
+} as const;
+
+const SOURCE_RESPONSE_SCHEMA = {
+  type: "object",
+  properties: {
+    answer: { type: "string", minLength: 1, maxLength: 8_000 },
+    evidenceRefs: {
+      type: "array",
+      items: { type: "string", pattern: "^ev_[0-9]{2}$" },
+      minItems: 1,
+      maxItems: 8
+    }
+  },
+  required: ["answer", "evidenceRefs"],
   additionalProperties: false
 } as const;
 

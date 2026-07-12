@@ -254,10 +254,10 @@ Context pack: `docs/PRD.md` BYOK and Agent workflow sections; `docs/PI_AGENT_AND
 
 Build:
 
-- [B3.01 -> E3.01] Provider profiles for OpenAI, Anthropic, OpenAI-compatible, and Anthropic-compatible services.
+- [B3.01 -> E3.01] Preset-first Provider profiles whose reviewed templates bind protocol/Endpoint; Custom Provider alone selects a compatible protocol.
 - [B3.02 -> E3.02] Encrypted-by-default API-key storage.
-- [B3.03 -> E3.01] Provider connection test before persistence.
-- [B3.04 -> E3.01] Model-list discovery, manual model IDs, and one effective default model.
+- [B3.03 -> E3.01] Non-durable discovery plus one real Pi bootstrap generation/tool probe and all-or-restore readback before persistence.
+- [B3.04 -> E3.01] Unified Provider model inventory with auto-sync/Refresh, merged manual fallback, enable/alias controls, and provider-grouped Global Default.
 - [B3.05 -> E3.03] Typed pre-prompt/pre-credential egress decision with `ordinary_allowed` default, non-blocking cloud status, and user-selected stricter behavior.
 - [B3.06 -> E3.04] Basic ingest prompt path with untrusted-source boundaries.
 - [B3.07 -> E3.05] Structured output validation and low-confidence routing.
@@ -280,9 +280,9 @@ remaining fixed routes. The v0.80.6 exception still forbids deep imports/forks/p
 parallel loops. Until E3.08 passes, pause non-blocking breadth; existing safe substrate
 and security/data-loss repairs may proceed.
 
-B3.14/E3.09 is the next integration gate. Current question-like routing, mandatory Home
-search, fixed zero-evidence output, query-hash-only Job, and inferred provider protocol
-do not satisfy it. Existing records remain readable until versioned migration.
+B3.14/E3.09 now proves direct/retrieved/file turns, waiting/resume, explicit protocol,
+and no renderer/Host semantic bypass. Agent-selected URL fetch/preserve, durable follow-up
+sessions, and signed packaged macOS/Windows BYOK remain open, so E3.09 is not complete.
 
 B3.05 has the default, exact-destination disclosure, Home private allow/sensitive wait,
 matrix/profile-switch tests, and per-turn audits/drift rejection. Persisted stricter
@@ -297,7 +297,9 @@ Deferred from this phase:
 
 Exit criteria:
 
-- [E3.01] Each supported provider profile can be connection-tested, can discover or accept model IDs, and resolves one effective default model used by Agent ingest.
+- [E3.01] A reviewed preset and compatible/custom path hide ordinary protocol choices,
+  auto-sync one deduplicated inventory, preserve it on refresh failure, accept manual
+  fallback, and resolve one enabled Global Default through the real Pi probe.
 - [E3.02] API keys do not appear in vault files, SQLite, logs, persisted prompts, diagnostics, operations, or backups.
 - [E3.03] Every external model attempt obtains a typed pre-prompt/pre-credential decision. Connected known destinations default to uninterrupted ordinary/private/bounded-large use with visible status; sensitive, restricted, unknown, changed, and stricter-policy cases enforce their gates.
 - [E3.04] Pasted text can become a source page, schema-valid wiki note, index update, and append-only log entry with source citations.
@@ -309,10 +311,10 @@ Exit criteria:
   parser/OCR stays idle before its event, no-model preserves only, writes are tool-caused
   and retry-safe, and mutation gates reject direct/fixed/bypass paths. Sensitive-tool
   Permission Broker acceptance remains Phase 8.
-- [E3.09] One real app path persists the user turn and `agent_turn`, uses the selected
-  probed Provider/Global Default with truthful binding status, waits/resumes without a model, answers an
-  ordinary empty-vault prompt without tools, retrieves cited local knowledge when Pi
-  chooses, and lets Pi choose file/URL tools without heuristic or silent fallback.
+- [E3.09] One real DeepSeek-first app path persists the user turn and `agent_turn`, keeps
+  Global Default across restart, uses the selected probed binding with truthful status,
+  waits/resumes without a model, answers ordinary empty-vault chat, retrieves cited
+  knowledge when Pi chooses, and uses file/URL tools without heuristic or silent fallback.
 
 ## 9. Phase 4: Local Database And Search Foundation
 
@@ -453,9 +455,8 @@ Build:
 - [B6.14 -> E6.09] Knowledge Tree visual semantics: domain/topic branch weight and fragment leaf quantity/density remain explainable, accessible, and source-backed.
 - [B6.15 -> E6.10] Executable retrieval, linking, and summarization regression fixtures for ranking, grounding, citations, related pages, and insufficient evidence.
 
-Current Home is one mandatory cited search turn, a no-binding fallback, and fixed
-zero-evidence output. Unified intent, ordinary conversation, optional retrieval,
-regression, RAG, Note Agent, conversation, Broker, platform, and 10k proof remain open.
+Current Home has durable direct chat, optional Pi-selected cited retrieval, and no-binding
+wait/resume. RAG, Note Agent, durable follow-up, Broker, packaged platforms, and 10k proof remain open.
 
 Deferred from this phase:
 

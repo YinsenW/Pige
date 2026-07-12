@@ -67,7 +67,7 @@ const ingest = read("apps/desktop/src/main/services/agent-ingest-service.ts");
 const method = ingest.slice(ingest.indexOf("async ingestSource"), ingest.indexOf("const unavailableCapabilityPort"));
 const decision = method.indexOf("createModelEgressDecision");
 const durableDecision = method.indexOf("writeModelEgressDecisionOperation");
-const prompt = method.indexOf("createSystemPrompt()");
+const prompt = method.indexOf("createSystemPrompt(");
 const credential = method.indexOf("getDefaultRuntimeConfig()");
 if (!(decision >= 0 && durableDecision > decision && prompt > durableDecision && credential > prompt)) {
   failures.push("Agent ingest must decide and durably record model egress before prompt rendering and credential lookup.");

@@ -9,6 +9,8 @@
     "build": "node ../../scripts/build/macos-vision-ocr-helper.mjs && electron-vite build",
     "smoke:electron-undici-transport": "electron scripts/electron-undici-transport-smoke.mjs",
     "smoke:electron-pi-agent": "electron scripts/electron-pi-agent-runtime-smoke.mjs",
+    "smoke:electron-persisted-provider": "node scripts/electron-persisted-provider-canary.mjs",
+    "smoke:electron-unified-agent-roundtrip": "node scripts/electron-unified-agent-roundtrip-smoke.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit --pretty false"
   },
   "dependencies": {
