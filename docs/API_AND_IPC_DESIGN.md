@@ -366,7 +366,8 @@ Phase 3 Agent ingest bridge:
 - `agent_ingest` jobs are durable job records created after source-page generation.
 - Background ingest is launched from main process only; renderer APIs still return preservation status and observe progress through `jobs.list`.
 - When a default model is configured later, waiting `agent_ingest` jobs may be requeued and processed without duplicating source pages.
-- Low-confidence or warning-bearing Agent ingest output creates a generated note with `status: "needs_review"` and completes the job as `completed_with_warnings`.
+- Low-confidence/warning output uses non-blocking `needs_review` quality metadata and
+  `completed_with_warnings`; that marker is not permission or mandatory approval.
 - Job summaries never expose prompts, raw model responses, provider request headers, API keys, managed source paths, or source bodies.
 
 Phase 2 job list DTO:
@@ -432,7 +433,7 @@ Rules:
   children require Pi tool events.
 - Direct-image OCR uses the same durable Job actions: no-capability parents wait without a child, recovery requeues them, retry reuses one child, cancellation reaches active OCR, and safe summaries never return private paths.
 
-### 6.4 Confirmation Proposals
+### 6.4 Exceptional Change Proposals
 
 Commands:
 
@@ -485,6 +486,9 @@ Rules:
 - Home uses safe list/detail for focused review; rejected calls re-read durable state and
   lock unknown outcomes. Writes are ordered, not transactional; unified diff, generic
   apply, replacement UX, CAS/TOCTOU, and platform proof remain open.
+- This current exact create-note review is transitional. Normal eligible changes target
+  autonomous Operations plus Activity/Undo; no renderer Operation/Undo API is implemented
+  yet, so it must be added to this owner and executable contracts before UI completion is claimed.
 
 ### 6.5 Library And Notes
 
@@ -534,12 +538,13 @@ Queries:
 Retrieval DTOs and internal context-pack refs must follow `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`. Renderer-facing responses show grounded answers, ranked results, snippets, citations, and degraded-search state; they do not expose raw prompts, context budgets, full retrieved bodies, raw vector data, or secret-bearing policy details.
 
 Current renderer semantics use `agent.submitTurn`. Main appends one bounded user event and
-`agent_turn`; ordinary chat may answer directly or Pi may select bounded cited retrieval.
+`agent_turn`; ordinary chat may answer directly or Pi may select cited retrieval or
+bounded URL fetch/preserve.
 One file attachment is preserved once and linked to that same turn; without a usable
 model the Job waits/resumes with no silent capture/retrieval fallback. Responses exclude
 bodies, paths, prompts, credentials, endpoints, and raw errors. `agent.ask`,
 `retrieval_query`, `agent_ingest`, and capture handlers remain readable compatibility
-paths. Agent-selected URL fetch/preserve, durable follow-up sessions, and save-answer stay open.
+paths. Durable follow-up sessions and save-answer stay open.
 
 ### 6.7 Permissions
 
@@ -632,7 +637,8 @@ Rules:
 - Setup never groups cloud/self-hosted/local; main retains boundary/egress enforcement.
 - `agent.runtimeStatus` reports embedded Pi readiness and non-secret policy IDs. It uses profile summaries and presence-only binding metadata, never credential resolution/decryption; production emits only `embedded_pi_sdk`.
 - v0.1 exposes one effective default Pi Agent model; Advanced/Fast model slots must not appear unless runtime routing support is real and tested.
-- Sensitive setting changes route through Permission Broker or confirmation proposals.
+- External/new-capability settings use Permission Broker; irreversible/security/
+  destination/conflict settings use exceptional proposals. Ordinary reversible settings do not re-prompt.
 - Settings updates include expected versions where concurrent edits or external vault changes are possible.
 - Agent policy preview returns redacted, typed policy summaries for debugging/settings UI; it never returns raw secrets, full settings files, or permission-store internals.
 - `system.toolchainHealth` reports bundled toolchain readiness or repair-needed status from `resources/toolchain-manifest/toolchain.manifest.json`; it does not trigger downloads.

@@ -54,6 +54,7 @@ interface ValidatedFetchTarget {
 interface FetchHandle {
   readonly response: Response;
   readonly signal: AbortSignal;
+  readonly abortKind: () => "cancelled" | "timeout" | undefined;
   dispose(): Promise<void>;
 }
 
@@ -96,13 +97,16 @@ export class SourceFetchService {
     this.#pinValidatedAddresses = !options.fetchImpl;
   }
 
-  async fetchSnapshot(url: string): Promise<SourceFetchSnapshot> {
+  async fetchSnapshot(url: string, externalSignal?: AbortSignal): Promise<SourceFetchSnapshot> {
+    if (externalSignal?.aborted) {
+      throw new PigeDomainError("url_fetch.cancelled", "The URL fetch was cancelled.");
+    }
     const originalTarget = await this.#validateFetchableUrl(url);
     let currentTarget = originalTarget;
     const warnings: string[] = [];
 
     for (let redirectCount = 0; redirectCount <= this.#maxRedirects; redirectCount += 1) {
-      const handle = await this.#fetchWithTimeout(currentTarget);
+      const handle = await this.#fetchWithTimeout(currentTarget, externalSignal);
       let nextTarget: ValidatedFetchTarget | undefined;
       let contentType = "";
       let decoded: DecodedResponse | undefined;
@@ -130,7 +134,12 @@ export class SourceFetchService {
         }
       } catch (caught) {
         if (handle.signal.aborted && !(caught instanceof PigeDomainError)) {
-          throw new PigeDomainError("url_fetch.timeout", "The URL fetch timed out while reading the response.");
+          throw new PigeDomainError(
+            handle.abortKind() === "cancelled" ? "url_fetch.cancelled" : "url_fetch.timeout",
+            handle.abortKind() === "cancelled"
+              ? "The URL fetch was cancelled."
+              : "The URL fetch timed out while reading the response."
+          );
         }
         throw caught;
       } finally {
@@ -241,9 +250,24 @@ export class SourceFetchService {
     return { url: parsed.toString(), hostname: stripIpv6Brackets(parsed.hostname), addresses: normalizedAddresses };
   }
 
-  async #fetchWithTimeout(target: ValidatedFetchTarget): Promise<FetchHandle> {
+  async #fetchWithTimeout(
+    target: ValidatedFetchTarget,
+    externalSignal?: AbortSignal
+  ): Promise<FetchHandle> {
+    if (externalSignal?.aborted) {
+      throw new PigeDomainError("url_fetch.cancelled", "The URL fetch was cancelled.");
+    }
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.#timeoutMs);
+    let abortedBy: "cancelled" | "timeout" | undefined;
+    const abortFromCaller = (): void => {
+      abortedBy ??= "cancelled";
+      controller.abort();
+    };
+    externalSignal?.addEventListener("abort", abortFromCaller, { once: true });
+    const timeout = setTimeout(() => {
+      abortedBy ??= "timeout";
+      controller.abort();
+    }, this.#timeoutMs);
     const dispatcher = this.#pinValidatedAddresses
       ? new Agent({
         allowH2: false,
@@ -268,10 +292,12 @@ export class SourceFetchService {
       return {
         response,
         signal: controller.signal,
+        abortKind: () => abortedBy,
         dispose: async () => {
           if (disposed) return;
           disposed = true;
           clearTimeout(timeout);
+          externalSignal?.removeEventListener("abort", abortFromCaller);
           if (response.body && !response.bodyUsed) await response.body.cancel().catch(() => undefined);
           if (dispatcher) {
             try {
@@ -284,9 +310,13 @@ export class SourceFetchService {
       };
     } catch (caught) {
       clearTimeout(timeout);
+      externalSignal?.removeEventListener("abort", abortFromCaller);
       if (dispatcher) await dispatcher.destroy().catch(() => undefined);
       if (controller.signal.aborted || (caught instanceof Error && caught.name === "AbortError")) {
-        throw new PigeDomainError("url_fetch.timeout", "The URL fetch timed out.");
+        throw new PigeDomainError(
+          abortedBy === "cancelled" ? "url_fetch.cancelled" : "url_fetch.timeout",
+          abortedBy === "cancelled" ? "The URL fetch was cancelled." : "The URL fetch timed out."
+        );
       }
       throw new PigeDomainError("url_fetch.failed", "The URL could not be fetched.");
     }
@@ -401,7 +431,11 @@ async function readResponseBytes(response: Response, maxBytes: number, signal: A
 }
 
 function waitForBody<T>(operation: Promise<T>, signal: AbortSignal, cancel?: () => Promise<unknown>): Promise<T> {
-  if (signal.aborted) return Promise.reject(createAbortError());
+  if (signal.aborted) {
+    return (cancel?.() ?? Promise.resolve())
+      .catch(() => undefined)
+      .then(() => Promise.reject(createAbortError()));
+  }
   return new Promise<T>((resolve, reject) => {
     let settled = false;
     const finish = (callback: () => void): void => {

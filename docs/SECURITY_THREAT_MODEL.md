@@ -19,10 +19,10 @@ This document defines:
 ## 2. Security Principles
 
 1. Local-first does not mean risk-free.
-2. User knowledge is more important than Agent autonomy.
+2. Agent autonomy grows user knowledge through recoverable, inspectable operations.
 3. Source content is untrusted data.
 4. Skills and packages are untrusted until installed, and still permission-scoped after install.
-5. Sensitive actions require clear user authorization.
+5. New authority, irreversible effects, and narrow sensitive boundaries require authorization.
 6. Secrets must not leak into Markdown, logs, prompts, diagnostics, or backups.
 7. Cloud model calls are allowed for ordinary BYOK processing, but must be visible and controllable.
 8. Recovery beats silent failure.
@@ -140,8 +140,8 @@ Product decision:
 Mitigations:
 
 - Explain the boundary once; routine Home and Agent calls show non-blocking cloud status.
-- Sensitive content still confirms, restricted content blocks, and unknown or changed
-  destinations confirm. Users can choose stricter behavior.
+- Sensitive confirms; restricted blocks; endpoint/Profile drift reconnects once. A
+  cloud/local label alone never causes per-call prompts.
 - Provider trust grants no tool, setting, extension, filesystem, or destructive authority.
 - Do not send full vault for retrieval.
 - Context assembly and cloud-send boundaries follow `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`: selected snippets, citations, scoped memory, and compact refs only by default.
@@ -226,7 +226,7 @@ Mitigations:
 - Runtime capabilities are declared and enforced by Pige services.
 - Sensitive capabilities require a first-class authorization dialog.
 - Permissions can be remembered narrowly, revoked, and inspected later.
-- Package writes must go through Pige-approved write APIs or confirmation proposals.
+- Package writes use brokered Pige APIs; core tools are separate.
 - Skills/packages cannot directly access API keys. A reviewed adapter can request brokered credential use for one declared provider action, but never receives or returns raw credential bytes.
 - Executable/package-backed Skills run only through reviewed runtime adapters in a dedicated worker, utility process, or child process with scoped source handles and Permission Broker decisions.
 - Install preview/staging never executes Skill/package code, package hooks, shell commands, or network callbacks.
@@ -295,11 +295,12 @@ Threat:
 
 Mitigations:
 
-- Archive/trash-first deletion.
-- Explicit confirmation for managed source copy deletion, source record deletion, schema changes, destructive cleanup, and bulk edits.
+- Same-vault validated recoverable writes run autonomously with Operations.
+- Confirm permanent/trash-bypass/source-original loss and non-recoverable bulk,
+  schema, restore, or migration effects.
 - Atomic writes.
 - External edit conflict detection.
-- Confirmation proposals for risky edits.
+- Proposals only when recovery/merge cannot avoid an exceptional boundary.
 
 Acceptance:
 
@@ -356,18 +357,22 @@ Permission scopes:
 
 `provider_profile` is a resource scope, not a decision-duration scope. The executable decision-record matrix is owned by `PermissionDecisionRecordSchema` and summarized in `docs/TECH_ARCHITECTURE.md`: denials use `never`; one-action authorization uses `once`; reusable human grants use `actor_version`, `resource_scope`, or `profile_default`; saved-grant/YOLO auto-allows are system-authored one-action records and cannot mint another persistent grant.
 
-Default permission modes:
+External/extension permission modes:
 
 - Ask Every Time: prompt for every sensitive action unless an explicit saved grant exists.
-- Remember Scoped Grants: prompt once and allow the user to save scoped permanent grants for a Skill, package, tool, Agent, resource, or provider profile.
-- YOLO Full Access: auto-allow eligible declared Agent, Skill, package, local-tool, network, shell, filesystem, and ordinary model-call capabilities until disabled. It never exposes raw secrets and does not replace always-required change or data-egress confirmation.
+- Remember Scoped Grants: save a revocable actor/capability/resource scope.
+- YOLO Full Access: auto-allow eligible external declared capabilities until disabled.
+  It is unnecessary for Pige-owned core knowledge tools and never exposes raw secrets.
 
 Authorization and confirmation are separate gates:
 
-- Permission Broker answers whether an actor may exercise a declared capability on a scoped resource. Ask Every Time, remembered grants, and eligible YOLO auto-allows operate at this layer.
-- Change Proposal or explicit action confirmation answers whether the human intended a particular high-impact state change. It is required for durable destructive deletion, trash bypass, restore apply, migration apply, vault/root relocation, enabling or disabling YOLO, secret export, provider/privacy/cloud-boundary changes, and other settings marked always-confirmed.
-- Model Egress Decision answers whether the exact selected payload may cross the configured provider boundary. A `confirm` or `block` result is not weakened by YOLO or a broader capability grant.
-- An action proceeds only when every applicable gate passes. A Permission Broker allow is not evidence of destructive intent, and a confirmation is not a reusable capability grant.
+- Pige core tools use service enforcement and no Permission prompt for recoverable work.
+- Permission Broker governs extensions and new shell/network/filesystem/credential/settings scopes.
+- Intervene for irreversible loss, authority/security escalation, destination drift,
+  unresolved conflict, or explicit stricter user policy.
+- Model Egress Decision normally enforces silently; exact connected calls proceed while
+  sensitive/blocked/stricter outcomes gate. A `confirm` or `block` result is not weakened by YOLO.
+- Every applicable gate must pass; one gate never grants another.
 
 Useful "only this" scopes:
 
@@ -391,7 +396,7 @@ YOLO Full Access rules:
 - Must still record permission decisions, operation records, command previews where available, affected paths, and data boundaries.
 - Must not bypass OS-level privacy prompts, app sandbox restrictions, update signature checks, malware protections, or filesystem errors.
 - Cannot be enabled by source content, prompt injection, a Skill, package, local tool, or model output.
-- Must not satisfy an always-required change confirmation or a stricter Model Egress Decision.
+- Cannot satisfy exceptional intervention or stricter Model Egress Decision.
 - Must never reveal raw secret bytes to an Agent, Skill, package, local tool, renderer, log, diagnostic, operation record, or model prompt.
 - Desktop-local YOLO or saved grants do not automatically grant future Pige Cloud, self-hosted backend, personal desktop backend, Web client, or mobile client capabilities; those execution locations require separate explicit user choices.
 
@@ -444,7 +449,7 @@ Rules:
 - Phase 3 basic Agent ingest sends only bounded, redacted managed-source previews to the configured provider, wraps the source as untrusted data, and persists only validated Markdown/operation summaries rather than raw prompts or raw provider responses.
 - Private/large confirmation is an optional stricter user policy, not the default.
 - Model call logs store metadata and summaries, not full prompts/responses by default.
-- Pi Agent, Pi tools, and Pi extensions must be mediated through Pige-owned adapters and Permission Broker rules from `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`.
+- Pige-owned Pi tools use service enforcement; external extensions also use Permission Broker.
 - Local-only processing mode can be added later.
 
 ## 10. Diagnostics And Support
@@ -475,7 +480,7 @@ Before v0.1 public alpha:
 - SSRF/private-network URL tests are blocked.
 - ZIP path traversal is blocked.
 - External Skill permission prompts work for shell, network, write, delete, model, and brokered-credential capabilities; raw-secret access is rejected rather than prompted.
-- Pi built-in tools and extensions cannot bypass Permission Broker or access raw vault files/secrets directly.
+- Core Pi tools cannot bypass validation; extensions cannot bypass Broker or access raw files/secrets.
 - Permission prompts support Deny, Allow Once, and Always Allow.
 - Default permission modes are enforced consistently.
 - YOLO Full Access suppresses covered prompts only after explicit user opt-in, remains visible, and records auto-allowed actions.

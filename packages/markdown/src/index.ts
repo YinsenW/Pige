@@ -45,6 +45,13 @@ export interface PigeMarkdownLinkRef {
   readonly label: string;
 }
 
+interface PigeHastNode {
+  readonly type: string;
+  tagName?: string;
+  properties?: Record<string, unknown>;
+  children?: PigeHastNode[];
+}
+
 export function createCitationLabel(ref: MarkdownCitationRef): string {
   return ref.locator ? `${ref.sourceId}@${ref.locator}` : ref.sourceId;
 }
@@ -57,6 +64,7 @@ export async function renderPigeMarkdownToHtml(markdown: string): Promise<PigeMa
     .use(remarkFrontmatter, ["yaml"])
     .use(remarkGfm)
     .use(remarkRehype)
+    .use(rehypePigeReaderResourcePolicy)
     .use(rehypeSanitize, {
       ...defaultSchema,
       attributes: {
@@ -79,6 +87,79 @@ export async function renderPigeMarkdownToHtml(markdown: string): Promise<PigeMa
     html: String(rendered),
     markdownBody
   };
+}
+
+function rehypePigeReaderResourcePolicy(): (tree: unknown) => void {
+  return (tree: unknown): void => enforcePigeReaderResourcePolicy(tree as PigeHastNode);
+}
+
+function enforcePigeReaderResourcePolicy(node: PigeHastNode): void {
+  if (node.type === "element" && node.properties) {
+    if (node.tagName === "a") {
+      const href = node.properties.href;
+      if (typeof href !== "string" || !isPigeReaderInternalHref(href)) {
+        delete node.properties.href;
+      }
+    }
+
+    if (node.tagName === "img") {
+      const src = node.properties.src;
+      if (typeof src !== "string" || !isSafeRelativeReaderImageSource(src)) {
+        delete node.properties.src;
+      }
+    }
+  }
+
+  for (const child of node.children ?? []) enforcePigeReaderResourcePolicy(child);
+}
+
+function isPigeReaderInternalHref(href: string): boolean {
+  return href.startsWith("#wiki:") || href.startsWith("#source:src_");
+}
+
+function isSafeRelativeReaderImageSource(src: string): boolean {
+  if (
+    src.length === 0 ||
+    src.length > 2048 ||
+    src !== src.trim() ||
+    /[\u0000-\u001f\u007f]/u.test(src)
+  ) {
+    return false;
+  }
+
+  const decoded = decodeReaderResourceSource(src);
+  if (decoded === undefined) return false;
+
+  if (decoded !== decoded.trim() || /[\u0000-\u001f\u007f]/u.test(decoded)) return false;
+
+  const pathPart = decoded.split(/[?#]/u, 1)[0] ?? "";
+  if (
+    pathPart.length === 0 ||
+    pathPart.startsWith("/") ||
+    pathPart.startsWith("\\") ||
+    pathPart.includes("\\") ||
+    /^[a-z][a-z0-9+.-]*:/iu.test(pathPart) ||
+    pathPart.split("/").some((segment) => segment === "..")
+  ) {
+    return false;
+  }
+
+  return /\.(?:avif|gif|jpe?g|png|webp)$/iu.test(pathPart);
+}
+
+function decodeReaderResourceSource(value: string): string | undefined {
+  let decoded = value;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    let next: string;
+    try {
+      next = decodeURIComponent(decoded);
+    } catch {
+      return undefined;
+    }
+    if (next === decoded) return decoded;
+    decoded = next;
+  }
+  return undefined;
 }
 
 export function stripPigeFrontmatter(markdown: string): string {

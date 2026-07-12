@@ -114,7 +114,9 @@ Rules:
 - `availability` is one of `available`, `missing`, `changed`, `permission_needed`, `unknown`.
 - Phase 2/3 bridge source pages may be generated without a model. Text-readable sources may inline only short excerpts in fenced code blocks; preserved PDF/DOCX/PPTX/image sources remain metadata-only until parser/OCR artifacts exist. Long source bodies and binary source bodies remain in managed source copies to avoid duplication and accidental prompt ingestion.
 - Phase 2/3 Library summaries are derived from common frontmatter fields only: `id`, `schema_version`, `title`, `type`, `created_at`, `updated_at`, `status`, `language`, and `source_ids`.
-- If the page and sidecar disagree, preserve user-authored Markdown, use the sidecar for operational resolution, mark the projection stale/conflicted, and create a `repair_record` operation or confirmation proposal. Never silently copy a Markdown path into the sidecar.
+- If page and sidecar disagree, preserve user Markdown, resolve from the sidecar, mark
+  stale/conflicted, and write a deterministic `repair_record`; only unreconcilable conflict
+  stages a proposal. Never copy a Markdown path into the sidecar.
 
 ### 5.2 Note Page
 
@@ -134,7 +136,7 @@ Phase 3 bridge generated notes:
 - These notes use `note_kind: "summary"` and cite one preserved `source_id`.
 - The page ID and path are deterministic from the source ID so retry cannot create duplicates.
 - Frontmatter includes `provenance.last_job_id`, `provenance.model_profile_id`, and `provenance.confidence`.
-- If the model output has low confidence or warnings, frontmatter uses `status: "needs_review"` and `note.review_state: "needs_review"` instead of pretending the note is clean.
+- Low-confidence/warning output uses `needs_review` as a non-blocking quality marker, not approval authority.
 - The page body contains a concise summary, key points, inline source citations resolved from the validated Evidence Pack, and optional warnings.
 - Each generated summary and key point carries one or more canonical `[source:<source-id>#<locator>]` citations when the model selected valid evidence refs. Model-authored citation tokens are not trusted or copied through.
 - Unknown evidence refs fail before the page write. Missing refs add a warning and force `needs_review`; Pige does not invent a `#summary` or other fallback locator for an uncited claim.
@@ -256,7 +258,7 @@ Pige stores `page_` stable IDs in frontmatter and can resolve wiki links by titl
 
 Rules:
 
-- Renames update links through a confirmed operation.
+- Renames update links through a validated recoverable Operation.
 - Broken links are reported by Knowledge Health.
 - File paths should not be used as durable cross-page IDs.
 - Relationship types, tag/topic/entity boundaries, backlink rebuild behavior, and Knowledge Tree graph rules are defined in `docs/KNOWLEDGE_MODEL_AND_LINKING.md`.
@@ -276,7 +278,8 @@ Rules:
 - Managed blocks must be readable as normal Markdown when comments are ignored.
 - Pige may replace managed blocks only after validating the surrounding file checksum.
 - User edits outside managed blocks must not be overwritten.
-- Large rewrites outside managed blocks require confirmation.
+- Rewrites outside managed blocks preserve user text, validate a base hash, and record
+  recovery/Undo; only an exceptional boundary pauses.
 
 ## 10. `PIGE.md` Contract
 
@@ -324,13 +327,15 @@ Every Markdown write must validate:
 - Managed block markers are balanced.
 - Pige-reserved fields are not malformed.
 
-Failed validation should produce a repair proposal, not corrupt the file.
+Failed validation blocks the write. Pige repairs/replans or abstains; it stages a proposal
+only when the failure reaches an exceptional conflict or stricter user policy.
 
 ## 12. Migration
 
 Schema migrations must:
 
-- Never rewrite user-owned Markdown without backup or confirmation.
+- Reversible migration rewrites require backup plus an Operation/Undo path; destructive or
+  unreconcilable migration requires intervention.
 - Be resumable.
 - Keep old IDs stable.
 - Record operation summaries.

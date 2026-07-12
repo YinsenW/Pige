@@ -8,19 +8,15 @@ This repository is intended to be developed heavily with AI assistance. Future a
 
 ## 0. Prime Product Directive: A Simple General Agent
 
-Pige is a general-purpose personal Agent whose distinctive advantage is local personal
-knowledge. Capture, parsing, and organization are flagship tools, not the product's
-entire scope. Pige is not a developer-facing Agent platform console; its UI must stay
-radically simple, calm, and low-learning-cost.
+Pige is a simple general Agent strengthened by local knowledge. **Input once, knowledge
+grows naturally:** Pi performs validated recoverable work; users inspect or undo, not approve each step.
 
 When implementation exposes powerful catalogs, provider ecosystems, package ecosystems, model capabilities, permissions, indexes, local tools, or Agent internals, hide that complexity behind sensible defaults, progressive disclosure, or internal metadata. Do not turn upstream complexity into visible product complexity unless a user-facing workflow truly needs it.
 
-For model setup, connect one service Pi Agent can call. After one boundary disclosure,
-`Connect` authorizes routine bounded calls to that exact Profile; show calm status, not
-repeat prompts. Local-first means local ownership, no Pige cloud account, and no product
-telemetry—not cloud friction. Sensitive, restricted, unknown/changed, or stricter-policy
-cases keep their gates; Provider trust grants no tool, setting, permission, or destructive
-authority. Support discovery/manual model IDs and one default model. Hide routing,
+For model setup, connect one service and choose one default model. One disclosure grants
+routine bounded calls to that exact Profile; show quiet status, not repeat prompts.
+Local-first means local ownership/truth and no Pige telemetry, not confirmation-first UX.
+Sensitive/restricted content and endpoint drift keep their narrow gates. Hide routing,
 matrices, marketplaces, and taxonomy until a tested runtime needs them.
 
 ### 0.1 Named Agent Roles
@@ -109,7 +105,10 @@ Historical/audit/research documents such as `docs/DESIGN_REVIEW.md`, `docs/DESIG
 - Renderer code must not directly access arbitrary filesystem paths, secrets, raw model credentials, or local database files.
 - Product/domain logic must not assume every runtime can run Bun, `uv`, npm packages, shell commands, parser binaries, large local models, or arbitrary downloaded tools; use runtime capability adapters.
 - The post-v0.1 mobile/Web route is Remote Agent Backend plus Web/mobile clients; Mobile Lite is a client capability tier for capture, offline capture queue, reading, cached search, and queued processing, not a full local Agent runtime.
-- Risky Agent edits require confirmation; destructive actions require explicit confirmation.
+- Pige-owned bounded, attributable, recoverable knowledge work runs without Permission
+  prompts. Intervene only for irreversible destruction, authority/security escalation,
+  destination drift, unreconcilable conflict, or an explicit stricter user policy;
+  uncertainty replans, warns, or abstains.
 - v0.1 targets macOS 26+, Windows 11, and Windows 10 if tests pass. Linux is deferred.
 
 ## 3. Task Protocol

@@ -87,7 +87,7 @@ Required context:
 Required output:
 
 - Tool calls and ephemeral bounded plan summaries; restart replans them.
-- Schema-valid proposal/publication arguments with citations and no arbitrary path.
+- Schema-valid knowledge-change arguments with citations and no arbitrary path.
 - A final summary from verified results; final text cannot write durable knowledge.
 
 Embedded Pi terminal knowledge-tool input:
@@ -128,17 +128,19 @@ Rules:
 - The publication handler writes the validated note, Operation, and index. After its
   typed result, Jobs Service appends log and completes the Job; recovery is idempotent,
   not cross-file atomic. Raw prompts or provider responses are not persisted by default.
-- If `confidence` is `"low"` or warnings exist, the publication handler marks the note
-  `needs_review`; Jobs Service completes the Job with warnings.
+- If `confidence` is `"low"` or warnings exist, apply only conservative supported content,
+  mark a non-blocking quality warning, or abstain; confidence alone cannot demand approval.
 - Service-side quality guards add a warning and cap model-reported `high` confidence at `medium` when document extraction was range-limited or visible content still needs OCR. Prompt compliance alone is not the enforcement layer.
-- The same service-side guard forces review and caps `high` confidence when OCR confidence is below `0.65` or warnings report block/text truncation. Empty OCR never reaches the model.
+- The same guard caps `high` confidence and adds a warning when OCR confidence is below
+  `0.65` or extraction truncates; empty OCR never reaches the model.
 - Source/artifact checksum and size are verified before the cloud call when integrity metadata exists. Delimiter-like source text is escaped inside the untrusted block so source content cannot close the evidence wrapper.
 - Model Egress binds redacted evidence, frozen metadata, Provider endpoint/boundary, and
   selected model ID. Before Pi invocation Pige validates credential-bearing config;
   each turn rechecks non-secret binding, source/cancellation, and egress. Drift fails closed.
 - The model may cite only supplied `ev_NN` refs. Unknown refs fail before any Markdown write. A statement with an empty ref list is retained only with a warning, confidence cap, and `needs_review`; model-authored `[source:...]` or `[artifact:...]` tokens are stripped and canonical citations are rendered service-side.
-- The Agent may stage one terminal durable proposal; explicit review may apply only its
-  exact create note or reject it. Automatic risk routing and generic proposal UX/operations remain open.
+- The target auto-commits eligible reversible knowledge and stages only an exceptional
+  boundary. Current code still stages every exact create note for Home review; autonomous
+  eligibility routing and Activity/Undo remain open.
 
 ### 5.2 Home Query
 
@@ -159,7 +161,7 @@ Required output:
 - Concise answer.
 - Ranked local results and citations when used.
 - Suggested follow-ups.
-- Optional proposal to save the answer.
+- Optional validated tool call to save useful knowledge; proposals are exceptional.
 
 A general answer must not claim vault support or fabricate citations. Empty retrieval may
 return to Pi for a general answer unless the user required vault/source-only grounding.
@@ -185,7 +187,8 @@ Required context:
 - Linked source snippets.
 - Relevant backlinks and related pages.
 
-Mutating outputs become previews or confirmation proposals unless the change is clearly local and reversible.
+Evidence-bound, scoped, recoverable mutations apply with Operations and Undo. Only an
+irreversible/security/destination/conflict or explicit stricter-policy boundary proposes.
 
 ### 5.4 Selection Actions
 
@@ -197,7 +200,7 @@ Rules:
 
 - Clipboard actions do not require model calls.
 - Translation, polish, expand, summarize, and explain can use the configured model.
-- Any write-back must preserve frontmatter and create a proposal when risky.
+- Write-back preserves frontmatter and auto-applies when recoverable; exceptional boundaries pause.
 
 ### 5.5 Lint And Repair
 
@@ -205,7 +208,7 @@ Goal:
 
 - Report broken links, missing citations, duplicate topics, orphan pages, and stale summaries.
 
-v0.1 may produce reports only. Automatic broad repairs require confirmation.
+Safe deterministic repairs may auto-apply with Operations; destructive or unresolved repairs pause.
 
 ## 6. Structured Output
 
@@ -218,7 +221,7 @@ type AgentWritePlan = {
   jobId: string;
   confidence: AgentIngestConfidence;
   writes: MarkdownWrite[];
-  proposals: ChangeProposal[];
+  exceptionalProposals: ChangeProposal[];
   warnings: AgentWarning[];
   userMessage: string;
 };
@@ -232,7 +235,8 @@ Rules:
 - Reject unknown write targets.
 - Reject invalid frontmatter.
 - Reject uncited factual claims when citations were available.
-- Convert low-confidence or broad changes into proposals.
+- On low confidence or breadth, gather evidence, narrow scope, preserve alternatives,
+  warn, or abstain; create a proposal only at an exceptional boundary.
 
 ## 7. Memory Injection
 
@@ -301,7 +305,7 @@ Template changes that affect output shape must update tests and docs.
 - Prompt-injection fixtures.
 - Structured output validation.
 - Citation requirement tests.
-- Low-confidence proposal routing.
+- Low-confidence replan/warning/abstention and exceptional-boundary routing.
 - Memory injection scope tests.
 - Cloud-send boundary tests.
 - Runtime policy context snapshot tests.

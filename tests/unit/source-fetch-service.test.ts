@@ -200,6 +200,39 @@ describe("source fetch service", () => {
     expect(cancelled).toBe(true);
   });
 
+  it("propagates caller cancellation while reading without retaining a partial response", async () => {
+    let responseStarted!: () => void;
+    const started = new Promise<void>((resolve) => { responseStarted = resolve; });
+    let cancellationObserved!: () => void;
+    const cancellation = new Promise<void>((resolve) => { cancellationObserved = resolve; });
+    let cancelled = false;
+    const service = new SourceFetchService({
+      lookup: async () => ["93.184.216.34"],
+      timeoutMs: 5_000,
+      fetchImpl: async () => {
+        responseStarted();
+        return new Response(new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode("partial"));
+          },
+          cancel() {
+            cancelled = true;
+            cancellationObserved();
+          }
+        }), { headers: { "content-type": "text/plain" } });
+      }
+    });
+    const controller = new AbortController();
+
+    const pending = service.fetchSnapshot("https://example.com/cancelled", controller.signal);
+    await started;
+    controller.abort();
+
+    await expect(pending).rejects.toMatchObject({ code: "url_fetch.cancelled" });
+    await cancellation;
+    expect(cancelled).toBe(true);
+  });
+
   it("decodes an HTML meta charset before local extraction", async () => {
     const prefix = Buffer.from("<html><head><meta charset=gbk><title>GBK</title></head><body><p>", "ascii");
     const chinese = Buffer.from([0xd6, 0xd0, 0xce, 0xc4]);

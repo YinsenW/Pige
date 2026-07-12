@@ -141,13 +141,16 @@ After a new document-parser or direct-image OCR Artifact is persisted, its owner
 - Block local/private network targets unless explicitly allowed.
 - Store canonical URL, final URL, capture timestamp, content type, and extraction warnings.
 - Preserve a readable snapshot when feasible.
-- Current Phase 5 still auto-fetches URL capture through pinned Undici before the Agent;
-  the SSRF/redirect/body safety remains valid, but that semantic route is transitional.
+- Current static-URL ingress is Pi-selected and preserves one restart-recoverable source,
+  page, artifact, and Operation; locator, multi-URL, and packaged proof remain open.
 - Declared and decompressed streamed response bodies are capped at 2 MiB. Charset is detected from HTTP metadata, BOM, or leading HTML metadata before the decoded snapshot is preserved under `raw/web/YYYY/MM/` as untrusted source evidence.
 - HTML article extraction runs in the bounded `workers/web-extractor-worker.js` entry with exact Mozilla Readability and jsdom dependencies. Script execution and external resource loading are not enabled. The worker returns plain text and selected metadata, never trusted article HTML.
 - The serial worker allows eight pending requests, a 5-second deadline, 256 MiB old-generation heap, 2,097,152 decoded input characters, 20,000 inspected elements, 1,000,000 output characters, and 64 HTTP(S) image references. A worker/dependency failure terminates the worker, falls back to bounded DOM-less extraction, and records a reduced-extraction warning.
 - Extracted readable text is stored once as a checksummed `extracted_text` artifact under `artifacts/web/YYYY/MM/` and is the preferred input for source pages and Agent ingest.
-- The Source Record stores effective charset, title, canonical URL, site, author, publication time, language, excerpt, redacted image references, parser identity/version/mode, counts, truncation, and warnings. Reduced or truncated extraction is carried into Agent context and forces review-quality warnings.
+- The Source Record stores effective charset, title, canonical URL, site, author, publication
+  time, language, excerpt, redacted image references, parser identity/version/mode, counts,
+  truncation, and warnings. Reduced or truncated extraction carries non-blocking quality
+  warnings into Agent context.
 - Durable URL fields shown in Markdown, source records, prompts, operation records, jobs, diagnostics, or conversations must redact sensitive query values such as token, api_key, password, secret, signature, and similar keys.
 - Browser-rendered JavaScript-heavy capture remains deferred and must not silently enable page-script execution in this path.
 
@@ -209,7 +212,8 @@ Minimum behavior:
 - Create source records.
 - Record inventory metadata where safe.
 - Avoid recursive parsing surprises.
-- Stage large or risky processing behind explicit user action.
+- Bound and queue expensive work; process or defer it autonomously. Ask only when it needs a
+  new capability/authority, irreversible effect, or other exceptional boundary.
 
 ## 9. OCR Routing
 
@@ -228,7 +232,9 @@ Current implementation scope:
 
 - `macos_vision_document` and `macos_vision_text` support direct rasters, Agent-selected bounded PDF candidates, and parser-selected PPTX raster media on macOS 26.
 - Full-slide, vector/chart and DOCX-media OCR, Windows AI, Paddle install/repair, and cross-platform packaged proof remain waiting.
-- Engine/confidence/warnings and bounded `ocr:block:N`, `page:N/ocr:block:M`, or `slide:N/media:M/ocr:block:K` locators wrap explicitly untrusted OCR text in Agent context. Low confidence or truncation forces review.
+- Engine/confidence/warnings and bounded `ocr:block:N`, `page:N/ocr:block:M`, or
+  `slide:N/media:M/ocr:block:K` locators wrap untrusted OCR text. Low confidence or
+  truncation forces conservative replan, warning, or abstention—not routine approval.
 
 ## 10. Parse Quality
 
@@ -289,7 +295,9 @@ Current handoff contract:
 
 - Evidence Assembly may combine multiple independently checksummed native and OCR Artifacts without creating a durable merged body.
 - Every fragment has one ephemeral `ev_NN` ref and one durable locator. Native text precedes OCR; duplicate suppression is limited to repeated text under the same parent locator.
-- Structured output represents the summary and each key point as `{ text, evidenceRefs }`. Unknown refs abort before write; empty refs force review; canonical Markdown citations are rendered by Pige rather than accepted from the model.
+- Structured output represents the summary and each key point as `{ text, evidenceRefs }`.
+  Unknown or empty refs block publication and force replan/abstention; Pige renders canonical
+  Markdown citations rather than accepting them from the model.
 - Agent ingest hashes the complete Source Record used for the Evidence Pack and rechecks it before model invocation, after the response, and after flushing the exclusive temporary note immediately before create-only publication. Drift requeues or waits; concurrent targets are preserved or same-source recovered. Strict cross-process SourceRecord-to-note CAS, parent-swap resistance, cross-file transactions, and packaged-platform proof remain open.
 - Text and preserved-source spines inspect evidence and write only through validated
   publication. PDF/DOCX/PPTX parse and selected PDF/PPTX/direct-image OCR are registered

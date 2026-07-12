@@ -170,7 +170,7 @@ The body-free operation audit records `payloadHash` for that exact redacted boun
 Readiness checks use only an enabled default model, matching provider, and presence-only required-auth satisfaction; `none` needs no secret and checks never decrypt credentials. Before `allow`, context assembly may build a bounded redacted plan but cannot render provider prompts or request credentials. After `allow`, the caller re-reads Provider/Model summaries and verifies any credential-bearing config against the approved routing identity immediately before invocation. Endpoint, boundary, model, enabled-state, revision, or privacy-class drift invalidates the decision; changed private/sensitive metadata creates a new audit.
 
 - `restricted` means raw credentials, secret-store material, permission-store internals, or content another invariant forbids sending. It is always blocked and cannot be overridden by YOLO or a saved grant.
-- `sensitive` means the selected payload is explicitly marked sensitive by the user/owner metadata or a secret/privacy scanner reports a confirmation-level finding after redaction. It always requires a current-action cloud-send confirmation for an external provider.
+- `sensitive` is explicit ask-before-cloud metadata or a high-confidence post-redaction security finding; it confirms once per action.
 - `private` means the user or durable source/page metadata explicitly marks the selected evidence private. Pige does not silently infer that every personal-vault snippet is private after the user has configured a provider.
 - `large` means the exact planned payload exceeds the workflow's recorded `normalPayloadCharacterLimit` or would require bypassing its normal bounded-snippet contract. The limit comes from the workflow/model budget and is recorded in the decision.
 - `ordinary` applies only when none of the higher classes applies.
@@ -183,7 +183,9 @@ Decision matrix:
 | `cloud` or `self_hosted` | Allow ordinary/private/large; confirm sensitive | Allow ordinary; confirm private/large/sensitive | Confirm every non-restricted payload | Block |
 | `unknown`, or `local` without loopback verification | Confirm every non-restricted payload | Confirm every non-restricted payload | Confirm every non-restricted payload | Block |
 
-`self_hosted` is still an external data boundary unless the actual endpoint is verified loopback. `user_asserted` records the user's classification but does not turn a remote endpoint into verified local execution. A stricter cloud-send policy outranks general Permission Broker defaults: YOLO cannot convert a `confirm` or `block` egress outcome into `allow`.
+Exact connected, verified Profile/endpoint is standing authority; unknown or changed
+boundaries reconnect once. Labels do not prompt. Only verified loopback is local; stricter
+policy outranks YOLO.
 
 ### 5.3 Permissions
 
@@ -197,7 +199,7 @@ type PermissionPolicyContext = {
 
 Rules:
 
-- Permission Broker remains enforcement.
+- Permission Broker covers extensions/new scopes; core tools use service enforcement.
 - Prompt text may tell the Agent that sensitive actions require permission, but tool calls still check Permission Broker.
 - YOLO may suppress prompts only when explicitly enabled by the user and still logs auto-allowed actions.
 - Do not expose raw permission-store details to the model.
@@ -248,8 +250,10 @@ type ConfirmationPolicyContext = {
 
 Rules:
 
-- Change Proposal Service enforces confirmation behavior.
-- Prompt instructions should ask the Agent to classify risk and confidence, but Pige validates before writing.
+- Schema-v1 thresholds are compatibility fields, not confidence/permission gates.
+  `riskyChangeRequiresConfirmation` means irreversible loss, authority/security,
+  destination drift, unresolved conflict, or an explicit stricter user policy. Other work
+  auto-applies or replans/abstains.
 
 ### 5.7 Retrieval
 
@@ -294,7 +298,7 @@ Prompt assembly should include a compact policy section:
 RUNTIME POLICY CONTEXT
 - Source storage: copy dropped files into Pige source storage unless this job has a trusted user override.
 - Cloud model use: send bounded selected context to the connected provider without routine prompts; show status and enforce higher-risk or stricter-policy gates.
-- Writes: risky changes require confirmation; safe new source pages may be proposed or auto-applied according to policy.
+- Writes: recoverable knowledge auto-applies with Activity/Undo; exceptions propose.
 - Retrieval: use selected snippets only; do not imply whole-vault search unless retrieval covered it.
 ```
 
@@ -314,7 +318,7 @@ Settings that affect Agent behavior must be enforced at the owning service.
 | Source storage strategy | Yes | Yes; selectable default for original-file captures, mandatory managed copy for text/URL snapshots | Source Storage Service |
 | Default model | Yes | Yes | Model Provider Registry, Agent Orchestrator |
 | Cloud-send policy | Yes | Yes | Permission Broker, Model Provider Registry |
-| Confirmation thresholds | Yes | Yes | Change Proposal Service |
+| Autonomy and intervention boundary | Yes | Yes | Change Proposal Service |
 | Permission mode | Yes | Yes | Permission Broker |
 | Generated language preference | Yes | Partly | Agent Orchestrator, I18N Service |
 | OCR language hints | Maybe | Yes | OCR Service |
@@ -356,8 +360,8 @@ Allowed:
 
 Rules:
 
-- Agent must create a clear setting-change proposal or call a settings-change tool guarded by confirmation.
-- Sensitive settings require explicit confirmation.
+- A trusted request applies ordinary reversible settings after validation; authority,
+  destination, privacy/security, destructive, or queue-invalidating changes intervene.
 - Source content cannot request settings changes.
 - If the requested setting changes behavior of already queued jobs, Pige must explain whether it applies to new jobs only or also requeues pending jobs.
 

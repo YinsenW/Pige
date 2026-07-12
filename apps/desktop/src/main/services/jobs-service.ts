@@ -123,6 +123,23 @@ export interface ReconcilePendingAgentTurnSourcesResult {
   readonly failed: number;
 }
 
+export interface ReserveAgentTurnUrlSourceRequest {
+  readonly toolId: "pige_fetch_url";
+  readonly toolVersion: "1";
+  readonly inputHash: string;
+  readonly catalogHash: string;
+  readonly policyHash: string;
+  readonly toolCallId: string;
+}
+
+export interface AgentTurnUrlSourceLink {
+  readonly job: JobRecord;
+  readonly sourceId: string;
+  readonly pageId: string;
+  readonly pagePath: string;
+  readonly title: string;
+}
+
 export interface ProcessQueuedIndexRebuildRequest {
   readonly jobIds?: readonly string[];
   readonly limit?: number;
@@ -654,6 +671,300 @@ export class JobsService {
       linked += 1;
     }
     return { linked, waiting, failed };
+  }
+
+  reconcilePendingAgentTurnUrlSources(): ReconcilePendingAgentTurnSourcesResult {
+    const vaultPath = this.#requireActiveVaultPath();
+    let linked = 0;
+    let waiting = 0;
+    let failed = 0;
+    for (const jobFile of readJobRecordFiles(path.join(vaultPath, ".pige", "jobs"))) {
+      const toolInput = jobFile.job.inputRefs?.find((ref) => ref.role === AGENT_TOOL_INPUT_ROLE);
+      const hasCompleteLink = [
+        AGENT_TURN_URL_SOURCE_ROLE,
+        AGENT_TURN_URL_PAGE_ROLE,
+        AGENT_TURN_URL_OPERATION_ROLE
+      ].every((role) => jobFile.job.outputRefs?.some((ref) => ref.role === role));
+      if (
+        jobFile.job.class !== "agent_turn" ||
+        jobFile.job.state !== "running" ||
+        jobFile.job.sourceId !== undefined ||
+        toolInput?.kind !== "tool" ||
+        toolInput.id !== "pige_fetch_url@1" ||
+        !toolInput.checksum ||
+        hasCompleteLink
+      ) {
+        continue;
+      }
+      const sourceId = createAgentTurnSourceId(jobFile.job.id);
+      const sourceRecordFile = readSourceRecordFile(vaultPath, sourceId);
+      if (!sourceRecordFile) {
+        waiting += 1;
+        continue;
+      }
+      try {
+        this.linkAgentTurnUrlSource(jobFile.job.id, sourceId);
+        linked += 1;
+      } catch (caught) {
+        if (!(caught instanceof PigeDomainError)) throw caught;
+        markJobFailedFinal(
+          jobFile.path,
+          jobFile.job,
+          "The durable Agent-selected URL source could not be reconciled safely after restart."
+        );
+        failed += 1;
+      }
+    }
+    return { linked, waiting, failed };
+  }
+
+  reserveAgentTurnUrlSource(
+    jobId: string,
+    request: ReserveAgentTurnUrlSourceRequest
+  ): { readonly job: JobRecord; readonly sourceId: string } {
+    const vaultPath = this.#requireActiveVaultPath();
+    const jobFile = readJobRecordFile(vaultPath, jobId);
+    if (
+      !jobFile ||
+      jobFile.job.class !== "agent_turn" ||
+      jobFile.job.sourceId !== undefined ||
+      jobFile.job.state !== "running" ||
+      request.toolId !== "pige_fetch_url" ||
+      request.toolVersion !== "1" ||
+      !isSha256(request.inputHash) ||
+      !isSha256(request.catalogHash) ||
+      !isSha256(request.policyHash) ||
+      request.policyHash !== jobFile.job.policyHash ||
+      !isBoundedOpaqueToolCallId(request.toolCallId)
+    ) {
+      throw new PigeDomainError(
+        "agent_runtime.tool_binding_invalid",
+        "The Agent-selected URL tool binding is invalid."
+      );
+    }
+    const sourceId = createAgentTurnSourceId(jobFile.job.id);
+    const requestedToolId = `${request.toolId}@${request.toolVersion}`;
+    const existingInput = jobFile.job.inputRefs?.find((ref) => ref.role === AGENT_TOOL_INPUT_ROLE);
+    const existingCatalog = jobFile.job.inputRefs?.find((ref) => ref.role === AGENT_TOOL_CATALOG_ROLE);
+    if (
+      (existingInput && (
+        existingInput.kind !== "tool" ||
+        existingInput.id !== requestedToolId ||
+        existingInput.checksum !== request.inputHash
+      )) ||
+      (existingCatalog && (
+        existingCatalog.kind !== "tool" ||
+        existingCatalog.id !== "pige_agent_tool_catalog" ||
+        existingCatalog.checksum !== request.catalogHash
+      ))
+    ) {
+      throw new PigeDomainError(
+        "agent_runtime.tool_binding_changed",
+        "The Agent-selected URL action changed before durable reuse."
+      );
+    }
+    const provenanceHash = createToolCallProvenanceHash(jobFile.job.id, request.toolCallId);
+    const baseRefs = [
+      ...(jobFile.job.inputRefs ?? []).filter((ref) =>
+        ref.role !== AGENT_TOOL_INPUT_ROLE &&
+        ref.role !== AGENT_TOOL_CATALOG_ROLE
+      ),
+      existingInput ?? {
+        kind: "tool" as const,
+        id: requestedToolId,
+        checksum: request.inputHash,
+        role: AGENT_TOOL_INPUT_ROLE
+      },
+      existingCatalog ?? {
+        kind: "tool" as const,
+        id: "pige_agent_tool_catalog",
+        checksum: request.catalogHash,
+        role: AGENT_TOOL_CATALOG_ROLE
+      }
+    ];
+    const reserved = JobRecordSchema.parse({
+      ...jobFile.job,
+      inputRefs: mergeAgentToolCallProvenance(baseRefs, provenanceHash),
+      updatedAt: new Date().toISOString(),
+      message: "Pi selected the host-bound URL fetch tool; the submitted URL action is durably reserved."
+    });
+    writeJsonAtomic(jobFile.path, reserved);
+    return { job: reserved, sourceId };
+  }
+
+  markAgentTurnUrlSourcePublicationStarted(
+    jobId: string,
+    sourceId: string,
+    inputHash: string
+  ): JobRecord {
+    const vaultPath = this.#requireActiveVaultPath();
+    const jobFile = readJobRecordFile(vaultPath, jobId);
+    const toolInput = jobFile?.job.inputRefs?.find((ref) => ref.role === AGENT_TOOL_INPUT_ROLE);
+    if (
+      !jobFile ||
+      jobFile.job.class !== "agent_turn" ||
+      jobFile.job.state !== "running" ||
+      jobFile.job.sourceId !== undefined ||
+      sourceId !== createAgentTurnSourceId(jobId) ||
+      toolInput?.kind !== "tool" ||
+      toolInput.id !== "pige_fetch_url@1" ||
+      toolInput.checksum !== inputHash
+    ) {
+      throw new PigeDomainError(
+        "agent_runtime.tool_binding_invalid",
+        "The Agent-selected URL publication guard binding is invalid."
+      );
+    }
+    const guarded = JobRecordSchema.parse({
+      ...jobFile.job,
+      cancellation: {
+        ...jobFile.job.cancellation,
+        safeCheckpointId: "agent_turn_url_source_preserving",
+        durableWritesApplied: true
+      },
+      updatedAt: new Date().toISOString(),
+      message: "The Agent-selected URL source passed confinement checks; durable preservation is beginning."
+    });
+    writeJsonAtomic(jobFile.path, guarded);
+    return guarded;
+  }
+
+  linkAgentTurnUrlSource(jobId: string, sourceId: string): AgentTurnUrlSourceLink {
+    const vaultPath = this.#requireActiveVaultPath();
+    const jobFile = readJobRecordFile(vaultPath, jobId);
+    const sourceRecordFile = readSourceRecordFile(vaultPath, sourceId);
+    if (
+      !jobFile ||
+      jobFile.job.class !== "agent_turn" ||
+      jobFile.job.sourceId !== undefined ||
+      jobFile.job.state !== "running" ||
+      !sourceRecordFile ||
+      sourceRecordFile.sourceRecord.kind !== "url" ||
+      sourceRecordFile.sourceRecord.metadata.agentTurnJobId !== jobId ||
+      !jobFile.job.policyContextId ||
+      !jobFile.job.policyHash ||
+      jobFile.job.cancellation?.durableWritesApplied !== true ||
+      sourceRecordFile.sourceRecord.metadata.agentTurnUrlInputHash !==
+        jobFile.job.inputRefs?.find((ref) => ref.role === AGENT_TOOL_INPUT_ROLE)?.checksum
+    ) {
+      throw new PigeDomainError(
+        "agent_runtime.turn_binding_invalid",
+        "The Agent-selected URL source does not match its parent turn."
+      );
+    }
+    const urlSnapshotBindingHash = createAgentTurnUrlSnapshotBindingHash(
+      sourceRecordFile.sourceRecord,
+      jobFile.job.inputRefs?.find((ref) => ref.role === AGENT_TOOL_INPUT_ROLE)?.checksum
+    );
+    const page = this.#sourcePages.createForSource(
+      vaultPath,
+      sourceRecordFile.sourceRecord,
+      sourceRecordFile.path,
+      jobFile.job.id,
+      sourceRecordFile.sourceRecord
+    );
+    const refreshedSource = readSourceRecord(vaultPath, sourceId);
+    if (!refreshedSource) {
+      throw new PigeDomainError(
+        "agent_runtime.url_source_changed",
+        "The Agent-selected URL source disappeared during projection."
+      );
+    }
+    const sourceRef = {
+      kind: "source" as const,
+      id: sourceId,
+      checksum: sourceInputRevision(refreshedSource),
+      role: AGENT_TURN_URL_SOURCE_ROLE
+    };
+    const pageRef = {
+      kind: "page" as const,
+      id: page.pageId,
+      locator: page.pagePath,
+      role: AGENT_TURN_URL_PAGE_ROLE
+    };
+    const operation = writeAgentTurnUrlSourceOperation(
+      vaultPath,
+      jobFile.job,
+      refreshedSource,
+      page.pageId,
+      page.pagePath,
+      urlSnapshotBindingHash
+    );
+    const operationRef = {
+      kind: "operation" as const,
+      id: operation.id,
+      role: AGENT_TURN_URL_OPERATION_ROLE
+    };
+    const linked = JobRecordSchema.parse({
+      ...jobFile.job,
+      outputRefs: [
+        ...(jobFile.job.outputRefs ?? []).filter((ref) =>
+          !(
+            (ref.kind === "source" && ref.role === AGENT_TURN_URL_SOURCE_ROLE) ||
+            (ref.kind === "page" && ref.role === AGENT_TURN_URL_PAGE_ROLE) ||
+            (ref.kind === "operation" && ref.role === AGENT_TURN_URL_OPERATION_ROLE)
+          )
+        ),
+        sourceRef,
+        pageRef,
+        operationRef
+      ],
+      operationIds: Array.from(new Set([...(jobFile.job.operationIds ?? []), operation.id])),
+      cancellation: {
+        ...jobFile.job.cancellation,
+        safeCheckpointId: "agent_turn_url_source_preserved",
+        durableWritesApplied: true
+      },
+      privacy: {
+        usedCloudModel: jobFile.job.privacy?.usedCloudModel ?? false,
+        usedNetwork: true,
+        usedShell: false,
+        accessedExternalFiles: false,
+        permissionDecisionIds: jobFile.job.privacy?.permissionDecisionIds ?? []
+      },
+      updatedAt: new Date().toISOString(),
+      message: "Agent-selected URL evidence was fetched, preserved, and projected without a Host-selected semantic continuation."
+    });
+    writeJsonAtomic(jobFile.path, linked);
+    return { job: linked, sourceId, pageId: page.pageId, pagePath: page.pagePath, title: page.title };
+  }
+
+  readAgentTurnUrlSourceLink(jobId: string, sourceId: string): AgentTurnUrlSourceLink {
+    const vaultPath = this.#requireActiveVaultPath();
+    const jobFile = readJobRecordFile(vaultPath, jobId);
+    const sourceRecord = readSourceRecord(vaultPath, sourceId);
+    const sourceRef = jobFile?.job.outputRefs?.find(
+      (ref) => ref.kind === "source" && ref.id === sourceId && ref.role === AGENT_TURN_URL_SOURCE_ROLE
+    );
+    const pageRef = jobFile?.job.outputRefs?.find(
+      (ref) => ref.kind === "page" && ref.role === AGENT_TURN_URL_PAGE_ROLE
+    );
+    const pageId = sourceRecord?.knowledgePageId;
+    const pagePath = sourceRecord?.knowledgePagePath;
+    const title = typeof sourceRecord?.metadata.title === "string"
+      ? sourceRecord.metadata.title
+      : sourceRecord?.original?.displayName;
+    if (
+      !jobFile ||
+      jobFile.job.class !== "agent_turn" ||
+      jobFile.job.sourceId !== undefined ||
+      !sourceRecord ||
+      sourceRecord.kind !== "url" ||
+      sourceRecord.metadata.agentTurnJobId !== jobId ||
+      !sourceRef?.checksum ||
+      !pageRef?.locator ||
+      pageRef.id !== pageId ||
+      pageRef.locator !== pagePath ||
+      !pageId ||
+      !pagePath ||
+      !title
+    ) {
+      throw new PigeDomainError(
+        "agent_runtime.url_source_changed",
+        "The Agent-selected URL source linkage changed before reuse."
+      );
+    }
+    return { job: jobFile.job, sourceId, pageId, pagePath, title };
   }
 
   writeRetrievalQueryJob(job: JobRecord): JobRecord {
@@ -3308,10 +3619,197 @@ function markAgentProposalAwaitingReview(
   return awaitingReview;
 }
 
+function writeAgentTurnUrlSourceOperation(
+  vaultPath: string,
+  job: JobRecord,
+  sourceRecord: SourceRecord,
+  pageId: string,
+  pagePath: string,
+  urlSnapshotBindingHash: string
+): ReturnType<typeof OperationRecordSchema.parse> {
+  const inputRef = job.inputRefs?.find((ref) => ref.role === AGENT_TOOL_INPUT_ROLE);
+  const catalogRef = job.inputRefs?.find((ref) => ref.role === AGENT_TOOL_CATALOG_ROLE);
+  const extractedArtifact = sourceRecord.artifacts.find((artifact) => artifact.kind === "extracted_text");
+  const dateKey = /^job_(\d{8})_/u.exec(job.id)?.[1];
+  if (
+    !dateKey ||
+    !job.policyContextId ||
+    !job.policyHash ||
+    inputRef?.id !== "pige_fetch_url@1" ||
+    !inputRef.checksum ||
+    catalogRef?.id !== "pige_agent_tool_catalog" ||
+    !catalogRef.checksum ||
+    !sourceRecord.original?.checksum ||
+    !sourceRecord.managedCopy?.checksum ||
+    !extractedArtifact?.checksum ||
+    !isSha256(urlSnapshotBindingHash)
+  ) {
+    throw new PigeDomainError(
+      "agent_runtime.tool_binding_invalid",
+      "The Agent-selected URL Operation binding is incomplete."
+    );
+  }
+  const identity = JSON.stringify({
+    schemaVersion: 1,
+    jobId: job.id,
+    sourceId: sourceRecord.id,
+    pageId,
+    toolInputHash: inputRef.checksum,
+    catalogHash: catalogRef.checksum,
+    policyHash: job.policyHash,
+    rawChecksum: sourceRecord.original.checksum,
+    managedCopyChecksum: sourceRecord.managedCopy.checksum,
+    extractedArtifactChecksum: extractedArtifact.checksum
+  });
+  const operationId = `op_${dateKey}_${createHash("sha256")
+    .update("pige:agent-turn-url-source-operation:v1\0", "utf8")
+    .update(identity, "utf8")
+    .digest("hex")
+    .slice(0, 12)}`;
+  const operationPath = path.join(
+    vaultPath,
+    ".pige",
+    "operations",
+    dateKey.slice(0, 4),
+    dateKey.slice(4, 6),
+    `${operationId}.json`
+  );
+  const existingBytes = readConfinedDurableRecord(
+    vaultPath,
+    path.join(vaultPath, ".pige", "operations"),
+    operationPath,
+    256 * 1024,
+    "agent_runtime.url_source_changed"
+  );
+  if (existingBytes) {
+    let existing: ReturnType<typeof OperationRecordSchema.parse>;
+    try {
+      existing = OperationRecordSchema.parse(JSON.parse(existingBytes));
+    } catch {
+      throw new PigeDomainError(
+        "agent_runtime.url_source_changed",
+        "The Agent-selected URL Operation is invalid."
+      );
+    }
+    if (
+      existing.id !== operationId ||
+      existing.jobId !== job.id ||
+      existing.kind !== "create_source_record" ||
+      existing.policyAudit?.policyContextId !== job.policyContextId ||
+      existing.policyAudit.policyHash !== job.policyHash ||
+      !existing.targetRefs.some((ref) => ref.kind === "source" && ref.id === sourceRecord.id) ||
+      !existing.targetRefs.some((ref) => ref.kind === "page" && ref.id === pageId && ref.path === pagePath) ||
+      !existing.sourceRefs.some(
+        (ref) => ref.kind === "root_binding" && ref.id === `agent_url_snapshot:${urlSnapshotBindingHash}`
+      )
+    ) {
+      throw new PigeDomainError(
+        "agent_runtime.url_source_changed",
+        "The Agent-selected URL Operation conflicts with durable state."
+      );
+    }
+    return existing;
+  }
+
+  const operation = OperationRecordSchema.parse({
+    id: operationId,
+    schemaVersion: 1,
+    jobId: job.id,
+    createdAt: new Date().toISOString(),
+    actor: {
+      kind: "pige_agent",
+      runtimeKind: "desktop_local",
+      clientCapabilityTier: "desktop_full"
+    },
+    permissionDecisionIds: job.privacy?.permissionDecisionIds ?? [],
+    policyAudit: {
+      policyContextId: job.policyContextId,
+      policyHash: job.policyHash,
+      enforcementOwners: ["Source Fetch Service", "Agent Orchestrator"]
+    },
+    kind: "create_source_record",
+    targetRefs: [
+      { kind: "source", id: sourceRecord.id },
+      { kind: "page", id: pageId, path: pagePath }
+    ],
+    sourceRefs: [
+      { kind: "job", id: job.id },
+      { kind: "root_binding", id: `agent_url_snapshot:${urlSnapshotBindingHash}` }
+    ],
+    summary: "Pi selected one submitted URL for bounded fetch, preservation, and source-page projection.",
+    reversible: "best_effort",
+    rollbackHint: "Use Pige's trash-first source cleanup after reviewing the preserved evidence.",
+    warnings: []
+  });
+  writeJsonAtomic(operationPath, operation);
+  return operation;
+}
+
+function createAgentTurnUrlSnapshotBindingHash(
+  sourceRecord: SourceRecord,
+  expectedInputHash: string | undefined
+): string {
+  const originalUrl = normalizeAgentTurnUrl(sourceRecord.metadata.originalUrl);
+  const originalUri = normalizeAgentTurnUrl(sourceRecord.original?.uri);
+  const finalUrl = normalizeAgentTurnUrl(sourceRecord.metadata.finalUrl);
+  const canonicalUrl = sourceRecord.metadata.canonicalUrl === undefined
+    ? null
+    : normalizeAgentTurnUrl(sourceRecord.metadata.canonicalUrl);
+  const extractedArtifact = sourceRecord.artifacts.find((artifact) => artifact.kind === "extracted_text");
+  const originalInputHash = originalUrl
+    ? `sha256:${createHash("sha256").update(originalUrl, "utf8").digest("hex")}`
+    : undefined;
+  if (
+    !originalUrl ||
+    originalUrl !== originalUri ||
+    !finalUrl ||
+    !expectedInputHash ||
+    originalInputHash !== expectedInputHash ||
+    !sourceRecord.original?.checksum ||
+    !sourceRecord.managedCopy?.checksum ||
+    !extractedArtifact?.checksum
+  ) {
+    throw new PigeDomainError(
+      "agent_runtime.url_source_changed",
+      "The Agent-selected URL provenance changed before durable linkage."
+    );
+  }
+  return `sha256:${createHash("sha256").update("pige:agent-turn-url-snapshot:v1\0", "utf8").update(JSON.stringify({
+    sourceId: sourceRecord.id,
+    originalUrl,
+    finalUrl,
+    canonicalUrl,
+    rawChecksum: sourceRecord.original.checksum,
+    managedCopyChecksum: sourceRecord.managedCopy.checksum,
+    extractedArtifactChecksum: extractedArtifact.checksum
+  }), "utf8").digest("hex")}`;
+}
+
+function normalizeAgentTurnUrl(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  try {
+    const parsed = new URL(value);
+    if (
+      (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
+      parsed.username ||
+      parsed.password
+    ) {
+      return undefined;
+    }
+    parsed.hash = "";
+    return parsed.toString();
+  } catch {
+    return undefined;
+  }
+}
+
 const AGENT_TOOL_SOURCE_ROLE = "agent_tool_source_revision";
 const AGENT_TOOL_INPUT_ROLE = "agent_tool_canonical_input";
 const AGENT_TOOL_CATALOG_ROLE = "agent_tool_catalog";
 const AGENT_TOOL_CALL_ROLE = "agent_tool_call_provenance";
+const AGENT_TURN_URL_SOURCE_ROLE = "agent_turn_url_source";
+const AGENT_TURN_URL_PAGE_ROLE = "agent_turn_url_source_page";
+const AGENT_TURN_URL_OPERATION_ROLE = "agent_turn_url_source_operation";
 const MAX_AGENT_TOOL_CALL_PROVENANCE_REFS = 16;
 const AGENT_PROPOSAL_STAGED_CHECKPOINT = "agent_knowledge_proposal_staged";
 
@@ -3576,6 +4074,10 @@ function createToolCallProvenanceHash(parentJobId: string, toolCallId: string): 
     .update("\0", "utf8")
     .update(toolCallId, "utf8")
     .digest("hex")}`;
+}
+
+function isBoundedOpaqueToolCallId(value: string): boolean {
+  return value.length >= 1 && value.length <= 256 && !/[\u0000-\u001f\u007f]/u.test(value);
 }
 
 function createAgentToolJobId(

@@ -299,26 +299,26 @@ Pige must distinguish archive, delete, reset, cleanup, compaction, uninstall, an
 
 Lifecycle rules:
 
-- The Agent cannot permanently delete durable user knowledge or source evidence.
-- User-confirmed deletion of Pige-managed durable vault data is trash-first in v0.1.
-- Externally referenced originals are never deleted, moved, or rewritten by Pige cleanup, Agent actions, package actions, or reset actions.
+- Pige may create/update/link/organize/archive recoverably with Operations/Undo, but no
+  actor auto-deletes durable knowledge/evidence permanently.
+- Permanent/trash-bypass/managed-evidence deletion confirms; external originals are never modified.
 - Rebuildable databases, indexes, and caches can be reset without confirmation beyond the repair action because Markdown/source evidence remains durable.
-- Destructive cleanup that affects durable vault data requires confirmation and an operation or tombstone record.
+- Irreversible cleanup confirms; reversible cleanup records an Operation/tombstone.
 - Cancelling a job stops or prevents later processing only; it must not delete source records, source assets, conversation events, proposals, operations, memory, or Markdown.
 - If an object participates in future sync, deletion must leave enough metadata to distinguish intentional deletion from missing local data.
 
-| Data class | User action | Agent/package action | Automatic cleanup | Record required | Backup behavior |
+| Data class | User action | Pige Agent / external extension action | Automatic cleanup | Record required | Backup behavior |
 | --- | --- | --- | --- | --- | --- |
-| Source pages and wiki pages | Move to `.pige/trash/` or OS trash after explicit confirmation | Proposal only | No | Operation record plus tombstone when deleted/archived | Trash included by default |
+| Source/wiki pages | Archive/trash with Undo; permanent delete confirms | Pige auto-maintains recoverably; extensions use brokered services | No permanent cleanup | Operation/tombstone | Trash included |
 | Managed source copies | Delete only after explicit confirmation and warning | Never | No | Operation record plus source record update/tombstone | Included unless excluded by user |
 | Referenced original files | Reveal, relink, mark missing | Never modify/delete | Never | Source availability warning or relink operation | Path/URI listed as external dependency |
-| Source records | Archive/delete only with owning source/page decision | Proposal only | No | Operation/tombstone | Included by default |
-| Durable artifacts | Trash-first after confirmation; regenerate may be offered | Proposal only | Only when artifact is proven temp/duplicate and source evidence remains | Operation record for durable artifact deletion | Included by default until trashed/excluded |
+| Source records | Archive with owner; permanent delete confirms | Pige updates provenance; no independent delete | No | Operation/tombstone | Included |
+| Durable artifacts | Regenerate/trash recoverably | Pige replaces/cleans only with proven source/recovery | Proven temp/duplicate only | Deletion Operation | Included until trashed/excluded |
 | Conversation events | Keep by default; future delete/export must be explicit | Never delete | Compact references only, not turns | Compaction summary if reduced | Included by default |
 | Job records | Compact successful jobs after retention; unresolved stays | No direct delete | Yes, after retention and durable effects are represented | Compaction summary | Included until compacted |
-| Proposals | Approve, reject, or archive after decision | Create proposal only | No unresolved cleanup | Proposal and final decision record | Included by default |
+| Proposals | Decide/archive | Exceptional boundaries only | No unresolved cleanup | Proposal/decision | Included |
 | Operation records | Append-only; no normal deletion | Append only through service | No | Existing record is the audit trail | Included by default |
-| Agent memory | Inspect, edit, disable, delete, reset with confirmation where broad/sensitive | Candidate/proposal unless explicit remember is safe | No | Memory event and operation summary | Vault memory included by default unless excluded |
+| Agent memory | Inspect/edit/disable/delete/reset | Pige adds scoped reversible secret-scanned memory | No | Memory event/Operation | Included unless excluded |
 | Vault Skills | Disable/uninstall/export explicitly | Install/enable only through confirmation | No | Skill operation record | Vault Skills included by default |
 | Machine-local Skills/packages/tools | Disable/uninstall explicitly | No self-uninstall | Update cleanup only after verified install state | Machine-local install record | Excluded from vault backup |
 | Local model files | Remove from Local Capabilities settings | No | No hidden removal during jobs | Machine-local model manifest update | Excluded; redownloadable |
@@ -491,7 +491,7 @@ SQLite remains rebuildable.
 1. Ensure the source record and storage strategy are durable.
 2. Start Pi Agent with bounded source metadata and tool contracts.
 3. Persist validated Artifacts from Agent-selected tools.
-4. Commit an approved proposal/publication tool atomically.
+4. Commit validated autonomous publication or an approved exception atomically.
 5. Derive source-page/index/log projections and append Operation provenance.
 6. Update database and indexes.
 
@@ -529,7 +529,7 @@ Rules:
 - Follow the lifecycle matrix in section 5.1.
 - Managed source copy deletion requires explicit confirmation.
 - Externally referenced originals are never deleted by normal Pige cleanup.
-- Generated pages and artifacts move to `.pige/trash/` or OS trash first.
+- Generated pages/artifacts move to recoverable trash first.
 - Deletions write operation records.
 - Related indexes are updated or marked dirty.
 
@@ -584,7 +584,8 @@ Current implementation:
 - Backup creates a local `.pige-backup.zip` with `pige-backup-manifest.json` at the archive root and vault files under `vault/`.
 - The target manifest contract is `BackupManifestSchema` in `packages/schemas/src/index.ts`. It records format/version, backup ID, app version, vault ID/name/schema, per-domain durable schema ranges, created time, counts, include flags, structured external dependencies, excluded roots, and one SHA-256 checksum per included file.
 - Existing format-v1 backups without `backupId` or `domainSchemaVersions` remain readable as legacy input. Restore preview must scan/derive compatible ranges conservatively; it must not invent a successful compatibility result when a durable domain cannot be identified.
-- The current foundation writer covers in-vault durable roots only and emits the older format-v1 subset. External managed-copy inclusion, structured dependency records, durable backup jobs/checkpoints, and domain-version emission are explicit implementation gaps; until they ship, the UI must not call a backup containing an external managed-copy binding “complete”.
+- The format-v1 writer snapshots via no-follow descriptors, validates source/stage manifests and entry checksums, and publishes adjacent 0600 staging by fsynced no-overwrite hard link; owned dead-PID links reconcile.
+- Domain versions, external copies/dependencies, include controls, durable Jobs/checkpoints, non-hardlink destinations, restore identity, pathname CAS, and pre-link cleanup remain open.
 - Advanced options such as excluding memory/conversations, fast-restore database cache, non-secret provider metadata export, and copying externally referenced originals remain future visible options.
 - API keys, tokens, machine-local settings, local model files, bundled tool binaries, `.pige/db/`, `.pige/indexes/`, and `.pige/cache/` are not included by default.
 
@@ -655,7 +656,7 @@ Conflict classes:
 - External edit while Agent proposal was pending.
 - Deleted locally but changed remotely in a future sync adapter.
 
-v0.1 should already stage conflicts as confirmation proposals rather than silently overwrite.
+Never silently overwrite: merge losslessly or preserve alternatives; unresolved conflict stages.
 
 ### 13.1 Remote Backend And Mobile Client Readiness
 
@@ -725,7 +726,7 @@ Migration domains:
 
 Rules:
 
-- Durable file migrations create a pre-migration backup or confirmation proposal when risky.
+- Destructive durable migrations back up and intervene; reversible migrations record Operations.
 - SQLite migrations are rebuildable and can be reset.
 - Unknown fields in durable JSON/YAML must be preserved.
 - Failed migrations must leave original files intact.

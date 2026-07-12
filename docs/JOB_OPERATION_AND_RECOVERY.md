@@ -28,8 +28,8 @@ The core rule:
 2. Durable work before expensive work.
    Any expensive, asynchronous, permissioned, or failure-prone action must create a durable job record before it starts.
 
-3. User trust beats automation.
-   Safe actions can auto-apply. Risky or destructive actions become confirmation proposals. Uncertain recovery becomes visible status, not silent cleanup.
+3. Recoverability enables autonomy.
+   Validated reversible work writes Operations; only exceptional boundaries use proposals.
 
 4. Jobs are operational history, not knowledge truth.
    Jobs explain work. Durable knowledge lives in Markdown, source records, artifacts, memory files, proposals, operations, and logs.
@@ -154,8 +154,8 @@ creates one Job linked to it and any preserve-first source ref. Without a usable
 waits at `waiting_dependency/waiting_for_model` and resumes the same identity. Short chat
 creates no Source Record; the current source-bearing turn stores one attachment once and
 reconciles a crash between preservation and linkage. Existing `retrieval_query` and
-`agent_ingest` remain readable compatibility records. Agent-selected URL fetch/preserve,
-durable follow-up sessions, and broader multi-source recovery remain open.
+`agent_ingest` remain readable compatibility records. Pi-selected static-URL
+fetch/preserve uses the same turn; durable follow-up and multi-source recovery remain open.
 
 Jobs may have parent-child structure:
 
@@ -216,9 +216,10 @@ Rules:
 - `queued` means no execution is active. A fresh Job has only its durable record; a
   retried Job may retain verified outputs and a true action-safety guard.
 - `running` means a worker, model call, tool, or write step is active.
-- `waiting_permission` pauses execution until the Permission Broker resolves the request.
+- `waiting_permission` pauses external/new capabilities, never normal Pige-owned tools.
 - `waiting_dependency` pauses execution until a missing model provider, local tool, local model, runtime capability, vault binding, or external source path is configured or repaired.
-- `awaiting_review` means a confirmation proposal is ready and no risky mutation should continue automatically.
+- `awaiting_review` holds an irreversible/security/destination/conflict or stricter-policy
+  proposal only.
 - `cancel_requested` is transitional; duplicate requests are idempotent and the active worker exits at a safe checkpoint.
 - `completed_with_warnings` is success with recoverable or explainable issues.
 - `failed_retryable` keeps enough checkpoint data to retry safely.
@@ -456,14 +457,14 @@ Rules:
 - Canceling Agent ingest aborts the provider call when possible and remains distinct from provider timeout; no raw partial response is persisted.
 - Canceling backup removes incomplete temp archives when safe.
 - Canceling restore before apply leaves the original vault untouched. Canceling during apply must finish a safe checkpoint or stop with a recovery report.
-- Canceling a job with applied operations does not roll back automatically; rollback is a separate proposal or repair flow.
+- Canceling a job with applied operations does not roll back automatically; Undo/repair is a separate operation flow.
 - Cleanup, cancellation, and compaction must follow the data lifecycle matrix in `docs/DATA_ARCHITECTURE.md`; they cannot become hidden deletion paths for durable knowledge or source evidence.
 
 UI copy should say "Stop" or "Cancel processing" for ongoing work and avoid implying already-preserved files will be deleted.
 
 ## 10. Permission Pause
 
-Sensitive actions route through Permission Broker.
+External/new capabilities use Permission Broker; bounded core tools use service enforcement.
 
 When permission is required:
 
@@ -481,6 +482,10 @@ Rules:
 - YOLO suppresses prompts only for covered actions and still logs decisions.
 
 ## 11. Confirmation Proposal Lifecycle
+
+Validated same-vault work commits with an Operation when evidence-bound, checksum-current,
+and recoverable. Only irreversible loss, authority/security escalation, destination drift,
+unreconcilable conflict, or an explicit stricter user policy waits as a proposal.
 
 Proposal states:
 
@@ -526,7 +531,7 @@ Rules:
 - Rejection should record enough reason to avoid repeated suggestions when possible.
 - Approval creates operation records; the proposal then becomes `applied`.
 
-Current Phase 3 foundation implementation:
+Current Phase 3 implementation is narrower and transitional:
 
 - ProposalService confines bounded vault-relative records, rejects link aliases, fsyncs exclusive commits/decisions, and reuses one exact-intent Job slot.
 - Pi stages before body-free parent linkage. Approval runs `approved` -> exact page/index/
@@ -535,6 +540,7 @@ Current Phase 3 foundation implementation:
 - Startup reconciles without model/credentials; Home re-reads durable state after rejected
   calls and locks unknown outcomes. The sequence is not transactional; generic operations,
   unified/replacement UX, CAS/TOCTOU, and platform proof remain open.
+- Exact create-note review is exception/recovery infrastructure; autonomous commit and Activity/Undo remain open.
 - `requiredPermissionIds` is a compatibility field for permission prerequisites and may contain canonical `permreq_` request IDs or `permdec_` decision IDs; a later schema may split, not reinterpret, it.
 
 ## 12. Operation Record Lifecycle
@@ -678,7 +684,7 @@ Home:
 
 - Shows active, failed, waiting-dependency, waiting-permission, and awaiting-review jobs as compact status rows/cards.
 - Does not expose "Inbox" or "Review" as mandatory top-level concepts.
-- Lets user retry, cancel, open source, open proposal, or dismiss completed summaries.
+- Shows compact Activity/Undo; users retry, cancel, inspect, or resolve exceptions.
 
 Reader:
 
@@ -720,12 +726,12 @@ Durable execution gates:
 - Staging paths are job-local temporary references, not durable output truth. A restart reconciles them using checkpoint hashes; cancellation removes only proven incomplete staging data.
 - A successful backup/restore job links the `backup_created`/`restore_applied` operation. Failure/cancellation never registers a staging directory as a vault or overwrites a valid archive/vault silently.
 
-Current implementation boundary: the foundation backup/restore service validates and stages archives but does not yet emit the full durable jobs/checkpoints or explicit restore mode. Those gates are required before claiming the full recovery contract; legacy format-v1 backups remain readable through the compatibility rules in `docs/SYNC_CONFLICT_AND_MIGRATION.md`.
+Current boundary: the backup/restore service validates and stages archives but does not yet emit the full durable jobs/checkpoints; backup creation also atomically publishes adjacent archives where hard links are supported. Non-hardlink destinations and explicit restore mode remain open. Legacy format-v1 backups stay readable under `docs/SYNC_CONFLICT_AND_MIGRATION.md`.
 
 Migration rules:
 
 - Migration tooling preserves records from a newer or unknown schema version as opaque bytes until a compatible migrator is available; it must not parse them through schema v1 and silently discard fields. Within schema v1, Job and Operation records are strict, so adding a durable field requires a versioned migration rather than an undeclared passthrough field.
-- Risky migration creates pre-migration backup or confirmation proposal.
+- Destructive migration creates a pre-migration backup and intervention; safe reversible migration records an Operation.
 - Migration itself writes an operation record.
 
 ## 17. Future Remote Agent Backend And Mobile

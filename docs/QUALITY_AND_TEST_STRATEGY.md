@@ -57,7 +57,7 @@ Integration tests:
 - Backlink and relationship graph rebuild from Markdown.
 - Knowledge Tree aggregation against the governed fixture vaults.
 - Search indexing and results.
-- Confirmation proposal approve/reject.
+- Autonomous knowledge apply/Undo plus exceptional proposal approve/reject.
 - Job retry/recovery, monotonic progress, cooperative cancellation, durable-output races, and worker termination.
 - Conversation history reference storage.
 - Agent memory creation/deletion.
@@ -70,7 +70,7 @@ Renderer/component tests:
 - Home job/status cards.
 - Home knowledge retrieval result list.
 - Note reader rendering.
-- Confirmation diff/preview.
+- Autonomous Activity/Undo and exceptional diff/preview.
 - Permission dialog.
 - Settings pages.
 - I18N string rendering in long-label locales.
@@ -150,7 +150,7 @@ AI evaluation fixtures:
 - Retrieval query fixtures with expected relevant page/source IDs, acceptable citations, and known distractors.
 - Linking fixtures with expected tags, topics, entities, backlinks, and relationship suggestions.
 - Hallucination fixtures where the correct output is "not enough evidence".
-- Low-confidence fixtures that should create warnings or confirmation proposals instead of confident writes.
+- Low-confidence fixtures that replan, narrow, warn, preserve alternatives, abstain, or route a true exception instead of unsupported writes.
 - Prompt-injection fixtures where source text asks the Agent to change settings, ignore citations, reveal secrets, or create unsupported claims.
 
 Current deterministic suite:
@@ -168,7 +168,8 @@ Public Alpha usability scenario fixture:
 - At least 25 mixed sources captured across a scripted multi-session run.
 - Must include typed text, large pasted text, URL, Markdown, TXT, text PDF, image-only PDF, DOCX, PPTX, screenshot/image OCR, and at least two multilingual CJK/Latin sources.
 - Must include at least one failed or degraded path: denied permission, missing optional OCR/RAG model, failed parser/OCR warning, network fetch failure, app restart with queued job, or external Markdown edit.
-- Must include at least one Home knowledge retrieval question, one opened note with Note Agent context, one selection action, one confirmation proposal, one explicit memory write or disabled memory path, one backup, one restore into a fresh folder, and one post-restore search.
+- Must include one Home retrieval question, Note Agent, selection action, autonomous
+  write/Undo, exceptional proposal, memory path, backup, fresh-folder restore, and search.
 - Must produce a release evidence report with fixture version, platform, app build, source counts, generated page counts, failed/degraded jobs, warnings, backup manifest summary, restore result, AI eval summary, and unresolved issues.
 
 Fixture manifest and evidence rules:
@@ -198,7 +199,8 @@ Every feature that writes files must test:
 - Existing file checksum is checked before overwrite.
 - Crash between temp write and rename does not corrupt durable files.
 - Delete/archive moves to recoverable trash when required.
-- Data lifecycle actions follow the matrix in `docs/DATA_ARCHITECTURE.md`: durable knowledge and source evidence are trash-first or proposal-only, while databases/indexes/caches are rebuildable reset targets.
+- Data lifecycle follows `docs/DATA_ARCHITECTURE.md`: eligible knowledge changes are
+  operation-recorded/recoverable, durable deletion is trash-first, and indexes/caches rebuild.
 - Agent, Skill, package, cleanup, reset, and compaction flows cannot permanently delete source records, managed source copies, Markdown pages, memory, conversations, proposals, or operations.
 - Trash entries preserve object IDs, previous paths, operation IDs, and checksums when available.
 - Source record creation and source asset preservation happen before parsing/model calls.
@@ -240,7 +242,7 @@ Tests must verify:
   order, unregistered or incomplete tools, nested tool/model execution, final-text
   writes, policy/catalog/source drift, and renderer bypass.
 - No Advanced/Fast model assignment UI exists in v0.1 unless a real routing service is implemented and tested.
-- Pi built-in tools or extensions cannot bypass Permission Broker.
+- Pige-owned Pi tools cannot bypass service validation; external extensions cannot bypass Permission Broker.
 - Pige does not mutate the user's global `~/.pi/agent/models.json` during normal provider setup.
 - Cloud-send indicators appear when content is sent to a cloud-hosted provider.
 
@@ -277,7 +279,8 @@ Tests and evaluation fixtures must verify:
 - Generated titles are concise, human-readable, and stable enough that small prompt wording changes do not churn filenames unnecessarily.
 - Tags, topics, entities, claims, and relationship suggestions match the knowledge model and avoid broad speculative hierarchy edits.
 - Factual claims in generated notes are cited when source evidence exists.
-- Low-confidence parsing, OCR, classification, or linking produces warnings or confirmation proposals instead of silent confident writes.
+- Low-confidence parsing/OCR/classification/linking replans, narrows, warns, preserves
+  alternatives, abstains, or routes a true exception instead of a confident unsafe write.
 - Home retrieval meets fixture-level relevance targets such as expected relevant pages in top results and no known distractor outranking the primary evidence.
 - Grounded summaries answer only from selected snippets and cite the evidence used.
 - Grounded/vault-only answers expose missing or contradictory evidence; general answers
@@ -292,7 +295,8 @@ Recommended v0.1 eval metrics:
 - `retrieval_recall_at_5`: expected relevant pages/sources present in top five results.
 - `primary_result_rank`: rank of the expected primary page/source.
 - `schema_valid_rate`: structured Agent outputs passing validation.
-- `proposal_rate_for_risky_changes`: risky writes routed to proposals instead of auto-applied.
+- `autonomous_safe_write_rate`: eligible evidence-bound recoverable writes auto-apply with Operations.
+- `exception_routing_precision`: only irreversible/security/destination/unresolved-conflict writes become proposals.
 - `language_policy_match`: generated language follows source/query/app policy as configured.
 
 Rules:
@@ -309,7 +313,8 @@ Tests must verify:
 - Portable-settings fixtures reject machine-local or secret fields from vault config.
 - Machine-local settings are excluded from default vault backups.
 - Settings export excludes secrets by default.
-- Sensitive setting changes require confirmation or Permission Broker mediation.
+- Irreversible/security/destination setting changes require intervention; external/new
+  capability scopes use Permission Broker, while ordinary reversible preferences do not re-prompt.
 - Setting updates that affect running jobs either apply to new jobs only or pause/flush/restart jobs according to the declared apply behavior.
 
 ## 6.4 Onboarding And Capture-Only Gates
@@ -341,8 +346,8 @@ Tests must verify:
 
 Tests must verify:
 
-- Sensitive actions create Permission Broker requests.
-- Jobs enter `waiting_permission` while waiting.
+- External/new sensitive capability actions create Permission Broker requests.
+- Only those jobs enter `waiting_permission`; Pige-owned core knowledge tools do not.
 - Grant-matching fixtures distinguish a non-reusable one-action decision from a
   revocable saved grant bound to actor/version/capability/resource scope.
 - Deny blocks the action and leaves the app stable.

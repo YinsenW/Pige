@@ -1051,7 +1051,7 @@
       ],
       "open": {
         "id": "OPEN-REQ-PIGE-KNOW-003",
-        "description": "Complete relationship-risk classes, proposal UI, stale-conflict, and approve/reject operation acceptance remain open.",
+        "description": "Autonomous relationship eligibility/Undo and conflict exceptions remain open.",
         "targetBuilds": [
           "B7.01",
           "B7.02",
@@ -1069,7 +1069,7 @@
     },
     "PIGE-KNOW-005": {
       "status": "planned",
-      "plannedTarget": "Deterministic broken-link, orphan, duplicate-topic, unsourced-claim, and proposal-routing fixtures."
+      "plannedTarget": "Deterministic issue detection plus autonomous-repair/Undo and exact-exception routing fixtures."
     },
     "PIGE-KNOW-006": {
       "status": "partial",
@@ -1078,7 +1078,7 @@
       ],
       "open": {
         "id": "OPEN-REQ-PIGE-KNOW-006",
-        "description": "Complete deterministic created/updated/skipped/failed/confirmation-needed action-summary coverage remains open.",
+        "description": "Complete autonomous outcome-summary/recovery-ref coverage remains open.",
         "targetBuilds": [
           "B3.06",
           "B3.07",
@@ -1129,7 +1129,7 @@
       "evidence": ["EV-PROPOSAL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-PROPOSAL-UI"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-003",
-        "description": "Exact create-note/Home review works; unified, generic, replacement, and cross-process work remains.",
+        "description": "Current review is transitional; autonomous eligibility, generic exceptions, and cross-process work remain.",
         "targetBuilds": [
           "B7.01",
           "B7.02",
@@ -1160,7 +1160,7 @@
       "evidence": ["EV-AGENT-INGEST", "EV-PROPOSAL-REVIEW-LIFECYCLE"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-005",
-        "description": "Exact create-note apply has body-free job/model/source/proposal/page/policy Operation refs; other Agent writes remain open.",
+        "description": "Complete autonomous/approved Agent-write Operation coverage remains open.",
         "targetBuilds": [
           "B7.04"
         ],
@@ -1192,7 +1192,7 @@
       "evidence": ["EV-JOB-STATUS", "EV-JOB-WAIT", "EV-JOB-CANCEL", "EV-HOME-UI"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-007",
-        "description": "Home question/review states show; progress, cancel, push, and permission UI remain.",
+        "description": "Home Activity/Undo, progress, cancel, push, and exceptional permission UI remain.",
         "targetBuilds": [
           "B2.10",
           "B2.12"
@@ -1338,10 +1338,10 @@
     },
     "PIGE-PI-001": {
       "status": "partial",
-      "evidence": ["EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-BOUNDARY", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-RETRIEVAL", "EV-PI-INGEST-PROPOSAL", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE"],
+      "evidence": ["EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-BOUNDARY", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-RETRIEVAL", "EV-PI-INGEST-PROPOSAL", "EV-PI-URL-INGRESS", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE"],
       "open": {
         "id": "OPEN-REQ-PIGE-PI-001",
-        "description": "Pi ingest/Home, retrieval, publication, and exact create-note review/apply run. Catalog/routes, generic proposal/UI/recovery, Broker, and packaged BYOK remain open.",
+        "description": "Pi core paths run; eligibility, Activity/Undo, catalog/routes, Broker, recovery, and packaged BYOK remain.",
         "targetBuilds": [
           "B3.06",
           "B3.13"
@@ -1381,22 +1381,14 @@
       ],
       "open": {
         "id": "OPEN-REQ-PIGE-PI-004",
-        "description": "Full catalog/help, Provider delete, DeepSeek Anthropic, Agent-selected URL fetch, and signed packaged BYOK remain open.",
-        "targetBuilds": [
-          "B3.01",
-          "B3.03",
-          "B3.04",
-          "B3.14"
-        ],
-        "targetExits": [
-          "E3.01",
-          "E3.09"
-        ]
+        "description": "Full catalog/help, Provider delete, DeepSeek Anthropic, and signed packaged BYOK remain open.",
+        "targetBuilds": ["B3.01", "B3.03", "B3.04"],
+        "targetExits": ["E3.01"]
       }
     },
     "PIGE-PI-005": {
       "status": "planned",
-      "plannedTarget": "Complete unified ingress adds Agent-selected URL fetch/preserve, durable follow-up, and packaged platform proof without Host routing."
+      "plannedTarget": "Complete unified ingress needs durable follow-up/session recovery and signed packaged direct/retrieved/file/URL proof."
     },
     "PIGE-SETTINGS-001": {
       "status": "partial",
@@ -1473,22 +1465,12 @@
     },
     "PIGE-INGEST-003": {
       "status": "partial",
-      "evidence": ["EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-DOCUMENT-PIPELINE", "EV-PARSER-SMOKE", "EV-MIXED-PDF-OCR", "EV-PDF-PARSER-INPUT-SNAPSHOT", "EV-OFFICE-PARSER-INPUT-SNAPSHOT", "EV-MARKDOWN-ATOMIC", "EV-SOURCE-PAGE-CONFLICT-PRESERVATION", "EV-SOURCE-PAGE-SOURCE-REVISION", "EV-SOURCE-PAGE-BASELINE", "EV-SOURCE-PAGE-PATH-PROJECTION", "EV-SOURCE-PAGE-PATH-CONFINEMENT", "EV-SOURCE-PAGE-PREVIEW-BOUNDARY", "EV-GENERATED-NOTE-FINAL-FENCE", "EV-GENERATED-NOTE-CONFLICT-PRESERVATION"],
+      "evidence": ["EV-PI-URL-INGRESS", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-DOCUMENT-PIPELINE", "EV-PARSER-SMOKE", "EV-MIXED-PDF-OCR", "EV-PDF-PARSER-INPUT-SNAPSHOT", "EV-OFFICE-PARSER-INPUT-SNAPSHOT", "EV-MARKDOWN-ATOMIC", "EV-SOURCE-PAGE-CONFLICT-PRESERVATION", "EV-SOURCE-PAGE-SOURCE-REVISION", "EV-SOURCE-PAGE-BASELINE", "EV-SOURCE-PAGE-PATH-PROJECTION", "EV-SOURCE-PAGE-PATH-CONFINEMENT", "EV-SOURCE-PAGE-PREVIEW-BOUNDARY", "EV-GENERATED-NOTE-FINAL-FENCE", "EV-GENERATED-NOTE-CONFLICT-PRESERVATION"],
       "open": {
         "id": "OPEN-REQ-PIGE-INGEST-003",
-        "description": "Complete URL/PDF/DOCX/PPTX source-to-note locator and degraded-path acceptance remains open across the full copy/reference and packaged-platform matrix; strict cross-process CAS/parent-swap resistance plus Source Record-to-Source Page, Artifact-to-note, and note-to-index/operation cross-file commits remain open.",
-        "targetBuilds": [
-          "B5.01",
-          "B5.02",
-          "B5.03",
-          "B5.04",
-          "B5.05",
-          "B5.06",
-          "B5.09"
-        ],
-        "targetExits": [
-          "E5.01"
-        ]
+        "description": "Static URL fetch/preserve/recovery passes; complete locators/degraded paths, copy/reference packaging, cross-process CAS/parent-swap, and cross-file commits remain open.",
+        "targetBuilds": ["B5.01", "B5.02", "B5.03", "B5.04", "B5.05", "B5.06", "B5.09"],
+        "targetExits": ["E5.01"]
       }
     },
     "PIGE-INGEST-004": {
@@ -1603,7 +1585,7 @@
       ],
       "open": {
         "id": "OPEN-REQ-PIGE-EVAL-002",
-        "description": "Contradiction, missing-evidence, destructive, and broad-hierarchy routing fixtures remain open.",
+        "description": "Uncertainty replan/preservation and true-exception fixtures remain open.",
         "targetBuilds": [
           "B3.07",
           "B3.11"
@@ -1622,7 +1604,7 @@
       ],
       "open": {
         "id": "OPEN-REQ-PIGE-EVAL-003",
-        "description": "The complete safe-auto-apply classifier and destructive/broad-change rejection matrix remain open.",
+        "description": "Complete recovery eligibility and exceptional-boundary matrix remain open.",
         "targetBuilds": [
           "B3.07",
           "B3.08",
@@ -1714,19 +1696,12 @@
     },
     "PIGE-BACKUP-003": {
       "status": "partial",
-      "evidence": [
-        "EV-BACKUP"
-      ],
+      "evidence": ["EV-BACKUP", "EV-BACKUP-ATOMIC-FINALIZATION"],
       "open": {
         "id": "OPEN-REQ-PIGE-BACKUP-003",
-        "description": "Durable backup job/checkpoint, crash retry, and external-dependency completeness evidence remain open.",
-        "targetBuilds": [
-          "B9.01",
-          "B9.02"
-        ],
-        "targetExits": [
-          "E9.01"
-        ]
+        "description": "Durable backup Job/checkpoint resume and external-dependency completeness remain open.",
+        "targetBuilds": ["B9.01", "B9.02"],
+        "targetExits": ["E9.01"]
       }
     },
     "PIGE-BACKUP-004": {
@@ -1986,20 +1961,12 @@
     },
     "PIGE-UI-001": {
       "status": "partial",
-      "evidence": [
-        "EV-RENDERER"
-      ],
+      "evidence": ["EV-RENDERER", "EV-READER-RESOURCE-SAFETY", "EV-RENDERER-NAVIGATION-GUARD"],
       "open": {
         "id": "OPEN-REQ-PIGE-UI-001",
         "description": "Source-preserving editing, IME, long-page budget, and external-conflict UI tests remain open.",
-        "targetBuilds": [
-          "B6.08",
-          "B6.13"
-        ],
-        "targetExits": [
-          "E6.05",
-          "E6.08"
-        ]
+        "targetBuilds": ["B6.08", "B6.13"],
+        "targetExits": ["E6.05", "E6.08"]
       }
     },
     "PIGE-UI-002": {
@@ -2034,7 +2001,7 @@
     },
     "PIGE-UI-005": {
       "status": "planned",
-      "plannedTarget": "Note Agent and complete selection-action context, local-copy, translation, and proposal tests."
+      "plannedTarget": "Note Agent local-copy, auto-apply, Activity/Undo, and exception tests."
     },
     "PIGE-UI-006": {
       "status": "partial",
@@ -2755,7 +2722,7 @@
       ],
       "open": {
         "id": "OPEN-EXIT-E3.04",
-        "description": "Full executable acceptance remains open for Exit E3.04: Pasted text can become a source page, schema-valid wiki note, index update, and append-only log entry with source citations.",
+        "description": "Cited autonomous source/wiki/index/log/Operation acceptance remains open.",
         "targetBuilds": [
           "B3.06",
           "B3.08",
@@ -2774,7 +2741,7 @@
       ],
       "open": {
         "id": "OPEN-EXIT-E3.05",
-        "description": "Full executable acceptance remains open for Exit E3.05: Invalid, unsupported, low-confidence, or hostile structured output is rejected or routed to warning/proposal without an unsafe durable write.",
+        "description": "Invalid/hostile rejection, uncertainty handling, and true-exception routing remain open.",
         "targetBuilds": [
           "B3.07"
         ],
@@ -2788,7 +2755,7 @@
       "evidence": ["EV-PROPOSAL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE"],
       "open": {
         "id": "OPEN-EXIT-E3.06",
-        "description": "Create-note stage/review/apply/recovery prevents silent writes; broader risks, generic operations/UI, CAS/TOCTOU/platform remain open.",
+        "description": "Review/recovery works; eligibility, generic exceptions, CAS/TOCTOU/platform remain open.",
         "targetBuilds": [
           "B3.11"
         ],
@@ -2804,7 +2771,7 @@
       ],
       "open": {
         "id": "OPEN-EXIT-E3.07",
-        "description": "Complete deterministic action-summary coverage remains open.",
+        "description": "Complete autonomous outcome/recovery-ref coverage remains open.",
         "targetBuilds": [
           "B3.12"
         ],
@@ -2815,10 +2782,10 @@
     },
     "E3.08": {
       "status": "partial",
-      "evidence": ["EV-BOUNDARY", "EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-RETRIEVAL", "EV-PI-INGEST-PROPOSAL", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE"],
+      "evidence": ["EV-BOUNDARY", "EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-RETRIEVAL", "EV-PI-INGEST-PROPOSAL", "EV-PI-URL-INGRESS", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE"],
       "open": {
         "id": "OPEN-EXIT-E3.08",
-        "description": "Embedded Pi proves ingest/Home, retrieval, publication, and exact create-note review/apply. Catalog/routes, generic operations/UI/recovery, Broker, and packaged BYOK remain.",
+        "description": "Pi core paths run; eligibility, Activity/Undo, catalog/routes, Broker, recovery, and packaged BYOK remain.",
         "targetBuilds": [
           "B3.13"
         ],
@@ -2829,7 +2796,7 @@
     },
     "E3.09": {
       "status": "planned",
-      "plannedTarget": "Complete E3.09 covers direct/retrieved/file turns plus Agent-selected URL fetch, durable follow-up, waiting/resume, and packaged platform proof."
+      "plannedTarget": "Complete unified ingress needs durable follow-up/session recovery and signed packaged direct/retrieved/file/URL proof."
     },
     "E4.01": {
       "status": "partial",
@@ -2898,22 +2865,12 @@
     },
     "E5.01": {
       "status": "partial",
-      "evidence": ["EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PARSER", "EV-PARSER-SMOKE", "EV-MIXED-PDF-OCR", "EV-PDF-REFERENCE-ORIGINAL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-PARSER-INPUT-SNAPSHOT", "EV-OFFICE-PARSER-INPUT-SNAPSHOT", "EV-MARKDOWN-ATOMIC", "EV-SOURCE-PAGE-CONFLICT-PRESERVATION", "EV-SOURCE-PAGE-SOURCE-REVISION", "EV-SOURCE-PAGE-BASELINE", "EV-SOURCE-PAGE-PATH-PROJECTION", "EV-SOURCE-PAGE-PATH-CONFINEMENT", "EV-SOURCE-PAGE-PREVIEW-BOUNDARY", "EV-GENERATED-NOTE-FINAL-FENCE", "EV-GENERATED-NOTE-CONFLICT-PRESERVATION"],
+      "evidence": ["EV-PI-URL-INGRESS", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PARSER", "EV-PARSER-SMOKE", "EV-MIXED-PDF-OCR", "EV-PDF-REFERENCE-ORIGINAL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-PARSER-INPUT-SNAPSHOT", "EV-OFFICE-PARSER-INPUT-SNAPSHOT", "EV-MARKDOWN-ATOMIC", "EV-SOURCE-PAGE-CONFLICT-PRESERVATION", "EV-SOURCE-PAGE-SOURCE-REVISION", "EV-SOURCE-PAGE-BASELINE", "EV-SOURCE-PAGE-PATH-PROJECTION", "EV-SOURCE-PAGE-PATH-CONFINEMENT", "EV-SOURCE-PAGE-PREVIEW-BOUNDARY", "EV-GENERATED-NOTE-FINAL-FENCE", "EV-GENERATED-NOTE-CONFLICT-PRESERVATION"],
       "open": {
         "id": "OPEN-EXIT-E5.01",
-        "description": "Full executable acceptance remains open for Exit E5.01 across URL, PDF, DOCX, and PPTX copy/reference inputs, locator-bearing results, degraded paths, and supported packaged platforms; strict cross-process CAS/parent-swap resistance plus Source Record-to-Source Page, Artifact-to-note, and note-to-index/operation cross-file commits remain open.",
-        "targetBuilds": [
-          "B5.01",
-          "B5.02",
-          "B5.03",
-          "B5.04",
-          "B5.05",
-          "B5.06",
-          "B5.09"
-        ],
-        "targetExits": [
-          "E5.01"
-        ]
+        "description": "Static URL fetch/preserve/recovery passes; complete locators/degraded paths, copy/reference packaging, cross-process CAS/parent-swap, and cross-file commits remain open.",
+        "targetBuilds": ["B5.01", "B5.02", "B5.03", "B5.04", "B5.05", "B5.06", "B5.09"],
+        "targetExits": ["E5.01"]
       }
     },
     "E5.02": {
@@ -3018,23 +2975,17 @@
     },
     "E6.05": {
       "status": "partial",
-      "evidence": [
-        "EV-RENDERER"
-      ],
+      "evidence": ["EV-RENDERER", "EV-READER-RESOURCE-SAFETY", "EV-RENDERER-NAVIGATION-GUARD"],
       "open": {
         "id": "OPEN-EXIT-E6.05",
-        "description": "Full executable acceptance remains open for Exit E6.05: Note reader is sanitized, source-safe, keyboard reachable, and within the long-page rendering budget.",
-        "targetBuilds": [
-          "B6.08"
-        ],
-        "targetExits": [
-          "E6.05"
-        ]
+        "description": "Keyboard reachability and long-page rendering-budget evidence remain open.",
+        "targetBuilds": ["B6.08"],
+        "targetExits": ["E6.05"]
       }
     },
     "E6.06": {
       "status": "planned",
-      "plannedTarget": "Note Agent and complete selection-action integration report."
+      "plannedTarget": "Note Agent proves scoped auto-apply, Activity/Undo, and exceptional review."
     },
     "E6.07": {
       "status": "partial",
@@ -3078,7 +3029,7 @@
       "evidence": ["EV-PROPOSAL", "EV-AGENT-INGEST", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-PROPOSAL-UI"],
       "open": {
         "id": "OPEN-EXIT-E7.01",
-        "description": "Exact create-note/Home review works; unified/generic/replacement and CAS/TOCTOU/platform remain.",
+        "description": "Review is transitional; eligible apply, Activity/Undo, exception routing, and CAS/TOCTOU/platform remain.",
         "targetBuilds": [
           "B7.01",
           "B7.02",
@@ -3092,7 +3043,7 @@
     },
     "E7.02": {
       "status": "planned",
-      "plannedTarget": "Memory lifecycle, provenance, backup, and secret-scan integration report."
+      "plannedTarget": "Autonomous memory provenance/Undo, backup, secret scan, and exception report."
     },
     "E7.03": {
       "status": "partial",
@@ -3124,11 +3075,11 @@
     },
     "E8.02": {
       "status": "planned",
-      "plannedTarget": "Permission Broker and wrapped Pi capability report."
+      "plannedTarget": "External Broker report proving core tools do not prompt."
     },
     "E8.03": {
       "status": "planned",
-      "plannedTarget": "Permission-mode scope, provenance, visibility, and revocation report."
+      "plannedTarget": "External grant/YOLO scope, provenance, revocation, and Operation report."
     },
     "E8.04": {
       "status": "planned",
@@ -3137,18 +3088,13 @@
     "E9.01": {
       "status": "partial",
       "evidence": [
-        "EV-BACKUP", "EV-BACKUP-DURABLE-COVERAGE"
+        "EV-BACKUP", "EV-BACKUP-DURABLE-COVERAGE", "EV-BACKUP-ATOMIC-FINALIZATION"
       ],
       "open": {
         "id": "OPEN-EXIT-E9.01",
-        "description": "backupId/domainSchemaVersions, release exclusion scans, external managed-copy transport, user include controls, durable backup Jobs/checkpoints, and structured external dependencies remain open.",
-        "targetBuilds": [
-          "B9.01",
-          "B9.02"
-        ],
-        "targetExits": [
-          "E9.01"
-        ]
+        "description": "backupId/domain versions, release scans, external transport/controls, durable Jobs, non-hardlink publication, restore identity, pathname CAS/pre-link cleanup, and dependencies remain open.",
+        "targetBuilds": ["B9.01", "B9.02"],
+        "targetExits": ["E9.01"]
       }
     },
     "E9.02": {
@@ -3193,7 +3139,7 @@
     },
     "E9.05": {
       "status": "planned",
-      "plannedTarget": "Deterministic Knowledge Health and proposal-routing report."
+      "plannedTarget": "Deterministic Knowledge Health with eligible Operation/Undo repair and exact-exception routing."
     },
     "E9.06": {
       "status": "partial",
@@ -3686,6 +3632,7 @@
       "selector": "answers from bounded local evidence with citations and ranked pages"
     },
     "EV-HOME-AGENT": { "kind": "test", "path": "tests/unit/home-agent-service.test.ts", "selector": "Home Pi Agent service" },
+    "EV-PI-URL-INGRESS": { "kind": "test", "path": "tests/unit/agent-selected-url-ingress.test.ts", "selector": "Agent-selected URL ingress" },
     "EV-HOME-UI": { "kind": "test", "path": "tests/unit/desktop-shell-contract.test.ts", "selector": "wires Home questions through Pi with visible typed outcomes and no raw provider error surface" },
     "EV-RETRIEVAL-REGRESSION-GOLDEN": { "kind": "test", "path": "tests/evals/retrieval.regression-golden.test.ts", "selector": "passes deterministic ranking, citation, distractor, related-page, and insufficient-evidence gates" },
     "EV-RETRIEVAL-REGRESSION-REPORT": { "kind": "contract", "path": ".github/workflows/ci.yml", "selector": "Upload retrieval regression report" },
@@ -3796,6 +3743,7 @@
       "path": "tests/unit/backup-service.test.ts",
       "selector": "creates a zip backup with durable vault files and restores it into a new vault without rebuildable cache files"
     },
+    "EV-BACKUP-ATOMIC-FINALIZATION": { "kind": "test", "path": "tests/unit/backup-service.test.ts", "selector": "publishes a validated adjacent staging archive and leaves no staging residue" },
     "EV-BACKUP-DURABLE-COVERAGE": { "kind": "test", "path": "tests/unit/backup-service.test.ts", "selector": "body-free path-safe manifest aligned with ZIP entries" },
     "EV-RESTORE-CONFLICT": {
       "kind": "test",
@@ -3812,6 +3760,8 @@
       "path": "tests/unit/markdown-renderer.test.ts",
       "selector": "sanitizes raw HTML and renders Pige inline references as safe anchors"
     },
+    "EV-READER-RESOURCE-SAFETY": { "kind": "test", "path": "tests/unit/markdown-renderer.test.ts", "selector": "keeps reader content from navigating or loading remote resources" },
+    "EV-RENDERER-NAVIGATION-GUARD": { "kind": "test", "path": "tests/unit/renderer-navigation-guard.test.ts", "selector": "blocks main-frame, child-frame, redirect, and new-window navigation" },
     "EV-SECURITY-POLICY": {
       "kind": "contract",
       "path": "SECURITY.md",

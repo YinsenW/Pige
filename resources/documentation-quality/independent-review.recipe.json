@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-12T09:01:07Z",
+  "reviewedAt": "2026-07-12T12:57:31Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,7 +30,7 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "57da2a677b70c459c23b29c28d4ce59d934702883e85141dfbb11cd885d05be7"
+    "reviewedSha256": "b1e37b27d9bfbe4a136466742ab0434234b97497c54a1c56bf1b8a6c58199fac"
   },
   "reviewers": [
     {
@@ -274,7 +274,7 @@
       "independence": "Fresh read-only dependency reviewer found the original workspace-lock verifier false negative and Decision lifecycle risk, then independently accepted the repaired 106-file Undici 8.7 candidate, exact owner alignment, unchanged semantic lock and statuses, and explicit platform/HTTP2 residuals without editing files."
     },
     {
-      "reviewerId": "combined-provider-general-agent-final-review",
+      "reviewerId": "autonomous-combined-final-review",
       "task": "/root/final_doc_review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
@@ -283,66 +283,66 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Fresh read-only reviewer validated the prior code, trace and UI audits against the exact 44-Development plus 24-governed candidate. It accepted existing Home/Models navigation, unified durable Agent turns, preset/Custom inventory and Global Default, exact current/open boundaries, unchanged partial/planned states, truthful loopback plus legacy Custom DeepSeek evidence, the 1,091-claim lock and fixed capacity with zero edits or blockers."
+      "independence": "Fresh read-only reviewer audited the exact 61-path Autonomous-by-Default plus URL, Reader and Backup candidate without editing files. It accepted Pi-selected restart-recoverable static-URL fetch, inert remote/traversal Reader resources, Electron navigation denial, validated adjacent no-overwrite backup publication, exact residual gaps, unchanged states, and the minimal four-evidence projection with zero blockers."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "combined-provider-general-agent-final-review",
+      "reviewerId": "autonomous-combined-final-review",
       "blockerCount": 0,
-      "summary": "Existing Home and Models own the unified turn, Provider inventory and Global Default without a new destination, mode or setup taxonomy; deferred URL, follow-up, delete and sync polish remain explicit."
+      "summary": "Existing Home, Reader, Activity and Settings surfaces absorb autonomous defaults, Pi-selected URL work and safety hardening without a new mode, destination or confirmation flow."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "combined-provider-general-agent-final-review",
+      "reviewerId": "autonomous-combined-final-review",
       "blockerCount": 0,
-      "summary": "PRD and Owners agree on five presets, Custom-only protocols, conditional auth, journaled Connect/Refresh, one inventory/default, durable Agent turns and no silent fallback."
+      "summary": "PRD and Owners agree on autonomous reversible knowledge work, exception-only intervention, standing exact-destination BYOK authority, Pi-selected URL ingress, Reader confinement and bounded backup finalization."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "combined-provider-general-agent-final-review",
+      "reviewerId": "autonomous-combined-final-review",
       "blockerCount": 0,
-      "summary": "Stable Provider and unified-ingress mappings retain partial/planned status with no new Requirement or evidence ID; current and locked ledgers contain the same 1,091 claims."
+      "summary": "Four exact executable evidence IDs map only to existing partial rows; planned unified-ingress rows and every phase/status remain unchanged, with 1,095 current and locked claims."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "combined-provider-general-agent-final-review",
+      "reviewerId": "autonomous-combined-final-review",
       "blockerCount": 0,
-      "summary": "Owners expose exact DTOs, conditional auth, probe/journal/recovery, inventory/default and unified-turn evidence while distinguishing assembled Connect proof from the legacy Custom DeepSeek canary."
+      "summary": "Owners expose current URL, Reader and Backup boundaries plus precise recovery and packaging gaps, while keeping proposal-first create-note explicitly transitional under the autonomous target."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.6,
-      "reviewerId": "combined-provider-general-agent-final-review",
+      "reviewerId": "autonomous-combined-final-review",
       "blockerCount": 0,
-      "summary": "No document, Requirement, Build, Exit or state was added: 57 Markdown files use 1,209,470/1,210,000 bytes; entry context is 4,128 words and trace uses 5,203 lines/249,928 bytes."
+      "summary": "No document, Requirement, Build, Exit or state was added: 57 Markdown files use 1,209,123/1,210,000 bytes; entry context is 4,105 words and trace uses 5,157 lines/249,831 bytes."
     }
   ],
   "verification": [
     {
       "command": "npm run verify",
       "status": "passed",
-      "evidence": "Full verification passed: docs, 84 decisions, UI visual, independent review, TRC-001 through TRC-005, CON-001 through CON-004, 49 dependencies, fixtures, Pi/import boundaries, no telemetry, source artifacts, LEN-001 through LEN-005, and all five quality dimensions."
+      "evidence": "Full verification passed on the exact combined candidate: docs, 85 decisions, UI visual, independent review, TRC-001 through TRC-005, CON-001 through CON-004, 49 dependencies, fixtures, Pi/import boundaries, no telemetry, source artifacts, LEN-001 through LEN-005, and all five quality dimensions."
     },
     {
-      "command": "npm run verify:docs && npm run verify:decisions && npm run verify:ui-visual && npm run verify:contracts && npm run verify:dependencies && npm run verify:fixtures && npm run verify:boundaries && npm run verify:no-telemetry && npm run verify:source-artifacts && git diff --check",
+      "command": "npm test && npm run typecheck && npm run build --workspace @pige/desktop",
       "status": "passed",
-      "evidence": "Focused docs, decision, UI, contract and diff gates passed on the exact 68-file combined candidate; full verification also covers dependency, fixture, boundary, telemetry and source-artifact gates."
+      "evidence": "Development's exact combined matrix passed 77 files plus one skip and 729 tests plus three skips, typecheck and production build; Electron unified Agent, Pi, Undici, parser, index and real macOS Vision smokes also passed."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 passed: 4,128/4,200 entry words, zero duplicate groups, 14 mutations, 5,203 trace lines, 249,928 trace bytes, 57 Markdown files, 1,209,470 bytes, and 6.95 percent line reduction."
+      "evidence": "LEN-001 through LEN-005 passed: 4,105/4,200 entry words, zero duplicate groups, 14 mutations, 5,157 trace lines, 249,831 trace bytes, 57 Markdown files, 1,209,123 bytes, and 6.72 percent line reduction."
     },
     {
       "command": "node scripts/verify/independent-documentation-review.mjs --print-snapshot && explicit semantic-ledger comparison",
       "status": "passed",
-      "evidence": "The governed snapshot is 57da2a677b70c459c23b29c28d4ce59d934702883e85141dfbb11cd885d05be7 across 109 files; current and locked ledgers contain 1,091 claims with zero differences."
+      "evidence": "The governed snapshot is b1e37b27d9bfbe4a136466742ab0434234b97497c54a1c56bf1b8a6c58199fac across 109 files; current and locked ledgers contain 1,095 claims with zero differences."
     }
   ],
   "coordination": {
@@ -351,8 +351,8 @@
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The combined candidate implements the bounded Provider/Global Default/Pi/Home and unified text/one-file ingress checkpoint while retaining legacy records, explicit open gaps and every existing partial/planned status.",
-    "acknowledgement": "Development froze 44 files and exact executable evidence; Product Planning synchronized 24 governed files, UI Design accepted the current/target boundary, and an independent reviewer cleared the exact 68-file candidate."
+    "compatibility": "The combined candidate keeps every existing phase/status and legacy boundary while adding the autonomous target contract, bounded Pi-selected static-URL ingress, Reader resource/navigation confinement and atomic self-validating backup finalization.",
+    "acknowledgement": "Development mechanically assembled and cleared exactly 61 paths; Product Planning made only the incremental Owner/acceptance/semantic bind, UI Design requested no additional surface, and independent reviewers cleared the exact candidate."
   },
   "resolvedBlockers": [
     "Implemented five preset-first Providers plus Custom-only protocols, conditional credentials, auto-sync/Refresh/manual inventory, grouped Global Default, typed repair and real Pi probe with journaled recovery; retained every partial/planned state.",
@@ -382,7 +382,11 @@
     "Moved direct-image OCR onto Pi tool events with no pre-tool child, deterministic reuse, capability recovery, cancellation, empty-output parking across restart, wrong-tool rejection, and managed/reference source proof.",
     "Added the reviewed OpenAI key-only preset and global default plus a Pi-grounded Home query vertical with no-model local fallback, body-free per-turn audits, exact Markdown/source privacy drift checks, confined records, untrusted evidence, fixed zero-evidence output, typed UI states, and no raw key/path/body/error exposure.",
     "Added one optional Agent-selected local ingest search with bounded opaque refs, current Markdown/SourceRecord revalidation, per-turn drift audits, terminal failure/publication fences, stable related_page_ids, and post-publication Operation recovery without a retrieval Job or state promotion.",
-    "Added Home proposal cards and focused escaped review over the exact Pi create-note lifecycle, with durable rejected-call reconciliation, ready retry, unknown fail-closed, localized outcomes, double-action guards, and bounded ARIA/focus behavior."
+    "Added Home proposal cards and focused escaped review over the exact Pi create-note lifecycle, with durable rejected-call reconciliation, ready retry, unknown fail-closed, localized outcomes, double-action guards, and bounded ARIA/focus behavior.",
+    "Made Input Once, Knowledge Grows Naturally and Autonomous by Default the target: validated reversible Pige-owned knowledge work auto-applies with Activity/Undo, while intervention is limited to destructive loss, authority escalation, changed destination, unreconcilable conflict or an explicit stricter policy.",
+    "Added Pi-selected static-URL fetch/preserve with SSRF/body gates, deterministic source/page/artifact/Operation recovery and no hidden Host route; durable follow-up, multi-URL and packaged proof remain open.",
+    "Made remote/protocol/traversal Reader resources inert and blocked frame, redirect and new-window navigation without adding user friction or a new surface.",
+    "Added descriptor-bound source snapshots, self-validation, adjacent private staging, fsync, no-overwrite hard-link publication and owned crash-link reconciliation while keeping non-hardlink transport and durable Backup Jobs open."
   ],
   "nonBlockingRisks": [
     "P5 remains in progress: remaining Job-class publishers, running capture/other-class cancellation, strict cross-process Job CAS and routing, parent-directory swap, guard-to-domain atomicity, guard-without-output recovery, checkpoint arrays, cross-file transactions, Windows/Paddle, packaged-filesystem proof, and visible progress/cancel UI remain open.",
@@ -390,10 +394,10 @@
     "The local-tool lifecycle remains a fake/local service foundation: real Paddle/Python/model/language-pack transport, ordinary-ingest no-hidden-install proof, production app-data/catalog/permission/pre-vault Job/Operation wiring, OCR/UI, supply chain, packaged platforms, cross-process locking, complete recovery/GC/quarantine purge, and background lifecycle controls remain open.",
     "The retrieval regression foundation remains lexical and synthetic: model-grounded summary/citation validation under cloud-send and Permission enforcement, tag/topic/entity and Knowledge Tree thresholds, vector/reranker ranking, 10k/100k and UI/packaged proof, and broader locale/query families remain open.",
     "The Knowledge Tree remains internal-only: broader relation and branch semantics, richer aggregate inputs, public IPC/preload/renderer navigation, localized empty state, 10k worker/incremental rebuild proof, packaged parity, and the separately owned visual/accessibility and Knowledge Health work remain open.",
-    "Pi remains partial: full Provider catalog/help/delete, durable sync health, optional-auth UI, live DeepSeek preset/Anthropic proof, Agent-selected URL fetch, durable follow-up/multi-source recovery, Broker and signed packaged BYOK remain open.",
+    "Pi remains partial: full Provider catalog/help/delete, durable sync health, optional-auth UI, live DeepSeek preset/Anthropic proof, durable follow-up/multi-source recovery, Broker and signed packaged BYOK remain open.",
     "No-telemetry is a static executable gate; unknown SDKs, computed endpoints, indirect transports, generated configuration, and crash-hook review remain open. Diagnostics still need broader stores, recovery correlation, user clear, export cancellation, selected-path UX, and crash recovery.",
-    "Backup still needs backupId/domainSchemaVersions, release exclusion scans, external managed copies, include controls, durable Jobs/checkpoints, structured dependencies, and complete restore orchestration.",
-    "Trace projections use 5,203 of 5,500 lines and 249,928 of 250,000 bytes; governed Markdown uses 1,209,470 of 1,210,000 bytes. Future additions must reclaim capacity instead of raising budgets.",
+    "Backup still needs backupId/domain versions, release scans, external copies/controls, durable Jobs/checkpoints, non-hardlink publication, restore identity, pathname CAS/pre-link cleanup, dependencies and complete restore orchestration.",
+    "Trace projections use 5,157 of 5,500 lines and 249,831 of 250,000 bytes; governed Markdown uses 1,209,123 of 1,210,000 bytes. Future additions must reclaim capacity instead of raising budgets.",
     "PRD, TECH_ARCHITECTURE, and Decision Log remain large Owner documents; future Agents should continue section-targeted reads and define each fact once.",
     "The concise pre-alpha README intentionally has no install button, screenshots, or release download; add those only when a usable signed build and governed visual evidence exist.",
     "Structural UI gates do not prove packaged macOS/Windows fidelity, accessibility, or human visual approval; real capture and release evidence remain open.",

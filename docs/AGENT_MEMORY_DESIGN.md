@@ -21,7 +21,7 @@ Recommended stance:
 Why:
 
 - Pige is a personal knowledge management product, not a general Agent runtime.
-- Memory must respect Pige's vault model, confirmation gates, backup/restore rules, privacy settings, and UI.
+- Memory must respect Pige's vault, autonomous-intervention boundary, backup/restore, privacy, and UI contracts.
 - A third-party memory package would bring its own lifecycle, storage conventions, prompt behavior, and permissions.
 
 ## 2. What Memory Means In Pige
@@ -60,7 +60,7 @@ Risks for Pige default:
 - Built primarily as an OpenClaw/Hermes plugin.
 - Uses its own gateway, environment variables, patch scripts, and runtime lifecycle.
 - Its default integration surface is broader and lower-level than Pige's product needs.
-- Direct integration would make Pige's confirmation, vault, backup, and UI boundaries harder to enforce.
+- Direct integration would make Pige's autonomy, vault, backup, and UI boundaries harder to enforce.
 
 Pige use:
 
@@ -134,7 +134,7 @@ Pige use:
 L0 Events:
 
 - Append-only records of memory-worthy interactions.
-- Examples: user correction, accepted confirmation proposal, repeated Agent failure, completed workflow, explicit remember command.
+- Examples: user correction, autonomous or approved Operation, repeated Agent failure, completed workflow, explicit remember command.
 
 L1 Atoms:
 
@@ -179,20 +179,21 @@ Direct writes:
 - Explicit "remember this" commands.
 - User-authored memory edits in Settings.
 
-Candidate writes:
+Autonomous eligible writes:
 
 - Accepted corrections.
-- Accepted confirmation proposals.
+- Completed Pige-owned Operations and exceptional approved proposals.
 - Repeated Agent failures.
 - Stable workflow patterns.
 
-Confirmation-required writes:
+They require provenance, secret scanning, bounded scope, reversibility, and evidence that
+the pattern is stable. Low confidence is skipped or retained only as non-active candidate data.
+
+Exceptional intervention:
 
 - Sensitive personal facts.
 - Identity-level claims.
-- Broad behavioral policies.
-- Memories that affect many future actions.
-- Low-confidence inferences.
+- Authority/security/external-destination policy changes disguised as memory.
 
 Blocked writes:
 
@@ -215,7 +216,7 @@ Rules:
 - Current user instruction wins over memory.
 - Explicit settings and `PIGE.md` win over inferred memory.
 - Memory should influence style, workflow, and behavior, not replace factual grounding.
-- If memory materially affects an action, Pige should expose a short reason in activity, confirmation, or operation logs.
+- If memory materially affects an action, expose a short reason in Activity or Operation history.
 
 ## 5. v0.1 Scope
 
@@ -223,7 +224,7 @@ Include:
 
 - Pige-native vault-scoped memory.
 - Explicit "remember this".
-- Memory from accepted corrections and confirmation proposals.
+- Memory from accepted corrections, completed Operations, and exceptional decisions.
 - Inspect, disable, delete, export, and reset controls.
 - Secret scanning before persistence.
 - Lexical recall.

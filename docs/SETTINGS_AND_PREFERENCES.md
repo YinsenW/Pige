@@ -131,9 +131,9 @@ Rules:
   Global Default; only Custom exposes protocol/Base URL.
 - Model/provider behavior must follow `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`; do not add Advanced/Fast model settings unless runtime routing support is real and tested.
 - Local embeddings, OCR, speech, parsers, and bundled tool health belong to Local Capabilities.
-- Permission mode, cloud-send policy, API key storage mode, and YOLO belong to Permissions & Privacy.
+- External-extension permission mode, cloud-send policy, API key storage mode, and YOLO belong to Permissions & Privacy; core knowledge autonomy is not a YOLO feature.
 - Vault & Note Storage is the place to see where local notes and source assets live.
-- Trash/archive policy must follow the data lifecycle matrix in `docs/DATA_ARCHITECTURE.md`; settings can choose future retention behavior but cannot let Agent/package cleanup permanently delete durable knowledge or source evidence.
+- Trash/archive policy follows `docs/DATA_ARCHITECTURE.md`; no setting lets any actor permanently delete durable knowledge/source evidence automatically.
 
 ## 6. Setting Registry
 
@@ -170,10 +170,10 @@ This table is the v0.1 baseline. Implementation can split storage files differen
 | Speech input enabled | Local Capabilities | `machine_local` | Speech Service | OS app data | No | `os_permission` | Immediate |
 | Parser/toolchain health | Local Capabilities/System | `derived_status` | Runtime Capability Service, Local Tool Service | `resources/toolchain-manifest/` plus resolved bundled paths | No | `none` | Recomputed/repair job |
 | `PIGE.md` policy | Agent & Memory | `vault_portable` | Vault Service, Agent Orchestrator | `PIGE.md` | Yes | `explicit_confirmation` | Requires validation and proposal |
-| Agent behavior preferences | Agent & Memory | `vault_portable` or `machine_local` by item | Agent Orchestrator | `.pige/config.json` or OS app data | Depends | `explicit_confirmation` | Usually new jobs |
+| Agent behavior preferences | Agent & Memory | `vault_portable` or `machine_local` by item | Agent Orchestrator | `.pige/config.json` or OS app data | Depends | `none` | Usually new jobs; exceptional boundary changes use their own guarded setting |
 | Memory enabled state | Agent & Memory | `vault_portable` for vault memory | Agent Memory Service | `.pige/config.json` | Yes | `none` | New memory reads/writes |
 | Memory backup inclusion | Agent & Memory/Backup flow | `vault_portable` | Backup Service | `.pige/config.json` | Yes | `none` | Next backup |
-| Confirmation thresholds | Agent & Memory | `vault_portable` | Change Proposal Service | `.pige/config.json` | Yes | `explicit_confirmation` | New proposals/jobs |
+| Exceptional intervention policy (`confirmation.*` compatibility) | Agent & Memory | `vault_portable` | Agent Orchestrator, Change Proposal Service | `.pige/config.json` | Yes | `explicit_confirmation` | New jobs; cannot turn uncertainty into routine prompts |
 | Default permission mode | Permissions & Privacy | `machine_local` | Permission Broker | OS app data | No | `explicit_confirmation` | Immediate |
 | Saved scoped grants | Permissions & Privacy | `permission_grant` | Permission Broker | Machine-local permission store | No | `explicit_confirmation` | Immediate |
 | YOLO Full Access | Permissions & Privacy | `permission_grant` | Permission Broker | Machine-local permission store | No | `explicit_confirmation` | Immediate, visible indicator |
@@ -233,10 +233,10 @@ Agent-affecting settings are not free-form prompt snippets. They compile into ty
 | YOLO Full Access | `permissions.yoloEnabled` | Yes, as status only | Permission Broker | Next covered sensitive action |
 | App language | `language.appLocale` | Yes | I18N Service, Renderer | UI immediately; generated text only when policy says so |
 | OCR language hints | `language.ocrLanguageHints` | Maybe | OCR Service | New OCR jobs |
-| Agent behavior preferences | Workflow-specific policy fields | Yes | Agent Orchestrator, Change Proposal Service | New Agent jobs |
+| Agent behavior preferences | Workflow-specific policy fields | Yes | Agent Orchestrator | New Agent jobs |
 | Memory enabled state | `memory.vaultMemoryEnabled` | Yes | Agent Memory Service | New memory reads/writes |
 | Memory backup inclusion | `memory.includeMemoryInBackup` | No | Backup Service | Next backup |
-| Confirmation thresholds | `confirmation.*` | Yes | Change Proposal Service | New proposals/jobs |
+| Exceptional intervention compatibility | `confirmation.*` | Yes | Agent Orchestrator, Change Proposal Service | New jobs |
 | Local embedding model status | `retrieval.vectorSearchAvailable` | Maybe | Local RAG Engine | New retrieval/index jobs |
 | Parser/toolchain health | `localCapabilities.parserToolchainReady` | Maybe | Local Tool Service, Parser Service | New parser jobs |
 | Speech input enabled | `localCapabilities.speechInputAvailable` | No for Agent | Speech Service | New dictation sessions |
@@ -259,7 +259,7 @@ Setting changes are one of these types:
 | Immediate | theme, language when possible, permission grant revoke | Apply now and emit event |
 | Next operation | default model, OCR preference, source storage strategy | Applies to new jobs only |
 | Requires job coordination | active vault switch, managed-copy root validation | Pause/flush/cancel/recover jobs safely |
-| Requires migration/proposal | `PIGE.md`, vault schema, destructive cleanup | Validate, stage proposal, require confirmation |
+| Requires exceptional intervention | `PIGE.md`, destructive vault migration/cleanup | Validate, preview, confirm, recover |
 | Requires restart | update channel in some cases, low-level native runtime setting | Tell user clearly |
 
 Rules:
@@ -277,8 +277,9 @@ Source content, model output, Skills, packages, and web pages must not directly 
 Allowed paths:
 
 - The human user changes settings in Settings UI.
-- The human user asks Pige in natural language to change a setting; Pige creates a clear confirmation proposal or permission request when the change is sensitive.
-- A built-in maintenance flow suggests a setting change with explanation and confirmation.
+- A direct user request for an ordinary reversible setting is validated and applied without
+  a second prompt; sensitive changes use the applicable exceptional gate.
+- Built-in maintenance auto-applies non-destructive repair; destructive change is previewed.
 
 Sensitive settings that always require explicit confirmation:
 
@@ -372,7 +373,8 @@ Rules:
 
 - Renderer receives display DTOs, not raw secret values or arbitrary filesystem capability.
 - Secret writes go through dedicated secret APIs.
-- Sensitive patches route through Permission Broker or confirmation proposals.
+- External/new-authority patches route through Permission Broker; irreversible/security/
+  destination/conflict patches use exceptional intervention.
 - Settings reads should be grouped by page and redacted by default.
 - Settings changes should emit domain events so UI, jobs, and services can refresh safely.
 

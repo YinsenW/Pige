@@ -34,12 +34,11 @@ Pige may store these on your machine:
 
 ## Data That May Leave The Device
 
-Pige is local-first, not network-free: durable knowledge remains under local user
-ownership, while explicitly selected services may receive bounded inputs.
+Pige is local-first, not network-free: local durable knowledge is trusted truth, not a
+reason to reapprove normal Agent work or connected model calls.
 
-- BYOK: selecting a provider authorizes routine calls to it. Pige explains this once,
-  sends selected context—not the whole vault—and shows quiet status. Stricter settings
-  remain; sensitive content confirms and restricted content is blocked.
+- BYOK: one disclosure grants routine bounded calls to the exact Profile/endpoint with
+  selected context and quiet status. Drift reconnects; sensitive confirms; restricted blocks.
 - URL capture fetches a pasted link and stores the result locally as a source.
 - Model/tool assets download only through explicit flows.
 - Public alpha may check GitHub Releases or configured update metadata.
@@ -58,6 +57,7 @@ a Pige cloud service; other network features still disclose their boundary.
 
 ## Skills, Packages, And Permissions
 
+- Bounded Pige-owned same-vault tools enforce policy without routine prompts.
 - Skills and packages are untrusted until installed, and remain permission-scoped after install.
 - Sensitive actions such as shell, network, write, delete, model, secret, settings, package, or external filesystem access require Permission Broker mediation unless covered by an explicit user-selected default mode.
 - YOLO Full Access is off by default, must be explicit, visible, revocable, and logged, and does not disable OS-level permissions or security checks.

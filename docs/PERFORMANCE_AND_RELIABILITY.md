@@ -324,12 +324,13 @@ Recovery on launch:
 - Validate temp files and partial outputs.
 - Reconcile operation records with file existence and checksums.
 - Rebuild dirty indexes.
-- Show recoverable failed items in Home status or confirmation surfaces.
+- Show recoverable failures in Home status and exceptional conflicts in decision surfaces.
 
 Rules:
 
 - Preserve user data over completing automation.
-- If recovery is uncertain, stage a proposal or warning.
+- If recovery is uncertain, preserve alternatives and warn/abstain; stage a proposal only
+  when conflict cannot be reconciled without loss.
 
 ## 13. Resource Pressure Handling
 

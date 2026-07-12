@@ -23,8 +23,8 @@ flowchart TD
   WikiPage --> Chunk
   Capture --> Conversation["Conversation Event"]
   Conversation --> Job["Job"]
-  Job --> Proposal["Confirmation Proposal"]
   Job --> Operation["Operation Record"]
+  Job -. exceptional boundary .-> Proposal["Change Proposal"]
   Proposal --> Operation
   Operation --> WikiPage
   Operation --> Memory["Agent Memory"]
@@ -55,7 +55,7 @@ flowchart TD
 | Asset | Local image or attachment used by Markdown pages. | `assets/` |
 | Conversation event | Reference-based chat timeline event. Stores user/assistant turns, job references, permission decisions, and short messages without duplicating large source asset bodies. | `.pige/conversations/` |
 | Job | Recoverable unit of work such as capture, parse, OCR, ingest, query, index rebuild, backup, restore, permissioned Skill run, tool/model install, or migration. | `.pige/jobs/` for vault jobs, OS app data for machine-local jobs, plus rebuildable SQLite index |
-| Proposal | Confirmation-required planned change before it mutates durable wiki state. | `.pige/proposals/` |
+| Proposal | Exceptional irreversible, authority, destination, or unresolved-conflict change awaiting a decision. | `.pige/proposals/` |
 | Operation record | Applied user, Agent, system, Skill, package, or migration change record for lifecycle audit, policy evidence, rollback when possible, and future sync reconciliation. | `.pige/operations/` |
 | Agent memory event | Raw memory input such as explicit remember, accepted correction, accepted proposal, failed action lesson, or preference. | `.pige/memory/events/` |
 | Agent memory atom | Compact durable memory statement derived from memory events. | `.pige/memory/atoms/` |
@@ -68,7 +68,7 @@ flowchart TD
 | Skill | Human-readable workflow extension. Pure Skills are Markdown instruction packs; external/Web Skills may request capabilities. | App bundle, `.pige/skills/`, or app data |
 | Package | Reviewed Pi package or future extension package that can provide capabilities, tools, or Skills. | App data and Package Manager records |
 | Local tool | Bundled or explicitly downloaded tool/model runtime such as Git, Bun, uv, PDF parser, PaddleOCR, or Qwen embedding model. | App bundle/app data |
-| Permission request | Runtime authorization prompt for sensitive Agent, Skill, package, tool, model, network, filesystem, secret, settings, or destructive actions. | Machine-local permission store |
+| Permission request | Authorization for an external actor or new capability scope; core tools do not create one. | Machine-local permission store |
 | Backup | Portable zip containing durable vault data according to backup policy. | User-selected output path |
 | Diagnostic event | Redacted machine-local operational record used to understand failures without storing user content or secrets. | OS app data diagnostics store |
 | Support bundle | User-initiated local diagnostic export, redacted by default and previewed before creation. | User-selected output path |
@@ -213,11 +213,11 @@ Rules:
 - Failed jobs remain visible until resolved or explicitly cleared.
 - Successful jobs may compact detail after the retention window, but not conversation turns, operation summaries, or `log.md` entries.
 
-## 8. Confirmation And Operation Model
+## 8. Autonomous Change And Exception Model
 
-Confirmation proposal:
+Change proposal:
 
-- Planned change.
+- Exceptional planned change, not the normal knowledge writer.
 - May include full proposed Markdown.
 - Must show paths, summaries, warnings, and diffs/previews.
 - Can be approved, rejected, or revised.
@@ -232,8 +232,10 @@ Operation record:
 
 Rules:
 
-- Risky edits require confirmation.
-- Deletes, merges, vault structure changes, and `PIGE.md` edits require explicit confirmation.
+- Validated, attributable, recoverable Pige-owned changes auto-apply with Undo.
+- Intervene for irreversible loss, authority/security escalation, destination drift,
+  destructive vault policy, unreconcilable conflict, or explicit stricter user policy;
+  uncertainty replans or abstains.
 - Operation records do not become a hidden duplicate knowledge base.
 - Proposal and operation lifecycle details live in `docs/JOB_OPERATION_AND_RECOVERY.md`.
 
@@ -251,7 +253,7 @@ Rules:
 - Memory is not a replacement for notes.
 - Memory must be inspectable and support disable, delete, export, and reset actions.
 - Secrets must be scanned before persistence.
-- Sensitive or broad behavior-changing memory requires confirmation.
+- Secret-scanned scoped memory grows autonomously; sensitive/authority changes intervene.
 - Vault-scoped memory is included in backup by default unless excluded.
 
 ## 10. Permission Model
@@ -268,21 +270,10 @@ Default permission modes:
 - Remember Scoped Grants.
 - YOLO Full Access.
 
-Sensitive capabilities:
-
-- Vault read/write/delete beyond current job scope.
-- External filesystem read.
-- External network.
-- Shell execution.
-- Package or local tool install/update.
-- Sensitive, unknown-destination, or stricter-policy model egress.
-- Secret access.
-- Settings or schema change.
-- Spawn Agent/background task.
-
 Rules:
 
-- Permission Broker owns sensitive runtime authorization.
+- Security Threat Model owns brokered actors/capabilities and egress classes. Pige-owned
+  bounded core tools use service enforcement and need no grant or YOLO.
 - Grants must be scoped, revocable, and machine-local by default.
 - Denial must leave the app stable and explainable.
 - YOLO Full Access can only be enabled by the human user in Settings.
@@ -299,8 +290,8 @@ Rules:
 | Parser output and OCR artifacts | Parser/OCR Services |
 | Markdown generation and frontmatter | Wiki Compiler |
 | Tags, relationship writes, and backlink maintenance | Wiki Compiler, with graph indexes owned by Local Database Service |
-| Confirmation proposals | Change Proposal Service |
-| Operation records | Change Proposal Service / Vault Service |
+| Exceptional change proposals | Change Proposal Service |
+| Autonomous or approved operation records | Change Proposal Service / Vault Service |
 | Conversation events | Conversation History Service |
 | Agent memory | Agent Memory Service |
 | SQLite and migrations | Local Database Service |

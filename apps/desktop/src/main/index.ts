@@ -71,6 +71,7 @@ import {
 } from "./services/jobs-service";
 import { LibraryService } from "./services/library-service";
 import { AgentSubmitTurnRequestSchema, HomeAgentService } from "./services/home-agent-service";
+import { HomeAgentUrlService } from "./services/home-agent-url-service";
 import { LocalDatabaseRebuildWorkerService } from "./services/local-database-rebuild-worker-service";
 import { LocalDatabaseService } from "./services/local-database-service";
 import { LocalSettingsStore } from "./services/local-settings";
@@ -78,6 +79,7 @@ import { ModelProviderRegistry } from "./services/model-provider-registry";
 import { NotesService } from "./services/notes-service";
 import { OcrService } from "./services/ocr-service";
 import { ProposalService } from "./services/proposal-service";
+import { installRendererNavigationGuard } from "./services/renderer-navigation-guard";
 import { RetrievalService } from "./services/retrieval-service";
 import { JsonSecretStore } from "./services/secret-store";
 import { guardSettingAction, type SettingActionConfirmation } from "./services/setting-action-guard";
@@ -96,6 +98,7 @@ let backupRestoreService: BackupRestoreService | undefined;
 let agentRuntimeService: AgentRuntimeService | undefined;
 let agentIngestService: AgentIngestService | undefined;
 let homeAgentService: HomeAgentService | undefined;
+let homeAgentUrlService: HomeAgentUrlService | undefined;
 let appearanceService: AppearanceService | undefined;
 let toolchainService: ToolchainService | undefined;
 let captureService: CaptureService | undefined;
@@ -152,6 +155,7 @@ const createMainWindow = (): void => {
       sandbox: true
     }
   });
+  installRendererNavigationGuard(browserWindow.webContents);
   mainWindows.add(browserWindow);
   browserWindow.once("closed", () => mainWindows.delete(browserWindow));
 
@@ -312,10 +316,19 @@ const getHomeAgentService = (): HomeAgentService => {
       getRetrievalService(),
       getJobsService(),
       undefined,
-      { snapshot: getAgentCapabilitySnapshot }
+      { snapshot: getAgentCapabilitySnapshot },
+      undefined,
+      getHomeAgentUrlService()
     );
   }
   return homeAgentService;
+};
+
+const getHomeAgentUrlService = (): HomeAgentUrlService => {
+  if (!homeAgentUrlService) {
+    homeAgentUrlService = new HomeAgentUrlService(getCaptureService(), getJobsService());
+  }
+  return homeAgentUrlService;
 };
 
 const getAgentCapabilitySnapshot = (): AgentIngestCapabilitySnapshot => {
@@ -484,6 +497,18 @@ const recordBackgroundFailure = (code: string, fallback: string): void => {
 
 const resumeBackgroundJobs = (): void => {
   try {
+    const urlSourceHandoffs = getJobsService().reconcilePendingAgentTurnUrlSources();
+    if (urlSourceHandoffs.linked > 0 || urlSourceHandoffs.failed > 0) {
+      getDiagnosticsService().recordEvent({
+        level: urlSourceHandoffs.failed > 0 ? "warning" : "info",
+        code: urlSourceHandoffs.failed > 0
+          ? "agent_runtime.url_source_handoff_conflict"
+          : "agent_runtime.url_source_handoff_recovered",
+        message: urlSourceHandoffs.failed > 0
+          ? "An Agent-selected URL source handoff could not be reconciled safely."
+          : "Agent-selected URL source handoffs were reconciled after startup."
+      });
+    }
     const sourceHandoffs = getJobsService().reconcilePendingAgentTurnSources();
     if (sourceHandoffs.linked > 0 || sourceHandoffs.failed > 0) {
       getDiagnosticsService().recordEvent({

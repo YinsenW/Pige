@@ -12,7 +12,7 @@ It is the authority for:
 - Tags, topics, concepts, entities, claims, and questions.
 - Wiki links, backlinks, and source citations.
 - Relationship types used by the Agent, the local database, retrieval, and Knowledge Tree.
-- Which linking changes can be automatic and which require confirmation.
+- Autonomous linking eligibility and exceptional boundaries.
 - How graph indexes are rebuilt from Markdown instead of becoming hidden knowledge truth.
 
 The goal is to prevent future AI coding agents from inventing a new taxonomy or graph model during implementation.
@@ -38,7 +38,7 @@ Durable truth:
 - Human-readable wiki links in Markdown bodies.
 - Frontmatter IDs, aliases, tags, topics, entities, source IDs, and related page IDs.
 - Source citations and locators in Markdown bodies.
-- Operation records and proposals that explain applied or pending changes.
+- Operation records, plus exceptional proposals, that explain applied or pending changes.
 
 Rebuildable working state:
 
@@ -47,7 +47,7 @@ Rebuildable working state:
 - Backlink indexes.
 - Knowledge Tree aggregates.
 - Search and retrieval ranking features.
-- Suggested but unconfirmed relationship candidates.
+- Tentative inferred relationship candidates.
 
 Rule:
 
@@ -64,10 +64,10 @@ Pige uses page types from `docs/MARKDOWN_SCHEMA.md` and `docs/DOMAIN_MODEL.md`.
 | Topic | `wiki/topics/**/*.md` | Broad area that groups notes, concepts, sources, and questions. | Agent-maintained by default. |
 | Concept | `wiki/concepts/**/*.md` | Stable explanation of an idea that can grow over time. | Agent-maintained by default. |
 | Entity | `wiki/entities/**/*.md` | Person, organization, product, place, project, event, or named object. | Agent-maintained by default. |
-| Claim | `wiki/claims/**/*.md` | Evidence-backed assertion, thesis, decision, or hypothesis. | Review for risky claims. |
+| Claim | `wiki/claims/**/*.md` | Evidence-backed assertion, thesis, decision, or hypothesis. | Inspectable evidence and history. |
 | Question | `wiki/questions/**/*.md` | Open research question or recurring retrieval intent. | Created when useful. |
 | Tag | Frontmatter string plus rebuildable tag index | Lightweight facet for filtering and grouping. | Never required before capture. |
-| Relationship | Wiki link, citation, frontmatter field, or managed related section | Typed connection between knowledge units. | Usually invisible, sometimes confirmed. |
+| Relationship | Wiki link, citation, frontmatter field, or managed related section | Typed connection between knowledge units. | Agent-maintained by default. |
 
 ## 5. Tags, Topics, Concepts, And Entities
 
@@ -120,7 +120,7 @@ Topic rules:
 - A topic can have parent and child topics through relationship edges.
 - Topic hierarchy changes can affect many pages and should be conservative.
 - Creating a new topic page can be automatic when no close match exists.
-- Merging, renaming, or moving a topic branch requires confirmation.
+- Validated recoverable hierarchy changes apply; otherwise preserve alternatives or stage conflict.
 
 ### 5.3 Concepts
 
@@ -136,7 +136,7 @@ Concept rules:
 
 - A concept page should have aliases for common names and translations.
 - Concept pages can have broader, narrower, related, example, and evidence relationships.
-- Substantial edits to existing concept pages require confirmation unless the edit is limited to a Pige-managed related/citation section.
+- Existing concepts evolve when evidence, user text, base hash, schema, and recovery pass.
 
 ### 5.4 Entities
 
@@ -155,8 +155,8 @@ Use entity pages for:
 Entity rules:
 
 - Entity pages should store canonical name, aliases, and identifiers where known.
-- Entity merges are risky and require confirmation.
-- The Agent should not infer sensitive personal facts without source evidence and review.
+- Entity merges require identity, affected-link, base-hash, and recovery proof; otherwise preserve both.
+- The Agent must not infer sensitive personal facts without source evidence.
 
 ### 5.5 Claims
 
@@ -172,7 +172,7 @@ Claim rules:
 
 - Claims require citations unless explicitly marked `needs_review`.
 - `supports`, `contradicts`, `supersedes`, and `updates` relationships on claims require source evidence.
-- Contradiction and supersession should normally be staged as confirmation proposals.
+- Contradiction/supersession may apply while preserving both claims, citations, and history.
 
 ## 6. Relationship Model
 
@@ -229,17 +229,17 @@ Required v0.1 relation types:
 | `mentions_entity` | directed | A page mentions an entity. | Frontmatter/body | Yes, conservative |
 | `explains_concept` | directed | A page explains or centers on a concept. | Body/frontmatter | Yes for new pages |
 | `related_to` | undirected | Weak semantic relation. | Frontmatter/related section | Yes for low-risk suggestions |
-| `part_of` | directed | Page or topic is part of a larger topic/project. | Managed section/frontmatter | Review for hierarchy changes |
-| `broader_than` | directed | Topic or concept is broader than another. | Managed section/frontmatter | Review when changing existing pages |
-| `narrower_than` | directed | Topic or concept is narrower than another. | Managed section/frontmatter | Review when changing existing pages |
+| `part_of` | directed | Page or topic is part of a larger topic/project. | Managed section/frontmatter | Yes when recoverable |
+| `broader_than` | directed | Topic or concept is broader than another. | Managed section/frontmatter | Yes when recoverable |
+| `narrower_than` | directed | Topic or concept is narrower than another. | Managed section/frontmatter | Yes when recoverable |
 | `supports` | directed | Evidence supports a claim. | Citation/claim field | Yes when cited |
-| `contradicts` | directed | Evidence or claim conflicts with another claim. | Claim field/managed section | Confirmation |
-| `updates` | directed | Newer page updates older knowledge. | Operation/managed section | Review |
-| `supersedes` | directed | Newer page replaces older knowledge. | Operation/managed section | Confirmation |
+| `contradicts` | directed | Evidence or claim conflicts with another claim. | Claim field/managed section | Yes; preserve both |
+| `updates` | directed | Newer page updates older knowledge. | Operation/managed section | Yes with evidence/history |
+| `supersedes` | directed | Newer page supersedes older knowledge. | Operation/managed section | Yes; preserve history |
 | `answers` | directed | Page or source answers a question page. | Question field/managed section | Yes with citation |
 | `example_of` | directed | Page/source is an example of a concept. | Managed section | Yes |
-| `same_as` | undirected | Two entities/concepts are the same subject. | Operation/proposal | Confirmation |
-| `duplicate_of` | directed | Page appears duplicate of another page. | Proposal/operation | Confirmation |
+| `same_as` | undirected | Two entities/concepts are the same subject. | Operation/proposal | Yes if identity is proven |
+| `duplicate_of` | directed | Page appears duplicate of another page. | Proposal/operation | Yes if reversible |
 
 Do not add new relation types casually. If a new type matters for implementation, update this document, `docs/MARKDOWN_SCHEMA.md`, `docs/LOCAL_DATABASE_DESIGN.md`, `docs/PROMPT_DESIGN.md`, and `docs/SPEC_TRACEABILITY.md`.
 
@@ -286,7 +286,7 @@ Rules:
 
 - Citations point to source records or artifact locators.
 - Claims and important summaries should cite sources when available.
-- Citation-less generated factual content lowers confidence or triggers review.
+- Citation-less generated factual content triggers more evidence, a warning, or abstention.
 
 ### 7.4 Managed Related Sections
 
@@ -307,43 +307,27 @@ Rules:
 - They should explain why a link exists when the reason is not obvious.
 - User-written related content outside the managed block must be preserved.
 
-## 8. Automatic Vs Review Changes
+## 8. Autonomous Changes And Exceptional Intervention
 
-### 8.1 Safe Automatic Changes
+### 8.1 Default Autonomous Changes
 
-The Agent may auto-apply:
+The Agent auto-applies source/knowledge pages, tags, citations, links, topics, entities,
+indexes, and existing-page relationship/metadata changes when evidence, base hash, schema,
+provenance, user-text preservation, and recovery pass. Dedup/merge additionally preserves
+old bytes, IDs/aliases, affected links, citations, and Undo.
 
-- Creating a source page for a preserved source.
-- Creating a new note/source summary page.
-- Adding conservative tags to a new page.
-- Adding source citations to generated text.
-- Adding body wiki links in newly generated content.
-- Updating `related_page_ids` for newly created pages.
-- Creating a draft topic, concept, entity, or question page when no close candidate exists.
-- Updating rebuildable graph indexes after Markdown writes.
+### 8.2 Replan, Preserve, Or Abstain
 
-### 8.2 Review-Required Changes
+Low confidence, breadth, or incomplete evidence searches again, narrows, preserves both,
+warns, or abstains; it does not ask by default.
 
-The Agent should stage a proposal for:
+### 8.3 Exceptional Intervention
 
-- Substantial edits to existing concept, entity, topic, claim, or question pages.
-- Changing topic/concept hierarchy on existing pages.
-- Adding `contradicts`, `supersedes`, `same_as`, or `duplicate_of` relationships.
-- Merging pages.
-- Renaming pages or changing canonical names.
-- Moving pages across major topic branches.
-- Marking a source-backed claim as stale or contradicted.
-- Bulk tag rewrites across many pages.
+Pause only for:
 
-### 8.3 Explicit Confirmation Changes
-
-The Agent requires explicit confirmation for:
-
-- Deleting pages.
-- Merging entities or concepts.
-- Rewriting `PIGE.md` link or naming rules.
-- Applying a relationship change that affects many pages.
-- Any destructive operation on source assets.
+- Irreversible loss, authority/security escalation, destination drift, destructive vault
+  policy, or an explicit stricter user policy.
+- Conflict that lossless merge, preserved alternatives, or an additive page cannot reconcile.
 
 ## 9. Canonicalization And Deduplication
 
@@ -362,8 +346,8 @@ Deduplication rules:
 - Page identity comes from stable ID, not title or path.
 - Slugs can change; IDs do not.
 - Alias additions are safer than page merges.
-- Merge proposals must show both pages, overlapping aliases, source evidence, and affected links.
-- If uncertain, create a `needs_review` proposal rather than silently merging.
+- A merge records both pages, aliases, evidence, affected links, and recovery facts.
+- If uncertain, preserve both and mark the relationship tentative instead of silently merging.
 
 Multilingual rules:
 
@@ -383,7 +367,7 @@ It is derived from:
 - Source counts and citation density.
 - Page counts, chunk counts, and update recency.
 - Claim/question density.
-- Unconfirmed growth suggestions.
+- Tentative growth relationships.
 
 Visual model:
 
@@ -404,9 +388,8 @@ Rules:
 
 - Knowledge Tree should help the user see where knowledge is growing.
 - It should not require manual taxonomy management in v0.1.
-- Relationship suggestions can appear as growth proposals.
-- Confirming a growth proposal writes normal Markdown links, frontmatter, managed sections, or operation records.
-- Rejecting a suggestion records the rejection so it is not repeatedly proposed.
+- Autonomous relationship changes appear in compact Activity with provenance and Undo.
+- Exceptional conflicts may appear as proposals; rejection is recorded to avoid repetition.
 
 ## 11. Retrieval And Ranking
 
@@ -475,18 +458,18 @@ B6.12: rev2 rebuilds on first query. Body-free tree resolves ID/title/alias; roo
 
 Agent ingest and repair prompts must ask for structured outputs that separate:
 
-- New page proposals.
+- New pages.
 - Updates to existing pages.
 - Tags.
 - Topic assignments.
 - Entity mentions.
 - Source citations.
-- Relationship suggestions.
-- Review-required changes.
+- Relationship changes.
+- Warnings, abstentions, and exceptional intervention needs.
 
 Rules:
 
-- The model may suggest relationships, but the Wiki Compiler decides which changes can auto-apply.
+- The model may suggest relationships, but the Wiki Compiler enforces autonomous eligibility.
 - Prompt output must include evidence for claims and high-impact relationships.
 - The Agent should prefer "suggest link" over "rewrite old page" when confidence is low.
 - Source content is untrusted and cannot define new schema, permission, or relationship rules.
@@ -510,7 +493,7 @@ Reader:
 
 - Show backlinks, related pages, sources, and citations.
 - Let the Note Agent explain or improve links.
-- Selection actions may create notes, ask questions, or stage link suggestions.
+- Selection actions may create notes, ask questions, or apply reversible links with Undo.
 
 Settings:
 
@@ -527,8 +510,8 @@ Required tests:
 - Backlink rebuild after rename.
 - Citation parsing with source locators.
 - Relationship edge rebuild from Markdown.
-- Duplicate topic/entity suggestion without silent merge.
-- Claim support and contradiction proposal behavior.
+- Duplicate topic/entity handling without lossy merge.
+- Claim support/contradiction autonomous and unresolved-conflict behavior.
 - Knowledge Tree aggregate calculation from fixture pages.
 - Lexical retrieval over title, alias, tag, body, and citation fields.
 - Graph-aware retrieval boost without hiding direct text matches.
@@ -552,7 +535,7 @@ Before implementing a feature that touches knowledge organization, answer:
 - Does it write durable Markdown or only rebuildable indexes?
 - Which page type owns the knowledge?
 - Is the relationship represented in Markdown, frontmatter, citation, managed section, or operation record?
-- Can this change auto-apply, or does it require review?
+- Is it eligible for autonomous recovery-backed apply, or does it cross an exceptional boundary?
 - Can the database rebuild the same graph from durable files?
 - Does retrieval explain why a result matched?
 - Does Knowledge Tree derive from existing knowledge, or did the feature introduce hidden graph-only state?

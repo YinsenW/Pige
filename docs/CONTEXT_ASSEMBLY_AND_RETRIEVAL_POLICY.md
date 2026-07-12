@@ -283,7 +283,9 @@ Rules:
   answers distinguish locally supported claims from model-general material.
 - Ranked results must include snippets and match reasons.
 - Ingest outputs should cite source pages, source artifacts, or original locators.
-- Current generated ingest notes append canonical `[source:<source-id>#<locator>]` citations to the summary and each key point. Unknown ephemeral refs are rejected before write; missing refs force review and never receive a fabricated fallback locator.
+- Current generated ingest notes append canonical `[source:<source-id>#<locator>]` citations
+  to supported statements. Unknown or missing refs block publication and force replan or
+  abstention; Pige never fabricates a fallback locator.
 - Note Agent answers about the current note should cite the current note or linked sources when possible.
 - If evidence is weak, missing, stale, or from low-confidence OCR, the answer should say so.
 - A synthesis may summarize multiple sources, but it must not hide that the conclusion is synthesized.
@@ -398,8 +400,8 @@ Current unified Home foundation:
 - Renderer results contain only the answer, bounded snippets, ranked page summaries,
   citations, warnings, degraded state, and `none|local|cloud`; no prompt, Context Pack,
   private path, credential, provider error, or evidence body is exposed.
-- One attached file is preserve-first and shares the same turn/draft. Legacy
-  `agent.ask`/retrieval records remain readable; Agent-selected URL fetch stays open.
+- One attached file is preserve-first and shares the turn/draft; bounded URL
+  fetch/preserve is Pi-selected. Legacy `agent.ask`/retrieval records remain readable.
 - Vector retrieval and reranking improve ranking when installed but are not required for basic answers.
 - Citation refs survive prompt assembly, model output validation, conversation compaction, and job retry.
 - Memory injection is scoped, ranked, secret-scanned, and lower authority than explicit user instruction.

@@ -1789,7 +1789,7 @@
     </section>
 
     <section class="prototype-screen" id="screen-activity" data-screen="activity">
-      <div class="screen-caption"><span class="screen-index">03</span>录入后的轻量活动流</div>
+      <div class="screen-caption"><span class="screen-index">03</span>录入后的轻量活动与撤销</div>
       <div class="app-window phone-window">
         <div class="topbar">
           <div class="brand">Pige</div>
@@ -1818,12 +1818,12 @@
               <span class="badge green">完成</span>
             </div>
             <div class="activity-row">
-              <div class="status-dot amber"></div>
+              <div class="status-dot"></div>
               <div>
-                <div class="activity-title">3 个链接建议等待确认</div>
-                <div class="activity-sub">涉及 RAG、OCR、权限设计</div>
+                <div class="activity-title">已建立 3 个知识关联</div>
+                <div class="activity-sub">涉及 RAG、OCR、权限设计 · 可查看记录</div>
               </div>
-              <span class="badge">确认</span>
+              <span class="badge">撤销</span>
             </div>
           </div>
           <div class="bottom-composer">
@@ -1889,7 +1889,7 @@
                     已保存原文快照，并生成了来源笔记。发现 4 个可连接主题。
                     <div class="delta-list">
                       <div class="delta-row"><svg class="icon"><use href="#i-note"/></svg><span>新建：本地 RAG 设计</span><span class="badge green">已写入</span></div>
-                      <div class="delta-row"><svg class="icon"><use href="#i-link"/></svg><span>建议链接：Agent Memory、OCR、权限模式</span><span class="badge">待确认</span></div>
+                      <div class="delta-row"><svg class="icon"><use href="#i-link"/></svg><span>已关联：Agent Memory、OCR、权限模式</span><span class="badge green">可撤销</span></div>
                     </div>
                   </div>
                   <div class="message user">本地 RAG 这一块我们最后怎么定的？</div>
@@ -1916,10 +1916,10 @@
                   <div class="source-row"><svg class="icon"><use href="#i-link"/></svg><div><strong>Pi AI Providers</strong>等待整理</div></div>
                 </div>
                 <div style="height: 18px;"></div>
-                <h3>待确认</h3>
+                <h3>最近活动</h3>
                 <div class="side-list">
-                  <div class="source-row"><svg class="icon"><use href="#i-check"/></svg><div><strong>1 个链接建议</strong>确认后写入知识树</div></div>
-                  <div class="source-row"><svg class="icon"><use href="#i-note"/></svg><div><strong>3 篇笔记变化</strong>1 新建，2 更新</div></div>
+                  <div class="source-row"><svg class="icon"><use href="#i-check"/></svg><div><strong>已建立 1 个链接</strong>查看记录 · 撤销</div></div>
+                  <div class="source-row"><svg class="icon"><use href="#i-note"/></svg><div><strong>3 篇笔记变化</strong>1 新建，2 更新 · 可撤销</div></div>
                 </div>
               </aside>
             </div>
@@ -2183,21 +2183,21 @@
     </section>
 
     <section class="prototype-screen" id="screen-permission" data-screen="permission">
-      <div class="screen-caption"><span class="screen-index">08</span>敏感操作权限弹窗</div>
+      <div class="screen-caption"><span class="screen-index">08</span>外部扩展首次网络授权</div>
       <div class="app-window modal-window">
         <div class="modal-stage">
           <div class="dialog-card">
             <div class="dialog-head">
               <div class="dialog-icon"><svg class="icon"><use href="#i-shield"/></svg></div>
               <div>
-                <h3>允许 Pige 抓取这个网页？</h3>
-                <p>来源内容会发送给当前模型提供商用于整理摘要和标签。</p>
+                <h3>允许「网页研究」访问这个网站？</h3>
+                <p>此外部 Skill 首次申请新的网络范围；已授权范围内不会重复询问。</p>
               </div>
             </div>
             <div class="scope-box">
-              <div class="scope-row"><span>执行者</span><strong>Agent · 网页整理</strong></div>
-              <div class="scope-row"><span>范围</span><strong>仅此 URL</strong></div>
-              <div class="scope-row"><span>模型</span><strong>OpenAI 兼容 · personal</strong></div>
+              <div class="scope-row"><span>执行者</span><strong>外部 Skill · 网页研究 v1</strong></div>
+              <div class="scope-row"><span>能力</span><strong>网络读取</strong></div>
+              <div class="scope-row"><span>范围</span><strong>仅此网站</strong></div>
               <div class="scope-row"><span>位置</span><strong>桌面本地运行时</strong></div>
             </div>
             <div class="button-row">
@@ -2535,8 +2535,8 @@
               <div class="tree-item"><span class="tree-spacer"></span><svg class="icon"><use href="#i-folder"/></svg><span class="label">创作系统</span><span class="tree-count">9</span></div>
               <div class="tree-item"><span class="tree-spacer"></span><svg class="icon"><use href="#i-folder"/></svg><span class="label">工作流</span><span class="tree-count">11</span></div>
             </div>
-            <div class="sidebar-section compact">待确认连接</div>
-            <div class="mini-note"><strong>3 个新连接</strong><span>确认后写入双链</span></div>
+            <div class="sidebar-section compact">最近生长</div>
+            <div class="mini-note"><strong>3 个新连接</strong><span>已写入 · 可撤销</span></div>
           </aside>
           <section class="content">
             <div class="content-topbar">
@@ -2618,9 +2618,9 @@
                   <div class="relation-row"><svg class="icon"><use href="#i-link"/></svg><span>OCR 管线</span><span class="badge">较新</span></div>
                 </div>
                 <div style="height: 18px;"></div>
-                <h3>待确认生长</h3>
+                <h3>自主生长</h3>
                 <div class="side-list">
-                  <div class="source-row"><svg class="icon"><use href="#i-link"/></svg><div><strong>3 个分支连接建议</strong>确认后写入双链</div></div>
+                  <div class="source-row"><svg class="icon"><use href="#i-link"/></svg><div><strong>3 个分支连接</strong>已写入双链 · 可撤销</div></div>
                   <div class="source-row"><svg class="icon"><use href="#i-note"/></svg><div><strong>本地 RAG 设计</strong>打开核心笔记</div></div>
                 </div>
               </aside>

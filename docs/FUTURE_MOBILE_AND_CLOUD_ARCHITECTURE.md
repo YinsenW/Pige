@@ -54,7 +54,8 @@ Remote Agent Backend gives a clearer user promise:
 - Same Agent capability across Web, mobile, and desktop.
 - Mobile app feels like a fast client, not a weaker clone.
 - Heavy work continues after the phone is locked or the app is closed.
-- Users can inspect progress, confirmation proposals, and results from any device.
+- Users can inspect progress, autonomous changes/Undo, exceptional decisions, and results
+  from any device.
 
 Mobile Lite Client still matters:
 
@@ -145,7 +146,8 @@ v0.1 should implement `desktop_local` and `desktop_full`, while keeping contract
 
 ## 6. Command And Event Contracts
 
-Capture, ingest, Agent, confirmation, permission, and sync-like operations should be serializable so they can cross process, device, and network boundaries later.
+Capture, ingest, Agent, Operations/Undo, exceptional intervention, permission, and
+sync-like actions should be serializable across process, device, and network boundaries.
 
 Portable contracts:
 
@@ -210,7 +212,7 @@ Client responsibilities:
 - Preserve local pending captures when offline.
 - Show data boundary and execution location.
 - Upload sources when the user allows.
-- Display job progress, confirmation proposals, and results.
+- Display job progress, autonomous changes/Undo, exceptional decisions, and results.
 - Keep local cache of recent notes and search metadata.
 
 Backend responsibilities:
@@ -231,7 +233,7 @@ Mobile should prioritize:
 - Searching cached metadata and content.
 - Voice/image/file capture through platform APIs.
 - Queueing heavy processing for backend or paired desktop.
-- Confirming simple proposals.
+- Resolving exceptional proposals.
 
 Likely mobile-client capabilities:
 
@@ -346,7 +348,8 @@ When backend/mobile work begins, create contract tests for:
 - Source with mobile local path and later uploaded blob reference.
 - Permission request for backend execution.
 - Job progress streaming from remote runtime.
-- Confirmation proposal generated remotely and applied locally.
+- Autonomous remote Operation remains inspectable/undoable locally; exceptional proposal
+  decisions reconcile across devices.
 - Conflict resolution across desktop/Web/mobile edits.
 
 ## 15. Relationship To v0.1

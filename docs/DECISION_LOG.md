@@ -381,22 +381,23 @@ References:
 
 Status: Accepted
 Date: 2026-07-09
+Revised: 2026-07-12
 
 Decision:
 
-Pige's knowledge graph, backlinks, tag indexes, relationship edges, and Knowledge Tree aggregates are derived from durable Markdown, source citations, frontmatter, managed related sections, source records, and operation/proposal records. SQLite graph tables are rebuildable indexes, not hidden knowledge truth.
+Markdown, citations, source records, managed sections, and Operations own knowledge
+relationships; SQLite graphs and Knowledge Tree aggregates are rebuildable views.
 
 Rationale:
 
-Pige's core promise is local Markdown ownership. A graph database that contains knowledge unavailable in Markdown would undermine portability, backup clarity, and future sync.
+Hidden graph truth would break local ownership, backup, portability, and sync readiness.
 
 Consequences:
 
-- Tags are lightweight facets, while topics, concepts, entities, claims, and questions become Markdown pages when they matter.
-- Wiki Compiler owns durable link and relationship writes.
-- Local Database Service owns graph indexes and rebuild.
-- Risky relationship changes such as merges, contradictions, supersession, duplicate marking, and broad hierarchy edits require confirmation.
-- Knowledge Tree is a visualization over the knowledge model, not a separate storage layer.
+- Wiki Compiler owns durable links/pages; Local Database owns rebuildable indexes/views.
+- Evidence-bound recoverable relationships auto-apply with Operations; destructive loss
+  or unreconcilable identity/conflict intervenes.
+- Tags stay facets; meaningful topics/concepts/entities/claims/questions are Markdown.
 
 References:
 
@@ -409,22 +410,22 @@ References:
 
 Status: Accepted
 Date: 2026-07-09
+Revised: 2026-07-12
 
 Decision:
 
-Pige creates durable job records before expensive, asynchronous, permissioned, or failure-prone work starts. Confirmation proposals and operation records are durable vault data, while SQLite job indexes are rebuildable.
+Pige persists Jobs before expensive/failure-prone work. Proposals and Operations are
+durable vault data; SQLite job indexes rebuild.
 
 Rationale:
 
-Pige is an Agent desktop app that must survive parser failures, OCR failures, model errors, permission prompts, external edits, app restarts, and crashes without losing user captures or silently duplicating work.
+Failures, restarts, and conflicts must not lose captures or duplicate effects.
 
 Consequences:
 
-- Capture preserves source records and source assets/references before parsing or model calls.
-- Retry and crash recovery must be idempotent and checkpoint-based.
-- Risky changes become durable proposals before mutation.
-- Approved mutations create redacted operation records.
-- Home can rebuild processing status from `.pige/jobs/`, `.pige/proposals/`, `.pige/operations/`, conversations, and `log.md`.
+- Preserve source before work; retry/recovery is checkpointed and idempotent.
+- Eligible mutations write redacted Operations; exceptional boundaries stage proposals.
+- Home rebuilds status from durable Jobs, proposals, Operations, conversations, and log.
 
 References:
 
@@ -490,23 +491,23 @@ References:
 
 Status: Accepted
 Date: 2026-07-12
+Revised: 2026-07-12
 
 Decision:
 
-Only the exact Pi-staged Job-scoped create under `wiki/generated/` may apply. Approval
-first drives an ordered recoverable page/index/Operation/proposal/log/Job sequence;
-rejection applies nothing, and conflict closes the parent.
+The current proposal handler applies only its exact Pi-staged Job-scoped generated note.
+Approval recovers; rejection writes nothing; conflict closes the parent. It is exception
+infrastructure, not the target default.
 
 Rationale:
 
-The bounded path adds explicit review and crash recovery without a generic mutation engine.
+It proves bounded review/recovery without a generic mutation engine.
 
 Consequences:
 
-- Existing IPC adds `applied`/`conflicted`; startup reconciles supported decisions without
-  model/credentials. This is not cross-file atomic.
-- Home cards and focused review are current; generic operations, unified diff/replacement
-  UX, dedicated/bulk management, CAS/TOCTOU, and platform proof stay open.
+- Startup reconciles supported decisions without model/credentials; writes are not atomic.
+- Home review is transitional; eligibility, Activity/Undo, generic Operations, CAS/TOCTOU,
+  and platform proof remain open.
 
 References:
 
@@ -590,25 +591,23 @@ References:
 
 Status: Accepted
 Date: 2026-07-09
-Revised: 2026-07-10
+Revised: 2026-07-12
 
 Decision:
 
-Pige supports multiple permission modes: Ask Every Time, Remember Scoped Grants, and YOLO Full Access.
+External Skills/packages/extensions use Ask Every Time, Remember Scoped Grants, or YOLO
+Full Access. Pige-owned bounded knowledge tools do not need YOLO or routine prompts.
 
 Rationale:
 
-Some users want strict prompts; others prefer a low-friction Agent experience and are comfortable granting broad local access. Pige should support both without hiding the risk. Pige intentionally avoids a chat-style "current session" permission mode because the product should not ask users to reason about sessions.
+External-capability users need both strict and scoped low-friction modes without a session concept.
 
 Consequences:
 
-- Permission dialogs include Deny, Allow Once, and Always Allow.
-- Always Allow is permanent until revoked, but it must be scoped to actor, capability, resource, provider profile, or vault boundary rather than treated as an unbounded grant.
-- "Only this" choices are modeled as resource scopes, such as only this URL, domain, source, note, file, folder, vault, Skill/package/tool version, or provider profile.
-- YOLO Full Access is off by default and can only be enabled explicitly in Settings.
-- YOLO suppresses eligible Permission Broker prompts but does not bypass OS permissions, app sandboxing, signature checks, malware protections, filesystem errors, always-required destructive/settings/restore/migration confirmation, or stricter Model Egress Decisions.
-- Raw secret bytes are never a grantable Agent, Skill, package, or local-tool capability. Reviewed provider adapters may use a secret ref for one declared call without disclosing the credential.
-- Auto-allowed actions must still be logged with actor, capability, data boundary, and affected resources.
+- Dialogs offer Deny, Allow Once, and revocable scoped Always Allow; YOLO is explicit/off by default.
+- Grants bind actor, version, capability, resource, and destination; auto-allows are logged.
+- YOLO cannot bypass OS/security, exceptional intervention, or stricter egress.
+- Raw secret bytes are never grantable; reviewed adapters use secret refs without disclosure.
 
 References:
 
@@ -1011,6 +1010,7 @@ References:
 
 Status: Accepted
 Date: 2026-07-09
+Revised: 2026-07-12
 
 Decision:
 
@@ -1025,7 +1025,9 @@ Consequences:
 - Data lifecycle behavior is governed by the matrix in `docs/DATA_ARCHITECTURE.md`.
 - Durable deletes create operation records and tombstone metadata when sync-relevant.
 - `.pige/trash/` is included in backups by default.
-- Reset Local Database, Rebuild Index, tool/model removal, job compaction, diagnostics cleanup, and cancellation must not touch durable knowledge or source evidence except through explicit confirmed flows.
+- Reset Local Database, Rebuild Index, tool/model removal, job compaction, diagnostics cleanup,
+  and cancellation do not touch durable knowledge or source evidence. Recoverable trash uses
+  Operations/Undo; permanent loss is an explicit exception.
 
 References:
 
@@ -1828,7 +1830,7 @@ References:
 
 Status: Accepted
 Date: 2026-07-10
-Revised: 2026-07-11
+Revised: 2026-07-12
 
 Decision:
 
@@ -1845,7 +1847,8 @@ Consequences:
 - URL capture enforces five redirects, 10 seconds through body reads, and 2 MiB of decompressed response bytes.
 - Web extraction enforces a 5-second worker deadline, 256 MiB old-generation cap, 2,097,152 decoded input characters, 20,000 Readability elements, 1,000,000 output characters, 64 redacted HTTP(S) image references, one active extraction, and at most eight pending extractions per adapter.
 - Source Records persist extraction identity/version/mode/counts/truncation and selected bounded metadata. Conversation history remains reference-only.
-- Reduced or truncated extraction enters Agent quality context and forces warning-bearing generated notes into review.
+- Reduced or truncated extraction enters Agent quality context as a non-blocking warning;
+  Pi narrows, replans, or abstains unless a true exception applies.
 - Dependency, toolchain, hostile fixture, built-worker smoke, SSRF, charset, body-timeout, response-size, fallback, and Agent-handoff evidence must pass before release.
 
 References:
@@ -1943,7 +1946,7 @@ References:
 
 Status: Accepted
 Date: 2026-07-10
-Revised: 2026-07-11
+Revised: 2026-07-12
 
 Decision:
 
@@ -1961,7 +1964,8 @@ Consequences:
 - Text and metadata use deterministic paths. The sidecar stores locators, counts, warnings, quality, checksums, and OCR candidates without duplicating page text.
 - One deterministic `create_artifact` Operation Record preserves audit references and warnings without duplicating the extracted body; retry can repair it idempotently.
 - The tool returns coverage, OCR candidates, warnings, and locators to Pi Agent; Pi Agent decides whether to inspect further, invoke OCR, continue with bounded evidence, or wait for a capability.
-- Page-limit truncation and OCR-pending state are included in trusted ingest quality metadata; service-side guards force review and cap high confidence so partial extraction cannot masquerade as complete evidence.
+- Page-limit truncation and OCR-pending state are trusted quality metadata; service guards
+  cap high confidence and force conservative replan/warning/abstention, not approval by default.
 - Source-page refresh uses durable previous/target checksums so interrupted Pige writes are recoverable and external user edits are never silently overwritten.
 - Release packaging must prove the platform-specific native canvas binary and worker entry are present on every supported macOS/Windows target.
 
@@ -2009,7 +2013,7 @@ References:
 
 Status: Accepted
 Date: 2026-07-10
-Revised: 2026-07-11
+Revised: 2026-07-12
 
 Decision:
 
@@ -2026,7 +2030,8 @@ Consequences:
 - Direct `image_file` OCR is implemented. PDF pages, slide images, and embedded Office media stay dependency-waiting until reviewed render/materialization adapters produce bounded pixel Artifacts; locator strings are not image inputs.
 - OCR text and metadata remain derived, checksummed, rebuildable Artifacts. The metadata sidecar contains locators, geometry, confidence, language/image metadata, warnings, and checksums without copying the recognized body.
 - Preserved source integrity is checked before and after recognition. Valid artifacts are reused after restart, stale derived artifacts are regenerated, source/path integrity failures do not invoke Vision, and empty recognition returns an explicit empty tool result for Pi Agent to replan without a knowledge write.
-- Low-confidence or truncated OCR is retained as evidence with warnings and forces Agent-generated knowledge into review.
+- Low-confidence or truncated OCR remains evidence with non-blocking quality warnings; Pi
+  narrows, replans, or abstains unless a true exception applies.
 - Windows AI OCR and user-consented PaddleOCR fallback remain separate future slices behind the same capability boundary.
 
 References:
@@ -2237,7 +2242,7 @@ References:
 
 Status: Accepted
 Date: 2026-07-10
-Revised: 2026-07-11
+Revised: 2026-07-12
 
 Decision:
 
@@ -2252,7 +2257,9 @@ Consequences:
 - The renderer has independent file/page/pixel/PNG/aggregate/heap/time limits, no network path, strict worker-response validation, symlink rejection, and an installed-worker smoke requirement.
 - Main-process `PdfOcrArtifactService` owns deterministic rendered-page, render-manifest, OCR-text, and OCR-metadata writes; source bytes remain immutable and may be a managed copy or verified referenced original. Render/OCR manifests bind parser-metadata identity and the exact candidate-page set, and persistence rereads the latest Source Record before merge.
 - Rendering and recognition use separate idempotent body-free Operation Records. Complete checksummed output is reused; incomplete render/recognition returns a retryable or dependency-waiting tool result to the Agent Job.
-- Pi Agent decides whether a mixed PDF needs bounded OCR enrichment before synthesis. Complete empty enrichment preserves independently verified native evidence; unavailable OCR is surfaced as a capability result so Pi Agent may wait or continue with an explicit review warning under policy.
+- Pi Agent decides whether a mixed PDF needs bounded OCR enrichment before synthesis. Complete
+  empty enrichment preserves verified native evidence; unavailable OCR lets Pi wait or continue
+  with an explicit quality warning under policy.
 - The native Canvas worker requires macOS arm64/x64 and Windows x64 installed-package startup and crash-soak evidence. The port can move to an Electron utility process, Poppler, PDFium, or another reviewed renderer if worker-thread/native-module evidence is insufficient.
 - B5.08 and E5.05 remain partial until slide/media materialization, Windows/PaddleOCR fallback, progress/cancellation, and supported-package evidence are complete.
 
@@ -2275,7 +2282,7 @@ References:
 
 Status: Accepted
 Date: 2026-07-10
-Revised: 2026-07-11
+Revised: 2026-07-12
 
 Decision:
 
@@ -2288,8 +2295,12 @@ Choosing the first OCR/text Artifact or the first metadata sidecar loses native 
 Consequences:
 
 - Native evidence is ordered before OCR. OCR is deduplicated only when same-parent native text already contains it; mixed packs reserve bounded capacity for supplemental OCR so native-first ordering cannot consume the entire context.
-- Current ingest caps the pack at 24 fragments and 18,000 evidence characters. Citation-locator collisions across distinct Artifacts receive deterministic Artifact-qualified suffixes. Truncation, unpaired metadata, low OCR confidence, and missing refs force review-quality warnings.
-- Unknown refs fail before Markdown write. Empty refs remain visible only as review-required statements. Model-authored citation tokens are stripped; Pige renders `[source:<source-id>#<locator>]` from validated refs.
+- Current ingest caps the pack at 24 fragments and 18,000 evidence characters. Citation-locator
+  collisions across distinct Artifacts get deterministic suffixes. Truncation, unpaired
+  metadata, low OCR confidence, and missing refs emit non-blocking quality warnings.
+- Unknown refs fail before Markdown write. Empty refs cannot support autonomous publication;
+  Pi replans or abstains. Model citation tokens are stripped; Pige renders
+  `[source:<source-id>#<locator>]` from validated refs.
 - PDF parser sidecars include exact page character spans for new output. Legacy one-page/marker-based sidecars remain readable, but cannot override a checksum-matched structured span.
 - Pi runtime Model Egress still occurs before prompt rendering or credential lookup. The audit binds the ordered redacted evidence selection, bounded/redacted dynamic prompt metadata, and concrete non-secret Provider/Model routing identities; same-ID endpoint or model changes fail closed before model invocation.
 - The deterministic B5.12 seed covers English direct text and Simplified Chinese low-confidence OCR plus fabricated-claim, cited-body-support, missing-ref, and unavailable-ref negative controls. E5.04 remains partial until all required fixture families and thresholds are present.
@@ -2445,13 +2456,13 @@ capture, and format routes duplicate Pi planning and block ordinary conversation
 Consequences:
 
 - Host owns preservation, policy, permission, egress, bounds, durability, validation,
-  confirmation, and commits; it never substitutes a semantic step.
+  exceptional intervention, and commits; it never substitutes a semantic step.
 - The versioned target uses one `agent.submitTurn` and durable `agent_turn`; no model
   waits/resumes the same turn instead of silent capture, retrieval, or local fallback.
 - Provider profiles gain explicit protocol, pre-save Pi probe, tri-state binding, and
   safe staged commit; legacy kinds map without silent Responses reinterpretation.
-- B3.14/E3.09 and PIGE-PI-005 stay unproven until real ordinary, knowledge-enhanced,
-  source-tool, migration, and Provider-to-Home evidence passes.
+- B3.14/E3.09 and PIGE-PI-005 stay planned pending durable follow-up/session recovery and
+  signed packaged direct/retrieved/file/URL proof.
 
 References:
 
@@ -2516,6 +2527,39 @@ References:
 
 - `docs/AGENT_RUNTIME_POLICY_CONTEXT.md`
 - `PRIVACY.md`
+
+### D-20260712-Autonomous-By-Default
+
+Status: Accepted
+Date: 2026-07-12
+
+Decision:
+
+**Input once. Knowledge grows naturally.** Validated, attributable, recoverable Pige-owned
+knowledge work auto-applies with Operation/Undo. Intervene only for irreversible loss,
+authority/security escalation, destination drift, unreconcilable conflict, or an explicit
+stricter user policy. Uncertainty
+replans, preserves alternatives, warns, or abstains.
+
+Rationale:
+
+Local-first owns data, not friction; prompt-first UX makes users supervise delegated work.
+
+Consequences:
+
+- Pi decides semantics; Host validates provenance, policy, concurrency, recovery, and commit.
+- Core tools need no Permission prompt; extensions/new authority stay brokered and exact
+  BYOK destinations retain standing egress authority.
+- Proposals remain exception/recovery infrastructure; current proposal-first create-note is transitional.
+- Home uses quiet Activity/details/Undo, not routine confirmation cards.
+
+References:
+
+- `docs/PRD.md`
+- `docs/SECURITY_THREAT_MODEL.md`
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
+- `docs/KNOWLEDGE_MODEL_AND_LINKING.md`
+- `docs/UI_PROTOTYPE.md`
 
 ## 4. Deferred Decisions
 

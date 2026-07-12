@@ -23,16 +23,16 @@ Individual screens:
 
 - `screens/01-compact-capture.png`: default minimal Home window.
 - `screens/02-drag-drop.png`: whole-window drag-and-drop hot zone.
-- `screens/03-activity.png`: Home window with recent activity.
+- `screens/03-activity.png`: Home activity with autonomous updates and Undo.
 - `screens/04-expanded-workspace.png`: expanded sidebar workspace.
 - `screens/05-home-knowledge-retrieval.png`: Home conversation when Pi selects grounded local retrieval.
 - `screens/06-reader-agent.png`: full-screen reader with Note Agent.
 - `screens/07-selection-actions.png`: text selection action menu.
-- `screens/08-permission-dialog.png`: sensitive action permission dialog.
+- `screens/08-permission-dialog.png`: external extension requesting a new network scope.
 - `screens/09-vault-settings.png`: local vault and note storage settings with recent vaults, backup, and restore.
 - `screens/10-model-settings.png`: target Models overview with grouped Global Default and Provider summaries.
 - `screens/11-add-provider.png`: target Provider detail with hidden preset protocol, Custom protocols, probe, sync, Refresh, enablement, and manual fallback.
-- `screens/12-knowledge-tree.png`: tree-style knowledge visualization with trunk, branches, leaves, and growth suggestions.
+- `screens/12-knowledge-tree.png`: tree visualization with autonomous growth and inspectable activity.
 
 Design intent:
 
@@ -42,7 +42,8 @@ Design intent:
 - Knowledge Tree is a semantic tree view, distinct from the Library's folder/category tree.
 - Home answers normally; when Pi selects local knowledge, it adds ranked notes and a cited summary.
 - The reader uses wide screens for navigation, content, and a scoped Note Agent.
-- Permission prompts use clear one-time and permanent scoped choices; no session-based permission mode.
+- External-extension permission prompts use clear one-time and permanent scoped choices;
+  Pige-owned knowledge tools instead show Activity and Undo.
 - Vault & Note Storage is a first-class Knowledge Base settings page because Pige stores notes as local files and lets users see the active vault path, note/knowledge root, source asset root, and default source storage strategy.
 - The Models settings page and Add Provider flow stay minimal; the Pi AI provider/model catalog and Pige Provider Profiles are internal reference data, not a reason to expose a model marketplace.
 - Advanced/Fast model assignment is not shown in v0.1. It is gated until Pi Agent upstream or Pige runtime code makes model routing real.

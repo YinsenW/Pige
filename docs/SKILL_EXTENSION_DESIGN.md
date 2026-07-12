@@ -230,9 +230,11 @@ Runtime safety:
 - Pure Skills can influence Agent reasoning, but cannot directly access files, network, shell, model providers, packages, settings, or secrets.
 - External/Web Skills can request sensitive capabilities, but Pige services must pause execution and ask the user before granting them.
 - Skills request capabilities; Pige services enforce permissions.
-- Mutating Skill actions create normal Pige ChangeSets or confirmation proposals.
+- Permission-scoped Skill mutations flow through Pige services and Operations; after a valid
+  grant, eligible reversible changes auto-apply, while only autonomy exceptions propose.
 - Current user instruction, `PIGE.md`, and explicit settings outrank Skills.
-- Skills cannot override prompt-injection defenses, package permissions, local tool policies, or confirmation gates.
+- Skills cannot override prompt-injection defenses, package permissions, local tool
+  policies, permission gates, or exceptional intervention.
 - A denied capability leaves the Skill installed but unable to perform that action.
 
 Sensitive capabilities that require a permission prompt:
