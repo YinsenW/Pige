@@ -1609,64 +1609,37 @@
     },
     "PIGE-BACKUP-001": {
       "status": "partial",
-      "evidence": [
-        "EV-BACKUP", "EV-BACKUP-DURABLE-COVERAGE"
-      ],
+      "evidence": ["EV-BACKUP", "EV-BACKUP-DURABLE-COVERAGE"],
       "open": {
         "id": "OPEN-REQ-PIGE-BACKUP-001",
         "description": "Current registered in-vault durable roots and root files are covered; backupId/domainSchemaVersions, external managed copies, include controls, and complete memory/conversation fixtures remain open.",
-        "targetBuilds": [
-          "B9.02"
-        ],
-        "targetExits": [
-          "E9.01"
-        ]
+        "targetBuilds": ["B9.02"],
+        "targetExits": ["E9.01"]
       }
     },
     "PIGE-BACKUP-002": {
       "status": "partial",
-      "evidence": [
-        "EV-BACKUP"
-      ],
+      "evidence": ["EV-BACKUP"],
       "open": {
         "id": "OPEN-REQ-PIGE-BACKUP-002",
         "description": "Release backup scans for every secret, model, tool, database, index, and cache class remain open.",
-        "targetBuilds": [
-          "B9.02"
-        ],
-        "targetExits": [
-          "E9.01"
-        ]
+        "targetBuilds": ["B9.02"],
+        "targetExits": ["E9.01"]
       }
     },
     "PIGE-BACKUP-003": {
       "status": "partial",
       "evidence": ["EV-BACKUP", "EV-BACKUP-ATOMIC-FINALIZATION"],
-      "open": {
-        "id": "OPEN-REQ-PIGE-BACKUP-003",
-        "description": "Durable backup Job/checkpoint resume and external-dependency completeness remain open.",
-        "targetBuilds": ["B9.01", "B9.02"],
-        "targetExits": ["E9.01"]
-      }
+      "open": { "id": "OPEN-REQ-PIGE-BACKUP-003", "description": "Durable backup Job/checkpoint resume and external-dependency completeness remain open.", "targetBuilds": ["B9.01", "B9.02"], "targetExits": ["E9.01"] }
     },
     "PIGE-BACKUP-004": {
       "status": "partial",
-      "evidence": [
-        "EV-BACKUP",
-        "EV-RESTORE-CONFLICT"
-      ],
+      "evidence": ["EV-BACKUP", "EV-RESTORE-CONFLICT", "EV-RESTORE-PREVIEW-FENCE", "EV-RESTORE-PUBLICATION"],
       "open": {
         "id": "OPEN-REQ-PIGE-BACKUP-004",
-        "description": "Durable restore checkpoints, incompatible schemas, identity modes, and complete derived-index rebuild remain open.",
-        "targetBuilds": [
-          "B9.03",
-          "B9.04",
-          "B9.05",
-          "B9.06"
-        ],
-        "targetExits": [
-          "E9.02"
-        ]
+        "description": "Identity modes, durable restore Jobs/restart, dependency/schema migration, typed errors, dirfd/CAS, packaged platforms, and complete index rebuild remain.",
+        "targetBuilds": ["B9.03", "B9.04", "B9.05", "B9.06"],
+        "targetExits": ["E9.02"]
       }
     },
     "PIGE-REL-001": {
@@ -2993,9 +2966,7 @@
     },
     "E9.01": {
       "status": "partial",
-      "evidence": [
-        "EV-BACKUP", "EV-BACKUP-DURABLE-COVERAGE", "EV-BACKUP-ATOMIC-FINALIZATION"
-      ],
+      "evidence": ["EV-BACKUP", "EV-BACKUP-DURABLE-COVERAGE", "EV-BACKUP-ATOMIC-FINALIZATION"],
       "open": {
         "id": "OPEN-EXIT-E9.01",
         "description": "backupId/domain versions, release scans, external transport/controls, durable Jobs, non-hardlink publication, restore identity, pathname CAS/pre-link cleanup, and dependencies remain open.",
@@ -3005,106 +2976,48 @@
     },
     "E9.02": {
       "status": "partial",
-      "evidence": [
-        "EV-BACKUP",
-        "EV-RESTORE-CONFLICT"
-      ],
+      "evidence": ["EV-BACKUP", "EV-RESTORE-CONFLICT", "EV-RESTORE-PREVIEW-FENCE", "EV-RESTORE-PUBLICATION"],
       "open": {
         "id": "OPEN-EXIT-E9.02",
-        "description": "Full executable acceptance remains open for Exit E9.02: Previewed fresh-folder restore validates archive paths and schemas, preserves stable IDs and durable records, resolves vault-copy identity explicitly, and rebuilds only derived state.",
-        "targetBuilds": [
-          "B9.03",
-          "B9.04",
-          "B9.05",
-          "B9.06"
-        ],
-        "targetExits": [
-          "E9.02"
-        ]
+        "description": "Identity modes, durable restore Jobs/restart, dependency/schema migration, typed errors, dirfd/CAS, packaged platforms, and complete index rebuild remain.",
+        "targetBuilds": ["B9.03", "B9.04", "B9.05", "B9.06"],
+        "targetExits": ["E9.02"]
       }
     },
-    "E9.03": {
-      "status": "planned",
-      "plannedTarget": "Versioned durable-data migration rollback/repair report."
-    },
+    "E9.03": { "status": "planned", "plannedTarget": "Versioned durable-data migration rollback/repair report." },
     "E9.04": {
       "status": "partial",
       "evidence": ["EV-BACKUP", "EV-ACTIVITY-UNDO"],
-      "open": {
-        "id": "OPEN-EXIT-E9.04",
-        "description": "Other classes and destructive lifecycle tests remain.",
-        "targetBuilds": ["B9.08"],
-        "targetExits": ["E9.04"]
-      }
+      "open": { "id": "OPEN-EXIT-E9.04", "description": "Other classes and destructive lifecycle tests remain.", "targetBuilds": ["B9.08"], "targetExits": ["E9.04"] }
     },
-    "E9.05": {
-      "status": "planned",
-      "plannedTarget": "Deterministic Knowledge Health with eligible Operation/Undo repair and exact-exception routing."
-    },
+    "E9.05": { "status": "planned", "plannedTarget": "Deterministic Knowledge Health with eligible Operation/Undo repair and exact-exception routing." },
     "E9.06": {
       "status": "partial",
-      "evidence": [
-        "EV-I18N"
-      ],
-      "open": {
-        "id": "OPEN-EXIT-E9.06",
-        "description": "Six-locale workflow smoke remains open.",
-        "targetBuilds": [
-          "B9.10"
-        ],
-        "targetExits": [
-          "E9.06"
-        ]
-      }
+      "evidence": ["EV-I18N"],
+      "open": { "id": "OPEN-EXIT-E9.06", "description": "Six-locale workflow smoke remains open.", "targetBuilds": ["B9.10"], "targetExits": ["E9.06"] }
     },
-    "E9.07": {
-      "status": "planned",
-      "plannedTarget": "Keyboard, focus, accessible-name, contrast, reduced-motion, and narrow-layout report."
-    },
-    "E9.08": {
-      "status": "planned",
-      "plannedTarget": "Platform, scale, installer-size, memory, attribution, release-note, and signing-status reports."
-    },
-    "E9.09": {
-      "status": "planned",
-      "plannedTarget": "Alpha-to-alpha update and active-risky-job safeguard report."
-    },
-    "E9.10": {
-      "status": "planned",
-      "plannedTarget": "25-source Public Alpha scenario generated report."
-    },
+    "E9.07": { "status": "planned", "plannedTarget": "Keyboard, focus, accessible-name, contrast, reduced-motion, and narrow-layout report." },
+    "E9.08": { "status": "planned", "plannedTarget": "Platform, scale, installer-size, memory, attribution, release-note, and signing-status reports." },
+    "E9.09": { "status": "planned", "plannedTarget": "Alpha-to-alpha update and active-risky-job safeguard report." },
+    "E9.10": { "status": "planned", "plannedTarget": "25-source Public Alpha scenario generated report." },
     "E9.11": {
       "status": "partial",
-      "evidence": [
-        "EV-SECURITY-POLICY",
-        "EV-PRIVACY-POLICY",
-        "EV-SUPPORT-POLICY"
-      ],
+      "evidence": ["EV-SECURITY-POLICY", "EV-PRIVACY-POLICY", "EV-SUPPORT-POLICY"],
       "open": {
         "id": "OPEN-EXIT-E9.11",
         "description": "Release-time data-flow and localized error/empty-state review remains open.",
-        "targetBuilds": [
-          "B9.17"
-        ],
-        "targetExits": [
-          "E9.11"
-        ]
+        "targetBuilds": ["B9.17"],
+        "targetExits": ["E9.11"]
       }
     },
     "E9.12": {
       "status": "partial",
-      "evidence": [
-        "EV-CJK"
-      ],
+      "evidence": ["EV-CJK"],
       "open": {
         "id": "OPEN-EXIT-E9.12",
         "description": "Full metadata propagation and query-language smoke remain open.",
-        "targetBuilds": [
-          "B9.18"
-        ],
-        "targetExits": [
-          "E9.12"
-        ]
+        "targetBuilds": ["B9.18"],
+        "targetExits": ["E9.12"]
       }
     }
   },
@@ -3653,6 +3566,8 @@
       "path": "tests/unit/backup-service.test.ts",
       "selector": "flags checksum mismatches during restore preview and blocks restore apply"
     },
+    "EV-RESTORE-PREVIEW-FENCE": { "kind": "test", "path": "tests/unit/desktop-shell-contract.test.ts", "selector": "binds restore apply to the exact preview token across renderer, preload, and main" },
+    "EV-RESTORE-PUBLICATION": { "kind": "test", "path": "tests/unit/backup-service.test.ts", "selector": "reserves the final destination without replacement and commits the vault manifest last" },
     "EV-I18N": {
       "kind": "test",
       "path": "tests/unit/i18n-catalog.test.ts",

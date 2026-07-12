@@ -727,10 +727,11 @@ Commands:
 - `restore.preview`
 - `restore.apply`
 
-Target restore request:
+Current bridge and target request:
 
 ```ts
-type RestoreApplyRequest = {
+type RestoreApplyRequest = { backupPath: string; previewToken: string };
+type RestoreApplyTarget = {
   previewId: string;
   mode: "replace_existing" | "clone_as_new";
 };
@@ -739,13 +740,19 @@ type RestoreApplyRequest = {
 Rules:
 
 - `backup.create` uses a trusted main-process save dialog and creates a local `.pige-backup.zip`.
-- `restore.preview` uses a trusted main-process file picker, reads only the backup manifest and ZIP entries, validates paths, sizes, and checksums, and returns summary counts plus warnings.
-- Preview returns per-domain schema-range compatibility, legacy-manifest detection, structured/redacted external dependencies, the permitted restore modes, and a preview ID bound to the archive checksum. Renderer code does not decide compatibility from app/vault version strings alone.
-- `restore.apply` requires a current preview ID and an explicit identity mode. `replace_existing` preserves `vault_id` and swaps the machine binding only after guarded commit; `clone_as_new` mints a new `vault_id` and records restore lineage. A chosen folder is not an identity mode.
-- Restore preview must happen before restore apply.
-- Renderer code never scans, compresses, extracts, writes, or validates arbitrary backup paths directly.
-- Backup progress is reserved as an event-based follow-up; the current implementation returns after completion or cancellation.
-- The current foundation request passes the previewed backup path and implicitly creates a same-ID recovery copy. This legacy request remains compatible while development continues, but it must not register both paths for one `vault_id`; explicit mode plus durable backup/restore jobs/checkpoints are required before the full recovery contract is accepted.
+- Target preview is main-picker-only: validate manifest/entries, paths/sizes/checksums,
+  schema ranges, legacy input and redacted dependencies; return permitted modes plus an
+  archive-bound ID. Renderer never scans/extracts/writes/validates arbitrary paths.
+- Target apply requires that current ID plus explicit mode: `replace_existing` preserves
+  `vault_id`; `clone_as_new` mints one and records lineage. A folder is not a mode.
+- Current compatibility uses `{ backupPath, previewToken }`. Main retains the archive-
+  checksum token; renderer sees a random per-WebContents/generation token. One atomic
+  apply lease blocks replay; cancel/retryable failure releases it, while success, archive
+  invalidation, or sender destruction consumes it.
+- Current apply reopens the descriptor-bound archive and validates owned 0700 staging;
+  Data Architecture owns its reserved, no-replace, manifest-last publication.
+- It still creates a same-ID recovery copy. Explicit modes, durable Jobs/checkpoints,
+  typed serialized errors, strict CAS/TOCTOU, complete rebuild, progress, and platforms remain open.
 
 ### 6.11 Window And Layout
 

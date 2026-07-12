@@ -882,6 +882,7 @@ function FirstRunPanel(props: FirstRunPanelProps): React.JSX.Element {
 
   const previewRestore = async (): Promise<void> => {
     props.onError(null);
+    setRestorePreview(null);
     setRestoreBusy(true);
     try {
       const result = await window.pige.backup.previewRestore();
@@ -894,11 +895,14 @@ function FirstRunPanel(props: FirstRunPanelProps): React.JSX.Element {
   };
 
   const applyRestore = async (): Promise<void> => {
-    if (!restorePreview?.backupPath) return;
+    if (!restorePreview?.backupPath || !restorePreview.previewToken) return;
     props.onError(null);
     setRestoreBusy(true);
     try {
-      const result = await window.pige.backup.applyRestore({ backupPath: restorePreview.backupPath });
+      const result = await window.pige.backup.applyRestore({
+        backupPath: restorePreview.backupPath,
+        previewToken: restorePreview.previewToken
+      });
       if (result.status === "restored") {
         setRestorePreview(null);
         await props.onRestoreCompleted();
@@ -1794,6 +1798,7 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
 
   const previewRestore = async (): Promise<void> =>
     runBackupAction(async () => {
+      setRestorePreview(null);
       const result = await window.pige.backup.previewRestore();
       if (result.status === "ready") {
         setRestorePreview(result);
@@ -1801,9 +1806,12 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
     });
 
   const applyRestore = async (): Promise<void> => {
-    if (!restorePreview?.backupPath) return;
+    if (!restorePreview?.backupPath || !restorePreview.previewToken) return;
     await runBackupAction(async () => {
-      const result = await window.pige.backup.applyRestore({ backupPath: restorePreview.backupPath! });
+      const result = await window.pige.backup.applyRestore({
+        backupPath: restorePreview.backupPath!,
+        previewToken: restorePreview.previewToken!
+      });
       if (result.status === "restored") {
         setRestorePreview(null);
         setBackupNotice(props.t("backup.restored"));

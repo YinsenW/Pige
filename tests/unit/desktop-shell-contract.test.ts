@@ -68,6 +68,30 @@ describe("desktop shell build contract", () => {
     }
   });
 
+  it("binds restore apply to the exact preview token across renderer, preload, and main", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const registrySource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/services/restore-preview-registry.ts"),
+      "utf8"
+    );
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
+
+    expect(contractsSource.match(/readonly previewToken: string;/gu)).toHaveLength(2);
+    expect(mainSource).toContain("restorePreviewRegistry.claim(senderId, request)");
+    expect(mainSource).toContain("restorePreviewRegistry.isCurrent(senderId, acceptedPreview)");
+    expect(mainSource).toContain("acceptedPreview.archivePreviewToken");
+    expect(mainSource).toContain("restorePreviewRegistry.release(senderId, acceptedPreview)");
+    expect(mainSource).toContain("restorePreviewRegistry.consume(senderId, acceptedPreview)");
+    expect(mainSource).toContain('new PigeDomainError("restore.backup_invalid"');
+    expect(registrySource).toContain("readonly #states = new Map<number, RestorePreviewState>();");
+    expect(registrySource).toContain("publicPreviewToken: createPublicPreviewToken()");
+    expect(preloadSource).toContain('ipcRenderer.invoke("restore.apply", request)');
+    expect(rendererSource.match(/previewToken: restorePreview\.previewToken!?/gu)).toHaveLength(2);
+    expect(rendererSource.match(/setRestorePreview\(null\);/gu)?.length ?? 0).toBeGreaterThanOrEqual(4);
+  });
+
   it("wires Home questions through Pi with visible typed outcomes and no raw provider error surface", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");

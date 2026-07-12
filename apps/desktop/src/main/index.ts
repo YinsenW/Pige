@@ -84,6 +84,7 @@ import { NotesService } from "./services/notes-service";
 import { OcrService } from "./services/ocr-service";
 import { ProposalService } from "./services/proposal-service";
 import { installRendererNavigationGuard } from "./services/renderer-navigation-guard";
+import { RestorePreviewRegistry } from "./services/restore-preview-registry";
 import { RetrievalService } from "./services/retrieval-service";
 import { JsonSecretStore } from "./services/secret-store";
 import { guardSettingAction, type SettingActionConfirmation } from "./services/setting-action-guard";
@@ -115,7 +116,8 @@ let retrievalService: RetrievalService | undefined;
 let documentParserService: DocumentParserService | undefined;
 let ocrService: OcrService | undefined;
 let latestSupportBundlePreview: SupportBundlePreview | undefined;
-let latestRestorePreviewPath: string | undefined;
+const restorePreviewRegistry = new RestorePreviewRegistry();
+const restorePreviewTrackedSenders = new Set<number>();
 
 async function confirmSettingAction(
   sender: WebContents,
@@ -137,6 +139,17 @@ async function confirmSettingAction(
     return result.response === 1;
   });
 }
+
+function trackRestorePreviewSender(sender: WebContents): void {
+  const senderId = sender.id;
+  if (restorePreviewTrackedSenders.has(senderId)) return;
+  restorePreviewTrackedSenders.add(senderId);
+  sender.once("destroyed", () => {
+    restorePreviewRegistry.clear(senderId);
+    restorePreviewTrackedSenders.delete(senderId);
+  });
+}
+
 const mainWindows = new Set<BrowserWindow>();
 let captureDrainer: CoalescedBatchDrainer<ProcessQueuedCapturesResult> | undefined;
 let parseDrainer: CoalescedBatchDrainer<ProcessQueuedParsesResult> | undefined;
@@ -913,38 +926,85 @@ ipcMain.handle("backup.create", async (event): Promise<BackupCreateResult> => {
   return getBackupRestoreService().createBackup(activeVaultPath, selection.filePath, app.getVersion());
 });
 ipcMain.handle("restore.preview", async (event): Promise<RestorePreviewResult> => {
+  const senderId = event.sender.id;
+  trackRestorePreviewSender(event.sender);
+  const generation = restorePreviewRegistry.begin(senderId);
   const parentWindow = BrowserWindow.fromWebContents(event.sender);
-  if (!parentWindow) throw new Error("No active window for restore preview.");
+  if (!parentWindow) {
+    restorePreviewRegistry.cancel(senderId, generation);
+    throw new Error("No active window for restore preview.");
+  }
   const selection = await dialog.showOpenDialog(parentWindow, {
     title: "Choose Pige Backup",
     properties: ["openFile"],
     filters: [{ name: "Pige Backup", extensions: ["zip"] }]
   });
   if (selection.canceled || selection.filePaths.length === 0 || !selection.filePaths[0]) {
-    latestRestorePreviewPath = undefined;
+    restorePreviewRegistry.cancel(senderId, generation);
     return { status: "canceled" };
   }
-  const preview = await getBackupRestoreService().previewRestore(selection.filePaths[0]);
-  latestRestorePreviewPath = preview.status === "ready" ? preview.backupPath : undefined;
-  return preview;
+  try {
+    const preview = await getBackupRestoreService().previewRestore(selection.filePaths[0]);
+    if (preview.status !== "ready") {
+      restorePreviewRegistry.cancel(senderId, generation);
+      return preview;
+    }
+    const accepted = restorePreviewRegistry.complete(senderId, generation, {
+      backupPath: preview.backupPath,
+      archivePreviewToken: preview.previewToken
+    });
+    return { ...preview, previewToken: accepted.publicPreviewToken };
+  } catch (caught) {
+    restorePreviewRegistry.cancel(senderId, generation);
+    throw caught;
+  }
 });
 ipcMain.handle("restore.apply", async (event, request: RestoreApplyRequest): Promise<RestoreApplyResult> => {
-  if (!latestRestorePreviewPath || request.backupPath !== latestRestorePreviewPath) {
-    throw new Error("Create a current restore preview before applying restore.");
+  if (!request || typeof request.backupPath !== "string" || typeof request.previewToken !== "string") {
+    throw new PigeDomainError("restore.backup_invalid", "Create a current restore preview before applying restore.");
   }
+  const senderId = event.sender.id;
+  const acceptedPreview = restorePreviewRegistry.claim(senderId, request);
   const parentWindow = BrowserWindow.fromWebContents(event.sender);
-  if (!parentWindow) throw new Error("No active window for restore.");
+  if (!parentWindow) {
+    restorePreviewRegistry.release(senderId, acceptedPreview);
+    throw new Error("No active window for restore.");
+  }
   const selection = await dialog.showOpenDialog(parentWindow, {
     title: "Choose restore location",
     defaultPath: app.getPath("documents"),
     properties: ["openDirectory", "createDirectory"]
+  }).catch((caught) => {
+    restorePreviewRegistry.release(senderId, acceptedPreview);
+    throw caught;
   });
   if (selection.canceled || selection.filePaths.length === 0 || !selection.filePaths[0]) {
+    restorePreviewRegistry.release(senderId, acceptedPreview);
     return { status: "canceled" };
   }
-  const result = await getBackupRestoreService().applyRestore(request.backupPath, selection.filePaths[0]);
-  if (result.status !== "restored" || !result.restoredVaultPath) return result;
-  latestRestorePreviewPath = undefined;
+  if (!restorePreviewRegistry.isCurrent(senderId, acceptedPreview)) {
+    throw new PigeDomainError("restore.backup_invalid", "The restore preview was superseded before apply.");
+  }
+  let result: RestoreApplyResult;
+  try {
+    result = await getBackupRestoreService().applyRestore(
+      acceptedPreview.backupPath,
+      selection.filePaths[0],
+      acceptedPreview.archivePreviewToken
+    );
+  } catch (caught) {
+    if (caught instanceof PigeDomainError && caught.code === "restore.backup_invalid") {
+      restorePreviewRegistry.consume(senderId, acceptedPreview);
+    } else {
+      restorePreviewRegistry.release(senderId, acceptedPreview);
+    }
+    throw caught;
+  }
+  if (result.status !== "restored" || !result.restoredVaultPath) {
+    restorePreviewRegistry.release(senderId, acceptedPreview);
+    return result;
+  }
+  restorePreviewRegistry.consume(senderId, acceptedPreview);
   const activated = getVaultService().openPath(result.restoredVaultPath);
   initializeActiveDatabase();
   const localDatabaseRebuild = getLocalDatabaseService().rebuild(result.restoredVaultPath);

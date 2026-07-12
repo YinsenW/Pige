@@ -1373,9 +1373,10 @@ Responsibilities:
 Current implementation:
 
 - ZIP create snapshots by descriptor, validates adjacent private staging, fsyncs, and
-  publishes by no-overwrite hard link with owned crash-link recovery. Preview/restore
-  still verify paths/manifests/checksums; broader controls, non-hardlink destinations,
-  external copies, durable Jobs, and progress remain open.
+  publishes by no-overwrite hard link with owned crash-link recovery. Restore binds archive
+  bytes plus one sender lease, validates owned staging, and publishes no-replace under an
+  owned reservation with manifest last and explicit-retry reconciliation. Identity modes,
+  external/migration handling, durable Jobs, dirfd CAS, progress, and platforms remain open.
 
 ### 5.11 Diagnostics Service
 

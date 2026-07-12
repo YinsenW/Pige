@@ -96,7 +96,11 @@ describe("backup restore service", () => {
 
     const created = await new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test");
     const preview = await new BackupRestoreService().previewRestore(backupPath);
-    const restored = await new BackupRestoreService().applyRestore(backupPath, restoreParent);
+    const restored = await new BackupRestoreService().applyRestore(
+      backupPath,
+      restoreParent,
+      requirePreviewToken(preview)
+    );
 
     expect(created.status).toBe("created");
     expect(fs.existsSync(backupPath)).toBe(true);
@@ -129,6 +133,227 @@ describe("backup restore service", () => {
     expect(fs.existsSync(path.join(restored.restoredVaultPath!, ".pige/db/vault.sqlite"))).toBe(false);
     expect(fs.existsSync(path.join(restored.restoredVaultPath!, ".pige/cache/tmp.bin"))).toBe(false);
     expect(fs.existsSync(path.join(restored.restoredVaultPath!, ".pige/indexes/index.bin"))).toBe(false);
+  });
+
+  it("reserves the final destination without replacement and commits the vault manifest last", async () => {
+    const { root, vaultPath } = makeVault();
+    const backupPath = path.join(root, "manifest-last.pige-backup.zip");
+    const restoreParent = path.join(root, "restore-targets");
+    const restoredVaultPath = path.join(restoreParent, "Backup Vault Restored");
+    writeVaultFixture(vaultPath);
+    await new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test");
+    const preview = await new BackupRestoreService().previewRestore(backupPath);
+    const writtenRestorePaths: string[] = [];
+    const originalLinkSync = fs.linkSync.bind(fs);
+    vi.spyOn(fs, "linkSync").mockImplementation((sourcePath, destinationPath) => {
+      const candidatePath = path.resolve(destinationPath.toString());
+      if (candidatePath.startsWith(`${restoredVaultPath}${path.sep}`)) writtenRestorePaths.push(candidatePath);
+      return originalLinkSync(sourcePath, destinationPath);
+    });
+
+    const result = await new BackupRestoreService().applyRestore(
+      backupPath,
+      restoreParent,
+      requirePreviewToken(preview)
+    );
+
+    expect(result.status).toBe("restored");
+    expect(writtenRestorePaths.length).toBeGreaterThan(1);
+    expect(writtenRestorePaths.at(-1)).toBe(path.join(restoredVaultPath, ".pige/manifest.json"));
+    expect(writtenRestorePaths.slice(0, -1)).not.toContain(path.join(restoredVaultPath, ".pige/manifest.json"));
+  });
+
+  it("resumes an identity-bound partial publication without deleting or duplicating restored files", async () => {
+    const { root, vaultPath } = makeVault();
+    const backupPath = path.join(root, "retryable-publication.pige-backup.zip");
+    const restoreParent = path.join(root, "restore-targets");
+    const restoredVaultPath = path.join(restoreParent, "Backup Vault Restored");
+    writeVaultFixture(vaultPath);
+    await new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test");
+    const preview = await new BackupRestoreService().previewRestore(backupPath);
+    const originalCopyFileSync = fs.copyFileSync.bind(fs);
+    const copySpy = vi.spyOn(fs, "copyFileSync").mockImplementation((sourcePath, destinationPath, mode) => {
+      const candidatePath = path.resolve(destinationPath.toString());
+      if (
+        path.resolve(sourcePath.toString()).endsWith(`${path.sep}${DURABLE_FIXTURES.wiki.path}`) &&
+        candidatePath.startsWith(`${restoredVaultPath}${path.sep}`) &&
+        candidatePath.endsWith(".tmp")
+      ) {
+        fs.writeFileSync(candidatePath, "partial restore publication bytes");
+        throw Object.assign(new Error("injected restore publication failure"), { code: "EIO" });
+      }
+      return originalCopyFileSync(sourcePath, destinationPath, mode);
+    });
+
+    await expect(new BackupRestoreService().applyRestore(
+      backupPath,
+      restoreParent,
+      requirePreviewToken(preview)
+    )).rejects.toMatchObject({ code: "EIO" });
+
+    expect(fs.existsSync(path.join(restoredVaultPath, ".pige/manifest.json"))).toBe(false);
+    expect(isPigeVault(restoredVaultPath)).toBe(false);
+    copySpy.mockRestore();
+
+    const retriedPreview = await new BackupRestoreService().previewRestore(backupPath);
+    const restored = await new BackupRestoreService().applyRestore(
+      backupPath,
+      restoreParent,
+      requirePreviewToken(retriedPreview)
+    );
+
+    expect(restored.status).toBe("restored");
+    expect(isPigeVault(restoredVaultPath)).toBe(true);
+    expect(fs.readFileSync(path.join(restoredVaultPath, DURABLE_FIXTURES.wiki.path), "utf8"))
+      .toBe(DURABLE_FIXTURES.wiki.canary);
+    expect(fs.existsSync(path.join(restoredVaultPath, ".pige-restore-publication.json"))).toBe(false);
+    expect(fs.existsSync(path.join(restoreParent, ".Backup Vault Restored.pige-restore.json"))).toBe(false);
+  });
+
+  it("fsyncs a complete crash-left publication temp before linking it on retry", async () => {
+    const { root, vaultPath } = makeVault();
+    const backupPath = path.join(root, "retryable-temp-fsync.pige-backup.zip");
+    const restoreParent = path.join(root, "restore-targets");
+    writeVaultFixture(vaultPath);
+    await new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test");
+    const preview = await new BackupRestoreService().previewRestore(backupPath);
+    const originalCopyFileSync = fs.copyFileSync.bind(fs);
+    const originalFsyncSync = fs.fsyncSync.bind(fs);
+    let copiedWikiTemp = false;
+    let injected = false;
+    vi.spyOn(fs, "copyFileSync").mockImplementation((sourcePath, destinationPath, mode) => {
+      const result = originalCopyFileSync(sourcePath, destinationPath, mode);
+      if (
+        path.resolve(sourcePath.toString()).endsWith(`${path.sep}${DURABLE_FIXTURES.wiki.path}`) &&
+        path.resolve(destinationPath.toString()).endsWith(".tmp")
+      ) {
+        copiedWikiTemp = true;
+      }
+      return result;
+    });
+    vi.spyOn(fs, "fsyncSync").mockImplementation((descriptor) => {
+      if (copiedWikiTemp && !injected) {
+        injected = true;
+        throw Object.assign(new Error("injected restore temp fsync failure"), { code: "EIO" });
+      }
+      return originalFsyncSync(descriptor);
+    });
+
+    await expect(new BackupRestoreService().applyRestore(
+      backupPath,
+      restoreParent,
+      requirePreviewToken(preview)
+    )).rejects.toMatchObject({ code: "EIO" });
+    expect(injected).toBe(true);
+    vi.restoreAllMocks();
+
+    const restored = await new BackupRestoreService().applyRestore(
+      backupPath,
+      restoreParent,
+      requirePreviewToken(await new BackupRestoreService().previewRestore(backupPath))
+    );
+    expect(restored.status).toBe("restored");
+  });
+
+  it("reconciles a manifest publication temp after the committed vault becomes visible", async () => {
+    const { root, vaultPath } = makeVault();
+    const backupPath = path.join(root, "retryable-manifest-temp.pige-backup.zip");
+    const restoreParent = path.join(root, "restore-targets");
+    const restoredVaultPath = path.join(restoreParent, "Backup Vault Restored");
+    writeVaultFixture(vaultPath);
+    await new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test");
+    const preview = await new BackupRestoreService().previewRestore(backupPath);
+    const originalLinkSync = fs.linkSync.bind(fs);
+    const originalUnlinkSync = fs.unlinkSync.bind(fs);
+    let manifestLinked = false;
+    let injected = false;
+    vi.spyOn(fs, "linkSync").mockImplementation((sourcePath, destinationPath) => {
+      const result = originalLinkSync(sourcePath, destinationPath);
+      if (path.resolve(destinationPath.toString()) === path.join(restoredVaultPath, ".pige/manifest.json")) {
+        manifestLinked = true;
+      }
+      return result;
+    });
+    vi.spyOn(fs, "unlinkSync").mockImplementation((filePath) => {
+      const candidatePath = path.resolve(filePath.toString());
+      if (manifestLinked && !injected && candidatePath.endsWith(".tmp")) {
+        injected = true;
+        throw Object.assign(new Error("injected manifest temp cleanup failure"), { code: "EIO" });
+      }
+      return originalUnlinkSync(filePath);
+    });
+
+    await expect(new BackupRestoreService().applyRestore(
+      backupPath,
+      restoreParent,
+      requirePreviewToken(preview)
+    )).rejects.toMatchObject({ code: "EIO" });
+    expect(injected).toBe(true);
+    expect(isPigeVault(restoredVaultPath)).toBe(true);
+    vi.restoreAllMocks();
+
+    const originalOpenSync = fs.openSync.bind(fs);
+    const originalFsyncSync = fs.fsyncSync.bind(fs);
+    const manifestDirectoryDescriptors = new Set<number>();
+    let manifestDirectoryFsynced = false;
+    vi.spyOn(fs, "openSync").mockImplementation((filePath, flags, mode) => {
+      const descriptor = originalOpenSync(filePath, flags, mode);
+      if (path.resolve(filePath.toString()) === path.join(restoredVaultPath, ".pige")) {
+        manifestDirectoryDescriptors.add(descriptor);
+      }
+      return descriptor;
+    });
+    vi.spyOn(fs, "fsyncSync").mockImplementation((descriptor) => {
+      if (manifestDirectoryDescriptors.has(descriptor)) manifestDirectoryFsynced = true;
+      return originalFsyncSync(descriptor);
+    });
+
+    const restored = await new BackupRestoreService().applyRestore(
+      backupPath,
+      restoreParent,
+      requirePreviewToken(await new BackupRestoreService().previewRestore(backupPath))
+    );
+    expect(restored.status).toBe("restored");
+    expect(manifestDirectoryFsynced).toBe(true);
+    expect(fs.readdirSync(path.join(restoredVaultPath, ".pige")).filter((entry) => entry.endsWith(".tmp")))
+      .toEqual([]);
+  });
+
+  it("cleans only owned staging after extraction failure and retries without a visible destination", async () => {
+    const { root, vaultPath } = makeVault();
+    const backupPath = path.join(root, "retryable-extraction.pige-backup.zip");
+    const restoreParent = path.join(root, "restore-targets");
+    const restoredVaultPath = path.join(restoreParent, "Backup Vault Restored");
+    writeVaultFixture(vaultPath);
+    await new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test");
+    const preview = await new BackupRestoreService().previewRestore(backupPath);
+    const originalCreateWriteStream = fs.createWriteStream.bind(fs);
+    const streamSpy = vi.spyOn(fs, "createWriteStream").mockImplementation((filePath, options) => {
+      const candidatePath = path.resolve(filePath.toString());
+      if (
+        candidatePath.includes(`${path.sep}.pige-restore-`) &&
+        candidatePath.endsWith(`${path.sep}${DURABLE_FIXTURES.wiki.path}`)
+      ) {
+        throw Object.assign(new Error("injected restore extraction failure"), { code: "EIO" });
+      }
+      return originalCreateWriteStream(filePath, options);
+    });
+
+    await expect(new BackupRestoreService().applyRestore(
+      backupPath,
+      restoreParent,
+      requirePreviewToken(preview)
+    )).rejects.toMatchObject({ code: "EIO" });
+
+    expect(fs.existsSync(restoredVaultPath)).toBe(false);
+    expect(fs.readdirSync(restoreParent).filter((entry) => entry.startsWith(".pige-restore-"))).toEqual([]);
+    streamSpy.mockRestore();
+    const retried = await new BackupRestoreService().applyRestore(
+      backupPath,
+      restoreParent,
+      requirePreviewToken(await new BackupRestoreService().previewRestore(backupPath))
+    );
+    expect(retried.status).toBe("restored");
   });
 
   it("archives every current durable class and emits a body-free path-safe manifest aligned with ZIP entries", async () => {
@@ -581,9 +806,145 @@ describe("backup restore service", () => {
     const preview = await new BackupRestoreService().previewRestore(backupPath);
 
     expect(preview.invalidFileCount).toBe(1);
-    await expect(new BackupRestoreService().applyRestore(backupPath, path.join(root, "restore"))).rejects.toMatchObject({
+    await expect(new BackupRestoreService().applyRestore(
+      backupPath,
+      path.join(root, "restore"),
+      requirePreviewToken(preview)
+    )).rejects.toMatchObject({
       code: "restore.backup_invalid"
     });
+  });
+
+  it("binds restore apply to the exact previewed archive bytes", async () => {
+    const first = makeVault();
+    const second = makeVault();
+    const backupPath = path.join(first.root, "preview-bound.pige-backup.zip");
+    const replacementPath = path.join(second.root, "replacement.pige-backup.zip");
+    writeVaultFixture(first.vaultPath);
+    writeVaultFixture(second.vaultPath);
+    fs.writeFileSync(path.join(second.vaultPath, DURABLE_FIXTURES.wiki.path), "replacement archive body");
+    await new BackupRestoreService().createBackup(first.vaultPath, backupPath, "0.1.0-test");
+    await new BackupRestoreService().createBackup(second.vaultPath, replacementPath, "0.1.0-test");
+    const preview = await new BackupRestoreService().previewRestore(backupPath);
+    const previewToken = requirePreviewToken(preview);
+
+    expect(previewToken).toMatch(/^sha256:[a-f0-9]{64}$/u);
+    expect(previewToken).not.toContain(first.root);
+    await expect(new BackupRestoreService().applyRestore(
+      backupPath,
+      path.join(first.root, "wrong-token-restore"),
+      `sha256:${"0".repeat(64)}`
+    )).rejects.toMatchObject({ code: "restore.backup_invalid" });
+    expect(fs.existsSync(path.join(first.root, "wrong-token-restore"))).toBe(false);
+    fs.copyFileSync(replacementPath, backupPath);
+
+    await expect(new BackupRestoreService().applyRestore(
+      backupPath,
+      path.join(first.root, "restore"),
+      previewToken
+    )).rejects.toMatchObject({ code: "restore.backup_invalid" });
+    expect(fs.existsSync(path.join(first.root, "restore", "Backup Vault Restored"))).toBe(false);
+  });
+
+  it("rejects an archive path replacement during descriptor-bound extraction before publication", async () => {
+    const first = makeVault();
+    const second = makeVault();
+    const backupPath = path.join(first.root, "descriptor-bound.pige-backup.zip");
+    const originalArchivePath = path.join(first.root, "descriptor-bound.original.zip");
+    const replacementPath = path.join(second.root, "descriptor-bound-replacement.pige-backup.zip");
+    const restoreParent = path.join(first.root, "restore");
+    writeVaultFixture(first.vaultPath);
+    writeVaultFixture(second.vaultPath);
+    fs.writeFileSync(path.join(second.vaultPath, DURABLE_FIXTURES.wiki.path), "replacement archive body");
+    await new BackupRestoreService().createBackup(first.vaultPath, backupPath, "0.1.0-test");
+    await new BackupRestoreService().createBackup(second.vaultPath, replacementPath, "0.1.0-test");
+    const preview = await new BackupRestoreService().previewRestore(backupPath);
+    const originalCreateWriteStream = fs.createWriteStream.bind(fs);
+    let replaced = false;
+    vi.spyOn(fs, "createWriteStream").mockImplementation((filePath, options) => {
+      const candidatePath = path.resolve(filePath.toString());
+      if (!replaced && candidatePath.includes(`${path.sep}.pige-restore-`)) {
+        replaced = true;
+        fs.renameSync(backupPath, originalArchivePath);
+        fs.copyFileSync(replacementPath, backupPath);
+      }
+      return originalCreateWriteStream(filePath, options);
+    });
+
+    await expect(new BackupRestoreService().applyRestore(
+      backupPath,
+      restoreParent,
+      requirePreviewToken(preview)
+    )).rejects.toMatchObject({ code: "restore.backup_invalid" });
+
+    expect(replaced).toBe(true);
+    expect(fs.existsSync(originalArchivePath)).toBe(true);
+    expect(fs.existsSync(path.join(restoreParent, "Backup Vault Restored"))).toBe(false);
+  });
+
+  it("preserves an unowned destination that appears during final restore publication", async () => {
+    const { root, vaultPath } = makeVault();
+    const backupPath = path.join(root, "destination-race-restore.pige-backup.zip");
+    const restoreParent = path.join(root, "restore-targets");
+    const restoredVaultPath = path.join(restoreParent, "Backup Vault Restored");
+    const canaryPath = path.join(restoredVaultPath, "unowned-canary.txt");
+    writeVaultFixture(vaultPath);
+    await new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test");
+    const preview = await new BackupRestoreService().previewRestore(backupPath);
+    const originalMkdirSync = fs.mkdirSync.bind(fs);
+    vi.spyOn(fs, "mkdirSync").mockImplementation((directoryPath, options) => {
+      if (path.resolve(directoryPath.toString()) !== restoredVaultPath) {
+        return originalMkdirSync(directoryPath, options);
+      }
+      originalMkdirSync(restoredVaultPath, { recursive: true });
+      fs.writeFileSync(canaryPath, "unowned destination canary");
+      throw Object.assign(new Error("injected restore destination race"), { code: "EEXIST" });
+    });
+
+    await expect(new BackupRestoreService().applyRestore(
+      backupPath,
+      restoreParent,
+      requirePreviewToken(preview)
+    )).rejects.toMatchObject({ code: "restore.destination_exists" });
+
+    expect(fs.readFileSync(canaryPath, "utf8")).toBe("unowned destination canary");
+    expect(fs.existsSync(path.join(restoredVaultPath, "wiki"))).toBe(false);
+  });
+
+  it("does not clean or overwrite an unowned destination swapped in after reservation", async () => {
+    const { root, vaultPath } = makeVault();
+    const backupPath = path.join(root, "post-reservation-race.pige-backup.zip");
+    const restoreParent = path.join(root, "restore-targets");
+    const restoredVaultPath = path.join(restoreParent, "Backup Vault Restored");
+    const ownedPublicationPath = path.join(restoreParent, ".owned-restore-publication");
+    const canaryPath = path.join(restoredVaultPath, "unowned-canary.txt");
+    writeVaultFixture(vaultPath);
+    await new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test");
+    const preview = await new BackupRestoreService().previewRestore(backupPath);
+    const originalCopyFileSync = fs.copyFileSync.bind(fs);
+    let swapped = false;
+    vi.spyOn(fs, "copyFileSync").mockImplementation((sourcePath, destinationPath, mode) => {
+      const candidatePath = path.resolve(destinationPath.toString());
+      if (!swapped && candidatePath.startsWith(`${restoredVaultPath}${path.sep}`)) {
+        swapped = true;
+        fs.renameSync(restoredVaultPath, ownedPublicationPath);
+        fs.mkdirSync(restoredVaultPath, { mode: 0o700 });
+        fs.writeFileSync(canaryPath, "unowned destination canary");
+        throw Object.assign(new Error("injected post-reservation destination swap"), { code: "EIO" });
+      }
+      return originalCopyFileSync(sourcePath, destinationPath, mode);
+    });
+
+    await expect(new BackupRestoreService().applyRestore(
+      backupPath,
+      restoreParent,
+      requirePreviewToken(preview)
+    )).rejects.toMatchObject({ code: "EIO" });
+
+    expect(swapped).toBe(true);
+    expect(fs.readFileSync(canaryPath, "utf8")).toBe("unowned destination canary");
+    expect(fs.readdirSync(restoredVaultPath)).toEqual(["unowned-canary.txt"]);
+    expect(fs.existsSync(path.join(ownedPublicationPath, ".pige-restore-publication.json"))).toBe(true);
   });
 
   it("rejects unsafe manifest paths before extraction", async () => {
@@ -603,6 +964,11 @@ describe("backup restore service", () => {
     });
   });
 });
+
+function requirePreviewToken(preview: { readonly previewToken?: string }): string {
+  if (!preview.previewToken) throw new Error("Expected a restore preview token.");
+  return preview.previewToken;
+}
 
 function writeVaultFixture(vaultPath: string): readonly FixtureFile[] {
   const fixtures = PIGE_DURABLE_ROOTS.map((rootName) => DURABLE_FIXTURES[rootName]);

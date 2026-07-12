@@ -728,7 +728,7 @@ Durable execution gates:
 - Staging paths are job-local temporary references, not durable output truth. A restart reconciles them using checkpoint hashes; cancellation removes only proven incomplete staging data.
 - A successful backup/restore job links the `backup_created`/`restore_applied` operation. Failure/cancellation never registers a staging directory as a vault or overwrites a valid archive/vault silently.
 
-Current boundary: the backup/restore service validates and stages archives but does not yet emit the full durable jobs/checkpoints; backup creation also atomically publishes adjacent archives where hard links are supported. Non-hardlink destinations and explicit restore mode remain open. Legacy format-v1 backups stay readable under `docs/SYNC_CONFLICT_AND_MIGRATION.md`.
+Current boundary: the backup/restore service validates and stages archives but does not yet emit the full durable jobs/checkpoints. Backup publishes adjacent archives atomically where hard links work. Restore binds preview bytes, owned staging/reservation, no-replace files, manifest-last publication, and matching-partial retry. Non-hardlink backup, restore modes/restart, strict CAS, and platforms remain open. Legacy format-v1 stays readable per `docs/SYNC_CONFLICT_AND_MIGRATION.md`.
 
 Migration rules:
 

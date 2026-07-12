@@ -864,16 +864,27 @@ export interface BackupCreateResult {
   readonly manifest?: BackupManifestSummary;
 }
 
-export interface RestorePreviewResult {
-  readonly status: "ready" | "canceled";
-  readonly backupPath?: string;
-  readonly manifest?: BackupManifestSummary;
-  readonly invalidFileCount?: number;
-  readonly warnings?: readonly string[];
-}
+export type RestorePreviewResult =
+  | {
+      readonly status: "ready";
+      readonly backupPath: string;
+      readonly previewToken: string;
+      readonly manifest: BackupManifestSummary;
+      readonly invalidFileCount: number;
+      readonly warnings: readonly string[];
+    }
+  | {
+      readonly status: "canceled";
+      readonly backupPath?: never;
+      readonly previewToken?: never;
+      readonly manifest?: never;
+      readonly invalidFileCount?: never;
+      readonly warnings?: never;
+    };
 
 export interface RestoreApplyRequest {
   readonly backupPath: string;
+  readonly previewToken: string;
 }
 
 export interface RestoreApplyResult {

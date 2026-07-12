@@ -1,8 +1,15 @@
 import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { openPromise, validateFileName, type Entry } from "yauzl";
+import {
+  RandomAccessReader,
+  fromRandomAccessReaderPromise,
+  openPromise,
+  validateFileName,
+  type Entry
+} from "yauzl";
 import { ZipFile } from "yazl";
 import type {
   BackupCreateResult,
@@ -48,10 +55,51 @@ interface BackupManifest {
   readonly files: readonly BackupManifestFile[];
 }
 
+interface RestoreArchiveSnapshot {
+  readonly size: number;
+  readonly checksum: string;
+  readonly revision: fs.Stats;
+}
+
+interface RestoreArchiveHandle {
+  readonly path: string;
+  readonly descriptor: number;
+  readonly initialSnapshot: RestoreArchiveSnapshot;
+}
+
+interface RestorePublicationReservation {
+  readonly identityVersion: 1;
+  readonly previewToken: string;
+  readonly reservationId: string;
+}
+
+interface RestorePublicationHandle {
+  readonly reservation: RestorePublicationReservation;
+  readonly sidecarPath: string;
+  readonly sidecarIdentity: fs.Stats;
+  readonly destinationPath: string;
+  readonly destinationIdentity: fs.Stats;
+  readonly markerPath?: string;
+  readonly markerIdentity?: fs.Stats;
+  readonly alreadyCommitted: boolean;
+}
+
+interface RestoreStagingHandle {
+  readonly path: string;
+  readonly identity: fs.Stats;
+  readonly markerPath: string;
+  readonly markerIdentity: fs.Stats;
+  readonly markerBody: string;
+}
+
 const BACKUP_FORMAT = "pige-backup";
 const BACKUP_FORMAT_VERSION = 1;
 const BACKUP_MANIFEST_FILE = "pige-backup-manifest.json";
 const BACKUP_VAULT_DIR = "vault";
+const RESTORE_COMMIT_ENTRY = ".pige/manifest.json";
+const RESTORE_PUBLICATION_MARKER = ".pige-restore-publication.json";
+const RESTORE_STAGING_MARKER = ".pige-restore-staging-owner";
+const RESTORE_PREVIEW_TOKEN = /^sha256:[a-f0-9]{64}$/u;
 const DEFAULT_INCLUDES: BackupRestoreStatus["defaultIncludes"] = {
   markdownKnowledge: true,
   sourceRecords: true,
@@ -241,53 +289,89 @@ export class BackupRestoreService {
 
   async previewRestore(backupPathInput: string): Promise<RestorePreviewResult> {
     const backupPath = path.resolve(backupPathInput);
-    const manifest = await readBackupManifest(backupPath);
-    const validation = await validateBackupZip(backupPath, manifest);
-    return {
-      status: "ready",
-      backupPath,
-      manifest: toManifestSummary(manifest),
-      invalidFileCount: validation.invalidFiles.length,
-      warnings: createPreviewWarnings(manifest, validation.invalidFiles)
-    };
+    const archive = openRestoreArchive(backupPath);
+    try {
+      const manifest = await readBackupManifest(archive.descriptor);
+      const validation = await validateBackupZip(archive.descriptor, manifest);
+      const snapshotAfterValidation = snapshotRestoreArchive(archive);
+      assertSameRestoreArchive(
+        archive.initialSnapshot,
+        snapshotAfterValidation,
+        "The backup changed while its restore preview was created."
+      );
+      return {
+        status: "ready",
+        backupPath,
+        previewToken: createRestorePreviewToken(backupPath, snapshotAfterValidation),
+        manifest: toManifestSummary(manifest),
+        invalidFileCount: validation.invalidFiles.length,
+        warnings: createPreviewWarnings(manifest, validation.invalidFiles)
+      };
+    } finally {
+      fs.closeSync(archive.descriptor);
+    }
   }
 
-  async applyRestore(backupPathInput: string, restoreParentDirectoryInput: string): Promise<RestoreApplyResult> {
+  async applyRestore(
+    backupPathInput: string,
+    restoreParentDirectoryInput: string,
+    previewToken: string
+  ): Promise<RestoreApplyResult> {
     const backupPath = path.resolve(backupPathInput);
     const restoreParentDirectory = path.resolve(restoreParentDirectoryInput);
-    const manifest = await readBackupManifest(backupPath);
-    const validation = await validateBackupZip(backupPath, manifest);
-    if (validation.invalidFiles.length > 0) {
-      throw new PigeDomainError("restore.backup_invalid", "Backup files failed validation.");
-    }
-
-    const restoredVaultPath = path.join(restoreParentDirectory, normalizeVaultName(`${manifest.vaultName} Restored`));
-    if (fs.existsSync(restoredVaultPath)) {
-      throw new PigeDomainError("restore.destination_exists", "Restore destination already exists.");
-    }
-    fs.mkdirSync(restoreParentDirectory, { recursive: true });
-    const stagingPath = fs.mkdtempSync(path.join(restoreParentDirectory, ".pige-restore-"));
-
+    assertRestorePreviewToken(previewToken);
+    const archive = openRestoreArchive(backupPath);
+    let staging: RestoreStagingHandle | undefined;
     try {
-      await extractBackupVault(backupPath, manifest, stagingPath);
-      for (const rebuildableRoot of PIGE_REBUILDABLE_ROOTS) {
-        fs.mkdirSync(path.join(stagingPath, rebuildableRoot), { recursive: true });
+      assertRestorePreviewMatches(backupPath, archive.initialSnapshot, previewToken);
+      const manifest = await readBackupManifest(archive.descriptor);
+      const validation = await validateBackupZip(archive.descriptor, manifest);
+      const snapshotAfterValidation = snapshotRestoreArchive(archive);
+      assertSameRestoreArchive(
+        archive.initialSnapshot,
+        snapshotAfterValidation,
+        "The backup changed after its restore preview."
+      );
+      assertRestorePreviewMatches(backupPath, snapshotAfterValidation, previewToken);
+      if (validation.invalidFiles.length > 0) {
+        throw new PigeDomainError("restore.backup_invalid", "Backup files failed validation.");
       }
-      if (!isPigeVault(stagingPath)) {
-        throw new PigeDomainError("restore.result_invalid", "Restored folder is not a compatible Pige vault.");
-      }
-      fs.renameSync(stagingPath, restoredVaultPath);
-    } catch (caught) {
-      fs.rmSync(stagingPath, { recursive: true, force: true });
-      fs.rmSync(restoredVaultPath, { recursive: true, force: true });
-      throw caught;
-    }
 
-    return {
-      status: "restored",
-      restoredVaultPath,
-      manifest: toManifestSummary(manifest)
-    };
+      const restoredVaultPath = path.join(
+        restoreParentDirectory,
+        normalizeVaultName(`${manifest.vaultName} Restored`)
+      );
+      fs.mkdirSync(restoreParentDirectory, { recursive: true });
+      const restoreParentIdentity = captureRestoreDirectoryIdentity(restoreParentDirectory);
+      staging = createRestoreStagingDirectory(restoreParentDirectory);
+      await extractBackupVault(archive.descriptor, manifest, staging.path);
+      for (const rebuildableRoot of PIGE_REBUILDABLE_ROOTS) {
+        fs.mkdirSync(path.join(staging.path, rebuildableRoot), { recursive: true });
+      }
+      const snapshotAfterExtraction = snapshotRestoreArchive(archive);
+      assertSameRestoreArchive(
+        snapshotAfterValidation,
+        snapshotAfterExtraction,
+        "The backup changed while it was restored."
+      );
+      assertRestorePreviewMatches(backupPath, snapshotAfterExtraction, previewToken);
+      assertRestoreDirectoryIdentity(restoreParentDirectory, restoreParentIdentity);
+      assertRestoreStagingIdentity(staging);
+      validateExtractedRestore(staging.path, manifest);
+
+      const publication = acquireRestorePublication(restoredVaultPath, previewToken, manifest);
+      publishValidatedRestore(staging.path, manifest, publication);
+      releaseRestorePublication(publication);
+
+      return {
+        status: "restored",
+        restoredVaultPath,
+        manifest: toManifestSummary(manifest)
+      };
+    } finally {
+      fs.closeSync(archive.descriptor);
+      if (staging) removeOwnedRestoreStagingDirectory(staging);
+    }
   }
 }
 
@@ -374,8 +458,8 @@ function isBackupFileCandidate(filePath: string): boolean {
   }
 }
 
-async function readBackupManifest(backupPath: string): Promise<BackupManifest> {
-  const manifestText = await readZipTextEntry(backupPath, BACKUP_MANIFEST_FILE);
+async function readBackupManifest(source: string | number): Promise<BackupManifest> {
+  const manifestText = await readZipTextEntry(source, BACKUP_MANIFEST_FILE);
   if (!manifestText) {
     throw new PigeDomainError("restore.manifest_missing", "Backup manifest is missing.");
   }
@@ -437,8 +521,8 @@ function parseBackupManifest(value: unknown): BackupManifest {
   };
 }
 
-async function readZipTextEntry(backupPath: string, entryName: string): Promise<string | undefined> {
-  const zipFile = await openPromise(backupPath, { lazyEntries: false, validateEntrySizes: true, strictFileNames: true });
+async function readZipTextEntry(source: string | number, entryName: string): Promise<string | undefined> {
+  const zipFile = await openBackupZip(source);
   try {
     for await (const entry of zipFile.eachEntry()) {
       assertSafeZipEntryName(entry.fileName);
@@ -453,7 +537,7 @@ async function readZipTextEntry(backupPath: string, entryName: string): Promise<
 }
 
 async function validateBackupZip(
-  backupPath: string,
+  source: string | number,
   manifest: BackupManifest
 ): Promise<{ readonly invalidFiles: readonly string[] }> {
   const invalidFiles = new Set<string>();
@@ -461,7 +545,7 @@ async function validateBackupZip(
   const seenManifestFiles = new Set<string>();
   const seenEntryNames = new Set<string>();
   let manifestEntryCount = 0;
-  const zipFile = await openPromise(backupPath, { lazyEntries: false, validateEntrySizes: true, strictFileNames: true });
+  const zipFile = await openBackupZip(source);
   try {
     for await (const entry of zipFile.eachEntry()) {
       assertSafeZipEntryName(entry.fileName);
@@ -502,9 +586,13 @@ async function validateBackupZip(
   return { invalidFiles: Array.from(invalidFiles).sort() };
 }
 
-async function extractBackupVault(backupPath: string, manifest: BackupManifest, stagingPath: string): Promise<void> {
+async function extractBackupVault(
+  source: string | number,
+  manifest: BackupManifest,
+  destinationPath: string
+): Promise<void> {
   const manifestFiles = new Set(manifest.files.map((file) => file.path));
-  const zipFile = await openPromise(backupPath, { lazyEntries: false, validateEntrySizes: true, strictFileNames: true });
+  const zipFile = await openBackupZip(source);
   try {
     for await (const entry of zipFile.eachEntry()) {
       assertSafeZipEntryName(entry.fileName);
@@ -513,12 +601,61 @@ async function extractBackupVault(backupPath: string, manifest: BackupManifest, 
       if (!manifestFiles.has(relativePath)) {
         throw new PigeDomainError("restore.entry_unexpected", "Backup contains an unexpected vault entry.");
       }
-      const targetPath = resolveRestoreTarget(stagingPath, relativePath);
+      const targetPath = resolveRestoreTarget(destinationPath, relativePath);
       fs.mkdirSync(path.dirname(targetPath), { recursive: true });
       await pipeline(await zipFile.openReadStreamPromise(entry), fs.createWriteStream(targetPath, { flags: "wx" }));
     }
   } finally {
     zipFile.close();
+  }
+}
+
+async function openBackupZip(source: string | number) {
+  const options = {
+    lazyEntries: false,
+    validateEntrySizes: true,
+    strictFileNames: true
+  } as const;
+  return typeof source === "number"
+    ? fromRandomAccessReaderPromise(
+        new BorrowedArchiveReader(source),
+        fs.fstatSync(source).size,
+        { ...options, autoClose: false }
+      )
+    : openPromise(source, options);
+}
+
+class BorrowedArchiveReader extends RandomAccessReader {
+  readonly #descriptor: number;
+
+  constructor(descriptor: number) {
+    super();
+    this.#descriptor = descriptor;
+  }
+
+  override _readStreamForRange(start: number, end: number): Readable {
+    let position = start;
+    const descriptor = this.#descriptor;
+    return new Readable({
+      read(requestedBytes) {
+        try {
+          if (position >= end) {
+            this.push(null);
+            return;
+          }
+          const buffer = Buffer.allocUnsafe(Math.min(requestedBytes, end - position));
+          const bytesRead = fs.readSync(descriptor, buffer, 0, buffer.length, position);
+          if (bytesRead <= 0) {
+            this.destroy(new Error("The borrowed archive ended during a bounded read."));
+            return;
+          }
+          position += bytesRead;
+          this.push(buffer.subarray(0, bytesRead));
+        } catch (caught) {
+          this.destroy(caught instanceof Error ? caught : new Error("The borrowed archive read failed."));
+        }
+      }
+    });
   }
 }
 
@@ -574,6 +711,589 @@ function checksumFile(filePath: string): string {
     fs.closeSync(file);
   }
   return `sha256:${hash.digest("hex")}`;
+}
+
+function openRestoreArchive(filePath: string): RestoreArchiveHandle {
+  const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0);
+  let descriptor: number;
+  try {
+    descriptor = fs.openSync(filePath, flags);
+  } catch {
+    throw new PigeDomainError("restore.backup_invalid", "The selected backup cannot be opened safely.");
+  }
+  try {
+    return {
+      path: filePath,
+      descriptor,
+      initialSnapshot: snapshotRestoreArchiveDescriptor(filePath, descriptor)
+    };
+  } catch (caught) {
+    fs.closeSync(descriptor);
+    if (caught instanceof PigeDomainError) throw caught;
+    throw new PigeDomainError("restore.backup_invalid", "The selected backup changed while it was read.");
+  }
+}
+
+function snapshotRestoreArchive(archive: RestoreArchiveHandle): RestoreArchiveSnapshot {
+  return snapshotRestoreArchiveDescriptor(archive.path, archive.descriptor);
+}
+
+function snapshotRestoreArchiveDescriptor(filePath: string, descriptor: number): RestoreArchiveSnapshot {
+  try {
+    const before = fs.fstatSync(descriptor);
+    const pathBefore = fs.lstatSync(filePath);
+    if (
+      !before.isFile() ||
+      pathBefore.isSymbolicLink() ||
+      !pathBefore.isFile() ||
+      !sameFileRevision(before, pathBefore)
+    ) {
+      throw new PigeDomainError("restore.backup_invalid", "The selected backup is not a stable regular file.");
+    }
+    const hash = createHash("sha256");
+    const buffer = Buffer.alloc(1024 * 1024);
+    let position = 0;
+    while (position < before.size) {
+      const bytesRead = fs.readSync(
+        descriptor,
+        buffer,
+        0,
+        Math.min(buffer.length, before.size - position),
+        position
+      );
+      if (bytesRead <= 0) {
+        throw new PigeDomainError("restore.backup_invalid", "The selected backup ended while it was read.");
+      }
+      hash.update(buffer.subarray(0, bytesRead));
+      position += bytesRead;
+    }
+
+    const after = fs.fstatSync(descriptor);
+    const pathAfter = fs.lstatSync(filePath);
+    if (
+      pathAfter.isSymbolicLink() ||
+      !sameFileRevision(before, after) ||
+      !sameFileRevision(after, pathAfter)
+    ) {
+      throw new PigeDomainError("restore.backup_invalid", "The selected backup changed while it was read.");
+    }
+    return {
+      size: after.size,
+      checksum: `sha256:${hash.digest("hex")}`,
+      revision: after
+    };
+  } catch (caught) {
+    if (caught instanceof PigeDomainError) throw caught;
+    throw new PigeDomainError("restore.backup_invalid", "The selected backup changed while it was read.");
+  }
+}
+
+function createRestorePreviewToken(backupPath: string, snapshot: RestoreArchiveSnapshot): string {
+  return `sha256:${createHash("sha256")
+    .update("pige.restore.preview.v1\0", "utf8")
+    .update(path.resolve(backupPath), "utf8")
+    .update("\0", "utf8")
+    .update(snapshot.checksum, "utf8")
+    .update("\0", "utf8")
+    .update(String(snapshot.size), "utf8")
+    .digest("hex")}`;
+}
+
+function assertRestorePreviewToken(previewToken: string): void {
+  if (!RESTORE_PREVIEW_TOKEN.test(previewToken)) {
+    throw new PigeDomainError("restore.backup_invalid", "Create a current restore preview before applying restore.");
+  }
+}
+
+function assertRestorePreviewMatches(
+  backupPath: string,
+  snapshot: RestoreArchiveSnapshot,
+  previewToken: string
+): void {
+  if (createRestorePreviewToken(backupPath, snapshot) !== previewToken) {
+    throw new PigeDomainError("restore.backup_invalid", "The backup changed after its restore preview.");
+  }
+}
+
+function assertSameRestoreArchive(
+  expected: RestoreArchiveSnapshot,
+  current: RestoreArchiveSnapshot,
+  message: string
+): void {
+  if (
+    expected.size !== current.size ||
+    expected.checksum !== current.checksum ||
+    !sameFileRevision(expected.revision, current.revision)
+  ) {
+    throw new PigeDomainError("restore.backup_invalid", message);
+  }
+}
+
+function captureRestoreDirectoryIdentity(directoryPath: string): fs.Stats {
+  const identity = fs.lstatSync(directoryPath);
+  if (!identity.isDirectory() || identity.isSymbolicLink()) {
+    throw new PigeDomainError("restore.result_invalid", "The restore directory is not safe.");
+  }
+  return identity;
+}
+
+function assertRestoreDirectoryIdentity(directoryPath: string, expected: fs.Stats): void {
+  let current: fs.Stats;
+  try {
+    current = fs.lstatSync(directoryPath);
+  } catch {
+    throw new PigeDomainError("restore.result_invalid", "The restore directory changed during restore.");
+  }
+  if (
+    !current.isDirectory() ||
+    current.isSymbolicLink() ||
+    expected.dev !== current.dev ||
+    expected.ino !== current.ino
+  ) {
+    throw new PigeDomainError("restore.result_invalid", "The restore directory changed during restore.");
+  }
+}
+
+function createRestoreStagingDirectory(parentDirectory: string): RestoreStagingHandle {
+  const stagingPath = fs.mkdtempSync(path.join(parentDirectory, ".pige-restore-"));
+  fs.chmodSync(stagingPath, 0o700);
+  const markerPath = path.join(stagingPath, RESTORE_STAGING_MARKER);
+  const markerBody = `pige.restore.staging.v1:${randomUUID()}\n`;
+  const markerIdentity = writeExclusiveRestoreFile(markerPath, markerBody);
+  return {
+    path: stagingPath,
+    identity: captureRestoreDirectoryIdentity(stagingPath),
+    markerPath,
+    markerIdentity,
+    markerBody
+  };
+}
+
+function assertRestoreStagingIdentity(staging: RestoreStagingHandle): void {
+  assertRestoreDirectoryIdentity(staging.path, staging.identity);
+  assertOwnedRestoreFile(staging.markerPath, staging.markerIdentity, staging.markerBody);
+}
+
+function removeOwnedRestoreStagingDirectory(staging: RestoreStagingHandle): void {
+  try {
+    assertRestoreStagingIdentity(staging);
+    fs.rmSync(staging.path, { recursive: true });
+  } catch {
+    // Leave uncertain staging in place rather than deleting a path whose identity changed.
+  }
+}
+
+function validateExtractedRestore(directoryPath: string, manifest: BackupManifest): void {
+  for (const file of manifest.files) {
+    const filePath = resolveRestoreTarget(directoryPath, file.path);
+    const snapshot = snapshotRestoredFile(filePath);
+    if (snapshot.size !== file.size || snapshot.checksum !== file.checksum) {
+      throw new PigeDomainError("restore.result_invalid", "A restored file failed checksum validation.");
+    }
+  }
+  if (!isPigeVault(directoryPath)) {
+    throw new PigeDomainError("restore.result_invalid", "Restored folder is not a compatible Pige vault.");
+  }
+}
+
+function acquireRestorePublication(
+  destinationPath: string,
+  previewToken: string,
+  manifest: BackupManifest
+): RestorePublicationHandle {
+  const sidecarPath = path.join(
+    path.dirname(destinationPath),
+    `.${path.basename(destinationPath)}.pige-restore.json`
+  );
+  let reservation: RestorePublicationReservation;
+  let sidecarIdentity: fs.Stats;
+  let createdSidecar = false;
+  try {
+    reservation = {
+      identityVersion: 1,
+      previewToken,
+      reservationId: randomUUID()
+    };
+    sidecarIdentity = writeExclusiveRestoreFile(sidecarPath, serializeRestoreReservation(reservation));
+    createdSidecar = true;
+  } catch (caught) {
+    if (!isErrno(caught, "EEXIST")) throw caught;
+    const existing = readRestoreReservation(sidecarPath);
+    if (existing.reservation.previewToken !== previewToken) {
+      throw new PigeDomainError("restore.destination_exists", "Restore destination is reserved by another restore.");
+    }
+    reservation = existing.reservation;
+    sidecarIdentity = existing.identity;
+  }
+
+  const reservationBody = serializeRestoreReservation(reservation);
+  let destinationIdentity: fs.Stats;
+  let createdDestination = false;
+  try {
+    fs.mkdirSync(destinationPath, { mode: 0o700 });
+    destinationIdentity = captureRestoreDirectoryIdentity(destinationPath);
+    createdDestination = true;
+  } catch (caught) {
+    if (!isErrno(caught, "EEXIST")) {
+      if (createdSidecar) removeOwnedRestoreFile(sidecarPath, sidecarIdentity, reservationBody);
+      throw caught;
+    }
+    try {
+      destinationIdentity = captureRestoreDirectoryIdentity(destinationPath);
+    } catch {
+      if (createdSidecar) removeOwnedRestoreFile(sidecarPath, sidecarIdentity, reservationBody);
+      throw new PigeDomainError("restore.destination_exists", "Restore destination cannot be reserved safely.");
+    }
+  }
+
+  const markerPath = path.join(destinationPath, ...RESTORE_PUBLICATION_MARKER.split("/"));
+  if (fs.existsSync(markerPath)) {
+    const marker = readRestoreReservation(markerPath);
+    if (serializeRestoreReservation(marker.reservation) !== reservationBody) {
+      if (createdSidecar) removeOwnedRestoreFile(sidecarPath, sidecarIdentity, reservationBody);
+      throw new PigeDomainError("restore.destination_exists", "Restore destination belongs to another operation.");
+    }
+    return {
+      reservation,
+      sidecarPath,
+      sidecarIdentity,
+      destinationPath,
+      destinationIdentity,
+      markerPath,
+      markerIdentity: marker.identity,
+      alreadyCommitted: isPigeVault(destinationPath)
+    };
+  }
+
+  if (!createdSidecar && !createdDestination && directoryContainsEntries(destinationPath)) {
+    validateExtractedRestore(destinationPath, manifest);
+    return {
+      reservation,
+      sidecarPath,
+      sidecarIdentity,
+      destinationPath,
+      destinationIdentity,
+      alreadyCommitted: true
+    };
+  }
+
+  if (createdSidecar && !createdDestination) {
+    removeOwnedRestoreFile(sidecarPath, sidecarIdentity, reservationBody);
+    throw new PigeDomainError("restore.destination_exists", "Restore destination already exists.");
+  }
+  const markerIdentity = writeExclusiveRestoreFile(markerPath, reservationBody);
+  return {
+    reservation,
+    sidecarPath,
+    sidecarIdentity,
+    destinationPath,
+    destinationIdentity,
+    markerPath,
+    markerIdentity,
+    alreadyCommitted: false
+  };
+}
+
+function publishValidatedRestore(
+  stagingPath: string,
+  manifest: BackupManifest,
+  publication: RestorePublicationHandle
+): void {
+  if (!publication.alreadyCommitted) {
+    for (const file of manifest.files) {
+      if (file.path === RESTORE_COMMIT_ENTRY) continue;
+      publishRestoreFile(stagingPath, file, publication);
+    }
+    for (const rebuildableRoot of PIGE_REBUILDABLE_ROOTS) {
+      ensureRestorePublicationDirectory(
+        path.join(publication.destinationPath, rebuildableRoot),
+        publication
+      );
+    }
+    assertRestorePublicationIdentity(publication);
+    publishRestoreFile(
+      stagingPath,
+      requireRestoreManifestFile(manifest, RESTORE_COMMIT_ENTRY),
+      publication
+    );
+  }
+  reconcileRestorePublicationTemps(manifest, publication);
+  assertRestorePublicationIdentity(publication);
+  validateExtractedRestore(publication.destinationPath, manifest);
+}
+
+function publishRestoreFile(
+  stagingPath: string,
+  file: BackupManifestFile,
+  publication: RestorePublicationHandle
+): void {
+  const sourcePath = resolveRestoreTarget(stagingPath, file.path);
+  const targetPath = resolveRestoreTarget(publication.destinationPath, file.path);
+  ensureRestorePublicationDirectory(path.dirname(targetPath), publication);
+  assertRestorePublicationIdentity(publication);
+  if (fs.existsSync(targetPath)) {
+    assertPublishedRestoreFile(targetPath, file);
+    removeRestorePublicationTempFile(restorePublicationTempPath(targetPath, file, publication), publication);
+    return;
+  }
+  const temporaryPath = restorePublicationTempPath(targetPath, file, publication);
+  prepareRestorePublicationTempFile(sourcePath, temporaryPath, file, publication);
+  assertRestorePublicationIdentity(publication);
+  try {
+    fs.linkSync(temporaryPath, targetPath);
+  } catch (caught) {
+    if (!isErrno(caught, "EEXIST")) throw caught;
+  }
+  assertPublishedRestoreFile(targetPath, file);
+  removeRestorePublicationTempFile(temporaryPath, publication);
+  fsyncDirectoryBestEffort(path.dirname(targetPath));
+}
+
+function prepareRestorePublicationTempFile(
+  sourcePath: string,
+  temporaryPath: string,
+  file: BackupManifestFile,
+  publication: RestorePublicationHandle
+): void {
+  if (fs.existsSync(temporaryPath)) {
+    try {
+      assertPublishedRestoreFile(temporaryPath, file);
+      fsyncFile(temporaryPath);
+      assertPublishedRestoreFile(temporaryPath, file);
+      return;
+    } catch {
+      removeRestorePublicationTempFile(temporaryPath, publication);
+    }
+  }
+  assertRestorePublicationIdentity(publication);
+  fs.copyFileSync(sourcePath, temporaryPath, fs.constants.COPYFILE_EXCL);
+  fsyncFile(temporaryPath);
+  assertPublishedRestoreFile(temporaryPath, file);
+}
+
+function reconcileRestorePublicationTemps(
+  manifest: BackupManifest,
+  publication: RestorePublicationHandle
+): void {
+  const targetDirectories = new Set<string>();
+  for (const file of manifest.files) {
+    const targetPath = resolveRestoreTarget(publication.destinationPath, file.path);
+    targetDirectories.add(path.dirname(targetPath));
+    removeRestorePublicationTempFile(restorePublicationTempPath(targetPath, file, publication), publication);
+  }
+  for (const directoryPath of targetDirectories) fsyncDirectoryBestEffort(directoryPath);
+}
+
+function assertPublishedRestoreFile(filePath: string, file: BackupManifestFile): void {
+  const snapshot = snapshotRestoredFile(filePath);
+  if (snapshot.size !== file.size || snapshot.checksum !== file.checksum) {
+    throw new PigeDomainError("restore.result_invalid", "Restore destination contains conflicting bytes.");
+  }
+}
+
+function restorePublicationTempPath(
+  targetPath: string,
+  file: BackupManifestFile,
+  publication: RestorePublicationHandle
+): string {
+  const fileIdentity = createHash("sha256").update(file.path, "utf8").digest("hex").slice(0, 16);
+  return path.join(
+    path.dirname(targetPath),
+    `.pige-restore-${publication.reservation.reservationId}-${fileIdentity}.tmp`
+  );
+}
+
+function removeRestorePublicationTempFile(
+  temporaryPath: string,
+  publication: RestorePublicationHandle
+): void {
+  if (!fs.existsSync(temporaryPath)) return;
+  assertRestorePublicationIdentity(publication);
+  const identity = fs.lstatSync(temporaryPath);
+  if (!identity.isFile() || identity.isSymbolicLink()) {
+    throw new PigeDomainError("restore.result_invalid", "Restore temporary publication path is not safe.");
+  }
+  fs.unlinkSync(temporaryPath);
+}
+
+function ensureRestorePublicationDirectory(
+  directoryPath: string,
+  publication: RestorePublicationHandle
+): void {
+  const relativePath = path.relative(publication.destinationPath, directoryPath);
+  if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+    throw new PigeDomainError("restore.result_invalid", "Restore directory escaped its reserved destination.");
+  }
+  let currentPath = publication.destinationPath;
+  for (const segment of relativePath.split(path.sep).filter(Boolean)) {
+    assertRestorePublicationIdentity(publication);
+    currentPath = path.join(currentPath, segment);
+    try {
+      fs.mkdirSync(currentPath, { mode: 0o700 });
+    } catch (caught) {
+      if (!isErrno(caught, "EEXIST")) throw caught;
+    }
+    const current = fs.lstatSync(currentPath);
+    if (!current.isDirectory() || current.isSymbolicLink()) {
+      throw new PigeDomainError("restore.result_invalid", "Restore directory traversal was not safe.");
+    }
+  }
+}
+
+function assertRestorePublicationIdentity(publication: RestorePublicationHandle): void {
+  const reservationBody = serializeRestoreReservation(publication.reservation);
+  assertOwnedRestoreFile(publication.sidecarPath, publication.sidecarIdentity, reservationBody);
+  assertRestoreDirectoryIdentity(publication.destinationPath, publication.destinationIdentity);
+  if (publication.markerPath && publication.markerIdentity) {
+    assertOwnedRestoreFile(publication.markerPath, publication.markerIdentity, reservationBody);
+  }
+}
+
+function releaseRestorePublication(publication: RestorePublicationHandle): void {
+  const reservationBody = serializeRestoreReservation(publication.reservation);
+  if (publication.markerPath && publication.markerIdentity) {
+    removeOwnedRestoreFile(publication.markerPath, publication.markerIdentity, reservationBody);
+  }
+  removeOwnedRestoreFile(publication.sidecarPath, publication.sidecarIdentity, reservationBody);
+  fsyncDirectoryBestEffort(publication.destinationPath);
+  fsyncDirectoryBestEffort(path.dirname(publication.destinationPath));
+}
+
+function requireRestoreManifestFile(manifest: BackupManifest, filePath: string): BackupManifestFile {
+  const file = manifest.files.find((candidate) => candidate.path === filePath);
+  if (!file) throw new PigeDomainError("restore.backup_invalid", "Backup vault manifest is missing.");
+  return file;
+}
+
+function directoryContainsEntries(directoryPath: string): boolean {
+  return fs.readdirSync(directoryPath).length > 0;
+}
+
+function serializeRestoreReservation(reservation: RestorePublicationReservation): string {
+  return `${JSON.stringify(reservation)}\n`;
+}
+
+function readRestoreReservation(filePath: string): {
+  readonly reservation: RestorePublicationReservation;
+  readonly identity: fs.Stats;
+} {
+  const snapshot = readOwnedRestoreFile(filePath);
+  let value: unknown;
+  try {
+    value = JSON.parse(snapshot.body);
+  } catch {
+    throw new PigeDomainError("restore.destination_exists", "Restore reservation is not valid.");
+  }
+  if (
+    !isRecord(value) ||
+    value.identityVersion !== 1 ||
+    typeof value.previewToken !== "string" ||
+    !RESTORE_PREVIEW_TOKEN.test(value.previewToken) ||
+    typeof value.reservationId !== "string" ||
+    !/^[0-9a-f-]{36}$/u.test(value.reservationId)
+  ) {
+    throw new PigeDomainError("restore.destination_exists", "Restore reservation is not valid.");
+  }
+  return {
+    reservation: {
+      identityVersion: 1,
+      previewToken: value.previewToken,
+      reservationId: value.reservationId
+    },
+    identity: snapshot.identity
+  };
+}
+
+function writeExclusiveRestoreFile(filePath: string, body: string): fs.Stats {
+  const flags = fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | (fs.constants.O_NOFOLLOW ?? 0);
+  const descriptor = fs.openSync(filePath, flags, 0o600);
+  try {
+    fs.writeFileSync(descriptor, body, "utf8");
+    fs.fsyncSync(descriptor);
+    return fs.fstatSync(descriptor);
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+function readOwnedRestoreFile(filePath: string): { readonly body: string; readonly identity: fs.Stats } {
+  const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0);
+  const descriptor = fs.openSync(filePath, flags);
+  try {
+    const before = fs.fstatSync(descriptor);
+    const pathIdentity = fs.lstatSync(filePath);
+    if (!sameFileRevision(before, pathIdentity) || before.size > 4096) {
+      throw new PigeDomainError("restore.destination_exists", "Restore reservation changed unexpectedly.");
+    }
+    const body = fs.readFileSync(descriptor, "utf8");
+    const after = fs.fstatSync(descriptor);
+    if (!sameFileRevision(before, after)) {
+      throw new PigeDomainError("restore.destination_exists", "Restore reservation changed unexpectedly.");
+    }
+    return { body, identity: after };
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+function assertOwnedRestoreFile(filePath: string, expected: fs.Stats, body: string): void {
+  const current = readOwnedRestoreFile(filePath);
+  if (!sameFileRevision(expected, current.identity) || current.body !== body) {
+    throw new PigeDomainError("restore.result_invalid", "Restore ownership changed during publication.");
+  }
+}
+
+function removeOwnedRestoreFile(filePath: string, expected: fs.Stats, body: string): void {
+  try {
+    assertOwnedRestoreFile(filePath, expected, body);
+    fs.unlinkSync(filePath);
+  } catch {
+    // A stale ownership marker is safer than unlinking a path whose identity changed.
+  }
+}
+
+function snapshotRestoredFile(filePath: string): { readonly size: number; readonly checksum: string } {
+  const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0);
+  let descriptor: number;
+  try {
+    descriptor = fs.openSync(filePath, flags);
+  } catch {
+    throw new PigeDomainError("restore.result_invalid", "A restored file could not be opened safely.");
+  }
+  try {
+    const before = fs.fstatSync(descriptor);
+    const pathIdentity = fs.lstatSync(filePath);
+    if (!sameFileRevision(before, pathIdentity)) {
+      throw new PigeDomainError("restore.result_invalid", "A restored file changed unexpectedly.");
+    }
+    const hash = createHash("sha256");
+    const buffer = Buffer.alloc(1024 * 1024);
+    let position = 0;
+    while (position < before.size) {
+      const bytesRead = fs.readSync(descriptor, buffer, 0, Math.min(buffer.length, before.size - position), position);
+      if (bytesRead <= 0) throw new PigeDomainError("restore.result_invalid", "A restored file ended unexpectedly.");
+      hash.update(buffer.subarray(0, bytesRead));
+      position += bytesRead;
+    }
+    const after = fs.fstatSync(descriptor);
+    const pathAfter = fs.lstatSync(filePath);
+    if (!sameFileRevision(before, after) || !sameFileRevision(after, pathAfter)) {
+      throw new PigeDomainError("restore.result_invalid", "A restored file changed unexpectedly.");
+    }
+    return { size: after.size, checksum: `sha256:${hash.digest("hex")}` };
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+function fsyncFile(filePath: string): void {
+  const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0);
+  const descriptor = fs.openSync(filePath, flags);
+  try {
+    fs.fsyncSync(descriptor);
+  } finally {
+    fs.closeSync(descriptor);
+  }
 }
 
 function snapshotBackupSourceFile(filePath: string): { readonly size: number; readonly checksum: string } {
