@@ -786,10 +786,10 @@ Rules:
 
 Current implementation:
 
-- Exact create plus one Pi-selected cited append to an eligible retrieved generated note
-  are current. Host owns target/base; Activity owns checksum-bound create/update recovery
-  and Undo. General patch/rename/link/organize/merge/delete, restore/redo, CAS/transactions,
-  broad history, and packaging remain open.
+- Current: exact create, one cited append, and one high-confidence directed `links_to`
+  between two retrieved clean generated notes. Host owns direction, targets, bytes, and
+  Operation; only source changes, Activity/Undo restores it, and rebuild derives backlink.
+  Other link/mutation shapes, CAS/transactions, history, redo, and packaging remain open.
 
 ### 5.5.2 Markdown Rendering And Editing Surface
 

@@ -265,21 +265,20 @@ Rules:
 
 ## 9. Managed Blocks
 
-Pige may maintain specific sections using HTML comments.
+Pige may maintain sections using paired HTML comments. The current exact-link append is:
 
 ```md
-<!-- pige:managed section="related" version="1" operation="op_20260709_bcde2345" -->
-- [[Example]]
-<!-- /pige:managed -->
+<!-- pige:managed:start agent-link op_20260709_bcde2345 -->
+- [Example](#wiki:page_20260709_abcd1234)
+<!-- pige:managed:end -->
 ```
 
 Rules:
 
-- Managed blocks must be readable as normal Markdown when comments are ignored.
-- Pige may replace managed blocks only after validating the surrounding file checksum.
-- User edits outside managed blocks must not be overwritten.
-- Rewrites outside managed blocks preserve user text, validate a base hash, and record
-  recovery/Undo; only an exceptional boundary pauses.
+- Exact linking changes only source: deduplicate target ID into `related_page_ids`, add
+  the encoded link, and leave target bytes unchanged.
+- Blocks read without comments. Writes preserve outside text, check base hash, and record
+  recovery/Undo; only an exception pauses.
 
 ## 10. `PIGE.md` Contract
 

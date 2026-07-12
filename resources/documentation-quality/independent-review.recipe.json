@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-12T22:04:18Z",
+  "reviewedAt": "2026-07-12T23:15:41Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,7 +30,7 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "1b06664b68b854ec82c331a3f8badb2afd76d16aacd0c016f3c1a5640d6ee376"
+    "reviewedSha256": "3836908c271e7d0110880b8310019c69acc67246727514621fe48ab12ab4dccf"
   },
   "reviewers": [
     {
@@ -344,43 +344,55 @@
         "documentation_leanness_and_maintainability"
       ],
       "independence": "Fresh read-only reviewer audited the repaired exact 19-Development plus 10-governed pre-recipe candidate without editing files. It accepted Operation occupancy preflight, one Pi-selected cited additive generated-note update, page-first recovery, exact create/update Activity and Undo, two evidence mappings, unchanged states, 1,102 claims, fixed budgets, and retained mutation/CAS/transaction/history/platform gaps."
+    },
+    {
+      "reviewerId": "autonomous-linking-final-review",
+      "task": "/root/autonomous_linking_final_review",
+      "independentDimensions": [
+        "navigation_and_resource_lifecycle",
+        "cross_document_contract_consistency",
+        "continuous_traceability_and_acceptance",
+        "ongoing_development_support",
+        "documentation_leanness_and_maintainability"
+      ],
+      "independence": "Fresh read-only reviewer audited the exact 5-Development plus 9-governed pre-recipe candidate without editing files. It accepted one high-confidence cited directed links_to between two clean generated notes, source-only mutation, read-only target binding, page-first recovery, exact Activity/Undo and derived backlink rebuild, two evidence mappings only to partial PIGE-KNOW-003/E7.01, 1,104 locked claims, fixed budgets, and retained broader link/mutation/CAS/transaction/platform gaps."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "autonomous-update-final-review",
+      "reviewerId": "autonomous-linking-final-review",
       "blockerCount": 0,
-      "summary": "No navigation, mode or storage root is added; Pi selects one opaque retrieved note while Host owns target, private images, Operation and inverse Undo."
+      "summary": "No navigation, mode or root is added; Pi selects two opaque refs while Host changes only source and Activity retains existing update/Undo."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "autonomous-update-final-review",
+      "reviewerId": "autonomous-linking-final-review",
       "blockerCount": 0,
-      "summary": "API, Job, Technical, Pi, Prompt, UI, Playbook and Decision agree on one cited additive generated-note append and exact create/update Activity/Undo."
+      "summary": "Knowledge, Markdown, Job, Technical, Pi, Prompt and Playbook agree on one Host-fixed directed links_to and derived backlink."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "autonomous-update-final-review",
+      "reviewerId": "autonomous-linking-final-review",
       "blockerCount": 0,
-      "summary": "Two exact update/recovery selectors change only four partial Requirements and four partial Exits; 1,102 claims are locked and every state remains unchanged."
+      "summary": "Two exact link/recovery selectors map only partial PIGE-KNOW-003 and E7.01; 1,104 claims are locked and every state is unchanged."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "autonomous-update-final-review",
+      "reviewerId": "autonomous-linking-final-review",
       "blockerCount": 0,
-      "summary": "Owners bind Operation occupancy before mutation, preserve page-first recovery and exact Undo, and retain broad mutation, CAS, transaction, history and platform work."
+      "summary": "Owners bind source/target/catalog before effect, preserve page-first adoption and source-only Undo, and retain broader links, CAS and platforms."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.6,
-      "reviewerId": "autonomous-update-final-review",
+      "reviewerId": "autonomous-linking-final-review",
       "blockerCount": 0,
-      "summary": "No document, Decision, screen or prototype was added; gates pass at 4,107/4,200 entry words, 4,802 trace lines, 249,487/250,000 trace bytes and 1,209,806/1,210,000 Markdown bytes."
+      "summary": "No document, Decision, screen or prototype was added; gates pass at 4,107/4,200 entry words, 4,743 trace lines, 249,760/250,000 trace bytes and 1,209,866/1,210,000 Markdown bytes."
     }
   ],
   "verification": [
@@ -392,17 +404,17 @@
     {
       "command": "npm test && npm run typecheck && npm run build --workspace @pige/desktop",
       "status": "passed",
-      "evidence": "The exact candidate passed 81 files and 819 tests, typecheck and production build; Electron unified Agent, Pi, parser, index and real macOS Vision smokes also passed."
+      "evidence": "The exact candidate passed 81 files and 833 tests, typecheck and production build; Electron unified Agent, Pi, parser, index and real macOS Vision smokes also passed."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 passed: 4,107/4,200 entry words, zero duplicate groups, 14 mutations, 4,802 trace lines, 249,487 trace bytes, 57 Markdown files, 1,209,806 bytes, and 6.62 percent line reduction."
+      "evidence": "LEN-001 through LEN-005 passed: 4,107/4,200 entry words, zero duplicate groups, 14 mutations, 4,743 trace lines, 249,760 trace bytes, 57 Markdown files, 1,209,866 bytes, and 6.64 percent line reduction."
     },
     {
       "command": "node scripts/verify/independent-documentation-review.mjs --print-snapshot && explicit semantic-ledger comparison",
       "status": "passed",
-      "evidence": "The governed snapshot is 1b06664b68b854ec82c331a3f8badb2afd76d16aacd0c016f3c1a5640d6ee376 across 109 files; current and locked ledgers contain 1,102 claims with zero differences."
+      "evidence": "The governed snapshot is 3836908c271e7d0110880b8310019c69acc67246727514621fe48ab12ab4dccf across 109 files; current and locked ledgers contain 1,104 claims with zero differences."
     }
   ],
   "coordination": {
@@ -411,8 +423,8 @@
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The update candidate keeps every phase/status and exact-create/proposal behavior while adding one additive generated-note update plus checksum-bound Activity/Undo.",
-    "acknowledgement": "Development froze exactly 19 files; Product Planning changed 11 governed files, no PRD/schema/prototype sync was needed, and fresh independent review cleared the repaired combined candidate."
+    "compatibility": "The linking candidate keeps every phase/status and prior create/update behavior while adding one directed source-only generated-note link with Activity/Undo.",
+    "acknowledgement": "Development froze exactly 5 files; Product Planning changed 10 governed files, no PRD/API/UI/Decision sync was needed, and fresh independent review cleared the candidate."
   },
   "resolvedBlockers": [
     "Implemented five preset-first Providers plus Custom-only protocols, conditional credentials, auto-sync/Refresh/manual inventory, grouped Global Default, typed repair and real Pi probe with journaled recovery; retained every partial/planned state.",
@@ -451,7 +463,8 @@
     "Added checksum-bound exact create Operations plus bounded Home Activity and non-confirming exact-page Undo with recoverable trash, deterministic trash Operations, worker rebuild, startup reconciliation and durable UI truth without changing statuses.",
     "Bound same-Job exact create publication before page link to source revision, Job policy, page bytes and deterministic Operation identity; page-first recovery now emits one checksum-bound Operation without retroactively attesting historical or drifted bytes.",
     "Bound restore preview/apply to exact archive bytes and one sender-scoped lease, validated owned staging, reserved a fresh destination, published checksum-checked files without replacement and the manifest last, and reconciled only matching owned partials on explicit retry.",
-    "Added one Pi-selected cited additive update for eligible generated notes with pre-mutation Operation occupancy checks, exact byte preservation, page-first recovery, distinct Activity and checksum-current inverse update Undo."
+    "Added one Pi-selected cited additive update for eligible generated notes with pre-mutation Operation occupancy checks, exact byte preservation, page-first recovery, distinct Activity and checksum-current inverse update Undo.",
+    "Added one evidence-backed directed links_to between two clean generated notes with source-only Markdown mutation, target binding, page-first recovery, Activity/Undo and derived backlink rebuild."
   ],
   "nonBlockingRisks": [
     "P5 remains in progress: remaining Job-class publishers, running capture/other-class cancellation, strict cross-process Job CAS and routing, parent-directory swap, guard-to-domain atomicity, other guard-without-output recovery, checkpoint arrays, cross-file transactions, Windows/Paddle, packaged-filesystem proof, and non-Agent progress/cancel UI remain open.",
@@ -460,10 +473,10 @@
     "The retrieval regression foundation remains lexical and synthetic: model-grounded summary/citation validation under cloud-send and Permission enforcement, tag/topic/entity and Knowledge Tree thresholds, vector/reranker ranking, 10k/100k and UI/packaged proof, and broader locale/query families remain open.",
     "The Knowledge Tree remains internal-only: broader relation and branch semantics, richer aggregate inputs, public IPC/preload/renderer navigation, localized empty state, 10k worker/incremental rebuild proof, packaged parity, and the separately owned visual/accessibility and Knowledge Health work remain open.",
     "Pi remains partial: full Provider catalog/help/delete, durable sync health, optional-auth UI, live DeepSeek preset/Anthropic proof, multi-source recovery, history compaction/indexing, steer queues, Broker and signed packaged BYOK remain open.",
-    "Activity/Undo covers exact checksum-bound generated create and one cited additive update; general patch/rename/link/organize/merge/delete, redo/history, tampering, batched scans, restore, CAS/transactions and packaged platforms remain open.",
+    "Activity/Undo covers exact generated create, one cited append and one directed link; other links/pages/mutations, redo/history, tampering, scans, restore, CAS/transactions and packaged platforms remain open.",
     "No-telemetry is a static executable gate; unknown SDKs, computed endpoints, indirect transports, generated configuration, and crash-hook review remain open. Diagnostics still need broader stores, recovery correlation, user clear, export cancellation, selected-path UX, and crash recovery.",
     "Backup/restore still need backupId/domain versions, release scans, external copies/controls, non-hardlink backup publication, explicit restore identity modes, durable restore Jobs/restart, dependency/schema migration, typed errors, dirfd/openat CAS, complete rebuild and packaged platforms.",
-    "Trace projections use 4,802 of 5,500 lines and 249,487 of 250,000 bytes; governed Markdown uses 1,209,806 of 1,210,000 bytes. Future additions must reclaim capacity instead of raising budgets.",
+    "Trace projections use 4,743 of 5,500 lines and 249,760 of 250,000 bytes; governed Markdown uses 1,209,866 of 1,210,000 bytes. Future additions must reclaim capacity instead of raising budgets.",
     "PRD, TECH_ARCHITECTURE, and Decision Log remain large Owner documents; future Agents should continue section-targeted reads and define each fact once.",
     "The concise pre-alpha README intentionally has no install button, screenshots, or release download; add those only when a usable signed build and governed visual evidence exist.",
     "Structural UI gates do not prove packaged macOS/Windows fidelity, accessibility, or human visual approval; real capture and release evidence remain open.",

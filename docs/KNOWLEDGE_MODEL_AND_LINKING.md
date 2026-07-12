@@ -260,19 +260,18 @@ Rules:
 
 ### 7.2 Body Links
 
-Use wiki links for readable durable links:
+Readable durable links may use titles:
 
 ```md
 [[Local RAG]]
 [[Local RAG|local retrieval]]
 ```
 
-Rules:
-
-- Body links should be meaningful in context.
-- Do not fill summaries with mechanical links on every keyword.
-- Prefer one or two useful links per paragraph over link spam.
-- Existing user-written links should be preserved unless broken or unsafe.
+Current slice: after inspect and one retrieval, Pi supplies two distinct `related_NN`
+refs, cited reason, and high confidence. Host fixes one directed `links_to` between clean
+active generated notes: source adds `related_page_ids` plus a canonical
+`#wiki:<encoded-id>` managed link; target stays unchanged. Undo restores source and
+rebuild derives/removes backlink. Other link shapes/pages/types remain open.
 
 ### 7.3 Citations
 
