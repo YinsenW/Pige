@@ -618,6 +618,51 @@ button.ghost {
   font-size: 13px;
 }
 
+.conversation-timeline {
+  width: min(100%, 48rem);
+  min-width: 0;
+  max-height: min(36vh, 26rem);
+  justify-self: center;
+  overflow: auto;
+  display: grid;
+  gap: 0;
+  margin-bottom: 12px;
+  padding: 0 4px;
+}
+
+.conversation-message {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr);
+  gap: 10px;
+  border-top: 1px solid var(--border-light);
+  padding: 10px 0;
+}
+
+.conversation-message:first-child {
+  border-top: 0;
+}
+
+.conversation-message-role {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.conversation-message p {
+  min-width: 0;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.conversation-message.role-user p {
+  color: var(--text-secondary);
+}
+
 .retrieval-results,
 .home-reader {
   width: min(100%, 1120px);

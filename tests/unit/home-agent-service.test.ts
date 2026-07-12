@@ -1048,6 +1048,316 @@ describe("Home Pi Agent service", () => {
     });
   });
 
+  it("rehydrates one durable follow-up after restart and adopts a repeated client turn without another model call", async () => {
+    const fixture = makeFixture();
+    const requests: PiAgentRunRequest[] = [];
+    const runtime = {
+      run: async (request: PiAgentRunRequest): Promise<PiAgentRunResult> => {
+        requests.push(request);
+        await request.beforeModelTurn?.();
+        return makeRuntimeResult(request, undefined, {
+          answer: requests.length === 1 ? "First durable answer." : "Second durable answer.",
+          citationRefs: [],
+          grounding: "general"
+        });
+      }
+    };
+    const first = await new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      runtime
+    ).submitTurn({
+      schemaVersion: 1,
+      clientTurnId: "turn_20260711_firstdurable001",
+      text: "Remember this first turn.",
+      inputKind: "typed_text",
+      objective: "auto",
+      locale: "en"
+    });
+    expect(first.state).toBe("completed");
+    if (first.state !== "completed") throw new Error("Expected the first durable turn to complete.");
+
+    const restarted = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      runtime
+    );
+    const followUpRequest = {
+      schemaVersion: 1 as const,
+      clientTurnId: "turn_20260711_followupdurable01",
+      conversationId: first.conversationId,
+      expectedTailEventId: first.tailEventId,
+      text: "Continue from the first answer.",
+      inputKind: "follow_up" as const,
+      objective: "auto" as const,
+      locale: "en" as const
+    };
+    const second = await restarted.submitTurn(followUpRequest);
+    expect(second.state).toBe("completed");
+    if (second.state !== "completed") throw new Error("Expected the durable follow-up to complete.");
+    expect(requests).toHaveLength(2);
+    expect(requests[0]?.history).toEqual([]);
+    expect(requests[1]?.history).toEqual([
+      expect.objectContaining({ role: "user", text: "Remember this first turn." }),
+      expect.objectContaining({ role: "assistant", text: "First durable answer." })
+    ]);
+
+    const adopted = await restarted.submitTurn(followUpRequest);
+    expect(adopted).toMatchObject({
+      state: "completed",
+      jobId: second.jobId,
+      conversationEventId: second.conversationEventId,
+      conversationId: first.conversationId,
+      tailEventId: second.tailEventId,
+      answer: { answer: "Second durable answer." }
+    });
+    expect(requests).toHaveLength(2);
+    expect(restarted.conversation({ conversationId: first.conversationId })).toMatchObject({
+      conversationId: first.conversationId,
+      tailEventId: second.tailEventId,
+      canFollowUp: true,
+      messages: [
+        { role: "user", text: "Remember this first turn." },
+        { role: "assistant", text: "First durable answer." },
+        { role: "user", text: "Continue from the first answer." },
+        { role: "assistant", text: "Second durable answer." }
+      ],
+      latestTurn: { jobId: second.jobId, state: "completed" }
+    });
+  });
+
+  it("adopts the same event and deterministic Job after a crash before text-turn execution", async () => {
+    const fixture = makeFixture();
+    const conversations = new AgentTurnConversationStore();
+    const jobs = new JobsService(fixture.vaults);
+    const request = {
+      schemaVersion: 1 as const,
+      clientTurnId: "turn_20260711_crashadopt00001",
+      text: "Resume the exact accepted turn after restart.",
+      inputKind: "typed_text" as const,
+      objective: "auto" as const,
+      locale: "en" as const
+    };
+    const preserved = conversations.appendUserTurn(
+      fixture.vaultPath,
+      request.text,
+      { inputKind: request.inputKind, objective: request.objective, locale: request.locale },
+      { clientTurnId: request.clientTurnId }
+    );
+    const preCrashJob = jobs.createAgentTurnJob({
+      conversationEventId: preserved.event.id,
+      conversationLocator: preserved.locator,
+      inputHash: preserved.inputHash
+    });
+    let runtimeCalls = 0;
+    const resumed = await new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      {
+        run: async (runtimeRequest) => {
+          runtimeCalls += 1;
+          await runtimeRequest.beforeModelTurn?.();
+          return makeRuntimeResult(runtimeRequest, undefined, {
+            answer: "The exact accepted turn resumed.", citationRefs: [], grounding: "general"
+          });
+        }
+      },
+      undefined,
+      new AgentTurnConversationStore()
+    ).submitTurn(request);
+
+    expect(resumed).toMatchObject({
+      state: "completed",
+      jobId: preCrashJob.id,
+      conversationEventId: preserved.event.id,
+      conversationId: preserved.event.conversationId
+    });
+    expect(runtimeCalls).toBe(1);
+    expect(readRecords<JobRecord>(path.join(fixture.vaultPath, ".pige", "jobs"))).toHaveLength(1);
+    expect(fs.readFileSync(path.join(fixture.vaultPath, ...preserved.locator.split("/")), "utf8")
+      .trim().split("\n")).toHaveLength(2);
+  });
+
+  it("rejects a stale follow-up tail before creating a Job or invoking Pi", async () => {
+    const fixture = makeFixture();
+    let runtimeCalls = 0;
+    const service = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      {
+        run: async (request) => {
+          runtimeCalls += 1;
+          await request.beforeModelTurn?.();
+          return makeRuntimeResult(request, undefined, {
+            answer: "Stable answer.", citationRefs: [], grounding: "general"
+          });
+        }
+      }
+    );
+    const first = await service.submitTurn({
+      schemaVersion: 1,
+      clientTurnId: "turn_20260711_stalebase000001",
+      text: "Create a stable conversation.",
+      inputKind: "typed_text",
+      locale: "en"
+    });
+    expect(first.state).toBe("completed");
+    if (first.state !== "completed") throw new Error("Expected the base turn to complete.");
+    const before = service.conversation({ conversationId: first.conversationId });
+
+    const stale = await service.submitTurn({
+      schemaVersion: 1,
+      clientTurnId: "turn_20260711_stalefollow00001",
+      conversationId: first.conversationId,
+      expectedTailEventId: "evt_20260711_staletail0001",
+      text: "This stale continuation must fail.",
+      inputKind: "follow_up",
+      locale: "en"
+    });
+
+    expect(stale).toMatchObject({
+      state: "failed",
+      error: { code: "agent_runtime.turn_conflict", retryable: false }
+    });
+    expect(runtimeCalls).toBe(1);
+    expect(service.conversation({ conversationId: first.conversationId })).toEqual(before);
+    expect(readRecords<JobRecord>(path.join(fixture.vaultPath, ".pige", "jobs"))).toHaveLength(1);
+  });
+
+  it("fails closed before a later model turn when the durable conversation tail drifts", async () => {
+    const fixture = makeFixture();
+    const first = await new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      {
+        run: async (request) => {
+          await request.beforeModelTurn?.();
+          return makeRuntimeResult(request, undefined, {
+            answer: "Bound first answer.", citationRefs: [], grounding: "general"
+          });
+        }
+      }
+    ).submitTurn({
+      schemaVersion: 1,
+      clientTurnId: "turn_20260711_driftbase000001",
+      text: "Create a bound conversation.",
+      inputKind: "typed_text",
+      locale: "en"
+    });
+    expect(first.state).toBe("completed");
+    if (first.state !== "completed") throw new Error("Expected the base turn to complete.");
+    let laterModelTurns = 0;
+    const service = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      {
+        run: async (request) => {
+          await request.beforeModelTurn?.();
+          laterModelTurns += 1;
+          const locator = `.pige/conversations/2026/07/${first.conversationId}.jsonl`;
+          fs.appendFileSync(path.join(fixture.vaultPath, ...locator.split("/")), `${JSON.stringify({
+            schemaVersion: 1,
+            id: "evt_20260711_externaldrift01",
+            conversationId: first.conversationId,
+            type: "error",
+            createdAt: "2026-07-11T23:59:59.000Z",
+            text: "Conversation changed outside the active turn."
+          })}\n`, "utf8");
+          await request.beforeModelTurn?.();
+          laterModelTurns += 1;
+          throw new Error("unreachable");
+        }
+      }
+    );
+    const outcome = await service.submitTurn({
+      schemaVersion: 1,
+      clientTurnId: "turn_20260711_driftfollow00001",
+      conversationId: first.conversationId,
+      expectedTailEventId: first.tailEventId,
+      text: "Continue only if the durable tail is unchanged.",
+      inputKind: "follow_up",
+      locale: "en"
+    });
+
+    expect(outcome).toMatchObject({
+      state: "failed",
+      error: { code: "agent_runtime.turn_conflict" }
+    });
+    expect(laterModelTurns).toBe(1);
+    expect(service.conversation({ conversationId: first.conversationId })).toMatchObject({
+      canFollowUp: false,
+      latestTurn: { state: "failed_final" }
+    });
+  });
+
+  it("cooperatively cancels the real text Agent execution and restores a body-free cancelled timeline", async () => {
+    const fixture = makeFixture();
+    const jobs = new JobsService(fixture.vaults);
+    let signalSeen: AbortSignal | undefined;
+    let releaseStarted!: () => void;
+    const started = new Promise<void>((resolve) => { releaseStarted = resolve; });
+    const service = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      jobs,
+      {
+        run: async (request) => {
+          await request.beforeModelTurn?.();
+          signalSeen = request.signal;
+          releaseStarted();
+          await new Promise<never>((_resolve, reject) => {
+            const abort = (): void => {
+              const error = new Error("synthetic cancellation");
+              error.name = "AbortError";
+              reject(error);
+            };
+            if (request.signal?.aborted) abort();
+            else request.signal?.addEventListener("abort", abort, { once: true });
+          });
+          throw new Error("unreachable");
+        }
+      }
+    );
+    const submission = service.submitTurn({
+      schemaVersion: 1,
+      clientTurnId: "turn_20260711_cancelturn00001",
+      text: "Cancel this model turn safely.",
+      inputKind: "typed_text",
+      locale: "en"
+    });
+    await started;
+    const running = jobs.list({ classes: ["agent_turn"] }).jobs[0];
+    expect(running).toMatchObject({ state: "running" });
+    expect(jobs.cancel({ jobId: running!.id })).toMatchObject({ status: "cancel_requested" });
+    const outcome = await submission;
+
+    expect(signalSeen?.aborted).toBe(true);
+    expect(outcome).toMatchObject({
+      state: "failed",
+      jobId: running!.id,
+      error: { code: "agent_runtime.turn_cancelled", retryable: true }
+    });
+    expect(jobs.readAgentTurnJob(running!.id)).toMatchObject({ state: "cancelled" });
+    expect(service.conversation()).toMatchObject({
+      canFollowUp: false,
+      messages: [{ role: "user", text: "Cancel this model turn safely." }],
+      latestTurn: { jobId: running!.id, state: "cancelled" }
+    });
+  });
+
   it("reports a verified local Pi binding as local rather than cloud usage", async () => {
     const fixture = makeFixture();
     const outcome = await new HomeAgentService(

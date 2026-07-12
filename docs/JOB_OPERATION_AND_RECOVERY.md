@@ -108,11 +108,12 @@ Phase 2 implementation note:
 - Capture, parse, and OCR runners persist and link each deterministic parse, OCR, or Agent-ingest child before parent terminalization. Interrupted `running` parents auto-requeue; handled finalization failures remain `failed_retryable` for explicit retry. Both reuse the linked child. This guarantee is separate from the deferred `capture_batch` hierarchy.
 - Startup and vault activation first reconcile interrupted jobs. Proven-idempotent capture/parse/OCR/Agent-ingest/index jobs are requeued; cancellation-in-progress and unproven classes become `failed_retryable`. Capture/parse/OCR/Agent ingest drain in batches of 20; index rebuild uses a coalesced limit-1 drainer. Waiting Agent ingest still honors current model/OCR readiness.
 - Home's contextual processing strip includes active capture, parse, OCR, Agent ingest, and index jobs. It remains hidden when no work needs attention and uses compact localized status indicators rather than a new queue destination.
-- Home creates `agent_turn` before Pi/retrieval and links the user event, body-free audits,
-  source/citation refs, and committed assistant event. Missing/broken binding waits on the
-  same Job; restart adopts a committed assistant event or resumes known state. Legacy
-  `retrieval_query` remains readable; durable follow-up, cancel/progress, and URL-tool
-  continuation remain open.
+- Home `agent_turn` binds one schema-v1 client turn to one hashed event/Job. Exact retry/
+  restart adopts it; changed input/metadata/binding or stale tail fails. Reads verify new
+  user/assistant hashes; legacy no-hash events remain readable. JobsService cancels Pi/
+  tools and adopts valid assistant output without another model call or overwritten
+  source checkpoints. Legacy `retrieval_query` remains readable; cross-process CAS,
+  pushed progress, and multi-source recovery remain open.
 - Source-page writes use pending/previous/target checksums so a crash can be reconciled without confusing Pige's partial write with a user edit.
 - Phase 3 text/document pages create deterministic `agent_ingest`. Missing models wait.
   Document parse/OCR children key parent/tool/version/source revision/input, reuse across
@@ -149,13 +150,12 @@ Required v0.1 job classes:
 
 `packages/schemas/src/index.ts` owns the executable `JobClassSchema`. This table explains those exact values; no document or DTO may introduce aliases such as `capture_preserve`, `parse_source`, `backup_create`, or `restore_validate`.
 
-`agent_turn` is executable. Main first appends the bounded user conversation event, then
-creates one Job linked to it and any preserve-first source ref. Without a usable model it
-waits at `waiting_dependency/waiting_for_model` and resumes the same identity. Short chat
-creates no Source Record; the current source-bearing turn stores one attachment once and
-reconciles a crash between preservation and linkage. Existing `retrieval_query` and
-`agent_ingest` remain readable compatibility records. Pi-selected static-URL
-fetch/preserve uses the same turn; durable follow-up and multi-source recovery remain open.
+`agent_turn` appends a bounded user event then its Job and preserve-first source ref. No
+model waits/resumes the same identity. Exact-tail follow-up rehydrates bounded history;
+valid assistant output is adopted without another model call. Short chat creates no
+Source Record; one attachment reconciles preservation/linkage crashes. Legacy records
+remain readable and Pi-selected URL work uses the turn; multi-source/cross-process
+recovery remains open.
 
 Jobs may have parent-child structure:
 
@@ -453,8 +453,8 @@ Cancellation is best effort, not data erasure.
 Rules:
 
 - Canceling capture before execution keeps its source; once capture is running, its source-page guard prevents a false clean-cancel claim, but cooperative running cancellation remains open.
-- Canceling parse/OCR/`index_rebuild` jobs preserves completed artifacts and marks incomplete artifacts stale or temporary.
-- Canceling Agent ingest aborts the provider call when possible and remains distinct from provider timeout; no raw partial response is persisted.
+- Canceling parse/OCR/`index_rebuild` preserves completed artifacts and marks incomplete artifacts stale or temporary.
+- Canceling `agent_turn` or Agent ingest durably requests cancellation before aborting Pi/provider and active tools; clean pre-publication cancellation writes no assistant/partial response and remains distinct from timeout.
 - Canceling backup removes incomplete temp archives when safe.
 - Canceling restore before apply leaves the original vault untouched. Canceling during apply must finish a safe checkpoint or stop with a recovery report.
 - Canceling a job with applied operations does not roll back automatically; Undo/repair is a separate operation flow.
@@ -649,6 +649,7 @@ Recovery decisions:
 | Situation | Recovery behavior |
 | --- | --- |
 | Source preserved, no selected child | Wake the Agent parent; never infer parse/OCR/retrieval from source shape. |
+| `agent_turn` has a valid assistant event | Adopt its checksum-bound output refs and finish without another model call. |
 | Source copied, source record missing | Create repair proposal or source record if checksum/path proves source. |
 | Parse artifact exists, source page missing | Resume source page creation. |
 | Proposal ready, app crashed before display | Show proposal in Home status. |

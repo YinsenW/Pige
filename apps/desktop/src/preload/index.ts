@@ -3,6 +3,8 @@ import type {
   AddPresetProviderRequest,
   AddManualProviderRequest,
   AddManualModelRequest,
+  AgentConversationRequest,
+  AgentConversationTimeline,
   AgentSubmitTurnRequest,
   AgentSubmitTurnResult,
   AgentRuntimeStatus,
@@ -79,6 +81,10 @@ const api: PigeDesktopApi = {
       ipcRenderer.invoke("agent.runtimeStatus") as Promise<AgentRuntimeStatus>,
     ask: async (request: HomeAgentAskRequest): Promise<HomeAgentAskResult> =>
       ipcRenderer.invoke("agent.ask", request) as Promise<HomeAgentAskResult>,
+    conversation: async (
+      request?: AgentConversationRequest
+    ): Promise<AgentConversationTimeline | undefined> =>
+      ipcRenderer.invoke("agent.conversation", request) as Promise<AgentConversationTimeline | undefined>,
     submitTurn: async (
       request: AgentSubmitTurnRequest,
       files: readonly File[] = []

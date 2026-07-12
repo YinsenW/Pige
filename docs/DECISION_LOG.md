@@ -2439,6 +2439,7 @@ References:
 
 Status: Accepted
 Date: 2026-07-12
+Revised: 2026-07-12
 Supersedes: D-20260709-Home-Composer-Unified-Entry, D-20260709-Phase-2-3-Home-Lexical-Retrieval, D-20260710-Home-Context-Pack-And-Local-Evidence-Summary
 
 Decision:
@@ -2461,8 +2462,8 @@ Consequences:
   waits/resumes the same turn instead of silent capture, retrieval, or local fallback.
 - Provider profiles gain explicit protocol, pre-save Pi probe, tri-state binding, and
   safe staged commit; legacy kinds map without silent Responses reinterpretation.
-- B3.14/E3.09 and PIGE-PI-005 stay planned pending durable follow-up/session recovery and
-  signed packaged direct/retrieved/file/URL proof.
+- Exact-tail binding makes one client turn own one event/`agent_turn`; retry/restart
+  adopts it. Signed packaged direct/retrieved/file/URL/follow-up proof still gates E3.09.
 
 References:
 

@@ -48,15 +48,14 @@ Today, the pre-alpha can:
 - Review an exact staged create-note proposal from Home; this is a transitional exception path.
 - Use persistent-job recovery and local-backup foundations.
 
-Unified text/one-file/static-URL Provider-to-Home now runs. Autonomous knowledge growth,
-durable follow-up, and broader recovery remain pre-alpha work. See the [implementation playbook](docs/V0_1_IMPLEMENTATION_PLAYBOOK.md).
+Unified text/one-file/static-URL Provider-to-Home plus exact durable follow-up now runs.
+Autonomous knowledge growth and broader recovery remain pre-alpha work. See the [implementation playbook](docs/V0_1_IMPLEMENTATION_PLAYBOOK.md).
 
 ## Road to `v0.1 Public Alpha`
 
 - **Complete autonomous knowledge growth:** eligibility, Activity/Undo, and exceptional
   recovery across normal note/link/organize work.
-- **Finish the Agent spine:** durable follow-up, cross-platform
-  document/OCR, and stronger recovery.
+- **Finish the Agent spine:** multi-source work, cross-platform document/OCR, and stronger recovery.
 - **Ship a trustworthy alpha:** backup/restore, accessibility, localization, packaged
   macOS/Windows proof, signing, and updates.
 

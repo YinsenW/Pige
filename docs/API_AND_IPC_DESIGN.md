@@ -73,6 +73,7 @@ type PigeErrorDomain =
   | "ocr"
   | "rag"
   | "model_provider"
+  | "agent_runtime"
   | "permission"
   | "skill"
   | "package"
@@ -420,13 +421,13 @@ Rules:
 - Job summaries may include source display name and source kind from the matching source record, but must not include source record paths, managed copy paths, original absolute paths, file bodies, prompts, model responses, or secrets.
 - Invalid job JSON is counted and skipped so Home can still open.
 - `jobs.cancel` directly cancels eligible queued/waiting/retryable work only with a
-  false/absent action-safety guard; active process-local parse/OCR/Agent ingest becomes
-  idempotent `cancel_requested`. Running capture and `index_rebuild` remain non-cooperative.
+  false/absent action-safety guard; active process-local parse/OCR/`agent_turn`/Agent
+  ingest/`index_rebuild` becomes idempotent `cancel_requested`. Running capture remains non-cooperative.
 - `jobs.retry` updates eligible `failed_retryable`, `waiting_dependency`, or `cancelled` jobs back to `queued` for later processing.
 - Before a queued/waiting/retryable Job is written as `cancelled`,
   `durableWritesApplied: true` returns `not_allowed` unchanged; retry retains this guard.
-  Active parse/OCR/Agent ingest may still become `cancel_requested`. Capture/parse/OCR/
-  Agent-ingest writers persist a real pre-publication checkpoint before their first
+  Active parse/OCR/`agent_turn`/Agent ingest/`index_rebuild` may still become
+  `cancel_requested`. Capture/parse/OCR/Agent-ingest writers persist a real pre-publication checkpoint before their first
   domain effect; the Job write must succeed before publication. Abandon/archive is separate.
 - `jobs.list` exposes persisted stage/progress by polling; numeric Home rendering and pushed progress events remain open.
 - Source-page projection is internal, not renderer-exposed. Document/image parse or OCR
@@ -533,18 +534,18 @@ Commands:
 
 Queries:
 
+- `agent.conversation`
 - `retrieval.search`
 
 Retrieval DTOs and internal context-pack refs must follow `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`. Renderer-facing responses show grounded answers, ranked results, snippets, citations, and degraded-search state; they do not expose raw prompts, context budgets, full retrieved bodies, raw vector data, or secret-bearing policy details.
 
-Current renderer semantics use `agent.submitTurn`. Main appends one bounded user event and
-`agent_turn`; ordinary chat may answer directly or Pi may select cited retrieval or
-bounded URL fetch/preserve.
-One file attachment is preserved once and linked to that same turn; without a usable
-model the Job waits/resumes with no silent capture/retrieval fallback. Responses exclude
-bodies, paths, prompts, credentials, endpoints, and raw errors. `agent.ask`,
-`retrieval_query`, `agent_ingest`, and capture handlers remain readable compatibility
-paths. Durable follow-up sessions and save-answer stay open.
+Current renderer uses schema-v1 `agent.submitTurn`. Optional client/conversation/tail IDs
+bind follow-up; exact retry adopts its event/Job, while changed input/binding or stale tail
+fails pre-Job/Pi. `agent.conversation` returns at most 100 bounded messages, tail,
+follow-up eligibility, and safe latest Job state; Home requests 24. Durable results include
+conversation/tail IDs. One file is preserved; no model waits/resumes without fallback.
+Responses exclude bodies, paths, prompts, credentials, endpoints, and raw errors. Legacy
+handlers stay readable; save-answer/multi-attachment recovery remain open.
 
 ### 6.7 Permissions
 

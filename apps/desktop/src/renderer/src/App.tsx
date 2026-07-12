@@ -7,6 +7,7 @@ import jaMessages from "./locales/ja/messages.json";
 import koMessages from "./locales/ko/messages.json";
 import zhHansMessages from "./locales/zh-Hans/messages.json";
 import type {
+  AgentConversationTimeline,
   AgentTurnAnswer,
   AgentSubmitTurnResult,
   AgentRuntimeStatus,
@@ -129,6 +130,7 @@ export function App(): React.JSX.Element {
       states: ["queued", "running", "waiting_dependency", "failed_retryable", "failed_final"] as JobState[]
     };
     homeJobStateFilter.states.push("awaiting_review");
+    homeJobStateFilter.states.push("cancel_requested");
     const [nextJobs, nextProposals] = nextOnboarding.activeVault
       ? await Promise.all([
         window.pige.jobs.list({
@@ -255,12 +257,18 @@ export function App(): React.JSX.Element {
     }
 
     try {
-      const result = await window.pige.agent.submitTurn({
+      const submission = window.pige.agent.submitTurn({
+        schemaVersion: 1,
+        clientTurnId: createAgentClientTurnId(),
         ...(text?.trim() ? { text: text.trim() } : {}),
         inputKind,
         objective: "auto",
         locale
       }, files);
+      void submission.catch(() => undefined);
+      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+      await refreshVaultState();
+      const result = await submission;
       setCaptureToast(result.state === "completed"
         ? { kind: "success", message: result.answer.answer }
         : { kind: "error", message: t(result.error.messageKey) });
@@ -274,12 +282,15 @@ export function App(): React.JSX.Element {
 
   const cancelJob = async (jobId: string): Promise<void> => {
     const result = await window.pige.jobs.cancel({ jobId });
-    if (result.status === "cancelled") {
-      setCaptureToast({ kind: "success", message: t("home.jobCancelled") });
+    if (result.status === "cancelled" || result.status === "cancel_requested") {
+      setCaptureToast({
+        kind: "success",
+        message: t(result.status === "cancel_requested" ? "home.jobCancelRequested" : "home.jobCancelled")
+      });
       await refreshVaultState();
       return;
     }
-    setCaptureToast({ kind: "error", message: result.reason ?? t("error.generic") });
+    setCaptureToast({ kind: "error", message: t("error.generic") });
   };
 
   const retryJob = async (jobId: string): Promise<void> => {
@@ -289,7 +300,7 @@ export function App(): React.JSX.Element {
       await refreshVaultState();
       return;
     }
-    setCaptureToast({ kind: "error", message: result.reason ?? t("error.generic") });
+    setCaptureToast({ kind: "error", message: t("error.generic") });
   };
 
   const handleDragEnter = (event: DragEvent<HTMLElement>): void => {
@@ -515,6 +526,7 @@ export function App(): React.JSX.Element {
             onFilesSelected={(files, text) => submitFiles(files, "file_picker", text)}
             onCancelJob={cancelJob}
             onRetryJob={retryJob}
+            onHomeStateChanged={refreshVaultState}
             onProposalChanged={refreshVaultState}
             onOpenModels={() => setView("models")}
             t={t}
@@ -902,6 +914,7 @@ function HomeComposer(props: {
   ) => Promise<AgentSubmitTurnResult | undefined>;
   readonly onCancelJob: (jobId: string) => Promise<void>;
   readonly onRetryJob: (jobId: string) => Promise<void>;
+  readonly onHomeStateChanged: () => Promise<void>;
   readonly onProposalChanged: () => Promise<void>;
   readonly onOpenModels: () => void;
   readonly t: (key: string) => string;
@@ -913,6 +926,8 @@ function HomeComposer(props: {
   const [agentRunState, setAgentRunState] = useState<HomeAgentUiState>("idle");
   const [agentError, setAgentError] = useState<PigeErrorSummary | null>(null);
   const [agentModelUsage, setAgentModelUsage] = useState<HomeAgentModelUsage>("none");
+  const [conversationTimeline, setConversationTimeline] = useState<AgentConversationTimeline | undefined>();
+  const [liveAnswerEventId, setLiveAnswerEventId] = useState<string | null>(null);
   const [selectedProposal, setSelectedProposal] = useState<ConfirmationProposal | null>(null);
   const [proposalBusy, setProposalBusy] = useState(false);
   const [openingProposalId, setOpeningProposalId] = useState<string | null>(null);
@@ -931,11 +946,70 @@ function HomeComposer(props: {
   const proposalFocusReturnId = useRef<string | null>(null);
   const proposalFocusReturnPending = useRef(false);
   const proposalQueueHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  const conversationLoadSequence = useRef(0);
+  const activeVaultIdRef = useRef<string | undefined>(props.activeVault?.vaultId);
+  activeVaultIdRef.current = props.activeVault?.vaultId;
   const agentStatusLabel = props.agentRuntimeStatus?.state === "ready" ? props.t("home.agentReady") : props.t("home.captureOnly");
   const plannedModelUsage = homeRuntimeModelUsage(props.agentRuntimeStatus);
   const cloudUsageMessageKey = agentRunState === "accepted" || agentRunState === "running"
     ? plannedModelUsage === "cloud" ? "home.cloudSend" : null
     : agentModelUsage === "cloud" ? "home.cloudCallAttempted" : null;
+  const latestTurn = conversationTimeline?.latestTurn;
+  const retryableLatestTurn = latestTurn && (
+    latestTurn.state === "failed_retryable" ||
+    latestTurn.state === "cancelled" ||
+    latestTurn.state === "waiting_dependency"
+  ) ? latestTurn : undefined;
+  const visibleConversationMessages = (conversationTimeline?.messages ?? []).filter((message) =>
+    !(agentAnswer && message.role === "assistant" && message.id === liveAnswerEventId)
+  );
+
+  const refreshConversation = async (): Promise<AgentConversationTimeline | undefined> => {
+    const vaultId = props.activeVault?.vaultId;
+    if (!vaultId) {
+      setConversationTimeline(undefined);
+      return undefined;
+    }
+    const requestId = conversationLoadSequence.current + 1;
+    conversationLoadSequence.current = requestId;
+    try {
+      const nextTimeline = await window.pige.agent.conversation({ limit: 24 });
+      if (requestId === conversationLoadSequence.current && activeVaultIdRef.current === vaultId) {
+        setConversationTimeline(nextTimeline);
+      }
+      return nextTimeline;
+    } catch {
+      return undefined;
+    }
+  };
+
+  useEffect(() => {
+    conversationLoadSequence.current += 1;
+    setConversationTimeline(undefined);
+    setLiveAnswerEventId(null);
+    setAgentAnswer(null);
+    setAgentError(null);
+    setAgentModelUsage("none");
+    setAgentRunState("idle");
+    if (props.activeVault?.vaultId) void refreshConversation();
+    return () => {
+      conversationLoadSequence.current += 1;
+    };
+  }, [props.activeVault?.vaultId]);
+
+  useEffect(() => {
+    if (!latestTurn) return;
+    const nextState = homeUiStateForJobState(latestTurn.state);
+    if (nextState) setAgentRunState(nextState);
+    setAgentError(latestTurn.error ?? null);
+  }, [latestTurn?.jobId, latestTurn?.state, latestTurn?.error?.code]);
+
+  useEffect(() => {
+    if (!props.activeVault?.vaultId || !isConversationPollingState(latestTurn?.state)) return;
+    const timer = window.setInterval(() => void refreshConversation(), 1_200);
+    return () => window.clearInterval(timer);
+  }, [props.activeVault?.vaultId, latestTurn?.jobId, latestTurn?.state]);
+
   const submitHomeInput = async (): Promise<void> => {
     if (!text.trim()) return;
     setCaptureError(null);
@@ -949,27 +1023,46 @@ function HomeComposer(props: {
     const turnText = text.trim();
     setAgentError(null);
     setAgentAnswer(null);
+    setLiveAnswerEventId(null);
     setAgentModelUsage("none");
     setAgentRunState("accepted");
     await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
     setAgentRunState("running");
+    const followUpConversation = canFollowUpToConversation(conversationTimeline)
+      ? conversationTimeline
+      : undefined;
+    const clientTurnId = createAgentClientTurnId();
     try {
-      const outcome = await window.pige.agent.submitTurn({
+      const submission = window.pige.agent.submitTurn({
+        schemaVersion: 1,
         text: turnText,
-        inputKind: classifyTextTransportKind(turnText),
+        inputKind: followUpConversation ? "follow_up" : classifyTextTransportKind(turnText),
         objective: "auto",
-        locale: props.locale
+        locale: props.locale,
+        clientTurnId,
+        ...(followUpConversation ? {
+          conversationId: followUpConversation.conversationId,
+          expectedTailEventId: followUpConversation.tailEventId
+        } : {})
       });
+      void submission.catch(() => undefined);
+      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+      await props.onHomeStateChanged().catch(() => undefined);
+      const outcome = await submission;
       if (outcome.state === "completed") {
         setAgentAnswer(outcome.answer);
+        setLiveAnswerEventId(outcome.tailEventId);
         setAgentModelUsage(outcome.modelUsage);
         setAgentRunState("completed");
         props.onDraftChange("");
+        await refreshConversation();
         return;
       }
       setAgentModelUsage(outcome.modelUsage);
       setAgentError(outcome.error);
       setAgentRunState(outcome.state);
+      if (outcome.state === "waiting") props.onDraftChange("");
+      await refreshConversation();
     } catch {
       setAgentError({
         code: "model_provider.call_failed",
@@ -980,7 +1073,19 @@ function HomeComposer(props: {
         userAction: "retry"
       });
       setAgentRunState("failed");
+      await refreshConversation();
     }
+  };
+
+  const retryLatestConversationTurn = async (): Promise<void> => {
+    if (!retryableLatestTurn) return;
+    setAgentError(null);
+    setAgentRunState("accepted");
+    await props.onRetryJob(retryableLatestTurn.jobId);
+    const nextTimeline = await refreshConversation();
+    const nextState = homeUiStateForJobState(nextTimeline?.latestTurn?.state);
+    setAgentRunState(nextState ?? "failed");
+    setAgentError(nextTimeline?.latestTurn?.error ?? null);
   };
 
   const openProposal = async (proposalId: string): Promise<void> => {
@@ -1119,12 +1224,15 @@ function HomeComposer(props: {
                 aria-label={props.t(jobStateMessageKey(job.state))}
               />
               <span>{job.sourceDisplayName ?? job.sourceId ?? job.id}</span>
-              {job.state === "queued" ? (
+              {job.state === "queued" || (
+                job.class === "agent_turn" && (job.state === "running" || job.state === "cancel_requested")
+              ) ? (
                 <button
                   className="job-action"
                   type="button"
                   title={props.t("home.cancelJob")}
                   aria-label={props.t("home.cancelJob")}
+                  disabled={job.state === "cancel_requested"}
                   onClick={() => void props.onCancelJob(job.id)}
                 >
                   {props.t("home.cancelJob")}
@@ -1194,6 +1302,22 @@ function HomeComposer(props: {
           ) : null}
         </section>
       ) : null}
+      {conversationTimeline && visibleConversationMessages.length > 0 ? (
+        <section className="conversation-timeline" aria-label={props.t("home.conversation")}>
+          {visibleConversationMessages.map((message) => (
+            <article
+              className={`conversation-message role-${message.role}`}
+              data-message-id={message.id}
+              key={message.id}
+            >
+              <span className="conversation-message-role">
+                {props.t(message.role === "user" ? "home.userMessage" : "home.assistantMessage")}
+              </span>
+              <p>{message.text}</p>
+            </article>
+          ))}
+        </section>
+      ) : null}
       {selectedNote ? (
         <section className="home-reader">
           <button
@@ -1248,10 +1372,11 @@ function HomeComposer(props: {
               const files = Array.from(event.currentTarget.files ?? []);
               event.currentTarget.value = "";
               setAgentAnswer(null);
+              setLiveAnswerEventId(null);
               setAgentError(null);
               setAgentModelUsage("none");
               setAgentRunState("running");
-              void props.onFilesSelected(files, text).then((result) => {
+              void props.onFilesSelected(files, text).then(async (result) => {
                 if (!result) {
                   setAgentRunState("failed");
                   return;
@@ -1260,12 +1385,14 @@ function HomeComposer(props: {
                 setAgentRunState(result.state);
                 if (result.state === "completed") {
                   setAgentAnswer(result.answer);
+                  setLiveAnswerEventId(result.tailEventId);
                   setAgentError(null);
                   props.onDraftChange("");
                 } else {
                   setAgentAnswer(null);
                   setAgentError(result.error);
                 }
+                await refreshConversation();
               });
             }}
           />
@@ -1296,8 +1423,11 @@ function HomeComposer(props: {
             ) : null}
             {agentError?.userAction === "configure_model" ? (
               <button type="button" className="ghost" onClick={props.onOpenModels}>{props.t("home.openModels")}</button>
-            ) : agentError?.retryable ? (
-              <button type="button" className="ghost" onClick={() => void submitHomeInput()}>{props.t("home.retryAnswer")}</button>
+            ) : null}
+            {retryableLatestTurn ? (
+              <button type="button" className="ghost" onClick={() => void retryLatestConversationTurn()}>
+                {props.t("home.retryAnswer")}
+              </button>
             ) : null}
           </div>
         ) : null}
@@ -1310,9 +1440,43 @@ function HomeComposer(props: {
 function jobStateMessageKey(state: JobState): string {
   if (state === "queued") return "home.jobQueued";
   if (state === "running") return "home.jobRunning";
+  if (state === "cancel_requested") return "home.jobCancelRequested";
   if (state === "waiting_dependency") return "home.jobWaiting";
   if (state === "awaiting_review") return "home.jobReview";
   return "home.jobFailed";
+}
+
+function homeUiStateForJobState(state: JobState | undefined): HomeAgentUiState | undefined {
+  if (state === "queued") return "accepted";
+  if (state === "running" || state === "cancel_requested") return "running";
+  if (state === "waiting_dependency" || state === "waiting_permission" || state === "awaiting_review") return "waiting";
+  if (state === "completed" || state === "completed_with_warnings" || state === "compacted") return "completed";
+  if (state === "failed_retryable" || state === "failed_final" || state === "cancelled") return "failed";
+  return undefined;
+}
+
+function isConversationPollingState(state: JobState | undefined): boolean {
+  return state === "queued" ||
+    state === "running" ||
+    state === "waiting_dependency" ||
+    state === "cancel_requested";
+}
+
+function canFollowUpToConversation(timeline: AgentConversationTimeline | undefined): timeline is AgentConversationTimeline {
+  return timeline?.canFollowUp === true && (
+    timeline.latestTurn?.state === "completed" ||
+    timeline.latestTurn?.state === "completed_with_warnings"
+  );
+}
+
+function createAgentClientTurnId(now = new Date()): string {
+  const date = [
+    now.getUTCFullYear().toString().padStart(4, "0"),
+    (now.getUTCMonth() + 1).toString().padStart(2, "0"),
+    now.getUTCDate().toString().padStart(2, "0")
+  ].join("");
+  const opaqueId = window.crypto.randomUUID().replaceAll("-", "").toLowerCase();
+  return `turn_${date}_${opaqueId}`;
 }
 
 function proposalOutcomeForDurableState(

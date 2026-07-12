@@ -6,6 +6,7 @@ import type {
   AddPresetProviderRequest,
   AddManualProviderRequest,
   AddManualModelRequest,
+  AgentConversationRequest,
   AgentSubmitTurnRequest,
   AppHealth,
   BackupCreateResult,
@@ -601,6 +602,9 @@ ipcMain.handle("window.setSidebarOpen", (event, request: SetSidebarOpenRequest) 
 );
 ipcMain.handle("agent.runtimeStatus", () => getAgentRuntimeService().runtimeStatus());
 ipcMain.handle("agent.ask", (_event, request: HomeAgentAskRequest) => getHomeAgentService().ask(request));
+ipcMain.handle("agent.conversation", (_event, request?: AgentConversationRequest) =>
+  getHomeAgentService().conversation(request)
+);
 ipcMain.handle("agent.submitTurn", async (_event, payload: {
   readonly request: AgentSubmitTurnRequest;
   readonly filePaths?: readonly string[];
@@ -614,10 +618,14 @@ ipcMain.handle("agent.submitTurn", async (_event, payload: {
   }
   const request = AgentSubmitTurnRequestSchema.parse(payload.request);
   const normalizedRequest: AgentSubmitTurnRequest = {
+    schemaVersion: 1,
     inputKind: request.inputKind,
     locale: request.locale,
     ...(request.text === undefined ? {} : { text: request.text }),
-    ...(request.objective === undefined ? {} : { objective: request.objective })
+    ...(request.objective === undefined ? {} : { objective: request.objective }),
+    ...(request.clientTurnId === undefined ? {} : { clientTurnId: request.clientTurnId }),
+    ...(request.conversationId === undefined ? {} : { conversationId: request.conversationId }),
+    ...(request.expectedTailEventId === undefined ? {} : { expectedTailEventId: request.expectedTailEventId })
   };
   if (filePaths.length === 0) {
     return getHomeAgentService().submitTurn(normalizedRequest);

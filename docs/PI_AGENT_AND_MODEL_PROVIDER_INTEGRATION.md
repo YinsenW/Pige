@@ -182,16 +182,13 @@ Rules:
 
 Current preset foundation:
 
-- Presets implement OpenAI/Responses, Anthropic/Messages, Gemini and DeepSeek/Chat, plus
-  no-auth loopback Ollama; Custom exposes all three protocols. Optional-key UI proof is open.
-- `presetId` reconnect preserves identity/choices and cannot replace same-Endpoint Custom.
-  Connect journals Provider/model/secret; Refresh journals Provider/model. Startup rolls
-  back incomplete state and removes old secrets only after journal removal.
-- Assembled loopback proves renderer-to-Pi connect/restart. A real legacy Custom DeepSeek
-  profile proves secret resolution, Chat direct/restart-cited Home, and clean diagnostics,
-  not fresh DeepSeek preset Connect.
-- Full catalog/help/delete, durable sync health, live DeepSeek preset/Anthropic, durable
-  follow-up, and signed packaged platforms remain open.
+- Presets cover OpenAI/Responses, Anthropic/Messages, Gemini, DeepSeek/Chat and no-auth
+  Ollama; Custom exposes three protocols. Optional-key UI proof is open.
+- `presetId` reconnect preserves identity/choices and never replaces same-Endpoint Custom.
+  Connect/Refresh journals restore incomplete writes; old secrets follow journal removal.
+- Loopback proves renderer-to-Pi connect/restart. A legacy Custom DeepSeek proves secret
+  resolution, Chat direct/restart-cited Home and clean diagnostics, not preset Connect.
+- Open: catalog/delete/sync, live DeepSeek preset/Anthropic, multi-source recovery, and packaged platforms.
 
 ## 8. Pi Custom Models Boundary
 
@@ -303,6 +300,7 @@ idempotency, limits, owner service, and handler.
 The model sees only bounded descriptors. Calls bind run/call, catalog/policy/source,
 tool-version, and input hashes; results carry typed refs, warnings, and provenance while
 large bodies remain Artifacts. Host validation precedes every result or effect.
+Job cancellation aborts Pi/active tools without persisting partial response.
 
 The target registry uses validated publication for autonomous eligible knowledge and
 `pige_stage_knowledge_note_proposal@1` only for an exceptional boundary. The current
@@ -334,6 +332,10 @@ Rules:
 - Pi session files are not included in vault backup by default.
 - If Pi needs transient runtime state, store it in machine-local app data or job-scoped temp state, not as the knowledge source of truth.
 
+Home follow-up creates fresh isolated Pi from at most 16 checked prior user/assistant
+messages/64 KiB; history cannot become the current result. Pige events/Jobs, not Pi
+sessions, are authoritative. Compaction/indexing and steer queues remain open.
+
 Agent memory:
 
 - Pige-native memory remains the default.
@@ -352,10 +354,15 @@ Rules:
 - Context compaction must not discard unresolved jobs, citations, source IDs, or permission-relevant state.
 - Initial context may contain only the user instruction, policy, and scoped tool
   descriptors. Parsed or retrieved evidence enters only after its Pi-selected result.
+- Host rechecks current event/history/tail and bindings before model/tool boundaries;
+  source/privacy/egress drift stops the next call/effect.
 
 ## 14. API And IPC
 
-The [Settings, Providers, and Tools API domain](API_AND_IPC_DESIGN.md#68-settings-providers-tools) owns model/provider channel names and redacted DTOs. The [Jobs API domain](API_AND_IPC_DESIGN.md#63-jobs) owns Agent-job retry and cancellation transport. This integration contract defines provider and Pi behavior, not a second IPC vocabulary.
+The [Settings, Providers, and Tools API domain](API_AND_IPC_DESIGN.md#68-settings-providers-tools)
+owns model DTOs; the [Jobs API domain](API_AND_IPC_DESIGN.md#63-jobs) owns retry/cancel;
+[Retrieval](API_AND_IPC_DESIGN.md#66-retrieval) owns `agent.submitTurn`/`agent.conversation`.
+This integration contract defines behavior, not a second IPC vocabulary.
 
 Any future connection test, model-list refresh, or Agent-run entry point must first be added to the API owner and executable contracts. It must not be introduced here as a speculative alias.
 
@@ -393,13 +400,10 @@ Phase 3 implementation note:
   retrieval/write tools replan or fail before effects. Egress, binding, evidence,
   cancellation, and commit are rechecked; raw prompts/responses/keys do not persist.
 - No model preserves sources and waits; unavailable/empty document evidence writes no note.
-- Home text uses durable `agent.submitTurn`: Pi may answer directly or select cited local
-  retrieval or bounded URL fetch/preserve; one file shares the draft, and missing/broken
-  bindings wait with typed repair. Legacy handlers stay readable.
+- Home `agent.submitTurn` supports direct, cited retrieval, URL, and one-file turns;
+  missing/broken bindings wait with typed repair and legacy handlers stay readable.
 
-Remaining work: durable follow-up/multi-source recovery, catalog/help/delete/sync polish,
-Broker/packaging, and
-re-review both Pi pins together whenever either changes.
+Re-review both Pi pins together whenever either changes.
 
 ## 17. References
 

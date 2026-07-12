@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-12T12:57:31Z",
+  "reviewedAt": "2026-07-12T14:43:14Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,7 +30,7 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "b1e37b27d9bfbe4a136466742ab0434234b97497c54a1c56bf1b8a6c58199fac"
+    "reviewedSha256": "76af5e66f3527d2acd4fde8a854c244a061d70fdc24c3d1e2cbeeb22a53b4cb0"
   },
   "reviewers": [
     {
@@ -284,43 +284,55 @@
         "documentation_leanness_and_maintainability"
       ],
       "independence": "Fresh read-only reviewer audited the exact 61-path Autonomous-by-Default plus URL, Reader and Backup candidate without editing files. It accepted Pi-selected restart-recoverable static-URL fetch, inert remote/traversal Reader resources, Electron navigation denial, validated adjacent no-overwrite backup publication, exact residual gaps, unchanged states, and the minimal four-evidence projection with zero blockers."
+    },
+    {
+      "reviewerId": "durable-agent-followup-final-review",
+      "task": "/root/followup_final_independent_review",
+      "independentDimensions": [
+        "navigation_and_resource_lifecycle",
+        "cross_document_contract_consistency",
+        "continuous_traceability_and_acceptance",
+        "ongoing_development_support",
+        "documentation_leanness_and_maintainability"
+      ],
+      "independence": "Fresh read-only reviewer independently audited the exact durable Agent follow-up candidate after the checksum repair without editing files. It verified the replacement Development hashes, symmetric user/assistant history integrity, exact-tail retry/restart adoption, bounded Pi history, cooperative cancellation, Home transcript behavior, unchanged states, and explicit residual gaps."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "autonomous-combined-final-review",
+      "reviewerId": "durable-agent-followup-final-review",
       "blockerCount": 0,
-      "summary": "Existing Home, Reader, Activity and Settings surfaces absorb autonomous defaults, Pi-selected URL work and safety hardening without a new mode, destination or confirmation flow."
+      "summary": "Existing Home, Jobs and Agent owners absorb transcript, follow-up, retry and cancellation without a new mode, destination, document or resource lifecycle."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "autonomous-combined-final-review",
+      "reviewerId": "durable-agent-followup-final-review",
       "blockerCount": 0,
-      "summary": "PRD and Owners agree on autonomous reversible knowledge work, exception-only intervention, standing exact-destination BYOK authority, Pi-selected URL ingress, Reader confinement and bounded backup finalization."
+      "summary": "API, Job, Pi, context, technical, UI, Decision and Playbook owners agree on schema-v1 exact-tail binding, bounded checked history, durable result adoption and typed cancellation."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "autonomous-combined-final-review",
+      "reviewerId": "durable-agent-followup-final-review",
       "blockerCount": 0,
-      "summary": "Four exact executable evidence IDs map only to existing partial rows; planned unified-ingress rows and every phase/status remain unchanged, with 1,095 current and locked claims."
+      "summary": "One exact UI evidence row and existing Home service evidence update only partial/planned mappings; 1,096 claims are current and locked and every Requirement, Exit and phase state is unchanged."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "autonomous-combined-final-review",
+      "reviewerId": "durable-agent-followup-final-review",
       "blockerCount": 0,
-      "summary": "Owners expose current URL, Reader and Backup boundaries plus precise recovery and packaging gaps, while keeping proposal-first create-note explicitly transitional under the autonomous target."
+      "summary": "Owners distinguish the executable follow-up/restart/cancel foundation from open cross-process CAS, multi-source, compaction/indexing, steer queues and packaged-platform proof."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.6,
-      "reviewerId": "autonomous-combined-final-review",
+      "reviewerId": "durable-agent-followup-final-review",
       "blockerCount": 0,
-      "summary": "No document, Requirement, Build, Exit or state was added: 57 Markdown files use 1,209,123/1,210,000 bytes; entry context is 4,105 words and trace uses 5,157 lines/249,831 bytes."
+      "summary": "No document or screen was added; gates pass at 4,107/4,200 entry words, 5,155 trace lines, 249,929/250,000 trace bytes and 1,209,638/1,210,000 Markdown bytes."
     }
   ],
   "verification": [
@@ -332,17 +344,17 @@
     {
       "command": "npm test && npm run typecheck && npm run build --workspace @pige/desktop",
       "status": "passed",
-      "evidence": "Development's exact combined matrix passed 77 files plus one skip and 729 tests plus three skips, typecheck and production build; Electron unified Agent, Pi, Undici, parser, index and real macOS Vision smokes also passed."
+      "evidence": "The exact replacement candidate passed 79 files and 749 tests with zero skips, typecheck and production build; Electron unified Agent, Pi, parser, index and real macOS Vision smokes also passed."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 passed: 4,105/4,200 entry words, zero duplicate groups, 14 mutations, 5,157 trace lines, 249,831 trace bytes, 57 Markdown files, 1,209,123 bytes, and 6.72 percent line reduction."
+      "evidence": "LEN-001 through LEN-005 passed: 4,107/4,200 entry words, zero duplicate groups, 14 mutations, 5,155 trace lines, 249,929 trace bytes, 57 Markdown files, 1,209,638 bytes, and 6.69 percent line reduction."
     },
     {
       "command": "node scripts/verify/independent-documentation-review.mjs --print-snapshot && explicit semantic-ledger comparison",
       "status": "passed",
-      "evidence": "The governed snapshot is b1e37b27d9bfbe4a136466742ab0434234b97497c54a1c56bf1b8a6c58199fac across 109 files; current and locked ledgers contain 1,095 claims with zero differences."
+      "evidence": "The governed snapshot is 76af5e66f3527d2acd4fde8a854c244a061d70fdc24c3d1e2cbeeb22a53b4cb0 across 109 files; current and locked ledgers contain 1,096 claims with zero differences."
     }
   ],
   "coordination": {
@@ -351,12 +363,12 @@
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The combined candidate keeps every existing phase/status and legacy boundary while adding the autonomous target contract, bounded Pi-selected static-URL ingress, Reader resource/navigation confinement and atomic self-validating backup finalization.",
-    "acknowledgement": "Development mechanically assembled and cleared exactly 61 paths; Product Planning made only the incremental Owner/acceptance/semantic bind, UI Design requested no additional surface, and independent reviewers cleared the exact candidate."
+    "compatibility": "The durable follow-up candidate keeps every phase/status and legacy no-hash record while adding exact-tail retry/restart, bounded checked history, cooperative Pi cancellation and one mode-free Home transcript.",
+    "acknowledgement": "Development froze exactly 20 files; Product Planning changed 12 governed files, UI Design accepted one existing-surface wording sync, and fresh independent review cleared the exact combined candidate."
   },
   "resolvedBlockers": [
     "Implemented five preset-first Providers plus Custom-only protocols, conditional credentials, auto-sync/Refresh/manual inventory, grouped Global Default, typed repair and real Pi probe with journaled recovery; retained every partial/planned state.",
-    "Implemented durable Home text and one preserve-first file through one Pi turn with direct chat, optional cited retrieval, waiting/resume and no renderer semantic fallback; kept URL fetch, follow-up, multi-source and packaged proof open.",
+    "Implemented durable Home text and one preserve-first file through one Pi turn with direct chat, optional cited retrieval, waiting/resume and no renderer semantic fallback; kept multi-source and packaged proof open.",
     "Implemented the governed ordinary_allowed default and exact Connect disclosure, with matrix, policy-hash, Home private/sensitive, restricted, unknown/local, and Profile-switch evidence while keeping persistence/IPC/UI and confirmation resume open.",
     "Defined local-first without BYOK friction: one exact-destination disclosure, ordinary_allowed routine use with quiet status, sensitive confirmation, restricted blocking, unknown/changed reconfirmation, optional stricter modes, and no inherited authority; kept the old executable default explicitly open.",
     "Rewrote README as a concise product entry with user value, honest current capability, the Agent-first roadmap, privacy boundaries, and the Agent-authored automation goal instead of a technical inventory.",
@@ -384,20 +396,21 @@
     "Added one optional Agent-selected local ingest search with bounded opaque refs, current Markdown/SourceRecord revalidation, per-turn drift audits, terminal failure/publication fences, stable related_page_ids, and post-publication Operation recovery without a retrieval Job or state promotion.",
     "Added Home proposal cards and focused escaped review over the exact Pi create-note lifecycle, with durable rejected-call reconciliation, ready retry, unknown fail-closed, localized outcomes, double-action guards, and bounded ARIA/focus behavior.",
     "Made Input Once, Knowledge Grows Naturally and Autonomous by Default the target: validated reversible Pige-owned knowledge work auto-applies with Activity/Undo, while intervention is limited to destructive loss, authority escalation, changed destination, unreconcilable conflict or an explicit stricter policy.",
-    "Added Pi-selected static-URL fetch/preserve with SSRF/body gates, deterministic source/page/artifact/Operation recovery and no hidden Host route; durable follow-up, multi-URL and packaged proof remain open.",
+    "Added Pi-selected static-URL fetch/preserve with SSRF/body gates, deterministic source/page/artifact/Operation recovery and no hidden Host route; multi-URL and packaged proof remain open.",
     "Made remote/protocol/traversal Reader resources inert and blocked frame, redirect and new-window navigation without adding user friction or a new surface.",
-    "Added descriptor-bound source snapshots, self-validation, adjacent private staging, fsync, no-overwrite hard-link publication and owned crash-link reconciliation while keeping non-hardlink transport and durable Backup Jobs open."
+    "Added descriptor-bound source snapshots, self-validation, adjacent private staging, fsync, no-overwrite hard-link publication and owned crash-link reconciliation while keeping non-hardlink transport and durable Backup Jobs open.",
+    "Added exact-tail durable Home follow-up with one event/Job per client turn, checksum-verified history/results, bounded Pi rehydration, restart adoption, cooperative cancellation, and localized transcript/retry/cancel UI without changing statuses."
   ],
   "nonBlockingRisks": [
-    "P5 remains in progress: remaining Job-class publishers, running capture/other-class cancellation, strict cross-process Job CAS and routing, parent-directory swap, guard-to-domain atomicity, guard-without-output recovery, checkpoint arrays, cross-file transactions, Windows/Paddle, packaged-filesystem proof, and visible progress/cancel UI remain open.",
+    "P5 remains in progress: remaining Job-class publishers, running capture/other-class cancellation, strict cross-process Job CAS and routing, parent-directory swap, guard-to-domain atomicity, guard-without-output recovery, checkpoint arrays, cross-file transactions, Windows/Paddle, packaged-filesystem proof, and non-Agent progress/cancel UI remain open.",
     "Explicit index rebuild is process-local only: implicit first-query rebuild, formal 10k CPU/RSS/latency, incremental/staging-swap, cross-process writer/CAS/routing, complete kill/crash/stale-worker recovery, packaged macOS/Windows paths, and visible progress/cancel UI remain open.",
     "The local-tool lifecycle remains a fake/local service foundation: real Paddle/Python/model/language-pack transport, ordinary-ingest no-hidden-install proof, production app-data/catalog/permission/pre-vault Job/Operation wiring, OCR/UI, supply chain, packaged platforms, cross-process locking, complete recovery/GC/quarantine purge, and background lifecycle controls remain open.",
     "The retrieval regression foundation remains lexical and synthetic: model-grounded summary/citation validation under cloud-send and Permission enforcement, tag/topic/entity and Knowledge Tree thresholds, vector/reranker ranking, 10k/100k and UI/packaged proof, and broader locale/query families remain open.",
     "The Knowledge Tree remains internal-only: broader relation and branch semantics, richer aggregate inputs, public IPC/preload/renderer navigation, localized empty state, 10k worker/incremental rebuild proof, packaged parity, and the separately owned visual/accessibility and Knowledge Health work remain open.",
-    "Pi remains partial: full Provider catalog/help/delete, durable sync health, optional-auth UI, live DeepSeek preset/Anthropic proof, durable follow-up/multi-source recovery, Broker and signed packaged BYOK remain open.",
+    "Pi remains partial: full Provider catalog/help/delete, durable sync health, optional-auth UI, live DeepSeek preset/Anthropic proof, multi-source recovery, history compaction/indexing, steer queues, Broker and signed packaged BYOK remain open.",
     "No-telemetry is a static executable gate; unknown SDKs, computed endpoints, indirect transports, generated configuration, and crash-hook review remain open. Diagnostics still need broader stores, recovery correlation, user clear, export cancellation, selected-path UX, and crash recovery.",
     "Backup still needs backupId/domain versions, release scans, external copies/controls, durable Jobs/checkpoints, non-hardlink publication, restore identity, pathname CAS/pre-link cleanup, dependencies and complete restore orchestration.",
-    "Trace projections use 5,157 of 5,500 lines and 249,831 of 250,000 bytes; governed Markdown uses 1,209,123 of 1,210,000 bytes. Future additions must reclaim capacity instead of raising budgets.",
+    "Trace projections use 5,155 of 5,500 lines and 249,929 of 250,000 bytes; governed Markdown uses 1,209,638 of 1,210,000 bytes. Future additions must reclaim capacity instead of raising budgets.",
     "PRD, TECH_ARCHITECTURE, and Decision Log remain large Owner documents; future Agents should continue section-targeted reads and define each fact once.",
     "The concise pre-alpha README intentionally has no install button, screenshots, or release download; add those only when a usable signed build and governed visual evidence exist.",
     "Structural UI gates do not prove packaged macOS/Windows fidelity, accessibility, or human visual approval; real capture and release evidence remain open.",
