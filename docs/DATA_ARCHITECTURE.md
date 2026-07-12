@@ -620,9 +620,15 @@ Restore must work without `.pige/db/`, `.pige/indexes/`, local model files, or m
 
 Current implementation:
 
-- Restore preview validates archive structure, entry paths, manifest file list, file sizes, and SHA-256 checksums before enabling restore apply.
-- Restore apply extracts into a temporary staging folder, rejects path traversal or unexpected entries, creates rebuildable roots, verifies the result is a Pige vault, and then moves it into a new restored vault folder.
-- Restore apply does not overwrite the current vault or import secrets. It currently preserves the backup's `vault_id` while extracting to a new folder, so it is only a recovery-copy foundation—not a completed clone flow. Before public-alpha acceptance, activation must either replace the old machine binding for that `vault_id` or use `clone_as_new` and mint a new vault ID; registering both paths is forbidden.
+- Preview/apply binds one no-follow archive descriptor and SHA-256 token; apply fully
+  extracts and validates in owned 0700 staging before destination publication.
+- Apply claims an exclusive sibling reservation + matching inner marker, fsyncs and
+  no-replace links checksum-checked files, publishes `.pige/manifest.json` last, and fsyncs
+  target parents. Explicit retry adopts only matching owned partials; unknown/drifted
+  archive or destination bytes are preserved and fail closed.
+- It does not overwrite the current vault or import secrets, but still preserves the
+  backup `vault_id` in a new folder; registering both paths is forbidden. Identity modes, durable restart checkpoints,
+  schema/dependency migration, strict dirfd CAS, complete rebuild, and platforms remain open.
 
 Restore execution contract:
 

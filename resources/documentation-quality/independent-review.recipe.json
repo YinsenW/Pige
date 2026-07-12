@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-12T18:40:32Z",
+  "reviewedAt": "2026-07-12T20:22:56Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,7 +30,7 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "594ec76ca67e55124f572c29bbc8dda937b8a94344a8841dc7f7888f0fd61560"
+    "reviewedSha256": "a84a7e0329e3d5f2af2f3f01af18ba0e222c48722e2663fd6123f88d3f5e48d4"
   },
   "reviewers": [
     {
@@ -320,43 +320,55 @@
         "documentation_leanness_and_maintainability"
       ],
       "independence": "Fresh read-only reviewer audited the exact 4-Development plus 6-governed pre-recipe candidate without editing files. It accepted checkpoint-proven same-Job page-first recovery, checksum-bound create Operations, Activity eligibility, the single exact evidence projection, unchanged states, 1,098 claims and fixed budgets while retaining historical hashless, non-create, completion-tampering, CAS/transaction and platform gaps."
+    },
+    {
+      "reviewerId": "restore-ownership-final-review",
+      "task": "/root/restore_final_independent_review",
+      "independentDimensions": [
+        "navigation_and_resource_lifecycle",
+        "cross_document_contract_consistency",
+        "continuous_traceability_and_acceptance",
+        "ongoing_development_support",
+        "documentation_leanness_and_maintainability"
+      ],
+      "independence": "Fresh read-only reviewer audited the exact restore candidate without editing files. It accepted the separate sender-scoped opaque lease and main-only archive checksum binding, owned staging and reservation, checksum-checked no-replace publication with manifest last, explicit-retry-only reconciliation, exact two-selector projection, unchanged states, 1,100-claim lock, fixed budgets, and retained identity, Job/restart, migration, error, CAS, rebuild and packaged-platform gaps."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "hash-bound-create-recovery-final-review",
+      "reviewerId": "restore-ownership-final-review",
       "blockerCount": 0,
-      "summary": "No new navigation, document, schema or storage root is added; one existing Job checkpoint binds the generated page and deterministic create Operation before recovery."
+      "summary": "No navigation or storage root is added; a sender-scoped opaque preview lease and main-only archive checksum bind one restore attempt without exposing archive identity."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "hash-bound-create-recovery-final-review",
+      "reviewerId": "restore-ownership-final-review",
       "blockerCount": 0,
-      "summary": "Job, Pi, technical and Playbook owners agree that only checkpoint-proven same-Job exact creates receive checksum-bound recovered Operations and Activity eligibility."
+      "summary": "API, Data, Job, Technical and Playbook owners agree on owned staging, reserved no-replace publication, manifest-last visibility and explicit-retry-only reconciliation."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "hash-bound-create-recovery-final-review",
+      "reviewerId": "restore-ownership-final-review",
       "blockerCount": 0,
-      "summary": "One exact recovery evidence row updates only four partial Requirements and four partial Exits; 1,098 claims are locked and every state remains unchanged."
+      "summary": "Two exact restore selectors update only partial PIGE-BACKUP-004 and E9.02; 1,100 claims are locked and every Requirement, Exit and phase state remains unchanged."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "hash-bound-create-recovery-final-review",
+      "reviewerId": "restore-ownership-final-review",
       "blockerCount": 0,
-      "summary": "Owners distinguish the exact page-first recovery slice from historical unbound records, pre-effect retry, other Job classes, non-create work, CAS/transactions and packaged proof."
+      "summary": "Owners distinguish explicit matching-partial retry from durable restore Jobs or startup recovery and retain identity, migration, typed-error, CAS, rebuild and platform work."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.6,
-      "reviewerId": "hash-bound-create-recovery-final-review",
+      "reviewerId": "restore-ownership-final-review",
       "blockerCount": 0,
-      "summary": "No document, screen or prototype was added; gates pass at 4,107/4,200 entry words, 5,063 trace lines, 249,856/250,000 trace bytes and 1,209,607/1,210,000 Markdown bytes."
+      "summary": "No document, Decision, screen or prototype was added; gates pass at 4,107/4,200 entry words, 4,980 trace lines, 249,838/250,000 trace bytes and 1,209,703/1,210,000 Markdown bytes."
     }
   ],
   "verification": [
@@ -368,17 +380,17 @@
     {
       "command": "npm test && npm run typecheck && npm run build --workspace @pige/desktop",
       "status": "passed",
-      "evidence": "The exact candidate passed 80 files and 784 tests, typecheck and production build; Electron unified Agent, Pi, parser, index and real macOS Vision smokes also passed."
+      "evidence": "The exact candidate passed 81 files and 798 tests, typecheck and production build; Electron unified Agent, Pi, parser, index and real macOS Vision smokes also passed."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 passed: 4,107/4,200 entry words, zero duplicate groups, 14 mutations, 5,063 trace lines, 249,856 trace bytes, 57 Markdown files, 1,209,607 bytes, and 6.68 percent line reduction."
+      "evidence": "LEN-001 through LEN-005 passed: 4,107/4,200 entry words, zero duplicate groups, 14 mutations, 4,980 trace lines, 249,838 trace bytes, 57 Markdown files, 1,209,703 bytes, and 6.62 percent line reduction."
     },
     {
       "command": "node scripts/verify/independent-documentation-review.mjs --print-snapshot && explicit semantic-ledger comparison",
       "status": "passed",
-      "evidence": "The governed snapshot is 594ec76ca67e55124f572c29bbc8dda937b8a94344a8841dc7f7888f0fd61560 across 109 files; current and locked ledgers contain 1,098 claims with zero differences."
+      "evidence": "The governed snapshot is a84a7e0329e3d5f2af2f3f01af18ba0e222c48722e2663fd6123f88d3f5e48d4 across 109 files; current and locked ledgers contain 1,100 claims with zero differences."
     }
   ],
   "coordination": {
@@ -387,8 +399,8 @@
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The recovery candidate keeps every phase/status and historical hashless record while checkpoint-binding exact same-Job source, policy, page and create Operation identities.",
-    "acknowledgement": "Development froze exactly 4 files; Product Planning changed 7 governed files, no UI sync was needed, and fresh independent review cleared the exact combined candidate."
+    "compatibility": "The restore candidate keeps every phase/status and same-ID recovery-copy behavior while adding archive/sender fencing and owned no-replace fresh-folder publication.",
+    "acknowledgement": "Development froze exactly 8 files; Product Planning changed 8 governed files, no UI or Decision sync was needed, and fresh independent review cleared the exact combined candidate."
   },
   "resolvedBlockers": [
     "Implemented five preset-first Providers plus Custom-only protocols, conditional credentials, auto-sync/Refresh/manual inventory, grouped Global Default, typed repair and real Pi probe with journaled recovery; retained every partial/planned state.",
@@ -425,7 +437,8 @@
     "Added descriptor-bound source snapshots, self-validation, adjacent private staging, fsync, no-overwrite hard-link publication and owned crash-link reconciliation while keeping non-hardlink transport and durable Backup Jobs open.",
     "Added exact-tail durable Home follow-up with one event/Job per client turn, checksum-verified history/results, bounded Pi rehydration, restart adoption, cooperative cancellation, and localized transcript/retry/cancel UI without changing statuses.",
     "Added checksum-bound exact create Operations plus bounded Home Activity and non-confirming exact-page Undo with recoverable trash, deterministic trash Operations, worker rebuild, startup reconciliation and durable UI truth without changing statuses.",
-    "Bound same-Job exact create publication before page link to source revision, Job policy, page bytes and deterministic Operation identity; page-first recovery now emits one checksum-bound Operation without retroactively attesting historical or drifted bytes."
+    "Bound same-Job exact create publication before page link to source revision, Job policy, page bytes and deterministic Operation identity; page-first recovery now emits one checksum-bound Operation without retroactively attesting historical or drifted bytes.",
+    "Bound restore preview/apply to exact archive bytes and one sender-scoped lease, validated owned staging, reserved a fresh destination, published checksum-checked files without replacement and the manifest last, and reconciled only matching owned partials on explicit retry."
   ],
   "nonBlockingRisks": [
     "P5 remains in progress: remaining Job-class publishers, running capture/other-class cancellation, strict cross-process Job CAS and routing, parent-directory swap, guard-to-domain atomicity, other guard-without-output recovery, checkpoint arrays, cross-file transactions, Windows/Paddle, packaged-filesystem proof, and non-Agent progress/cancel UI remain open.",
@@ -436,8 +449,8 @@
     "Pi remains partial: full Provider catalog/help/delete, durable sync health, optional-auth UI, live DeepSeek preset/Anthropic proof, multi-source recovery, history compaction/indexing, steer queues, Broker and signed packaged BYOK remain open.",
     "Activity/Undo remains exact checksum-bound generated create pages only; historical/unbound hashless recovery, completion-time tampering, non-create operations, batched scans, restore/redo, cross-process CAS/transactions and packaged platforms remain open.",
     "No-telemetry is a static executable gate; unknown SDKs, computed endpoints, indirect transports, generated configuration, and crash-hook review remain open. Diagnostics still need broader stores, recovery correlation, user clear, export cancellation, selected-path UX, and crash recovery.",
-    "Backup still needs backupId/domain versions, release scans, external copies/controls, durable Jobs/checkpoints, non-hardlink publication, restore identity, pathname CAS/pre-link cleanup, dependencies and complete restore orchestration.",
-    "Trace projections use 5,063 of 5,500 lines and 249,856 of 250,000 bytes; governed Markdown uses 1,209,607 of 1,210,000 bytes. Future additions must reclaim capacity instead of raising budgets.",
+    "Backup/restore still need backupId/domain versions, release scans, external copies/controls, non-hardlink backup publication, explicit restore identity modes, durable restore Jobs/restart, dependency/schema migration, typed errors, dirfd/openat CAS, complete rebuild and packaged platforms.",
+    "Trace projections use 4,980 of 5,500 lines and 249,838 of 250,000 bytes; governed Markdown uses 1,209,703 of 1,210,000 bytes. Future additions must reclaim capacity instead of raising budgets.",
     "PRD, TECH_ARCHITECTURE, and Decision Log remain large Owner documents; future Agents should continue section-targeted reads and define each fact once.",
     "The concise pre-alpha README intentionally has no install button, screenshots, or release download; add those only when a usable signed build and governed visual evidence exist.",
     "Structural UI gates do not prove packaged macOS/Windows fidelity, accessibility, or human visual approval; real capture and release evidence remain open.",

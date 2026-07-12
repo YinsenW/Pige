@@ -554,8 +554,8 @@ Build:
 
 - [B9.01 -> E9.01] `.pige-backup.zip` creation.
 - [B9.02 -> E9.01] Versioned backup manifest with counts, include/exclude decisions, checksums, and external dependencies.
-- [B9.03 -> E9.02] Restore preview.
-- [B9.04 -> E9.02] Restore into a validated new folder with explicit vault identity handling.
+- [B9.03 -> E9.02] Archive/sender-bound restore preview plus one apply lease.
+- [B9.04 -> E9.02] Ownership-reserved, manifest-last fresh-folder restore with explicit vault identity handling.
 - [B9.05 -> E9.02] Conflict and incompatible-schema detection.
 - [B9.06 -> E9.02] Database, lexical, graph, chunk, and vector-index rebuild after restore according to available capabilities.
 - [B9.07 -> E9.03] Versioned migration framework with rollback/repair evidence and no silent durable-data loss.
