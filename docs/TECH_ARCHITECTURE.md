@@ -786,9 +786,9 @@ Rules:
 
 Current implementation:
 
-- Fresh direct/proposal creates bind hashes. Bounded Activity exposes safe summaries and
-  exact-page Undo via trash/`trash_page`; Activity owns recovery, Job rebuild. Non-create,
-  generic exceptions, restore/redo, CAS, batched scan/broader Activity, and packaging remain open.
+- Direct/proposal and checkpoint-proven same-Job recovered creates bind hashes; bounded
+  Activity offers exact-page Undo. Activity owns recovery, Job rebuild. Non-create/generic/
+  restore/redo/CAS, batched scan, broader Activity, and packaging remain open.
 
 ### 5.5.2 Markdown Rendering And Editing Surface
 

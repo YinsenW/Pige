@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-12T17:17:07Z",
+  "reviewedAt": "2026-07-12T18:40:32Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,7 +30,7 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "26e2724e60b24192a39319d1c86cffeed0f0f8af463f715d2170d86d41e5ce67"
+    "reviewedSha256": "594ec76ca67e55124f572c29bbc8dda937b8a94344a8841dc7f7888f0fd61560"
   },
   "reviewers": [
     {
@@ -308,43 +308,55 @@
         "documentation_leanness_and_maintainability"
       ],
       "independence": "Fresh read-only reviewer audited the exact 19-Development plus 10-governed pre-recipe candidate without editing files. It required repair of stale proposal-first Prompt/Decision/UI wording, the Activity-versus-Job recovery owner, and the unbatched scan residual; after repair all five dimensions were CLEAR for exact checksum-bound create Activity/Undo, durable UI reconciliation, unchanged states, 1,097 claims, and fixed budgets."
+    },
+    {
+      "reviewerId": "hash-bound-create-recovery-final-review",
+      "task": "/root/recovered_create_final_review",
+      "independentDimensions": [
+        "navigation_and_resource_lifecycle",
+        "cross_document_contract_consistency",
+        "continuous_traceability_and_acceptance",
+        "ongoing_development_support",
+        "documentation_leanness_and_maintainability"
+      ],
+      "independence": "Fresh read-only reviewer audited the exact 4-Development plus 6-governed pre-recipe candidate without editing files. It accepted checkpoint-proven same-Job page-first recovery, checksum-bound create Operations, Activity eligibility, the single exact evidence projection, unchanged states, 1,098 claims and fixed budgets while retaining historical hashless, non-create, completion-tampering, CAS/transaction and platform gaps."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "autonomous-auto-apply-final-review",
+      "reviewerId": "hash-bound-create-recovery-final-review",
       "blockerCount": 0,
-      "summary": "Existing Home and Activity surfaces add no navigation or document; exact-page Undo uses recoverable private trash, a deterministic trash Operation and worker rebuild."
+      "summary": "No new navigation, document, schema or storage root is added; one existing Job checkpoint binds the generated page and deterministic create Operation before recovery."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "autonomous-auto-apply-final-review",
+      "reviewerId": "hash-bound-create-recovery-final-review",
       "blockerCount": 0,
-      "summary": "API, Job, Pi, Prompt, technical, UI, Decision and Playbook owners agree on direct versus proposal create paths, exact hash eligibility, Activity recovery and Job rebuild."
+      "summary": "Job, Pi, technical and Playbook owners agree that only checkpoint-proven same-Job exact creates receive checksum-bound recovered Operations and Activity eligibility."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "autonomous-auto-apply-final-review",
+      "reviewerId": "hash-bound-create-recovery-final-review",
       "blockerCount": 0,
-      "summary": "One exact Activity/Undo evidence row updates only existing partial mappings; 1,097 claims are locked and every Requirement, Exit and phase state remains unchanged."
+      "summary": "One exact recovery evidence row updates only four partial Requirements and four partial Exits; 1,098 claims are locked and every state remains unchanged."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "autonomous-auto-apply-final-review",
+      "reviewerId": "hash-bound-create-recovery-final-review",
       "blockerCount": 0,
-      "summary": "Owners distinguish exact generated-page Activity/Undo from open non-create eligibility, hashless recovery, batched scans, restore/redo, cross-process CAS and platform proof."
+      "summary": "Owners distinguish the exact page-first recovery slice from historical unbound records, pre-effect retry, other Job classes, non-create work, CAS/transactions and packaged proof."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.6,
-      "reviewerId": "autonomous-auto-apply-final-review",
+      "reviewerId": "hash-bound-create-recovery-final-review",
       "blockerCount": 0,
-      "summary": "No document, screen or prototype was added; gates pass at 4,107/4,200 entry words, 5,112 trace lines, 249,895/250,000 trace bytes and 1,209,625/1,210,000 Markdown bytes."
+      "summary": "No document, screen or prototype was added; gates pass at 4,107/4,200 entry words, 5,063 trace lines, 249,856/250,000 trace bytes and 1,209,607/1,210,000 Markdown bytes."
     }
   ],
   "verification": [
@@ -356,17 +368,17 @@
     {
       "command": "npm test && npm run typecheck && npm run build --workspace @pige/desktop",
       "status": "passed",
-      "evidence": "The exact candidate passed 80 files and 781 tests, typecheck and production build; Electron unified Agent, Pi, parser, index and real macOS Vision smokes also passed."
+      "evidence": "The exact candidate passed 80 files and 784 tests, typecheck and production build; Electron unified Agent, Pi, parser, index and real macOS Vision smokes also passed."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 passed: 4,107/4,200 entry words, zero duplicate groups, 14 mutations, 5,112 trace lines, 249,895 trace bytes, 57 Markdown files, 1,209,625 bytes, and 6.68 percent line reduction."
+      "evidence": "LEN-001 through LEN-005 passed: 4,107/4,200 entry words, zero duplicate groups, 14 mutations, 5,063 trace lines, 249,856 trace bytes, 57 Markdown files, 1,209,607 bytes, and 6.68 percent line reduction."
     },
     {
       "command": "node scripts/verify/independent-documentation-review.mjs --print-snapshot && explicit semantic-ledger comparison",
       "status": "passed",
-      "evidence": "The governed snapshot is 26e2724e60b24192a39319d1c86cffeed0f0f8af463f715d2170d86d41e5ce67 across 109 files; current and locked ledgers contain 1,097 claims with zero differences."
+      "evidence": "The governed snapshot is 594ec76ca67e55124f572c29bbc8dda937b8a94344a8841dc7f7888f0fd61560 across 109 files; current and locked ledgers contain 1,098 claims with zero differences."
     }
   ],
   "coordination": {
@@ -375,8 +387,8 @@
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The exact-create candidate keeps every phase/status and legacy hashless record while adding checksum-bound Activity, exact-page Undo, recoverable trash and durable Home reconciliation.",
-    "acknowledgement": "Development froze exactly 19 files; Product Planning changed 11 governed files, UI Design accepted the existing Home surface, and fresh independent review cleared the exact combined candidate."
+    "compatibility": "The recovery candidate keeps every phase/status and historical hashless record while checkpoint-binding exact same-Job source, policy, page and create Operation identities.",
+    "acknowledgement": "Development froze exactly 4 files; Product Planning changed 7 governed files, no UI sync was needed, and fresh independent review cleared the exact combined candidate."
   },
   "resolvedBlockers": [
     "Implemented five preset-first Providers plus Custom-only protocols, conditional credentials, auto-sync/Refresh/manual inventory, grouped Global Default, typed repair and real Pi probe with journaled recovery; retained every partial/planned state.",
@@ -412,19 +424,20 @@
     "Made remote/protocol/traversal Reader resources inert and blocked frame, redirect and new-window navigation without adding user friction or a new surface.",
     "Added descriptor-bound source snapshots, self-validation, adjacent private staging, fsync, no-overwrite hard-link publication and owned crash-link reconciliation while keeping non-hardlink transport and durable Backup Jobs open.",
     "Added exact-tail durable Home follow-up with one event/Job per client turn, checksum-verified history/results, bounded Pi rehydration, restart adoption, cooperative cancellation, and localized transcript/retry/cancel UI without changing statuses.",
-    "Added checksum-bound exact create Operations plus bounded Home Activity and non-confirming exact-page Undo with recoverable trash, deterministic trash Operations, worker rebuild, startup reconciliation and durable UI truth without changing statuses."
+    "Added checksum-bound exact create Operations plus bounded Home Activity and non-confirming exact-page Undo with recoverable trash, deterministic trash Operations, worker rebuild, startup reconciliation and durable UI truth without changing statuses.",
+    "Bound same-Job exact create publication before page link to source revision, Job policy, page bytes and deterministic Operation identity; page-first recovery now emits one checksum-bound Operation without retroactively attesting historical or drifted bytes."
   ],
   "nonBlockingRisks": [
-    "P5 remains in progress: remaining Job-class publishers, running capture/other-class cancellation, strict cross-process Job CAS and routing, parent-directory swap, guard-to-domain atomicity, guard-without-output recovery, checkpoint arrays, cross-file transactions, Windows/Paddle, packaged-filesystem proof, and non-Agent progress/cancel UI remain open.",
+    "P5 remains in progress: remaining Job-class publishers, running capture/other-class cancellation, strict cross-process Job CAS and routing, parent-directory swap, guard-to-domain atomicity, other guard-without-output recovery, checkpoint arrays, cross-file transactions, Windows/Paddle, packaged-filesystem proof, and non-Agent progress/cancel UI remain open.",
     "Explicit index rebuild is process-local only: implicit first-query rebuild, formal 10k CPU/RSS/latency, incremental/staging-swap, cross-process writer/CAS/routing, complete kill/crash/stale-worker recovery, packaged macOS/Windows paths, and visible progress/cancel UI remain open.",
     "The local-tool lifecycle remains a fake/local service foundation: real Paddle/Python/model/language-pack transport, ordinary-ingest no-hidden-install proof, production app-data/catalog/permission/pre-vault Job/Operation wiring, OCR/UI, supply chain, packaged platforms, cross-process locking, complete recovery/GC/quarantine purge, and background lifecycle controls remain open.",
     "The retrieval regression foundation remains lexical and synthetic: model-grounded summary/citation validation under cloud-send and Permission enforcement, tag/topic/entity and Knowledge Tree thresholds, vector/reranker ranking, 10k/100k and UI/packaged proof, and broader locale/query families remain open.",
     "The Knowledge Tree remains internal-only: broader relation and branch semantics, richer aggregate inputs, public IPC/preload/renderer navigation, localized empty state, 10k worker/incremental rebuild proof, packaged parity, and the separately owned visual/accessibility and Knowledge Health work remain open.",
     "Pi remains partial: full Provider catalog/help/delete, durable sync health, optional-auth UI, live DeepSeek preset/Anthropic proof, multi-source recovery, history compaction/indexing, steer queues, Broker and signed packaged BYOK remain open.",
-    "Activity/Undo remains exact checksum-bound generated create pages only; hashless recovery, non-create operations, batched scans, restore/redo, cross-process CAS/transactions and packaged platforms remain open.",
+    "Activity/Undo remains exact checksum-bound generated create pages only; historical/unbound hashless recovery, completion-time tampering, non-create operations, batched scans, restore/redo, cross-process CAS/transactions and packaged platforms remain open.",
     "No-telemetry is a static executable gate; unknown SDKs, computed endpoints, indirect transports, generated configuration, and crash-hook review remain open. Diagnostics still need broader stores, recovery correlation, user clear, export cancellation, selected-path UX, and crash recovery.",
     "Backup still needs backupId/domain versions, release scans, external copies/controls, durable Jobs/checkpoints, non-hardlink publication, restore identity, pathname CAS/pre-link cleanup, dependencies and complete restore orchestration.",
-    "Trace projections use 5,112 of 5,500 lines and 249,895 of 250,000 bytes; governed Markdown uses 1,209,625 of 1,210,000 bytes. Future additions must reclaim capacity instead of raising budgets.",
+    "Trace projections use 5,063 of 5,500 lines and 249,856 of 250,000 bytes; governed Markdown uses 1,209,607 of 1,210,000 bytes. Future additions must reclaim capacity instead of raising budgets.",
     "PRD, TECH_ARCHITECTURE, and Decision Log remain large Owner documents; future Agents should continue section-targeted reads and define each fact once.",
     "The concise pre-alpha README intentionally has no install button, screenshots, or release download; add those only when a usable signed build and governed visual evidence exist.",
     "Structural UI gates do not prove packaged macOS/Windows fidelity, accessibility, or human visual approval; real capture and release evidence remain open.",

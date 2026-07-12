@@ -276,7 +276,7 @@ Build:
 Agent Spine Gate: embedded Pi handles preserved text/documents/images, inspect,
 parse/selected OCR, bounded Home/ingest retrieval, cited publish, and exact create-note
 proposal stage/review/apply plus Home review. That proposal path is transitional;
-B3.13/E3.08 remains partial despite exact-create Undo; broader eligibility/catalog/routes,
+B3.13/E3.08 remains partial despite exact-create Undo/page-first recovery; broader eligibility/catalog/routes,
 pre-publication replay/in-call cancellation, generic proposals/recovery, Broker, and
 remaining fixed routes. The v0.80.6 exception still forbids deep imports/forks/patches/
 parallel loops. Until E3.08 passes, pause non-blocking breadth; existing safe substrate
@@ -493,7 +493,7 @@ Build:
 - [B7.01 -> E7.01] Exact-create Activity/Undo plus transitional exception review.
 - [B7.02 -> E7.01] Bounded escaped exceptional preview; unified conflict diff remains open.
 - [B7.03 -> E7.01] Exact create-note review/apply/conflict recovery foundation; autonomous eligibility and generic operations remain open.
-- [B7.04 -> E7.01] Direct/proposal create hash plus deterministic `trash_page`; non-create remains open.
+- [B7.04 -> E7.01] Hash-bound direct/proposal/checkpoint recovery plus `trash_page`; unbound/non-create open.
 - [B7.05 -> E7.02] Explicit "remember this" flow with provenance.
 - [B7.06 -> E7.02] Memory inspection, disable, delete, export, and reset.
 - [B7.07 -> E7.05] Secret scanning before memory persistence.

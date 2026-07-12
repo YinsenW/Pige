@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -10,6 +11,7 @@ import { CaptureService, type SourceFetchPort } from "../../apps/desktop/src/mai
 import { DocumentParserService, type DocumentParserPort } from "../../apps/desktop/src/main/services/document-parser-service";
 import { JobCancellationError } from "../../apps/desktop/src/main/services/job-execution-control";
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
+import { KnowledgeActivityService } from "../../apps/desktop/src/main/services/knowledge-activity-service";
 import type { LocalDatabaseRebuildPort } from "../../apps/desktop/src/main/services/local-database-rebuild-types";
 import {
   LocalDatabaseService,
@@ -1796,9 +1798,8 @@ describe("jobs service", () => {
 
   it("keeps Agent ingest retryable when note publication fails after the durable guard but before link", async () => {
     const { vaultPath, vault } = makeVault();
-    const agentIngest = new AgentIngestService(makeModelPort(), new StaticModelClient(standardAgentOutput(
-      "Pre-link publication failure"
-    )));
+    const modelClient = new StaticModelClient(standardAgentOutput("Pre-link publication failure"));
+    const agentIngest = new AgentIngestService(makeModelPort(), modelClient);
     const { capture, jobs } = makeServices(vaultPath, vault, agentIngest);
     const captured = capture.submitText({
       text: "The note link must never precede its durable action-safety guard.",
@@ -1823,6 +1824,21 @@ describe("jobs service", () => {
     expect(listFiles(path.join(vaultPath, "wiki", "generated")).filter((filePath) => filePath.endsWith(".md")))
       .toEqual([]);
     expect(jobs.cancel({ jobId: failed.id })).toMatchObject({ status: "not_allowed" });
+    const firstPlannedHash = readJobRecord(vaultPath, failed.id).checkpoints?.find(
+      (checkpoint) => checkpoint.id === "agent_note_publication_started"
+    )?.checksumAfter;
+    vi.restoreAllMocks();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(jobs.retry({ jobId: failed.id }).status).toBe("requeued");
+    expect(await jobs.processQueuedAgentIngest({ jobIds: [failed.id] }))
+      .toEqual({ processed: 1, completed: 1, failed: 0 });
+    expect(modelClient.requests).toHaveLength(2);
+    const completedCheckpoint = readJobRecord(vaultPath, failed.id).checkpoints?.find(
+      (checkpoint) => checkpoint.id === "agent_note_publication_started"
+    );
+    expect(firstPlannedHash).toMatch(/^sha256:[a-f0-9]{64}$/u);
+    expect(completedCheckpoint).toMatchObject({ state: "done" });
+    expect(completedCheckpoint?.checksumAfter).not.toBe(firstPlannedHash);
   });
 
   it("preserves a verified Agent note when cancellation races its create-only commit", async () => {
@@ -1890,7 +1906,44 @@ describe("jobs service", () => {
     vi.restoreAllMocks();
 
     const failed = requireValue(jobs.list({ classes: ["agent_ingest"], states: ["failed_retryable"] }).jobs[0]);
-    expect(fs.existsSync(findFile(path.join(vaultPath, "wiki", "generated"), ".md"))).toBe(true);
+    const notePath = findFile(path.join(vaultPath, "wiki", "generated"), ".md");
+    const noteHash = checksumText(fs.readFileSync(notePath, "utf8"));
+    const guardedJob = readJobRecord(vaultPath, failed.id);
+    expect(guardedJob.checkpoints).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "agent_note_publication_started",
+        step: "agent_note_publication_started",
+        state: "running",
+        checksumAfter: noteHash,
+        inputRefs: [
+          expect.objectContaining({
+            kind: "source",
+            id: failed.sourceId,
+            checksum: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u),
+            role: "publication_source_revision"
+          }),
+          {
+            kind: "tool",
+            id: guardedJob.policyContextId,
+            checksum: guardedJob.policyHash,
+            role: "publication_policy"
+          }
+        ],
+        outputRefs: [
+          expect.objectContaining({
+            kind: "page",
+            path: path.relative(vaultPath, notePath).split(path.sep).join("/"),
+            checksum: noteHash,
+            role: "expected_generated_note"
+          }),
+          expect.objectContaining({
+            kind: "operation",
+            path: expect.stringMatching(/^\.pige\/operations\//u),
+            role: "expected_create_operation"
+          })
+        ]
+      })
+    ]));
     expect(jobs.retry({ jobId: failed.id }).status).toBe("requeued");
     expect(await jobs.processQueuedAgentIngest({ jobIds: [failed.id] }))
       .toEqual({ processed: 1, completed: 1, failed: 0 });
@@ -1900,6 +1953,63 @@ describe("jobs service", () => {
       safeCheckpointId: "agent_existing_note_adoption_started",
       durableWritesApplied: true
     });
+    expect(readJobRecord(vaultPath, completed.id).checkpoints).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "agent_note_publication_started",
+        state: "done",
+        checksumAfter: noteHash,
+        finishedAt: expect.any(String)
+      })
+    ]));
+    expect(modelClient.requests).toHaveLength(1);
+    const createOperation = readOperationBodies(vaultPath)
+      .map((body) => JSON.parse(body) as { readonly kind?: string; readonly id?: string; readonly after?: unknown })
+      .find((operation) => operation.kind === "create_page");
+    expect(createOperation?.after).toEqual(expect.objectContaining({ id: noteHash }));
+    const activity = new KnowledgeActivityService({
+      current: () => vault,
+      activeVaultPath: () => vaultPath
+    });
+    expect(activity.list().activities.find((item) => item.operationId === createOperation?.id))
+      .toMatchObject({ canUndo: true });
+  });
+
+  it("preserves an external edit made after a create link but before recovery", async () => {
+    const { vaultPath, vault } = makeVault();
+    const modelClient = new StaticModelClient(standardAgentOutput("Recovery conflict note"));
+    const { capture, jobs } = makeServices(
+      vaultPath,
+      vault,
+      new AgentIngestService(makeModelPort(), modelClient)
+    );
+    const captured = capture.submitText({
+      text: "A recovery-window edit must remain authoritative.",
+      inputKind: "typed_text",
+      userIntent: "capture",
+      locale: "en"
+    });
+    jobs.processQueuedCaptures({ jobIds: [captured.jobId] });
+    const queued = requireValue(jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]);
+    const originalLink = fs.linkSync.bind(fs);
+    vi.spyOn(fs, "linkSync").mockImplementation((existingPath, newPath) => {
+      originalLink(existingPath, newPath);
+      throw new Error("simulated process loss after create link");
+    });
+    expect(await jobs.processQueuedAgentIngest({ jobIds: [queued.id] }))
+      .toEqual({ processed: 1, completed: 0, failed: 1 });
+    vi.restoreAllMocks();
+
+    const failed = requireValue(jobs.list({ classes: ["agent_ingest"], states: ["failed_retryable"] }).jobs[0]);
+    const notePath = findFile(path.join(vaultPath, "wiki", "generated"), ".md");
+    fs.appendFileSync(notePath, "\nUser edit made before restart recovery.\n", "utf8");
+    expect(jobs.retry({ jobId: failed.id }).status).toBe("requeued");
+
+    expect(await jobs.processQueuedAgentIngest({ jobIds: [failed.id] }))
+      .toEqual({ processed: 1, completed: 0, failed: 1 });
+    expect(fs.readFileSync(notePath, "utf8")).toContain("User edit made before restart recovery.");
+    expect(readOperationBodies(vaultPath).some((body) => body.includes('"kind": "create_page"')))
+      .toBe(false);
+    expect(fs.readFileSync(path.join(vaultPath, "index.md"), "utf8")).not.toContain("Recovery conflict note");
     expect(modelClient.requests).toHaveLength(1);
   });
 
@@ -2470,6 +2580,10 @@ function seedExplicitImageOcrJob(
 function readJobRecord(vaultPath: string, jobId: string): JobRecord {
   const jobPath = findFile(path.join(vaultPath, ".pige", "jobs"), `${jobId}.json`);
   return JSON.parse(fs.readFileSync(jobPath, "utf8")) as JobRecord;
+}
+
+function checksumText(value: string): string {
+  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
 
 function listJobRecords(vaultPath: string): JobRecord[] {
