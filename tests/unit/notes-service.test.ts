@@ -90,4 +90,31 @@ status: "active"
 
     expect(() => notes.get({ pageId: "page_20260709_outside1234" })).toThrow(PigeDomainError);
   });
+
+  it("does not return network-capable links or images to the renderer", async () => {
+    const { vaultPath, vault } = makeVault();
+    const notes = makeNotes(vaultPath, vault);
+    const pagePath = path.join(vaultPath, "wiki", "remote-content.md");
+    fs.mkdirSync(path.dirname(pagePath), { recursive: true });
+    fs.writeFileSync(pagePath, `---
+id: "page_20260709_remote1234"
+schema_version: 1
+title: "Remote Content"
+type: "note"
+created_at: "2026-07-09T12:00:00.000Z"
+updated_at: "2026-07-09T12:00:00.000Z"
+status: "active"
+---
+
+[External](https://example.com/private)
+![Remote](//example.com/tracker.png)
+[[Safe Wiki]]
+`, "utf8");
+
+    const rendered = await notes.render({ pageId: "page_20260709_remote1234" });
+
+    expect(rendered.html).not.toContain('href="https:');
+    expect(rendered.html).not.toContain('src="//');
+    expect(rendered.html).toContain('href="#wiki:Safe%20Wiki"');
+  });
 });

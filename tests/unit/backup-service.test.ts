@@ -2,8 +2,9 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { Writable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { openPromise } from "yauzl";
 import { ZipFile } from "yazl";
 import { BackupManifestSchema, type BackupManifest } from "@pige/schemas";
@@ -63,6 +64,7 @@ function makeVault(): { root: string; vaultPath: string } {
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const root of tempRoots.splice(0)) {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -212,6 +214,358 @@ describe("backup restore service", () => {
     ).rejects.toMatchObject({ code: "backup.path_inside_vault" });
   });
 
+  it("publishes a validated adjacent staging archive and leaves no staging residue", async () => {
+    const { root, vaultPath } = makeVault();
+    const backupPath = path.join(root, "atomic-success.pige-backup.zip");
+    writeVaultFixture(vaultPath);
+    const originalCreateWriteStream = fs.createWriteStream.bind(fs);
+    let observedStagingPath: string | undefined;
+    vi.spyOn(fs, "createWriteStream").mockImplementation((filePath, options) => {
+      const candidatePath = path.resolve(filePath.toString());
+      if (isBackupStagingPath(candidatePath, backupPath)) observedStagingPath = candidatePath;
+      return originalCreateWriteStream(filePath, options);
+    });
+
+    await new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test");
+
+    expect(observedStagingPath).toBeDefined();
+    expect(path.dirname(observedStagingPath!)).toBe(path.dirname(backupPath));
+    expect(fs.existsSync(observedStagingPath!)).toBe(false);
+    expect(listBackupStagingFiles(backupPath)).toEqual([]);
+    const publishedStat = fs.lstatSync(backupPath);
+    expect(publishedStat.nlink).toBe(1);
+    expect(publishedStat.mode & 0o777).toBe(0o600);
+    await expect(new BackupRestoreService().previewRestore(backupPath)).resolves.toMatchObject({
+      status: "ready",
+      invalidFileCount: 0
+    });
+  });
+
+  it("rejects same-size source drift after manifest hashing without publishing a backup", async () => {
+    const { root, vaultPath } = makeVault();
+    const backupPath = path.join(root, "source-drift.pige-backup.zip");
+    writeVaultFixture(vaultPath);
+    const sourcePath = path.join(vaultPath, DURABLE_FIXTURES.wiki.path);
+    const originalBody = fs.readFileSync(sourcePath, "utf8");
+    const changedBody = "x".repeat(Buffer.byteLength(originalBody));
+    const originalOpenSync = fs.openSync.bind(fs);
+    const originalCloseSync = fs.closeSync.bind(fs);
+    let checksumDescriptor: number | undefined;
+    let mutatedAfterHash = false;
+    vi.spyOn(fs, "openSync").mockImplementation((filePath, flags, mode) => {
+      const descriptor = originalOpenSync(filePath, flags, mode);
+      if (path.resolve(filePath.toString()) === sourcePath) {
+        checksumDescriptor = descriptor;
+      }
+      return descriptor;
+    });
+    vi.spyOn(fs, "closeSync").mockImplementation((descriptor) => {
+      originalCloseSync(descriptor);
+      if (descriptor === checksumDescriptor) {
+        checksumDescriptor = undefined;
+        fs.writeFileSync(sourcePath, changedBody, "utf8");
+        mutatedAfterHash = true;
+      }
+    });
+
+    await expect(
+      new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test")
+    ).rejects.toMatchObject({ code: "backup.validation_failed" });
+
+    expect(mutatedAfterHash).toBe(true);
+    expect(Buffer.byteLength(changedBody)).toBe(Buffer.byteLength(originalBody));
+    expect(fs.readFileSync(sourcePath, "utf8")).toBe(changedBody);
+    expect(fs.existsSync(backupPath)).toBe(false);
+    expect(listBackupStagingFiles(backupPath)).toEqual([]);
+  });
+
+  it("rejects a same-size source replacement between descriptor stat and hashing", async () => {
+    const { root, vaultPath } = makeVault();
+    const backupPath = path.join(root, "source-replacement.pige-backup.zip");
+    writeVaultFixture(vaultPath);
+    const sourcePath = path.join(vaultPath, DURABLE_FIXTURES.wiki.path);
+    const originalBody = fs.readFileSync(sourcePath, "utf8");
+    const replacementBody = "y".repeat(Buffer.byteLength(originalBody));
+    const displacedPath = path.join(root, "displaced-source.md");
+    const originalLstatSync = fs.lstatSync.bind(fs);
+    let replaced = false;
+    vi.spyOn(fs, "lstatSync").mockImplementation((filePath, options) => {
+      if (!replaced && path.resolve(filePath.toString()) === sourcePath) {
+        fs.renameSync(sourcePath, displacedPath);
+        fs.writeFileSync(sourcePath, replacementBody, "utf8");
+        replaced = true;
+      }
+      return originalLstatSync(filePath, options as never);
+    });
+
+    await expect(
+      new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test")
+    ).rejects.toMatchObject({ code: "backup.source_changed" });
+
+    expect(replaced).toBe(true);
+    expect(Buffer.byteLength(replacementBody)).toBe(Buffer.byteLength(originalBody));
+    expect(fs.existsSync(backupPath)).toBe(false);
+    expect(listBackupStagingFiles(backupPath)).toEqual([]);
+  });
+
+  it("cleans only its owned staging archive when the archive write stream fails", async () => {
+    const { root, vaultPath } = makeVault();
+    const backupPath = path.join(root, "write-failure.pige-backup.zip");
+    const unrelatedStagingPath = path.join(root, `.${path.basename(backupPath)}.unrelated.tmp`);
+    writeVaultFixture(vaultPath);
+    fs.writeFileSync(unrelatedStagingPath, "unrelated staging canary", "utf8");
+    const writeFailure = new Error("injected backup write failure");
+    const originalCreateWriteStream = fs.createWriteStream.bind(fs);
+    let failedStagingPath: string | undefined;
+    vi.spyOn(fs, "createWriteStream").mockImplementation((filePath, options) => {
+      const candidatePath = path.resolve(filePath.toString());
+      if (!isBackupStagingPath(candidatePath, backupPath) || candidatePath === unrelatedStagingPath) {
+        return originalCreateWriteStream(filePath, options);
+      }
+      failedStagingPath = candidatePath;
+      return new Writable({
+        write(_chunk, _encoding, callback) {
+          callback();
+        },
+        final(callback) {
+          callback(writeFailure);
+        }
+      }) as fs.WriteStream;
+    });
+
+    await expect(
+      new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test")
+    ).rejects.toBe(writeFailure);
+
+    expect(failedStagingPath).toBeDefined();
+    expect(fs.existsSync(failedStagingPath!)).toBe(false);
+    expect(fs.existsSync(backupPath)).toBe(false);
+    expect(fs.readFileSync(unrelatedStagingPath, "utf8")).toBe("unrelated staging canary");
+    expect(listBackupStagingFiles(backupPath)).toEqual([unrelatedStagingPath]);
+  });
+
+  it("does not overwrite or remove a destination that appears during atomic publication", async () => {
+    const { root, vaultPath } = makeVault();
+    const backupPath = path.join(root, "destination-race.pige-backup.zip");
+    const racedDestinationBody = "destination race winner";
+    writeVaultFixture(vaultPath);
+    const originalLinkSync = fs.linkSync.bind(fs);
+    const linkSpy = vi.spyOn(fs, "linkSync").mockImplementation((existingPath, newPath) => {
+      expect(path.resolve(existingPath.toString())).not.toBe(backupPath);
+      expect(path.resolve(newPath.toString())).toBe(backupPath);
+      fs.writeFileSync(newPath, racedDestinationBody, { encoding: "utf8", flag: "wx" });
+      originalLinkSync(existingPath, newPath);
+    });
+
+    await expect(
+      new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test")
+    ).rejects.toMatchObject({ code: "backup.destination_exists" });
+
+    expect(linkSpy).toHaveBeenCalledTimes(1);
+    expect(fs.readFileSync(backupPath, "utf8")).toBe(racedDestinationBody);
+    expect(listBackupStagingFiles(backupPath)).toEqual([]);
+  });
+
+  it("distinguishes a non-writable destination from unsupported atomic publication", async () => {
+    const { root, vaultPath } = makeVault();
+    const backupPath = path.join(root, "unsupported-atomic-link.pige-backup.zip");
+    writeVaultFixture(vaultPath);
+    vi.spyOn(fs, "linkSync").mockImplementation(() => {
+      throw Object.assign(new Error("hard links unavailable"), { code: "EPERM" });
+    });
+
+    await expect(
+      new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test")
+    ).rejects.toMatchObject({ code: "backup.destination_not_writable" });
+
+    expect(fs.existsSync(backupPath)).toBe(false);
+    expect(listBackupStagingFiles(backupPath)).toEqual([]);
+  });
+
+  it("reports an unsupported atomic-publication filesystem without leaving output", async () => {
+    const { root, vaultPath } = makeVault();
+    const backupPath = path.join(root, "unsupported-link-filesystem.pige-backup.zip");
+    writeVaultFixture(vaultPath);
+    vi.spyOn(fs, "linkSync").mockImplementation(() => {
+      throw Object.assign(new Error("cross-device hard link"), { code: "EXDEV" });
+    });
+
+    await expect(
+      new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test")
+    ).rejects.toMatchObject({ code: "backup.atomic_publish_unsupported" });
+
+    expect(fs.existsSync(backupPath)).toBe(false);
+    expect(listBackupStagingFiles(backupPath)).toEqual([]);
+  });
+
+  it("reconciles a crash-left staging hard link before reporting an existing destination", async () => {
+    const { root, vaultPath } = makeVault();
+    const backupPath = path.join(root, "crash-linked.pige-backup.zip");
+    vi.spyOn(process, "kill").mockImplementation((ownerPid) => {
+      if (ownerPid === 123) throw Object.assign(new Error("process exited"), { code: "ESRCH" });
+      return true;
+    });
+    const stagingPath = path.join(
+      root,
+      `.${path.basename(backupPath)}.123.00000000-0000-4000-8000-000000000000.tmp`
+    );
+    fs.writeFileSync(stagingPath, "fully published archive canary", { encoding: "utf8", mode: 0o600 });
+    fs.linkSync(stagingPath, backupPath);
+
+    await expect(
+      new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test")
+    ).rejects.toMatchObject({ code: "backup.destination_exists" });
+
+    expect(fs.existsSync(stagingPath)).toBe(false);
+    expect(fs.readFileSync(backupPath, "utf8")).toBe("fully published archive canary");
+    expect(fs.lstatSync(backupPath).nlink).toBe(1);
+  });
+
+  it("does not reconcile a staging link owned by a live publisher", async () => {
+    const { root, vaultPath } = makeVault();
+    const backupPath = path.join(root, "live-linked.pige-backup.zip");
+    const stagingPath = path.join(
+      root,
+      `.${path.basename(backupPath)}.${process.pid}.00000000-0000-4000-8000-000000000000.tmp`
+    );
+    fs.writeFileSync(stagingPath, "live publication canary", { encoding: "utf8", mode: 0o600 });
+    fs.linkSync(stagingPath, backupPath);
+
+    await expect(
+      new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test")
+    ).rejects.toMatchObject({ code: "backup.destination_exists" });
+
+    expect(fs.readFileSync(stagingPath, "utf8")).toBe("live publication canary");
+    expect(fs.readFileSync(backupPath, "utf8")).toBe("live publication canary");
+    expect(fs.lstatSync(backupPath).nlink).toBe(2);
+  });
+
+  it("rejects same-size staging drift between validation and atomic publication", async () => {
+    const { root, vaultPath } = makeVault();
+    const backupPath = path.join(root, "staging-race.pige-backup.zip");
+    writeVaultFixture(vaultPath);
+    const originalLinkSync = fs.linkSync.bind(fs);
+    let mutatedStagingPath: string | undefined;
+    vi.spyOn(fs, "linkSync").mockImplementation((existingPath, newPath) => {
+      mutatedStagingPath = path.resolve(existingPath.toString());
+      const archive = fs.readFileSync(mutatedStagingPath);
+      archive[Math.max(0, archive.length - 1)] ^= 0xff;
+      fs.writeFileSync(mutatedStagingPath, archive);
+      const changedAt = new Date(Date.now() + 5_000);
+      fs.utimesSync(mutatedStagingPath, changedAt, changedAt);
+      originalLinkSync(existingPath, newPath);
+    });
+
+    await expect(
+      new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test")
+    ).rejects.toMatchObject({ code: "backup.finalization_failed" });
+
+    expect(mutatedStagingPath).toBeDefined();
+    expect(fs.existsSync(backupPath)).toBe(false);
+    expect(listBackupStagingFiles(backupPath)).toEqual([]);
+  });
+
+  it("rejects same-size destination drift immediately after atomic publication", async () => {
+    const { root, vaultPath } = makeVault();
+    const backupPath = path.join(root, "destination-content-race.pige-backup.zip");
+    writeVaultFixture(vaultPath);
+    const originalLinkSync = fs.linkSync.bind(fs);
+    vi.spyOn(fs, "linkSync").mockImplementation((existingPath, newPath) => {
+      originalLinkSync(existingPath, newPath);
+      const archive = fs.readFileSync(newPath);
+      archive[Math.max(0, archive.length - 1)] ^= 0xff;
+      fs.writeFileSync(newPath, archive);
+      const changedAt = new Date(Date.now() + 5_000);
+      fs.utimesSync(newPath, changedAt, changedAt);
+    });
+
+    await expect(
+      new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test")
+    ).rejects.toMatchObject({ code: "backup.finalization_failed" });
+
+    expect(fs.existsSync(backupPath)).toBe(false);
+    expect(listBackupStagingFiles(backupPath)).toEqual([]);
+  });
+
+  it("rejects a self-consistent staged archive whose embedded manifest is not the source snapshot", async () => {
+    const { root, vaultPath } = makeVault();
+    const backupPath = path.join(root, "validation-failure.pige-backup.zip");
+    const invalidTemplatePath = path.join(root, "invalid-template.zip");
+    writeVaultFixture(vaultPath);
+    await writeCustomBackupZip(invalidTemplatePath, {
+      manifestFile: {
+        path: "wiki/note.md",
+        size: Buffer.byteLength("actual body"),
+        checksum: checksumBuffer(Buffer.from("actual body", "utf8"))
+      },
+      entryBody: "actual body"
+    });
+    const invalidArchive = fs.readFileSync(invalidTemplatePath);
+    fs.rmSync(invalidTemplatePath);
+
+    const originalCreateWriteStream = fs.createWriteStream.bind(fs);
+    const originalCloseSync = fs.closeSync.bind(fs);
+    let stagingPath: string | undefined;
+    let stagingDescriptor: number | undefined;
+    let replacedAfterClose = false;
+    vi.spyOn(fs, "createWriteStream").mockImplementation((filePath, options) => {
+      const candidatePath = path.resolve(filePath.toString());
+      if (isBackupStagingPath(candidatePath, backupPath) && typeof options === "object" && options !== null) {
+        stagingPath = candidatePath;
+        stagingDescriptor = typeof options.fd === "number" ? options.fd : undefined;
+      }
+      return originalCreateWriteStream(filePath, options);
+    });
+    vi.spyOn(fs, "closeSync").mockImplementation((descriptor) => {
+      originalCloseSync(descriptor);
+      if (descriptor === stagingDescriptor) {
+        stagingDescriptor = undefined;
+        fs.writeFileSync(stagingPath!, invalidArchive);
+        replacedAfterClose = true;
+      }
+    });
+
+    await expect(
+      new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test")
+    ).rejects.toMatchObject({ code: "backup.validation_failed" });
+
+    expect(replacedAfterClose).toBe(true);
+    expect(fs.existsSync(backupPath)).toBe(false);
+    expect(listBackupStagingFiles(backupPath)).toEqual([]);
+  });
+
+  it.each(["manifest", "vault entry"] as const)("rejects duplicate ZIP %s", async (duplicateKind) => {
+    const { root } = makeVault();
+    const backupPath = path.join(root, `duplicate-${duplicateKind.replace(" ", "-")}.pige-backup.zip`);
+    await writeDuplicateBackupZip(backupPath, duplicateKind);
+
+    await expect(new BackupRestoreService().previewRestore(backupPath)).rejects.toMatchObject({
+      code: "restore.entry_duplicate"
+    });
+  });
+
+  it("does not publish when the destination directory cannot be durably flushed", async () => {
+    const { root, vaultPath } = makeVault();
+    const backupPath = path.join(root, "directory-fsync-failure.pige-backup.zip");
+    writeVaultFixture(vaultPath);
+    const originalFsyncSync = fs.fsyncSync.bind(fs);
+    let fsyncCalls = 0;
+    const directoryFsyncFailure = Object.assign(new Error("injected directory fsync failure"), { code: "EIO" });
+    vi.spyOn(fs, "fsyncSync").mockImplementation((descriptor) => {
+      fsyncCalls += 1;
+      if (fsyncCalls === 2) throw directoryFsyncFailure;
+      originalFsyncSync(descriptor);
+    });
+
+    await expect(
+      new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test")
+    ).rejects.toBe(directoryFsyncFailure);
+
+    expect(fsyncCalls).toBe(2);
+    expect(fs.existsSync(backupPath)).toBe(false);
+    expect(listBackupStagingFiles(backupPath)).toEqual([]);
+  });
+
   it("flags checksum mismatches during restore preview and blocks restore apply", async () => {
     const { root } = makeVault();
     const backupPath = path.join(root, "bad-checksum.pige-backup.zip");
@@ -328,6 +682,20 @@ function checksumBuffer(buffer: Buffer): string {
   return `sha256:${createHash("sha256").update(buffer).digest("hex")}`;
 }
 
+function isBackupStagingPath(candidatePath: string, backupPath: string): boolean {
+  const candidateName = path.basename(candidatePath);
+  return path.dirname(candidatePath) === path.dirname(backupPath) &&
+    candidateName.startsWith(`.${path.basename(backupPath)}.`) &&
+    candidateName.endsWith(".tmp");
+}
+
+function listBackupStagingFiles(backupPath: string): readonly string[] {
+  return fs.readdirSync(path.dirname(backupPath))
+    .map((entry) => path.join(path.dirname(backupPath), entry))
+    .filter((entryPath) => isBackupStagingPath(entryPath, backupPath))
+    .sort();
+}
+
 async function writeCustomBackupZip(
   backupPath: string,
   input: { readonly manifestFile: { readonly path: string; readonly size: number; readonly checksum: string }; readonly entryBody: string }
@@ -365,6 +733,56 @@ async function writeCustomBackupZip(
   zip.addBuffer(Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, "utf8"), "pige-backup-manifest.json");
   if (!input.manifestFile.path.startsWith("../")) {
     zip.addBuffer(Buffer.from(input.entryBody, "utf8"), `vault/${input.manifestFile.path}`);
+  }
+  zip.end();
+  await pipeline(zip.outputStream, fs.createWriteStream(backupPath));
+}
+
+async function writeDuplicateBackupZip(
+  backupPath: string,
+  duplicateKind: "manifest" | "vault entry"
+): Promise<void> {
+  const entryBody = "duplicate entry body";
+  const manifest = {
+    format: "pige-backup",
+    formatVersion: 1,
+    appVersion: "0.1.0-test",
+    vaultId: "vault_20260709_testid",
+    vaultName: "Duplicate",
+    vaultSchemaVersion: 1,
+    createdAt: "2026-07-09T12:00:00.000Z",
+    fileCount: 1,
+    totalBytes: Buffer.byteLength(entryBody),
+    noteCount: 1,
+    sourceCount: 0,
+    conversationCount: 0,
+    memoryCount: 0,
+    includesSecrets: false,
+    includes: {
+      markdownKnowledge: true,
+      sourceRecords: true,
+      managedSourceCopies: true,
+      conversations: true,
+      vaultMemory: true,
+      trash: true,
+      rebuildableDatabaseCache: false,
+      secrets: false
+    },
+    excludedRoots: [".pige/db", ".pige/indexes", ".pige/cache"],
+    externalDependencies: [],
+    files: [{
+      path: "wiki/note.md",
+      size: Buffer.byteLength(entryBody),
+      checksum: checksumBuffer(Buffer.from(entryBody, "utf8"))
+    }]
+  };
+  const manifestBody = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  const zip = new ZipFile();
+  zip.addBuffer(manifestBody, BACKUP_MANIFEST_ENTRY);
+  if (duplicateKind === "manifest") zip.addBuffer(manifestBody, BACKUP_MANIFEST_ENTRY);
+  zip.addBuffer(Buffer.from(entryBody, "utf8"), "vault/wiki/note.md");
+  if (duplicateKind === "vault entry") {
+    zip.addBuffer(Buffer.from(entryBody, "utf8"), "vault/wiki/note.md");
   }
   zip.end();
   await pipeline(zip.outputStream, fs.createWriteStream(backupPath));

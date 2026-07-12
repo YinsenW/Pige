@@ -3,11 +3,11 @@
 ## Your general Agent, grounded in what you know.
 
 Pige is a local-first general-purpose Agent with personal knowledge as its strongest
-advantage. Ask ordinary questions, continue a conversation, paste a link, or drop a
-document. When your own knowledge matters, Pige retrieves and cites it first.
+advantage. Ask, paste, or drop something once; Pige answers now and keeps useful knowledge
+growing in local Markdown without making you supervise every step.
 
 The same Agent decides whether to answer directly, retrieve, inspect, parse, OCR,
-analyze, or propose durable knowledge. Pige preserves attached sources and constrains
+analyze, or grow durable knowledge. Pige preserves attached sources and constrains
 tools, but does not replace that decision with format rules or a fixed workflow.
 
 **Your files remain sources. Markdown becomes your knowledge.** No folder, tag, title,
@@ -16,13 +16,13 @@ or capture mode is required before you begin—just one calm doorway into what y
 > Pige is in **active pre-alpha development**. There is no public installer yet. Do
 > not use it as the only copy of important knowledge.
 
-## From conversation to durable knowledge
+## Input once. Knowledge grows naturally.
 
-**Ask or drop → Agent decides → Use tools → Answer or preserve knowledge**
+**Ask or drop → Agent decides → Knowledge keeps growing**
 
-Pige can answer normally when no local evidence is relevant. Files and other source
-material are preserved before expensive work, then embedded Pi selects bounded Pige
-tools and may turn useful results into cited Markdown.
+Pige answers normally when local evidence is irrelevant. When material matters, Pi selects
+bounded tools to preserve, understand, connect, and maintain cited Markdown autonomously;
+operation history and undo replace routine approval.
 
 ## Why Pige
 
@@ -45,29 +45,29 @@ Today, the pre-alpha can:
 - Run preserved text and supported PDF/DOCX/PPTX/images through embedded Pi, isolated BYOK binding,
   bounded inspect/parse/OCR tools, and validated knowledge publication.
 - Generate source-backed Markdown and run a bounded cited Home knowledge-answer path.
-- Review an exact staged create-note proposal from Home.
+- Review an exact staged create-note proposal from Home; this is a transitional exception path.
 - Use persistent-job recovery and local-backup foundations.
 
-The unified general-conversation ingress and complete Provider-to-Home round trip remain
-pre-alpha work. See the [implementation playbook](docs/V0_1_IMPLEMENTATION_PLAYBOOK.md).
+Unified text/one-file/static-URL Provider-to-Home now runs. Autonomous knowledge growth,
+durable follow-up, and broader recovery remain pre-alpha work. See the [implementation playbook](docs/V0_1_IMPLEMENTATION_PLAYBOOK.md).
 
 ## Road to `v0.1 Public Alpha`
 
-- **Complete the Agent path:** one real Provider-to-Home loop for ordinary conversation,
-  local-knowledge-enhanced answers, and Agent-selected source tools.
-- **Expand the proven tool spine:** cross-platform document/OCR and stronger local retrieval.
-- **Ship a trustworthy alpha:** reviewable changes, backup/restore, accessibility,
-  localization, packaging, signing, and updates.
+- **Complete autonomous knowledge growth:** eligibility, Activity/Undo, and exceptional
+  recovery across normal note/link/organize work.
+- **Finish the Agent spine:** durable follow-up, cross-platform
+  document/OCR, and stronger recovery.
+- **Ship a trustworthy alpha:** backup/restore, accessibility, localization, packaged
+  macOS/Windows proof, signing, and updates.
 
 Sync, mobile, and collaboration come later. See the [roadmap](docs/MILESTONES.md) and
 [product requirements](docs/PRD.md).
 
 ## Local-first, with honest boundaries
 
-Your vault and durable knowledge remain local; Pige requires no cloud account, product
-analytics, background telemetry, or automatic diagnostic upload. Once you connect a
-BYOK provider, ordinary Agent calls use it seamlessly with quiet status and selected
-evidence—not the whole vault by default.
+Your vault and durable truth remain local; that is a data-ownership principle, not a
+confirmation workflow. Pige requires no cloud account or telemetry. Once connected, a
+BYOK provider receives bounded selected context seamlessly—not the whole vault by default.
 
 ## Built and maintained by AI Agents
 

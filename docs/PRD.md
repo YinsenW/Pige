@@ -58,7 +58,8 @@ single owner; it must not create a competing technical definition.
 Pige is a local-first general-purpose personal Agent. One Home conversation accepts
 ordinary questions, tasks, sources, and files. Local knowledge strengthens a turn when
 relevant; it is not required for an Agent response. Useful material can become an
-interlinked Markdown wiki owned by the user.
+interlinked Markdown wiki owned by the user. **Input once, knowledge grows naturally:**
+normal validated reversible knowledge work is autonomous by default.
 
 The product combines three familiar metaphors:
 
@@ -134,8 +135,10 @@ order. A lower group cannot weaken a higher group merely to simplify implementat
 3. Original files remain user-owned. Pige may make a managed copy or retain a verified
    reference according to the source-storage contract, but MUST NOT force migration,
    silently rewrite evidence, or treat a future link strategy as a v0.1 strategy.
-4. Agent changes MUST be visible, attributable, reversible where possible, and staged
-   when risky. Destructive actions require explicit confirmation.
+4. Agent changes MUST be visible, attributable, recoverable, and operation-recorded.
+   Human intervention is reserved for irreversible/destructive action, security or
+   authority escalation, a new/changed external destination, unresolved conflict, or an
+   explicit stricter user policy.
 5. Ingested content is untrusted and MUST NOT change user intent, product policy,
    settings, tools, schemas, or permission boundaries.
 6. Durable truth, regenerable artifacts, machine-local preferences, secrets, caches,
@@ -148,8 +151,8 @@ order. A lower group cannot weaken a higher group merely to simplify implementat
    tasks, knowledge, and sources without a mode choice.
 2. Every submission enters Pi. Product services may preserve evidence first and enforce
    safety, but cannot infer semantic intent with punctuation, URL, MIME, or file rules.
-3. The Agent maintains naming, linking, filing, summaries, and bookkeeping. Users guide
-   intent and correct outcomes; they do not maintain a taxonomy before capture.
+3. The Agent autonomously maintains naming, linking, filing, summaries, and structure.
+   Users guide, inspect, correct, or undo outcomes; they do not supervise each step.
 4. Ordinary answers may remain conversational; reusable outcomes can become Markdown.
 5. When local knowledge is relevant, retrieval returns grounded synthesis plus ranked,
    inspectable notes. Empty or irrelevant retrieval does not block ordinary conversation.
@@ -322,7 +325,8 @@ User-facing simplicity rule:
 - Tags are lightweight facets, not the main hierarchy.
 - Topics, concepts, entities, claims, and questions are durable Markdown pages when they matter.
 - Graph indexes and Knowledge Tree aggregates are rebuildable working layers, not hidden knowledge truth.
-- Risky graph changes such as merges, contradictions, supersession, and broad hierarchy edits require confirmation.
+- Evidence-bound, reversible graph changes may auto-apply with Operations; only the
+  exceptional intervention boundary in section 11.5 pauses.
 
 ### 6.4 Schema
 
@@ -343,7 +347,7 @@ Knowledge health is the quality of the wiki as a maintained system:
 
 ### 6.6 Processing Status
 
-Processing status is the user-visible surface for captures and Agent jobs that are not fully compiled yet. It includes queued, processing, failed, partially processed, and confirmation-needed jobs.
+Processing status covers queued, active, failed, partial, and exceptional intervention jobs.
 
 This capability is important because the user should never lose a capture just because parsing, model calls, or wiki compilation failed.
 
@@ -355,27 +359,14 @@ UI rule:
 - Show processing status inside Home as activity rows, compact status cards, or notifications.
 - A deeper job-management view may exist behind status cards or Settings for troubleshooting.
 
-### 6.7 Confirmation Queue
+### 6.7 Exceptional Intervention
 
-The confirmation queue holds Agent-proposed changes that should not be silently applied.
-
-Proposal and operation lifecycle rules are defined in `docs/JOB_OPERATION_AND_RECOVERY.md`.
-
-Examples:
-
-- Merging pages.
-- Renaming existing pages.
-- Rewriting an existing concept or entity page substantially.
-- Marking a claim as contradicted.
-- Deleting or archiving pages.
-- Editing `PIGE.md`.
-- Any operation with low confidence.
-
-UI rule:
-
-- Do not expose "Review" as a default first-level navigation item.
-- Show confirmation-needed changes as Home cards, inline note banners, or a focused confirmation surface.
-- The user should feel they are confirming a specific change, not managing an abstract review inbox.
+Routine work never enters review. Only irreversible loss, authority/security escalation,
+destination drift, destructive migration/restore, unresolved conflict, or an explicit
+stricter user policy creates a durable
+proposal. Breadth, merge/rename, or low confidence instead narrows, preserves, warns, or
+abstains. Home shows Activity/Undo and a focused exception, never a Review destination.
+Lifecycle is owned by `docs/JOB_OPERATION_AND_RECOVERY.md`.
 
 ### 6.8 Home Knowledge Retrieval
 
@@ -414,7 +405,7 @@ It should help the user interact with the current note without losing reading co
 - Find related notes.
 - Suggest backlinks.
 - Summarize or restructure the note.
-- Produce proposed edits that can be previewed before applying.
+- Apply eligible reversible edits with Activity/Undo; preview only an exceptional boundary.
 
 ### 6.10 Selection Actions
 
@@ -433,7 +424,7 @@ Examples:
 - Create note from selection.
 - Ask Agent about selection.
 
-Read-only actions may return inline results. Mutating actions should preview changes or create confirmation proposals.
+Read-only actions may return inline results. Eligible mutations auto-apply with Activity/Undo; exceptional boundaries preview.
 
 ### 6.11 Bundled Toolchain And Local Tool Manager
 
@@ -572,7 +563,7 @@ User-visible processing states:
 | Saved locally | The durable source record/reference exists before parser or model work starts. |
 | Organizing | Bounded parser, OCR, retrieval, or Agent work is active and progress is visible. |
 | Complete | The UI distinguishes what was created, updated, skipped, or warned and links to durable results. |
-| Needs confirmation | A specific risky change is previewed with the evidence and consequence needed for a decision. |
+| Needs intervention | An exceptional boundary names why recovery/undo is insufficient and asks for one decision. |
 | Paused; source safe | A dependency, permission, unsupported capability, or recoverable failure blocks further work, but the input remains preserved and a single repair/resume action is available. |
 
 State rules:
@@ -582,8 +573,8 @@ State rules:
 - Retry, resume, crash recovery, and model configuration MUST NOT duplicate sources,
   conversations, pages, proposals, or applied operations.
 - Source-bearing evidence is preserved before expensive work. Ambiguity is resolved by
-  Pi through normal conversation, not a hidden host classifier; risky intent still uses
-  typed confirmation or permission boundaries.
+  Pi through normal conversation, not a hidden host classifier; only exceptional intent
+  uses typed intervention or external permission boundaries.
 - User-facing state names are product copy, not a competing executable Job vocabulary.
   Their mapping to durable states and repair actions is owned by
   `docs/JOB_OPERATION_AND_RECOVERY.md` and `docs/API_AND_IPC_DESIGN.md`.
@@ -618,7 +609,7 @@ Home and capture:
 - OCR fallback for image-heavy PDFs and PowerPoint slides.
 - Local tool manager for explicitly installing and managing a supported optional OCR fallback.
 - Processing status visible in the home timeline.
-- Status states for queued, processing, failed, and confirmation-needed captures.
+- Status states for queued, processing, failed, and exceptional intervention captures.
 
 Agent output:
 
@@ -633,7 +624,7 @@ Agent output:
 - Basic index update.
 - Append-only log update.
 - Source references with enough detail to trace claims back to source files, URLs, pages, or text spans.
-- Change summary that separates created, updated, skipped, failed, and confirmation-needed actions.
+- Change summary that separates created, updated, linked, skipped, failed, and needs-attention actions.
 
 Vault:
 
@@ -671,7 +662,7 @@ Navigation:
 
 - Collapsible sidebar.
 - Home as the single default input and knowledge-retrieval surface.
-- Processing and confirmation-needed cards surfaced from Home when relevant.
+- Processing, autonomous Activity/Undo, and exceptional intervention surfaced from Home.
 - Library view with an Agent-maintained note tree plus notes, sources, topics, and tags.
 - Expanded sidebar should expose the Library tree directly, including at least three levels of hierarchy when available, so browsing does not require a separate Library page first.
 - Knowledge Tree as a semantic tree of domains, topics, concepts, sources, fragments, and backlinks, distinct from the Library's category/folder tree.
@@ -744,7 +735,7 @@ Agent memory:
 - Layered memory model from events to atoms, scenarios, and compact profile/policy.
 - Inspectable memory text stored locally with rebuildable memory indexes.
 - Explicit remember, undo, inspect, disable, export, delete, and reset controls.
-- Secret scanning and confirmation gates for sensitive or broad behavior-changing memories.
+- Secret scanning and exceptional gates for sensitive or unsafe behavior-changing memories.
 - Vault-scoped Agent memory is included in backup by default, with an explicit exclude option.
 
 Conversation history:
@@ -803,8 +794,8 @@ Release:
 
 Safety and trust:
 
-- New source pages and simple new notes may be auto-applied.
-- Risky edits must be staged for confirmation.
+- Validated reversible knowledge changes auto-apply with operation history and recovery.
+- Exceptional irreversible, security, destination, or conflict actions pause for intervention.
 - Every Agent write operation must be logged with job ID, model profile, source IDs, and changed paths.
 - External file changes must not be overwritten silently.
 - No product analytics, background telemetry, or automatic crash/diagnostic upload in v0.1; support export is local, user-initiated, previewed, and redacted.
@@ -1028,8 +1019,8 @@ Required invariants and outcomes:
    validation, provenance, and commit fences, and can refuse unsafe work.
 4. The result is source-backed, schema-valid Markdown plus citations, index/log
    projections, an operation summary, and visible created/updated/skipped/failed or
-   confirmation-needed status.
-5. Risky changes are staged for confirmation. If the Agent, model, or required tool is
+   needs-attention status.
+5. Eligible changes apply autonomously with Operations; exceptions use section 11.5. If the Agent, model, or required tool is
    unavailable, the preserved source remains visible and resumable; no hidden semantic
    pipeline substitutes for the Agent.
 
@@ -1050,7 +1041,8 @@ Required outcomes:
    stays inside the tool and the whole vault is never sent to a model.
 3. Evidence used in an answer remains inspectable and cited. No evidence means no local
    citation; only an explicit vault-only request returns insufficient evidence.
-4. Valuable answers become Markdown only through a validated write/proposal tool.
+4. Valuable answers become Markdown through a validated autonomous write tool; only an
+   exceptional boundary uses a proposal.
 
 Without a model, source-bearing inputs remain safe and wait for setup/resume. Any
 deterministic local search fallback is explicit and never presented as Agent synthesis.
@@ -1064,7 +1056,7 @@ Required behavior:
 - Current note context is always visible to the Agent.
 - User can ask about the note, selected text, backlinks, sources, or related pages.
 - Read-only answers stay in the side panel.
-- Proposed note edits become previews or confirmation proposals.
+- Validated reversible note edits apply with activity history and Undo.
 - The Agent should cite current-note sections and linked sources where possible.
 
 #### 11.2.2 Selection Action Workflow
@@ -1079,7 +1071,8 @@ Action categories:
 - Organize: create note from selection, add backlink, add tag, turn into claim/question.
 - Ask: send selection to Note Agent as context.
 
-Mutating actions should not silently rewrite a note unless the action is clearly local and reversible. Larger edits should use preview or confirmation.
+Mutating actions preserve version/history and auto-apply when scoped and reversible;
+size alone never creates a confirmation.
 
 ### 11.3 Compile
 
@@ -1092,8 +1085,8 @@ The Agent may:
 - Add claims with citations.
 - Add questions.
 - Add backlinks.
-- Merge duplicates when approved.
-- Flag conflicts.
+- Merge duplicates with recoverable Operations.
+- Preserve and flag unresolved conflicts.
 
 ### 11.4 Lint
 
@@ -1110,33 +1103,18 @@ The Agent checks:
 - Overly broad tags.
 - Important uncreated concept pages.
 
-v0.1 may implement lint as a button that produces a report without automatically changing files.
+Lint may repair eligible issues autonomously and reports every change; unsafe repairs abstain or intervene.
 
-### 11.5 Action Risk And Confirmation
+### 11.5 Autonomous Application And Exceptional Intervention
 
-Agent actions use action risk, evidence completeness, structural validation,
-reversibility, and policy—not an uncalibrated model confidence number—to determine
-whether work can apply automatically.
+Auto-apply when evidence, scope, schema, base checksum, attribution, and version/trash/
+rollback recovery pass—including create, update, link, rename, merge, contradiction,
+hierarchy, and metadata. Otherwise replan, preserve, warn, or abstain. Only irreversible
+loss, authority/security escalation, destination drift, unresolved conflict, or a stricter
+user mode pauses. Activity/provenance/Undo is normal; proposals are exceptions. Raw
+secrets stay unavailable and extensions/new capabilities remain brokered.
 
-- Auto-apply: preserve source according to storage strategy, create parser artifacts, create source pages, create simple new notes, append to `log.md`, and update local database/index caches.
-- Auto-apply with summary: validated, reversible, low-risk index, backlink, tag,
-  relation-suggestion, or metadata work that does not substantially rewrite existing
-  knowledge.
-- Stage for confirmation: substantial edits to existing pages, renames, merges,
-  contradiction markers, broad topic reshaping, external file conflicts, ambiguous
-  memories, or any action whose evidence or validation is insufficient.
-- Require explicit confirmation: deletion, destructive cleanup, editing `PIGE.md`,
-  changing vault structure, installing packages or tools, enabling externally sourced
-  Skills, or another always-confirmed action defined by the security contract.
-- Raw secrets are never offered as Agent/extension output. Eligible credentials are used
-  only through a one-action brokered capability without exposing key bytes.
-- A broad Permission Broker mode, including YOLO Full Access, never replaces an
-  always-confirmed destructive, settings, or data-egress decision.
-
-This keeps capture fast while preventing the Agent from quietly reshaping the user's knowledge base in surprising ways.
-
-The executable risk vocabulary, proposal/operation lifecycle, permission modes,
-always-confirmed classes, and policy enforcement are owned by
+Executable lifecycle, exceptional classes, permission modes, and policy are owned by
 `docs/JOB_OPERATION_AND_RECOVERY.md`, `docs/SECURITY_THREAT_MODEL.md`,
 `docs/AGENT_RUNTIME_POLICY_CONTEXT.md`, and the shared schemas.
 
@@ -1252,9 +1230,9 @@ v0.1 memory requirements:
 - Index memory with local lexical search and, when available, the Local RAG Pack.
 - Inject only compact, relevant memory into Agent prompts.
 - Never inject the full memory store into the model context.
-- Keep memory provenance linked to the conversation, capture, confirmation decision, or Agent job that produced it.
-- Let users approve or undo durable memory writes.
-- Require confirmation for sensitive, identity-level, or broad behavioral memories.
+- Keep memory provenance linked to the conversation, capture, policy/exception decision, or Agent job that produced it.
+- Auto-apply scoped, secret-scanned, reversible memory and let users inspect or undo it.
+- Abstain or use exceptional intervention for sensitive or authority-changing memory.
 - Scan memory candidates for secrets before persistence.
 - Let users inspect, edit, disable, export, delete, and reset memory.
 
@@ -1338,7 +1316,7 @@ v0.1 package manager requirements:
 - Show capability and permission requests before install.
 - Require explicit user confirmation for install and update.
 - Block package installation during ordinary Agent jobs.
-- Route package writes into the vault through Pige-approved write APIs or confirmation proposals.
+- Route package writes through permission-scoped Pige APIs and Operations; exceptional boundaries still intervene.
 - Keep package-generated durable outputs inspectable as Markdown or source artifacts when possible.
 
 Package safety rules:
@@ -1547,10 +1525,9 @@ Current pass/fail status and evidence remain only in the acceptance manifest.
 
 - The user can tell where knowledge lives, when selected content may go to a configured
   cloud model, what an Agent operation changed, and whether work completed, paused,
-  failed, or needs confirmation.
-- Risky edits and sensitive extension actions cannot cross their confirmation or
-  permission boundary; raw secrets never appear in Agent, extension, diagnostic, or
-  vault output.
+  failed, was undone, or needs exceptional intervention.
+- Routine knowledge growth completes without prompts; irreversible/security/destination/
+  conflict exceptions and sensitive extension actions cannot cross their boundary.
 - A Skill or curated package can complete its explicit staged lifecycle without turning
   ordinary capture into package installation or exposing a general platform console.
 
@@ -1576,12 +1553,12 @@ default telemetry contrary to `PRIVACY.md`.
 | Risk and affected promise | Detection evidence | Required mitigation and decision trigger | Primary owners |
 | --- | --- | --- | --- |
 | Capture, write, crash, external edit, backup, or restore loses durable evidence/knowledge or silently overwrites a newer version. | Preserve-before-work fixtures, restart/idempotency tests, external-change conflicts, source checksums, and backup/restore manifest validation. | Preserve durable input before expensive work; use recoverable writes, explicit conflicts, and validated restore. Any unexplained loss or silent overwrite blocks release. | Data Architecture, Source Storage, Job/Recovery, Sync/Migration |
-| Over-created, duplicate, or weakly connected pages make the wiki noisier than the captured material. | Golden ingest/linking evaluation, duplicate/noise review, rejected or reversed proposals. | Require evidence and incremental value for durable structure; stage broad merges/reshaping. Block release when output quality gates fail. | Knowledge Model, Prompt, Quality |
+| Over-created, duplicate, or weakly connected pages make the wiki noisier than the captured material. | Golden ingest/linking evaluation, noise and undo/repair evidence. | Require evidence and incremental value; auto-apply recoverable structure, abstain or intervene at exceptions, and block release on quality failure. | Knowledge Model, Prompt, Quality |
 | Bad extraction or OCR creates plausible but wrong knowledge. | Multilingual parser/OCR fixtures, low-confidence and unsupported-claim checks, source-locator inspection. | Preserve native and OCR evidence separately, expose partial/low-confidence results, and prevent unsupported claims from auto-applying. | Parser Ingest, Context, Quality |
 | BYOK setup or cloud use surprises or blocks users. | First-run, model-sync/default, real Provider/Pi/Home, quiet-status tests. | Preset-first auto-sync/manual fallback, one disclosure, typed repair, seamless calls, preserved waiting work. | Onboarding, Pi Integration, Privacy |
 | Weak retrieval, large local assets, or slow indexing makes answers worse than simple search. | Retrieval relevance fixtures, lexical-fallback tests, disk/index/performance budgets. | Keep lexical results available, make optional assets explicit/removable, and admit reranking only when it improves the owner-defined quality/performance gate. | Context, Local Database, Performance |
 | Cross-platform parsers, bundled tools, optional OCR, installer size, licensing, or security updates become fragile. | Platform smoke matrix, dependency checksums/licenses, installer and update evidence. | Keep no-download ordinary workflows, visible repair/fallback, pinned release inputs, and a replacement path. Re-scope a dependency when release gates cannot be met safely. | Tech Architecture, Release Engineering |
-| Hostile sources, weak provenance, or automatic edits undermine trust. | Prompt-injection fixtures, citation checks, operation/proposal audit, security negative cases. | Treat sources as data, keep provenance inspectable, mediate tools, and stage risky changes. No quality gain justifies weakening the boundary. | Security, Prompt, Job/Recovery |
+| Hostile sources, weak provenance, or automatic edits undermine trust. | Prompt-injection, citation, Operation/undo, conflict and security fixtures. | Treat sources as data; validate and log reversible writes; block or intervene only at the exact safety boundary. | Security, Prompt, Job/Recovery |
 | Skills or packages introduce excessive permission, maintenance, or default-UI complexity. | Capability/permission negative tests, curated review, default-navigation inspection, update-delta tests. | Curate knowledge-focused defaults, isolate community search, require explicit lifecycle decisions, and block unmediated access or task-time installs. | Skill Extension, Security, UI |
 | Six-locale UI or multilingual retrieval breaks compact layouts, IME, CJK search, OCR, or speech behavior. | Six-locale screenshots/workflow fixtures, IME and CJK retrieval tests. | Keep language concepts separate, use owner-defined catalogs/fallbacks, and block release when a core locale workflow is unusable. | I18N, UI, Quality |
 | Desktop-local contracts make later sync/mobile/remote execution require destructive migration. | Schema/migration review, path-independent ID and capability-adapter tests. | Keep portable IDs, explicit machine bindings, conflict metadata, and runtime capability boundaries; do not implement sync inside v0.1. | Sync/Migration, Data, Future Mobile/Cloud |

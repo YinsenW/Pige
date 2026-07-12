@@ -35,7 +35,7 @@ Scope discipline:
 
 For milestone planning, v0.1 is a local-first desktop Agent: BYOK/Pi conversation and
 optional local knowledge must work; sources survive failure; Markdown stays portable;
-risky actions remain reviewable; release hardening closes the product.
+eligible changes remain recoverable through Activity/Undo; exact exceptions stay decidable.
 
 Platform scope remains macOS 26+, Windows 11, and Windows 10 when release tests pass; Linux and the items in section 5 remain deferred.
 
@@ -54,7 +54,7 @@ The relationship is intentionally not one-to-one: M5 requires four implementatio
 | P4 | M5 | Rebuildable database, lexical search, Library, and graph foundations |
 | P5 | M4 | URL, document, image, parser, artifact, and OCR tool breadth |
 | P6 | M5 | Retrieval, local RAG, reader/editing, backlinks, and Knowledge Tree |
-| P7 | M5 | Confirmation, operations, memory, and conversation lifecycle |
+| P7 | M5 | Autonomous operations/Undo, exceptional decisions, memory, and conversation lifecycle |
 | P8 | M5 | Skills, complete curated Pi package lifecycle, and permissions |
 | P9 | M6, M7 | Backup/restore, Knowledge Health, migration, accessibility, localization, packaging, update, and release evidence |
 
@@ -127,7 +127,7 @@ Acceptance:
 - An image-only PDF page or screenshot becomes searchable when OCR is available.
 - Common document ingest does not trigger a runtime dependency download.
 
-### M5: Knowledge Navigation And Confirmation
+### M5: Knowledge Navigation And Autonomous Evolution
 
 Outcome:
 
@@ -136,7 +136,8 @@ Outcome:
 
 Acceptance:
 
-- User can ask a natural language question, see relevant notes, read a grounded summary, open source notes, use the Note Agent on an opened note, and approve or reject risky changes.
+- User can ask, inspect grounded results, use Note Agent, and see/undo autonomous
+  knowledge growth; exceptional conflicts or irreversible changes remain decidable.
 - User can get semantic results without configuring an embedding or reranking provider.
 - User can explicitly ask Pige in chat to install a Skill link or file, inspect the staged Skill, enable it, and approve or deny sensitive runtime capabilities.
 - User can inspect and manage curated Pi packages without the Agent installing packages during ordinary jobs.
@@ -153,7 +154,8 @@ Outcome:
 Acceptance:
 
 - A vault can be backed up, restored into a fresh folder, and searched again after index rebuild without losing notes, sources, artifacts, vault-scoped memory, conversation history, proposals, or applied operation summaries.
-- Knowledge Health deterministically reports broken links, orphan pages, duplicate-topic candidates, and unsourced claims; suggested repairs remain reviewable and do not silently rewrite durable pages.
+- Knowledge Health reports required issue classes; eligible repairs use Operations/Undo,
+  while exact exceptions remain decidable and no broad rewrite is silent.
 
 ### M7: Public Alpha Hardening
 

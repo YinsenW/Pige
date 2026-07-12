@@ -186,10 +186,10 @@ Conflict cases:
 
 | Case | Example | v0.1 behavior |
 | --- | --- | --- |
-| Same ID, same path, different content | User edited Markdown while proposal was pending. | Stage conflict proposal. |
-| Same ID, moved path | User moved note outside Pige. | Update manifest/index if safe; otherwise stage proposal. |
-| Different IDs, same slug/title | Imported duplicate topic. | Keep both, suggest merge. |
-| Delete vs update | Page archived while another operation updates it. | Stage proposal, never silently resurrect or delete. |
+| Same ID, same path, different content | User edited Markdown during an Operation. | Lossless base/current/proposed merge; otherwise stage conflict. |
+| Same ID, moved path | User moved note outside Pige. | Rebind safely or preserve both; unresolved conflict stages. |
+| Different IDs, same slug/title | Imported duplicate topic. | Keep both; merge only with proven identity and recovery. |
+| Delete vs update | Archive races update. | Preserve both states; unresolved intent stages, never silently resurrect/delete. |
 | Source changed externally | Referenced original file modified. | Mark source state `changed`, offer re-ingest. |
 | Missing referenced original | External file moved/deleted. | Mark `missing_source`, offer relink. |
 | Source page projection differs from sidecar | User edited or stale generated source metadata. | Preserve Markdown; sidecar remains operational authority; stage repair/conflict rather than copying paths in either direction. |
@@ -200,11 +200,11 @@ Rules:
 
 - Pige never silently overwrites user-edited Markdown when base hash changed.
 - Pige never silently deletes durable Markdown, source assets, memory, conversations, proposals, or operations.
-- When uncertain, create a confirmation proposal.
+- Uncertainty preserves both, replans, warns, or abstains; only unreconcilable loss stages a proposal.
 - Conflict proposals should show current content, proposed change, base metadata, affected paths, and possible actions.
 - `docs/SOURCE_STORAGE_STRATEGY.md` section 5 owns the Source Record/Source Page projection commit protocol and its residual concurrency windows; this document owns only the general conflict outcome and does not restate that mechanism.
 
-## 8. Conflict Proposal Actions
+## 8. Conflict Resolution Actions
 
 Required v0.1 actions:
 
@@ -224,9 +224,10 @@ Future sync actions:
 
 Rules:
 
-- Agent-assisted merge is a proposal, not an automatic write.
-- Merge proposals must cite both base and changed versions.
-- Merges that affect many links or relationships require explicit confirmation.
+- A lossless, evidence-bound Agent merge may auto-apply with an Operation and Undo.
+- Unresolved merge proposals cite base, current, and proposed versions.
+- Breadth alone does not require confirmation; narrow, preserve both, warn, or abstain when
+  the merge cannot remain recoverable.
 
 ## 9. Deletes, Archives, And Tombstones
 
@@ -418,12 +419,12 @@ Required tests:
 
 - Stable ID remains after rename.
 - Same title with different IDs does not merge silently.
-- Base hash conflict creates proposal.
+- Base-hash conflict attempts a lossless merge or preserves both before an exception proposal.
 - External edit while proposal pending creates conflict proposal.
 - Delete/archive creates tombstone or operation record.
 - Newer unsupported vault schema opens read-only or blocks safely.
 - Additive migration preserves unknown fields.
-- Risky migration requires backup or confirmation.
+- Destructive/irreversible migration requires backup and intervention; reversible migration records an Operation.
 - Failed migration leaves original files intact.
 - Backup/restore preserves durable object IDs and schema versions; vault ID follows the explicit replace/clone mode.
 - Legacy format-v1 backup without domain ranges is scanned conservatively and never receives an invented compatibility pass.

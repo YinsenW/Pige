@@ -190,8 +190,8 @@ Current preset foundation:
 - Assembled loopback proves renderer-to-Pi connect/restart. A real legacy Custom DeepSeek
   profile proves secret resolution, Chat direct/restart-cited Home, and clean diagnostics,
   not fresh DeepSeek preset Connect.
-- Full catalog/help/delete, durable sync health, live DeepSeek preset/Anthropic, URL fetch,
-  durable follow-up, and signed packaged platforms remain open.
+- Full catalog/help/delete, durable sync health, live DeepSeek preset/Anthropic, durable
+  follow-up, and signed packaged platforms remain open.
 
 ## 8. Pi Custom Models Boundary
 
@@ -277,13 +277,15 @@ Rules:
 
 - Disable or avoid Pi built-in tools unless Pige wraps them with scoped adapters.
 - Register Pige-owned tools only through Agent Orchestrator.
-- Sensitive tools use Permission Broker. The first create-only note tool uses a bounded
-  current-job authorization port; it is not persisted Broker evidence.
+- Pige-owned bounded tools use service authorization and eligible reversible knowledge
+  effects need no user Permission. External extensions/new authority use Permission Broker.
 - `beforeToolCall` freezes and authorizes scoped input; handlers revalidate canonical
   input and effect guards. Brokered tools reauthorize scope before effects.
 - Side-effecting tools run sequentially; parallel tools require an explicit
   read-only/idempotent contract plus ordering, cancellation, and audit tests.
-- Shell, filesystem, network, package, brokered credential use, provider, settings, delete, and external source actions require declared capabilities and permission policy. Raw key bytes are never a capability and are never exposed to Pi extensions or tools.
+- External shell/filesystem/network/package/credential/settings/delete scopes require
+  declared capabilities and permission policy. Exact connected model calls use standing
+  BYOK authority. Raw key bytes are never a capability or exposed to extensions/tools.
 - Pi extensions or tools cannot directly read/write vault files.
 - Pi extensions or tools cannot access raw API keys. A reviewed Pige adapter may request brokered credential use for a specific provider call; it receives the call result, never the credential bytes.
 - Pi tool output is treated as untrusted tool output and sanitized before display, logging, or model reuse.
@@ -291,7 +293,7 @@ Rules:
   another tool, or hide a composite semantic workflow.
 - Final assistant text never causes a durable knowledge write. A write occurs only from
   a validated registered tool call, except deterministic source preservation and
-  mechanical projections owned by the same approved commit.
+  mechanical projections owned by the same validated commit.
 
 The Pige Tool Registry is Pi's only product-capability surface. Each entry declares
 stable ID/version/description/capability; strict input/output schemas and trust; effect,
@@ -302,11 +304,11 @@ The model sees only bounded descriptors. Calls bind run/call, catalog/policy/sou
 tool-version, and input hashes; results carry typed refs, warnings, and provenance while
 large bodies remain Artifacts. Host validation precedes every result or effect.
 
-The current slice exposes inspect, parse/OCR, search, cited publication, or terminal
-`pige_stage_knowledge_note_proposal@1`. Host owns proposal target/trust/refs/operation,
-then Home review may apply only that exact create note without another Pi/model turn;
-reject applies nothing. Full risk routing, unified/generic proposal UX, catalog, Broker,
-cross-process recovery, and packaged paths remain open.
+The target registry uses validated publication for autonomous eligible knowledge and
+`pige_stage_knowledge_note_proposal@1` only for an exceptional boundary. The current
+slice still stages every exact create note for Home review; this is truthful transitional
+recovery infrastructure, not the target default. Full eligibility routing, Activity/Undo,
+catalog, Broker, cross-process recovery, and packaged paths remain open.
 
 Source inspection, extraction, OCR, retrieval, and knowledge publication remain
 separate tools. Recommendations cannot invoke another tool. Runtime may keep only a
@@ -392,11 +394,11 @@ Phase 3 implementation note:
   cancellation, and commit are rechecked; raw prompts/responses/keys do not persist.
 - No model preserves sources and waits; unavailable/empty document evidence writes no note.
 - Home text uses durable `agent.submitTurn`: Pi may answer directly or select cited local
-  retrieval; one preserved file carries the same draft; missing/broken bindings wait with
-  typed repair and no silent fallback. Legacy handlers stay readable.
+  retrieval or bounded URL fetch/preserve; one file shares the draft, and missing/broken
+  bindings wait with typed repair. Legacy handlers stay readable.
 
-Remaining work: Agent-selected URL fetch, durable follow-up/multi-source recovery,
-catalog/help/delete/sync polish, Broker/packaging, and
+Remaining work: durable follow-up/multi-source recovery, catalog/help/delete/sync polish,
+Broker/packaging, and
 re-review both Pi pins together whenever either changes.
 
 ## 17. References

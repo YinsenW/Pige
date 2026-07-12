@@ -52,7 +52,7 @@ Default desktop window:
 Expanded state:
 
 - Sidebar opens to reveal Home, Library, Knowledge Tree, and Settings.
-- Processing, failed jobs, and confirmation-needed changes appear as status cards, notifications, or contextual confirmation surfaces rather than default top-level destinations.
+- Progress, failures, Activity/Undo, and exceptional attention stay contextual, never top-level.
 - Library contains an Agent-maintained note tree, notes, sources, topics, and tags.
 - The expanded sidebar reveals the Library tree directly, including at least three visible hierarchy levels when available.
 - Knowledge Tree is a separate semantic tree view for concepts, topics, evidence, and backlinks.
@@ -113,7 +113,7 @@ Purpose:
 - Continue the home dialogue.
 - Browse the Library.
 - Inspect captures and sources.
-- See processing status and confirmation-needed changes when they exist.
+- See Activity, progress, failures, and exceptional attention.
 - Open knowledge retrieval results with visible ranked notes.
 
 Layout:
@@ -133,7 +133,7 @@ Behavior:
 - Sidebar width is stable and should not crowd the content column.
 - The home composer remains easy to access.
 - The window can return to compact mode without losing the current task.
-- Confirmation-needed changes are surfaced inline or in a right-side status panel, not as a mandatory navigation concept.
+- Exceptional needs-attention items are inline or contextual, not mandatory navigation.
 
 ### Full-Screen Reading Workspace
 
@@ -211,7 +211,7 @@ Behavior:
 - On supported macOS versions, the microphone button starts voice dictation into the same input.
 - Recent activity appears above the composer only after there is something useful to show.
 - The same input supports capture and retrieval questions. User should not see separate "Capture" and "Ask" modes.
-- The composer must not show mode chips such as "Deep Organize" or "Smart Search"; Agent intent routing decides whether to capture, organize, retrieve, answer, or ask for confirmation.
+- No mode chips: Pi decides semantics; Host handles exceptional boundaries.
 - Host UI does not classify by punctuation, URL, attachment, or file type. Pi may answer
   directly or retrieve; citations appear only when local evidence is used.
 
@@ -249,6 +249,7 @@ Behavior:
 │  Fetched article                   │
 │  Created 1 source page             │
 │  Updated 2 concept pages           │
+│  View details · Undo               │
 │                                    │
 │  Saved as "Agent-maintained Wiki"  │
 │                                    │
@@ -262,7 +263,7 @@ Behavior:
 Behavior:
 
 - Activity is secondary to the home composer.
-- Recent items summarize durable changes.
+- Recent items summarize durable changes with provenance and Undo when recoverable.
 - The user can ignore the activity area and keep adding sources or asking questions.
 
 ### 4.4 Sidebar Expanded
@@ -294,7 +295,7 @@ Behavior:
 - Recent pages appear below primary navigation.
 - Vault status appears at bottom.
 - Opening the sidebar is an exploration action, not required for capture.
-- Processing and confirmation-needed items appear as Home status cards, not as separate required navigation.
+- Processing and exceptional needs-attention items appear in Home, not separate navigation.
 
 ## 5. Home Composer
 
@@ -398,17 +399,13 @@ v0.1 can show a simplified version:
 Pige
 Processed successfully.
 Created 1 source page and 1 note.
-2 proposed updates need confirmation.
+Updated 2 relationships.  View details · Undo
 ```
 
-## 6.1 Processing And Confirmation States
+## 6.1 Processing, Activity, And Exceptional Intervention
 
-Pige should not expose "Inbox" and "Review" as default first-level destinations. They are internal operational concepts surfaced only when useful:
-
-- Processing status appears in Home as recent activity, status cards, or compact progress rows.
-- Failed jobs appear in Home with retry and preserve-source actions.
-- Risky Agent changes appear as confirmation cards, inline banners, or a focused confirmation surface.
-- A dedicated management view can exist behind status cards or Settings for advanced cleanup, but it should not be part of the default mental model.
+No default Inbox/Review destination: Home shows compact progress and retry, eligible
+changes as Activity/details/Undo, and only exceptional boundaries as focused decisions.
 
 Processing states:
 
@@ -416,15 +413,12 @@ Processing states:
 - Processing.
 - Failed.
 - Ready to retry.
-- Needs confirmation.
+- Needs attention.
 - Completed with warnings.
 
-Current Home foundation:
-
-- Show up to three ready cards with progressive expansion and no new top-level destination.
-- Review opens exact summary, reason, targets, warnings, and bounded escaped create-note Markdown.
-- Localized actions lock in-flight, terminal, or unknown state; rejected calls re-read durable truth, and Back/Escape restores useful focus.
-- `awaiting_review` stays visible in Home.
+Current code still stages every exact create note and shows up to three safe review cards;
+detail is escaped, decisions re-read durable truth, focus restores, and `awaiting_review`
+stays visible. This is transitional; eligibility and Activity/Undo remain open.
 
 Unified update diff, generic apply, replacement UX, bulk/dedicated management, and packaged visual proof remain open.
 
@@ -472,14 +466,13 @@ Behavior:
 - Each result opens the Markdown page at the matching snippet when possible.
 - The synthesis should cite the result cards it used.
 - The user can refine the query without starting a new chat thread.
-- Saving an answer creates a proposed note or appends to an existing note after confirmation.
+- Saving useful knowledge auto-applies through a validated recoverable tool; exceptional boundaries pause.
 - There is no separate default "Ask" entry in navigation; this behavior lives inside Home.
 
 Current Home uses `agent.submitTurn` for text and one preserve-first file attachment. Pi
-may answer empty/no-evidence chat directly or select cited local retrieval; missing or
-broken bindings show typed Configure/Retry state with no silent fallback. Agent-selected
-URL fetch/preserve, durable follow-up, and multi-attachment recovery remain open without
-adding a mode, status, or navigation destination.
+may answer empty/no-evidence chat directly or select cited retrieval or bounded URL
+fetch/preserve; broken bindings show typed Configure/Retry state. Durable follow-up and
+multi-attachment recovery remain open without another mode or destination.
 
 ## 8. Note Reader
 
@@ -540,13 +533,13 @@ Editing mode:
 - v0.1 does not need a full block editor, but it must preserve clean Markdown.
 - Preview/read mode and edit mode should keep roughly the same scroll position when possible.
 - Saving should validate frontmatter, wiki links, and citations before applying changes.
-- Pige-managed generated sections should be editable, but risky rewrites can enter confirmation.
+- Pige-managed sections remain editable; Agent rewrites use base hashes/history/Undo and pause only at exceptions.
 
 Phase 2/3 bridge:
 
 - Opening a Library row shows a minimal rendered reader.
 - The reader hides frontmatter and shows compact metadata derived from frontmatter.
-- Markdown rendering supports the initial structured pipeline with GFM, sanitized HTML, wiki-link anchors, source-citation anchors, stable code/table overflow, and constrained images.
+- Markdown rendering supports GFM, sanitized HTML, Pige links, code/table overflow, and confined relative raster images; remote/protocol/traversal resources and Electron navigation are denied.
 
 Current Phase 4 reader context foundation:
 
@@ -582,7 +575,7 @@ Note Agent behavior:
 - Uses current note as primary context.
 - Can answer questions about the note, its sources, and related notes.
 - Can suggest backlinks and related pages.
-- Can propose edits, but meaningful edits should preview or require confirmation.
+- Applies eligible evidence-backed edits with Activity/Undo; exceptional conflicts open review.
 - Read-only answers stay in the panel and do not automatically become notes.
 
 ### 8.3 Selection Actions
@@ -601,9 +594,7 @@ Action behavior:
 
 - Copy and quote are local and instant.
 - Translate, polish, expand, summarize, and explain can return inline output or send results to the Note Agent panel.
-- Create note from selection should open a preview before writing.
-- Mutating actions should preserve the original text until the user confirms.
-- Large rewrites should create a confirmation proposal.
+- Mutations preserve base/original, record an Operation, and expose Undo; preview is optional.
 
 ## 9. Sources View
 
@@ -704,7 +695,7 @@ It should show:
 - Related notes and source evidence.
 - Backlinks and suggested links.
 - Relationship confidence or status when useful.
-- Confirmation-needed relationship suggestions.
+- Autonomous relationship Activity and exceptional unresolved conflicts.
 
 Visual encoding:
 
@@ -713,7 +704,7 @@ Visual encoding:
 - Leaf count represents the number of fragmented knowledge units under that branch.
 - Leaf size represents the size or importance of a leaf cluster.
 - Leaf color depth represents density: deeper color means more accumulated fragments or stronger evidence.
-- New or low-confidence growth can use lighter leaves until confirmed or reinforced.
+- New or low-confidence growth can use lighter leaves until evidence reinforces it.
 
 Prototype:
 
@@ -792,7 +783,7 @@ Settings rules:
 - Permissions & Privacy contains permission modes, saved grants, API key storage, cloud-send policy, secret redaction, and YOLO.
 - Vault & Note Storage contains vault identity, active vault path, note/knowledge root path, source asset root path, source storage policy, recent vaults, backup, restore, export, and trash.
 - Index & Maintenance contains rebuild index, reset local database, knowledge health, chunk status, and repair actions.
-- Agent & Memory contains `PIGE.md`, Agent behavior preferences, memory inspection, and confirmation thresholds.
+- Agent & Memory contains `PIGE.md`, Agent behavior preferences, memory inspection, and autonomous activity/history controls.
 - Skills and Pi Packages are both under Extensions, but remain separate pages.
 - Cross-links are allowed, but cards from another domain should not be embedded in the current page.
 
@@ -918,7 +909,7 @@ Provider setup discloses the destination once. Saved authority is exact to that 
 
 Voice input, OCR, local RAG, parser health, and bundled toolchain status belong to Local Capabilities. Models should not contain those controls.
 
-### Permission Mode And Grants
+### External Extension Permission Mode And Grants
 
 ```txt
 Permissions
@@ -938,11 +929,11 @@ Off
 Enable...
 ```
 
-Default mode behavior:
+These modes govern extensions/new scopes, not core knowledge tools or connected BYOK:
 
 - Ask every time: prompt for each sensitive action unless a saved grant exists.
 - Remember scoped grants: the normal power-user mode; prompts can be saved permanently for a scoped actor/capability/resource.
-- YOLO full access: auto-allows eligible declared Agent, Skill, package, tool, network, shell, filesystem, and ordinary model-call capabilities until disabled. It never reveals raw secrets or replaces always-required destructive, settings, restore, migration, or model-egress confirmation.
+- YOLO full access: auto-allows eligible external scopes; never secrets or exceptional/egress gates.
 
 Common grant scopes:
 
@@ -957,9 +948,9 @@ YOLO enable dialog:
 ```txt
 Enable YOLO full access?
 
-Pige will stop asking for eligible Agent, Skill, package, tool, network,
-shell, filesystem, and ordinary model actions. High-impact changes and
-stricter cloud-send confirmations will still ask. Raw secrets are never exposed.
+Pige will stop asking for eligible external Skill, package, network,
+shell, and filesystem scopes. Exceptional boundaries and stricter
+cloud-send choices still apply. Raw secrets are never exposed.
 
 Actions will still be logged. You can turn this off anytime.
 
@@ -985,7 +976,7 @@ Prefers concise source summaries
 Use memory for
 [x] Capture and summarization style
 [x] Note naming and linking conventions
-[x] Confirmation behavior
+[x] Autonomous organization style
 [x] Avoiding repeated Agent mistakes
 
 Controls
@@ -994,7 +985,8 @@ Export Memory
 Reset Memory
 ```
 
-Memory should feel transparent rather than anthropomorphic. The page should show what Pige remembers, why it was remembered, where it came from, and how to disable or delete it. Sensitive or broad memories should require confirmation instead of silently becoming active.
+Show what Pige remembers, why/from where, and disable/delete/Undo. Secret-scanned scoped
+memory grows autonomously; sensitive/authority changes intervene.
 
 ### Skills Settings
 
@@ -1548,7 +1540,7 @@ product screenshots are forbidden in committed baselines.
 - Errors should preserve user input and offer retry.
 - Users should be able to open generated Markdown in the system file browser.
 - When a generated page updates existing knowledge, the UI should show "updated" separately from "created".
-- Risky Agent edits should require confirmation instead of silently changing the wiki.
+- Eligible Agent edits apply visibly with provenance and Undo; exceptional boundaries pause.
 - Source warnings, including possible prompt injection, should be visible but not alarming.
 
 ## 18. v0.1 Screen Checklist
@@ -1560,7 +1552,7 @@ Must implement:
 - Home composer.
 - Voice input button and recording state on supported macOS versions.
 - Sidebar collapsed and expanded.
-- Processing and confirmation-needed status cards.
+- Processing, autonomous Activity/Undo, and exceptional needs-attention cards.
 - Library with notes, sources, topics, and tags.
 - Expanded Library tree in the sidebar.
 - Knowledge Tree semantic tree.
@@ -1602,6 +1594,6 @@ Can wait:
 - Opened notes can show a contextual Agent panel.
 - Selected text exposes common actions without leaving the note.
 - Settings offers preset connection, unified sync/manual inventory, and grouped Global Default without protocol/raw-ID work.
-- The user can tell whether an Agent change was applied, needs confirmation, or failed.
+- The user can inspect and undo autonomous changes and distinguish exceptional attention from failure.
 - The user can tell when captured content is being sent to a cloud model provider.
 - The user can dictate into the main input on supported macOS versions without learning a separate recording workflow.

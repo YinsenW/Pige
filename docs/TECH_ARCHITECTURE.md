@@ -430,7 +430,8 @@ Responsibilities:
 - Watch durable vault files for external changes.
 - Provide atomic write helpers for Markdown, JSON records, memory files, Skill files, and operation records.
 - Detect file conflicts before applying Agent writes.
-- Route conflicts to confirmation proposals instead of overwriting.
+- Reconcile conflicts deterministically while preserving old bytes; only unreconcilable
+  conflicts stage proposals, never silent overwrite.
 - Coordinate with Source Storage Service when operations reference source assets.
 - Provide archive/trash-first deletion helpers.
 - Trigger local database and index rebuild jobs when durable files change externally.
@@ -447,13 +448,13 @@ Atomic write rule:
 Conflict rule:
 
 - If a target file has changed since the proposal was created, do not apply the proposal.
-- Create a conflict confirmation proposal with current file, proposed patch, and source operation.
+- Reconcile losslessly or stage a conflict proposal with current file, proposed patch, and source Operation.
 - Source assets never enter Markdown merge; they remain preserved evidence or external references.
 
 Deletion rule:
 
 - Agent cannot permanently delete files.
-- User-confirmed delete should move generated files to a vault archive/trash area or OS trash when safe.
+- Generated-file archive/delete is trash-first and operation-recorded; permanent deletion confirms.
 - Managed source copy deletion requires explicit user action and warning.
 - Externally referenced originals are never deleted by ordinary Pige delete or cleanup actions.
 
@@ -477,9 +478,8 @@ Responsibilities:
 - Execute readable-content/metadata extraction only from an Agent-selected web tool and
   return a normalized Artifact.
 
-The current bridge still couples pinned Undici fetch and inert extraction to URL
-capture. Its safety evidence remains valid, but that pre-Agent route is transitional
-under B3.13; the target preserves the submitted task first and lets Pi select fetch.
+Pi now chooses bounded fetch for a static URL and writes one recoverable Source, Page,
+Artifact, and Operation. Multi-URL, durable follow-up, and packaged proof remain open.
 
 ### 5.3 Parser Service
 
@@ -628,7 +628,7 @@ The boundary has three planes:
 - **Tool execution plane:** the Pige Tool Registry exposes narrow typed capabilities
   backed by deterministic services and bounded results.
 - **Host policy and commit plane:** Pige owns preservation, permissions, egress, limits,
-  Jobs, provenance, validation, confirmation, and atomic publication.
+  Jobs, provenance, validation, exceptional intervention, and atomic publication.
 
 Agent decisions never weaken the host plane. A refusal returns a typed result to Pi or
 stops safely; it does not authorize a Host-selected fallback. Mechanical refresh follows the
@@ -644,11 +644,11 @@ Responsibilities:
 - Run the embedded Pi Agent loop through the one approved adapter.
 - Present only the task-scoped Pige tool catalog and dispatch validated tool calls.
 - Plan wiki changes.
-- Submit structured change requests through registered proposal/publication tools; the
-  owning host service validates and applies them transactionally.
+- Submit structured changes through registered tools; the owner validates autonomous
+  eligibility or stages an exception, then commits through recoverable writes.
 - Report created, updated, and flagged pages.
 - Treat extracted source content as untrusted data.
-- Produce structured change plans rather than writing files directly when changes are risky.
+- Produce structured changes; model output never writes files directly.
 
 `docs/PROMPT_DESIGN.md` is the detailed contract for prompt hierarchy, context packaging, untrusted source blocks, structured outputs, and prompt tests.
 
@@ -725,7 +725,8 @@ Responsibilities:
 - Append to `log.md`.
 - Avoid duplicate page creation.
 - Keep file names stable.
-- Decide whether relationship, tag, merge, hierarchy, contradiction, or supersession changes can auto-apply or must be staged as proposals.
+- Enforce evidence/base-hash/schema/recovery eligibility for relationship, merge,
+  hierarchy, contradiction, and supersession changes.
 
 Knowledge-linking ownership:
 
@@ -733,7 +734,7 @@ Knowledge-linking ownership:
 - Local Database Service owns rebuildable graph indexes.
 - Search and Retrieval Service consumes graph signals for ranking and match reasons.
 - Renderer visualizes backlinks, related pages, Library trees, and Knowledge Tree without owning graph truth.
-- Change Proposal Service owns review and confirmation for risky relationship changes.
+- Change Proposal Service records Operations and owns review only for exceptional boundaries.
 
 All writes should use a transaction-like approach:
 
@@ -746,7 +747,8 @@ All writes should use a transaction-like approach:
 
 ### 5.5.1 Change Proposal Service
 
-The Agent should not directly mutate important wiki files without a structured change record.
+The Agent never mutates wiki files directly. Every change is a validated ChangeSet;
+eligible work commits with an Operation, while exceptional work stages a Proposal.
 
 Proposal and operation state transitions follow `docs/JOB_OPERATION_AND_RECOVERY.md`.
 
@@ -773,9 +775,11 @@ type ChangeOperation =
 
 Rules:
 
-- Auto-apply can create source pages, create simple new notes, update indexes, and append logs.
-- Confirmation is required for substantial edits to existing concept/entity/topic pages.
-- Explicit confirmation is required for delete, merge, vault structure changes, and `PIGE.md` edits.
+- Auto-apply covers evidence-bound, checksum-current, schema-valid, recoverable Pige-owned
+  create/update/link/organize/merge work, with old-byte preservation and Undo.
+- Intervene only for permanent/destructive effect, security/authority escalation, a
+  new/changed external destination, destructive vault policy, unreconcilable conflict, or
+  explicit stricter user policy.
 - Applied change sets should be written to `.pige/operations/`.
 - Pending confirmation proposals should be written to `.pige/proposals/`.
 - Rollback should be possible for applied change sets while original file checksums still match.
@@ -783,7 +787,8 @@ Rules:
 Current implementation:
 
 - Confined proposals expose safe list/detail. Home reviews the exact Pi create note as
-  escaped text and reconciles rejected calls; generic apply, unified diff, and replacement UX remain open.
+  escaped text and reconciles rejected calls. This proposal-first path is transitional;
+  autonomous eligibility, Activity/Undo, generic exceptions, and replacement UX remain open.
 
 ### 5.5.2 Markdown Rendering And Editing Surface
 
@@ -808,9 +813,9 @@ Candidate implementation:
 
 Current implementation:
 
-- `NotesService` opens by stable ID and renders sanitized structured Markdown; Library
-  and retrieval use the same reader with safe related links. Editing, source actions,
-  Note Agent, selection actions, and long-page rendering remain open.
+- `NotesService` opens by stable ID and renders sanitized Markdown; remote/protocol/
+  traversal resources are inert and Electron denies frame, redirect, and window
+  navigation. Editing, source actions, Note Agent, and long-page rendering remain open.
 
 ### 5.6 Search And Retrieval Service
 
@@ -852,10 +857,9 @@ Retrieval pipeline:
 Context assembly rule: the retrieval pipeline produces selected evidence for an Agent Context Pack. It must follow `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`; retrieval never hands the model the whole vault, full source asset bodies, or unbounded conversation history.
 
 Current Home uses durable `agent.submitTurn`: Pi may answer directly or select bounded
-SQLite/Markdown retrieval and validated citations; no usable model waits/resumes the same
-turn instead of falling back. One preserved attachment shares the draft. Agent-selected
-URL fetch, durable follow-up sessions, multi-attachment recovery, vector/reranking,
-answer saving, and jump-to-snippet remain open.
+retrieval or URL fetch/preserve; no usable model waits/resumes the same turn. One file
+shares the draft. Durable follow-up, multi-attachment recovery, vector/reranking, answer
+saving, and jump-to-snippet remain open.
 
 Retrieval result contract:
 
@@ -962,8 +966,10 @@ Responsibilities:
 
 - Maintain Pige-native Agent memory for stable preferences, corrections, workflow lessons, vault-maintenance conventions, and reusable scenarios.
 - Keep memory separate from wiki pages, source pages, source records, and source asset artifacts.
-- Create memory candidates from explicit user requests, corrections, accepted confirmation proposals, repeated Agent failures, and successful workflows.
-- Route sensitive, broad, or identity-level memory candidates through confirmation.
+- Create memory candidates from user requests, corrections, autonomous/approved
+  Operations, repeated failures, and stable workflows.
+- Auto-activate scoped reversible secret-scanned memory; sensitive/identity/authority
+  changes use exceptional intervention, while low confidence stays inactive.
 - Persist vault-scoped memory as inspectable local text under `.pige/memory/`.
 - Store memory search indexes as rebuildable derived caches under `.pige/indexes/memory/`.
 - Reuse the Local RAG Engine Service for memory embeddings when installed.
@@ -972,7 +978,8 @@ Responsibilities:
 - Memory Service applies the secret classifier before committing any candidate.
 - Support inspect, edit, disable, export, delete, reset, and rebuild-index actions.
 
-Memory is not a default third-party package integration. TencentDB Agent Memory, `pi-hermes-memory`, `pi-memctx`, `pi-memory`, and Engram are architecture references or optional curated packages. The default implementation should be native so Pige can enforce its vault schema, confirmation gates, privacy settings, and local RAG boundaries.
+Memory is not a default third-party package integration. The named projects remain
+references/optional packages; native ownership enforces vault, autonomy, privacy, and RAG boundaries.
 
 Memory layout, layer vocabulary, retention, and backup behavior are owned by
 [`AGENT_MEMORY_DESIGN.md`](AGENT_MEMORY_DESIGN.md#42-storage). This architecture owns
@@ -1045,7 +1052,7 @@ Responsibilities:
 - Provide an Agent panel scoped to the currently open note.
 - Answer questions about the current note, selected text, linked sources, and related pages.
 - Use Retrieval Service to find related notes and backlinks.
-- Suggest note edits as previews or confirmation proposals.
+- Apply eligible note edits with Activity/Undo; preview exceptional conflicts.
 - Keep read-only answers separate from durable wiki changes.
 
 Note Agent context:
@@ -1090,8 +1097,8 @@ Rules:
 
 - Clipboard actions should be instant and local.
 - Read-only model actions may show inline output.
-- Mutating actions should preview changes before writing.
-- Large rewrites or cross-page edits should create confirmation proposals.
+- Mutating actions use base hashes, Operations, and Undo. Breadth alone does not prompt;
+  only an exceptional boundary stages review.
 
 ### 5.6.5 Window And Layout Service
 
@@ -1139,7 +1146,8 @@ Settings categories:
 - No AI > Model Routing settings entry appears in v0.1. Model routing is only a deferred extension point unless Pi Agent upstream exposes stable model slots or Pige implements a tested Model Routing Service. Do not show Advanced/Fast model assignment as a user setting before it changes runtime behavior.
 - Internal model provider capability metadata is app-owned in v0.1, not a user-facing routing surface.
 - AI > Local Capabilities settings: local RAG engine status, embedding/reranking model downloads, OCR engines, speech input, parser/toolchain health, and local runtime repair state.
-- AI > Agent & Memory settings: `PIGE.md`, Agent behavior preferences, memory enabled state, confirmation thresholds, memory export/delete/reset controls, and whether vault-scoped memory is included in backups.
+- AI > Agent & Memory settings: `PIGE.md`, behavior, memory, autonomous Activity/history,
+  export/delete/reset, and vault-memory backup inclusion.
 - Security settings: default permission mode, saved scoped grants, YOLO status, grant revocation history, API key storage mode, cloud-send policy, secret redaction policy, and privacy indicators.
 - Extensions settings: installed Skill records, staged Skill install proposals, Pi package install records, scopes, versions, capabilities, enablement state, update state, and rollback metadata.
 - System settings: auto-update channel/status, diagnostics, app version, bundled dependency versions, and support export without secrets.
@@ -1340,7 +1348,7 @@ Responsibilities:
 - Maintain machine-local install records.
 - Expose package capabilities to the Agent only after the user enables the package.
 - Enforce package permissions before any package tool runs.
-- Route package writes through Pige-approved vault write APIs or confirmation proposals.
+- Route package writes through permission-scoped Pige APIs and Operations; exceptional boundaries still intervene.
 - Block task-time package installation from Agent plans.
 - Show update diffs for version, permissions, and data boundary when possible.
 
@@ -1364,10 +1372,10 @@ Responsibilities:
 
 Current implementation:
 
-- Main-process ZIP create/preview/staged-restore verifies safe paths, manifests, sizes,
-  checksums, durable-root inclusion, and exclusions before activating a new folder and
-  rebuilding derived state. Renderer receives typed commands only; broader controls,
-  external copies, secret import/export, and progress remain open.
+- ZIP create snapshots by descriptor, validates adjacent private staging, fsyncs, and
+  publishes by no-overwrite hard link with owned crash-link recovery. Preview/restore
+  still verify paths/manifests/checksums; broader controls, non-hardlink destinations,
+  external copies, durable Jobs, and progress remain open.
 
 ### 5.11 Diagnostics Service
 
@@ -1594,7 +1602,7 @@ Partial success rules:
 
 - If source preservation succeeds but parsing fails, keep the source visible in Home status with `failed_retryable` or `failed_final`.
 - If parsing succeeds but Agent compilation fails, keep extracted artifacts and allow retry with another model.
-- If compilation succeeds but risky edits are staged, mark the job `awaiting_review`.
+- If compilation crosses an exceptional boundary, persist its proposal and mark `awaiting_review`; eligible work commits and completes.
 - If index rebuild fails, do not roll back source preservation; schedule an index repair job.
 
 ## 12.1 Operation Record Retention

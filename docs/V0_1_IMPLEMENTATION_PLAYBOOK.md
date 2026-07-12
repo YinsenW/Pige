@@ -12,7 +12,7 @@ This document is the sole owner of P0-P9 phase numbers, stable Build commitments
 
 The PRD owns scope. Phases must compose into one usable journey: install, open a vault,
 connect BYOK, converse through Pi, preserve sources, use local knowledge when relevant,
-produce portable Markdown, review risky changes, and back up/restore safely.
+grow portable Markdown autonomously with Activity/Undo, resolve rare exceptions, and back up/restore safely.
 
 ## 3. Implementation Strategy
 
@@ -45,7 +45,7 @@ Current implementation state, last reconciled 2026-07-11:
 | P4 | in progress | SQLite, lexical search, Library, and worker-backed rebuild foundations have evidence; the full scale and relationship exit set remains open. |
 | P5 | in progress | PDF, Office, static-web, direct-image macOS Vision OCR, Artifact, and recovery slices have evidence; cross-platform/document OCR and remaining P5 exits are still open. |
 | P6 | in progress | Lexical retrieval, cited Home answers, Reader, backlinks, and related-context foundations exist; local RAG, editing, Knowledge Tree, and full exits remain open. |
-| P7 | planned | Foundations may exist, but confirmation, memory, and conversation-lifecycle acceptance remains assigned below. |
+| P7 | planned | Foundations may exist, but autonomous Operation/Undo, exceptional decisions, memory, and conversation acceptance remains assigned below. |
 | P8 | planned | Skill, package, and permission-broker acceptance remains assigned below. |
 | P9 | planned | Backup/release foundations may exist, but full recovery, health, localization, accessibility, and release evidence remains open. |
 
@@ -260,12 +260,13 @@ Build:
 - [B3.04 -> E3.01] Unified Provider model inventory with auto-sync/Refresh, merged manual fallback, enable/alias controls, and provider-grouped Global Default.
 - [B3.05 -> E3.03] Typed pre-prompt/pre-credential egress decision with `ordinary_allowed` default, non-blocking cloud status, and user-selected stricter behavior.
 - [B3.06 -> E3.04] Basic ingest prompt path with untrusted-source boundaries.
-- [B3.07 -> E3.05] Structured output validation and low-confidence routing.
+- [B3.07 -> E3.05] Structured validation plus uncertainty replan/warn/abstain/exception routing.
 - [B3.08 -> E3.04] Source-page generation.
 - [B3.09 -> E3.04] Simple wiki-page generation.
 - [B3.10 -> E3.04] Append-only `log.md` update.
-- [B3.11 -> E3.06] Deterministic create-note proposal stage/review/apply service foundation.
-- [B3.12 -> E3.07] Complete Agent output and change-summary contract for title, summary, tags, topic, entities, related notes, Markdown/source pages, citations, index/log updates, and created/updated/skipped/failed/confirmation-needed results.
+- [B3.11 -> E3.06] Transitional deterministic create-note proposal/recovery foundation for exceptional review.
+- [B3.12 -> E3.07] Agent output/change summary for knowledge fields, citations, writes,
+  Operations/Undo, and created/updated/linked/skipped/failed/needs-attention results.
 - [B3.13 -> E3.08] Embedded Pi plus a schema-complete Pige Tool Registry; after source
   preservation Pi Agent alone selects semantic tools, with no host-fixed/parallel path.
 - [B3.14 -> E3.09] Versioned unified `agent_turn` ingress: probed explicit-protocol Provider binding,
@@ -274,15 +275,16 @@ Build:
 
 Agent Spine Gate: embedded Pi handles preserved text/documents/images, inspect,
 parse/selected OCR, bounded Home/ingest retrieval, cited publish, and exact create-note
-proposal stage/review/apply plus Home review. B3.13/E3.08 remains partial for catalog/risk routing,
+proposal stage/review/apply plus Home review. That proposal-first writer is transitional;
+B3.13/E3.08 remains partial for autonomous eligibility, Activity/Undo, catalog/risk routing,
 pre-publication replay/in-call cancellation, generic proposals/recovery, Broker, and
 remaining fixed routes. The v0.80.6 exception still forbids deep imports/forks/patches/
 parallel loops. Until E3.08 passes, pause non-blocking breadth; existing safe substrate
 and security/data-loss repairs may proceed.
 
 B3.14/E3.09 now proves direct/retrieved/file turns, waiting/resume, explicit protocol,
-and no renderer/Host semantic bypass. Agent-selected URL fetch/preserve, durable follow-up
-sessions, and signed packaged macOS/Windows BYOK remain open, so E3.09 is not complete.
+no Host bypass, and Pi-selected URL fetch/preserve with restart recovery. Durable
+follow-up/session and signed packaged macOS/Windows BYOK remain open; E3.09 is incomplete.
 
 B3.05 has the default, exact-destination disclosure, Home private allow/sensitive wait,
 matrix/profile-switch tests, and per-turn audits/drift rejection. Persisted stricter
@@ -302,15 +304,16 @@ Exit criteria:
   fallback, and resolve one enabled Global Default through the real Pi probe.
 - [E3.02] API keys do not appear in vault files, SQLite, logs, persisted prompts, diagnostics, operations, or backups.
 - [E3.03] Every external model attempt obtains a typed pre-prompt/pre-credential decision. Connected known destinations default to uninterrupted ordinary/private/bounded-large use with visible status; sensitive, restricted, unknown, changed, and stricter-policy cases enforce their gates.
-- [E3.04] Pasted text can become a source page, schema-valid wiki note, index update, and append-only log entry with source citations.
-- [E3.05] Invalid, unsupported, low-confidence, or hostile structured output is rejected or routed to warning/proposal without an unsafe durable write.
-- [E3.06] A risky generated change can be staged durably as a redacted proposal without being silently applied.
-- [E3.07] Agent ingest emits the required structured knowledge fields, traceable citations, source/wiki/index/log writes, and a deterministic action summary separating created, updated, skipped, failed, and confirmation-needed outcomes.
+- [E3.04] Pasted text can autonomously become a cited source page, schema-valid wiki note, index update, append-only log, and Operation when eligibility passes.
+- [E3.05] Invalid/hostile output is rejected; uncertainty replans, narrows, warns, preserves alternatives, abstains, or routes only a true exception without unsafe writes.
+- [E3.06] Irreversible/security/destination/conflict/stricter-policy exceptions stage
+  durably; current exact create-note review is transitional recovery evidence.
+- [E3.07] Agent ingest emits required knowledge/citation/write fields and a deterministic created/updated/linked/skipped/failed/needs-attention summary with recovery refs.
 - [E3.08] One preserved-source Pi vertical uses the selected model and registered tools
   to cited Markdown. One Host/catalog proves distinct Agent-chosen traces and replan;
   parser/OCR stays idle before its event, no-model preserves only, writes are tool-caused
   and retry-safe, and mutation gates reject direct/fixed/bypass paths. Sensitive-tool
-  Permission Broker acceptance remains Phase 8.
+  Pige-owned eligible writes need no Permission prompt; external/new-capability Broker acceptance remains Phase 8.
 - [E3.09] One real DeepSeek-first app path persists the user turn and `agent_turn`, keeps
   Global Default across restart, uses the selected probed binding with truthful status,
   waits/resumes without a model, answers ordinary empty-vault chat, retrieves cited
@@ -407,11 +410,11 @@ Raster images now run Pi inspect→OCR→inspect→publish over the verified mac
 
 PDF OCR evidence covers real Pi inspect→parse(`needs_ocr`)→OCR→inspect→publish, parser-selected pages, deterministic reuse, wait/resume, parent cancellation, empty-output stop, and separate native/OCR provenance. Existing renderer/OCR fixtures retain tamper, drift, incomplete-render, referenced-source, and recovery coverage; built-worker smoke rasterizes a real no-text page.
 
-Evidence exists for page-aware multi-Artifact Agent handoff -> independently checksummed native/OCR bodies -> sidecar pairing by Source ID, sidecar Artifact ID, kind, and body checksum -> bounded ordered Evidence Pack with supplemental-OCR reserve -> same-parent duplicate suppression -> collision-safe canonical locators -> statement-level `ev_NN` refs -> canonical Markdown citations. PDF parser sidecars now provide exact page character spans; unknown refs fail before write and missing refs force review without a fabricated locator.
+Evidence exists for page-aware multi-Artifact Agent handoff -> independently checksummed native/OCR bodies -> sidecar pairing by Source ID, sidecar Artifact ID, kind, and body checksum -> bounded ordered Evidence Pack with supplemental-OCR reserve -> same-parent duplicate suppression -> collision-safe canonical locators -> statement-level `ev_NN` refs -> canonical Markdown citations. PDF parser sidecars provide exact page spans; unknown/missing refs block publication and force replan/abstention without a fabricated locator.
 
 B5.11 adversarial evidence now covers URL Readability, DOCX, PDF, PPTX, and image-OCR handoff through the public ingest boundary. It verifies delimiter escaping, unchanged control-plane sentinels, deterministic note-path ownership, and strict rejection of model-authored control fields. Full Pi tool/Permission Broker runtime proof remains open, so E5.03 stays partial.
 
-B5.12/E5.04 evidence covers seven text, URL, PDF, PPTX, and image-OCR cases across six v0.1 locales, including mixed-language, contradictory-page, and low-confidence inputs. Executable gates enforce schema, citation coverage, support, recall, language, review routing, rendered locators, source-family retention, and negative controls; E5.04 is verified.
+B5.12/E5.04 evidence covers seven text, URL, PDF, PPTX, and image-OCR cases across six v0.1 locales, including mixed-language, contradictory-page, and low-confidence inputs. Executable gates enforce schema, citation coverage, support, recall, language, uncertainty routing, rendered locators, source-family retention, and negative controls; E5.04 is verified.
 
 Evidence exists for startup reconciliation of interrupted idempotent document/OCR/Agent jobs.
 
@@ -427,7 +430,7 @@ Deferred from this phase:
 
 Exit criteria:
 
-- [E5.01] URL, PDF, DOCX, and PPTX inputs produce a source record, preserved asset/reference, checksummed artifact, source page, and useful note or proposal with available locators.
+- [E5.01] URL, PDF, DOCX, and PPTX inputs produce a source record, preserved asset/reference, checksummed artifact, source page, and useful note or typed exception with available locators.
 - [E5.02] Core parser tools are registered and available without task-time downloads; optional OCR install/repair is explicit, checksummed, and user initiated.
 - [E5.03] Suspicious source instructions are delimited as untrusted content and cannot change settings, permissions, providers, tools, or `PIGE.md`.
 - [E5.04] Multilingual source-to-note golden fixtures pass schema, citation, unsupported-claim, and low-confidence routing checks.
@@ -446,10 +449,10 @@ Build:
 - [B6.05 -> E6.02] Explicit Qwen3 embedding-model download, verification, disable/remove, and status flow.
 - [B6.06 -> E6.02] Local RAG engine integration.
 - [B6.07 -> E6.02] Chunk indexing and rebuild status.
-- [B6.08 -> E6.05] Safe polished note-reader Markdown rendering.
+- [B6.08 -> E6.05] Reader strips remote/traversal resources and blocks Electron navigation; keyboard/long-page proof remains.
 - [B6.09 -> E6.07] Backlinks and related pages beyond the current basic Reader rail.
 - [B6.10 -> E6.06] Note Agent side panel with note-scoped context.
-- [B6.11 -> E6.06] Note Agent plus selection actions for copy, quote, ask, translate, polish, expand, summarize, and create-note, with proposal-gated mutations.
+- [B6.11 -> E6.06] Note Agent and selection actions with reversible autonomous mutations, Activity/Undo, and exception-only review.
 - [B6.12 -> E6.07] Simple explainable Knowledge Tree with rebuildable domain/topic/concept/source aggregates and source-backed navigation.
 - [B6.13 -> E6.08] Source-preserving Markdown editing with valid frontmatter, links, citations, and IME-safe input.
 - [B6.14 -> E6.09] Knowledge Tree visual semantics: domain/topic branch weight and fragment leaf quantity/density remain explainable, accessible, and source-backed.
@@ -473,22 +476,22 @@ Exit criteria:
 - [E6.03] Model calls receive selected snippets, policy/budget metadata, and citation refs, not the full vault or unbounded conversation history.
 - [E6.04] Retrieval fixtures pass expected top-result, grounded-summary, citation-coverage, and insufficient-evidence checks.
 - [E6.05] Note reader is sanitized, source-safe, keyboard reachable, and within the long-page rendering budget.
-- [E6.06] Note Agent and the full v0.1 selection-action set remain context-scoped; mutations create previewable proposals, local copy stays local, and translation remains an action rather than a separate workspace.
+- [E6.06] Note Agent/selection actions stay scoped; eligible mutations auto-apply with Operations/Undo, exceptional boundaries preview, copy stays local, and translation remains an action.
 - [E6.07] Backlinks, related pages, and Knowledge Tree aggregates rebuild from durable truth and navigate to supporting pages; no advanced graph analytics are exposed.
 - [E6.08] Markdown editing preserves valid frontmatter, clean portable source, wiki links, citations, IME composition, and external-edit conflict safety.
 - [E6.09] Knowledge Tree visual weight and density encodings are deterministic, keyboard/screen-reader interpretable, and traceable to rebuildable source-backed aggregates without exposing advanced graph analytics.
 - [E6.10] Retrieval, linking, and summarization fixtures enforce ranking, grounding, citation coverage, related-page, and insufficient-evidence thresholds without accepting a narrower ingest-only report.
 
-## 12. Phase 7: Confirmation, Memory, And Conversation Polish
+## 12. Phase 7: Autonomous Knowledge, Memory, And Conversation Polish
 
 Context pack: `docs/AGENT_MEMORY_DESIGN.md`; `docs/DATA_ARCHITECTURE.md`; `docs/UI_PROTOTYPE.md`; `docs/SECURITY_THREAT_MODEL.md`.
 
 Build:
 
-- [B7.01 -> E7.01] Home proposal cards and focused review foundation; dedicated/bulk management remains open.
-- [B7.02 -> E7.01] Bounded escaped new-page preview; unified update diff remains open.
-- [B7.03 -> E7.01] Exact create-note approve/reject/apply and conflict recovery; generic operations remain open.
-- [B7.04 -> E7.01] Body-free `create_page` Operation for the exact applied Agent note; remaining Agent writes stay open.
+- [B7.01 -> E7.01] Home autonomous Activity/Undo plus focused exceptional review; current proposal cards are transitional.
+- [B7.02 -> E7.01] Bounded escaped exceptional preview; unified conflict diff remains open.
+- [B7.03 -> E7.01] Exact create-note review/apply/conflict recovery foundation; autonomous eligibility and generic operations remain open.
+- [B7.04 -> E7.01] Body-free `create_page` Operation for the exact applied note; complete autonomous Agent-write coverage remains open.
 - [B7.05 -> E7.02] Explicit "remember this" flow with provenance.
 - [B7.06 -> E7.02] Memory inspection, disable, delete, export, and reset.
 - [B7.07 -> E7.05] Secret scanning before memory persistence.
@@ -502,11 +505,13 @@ Deferred from this phase:
 
 Exit criteria:
 
-- [E7.01] Risky edits are never silently applied; approve/reject decisions are durable, checksum conflicts block stale application, and every applied Agent write creates a redacted operation with job ID, model profile, source IDs, and changed paths.
+- [E7.01] Eligible evidence-bound recoverable edits auto-apply with redacted Operations and
+  Undo; irreversible/security/destination/unresolved-conflict/stricter-policy exceptions
+  use durable decisions and stale checks. Current exact create-note review is transitional.
 - [E7.02] Memory is inspectable, provenance-linked, scoped, reversible, exportable, and independent from note/source deletion.
 - [E7.03] Conversation history remains readable and restart-safe without duplicating large source assets or saved note bodies.
 - [E7.04] Compaction preserves event identity, source/job/operation references, decisions, and user-visible summaries while discarding only rebuildable detail.
-- [E7.05] Secret scanning and broad-behavior confirmation prevent sensitive or unsafe memory persistence.
+- [E7.05] Secret scanning precedes memory; scoped reversible memory may grow autonomously, while sensitive/authority-changing memory uses exceptional intervention.
 
 ## 13. Phase 8: Skills, Packages, And Permission Broker
 
@@ -534,8 +539,8 @@ Deferred from this phase:
 Exit criteria:
 
 - [E8.01] User can explicitly initiate Skill staging from Settings or chat, then inspect, install, enable, disable, update, uninstall, and export each supported Skill class with ZIP/path safety and declared capabilities.
-- [E8.02] Sensitive Skill/package actions pause in `waiting_permission`; deny and allow-once are explicit, redacted, restart-safe, and leave the app stable.
-- [E8.03] Scoped grants and YOLO auto-allow honor scope, provenance, visibility, revocation, and operation logging; no source/model/package input can enable them.
+- [E8.02] External Skill/package sensitive actions pause in `waiting_permission`; Pige-owned core knowledge tools do not. Deny/allow-once stay redacted and restart-safe.
+- [E8.03] External-capability grants and YOLO honor scope, provenance, visibility, revocation, and Operations; no source/model/package input can enable them or expand core authority.
 - [E8.04] Curated Pi packages can be searched, inspected, explicitly installed, enabled/disabled, updated, version-pinned, rolled back, and uninstalled; ordinary Agent jobs never install them implicitly.
 
 ## 14. Phase 9: Backup, Restore, Knowledge Health, Migration, And Release Hardening
@@ -575,7 +580,9 @@ Exit criteria:
 - [E9.02] Previewed fresh-folder restore validates archive paths and schemas, preserves stable IDs and durable records, resolves vault-copy identity explicitly, and rebuilds only derived state.
 - [E9.03] Versioned migration preserves durable data and stable IDs; failure has a documented rollback or repair path.
 - [E9.04] Trash-first lifecycle checks prove Agent, Skill, package, cleanup, compaction, repair, and reset cannot permanently delete durable knowledge or source evidence.
-- [E9.05] Knowledge Health deterministically finds the required issue classes and routes proposed repairs through safe auto-apply or confirmation without silent broad rewrites.
+- [E9.05] Knowledge Health deterministically finds the required issue classes; eligible
+  repairs auto-apply with Operations/Undo, while exact exceptions intervene and broad
+  rewrites never happen silently.
 - [E9.06] Core workflows pass smoke tests in `zh-Hans`, `en`, `ja`, `ko`, `fr`, and `de`, including CJK search and narrow long-label layouts.
 - [E9.07] Keyboard-only navigation, visible focus, accessible names/tooltips, readable contrast, reduced-motion behavior, and unavailable/error states pass the v0.1 accessibility baseline.
 - [E9.08] CI produces attributable macOS and supported Windows alpha artifacts; each core distributable is at or below 330,000,000 bytes excluding optional weights, packaged idle/ordinary-use memory and post-heavy-Job recovery pass the exact Performance and Reliability reference scenarios, the 10,000-page/100,000-chunk scale smoke passes, and license/signing/release-note evidence is recorded.

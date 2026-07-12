@@ -19,13 +19,10 @@ In Pige, files are sources. Markdown is the knowledge layer.
 ## 2. Core Product Statement
 
 Pige is a general Agent enhanced by an Agent-maintained local Markdown knowledge base.
-It can converse without local evidence and use personal knowledge without reorganizing
-the user's files.
-
-Local-first means durable local ownership, not network-free. After one disclosure,
-selecting a BYOK Profile authorizes routine bounded calls to that exact destination with
-quiet status. Higher-risk, unknown/changed, or stricter-policy gates remain; Provider
-trust grants no tool, setting, or source-policy authority.
+**Input once. Knowledge grows naturally.** It converses without local evidence and uses
+personal knowledge without reorganizing files. Local-first is durable ownership, not
+network-free or confirmation-first: one BYOK disclosure grants routine bounded calls to
+that exact destination; narrow content/drift gates grant no other authority.
 
 ## 3. Non-Negotiable Principles
 
@@ -54,17 +51,16 @@ Supported source ownership patterns:
 - Use a link strategy such as symlink or alias only when safe, supported, and explicit.
 - Add future storage adapters without rewriting the knowledge layer.
 
-### 3.4 Agent-Orchestrated, Tool-Constrained
+### 3.4 Autonomous By Default, Tool-Constrained
 
-Every user submission enters Pi Agent. Pige first preserves attached evidence when
-needed; Pi then owns whether to answer directly, retrieve, fetch, inspect, parse, OCR,
-organize, analyze, or change knowledge. Typed tools replace format rules and fixed
-product-service workflows.
-
-The Agent owns semantic decisions, not safety boundaries. Pige still enforces source
-preservation, permissions, egress, resource limits, provenance, durable Jobs, validation,
-confirmation, and atomic publication. If the Agent or model is unavailable, Pige keeps
-the source and waits visibly rather than running a hidden substitute pipeline.
+Every submission enters Pi. It answers or selects typed tools to retrieve, parse,
+organize, link, summarize, and grow knowledge. Normal validated reversible work applies
+autonomously. Host services enforce preservation, egress, provenance, limits, Jobs,
+validation, Operations, and recovery. Intervene only for irreversible destruction,
+authority/security escalation, destination drift, unreconcilable conflict, or an explicit
+stricter user policy; uncertainty
+chooses a conservative representation or abstention. Better models should increase
+autonomy inside the same service-enforced safety architecture.
 
 Folder management is secondary. Pige's main artifact is an AI-readable, user-readable
 Markdown knowledge base with provenance.

@@ -179,7 +179,7 @@ Rules:
 - Capture-only mode must not run a hidden format-driven parser/OCR/knowledge pipeline;
   configuring a model resumes the preserved source through Pi Agent orchestration.
 - Model-dependent jobs use `waiting_dependency` with `dependencyKind: "model_provider"`.
-- Configuring a valid default model should resume waiting jobs after user-visible confirmation or a clear "process saved captures" action.
+- Configuring a valid default model resumes waiting jobs automatically with quiet visible Activity; no second approval is required.
 - Resuming jobs must not duplicate source records, managed source copies, conversation events, or source pages.
 
 ## 8. Waiting Dependency Jobs
