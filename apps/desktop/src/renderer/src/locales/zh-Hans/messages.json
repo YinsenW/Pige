@@ -1,6 +1,7 @@
 {
   "activity.alreadyUndone": "这项更改已经撤销。",
   "activity.createdPage": "已创建知识笔记",
+  "activity.updatedPage": "已更新知识笔记",
   "activity.statusApplied": "已应用",
   "activity.statusUndone": "已撤销",
   "activity.title": "活动",

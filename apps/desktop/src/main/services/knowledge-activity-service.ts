@@ -12,6 +12,14 @@ import type {
 import { PigeDomainError } from "@pige/domain";
 import { parsePigeFrontmatter } from "@pige/markdown";
 import { OperationRecordSchema, type OperationRecord } from "@pige/schemas";
+import {
+  assertCompletedAgentPageUpdateUndo,
+  createAgentPageUpdateUndoOperationId,
+  finalizeAgentPageUpdateUndo,
+  hasAgentPageUpdateUndoMarker,
+  isMatchingAgentPageUpdateUndo,
+  readAgentPageUpdateOperationBinding
+} from "./agent-page-update-service";
 
 export interface KnowledgeActivityVaultPort {
   current(): VaultSummary | undefined;
@@ -69,7 +77,7 @@ export class KnowledgeActivityService {
     const scan = readOperationRecords(vaultPath);
     const undoByOperationId = createUndoOperationMap(scan.operations);
     const activities = scan.operations
-      .filter(isGeneratedCreatePageOperation)
+      .filter(isKnowledgeActivityOperation)
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt) || left.id.localeCompare(right.id));
 
     return {
@@ -95,7 +103,7 @@ export class KnowledgeActivityService {
     const vaultPath = this.#requireActiveVaultPath();
     const scan = readOperationRecords(vaultPath);
     const operation = scan.operations.find((candidate) => candidate.id === request.operationId);
-    if (!operation || !isGeneratedCreatePageOperation(operation)) {
+    if (!operation || !isKnowledgeActivityOperation(operation)) {
       throw new PigeDomainError("activity.not_allowed", "This Activity cannot be undone by the current bounded path.");
     }
     const existingUndo = createUndoOperationMap(scan.operations).get(operation.id);
@@ -109,7 +117,9 @@ export class KnowledgeActivityService {
     }
     assertUndoOperationIdentityAvailable(scan.operations, operation);
 
-    const undoOperation = finalizeCreatePageUndo(vaultPath, operation, true);
+    const undoOperation = isGeneratedCreatePageOperation(operation)
+      ? finalizeCreatePageUndo(vaultPath, operation, true)
+      : finalizeAgentPageUpdateUndo(vaultPath, operation, true);
     if (!undoOperation) {
       throw new PigeDomainError("activity.target_missing", "The generated page is no longer available to undo.");
     }
@@ -147,6 +157,24 @@ export class KnowledgeActivityService {
         failed += 1;
       }
     }
+    for (const operation of scan.operations.filter(isAgentPageUpdateOperation)) {
+      const existingUndo = undoByOperationId.get(operation.id);
+      if (existingUndo) {
+        try {
+          assertCompletedUndoState(vaultPath, operation, existingUndo);
+        } catch {
+          failed += 1;
+        }
+        continue;
+      }
+      try {
+        if (!hasAgentPageUpdateUndoMarker(vaultPath, operation)) continue;
+        assertUndoOperationIdentityAvailable(scan.operations, operation);
+        if (finalizeAgentPageUpdateUndo(vaultPath, operation, false)) recovered += 1;
+      } catch {
+        failed += 1;
+      }
+    }
     return { recovered, failed };
   }
 
@@ -169,6 +197,9 @@ function toActivitySummary(
   operation: OperationRecord,
   undoOperation: OperationRecord | undefined
 ): KnowledgeActivitySummary {
+  if (isAgentPageUpdateOperation(operation)) {
+    return toPageUpdateActivitySummary(vaultPath, operation, undoOperation);
+  }
   const targetLabel = readActivityTargetLabel(vaultPath, operation, undoOperation);
   if (undoOperation) {
     return {
@@ -248,11 +279,95 @@ function toActivitySummary(
   }
 }
 
+function toPageUpdateActivitySummary(
+  vaultPath: string,
+  operation: OperationRecord,
+  undoOperation: OperationRecord | undefined
+): KnowledgeActivitySummary {
+  const targetLabel = readActivityTargetLabel(vaultPath, operation, undoOperation);
+  if (undoOperation) {
+    return {
+      operationId: operation.id,
+      kind: "update_page",
+      createdAt: operation.createdAt,
+      ...(targetLabel ? { targetLabel } : {}),
+      status: "undone",
+      canUndo: false,
+      undoUnavailableReason: "already_undone"
+    };
+  }
+  const binding = readAgentPageUpdateOperationBinding(operation);
+  if (!binding) {
+    return {
+      operationId: operation.id,
+      kind: "update_page",
+      createdAt: operation.createdAt,
+      ...(targetLabel ? { targetLabel } : {}),
+      status: "applied",
+      canUndo: false,
+      undoUnavailableReason: "legacy_record"
+    };
+  }
+  const pagePath = resolveVaultPath(vaultPath, binding.pagePath);
+  if (!pathExists(pagePath)) {
+    return {
+      operationId: operation.id,
+      kind: "update_page",
+      createdAt: operation.createdAt,
+      ...(targetLabel ? { targetLabel } : {}),
+      status: "applied",
+      canUndo: false,
+      undoUnavailableReason: "target_missing"
+    };
+  }
+  try {
+    const current = readPrivateFile(vaultPath, pagePath, MAX_GENERATED_PAGE_BYTES, 1);
+    const canUndo = hashBytes(current.bytes) === binding.afterHash;
+    return {
+      operationId: operation.id,
+      kind: "update_page",
+      createdAt: operation.createdAt,
+      ...(targetLabel ? { targetLabel } : {}),
+      status: "applied",
+      canUndo,
+      ...(canUndo ? {} : { undoUnavailableReason: "content_changed" as const })
+    };
+  } catch {
+    return {
+      operationId: operation.id,
+      kind: "update_page",
+      createdAt: operation.createdAt,
+      ...(targetLabel ? { targetLabel } : {}),
+      status: "applied",
+      canUndo: false,
+      undoUnavailableReason: "content_changed"
+    };
+  }
+}
+
 function readActivityTargetLabel(
   vaultPath: string,
   operation: OperationRecord,
   undoOperation: OperationRecord | undefined
 ): string | undefined {
+  const updateBinding = readAgentPageUpdateOperationBinding(operation);
+  if (updateBinding) {
+    try {
+      const snapshot = readPrivateFile(
+        vaultPath,
+        resolveVaultPath(vaultPath, updateBinding.pagePath),
+        MAX_GENERATED_PAGE_BYTES,
+        1
+      );
+      const expectedHash = undoOperation ? updateBinding.beforeHash : updateBinding.afterHash;
+      if (hashBytes(snapshot.bytes) !== expectedHash) return undefined;
+      const title = parsePigeFrontmatter(snapshot.bytes.toString("utf8"))?.frontmatter.title
+        ?.replace(/\s+/gu, " ").trim().slice(0, 120);
+      return title || undefined;
+    } catch {
+      return undefined;
+    }
+  }
   const binding = generatedPageBinding(operation);
   if (!binding) return undefined;
   const relativePath = undoOperation?.targetRefs[0]?.path ?? operation.targetRefs[0]?.path;
@@ -569,12 +684,24 @@ function isGeneratedCreatePageOperation(operation: OperationRecord): boolean {
     path.posix.basename(target.path) === `${target.id}.md`;
 }
 
+function isAgentPageUpdateOperation(operation: OperationRecord): boolean {
+  return readAgentPageUpdateOperationBinding(operation) !== undefined;
+}
+
+function isKnowledgeActivityOperation(operation: OperationRecord): boolean {
+  return isGeneratedCreatePageOperation(operation) || isAgentPageUpdateOperation(operation);
+}
+
 function createUndoOperationMap(operations: readonly OperationRecord[]): Map<string, OperationRecord> {
   const result = new Map<string, OperationRecord>();
   const byId = new Map(operations.map((operation) => [operation.id, operation]));
   for (const operation of operations.filter(isGeneratedCreatePageOperation)) {
     const candidate = byId.get(createUndoOperationId(operation.id));
     if (candidate && isMatchingUndoOperation(operation, candidate)) result.set(operation.id, candidate);
+  }
+  for (const operation of operations.filter(isAgentPageUpdateOperation)) {
+    const candidate = byId.get(createAgentPageUpdateUndoOperationId(operation.id));
+    if (candidate && isMatchingAgentPageUpdateUndo(operation, candidate)) result.set(operation.id, candidate);
   }
   return result;
 }
@@ -583,8 +710,14 @@ function assertUndoOperationIdentityAvailable(
   operations: readonly OperationRecord[],
   operation: OperationRecord
 ): void {
-  const candidate = operations.find((entry) => entry.id === createUndoOperationId(operation.id));
-  if (candidate && !isMatchingUndoOperation(operation, candidate)) {
+  const candidateId = isAgentPageUpdateOperation(operation)
+    ? createAgentPageUpdateUndoOperationId(operation.id)
+    : createUndoOperationId(operation.id);
+  const candidate = operations.find((entry) => entry.id === candidateId);
+  const matches = candidate && (isAgentPageUpdateOperation(operation)
+    ? isMatchingAgentPageUpdateUndo(operation, candidate)
+    : isMatchingUndoOperation(operation, candidate));
+  if (candidate && !matches) {
     throw new PigeDomainError(
       "activity.operation_conflict",
       "The deterministic Undo Operation identity is already occupied by different audit facts."
@@ -625,6 +758,10 @@ function assertCompletedUndoState(
   operation: OperationRecord,
   undoOperation: OperationRecord
 ): void {
+  if (isAgentPageUpdateOperation(operation)) {
+    assertCompletedAgentPageUpdateUndo(vaultPath, operation, undoOperation);
+    return;
+  }
   if (!isMatchingUndoOperation(operation, undoOperation)) {
     throw new PigeDomainError("activity.operation_conflict", "The Undo Operation bindings are inconsistent.");
   }

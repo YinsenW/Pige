@@ -1889,7 +1889,9 @@ export class JobsService {
           result.reviewRequired ? "completed_with_warnings" : "completed",
           result.reviewRequired
             ? "Agent ingest created a wiki note that needs review."
-            : result.created ? "Agent ingest created a wiki note." : "Agent ingest wiki note already exists.",
+            : result.mutationKind === "update_page"
+              ? "Agent ingest updated an existing wiki note."
+              : result.created ? "Agent ingest created a wiki note." : "Agent ingest wiki note already exists.",
           "source",
           execution.control.durableWriteState(),
           result.operationIds
@@ -1898,7 +1900,10 @@ export class JobsService {
           failed += 1;
         } else {
           const warningSuffix = result.reviewRequired ? " Review is needed before treating it as clean knowledge." : "";
-          appendLog(vaultPath, `${new Date().toISOString()} Created wiki note [${result.title}](${result.pagePath}) from source \`${sourceRecordFile.sourceRecord.id}\`.${warningSuffix}`);
+          appendLog(
+            vaultPath,
+            `${new Date().toISOString()} ${result.mutationKind === "update_page" ? "Updated" : "Created"} wiki note [${result.title}](${result.pagePath}) from source \`${sourceRecordFile.sourceRecord.id}\`.${warningSuffix}`
+          );
           completed += 1;
         }
       } catch (caught) {
@@ -3302,6 +3307,10 @@ function recordAgentNotePublicationCheckpoint(
   checkpointId: string,
   binding: AgentIngestPublicationBinding
 ): void {
+  if (binding.mutationKind === "update_page") {
+    recordAgentPageUpdateCheckpoint(vaultPath, jobPath, checkpointId, binding);
+    return;
+  }
   const current = readJobRecordAtPath(jobPath);
   if (
     !current ||
@@ -3394,6 +3403,173 @@ function recordAgentNotePublicationCheckpoint(
   }));
 }
 
+function recordAgentPageUpdateCheckpoint(
+  vaultPath: string,
+  jobPath: string,
+  checkpointId: string,
+  binding: Extract<AgentIngestPublicationBinding, { readonly mutationKind: "update_page" }>
+): void {
+  const current = readJobRecordAtPath(jobPath);
+  if (
+    checkpointId !== "agent_existing_note_update_started" ||
+    !current ||
+    current.state !== "running" ||
+    current.sourceId !== binding.sourceId ||
+    current.policyContextId !== binding.policyContextId ||
+    current.policyHash !== binding.policyHash
+  ) {
+    throw new PigeDomainError(
+      "agent_ingest.page_conflict",
+      "The active Agent Job cannot bind its existing-note update."
+    );
+  }
+  const expectedInputRefs = [
+    {
+      kind: "source" as const,
+      id: binding.sourceId,
+      checksum: binding.sourceRevisionHash,
+      role: "publication_source_revision"
+    },
+    {
+      kind: "tool" as const,
+      id: binding.policyContextId,
+      checksum: binding.policyHash,
+      role: "publication_policy"
+    },
+    {
+      kind: "tool" as const,
+      id: `${binding.toolId}@${binding.toolVersion}`,
+      checksum: binding.canonicalInputHash,
+      role: "update_tool_input"
+    },
+    {
+      kind: "tool" as const,
+      id: "pige_agent_tool_catalog",
+      checksum: binding.catalogHash,
+      role: "agent_tool_catalog"
+    },
+    {
+      kind: "tool" as const,
+      id: "pi_tool_call_provenance",
+      checksum: binding.toolCallProvenanceHash,
+      role: "agent_tool_call_provenance"
+    },
+    {
+      kind: "page" as const,
+      id: binding.pageId,
+      path: binding.pagePath,
+      checksum: binding.beforeContentHash,
+      role: "update_target_base"
+    },
+    {
+      kind: "tool" as const,
+      id: binding.modelProfileId,
+      role: "update_model_profile"
+    },
+    ...binding.artifactIds.map((artifactId) => ({
+      kind: "artifact" as const,
+      id: artifactId,
+      role: "update_evidence_artifact"
+    }))
+  ];
+  const expectedOutputRefs = [
+    {
+      kind: "page" as const,
+      id: binding.pageId,
+      path: binding.pagePath,
+      checksum: binding.contentHash,
+      role: "expected_updated_note"
+    },
+    {
+      kind: "page" as const,
+      id: binding.pageId,
+      path: binding.beforePath,
+      checksum: binding.beforeContentHash,
+      role: "preserved_update_before"
+    },
+    {
+      kind: "page" as const,
+      id: binding.pageId,
+      path: binding.stagedPath,
+      checksum: binding.contentHash,
+      role: "staged_update_after"
+    },
+    {
+      kind: "operation" as const,
+      id: binding.operationId,
+      path: binding.operationPath,
+      role: "expected_update_operation"
+    }
+  ];
+  if (
+    readCheckpointFileHash(vaultPath, binding.pagePath, 1024 * 1024) !== binding.beforeContentHash ||
+    readCheckpointFileHash(vaultPath, binding.stagedPath, 1024 * 1024) !== binding.contentHash
+  ) {
+    throw new PigeDomainError(
+      "agent_ingest.page_conflict",
+      "The staged existing-note update does not match its base or result hash."
+    );
+  }
+  const matches = current.checkpoints?.filter((checkpoint) => checkpoint.id === checkpointId) ?? [];
+  if (matches.length > 1) {
+    throw new PigeDomainError("agent_ingest.page_conflict", "The existing-note update checkpoint is ambiguous.");
+  }
+  const existing = matches[0];
+  if (existing && !matchesAgentNotePublicationCheckpoint(
+    existing,
+    checkpointId,
+    expectedInputRefs,
+    expectedOutputRefs,
+    binding.contentHash
+  )) {
+    throw new PigeDomainError(
+      "agent_ingest.page_conflict",
+      "The existing-note update checkpoint changed before commit."
+    );
+  }
+  const now = new Date().toISOString();
+  const checkpoint = {
+    id: checkpointId,
+    step: checkpointId,
+    state: "running" as const,
+    startedAt: existing?.startedAt ?? now,
+    inputRefs: expectedInputRefs,
+    outputRefs: expectedOutputRefs,
+    checksumBefore: binding.beforeContentHash,
+    checksumAfter: binding.contentHash,
+    resumeHint: "Verify the exact target, before-image, staged result, and update Operation before adoption."
+  };
+  writeJsonAtomic(jobPath, JobRecordSchema.parse({
+    ...current,
+    checkpoints: [
+      ...(current.checkpoints ?? []).filter((candidate) => candidate.id !== checkpointId),
+      checkpoint
+    ],
+    updatedAt: now
+  }));
+}
+
+function readCheckpointFileHash(vaultPath: string, relativePath: string, maximumBytes: number): string | undefined {
+  const absolutePath = resolveCheckpointPath(vaultPath, relativePath);
+  try {
+    const stat = fs.lstatSync(absolutePath);
+    if (stat.isSymbolicLink() || !stat.isFile() || stat.nlink !== 1 || stat.size > maximumBytes) return undefined;
+    const content = fs.readFileSync(absolutePath);
+    const after = fs.lstatSync(absolutePath);
+    if (
+      after.isSymbolicLink() ||
+      after.dev !== stat.dev ||
+      after.ino !== stat.ino ||
+      after.size !== stat.size ||
+      after.mtimeMs !== stat.mtimeMs ||
+      after.ctimeMs !== stat.ctimeMs
+    ) return undefined;
+    return `sha256:${createHash("sha256").update(content).digest("hex")}`;
+  } catch {
+    return undefined;
+  }
+}
+
 function canReplaceUncommittedAgentNoteCheckpoint(
   vaultPath: string,
   checkpoint: NonNullable<JobRecord["checkpoints"]>[number],
@@ -3468,12 +3644,20 @@ function completeAgentNotePublicationCheckpoint(
       "The Agent Job disappeared before its generated-note checkpoint completed."
     );
   }
-  const matches = current.checkpoints?.filter(
-    (checkpoint) => checkpoint.id === "agent_note_publication_started"
-  ) ?? [];
+  const checkpointId = publication.mutationKind === "update_page"
+    ? "agent_existing_note_update_started"
+    : "agent_note_publication_started";
+  const pageRole = publication.mutationKind === "update_page"
+    ? "expected_updated_note"
+    : "expected_generated_note";
+  const operationRole = publication.mutationKind === "update_page"
+    ? "expected_update_operation"
+    : "expected_create_operation";
+  const matches = current.checkpoints?.filter((checkpoint) => checkpoint.id === checkpointId) ?? [];
   if (matches.length === 0) return;
   const checkpoint = matches[0];
-  const pageRef = checkpoint?.outputRefs.find((ref) => ref.role === "expected_generated_note");
+  const pageRef = checkpoint?.outputRefs.find((ref) => ref.role === pageRole);
+  const operationRef = checkpoint?.outputRefs.find((ref) => ref.role === operationRole);
   if (
     matches.length !== 1 ||
     !checkpoint ||
@@ -3481,7 +3665,12 @@ function completeAgentNotePublicationCheckpoint(
     pageRef?.kind !== "page" ||
     pageRef.id !== publication.pageId ||
     pageRef.path !== publication.pagePath ||
-    pageRef.checksum !== checkpoint.checksumAfter
+    pageRef.checksum !== checkpoint.checksumAfter ||
+    (publication.mutationKind === "update_page" && (
+      !publication.operationId ||
+      operationRef?.kind !== "operation" ||
+      operationRef.id !== publication.operationId
+    ))
   ) {
     throw new PigeDomainError(
       "agent_ingest.page_conflict",

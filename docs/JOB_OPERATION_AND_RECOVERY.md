@@ -532,13 +532,14 @@ Rules:
 
 Current Phase 3 implementation is narrower and transitional:
 
-- Exact proposals remain confined/ordered/restart-reconciled. Fresh direct/proposal and
-  checkpoint-proven same-Job recovered creates bind hash/path/policy/source revision. Before targets
-  exist only content hash may refresh; page-first adoption rechecks bytes. Legacy unbound/
-  hashless recovery stays non-undoable.
-- Activity admits one reversible generated-page create; Undo rechecks page/index/audit,
-  then private trash + `trash_page` precede rebuild.
-- Non-create/generic/restore/redo, completion tampering, CAS/TOCTOU, broad Activity/platforms remain open.
+- Exact proposals/create recovery retain their confined hash/path/policy/source rules;
+  legacy unbound creates stay non-undoable. One retrieved-note update binds source/policy/
+  catalog/input/call, target/base, private before, staged after, and Operation; page-first
+  adoption revalidates them without Pi or credentials.
+- Activity admits exact create/update: create Undo uses `trash_page`; update requires the
+  live after hash, restores exact before bytes, and writes an inverse `update_page`.
+- General patch/rename/link/organize/merge/delete, restore/redo, CAS/transactions, broad
+  Activity/history, and packaged platforms remain open.
 - `requiredPermissionIds` is a compatibility field for permission prerequisites and may contain canonical `permreq_` request IDs or `permdec_` decision IDs; a later schema may split, not reinterpret, it.
 
 ## 12. Operation Record Lifecycle
@@ -650,7 +651,7 @@ Recovery decisions:
 | --- | --- |
 | Source preserved, no selected child | Wake the Agent parent; never infer parse/OCR/retrieval from source shape. |
 | `agent_turn` has a valid assistant event | Adopt its checksum-bound output refs and finish without another model call. |
-| Generated-page Undo is interrupted | Adopt page/trash/index/quarantine/Operation only when IDs/hashes agree; else preserve/fail closed, then rebuild. |
+| Generated-page create/update Undo is interrupted | Adopt page/private-image/trash/index/quarantine/Operation only when IDs/hashes agree; else preserve/fail closed, then rebuild. |
 | Source copied, source record missing | Create repair proposal or source record if checksum/path proves source. |
 | Parse artifact exists, source page missing | Resume source page creation. |
 | Proposal ready, app crashed before display | Show proposal in Home status. |

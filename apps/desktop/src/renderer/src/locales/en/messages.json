@@ -1,6 +1,7 @@
 {
   "activity.alreadyUndone": "That change was already undone.",
   "activity.createdPage": "Knowledge note created",
+  "activity.updatedPage": "Knowledge note updated",
   "activity.statusApplied": "Applied",
   "activity.statusUndone": "Undone",
   "activity.title": "Activity",

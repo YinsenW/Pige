@@ -2551,7 +2551,7 @@ Consequences:
 - Pi decides semantics; Host validates provenance, policy, concurrency, recovery, and commit.
 - Core tools need no Permission prompt; extensions/new authority stay brokered and exact
   BYOK destinations retain standing egress authority.
-- Exact-page Activity/Undo is first; proposals stay transitional and non-create autonomy open.
+- Exact create plus one cited managed append has Activity/Undo; proposals stay transitional and broader non-create autonomy remains open.
 - Home uses quiet Activity/details/Undo, not routine confirmation cards.
 
 References:

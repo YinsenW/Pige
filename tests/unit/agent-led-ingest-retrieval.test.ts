@@ -1,7 +1,8 @@
 import fs from "node:fs";
+import { createHash } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   ModelProfileSummary,
   ProviderProfileSummary,
@@ -9,7 +10,10 @@ import type {
   RetrievalSearchResult,
   VaultSummary
 } from "@pige/contracts";
+import { PigeDomainError } from "@pige/domain";
 import {
+  JobRecordSchema,
+  OperationRecordSchema,
   SourceRecordSchema,
   type JobRecord,
   type OperationRecord,
@@ -22,12 +26,22 @@ import {
   type AgentIngestRetrievalPort,
   type AgentIngestRuntimePort
 } from "../../apps/desktop/src/main/services/agent-ingest-service";
+import {
+  AGENT_PAGE_UPDATE_CHECKPOINT_ID,
+  applyAgentPageUpdate,
+  createAgentPageUpdateBeforePath,
+  createAgentPageUpdateOperationId,
+  createAgentPageUpdateStagedPath,
+  recoverAgentPageUpdate,
+  type AgentPageUpdatePublicationBinding
+} from "../../apps/desktop/src/main/services/agent-page-update-service";
 import { CaptureService } from "../../apps/desktop/src/main/services/capture-service";
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
 import { extractPdfText } from "../../apps/desktop/src/main/services/pdf-parser-core";
 import { PdfParserService } from "../../apps/desktop/src/main/services/pdf-parser-service";
 import { ProposalService } from "../../apps/desktop/src/main/services/proposal-service";
+import { readCurrentRetrievalPageForMutation } from "../../apps/desktop/src/main/services/retrieval-evidence-boundary";
 import {
   PiAgentRuntimeAdapter,
   type PigeAgentToolDefinition,
@@ -44,6 +58,10 @@ const RELATED_PAGE_ID = "page_20260712_relatedabc";
 const RELATED_PAGE_PATH = "wiki/related-launch.md";
 const RELATED_TITLE = "Related launch plan";
 const RELATED_BODY = "The related page records the reviewed launch dependency graph.";
+const UPDATE_PAGE_ID = "page_20260710_existingupdate";
+const UPDATE_PAGE_PATH = "wiki/generated/2026/page_20260710_existingupdate.md";
+const UPDATE_PAGE_TITLE = "Existing managed knowledge";
+const UPDATE_PAGE_BODY = "User-authored knowledge remains byte-for-byte preserved.";
 
 const localRuntimeConfig: ModelProviderRuntimeConfig = {
   provider: {
@@ -186,6 +204,554 @@ describe("Agent-selected ingest retrieval tool", () => {
     } finally {
       network.restore();
     }
+  });
+
+  it("lets real Pi select one related managed note update with a durable checkpoint and no create fallback", async () => {
+    const fixture = makeVault();
+    writeUpdateTargetPage(fixture.vaultPath);
+    const before = fs.readFileSync(path.join(fixture.vaultPath, ...UPDATE_PAGE_PATH.split("/")), "utf8");
+    const runtime = new RecordingPiRuntime([
+      toolCall("pige_inspect_source", "inspect_update", {}),
+      toolCall("pige_search_knowledge", "search_update", { query: "existing managed knowledge" }),
+      toolCall("pige_update_knowledge_note", "update_existing_call", existingNoteUpdateInput())
+    ]);
+    const retrieval = new RecordingRetrievalPort(
+      fixture,
+      (request) => makeUpdateSearchResult(fixture, request.query)
+    );
+    const jobs = new JobsService(
+      fixture.vaultPort,
+      new AgentIngestService(modelPort(), runtime, undefined, undefined, undefined, retrieval)
+    );
+    const capture = submitText(fixture, "A newly preserved source adds one cited fact to existing knowledge.");
+    expect(jobs.processQueuedCaptures({ jobIds: [capture.jobId] }).completed).toBe(1);
+    const parent = requireValue(jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]);
+
+    expect(await jobs.processQueuedAgentIngest({ jobIds: [parent.id] })).toEqual({
+      processed: 1,
+      completed: 1,
+      failed: 0
+    });
+
+    const targetPath = path.join(fixture.vaultPath, ...UPDATE_PAGE_PATH.split("/"));
+    const after = fs.readFileSync(targetPath, "utf8");
+    const operations = readOperations(fixture.vaultPath);
+    const update = requireValue(operations.find((operation) => operation.kind === "update_page"));
+    const completedJob = readJob(fixture.vaultPath, parent.id);
+    const checkpoint = requireValue(completedJob.checkpoints?.find(
+      (candidate) => candidate.id === AGENT_PAGE_UPDATE_CHECKPOINT_ID
+    ));
+    const beforePath = requireValue(update.before?.path);
+
+    expect(runtime.results[0]?.invokedTools).toEqual([
+      "pige_inspect_source",
+      "pige_search_knowledge",
+      "pige_update_knowledge_note"
+    ]);
+    expect(operations.filter((operation) => operation.kind === "create_page")).toEqual([]);
+    expect(update).toMatchObject({
+      jobId: parent.id,
+      actor: { kind: "pige_agent" },
+      modelProfileId: localRuntimeConfig.model.id,
+      targetRefs: [{ kind: "page", id: UPDATE_PAGE_ID, path: UPDATE_PAGE_PATH }],
+      reversible: "yes"
+    });
+    expect(fs.readFileSync(path.join(fixture.vaultPath, ...beforePath.split("/")), "utf8")).toBe(before);
+    expect(after).toContain(UPDATE_PAGE_BODY);
+    expect(after).toContain("<!-- pige:managed:start agent-update");
+    expect(after).toContain(`[source:${capture.sourceId}#source]`);
+    expect(after).toContain(`source_ids: ["${capture.sourceId}"]`);
+    expect(checkpoint).toMatchObject({
+      state: "done",
+      checksumBefore: update.before?.id,
+      checksumAfter: update.after?.id
+    });
+    expect(checkpoint.inputRefs).toEqual(expect.arrayContaining([
+      expect.objectContaining({ role: "update_target_base", id: UPDATE_PAGE_ID }),
+      expect.objectContaining({ role: "agent_tool_catalog" }),
+      expect.objectContaining({ role: "update_tool_input" }),
+      expect.objectContaining({ role: "agent_tool_call_provenance" })
+    ]));
+    const durable = JSON.stringify({ completedJob, update });
+    expect(durable).not.toContain("update_existing_call");
+    expect(durable).not.toContain(UPDATE_PAGE_BODY);
+  });
+
+  it("recovers a page-first existing-note update without another model or duplicate Operation", async () => {
+    const fixture = makeVault();
+    writeUpdateTargetPage(fixture.vaultPath);
+    const prepared = prepareAgentSource(fixture, "Crash-window source evidence for an existing note update.");
+    const searchItem = requireValue(makeUpdateSearchResult(fixture, "existing managed knowledge").results[0]);
+    const target = readCurrentRetrievalPageForMutation(fixture.vaultPath, searchItem);
+    let durableBinding: AgentPageUpdatePublicationBinding | undefined;
+    const originalOpen = fs.openSync.bind(fs);
+    const openSpy = vi.spyOn(fs, "openSync").mockImplementation((filePath, flags, mode) => {
+      if (
+        durableBinding &&
+        String(filePath).includes(`${path.sep}.pige${path.sep}operations${path.sep}`) &&
+        String(filePath).includes(`.${durableBinding.operationId}.`)
+      ) {
+        throw new Error("synthetic crash before update Operation commit");
+      }
+      return originalOpen(filePath, flags, mode);
+    });
+    try {
+      expect(() => applyAgentPageUpdate({
+        vaultPath: fixture.vaultPath,
+        job: prepared.parent,
+        sourceRecord: prepared.source,
+        target,
+        modelProfileId: localRuntimeConfig.model.id,
+        policyContextId: "policyctx_existing_update",
+        policyHash: syntheticHash("policy"),
+        toolId: "pige_update_knowledge_note",
+        toolVersion: "1",
+        catalogHash: syntheticHash("catalog"),
+        canonicalInputHash: syntheticHash("input"),
+        toolCallProvenanceHash: syntheticHash("call"),
+        artifactIds: [],
+        summary: {
+          text: "The new source adds one verified fact.",
+          citations: [`[source:${prepared.source.id}#source]`]
+        },
+        keyPoints: [],
+        confidence: "high",
+        onPublicationStart: (binding) => { durableBinding = binding; }
+      })).toThrowError(PigeDomainError);
+    } finally {
+      openSpy.mockRestore();
+    }
+    const binding = requireValue(durableBinding);
+    expect(fs.readFileSync(path.join(fixture.vaultPath, ...binding.pagePath.split("/")), "utf8"))
+      .toContain("The new source adds one verified fact.");
+    expect(readOperations(fixture.vaultPath).filter((operation) => operation.kind === "update_page"))
+      .toEqual([]);
+    const recoveringJob = JobRecordSchema.parse({
+      ...prepared.parent,
+      state: "running",
+      policyContextId: binding.policyContextId,
+      policyHash: binding.policyHash,
+      checkpoints: [createUpdateCheckpoint(binding)]
+    });
+
+    const first = requireValue(recoverAgentPageUpdate({
+      vaultPath: fixture.vaultPath,
+      job: recoveringJob,
+      sourceRecord: prepared.source
+    }));
+    const second = requireValue(recoverAgentPageUpdate({
+      vaultPath: fixture.vaultPath,
+      job: recoveringJob,
+      sourceRecord: prepared.source
+    }));
+
+    expect(first.recovered).toBe(true);
+    expect(second.operation.id).toBe(first.operation.id);
+    expect(readOperations(fixture.vaultPath).filter((operation) => operation.kind === "update_page"))
+      .toHaveLength(1);
+    expect(fs.existsSync(path.join(fixture.vaultPath, ...binding.stagedPath.split("/")))).toBe(false);
+  });
+
+  it("rejects a tampered recovery target before touching an unrelated vault file", () => {
+    const fixture = makeVault();
+    writeUpdateTargetPage(fixture.vaultPath);
+    const prepared = prepareAgentSource(fixture, "Tampered recovery paths must never redirect an Agent update.");
+    const searchItem = requireValue(makeUpdateSearchResult(fixture, "existing managed knowledge").results[0]);
+    const target = readCurrentRetrievalPageForMutation(fixture.vaultPath, searchItem);
+    let durableBinding: AgentPageUpdatePublicationBinding | undefined;
+    expect(() => applyAgentPageUpdate({
+      ...directUpdateInput(fixture.vaultPath, prepared, target),
+      onPublicationStart: (binding) => {
+        durableBinding = binding;
+        throw new Error("synthetic interruption after durable update checkpoint input");
+      }
+    })).toThrow("synthetic interruption after durable update checkpoint input");
+    const binding = requireValue(durableBinding);
+    const unrelatedPath = "wiki/unrelated-user-page.md";
+    const unrelatedAbsolutePath = path.join(fixture.vaultPath, ...unrelatedPath.split("/"));
+    const unrelatedBytes = "User-owned unrelated bytes must remain unchanged.\n";
+    fs.mkdirSync(path.dirname(unrelatedAbsolutePath), { recursive: true });
+    fs.writeFileSync(unrelatedAbsolutePath, unrelatedBytes, "utf8");
+    const checkpoint = createUpdateCheckpoint(binding);
+    const tamperedCheckpoint = {
+      ...checkpoint,
+      inputRefs: checkpoint.inputRefs.map((ref) => ref.role === "update_target_base"
+        ? { ...ref, path: unrelatedPath }
+        : ref),
+      outputRefs: checkpoint.outputRefs.map((ref) => ref.role === "expected_updated_note"
+        ? { ...ref, path: unrelatedPath }
+        : ref)
+    };
+    const recoveringJob = JobRecordSchema.parse({
+      ...prepared.parent,
+      state: "running",
+      policyContextId: binding.policyContextId,
+      policyHash: binding.policyHash,
+      checkpoints: [tamperedCheckpoint]
+    });
+
+    expect(() => recoverAgentPageUpdate({
+      vaultPath: fixture.vaultPath,
+      job: recoveringJob,
+      sourceRecord: prepared.source
+    })).toThrowError(PigeDomainError);
+    expect(fs.readFileSync(unrelatedAbsolutePath, "utf8")).toBe(unrelatedBytes);
+    expect(fs.readFileSync(path.join(fixture.vaultPath, ...UPDATE_PAGE_PATH.split("/")), "utf8"))
+      .not.toContain("The new source adds one verified fact.");
+    expect(readOperations(fixture.vaultPath).filter((operation) => operation.kind === "update_page"))
+      .toEqual([]);
+  });
+
+  it("rejects a conflicting deterministic update Operation before staging or replacing the page", () => {
+    const fixture = makeVault();
+    writeUpdateTargetPage(fixture.vaultPath);
+    const prepared = prepareAgentSource(fixture, "An occupied Operation identity must fail before page mutation.");
+    const item = requireValue(makeUpdateSearchResult(fixture, "existing managed knowledge").results[0]);
+    const target = readCurrentRetrievalPageForMutation(fixture.vaultPath, item);
+    const targetPath = path.join(fixture.vaultPath, ...UPDATE_PAGE_PATH.split("/"));
+    const before = fs.readFileSync(targetPath, "utf8");
+    const operationId = createAgentPageUpdateOperationId(prepared.parent.id, UPDATE_PAGE_ID);
+    const dateKey = requireValue(/^op_(\d{8})_/u.exec(operationId)?.[1]);
+    const operationPath = path.join(
+      fixture.vaultPath,
+      ".pige",
+      "operations",
+      dateKey.slice(0, 4),
+      dateKey.slice(4, 6),
+      `${operationId}.json`
+    );
+    const conflictingOperation = OperationRecordSchema.parse({
+      id: operationId,
+      schemaVersion: 1,
+      jobId: prepared.parent.id,
+      createdAt: prepared.parent.createdAt,
+      actor: {
+        kind: "pige_agent",
+        runtimeKind: "desktop_local",
+        clientCapabilityTier: "desktop_full"
+      },
+      permissionDecisionIds: [],
+      kind: "update_page",
+      targetRefs: [{ kind: "page", id: UPDATE_PAGE_ID, path: UPDATE_PAGE_PATH }],
+      sourceRefs: [{ kind: "job", id: prepared.parent.id }],
+      before: { kind: "page", id: syntheticHash("occupied-before"), path: UPDATE_PAGE_PATH },
+      after: { kind: "page", id: syntheticHash("occupied-after"), path: UPDATE_PAGE_PATH },
+      summary: "Synthetic conflicting Operation identity.",
+      reversible: "no",
+      warnings: []
+    });
+    fs.mkdirSync(path.dirname(operationPath), { recursive: true });
+    fs.writeFileSync(operationPath, `${JSON.stringify(conflictingOperation, null, 2)}\n`, {
+      encoding: "utf8",
+      mode: 0o600
+    });
+    let publicationStarts = 0;
+
+    expect(() => applyAgentPageUpdate({
+      ...directUpdateInput(fixture.vaultPath, prepared, target),
+      onPublicationStart: () => { publicationStarts += 1; }
+    })).toThrowError(PigeDomainError);
+
+    expect(publicationStarts).toBe(0);
+    expect(fs.readFileSync(targetPath, "utf8")).toBe(before);
+    expect(fs.readFileSync(operationPath, "utf8")).toBe(`${JSON.stringify(conflictingOperation, null, 2)}\n`);
+    expect(fs.existsSync(path.join(
+      fixture.vaultPath,
+      ...createAgentPageUpdateStagedPath(operationId).split("/")
+    ))).toBe(false);
+    expect(fs.existsSync(path.join(
+      fixture.vaultPath,
+      ...createAgentPageUpdateBeforePath(operationId).split("/")
+    ))).toBe(false);
+    expect(fs.existsSync(path.join(fixture.vaultPath, ".pige", "trash", "page-updates"))).toBe(false);
+  });
+
+  it.each(["archived", "missing_source", "conflict"] as const)(
+    "does not autonomously update a %s generated note",
+    (status) => {
+      const fixture = makeVault();
+      writeUpdateTargetPage(fixture.vaultPath);
+      const targetPath = path.join(fixture.vaultPath, ...UPDATE_PAGE_PATH.split("/"));
+      const before = fs.readFileSync(targetPath, "utf8").replace('status: "active"', `status: "${status}"`);
+      fs.writeFileSync(targetPath, before, "utf8");
+      const prepared = prepareAgentSource(fixture, `A ${status} note is not an autonomous update target.`);
+      const indexed = requireValue(makeUpdateSearchResult(fixture, "existing managed knowledge").results[0]);
+      const target = readCurrentRetrievalPageForMutation(fixture.vaultPath, {
+        ...indexed,
+        summary: { ...indexed.summary, status }
+      });
+      let publicationStarts = 0;
+
+      expect(() => applyAgentPageUpdate({
+        ...directUpdateInput(fixture.vaultPath, prepared, target),
+        onPublicationStart: () => { publicationStarts += 1; }
+      })).toThrowError(PigeDomainError);
+      expect(publicationStarts).toBe(0);
+      expect(fs.readFileSync(targetPath, "utf8")).toBe(before);
+      expect(readOperations(fixture.vaultPath).filter((operation) => operation.kind === "update_page"))
+        .toEqual([]);
+      expect(fs.existsSync(path.join(fixture.vaultPath, ".pige", "trash", "page-updates"))).toBe(false);
+    }
+  );
+
+  it.each([
+    {
+      name: "duplicate reserved status field",
+      mutate: (markdown: string) => markdown.replace('status: "active"', 'status: "active"\nstatus: "active"')
+    },
+    {
+      name: "unbalanced managed block",
+      mutate: (markdown: string) => `${markdown}\n<!-- pige:managed:start malformed -->\n`
+    }
+  ])("blocks a target with $name before checkpoint or write", ({ mutate }) => {
+    const fixture = makeVault();
+    writeUpdateTargetPage(fixture.vaultPath);
+    const targetPath = path.join(fixture.vaultPath, ...UPDATE_PAGE_PATH.split("/"));
+    const before = mutate(fs.readFileSync(targetPath, "utf8"));
+    fs.writeFileSync(targetPath, before, "utf8");
+    const prepared = prepareAgentSource(fixture, "Malformed generated Markdown must fail before update staging.");
+    const indexed = requireValue(makeUpdateSearchResult(fixture, "existing managed knowledge").results[0]);
+    const target = readCurrentRetrievalPageForMutation(fixture.vaultPath, indexed);
+    let publicationStarts = 0;
+
+    expect(() => applyAgentPageUpdate({
+      ...directUpdateInput(fixture.vaultPath, prepared, target),
+      onPublicationStart: () => { publicationStarts += 1; }
+    })).toThrowError(PigeDomainError);
+    expect(publicationStarts).toBe(0);
+    expect(fs.readFileSync(targetPath, "utf8")).toBe(before);
+    expect(readOperations(fixture.vaultPath).filter((operation) => operation.kind === "update_page"))
+      .toEqual([]);
+    expect(fs.existsSync(path.join(fixture.vaultPath, ".pige", "trash", "page-updates"))).toBe(false);
+  });
+
+  it("retries a page-first Agent update through Jobs without runtime config, credentials, or another Pi turn", async () => {
+    const fixture = makeVault();
+    writeUpdateTargetPage(fixture.vaultPath);
+    const retrieval = new RecordingRetrievalPort(
+      fixture,
+      (request) => makeUpdateSearchResult(fixture, request.query)
+    );
+    const firstRuntime = new RecordingPiRuntime([
+      toolCall("pige_inspect_source", "inspect_restart_update", {}),
+      toolCall("pige_search_knowledge", "search_restart_update", { query: "existing knowledge" }),
+      toolCall("pige_update_knowledge_note", "update_restart_call", existingNoteUpdateInput())
+    ]);
+    const firstJobs = new JobsService(
+      fixture.vaultPort,
+      new AgentIngestService(modelPort(), firstRuntime, undefined, undefined, undefined, retrieval)
+    );
+    const capture = submitText(fixture, "Restart recovery must adopt the exact Agent-selected update.");
+    expect(firstJobs.processQueuedCaptures({ jobIds: [capture.jobId] }).completed).toBe(1);
+    const parentId = requireValue(firstJobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]?.id);
+    const originalOpen = fs.openSync.bind(fs);
+    let failedOperationCommit = false;
+    const openSpy = vi.spyOn(fs, "openSync").mockImplementation((filePath, flags, mode) => {
+      const candidate = String(filePath);
+      if (
+        !failedOperationCommit &&
+        candidate.includes(`${path.sep}.pige${path.sep}operations${path.sep}`) &&
+        path.basename(candidate).startsWith(".op_") &&
+        candidate.endsWith(".tmp")
+      ) {
+        failedOperationCommit = true;
+        throw new Error("synthetic page-first update crash");
+      }
+      return originalOpen(filePath, flags, mode);
+    });
+    try {
+      expect(await firstJobs.processQueuedAgentIngest({ jobIds: [parentId] })).toEqual({
+        processed: 1,
+        completed: 0,
+        failed: 1
+      });
+    } finally {
+      openSpy.mockRestore();
+    }
+    expect(failedOperationCommit).toBe(true);
+    expect(readJob(fixture.vaultPath, parentId)).toMatchObject({
+      state: "failed_retryable",
+      checkpoints: [expect.objectContaining({ id: AGENT_PAGE_UPDATE_CHECKPOINT_ID, state: "running" })]
+    });
+    let runtimeConfigReads = 0;
+    let runtimeCalls = 0;
+    const restarted = new JobsService(
+      fixture.vaultPort,
+      new AgentIngestService(
+        modelPort(localRuntimeConfig, () => { runtimeConfigReads += 1; }),
+        new FunctionalRuntime(async () => {
+          runtimeCalls += 1;
+          throw new Error("Recovery must not enter Pi.");
+        }),
+        undefined,
+        undefined,
+        undefined,
+        retrieval
+      )
+    );
+    expect(restarted.retry({ jobId: parentId })).toMatchObject({ status: "requeued" });
+    expect(await restarted.processQueuedAgentIngest({ jobIds: [parentId] })).toEqual({
+      processed: 1,
+      completed: 1,
+      failed: 0
+    });
+
+    expect(runtimeConfigReads).toBe(0);
+    expect(runtimeCalls).toBe(0);
+    expect(readOperations(fixture.vaultPath).filter((operation) => operation.kind === "update_page"))
+      .toHaveLength(1);
+    expect(readJob(fixture.vaultPath, parentId)).toMatchObject({
+      state: "completed",
+      checkpoints: [expect.objectContaining({ id: AGENT_PAGE_UPDATE_CHECKPOINT_ID, state: "done" })]
+    });
+    expect(fs.readFileSync(path.join(fixture.vaultPath, ...UPDATE_PAGE_PATH.split("/")), "utf8"))
+      .toContain("The newly preserved source adds one verified fact");
+  });
+
+  it("cancels before the durable update boundary and removes the private staged replacement", () => {
+    const fixture = makeVault();
+    writeUpdateTargetPage(fixture.vaultPath);
+    const prepared = prepareAgentSource(fixture, "Cancellation before publication must preserve the existing note.");
+    const item = requireValue(makeUpdateSearchResult(fixture, "existing note").results[0]);
+    const target = readCurrentRetrievalPageForMutation(fixture.vaultPath, item);
+    const before = fs.readFileSync(path.join(fixture.vaultPath, ...UPDATE_PAGE_PATH.split("/")), "utf8");
+    let publicationStarts = 0;
+
+    expect(() => applyAgentPageUpdate({
+      vaultPath: fixture.vaultPath,
+      job: prepared.parent,
+      sourceRecord: prepared.source,
+      target,
+      modelProfileId: localRuntimeConfig.model.id,
+      policyContextId: "policyctx_cancel_update",
+      policyHash: syntheticHash("cancel-policy"),
+      toolId: "pige_update_knowledge_note",
+      toolVersion: "1",
+      catalogHash: syntheticHash("cancel-catalog"),
+      canonicalInputHash: syntheticHash("cancel-input"),
+      toolCallProvenanceHash: syntheticHash("cancel-call"),
+      artifactIds: [],
+      summary: { text: "Cancelled update.", citations: [`[source:${prepared.source.id}#source]`] },
+      keyPoints: [],
+      confidence: "high",
+      throwIfCancellationRequested: () => { throw new Error("synthetic pre-publication cancellation"); },
+      onPublicationStart: () => { publicationStarts += 1; }
+    })).toThrow("synthetic pre-publication cancellation");
+
+    const operationId = createAgentPageUpdateOperationId(prepared.parent.id, UPDATE_PAGE_ID);
+    expect(publicationStarts).toBe(0);
+    expect(fs.readFileSync(path.join(fixture.vaultPath, ...UPDATE_PAGE_PATH.split("/")), "utf8")).toBe(before);
+    expect(fs.existsSync(path.join(
+      fixture.vaultPath,
+      ...createAgentPageUpdateStagedPath(operationId).split("/")
+    ))).toBe(false);
+    expect(fs.existsSync(path.join(
+      fixture.vaultPath,
+      ...createAgentPageUpdateBeforePath(operationId).split("/")
+    ))).toBe(false);
+    expect(readOperations(fixture.vaultPath).filter((operation) => operation.kind === "update_page"))
+      .toEqual([]);
+  });
+
+  it.each([
+    {
+      name: "unknown opaque ref",
+      args: { ...existingNoteUpdateInput(), targetPageRef: "related_02" },
+      expectedCode: "agent_ingest.update_target_invalid",
+      eligibleTarget: true
+    },
+    {
+      name: "non-managed related note",
+      args: existingNoteUpdateInput(),
+      expectedCode: "agent_ingest.update_target_ineligible",
+      eligibleTarget: false
+    },
+    {
+      name: "low-confidence update",
+      args: { ...existingNoteUpdateInput(), confidence: "low" },
+      expectedCode: "agent_ingest.update_not_eligible",
+      eligibleTarget: true
+    },
+    {
+      name: "restricted secret-shaped output",
+      args: {
+        ...existingNoteUpdateInput(),
+        summary: { text: '{"apiKey":"opaque-value-123456"}', evidenceRefs: ["ev_01"] }
+      },
+      expectedCode: "agent_ingest.update_content_restricted",
+      eligibleTarget: true
+    }
+  ])("blocks $name before any existing-note write", async ({ args, expectedCode, eligibleTarget }) => {
+    const fixture = makeVault();
+    if (eligibleTarget) writeUpdateTargetPage(fixture.vaultPath);
+    const prepared = prepareAgentSource(fixture, "Unsafe update attempts must not change durable knowledge.");
+    const targetPath = path.join(
+      fixture.vaultPath,
+      ...(eligibleTarget ? UPDATE_PAGE_PATH : RELATED_PAGE_PATH).split("/")
+    );
+    const before = fs.readFileSync(targetPath, "utf8");
+    const retrieval = new RecordingRetrievalPort(fixture, (request) => eligibleTarget
+      ? makeUpdateSearchResult(fixture, request.query)
+      : makeSearchResult(fixture, request.query));
+    const runtime = new FunctionalRuntime(async (request) => {
+      await invokeTool(request, "pige_inspect_source", {}, `inspect_${expectedCode}`);
+      await invokeTool(request, "pige_search_knowledge", { query: "bounded update" }, `search_${expectedCode}`);
+      await request.beforeModelTurn?.();
+      await invokeTool(request, "pige_update_knowledge_note", args, `update_${expectedCode}`);
+      return runtimeResult(request, []);
+    });
+
+    await expect(new AgentIngestService(
+      modelPort(),
+      runtime,
+      undefined,
+      undefined,
+      undefined,
+      retrieval
+    ).ingestSource(fixture.vaultPath, prepared.source, prepared.parent)).rejects.toMatchObject({
+      code: expectedCode
+    });
+    expect(fs.readFileSync(targetPath, "utf8")).toBe(before);
+    expect(readOperations(fixture.vaultPath).filter((operation) => operation.kind === "update_page"))
+      .toEqual([]);
+  });
+
+  it("revalidates the exact update target after model evaluation and before replacement", async () => {
+    const fixture = makeVault();
+    writeUpdateTargetPage(fixture.vaultPath);
+    const prepared = prepareAgentSource(fixture, "An update target must remain checksum-current until commit.");
+    const retrieval = new RecordingRetrievalPort(
+      fixture,
+      (request) => makeUpdateSearchResult(fixture, request.query)
+    );
+    const runtime = new FunctionalRuntime(async (request) => {
+      await invokeTool(request, "pige_inspect_source", {}, "inspect_update_drift");
+      await invokeTool(request, "pige_search_knowledge", { query: "managed note" }, "search_update_drift");
+      await request.beforeModelTurn?.();
+      mutateUpdateTarget(fixture.vaultPath);
+      await invokeTool(
+        request,
+        "pige_update_knowledge_note",
+        existingNoteUpdateInput(),
+        "update_after_drift"
+      );
+      return runtimeResult(request, []);
+    });
+
+    await expect(new AgentIngestService(
+      modelPort(),
+      runtime,
+      undefined,
+      undefined,
+      undefined,
+      retrieval
+    ).ingestSource(fixture.vaultPath, prepared.source, prepared.parent)).rejects.toMatchObject({
+      code: "agent_ingest.related_evidence_changed"
+    });
+    expect(readOperations(fixture.vaultPath).filter((operation) => operation.kind === "update_page"))
+      .toEqual([]);
+    expect(fs.readFileSync(path.join(fixture.vaultPath, ...UPDATE_PAGE_PATH.split("/")), "utf8"))
+      .toContain("External edit before update commit.");
   });
 
   it("keeps retrieval optional when Pi inspects and publishes directly", async () => {
@@ -1242,6 +1808,216 @@ function groundedOutput(title: string, relatedPageRefs: readonly string[] = []) 
     warnings: [],
     confidence: "high"
   };
+}
+
+function existingNoteUpdateInput() {
+  return {
+    targetPageRef: "related_01",
+    summary: {
+      text: "The newly preserved source adds one verified fact to this existing note.",
+      evidenceRefs: ["ev_01"]
+    },
+    keyPoints: [{
+      text: "The existing user-authored body remains preserved while Pige appends cited knowledge.",
+      evidenceRefs: ["ev_01"]
+    }],
+    warnings: [],
+    confidence: "high"
+  };
+}
+
+function makeUpdateSearchResult(
+  fixture: ReturnType<typeof makeVault>,
+  query: string
+): RetrievalSearchResult {
+  return {
+    searchedAt: "2026-07-12T01:00:00.000Z",
+    activeVaultId: fixture.vault.vaultId,
+    query,
+    mode: "lexical_sqlite_fts",
+    total: 1,
+    invalidPageCount: 0,
+    degraded: false,
+    results: [{
+      summary: {
+        pageId: UPDATE_PAGE_ID,
+        title: UPDATE_PAGE_TITLE,
+        pageType: "note",
+        status: "active",
+        pagePath: UPDATE_PAGE_PATH,
+        createdAt: "2026-07-10T00:00:00.000Z",
+        updatedAt: "2026-07-10T00:00:00.000Z",
+        sourceIds: []
+      },
+      score: 23,
+      snippets: [UPDATE_PAGE_BODY],
+      matchReasons: ["title", "body"]
+    }]
+  };
+}
+
+function writeUpdateTargetPage(vaultPath: string): void {
+  const filePath = path.join(vaultPath, ...UPDATE_PAGE_PATH.split("/"));
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, `---
+id: "${UPDATE_PAGE_ID}"
+schema_version: 1
+title: "${UPDATE_PAGE_TITLE}"
+type: "note"
+created_at: "2026-07-10T00:00:00.000Z"
+updated_at: "2026-07-10T00:00:00.000Z"
+status: "active"
+language: "en"
+aliases: ["Existing alias"]
+tags: ["existing"]
+topics: ["Managed knowledge"]
+entities: []
+source_ids: []
+related_page_ids: ["page_20260709_preservedlink"]
+provenance:
+  generated_by: "pige"
+  last_job_id: "job_20260710_existingupdate"
+  model_profile_id: "model_existing_update"
+  confidence: "high"
+note:
+  note_kind: "summary"
+  review_state: "clean"
+---
+
+# ${UPDATE_PAGE_TITLE}
+
+${UPDATE_PAGE_BODY}
+`, "utf8");
+}
+
+function directUpdateInput(
+  vaultPath: string,
+  prepared: { readonly parent: JobRecord; readonly source: SourceRecord },
+  target: ReturnType<typeof readCurrentRetrievalPageForMutation>
+): Parameters<typeof applyAgentPageUpdate>[0] {
+  return {
+    vaultPath,
+    job: prepared.parent,
+    sourceRecord: prepared.source,
+    target,
+    modelProfileId: localRuntimeConfig.model.id,
+    policyContextId: "policyctx_existing_update_adversarial",
+    policyHash: syntheticHash("adversarial-policy"),
+    toolId: "pige_update_knowledge_note",
+    toolVersion: "1",
+    catalogHash: syntheticHash("adversarial-catalog"),
+    canonicalInputHash: syntheticHash("adversarial-input"),
+    toolCallProvenanceHash: syntheticHash("adversarial-call"),
+    artifactIds: [],
+    summary: {
+      text: "The new source adds one verified fact.",
+      citations: [`[source:${prepared.source.id}#source]`]
+    },
+    keyPoints: [],
+    confidence: "high"
+  };
+}
+
+function mutateUpdateTarget(vaultPath: string): void {
+  const filePath = path.join(vaultPath, ...UPDATE_PAGE_PATH.split("/"));
+  const current = fs.readFileSync(filePath, "utf8");
+  const next = current.replace(UPDATE_PAGE_BODY, `${UPDATE_PAGE_BODY}\n\nExternal edit before update commit.`);
+  if (next === current) throw new Error("Test update-target mutation did not change the page.");
+  fs.writeFileSync(filePath, next, "utf8");
+}
+
+function createUpdateCheckpoint(binding: AgentPageUpdatePublicationBinding) {
+  return {
+    id: AGENT_PAGE_UPDATE_CHECKPOINT_ID,
+    step: AGENT_PAGE_UPDATE_CHECKPOINT_ID,
+    state: "running" as const,
+    startedAt: "2026-07-12T02:00:00.000Z",
+    inputRefs: [
+      {
+        kind: "source" as const,
+        id: binding.sourceId,
+        checksum: binding.sourceRevisionHash,
+        role: "publication_source_revision"
+      },
+      {
+        kind: "tool" as const,
+        id: binding.policyContextId,
+        checksum: binding.policyHash,
+        role: "publication_policy"
+      },
+      {
+        kind: "tool" as const,
+        id: `${binding.toolId}@${binding.toolVersion}`,
+        checksum: binding.canonicalInputHash,
+        role: "update_tool_input"
+      },
+      {
+        kind: "tool" as const,
+        id: "pige_agent_tool_catalog",
+        checksum: binding.catalogHash,
+        role: "agent_tool_catalog"
+      },
+      {
+        kind: "tool" as const,
+        id: "pi_tool_call_provenance",
+        checksum: binding.toolCallProvenanceHash,
+        role: "agent_tool_call_provenance"
+      },
+      {
+        kind: "page" as const,
+        id: binding.pageId,
+        path: binding.pagePath,
+        checksum: binding.beforeContentHash,
+        role: "update_target_base"
+      },
+      {
+        kind: "tool" as const,
+        id: binding.modelProfileId,
+        role: "update_model_profile"
+      },
+      ...binding.artifactIds.map((artifactId) => ({
+        kind: "artifact" as const,
+        id: artifactId,
+        role: "update_evidence_artifact"
+      }))
+    ],
+    outputRefs: [
+      {
+        kind: "page" as const,
+        id: binding.pageId,
+        path: binding.pagePath,
+        checksum: binding.contentHash,
+        role: "expected_updated_note"
+      },
+      {
+        kind: "page" as const,
+        id: binding.pageId,
+        path: binding.beforePath,
+        checksum: binding.beforeContentHash,
+        role: "preserved_update_before"
+      },
+      {
+        kind: "page" as const,
+        id: binding.pageId,
+        path: binding.stagedPath,
+        checksum: binding.contentHash,
+        role: "staged_update_after"
+      },
+      {
+        kind: "operation" as const,
+        id: binding.operationId,
+        path: binding.operationPath,
+        role: "expected_update_operation"
+      }
+    ],
+    checksumBefore: binding.beforeContentHash,
+    checksumAfter: binding.contentHash,
+    resumeHint: "Verify the exact target, before-image, staged result, and update Operation before adoption."
+  };
+}
+
+function syntheticHash(value: string): string {
+  return `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
 }
 
 function modelPort(

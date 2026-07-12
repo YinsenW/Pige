@@ -217,6 +217,37 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("labels created and updated knowledge Activity distinctly and undoes an updated page", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.activities = [reversibleActivity(), reversibleUpdatedActivity()];
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    const updateUndoLabel = "Undo: Knowledge note updated: Refined boundary (2)";
+    await waitFor(dom, () => buttonsByAriaLabel(container, updateUndoLabel).length === 1);
+    const activityRegion = container.querySelector('[aria-label="Activity"]');
+    expect(activityRegion?.textContent).toContain("Knowledge note created: Grounded boundary");
+    expect(activityRegion?.textContent).toContain("Knowledge note updated: Refined boundary");
+    expect(container.querySelector('[data-activity-row-id="op_20260712_activityfixture"]')?.getAttribute("aria-label"))
+      .toBe("Knowledge note created: Grounded boundary (1)");
+    expect(container.querySelector('[data-activity-row-id="op_20260712_updateactivity"]')?.getAttribute("aria-label"))
+      .toBe("Knowledge note updated: Refined boundary (2)");
+
+    await clickElement(dom, buttonsByAriaLabel(container, updateUndoLabel)[0]!);
+    await waitFor(dom, () => harness.undoOperationIds.length === 1);
+
+    expect(harness.undoOperationIds).toEqual(["op_20260712_updateactivity"]);
+    expect(container.textContent).toContain("Change moved to recoverable trash.");
+    expect(buttonsByAriaLabel(container, updateUndoLabel)).toHaveLength(0);
+    expect(buttonsByAriaLabel(container, "Undo: Knowledge note created: Grounded boundary (1)")).toHaveLength(1);
+    const updatedRow = container.querySelector<HTMLElement>('[data-activity-row-id="op_20260712_updateactivity"]');
+    expect(updatedRow?.textContent).toContain("Undone");
+    await waitFor(dom, () => dom.window.document.activeElement === updatedRow);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("re-reads durable Activity truth after a post-commit Undo rejection", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
@@ -484,6 +515,17 @@ function reversibleActivity(): KnowledgeActivitySummary {
     kind: "create_page",
     createdAt: "2026-07-12T08:00:00.000Z",
     targetLabel: "Grounded boundary",
+    status: "applied",
+    canUndo: true
+  };
+}
+
+function reversibleUpdatedActivity(): KnowledgeActivitySummary {
+  return {
+    operationId: "op_20260712_updateactivity",
+    kind: "update_page",
+    createdAt: "2026-07-12T08:01:00.000Z",
+    targetLabel: "Refined boundary",
     status: "applied",
     canUndo: true
   };

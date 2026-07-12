@@ -1,6 +1,7 @@
 {
   "activity.alreadyUndone": "Cette modification a déjà été annulée.",
   "activity.createdPage": "Note de connaissance créée",
+  "activity.updatedPage": "Note de connaissance mise à jour",
   "activity.statusApplied": "Appliquée",
   "activity.statusUndone": "Annulée",
   "activity.title": "Activité",

@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
@@ -6,6 +6,7 @@ import { PigeDomainError } from "@pige/domain";
 const GENERATED_NOTE_HEADER_READ_LIMIT_BYTES = 128 * 1024;
 
 export type GeneratedNoteCommitResult = "created" | "exists";
+export type GeneratedNoteReplaceResult = "updated" | "already_updated";
 
 export interface GeneratedNoteCommitHooks {
   readonly beforeFinalSourceCheck?: () => void;
@@ -131,6 +132,10 @@ export function readGeneratedNoteExact(
   }
 }
 
+export function ensureGeneratedNoteParentSafe(vaultPath: string, filePath: string): void {
+  ensureSafeParent(vaultPath, filePath, true);
+}
+
 export function createGeneratedNoteExclusive(
   vaultPath: string,
   filePath: string,
@@ -251,6 +256,91 @@ export function createGeneratedNoteExclusive(
       // A cleanup failure must not replace the commit result.
     }
   }
+}
+
+export function replaceGeneratedNoteExact(
+  vaultPath: string,
+  filePath: string,
+  replacementPath: string,
+  input: {
+    readonly beforeHash: string;
+    readonly afterHash: string;
+    readonly maximumBytes: number;
+  }
+): GeneratedNoteReplaceResult {
+  ensureSafeParent(vaultPath, filePath, false);
+  ensureSafeParent(vaultPath, replacementPath, false);
+  const current = readGeneratedNoteExact(vaultPath, filePath, input.maximumBytes);
+  if (current === undefined) throw pageConflict("The generated-note update target is unavailable.");
+  const currentHash = hashText(current);
+  if (currentHash === input.afterHash) {
+    removeGeneratedNoteExact(vaultPath, replacementPath, input.afterHash, input.maximumBytes);
+    return "already_updated";
+  }
+  if (currentHash !== input.beforeHash) {
+    throw pageConflict("The generated-note update target changed after its base hash was approved.");
+  }
+  const replacement = readGeneratedNoteExact(vaultPath, replacementPath, input.maximumBytes);
+  if (replacement === undefined || hashText(replacement) !== input.afterHash) {
+    throw pageConflict("The staged generated-note update is unavailable or changed.");
+  }
+
+  const targetParent = captureSafeParentIdentity(vaultPath, filePath);
+  const replacementParent = captureSafeParentIdentity(vaultPath, replacementPath);
+  const currentBeforeCommit = readGeneratedNoteExact(vaultPath, filePath, input.maximumBytes);
+  const replacementBeforeCommit = readGeneratedNoteExact(vaultPath, replacementPath, input.maximumBytes);
+  if (
+    currentBeforeCommit === undefined ||
+    replacementBeforeCommit === undefined ||
+    hashText(currentBeforeCommit) !== input.beforeHash ||
+    hashText(replacementBeforeCommit) !== input.afterHash
+  ) {
+    throw pageConflict("The generated-note update changed during its final base-hash check.");
+  }
+  assertSafeParentIdentity(vaultPath, filePath, targetParent);
+  assertSafeParentIdentity(vaultPath, replacementPath, replacementParent);
+  try {
+    fs.renameSync(replacementPath, filePath);
+  } catch (caught) {
+    if (caught instanceof PigeDomainError) throw caught;
+    throw pageConflict("The generated-note update could not be committed atomically.");
+  }
+  flushDirectoryWhereSupported(path.dirname(filePath));
+  if (path.dirname(replacementPath) !== path.dirname(filePath)) {
+    flushDirectoryWhereSupported(path.dirname(replacementPath));
+  }
+  const committed = readGeneratedNoteExact(vaultPath, filePath, input.maximumBytes);
+  if (committed === undefined || hashText(committed) !== input.afterHash) {
+    throw pageConflict("The generated-note update could not be verified after commit.");
+  }
+  return "updated";
+}
+
+export function removeGeneratedNoteExact(
+  vaultPath: string,
+  filePath: string,
+  expectedHash: string,
+  maximumBytes: number
+): void {
+  const current = readGeneratedNoteExact(vaultPath, filePath, maximumBytes);
+  if (current === undefined) return;
+  if (hashText(current) !== expectedHash) {
+    throw pageConflict("A private generated-note recovery file contains unexpected content.");
+  }
+  const parent = captureSafeParentIdentity(vaultPath, filePath);
+  const before = fs.lstatSync(filePath);
+  const verified = readGeneratedNoteExact(vaultPath, filePath, maximumBytes);
+  const after = fs.lstatSync(filePath);
+  if (
+    verified === undefined ||
+    hashText(verified) !== expectedHash ||
+    !sameFileRevision(before, after)
+  ) {
+    throw pageConflict("A private generated-note recovery file changed before cleanup.");
+  }
+  assertSafeParentIdentity(vaultPath, filePath, parent);
+  fs.unlinkSync(filePath);
+  flushDirectoryWhereSupported(path.dirname(filePath));
 }
 
 function captureSafeParentIdentity(vaultPath: string, filePath: string): fs.Stats {
@@ -413,6 +503,10 @@ function sameFileRevision(left: fs.Stats, right: fs.Stats): boolean {
 
 function isContainedPath(candidate: string, root: string): boolean {
   return candidate === root || candidate.startsWith(`${root}${path.sep}`);
+}
+
+function hashText(value: string): string {
+  return `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
 }
 
 function isErrno(value: unknown, code: string): value is NodeJS.ErrnoException {

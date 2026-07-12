@@ -39,9 +39,11 @@ export interface RetrievalEvidenceAuditSnapshot {
   readonly snapshot: RetrievalEvidencePrivacySnapshot;
 }
 
-interface CurrentRetrievalPageBinding {
+export interface CurrentRetrievalPageMutationBinding {
   readonly item: RetrievalSearchResultItem;
   readonly page: RetrievalEvidencePrivacySnapshot["pages"][number];
+  readonly markdown: string;
+  readonly absolutePath: string;
 }
 
 const MAX_RETRIEVAL_SOURCE_REFS = 64;
@@ -71,6 +73,13 @@ export function bindRetrievalEvidenceToCurrentMarkdown(
     items: bindings.map(({ item }) => item),
     snapshot: createPrivacySnapshot(vaultPath, bindings.map(({ page }) => page))
   };
+}
+
+export function readCurrentRetrievalPageForMutation(
+  vaultPath: string,
+  indexedItem: RetrievalSearchResultItem
+): CurrentRetrievalPageMutationBinding {
+  return readCurrentRetrievalPageBinding(vaultPath, indexedItem);
 }
 
 export function readRetrievalEvidenceAuditSnapshot(
@@ -130,7 +139,7 @@ function readCurrentRetrievalPageBinding(
   vaultPath: string,
   indexedItem: RetrievalSearchResultItem,
   queryTerms?: ReturnType<typeof createQueryTerms>
-): CurrentRetrievalPageBinding {
+): CurrentRetrievalPageMutationBinding {
   if (!PageIdSchema.safeParse(indexedItem.summary.pageId).success) {
     throw evidencePrivacyUnavailableError();
   }
@@ -175,7 +184,9 @@ function readCurrentRetrievalPageBinding(
       updatedAt: currentPage.summary.updatedAt,
       sourceIds,
       contentHash: boundedPage.contentHash
-    }
+    },
+    markdown: boundedPage.markdown,
+    absolutePath: currentPage.absolutePath
   };
 }
 

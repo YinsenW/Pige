@@ -1,6 +1,7 @@
 {
   "activity.alreadyUndone": "この変更はすでに元に戻されています。",
   "activity.createdPage": "ナレッジノートを作成",
+  "activity.updatedPage": "ナレッジノートを更新",
   "activity.statusApplied": "適用済み",
   "activity.statusUndone": "取り消し済み",
   "activity.title": "アクティビティ",

@@ -1341,7 +1341,10 @@ function HomeComposer(props: {
           <h2>{props.t("activity.title")}</h2>
           <div className="activity-list">
             {props.recentActivities.slice(0, 3).map((activity, index) => {
-              const activityLabel = `${props.t("activity.createdPage")}${activity.targetLabel ? `: ${activity.targetLabel}` : ""} (${index + 1})`;
+              const activityMessageKey = activity.kind === "update_page"
+                ? "activity.updatedPage"
+                : "activity.createdPage";
+              const activityLabel = `${props.t(activityMessageKey)}${activity.targetLabel ? `: ${activity.targetLabel}` : ""} (${index + 1})`;
               return (
                 <article
                   className="activity-row"
@@ -1352,7 +1355,7 @@ function HomeComposer(props: {
                 >
                   <div>
                     <strong>
-                      {props.t("activity.createdPage")}
+                      {props.t(activityMessageKey)}
                       {activity.targetLabel ? `: ${activity.targetLabel}` : ""}
                     </strong>
                     <span>{props.t(activity.status === "undone" ? "activity.statusUndone" : "activity.statusApplied")}</span>

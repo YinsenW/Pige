@@ -10,6 +10,10 @@ import {
   type KnowledgeActivityVaultPort
 } from "../../apps/desktop/src/main/services/knowledge-activity-service";
 import { LocalDatabaseService } from "../../apps/desktop/src/main/services/local-database-service";
+import {
+  createAgentPageUpdateBeforePath,
+  createAgentPageUpdateUndoOperationId
+} from "../../apps/desktop/src/main/services/agent-page-update-service";
 
 const temporaryRoots: string[] = [];
 
@@ -82,6 +86,113 @@ describe("Knowledge Activity and Undo", () => {
       before: { kind: "page", id: hash(fixture.pageContent), path: fixture.pageRelativePath },
       after: { kind: "page", id: hash(fixture.pageContent), path: fixture.trashRelativePath }
     });
+  });
+
+  it("lists a checksum-bound existing-note update and restores exact prior bytes idempotently", () => {
+    const fixture = createUpdateFixture();
+    const service = new KnowledgeActivityService(fixture.vaults);
+
+    expect(service.list()).toMatchObject({
+      total: 1,
+      invalidOperationCount: 0,
+      activities: [{
+        operationId: fixture.operation.id,
+        kind: "update_page",
+        targetLabel: "Updated Activity fixture",
+        status: "applied",
+        canUndo: true
+      }]
+    });
+    const indexedAfter = new LocalDatabaseService();
+    expect(indexedAfter.rebuild(fixture.vaultPath)?.pageCount).toBe(1);
+    expect(indexedAfter.listPages(fixture.vaultPath)?.pages[0]?.updatedAt)
+      .toBe("2026-07-12T12:01:00.000Z");
+
+    const first = service.undo({ operationId: fixture.operation.id });
+    expect(first.status).toBe("undone");
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(fixture.beforeContent);
+    expect(fs.readFileSync(fixture.beforePath, "utf8")).toBe(fixture.beforeContent);
+    const undoBeforePath = path.join(
+      fixture.vaultPath,
+      ...createAgentPageUpdateBeforePath(first.undoOperationId).split("/")
+    );
+    expect(fs.readFileSync(undoBeforePath, "utf8")).toBe(fixture.afterContent);
+
+    expect(new KnowledgeActivityService(fixture.vaults).undo({ operationId: fixture.operation.id }))
+      .toEqual({
+        status: "already_undone",
+        operationId: fixture.operation.id,
+        undoOperationId: first.undoOperationId
+      });
+    expect(new KnowledgeActivityService(fixture.vaults).list().activities[0]).toMatchObject({
+      kind: "update_page",
+      status: "undone",
+      canUndo: false,
+      undoUnavailableReason: "already_undone"
+    });
+    expect(new LocalDatabaseService().listPages(fixture.vaultPath)?.pages[0]?.updatedAt)
+      .toBe("2026-07-12T12:00:00.000Z");
+    const undoOperation = requireOperation(fixture.vaultPath, first.undoOperationId);
+    expect(undoOperation).toMatchObject({
+      kind: "update_page",
+      actor: { kind: "user" },
+      sourceRefs: [{ kind: "operation", id: fixture.operation.id }],
+      before: { kind: "page", id: hash(fixture.afterContent), path: expect.any(String) },
+      after: { kind: "page", id: hash(fixture.beforeContent), path: fixture.pageRelativePath }
+    });
+  });
+
+  it("recovers an interrupted update Undo from its durable post-update marker", () => {
+    const fixture = createUpdateFixture();
+    const undoId = createAgentPageUpdateUndoOperationId(fixture.operation.id);
+    const markerPath = path.join(
+      fixture.vaultPath,
+      ...createAgentPageUpdateBeforePath(undoId).split("/")
+    );
+    fs.mkdirSync(path.dirname(markerPath), { recursive: true });
+    fs.writeFileSync(markerPath, fixture.afterContent, { encoding: "utf8", mode: 0o600 });
+
+    const restarted = new KnowledgeActivityService(fixture.vaults);
+    expect(restarted.recoverIncompleteUndos()).toEqual({ recovered: 1, failed: 0 });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(fixture.beforeContent);
+    expect(requireOperation(fixture.vaultPath, undoId).sourceRefs)
+      .toEqual([{ kind: "operation", id: fixture.operation.id }]);
+    expect(restarted.list().activities[0]).toMatchObject({ status: "undone", canUndo: false });
+  });
+
+  it("does not report a completed update Undo as failed after a later legitimate edit", () => {
+    const fixture = createUpdateFixture();
+    const service = new KnowledgeActivityService(fixture.vaults);
+    expect(service.undo({ operationId: fixture.operation.id }).status).toBe("undone");
+    fs.appendFileSync(fixture.pagePath, "\nLater user-authored knowledge.\n", "utf8");
+
+    const restarted = new KnowledgeActivityService(fixture.vaults);
+    expect(restarted.recoverIncompleteUndos()).toEqual({ recovered: 0, failed: 0 });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toContain("Later user-authored knowledge.");
+    expect(restarted.list().activities[0]).toMatchObject({
+      kind: "update_page",
+      status: "undone",
+      canUndo: false,
+      undoUnavailableReason: "already_undone"
+    });
+  });
+
+  it("does not undo an existing-note update after an external page edit", () => {
+    const fixture = createUpdateFixture();
+    fs.appendFileSync(fixture.pagePath, "\nExternal correction.\n", "utf8");
+    const service = new KnowledgeActivityService(fixture.vaults);
+
+    expect(service.list().activities[0]).toMatchObject({
+      kind: "update_page",
+      canUndo: false,
+      undoUnavailableReason: "content_changed"
+    });
+    expect(() => service.undo({ operationId: fixture.operation.id })).toThrowError(PigeDomainError);
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toContain("External correction.");
+    expect(fs.existsSync(operationPath(
+      fixture.vaultPath,
+      createAgentPageUpdateUndoOperationId(fixture.operation.id)
+    ))).toBe(false);
   });
 
   it("fails closed instead of reporting already-undone when durable page or trash state drifts", () => {
@@ -637,6 +748,124 @@ function createFixture(options: { readonly includeAfterHash?: boolean } = {}): {
     trashRelativePath,
     trashPath: path.join(vaultPath, ...trashRelativePath.split("/"))
   };
+}
+
+function createUpdateFixture(): {
+  readonly vaultPath: string;
+  readonly vaults: KnowledgeActivityVaultPort;
+  readonly operation: OperationRecord;
+  readonly beforeContent: string;
+  readonly afterContent: string;
+  readonly beforePath: string;
+  readonly pageRelativePath: string;
+  readonly pagePath: string;
+} {
+  const vaultPath = fs.mkdtempSync(path.join(os.tmpdir(), "pige-update-activity-"));
+  temporaryRoots.push(vaultPath);
+  const pageId = "page_20260712_updateactivity";
+  const pageRelativePath = `wiki/generated/2026/${pageId}.md`;
+  const pagePath = path.join(vaultPath, ...pageRelativePath.split("/"));
+  const operationId = "op_20260712_updateactivity";
+  const beforeRelativePath = createAgentPageUpdateBeforePath(operationId);
+  const beforePath = path.join(vaultPath, ...beforeRelativePath.split("/"));
+  const beforeContent = `---
+id: "${pageId}"
+schema_version: 1
+title: "Updated Activity fixture"
+type: "note"
+created_at: "2026-07-12T12:00:00.000Z"
+updated_at: "2026-07-12T12:00:00.000Z"
+status: "active"
+language: "en"
+aliases: []
+tags: []
+topics: []
+entities: []
+source_ids: ["src_20260712_activityfixture"]
+related_page_ids: []
+provenance:
+  generated_by: "pige"
+  last_job_id: "job_20260712_activityfixture"
+  model_profile_id: "model_activityfixture"
+  confidence: "high"
+note:
+  note_kind: "summary"
+  review_state: "clean"
+---
+
+# Updated Activity fixture
+
+Original user-authored body.
+`;
+  const afterContent = beforeContent
+    .replace('updated_at: "2026-07-12T12:00:00.000Z"', 'updated_at: "2026-07-12T12:01:00.000Z"')
+    .replace('last_job_id: "job_20260712_activityfixture"', 'last_job_id: "job_20260712_updateactivity"') +
+    `
+<!-- pige:managed:start agent-update ${operationId} -->
+## Knowledge update
+
+Grounded additive change. [source:src_20260712_updateactivity#source]
+<!-- pige:managed:end -->
+`;
+  fs.mkdirSync(path.dirname(pagePath), { recursive: true });
+  fs.mkdirSync(path.dirname(beforePath), { recursive: true });
+  fs.writeFileSync(pagePath, afterContent, { encoding: "utf8", mode: 0o600 });
+  fs.writeFileSync(beforePath, beforeContent, { encoding: "utf8", mode: 0o600 });
+  fs.writeFileSync(path.join(vaultPath, "index.md"), "# Index\n", "utf8");
+  const operation = OperationRecordSchema.parse({
+    id: operationId,
+    schemaVersion: 1,
+    jobId: "job_20260712_updateactivity",
+    createdAt: "2026-07-12T12:01:00.000Z",
+    actor: {
+      kind: "pige_agent",
+      runtimeKind: "desktop_local",
+      clientCapabilityTier: "desktop_full"
+    },
+    modelProfileId: "model_activityfixture",
+    permissionDecisionIds: [],
+    kind: "update_page",
+    targetRefs: [{ kind: "page", id: pageId, path: pageRelativePath }],
+    sourceRefs: [
+      { kind: "job", id: "job_20260712_updateactivity" },
+      { kind: "source", id: "src_20260712_updateactivity" }
+    ],
+    before: { kind: "page", id: hash(beforeContent), path: beforeRelativePath },
+    after: { kind: "page", id: hash(afterContent), path: pageRelativePath },
+    summary: "Updated existing Pige-managed note from preserved source.",
+    reversible: "yes",
+    rollbackHint: "Restore the exact private before-image while the live after hash matches.",
+    warnings: []
+  });
+  writeOperation(vaultPath, operation);
+  return {
+    vaultPath,
+    vaults: {
+      current: () => ({
+        vaultId: "vault_20260712_updateactivity",
+        name: "Update Activity Vault",
+        activeVaultPathDisplay: "Update Activity Vault",
+        knowledgeRootDisplay: "Update Activity Vault",
+        sourceAssetRootDisplay: "Update Activity Vault sources",
+        sourceAssetRootKind: "vault_internal",
+        defaultSourceStorageStrategy: "managed_copy",
+        schemaVersion: 1
+      }),
+      activeVaultPath: () => vaultPath
+    },
+    operation,
+    beforeContent,
+    afterContent,
+    beforePath,
+    pageRelativePath,
+    pagePath
+  };
+}
+
+function requireOperation(vaultPath: string, operationId: string): OperationRecord {
+  const operation = readOperations(vaultPath).find((candidate) => candidate.id === operationId);
+  if (!operation) throw new Error(`Expected Operation ${operationId}.`);
+  return operation;
 }
 
 function writeOperation(vaultPath: string, operation: OperationRecord): void {

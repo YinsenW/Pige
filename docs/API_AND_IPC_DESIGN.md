@@ -489,11 +489,11 @@ Rules:
 
 #### 6.4.1 Knowledge Activity And Undo
 
-`activity.list` (default 5, max 20) returns safe create summaries/counts without paths,
-hashes, bodies, or source/provider data. `activity.undo` revalidates one unchanged
-hash-bound generated page, returns original/Undo IDs + status, then uses private trash,
-`trash_page`, and worker rebuild. Hashless/changed/missing/non-create stays ineligible;
-restore/redo and broad routing/Activity remain open.
+`activity.list` (default 5, max 20) returns safe `create_page | update_page` summaries,
+never paths/hashes/bodies/source/Provider data. `activity.undo` rechecks live checksum:
+create uses private trash + `trash_page`; update restores exact before bytes + inverse
+`update_page`; both schedule rebuild. Hashless/changed/missing/malformed/other Operations
+stay ineligible; restore/redo and broad routing/history remain open.
 
 ### 6.5 Library And Notes
 
