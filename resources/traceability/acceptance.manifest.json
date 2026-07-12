@@ -1360,7 +1360,7 @@
       ],
       "open": {
         "id": "OPEN-REQ-PIGE-PI-002",
-        "description": "The reviewed OpenAI preset and isolated compatible bindings work; full catalog/provider matrix and packaged manual BYOK remain open, with Advanced/Fast hidden.",
+        "description": "Full catalog/help, Provider delete, DeepSeek Anthropic, and packaged model matrix remain; Advanced/Fast stays hidden.",
         "targetBuilds": [
           "B3.04"
         ],
@@ -1381,7 +1381,7 @@
       ],
       "open": {
         "id": "OPEN-REQ-PIGE-PI-004",
-        "description": "OpenAI discovery works; explicit protocol, real Pi probe, tri-state binding, safe commit/recovery, other providers, and packaged BYOK stay open.",
+        "description": "Full catalog/help, Provider delete, DeepSeek Anthropic, Agent-selected URL fetch, and signed packaged BYOK remain open.",
         "targetBuilds": [
           "B3.01",
           "B3.03",
@@ -1396,7 +1396,7 @@
     },
     "PIGE-PI-005": {
       "status": "planned",
-      "plannedTarget": "One durable Pi Home ingress for ordinary, knowledge-enhanced, and source-bearing turns, with no-model wait/resume and no Host semantic routing."
+      "plannedTarget": "Complete unified ingress adds Agent-selected URL fetch/preserve, durable follow-up, and packaged platform proof without Host routing."
     },
     "PIGE-SETTINGS-001": {
       "status": "partial",
@@ -2706,7 +2706,7 @@
       "evidence": ["EV-PROVIDER", "EV-RUNTIME", "EV-PI-PROVIDER-BINDING"],
       "open": {
         "id": "OPEN-EXIT-E3.01",
-        "description": "One reviewed OpenAI preset/default is executable; full catalog/provider matrix and packaged manual BYOK remain open.",
+        "description": "Full catalog/help, Provider delete, DeepSeek Anthropic, and signed packaged BYOK matrix remain open.",
         "targetBuilds": [
           "B3.01",
           "B3.03",
@@ -2829,7 +2829,7 @@
     },
     "E3.09": {
       "status": "planned",
-      "plannedTarget": "Real Provider-to-Pi-to-Home agent_turn proves direct, retrieved, source-tool, waiting/resume, protocol, and no-heuristic behavior."
+      "plannedTarget": "Complete E3.09 covers direct/retrieved/file turns plus Agent-selected URL fetch, durable follow-up, waiting/resume, and packaged platform proof."
     },
     "E4.01": {
       "status": "partial",
@@ -3591,7 +3591,7 @@
     "EV-PI-RUNTIME-BOUNDARY": { "kind": "verifier", "path": "scripts/verify/pi-runtime-boundary.mjs", "selector": "Pi runtime boundary OK: one contained adapter owns official Pi imports, isolated auth/models, and sequential Pige tools." },
     "EV-PI-RUNTIME-MUTATIONS": { "kind": "verifier", "path": "scripts/verify/pi-runtime-boundary-negative-cases.mjs", "selector": "Pi runtime boundary mutations OK:" },
     "EV-PI-IMPORT-SNAPSHOT": { "kind": "verifier", "path": "scripts/verify/pi-import-side-effects.mjs", "selector": "Pi import side-effect snapshot OK:" },
-    "EV-PI-ELECTRON-SMOKE": { "kind": "implementation", "path": "apps/desktop/scripts/electron-pi-agent-runtime-smoke.mjs", "selector": "Electron Pi runtime smoke OK:" },
+    "EV-PI-ELECTRON-SMOKE": { "kind": "implementation", "path": "apps/desktop/scripts/electron-unified-agent-roundtrip-smoke.mjs", "selector": "Electron unified Agent roundtrip OK:" },
     "EV-GENERATED-NOTE-FINAL-FENCE": {
       "kind": "test",
       "path": "tests/unit/jobs-service.test.ts",

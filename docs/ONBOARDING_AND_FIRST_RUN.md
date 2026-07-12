@@ -97,8 +97,8 @@ The model step is optional.
 
 Default path:
 
-- Connect a supported provider, test credentials, discover or manually add models, and
-  select one default Pi Agent model.
+- Choose a template, enter required credentials, and `Connect`; Pige fills protocol/
+  Endpoint, discovers, probes once, commits safely, and establishes Global Default.
 - Immediately above `Connect Provider`, disclose the exact destination and standing
   authorization for ordinary, private, and bounded large selected context.
 
@@ -111,6 +111,8 @@ Skip path:
 Rules:
 
 - Keys go only to the secret store; provider/model behavior follows the Pi owner.
+- Manual ID follows incomplete discovery; custom protocol/Endpoint and inventory
+  management stay progressively disclosed in Settings.
 - Sensitive content still asks, restricted content never sends, and unknown or changed
   boundaries ask again. Add no routing, marketplace, second wizard, or routine prompt;
   expose stricter policy later.
@@ -275,8 +277,7 @@ Required controls:
 - Create vault.
 - Open existing Pige vault.
 - Restore backup.
-- Add provider.
-- Test and save provider.
+- Connect Provider.
 - Skip model for now.
 
 Phase 1 implementation note:
@@ -346,8 +347,8 @@ Required tests:
 - Opening missing/incompatible folder shows a safe error.
 - Active vault path is not written into `.pige/manifest.json`.
 - Model setup stores API key only in the secret store.
-- Model setup with list-model support creates model profiles.
-- Model setup without list-model support allows manual model ID.
+- Setup auto-syncs one inventory, probes one model, and chooses an enabled default.
+- Incomplete discovery offers typed Retry/manual fallback, never empty-success/raw error.
 - Skip model enters `capture_only`.
 - Capture-only text/file capture creates source record and durable conversation reference.
 - Model-dependent jobs become `waiting_dependency`, not silent failures.

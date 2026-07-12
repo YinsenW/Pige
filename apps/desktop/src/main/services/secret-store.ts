@@ -30,7 +30,7 @@ export class JsonSecretStore {
     this.#crypto = crypto;
   }
 
-  saveProviderSecret(secretValue: string): string {
+  saveProviderSecret(secretValue: string, requestedRef?: string): string {
     const trimmed = secretValue.trim();
     if (!trimmed) {
       throw new PigeDomainError("secret_empty", "Provider API key cannot be empty.");
@@ -40,14 +40,20 @@ export class JsonSecretStore {
     }
 
     const now = new Date().toISOString();
-    const ref = `provider_secret_${randomUUID().replaceAll("-", "_")}`;
+    const ref = requestedRef ?? `provider_secret_${randomUUID().replaceAll("-", "_")}`;
+    if (!/^provider_secret_[a-z0-9_]+$/u.test(ref)) {
+      throw new PigeDomainError("secret_ref_invalid", "Provider secret reference is invalid.");
+    }
+    const file = this.#read();
+    if (file.secrets.some((secret) => secret.ref === ref)) {
+      throw new PigeDomainError("secret_ref_conflict", "Provider secret reference already exists.");
+    }
     const record: SecretRecord = {
       ref,
       encryptedValue: this.#crypto.encryptString(trimmed).toString("base64"),
       createdAt: now,
       updatedAt: now
     };
-    const file = this.#read();
     this.#write({
       schemaVersion: 1,
       secrets: [record, ...file.secrets.filter((secret) => secret.ref !== ref)]
@@ -97,7 +103,40 @@ export class JsonSecretStore {
   #write(file: SecretStoreFile): void {
     fs.mkdirSync(path.dirname(this.#secretsPath), { recursive: true });
     const temporaryPath = `${this.#secretsPath}.${process.pid}.tmp`;
-    fs.writeFileSync(temporaryPath, `${JSON.stringify(file, null, 2)}\n`, "utf8");
-    fs.renameSync(temporaryPath, this.#secretsPath);
+    let descriptor: number | undefined;
+    try {
+      descriptor = fs.openSync(temporaryPath, "w", 0o600);
+      fs.writeFileSync(descriptor, `${JSON.stringify(file, null, 2)}\n`, "utf8");
+      fs.fsyncSync(descriptor);
+      fs.closeSync(descriptor);
+      descriptor = undefined;
+      fs.renameSync(temporaryPath, this.#secretsPath);
+      fsyncDirectoryIfSupported(path.dirname(this.#secretsPath));
+    } finally {
+      if (descriptor !== undefined) fs.closeSync(descriptor);
+      try {
+        fs.rmSync(temporaryPath, { force: true });
+      } catch {
+        // Temporary cleanup cannot replace the primary persistence result.
+      }
+    }
   }
+}
+
+function fsyncDirectoryIfSupported(directoryPath: string): void {
+  let descriptor: number | undefined;
+  try {
+    descriptor = fs.openSync(directoryPath, fs.constants.O_RDONLY);
+    fs.fsyncSync(descriptor);
+  } catch (caught) {
+    if (!isUnsupportedDirectoryFsync(caught)) throw caught;
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
+  }
+}
+
+function isUnsupportedDirectoryFsync(caught: unknown): boolean {
+  if (typeof caught !== "object" || caught === null || !("code" in caught)) return false;
+  return ["EBADF", "EINVAL", "EISDIR", "ENOSYS", "ENOTSUP", "EOPNOTSUPP", "EPERM"]
+    .includes(String(caught.code));
 }

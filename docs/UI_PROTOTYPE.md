@@ -443,7 +443,7 @@ Home
 How did we decide to handle BYOK providers?
 
 Summary
-Pige treats BYOK as a first-class model configuration layer. The first version supports OpenAI, Anthropic, OpenAI-compatible, and Anthropic-compatible providers. The design also separates provider credentials from vault data and shows whether a provider is local, self-hosted, or cloud-hosted.
+Pige treats BYOK as a first-class model configuration layer. Credentials stay separate from vault data, and Home shows quiet destination/provider status when relevant.
 
 Top Results
 
@@ -475,11 +475,11 @@ Behavior:
 - Saving an answer creates a proposed note or appends to an existing note after confirmation.
 - There is no separate default "Ask" entry in navigation; this behavior lives inside Home.
 
-Current implementation is narrower: question-like text may use bounded local/Pi
-retrieval while other input follows capture handling. Unified Pi ingress, optional
-retrieval, and general empty/no-evidence conversation remain open; do not turn that gap
-into a new mode, status, or navigation destination. Existing localized states, quiet
-provider status, non-raw errors, and exact-destination cloud behavior remain required.
+Current Home uses `agent.submitTurn` for text and one preserve-first file attachment. Pi
+may answer empty/no-evidence chat directly or select cited local retrieval; missing or
+broken bindings show typed Configure/Retry state with no silent fallback. Agent-selected
+URL fetch/preserve, durable follow-up, and multi-attachment recovery remain open without
+adding a mode, status, or navigation destination.
 
 ## 8. Note Reader
 
@@ -851,20 +851,44 @@ Reset Local Database should be framed as a repair action under Index & Maintenan
 ```txt
 Models
 
-Recommended
-OpenAI
-API key  [Connect]
+Global Default
+[ OpenAI — gpt-5-mini                    ▾ ]
 
-▸ Custom provider
+Providers
+OpenAI             Connected · 2 enabled · 3 models     Manage
+Personal endpoint  Needs attention · discovery failed   Manage
 
-Models
-gpt-5-mini     OpenAI     Global Default
-gpt-4.1-mini   OpenAI     Set as Global Default
+Connect Provider
 ```
 
-The reviewed OpenAI preset asks only for a key, discovers models, and establishes one Global Default. Immediately above `Connect Provider`, disclose once that ordinary, private, and bounded large selected context may go to this exact Profile/endpoint; sensitive content asks, restricted content never sends, and an unknown or changed boundary asks again. Custom setup stays collapsed.
+Presets hide protocol/Endpoint and ask required credentials only. Custom alone reveals
+Chat, Responses, or Anthropic compatible protocol plus Base URL. Cloud/self-hosted/local
+is not setup taxonomy. Global Default groups enabled models by Provider, never raw ID or
+per-row action. Each Provider opens in place to one inventory:
 
-All connected models appear in one provider-labeled list with exactly one Global Default. Keep full catalogs/help/custom-protocol polish open; hide matrices, pricing, routing, Advanced/Fast roles, local tools, Skills, backup, and memory.
+```txt
+OpenAI                                      Connected
+Models                                      Refresh
+[x] gpt-5-mini       Display name: Fast     Synced
+[x] gpt-4.1-mini                              Synced
+[ ] gpt-4.1                                   Synced
+Add custom model
+```
+
+Connect discovers; Refresh repeats. Synced/manual exact IDs merge while preserving alias,
+enabled, and default; manual ID is fallback. One `Checking connection…` Provider-level Pi
+probe gates commit, never per-model tests. Failure shows `Models could not be synced`,
+`Retry`, and `Add custom model`, not raw error or empty success.
+
+Above Connect disclose the exact destination once; sensitive asks, restricted never
+sends, unknown/changed reconfirms. Hide marketplaces, matrices, routing, Advanced/Fast,
+local tools, Skills, backup, and memory.
+
+Current executable checkpoint is one inline page: five presets and collapsed Custom,
+then Provider inventories and grouped Global Default, with Refresh/manual fallback,
+enable/alias and localized transient errors. Summary/Manage detail, durable sync health,
+visible probe progress, key-help, delete, provider-named Home status, and localized native
+confirmation remain target polish; images show direction, not frozen renderer evidence.
 
 ### Deferred Model Routing Settings
 
@@ -1223,11 +1247,11 @@ Step 1: Welcome.
 
 Step 2: Model setup.
 
-- Show the reviewed provider preset and request its API key.
+- Show reviewed Provider templates; selection asks only for required credentials.
 - Before `Connect Provider`, explain once that ordinary, private, and bounded large
   selected context may go to this exact Profile/endpoint; sensitive content still asks
   and restricted content never sends.
-- Test and connect.
+- Connect, auto-sync, run one Provider check, and establish Global Default; manual ID is fallback.
 - Allow skip into capture-only mode: Pige preserves source records/source assets and queues Agent processing until a model is configured.
 
 Step 3: Start capture.
@@ -1542,7 +1566,7 @@ Must implement:
 - Knowledge Tree semantic tree.
 - Note reader.
 - Settings: grouped sidebar with Basic, Knowledge Base, AI, Security, Extensions, and System.
-- Settings: Models page containing only BYOK provider connection.
+- Settings: Models page for Provider connection, inventory, and Global Default.
 - Settings: Local Capabilities page for local RAG, OCR, speech, parsers, and bundled toolchain.
 - Settings: Permissions & Privacy page for default permission mode, saved grants, cloud-send policy, secrets, and YOLO.
 - Settings: Agent & Memory page.
@@ -1577,7 +1601,7 @@ Can wait:
   notes and grounded citations remain visible.
 - Opened notes can show a contextual Agent panel.
 - Selected text exposes common actions without leaving the note.
-- Settings make BYOK setup understandable without exposing unnecessary advanced options.
+- Settings offers preset connection, unified sync/manual inventory, and grouped Global Default without protocol/raw-ID work.
 - The user can tell whether an Agent change was applied, needs confirmation, or failed.
 - The user can tell when captured content is being sent to a cloud model provider.
 - The user can dictate into the main input on supported macOS versions without learning a separate recording workflow.

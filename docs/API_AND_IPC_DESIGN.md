@@ -36,7 +36,7 @@ vault.create
 capture.submit
 jobs.cancel
 library.query
-retrieval.ask
+agent.submitTurn
 notes.open
 notes.saveDraft
 permissions.resolve
@@ -152,7 +152,7 @@ Rules:
 
 ### 6.1 Vault
 
-Commands:
+Internal compatibility/recovery commands (not current renderer/preload ingress):
 
 - `vault.create`
 - `vault.open`
@@ -332,7 +332,9 @@ Rules:
 - URL source records store redacted original/final/canonical URLs, content type, effective charset, selected article metadata, redacted image references, extraction identity/version/mode/counts/truncation/warnings, and a checksummed `extracted_text` artifact. Query values for sensitive keys such as token, api_key, password, secret, signature, and similar are redacted before durable storage.
 - HTML parsing and Readability extraction run in a bounded local worker with scripts and subresources disabled. Renderer IPC receives capture IDs/status only; it never receives raw HTML, article DOM, arbitrary response headers, dispatcher handles, or network credentials.
 - URL capture conversation events store only source ID, display name, and source kind. Raw HTML and extracted web text are not duplicated in `.pige/conversations/`.
-- `capture.submitDroppedFiles` is the renderer-facing preload API for whole-window drops and file picker selections. Preload extracts selected file paths with Electron `webUtils.getPathForFile` and calls the main-process `capture.submitFiles` channel.
+- Current preload uses `agent.submitTurn`: it extracts one selected file path with Electron
+  `webUtils.getPathForFile`; main preserves it first, then links the same user draft and
+  Source ref to one durable `agent_turn`. Historical capture handlers remain internal.
 - `capture.submitFiles` accepts `.md`, `.markdown`, `.txt`, `.pdf`, `.docx`, `.pptx`, `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, `.tif`, `.tiff`, and `.bmp`. It consumes the active vault's `sourceStorage.defaultStrategy`: managed-copy mode writes `raw/files/YYYY/MM/`; reference-original mode records checksum/size/mtime and does not duplicate the file. Both modes create one source record, conversation event, and queued capture job per accepted file and return display-name-only rejection summaries.
 - File bodies are never copied into conversation history; conversation events reference source IDs, display names, and source kinds.
 - The renderer receives IDs and status, not arbitrary filesystem paths or file handles.
@@ -520,6 +522,7 @@ Current bridge queries:
 
 Commands:
 
+- `agent.submitTurn`
 - `agent.ask`
 - `retrieval.ask`
 - `retrieval.saveAnswer`
@@ -530,19 +533,13 @@ Queries:
 
 Retrieval DTOs and internal context-pack refs must follow `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`. Renderer-facing responses show grounded answers, ranked results, snippets, citations, and degraded-search state; they do not expose raw prompts, context budgets, full retrieved bodies, raw vector data, or secret-bearing policy details.
 
-Current bridge: `retrieval.search`/`ask` return bounded safe lexical results. Home still
-routes question-like text through `agent.ask`, one search call, query-hash-only
-`retrieval_query`, per-turn evidence audits, and a fixed zero-evidence result; other text
-becomes capture. Responses exclude bodies, paths, prompts, credentials, endpoints, and
-raw errors. Save-answer remains open.
-
-Target unified-ingress migration (not yet an implemented channel):
-
-- `agent.submitTurn` becomes the sole semantic Home command. Main appends the user event
-  and versioned `agent_turn`; preservation APIs only supply source refs.
-- Short chat creates no Source Record; large/attached evidence is stored once. Without
-  a model the same Job waits/resumes, never becoming silent capture/retrieval.
-- Existing `agent.ask`, `retrieval_query`, and `agent_ingest` stay readable until migration.
+Current renderer semantics use `agent.submitTurn`. Main appends one bounded user event and
+`agent_turn`; ordinary chat may answer directly or Pi may select bounded cited retrieval.
+One file attachment is preserved once and linked to that same turn; without a usable
+model the Job waits/resumes with no silent capture/retrieval fallback. Responses exclude
+bodies, paths, prompts, credentials, endpoints, and raw errors. `agent.ask`,
+`retrieval_query`, `agent_ingest`, and capture handlers remain readable compatibility
+paths. Agent-selected URL fetch/preserve, durable follow-up sessions, and save-answer stay open.
 
 ### 6.7 Permissions
 
@@ -570,6 +567,9 @@ Commands:
 - `agent.runtimeStatus`
 - `models.addPresetProvider`
 - `models.addManualProvider`
+- `models.refreshProviderModels`
+- `models.addManualModel`
+- `models.updateModel`
 - `models.setDefaultModel`
 - `tools.install`
 - `tools.remove`
@@ -584,21 +584,30 @@ Queries:
 Provider/model DTOs:
 
 ```ts
-type ModelProviderSettingsSummary = { presets: ProviderPresetSummary[]; providers: ProviderProfileSummary[]; models: ModelProfileSummary[]; defaultModelProfileId?: string; hasDefaultModel: boolean };
+type DefaultModelBindingSummary =
+  | { state: "not_configured" }
+  | { state: "ready"; providerProfileId: string; modelProfileId: string }
+  | { state: "configured_unusable"; providerProfileId?: string; modelProfileId?: string; error: PigeErrorSummary };
 
-type ProviderPresetSummary = { presetId: string; displayName: string; providerKind: ProviderKind; endpointProtocol: "openai_responses"; fixedBaseUrl: string; modelListStrategy: "list_models"; cloudBoundary: "cloud"; apiKeyManagementUrl: string };
+type ModelProviderSettingsSummary = { presets: ProviderPresetSummary[]; providers: ProviderProfileSummary[]; models: ModelProfileSummary[]; defaultModelProfileId?: string; hasDefaultModel: boolean; defaultBinding: DefaultModelBindingSummary };
 
-type ProviderProfileSummary = { id: string; displayName: string; providerKind: ProviderKind; baseUrl?: string; modelListStrategy: ModelListStrategy; cloudBoundary: CloudBoundary; createdAt: string; updatedAt: string };
+type ProviderPresetSummary = { presetId: string; displayName: string; providerKind: ProviderKind; endpointProtocol: "openai_responses" | "openai_chat_completions" | "anthropic_messages"; fixedBaseUrl: string; authRequirement: "api_key" | "optional_api_key" | "none"; modelListStrategy: ModelListStrategy; cloudBoundary: CloudBoundary; apiKeyManagementUrl?: string };
+
+type ProviderProfileSummary = { id: string; presetId?: string; displayName: string; providerKind: ProviderKind; endpointProtocol: ProviderEndpointProtocol; authRequirement: ProviderAuthRequirement; baseUrl?: string; modelListStrategy: ModelListStrategy; cloudBoundary: CloudBoundary; boundaryVerification?: BoundaryVerification; createdAt: string; updatedAt: string };
 
 type ModelProfileSummary = { id: string; providerProfileId: string; modelId: string; displayName?: string; source: "provider_list" | "manual"; enabled: boolean; isDefault: boolean; createdAt: string; updatedAt: string };
+
+type ProviderConnectNeedsManualModel = { status: "needs_manual_model"; reason: "select_bootstrap_model" | "discovery_unavailable" | "discovery_failed"; discoveredModels: Array<{ modelId: string; displayName?: string }>; error?: PigeErrorSummary };
+
+type ProviderConnectResult = ModelProviderSettingsSummary | ProviderConnectNeedsManualModel;
 ```
 
-Target profile/API revision: required `endpointProtocol` is Responses, Chat Completions,
-or Anthropic Messages; new manual profiles use `custom`, while the Pi Owner defines the
-non-reinterpreting legacy map. `defaultBinding` is `not_configured`, `ready`, or
-`configured_unusable` with safe IDs and a typed redacted repair error. Connect runs a
-synthetic Pi generation/tool probe before staged provider/model/secret writes, then
-read-back commits all or restores all; protocol persists, probe health does not.
+Current profile/API revision persists explicit protocol/auth/preset identity and preserves
+the Pi Owner's legacy map. `defaultBinding.state` carries safe selected IDs and a typed
+redacted repair error. Connect runs a real Pi generation/tool probe with synthetic
+non-user content before journaled all-or-restore writes. Preset protocol/Endpoint are
+main-owned; Refresh failure preserves inventory and returns a typed command error. A
+durable `modelSync` status summary remains open; current UI repair state is session-local.
 
 Secrets are passed only to the Settings and Secrets Service and are never echoed back.
 
@@ -607,14 +616,20 @@ Rules:
 - Settings APIs return redacted page DTOs, not raw storage files.
 - `settings.appearance` returns the current app locale and supported locale list. `settings.setLocale` stores the user override in machine-local settings and applies it without writing to the vault.
 - Secret writes use dedicated secret handling and return secret references only.
-- `models.addPresetProvider({ presetId, apiKey })` is write-only toward main; validation
-  and native confirmation precede effects, and no key returns. The reviewed `openai`
-  preset fixes endpoint/protocol, bounds discovery, selects its default, and restores the
-  known-good provider/model/secret binding on failure.
+- `models.addPresetProvider({ presetId, apiKey? })` is write-only toward main; preset
+  metadata decides whether a key is required, optional, or absent and whether a help URL
+  exists. Validation precedes effects, no key returns, and one probe gates commit/restore.
 - `models.addManualProvider` confirms/tests before persistence, discovers models when
-  supported, writes keys only through the secret store, and returns redacted summaries.
-  Auth/validation failure or canceled main-process confirmation leaves state unchanged;
-  only explicit compatible-endpoint listing absence permits a manual model ID.
+  possible, writes keys only through the secret store, and returns redacted summaries.
+  Auth/validation failure or canceled main-process confirmation leaves state unchanged.
+- Successful discovery needing a bootstrap choice, or unavailable/failed discovery, returns typed
+  `needs_manual_model` with zero Provider/model/secret writes. Custom then resubmits the
+  same write-only request plus one transient bootstrap Model ID; main revalidates, runs
+  the real Pi probe, and commits all or restores all. No key or attempt secret returns.
+- `models.addManualModel` is the connected-Provider inventory fallback. One exact
+  Provider+Model array preserves alias/enabled/default across Refresh. The current default
+  cannot be disabled; select another enabled default first.
+- Setup never groups cloud/self-hosted/local; main retains boundary/egress enforcement.
 - `agent.runtimeStatus` reports embedded Pi readiness and non-secret policy IDs. It uses profile summaries and presence-only binding metadata, never credential resolution/decryption; production emits only `embedded_pi_sdk`.
 - v0.1 exposes one effective default Pi Agent model; Advanced/Fast model slots must not appear unless runtime routing support is real and tested.
 - Sensitive setting changes route through Permission Broker or confirmation proposals.

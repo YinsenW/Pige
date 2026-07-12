@@ -108,10 +108,11 @@ Phase 2 implementation note:
 - Capture, parse, and OCR runners persist and link each deterministic parse, OCR, or Agent-ingest child before parent terminalization. Interrupted `running` parents auto-requeue; handled finalization failures remain `failed_retryable` for explicit retry. Both reuse the linked child. This guarantee is separate from the deferred `capture_batch` hierarchy.
 - Startup and vault activation first reconcile interrupted jobs. Proven-idempotent capture/parse/OCR/Agent-ingest/index jobs are requeued; cancellation-in-progress and unproven classes become `failed_retryable`. Capture/parse/OCR/Agent ingest drain in batches of 20; index rebuild uses a coalesced limit-1 drainer. Waiting Agent ingest still honors current model/OCR readiness.
 - Home's contextual processing strip includes active capture, parse, OCR, Agent ingest, and index jobs. It remains hidden when no work needs attention and uses compact localized status indicators rather than a new queue destination.
-- Model-backed Home creates a query-hash-only `retrieval_query` before retrieval and links
-  body-free audits/citation refs. No-binding fallback creates none. Restart marks an
-  interrupted query `failed_retryable`; generic retry is rejected and resubmission starts
-  a new turn. Drainer, continuation, cancel/progress, and conversation persistence remain open.
+- Home creates `agent_turn` before Pi/retrieval and links the user event, body-free audits,
+  source/citation refs, and committed assistant event. Missing/broken binding waits on the
+  same Job; restart adopts a committed assistant event or resumes known state. Legacy
+  `retrieval_query` remains readable; durable follow-up, cancel/progress, and URL-tool
+  continuation remain open.
 - Source-page writes use pending/previous/target checksums so a crash can be reconciled without confusing Pige's partial write with a user edit.
 - Phase 3 text/document pages create deterministic `agent_ingest`. Missing models wait.
   Document parse/OCR children key parent/tool/version/source revision/input, reuse across
@@ -136,7 +137,8 @@ Required v0.1 job classes:
 | `parse` | PDF/DOCX/PPTX/text extraction | extracted artifact, parser metadata | Yes where tool supports | Yes |
 | `ocr` | screenshot or rendered PDF page OCR | OCR artifact, confidence metadata | Yes where tool supports | Yes |
 | `agent_ingest` | summarize, tag, link, compile pages | source page, wiki pages, proposal/operation | During model/tool stages | Yes |
-| `retrieval_query` | Home question with grounded answer | conversation event, optional saved page | Yes | Usually yes |
+| `agent_turn` | unified Home text or one preserved attachment | conversation events, answer/source/proposal refs | During model/tool stages | Yes |
+| `retrieval_query` | legacy Home grounded-answer record | conversation event, optional saved page | Yes | Usually yes |
 | `index_rebuild` | FTS/vector/graph rebuild | SQLite/index files | Yes | Yes |
 | `backup` | create backup zip | backup archive and manifest | Yes before finalization | Yes |
 | `restore` | preview/apply backup | restored vault, restore report | Preview yes, apply guarded | Only through new preview |
@@ -147,13 +149,13 @@ Required v0.1 job classes:
 
 `packages/schemas/src/index.ts` owns the executable `JobClassSchema`. This table explains those exact values; no document or DTO may introduce aliases such as `capture_preserve`, `parse_source`, `backup_create`, or `restore_validate`.
 
-Unified ingress requires a versioned shared-schema migration adding `agent_turn`; it
-must not overload query-hash-only `retrieval_query`. Main first appends the bounded user
-conversation event, then creates one `agent_turn` linked to that event and any preserved
-source refs. Without a model it waits at `waiting_dependency/waiting_for_model` and
-resumes the same identity. Short chat creates no Source Record; large/attached evidence
-is stored once. Existing `retrieval_query` and `agent_ingest` records remain readable
-compatibility records until migration; no implementation may emit `agent_turn` early.
+`agent_turn` is executable. Main first appends the bounded user conversation event, then
+creates one Job linked to it and any preserve-first source ref. Without a usable model it
+waits at `waiting_dependency/waiting_for_model` and resumes the same identity. Short chat
+creates no Source Record; the current source-bearing turn stores one attachment once and
+reconciles a crash between preservation and linkage. Existing `retrieval_query` and
+`agent_ingest` remain readable compatibility records. Agent-selected URL fetch/preserve,
+durable follow-up sessions, and broader multi-source recovery remain open.
 
 Jobs may have parent-child structure:
 

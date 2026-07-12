@@ -7,6 +7,8 @@ import jaMessages from "./locales/ja/messages.json";
 import koMessages from "./locales/ko/messages.json";
 import zhHansMessages from "./locales/zh-Hans/messages.json";
 import type {
+  AgentTurnAnswer,
+  AgentSubmitTurnResult,
   AgentRuntimeStatus,
   AppHealth,
   BackupRestoreStatus,
@@ -19,9 +21,11 @@ import type {
   LibraryRelatedResult,
   LocalDatabaseStatus,
   ModelProviderSettingsSummary,
+  ModelProfileSummary,
   NoteRenderResult,
   OnboardingStatus,
   PigeErrorSummary,
+  ProviderConnectNeedsManualModel,
   ProposalDecisionResult,
   ProposalSummary,
   RecentVaultSummary,
@@ -34,11 +38,10 @@ import type {
   WindowState
 } from "@pige/contracts";
 import type {
-  CloudBoundary,
   ConfirmationProposal,
   JobState,
   Locale,
-  ProviderKind,
+  ProviderEndpointProtocol,
   SourceStorageStrategy,
   WindowLayoutMode
 } from "@pige/schemas";
@@ -85,6 +88,7 @@ export function App(): React.JSX.Element {
   const [availableLocales, setAvailableLocales] = useState<readonly Locale[]>(["zh-Hans", "en", "ja", "ko", "fr", "de"]);
   const [toolchainHealth, setToolchainHealth] = useState<ToolchainHealth | null>(null);
   const [dropActive, setDropActive] = useState(false);
+  const [homeDraftText, setHomeDraftText] = useState("");
   const [captureToast, setCaptureToast] = useState<CaptureToast | null>(null);
   const [recentJobs, setRecentJobs] = useState<readonly JobSummary[]>([]);
   const [readyProposals, setReadyProposals] = useState<readonly ProposalSummary[]>([]);
@@ -129,7 +133,7 @@ export function App(): React.JSX.Element {
       ? await Promise.all([
         window.pige.jobs.list({
           limit: 6,
-          classes: ["capture", "parse", "ocr", "agent_ingest", "index_rebuild"],
+          classes: ["capture", "parse", "ocr", "agent_ingest", "agent_turn", "index_rebuild"],
           ...homeJobStateFilter
         }).catch(() => undefined),
         window.pige.proposals.list({ limit: 100, states: ["ready"] }).catch(() => undefined)
@@ -235,28 +239,36 @@ export function App(): React.JSX.Element {
     setAvailableLocales(appearance.availableLocales);
   };
 
-  const submitFiles = async (files: readonly File[], inputKind: "file_drop" | "file_picker"): Promise<void> => {
-    if (files.length === 0) return;
+  const submitFiles = async (
+    files: readonly File[],
+    inputKind: "file_drop" | "file_picker",
+    text?: string
+  ): Promise<AgentSubmitTurnResult | undefined> => {
+    if (files.length === 0) return undefined;
+    if (files.length > 1) {
+      setCaptureToast({ kind: "error", message: t("home.oneFilePerTurn") });
+      return undefined;
+    }
     if (!onboarding?.activeVault) {
       setCaptureToast({ kind: "error", message: t("home.createVaultBeforeDrop") });
-      return;
+      return undefined;
     }
 
     try {
-      const result = await window.pige.capture.submitDroppedFiles(files, {
+      const result = await window.pige.agent.submitTurn({
+        ...(text?.trim() ? { text: text.trim() } : {}),
         inputKind,
-        userIntent: "capture",
+        objective: "auto",
         locale
-      });
-      if (result.status === "rejected") {
-        setCaptureToast({ kind: "error", message: `${t("home.filesRejected")}: ${result.rejectedFiles.length}` });
-        return;
-      }
-      const statusKey = result.status === "partially_queued" ? "home.filesPartiallyQueued" : "home.filesQueued";
-      setCaptureToast({ kind: "success", message: `${t(statusKey)}: ${result.sourceIds.length}` });
+      }, files);
+      setCaptureToast(result.state === "completed"
+        ? { kind: "success", message: result.answer.answer }
+        : { kind: "error", message: t(result.error.messageKey) });
       await refreshVaultState();
-    } catch (caught) {
-      setCaptureToast({ kind: "error", message: caught instanceof Error ? caught.message : t("error.generic") });
+      return result;
+    } catch {
+      setCaptureToast({ kind: "error", message: t("error.generic") });
+      return undefined;
     }
   };
 
@@ -303,7 +315,11 @@ export function App(): React.JSX.Element {
     if (!dragEventHasFiles(event)) return;
     event.preventDefault();
     setDropActive(false);
-    void submitFiles(Array.from(event.dataTransfer.files), "file_drop");
+    void submitFiles(
+      Array.from(event.dataTransfer.files),
+      "file_drop",
+      view === "home" ? homeDraftText : undefined
+    );
   };
 
   const activeVault = onboarding?.activeVault;
@@ -494,7 +510,9 @@ export function App(): React.JSX.Element {
             recentJobs={recentJobs}
             readyProposals={readyProposals}
             locale={locale}
-            onFilesSelected={(files) => submitFiles(files, "file_picker")}
+            draftText={homeDraftText}
+            onDraftChange={setHomeDraftText}
+            onFilesSelected={(files, text) => submitFiles(files, "file_picker", text)}
             onCancelJob={cancelJob}
             onRetryJob={retryJob}
             onProposalChanged={refreshVaultState}
@@ -876,17 +894,22 @@ function HomeComposer(props: {
   readonly recentJobs: readonly JobSummary[];
   readonly readyProposals: readonly ProposalSummary[];
   readonly locale: Locale;
-  readonly onFilesSelected: (files: readonly File[]) => Promise<void>;
+  readonly draftText: string;
+  readonly onDraftChange: (text: string) => void;
+  readonly onFilesSelected: (
+    files: readonly File[],
+    text?: string
+  ) => Promise<AgentSubmitTurnResult | undefined>;
   readonly onCancelJob: (jobId: string) => Promise<void>;
   readonly onRetryJob: (jobId: string) => Promise<void>;
   readonly onProposalChanged: () => Promise<void>;
   readonly onOpenModels: () => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
-  const [text, setText] = useState("");
+  const text = props.draftText;
   const [captureStatus, setCaptureStatus] = useState<string | null>(null);
   const [captureError, setCaptureError] = useState<string | null>(null);
-  const [retrievalResult, setRetrievalResult] = useState<RetrievalAskResult | null>(null);
+  const [agentAnswer, setAgentAnswer] = useState<AgentTurnAnswer | null>(null);
   const [agentRunState, setAgentRunState] = useState<HomeAgentUiState>("idle");
   const [agentError, setAgentError] = useState<PigeErrorSummary | null>(null);
   const [agentModelUsage, setAgentModelUsage] = useState<HomeAgentModelUsage>("none");
@@ -923,62 +946,25 @@ function HomeComposer(props: {
     noteOpenSequence.current += 1;
     setSelectedNote(null);
     setSelectedNoteRelated(null);
-    const captureUrl = extractSingleCaptureUrl(text);
-    if (captureUrl) {
-      await submitUrlCapture(captureUrl);
-      return;
-    }
-    if (isLikelyQuestion(text)) {
-      await submitAgentQuestion();
-      return;
-    }
-
-    try {
-      const result = await window.pige.capture.submitText({
-        text,
-        inputKind: "typed_text",
-        userIntent: "capture",
-        locale: props.locale
-      });
-      setCaptureStatus(`${props.t("home.captureQueued")}: ${result.sourceId}`);
-      setRetrievalResult(null);
-      setText("");
-    } catch (caught) {
-      setCaptureError(caught instanceof Error ? caught.message : props.t("error.generic"));
-    }
-  };
-
-  const submitUrlCapture = async (url: string): Promise<void> => {
-    try {
-      const result = await window.pige.capture.submitUrl({
-        url,
-        inputKind: "pasted_url",
-        userIntent: "capture",
-        locale: props.locale
-      });
-      setCaptureStatus(`${props.t("home.urlQueued")}: ${result.sourceId}`);
-      setRetrievalResult(null);
-      setText("");
-    } catch (caught) {
-      setCaptureError(caught instanceof Error ? caught.message : props.t("error.generic"));
-    }
-  };
-
-  const submitAgentQuestion = async (): Promise<void> => {
-    const query = text.trim();
+    const turnText = text.trim();
     setAgentError(null);
-    setRetrievalResult(null);
+    setAgentAnswer(null);
     setAgentModelUsage("none");
     setAgentRunState("accepted");
     await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
     setAgentRunState("running");
     try {
-      const outcome = await window.pige.agent.ask({ query, limit: 8, locale: props.locale });
+      const outcome = await window.pige.agent.submitTurn({
+        text: turnText,
+        inputKind: classifyTextTransportKind(turnText),
+        objective: "auto",
+        locale: props.locale
+      });
       if (outcome.state === "completed") {
-        setRetrievalResult(outcome.result);
+        setAgentAnswer(outcome.answer);
         setAgentModelUsage(outcome.modelUsage);
         setAgentRunState("completed");
-        setText("");
+        props.onDraftChange("");
         return;
       }
       setAgentModelUsage(outcome.modelUsage);
@@ -1229,14 +1215,18 @@ function HomeComposer(props: {
             t={props.t}
           />
         </section>
-      ) : retrievalResult ? (
+      ) : agentAnswer?.retrieval ? (
         <RetrievalResults
-          result={retrievalResult}
+          result={toRetrievalAskResult(agentAnswer)}
           modelUsage={agentModelUsage}
           noteLoadingPageId={noteLoadingPageId}
           onOpen={openResult}
           t={props.t}
         />
+      ) : agentAnswer ? (
+        <section className="retrieval-answer" aria-live="polite">
+          <p>{agentAnswer.answer}</p>
+        </section>
       ) : null}
       <section className="composer">
         <textarea
@@ -1245,20 +1235,38 @@ function HomeComposer(props: {
           placeholder={props.t("home.placeholder")}
           rows={4}
           value={text}
-          onChange={(event) => setText(event.target.value)}
+          onChange={(event) => props.onDraftChange(event.target.value)}
         />
         <div className="toolbar">
           <span>{props.t("home.toolbarHint")}</span>
           <input
             ref={fileInputRef}
-            className="visually-hidden"
-            type="file"
-            accept=".md,.markdown,.txt,text/plain,text/markdown"
-            multiple
-            onChange={(event) => {
+              className="visually-hidden"
+              type="file"
+              accept=".md,.markdown,.txt,.pdf,.docx,.pptx,.png,.jpg,.jpeg,.webp,.gif,.tif,.tiff,.bmp,text/plain,text/markdown,image/*"
+              onChange={(event) => {
               const files = Array.from(event.currentTarget.files ?? []);
               event.currentTarget.value = "";
-              void props.onFilesSelected(files);
+              setAgentAnswer(null);
+              setAgentError(null);
+              setAgentModelUsage("none");
+              setAgentRunState("running");
+              void props.onFilesSelected(files, text).then((result) => {
+                if (!result) {
+                  setAgentRunState("failed");
+                  return;
+                }
+                setAgentModelUsage(result.modelUsage);
+                setAgentRunState(result.state);
+                if (result.state === "completed") {
+                  setAgentAnswer(result.answer);
+                  setAgentError(null);
+                  props.onDraftChange("");
+                } else {
+                  setAgentAnswer(null);
+                  setAgentError(result.error);
+                }
+              });
             }}
           />
           <button
@@ -1289,7 +1297,7 @@ function HomeComposer(props: {
             {agentError?.userAction === "configure_model" ? (
               <button type="button" className="ghost" onClick={props.onOpenModels}>{props.t("home.openModels")}</button>
             ) : agentError?.retryable ? (
-              <button type="button" className="ghost" onClick={() => void submitAgentQuestion()}>{props.t("home.retryAnswer")}</button>
+              <button type="button" className="ghost" onClick={() => void submitHomeInput()}>{props.t("home.retryAnswer")}</button>
             ) : null}
           </div>
         ) : null}
@@ -1383,6 +1391,30 @@ function RetrievalResults(props: {
   );
 }
 
+function toRetrievalAskResult(answer: AgentTurnAnswer): RetrievalAskResult {
+  if (!answer.retrieval) {
+    throw new Error("Agent retrieval metadata is unavailable.");
+  }
+  return {
+    ...answer.retrieval,
+    answeredAt: new Date().toISOString(),
+    answer: answer.answer,
+    answerMode: "model_grounded",
+    confidence: answer.grounding === "insufficient_evidence"
+      ? "insufficient"
+      : answer.citations.length > 1
+        ? "grounded"
+        : "limited",
+    citations: answer.citations,
+    warnings: answer.grounding === "insufficient_evidence"
+      ? ["insufficient_evidence"]
+      : [
+          ...(answer.citations.length === 1 ? ["limited_evidence" as const] : []),
+          ...(answer.retrieval.degraded ? ["search_degraded" as const] : [])
+        ]
+  };
+}
+
 function RetrievalResultRow(props: {
   readonly item: RetrievalSearchResultItem;
   readonly loading: boolean;
@@ -1415,25 +1447,14 @@ function homeRuntimeModelUsage(status: AgentRuntimeStatus | null): HomeAgentMode
     : "cloud";
 }
 
-function isLikelyQuestion(value: string): boolean {
-  const text = value.trim();
-  if (!text) return false;
-  if (/[?？]$/u.test(text)) return true;
-  const normalized = text.toLocaleLowerCase();
-  return (
-    /^(what|why|how|who|where|when|which|find|search|show|tell me|summarize|explain|do|does|did|can|could|would|should|is|are|was|were|has|have|had|où|pourquoi|comment|warum|wie)\b/iu.test(normalized) ||
-    /^(什么|为什么|为何|怎么|如何|谁|哪里|哪|请问|找|搜索|总结|解释|教えて|なぜ|どう|どこ|무엇|왜|어떻게)/u.test(normalized)
-  );
-}
-
-function extractSingleCaptureUrl(value: string): string | undefined {
-  const trimmed = value.trim();
-  if (/\s/u.test(trimmed)) return undefined;
+function classifyTextTransportKind(text: string): "typed_text" | "typed_url" {
   try {
-    const parsed = new URL(trimmed);
-    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.toString() : undefined;
+    const parsed = new URL(text);
+    return (parsed.protocol === "http:" || parsed.protocol === "https:") && parsed.toString() === text
+      ? "typed_url"
+      : "typed_text";
   } catch {
-    return undefined;
+    return "typed_text";
   }
 }
 
@@ -1739,13 +1760,14 @@ interface ModelSettingsPanelProps {
 }
 
 function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.Element {
-  const [presetApiKey, setPresetApiKey] = useState("");
-  const [displayName, setDisplayName] = useState("OpenAI");
-  const [providerKind, setProviderKind] = useState<ProviderKind>("openai");
+  const [presetApiKeys, setPresetApiKeys] = useState<Record<string, string>>({});
+  const [displayName, setDisplayName] = useState("Custom provider");
+  const [endpointProtocol, setEndpointProtocol] = useState<ProviderEndpointProtocol>("openai_responses");
   const [baseUrl, setBaseUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
-  const [manualModelId, setManualModelId] = useState("gpt-4.1");
-  const [cloudBoundary, setCloudBoundary] = useState<CloudBoundary>("cloud");
+  const [manualModelId, setManualModelId] = useState("");
+  const [manualBootstrap, setManualBootstrap] = useState<ProviderConnectNeedsManualModel | null>(null);
+  const [providerSyncFailures, setProviderSyncFailures] = useState<ReadonlySet<string>>(new Set());
 
   useEffect(() => {
     void props.onRefreshModels();
@@ -1755,11 +1777,16 @@ function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.Element {
     props.onBusy(true);
     props.onError(null);
     try {
-      await window.pige.models.addPresetProvider({ presetId, apiKey: presetApiKey });
-      setPresetApiKey("");
+      const apiKey = presetApiKeys[presetId]?.trim();
+      const result = await window.pige.models.addPresetProvider({
+        presetId,
+        ...(apiKey ? { apiKey } : {})
+      });
+      if ("status" in result) throw new Error("Reviewed preset did not select a bootstrap model.");
+      setPresetApiKeys((current) => ({ ...current, [presetId]: "" }));
       await Promise.all([props.onRefreshModels(), props.onRefreshVaultState()]);
-    } catch (caught) {
-      props.onError(caught instanceof Error ? caught.message : props.t("error.generic"));
+    } catch {
+      props.onError(props.t("models.connectionFailed"));
     } finally {
       props.onBusy(false);
     }
@@ -1769,18 +1796,27 @@ function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.Element {
     props.onBusy(true);
     props.onError(null);
     try {
-      await window.pige.models.addManualProvider({
+      const result = await window.pige.models.addManualProvider({
         displayName,
-        providerKind,
-        ...(baseUrl.trim() ? { baseUrl: baseUrl.trim() } : {}),
+        providerKind: endpointProtocol === "anthropic_messages" ? "anthropic_compatible" : "custom",
+        endpointProtocol,
+        baseUrl: baseUrl.trim(),
         apiKey,
-        manualModelId,
-        cloudBoundary
+        ...(manualBootstrap ? { manualModelId: manualModelId.trim() } : {}),
+        cloudBoundary: "unknown"
       });
+      if ("status" in result) {
+        setManualBootstrap(result);
+        setManualModelId(result.discoveredModels[0]?.modelId ?? "");
+        if (result.error) props.onError(props.t("models.discoveryFailed"));
+        return;
+      }
       setApiKey("");
+      setManualModelId("");
+      setManualBootstrap(null);
       await Promise.all([props.onRefreshModels(), props.onRefreshVaultState()]);
-    } catch (caught) {
-      props.onError(caught instanceof Error ? caught.message : "Something went wrong.");
+    } catch {
+      props.onError(props.t("models.connectionFailed"));
     } finally {
       props.onBusy(false);
     }
@@ -1792,14 +1828,85 @@ function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.Element {
     try {
       await window.pige.models.setDefaultModel({ modelProfileId });
       await Promise.all([props.onRefreshModels(), props.onRefreshVaultState()]);
-    } catch (caught) {
-      props.onError(caught instanceof Error ? caught.message : "Something went wrong.");
+    } catch {
+      props.onError(props.t("models.connectionFailed"));
+    } finally {
+      props.onBusy(false);
+    }
+  };
+
+  const refreshProviderModels = async (providerProfileId: string): Promise<void> => {
+    props.onBusy(true);
+    props.onError(null);
+    try {
+      await window.pige.models.refreshProviderModels({ providerProfileId });
+      setProviderSyncFailures((current) => {
+        const next = new Set(current);
+        next.delete(providerProfileId);
+        return next;
+      });
+      await props.onRefreshModels();
+    } catch {
+      setProviderSyncFailures((current) => new Set(current).add(providerProfileId));
+      props.onError(props.t("models.discoveryFailed"));
+    } finally {
+      props.onBusy(false);
+    }
+  };
+
+  const addManualModel = async (
+    providerProfileId: string,
+    modelId: string,
+    modelDisplayName: string
+  ): Promise<void> => {
+    props.onBusy(true);
+    props.onError(null);
+    try {
+      await window.pige.models.addManualModel({
+        providerProfileId,
+        modelId,
+        ...(modelDisplayName.trim() ? { displayName: modelDisplayName.trim() } : {})
+      });
+      await props.onRefreshModels();
+    } catch {
+      props.onError(props.t("models.connectionFailed"));
+    } finally {
+      props.onBusy(false);
+    }
+  };
+
+  const setModelEnabled = async (modelProfileId: string, enabled: boolean): Promise<void> => {
+    props.onBusy(true);
+    props.onError(null);
+    try {
+      await window.pige.models.updateModel({ modelProfileId, enabled });
+      await Promise.all([props.onRefreshModels(), props.onRefreshVaultState()]);
+    } catch {
+      props.onError(props.t("models.connectionFailed"));
+    } finally {
+      props.onBusy(false);
+    }
+  };
+
+  const setModelDisplayName = async (
+    modelProfileId: string,
+    displayName: string | null
+  ): Promise<void> => {
+    props.onBusy(true);
+    props.onError(null);
+    try {
+      await window.pige.models.updateModel({ modelProfileId, displayName });
+      await props.onRefreshModels();
+    } catch {
+      props.onError(props.t("models.connectionFailed"));
     } finally {
       props.onBusy(false);
     }
   };
 
   const summary = props.modelSummary;
+  const defaultModel = summary?.models.find((model) => model.id === summary.defaultModelProfileId);
+  const defaultProvider = summary?.providers.find((provider) => provider.id === defaultModel?.providerProfileId);
 
   return (
     <section className="settings-page" aria-label={props.t("nav.models")}>
@@ -1816,18 +1923,27 @@ function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.Element {
               <strong>{preset.displayName}</strong>
               <span>{props.t("models.recommended")}</span>
             </div>
-            <label htmlFor={`preset-key-${preset.presetId}`}>{props.t("models.apiKey")}</label>
-            <input
-              id={`preset-key-${preset.presetId}`}
-              value={presetApiKey}
-              type="password"
-              autoComplete="off"
-              onChange={(event) => setPresetApiKey(event.target.value)}
-            />
+            {preset.authRequirement !== "none" ? (
+              <>
+                <label htmlFor={`preset-key-${preset.presetId}`}>{props.t("models.apiKey")}</label>
+                <input
+                  id={`preset-key-${preset.presetId}`}
+                  value={presetApiKeys[preset.presetId] ?? ""}
+                  type="password"
+                  autoComplete="off"
+                  onChange={(event) => setPresetApiKeys((current) => ({
+                    ...current,
+                    [preset.presetId]: event.target.value
+                  }))}
+                />
+              </>
+            ) : null}
             <button
               type="button"
               onClick={() => void connectPreset(preset.presetId)}
-              disabled={props.busy || !presetApiKey.trim()}
+              disabled={props.busy || (
+                preset.authRequirement === "api_key" && !(presetApiKeys[preset.presetId] ?? "").trim()
+              )}
             >
               {props.t("models.connect")}
             </button>
@@ -1840,24 +1956,21 @@ function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.Element {
             <label htmlFor="provider-name">{props.t("field.name")}</label>
             <input id="provider-name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
 
-            <label htmlFor="provider-kind">{props.t("models.serviceType")}</label>
+            <label htmlFor="provider-protocol">{props.t("models.endpointProtocol")}</label>
             <select
-              id="provider-kind"
-              value={providerKind}
-              onChange={(event) => setProviderKind(event.target.value as ProviderKind)}
+              id="provider-protocol"
+              value={endpointProtocol}
+              onChange={(event) => setEndpointProtocol(event.target.value as ProviderEndpointProtocol)}
             >
-              <option value="openai">OpenAI</option>
-              <option value="anthropic">Anthropic</option>
-              <option value="openai_compatible">OpenAI-compatible</option>
-              <option value="anthropic_compatible">Anthropic-compatible</option>
-              <option value="custom">{props.t("models.customEndpoint")}</option>
+              <option value="openai_responses">{props.t("models.protocol.openaiResponses")}</option>
+              <option value="openai_chat_completions">{props.t("models.protocol.openaiChatCompletions")}</option>
+              <option value="anthropic_messages">{props.t("models.protocol.anthropicMessages")}</option>
             </select>
 
             <label htmlFor="provider-base-url">{props.t("models.baseUrl")}</label>
             <input
               id="provider-base-url"
               value={baseUrl}
-              placeholder={props.t("models.optional")}
               onChange={(event) => setBaseUrl(event.target.value)}
             />
 
@@ -1869,22 +1982,31 @@ function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.Element {
               onChange={(event) => setApiKey(event.target.value)}
             />
 
-            <label htmlFor="provider-model">{props.t("models.modelId")}</label>
-            <input id="provider-model" value={manualModelId} onChange={(event) => setManualModelId(event.target.value)} />
+            {manualBootstrap ? (
+              <>
+                <p className="muted">{props.t("models.bootstrapModelRequired")}</p>
+                <label htmlFor="provider-model">{props.t("models.modelId")}</label>
+                <input
+                  id="provider-model"
+                  list="provider-discovered-models"
+                  value={manualModelId}
+                  onChange={(event) => setManualModelId(event.target.value)}
+                />
+                <datalist id="provider-discovered-models">
+                  {manualBootstrap.discoveredModels.map((model) => (
+                    <option key={model.modelId} value={model.modelId}>{model.displayName ?? model.modelId}</option>
+                  ))}
+                </datalist>
+              </>
+            ) : null}
 
-            <label htmlFor="cloud-boundary">{props.t("models.boundary")}</label>
-            <select
-              id="cloud-boundary"
-              value={cloudBoundary}
-              onChange={(event) => setCloudBoundary(event.target.value as CloudBoundary)}
+            <button
+              type="button"
+              onClick={() => void saveProvider()}
+              disabled={props.busy || !baseUrl.trim() || !apiKey.trim() || (
+                manualBootstrap !== null && !manualModelId.trim()
+              )}
             >
-              <option value="cloud">{props.t("models.cloud")}</option>
-              <option value="self_hosted">{props.t("models.selfHosted")}</option>
-              <option value="local">{props.t("models.local")}</option>
-              <option value="unknown">{props.t("models.unknown")}</option>
-            </select>
-
-            <button type="button" onClick={() => void saveProvider()} disabled={props.busy}>
               {props.t("models.testAndSave")}
             </button>
           </div>
@@ -1892,27 +2014,26 @@ function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.Element {
       </section>
 
       <section className="settings-group">
-        <h2>{props.t("models.defaultModel")}</h2>
-        {summary && summary.models.length > 0 ? (
-          <div className="model-list">
-            {summary.models.map((model) => (
-              <div className="model-row" key={model.id}>
-                <div>
-                  <strong>{model.displayName ?? model.modelId}</strong>
-                  <span>
-                    {summary.providers.find((provider) => provider.id === model.providerProfileId)?.displayName ?? props.t("models.unknown")}
-                    {model.isDefault ? ` · ${props.t("models.default")}` : ""}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  className="secondary"
-                  disabled={model.isDefault || props.busy}
-                  onClick={() => void setDefaultModel(model.id)}
-                >
-                  {props.t("models.setDefault")}
-                </button>
-              </div>
+        <h2>{props.t("models.availableModels")}</h2>
+        {summary?.defaultBinding.state === "configured_unusable" ? (
+          <p className="error" role="alert">{props.t(summary.defaultBinding.error.messageKey)}</p>
+        ) : null}
+        {summary && summary.providers.length > 0 ? (
+          <div className="provider-model-groups">
+            {summary.providers.map((provider) => (
+              <ProviderModelGroup
+                key={provider.id}
+                providerId={provider.id}
+                providerName={provider.displayName}
+                models={summary.models.filter((model) => model.providerProfileId === provider.id)}
+                syncFailed={providerSyncFailures.has(provider.id)}
+                busy={props.busy}
+                onRefresh={() => refreshProviderModels(provider.id)}
+                onAddCustom={(modelId, modelDisplayName) => addManualModel(provider.id, modelId, modelDisplayName)}
+                onSetEnabled={setModelEnabled}
+                onSetDisplayName={setModelDisplayName}
+                t={props.t}
+              />
             ))}
           </div>
         ) : (
@@ -1920,19 +2041,162 @@ function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.Element {
         )}
       </section>
 
-      {summary && summary.providers.length > 0 ? (
+      <section className="settings-group">
+        <h2>{props.t("models.defaultModel")}</h2>
+        <label htmlFor="global-default-model">{props.t("models.defaultModel")}</label>
+        <select
+          id="global-default-model"
+          value={summary?.defaultModelProfileId ?? ""}
+          disabled={props.busy || !summary?.models.some((model) => model.enabled)}
+          onChange={(event) => void setDefaultModel(event.target.value)}
+        >
+          <option value="" disabled>{props.t("models.noModel")}</option>
+          {summary?.providers.map((provider) => (
+            <optgroup key={provider.id} label={provider.displayName}>
+              {summary.models
+                .filter((model) => model.providerProfileId === provider.id && model.enabled)
+                .map((model) => (
+                  <option key={model.id} value={model.id}>{model.displayName ?? model.modelId}</option>
+                ))}
+            </optgroup>
+          ))}
+        </select>
+      </section>
+
+      {defaultProvider ? (
         <InfoGroup
           title={props.t("models.currentProvider")}
           rows={[
-            [props.t("field.name"), summary.providers[0]?.displayName ?? ""],
-            [props.t("models.type"), summary.providers[0]?.providerKind ?? ""],
-            [props.t("models.boundary"), summary.providers[0]?.cloudBoundary ?? ""]
+            [props.t("field.name"), defaultProvider.displayName],
+            [props.t("models.defaultModel"), defaultModel?.displayName ?? defaultModel?.modelId ?? props.t("models.unknown")]
           ]}
         />
       ) : null}
 
       {props.error ? <p className="error">{props.error}</p> : null}
     </section>
+  );
+}
+
+function ProviderModelGroup(props: {
+  readonly providerId: string;
+  readonly providerName: string;
+  readonly models: readonly ModelProfileSummary[];
+  readonly syncFailed: boolean;
+  readonly busy: boolean;
+  readonly onRefresh: () => Promise<void>;
+  readonly onAddCustom: (modelId: string, displayName: string) => Promise<void>;
+  readonly onSetEnabled: (modelProfileId: string, enabled: boolean) => Promise<void>;
+  readonly onSetDisplayName: (modelProfileId: string, displayName: string | null) => Promise<void>;
+  readonly t: (key: string) => string;
+}): React.JSX.Element {
+  const [modelId, setModelId] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const addModel = async (): Promise<void> => {
+    await props.onAddCustom(modelId.trim(), displayName.trim());
+    setModelId("");
+    setDisplayName("");
+  };
+  return (
+    <section className="provider-model-group" aria-labelledby={`provider-models-${props.providerId}`}>
+      <div className="provider-model-heading">
+        <h3 id={`provider-models-${props.providerId}`}>{props.providerName}</h3>
+        <button type="button" className="secondary" disabled={props.busy} onClick={() => void props.onRefresh()}>
+          {props.t("library.refresh")}
+        </button>
+      </div>
+      {props.models.length > 0 ? (
+        <div className="model-list">
+          {props.models.map((model) => (
+            <ModelInventoryRow
+              key={model.id}
+              model={model}
+              busy={props.busy}
+              onSetEnabled={props.onSetEnabled}
+              onSetDisplayName={props.onSetDisplayName}
+              t={props.t}
+            />
+          ))}
+        </div>
+      ) : <p className="muted">{props.t("models.noModel")}</p>}
+      {props.syncFailed ? (
+        <p className="error" role="alert">{props.t("models.discoveryFailed")}</p>
+      ) : null}
+      <details className="custom-model">
+        <summary>{props.t("models.addCustomModel")}</summary>
+        <div className="custom-provider-fields">
+          <label htmlFor={`custom-model-id-${props.providerId}`}>{props.t("models.modelId")}</label>
+          <input
+            id={`custom-model-id-${props.providerId}`}
+            value={modelId}
+            onChange={(event) => setModelId(event.target.value)}
+          />
+          <label htmlFor={`custom-model-name-${props.providerId}`}>{props.t("field.name")}</label>
+          <input
+            id={`custom-model-name-${props.providerId}`}
+            value={displayName}
+            placeholder={props.t("models.optional")}
+            onChange={(event) => setDisplayName(event.target.value)}
+          />
+          <button type="button" disabled={props.busy || !modelId.trim()} onClick={() => void addModel()}>
+            {props.t("models.addCustomModel")}
+          </button>
+        </div>
+      </details>
+    </section>
+  );
+}
+
+function ModelInventoryRow(props: {
+  readonly model: ModelProfileSummary;
+  readonly busy: boolean;
+  readonly onSetEnabled: (modelProfileId: string, enabled: boolean) => Promise<void>;
+  readonly onSetDisplayName: (modelProfileId: string, displayName: string | null) => Promise<void>;
+  readonly t: (key: string) => string;
+}): React.JSX.Element {
+  const initialName = props.model.displayName && props.model.displayName !== props.model.modelId
+    ? props.model.displayName
+    : "";
+  const [displayName, setDisplayName] = useState(initialName);
+  return (
+    <div className="model-row">
+      <span>
+        <strong>{props.model.displayName ?? props.model.modelId}</strong>
+        <small>{props.model.source === "manual" ? props.t("models.manual") : props.model.modelId}</small>
+      </span>
+      <div className="model-row-controls">
+        <label>
+          <input
+            type="checkbox"
+            checked={props.model.enabled}
+            disabled={props.busy || props.model.isDefault}
+            aria-label={`${props.t("models.enabled")}: ${props.model.displayName ?? props.model.modelId}`}
+            onChange={(event) => void props.onSetEnabled(props.model.id, event.target.checked)}
+          />
+          {props.model.isDefault ? props.t("models.default") : props.t("models.enabled")}
+        </label>
+        <details className="model-name-editor">
+          <summary>{props.t("models.editDisplayName")}</summary>
+          <div className="model-name-fields">
+            <label htmlFor={`model-display-name-${props.model.id}`}>{props.t("models.displayName")}</label>
+            <input
+              id={`model-display-name-${props.model.id}`}
+              value={displayName}
+              placeholder={props.model.modelId}
+              onChange={(event) => setDisplayName(event.target.value)}
+            />
+            <button
+              type="button"
+              className="secondary"
+              disabled={props.busy}
+              onClick={() => void props.onSetDisplayName(props.model.id, displayName.trim() || null)}
+            >
+              {props.t("models.saveDisplayName")}
+            </button>
+          </div>
+        </details>
+      </div>
+    </div>
   );
 }
 

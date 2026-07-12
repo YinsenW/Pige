@@ -1,12 +1,21 @@
 import { Buffer } from "node:buffer";
-import { isBuiltInProviderKind, type CloudBoundary, type ModelListStrategy, type ProviderKind } from "@pige/schemas";
+import {
+  isBuiltInProviderKind,
+  type CloudBoundary,
+  type ModelListStrategy,
+  type ProviderAuthRequirement,
+  type ProviderEndpointProtocol,
+  type ProviderKind
+} from "@pige/schemas";
 import { PigeDomainError } from "@pige/domain";
 import { normalizeProviderBaseUrl } from "./provider-base-url";
 
 export interface ProviderConnectionInput {
   readonly providerKind: ProviderKind;
+  readonly endpointProtocol: ProviderEndpointProtocol;
   readonly baseUrl?: string;
-  readonly apiKey: string;
+  readonly authRequirement?: ProviderAuthRequirement;
+  readonly apiKey?: string;
   readonly manualModelId: string;
   readonly cloudBoundary: CloudBoundary;
 }
@@ -21,6 +30,14 @@ export interface ProviderConnectionResult {
   readonly modelListStrategy: ModelListStrategy;
   readonly discoveredModels: readonly DiscoveredModel[];
   readonly selectedModelId: string;
+}
+
+export type ProviderDiscoveryInput = Omit<ProviderConnectionInput, "manualModelId">;
+
+export interface ProviderDiscoveryResult {
+  readonly checkedAt: string;
+  readonly modelListStrategy: ModelListStrategy;
+  readonly discoveredModels: readonly DiscoveredModel[];
 }
 
 export type FetchLike = typeof fetch;
@@ -49,9 +66,27 @@ export class ModelProviderConnectionTester {
       throw new PigeDomainError("model_id_empty", "Manual model ID cannot be empty.");
     }
 
-    const apiKey = input.apiKey.trim();
-    if (!apiKey) {
+    const discovery = await this.discoverModels(input);
+    if (discovery.modelListStrategy === "list_models") {
+      if (!discovery.discoveredModels.some((model) => model.modelId === selectedModelId)) {
+        throw new PigeDomainError("model_provider.model_not_found", "The selected model was not returned by this provider.");
+      }
+      return {
+        ...discovery,
+        selectedModelId
+      };
+    }
+    return { ...discovery, selectedModelId };
+  }
+
+  async discoverModels(input: ProviderDiscoveryInput): Promise<ProviderDiscoveryResult> {
+    const authRequirement = input.authRequirement ?? "api_key";
+    const apiKey = input.apiKey?.trim();
+    if (authRequirement === "api_key" && !apiKey) {
       throw new PigeDomainError("secret_empty", "Provider API key cannot be empty.");
+    }
+    if (authRequirement === "none" && apiKey) {
+      throw new PigeDomainError("secret_forbidden", "This Provider preset does not accept an API key.");
     }
     if (isBuiltInProviderKind(input.providerKind) && input.baseUrl !== undefined) {
       throw new PigeDomainError(
@@ -60,10 +95,11 @@ export class ModelProviderConnectionTester {
       );
     }
 
-    const endpoint = buildModelsEndpoint(input.providerKind, input.baseUrl);
+    assertBuiltInProtocol(input.providerKind, input.endpointProtocol);
+    const endpoint = buildModelsEndpoint(input.endpointProtocol, input.baseUrl);
     const response = await this.#fetchWithTimeout(endpoint, {
       method: "GET",
-      headers: buildModelListHeaders(input.providerKind, apiKey)
+      headers: buildModelListHeaders(input.endpointProtocol, authRequirement, apiKey)
     });
 
     if (response.ok) {
@@ -71,14 +107,10 @@ export class ModelProviderConnectionTester {
       if (discoveredModels.length === 0) {
         throw new PigeDomainError("model_provider.no_models", "The provider did not return any models.");
       }
-      if (!discoveredModels.some((model) => model.modelId === selectedModelId)) {
-        throw new PigeDomainError("model_provider.model_not_found", "The selected model was not returned by this provider.");
-      }
       return {
         checkedAt: new Date().toISOString(),
         modelListStrategy: "list_models",
-        discoveredModels,
-        selectedModelId
+        discoveredModels
       };
     }
 
@@ -90,8 +122,7 @@ export class ModelProviderConnectionTester {
       return {
         checkedAt: new Date().toISOString(),
         modelListStrategy: "failed_then_manual",
-        discoveredModels: [],
-        selectedModelId
+        discoveredModels: []
       };
     }
 
@@ -114,11 +145,10 @@ export class ModelProviderConnectionTester {
   }
 }
 
-function buildModelsEndpoint(providerKind: ProviderKind, baseUrl: string | undefined): string {
-  const defaultBaseUrl =
-    providerKind === "anthropic" || providerKind === "anthropic_compatible"
-      ? DEFAULT_ANTHROPIC_BASE_URL
-      : DEFAULT_OPENAI_BASE_URL;
+function buildModelsEndpoint(endpointProtocol: ProviderEndpointProtocol, baseUrl: string | undefined): string {
+  const defaultBaseUrl = endpointProtocol === "anthropic_messages"
+    ? DEFAULT_ANTHROPIC_BASE_URL
+    : DEFAULT_OPENAI_BASE_URL;
   const normalizedBaseUrl = normalizeProviderBaseUrl(baseUrl ?? defaultBaseUrl);
   return `${normalizedBaseUrl}/models`;
 }
@@ -127,8 +157,13 @@ function supportsManualModelFallback(providerKind: ProviderKind): boolean {
   return providerKind === "openai_compatible" || providerKind === "anthropic_compatible" || providerKind === "custom";
 }
 
-function buildModelListHeaders(providerKind: ProviderKind, apiKey: string): HeadersInit {
-  if (providerKind === "anthropic" || providerKind === "anthropic_compatible") {
+function buildModelListHeaders(
+  endpointProtocol: ProviderEndpointProtocol,
+  authRequirement: ProviderAuthRequirement,
+  apiKey: string | undefined
+): HeadersInit {
+  if (authRequirement === "none" || !apiKey) return {};
+  if (endpointProtocol === "anthropic_messages") {
     return {
       "anthropic-version": "2023-06-01",
       "x-api-key": apiKey
@@ -137,6 +172,23 @@ function buildModelListHeaders(providerKind: ProviderKind, apiKey: string): Head
   return {
     Authorization: `Bearer ${apiKey}`
   };
+}
+
+function assertBuiltInProtocol(
+  providerKind: ProviderKind,
+  endpointProtocol: ProviderEndpointProtocol
+): void {
+  const required = providerKind === "openai"
+    ? "openai_responses"
+    : providerKind === "anthropic"
+      ? "anthropic_messages"
+      : undefined;
+  if (required !== undefined && endpointProtocol !== required) {
+    throw new PigeDomainError(
+      "model_provider.protocol_mismatch",
+      "The built-in provider protocol does not match its reviewed endpoint."
+    );
+  }
 }
 
 function parseModelList(value: unknown): DiscoveredModel[] {

@@ -5,6 +5,8 @@ import { PigeDomainError } from "@pige/domain";
 import type {
   AddPresetProviderRequest,
   AddManualProviderRequest,
+  AddManualModelRequest,
+  AgentSubmitTurnRequest,
   AppHealth,
   BackupCreateResult,
   CreateVaultRequest,
@@ -19,13 +21,16 @@ import type {
   ProposalDecisionRequest,
   ProposalGetRequest,
   ProposalsListRequest,
+  ProviderConnectResult,
   RetrievalAskRequest,
   RetrievalSearchRequest,
   RestoreApplyRequest,
   RestoreApplyResult,
   RestorePreviewResult,
+  RefreshProviderModelsRequest,
   SetAlwaysOnTopRequest,
   SetDefaultModelRequest,
+  UpdateModelRequest,
   SetLocaleRequest,
   SetSidebarOpenRequest,
   SubmitFilesCaptureRequest,
@@ -38,6 +43,9 @@ import type {
 import {
   AddManualProviderRequestSchema,
   AddPresetProviderRequestSchema,
+  AddManualModelRequestSchema,
+  RefreshProviderModelsRequestSchema,
+  UpdateModelRequestSchema,
   SetDefaultModelRequestSchema
 } from "@pige/schemas";
 import { PRELOAD_ENTRY_FILENAME } from "../shared/preload-entry";
@@ -62,7 +70,7 @@ import {
   type ProcessQueuedParsesResult
 } from "./services/jobs-service";
 import { LibraryService } from "./services/library-service";
-import { HomeAgentService } from "./services/home-agent-service";
+import { AgentSubmitTurnRequestSchema, HomeAgentService } from "./services/home-agent-service";
 import { LocalDatabaseRebuildWorkerService } from "./services/local-database-rebuild-worker-service";
 import { LocalDatabaseService } from "./services/local-database-service";
 import { LocalSettingsStore } from "./services/local-settings";
@@ -126,6 +134,7 @@ let captureDrainer: CoalescedBatchDrainer<ProcessQueuedCapturesResult> | undefin
 let parseDrainer: CoalescedBatchDrainer<ProcessQueuedParsesResult> | undefined;
 let ocrDrainer: CoalescedBatchDrainer<ProcessQueuedOcrResult> | undefined;
 let agentIngestDrainer: CoalescedBatchDrainer<ProcessQueuedCapturesResult> | undefined;
+let agentTurnDrainer: CoalescedBatchDrainer<Awaited<ReturnType<HomeAgentService["resumeWaitingTurns"]>>> | undefined;
 let indexRebuildDrainer: CoalescedBatchDrainer<ProcessQueuedIndexRebuildResult> | undefined;
 
 const createMainWindow = (): void => {
@@ -443,6 +452,17 @@ const scheduleAgentIngestProcessing = (): void => {
   agentIngestDrainer.schedule();
 };
 
+const scheduleAgentTurnProcessing = (): void => {
+  agentTurnDrainer ??= new CoalescedBatchDrainer({
+    runBatch: () => getHomeAgentService().resumeWaitingTurns(20),
+    onError: () => recordBackgroundFailure(
+      "agent_runtime.turn_resume_failed",
+      "Waiting Agent turns could not be resumed."
+    )
+  });
+  agentTurnDrainer.schedule();
+};
+
 const scheduleIndexRebuildProcessing = (): void => {
   indexRebuildDrainer ??= new CoalescedBatchDrainer({
     runBatch: () => getJobsService().processQueuedIndexRebuild({ limit: 1 }),
@@ -464,6 +484,18 @@ const recordBackgroundFailure = (code: string, fallback: string): void => {
 
 const resumeBackgroundJobs = (): void => {
   try {
+    const sourceHandoffs = getJobsService().reconcilePendingAgentTurnSources();
+    if (sourceHandoffs.linked > 0 || sourceHandoffs.failed > 0) {
+      getDiagnosticsService().recordEvent({
+        level: sourceHandoffs.failed > 0 ? "warning" : "info",
+        code: sourceHandoffs.failed > 0
+          ? "agent_runtime.source_handoff_conflict"
+          : "agent_runtime.source_handoff_recovered",
+        message: sourceHandoffs.failed > 0
+          ? "A preserved Agent source handoff could not be reconciled safely."
+          : "Preserved Agent source handoffs were reconciled after startup."
+      });
+    }
     const recovery = getJobsService().recoverInterruptedJobs();
     if (recovery.requeued > 0 || recovery.failedRetryable > 0) {
       getDiagnosticsService().recordEvent({
@@ -496,6 +528,7 @@ const resumeBackgroundJobs = (): void => {
     scheduleParseProcessing();
     scheduleOcrProcessing();
     scheduleAgentIngestProcessing();
+    scheduleAgentTurnProcessing();
     scheduleIndexRebuildProcessing();
   } catch {
     getDiagnosticsService().recordEvent({
@@ -512,6 +545,7 @@ const scheduleWaitingAgentIngestAfterModelReady = (): void => {
     if (result.requeued > 0) {
       scheduleAgentIngestProcessing();
     }
+    scheduleAgentTurnProcessing();
   } catch {
     getDiagnosticsService().recordEvent({
       level: "warning",
@@ -520,6 +554,9 @@ const scheduleWaitingAgentIngestAfterModelReady = (): void => {
     });
   }
 };
+
+const isNeedsManualModelResult = (result: ProviderConnectResult): boolean =>
+  "status" in result && result.status === "needs_manual_model";
 
 ipcMain.handle("pige:getHealth", (): AppHealth => ({
   status: "ok",
@@ -539,6 +576,59 @@ ipcMain.handle("window.setSidebarOpen", (event, request: SetSidebarOpenRequest) 
 );
 ipcMain.handle("agent.runtimeStatus", () => getAgentRuntimeService().runtimeStatus());
 ipcMain.handle("agent.ask", (_event, request: HomeAgentAskRequest) => getHomeAgentService().ask(request));
+ipcMain.handle("agent.submitTurn", async (_event, payload: {
+  readonly request: AgentSubmitTurnRequest;
+  readonly filePaths?: readonly string[];
+}) => {
+  const filePaths = payload.filePaths ?? [];
+  if (filePaths.length > 1) {
+    throw new PigeDomainError(
+      "agent_runtime.multiple_sources_not_ready",
+      "Submit one attachment per Agent turn in this runtime build."
+    );
+  }
+  const request = AgentSubmitTurnRequestSchema.parse(payload.request);
+  const normalizedRequest: AgentSubmitTurnRequest = {
+    inputKind: request.inputKind,
+    locale: request.locale,
+    ...(request.text === undefined ? {} : { text: request.text }),
+    ...(request.objective === undefined ? {} : { objective: request.objective })
+  };
+  if (filePaths.length === 0) {
+    return getHomeAgentService().submitTurn(normalizedRequest);
+  }
+  if (request.inputKind !== "file_drop" && request.inputKind !== "file_picker") {
+    throw new PigeDomainError(
+      "agent_runtime.turn_binding_invalid",
+      "An attached source requires a file-drop or file-picker Agent input kind."
+    );
+  }
+  const home = getHomeAgentService();
+  const prepared = home.prepareSourceTurn(normalizedRequest);
+  try {
+    const preserved = await getCaptureService().preserveFilesForAgentTurn({
+      filePaths,
+      inputKind: request.inputKind === "file_drop" ? "file_drop" : "file_picker",
+      userIntent: request.objective === "capture" ? "capture" : "unknown",
+      locale: request.locale
+    }, {
+      jobId: prepared.jobId,
+      sourceId: prepared.sourceId
+    });
+    if (
+      preserved.status === "rejected" ||
+      preserved.sourceIds.length !== 1 ||
+      preserved.sourceIds[0] !== prepared.sourceId
+    ) {
+      home.failPreparedSourceTurn(prepared);
+      throw new PigeDomainError("capture.file_rejected", "The selected attachment could not be preserved safely.");
+    }
+    return home.submitPreparedSourceTurn(prepared);
+  } catch (caught) {
+    home.failPreparedSourceTurn(prepared);
+    throw caught;
+  }
+});
 ipcMain.handle("capture.submitText", (_event, request: SubmitTextCaptureRequest) => {
   const result = getCaptureService().submitText(request);
   scheduleCaptureProcessing();
@@ -569,6 +659,10 @@ ipcMain.handle("jobs.retry", async (_event, request: JobActionRequest) => {
   }
   if (result.status === "requeued" && result.job?.class === "agent_ingest") {
     scheduleAgentIngestProcessing();
+  }
+  if (result.status === "requeued" && result.job?.class === "agent_turn") {
+    scheduleAgentIngestProcessing();
+    scheduleAgentTurnProcessing();
   }
   if (result.status === "requeued" && result.job?.class === "index_rebuild") {
     scheduleIndexRebuildProcessing();
@@ -657,15 +751,25 @@ ipcMain.handle("diagnostics.exportSupportBundle", async (event, request: ExportS
 });
 ipcMain.handle("models.summary", () => getModelProviderRegistry().summary());
 ipcMain.handle("models.addPresetProvider", async (event, request: AddPresetProviderRequest) => {
-  const validatedRequest = AddPresetProviderRequestSchema.parse(request);
-  await confirmSettingAction(event.sender, ["models.providerProfiles", "models.providerApiKeys"], {
+  const parsedRequest = AddPresetProviderRequestSchema.parse(request);
+  const validatedRequest: AddPresetProviderRequest = {
+    presetId: parsedRequest.presetId,
+    ...(parsedRequest.apiKey ? { apiKey: parsedRequest.apiKey } : {})
+  };
+  await confirmSettingAction(
+    event.sender,
+    validatedRequest.apiKey
+      ? ["models.providerProfiles", "models.providerApiKeys"]
+      : ["models.providerProfiles"],
+    {
     title: "Connect this model service?",
-    message: "Pige will test this exact reviewed service and may send selected context, including ordinary, private, and bounded large content, to this Provider Profile and endpoint for ongoing model calls. Sensitive content still asks each time; restricted content is never sent. If the endpoint or trust boundary changes or becomes unknown, Pige asks again. The API key stays in protected local storage.",
+    message: "Pige will test this exact reviewed service and may send selected context, including ordinary, private, and bounded large content, to this Provider Profile and endpoint for ongoing model calls. Sensitive content still asks each time; restricted content is never sent. If the endpoint or trust boundary changes or becomes unknown, Pige asks again. Credentials, when required, stay in protected local storage.",
     confirmLabel: "Connect service"
-  });
-  return getModelProviderRegistry().addPresetProvider(validatedRequest).then((summary) => {
-    scheduleWaitingAgentIngestAfterModelReady();
-    return summary;
+    }
+  );
+  return getModelProviderRegistry().addPresetProvider(validatedRequest).then((result) => {
+    if (!isNeedsManualModelResult(result)) scheduleWaitingAgentIngestAfterModelReady();
+    return result;
   });
 });
 ipcMain.handle("models.addManualProvider", async (event, request: AddManualProviderRequest) => {
@@ -675,18 +779,38 @@ ipcMain.handle("models.addManualProvider", async (event, request: AddManualProvi
     message: "Pige will test this exact configured service and may send selected context, including ordinary, private, and bounded large content, to this Provider Profile and endpoint for ongoing model calls. Sensitive content still asks each time; restricted content is never sent. If the endpoint or trust boundary changes or becomes unknown, Pige asks again. The API key stays in protected local storage.",
     confirmLabel: "Connect service"
   });
-  return getModelProviderRegistry().addManualProvider(validatedRequest).then((summary) => {
-    scheduleWaitingAgentIngestAfterModelReady();
-    return summary;
+  return getModelProviderRegistry().addManualProvider(validatedRequest).then((result) => {
+    if (!isNeedsManualModelResult(result)) scheduleWaitingAgentIngestAfterModelReady();
+    return result;
   });
 });
-ipcMain.handle("models.setDefaultModel", (_event, request: SetDefaultModelRequest) =>
+ipcMain.handle("models.refreshProviderModels", async (_event, request: RefreshProviderModelsRequest) =>
+  getModelProviderRegistry().refreshProviderModels(RefreshProviderModelsRequestSchema.parse(request))
+);
+ipcMain.handle("models.addManualModel", async (_event, request: AddManualModelRequest) =>
   {
-    const summary = getModelProviderRegistry().setDefaultModel(SetDefaultModelRequestSchema.parse(request));
-    scheduleWaitingAgentIngestAfterModelReady();
-    return summary;
+    const parsed = AddManualModelRequestSchema.parse(request);
+    return getModelProviderRegistry().addManualModel({
+      providerProfileId: parsed.providerProfileId,
+      modelId: parsed.modelId,
+      ...(parsed.displayName === undefined ? {} : { displayName: parsed.displayName })
+    });
   }
 );
+ipcMain.handle("models.updateModel", async (_event, request: UpdateModelRequest) => {
+  const parsed = UpdateModelRequestSchema.parse(request);
+  return getModelProviderRegistry().updateModel({
+    modelProfileId: parsed.modelProfileId,
+    ...(parsed.enabled === undefined ? {} : { enabled: parsed.enabled }),
+    ...(parsed.displayName === undefined ? {} : { displayName: parsed.displayName })
+  });
+}
+);
+ipcMain.handle("models.setDefaultModel", async (_event, request: SetDefaultModelRequest) => {
+    const summary = await getModelProviderRegistry().setDefaultModel(SetDefaultModelRequestSchema.parse(request));
+    scheduleWaitingAgentIngestAfterModelReady();
+    return summary;
+});
 ipcMain.handle("settings.appearance", () => getAppearanceService().summary());
 ipcMain.handle("settings.setLocale", (_event, request: SetLocaleRequest) => getAppearanceService().setLocale(request));
 ipcMain.handle("settings.registry", () => getSettingsRegistry());

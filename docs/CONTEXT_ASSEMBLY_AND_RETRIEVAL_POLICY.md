@@ -382,22 +382,24 @@ Current Phase 5 ingest bridge:
 - The bridge hashes the complete selected Source Record as an ephemeral evidence-revision guard, checks it before prompt rendering/model invocation and after the provider response, and does not persist or send the Source Record body as part of that guard.
 - Full durable ingest `AgentContextPack` materialization remains later orchestration work; the current bridge implements the bounded evidence and provenance subset without persisting raw prompts.
 
-Current Phase 6 foundation:
+Current unified Home foundation:
 
 - `retrieval.search` returns bounded lexical snippets and match reasons through SQLite FTS or Markdown-scan fallback.
-- `agent.ask` selects at most eight evidence items and requires embedded Pi to call one
-  current-vault search tool. Tool output is escaped inside
+- `agent.submitTurn` lets Pi answer directly or call one current-vault search tool with
+  at most eight evidence items. Tool output is escaped inside
   `PIGE_UNTRUSTED_EVIDENCE_V1`; it cannot change tools, providers, settings, output
   shape, permissions, or authority. Final JSON and citation refs are host-validated.
 - Before each model turn, Pige re-reads bounded confined Markdown bytes and complete
   Source Record privacy facts, binds their hashes into the body-free evidence summary,
   records the current egress decision, and rejects revision/privacy drift.
-- With no ready runtime binding, `agent.ask` returns `retrieval.ask` before Agent Job,
-  audit, credential, or Pi work. No selected evidence returns the fixed local
-  `insufficient_evidence` result with no citations or model prose.
+- With no usable runtime, the durable `agent_turn` waits and later resumes the same
+  identity. Empty/irrelevant evidence does not block ordinary chat; `vault_only` must
+  cite selected evidence or fail closed.
 - Renderer results contain only the answer, bounded snippets, ranked page summaries,
   citations, warnings, degraded state, and `none|local|cloud`; no prompt, Context Pack,
   private path, credential, provider error, or evidence body is exposed.
+- One attached file is preserve-first and shares the same turn/draft. Legacy
+  `agent.ask`/retrieval records remain readable; Agent-selected URL fetch stays open.
 - Vector retrieval and reranking improve ranking when installed but are not required for basic answers.
 - Citation refs survive prompt assembly, model output validation, conversation compaction, and job retry.
 - Memory injection is scoped, ranked, secret-scanned, and lower authority than explicit user instruction.

@@ -1317,6 +1317,29 @@ dd {
   gap: 8px;
 }
 
+.provider-model-groups,
+.provider-model-group {
+  display: grid;
+  gap: 12px;
+}
+
+.provider-model-group + .provider-model-group {
+  border-top: 1px solid var(--border-light);
+  padding-top: 12px;
+}
+
+.provider-model-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.provider-model-heading h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
 .preset-provider,
 .custom-provider-fields {
   display: grid;
@@ -1335,12 +1358,14 @@ dd {
   font-size: 12px;
 }
 
-.custom-provider {
+.custom-provider,
+.custom-model {
   border-top: 1px solid var(--border-light);
   padding-top: 10px;
 }
 
-.custom-provider summary {
+.custom-provider summary,
+.custom-model summary {
   color: var(--text-secondary);
   cursor: pointer;
   font-size: 13px;
@@ -1359,15 +1384,40 @@ dd {
   padding-top: 8px;
 }
 
-.model-row div {
+.model-row-controls,
+.model-name-fields {
+  display: grid;
+  gap: 8px;
+}
+
+.model-row-controls {
+  justify-items: end;
+}
+
+.model-name-editor {
+  max-width: min(320px, 100%);
+}
+
+.model-name-fields {
+  margin-top: 8px;
+}
+
+.model-row > span:first-child {
   min-width: 0;
   display: grid;
   gap: 2px;
 }
 
-.model-row span {
+.model-row span,
+.model-row small {
   color: var(--text-secondary);
   font-size: 12px;
+}
+
+.model-row > span:last-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .recent-item div {

@@ -146,7 +146,7 @@
 
     .provider-browser-window {
       width: 1180px;
-      height: 760px;
+      height: 720px;
     }
 
     .traffic {
@@ -1451,7 +1451,7 @@
       top: 50%;
       transform: translate(-50%, -50%);
       width: 760px;
-      height: 760px;
+      height: 680px;
       background: var(--surface);
       border: 1px solid rgba(32, 35, 31, 0.12);
       border-radius: 12px;
@@ -1541,6 +1541,10 @@
       flex-direction: column;
       gap: 12px;
     }
+
+    .provider-dialog .provider-simple-body { padding: 12px 16px; }
+    .provider-dialog .provider-setup { padding: 12px; gap: 8px; }
+    .provider-dialog .provider-form-grid { gap: 8px; }
 
     .provider-setup h3 {
       margin: 0;
@@ -2325,7 +2329,7 @@
     </section>
 
     <section class="prototype-screen" id="screen-model-settings" data-screen="model-settings">
-      <div class="screen-caption"><span class="screen-index">10</span>模型：推荐预设与全局默认</div>
+      <div class="screen-caption"><span class="screen-index">10</span>模型：全局默认与服务商</div>
       <div class="app-window settings-window">
         <div class="settings-layout">
           <aside class="sidebar">
@@ -2372,36 +2376,31 @@
             </div>
             <div class="settings-grid">
               <section class="setting-card">
-                <h3>推荐</h3>
-                <p>使用已审核的 OpenAI 预设，只需填写 API Key。</p>
+                <h3>Global Default</h3>
+                <p>从所有已连接服务商中启用的模型选择；不需要填写 Model ID。</p>
                 <div class="provider-row">
-                  <div class="provider-mark"><svg class="icon"><use href="#i-key"/></svg></div>
-                  <div><strong style="color:var(--text);">OpenAI</strong><br/>固定端点 · 自动发现模型</div>
-                  <span class="badge green">推荐</span>
-                </div>
-                <div class="provider-row">
-                  <div class="provider-mark"><svg class="icon"><use href="#i-shield"/></svg></div>
-                  <div><strong style="color:var(--text);">API Key</strong><br/>sk-••••••••••••••••</div>
-                  <button class="text-button primary">连接</button>
-                </div>
-                <div class="provider-row">
-                  <div class="provider-mark"><svg class="icon"><use href="#i-chevron"/></svg></div>
-                  <div><strong style="color:var(--text);">自定义服务商</strong><br/>按需展开高级连接字段</div>
-                  <span class="badge">展开</span>
+                  <div class="provider-mark"><svg class="icon"><use href="#i-check"/></svg></div>
+                  <div><strong style="color:var(--text);">OpenAI — gpt-5-mini</strong><br/>已启用模型 · 新的 Agent 调用立即使用</div>
+                  <span class="badge green">已选择 ▾</span>
                 </div>
               </section>
               <section class="setting-card">
-                <h3>模型</h3>
-                <p>所有 Provider Profile 的模型集中管理；一个默认模型即可运行 Pige。</p>
-                <div class="model-list-card">
-                  <div class="model-list-head">
-                    <div>
-                      <div class="model-list-title">全局模型列表</div>
-                      <div class="model-list-hint">每行保留服务商标签，且只有一个 Global Default。</div>
-                    </div>
+                <div class="model-list-head">
+                  <div>
+                    <h3>服务商</h3>
+                    <p>服务商是模型来源；协议与默认端点由预设自动处理。</p>
                   </div>
-                  <div class="model-row"><span>gpt-5-mini · OpenAI</span><span class="badge green">Global Default</span></div>
-                  <div class="model-row"><span>gpt-4.1-mini · OpenAI</span><span class="badge">设为 Global Default</span></div>
+                  <button class="text-button primary">连接服务商</button>
+                </div>
+                <div class="provider-row">
+                  <div class="provider-mark"><svg class="icon"><use href="#i-key"/></svg></div>
+                  <div><strong style="color:var(--text);">OpenAI</strong><br/>已连接 · 2 个启用 · 3 个模型</div>
+                  <button class="text-button">管理</button>
+                </div>
+                <div class="provider-row">
+                  <div class="provider-mark"><svg class="icon"><use href="#i-heartbeat"/></svg></div>
+                  <div><strong style="color:var(--text);">Personal endpoint</strong><br/>需要处理 · 模型同步失败</div>
+                  <button class="text-button">管理</button>
                 </div>
               </section>
             </div>
@@ -2411,7 +2410,7 @@
     </section>
 
     <section class="prototype-screen" id="screen-add-provider" data-screen="add-provider">
-      <div class="screen-caption"><span class="screen-index">11</span>自定义服务商：按需展开高级字段</div>
+      <div class="screen-caption"><span class="screen-index">11</span>服务商：连接、同步与模型管理</div>
       <div class="app-window provider-browser-window">
         <div class="settings-layout">
           <aside class="sidebar">
@@ -2439,7 +2438,7 @@
             <div class="content-topbar">
               <div>
                 <div class="page-title">模型服务商</div>
-                <div class="page-subtitle">推荐预设留在模型页；这里仅展示自定义配置</div>
+                <div class="page-subtitle">预设简化连接；自定义服务商按需展开协议</div>
               </div>
               <button class="text-button">返回模型</button>
             </div>
@@ -2449,26 +2448,28 @@
         <div class="provider-dialog">
           <div class="provider-dialog-header">
             <div>
-              <div class="provider-dialog-title">自定义服务商</div>
-              <div class="provider-dialog-subtitle">仅在默认 OpenAI 预设不适用时展开。</div>
+              <div class="provider-dialog-title">连接与管理服务商</div>
+              <div class="provider-dialog-subtitle">服务商提供模型；Pige 自动同步并统一管理。</div>
             </div>
             <div class="icon-button subtle"><svg class="icon"><use href="#i-check"/></svg></div>
           </div>
           <div class="provider-simple-body">
             <div class="provider-type-list">
-              <div class="provider-type-row active"><span class="provider-type-dot">C</span><span>自定义端点</span></div>
+              <div class="provider-type-row"><span class="provider-type-dot">O</span><span>OpenAI</span></div>
+              <div class="provider-type-row"><span class="provider-type-dot">D</span><span>DeepSeek</span></div>
+              <div class="provider-type-row active"><span class="provider-type-dot">C</span><span>自定义服务商</span></div>
             </div>
             <aside class="provider-setup">
-              <h3>自定义服务商（已展开）</h3>
-              <p>当前只展示必要连接字段；完整三协议体验仍待后续完善。</p>
+              <h3>自定义服务商</h3>
+              <p>预设不显示协议或默认端点；只有自定义连接需要这些字段。</p>
               <div class="provider-form-grid">
                 <div>
                   <div class="field-label">名称</div>
                   <div class="field-box">我的服务</div>
                 </div>
                 <div>
-                  <div class="field-label">协议 / 服务类型</div>
-                  <div class="field-box">OpenAI 兼容（当前）</div>
+                  <div class="field-label">API 协议</div>
+                  <div class="field-box">OpenAI Chat Compatible ▾</div>
                 </div>
                 <div class="wide">
                   <div class="field-label">Base URL</div>
@@ -2478,22 +2479,32 @@
                   <div class="field-label">API Key</div>
                   <div class="field-box">sk-••••••••••••••••••••</div>
                 </div>
-                <div>
-                  <div class="field-label">手动模型 ID</div>
-                  <div class="field-box">model-id</div>
+              </div>
+              <p>也可选 OpenAI Responses Compatible 或 Anthropic Messages Compatible。</p>
+              <div class="provider-row">
+                <div class="provider-mark"><svg class="icon"><use href="#i-check"/></svg></div>
+                <div><strong style="color:var(--text);">连接检查</strong><br/>真实 Pi bootstrap + 工具探测 · 模型已同步</div>
+                <span class="badge green">已连接</span>
+              </div>
+              <div class="model-list-card">
+                <div class="model-list-head">
+                  <div>
+                    <div class="model-list-title">模型</div>
+                    <div class="model-list-hint">自动同步与手动模型共用同一列表。</div>
+                  </div>
+                  <button class="text-button">刷新</button>
                 </div>
-                <div>
-                  <div class="field-label">数据边界</div>
-                  <div class="field-box">云端或本地</div>
-                </div>
+                <div class="model-row"><span>[x] model-fast · 显示名：Fast</span><span class="badge green">已同步</span></div>
+                <div class="model-row"><span>[ ] private-model</span><span class="badge">自定义</span></div>
+                <button class="text-button">添加自定义模型</button>
               </div>
             </aside>
           </div>
           <div class="provider-dialog-footer">
-            <div class="provider-footnote">完整预设目录、API Key 帮助与三协议体验仍在后续。</div>
+            <div class="provider-footnote">同步失败时保留上次列表，并提供“重试 / 添加自定义模型”。</div>
             <div class="row-actions">
               <button class="text-button">取消</button>
-              <button class="text-button primary">测试并保存</button>
+              <button class="text-button primary">连接服务商</button>
             </div>
           </div>
         </div>

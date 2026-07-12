@@ -851,12 +851,11 @@ Retrieval pipeline:
 
 Context assembly rule: the retrieval pipeline produces selected evidence for an Agent Context Pack. It must follow `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`; retrieval never hands the model the whole vault, full source asset bodies, or unbounded conversation history.
 
-Current implementation uses SQLite FTS5 with CJK augmentation and bounded Markdown
-fallback. Home still routes question-like input into one mandatory Pi search and uses
-`retrieval.ask` when unbound; zero evidence ends without Pi prose. This narrower bridge
-does not satisfy unified Agent ingress. Ingest's optional read-only search is already
-Agent-selected. Vector/reranking, answer saving, conversation persistence, and
-jump-to-snippet remain open.
+Current Home uses durable `agent.submitTurn`: Pi may answer directly or select bounded
+SQLite/Markdown retrieval and validated citations; no usable model waits/resumes the same
+turn instead of falling back. One preserved attachment shares the draft. Agent-selected
+URL fetch, durable follow-up sessions, multi-attachment recovery, vector/reranking,
+answer saving, and jump-to-snippet remain open.
 
 Retrieval result contract:
 
@@ -1135,7 +1134,8 @@ Settings categories:
 - Basic settings: app language, theme, window preferences, always-on-top, compact/expanded/full-screen preferences, and startup behavior.
 - Knowledge Base > Vault & Note Storage settings: current vault name, active vault path, knowledge root path, source asset root path, default source storage strategy, reveal in file manager, open existing vault, create new vault, recent vaults, vault schema version, backup/restore entry points, trash policy, and backup include/exclude defaults.
 - Knowledge Base > Index & Maintenance settings: rebuild index, reset local database, chunk/index status, knowledge health repair actions, and parser/index repair jobs.
-- AI > Provider settings: BYOK provider profiles, API key references, connection status, model list status, and one default Pi Agent model.
+- AI > Models: preset/custom Provider connections, per-Provider unified model inventory,
+  sync/repair status, and one Global Default selected from enabled models.
 - No AI > Model Routing settings entry appears in v0.1. Model routing is only a deferred extension point unless Pi Agent upstream exposes stable model slots or Pige implements a tested Model Routing Service. Do not show Advanced/Fast model assignment as a user setting before it changes runtime behavior.
 - Internal model provider capability metadata is app-owned in v0.1, not a user-facing routing surface.
 - AI > Local Capabilities settings: local RAG engine status, embedding/reranking model downloads, OCR engines, speech input, parser/toolchain health, and local runtime repair state.
@@ -1482,9 +1482,9 @@ type ProviderCatalogEntry = {
 };
 ```
 
-Catalog rule: Pige does not copy Pi's full catalog or expose it as a marketplace. The
-default flow connects one service and manages its model IDs without capability tables,
-pricing, routing metadata, boundary columns, or advanced filters.
+Catalog rule: Pige does not copy Pi's full catalog or expose it as a marketplace. Current
+templates are OpenAI, Anthropic, Gemini, DeepSeek, and Ollama; Custom is progressive disclosure.
+Cloud/self-hosted/local stays internal boundary metadata, never a setup taxonomy.
 
 Model-routing architecture boundary:
 
@@ -1501,16 +1501,21 @@ Provider profile:
 
 The canonical `ProviderProfile`, `ModelProfile`, provider/model file schemas, and enums are `ProviderProfileSchema` and related exports in `packages/schemas/src/index.ts`; their product rules and readable type shape are owned by `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`. This architecture document intentionally does not redefine them.
 
-Provider metadata stores an `authSecretRef`, never a key or arbitrary authentication-header map. Reviewed provider adapters construct authentication and required protocol headers at call time. Official providers have a built-in cloud classification; verified loopback endpoints can be local; a non-loopback compatible/custom endpoint remains conservative until its boundary is explicitly classified, and a user assertion is not network proof. Embedding capability metadata is future-only; v0.1 does not ask users to configure embedding or reranking providers for local RAG.
+Keyed Provider metadata stores an optional `authSecretRef`, never a key or arbitrary
+header map; no-auth stores no secret and the adapter removes credential headers. Official
+providers have reviewed boundaries, loopback may be verified local, and remote Custom
+stays conservative. Embedding/reranking remain Local RAG concerns.
 
 Model list behavior:
 
-- The Pi integration owner defines connection tests, discovery, manual fallback, and
-  failure semantics. Architecture requires one selected `ModelProfile`, no untracked
-  model string, and no Advanced/Fast or per-workflow routing before its runtime gate.
-- The reviewed OpenAI preset fixes endpoint/protocol, asks only for a key, bounds
-  discovery, and fills the global model list/default; broader catalog/custom/platform
-  acceptance stays open.
+- Registry resolves presets, discovers/upserts exact Provider+Model IDs, merges manual
+  fallback, preserves alias/enabled/default on Refresh, and resolves Global Default
+  without discarding a failed inventory. Durable sync-health summaries remain open.
+- Connect journals Provider/model/secret replacement; Refresh journals Provider/model
+  state. Startup rolls back incomplete transactions, fsync is platform-tolerant, and old
+  secrets are cleaned only after journal removal. Other single-model edits use atomic replace.
+- Pi owns the real bootstrap probe. Presets hide protocol/Endpoint; Custom reveals them;
+  Pi AI stays the sole runtime, with no copied layer or Advanced/Fast routing.
 
 Current embedded Agent ingest spine:
 

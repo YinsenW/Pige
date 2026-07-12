@@ -25,13 +25,13 @@ Individual screens:
 - `screens/02-drag-drop.png`: whole-window drag-and-drop hot zone.
 - `screens/03-activity.png`: Home window with recent activity.
 - `screens/04-expanded-workspace.png`: expanded sidebar workspace.
-- `screens/05-home-knowledge-retrieval.png`: Home dialogue answer grounded in knowledge retrieval.
+- `screens/05-home-knowledge-retrieval.png`: Home conversation when Pi selects grounded local retrieval.
 - `screens/06-reader-agent.png`: full-screen reader with Note Agent.
 - `screens/07-selection-actions.png`: text selection action menu.
 - `screens/08-permission-dialog.png`: sensitive action permission dialog.
 - `screens/09-vault-settings.png`: local vault and note storage settings with recent vaults, backup, and restore.
-- `screens/10-model-settings.png`: Models page with one reviewed OpenAI API-key preset, collapsed custom-provider details, and a global model list.
-- `screens/11-add-provider.png`: Progressively disclosed custom-provider setup; full catalog, API-key help, and three-protocol polish remain open.
+- `screens/10-model-settings.png`: target Models overview with grouped Global Default and Provider summaries.
+- `screens/11-add-provider.png`: target Provider detail with hidden preset protocol, Custom protocols, probe, sync, Refresh, enablement, and manual fallback.
 - `screens/12-knowledge-tree.png`: tree-style knowledge visualization with trunk, branches, leaves, and growth suggestions.
 
 Design intent:
@@ -40,7 +40,7 @@ Design intent:
 - Exploration and retrieval can become richer after the user opens the sidebar or a note.
 - Expanded sidebars show the Library tree directly, so notes can be browsed by Agent-maintained categories without opening another screen.
 - Knowledge Tree is a semantic tree view, distinct from the Library's folder/category tree.
-- Home dialogue answers knowledge questions with ranked notes plus a grounded summary, not answer-only chat.
+- Home answers normally; when Pi selects local knowledge, it adds ranked notes and a cited summary.
 - The reader uses wide screens for navigation, content, and a scoped Note Agent.
 - Permission prompts use clear one-time and permanent scoped choices; no session-based permission mode.
 - Vault & Note Storage is a first-class Knowledge Base settings page because Pige stores notes as local files and lets users see the active vault path, note/knowledge root, source asset root, and default source storage strategy.

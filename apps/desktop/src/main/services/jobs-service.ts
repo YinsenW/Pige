@@ -48,6 +48,7 @@ import {
   type JobProgressUpdate
 } from "./job-execution-control";
 import { ProposalService } from "./proposal-service";
+import { AgentTurnConversationStore, type PreservedAgentTurn } from "./agent-turn-conversation-store";
 
 export interface JobsVaultPort {
   current(): VaultSummary | undefined;
@@ -108,6 +109,20 @@ export interface CreateRetrievalQueryJobRequest {
   readonly queryHash: string;
 }
 
+export interface CreateAgentTurnJobRequest {
+  readonly conversationEventId: string;
+  readonly conversationLocator: string;
+  readonly inputHash: string;
+  readonly sourceIds?: readonly string[];
+  readonly sourceExpected?: boolean;
+}
+
+export interface ReconcilePendingAgentTurnSourcesResult {
+  readonly linked: number;
+  readonly waiting: number;
+  readonly failed: number;
+}
+
 export interface ProcessQueuedIndexRebuildRequest {
   readonly jobIds?: readonly string[];
   readonly limit?: number;
@@ -132,7 +147,13 @@ const DEFAULT_JOB_LIST_LIMIT = 20;
 const MAX_JOB_LIST_LIMIT = 100;
 const CANCELABLE_STATES = new Set<JobState>(["queued", "waiting_dependency", "waiting_permission", "failed_retryable"]);
 const RETRYABLE_STATES = new Set<JobState>(["failed_retryable", "waiting_dependency", "cancelled"]);
-const COOPERATIVELY_CANCELABLE_CLASSES = new Set<JobClass>(["parse", "ocr", "agent_ingest", "index_rebuild"]);
+const COOPERATIVELY_CANCELABLE_CLASSES = new Set<JobClass>([
+  "parse",
+  "ocr",
+  "agent_turn",
+  "agent_ingest",
+  "index_rebuild"
+]);
 
 export class JobsService {
   readonly #vaults: JobsVaultPort;
@@ -466,6 +487,175 @@ export class JobsService {
     return job;
   }
 
+  createAgentTurnJob(request: CreateAgentTurnJobRequest): JobRecord {
+    const activeVault = this.#vaults.current();
+    const vaultPath = this.#requireActiveVaultPath();
+    const timestamp = new Date().toISOString();
+    const dateKey = timestamp.slice(0, 10).replaceAll("-", "");
+    const jobId = `job_${dateKey}_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+    const sourceIds = Array.from(new Set(
+      request.sourceIds ?? (request.sourceExpected ? [createAgentTurnSourceId(jobId)] : [])
+    ));
+    if (
+      !activeVault ||
+      !/^evt_\d{8}_[a-z0-9]{8,}$/u.test(request.conversationEventId) ||
+      !/^sha256:[a-f0-9]{64}$/u.test(request.inputHash) ||
+      !isConfinedConversationLocator(request.conversationLocator) ||
+      sourceIds.length > 1 ||
+      (request.sourceExpected === true && sourceIds.length !== 1)
+    ) {
+      throw new PigeDomainError("agent_runtime.turn_invalid", "The unified Agent turn identity is invalid.");
+    }
+
+    const job = JobRecordSchema.parse({
+      id: jobId,
+      class: "agent_turn",
+      state: request.sourceExpected ? "waiting_dependency" : "queued",
+      ...(request.sourceExpected ? { stage: "capturing_source" } : {}),
+      priority: "interactive",
+      scope: "vault",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      activeVaultId: activeVault.vaultId,
+      actor: {
+        kind: "user",
+        runtimeKind: "desktop_local",
+        clientCapabilityTier: "desktop_full"
+      },
+      ...(sourceIds[0] ? { sourceId: sourceIds[0] } : {}),
+      conversationEventId: request.conversationEventId,
+      inputRefs: [
+        {
+          kind: "conversation",
+          id: request.conversationEventId,
+          locator: request.conversationLocator,
+          checksum: request.inputHash,
+          role: "agent_turn_user_event"
+        },
+        ...sourceIds.map((sourceId) => ({
+          kind: "source" as const,
+          id: sourceId,
+          role: "agent_turn_source"
+        }))
+      ],
+      retry: {
+        retryCount: 0,
+        maxAutomaticRetries: 0,
+        requiresUserAction: false
+      },
+      privacy: {
+        usedCloudModel: false,
+        usedNetwork: false,
+        usedShell: false,
+        accessedExternalFiles: false,
+        permissionDecisionIds: []
+      },
+      message: request.sourceExpected
+        ? "Agent turn accepted; waiting for its source preservation binding."
+        : "Agent turn accepted and preserved."
+    });
+    writeJsonAtomic(createJobRecordPath(vaultPath, job.id), job);
+    return job;
+  }
+
+  attachAgentTurnSource(jobId: string, sourceId: string): JobRecord {
+    const vaultPath = this.#requireActiveVaultPath();
+    const jobFile = readJobRecordFile(vaultPath, jobId);
+    const sourceRecordFile = readSourceRecordFile(vaultPath, sourceId);
+    if (
+      !jobFile ||
+      jobFile.job.class !== "agent_turn" ||
+      jobFile.job.sourceId !== sourceId ||
+      !sourceRecordFile ||
+      sourceRecordFile.sourceRecord.metadata.agentTurnJobId !== jobId
+    ) {
+      throw new PigeDomainError(
+        "agent_runtime.turn_binding_invalid",
+        "The preserved source does not match its unified Agent turn."
+      );
+    }
+    if (
+      jobFile.job.state !== "waiting_dependency" ||
+      jobFile.job.stage !== "capturing_source"
+    ) {
+      if (jobFile.job.state === "queued") return jobFile.job;
+      throw new PigeDomainError(
+        "agent_runtime.turn_binding_invalid",
+        "The unified Agent turn is not waiting for source preservation."
+      );
+    }
+    const {
+      stage: _stage,
+      waitingDependency: _waitingDependency,
+      error: _error,
+      finishedAt: _finishedAt,
+      ...current
+    } = jobFile.job;
+    const linked = JobRecordSchema.parse({
+      ...current,
+      state: "queued",
+      updatedAt: new Date().toISOString(),
+      message: "Agent turn source preservation completed; semantic processing is queued."
+    });
+    writeJsonAtomic(jobFile.path, linked);
+    return linked;
+  }
+
+  failAgentTurnSourcePreservation(jobId: string): JobRecord | undefined {
+    const vaultPath = this.#requireActiveVaultPath();
+    const jobFile = readJobRecordFile(vaultPath, jobId);
+    if (
+      !jobFile ||
+      jobFile.job.class !== "agent_turn" ||
+      jobFile.job.state !== "waiting_dependency" ||
+      jobFile.job.stage !== "capturing_source"
+    ) {
+      return jobFile?.job.class === "agent_turn" ? jobFile.job : undefined;
+    }
+    const failed = JobRecordSchema.parse({
+      ...jobFile.job,
+      state: "failed_retryable",
+      updatedAt: new Date().toISOString(),
+      message: "The attachment could not be preserved safely; the Agent turn remains available for an explicit retry."
+    });
+    writeJsonAtomic(jobFile.path, failed);
+    return failed;
+  }
+
+  reconcilePendingAgentTurnSources(): ReconcilePendingAgentTurnSourcesResult {
+    const vaultPath = this.#requireActiveVaultPath();
+    let linked = 0;
+    let waiting = 0;
+    let failed = 0;
+    for (const jobFile of readJobRecordFiles(path.join(vaultPath, ".pige", "jobs"))) {
+      if (
+        jobFile.job.class !== "agent_turn" ||
+        jobFile.job.state !== "waiting_dependency" ||
+        jobFile.job.stage !== "capturing_source" ||
+        !jobFile.job.sourceId
+      ) {
+        continue;
+      }
+      const sourceRecordFile = readSourceRecordFile(vaultPath, jobFile.job.sourceId);
+      if (!sourceRecordFile) {
+        waiting += 1;
+        continue;
+      }
+      if (sourceRecordFile.sourceRecord.metadata.agentTurnJobId !== jobFile.job.id) {
+        markJobFailedFinal(
+          jobFile.path,
+          jobFile.job,
+          "The preserved source binding conflicts with its Agent turn; automatic processing was stopped."
+        );
+        failed += 1;
+        continue;
+      }
+      this.attachAgentTurnSource(jobFile.job.id, jobFile.job.sourceId);
+      linked += 1;
+    }
+    return { linked, waiting, failed };
+  }
+
   writeRetrievalQueryJob(job: JobRecord): JobRecord {
     const activeVault = this.#vaults.current();
     const vaultPath = this.#requireActiveVaultPath();
@@ -486,6 +676,87 @@ export class JobsService {
     return validated;
   }
 
+  writeAgentTurnJob(job: JobRecord): JobRecord {
+    const activeVault = this.#vaults.current();
+    const vaultPath = this.#requireActiveVaultPath();
+    const existing = readJobRecordFile(vaultPath, job.id);
+    if (
+      !activeVault ||
+      !existing ||
+      existing.job.class !== "agent_turn" ||
+      job.class !== "agent_turn" ||
+      job.createdAt !== existing.job.createdAt ||
+      job.conversationEventId !== existing.job.conversationEventId ||
+      job.activeVaultId !== activeVault.vaultId ||
+      existing.job.activeVaultId !== activeVault.vaultId
+    ) {
+      throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The unified Agent turn binding is invalid.");
+    }
+    const validated = JobRecordSchema.parse(job);
+    writeJsonAtomic(existing.path, validated);
+    return validated;
+  }
+
+  readAgentTurnJob(jobId: string): JobRecord | undefined {
+    const vaultPath = this.#requireActiveVaultPath();
+    const jobFile = readJobRecordFile(vaultPath, jobId);
+    return jobFile?.job.class === "agent_turn" ? jobFile.job : undefined;
+  }
+
+  async processAgentTurnSource(jobId: string): Promise<JobRecord> {
+    const before = this.readAgentTurnJob(jobId);
+    if (!before?.sourceId) {
+      throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The source-bearing Agent turn is invalid.");
+    }
+    if (before.state === "queued") {
+      await this.processQueuedAgentIngest({ jobIds: [jobId], sourceIds: [before.sourceId], limit: 1 });
+    }
+    const after = this.readAgentTurnJob(jobId);
+    if (!after) {
+      throw new PigeDomainError("agent_runtime.turn_unavailable", "The source-bearing Agent turn is unavailable.");
+    }
+    return after;
+  }
+
+  requeueWaitingTextAgentTurns(): { readonly requeued: number } {
+    const vaultPath = this.#requireActiveVaultPath();
+    let requeued = 0;
+    for (const jobFile of readJobRecordFiles(path.join(vaultPath, ".pige", "jobs"))) {
+      if (
+        jobFile.job.class !== "agent_turn" ||
+        jobFile.job.sourceId !== undefined ||
+        jobFile.job.state !== "waiting_dependency" ||
+        jobFile.job.stage !== "waiting_for_model"
+      ) {
+        continue;
+      }
+      const {
+        stage: _stage,
+        finishedAt: _finishedAt,
+        error: _error,
+        waitingDependency: _waitingDependency,
+        ...current
+      } = jobFile.job;
+      writeJsonAtomic(jobFile.path, JobRecordSchema.parse({
+        ...current,
+        state: "queued",
+        updatedAt: new Date().toISOString(),
+        message: "The preserved Agent turn is queued after model setup became ready."
+      }));
+      requeued += 1;
+    }
+    return { requeued };
+  }
+
+  listQueuedTextAgentTurns(limit = 20): readonly JobRecord[] {
+    const vaultPath = this.#requireActiveVaultPath();
+    return readJobRecordFiles(path.join(vaultPath, ".pige", "jobs"))
+      .map((jobFile) => jobFile.job)
+      .filter((job) => job.class === "agent_turn" && job.sourceId === undefined && job.state === "queued")
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+      .slice(0, clampLimit(limit));
+  }
+
   recoverInterruptedJobs(): RecoverInterruptedJobsResult {
     const vaultPath = this.#requireActiveVaultPath();
     let requeued = 0;
@@ -496,6 +767,7 @@ export class JobsService {
         (jobFile.job.class === "capture" ||
           jobFile.job.class === "parse" ||
           jobFile.job.class === "ocr" ||
+          jobFile.job.class === "agent_turn" ||
           jobFile.job.class === "agent_ingest" ||
           jobFile.job.class === "index_rebuild");
       const state: JobState = canResumeIdempotently ? "queued" : "failed_retryable";
@@ -522,7 +794,7 @@ export class JobsService {
 
     let requeued = 0;
     for (const jobFile of readJobRecordFiles(path.join(vaultPath, ".pige", "jobs"))) {
-      if (jobFile.job.class !== "agent_ingest" || jobFile.job.state !== "waiting_dependency") continue;
+      if (!isAgentKnowledgeTurn(jobFile.job) || jobFile.job.state !== "waiting_dependency") continue;
       const sourceRecord = jobFile.job.sourceId ? readSourceRecord(vaultPath, jobFile.job.sourceId) : undefined;
       const agentSelectedOcr = Boolean(sourceRecord && supportsAgentSelectedOcr(sourceRecord.kind));
       const waitingAgentOcr = agentSelectedOcr &&
@@ -954,6 +1226,45 @@ export class JobsService {
 
     for (const jobFile of jobFiles) {
       const agentIngest = this.#agentIngest;
+      let preservedAgentTurn: PreservedAgentTurn | undefined;
+      if (jobFile.job.class === "agent_turn") {
+        try {
+          preservedAgentTurn = readPreservedAgentTurn(vaultPath, jobFile.job);
+          const existingAssistant = new AgentTurnConversationStore().findAssistantTurn(
+            vaultPath,
+            preservedAgentTurn.locator,
+            jobFile.job.id
+          );
+          if (existingAssistant) {
+            const finishedAt = new Date().toISOString();
+            writeJsonAtomic(jobFile.path, JobRecordSchema.parse({
+              ...jobFile.job,
+              state: "completed",
+              updatedAt: finishedAt,
+              finishedAt,
+              outputRefs: Array.from(new Map([
+                ...(jobFile.job.outputRefs ?? []).map((ref) => [`${ref.kind}:${ref.id}:${ref.role ?? ""}`, ref] as const),
+                [`conversation:${existingAssistant.id}:agent_turn_assistant_event`, {
+                  kind: "conversation" as const,
+                  id: existingAssistant.id,
+                  role: "agent_turn_assistant_event"
+                }]
+              ]).values()),
+              message: "Recovered the durable assistant result for this source Agent turn."
+            }));
+            completed += 1;
+            continue;
+          }
+        } catch {
+          markJobFailedRetryable(
+            jobFile.path,
+            jobFile.job,
+            "The preserved Agent turn binding is unavailable. The source remains preserved."
+          );
+          failed += 1;
+          continue;
+        }
+      }
       const durableProposalAvailable = agentIngest?.hasDurableProposal(vaultPath, jobFile.job.id) === true;
       if (!agentIngest || (!durableProposalAvailable && !canRunAgentIngest(agentIngest))) {
         markJobWaitingDependency(jobFile.path, jobFile.job, "Waiting for a tested default model before Agent ingest.");
@@ -1051,8 +1362,59 @@ export class JobsService {
               proposalResult.pagePath
             );
           },
+          ...(preservedAgentTurn?.metadata ? {
+            userTurn: {
+              text: preservedAgentTurn.event.text ?? "Inspect the attached preserved source.",
+              objective: preservedAgentTurn.metadata.objective
+            }
+          } : {}),
           signal: execution.control.signal
         });
+        if (result.outcome === "responded") {
+          if (!preservedAgentTurn) {
+            throw new PigeDomainError(
+              "agent_runtime.turn_binding_invalid",
+              "A source response requires a preserved Agent user turn."
+            );
+          }
+          const conversations = new AgentTurnConversationStore();
+          const assistantEvent = conversations.findAssistantTurn(
+            vaultPath,
+            preservedAgentTurn.locator,
+            runningJob.id
+          ) ?? conversations.appendAssistantTurn(
+            vaultPath,
+            preservedAgentTurn,
+            runningJob.id,
+            result.answer
+          );
+          const current = readJobRecordAtPath(jobFile.path) ?? activeJob;
+          activeJob = JobRecordSchema.parse({
+            ...current,
+            outputRefs: Array.from(new Map([
+              ...(current.outputRefs ?? []).map((ref) => [`${ref.kind}:${ref.id}:${ref.role ?? ""}`, ref] as const),
+              [`conversation:${assistantEvent.id}:agent_turn_assistant_event`, {
+                kind: "conversation" as const,
+                id: assistantEvent.id,
+                role: "agent_turn_assistant_event"
+              }]
+            ]).values()),
+            updatedAt: new Date().toISOString()
+          });
+          writeJsonAtomic(jobFile.path, activeJob);
+          const completedJob = this.#completeCooperativeExecution(
+            jobFile.path,
+            runningJob,
+            "completed",
+            "Pi Agent answered from the inspected preserved source without publishing a note.",
+            "source",
+            execution.control.durableWriteState(),
+            result.operationIds
+          );
+          if (completedJob.state === "cancelled") failed += 1;
+          else completed += 1;
+          continue;
+        }
         if (result.outcome === "confirmation_needed") {
           markAgentProposalAwaitingReview(
             jobFile.path,
@@ -1065,6 +1427,35 @@ export class JobsService {
           );
           completed += 1;
           continue;
+        }
+        if (preservedAgentTurn) {
+          const conversations = new AgentTurnConversationStore();
+          const assistantEvent = conversations.findAssistantTurn(
+            vaultPath,
+            preservedAgentTurn.locator,
+            runningJob.id
+          ) ?? conversations.appendAssistantTurn(
+            vaultPath,
+            preservedAgentTurn,
+            runningJob.id,
+            result.reviewRequired
+              ? "Pi Agent completed the selected knowledge action, and the saved note needs review."
+              : "Pi Agent completed the selected knowledge action and saved the result to the knowledge base."
+          );
+          const current = readJobRecordAtPath(jobFile.path) ?? activeJob;
+          activeJob = JobRecordSchema.parse({
+            ...current,
+            outputRefs: Array.from(new Map([
+              ...(current.outputRefs ?? []).map((ref) => [`${ref.kind}:${ref.id}:${ref.role ?? ""}`, ref] as const),
+              [`conversation:${assistantEvent.id}:agent_turn_assistant_event`, {
+                kind: "conversation" as const,
+                id: assistantEvent.id,
+                role: "agent_turn_assistant_event"
+              }]
+            ]).values()),
+            updatedAt: new Date().toISOString()
+          });
+          writeJsonAtomic(jobFile.path, activeJob);
         }
         const completedJob = this.#completeCooperativeExecution(
           jobFile.path,
@@ -1423,7 +1814,7 @@ export class JobsService {
           : {})
       });
     }
-    if (currentParent.job.state !== "running" || currentParent.job.class !== "agent_ingest") {
+    if (currentParent.job.state !== "running" || !isAgentKnowledgeTurn(currentParent.job)) {
       throw new PigeDomainError("agent_runtime.tool_parent_inactive", "The Agent tool parent is not the active ingest Job.");
     }
     if (currentParent.job.policyHash !== request.policyHash) {
@@ -1525,7 +1916,7 @@ export class JobsService {
           : {})
       });
     }
-    if (currentParent.job.state !== "running" || currentParent.job.class !== "agent_ingest") {
+    if (currentParent.job.state !== "running" || !isAgentKnowledgeTurn(currentParent.job)) {
       throw new PigeDomainError("agent_runtime.tool_parent_inactive", "The Agent tool parent is not the active ingest Job.");
     }
     if (currentParent.job.policyHash !== request.policyHash) {
@@ -2015,6 +2406,10 @@ function canRunAgentIngest(agentIngest: AgentIngestService | undefined): boolean
   }
 }
 
+function isAgentKnowledgeTurn(job: JobRecord): boolean {
+  return job.class === "agent_ingest" || job.class === "agent_turn";
+}
+
 function findQueuedCaptureJobFiles(vaultPath: string, request: ProcessQueuedCapturesRequest): { path: string; job: JobRecord }[] {
   const limit = clampLimit(request.limit);
   if (request.jobIds && request.jobIds.length > 0) {
@@ -2041,13 +2436,13 @@ function findQueuedAgentIngestJobFiles(
     return request.jobIds
       .map((jobId) => readJobRecordFile(vaultPath, jobId))
       .filter((jobFile): jobFile is { path: string; job: JobRecord } => Boolean(jobFile))
-      .filter((jobFile) => jobFile.job.class === "agent_ingest" && jobFile.job.state === "queued")
+      .filter((jobFile) => isAgentKnowledgeTurn(jobFile.job) && jobFile.job.state === "queued" && Boolean(jobFile.job.sourceId))
       .filter((jobFile) => sourceIds.size === 0 || (jobFile.job.sourceId ? sourceIds.has(jobFile.job.sourceId) : false))
       .slice(0, limit);
   }
 
   return readJobRecordFiles(path.join(vaultPath, ".pige", "jobs"))
-    .filter((jobFile) => jobFile.job.class === "agent_ingest" && jobFile.job.state === "queued")
+    .filter((jobFile) => isAgentKnowledgeTurn(jobFile.job) && jobFile.job.state === "queued" && Boolean(jobFile.job.sourceId))
     .filter((jobFile) => sourceIds.size === 0 || (jobFile.job.sourceId ? sourceIds.has(jobFile.job.sourceId) : false))
     .sort((left, right) => left.job.createdAt.localeCompare(right.job.createdAt))
     .slice(0, limit);
@@ -2208,6 +2603,14 @@ function createJobRecordPath(vaultPath: string, jobId: string): string {
   return path.join(vaultPath, ".pige", "jobs", dateKey.slice(0, 4), dateKey.slice(4, 6), `${jobId}.json`);
 }
 
+function createAgentTurnSourceId(jobId: string): string {
+  const match = /^job_(\d{8})_([a-z0-9]{8,})$/u.exec(jobId);
+  if (!match) {
+    throw new PigeDomainError("agent_runtime.turn_invalid", "The unified Agent turn Job identity is invalid.");
+  }
+  return `src_${match[1]}_${match[2]}`;
+}
+
 function readJobRecordAtPath(jobPath: string): JobRecord | undefined {
   try {
     const parsed = JobRecordSchema.safeParse(JSON.parse(fs.readFileSync(jobPath, "utf8")));
@@ -2249,6 +2652,23 @@ function toJobSummary(vaultPath: string, job: JobRecord): JobSummary {
     createdAt: job.createdAt,
     updatedAt: job.updatedAt
   };
+}
+
+function readPreservedAgentTurn(vaultPath: string, job: JobRecord): PreservedAgentTurn {
+  const reference = job.inputRefs?.find(
+    (candidate) => candidate.kind === "conversation" &&
+      candidate.role === "agent_turn_user_event" &&
+      candidate.id === job.conversationEventId
+  );
+  if (!job.conversationEventId || !reference?.locator || !reference.checksum) {
+    throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The source Agent turn lacks its durable user-event binding.");
+  }
+  return new AgentTurnConversationStore().readUserTurn(
+    vaultPath,
+    reference.locator,
+    job.conversationEventId,
+    reference.checksum
+  );
 }
 
 function readSourceRecord(vaultPath: string, sourceId: string): SourceRecord | undefined {
@@ -2419,7 +2839,7 @@ function assertProposalParentJob(
     : new Set<JobState>(["awaiting_review"]);
   if (
     job.id !== proposal.jobId ||
-    job.class !== "agent_ingest" ||
+    !isAgentKnowledgeTurn(job) ||
     job.activeVaultId !== activeVaultId ||
     !job.sourceId ||
     !allowedStates.has(job.state) ||
@@ -2800,7 +3220,7 @@ function markAgentProposalAwaitingReview(
   const sourceId = current.sourceId;
   if (
     !sourceId ||
-    current.class !== "agent_ingest" ||
+    !isAgentKnowledgeTurn(current) ||
     sourceId !== binding.sourceId ||
     !["running", "cancel_requested", "awaiting_review"].includes(current.state) ||
     current.policyHash !== binding.policyHash
@@ -2902,6 +3322,7 @@ function assertAgentParseToolRequest(parentJob: JobRecord, request: AgentIngestP
     !/^[a-z0-9][a-z0-9._-]{0,31}$/u.test(request.toolVersion) ||
     !isSha256(request.canonicalInputHash) ||
     !isSha256(request.catalogHash) ||
+    request.compatibleCatalogHashes?.some((hash) => !isSha256(hash)) === true ||
     !isSha256(request.policyHash)
   ) {
     throw new PigeDomainError("agent_runtime.tool_binding_invalid", "The Agent parser tool binding is invalid.");
@@ -2915,6 +3336,7 @@ function assertAgentOcrToolRequest(parentJob: JobRecord, request: AgentIngestOcr
     !/^[a-z0-9][a-z0-9._-]{0,31}$/u.test(request.toolVersion) ||
     !isSha256(request.canonicalInputHash) ||
     !isSha256(request.catalogHash) ||
+    request.compatibleCatalogHashes?.some((hash) => !isSha256(hash)) === true ||
     !isSha256(request.policyHash)
   ) {
     throw new PigeDomainError("agent_runtime.tool_binding_invalid", "The Agent OCR tool binding is invalid.");
@@ -2967,7 +3389,7 @@ function ensureAgentParseToolJob(
       : `Agent selected ${documentLabel(sourceRecord.kind)} parsing; waiting for the bundled parser capability.`
   });
   return ensureRequiredChildJob(vaultPath, parentJob, requested, (existing) => {
-    assertAgentToolChildBinding(existing, requested);
+    assertAgentToolChildBinding(existing, requested, request.compatibleCatalogHashes);
     return JobRecordSchema.parse({
       ...existing,
       inputRefs: mergeAgentToolCallProvenance(existing.inputRefs ?? [], provenanceHash)
@@ -3023,7 +3445,7 @@ function ensureAgentOcrToolJob(
       : `Agent selected ${documentLabel(sourceRecord.kind)} OCR; waiting for the reviewed local OCR capability.`
   });
   return ensureRequiredChildJob(vaultPath, parentJob, requested, (existing) => {
-    assertAgentToolChildBinding(existing, requested);
+    assertAgentToolChildBinding(existing, requested, request.compatibleCatalogHashes);
     return JobRecordSchema.parse({
       ...existing,
       inputRefs: mergeAgentToolCallProvenance(existing.inputRefs ?? [], provenanceHash)
@@ -3068,7 +3490,11 @@ function createAgentToolInputRefs(input: {
   ];
 }
 
-function assertAgentToolChildBinding(existing: JobRecord, requested: JobRecord): void {
+function assertAgentToolChildBinding(
+  existing: JobRecord,
+  requested: JobRecord,
+  compatibleCatalogHashes: readonly string[] = []
+): void {
   if (
     existing.id !== requested.id ||
     existing.class !== requested.class ||
@@ -3085,12 +3511,15 @@ function assertAgentToolChildBinding(existing: JobRecord, requested: JobRecord):
   ]) {
     const existingRef = existing.inputRefs?.find((ref) => ref.role === role);
     const requestedRef = requested.inputRefs?.find((ref) => ref.role === role);
+    const catalogGenerationCompatible = role === AGENT_TOOL_CATALOG_ROLE &&
+      existingRef?.checksum !== undefined &&
+      compatibleCatalogHashes.includes(existingRef.checksum);
     if (
       !existingRef ||
       !requestedRef ||
       existingRef.kind !== requestedRef.kind ||
       existingRef.id !== requestedRef.id ||
-      existingRef.checksum !== requestedRef.checksum
+      (existingRef.checksum !== requestedRef.checksum && !catalogGenerationCompatible)
     ) {
       throw new PigeDomainError("agent_runtime.tool_binding_changed", "The durable tool child input binding changed before reuse.");
     }
@@ -3660,6 +4089,18 @@ function createIndexRebuildJob(vaultPath: string): JobRecord {
   const jobPath = path.join(vaultPath, ".pige", "jobs", dateKey.slice(0, 4), dateKey.slice(4, 6), `${jobId}.json`);
   writeJsonAtomic(jobPath, jobRecord);
   return jobRecord;
+}
+
+function isConfinedConversationLocator(locator: string): boolean {
+  if (
+    locator.includes("\\") ||
+    locator.startsWith("/") ||
+    locator.includes("\0") ||
+    locator.split("/").some((segment) => segment === "" || segment === "." || segment === "..")
+  ) {
+    return false;
+  }
+  return /^\.pige\/conversations\/\d{4}\/\d{2}\/conv_\d{8}(?:_[a-z0-9]{4,})?\.jsonl$/u.test(locator);
 }
 
 function appendLog(vaultPath: string, line: string): void {

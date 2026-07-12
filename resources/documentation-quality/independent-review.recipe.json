@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-12T03:48:24Z",
+  "reviewedAt": "2026-07-12T09:01:07Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,9 +30,21 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "a19d7bbcfea957ce1d8100ced9019a75661c9e1226a3cac213b64eb07eb1ffef"
+    "reviewedSha256": "57da2a677b70c459c23b29c28d4ce59d934702883e85141dfbb11cd885d05be7"
   },
   "reviewers": [
+    {
+      "reviewerId": "provider-settings-simplification-final-review",
+      "task": "/root/provider_docs_independent_review",
+      "independentDimensions": [
+        "navigation_and_resource_lifecycle",
+        "cross_document_contract_consistency",
+        "continuous_traceability_and_acceptance",
+        "ongoing_development_support",
+        "documentation_leanness_and_maintainability"
+      ],
+      "independence": "Fresh read-only reviewer audited the exact 19-file pre-recipe Provider Settings candidate and rejected a corrupted board, stale UI copy, incomplete manual-bootstrap sequencing, unsafe status DTOs, key-only auth assumptions, unspecified enablement, incomplete DeepSeek boundary proof, and capacity overflow. After repair it accepted preset-first setup, Custom-only protocols, unified model inventory, grouped Global Default, real Pi pre-write probe, conditional auth, unchanged states, 1,091 claims, clean UI assets, and fixed budgets; all five dimensions were CLEAR with no reviewer edits."
+    },
     {
       "reviewerId": "general-agent-unified-ingress-final-review",
       "task": "/root/general_agent_final_review",
@@ -260,65 +272,77 @@
         "documentation_leanness_and_maintainability"
       ],
       "independence": "Fresh read-only dependency reviewer found the original workspace-lock verifier false negative and Decision lifecycle risk, then independently accepted the repaired 106-file Undici 8.7 candidate, exact owner alignment, unchanged semantic lock and statuses, and explicit platform/HTTP2 residuals without editing files."
+    },
+    {
+      "reviewerId": "combined-provider-general-agent-final-review",
+      "task": "/root/final_doc_review",
+      "independentDimensions": [
+        "navigation_and_resource_lifecycle",
+        "cross_document_contract_consistency",
+        "continuous_traceability_and_acceptance",
+        "ongoing_development_support",
+        "documentation_leanness_and_maintainability"
+      ],
+      "independence": "Fresh read-only reviewer validated the prior code, trace and UI audits against the exact 44-Development plus 24-governed candidate. It accepted existing Home/Models navigation, unified durable Agent turns, preset/Custom inventory and Global Default, exact current/open boundaries, unchanged partial/planned states, truthful loopback plus legacy Custom DeepSeek evidence, the 1,091-claim lock and fixed capacity with zero edits or blockers."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "general-agent-unified-ingress-final-review",
+      "reviewerId": "combined-provider-general-agent-final-review",
       "blockerCount": 0,
-      "summary": "One existing Home surface and the existing Owner map now cover ordinary conversation, source-bearing turns and optional local knowledge without a new mode, destination, document or resource owner."
+      "summary": "Existing Home and Models own the unified turn, Provider inventory and Global Default without a new destination, mode or setup taxonomy; deferred URL, follow-up, delete and sync polish remain explicit."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "general-agent-unified-ingress-final-review",
+      "reviewerId": "combined-provider-general-agent-final-review",
       "blockerCount": 0,
-      "summary": "Vision, PRD, TECH, Pi, API, Jobs, Context, Prompt, Parser, UI and Playbook agree on one Pi semantic ingress, Host safety ownership, optional retrieval, durable waiting and explicit Provider binding targets."
+      "summary": "PRD and Owners agree on five presets, Custom-only protocols, conditional auth, journaled Connect/Refresh, one inventory/default, durable Agent turns and no silent fallback."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "general-agent-unified-ingress-final-review",
+      "reviewerId": "combined-provider-general-agent-final-review",
       "blockerCount": 0,
-      "summary": "PIGE-PI-005 maps through pi.unified-agent-ingress to B3.14 and E3.09 with no evidence; the 1,091-claim lock is current and every existing planned, partial and in-progress state remains unchanged."
+      "summary": "Stable Provider and unified-ingress mappings retain partial/planned status with no new Requirement or evidence ID; current and locked ledgers contain the same 1,091 claims."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "general-agent-unified-ingress-final-review",
+      "reviewerId": "combined-provider-general-agent-final-review",
       "blockerCount": 0,
-      "summary": "B3.14/E3.09 freezes agent.submitTurn and agent_turn waiting/resume, no heuristic fallback, explicit three-protocol dispatch, safe defaultBinding status and probe-before-write all-or-restore acceptance targets."
+      "summary": "Owners expose exact DTOs, conditional auth, probe/journal/recovery, inventory/default and unified-turn evidence while distinguishing assembled Connect proof from the legacy Custom DeepSeek canary."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.6,
-      "reviewerId": "general-agent-unified-ingress-final-review",
+      "reviewerId": "combined-provider-general-agent-final-review",
       "blockerCount": 0,
-      "summary": "No document or state was added: 57 Markdown files, 1,209,730/1,210,000 bytes, 4,128 entry words, 5,203/5,500 trace lines, 249,993/250,000 trace bytes, zero duplicate groups and 14 mutations."
+      "summary": "No document, Requirement, Build, Exit or state was added: 57 Markdown files use 1,209,470/1,210,000 bytes; entry context is 4,128 words and trace uses 5,203 lines/249,928 bytes."
     }
   ],
   "verification": [
     {
       "command": "npm run verify",
       "status": "passed",
-      "evidence": "Full verification passed: docs, 83 decisions, UI visual, independent review, TRC-001 through TRC-005, CON-001 through CON-004, 49 dependencies, fixtures, Pi/import boundaries, no telemetry, source artifacts, LEN-001 through LEN-005, and all five quality dimensions."
+      "evidence": "Full verification passed: docs, 84 decisions, UI visual, independent review, TRC-001 through TRC-005, CON-001 through CON-004, 49 dependencies, fixtures, Pi/import boundaries, no telemetry, source artifacts, LEN-001 through LEN-005, and all five quality dimensions."
     },
     {
       "command": "npm run verify:docs && npm run verify:decisions && npm run verify:ui-visual && npm run verify:contracts && npm run verify:dependencies && npm run verify:fixtures && npm run verify:boundaries && npm run verify:no-telemetry && npm run verify:source-artifacts && git diff --check",
       "status": "passed",
-      "evidence": "All focused documentation, decision, UI, contract, dependency, fixture, boundary, telemetry, source-artifact and diff gates passed on the exact governance-only candidate."
+      "evidence": "Focused docs, decision, UI, contract and diff gates passed on the exact 68-file combined candidate; full verification also covers dependency, fixture, boundary, telemetry and source-artifact gates."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 passed: 4,128/4,200 entry words, zero duplicate groups, 14 mutations, 5,203 trace lines, 249,993 trace bytes, 57 Markdown files, 1,209,730 bytes, and 7.14 percent line reduction."
+      "evidence": "LEN-001 through LEN-005 passed: 4,128/4,200 entry words, zero duplicate groups, 14 mutations, 5,203 trace lines, 249,928 trace bytes, 57 Markdown files, 1,209,470 bytes, and 6.95 percent line reduction."
     },
     {
       "command": "node scripts/verify/independent-documentation-review.mjs --print-snapshot && explicit semantic-ledger comparison",
       "status": "passed",
-      "evidence": "The governed snapshot is a19d7bbcfea957ce1d8100ced9019a75661c9e1226a3cac213b64eb07eb1ffef across 109 files; current and locked ledgers contain 1,091 claims with zero differences."
+      "evidence": "The governed snapshot is 57da2a677b70c459c23b29c28d4ce59d934702883e85141dfbb11cd885d05be7 across 109 files; current and locked ledgers contain 1,091 claims with zero differences."
     }
   ],
   "coordination": {
@@ -327,11 +351,12 @@
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "This governance-only candidate adds planned PIGE-PI-005/B3.14/E3.09 and future versioned agent_turn, agent.submitTurn, endpointProtocol and defaultBinding targets; no runtime channel, Job/schema revision, Provider persistence, navigation destination, evidence or status is implemented or promoted.",
-    "acknowledgement": "Project Management closed the prior Proposal UI candidate and directed this clean-baseline lane. Product Planning resolved Development's protocol, readiness and no-model durable-truth questions; UI Design accepted the exact text-only Home contract, and an independent reviewer accepted all 25 pre-recipe files."
+    "compatibility": "The combined candidate implements the bounded Provider/Global Default/Pi/Home and unified text/one-file ingress checkpoint while retaining legacy records, explicit open gaps and every existing partial/planned status.",
+    "acknowledgement": "Development froze 44 files and exact executable evidence; Product Planning synchronized 24 governed files, UI Design accepted the current/target boundary, and an independent reviewer cleared the exact 68-file candidate."
   },
   "resolvedBlockers": [
-    "Governed Pige as a general-purpose personal Agent with one Pi semantic ingress for text, URLs and files after Host preservation; made retrieval optional, froze durable no-model waiting, explicit Provider protocols, safe binding truth and pre-save Pi probe targets, and kept the entire vertical planned without implementation evidence.",
+    "Implemented five preset-first Providers plus Custom-only protocols, conditional credentials, auto-sync/Refresh/manual inventory, grouped Global Default, typed repair and real Pi probe with journaled recovery; retained every partial/planned state.",
+    "Implemented durable Home text and one preserve-first file through one Pi turn with direct chat, optional cited retrieval, waiting/resume and no renderer semantic fallback; kept URL fetch, follow-up, multi-source and packaged proof open.",
     "Implemented the governed ordinary_allowed default and exact Connect disclosure, with matrix, policy-hash, Home private/sensitive, restricted, unknown/local, and Profile-switch evidence while keeping persistence/IPC/UI and confirmation resume open.",
     "Defined local-first without BYOK friction: one exact-destination disclosure, ordinary_allowed routine use with quiet status, sensitive confirmation, restricted blocking, unknown/changed reconfirmation, optional stricter modes, and no inherited authority; kept the old executable default explicitly open.",
     "Rewrote README as a concise product entry with user value, honest current capability, the Agent-first roadmap, privacy boundaries, and the Agent-authored automation goal instead of a technical inventory.",
@@ -365,10 +390,10 @@
     "The local-tool lifecycle remains a fake/local service foundation: real Paddle/Python/model/language-pack transport, ordinary-ingest no-hidden-install proof, production app-data/catalog/permission/pre-vault Job/Operation wiring, OCR/UI, supply chain, packaged platforms, cross-process locking, complete recovery/GC/quarantine purge, and background lifecycle controls remain open.",
     "The retrieval regression foundation remains lexical and synthetic: model-grounded summary/citation validation under cloud-send and Permission enforcement, tag/topic/entity and Knowledge Tree thresholds, vector/reranker ranking, 10k/100k and UI/packaged proof, and broader locale/query families remain open.",
     "The Knowledge Tree remains internal-only: broader relation and branch semantics, richer aggregate inputs, public IPC/preload/renderer navigation, localized empty state, 10k worker/incremental rebuild proof, packaged parity, and the separately owned visual/accessibility and Knowledge Health work remain open.",
-    "Pi remains partial: agent_turn/agent.submitTurn, no-model same-turn resume, removal of Home shape heuristics and silent fallback, explicit three-protocol profile persistence and migration, defaultBinding truth, pre-save Pi probe/all-or-restore, remaining fixed routes, Broker, packaged BYOK, signed platforms, and broader cross-process/cross-file recovery remain open.",
+    "Pi remains partial: full Provider catalog/help/delete, durable sync health, optional-auth UI, live DeepSeek preset/Anthropic proof, Agent-selected URL fetch, durable follow-up/multi-source recovery, Broker and signed packaged BYOK remain open.",
     "No-telemetry is a static executable gate; unknown SDKs, computed endpoints, indirect transports, generated configuration, and crash-hook review remain open. Diagnostics still need broader stores, recovery correlation, user clear, export cancellation, selected-path UX, and crash recovery.",
     "Backup still needs backupId/domainSchemaVersions, release exclusion scans, external managed copies, include controls, durable Jobs/checkpoints, structured dependencies, and complete restore orchestration.",
-    "Trace projections use 5,203 of 5,500 lines and 249,993 of 250,000 bytes; governed Markdown uses 1,209,730 of 1,210,000 bytes. Future additions must reclaim capacity before editing instead of raising budgets.",
+    "Trace projections use 5,203 of 5,500 lines and 249,928 of 250,000 bytes; governed Markdown uses 1,209,470 of 1,210,000 bytes. Future additions must reclaim capacity instead of raising budgets.",
     "PRD, TECH_ARCHITECTURE, and Decision Log remain large Owner documents; future Agents should continue section-targeted reads and define each fact once.",
     "The concise pre-alpha README intentionally has no install button, screenshots, or release download; add those only when a usable signed build and governed visual evidence exist.",
     "Structural UI gates do not prove packaged macOS/Windows fidelity, accessibility, or human visual approval; real capture and release evidence remain open.",

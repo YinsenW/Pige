@@ -6,6 +6,8 @@ import type { ModelProviderRuntimeConfig } from "./model-provider-registry";
 interface ProviderIdentityInput {
   readonly id: string;
   readonly providerKind: ProviderProfileSummary["providerKind"];
+  readonly endpointProtocol: ProviderProfileSummary["endpointProtocol"];
+  readonly authRequirement: ProviderProfileSummary["authRequirement"];
   readonly baseUrl?: string | undefined;
   readonly modelListStrategy: ProviderProfileSummary["modelListStrategy"];
   readonly cloudBoundary: ProviderProfileSummary["cloudBoundary"];
@@ -35,6 +37,8 @@ export function createModelRuntimeBindingIdentity(
     providerIdentityHash: hashIdentity({
       id: provider.id,
       providerKind: provider.providerKind,
+      endpointProtocol: provider.endpointProtocol,
+      authRequirement: provider.authRequirement,
       baseUrl: provider.baseUrl ?? null,
       modelListStrategy: provider.modelListStrategy,
       cloudBoundary: provider.cloudBoundary,

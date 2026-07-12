@@ -2,12 +2,14 @@ import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type {
   AddPresetProviderRequest,
   AddManualProviderRequest,
+  AddManualModelRequest,
+  AgentSubmitTurnRequest,
+  AgentSubmitTurnResult,
   AgentRuntimeStatus,
   AppHealth,
   BackupCreateResult,
   AppearanceSettingsSummary,
   BackupRestoreStatus,
-  CaptureSubmitResult,
   CreateVaultRequest,
   DiagnosticsHealth,
   ExportSupportBundleRequest,
@@ -25,6 +27,7 @@ import type {
   LocalDatabaseStatus,
   LocalDatabaseResetResult,
   ModelProviderSettingsSummary,
+  ProviderConnectResult,
   NoteDocument,
   NoteGetRequest,
   NoteRenderRequest,
@@ -38,26 +41,21 @@ import type {
   ProposalsListRequest,
   ProposalsListResult,
   RecentVaultSummary,
-  RetrievalAskRequest,
-  RetrievalAskResult,
   RetrievalSearchRequest,
   RetrievalSearchResult,
   RestoreApplyRequest,
   RestoreApplyResult,
   RestorePreviewResult,
+  RefreshProviderModelsRequest,
   SetAlwaysOnTopRequest,
   SetDefaultModelRequest,
+  UpdateModelRequest,
   SetLocaleRequest,
   SetSidebarOpenRequest,
   SetWindowModeRequest,
   SettingsRegistrySummary,
-  SubmitDroppedFilesCaptureRequest,
-  SubmitFilesCaptureRequest,
-  SubmitTextCaptureRequest,
-  SubmitUrlCaptureRequest,
   SupportBundleExportResult,
   SupportBundlePreview,
-  CaptureFilesSubmitResult,
   ToolchainHealth,
   UpdateSourceStoragePolicyRequest,
   WindowState,
@@ -80,25 +78,15 @@ const api: PigeDesktopApi = {
     runtimeStatus: async (): Promise<AgentRuntimeStatus> =>
       ipcRenderer.invoke("agent.runtimeStatus") as Promise<AgentRuntimeStatus>,
     ask: async (request: HomeAgentAskRequest): Promise<HomeAgentAskResult> =>
-      ipcRenderer.invoke("agent.ask", request) as Promise<HomeAgentAskResult>
-  },
-  capture: {
-    submitText: async (request: SubmitTextCaptureRequest): Promise<CaptureSubmitResult> =>
-      ipcRenderer.invoke("capture.submitText", request) as Promise<CaptureSubmitResult>,
-    submitUrl: async (request: SubmitUrlCaptureRequest): Promise<CaptureSubmitResult> =>
-      ipcRenderer.invoke("capture.submitUrl", request) as Promise<CaptureSubmitResult>,
-    submitDroppedFiles: async (
-      files: readonly File[],
-      request: SubmitDroppedFilesCaptureRequest
-    ): Promise<CaptureFilesSubmitResult> => {
+      ipcRenderer.invoke("agent.ask", request) as Promise<HomeAgentAskResult>,
+    submitTurn: async (
+      request: AgentSubmitTurnRequest,
+      files: readonly File[] = []
+    ): Promise<AgentSubmitTurnResult> => {
       const filePaths = files
         .map((file) => webUtils.getPathForFile(file))
         .filter((filePath): filePath is string => filePath.length > 0);
-      const payload: SubmitFilesCaptureRequest = {
-        ...request,
-        filePaths
-      };
-      return ipcRenderer.invoke("capture.submitFiles", payload) as Promise<CaptureFilesSubmitResult>;
+      return ipcRenderer.invoke("agent.submitTurn", { request, filePaths }) as Promise<AgentSubmitTurnResult>;
     }
   },
   jobs: {
@@ -133,9 +121,7 @@ const api: PigeDesktopApi = {
   },
   retrieval: {
     search: async (request: RetrievalSearchRequest): Promise<RetrievalSearchResult> =>
-      ipcRenderer.invoke("retrieval.search", request) as Promise<RetrievalSearchResult>,
-    ask: async (request: RetrievalAskRequest): Promise<RetrievalAskResult> =>
-      ipcRenderer.invoke("retrieval.ask", request) as Promise<RetrievalAskResult>
+      ipcRenderer.invoke("retrieval.search", request) as Promise<RetrievalSearchResult>
   },
   vault: {
     current: async (): Promise<VaultSummary | undefined> =>
@@ -174,10 +160,16 @@ const api: PigeDesktopApi = {
   models: {
     summary: async (): Promise<ModelProviderSettingsSummary> =>
       ipcRenderer.invoke("models.summary") as Promise<ModelProviderSettingsSummary>,
-    addPresetProvider: async (request: AddPresetProviderRequest): Promise<ModelProviderSettingsSummary> =>
-      ipcRenderer.invoke("models.addPresetProvider", request) as Promise<ModelProviderSettingsSummary>,
-    addManualProvider: async (request: AddManualProviderRequest): Promise<ModelProviderSettingsSummary> =>
-      ipcRenderer.invoke("models.addManualProvider", request) as Promise<ModelProviderSettingsSummary>,
+    addPresetProvider: async (request: AddPresetProviderRequest): Promise<ProviderConnectResult> =>
+      ipcRenderer.invoke("models.addPresetProvider", request) as Promise<ProviderConnectResult>,
+    addManualProvider: async (request: AddManualProviderRequest): Promise<ProviderConnectResult> =>
+      ipcRenderer.invoke("models.addManualProvider", request) as Promise<ProviderConnectResult>,
+    refreshProviderModels: async (request: RefreshProviderModelsRequest): Promise<ModelProviderSettingsSummary> =>
+      ipcRenderer.invoke("models.refreshProviderModels", request) as Promise<ModelProviderSettingsSummary>,
+    addManualModel: async (request: AddManualModelRequest): Promise<ModelProviderSettingsSummary> =>
+      ipcRenderer.invoke("models.addManualModel", request) as Promise<ModelProviderSettingsSummary>,
+    updateModel: async (request: UpdateModelRequest): Promise<ModelProviderSettingsSummary> =>
+      ipcRenderer.invoke("models.updateModel", request) as Promise<ModelProviderSettingsSummary>,
     setDefaultModel: async (request: SetDefaultModelRequest): Promise<ModelProviderSettingsSummary> =>
       ipcRenderer.invoke("models.setDefaultModel", request) as Promise<ModelProviderSettingsSummary>
   },

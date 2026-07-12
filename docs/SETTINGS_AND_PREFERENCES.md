@@ -88,7 +88,7 @@ Pige Vault/
 Storage rules:
 
 - `settings.json` must not contain secrets.
-- Provider records store only secret references, never raw keys.
+- Keyed Provider records store only secret references; no-auth Providers store neither.
 - `.pige/config.json` must not contain active absolute paths outside the vault, API keys, provider tokens, permission grants, or machine-only update state.
 - `.pige/manifest.json` is not a general settings file.
 - Derived health/status can be recomputed and should not be treated as user preference.
@@ -127,7 +127,8 @@ Rules:
 
 - Each page owns one conceptual domain.
 - Cross-links can guide the user to related pages, but a page should not embed another domain's controls.
-- Models page only connects the language model service Pi Agent can call.
+- Models connects preset/custom Providers, manages one inventory per Provider, and picks
+  Global Default; only Custom exposes protocol/Base URL.
 - Model/provider behavior must follow `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`; do not add Advanced/Fast model settings unless runtime routing support is real and tested.
 - Local embeddings, OCR, speech, parsers, and bundled tool health belong to Local Capabilities.
 - Permission mode, cloud-send policy, API key storage mode, and YOLO belong to Permissions & Privacy.
@@ -157,11 +158,11 @@ This table is the v0.1 baseline. Implementation can split storage files differen
 | Trash/archive policy | Vault & Note Storage | `vault_portable` | Vault Runtime Service | `.pige/config.json` | Yes | `explicit_confirmation` | Immediate for future deletes |
 | Index rebuild requested | Index & Maintenance | `runtime_transient` job | Local Database Service | job record | Job backup policy | `none` | Starts a rebuildable `index_rebuild` job; unlike Reset Local Database, this does not delete derived state first |
 | Index/chunk health status | Index & Maintenance | `derived_status` | Local Database Service | SQLite/app data | No | `none` | Recomputed |
-| Provider profile metadata and explicit endpoint protocol | Models | `machine_local` | Model Provider Registry | OS app data | No by default | `explicit_confirmation` | New calls after validation; changing protocol reconnects and retests |
-| Provider API key | Models | `secret` | Settings and Secrets Service | OS keychain/encrypted store | No | `explicit_warning` | Immediate after test/save |
-| Provider model list cache | Models | `derived_status` | Model Provider Registry | OS app data/cache | No | `none` | Refreshable |
-| Manually added model ID | Models | `machine_local` | Model Provider Registry | OS app data | No by default | `none` | Immediate after validation |
-| Default Pi Agent model | Models | `machine_local` | Model Provider Registry, Agent Orchestrator | OS app data | No by default | `none` | New model calls |
+| Provider template/profile metadata, preset identity, protocol, and Endpoint binding | Models | `machine_local` | Model Provider Registry | OS app data | No by default | `explicit_confirmation` | Journaled Connect/reconnect; startup rollback |
+| Provider credential when required | Models | `secret` | Settings and Secrets Service | OS keychain/encrypted store | No | `explicit_warning` | After validated Connect |
+| Provider model inventory: exact ID, source, enabled state, optional alias/capabilities | Models | `machine_local` | Model Provider Registry | OS app data | No by default | `none` | Journaled Refresh; atomic manual/alias/enabled updates |
+| Provider model-sync health | Models | `runtime_transient` | Model Provider Registry, Renderer | None | No | `none` | Session-local; failure preserves last inventory |
+| Global Default Pi Agent model | Models | `machine_local` | Model Provider Registry, Agent Orchestrator | OS app data | No by default | `none` | New calls; must reference an enabled model |
 | Cloud-send policy (`ordinary_allowed` default) | Permissions & Privacy | `machine_local` | Settings Service, Model Egress Policy | OS app data | No | `explicit_confirmation` | New model calls |
 | Local embedding model status | Local Capabilities | `derived_status` plus machine asset | Local RAG Engine, Local Tool Service | OS app data | No | `permission_and_confirmation` | After download/remove job |
 | OCR engine preference | Local Capabilities | `machine_local` | OCR Service | OS app data | No | `none` | New OCR jobs |
@@ -225,7 +226,7 @@ Agent-affecting settings are not free-form prompt snippets. They compile into ty
 | In-vault managed-copy root | `sourceStorage.sourceAssetRootKind` compatibility field | Sometimes | Source Storage Service | New managed sources; existing sources unchanged |
 | External managed-copy root binding | `sourceStorage.sourceAssetRootKind` plus stable root binding availability | Sometimes | Source Storage Service, Permission Broker | New managed sources and source availability checks; existing sources resolve their recorded root ID |
 | Default Pi Agent model | `model.defaultModelProfileId` | Yes | Model Provider Registry, Agent Orchestrator | New model calls |
-| Provider profile metadata | `model.cloudBoundary` and provider availability | Yes, redacted | Model Provider Registry | New model calls |
+| Provider profile metadata | protocol-bound availability and internal `model.cloudBoundary` | Yes, redacted | Model Provider Registry | New model calls |
 | Cloud-send policy (`ordinary_allowed` default) | `model.cloudSendPolicy` | Yes | Model Egress Policy, Model Provider Registry | New model calls and queued model jobs |
 | Default permission mode | `permissions.defaultMode` | Yes | Permission Broker | Next sensitive action |
 | Saved scoped grants | `permissions.savedGrantSummaryRefs` | No raw details | Permission Broker | Next sensitive action |
@@ -385,10 +386,11 @@ Required tests:
 - `.pige/config.json` contains only portable non-secret vault preferences.
 - External managed-copy root binding is machine-local, has a stable `root_` ID, appears as an external dependency in backup/restore preview, and never retargets existing sidecars when the default root changes.
 - Agent-affecting settings appear in the Agent Policy Effect Registry and compile into Agent Runtime Policy Context.
-- Provider model list refresh does not expose API keys to renderer.
+- Provider refresh preserves list/alias/enabled/default on failure and never exposes keys
+  or duplicates manual/discovered IDs.
 - Provider Connect performs the exact-protocol Pi generation/tool probe before writes;
   failure persists nothing, and staged rollback/readback cannot delete a still-referenced secret.
-- Provider setup stores discovered models when model listing succeeds and falls back to manual model IDs only when compatible/custom endpoints explicitly do not support listing.
+- Provider setup uses one inventory; typed Retry/manual ID covers incomplete discovery.
 - The next profile revision stores an explicit Responses, Chat Completions, or Anthropic
   Messages protocol. New custom setup requires a choice; legacy compatible/custom
   records migrate by the Pi Owner mapping and are never inferred from URL.

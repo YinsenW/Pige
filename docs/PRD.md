@@ -711,12 +711,12 @@ Accessibility:
 
 Models:
 
-- BYOK settings.
-- OpenAI provider.
-- Anthropic provider.
-- OpenAI-compatible provider.
-- Anthropic-compatible provider.
-- No user-facing per-workflow model selection in v0.1. Pige uses sensible internal defaults after one provider is connected.
+- BYOK with reviewed Provider templates and a progressively disclosed Custom Provider.
+- Templates fill protocol/Endpoint; Custom alone exposes three compatible protocols and Base URL.
+- Connect auto-syncs one Provider inventory; manual Model ID merges as fallback.
+- Global Default is a provider-grouped enabled-model picker, never a raw ID.
+- Models support Refresh, enable/disable, and optional display aliases.
+- No user-facing per-workflow model selection in v0.1; Advanced/Fast routing stays hidden.
 - No required user-facing embedding or reranker provider setup. Local RAG uses Pige-managed local models.
 - After BYOK setup, bounded selected context uses the configured provider with visible status; stricter confirmation remains configurable.
 - API keys are stored encrypted by default through OS keychain or encrypted local storage; plaintext portable/developer mode is explicit and warned.
@@ -1403,9 +1403,15 @@ behavior are owned by `docs/I18N_DESIGN.md`, `docs/MARKDOWN_SCHEMA.md`, and
 
 Pige must support BYOK as a product requirement, not a later extension.
 
-v0.1 supports OpenAI, Anthropic, OpenAI-compatible, and Anthropic-compatible profiles.
-Models uses a short connection flow—not a marketplace or capability table—to collect
-endpoint/key data when needed, discover or accept model IDs, test, and select one default.
+Models is preset-first: reviewed services fill protocol/Endpoint and ask only required
+credentials; Custom alone exposes three compatible protocols plus Base URL. Connect
+auto-discovers and runs one real Provider-level Pi probe before all-or-restore commit.
+It does not test every model.
+
+Each Provider owns one exact-ID inventory. Discovery/manual fallback merge; Refresh
+preserves alias, enabled, and default. Global Default groups enabled models by Provider.
+Targets include OpenAI, Anthropic, Gemini, Grok, DeepSeek, Kimi, Zhipu, MiniMax,
+StepFun, SiliconFlow, CherryIn, Ollama, and LM Studio; DeepSeek is the first real proof.
 
 Connecting and selecting a Provider Profile is the user's standing choice for ordinary,
 private, and larger bounded calls to that exact destination. Setup explains once that
@@ -1413,10 +1419,10 @@ selected context may leave the device; routine calls then proceed without per-ca
 confirmation and show calm non-blocking status. Users may choose a stricter policy.
 Sensitive, restricted, unknown, or changed boundaries follow the Model Egress contract.
 
-Models shows connection, safe key state, model list/default, and test result. Hide pricing,
-matrices, routing, per-workflow choices, and Advanced/Fast roles until a tested runtime
-makes them effective. Embedding/reranking stays in Local Capabilities. Profile/runtime
-details are owned by the Pi integration, Settings, Technical Architecture, and UI owners.
+Models shows Provider connection/sync health, its unified inventory, and Global Default.
+Cloud, self-hosted, and local remain internal endpoint/egress facts, not setup categories
+or warning branches. Hide pricing, matrices, routing, and Advanced/Fast roles; keep
+embedding/reranking in Local Capabilities. Details are owned by Pi, Settings, Tech, and UI.
 
 ## 21. Backup And Restore
 
@@ -1511,8 +1517,8 @@ Current pass/fail status and evidence remain only in the acceptance manifest.
   without completing a product tour.
 - The user can skip model setup, capture supported input, see that it is saved locally,
   reopen the app, and find the same source without duplication.
-- After one default model is configured, the user can explicitly resume dependent work
-  and see a readable, source-backed Markdown result.
+- After template auto-sync, an enabled Global Default survives restart and yields a real
+  Pi/Home result or typed actionable protocol error without silent fallback.
 
 ### 23.2 Mixed-Source Knowledge Compilation
 
@@ -1572,7 +1578,7 @@ default telemetry contrary to `PRIVACY.md`.
 | Capture, write, crash, external edit, backup, or restore loses durable evidence/knowledge or silently overwrites a newer version. | Preserve-before-work fixtures, restart/idempotency tests, external-change conflicts, source checksums, and backup/restore manifest validation. | Preserve durable input before expensive work; use recoverable writes, explicit conflicts, and validated restore. Any unexplained loss or silent overwrite blocks release. | Data Architecture, Source Storage, Job/Recovery, Sync/Migration |
 | Over-created, duplicate, or weakly connected pages make the wiki noisier than the captured material. | Golden ingest/linking evaluation, duplicate/noise review, rejected or reversed proposals. | Require evidence and incremental value for durable structure; stage broad merges/reshaping. Block release when output quality gates fail. | Knowledge Model, Prompt, Quality |
 | Bad extraction or OCR creates plausible but wrong knowledge. | Multilingual parser/OCR fixtures, low-confidence and unsupported-claim checks, source-locator inspection. | Preserve native and OCR evidence separately, expose partial/low-confidence results, and prevent unsupported claims from auto-applying. | Parser Ingest, Context, Quality |
-| BYOK setup or cloud use surprises or blocks users. | First-run/capture-only scenarios, provider tests, cloud-status UI review. | Disclose the selected destination once, make routine bounded calls seamless, retain stricter policy, and preserve captures when unavailable or denied. | Onboarding, Pi Integration, Privacy |
+| BYOK setup or cloud use surprises or blocks users. | First-run, model-sync/default, real Provider/Pi/Home, quiet-status tests. | Preset-first auto-sync/manual fallback, one disclosure, typed repair, seamless calls, preserved waiting work. | Onboarding, Pi Integration, Privacy |
 | Weak retrieval, large local assets, or slow indexing makes answers worse than simple search. | Retrieval relevance fixtures, lexical-fallback tests, disk/index/performance budgets. | Keep lexical results available, make optional assets explicit/removable, and admit reranking only when it improves the owner-defined quality/performance gate. | Context, Local Database, Performance |
 | Cross-platform parsers, bundled tools, optional OCR, installer size, licensing, or security updates become fragile. | Platform smoke matrix, dependency checksums/licenses, installer and update evidence. | Keep no-download ordinary workflows, visible repair/fallback, pinned release inputs, and a replacement path. Re-scope a dependency when release gates cannot be met safely. | Tech Architecture, Release Engineering |
 | Hostile sources, weak provenance, or automatic edits undermine trust. | Prompt-injection fixtures, citation checks, operation/proposal audit, security negative cases. | Treat sources as data, keep provenance inspectable, mediate tools, and stage risky changes. No quality gain justifies weakening the boundary. | Security, Prompt, Job/Recovery |
