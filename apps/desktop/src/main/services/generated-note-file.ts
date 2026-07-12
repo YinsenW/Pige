@@ -63,6 +63,74 @@ export function readGeneratedNoteHeader(vaultPath: string, filePath: string): st
   }
 }
 
+export function readGeneratedNoteExact(
+  vaultPath: string,
+  filePath: string,
+  maximumBytes: number
+): string | undefined {
+  if (!Number.isSafeInteger(maximumBytes) || maximumBytes <= 0) {
+    throw pageConflict("The generated-note read limit is invalid.");
+  }
+  if (!ensureSafeParent(vaultPath, filePath, false)) return undefined;
+  let pathStatBefore: fs.Stats;
+  try {
+    pathStatBefore = fs.lstatSync(filePath);
+  } catch (caught) {
+    if (isErrno(caught, "ENOENT")) return undefined;
+    throw pageConflict("The generated-note target cannot be inspected safely.");
+  }
+  if (
+    !pathStatBefore.isFile() ||
+    pathStatBefore.isSymbolicLink() ||
+    pathStatBefore.nlink !== 1 ||
+    pathStatBefore.size > maximumBytes
+  ) {
+    throw pageConflict("The generated-note target is not a bounded private regular file.");
+  }
+  assertFileResolvesWithinVault(vaultPath, filePath);
+
+  const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0);
+  let descriptor: number;
+  try {
+    descriptor = fs.openSync(filePath, flags);
+  } catch {
+    throw pageConflict("The generated-note target cannot be opened safely.");
+  }
+  try {
+    const descriptorStatBefore = fs.fstatSync(descriptor);
+    if (
+      !sameFileRevision(pathStatBefore, descriptorStatBefore) ||
+      descriptorStatBefore.nlink !== 1 ||
+      descriptorStatBefore.size > maximumBytes
+    ) {
+      throw pageConflict("The generated-note target changed before it could be read.");
+    }
+    const buffer = Buffer.alloc(descriptorStatBefore.size);
+    const bytesRead = descriptorStatBefore.size === 0
+      ? 0
+      : fs.readSync(descriptor, buffer, 0, descriptorStatBefore.size, 0);
+    const descriptorStatAfter = fs.fstatSync(descriptor);
+    let pathStatAfter: fs.Stats;
+    try {
+      pathStatAfter = fs.lstatSync(filePath);
+    } catch {
+      throw pageConflict("The generated-note target changed while it was being read.");
+    }
+    if (
+      bytesRead !== descriptorStatBefore.size ||
+      !sameFileRevision(descriptorStatBefore, descriptorStatAfter) ||
+      !sameFileRevision(descriptorStatAfter, pathStatAfter) ||
+      pathStatAfter.isSymbolicLink() ||
+      pathStatAfter.nlink !== 1
+    ) {
+      throw pageConflict("The generated-note target changed while it was being read.");
+    }
+    return buffer.toString("utf8");
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
 export function createGeneratedNoteExclusive(
   vaultPath: string,
   filePath: string,
@@ -71,21 +139,39 @@ export function createGeneratedNoteExclusive(
 ): GeneratedNoteCommitResult {
   ensureSafeParent(vaultPath, filePath, true);
   if (targetExists(filePath)) return "exists";
+  const parentIdentity = captureSafeParentIdentity(vaultPath, filePath);
 
   const temporaryPath = path.join(
     path.dirname(filePath),
     `.${path.basename(filePath)}.${process.pid}.${randomUUID()}.tmp`
   );
   let descriptor: number | undefined;
+  let linkedTarget = false;
+  let committed = false;
+  let temporaryIdentity: fs.Stats | undefined;
   try {
     const flags = fs.constants.O_WRONLY |
       fs.constants.O_CREAT |
       fs.constants.O_EXCL |
       (fs.constants.O_NOFOLLOW ?? 0);
     descriptor = fs.openSync(temporaryPath, flags, 0o600);
+    const openedStat = fs.fstatSync(descriptor);
+    const openedPathStat = fs.lstatSync(temporaryPath);
+    assertSafeParentIdentity(vaultPath, filePath, parentIdentity);
+    if (
+      openedStat.nlink !== 1 ||
+      openedPathStat.nlink !== 1 ||
+      !sameIdentity(openedStat, openedPathStat)
+    ) {
+      throw pageConflict("The generated-note temporary file is not private.");
+    }
     fs.writeFileSync(descriptor, value, "utf8");
     fs.fsyncSync(descriptor);
     const temporaryStat = fs.fstatSync(descriptor);
+    if (temporaryStat.nlink !== 1 || !sameInodeIdentity(openedStat, temporaryStat)) {
+      throw pageConflict("The generated-note temporary file changed during write.");
+    }
+    temporaryIdentity = temporaryStat;
     fs.closeSync(descriptor);
     descriptor = undefined;
 
@@ -95,10 +181,17 @@ export function createGeneratedNoteExclusive(
     hooks.afterPublicationStart?.();
     hooks.assertSourceCurrent?.();
     ensureSafeParent(vaultPath, filePath, false);
+    assertSafeParentIdentity(vaultPath, filePath, parentIdentity);
     if (targetExists(filePath)) return "exists";
+
+    const temporaryBeforeLink = fs.lstatSync(temporaryPath);
+    if (temporaryBeforeLink.nlink !== 1 || !sameIdentity(temporaryStat, temporaryBeforeLink)) {
+      throw pageConflict("The generated-note temporary file changed before commit.");
+    }
 
     try {
       fs.linkSync(temporaryPath, filePath);
+      linkedTarget = true;
     } catch (caught) {
       if (isErrno(caught, "EEXIST")) return "exists";
       throw caught;
@@ -110,10 +203,23 @@ export function createGeneratedNoteExclusive(
     } catch {
       throw pageConflict("The generated note changed immediately after commit.");
     }
-    if (committedStat.isSymbolicLink() || !sameIdentity(temporaryStat, committedStat)) {
+    const temporaryAfterLink = fs.lstatSync(temporaryPath);
+    if (
+      committedStat.isSymbolicLink() ||
+      committedStat.nlink !== 2 ||
+      temporaryAfterLink.nlink !== 2 ||
+      !sameIdentity(temporaryStat, committedStat) ||
+      !sameIdentity(committedStat, temporaryAfterLink)
+    ) {
       throw pageConflict("The generated note changed immediately after commit.");
     }
+    fs.rmSync(temporaryPath);
+    const privateCommittedStat = fs.lstatSync(filePath);
+    if (privateCommittedStat.nlink !== 1 || !sameIdentity(committedStat, privateCommittedStat)) {
+      throw pageConflict("The generated note did not become a private committed file.");
+    }
     flushDirectoryWhereSupported(path.dirname(filePath));
+    committed = true;
     return "created";
   } catch (caught) {
     if (caught instanceof PigeDomainError) throw caught;
@@ -129,11 +235,53 @@ export function createGeneratedNoteExclusive(
         // The authoritative commit result remains unchanged.
       }
     }
+    if (!committed && linkedTarget && temporaryIdentity) {
+      try {
+        const targetStat = fs.lstatSync(filePath);
+        if (!targetStat.isSymbolicLink() && sameIdentity(temporaryIdentity, targetStat)) {
+          fs.rmSync(filePath);
+        }
+      } catch {
+        // Never remove a path whose identity cannot be proven to be this failed commit.
+      }
+    }
     try {
       fs.rmSync(temporaryPath, { force: true });
     } catch {
       // A cleanup failure must not replace the commit result.
     }
+  }
+}
+
+function captureSafeParentIdentity(vaultPath: string, filePath: string): fs.Stats {
+  ensureSafeParent(vaultPath, filePath, false);
+  const parentPath = path.dirname(path.resolve(filePath));
+  const parentStat = fs.lstatSync(parentPath);
+  if (!parentStat.isDirectory() || parentStat.isSymbolicLink()) {
+    throw pageConflict("The generated-note parent is not a safe directory.");
+  }
+  assertParentResolvesWithinVault(vaultPath, parentPath);
+  return parentStat;
+}
+
+function assertSafeParentIdentity(
+  vaultPath: string,
+  filePath: string,
+  expected: fs.Stats
+): void {
+  const parentPath = path.dirname(path.resolve(filePath));
+  const current = fs.lstatSync(parentPath);
+  if (!sameDirectoryIdentity(expected, current) || current.isSymbolicLink()) {
+    throw pageConflict("The generated-note parent changed during commit.");
+  }
+  assertParentResolvesWithinVault(vaultPath, parentPath);
+}
+
+function assertParentResolvesWithinVault(vaultPath: string, parentPath: string): void {
+  const realVaultPath = fs.realpathSync(path.resolve(vaultPath));
+  const realParentPath = fs.realpathSync(parentPath);
+  if (!isContainedPath(realParentPath, realVaultPath)) {
+    throw pageConflict("The generated-note parent resolves outside the active vault.");
   }
 }
 
@@ -247,6 +395,14 @@ function sameIdentity(left: fs.Stats, right: fs.Stats): boolean {
     left.dev === right.dev &&
     left.ino === right.ino &&
     left.size === right.size;
+}
+
+function sameInodeIdentity(left: fs.Stats, right: fs.Stats): boolean {
+  return left.isFile() && right.isFile() && left.dev === right.dev && left.ino === right.ino;
+}
+
+function sameDirectoryIdentity(left: fs.Stats, right: fs.Stats): boolean {
+  return left.isDirectory() && right.isDirectory() && left.dev === right.dev && left.ino === right.ino;
 }
 
 function sameFileRevision(left: fs.Stats, right: fs.Stats): boolean {

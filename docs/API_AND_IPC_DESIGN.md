@@ -442,7 +442,7 @@ Queries:
 - `proposals.list`
 - `proposals.get`
 
-Phase 3 proposal foundation DTO:
+Current proposal DTO:
 
 ```ts
 type ProposalSummary = {
@@ -468,7 +468,7 @@ type ProposalsListResult = {
 };
 
 type ProposalDecisionResult = {
-  status: "approved" | "rejected" | "not_found" | "not_allowed";
+  status: "approved" | "applied" | "rejected" | "conflicted" | "not_found" | "not_allowed";
   reason?: string;
   proposal?: ConfirmationProposal;
 };
@@ -476,11 +476,11 @@ type ProposalDecisionResult = {
 
 Rules:
 
-- Proposal records are durable JSON under `.pige/proposals/YYYY/MM/`.
-- `proposals.list` returns safe summaries only. It must not include proposed Markdown bodies, source bodies, raw prompts, model responses, secrets, managed source paths, or absolute paths.
-- `proposals.get` returns the full proposal by stable ID for a future explicit review surface.
-- `proposals.approve` and `proposals.reject` currently record the user decision for `ready` proposals only. Applying approved changes to Markdown files and creating operation records remains a later Change Proposal Service slice.
-- Invalid proposal JSON is counted and skipped in list results so Home or a future review surface can still open.
+- Records live under `.pige/proposals/YYYY/MM/`; list omits bodies/secrets/paths, get returns full records, and invalid entries are skipped.
+- Approve applies only the exact Job-scoped Pi create note under `wiki/generated/`:
+  `approved` -> page/index/Operation -> `applied` -> idempotent log -> parent. Generic
+  apply is `not_allowed`; generic reject remains state-only.
+- Startup reconciles supported decisions without model/credentials. Files are ordered, not transactional; UI, generic apply, replacement conflicts, CAS/TOCTOU, and platform proof remain open.
 
 ### 6.5 Library And Notes
 

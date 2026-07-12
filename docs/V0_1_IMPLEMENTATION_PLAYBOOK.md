@@ -261,15 +261,15 @@ Build:
 - [B3.08 -> E3.04] Source-page generation.
 - [B3.09 -> E3.04] Simple wiki-page generation.
 - [B3.10 -> E3.04] Append-only `log.md` update.
-- [B3.11 -> E3.06] Deterministic Agent-selected proposal staging foundation; apply remains open.
+- [B3.11 -> E3.06] Deterministic create-note proposal stage/review/apply service foundation.
 - [B3.12 -> E3.07] Complete Agent output and change-summary contract for title, summary, tags, topic, entities, related notes, Markdown/source pages, citations, index/log updates, and created/updated/skipped/failed/confirmation-needed results.
 - [B3.13 -> E3.08] Embedded Pi plus a schema-complete Pige Tool Registry; after source
   preservation Pi Agent alone selects semantic tools, with no host-fixed/parallel path.
 
 Agent Spine Gate: embedded Pi handles preserved text/documents/images, inspect,
-parse/selected OCR, bounded Home/ingest retrieval, and terminal cited publish/proposal
-stage. B3.13/E3.08 remains partial for catalog/risk routing, proposal review/apply,
-pre-publication replay/in-call cancellation, generic recovery, Broker, platforms, and
+parse/selected OCR, bounded Home/ingest retrieval, cited publish, and exact create-note
+proposal stage/review/apply. B3.13/E3.08 remains partial for catalog/risk routing/UI,
+pre-publication replay/in-call cancellation, generic proposals/recovery, Broker, and
 remaining fixed routes. The v0.80.6 exception still forbids deep imports/forks/patches/
 parallel loops. Until E3.08 passes, pause non-blocking breadth; existing safe substrate
 and security/data-loss repairs may proceed.
@@ -470,8 +470,8 @@ Build:
 
 - [B7.01 -> E7.01] Confirmation-proposal UI.
 - [B7.02 -> E7.01] Unified text diff and new-page preview.
-- [B7.03 -> E7.01] Approve/reject proposal flow with conflict detection.
-- [B7.04 -> E7.01] Redacted operation records for every applied Agent write, including job ID, model profile, source IDs, and changed paths.
+- [B7.03 -> E7.01] Exact create-note approve/reject/apply and conflict-recovery foundation; UI and generic operations remain.
+- [B7.04 -> E7.01] Body-free `create_page` Operation for the exact applied Agent note; remaining Agent writes stay open.
 - [B7.05 -> E7.02] Explicit "remember this" flow with provenance.
 - [B7.06 -> E7.02] Memory inspection, disable, delete, export, and reset.
 - [B7.07 -> E7.05] Secret scanning before memory persistence.

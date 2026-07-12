@@ -1335,10 +1335,10 @@
     },
     "PIGE-JOB-002": {
       "status": "partial",
-      "evidence": ["EV-JOB-DRAIN", "EV-JOB-RECOVERY", "EV-HOME-JOB-RECOVERY", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-PROPOSAL", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER"],
+      "evidence": ["EV-JOB-DRAIN", "EV-JOB-RECOVERY", "EV-HOME-JOB-RECOVERY", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-002",
-        "description": "Agent proposal commit/link recovery and cancellation fencing work; Home still lacks a drainer/generic retry. Other-class cancellation, cross-process routing/CAS, swaps/atomicity, kill recovery, packaged filesystems, checkpoints, and visible UI stay open.",
+        "description": "Exact proposal decision recovery works; Home retry, other classes, and cross-process/kill/packaged/checkpoint/UI proof remain open.",
         "targetBuilds": [
           "B2.08",
           "B2.11"
@@ -1351,10 +1351,10 @@
     },
     "PIGE-JOB-003": {
       "status": "partial",
-      "evidence": ["EV-PROPOSAL", "EV-PI-INGEST-PROPOSAL"],
+      "evidence": ["EV-PROPOSAL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-003",
-        "description": "Agent-selected create-note staging is durable and unapplied; risk classes, review UI, apply/conflict, and applied Operation acceptance remain open.",
+        "description": "Exact create-note proposals stage, decide, apply, conflict, and recover; generic operations, UI, replacements, and cross-process safety remain open.",
         "targetBuilds": [
           "B7.01",
           "B7.02",
@@ -1382,12 +1382,10 @@
     },
     "PIGE-JOB-005": {
       "status": "partial",
-      "evidence": [
-        "EV-AGENT-INGEST"
-      ],
+      "evidence": ["EV-AGENT-INGEST", "EV-PROPOSAL-REVIEW-LIFECYCLE"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-005",
-        "description": "Complete job/model/source/path field coverage for every applied Agent write remains open.",
+        "description": "Exact create-note apply has body-free job/model/source/proposal/page/policy Operation refs; other Agent writes remain open.",
         "targetBuilds": [
           "B7.04"
         ],
@@ -1568,7 +1566,7 @@
       "evidence": ["EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-BOUNDARY", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-RETRIEVAL", "EV-PI-INGEST-PROPOSAL", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE"],
       "open": {
         "id": "OPEN-REQ-PIGE-PI-001",
-        "description": "Pi ingest/Home, bounded retrieval, and one terminal proposal stage are executable. Review/apply, full catalog/routes, replay/cancel, generic recovery, Broker, and packaged BYOK remain open.",
+        "description": "Pi ingest/Home, retrieval, publication, and exact create-note review/apply run. Catalog/routes, generic proposal/UI/recovery, Broker, and packaged BYOK remain open.",
         "targetBuilds": [
           "B3.06",
           "B3.13"
@@ -2896,10 +2894,10 @@
     },
     "E2.10": {
       "status": "partial",
-      "evidence": ["EV-JOB-RECOVERY", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-PROPOSAL", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER"],
+      "evidence": ["EV-JOB-RECOVERY", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER"],
       "open": {
         "id": "OPEN-EXIT-E2.10",
-        "description": "Agent proposal commit/link recovery and its cancellation fence are proven. Running capture/remaining classes, cross-process cancel/guard/writer routing, swaps/atomicity, kill/stale-worker recovery, packaged filesystems, checkpoints, archive, and visible UI remain open.",
+        "description": "Exact proposal stage/decision/page/parent recovery works; other classes and cross-process/kill/packaged/checkpoint/UI proof remain open.",
         "targetBuilds": [
           "B2.11"
         ],
@@ -3006,10 +3004,10 @@
     },
     "E3.06": {
       "status": "partial",
-      "evidence": ["EV-PROPOSAL", "EV-PI-INGEST-PROPOSAL"],
+      "evidence": ["EV-PROPOSAL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE"],
       "open": {
         "id": "OPEN-EXIT-E3.06",
-        "description": "Deterministic Pi staging, no silent apply, body-free parent linkage, one-slot recovery, cancellation, and terminal fences are proven. Broader risk classes, review/apply/conflict UI, packaged recovery, CAS/locking, and swap TOCTOU remain open.",
+        "description": "Create-note stage/review/apply/recovery prevents silent writes; broader risks, generic operations/UI, CAS/TOCTOU/platform remain open.",
         "targetBuilds": [
           "B3.11"
         ],
@@ -3039,7 +3037,7 @@
       "evidence": ["EV-BOUNDARY", "EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-RETRIEVAL", "EV-PI-INGEST-PROPOSAL", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE"],
       "open": {
         "id": "OPEN-EXIT-E3.08",
-        "description": "Embedded Pi proves ingest/Home, bounded retrieval, publication, and one terminal proposal stage. Review/apply, catalog/routes, replay/cancel, generic recovery, Broker, and packaged BYOK remain.",
+        "description": "Embedded Pi proves ingest/Home, retrieval, publication, and exact create-note review/apply. Catalog/routes, generic operations/UI/recovery, Broker, and packaged BYOK remain.",
         "targetBuilds": [
           "B3.13"
         ],
@@ -3292,10 +3290,10 @@
     },
     "E7.01": {
       "status": "partial",
-      "evidence": ["EV-PROPOSAL", "EV-AGENT-INGEST", "EV-PI-INGEST-PROPOSAL"],
+      "evidence": ["EV-PROPOSAL", "EV-AGENT-INGEST", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE"],
       "open": {
         "id": "OPEN-EXIT-E7.01",
-        "description": "Durable awaiting-review/no-silent-write and state-only decisions are proven. Risk classes, review UI, approved apply, base-hash conflicts, and redacted applied Operations remain open.",
+        "description": "Exact create-note decisions/apply/conflict/Operation/recovery work; generic operations, UI, replacements, CAS/TOCTOU/platform remain open.",
         "targetBuilds": [
           "B7.01",
           "B7.02",
@@ -3802,6 +3800,7 @@
     "EV-PI-IMAGE-OCR-TOOL": { "kind": "test", "path": "tests/unit/agent-led-image-ocr.test.ts", "selector": "Agent-led image OCR tool" },
     "EV-PI-INGEST-RETRIEVAL": { "kind": "test", "path": "tests/unit/agent-led-ingest-retrieval.test.ts", "selector": "Agent-selected ingest retrieval tool" },
     "EV-PI-INGEST-PROPOSAL": { "kind": "test", "path": "tests/unit/agent-led-ingest-proposal.test.ts", "selector": "Agent-selected ingest proposal tool" },
+    "EV-PROPOSAL-REVIEW-LIFECYCLE": { "kind": "test", "path": "tests/unit/proposal-review-lifecycle.test.ts", "selector": "proposal review lifecycle" },
     "EV-PI-TOOL-CALL-ID": { "kind": "test", "path": "tests/unit/pi-agent-runtime-adapter.test.ts", "selector": "passes a bounded opaque Pi tool call ID to authorization and execution without recording it" },
     "EV-PI-PROVIDER-BINDING": { "kind": "test", "path": "tests/unit/pi-agent-provider-binding.test.ts", "selector": "Pi AI provider binding" },
     "EV-PI-RUNTIME-BOUNDARY": { "kind": "verifier", "path": "scripts/verify/pi-runtime-boundary.mjs", "selector": "Pi runtime boundary OK: one contained adapter owns official Pi imports, isolated auth/models, and sequential Pige tools." },

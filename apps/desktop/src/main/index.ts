@@ -475,6 +475,23 @@ const resumeBackgroundJobs = (): void => {
     getJobsService().requeueWaitingParses();
     getJobsService().requeueWaitingOcr();
     getJobsService().requeueWaitingAgentIngest();
+    void getJobsService().recoverProposalDecisions(getProposalService()).then((result) => {
+      if (result.applied > 0 || result.rejected > 0 || result.conflicted > 0 || result.failed > 0) {
+        getDiagnosticsService().recordEvent({
+          level: result.failed > 0 ? "warning" : "info",
+          code: result.failed > 0 ? "proposal.recovery_incomplete" : "proposal.recovery_completed",
+          message: result.failed > 0
+            ? "Some durable proposal decisions still require recovery."
+            : "Durable proposal decisions were reconciled after startup."
+        });
+      }
+    }).catch(() => {
+      getDiagnosticsService().recordEvent({
+        level: "warning",
+        code: "proposal.recovery_failed",
+        message: "Durable proposal decision recovery failed."
+      });
+    });
     scheduleCaptureProcessing();
     scheduleParseProcessing();
     scheduleOcrProcessing();
@@ -565,10 +582,10 @@ ipcMain.handle("notes.render", (_event, request: NoteRenderRequest) => getNotesS
 ipcMain.handle("proposals.list", (_event, request?: ProposalsListRequest) => getProposalService().list(request));
 ipcMain.handle("proposals.get", (_event, request: ProposalGetRequest) => getProposalService().get(request));
 ipcMain.handle("proposals.approve", (_event, request: ProposalDecisionRequest) =>
-  getProposalService().approve(request)
+  getJobsService().approveProposal(getProposalService(), request)
 );
 ipcMain.handle("proposals.reject", (_event, request: ProposalDecisionRequest) =>
-  getProposalService().reject(request)
+  getJobsService().rejectProposal(getProposalService(), request)
 );
 ipcMain.handle("retrieval.search", (_event, request: RetrievalSearchRequest) => getRetrievalService().search(request));
 ipcMain.handle("retrieval.ask", (_event, request: RetrievalAskRequest) => getRetrievalService().ask(request));

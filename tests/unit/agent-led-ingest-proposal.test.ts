@@ -143,6 +143,107 @@ describe("Agent-selected ingest proposal tool", () => {
     expect(durable).not.toContain(fixture.vaultPath);
   });
 
+  it("applies an approved Pi proposal without another model turn and resolves the parent Job", async () => {
+    const fixture = makeVault();
+    const proposals = new ProposalService(fixture.vaultPort);
+    const runtime = new RecordingPiRuntime([
+      toolCall("pige_inspect_source", "inspect_apply", {}),
+      toolCall(
+        "pige_stage_knowledge_note_proposal",
+        "opaque_apply_call",
+        groundedOutput("Applied Agent knowledge")
+      )
+    ]);
+    const agentIngest = new AgentIngestService(
+      modelPort(),
+      runtime,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      bindProposalPort(proposals, fixture.vaultPath)
+    );
+    const jobs = new JobsService(fixture.vaultPort, agentIngest);
+    const capture = submitText(fixture, "An approved proposal should become one durable note without another model call.");
+    jobs.processQueuedCaptures({ jobIds: [capture.jobId] });
+    const parent = requireValue(readJobs(fixture.vaultPath).find((job) =>
+      job.class === "agent_ingest" && job.sourceId === capture.sourceId
+    ));
+    await jobs.processQueuedAgentIngest({ jobIds: [parent.id] });
+    const proposalId = requireValue(proposals.list({ states: ["ready"] }).proposals[0]).id;
+    const proposal = proposals.get({ proposalId }).proposal;
+
+    const result = await jobs.approveProposal(proposals, { proposalId: proposal.id });
+
+    const notePath = requireValue(generatedNotes(fixture.vaultPath)[0]);
+    const operations = readOperations(fixture.vaultPath);
+    const createOperations = operations.filter((operation) => operation.kind === "create_page");
+    const resolvedParent = readJob(fixture.vaultPath, parent.id);
+    expect(result.status).toBe("applied");
+    expect(result.proposal?.state).toBe("applied");
+    expect(runtime.calls).toBe(1);
+    expect(fs.readFileSync(notePath, "utf8")).toContain("# Applied Agent knowledge");
+    expect(createOperations).toHaveLength(1);
+    expect(createOperations[0]).toMatchObject({
+      jobId: parent.id,
+      proposalId: proposal.id,
+      modelProfileId: runtimeConfig.model.id,
+      targetRefs: [expect.objectContaining({ kind: "page", path: path.relative(fixture.vaultPath, notePath) })]
+    });
+    expect(resolvedParent.state).toMatch(/^completed/u);
+    expect(resolvedParent.operationIds).toContain(createOperations[0]?.id);
+    const durable = JSON.stringify({ result, resolvedParent, createOperations });
+    expect(durable).not.toContain("opaque_apply_call");
+    expect(durable).not.toContain(runtimeConfig.apiKey);
+    expect(durable).not.toContain(fixture.vaultPath);
+  });
+
+  it("rejects a staged Pi proposal without applying durable knowledge", async () => {
+    const fixture = makeVault();
+    const proposals = new ProposalService(fixture.vaultPort);
+    const runtime = new RecordingPiRuntime([
+      toolCall("pige_inspect_source", "inspect_reject", {}),
+      toolCall(
+        "pige_stage_knowledge_note_proposal",
+        "opaque_reject_call",
+        groundedOutput("Rejected Agent knowledge")
+      )
+    ]);
+    const jobs = new JobsService(
+      fixture.vaultPort,
+      new AgentIngestService(
+        modelPort(),
+        runtime,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        bindProposalPort(proposals, fixture.vaultPath)
+      )
+    );
+    const capture = submitText(fixture, "A rejected proposal must leave source evidence intact and create no note.");
+    jobs.processQueuedCaptures({ jobIds: [capture.jobId] });
+    const parent = requireValue(readJobs(fixture.vaultPath).find((job) =>
+      job.class === "agent_ingest" && job.sourceId === capture.sourceId
+    ));
+    await jobs.processQueuedAgentIngest({ jobIds: [parent.id] });
+    const proposalId = requireValue(proposals.list({ states: ["ready"] }).proposals[0]).id;
+
+    const rejected = jobs.rejectProposal(proposals, { proposalId, reason: "Not useful." });
+    const repeated = jobs.rejectProposal(proposals, { proposalId });
+
+    expect(rejected.status).toBe("rejected");
+    expect(repeated.status).toBe("rejected");
+    expect(proposals.get({ proposalId }).proposal.state).toBe("rejected");
+    expect(readJob(fixture.vaultPath, parent.id)).toMatchObject({
+      state: "completed_with_warnings",
+      message: expect.stringContaining("rejected")
+    });
+    expect(generatedNotes(fixture.vaultPath)).toEqual([]);
+    expect(readOperations(fixture.vaultPath).filter((operation) => operation.kind === "create_page")).toEqual([]);
+    expect(runtime.calls).toBe(1);
+  });
+
   it("rejects any later model turn after the proposal terminal commits", async () => {
     const fixture = makeVault();
     const proposals = new ProposalService(fixture.vaultPort);

@@ -69,6 +69,12 @@ const MAX_PROPOSAL_WARNINGS = 16;
 const MAX_PROPOSAL_PERMISSION_REFS = 64;
 const MAX_PROPOSAL_SCAN_ENTRIES = 10_000;
 const DECIDABLE_STATES = new Set<ProposalState>(["ready"]);
+const RECOVERABLE_DECISION_STATES = new Set<ProposalState>([
+  "approved",
+  "applied",
+  "rejected",
+  "conflicted"
+]);
 
 export class ProposalService {
   readonly #vaults: ProposalVaultPort;
@@ -121,6 +127,13 @@ export class ProposalService {
       );
     }
     return proposalFile.proposal;
+  }
+
+  recoveryCandidates(): readonly ConfirmationProposal[] {
+    const vaultPath = this.#requireActiveVaultPath();
+    return readProposalRecords(vaultPath).proposals
+      .filter((proposal) => RECOVERABLE_DECISION_STATES.has(proposal.state))
+      .sort((left, right) => left.updatedAt.localeCompare(right.updatedAt) || left.id.localeCompare(right.id));
   }
 
   stage(request: StageProposalRequest): StageProposalResult {
@@ -183,6 +196,23 @@ export class ProposalService {
     return this.#decide(request, "rejected");
   }
 
+  markApplied(proposalId: string): ProposalDecisionResult {
+    return this.#transition(
+      proposalId,
+      "applied",
+      new Set<ProposalState>(["approved"])
+    );
+  }
+
+  markConflicted(proposalId: string): ProposalDecisionResult {
+    return this.#transition(
+      proposalId,
+      "conflicted",
+      new Set<ProposalState>(["approved"]),
+      "The approved proposal target or current evidence changed before apply."
+    );
+  }
+
   #decide(request: ProposalDecisionRequest, state: "approved" | "rejected"): ProposalDecisionResult {
     const vaultPath = this.#requireActiveVaultPath();
     const proposalFile = readProposalRecordFile(vaultPath, request.proposalId);
@@ -215,6 +245,43 @@ export class ProposalService {
     const committed = readProposalRecordFile(vaultPath, proposalFile.proposal.id);
     if (!committed || committed.proposal.state !== state) {
       throw new PigeDomainError("proposal.write_failed", "The proposal decision could not be verified after commit.");
+    }
+    return { status: state, proposal: committed.proposal };
+  }
+
+  #transition(
+    proposalId: string,
+    state: "applied" | "conflicted",
+    allowedStates: ReadonlySet<ProposalState>,
+    warning?: string
+  ): ProposalDecisionResult {
+    const vaultPath = this.#requireActiveVaultPath();
+    const proposalFile = readProposalRecordFile(vaultPath, proposalId);
+    if (!proposalFile) {
+      return { status: "not_found", reason: "Proposal record was not found." };
+    }
+    if (proposalFile.proposal.state === state) {
+      return { status: state, proposal: proposalFile.proposal };
+    }
+    if (!allowedStates.has(proposalFile.proposal.state)) {
+      return {
+        status: "not_allowed",
+        reason: `Proposal state ${proposalFile.proposal.state} cannot become ${state}.`,
+        proposal: proposalFile.proposal
+      };
+    }
+    const updated = ConfirmationProposalSchema.parse({
+      ...proposalFile.proposal,
+      state,
+      updatedAt: new Date().toISOString(),
+      ...(warning ? {
+        warnings: Array.from(new Set([...proposalFile.proposal.warnings, warning]))
+      } : {})
+    });
+    writeJsonReplace(vaultPath, proposalFile.path, updated, proposalFile.revision);
+    const committed = readProposalRecordFile(vaultPath, proposalId);
+    if (!committed || committed.proposal.state !== state) {
+      throw new PigeDomainError("proposal.write_failed", "The proposal state transition could not be verified after commit.");
     }
     return { status: state, proposal: committed.proposal };
   }

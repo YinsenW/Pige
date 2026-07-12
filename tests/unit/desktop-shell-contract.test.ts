@@ -101,6 +101,23 @@ describe("desktop shell build contract", () => {
     expect(submitAgentQuestion).not.toContain("caught instanceof Error ? caught.message");
   });
 
+  it("routes proposal decisions through durable Job apply and startup recovery", () => {
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const approveHandler = mainSource.slice(
+      mainSource.indexOf('ipcMain.handle("proposals.approve"'),
+      mainSource.indexOf('ipcMain.handle("proposals.reject"')
+    );
+    const rejectHandler = mainSource.slice(
+      mainSource.indexOf('ipcMain.handle("proposals.reject"'),
+      mainSource.indexOf('ipcMain.handle("retrieval.search"')
+    );
+
+    expect(approveHandler).toContain("getJobsService().approveProposal(getProposalService(), request)");
+    expect(approveHandler).not.toContain("getProposalService().approve(request)");
+    expect(rejectHandler).toContain("getJobsService().rejectProposal(getProposalService(), request)");
+    expect(mainSource).toContain("recoverProposalDecisions(getProposalService())");
+  });
+
   it("keeps the reviewed Provider path API-key-only and the custom form progressively disclosed", () => {
     const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
     const styles = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/styles/app.css"), "utf8");

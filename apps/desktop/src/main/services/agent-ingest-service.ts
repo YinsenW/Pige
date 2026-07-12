@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
@@ -63,7 +63,11 @@ import {
   type EvidenceFragment,
   type EvidencePack
 } from "./evidence-assembly-service";
-import { createGeneratedNoteExclusive, readGeneratedNoteHeader } from "./generated-note-file";
+import {
+  createGeneratedNoteExclusive,
+  readGeneratedNoteExact,
+  readGeneratedNoteHeader
+} from "./generated-note-file";
 import {
   bindRetrievalEvidenceToCurrentMarkdown,
   createRetrievalEvidencePrivacyHash,
@@ -273,6 +277,9 @@ interface AgentIngestRetrievalSelection {
 const AGENT_NOTE_PUBLICATION_CHECKPOINT = "agent_note_publication_started";
 const AGENT_EXISTING_NOTE_ADOPTION_CHECKPOINT = "agent_existing_note_adoption_started";
 const AGENT_INDEX_PUBLICATION_CHECKPOINT = "agent_index_publication_started";
+const AGENT_PROPOSAL_APPLY_CHECKPOINT = "agent_proposal_apply_started";
+const MAX_PROPOSAL_APPLY_CONTENT_BYTES = 1024 * 1024;
+const MAX_PROPOSAL_INDEX_BYTES = 2 * 1024 * 1024;
 const MAX_AGENT_RETRIEVAL_QUERY_CHARACTERS = 320;
 const MAX_AGENT_RETRIEVAL_RESULTS = 6;
 const AGENT_RETRIEVAL_PAGE_TYPES: readonly MarkdownPageType[] = [
@@ -330,6 +337,196 @@ export class AgentIngestService {
 
   hasDurableProposal(vaultPath: string, jobId: string): boolean {
     return this.#proposals?.findForJob(vaultPath, jobId) !== undefined;
+  }
+
+  async applyStagedProposal(
+    vaultPath: string,
+    sourceRecord: SourceRecord,
+    job: JobRecord,
+    proposal: ConfirmationProposal,
+    hooks: AgentIngestHooks = {}
+  ): Promise<AgentIngestPublishedResult> {
+    if (!new Set<ConfirmationProposal["state"]>(["approved", "applied"]).has(proposal.state) || Object.keys(proposal.baseHashes).length !== 0) {
+      throw new PigeDomainError(
+        "proposal.not_allowed",
+        "Only an approved create-note proposal with an absent target base can be applied."
+      );
+    }
+    const catalogHash = readJobInputChecksum(job, "agent_tool_catalog", "tool", "pige_agent_tool_catalog");
+    const sourceBindingHash = readJobInputChecksum(
+      job,
+      "agent_tool_source_revision",
+      "source",
+      sourceRecord.id
+    );
+    const canonicalInputHash = readJobInputChecksum(
+      job,
+      "agent_tool_canonical_input",
+      "tool",
+      `${STAGE_KNOWLEDGE_NOTE_PROPOSAL_TOOL_NAME}@${STAGE_KNOWLEDGE_NOTE_PROPOSAL_TOOL_VERSION}`
+    );
+    if (!catalogHash || !sourceBindingHash || !canonicalInputHash || !job.policyHash || !job.policyContextId) {
+      throw new PigeDomainError(
+        "proposal.binding_changed",
+        "The approved proposal parent is missing its durable policy or tool-catalog binding."
+      );
+    }
+    const createOperation = requireProposalCreateOperation(proposal);
+    const pageId = requireProposalTargetPageId(proposal);
+    const envelope = validateApprovedProposalEnvelope({
+      proposal,
+      job,
+      sourceId: sourceRecord.id,
+      expectedCatalogHash: catalogHash,
+      expectedPolicyHash: job.policyHash,
+      expectedSourceBindingHash: sourceBindingHash,
+      expectedCanonicalInputHash: canonicalInputHash
+    });
+    const proposalOperationInput = {
+      vaultPath,
+      job,
+      proposal,
+      pageId,
+      pagePath: createOperation.path,
+      sourceRecord,
+      ...(envelope.modelProfileId ? { modelProfileId: envelope.modelProfileId } : {}),
+      createdAt: proposal.decision?.decidedAt ?? proposal.updatedAt
+    };
+    preflightProposalCreatePageOperation(proposalOperationInput);
+    preflightProposalIndex(vaultPath);
+    const absolutePagePath = resolveVaultRelativePath(vaultPath, createOperation.path);
+    const expectedChecksum = createModelEgressPayloadHash(createOperation.content);
+    let created = false;
+    const existingBeforeCommit = readGeneratedNoteExact(
+      vaultPath,
+      absolutePagePath,
+      MAX_PROPOSAL_APPLY_CONTENT_BYTES
+    );
+    if (existingBeforeCommit === undefined) {
+      hooks.throwIfCancellationRequested?.();
+      const evidencePack = await this.#evidence.assemble(vaultPath, sourceRecord);
+      hooks.assertSourceCurrent?.(sourceRecord);
+      hooks.throwIfCancellationRequested?.();
+      const validated = recoverExistingKnowledgeProposal({
+        proposal,
+        job,
+        sourceRecord,
+        evidencePack,
+        pageId,
+        pagePath: createOperation.path,
+        expectedCatalogHash: catalogHash,
+        expectedPolicyHash: job.policyHash,
+        expectedSourceBindingHash: sourceBindingHash,
+        expectedCanonicalInputHash: canonicalInputHash,
+        allowedStates: new Set<ConfirmationProposal["state"]>(["approved", "applied"]),
+        ...(job.operationIds ? { precedingOperationIds: job.operationIds } : {}),
+        hooks
+      });
+      if (validated.title !== envelope.title) {
+        throw new PigeDomainError(
+          "proposal.identity_conflict",
+          "The approved proposal title changed during evidence recovery."
+        );
+      }
+      const commitResult = createGeneratedNoteExclusive(vaultPath, absolutePagePath, createOperation.content, {
+        ...(hooks.throwIfCancellationRequested ? {
+          beforeFinalSourceCheck: hooks.throwIfCancellationRequested,
+          afterPublicationStart: hooks.throwIfCancellationRequested
+        } : {}),
+        ...(hooks.assertSourceCurrent ? {
+          assertSourceCurrent: () => hooks.assertSourceCurrent?.(sourceRecord)
+        } : {}),
+        onPublicationStart: () => hooks.onPublicationStart?.(AGENT_PROPOSAL_APPLY_CHECKPOINT)
+      });
+      created = commitResult === "created";
+    }
+    let committedState = assertCommittedProposalTarget({
+      vaultPath,
+      absolutePagePath,
+      content: createOperation.content,
+      expectedChecksum,
+      sourceId: sourceRecord.id,
+      jobId: job.id,
+      modelProfileId: envelope.modelProfileId
+    });
+    if (created) hooks.assertSourceCurrent?.(sourceRecord);
+    appendProposalIndex(vaultPath, envelope.title, createOperation.path, sourceRecord.id);
+    committedState = assertCommittedProposalTarget({
+      vaultPath,
+      absolutePagePath,
+      content: createOperation.content,
+      expectedChecksum,
+      sourceId: sourceRecord.id,
+      jobId: job.id,
+      modelProfileId: envelope.modelProfileId
+    });
+    const operation = writeProposalCreatePageOperation(proposalOperationInput);
+    committedState = assertCommittedProposalTarget({
+      vaultPath,
+      absolutePagePath,
+      content: createOperation.content,
+      expectedChecksum,
+      sourceId: sourceRecord.id,
+      jobId: job.id,
+      modelProfileId: envelope.modelProfileId
+    });
+    return {
+      outcome: "published",
+      pageId,
+      pagePath: createOperation.path,
+      title: envelope.title,
+      created,
+      reviewRequired: committedState.reviewRequired,
+      warnings: proposal.warnings,
+      operationId: operation.id,
+      operationIds: Array.from(new Set([...(job.operationIds ?? []), operation.id]))
+    };
+  }
+
+  verifyAppliedProposalEffects(
+    vaultPath: string,
+    job: JobRecord,
+    proposal: ConfirmationProposal
+  ): void {
+    if (!job.sourceId) {
+      throw new PigeDomainError("proposal.binding_changed", "The applied proposal source binding is missing.");
+    }
+    const catalogHash = readJobInputChecksum(job, "agent_tool_catalog", "tool", "pige_agent_tool_catalog");
+    const sourceBindingHash = readJobInputChecksum(job, "agent_tool_source_revision", "source", job.sourceId);
+    const canonicalInputHash = readJobInputChecksum(
+      job,
+      "agent_tool_canonical_input",
+      "tool",
+      `${STAGE_KNOWLEDGE_NOTE_PROPOSAL_TOOL_NAME}@${STAGE_KNOWLEDGE_NOTE_PROPOSAL_TOOL_VERSION}`
+    );
+    if (!catalogHash || !sourceBindingHash || !canonicalInputHash || !job.policyHash) {
+      throw new PigeDomainError("proposal.binding_changed", "The applied proposal binding is incomplete.");
+    }
+    const createOperation = requireProposalCreateOperation(proposal);
+    const envelope = validateApprovedProposalEnvelope({
+      proposal,
+      job,
+      sourceId: job.sourceId,
+      expectedCatalogHash: catalogHash,
+      expectedPolicyHash: job.policyHash,
+      expectedSourceBindingHash: sourceBindingHash,
+      expectedCanonicalInputHash: canonicalInputHash
+    });
+    assertCommittedProposalTarget({
+      vaultPath,
+      absolutePagePath: resolveVaultRelativePath(vaultPath, createOperation.path),
+      content: createOperation.content,
+      expectedChecksum: createModelEgressPayloadHash(createOperation.content),
+      sourceId: job.sourceId,
+      jobId: job.id,
+      modelProfileId: envelope.modelProfileId
+    });
+    if (!proposalIndexContainsPage(vaultPath, createOperation.path)) {
+      throw new PigeDomainError(
+        "proposal.index_conflict",
+        "The applied proposal index entry is missing or unsafe."
+      );
+    }
   }
 
   async ingestSource(
@@ -1384,6 +1581,167 @@ function createProposalSourceRefs(input: {
   ];
 }
 
+function requireProposalCreateOperation(
+  proposal: ConfirmationProposal
+): Extract<ConfirmationProposal["proposedOperations"][number], { kind: "create" }> {
+  const operation = proposal.proposedOperations[0];
+  if (
+    proposal.proposedOperations.length !== 1 ||
+    operation?.kind !== "create" ||
+    !operation.path.startsWith("wiki/generated/") ||
+    !operation.path.endsWith(".md")
+  ) {
+    throw new PigeDomainError(
+      "proposal.not_allowed",
+      "This proposal apply path supports one generated wiki-page create operation only."
+    );
+  }
+  return operation;
+}
+
+function requireProposalTargetPageId(proposal: ConfirmationProposal): string {
+  const target = proposal.targetRefs[0];
+  if (
+    proposal.targetRefs.length !== 1 ||
+    target?.kind !== "page" ||
+    target.path !== requireProposalCreateOperation(proposal).path
+  ) {
+    throw new PigeDomainError(
+      "proposal.identity_conflict",
+      "The approved proposal does not have one matching page target."
+    );
+  }
+  return target.id;
+}
+
+function validateApprovedProposalEnvelope(input: {
+  readonly proposal: ConfirmationProposal;
+  readonly job: JobRecord;
+  readonly sourceId: string;
+  readonly expectedCatalogHash: string;
+  readonly expectedPolicyHash: string;
+  readonly expectedSourceBindingHash: string;
+  readonly expectedCanonicalInputHash: string;
+}): { readonly title: string; readonly modelProfileId: string } {
+  const { proposal, job, sourceId } = input;
+  const operation = requireProposalCreateOperation(proposal);
+  const pageId = requireProposalTargetPageId(proposal);
+  if (
+    !new Set<ConfirmationProposal["state"]>(["approved", "applied"]).has(proposal.state) ||
+    proposal.decision?.decidedBy !== "user" ||
+    proposal.trustLevel !== "review_required" ||
+    proposal.jobId !== job.id ||
+    Object.keys(proposal.baseHashes).length !== 0 ||
+    operation.content.length > MAX_PROPOSAL_APPLY_CONTENT_BYTES ||
+    !proposal.sourceRefs.some((ref) => ref.kind === "job" && ref.id === job.id) ||
+    !proposal.sourceRefs.some((ref) => ref.kind === "source" && ref.id === sourceId)
+  ) {
+    throw new PigeDomainError(
+      "proposal.identity_conflict",
+      "The approved proposal does not match its durable Job and source identity."
+    );
+  }
+  const sourceBinding = readProposalRootBinding(proposal, PROPOSAL_SOURCE_BINDING_PREFIX);
+  const toolBinding = readProposalRootBinding(proposal, PROPOSAL_TOOL_BINDING_PREFIX);
+  const catalogHash = readProposalRootBinding(proposal, PROPOSAL_CATALOG_BINDING_PREFIX);
+  const policyHash = readProposalRootBinding(proposal, PROPOSAL_POLICY_BINDING_PREFIX);
+  const canonicalInputHash = createProposalCanonicalInputHash(
+    sourceId,
+    input.expectedSourceBindingHash,
+    operation
+  );
+  const expectedToolBinding = `${STAGE_KNOWLEDGE_NOTE_PROPOSAL_TOOL_NAME}@${STAGE_KNOWLEDGE_NOTE_PROPOSAL_TOOL_VERSION}:${input.expectedCanonicalInputHash}`;
+  if (
+    sourceBinding !== input.expectedSourceBindingHash ||
+    canonicalInputHash !== input.expectedCanonicalInputHash ||
+    toolBinding !== expectedToolBinding ||
+    catalogHash !== input.expectedCatalogHash ||
+    policyHash !== input.expectedPolicyHash
+  ) {
+    throw new PigeDomainError(
+      "proposal.binding_changed",
+      "The approved proposal no longer matches its durable source, tool, catalog, or policy binding."
+    );
+  }
+  const parsed = parsePigeFrontmatter(operation.content);
+  const frontmatter = parsed?.raw ?? "";
+  const title = parsed?.frontmatter.title?.trim();
+  const modelProfileId = readNestedFrontmatterScalar(frontmatter, "provenance", "model_profile_id");
+  if (
+    parsed?.frontmatter.id !== pageId ||
+    !title ||
+    parsed.frontmatter.source_ids?.includes(sourceId) !== true ||
+    readNestedFrontmatterScalar(frontmatter, "provenance", "generated_by") !== "pige" ||
+    readNestedFrontmatterScalar(frontmatter, "provenance", "last_job_id") !== job.id ||
+    !modelProfileId ||
+    !/^model_[a-z0-9_]+$/u.test(modelProfileId)
+  ) {
+    throw new PigeDomainError(
+      "proposal.identity_conflict",
+      "The approved proposal Markdown no longer matches its Pige provenance."
+    );
+  }
+  return { title, modelProfileId };
+}
+
+function assertCommittedProposalTarget(input: {
+  readonly vaultPath: string;
+  readonly absolutePagePath: string;
+  readonly content: string;
+  readonly expectedChecksum: string;
+  readonly sourceId: string;
+  readonly jobId: string;
+  readonly modelProfileId: string;
+}): { readonly reviewRequired: boolean } {
+  const committedContent = readGeneratedNoteExact(
+    input.vaultPath,
+    input.absolutePagePath,
+    MAX_PROPOSAL_APPLY_CONTENT_BYTES
+  );
+  if (
+    !committedContent ||
+    committedContent !== input.content ||
+    createModelEgressPayloadHash(committedContent) !== input.expectedChecksum
+  ) {
+    throw new PigeDomainError(
+      "proposal.target_conflict",
+      "The proposal target no longer matches the approved create operation."
+    );
+  }
+  const parsed = parsePigeFrontmatter(committedContent);
+  const frontmatter = parsed?.raw ?? "";
+  if (
+    parsed?.frontmatter.source_ids?.includes(input.sourceId) !== true ||
+    readNestedFrontmatterScalar(frontmatter, "provenance", "generated_by") !== "pige" ||
+    readNestedFrontmatterScalar(frontmatter, "provenance", "last_job_id") !== input.jobId ||
+    readNestedFrontmatterScalar(frontmatter, "provenance", "model_profile_id") !== input.modelProfileId
+  ) {
+    throw new PigeDomainError(
+      "proposal.target_conflict",
+      "The proposal target does not retain the approved Job, source, and model provenance."
+    );
+  }
+  return { reviewRequired: parsed.frontmatter.status === "needs_review" };
+}
+
+function readJobInputChecksum(
+  job: JobRecord,
+  role: string,
+  expectedKind: NonNullable<JobRecord["inputRefs"]>[number]["kind"],
+  expectedId: string
+): string | undefined {
+  const matches = (job.inputRefs ?? []).filter((ref) => ref.role === role);
+  if (
+    matches.length !== 1 ||
+    matches[0]?.kind !== expectedKind ||
+    matches[0].id !== expectedId ||
+    !isSha256Hash(matches[0].checksum)
+  ) {
+    return undefined;
+  }
+  return matches[0].checksum;
+}
+
 function recoverExistingKnowledgeProposal(input: {
   readonly proposal: ConfirmationProposal;
   readonly job: JobRecord;
@@ -1393,6 +1751,9 @@ function recoverExistingKnowledgeProposal(input: {
   readonly pagePath: string;
   readonly expectedCatalogHash?: string;
   readonly expectedPolicyHash?: string;
+  readonly expectedSourceBindingHash?: string;
+  readonly expectedCanonicalInputHash?: string;
+  readonly allowedStates?: ReadonlySet<ConfirmationProposal["state"]>;
   readonly toolCallProvenanceHash?: string;
   readonly precedingOperationIds?: readonly string[];
   readonly hooks?: AgentIngestHooks;
@@ -1400,8 +1761,9 @@ function recoverExistingKnowledgeProposal(input: {
   const proposal = input.proposal;
   const operation = proposal.proposedOperations[0];
   const target = proposal.targetRefs[0];
+  const allowedStates = input.allowedStates ?? new Set<ConfirmationProposal["state"]>(["ready"]);
   if (
-    proposal.state !== "ready" ||
+    !allowedStates.has(proposal.state) ||
     proposal.trustLevel !== "review_required" ||
     proposal.jobId !== input.job.id ||
     proposal.proposedOperations.length !== 1 ||
@@ -1454,7 +1816,9 @@ function recoverExistingKnowledgeProposal(input: {
     !isSha256Hash(catalogHash) ||
     !isSha256Hash(policyHash) ||
     (input.expectedCatalogHash !== undefined && catalogHash !== input.expectedCatalogHash) ||
-    (input.expectedPolicyHash !== undefined && policyHash !== input.expectedPolicyHash)
+    (input.expectedPolicyHash !== undefined && policyHash !== input.expectedPolicyHash) ||
+    (input.expectedSourceBindingHash !== undefined && sourceBindingHash !== input.expectedSourceBindingHash) ||
+    (input.expectedCanonicalInputHash !== undefined && canonicalInputHash !== input.expectedCanonicalInputHash)
   ) {
     throw new PigeDomainError(
       "proposal.binding_changed",
@@ -2118,6 +2482,385 @@ function writeCreatePageOperation(input: {
   return operation;
 }
 
+interface ProposalCreatePageOperationInput {
+  readonly vaultPath: string;
+  readonly job: JobRecord;
+  readonly proposal: ConfirmationProposal;
+  readonly pageId: string;
+  readonly pagePath: string;
+  readonly sourceRecord: SourceRecord;
+  readonly modelProfileId?: string;
+  readonly createdAt: string;
+}
+
+function preflightProposalCreatePageOperation(input: ProposalCreatePageOperationInput): void {
+  const operation = createProposalCreatePageOperationRecord(input);
+  const operationPath = resolveVaultRelativePath(input.vaultPath, createOperationPath(operation.id));
+  const existing = readProposalOperationRecord(input.vaultPath, operationPath);
+  if (existing && JSON.stringify(existing) !== JSON.stringify(operation)) {
+    throw proposalOperationConflict(
+      "The deterministic proposal Operation identity is already used by different audit facts."
+    );
+  }
+  if (!existing) assertProposalOperationParent(input.vaultPath, operationPath, true);
+}
+
+function writeProposalCreatePageOperation(input: ProposalCreatePageOperationInput): OperationRecord {
+  const operation = createProposalCreatePageOperationRecord(input);
+  const operationPath = resolveVaultRelativePath(input.vaultPath, createOperationPath(operation.id));
+  const existing = readProposalOperationRecord(input.vaultPath, operationPath);
+  if (existing) {
+    if (JSON.stringify(existing) !== JSON.stringify(operation)) {
+      throw proposalOperationConflict(
+        "The deterministic proposal Operation identity is already used by different audit facts."
+      );
+    }
+    return existing;
+  }
+  assertProposalOperationParent(input.vaultPath, operationPath, true);
+  commitProposalOperationExclusive(input.vaultPath, operationPath, operation);
+  const committed = readProposalOperationRecord(input.vaultPath, operationPath);
+  if (!committed) {
+    throw new PigeDomainError(
+      "proposal.operation_unavailable",
+      "The deterministic proposal Operation was not durable after commit."
+    );
+  }
+  if (JSON.stringify(committed) !== JSON.stringify(operation)) {
+    throw proposalOperationConflict("The deterministic proposal Operation changed during commit.");
+  }
+  return committed;
+}
+
+function commitProposalOperationExclusive(
+  vaultPath: string,
+  operationPath: string,
+  operation: OperationRecord
+): void {
+  assertProposalOperationParent(vaultPath, operationPath, true);
+  const parentPath = path.dirname(operationPath);
+  const parentIdentity = fs.lstatSync(parentPath);
+  const temporaryPath = path.join(
+    parentPath,
+    `.${path.basename(operationPath)}.${process.pid}.${randomUUID()}.tmp`
+  );
+  let descriptor: number | undefined;
+  let linkedTarget = false;
+  let committed = false;
+  let temporaryIdentity: fs.Stats | undefined;
+  try {
+    descriptor = fs.openSync(
+      temporaryPath,
+      fs.constants.O_WRONLY |
+        fs.constants.O_CREAT |
+        fs.constants.O_EXCL |
+        (fs.constants.O_NOFOLLOW ?? 0),
+      0o600
+    );
+    const openedStat = fs.fstatSync(descriptor);
+    const openedPathStat = fs.lstatSync(temporaryPath);
+    assertProposalOperationParentIdentity(vaultPath, operationPath, parentIdentity);
+    if (
+      openedStat.nlink !== 1 ||
+      openedPathStat.nlink !== 1 ||
+      !sameProposalOperationRevision(openedStat, openedPathStat)
+    ) {
+      throw proposalOperationUnavailable("The proposal Operation temporary file is not private.");
+    }
+    fs.writeFileSync(descriptor, `${JSON.stringify(operation, null, 2)}\n`, "utf8");
+    fs.fsyncSync(descriptor);
+    const writtenStat = fs.fstatSync(descriptor);
+    if (
+      writtenStat.nlink !== 1 ||
+      openedStat.dev !== writtenStat.dev ||
+      openedStat.ino !== writtenStat.ino
+    ) {
+      throw proposalOperationUnavailable("The proposal Operation temporary file changed during write.");
+    }
+    temporaryIdentity = writtenStat;
+    fs.closeSync(descriptor);
+    descriptor = undefined;
+    assertProposalOperationParentIdentity(vaultPath, operationPath, parentIdentity);
+    const temporaryBeforeLink = fs.lstatSync(temporaryPath);
+    if (
+      temporaryBeforeLink.nlink !== 1 ||
+      !sameProposalOperationRevision(writtenStat, temporaryBeforeLink)
+    ) {
+      throw proposalOperationUnavailable("The proposal Operation temporary file changed before commit.");
+    }
+    try {
+      fs.linkSync(temporaryPath, operationPath);
+      linkedTarget = true;
+    } catch (caught) {
+      if (isErrno(caught, "EEXIST")) return;
+      throw caught;
+    }
+    const targetStat = fs.lstatSync(operationPath);
+    const temporaryAfterLink = fs.lstatSync(temporaryPath);
+    if (
+      targetStat.isSymbolicLink() ||
+      targetStat.nlink !== 2 ||
+      temporaryAfterLink.nlink !== 2 ||
+      !sameProposalOperationContentIdentity(writtenStat, targetStat) ||
+      !sameProposalOperationContentIdentity(targetStat, temporaryAfterLink)
+    ) {
+      throw proposalOperationUnavailable("The proposal Operation changed during commit.");
+    }
+    fs.rmSync(temporaryPath);
+    const privateTargetStat = fs.lstatSync(operationPath);
+    if (
+      privateTargetStat.nlink !== 1 ||
+      !sameProposalOperationContentIdentity(targetStat, privateTargetStat)
+    ) {
+      throw proposalOperationUnavailable("The proposal Operation did not become a private durable file.");
+    }
+    flushProposalDirectoryWhereSupported(parentPath);
+    committed = true;
+  } catch (caught) {
+    if (caught instanceof PigeDomainError) throw caught;
+    throw proposalOperationUnavailable("The proposal Operation could not be committed safely.");
+  } finally {
+    if (descriptor !== undefined) {
+      try {
+        fs.closeSync(descriptor);
+      } catch {
+        // Preserve the authoritative commit failure.
+      }
+    }
+    if (!committed && linkedTarget && temporaryIdentity) {
+      try {
+        const targetStat = fs.lstatSync(operationPath);
+        if (
+          !targetStat.isSymbolicLink() &&
+          targetStat.dev === temporaryIdentity.dev &&
+          targetStat.ino === temporaryIdentity.ino
+        ) {
+          fs.rmSync(operationPath);
+        }
+      } catch {
+        // Never remove a path whose identity cannot be proven to be this failed commit.
+      }
+    }
+    try {
+      fs.rmSync(temporaryPath, { force: true });
+    } catch {
+      // Recovery treats an unreferenced temporary file as non-authoritative.
+    }
+  }
+}
+
+function createProposalCreatePageOperationRecord(
+  input: ProposalCreatePageOperationInput
+): OperationRecord {
+  if (
+    !input.job.policyContextId ||
+    !input.job.policyHash ||
+    !input.modelProfileId ||
+    !/^model_[a-z0-9_]+$/u.test(input.modelProfileId)
+  ) {
+    throw new PigeDomainError(
+      "proposal.binding_changed",
+      "The approved proposal is missing its model or policy audit binding."
+    );
+  }
+  if (input.proposal.requiredPermissionIds.some((id) => !id.startsWith("permdec_"))) {
+    throw new PigeDomainError(
+      "proposal.permission_unresolved",
+      "The approved proposal still contains an unresolved permission request."
+    );
+  }
+  const operationId = createProposalApplyOperationId(input.proposal.id);
+  return OperationRecordSchema.parse({
+    id: operationId,
+    schemaVersion: 1,
+    jobId: input.job.id,
+    proposalId: input.proposal.id,
+    createdAt: input.createdAt,
+    actor: {
+      kind: "pige_agent",
+      runtimeKind: "desktop_local",
+      clientCapabilityTier: "desktop_full"
+    },
+    modelProfileId: input.modelProfileId,
+    permissionDecisionIds: input.proposal.requiredPermissionIds,
+    policyAudit: {
+      policyContextId: input.job.policyContextId,
+      policyHash: input.job.policyHash,
+      enforcementOwners: ["Agent Orchestrator", "Change Proposal Service", "Vault Service"]
+    },
+    kind: "create_page",
+    targetRefs: [{ kind: "page", id: input.pageId, path: input.pagePath }],
+    sourceRefs: dedupeOperationRefs([
+      { kind: "proposal", id: input.proposal.id },
+      { kind: "job", id: input.job.id },
+      { kind: "source", id: input.sourceRecord.id },
+      ...input.proposal.sourceRefs
+    ]),
+    summary: `Applied approved proposal ${input.proposal.id} to create one wiki page from source ${input.sourceRecord.id}.`,
+    reversible: "best_effort",
+    rollbackHint: "Move the created page to trash only after verifying that its content still matches the applied proposal.",
+    warnings: input.proposal.warnings
+  });
+}
+
+function readProposalOperationRecord(vaultPath: string, operationPath: string): OperationRecord | undefined {
+  if (!assertProposalOperationParent(vaultPath, operationPath, false)) return undefined;
+  let pathStatBefore: fs.Stats;
+  try {
+    pathStatBefore = fs.lstatSync(operationPath);
+  } catch (caught) {
+    if (isErrno(caught, "ENOENT")) return undefined;
+    throw proposalOperationConflict("The proposal Operation cannot be inspected safely.");
+  }
+  if (
+    !pathStatBefore.isFile() ||
+    pathStatBefore.isSymbolicLink() ||
+    pathStatBefore.nlink !== 1 ||
+    pathStatBefore.size > 256 * 1024
+  ) {
+    throw proposalOperationConflict("The proposal Operation is not a bounded private regular file.");
+  }
+  const operationRoot = fs.realpathSync(path.join(vaultPath, ".pige", "operations"));
+  const realOperationPath = fs.realpathSync(operationPath);
+  if (!realOperationPath.startsWith(`${operationRoot}${path.sep}`)) {
+    throw proposalOperationConflict("The proposal Operation resolves outside its durable root.");
+  }
+  const descriptor = fs.openSync(operationPath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+  try {
+    const descriptorStatBefore = fs.fstatSync(descriptor);
+    if (!sameProposalOperationRevision(pathStatBefore, descriptorStatBefore)) {
+      throw proposalOperationConflict("The proposal Operation changed before it could be read.");
+    }
+    const buffer = Buffer.alloc(descriptorStatBefore.size);
+    const bytesRead = descriptorStatBefore.size === 0
+      ? 0
+      : fs.readSync(descriptor, buffer, 0, descriptorStatBefore.size, 0);
+    const descriptorStatAfter = fs.fstatSync(descriptor);
+    const pathStatAfter = fs.lstatSync(operationPath);
+    if (
+      bytesRead !== descriptorStatBefore.size ||
+      !sameProposalOperationRevision(descriptorStatBefore, descriptorStatAfter) ||
+      !sameProposalOperationRevision(descriptorStatAfter, pathStatAfter) ||
+      pathStatAfter.isSymbolicLink() ||
+      pathStatAfter.nlink !== 1
+    ) {
+      throw proposalOperationConflict("The proposal Operation changed while it was being read.");
+    }
+    try {
+      return OperationRecordSchema.parse(JSON.parse(buffer.toString("utf8")));
+    } catch {
+      throw proposalOperationConflict("The proposal Operation record is invalid.");
+    }
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+function assertProposalOperationParent(
+  vaultPath: string,
+  operationPath: string,
+  create: boolean
+): boolean {
+  const resolvedVault = path.resolve(vaultPath);
+  const resolvedOperation = path.resolve(operationPath);
+  const operationRoot = path.join(resolvedVault, ".pige", "operations");
+  if (!resolvedOperation.startsWith(`${operationRoot}${path.sep}`)) {
+    throw proposalOperationUnavailable("The proposal Operation path escapes its durable root.");
+  }
+  let current = resolvedVault;
+  for (const component of path.relative(resolvedVault, path.dirname(resolvedOperation)).split(path.sep).filter(Boolean)) {
+    current = path.join(current, component);
+    let stat: fs.Stats;
+    try {
+      stat = fs.lstatSync(current);
+    } catch (caught) {
+      if (!isErrno(caught, "ENOENT")) {
+        throw proposalOperationUnavailable("A proposal Operation parent cannot be inspected safely.");
+      }
+      if (!create) return false;
+      try {
+        fs.mkdirSync(current, { mode: 0o700 });
+        stat = fs.lstatSync(current);
+      } catch {
+        throw proposalOperationUnavailable("A proposal Operation parent cannot be created safely.");
+      }
+    }
+    if (!stat.isDirectory() || stat.isSymbolicLink()) {
+      throw proposalOperationUnavailable("A proposal Operation parent is not a safe directory.");
+    }
+  }
+  const realVault = fs.realpathSync(resolvedVault);
+  const realParent = fs.realpathSync(path.dirname(resolvedOperation));
+  if (!realParent.startsWith(`${realVault}${path.sep}`)) {
+    throw proposalOperationUnavailable("A proposal Operation parent resolves outside the active vault.");
+  }
+  return true;
+}
+
+function assertProposalOperationParentIdentity(
+  vaultPath: string,
+  operationPath: string,
+  expected: fs.Stats
+): void {
+  assertProposalOperationParent(vaultPath, operationPath, false);
+  const current = fs.lstatSync(path.dirname(operationPath));
+  if (
+    !expected.isDirectory() ||
+    !current.isDirectory() ||
+    current.isSymbolicLink() ||
+    expected.dev !== current.dev ||
+    expected.ino !== current.ino
+  ) {
+    throw proposalOperationUnavailable("The proposal Operation parent changed during commit.");
+  }
+}
+
+function flushProposalDirectoryWhereSupported(directoryPath: string): void {
+  let descriptor: number | undefined;
+  try {
+    descriptor = fs.openSync(directoryPath, fs.constants.O_RDONLY);
+    fs.fsyncSync(descriptor);
+  } catch {
+    // Directory fsync is not available on every supported filesystem.
+  } finally {
+    if (descriptor !== undefined) {
+      try {
+        fs.closeSync(descriptor);
+      } catch {
+        // Directory cleanup cannot change the committed Operation identity.
+      }
+    }
+  }
+}
+
+function sameProposalOperationRevision(left: fs.Stats, right: fs.Stats): boolean {
+  return left.isFile() && right.isFile() &&
+    left.dev === right.dev &&
+    left.ino === right.ino &&
+    left.size === right.size &&
+    left.mtimeMs === right.mtimeMs &&
+    left.ctimeMs === right.ctimeMs;
+}
+
+function sameProposalOperationContentIdentity(left: fs.Stats, right: fs.Stats): boolean {
+  return left.isFile() && right.isFile() &&
+    left.dev === right.dev &&
+    left.ino === right.ino &&
+    left.size === right.size;
+}
+
+function proposalOperationConflict(message: string): PigeDomainError {
+  return new PigeDomainError("proposal.operation_conflict", message);
+}
+
+function proposalOperationUnavailable(message: string): PigeDomainError {
+  return new PigeDomainError("proposal.operation_unavailable", message);
+}
+
+function isErrno(value: unknown, code: string): value is NodeJS.ErrnoException {
+  return value instanceof Error && "code" in value && value.code === code;
+}
+
 function writeRecoveredCreatePageOperation(input: {
   readonly vaultPath: string;
   readonly job: JobRecord;
@@ -2174,6 +2917,142 @@ function appendIndex(vaultPath: string, title: string, pagePath: string, sourceI
     ? `${existing.trimEnd()}\n- [${escapeMarkdownInline(title)}](${pagePath}) from \`${sourceId}\`\n`
     : `${existing.trimEnd()}\n\n${header}\n\n- [${escapeMarkdownInline(title)}](${pagePath}) from \`${sourceId}\`\n`;
   writeFileAtomic(indexPath, next);
+}
+
+interface ProposalIndexSnapshot {
+  readonly path: string;
+  readonly content: string;
+  readonly stat: fs.Stats;
+}
+
+function preflightProposalIndex(vaultPath: string): void {
+  readProposalIndexSnapshot(vaultPath);
+}
+
+function appendProposalIndex(vaultPath: string, title: string, pagePath: string, sourceId: string): void {
+  const snapshot = readProposalIndexSnapshot(vaultPath);
+  if (snapshot.content.includes(`](${pagePath})`)) return;
+  const header = "## Generated Notes";
+  const line = `- [${escapeMarkdownInline(title)}](${pagePath}) from \`${sourceId}\`\n`;
+  const addition = snapshot.content.includes(header)
+    ? `${snapshot.content.endsWith("\n") ? "" : "\n"}${line}`
+    : `${snapshot.content.endsWith("\n") ? "" : "\n"}\n${header}\n\n${line}`;
+  const bytes = Buffer.from(addition, "utf8");
+  if (snapshot.stat.size + bytes.length > MAX_PROPOSAL_INDEX_BYTES) {
+    throw proposalIndexUnavailable("The proposal index update exceeds its bounded size.");
+  }
+  const descriptor = fs.openSync(
+    snapshot.path,
+    fs.constants.O_WRONLY | fs.constants.O_APPEND | (fs.constants.O_NOFOLLOW ?? 0)
+  );
+  try {
+    const descriptorStat = fs.fstatSync(descriptor);
+    const pathStat = fs.lstatSync(snapshot.path);
+    if (
+      !sameProposalIndexRevision(snapshot.stat, descriptorStat) ||
+      !sameProposalIndexRevision(descriptorStat, pathStat) ||
+      descriptorStat.nlink !== 1 ||
+      pathStat.isSymbolicLink()
+    ) {
+      throw proposalIndexConflict("The proposal index changed before append.");
+    }
+    fs.writeFileSync(descriptor, bytes);
+    fs.fsyncSync(descriptor);
+    const descriptorAfter = fs.fstatSync(descriptor);
+    const pathAfter = fs.lstatSync(snapshot.path);
+    if (
+      descriptorAfter.dev !== snapshot.stat.dev ||
+      descriptorAfter.ino !== snapshot.stat.ino ||
+      descriptorAfter.nlink !== 1 ||
+      descriptorAfter.size !== snapshot.stat.size + bytes.length ||
+      pathAfter.dev !== descriptorAfter.dev ||
+      pathAfter.ino !== descriptorAfter.ino ||
+      pathAfter.size !== descriptorAfter.size ||
+      pathAfter.nlink !== 1 ||
+      pathAfter.isSymbolicLink()
+    ) {
+      throw proposalIndexConflict("The proposal index changed during append.");
+    }
+  } finally {
+    fs.closeSync(descriptor);
+  }
+  if (!proposalIndexContainsPage(vaultPath, pagePath)) {
+    throw proposalIndexUnavailable("The proposal index entry was not durable after append.");
+  }
+}
+
+function proposalIndexContainsPage(vaultPath: string, pagePath: string): boolean {
+  return readProposalIndexSnapshot(vaultPath).content.includes(`](${pagePath})`);
+}
+
+function readProposalIndexSnapshot(vaultPath: string): ProposalIndexSnapshot {
+  const resolvedVault = path.resolve(vaultPath);
+  const indexPath = path.join(resolvedVault, "index.md");
+  let vaultStat: fs.Stats;
+  let pathStatBefore: fs.Stats;
+  try {
+    vaultStat = fs.lstatSync(resolvedVault);
+    pathStatBefore = fs.lstatSync(indexPath);
+  } catch {
+    throw proposalIndexUnavailable("The proposal index is unavailable.");
+  }
+  if (
+    !vaultStat.isDirectory() ||
+    vaultStat.isSymbolicLink() ||
+    !pathStatBefore.isFile() ||
+    pathStatBefore.isSymbolicLink() ||
+    pathStatBefore.nlink !== 1 ||
+    pathStatBefore.size > MAX_PROPOSAL_INDEX_BYTES
+  ) {
+    throw proposalIndexConflict("The proposal index is not a bounded private regular file.");
+  }
+  const realVault = fs.realpathSync(resolvedVault);
+  const realIndex = fs.realpathSync(indexPath);
+  if (!realIndex.startsWith(`${realVault}${path.sep}`)) {
+    throw proposalIndexConflict("The proposal index resolves outside the active vault.");
+  }
+  const descriptor = fs.openSync(indexPath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+  try {
+    const descriptorStatBefore = fs.fstatSync(descriptor);
+    if (!sameProposalIndexRevision(pathStatBefore, descriptorStatBefore)) {
+      throw proposalIndexConflict("The proposal index changed before inspection.");
+    }
+    const buffer = Buffer.alloc(descriptorStatBefore.size);
+    const bytesRead = descriptorStatBefore.size === 0
+      ? 0
+      : fs.readSync(descriptor, buffer, 0, descriptorStatBefore.size, 0);
+    const descriptorStatAfter = fs.fstatSync(descriptor);
+    const pathStatAfter = fs.lstatSync(indexPath);
+    if (
+      bytesRead !== descriptorStatBefore.size ||
+      !sameProposalIndexRevision(descriptorStatBefore, descriptorStatAfter) ||
+      !sameProposalIndexRevision(descriptorStatAfter, pathStatAfter) ||
+      pathStatAfter.isSymbolicLink() ||
+      pathStatAfter.nlink !== 1
+    ) {
+      throw proposalIndexConflict("The proposal index changed during inspection.");
+    }
+    return { path: indexPath, content: buffer.toString("utf8"), stat: descriptorStatAfter };
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+function sameProposalIndexRevision(left: fs.Stats, right: fs.Stats): boolean {
+  return left.isFile() && right.isFile() &&
+    left.dev === right.dev &&
+    left.ino === right.ino &&
+    left.size === right.size &&
+    left.mtimeMs === right.mtimeMs &&
+    left.ctimeMs === right.ctimeMs;
+}
+
+function proposalIndexConflict(message: string): PigeDomainError {
+  return new PigeDomainError("proposal.index_conflict", message);
+}
+
+function proposalIndexUnavailable(message: string): PigeDomainError {
+  return new PigeDomainError("proposal.index_unavailable", message);
 }
 
 function indexContainsPage(vaultPath: string, pagePath: string): boolean {
@@ -2454,6 +3333,21 @@ function createWikiNotePagePath(sourceId: string, pageId: string): string {
 function createOperationId(jobId: string, pageId: string): string {
   const dateKey = /^job_(\d{8})_/.exec(jobId)?.[1] ?? new Date().toISOString().slice(0, 10).replaceAll("-", "");
   return `op_${dateKey}_${createHash("sha256").update(`op:${jobId}:${pageId}`).digest("hex").slice(0, 12)}`;
+}
+
+export function createProposalApplyOperationId(proposalId: string): string {
+  const dateKey = /^proposal_(\d{8})_/.exec(proposalId)?.[1] ?? new Date().toISOString().slice(0, 10).replaceAll("-", "");
+  return `op_${dateKey}_${createHash("sha256").update(`proposal-apply:${proposalId}`).digest("hex").slice(0, 12)}`;
+}
+
+function dedupeOperationRefs(refs: readonly ConfirmationProposal["sourceRefs"][number][]): ConfirmationProposal["sourceRefs"] {
+  const seen = new Set<string>();
+  return refs.filter((ref) => {
+    const key = `${ref.kind}\0${ref.id}\0${ref.path ?? ""}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function createModelEgressOperationId(

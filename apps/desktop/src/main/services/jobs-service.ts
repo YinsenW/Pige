@@ -8,12 +8,17 @@ import type {
   JobsListRequest,
   JobsListResult,
   LocalDatabaseRebuildResult,
+  ProposalDecisionRequest,
+  ProposalDecisionResult,
   VaultSummary
 } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
+import { parsePigeFrontmatter } from "@pige/markdown";
 import {
   JobRecordSchema,
+  OperationRecordSchema,
   SourceRecordSchema,
+  type ConfirmationProposal,
   type JobClass,
   type JobRecord,
   type JobStage,
@@ -23,10 +28,12 @@ import {
 } from "@pige/schemas";
 import {
   AgentIngestService,
+  createProposalApplyOperationId,
   type AgentIngestOcrToolExecution,
   type AgentIngestOcrToolRequest,
   type AgentIngestParseToolExecution,
   type AgentIngestParseToolRequest,
+  type AgentIngestPublishedResult,
   type AgentIngestProposalBinding
 } from "./agent-ingest-service";
 import type { DocumentParserPort } from "./document-parser-service";
@@ -40,6 +47,7 @@ import {
   type JobExecutionControl,
   type JobProgressUpdate
 } from "./job-execution-control";
+import { ProposalService } from "./proposal-service";
 
 export interface JobsVaultPort {
   current(): VaultSummary | undefined;
@@ -87,6 +95,13 @@ export type RequeueWaitingOcrResult = RequeueWaitingAgentIngestResult;
 export interface RecoverInterruptedJobsResult {
   readonly requeued: number;
   readonly failedRetryable: number;
+}
+
+export interface RecoverProposalDecisionsResult {
+  readonly applied: number;
+  readonly rejected: number;
+  readonly conflicted: number;
+  readonly failed: number;
 }
 
 export interface CreateRetrievalQueryJobRequest {
@@ -169,6 +184,105 @@ export class JobsService {
       invalidJobCount,
       jobs: summaries
     };
+  }
+
+  async approveProposal(
+    proposals: ProposalService,
+    request: ProposalDecisionRequest
+  ): Promise<ProposalDecisionResult> {
+    const current = readProposalForDecision(proposals, request.proposalId);
+    if (!current) return { status: "not_found", reason: "Proposal record was not found." };
+    if (current.state === "applied") {
+      appendProposalApplyLog(this.#requireActiveVaultPath(), current);
+      this.#finalizeProposalJob(current, "applied");
+      return { status: "applied", proposal: current };
+    }
+    if (current.state === "conflicted") {
+      this.#finalizeConflictedProposalJob(current);
+      return { status: "conflicted", proposal: current };
+    }
+    if (!isSupportedAgentCreateProposal(current)) {
+      return {
+        status: "not_allowed",
+        reason: "Only the current Agent-generated create-note proposal can be applied.",
+        proposal: current
+      };
+    }
+    let approved = current;
+    if (current.state === "ready") {
+      const decision = proposals.approve(request);
+      if (decision.status !== "approved" || !decision.proposal) return decision;
+      approved = decision.proposal;
+    } else if (current.state !== "approved") {
+      return {
+        status: "not_allowed",
+        reason: `Proposal state ${current.state} cannot be approved.`,
+        proposal: current
+      };
+    }
+    return this.#applyApprovedProposal(proposals, approved);
+  }
+
+  rejectProposal(proposals: ProposalService, request: ProposalDecisionRequest): ProposalDecisionResult {
+    const current = readProposalForDecision(proposals, request.proposalId);
+    if (!current) return { status: "not_found", reason: "Proposal record was not found." };
+    if (current.state === "rejected") {
+      if (isSupportedAgentCreateProposal(current)) this.#finalizeProposalJob(current, "rejected");
+      return { status: "rejected", proposal: current };
+    }
+    if (current.state !== "ready") {
+      return {
+        status: "not_allowed",
+        reason: `Proposal state ${current.state} cannot be rejected.`,
+        proposal: current
+      };
+    }
+    if (isSupportedAgentCreateProposal(current)) this.#assertProposalParentReady(current);
+    const rejected = proposals.reject(request);
+    if (
+      rejected.status === "rejected" &&
+      rejected.proposal &&
+      isSupportedAgentCreateProposal(rejected.proposal)
+    ) {
+      this.#finalizeProposalJob(rejected.proposal, "rejected");
+    }
+    return rejected;
+  }
+
+  async recoverProposalDecisions(proposals: ProposalService): Promise<RecoverProposalDecisionsResult> {
+    let applied = 0;
+    let rejected = 0;
+    let conflicted = 0;
+    let failed = 0;
+    for (const proposal of proposals.recoveryCandidates()) {
+      if (!isSupportedAgentCreateProposal(proposal)) continue;
+      try {
+        if (proposal.state === "approved") {
+          const result = await this.#applyApprovedProposal(proposals, proposal);
+          if (result.status === "applied") applied += 1;
+          if (result.status === "conflicted") conflicted += 1;
+          continue;
+        }
+        if (proposal.state === "applied") {
+          appendProposalApplyLog(this.#requireActiveVaultPath(), proposal);
+          this.#finalizeProposalJob(proposal, "applied");
+          applied += 1;
+          continue;
+        }
+        if (proposal.state === "rejected") {
+          this.#finalizeProposalJob(proposal, "rejected");
+          rejected += 1;
+          continue;
+        }
+        if (proposal.state === "conflicted") {
+          this.#finalizeConflictedProposalJob(proposal);
+          conflicted += 1;
+        }
+      } catch {
+        failed += 1;
+      }
+    }
+    return { applied, rejected, conflicted, failed };
   }
 
   cancel(request: JobActionRequest): JobActionResult {
@@ -543,14 +657,16 @@ export class JobsService {
             vaultPath,
             captureExecution.job,
             sourceRecordFile.sourceRecord.id,
-            canRunAgentIngest(this.#agentIngest)
+            canRunAgentIngest(this.#agentIngest),
+            this.#requireActiveVaultId(vaultPath)
           );
         } else {
           ensureAgentIngestJob(
             vaultPath,
             captureExecution.job,
             sourceRecordFile.sourceRecord.id,
-            canRunAgentIngest(this.#agentIngest)
+            canRunAgentIngest(this.#agentIngest),
+            this.#requireActiveVaultId(vaultPath)
           );
         }
         this.#completeCooperativeExecution(
@@ -651,7 +767,13 @@ export class JobsService {
           result.agentTextReady &&
           (!result.needsOcr || ocrCapability?.ready !== true)
         ) {
-          ensureAgentIngestJob(vaultPath, runningJob, refreshedSource.id, canRunAgentIngest(this.#agentIngest));
+          ensureAgentIngestJob(
+            vaultPath,
+            runningJob,
+            refreshedSource.id,
+            canRunAgentIngest(this.#agentIngest),
+            this.#requireActiveVaultId(vaultPath)
+          );
           agentReadySourceIds.push(refreshedSource.id);
         }
         const hasWarnings = result.needsOcr || result.sourcePageConflict || result.warnings.length > 0;
@@ -721,7 +843,8 @@ export class JobsService {
             vaultPath,
             jobFile.job,
             sourceRecordFile.sourceRecord.id,
-            canRunAgentIngest(this.#agentIngest)
+            canRunAgentIngest(this.#agentIngest),
+            this.#requireActiveVaultId(vaultPath)
           );
           agentReadySourceIds.push(sourceRecordFile.sourceRecord.id);
         }
@@ -756,7 +879,13 @@ export class JobsService {
           execution.control
         );
         if (!agentSelected && result.agentTextReady) {
-          ensureAgentIngestJob(vaultPath, runningJob, sourceRecordFile.sourceRecord.id, canRunAgentIngest(this.#agentIngest));
+          ensureAgentIngestJob(
+            vaultPath,
+            runningJob,
+            sourceRecordFile.sourceRecord.id,
+            canRunAgentIngest(this.#agentIngest),
+            this.#requireActiveVaultId(vaultPath)
+          );
           agentReadySourceIds.push(sourceRecordFile.sourceRecord.id);
         }
         const hasWarnings = !result.agentTextReady || result.sourcePageConflict || result.warnings.length > 0;
@@ -793,7 +922,8 @@ export class JobsService {
                 vaultPath,
                 runningJob,
                 sourceRecordFile.sourceRecord.id,
-                canRunAgentIngest(this.#agentIngest)
+                canRunAgentIngest(this.#agentIngest),
+                this.#requireActiveVaultId(vaultPath)
               );
               if (!agentReadySourceIds.includes(sourceRecordFile.sourceRecord.id)) {
                 agentReadySourceIds.push(sourceRecordFile.sourceRecord.id);
@@ -1021,6 +1151,257 @@ export class JobsService {
       completed,
       failed
     };
+  }
+
+  async #applyApprovedProposal(
+    proposals: ProposalService,
+    proposal: ConfirmationProposal
+  ): Promise<ProposalDecisionResult> {
+    const vaultPath = this.#vaults.activeVaultPath();
+    const activeVault = this.#vaults.current();
+    const agentIngest = this.#agentIngest;
+    if (!vaultPath || !activeVault || !agentIngest) {
+      throw new PigeDomainError("vault_missing", "No active Pige vault is available for proposal apply.");
+    }
+    const assertActiveVault = (): void => {
+      if (
+        this.#vaults.activeVaultPath() !== vaultPath ||
+        this.#vaults.current()?.vaultId !== activeVault.vaultId
+      ) {
+        throw new PigeDomainError(
+          "proposal.vault_changed",
+          "The active vault changed while the approved proposal was being applied."
+        );
+      }
+    };
+    assertActiveVault();
+    const jobId = proposal.jobId;
+    if (!jobId || !isSupportedAgentCreateProposal(proposal)) {
+      return {
+        status: "not_allowed",
+        reason: "Only the current Agent-generated create-note proposal can be applied.",
+        proposal
+      };
+    }
+    const jobFile = readProposalParentJobRecord(vaultPath, jobId);
+    if (!jobFile) {
+      throw new PigeDomainError("proposal.parent_job_missing", "The proposal parent Job was not found.");
+    }
+    assertProposalParentJob(jobFile.job, proposal, activeVault.vaultId);
+    const sourceRecord = jobFile.job.sourceId ? readSourceRecord(vaultPath, jobFile.job.sourceId) : undefined;
+    if (!sourceRecord) {
+      throw new PigeDomainError("proposal.source_missing", "The proposal source record was not found.");
+    }
+    assertProposalLogPath(vaultPath, path.join(vaultPath, "log.md"));
+
+    try {
+      const publication = await agentIngest.applyStagedProposal(
+        vaultPath,
+        sourceRecord,
+        jobFile.job,
+        proposal,
+        {
+          assertSourceCurrent: (expectedSource) => {
+            assertActiveVault();
+            const currentJob = readProposalParentJobRecord(vaultPath, jobId);
+            if (!currentJob) {
+              throw new PigeDomainError("proposal.parent_job_missing", "The proposal parent Job disappeared.");
+            }
+            assertProposalParentJob(currentJob.job, proposal, activeVault.vaultId);
+            const currentSource = readSourceRecord(vaultPath, expectedSource.id);
+            if (!currentSource || sourceRecordRevision(currentSource) !== sourceRecordRevision(expectedSource)) {
+              throw new PigeDomainError(
+                "agent_ingest.source_changed",
+                "The proposal source evidence changed before apply."
+              );
+            }
+          },
+          onPublicationStart: (checkpointId) => {
+            markProposalApplyStarted(vaultPath, jobFile.job, proposal.id, checkpointId);
+          }
+        }
+      );
+      assertActiveVault();
+      const applied = proposals.markApplied(proposal.id);
+      if (applied.status !== "applied" || !applied.proposal) {
+        throw new PigeDomainError("proposal.write_failed", "The applied proposal state could not be committed.");
+      }
+      appendProposalApplyLog(vaultPath, applied.proposal);
+      this.#finalizeProposalJob(applied.proposal, "applied", publication);
+      return applied;
+    } catch (caught) {
+      if (!isProposalApplyConflict(caught)) throw caught;
+      const conflicted = proposals.markConflicted(proposal.id);
+      if (conflicted.proposal) markProposalJobConflicted(vaultPath, jobFile.job, conflicted.proposal);
+      return conflicted;
+    }
+  }
+
+  #assertProposalParentReady(proposal: ConfirmationProposal): void {
+    const vaultPath = this.#requireActiveVaultPath();
+    const activeVault = this.#vaults.current();
+    if (!activeVault || !proposal.jobId) {
+      throw new PigeDomainError("proposal.parent_job_missing", "The proposal parent Job was not found.");
+    }
+    const jobFile = readProposalParentJobRecord(vaultPath, proposal.jobId);
+    if (!jobFile) {
+      throw new PigeDomainError("proposal.parent_job_missing", "The proposal parent Job was not found.");
+    }
+    assertProposalParentJob(jobFile.job, proposal, activeVault.vaultId);
+  }
+
+  #finalizeConflictedProposalJob(proposal: ConfirmationProposal): JobRecord {
+    const vaultPath = this.#requireActiveVaultPath();
+    const activeVault = this.#vaults.current();
+    if (!activeVault || !proposal.jobId || !isSupportedAgentCreateProposal(proposal)) {
+      throw new PigeDomainError(
+        "proposal.parent_job_missing",
+        "The conflicted proposal parent Job was not found."
+      );
+    }
+    const jobFile = readProposalParentJobRecord(vaultPath, proposal.jobId);
+    if (!jobFile) {
+      throw new PigeDomainError(
+        "proposal.parent_job_missing",
+        "The conflicted proposal parent Job was not found."
+      );
+    }
+    assertProposalParentJob(jobFile.job, proposal, activeVault.vaultId, true);
+    if (
+      jobFile.job.state === "failed_final" &&
+      jobFile.job.message === proposalConflictMessage()
+    ) {
+      return jobFile.job;
+    }
+    if (jobFile.job.state !== "awaiting_review") {
+      throw new PigeDomainError(
+        "proposal.parent_job_changed",
+        "The conflicted proposal parent Job is no longer awaiting reconciliation."
+      );
+    }
+    markProposalJobConflicted(vaultPath, jobFile.job, proposal);
+    const reconciled = readProposalParentJobRecord(vaultPath, proposal.jobId);
+    if (
+      !reconciled ||
+      reconciled.job.state !== "failed_final" ||
+      reconciled.job.message !== proposalConflictMessage()
+    ) {
+      throw new PigeDomainError(
+        "proposal.parent_job_changed",
+        "The conflicted proposal parent Job was not durably reconciled."
+      );
+    }
+    return reconciled.job;
+  }
+
+  #finalizeProposalJob(
+    proposal: ConfirmationProposal,
+    outcome: "applied" | "rejected",
+    publication?: AgentIngestPublishedResult
+  ): JobRecord {
+    const vaultPath = this.#vaults.activeVaultPath();
+    const activeVault = this.#vaults.current();
+    if (!vaultPath || !activeVault || !proposal.jobId) {
+      throw new PigeDomainError("vault_missing", "No active Pige vault is available for proposal resolution.");
+    }
+    const jobFile = readProposalParentJobRecord(vaultPath, proposal.jobId);
+    if (!jobFile) {
+      throw new PigeDomainError("proposal.parent_job_missing", "The proposal parent Job was not found.");
+    }
+    assertProposalParentJob(jobFile.job, proposal, activeVault.vaultId, true);
+    const target = outcome === "applied" ? requireProposalPageTarget(proposal) : undefined;
+    if (outcome === "applied") {
+      if (!this.#agentIngest) {
+        throw new PigeDomainError("proposal.runtime_unavailable", "Proposal recovery is unavailable.");
+      }
+      this.#agentIngest.verifyAppliedProposalEffects(vaultPath, jobFile.job, proposal);
+    }
+    const recoveredOperationId = outcome === "applied"
+      ? requireProposalApplyOperation(vaultPath, proposal, jobFile.job).id
+      : undefined;
+    const reviewRequired = publication?.reviewRequired ?? proposalContentNeedsReview(proposal);
+    const desiredState = outcome === "applied"
+      ? reviewRequired ? "completed_with_warnings" : "completed"
+      : "completed_with_warnings";
+    if (
+      ["completed", "completed_with_warnings"].includes(jobFile.job.state) &&
+      jobFile.job.message === proposalResolutionMessage(outcome, reviewRequired)
+    ) {
+      return jobFile.job;
+    }
+    if (jobFile.job.state !== "awaiting_review") {
+      throw new PigeDomainError(
+        "proposal.parent_job_changed",
+        "The proposal parent Job is no longer awaiting this review decision."
+      );
+    }
+    const operationIds = Array.from(new Set([
+      ...(jobFile.job.operationIds ?? []),
+      ...(publication?.operationIds ?? []),
+      ...(recoveredOperationId ? [recoveredOperationId] : [])
+    ]));
+    const proposalApplyOperationIds = [publication?.operationId, recoveredOperationId]
+      .filter((operationId): operationId is string => Boolean(operationId));
+    const outputRefs = [...(jobFile.job.outputRefs ?? [])];
+    const pageId = publication?.pageId ?? target?.id;
+    const pagePath = publication?.pagePath ?? target?.path;
+    if (pageId && !outputRefs.some((ref) => ref.kind === "page" && ref.id === pageId)) {
+      outputRefs.push({
+        kind: "page",
+        id: pageId,
+        ...(pagePath ? { path: pagePath } : {}),
+        role: "applied_proposal_target"
+      });
+    }
+    for (const operationId of proposalApplyOperationIds) {
+      if (!outputRefs.some((ref) => ref.kind === "operation" && ref.id === operationId)) {
+        outputRefs.push({ kind: "operation", id: operationId, role: "proposal_apply_audit" });
+      }
+    }
+    const now = new Date().toISOString();
+    const proposalCheckpointId = `proposal_apply:${proposal.id}`;
+    const proposalCheckpoint = jobFile.job.checkpoints?.find(
+      (checkpoint) => checkpoint.id === proposalCheckpointId
+    );
+    const checkpoints = outcome === "applied"
+      ? [
+          ...(jobFile.job.checkpoints ?? []).filter((checkpoint) => checkpoint.id !== proposalCheckpointId),
+          {
+            id: proposalCheckpointId,
+            step: proposalCheckpoint?.step ?? "agent_proposal_apply_started",
+            state: "done" as const,
+            startedAt: proposalCheckpoint?.startedAt ?? proposal.decision?.decidedAt ?? proposal.updatedAt,
+            finishedAt: now,
+            inputRefs: [{ kind: "proposal" as const, id: proposal.id }],
+            outputRefs: [
+              ...(pageId ? [{ kind: "page" as const, id: pageId, ...(pagePath ? { path: pagePath } : {}) }] : []),
+              ...proposalApplyOperationIds.map((operationId) => ({
+                kind: "operation" as const,
+                id: operationId,
+                role: "proposal_apply_audit"
+              }))
+            ]
+          }
+        ]
+      : jobFile.job.checkpoints;
+    const resolved = JobRecordSchema.parse({
+      ...jobFile.job,
+      state: desiredState,
+      stage: "writing",
+      updatedAt: now,
+      finishedAt: now,
+      outputRefs,
+      operationIds,
+      ...(checkpoints ? { checkpoints } : {}),
+      progress: {
+        completedUnits: 1,
+        totalUnits: 1,
+        unit: outcome === "applied" ? "page" : "proposal"
+      },
+      message: proposalResolutionMessage(outcome, reviewRequired)
+    });
+    writeJsonAtomic(jobFile.path, resolved);
+    return resolved;
   }
 
   async #runAgentSelectedParseTool(
@@ -1326,6 +1707,14 @@ export class JobsService {
       throw new PigeDomainError("vault_missing", "No active Pige vault is selected.");
     }
     return vaultPath;
+  }
+
+  #requireActiveVaultId(expectedVaultPath: string): string {
+    const activeVault = this.#vaults.current();
+    if (!activeVault || this.#vaults.activeVaultPath() !== expectedVaultPath) {
+      throw new PigeDomainError("vault_missing", "The active Pige vault changed during Job creation.");
+    }
+    return activeVault.vaultId;
   }
 
   #beginCooperativeExecution(
@@ -1787,6 +2176,30 @@ function readJobRecordFile(vaultPath: string, jobId: string): { path: string; jo
   }
 }
 
+function readProposalParentJobRecord(
+  vaultPath: string,
+  jobId: string
+): { path: string; job: JobRecord } | undefined {
+  if (!/^job_\d{8}_[a-z0-9]{8,}$/.test(jobId)) return undefined;
+  const jobPath = createJobRecordPath(vaultPath, jobId);
+  const bytes = readConfinedDurableRecord(
+    vaultPath,
+    path.join(vaultPath, ".pige", "jobs"),
+    jobPath,
+    2 * 1024 * 1024,
+    "proposal.parent_job_changed"
+  );
+  if (bytes === undefined) return undefined;
+  try {
+    return { path: jobPath, job: JobRecordSchema.parse(JSON.parse(bytes)) };
+  } catch {
+    throw new PigeDomainError(
+      "proposal.parent_job_changed",
+      "The proposal parent Job record is invalid."
+    );
+  }
+}
+
 function createJobRecordPath(vaultPath: string, jobId: string): string {
   const dateKey = /^job_(\d{8})_/.exec(jobId)?.[1];
   if (!dateKey) {
@@ -1847,13 +2260,458 @@ function readSourceRecordFile(vaultPath: string, sourceId: string): { path: stri
   if (!dateKey) return undefined;
   const relativePath = [".pige", "source-records", dateKey.slice(0, 4), dateKey.slice(4, 6), `${sourceId}.json`].join("/");
   const sourceRecordPath = path.join(vaultPath, ...relativePath.split("/"));
-  if (!fs.existsSync(sourceRecordPath)) return undefined;
   try {
-    const parsed = SourceRecordSchema.safeParse(JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")));
+    const bytes = readConfinedDurableRecord(
+      vaultPath,
+      path.join(vaultPath, ".pige", "source-records"),
+      sourceRecordPath,
+      2 * 1024 * 1024
+    );
+    if (bytes === undefined) return undefined;
+    const parsed = SourceRecordSchema.safeParse(JSON.parse(bytes));
     return parsed.success ? { path: relativePath, sourceRecord: parsed.data } : undefined;
-  } catch {
+  } catch (caught) {
+    if (caught instanceof PigeDomainError) throw caught;
     return undefined;
   }
+}
+
+function readConfinedDurableRecord(
+  vaultPath: string,
+  durableRoot: string,
+  filePath: string,
+  maximumBytes: number,
+  errorCode = "source.record_unsafe"
+): string | undefined {
+  const resolvedVault = path.resolve(vaultPath);
+  const resolvedRoot = path.resolve(durableRoot);
+  const resolvedFile = path.resolve(filePath);
+  if (
+    !resolvedRoot.startsWith(`${resolvedVault}${path.sep}`) ||
+    !resolvedFile.startsWith(`${resolvedRoot}${path.sep}`)
+  ) {
+    throw new PigeDomainError(errorCode, "The durable record path escapes its owned root.");
+  }
+  let current = resolvedVault;
+  for (const component of path.relative(resolvedVault, path.dirname(resolvedFile)).split(path.sep).filter(Boolean)) {
+    current = path.join(current, component);
+    let stat: fs.Stats;
+    try {
+      stat = fs.lstatSync(current);
+    } catch (caught) {
+      if (isErrno(caught, "ENOENT")) return undefined;
+      throw new PigeDomainError(errorCode, "A durable record parent cannot be inspected safely.");
+    }
+    if (!stat.isDirectory() || stat.isSymbolicLink()) {
+      throw new PigeDomainError(errorCode, "A durable record parent is not a safe directory.");
+    }
+  }
+  let pathStatBefore: fs.Stats;
+  try {
+    pathStatBefore = fs.lstatSync(resolvedFile);
+  } catch (caught) {
+    if (isErrno(caught, "ENOENT")) return undefined;
+    throw new PigeDomainError(errorCode, "The durable record cannot be inspected safely.");
+  }
+  if (
+    !pathStatBefore.isFile() ||
+    pathStatBefore.isSymbolicLink() ||
+    pathStatBefore.nlink !== 1 ||
+    pathStatBefore.size > maximumBytes
+  ) {
+    throw new PigeDomainError(errorCode, "The durable record is not a bounded private regular file.");
+  }
+  const realRoot = fs.realpathSync(resolvedRoot);
+  const realFile = fs.realpathSync(resolvedFile);
+  if (!realFile.startsWith(`${realRoot}${path.sep}`)) {
+    throw new PigeDomainError(errorCode, "The durable record resolves outside its owned root.");
+  }
+  const descriptor = fs.openSync(resolvedFile, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+  try {
+    const descriptorStatBefore = fs.fstatSync(descriptor);
+    if (!sameDurableFileRevision(pathStatBefore, descriptorStatBefore)) {
+      throw new PigeDomainError(errorCode, "The durable record changed before it could be read.");
+    }
+    const buffer = Buffer.alloc(descriptorStatBefore.size);
+    const bytesRead = descriptorStatBefore.size === 0
+      ? 0
+      : fs.readSync(descriptor, buffer, 0, descriptorStatBefore.size, 0);
+    const descriptorStatAfter = fs.fstatSync(descriptor);
+    const pathStatAfter = fs.lstatSync(resolvedFile);
+    if (
+      bytesRead !== descriptorStatBefore.size ||
+      !sameDurableFileRevision(descriptorStatBefore, descriptorStatAfter) ||
+      !sameDurableFileRevision(descriptorStatAfter, pathStatAfter) ||
+      pathStatAfter.isSymbolicLink() ||
+      pathStatAfter.nlink !== 1
+    ) {
+      throw new PigeDomainError(errorCode, "The durable record changed while it was being read.");
+    }
+    return buffer.toString("utf8");
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+function sameDurableFileRevision(left: fs.Stats, right: fs.Stats): boolean {
+  return left.isFile() && right.isFile() &&
+    left.dev === right.dev &&
+    left.ino === right.ino &&
+    left.size === right.size &&
+    left.mtimeMs === right.mtimeMs &&
+    left.ctimeMs === right.ctimeMs;
+}
+
+function isErrno(value: unknown, code: string): value is NodeJS.ErrnoException {
+  return value instanceof Error && "code" in value && value.code === code;
+}
+
+function readProposalForDecision(
+  proposals: ProposalService,
+  proposalId: string
+): ConfirmationProposal | undefined {
+  try {
+    return proposals.get({ proposalId }).proposal;
+  } catch (caught) {
+    if (caught instanceof PigeDomainError && caught.code === "proposal.not_found") return undefined;
+    throw caught;
+  }
+}
+
+function isSupportedAgentCreateProposal(proposal: ConfirmationProposal): boolean {
+  const operation = proposal.proposedOperations[0];
+  const target = proposal.targetRefs[0];
+  const decisionIsValid = proposal.state === "ready" || proposal.decision?.decidedBy === "user";
+  return Boolean(
+    proposal.jobId &&
+    decisionIsValid &&
+    proposal.trustLevel === "review_required" &&
+    proposal.proposedOperations.length === 1 &&
+    operation?.kind === "create" &&
+    operation.path.startsWith("wiki/generated/") &&
+    operation.path.endsWith(".md") &&
+    proposal.targetRefs.length === 1 &&
+    target?.kind === "page" &&
+    target.path === operation.path &&
+    Object.keys(proposal.baseHashes).length === 0
+  );
+}
+
+function requireProposalPageTarget(
+  proposal: ConfirmationProposal
+): ConfirmationProposal["targetRefs"][number] {
+  const target = proposal.targetRefs[0];
+  if (!isSupportedAgentCreateProposal(proposal) || !target) {
+    throw new PigeDomainError("proposal.not_allowed", "The proposal does not have one supported page target.");
+  }
+  return target;
+}
+
+function assertProposalParentJob(
+  job: JobRecord,
+  proposal: ConfirmationProposal,
+  activeVaultId: string,
+  allowResolved = false
+): void {
+  const target = requireProposalPageTarget(proposal);
+  const allowedStates = allowResolved
+    ? new Set<JobState>(["awaiting_review", "completed", "completed_with_warnings", "failed_final"])
+    : new Set<JobState>(["awaiting_review"]);
+  if (
+    job.id !== proposal.jobId ||
+    job.class !== "agent_ingest" ||
+    job.activeVaultId !== activeVaultId ||
+    !job.sourceId ||
+    !allowedStates.has(job.state) ||
+    !job.proposalIds?.includes(proposal.id) ||
+    !job.outputRefs?.some((ref) => ref.kind === "proposal" && ref.id === proposal.id) ||
+    !job.outputRefs?.some((ref) =>
+      ref.kind === "page" && ref.id === target.id && ref.path === target.path
+    ) ||
+    !proposal.sourceRefs.some((ref) => ref.kind === "job" && ref.id === job.id) ||
+    !proposal.sourceRefs.some((ref) => ref.kind === "source" && ref.id === job.sourceId)
+  ) {
+    throw new PigeDomainError(
+      "proposal.parent_job_changed",
+      "The proposal no longer matches its active vault, parent Job, source, or target."
+    );
+  }
+}
+
+function markProposalApplyStarted(
+  vaultPath: string,
+  fallback: JobRecord,
+  proposalId: string,
+  checkpointId: string
+): void {
+  const currentFile = readProposalParentJobRecord(vaultPath, fallback.id);
+  const current = currentFile?.job ?? fallback;
+  const jobPath = currentFile?.path ?? createJobRecordPath(vaultPath, fallback.id);
+  if (["completed", "completed_with_warnings"].includes(current.state)) return;
+  if (current.state !== "awaiting_review" || !current.proposalIds?.includes(proposalId)) {
+    throw new PigeDomainError(
+      "proposal.parent_job_changed",
+      "The proposal parent Job is no longer awaiting review."
+    );
+  }
+  const checkpointRecordId = `proposal_apply:${proposalId}`;
+  const existing = current.checkpoints?.find((checkpoint) => checkpoint.id === checkpointRecordId);
+  const checkpoints = [
+    ...(current.checkpoints ?? []).filter((checkpoint) => checkpoint.id !== checkpointRecordId),
+    {
+      id: checkpointRecordId,
+      step: checkpointId,
+      state: "running" as const,
+      startedAt: existing?.startedAt ?? new Date().toISOString(),
+      inputRefs: [{ kind: "proposal" as const, id: proposalId }],
+      outputRefs: []
+    }
+  ];
+  writeJsonAtomic(jobPath, JobRecordSchema.parse({
+    ...current,
+    stage: "writing",
+    updatedAt: new Date().toISOString(),
+    checkpoints,
+    message: "Applying the explicitly approved knowledge proposal through the confined vault writer."
+  }));
+}
+
+function markProposalJobConflicted(
+  vaultPath: string,
+  fallback: JobRecord,
+  proposal: ConfirmationProposal
+): void {
+  const currentFile = readProposalParentJobRecord(vaultPath, fallback.id);
+  const current = currentFile?.job ?? fallback;
+  const jobPath = currentFile?.path ?? createJobRecordPath(vaultPath, fallback.id);
+  if (current.state !== "awaiting_review") return;
+  const checkpointRecordId = `proposal_apply:${proposal.id}`;
+  const checkpoints = [
+    ...(current.checkpoints ?? []).filter((checkpoint) => checkpoint.id !== checkpointRecordId),
+    {
+      id: checkpointRecordId,
+      step: "proposal_apply_conflicted",
+      state: "failed" as const,
+      startedAt: current.checkpoints?.find((checkpoint) => checkpoint.id === checkpointRecordId)?.startedAt,
+      finishedAt: new Date().toISOString(),
+      inputRefs: [{ kind: "proposal" as const, id: proposal.id }],
+      outputRefs: []
+    }
+  ];
+  writeJsonAtomic(jobPath, JobRecordSchema.parse({
+    ...current,
+    state: "failed_final",
+    stage: "planning",
+    updatedAt: new Date().toISOString(),
+    finishedAt: new Date().toISOString(),
+    checkpoints,
+    progress: { completedUnits: 0, totalUnits: 1, unit: "proposal" },
+    message: proposalConflictMessage()
+  }));
+}
+
+function proposalConflictMessage(): string {
+  return "The approved proposal conflicts with current source evidence or its target. Existing bytes were preserved.";
+}
+
+function requireProposalApplyOperation(
+  vaultPath: string,
+  proposal: ConfirmationProposal,
+  job: JobRecord
+): ReturnType<typeof OperationRecordSchema.parse> {
+  const target = requireProposalPageTarget(proposal);
+  const operationId = createProposalApplyOperationId(proposal.id);
+  const dateKey = /^op_(\d{8})_/.exec(operationId)?.[1];
+  if (!dateKey) {
+    throw new PigeDomainError("proposal.operation_conflict", "The proposal Operation identity is invalid.");
+  }
+  const operationPath = path.join(
+    vaultPath,
+    ".pige",
+    "operations",
+    dateKey.slice(0, 4),
+    dateKey.slice(4, 6),
+    `${operationId}.json`
+  );
+  const bytes = readConfinedDurableRecord(
+    vaultPath,
+    path.join(vaultPath, ".pige", "operations"),
+    operationPath,
+    256 * 1024,
+    "proposal.operation_conflict"
+  );
+  if (!bytes) {
+    throw new PigeDomainError("proposal.operation_missing", "The applied proposal Operation is missing.");
+  }
+  let operation: ReturnType<typeof OperationRecordSchema.parse>;
+  try {
+    operation = OperationRecordSchema.parse(JSON.parse(bytes));
+  } catch {
+    throw new PigeDomainError("proposal.operation_conflict", "The applied proposal Operation is invalid.");
+  }
+  if (
+    operation.id !== operationId ||
+    operation.jobId !== job.id ||
+    operation.proposalId !== proposal.id ||
+    operation.kind !== "create_page" ||
+    !operation.targetRefs.some((ref) => ref.kind === "page" && ref.id === target.id && ref.path === target.path)
+  ) {
+    throw new PigeDomainError(
+      "proposal.operation_conflict",
+      "The applied proposal Operation does not match its Job, proposal, or page target."
+    );
+  }
+  return operation;
+}
+
+function proposalResolutionMessage(outcome: "applied" | "rejected", reviewRequired: boolean): string {
+  if (outcome === "rejected") {
+    return "The user rejected the staged knowledge proposal. Preserved source evidence remains unchanged.";
+  }
+  return reviewRequired
+    ? "The approved knowledge proposal was applied with retained review warnings."
+    : "The approved knowledge proposal was applied successfully.";
+}
+
+function proposalContentNeedsReview(proposal: ConfirmationProposal): boolean {
+  const operation = proposal.proposedOperations[0];
+  if (operation?.kind !== "create") return true;
+  return parsePigeFrontmatter(operation.content)?.frontmatter.status === "needs_review";
+}
+
+function isProposalApplyConflict(value: unknown): value is PigeDomainError {
+  return value instanceof PigeDomainError && new Set([
+    "agent_ingest.page_conflict",
+    "agent_ingest.source_changed",
+    "proposal.binding_changed",
+    "proposal.identity_conflict",
+    "proposal.index_conflict",
+    "proposal.operation_conflict",
+    "proposal.parent_job_changed",
+    "proposal.target_conflict"
+  ]).has(value.code);
+}
+
+function appendProposalApplyLog(vaultPath: string, proposal: ConfirmationProposal): void {
+  const target = requireProposalPageTarget(proposal);
+  const sourceId = proposal.sourceRefs.find((ref) => ref.kind === "source")?.id;
+  if (!sourceId) {
+    throw new PigeDomainError("proposal.binding_changed", "The applied proposal source reference is missing.");
+  }
+  const operationId = createProposalApplyOperationId(proposal.id);
+  const marker = `<!-- operation:${operationId} -->`;
+  const logPath = path.join(vaultPath, "log.md");
+  if (fs.existsSync(logPath) && fileContainsMarker(vaultPath, logPath, marker)) return;
+  appendProposalLogLine(
+    vaultPath,
+    `${proposal.updatedAt} Applied proposal \`${proposal.id}\` to page [\`${target.id}\`](${target.path}) from source \`${sourceId}\`. ${marker}`
+  );
+}
+
+function fileContainsMarker(vaultPath: string, filePath: string, marker: string): boolean {
+  const pathStatBefore = assertProposalLogPath(vaultPath, filePath);
+  const needle = Buffer.from(marker, "utf8");
+  const descriptor = fs.openSync(filePath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+  try {
+    const descriptorStatBefore = fs.fstatSync(descriptor);
+    if (!sameDurableFileRevision(pathStatBefore, descriptorStatBefore)) {
+      throw new PigeDomainError("proposal.log_unsafe", "The proposal audit log changed before inspection.");
+    }
+    const buffer = Buffer.alloc(64 * 1024);
+    let overlap = Buffer.alloc(0);
+    let position = 0;
+    let found = false;
+    while (true) {
+      const bytesRead = fs.readSync(descriptor, buffer, 0, buffer.length, position);
+      if (bytesRead === 0) break;
+      const chunk = Buffer.concat([overlap, buffer.subarray(0, bytesRead)]);
+      if (chunk.includes(needle)) {
+        found = true;
+        break;
+      }
+      const overlapBytes = Math.min(needle.length - 1, chunk.length);
+      overlap = chunk.subarray(chunk.length - overlapBytes);
+      position += bytesRead;
+    }
+    const descriptorStatAfter = fs.fstatSync(descriptor);
+    const pathStatAfter = assertProposalLogPath(vaultPath, filePath);
+    if (
+      !sameDurableFileRevision(descriptorStatBefore, descriptorStatAfter) ||
+      !sameDurableFileRevision(descriptorStatAfter, pathStatAfter)
+    ) {
+      throw new PigeDomainError("proposal.log_unsafe", "The proposal audit log changed during inspection.");
+    }
+    return found;
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+function appendProposalLogLine(vaultPath: string, line: string): void {
+  const logPath = path.join(vaultPath, "log.md");
+  const before = fs.existsSync(logPath) ? assertProposalLogPath(vaultPath, logPath) : undefined;
+  const descriptor = fs.openSync(
+    logPath,
+    fs.constants.O_WRONLY |
+      fs.constants.O_APPEND |
+      fs.constants.O_CREAT |
+      (fs.constants.O_NOFOLLOW ?? 0),
+    0o600
+  );
+  try {
+    const descriptorStat = fs.fstatSync(descriptor);
+    if (
+      !descriptorStat.isFile() ||
+      descriptorStat.nlink !== 1 ||
+      (before && !sameDurableFileRevision(before, descriptorStat))
+    ) {
+      throw new PigeDomainError("proposal.log_unsafe", "The proposal audit log changed before append.");
+    }
+    const pathStatBeforeWrite = assertProposalLogPath(vaultPath, logPath);
+    if (!sameDurableFileRevision(descriptorStat, pathStatBeforeWrite)) {
+      throw new PigeDomainError("proposal.log_unsafe", "The proposal audit log changed before append.");
+    }
+    fs.writeSync(descriptor, Buffer.from(`- ${line}\n`, "utf8"));
+    fs.fsyncSync(descriptor);
+    const descriptorStatAfter = fs.fstatSync(descriptor);
+    const pathStatAfter = assertProposalLogPath(vaultPath, logPath);
+    if (
+      descriptorStatAfter.dev !== pathStatAfter.dev ||
+      descriptorStatAfter.ino !== pathStatAfter.ino ||
+      descriptorStatAfter.size !== pathStatAfter.size ||
+      descriptorStatAfter.nlink !== 1 ||
+      pathStatAfter.nlink !== 1
+    ) {
+      throw new PigeDomainError("proposal.log_unsafe", "The proposal audit log changed during append.");
+    }
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+function assertProposalLogPath(vaultPath: string, logPath: string): fs.Stats {
+  const resolvedVault = path.resolve(vaultPath);
+  const resolvedLog = path.resolve(logPath);
+  if (resolvedLog !== path.join(resolvedVault, "log.md")) {
+    throw new PigeDomainError("proposal.log_unsafe", "The proposal audit log path is invalid.");
+  }
+  const vaultStat = fs.lstatSync(resolvedVault);
+  const logStat = fs.lstatSync(resolvedLog);
+  if (
+    !vaultStat.isDirectory() ||
+    vaultStat.isSymbolicLink() ||
+    !logStat.isFile() ||
+    logStat.isSymbolicLink() ||
+    logStat.nlink !== 1
+  ) {
+    throw new PigeDomainError("proposal.log_unsafe", "The proposal audit log is not a private regular file.");
+  }
+  const realVault = fs.realpathSync(resolvedVault);
+  const realLog = fs.realpathSync(resolvedLog);
+  if (!realLog.startsWith(`${realVault}${path.sep}`)) {
+    throw new PigeDomainError("proposal.log_unsafe", "The proposal audit log escapes the active vault.");
+  }
+  return logStat;
 }
 
 function markJobFailedRetryable(
@@ -2675,7 +3533,13 @@ function documentLabel(sourceKind: SourceKind): string {
   return "PDF";
 }
 
-function ensureAgentIngestJob(vaultPath: string, parentJob: JobRecord, sourceId: string, canRun: boolean): void {
+function ensureAgentIngestJob(
+  vaultPath: string,
+  parentJob: JobRecord,
+  sourceId: string,
+  canRun: boolean,
+  activeVaultId: string
+): void {
   const jobId = createAgentIngestJobId(sourceId);
   const nextState: JobState = canRun ? "queued" : "waiting_dependency";
   const nextMessage = canRun
@@ -2690,6 +3554,7 @@ function ensureAgentIngestJob(vaultPath: string, parentJob: JobRecord, sourceId:
     createdAt: now,
     updatedAt: now,
     sourceId,
+    activeVaultId,
     ...(parentJob.captureId ? { captureId: parentJob.captureId } : {}),
     ...(parentJob.conversationEventId ? { conversationEventId: parentJob.conversationEventId } : {}),
     message: nextMessage

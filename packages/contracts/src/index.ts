@@ -460,7 +460,7 @@ export interface ProposalDecisionRequest {
 }
 
 export interface ProposalDecisionResult {
-  readonly status: "approved" | "rejected" | "not_found" | "not_allowed";
+  readonly status: "approved" | "applied" | "rejected" | "conflicted" | "not_found" | "not_allowed";
   readonly reason?: string;
   readonly proposal?: ConfirmationProposal;
 }
