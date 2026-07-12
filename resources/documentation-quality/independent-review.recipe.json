@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-12T02:59:22Z",
+  "reviewedAt": "2026-07-12T03:48:24Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,9 +30,21 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "34c6e85ffc85dd2875d76b08ce76fc73db772bf587c7a66f2d832afcb4d80c58"
+    "reviewedSha256": "a19d7bbcfea957ce1d8100ced9019a75661c9e1226a3cac213b64eb07eb1ffef"
   },
   "reviewers": [
+    {
+      "reviewerId": "general-agent-unified-ingress-final-review",
+      "task": "/root/general_agent_final_review",
+      "independentDimensions": [
+        "navigation_and_resource_lifecycle",
+        "cross_document_contract_consistency",
+        "continuous_traceability_and_acceptance",
+        "ongoing_development_support",
+        "documentation_leanness_and_maintainability"
+      ],
+      "independence": "Fresh read-only reviewer audited all 25 changed files and the exact 109-file pre-recipe snapshot. It accepted the general-purpose Agent positioning, one Pi ingress after preservation, optional cited retrieval, durable no-model waiting, explicit provider protocols, safe binding status, pre-save Pi probe and rollback target, honest unimplemented states, 1,091-claim lock, superseded decisions and fixed budgets; all five dimensions were CLEAR with no reviewer edits."
+    },
     {
       "reviewerId": "proposal-home-review-ui-final-review",
       "task": "/root/proposal_ui_final_review",
@@ -254,59 +266,59 @@
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "proposal-home-review-ui-final-review",
+      "reviewerId": "general-agent-unified-ingress-final-review",
       "blockerCount": 0,
-      "summary": "Home exposes at most three ready cards, progressive expansion, focused review through existing proposal APIs, durable terminal refresh, and useful focus restoration without a new navigation destination."
+      "summary": "One existing Home surface and the existing Owner map now cover ordinary conversation, source-bearing turns and optional local knowledge without a new mode, destination, document or resource owner."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "proposal-home-review-ui-final-review",
+      "reviewerId": "general-agent-unified-ingress-final-review",
       "blockerCount": 0,
-      "summary": "UI, API, Job, TECH, Pi, Prompt, Playbook, and Decision agree on exact Home review, durable reread truth, existing channels, and open automatic routing/unified/generic proposal UX."
+      "summary": "Vision, PRD, TECH, Pi, API, Jobs, Context, Prompt, Parser, UI and Playbook agree on one Pi semantic ingress, Host safety ownership, optional retrieval, durable waiting and explicit Provider binding targets."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "proposal-home-review-ui-final-review",
+      "reviewerId": "general-agent-unified-ingress-final-review",
       "blockerCount": 0,
-      "summary": "EV-PROPOSAL-UI and the awaiting-review EV-JOB-STATUS selector bind Home review only to existing Job/proposal requirements and exits. The 1,084-claim lock is current; P7 stays planned and mapped states stay partial."
+      "summary": "PIGE-PI-005 maps through pi.unified-agent-ingress to B3.14 and E3.09 with no evidence; the 1,091-claim lock is current and every existing planned, partial and in-progress state remains unchanged."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "proposal-home-review-ui-final-review",
+      "reviewerId": "general-agent-unified-ingress-final-review",
       "blockerCount": 0,
-      "summary": "Post-commit approve/reject rejection, exact-ID reread, ready retry, unknown lock, double-action guard, escaped preview, six locales, disclosure ARIA, and Back/Escape focus fallbacks are executable."
+      "summary": "B3.14/E3.09 freezes agent.submitTurn and agent_turn waiting/resume, no heuristic fallback, explicit three-protocol dispatch, safe defaultBinding status and probe-before-write all-or-restore acceptance targets."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.6,
-      "reviewerId": "proposal-home-review-ui-final-review",
+      "reviewerId": "general-agent-unified-ingress-final-review",
       "blockerCount": 0,
-      "summary": "No document or state was added: 57 Markdown files, 1,209,913/1,210,000 bytes, 4,014 entry words, 5,410/5,500 trace lines, 249,982/250,000 trace bytes, zero duplicate groups, and 14 mutations."
+      "summary": "No document or state was added: 57 Markdown files, 1,209,730/1,210,000 bytes, 4,128 entry words, 5,203/5,500 trace lines, 249,993/250,000 trace bytes, zero duplicate groups and 14 mutations."
     }
   ],
   "verification": [
     {
       "command": "npm run verify",
       "status": "passed",
-      "evidence": "Full verification passed: docs, 82 decisions, UI visual, independent review, TRC-001 through TRC-005, CON-001 through CON-004, 49 dependencies, fixtures, Pi/import boundaries, no telemetry, source artifacts, LEN-001 through LEN-005, and all five quality dimensions."
+      "evidence": "Full verification passed: docs, 83 decisions, UI visual, independent review, TRC-001 through TRC-005, CON-001 through CON-004, 49 dependencies, fixtures, Pi/import boundaries, no telemetry, source artifacts, LEN-001 through LEN-005, and all five quality dimensions."
     },
     {
-      "command": "npm test && npm run typecheck && npm run build && npm run smoke:pi-agent-runtime && npm run smoke:index-rebuild-worker && npm run smoke:parser-workers && npm run smoke:macos-vision-ocr",
+      "command": "npm run verify:docs && npm run verify:decisions && npm run verify:ui-visual && npm run verify:contracts && npm run verify:dependencies && npm run verify:fixtures && npm run verify:boundaries && npm run verify:no-telemetry && npm run verify:source-artifacts && git diff --check",
       "status": "passed",
-      "evidence": "All 73 test files/612 tests, typecheck, production build, Electron Pi/Home, parser/index workers, and real macOS Vision OCR passed on the exact candidate."
+      "evidence": "All focused documentation, decision, UI, contract, dependency, fixture, boundary, telemetry, source-artifact and diff gates passed on the exact governance-only candidate."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 passed: 4,014/4,200 entry words, zero duplicate groups, 14 mutations, 5,410 trace lines, 57 Markdown files, 1,209,913 bytes, and 7.35 percent line reduction."
+      "evidence": "LEN-001 through LEN-005 passed: 4,128/4,200 entry words, zero duplicate groups, 14 mutations, 5,203 trace lines, 249,993 trace bytes, 57 Markdown files, 1,209,730 bytes, and 7.14 percent line reduction."
     },
     {
       "command": "node scripts/verify/independent-documentation-review.mjs --print-snapshot && explicit semantic-ledger comparison",
       "status": "passed",
-      "evidence": "The governed snapshot is 34c6e85ffc85dd2875d76b08ce76fc73db772bf587c7a66f2d832afcb4d80c58 across 109 files; current and locked ledgers contain 1,084 claims with zero differences."
+      "evidence": "The governed snapshot is a19d7bbcfea957ce1d8100ced9019a75661c9e1226a3cac213b64eb07eb1ffef across 109 files; current and locked ledgers contain 1,091 claims with zero differences."
     }
   ],
   "coordination": {
@@ -315,10 +327,11 @@
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "No stable ID, Job class, public channel, durable schema, navigation destination, or status changed. Existing proposal APIs now have a bounded Home review consumer; unified/generic/replacement UX, CAS/atomicity/TOCTOU, and platform guarantees stay open.",
-    "acknowledgement": "Development delivered twelve frozen renderer/locale/test files on governed main; Product Planning synchronized eight existing Owner/management documents plus acceptance, semantic lock, and recipe, and independent UI/code/document reviewers accepted the exact 23-file combined candidate."
+    "compatibility": "This governance-only candidate adds planned PIGE-PI-005/B3.14/E3.09 and future versioned agent_turn, agent.submitTurn, endpointProtocol and defaultBinding targets; no runtime channel, Job/schema revision, Provider persistence, navigation destination, evidence or status is implemented or promoted.",
+    "acknowledgement": "Project Management closed the prior Proposal UI candidate and directed this clean-baseline lane. Product Planning resolved Development's protocol, readiness and no-model durable-truth questions; UI Design accepted the exact text-only Home contract, and an independent reviewer accepted all 25 pre-recipe files."
   },
   "resolvedBlockers": [
+    "Governed Pige as a general-purpose personal Agent with one Pi semantic ingress for text, URLs and files after Host preservation; made retrieval optional, froze durable no-model waiting, explicit Provider protocols, safe binding truth and pre-save Pi probe targets, and kept the entire vertical planned without implementation evidence.",
     "Implemented the governed ordinary_allowed default and exact Connect disclosure, with matrix, policy-hash, Home private/sensitive, restricted, unknown/local, and Profile-switch evidence while keeping persistence/IPC/UI and confirmation resume open.",
     "Defined local-first without BYOK friction: one exact-destination disclosure, ordinary_allowed routine use with quiet status, sensitive confirmation, restricted blocking, unknown/changed reconfirmation, optional stricter modes, and no inherited authority; kept the old executable default explicitly open.",
     "Rewrote README as a concise product entry with user value, honest current capability, the Agent-first roadmap, privacy boundaries, and the Agent-authored automation goal instead of a technical inventory.",
@@ -352,10 +365,10 @@
     "The local-tool lifecycle remains a fake/local service foundation: real Paddle/Python/model/language-pack transport, ordinary-ingest no-hidden-install proof, production app-data/catalog/permission/pre-vault Job/Operation wiring, OCR/UI, supply chain, packaged platforms, cross-process locking, complete recovery/GC/quarantine purge, and background lifecycle controls remain open.",
     "The retrieval regression foundation remains lexical and synthetic: model-grounded summary/citation validation under cloud-send and Permission enforcement, tag/topic/entity and Knowledge Tree thresholds, vector/reranker ranking, 10k/100k and UI/packaged proof, and broader locale/query families remain open.",
     "The Knowledge Tree remains internal-only: broader relation and branch semantics, richer aggregate inputs, public IPC/preload/renderer navigation, localized empty state, 10k worker/incremental rebuild proof, packaged parity, and the separately owned visual/accessibility and Knowledge Health work remain open.",
-    "Pi remains partial: automatic proposal risk routing, unified/generic/replacement UX, dedicated/bulk review, persisted Provider-to-Home roundtrip/tool-capability proof, hard-coded Home intent routing, complete provider protocols, remaining fixed routes, Broker, packaged BYOK, signed platforms, and broader cross-process/cross-file recovery remain open.",
+    "Pi remains partial: agent_turn/agent.submitTurn, no-model same-turn resume, removal of Home shape heuristics and silent fallback, explicit three-protocol profile persistence and migration, defaultBinding truth, pre-save Pi probe/all-or-restore, remaining fixed routes, Broker, packaged BYOK, signed platforms, and broader cross-process/cross-file recovery remain open.",
     "No-telemetry is a static executable gate; unknown SDKs, computed endpoints, indirect transports, generated configuration, and crash-hook review remain open. Diagnostics still need broader stores, recovery correlation, user clear, export cancellation, selected-path UX, and crash recovery.",
     "Backup still needs backupId/domainSchemaVersions, release exclusion scans, external managed copies, include controls, durable Jobs/checkpoints, structured dependencies, and complete restore orchestration.",
-    "Trace projections use 5,410 of 5,500 lines and 249,982 of 250,000 bytes; governed Markdown uses 1,209,913 of 1,210,000 bytes. Future additions must reclaim capacity instead of raising budgets.",
+    "Trace projections use 5,203 of 5,500 lines and 249,993 of 250,000 bytes; governed Markdown uses 1,209,730 of 1,210,000 bytes. Future additions must reclaim capacity before editing instead of raising budgets.",
     "PRD, TECH_ARCHITECTURE, and Decision Log remain large Owner documents; future Agents should continue section-targeted reads and define each fact once.",
     "The concise pre-alpha README intentionally has no install button, screenshots, or release download; add those only when a usable signed build and governed visual evidence exist.",
     "Structural UI gates do not prove packaged macOS/Windows fidelity, accessibility, or human visual approval; real capture and release evidence remain open.",

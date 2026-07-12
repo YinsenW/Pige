@@ -55,11 +55,10 @@ single owner; it must not create a competing technical definition.
 
 ## 1. Summary
 
-Pige is a local-first Agent note application. Users capture information through a
-chat-like input box by typing text, pasting web links, or dropping files. Pige preserves
-or references the source according to the user's storage choice, asks an Agent to
-understand it when a model is available, and maintains an interlinked Markdown wiki on
-the user's machine.
+Pige is a local-first general-purpose personal Agent. One Home conversation accepts
+ordinary questions, tasks, sources, and files. Local knowledge strengthens a turn when
+relevant; it is not required for an Agent response. Useful material can become an
+interlinked Markdown wiki owned by the user.
 
 The product combines three familiar metaphors:
 
@@ -67,29 +66,33 @@ The product combines three familiar metaphors:
 - ChatGPT-like conversational input.
 - Obsidian-like local Markdown vault.
 
-The core product mechanism follows the LLM Wiki pattern: instead of only retrieving raw chunks at question time, the Agent incrementally compiles knowledge into a persistent Markdown wiki and keeps it current.
+Unlike ordinary assistants, Pige can compile useful work into durable Markdown and use
+it in later conversations.
 
 ## 2. Product Positioning
 
 One-line positioning:
 
-> Pige turns anything you throw at it into a local, agent-maintained Markdown wiki.
+> Pige is a general Agent grounded in the personal knowledge you choose to keep.
 
 This is the long-term positioning, not permission to claim unsupported v0.1 formats.
 Sections 8–10 own the accepted release inputs and degraded behavior.
 
 Short positioning:
 
-> Pige is a local-first knowledge companion. You capture casually, the Agent organizes deliberately, and your knowledge remains readable, portable, and owned by you.
+> Ask anything. When your knowledge matters, Pige retrieves and cites it; when something
+> is worth keeping, Pige can turn it into portable Markdown.
 
 Product contrast:
 
 - Not a manual folder/tag note app.
-- Not a pure RAG chatbot over uploaded files.
+- Not a knowledge-only RAG chatbot over uploaded files.
 - Not a cloud-first AI knowledge base.
 - Not an Obsidian clone with AI features bolted on.
+- Not a developer-facing Agent runtime console.
 
-Pige's center of gravity is an Agent that writes, updates, links, and audits a local Markdown wiki.
+Pige's center of gravity is Pi Agent; personal knowledge is its durable memory and
+distinctive toolset, not the limit of what users may ask.
 
 ## 3. Problem
 
@@ -141,16 +144,15 @@ order. A lower group cannot weaken a higher group merely to simplify implementat
 
 ### 5.2 Keep The Default Product Simple And Useful
 
-1. The default experience is capture-first: one calm Home composer accepts knowledge
-   and questions without requiring a type, folder, tag, or mode choice.
-2. After source preservation, the Agent chooses bounded knowledge tools; product
-   services enforce safety and persistence without replacing its semantic plan.
+1. The default experience is Agent-first: one calm Home composer accepts conversation,
+   tasks, knowledge, and sources without a mode choice.
+2. Every submission enters Pi. Product services may preserve evidence first and enforce
+   safety, but cannot infer semantic intent with punctuation, URL, MIME, or file rules.
 3. The Agent maintains naming, linking, filing, summaries, and bookkeeping. Users guide
    intent and correct outcomes; they do not maintain a taxonomy before capture.
-4. Chat and activity are operational surfaces, not the final knowledge artifact. Useful
-   knowledge and reusable answers belong in the Markdown wiki.
-5. Retrieval is a first-class experience: natural-language questions return grounded
-   synthesis plus ranked inspectable notes and sources, not answer-only chat.
+4. Ordinary answers may remain conversational; reusable outcomes can become Markdown.
+5. When local knowledge is relevant, retrieval returns grounded synthesis plus ranked,
+   inspectable notes. Empty or irrelevant retrieval does not block ordinary conversation.
 6. The interface MUST be keyboard usable, screen-reader understandable, contrast-safe,
    IME-safe, and usable with larger text. Simplicity cannot depend on tiny controls or
    visual-only cues.
@@ -175,8 +177,8 @@ order. A lower group cannot weaken a higher group merely to simplify implementat
 
 ### 5.4 Extend Vertically Without Turning Pige Into A Platform Console
 
-1. Skills and packages are admitted only when they improve personal knowledge capture,
-   preservation, understanding, retrieval, linking, review, or reuse.
+1. Default Skills and packages strengthen the core Agent or personal-knowledge loop;
+   broader user-directed tools remain permissioned and progressively disclosed.
 2. Extension installation is explicit, staged, reversible, capability-declared, and
    permission-mediated. Source content and model output cannot install or enable an
    extension.
@@ -203,12 +205,10 @@ Default user model:
 Default product loop:
 
 ```text
-capture or ask
--> preserve the input before expensive work
--> understand and connect when dependencies are available
--> show what was created, updated, paused, or needs confirmation
--> retrieve, inspect, and reuse the resulting knowledge
--> apply user corrections without losing provenance
+submit one Home turn
+-> preserve source-bearing evidence
+-> Pi interprets intent and chooses bounded tools
+-> answer, clarify, or show durable/paused/review outcomes
 ```
 
 The concepts below exist to make that loop deterministic for implementation. Internal
@@ -218,7 +218,8 @@ uses the user-facing language owned by `docs/UI_PROTOTYPE.md` and
 
 ### 6.1 Home Composer
 
-The Home Composer is the user's only required interaction surface. It accepts both knowledge capture and knowledge-base questions. Inputs include:
+The Home Composer is the user's only required interaction surface. It accepts ordinary
+conversation, tasks, knowledge requests, and source-bearing inputs:
 
 - Typed or pasted text.
 - Natural language questions.
@@ -236,12 +237,16 @@ Default home requirements:
 
 - The first screen should be dominated by a single bottom composer.
 - The user should not need to choose a type, folder, tag, capture mode, or ask mode before typing.
-- The composer should not expose user-selectable "deep organize", "smart search", capture, ask, or retrieval mode chips. Agent intent routing should infer whether to save, organize, retrieve, answer, or request confirmation.
+- The composer should not expose user-selectable "deep organize", "smart search",
+  capture, ask, or retrieval modes. Pi decides whether to answer, clarify, retrieve,
+  preserve, organize, or use another bounded tool.
 - The whole window should become a drop target when files are dragged over it.
 - Empty state should be calm and sparse, with minimal chrome.
 - Advanced navigation should be hidden behind progressive disclosure.
-- The primary input supports both capture and knowledge retrieval intent; Pige infers intent from the content and attached context.
-- Question-like input should retrieve from the local knowledge base first and return grounded summaries plus ranked notes, not generic chat by default.
+- Host or renderer code must not route by question marks, text shape, URL detection,
+  attachment presence, MIME, or source kind. Explicit user instructions may constrain Pi.
+- If local knowledge is relevant, Pi prefers bounded local retrieval and cites what it
+  uses. Otherwise it answers normally without fabricated local citations.
 - Voice input should be available from the composer toolbar as a low-friction alternative to typing.
 
 #### 6.1.1 Window And Layout Modes
@@ -374,9 +379,11 @@ UI rule:
 
 ### 6.8 Home Knowledge Retrieval
 
-Home knowledge retrieval is Pige's primary retrieval experience. It combines search, ranking, and grounded summarization inside the Home Composer flow.
+Home knowledge retrieval is an Agent-selected enhancement inside ordinary conversation.
+It combines local search, ranking, and grounded summarization when personal knowledge is
+relevant or the user explicitly asks about the vault.
 
-Home knowledge retrieval should not behave like a generic chatbot that only returns one answer. It should:
+When selected, it should:
 
 - Interpret a natural language question.
 - Find highly relevant notes, source pages, topics, and entities through local hybrid retrieval.
@@ -385,7 +392,11 @@ Home knowledge retrieval should not behave like a generic chatbot that only retu
 - Let the user open the original Markdown page or source page immediately.
 - Let useful answers be saved back into the wiki when the user chooses.
 
-The retrieval layer should be local even when the synthesis model is cloud-hosted. Pige may send only the selected grounded context to the configured language model after local retrieval has prepared it. Context source selection, snippet budgets, citations, memory injection, and conversation compaction are governed by `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`.
+Retrieval stays local even when synthesis is cloud-hosted; only selected context crosses
+the configured boundary. Empty or irrelevant results permit an ordinary answer without
+local citations. An explicit vault-only request reports insufficient evidence honestly.
+Context selection and citation rules are governed by
+`docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`.
 
 UI rule:
 
@@ -547,7 +558,7 @@ Coding Agents, not separate feature backlogs.
 | Paste a useful article URL. | Preserve the source, extract readable content, create a source-backed Markdown result, and connect useful knowledge without asking for a folder first. | `PIGE-CAP-001`, `PIGE-INGEST-003`, `PIGE-KNOW-006` |
 | Capture a messy idea. | Preserve it immediately and produce a readable titled note when a model is available. | `PIGE-CAP-001`, `PIGE-KNOW-006` |
 | Drop a PDF, document, screenshot, or scanned page. | Preserve the input, recover useful text and evidence locators with the best available local parser/OCR path, and expose any partial result or warning. | `PIGE-INGEST-003`, `PIGE-INGEST-004` |
-| Ask about previously captured knowledge. | Return ranked relevant notes and a grounded synthesis with inspectable citations; allow a useful answer to become durable knowledge. | `PIGE-SEARCH-001`, `PIGE-CONTEXT-001`, `PIGE-CONTEXT-002` |
+| Ask a general question or work through a task. | Answer normally; if personal knowledge is relevant, retrieve it locally and expose citations. | `PIGE-PI-001`, `PIGE-SEARCH-001`, `PIGE-CONTEXT-001` |
 | Open or select text in a note. | Support reading, contextual questions, and reversible transformations without losing the note or its sources. | `PIGE-UI-001`, `PIGE-UI-005`, `PIGE-UI-006` |
 | Correct Pige or explicitly ask it to remember a preference. | Apply the current correction, and keep any durable memory local, inspectable, scoped, and reversible. | `PIGE-MEM-001` |
 | Inspect a growing vault. | Find broken links, weak provenance, duplicate-topic candidates, stale knowledge, and missing connections without silently reshaping the wiki. | `PIGE-KNOW-005` |
@@ -557,7 +568,7 @@ User-visible processing states:
 
 | Product state | User-visible contract |
 | --- | --- |
-| Ready to capture | Home accepts supported input without requiring a mode, taxonomy, or model configuration. |
+| Ready | Home accepts conversation and sources without a mode or taxonomy; model-dependent work waits clearly when no model is ready. |
 | Saved locally | The durable source record/reference exists before parser or model work starts. |
 | Organizing | Bounded parser, OCR, retrieval, or Agent work is active and progress is visible. |
 | Complete | The UI distinguishes what was created, updated, skipped, or warned and links to durable results. |
@@ -570,9 +581,9 @@ State rules:
   wiki compilation.
 - Retry, resume, crash recovery, and model configuration MUST NOT duplicate sources,
   conversations, pages, proposals, or applied operations.
-- When Home intent is ambiguous, Pige MUST preserve the input first, expose the inferred
-  result, and allow the user to correct save/query/install/memory intent without hidden
-  destructive rollback.
+- Source-bearing evidence is preserved before expensive work. Ambiguity is resolved by
+  Pi through normal conversation, not a hidden host classifier; risky intent still uses
+  typed confirmation or permission boundaries.
 - User-facing state names are product copy, not a competing executable Job vocabulary.
   Their mapping to durable states and repair actions is owned by
   `docs/JOB_OPERATION_AND_RECOVERY.md` and `docs/API_AND_IPC_DESIGN.md`.
@@ -592,8 +603,9 @@ Home and capture:
 
 - Chat-like bottom home composer.
 - Default empty state with only the essential home composer visible.
-- Home composer supports both capture and knowledge-base questions.
-- Home composer does not expose mode chips; intent classification is handled by the Agent and can be corrected through normal conversation.
+- Home supports ordinary Agent conversation, source capture, and knowledge-enhanced
+  requests, including turns with no relevant local evidence.
+- Home exposes no mode chips; Pi handles intent and clarification.
 - Whole-window drag-and-drop hot zone.
 - On-device voice input on supported macOS 26-or-later systems.
 - Plain text capture.
@@ -846,13 +858,13 @@ Agent selection and degraded behavior.
 
 ### 10.1 Text
 
-Plain text entered in the capture box MUST first be saved as a managed text source. When
-a tested default model is available, the ingest workflow MUST transform it into at least
-one readable Markdown page. Without that model, preservation still completes, while
-knowledge compilation enters the visible `Paused; source safe` state and resumes without
-duplicate output after setup.
+Short typed text is a conversation turn, not an automatic capture. When the user asks to
+save it or Pi selects a validated capture/write tool, Pige preserves the body once as a
+managed text source before compilation. Large pasted or attached bodies are preserved
+as evidence before model/tool work. Without a model, source-bearing evidence stays safe
+and the turn waits visibly; host heuristics do not choose capture instead.
 
-Minimum output:
+Minimum output when text capture is selected:
 
 - Title.
 - Cleaned Markdown body.
@@ -904,14 +916,10 @@ Minimum output:
 
 ### 10.3 Web Links
 
-When the user pastes a URL, Pige should:
-
-1. Detect the URL.
-2. Use the bounded static web-capture path to retrieve it without executing page scripts.
-3. Store a raw HTML snapshot where legally and technically possible.
-4. Extract readable article text, title, author, publish date, canonical URL, site name, and image references.
-5. Generate a Markdown source page.
-6. Compile useful knowledge into the wiki.
+URL shape is evidence, not a routing decision. The submitted URL enters the same Pi
+turn. Pige validates it and preserves the instruction/evidence boundary; only an
+Agent-selected web tool may fetch a bounded inert snapshot, extract readable metadata,
+or compile useful knowledge.
 
 Future fallback:
 
@@ -934,7 +942,7 @@ Examples:
 Requirements:
 
 - If the user intent is explicit, route the input to Skill Manager staging.
-- If intent is ambiguous, ask for confirmation or treat the input as ordinary knowledge capture.
+- If intent is ambiguous, Pi asks for clarification; URL or file shape cannot select installation.
 - Skill installation must show a preview before enabling.
 - Skill install flow must not execute code, scripts, or package install hooks.
 - Files that contain executable or package-backed content must be staged with warnings and declared capabilities. They can be enabled only through a reviewed runtime adapter, Package Manager, or Local Tools flow, and sensitive runtime actions require Permission Broker mediation.
@@ -1031,25 +1039,21 @@ Example result:
 
 ### 11.2 Home Query
 
-The home query workflow is Agent-orchestrated over the maintained Markdown knowledge
-base first, then source records, artifacts, and available original sources if needed.
-It is triggered from the same Home Composer used for capture. Local search may still
-serve a direct deterministic fallback when no model is configured, but it does not
-pretend to be Agent synthesis.
+Every Home submission is one Pi turn. Pi may answer directly, retrieve local knowledge,
+use another allowed tool, or ask for clarification. Source-bearing payloads are
+preserved first; Host services do not select the semantic branch.
 
 Required outcomes:
 
-1. Pi Agent interprets the request and chooses scoped retrieval tools; tool-internal
-   lexical, metadata, vector, and reranking policy remains deterministic and locally
-   available according to capability state.
-2. The Agent can inspect ranked results, request another bounded retrieval when useful,
-   and build a cited Context Pack without receiving the whole vault.
-3. The product returns ranked inspectable notes and sources plus a concise grounded
-   synthesis, visible limitations, follow-ups, and an optional validated knowledge write.
-4. Users can open any result directly, and valuable answers can become cited Markdown
-   only through the same bounded write/confirmation boundary as other Agent changes.
+1. Ordinary questions work with an empty vault and do not require retrieval.
+2. When local knowledge may help, Pi chooses scoped retrieval; deterministic ranking
+   stays inside the tool and the whole vault is never sent to a model.
+3. Evidence used in an answer remains inspectable and cited. No evidence means no local
+   citation; only an explicit vault-only request returns insufficient evidence.
+4. Valuable answers become Markdown only through a validated write/proposal tool.
 
-Query output should feel closer to "search results plus summary" than "chat answer only."
+Without a model, source-bearing inputs remain safe and wait for setup/resume. Any
+deterministic local search fallback is explicit and never presented as Agent synthesis.
 
 #### 11.2.1 Note-Level Agent Workflow
 
@@ -1524,8 +1528,9 @@ Current pass/fail status and evidence remain only in the acceptance manifest.
 
 ### 23.3 Retrieval And Reuse
 
-- Natural-language questions return ranked relevant notes plus a concise grounded
-  synthesis, and every supported claim can be inspected back to a note or source.
+- Ordinary conversation works with an empty vault. Relevant personal knowledge triggers
+  local retrieval with inspectable citations; irrelevant or empty results do not block
+  an answer, while explicit vault-only requests report insufficient evidence.
 - Retrieval remains useful through lexical fallback without local model assets and gains
   semantic capability without another provider configuration when the managed asset is
   installed.

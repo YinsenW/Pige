@@ -184,7 +184,7 @@ acceptance; uncaptured matrix entries stay explicit and are handed to UI Design.
 
 ## 10. UI Implementation Rules
 
-`docs/UI_PROTOTYPE.md` owns the detailed minimal, calm, capture-first interaction contract.
+`docs/UI_PROTOTYPE.md` owns the detailed minimal, calm, Agent-first interaction contract.
 Development preserves its affected state/viewport matrix, routes strings through I18N,
 and does not invent new UI behavior to satisfy implementation convenience.
 

@@ -1,13 +1,14 @@
 # Pige
 
-## Drop it in. Get connected knowledge back.
+## Your general Agent, grounded in what you know.
 
-Pige is a local-first Personal Knowledge Agent for notes, links, documents,
-screenshots, and half-finished thoughts that are worth keeping.
+Pige is a local-first general-purpose Agent with personal knowledge as its strongest
+advantage. Ask ordinary questions, continue a conversation, paste a link, or drop a
+document. When your own knowledge matters, Pige retrieves and cites it first.
 
-Paste an idea, save a web page, or drop a PDF, Office document, or image. Pige is being
-built to preserve the source, let its Agent choose bounded tools, turn useful material
-into connected Markdown, and bring it back with citations.
+The same Agent decides whether to answer directly, retrieve, inspect, parse, OCR,
+analyze, or propose durable knowledge. Pige preserves attached sources and constrains
+tools, but does not replace that decision with format rules or a fixed workflow.
 
 **Your files remain sources. Markdown becomes your knowledge.** No folder, tag, title,
 or capture mode is required before you begin—just one calm doorway into what you know.
@@ -15,20 +16,21 @@ or capture mode is required before you begin—just one calm doorway into what y
 > Pige is in **active pre-alpha development**. There is no public installer yet. Do
 > not use it as the only copy of important knowledge.
 
-## From capture to durable knowledge
+## From conversation to durable knowledge
 
-**Capture → Preserve → Understand → Connect → Retrieve → Reuse**
+**Ask or drop → Agent decides → Use tools → Answer or preserve knowledge**
 
-Pige preserves local inputs before expensive work; explicit URL capture first performs
-the bounded fetch needed for its snapshot. Embedded Pi paths move preserved text and
-supported PDF/Office documents through bounded tools into cited Markdown.
+Pige can answer normally when no local evidence is relevant. Files and other source
+material are preserved before expensive work, then embedded Pi selects bounded Pige
+tools and may turn useful results into cited Markdown.
 
 ## Why Pige
 
-Note apps ask you to organize too early; document chat buries useful answers. Pige is a
-**Markdown knowledge compiler** whose Agent maintains a wiki beyond one conversation.
+Most assistants forget your working context; note apps ask you to organize too early.
+Pige combines a **general Agent** with a Markdown knowledge compiler that can remember
+useful work beyond one conversation.
 
-- **Durable knowledge, not disposable chat.** Valuable synthesis returns to Markdown.
+- **Conversation when you need it, durable knowledge when it matters.**
 - **Inspectable and portable.** Sources and citations stay attached; Markdown is the
   long-term truth, while indexes and caches are rebuildable.
 - **Calm outside, strong inside.** Complex tools and safeguards stay behind useful defaults.
@@ -42,16 +44,17 @@ Today, the pre-alpha can:
 - Extract structured document content and run supported macOS Vision OCR paths.
 - Run preserved text and supported PDF/DOCX/PPTX/images through embedded Pi, isolated BYOK binding,
   bounded inspect/parse/OCR tools, and validated knowledge publication.
-- Generate source-backed Markdown; answer Home questions through embedded Pi when configured
-  or bounded local retrieval otherwise, with citations, backlinks, and related pages.
+- Generate source-backed Markdown and run a bounded cited Home knowledge-answer path.
+- Review an exact staged create-note proposal from Home.
 - Use persistent-job recovery and local-backup foundations.
 
-These are foundations, not a finished release. See the [implementation playbook](docs/V0_1_IMPLEMENTATION_PLAYBOOK.md).
+The unified general-conversation ingress and complete Provider-to-Home round trip remain
+pre-alpha work. See the [implementation playbook](docs/V0_1_IMPLEMENTATION_PLAYBOOK.md).
 
 ## Road to `v0.1 Public Alpha`
 
-- **Extend the Agent path:** broaden retrieval, proposals, and permissioned actions on
-  the embedded Pi tool-loop spine.
+- **Complete the Agent path:** one real Provider-to-Home loop for ordinary conversation,
+  local-knowledge-enhanced answers, and Agent-selected source tools.
 - **Expand the proven tool spine:** cross-platform document/OCR and stronger local retrieval.
 - **Ship a trustworthy alpha:** reviewable changes, backup/restore, accessibility,
   localization, packaging, signing, and updates.

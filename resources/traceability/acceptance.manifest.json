@@ -398,257 +398,32 @@
         "E1.15"
       ]
     },
-    "privacy.public-copy": {
-      "requirement": "PIGE-PRIV-001",
-      "builds": [
-        "B9.17"
-      ],
-      "exits": [
-        "E9.11"
-      ]
-    },
-    "pi.service-boundary": {
-      "requirement": "PIGE-PI-001",
-      "builds": [
-        "B3.06",
-        "B3.13"
-      ],
-      "exits": [
-        "E3.04",
-        "E3.08"
-      ]
-    },
-    "pi.default-model": {
-      "requirement": "PIGE-PI-002",
-      "builds": [
-        "B3.04"
-      ],
-      "exits": [
-        "E3.01"
-      ]
-    },
-    "pi.permission-boundary": {
-      "requirement": "PIGE-PI-003",
-      "builds": [
-        "B8.08"
-      ],
-      "exits": [
-        "E8.02"
-      ]
-    },
-    "pi.byok-providers": {
-      "requirement": "PIGE-PI-004",
-      "builds": [
-        "B3.01",
-        "B3.03",
-        "B3.04"
-      ],
-      "exits": [
-        "E3.01"
-      ]
-    },
-    "settings.registry": {
-      "requirement": "PIGE-SETTINGS-001",
-      "builds": [
-        "B1.10",
-        "B1.11"
-      ],
-      "exits": [
-        "E1.05"
-      ]
-    },
-    "settings.machine-local-backup": {
-      "requirement": "PIGE-SETTINGS-002",
-      "builds": [
-        "B1.10",
-        "B1.11"
-      ],
-      "exits": [
-        "E1.05"
-      ]
-    },
-    "settings.guarded-mutation": {
-      "requirement": "PIGE-SETTINGS-003",
-      "builds": [
-        "B1.24"
-      ],
-      "exits": [
-        "E1.20"
-      ]
-    },
-    "ingest.no-task-download": {
-      "requirement": "PIGE-INGEST-001",
-      "builds": [
-        "B5.10"
-      ],
-      "exits": [
-        "E5.02"
-      ]
-    },
-    "ingest.paddle-lifecycle": {
-      "requirement": "PIGE-INGEST-002",
-      "builds": [
-        "B5.10"
-      ],
-      "exits": [
-        "E5.02"
-      ]
-    },
-    "ingest.web-pdf-office": {
-      "requirement": "PIGE-INGEST-003",
-      "builds": [
-        "B5.01",
-        "B5.02",
-        "B5.03",
-        "B5.04",
-        "B5.05",
-        "B5.06",
-        "B5.09"
-      ],
-      "exits": [
-        "E5.01"
-      ]
-    },
-    "ingest.native-ocr-routing": {
-      "requirement": "PIGE-INGEST-004",
-      "builds": [
-        "B5.07",
-        "B5.08"
-      ],
-      "exits": [
-        "E5.05"
-      ]
-    },
-    "dependency.registry": {
-      "requirement": "PIGE-DEP-001",
-      "builds": [
-        "B0.09",
-        "B0.10"
-      ],
-      "exits": [
-        "E0.05"
-      ]
-    },
-    "dependency.bundled-toolchain": {
-      "requirement": "PIGE-DEP-002",
-      "builds": [
-        "B1.18"
-      ],
-      "exits": [
-        "E1.14"
-      ]
-    },
-    "prompt.untrusted-source": {
-      "requirement": "PIGE-PROMPT-001",
-      "builds": [
-        "B5.11"
-      ],
-      "exits": [
-        "E5.03"
-      ]
-    },
-    "prompt.typed-policy": {
-      "requirement": "PIGE-PROMPT-002",
-      "builds": [
-        "B1.12"
-      ],
-      "exits": [
-        "E1.06"
-      ]
-    },
-    "context.local-first-selection": {
-      "requirement": "PIGE-CONTEXT-001",
-      "builds": [
-        "B6.04"
-      ],
-      "exits": [
-        "E6.03"
-      ]
-    },
-    "context.reference-pack": {
-      "requirement": "PIGE-CONTEXT-002",
-      "builds": [
-        "B6.04"
-      ],
-      "exits": [
-        "E6.03"
-      ]
-    },
-    "eval.ingest-quality": {
-      "requirement": "PIGE-EVAL-001",
-      "builds": [
-        "B5.12"
-      ],
-      "exits": [
-        "E5.04"
-      ]
-    },
-    "eval.risky-output-routing": {
-      "requirement": "PIGE-EVAL-002",
-      "builds": [
-        "B3.07",
-        "B3.11"
-      ],
-      "exits": [
-        "E3.05",
-        "E3.06"
-      ]
-    },
-    "eval.safe-auto-apply": {
-      "requirement": "PIGE-EVAL-003",
-      "builds": [
-        "B3.07",
-        "B3.08",
-        "B3.09"
-      ],
-      "exits": [
-        "E3.04",
-        "E3.05"
-      ]
-    },
-    "eval.retrieval-linking-quality": {
-      "requirement": "PIGE-EVAL-004",
-      "builds": [
-        "B6.15"
-      ],
-      "exits": [
-        "E6.10"
-      ]
-    },
-    "search.home-grounded": {
-      "requirement": "PIGE-SEARCH-001",
-      "builds": [
-        "B6.01",
-        "B6.02",
-        "B6.03"
-      ],
-      "exits": [
-        "E6.01",
-        "E6.04"
-      ]
-    },
-    "search.lexical-before-model": {
-      "requirement": "PIGE-SEARCH-002",
-      "builds": [
-        "B4.02",
-        "B4.03",
-        "B4.06"
-      ],
-      "exits": [
-        "E4.01"
-      ]
-    },
-    "search.local-rag": {
-      "requirement": "PIGE-SEARCH-003",
-      "builds": [
-        "B6.05",
-        "B6.06",
-        "B6.07"
-      ],
-      "exits": [
-        "E6.02"
-      ]
-    },
+    "privacy.public-copy": { "requirement": "PIGE-PRIV-001", "builds": ["B9.17"], "exits": ["E9.11"] },
+    "pi.service-boundary": { "requirement": "PIGE-PI-001", "builds": ["B3.06", "B3.13"], "exits": ["E3.04", "E3.08"] },
+    "pi.default-model": { "requirement": "PIGE-PI-002", "builds": ["B3.04"], "exits": ["E3.01"] },
+    "pi.permission-boundary": { "requirement": "PIGE-PI-003", "builds": ["B8.08"], "exits": ["E8.02"] },
+    "pi.byok-providers": { "requirement": "PIGE-PI-004", "builds": ["B3.01", "B3.03", "B3.04", "B3.14"], "exits": ["E3.01", "E3.09"] },
+    "pi.unified-agent-ingress": { "requirement": "PIGE-PI-005", "builds": ["B3.14"], "exits": ["E3.09"] },
+    "settings.registry": { "requirement": "PIGE-SETTINGS-001", "builds": ["B1.10", "B1.11"], "exits": ["E1.05"] },
+    "settings.machine-local-backup": { "requirement": "PIGE-SETTINGS-002", "builds": ["B1.10", "B1.11"], "exits": ["E1.05"] },
+    "settings.guarded-mutation": { "requirement": "PIGE-SETTINGS-003", "builds": ["B1.24"], "exits": ["E1.20"] },
+    "ingest.no-task-download": { "requirement": "PIGE-INGEST-001", "builds": ["B5.10"], "exits": ["E5.02"] },
+    "ingest.paddle-lifecycle": { "requirement": "PIGE-INGEST-002", "builds": ["B5.10"], "exits": ["E5.02"] },
+    "ingest.web-pdf-office": { "requirement": "PIGE-INGEST-003", "builds": ["B5.01", "B5.02", "B5.03", "B5.04", "B5.05", "B5.06", "B5.09"], "exits": ["E5.01"] },
+    "ingest.native-ocr-routing": { "requirement": "PIGE-INGEST-004", "builds": ["B5.07", "B5.08"], "exits": ["E5.05"] },
+    "dependency.registry": { "requirement": "PIGE-DEP-001", "builds": ["B0.09", "B0.10"], "exits": ["E0.05"] },
+    "dependency.bundled-toolchain": { "requirement": "PIGE-DEP-002", "builds": ["B1.18"], "exits": ["E1.14"] },
+    "prompt.untrusted-source": { "requirement": "PIGE-PROMPT-001", "builds": ["B5.11"], "exits": ["E5.03"] },
+    "prompt.typed-policy": { "requirement": "PIGE-PROMPT-002", "builds": ["B1.12"], "exits": ["E1.06"] },
+    "context.local-first-selection": { "requirement": "PIGE-CONTEXT-001", "builds": ["B6.04"], "exits": ["E6.03"] },
+    "context.reference-pack": { "requirement": "PIGE-CONTEXT-002", "builds": ["B6.04"], "exits": ["E6.03"] },
+    "eval.ingest-quality": { "requirement": "PIGE-EVAL-001", "builds": ["B5.12"], "exits": ["E5.04"] },
+    "eval.risky-output-routing": { "requirement": "PIGE-EVAL-002", "builds": ["B3.07", "B3.11"], "exits": ["E3.05", "E3.06"] },
+    "eval.safe-auto-apply": { "requirement": "PIGE-EVAL-003", "builds": ["B3.07", "B3.08", "B3.09"], "exits": ["E3.04", "E3.05"] },
+    "eval.retrieval-linking-quality": { "requirement": "PIGE-EVAL-004", "builds": ["B6.15"], "exits": ["E6.10"] },
+    "search.home-grounded": { "requirement": "PIGE-SEARCH-001", "builds": ["B6.01", "B6.02", "B6.03"], "exits": ["E6.01", "E6.04"] },
+    "search.lexical-before-model": { "requirement": "PIGE-SEARCH-002", "builds": ["B4.02", "B4.03", "B4.06"], "exits": ["E4.01"] },
+    "search.local-rag": { "requirement": "PIGE-SEARCH-003", "builds": ["B6.05", "B6.06", "B6.07"], "exits": ["E6.02"] },
     "memory.inspectable-lifecycle": {
       "requirement": "PIGE-MEM-001",
       "builds": [
@@ -1606,16 +1381,22 @@
       ],
       "open": {
         "id": "OPEN-REQ-PIGE-PI-004",
-        "description": "OpenAI preset connection/discovery is proven; remaining provider classes and packaged manual acceptance are open.",
+        "description": "OpenAI discovery works; explicit protocol, real Pi probe, tri-state binding, safe commit/recovery, other providers, and packaged BYOK stay open.",
         "targetBuilds": [
           "B3.01",
           "B3.03",
-          "B3.04"
+          "B3.04",
+          "B3.14"
         ],
         "targetExits": [
-          "E3.01"
+          "E3.01",
+          "E3.09"
         ]
       }
+    },
+    "PIGE-PI-005": {
+      "status": "planned",
+      "plannedTarget": "One durable Pi Home ingress for ordinary, knowledge-enhanced, and source-bearing turns, with no-model wait/resume and no Host semantic routing."
     },
     "PIGE-SETTINGS-001": {
       "status": "partial",
@@ -1872,7 +1653,7 @@
       "evidence": ["EV-RETRIEVAL", "EV-HOME-AGENT", "EV-HOME-UI"],
       "open": {
         "id": "OPEN-REQ-PIGE-SEARCH-001",
-        "description": "Local fallback and Pi-grounded Home work; 10k, broader regression, and packaged UI acceptance remain open.",
+        "description": "Bounded retrieval works; optional Pi use, empty-vault chat, vault-only insufficiency, 10k, regression, and packaged UI remain open.",
         "targetBuilds": [
           "B6.01",
           "B6.02",
@@ -2232,7 +2013,7 @@
       ],
       "open": {
         "id": "OPEN-REQ-PIGE-UI-003",
-        "description": "Capture-only, context continuity, three-level Library, and six-locale UI acceptance remain open.",
+        "description": "Unified Agent-first Home, continuity, Library depth, and six-locale acceptance remain open.",
         "targetBuilds": [
           "B1.03",
           "B1.07",
@@ -3046,6 +2827,10 @@
         ]
       }
     },
+    "E3.09": {
+      "status": "planned",
+      "plannedTarget": "Real Provider-to-Pi-to-Home agent_turn proves direct, retrieved, source-tool, waiting/resume, protocol, and no-heuristic behavior."
+    },
     "E4.01": {
       "status": "partial",
       "evidence": [
@@ -3187,7 +2972,7 @@
       "evidence": ["EV-RETRIEVAL", "EV-HOME-AGENT", "EV-HOME-UI"],
       "open": {
         "id": "OPEN-EXIT-E6.01",
-        "description": "Ranked local fallback and Pi-grounded Home work; 10k and packaged UI acceptance remain open.",
+        "description": "Ranked retrieval works; optional Pi use, general/no-evidence conversation, 10k, and packaged UI remain open.",
         "targetBuilds": [
           "B6.01",
           "B6.02"

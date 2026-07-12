@@ -9,7 +9,7 @@ This is Pige's AI documentation router. Treat owner documents as the product con
 
 ## 2. Golden Rule
 
-Simplicity first: Pige should feel like a quiet personal knowledge app, not an Agent console. Before changing code, identify the requirement, owning service, durable truth, safety boundary, verification, and affected owner documents; otherwise load more context.
+Simplicity first: Pige should feel like a quiet personal Agent, not an Agent console. Before changing code, identify the requirement, owning service, durable truth, safety boundary, verification, and affected owner documents; otherwise load more context.
 
 ## 3. Minimal First Read
 

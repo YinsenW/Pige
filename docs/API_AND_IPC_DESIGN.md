@@ -530,24 +530,19 @@ Queries:
 
 Retrieval DTOs and internal context-pack refs must follow `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`. Renderer-facing responses show grounded answers, ranked results, snippets, citations, and degraded-search state; they do not expose raw prompts, context budgets, full retrieved bodies, raw vector data, or secret-bearing policy details.
 
-Current retrieval queries:
+Current bridge: `retrieval.search`/`ask` return bounded safe lexical results. Home still
+routes question-like text through `agent.ask`, one search call, query-hash-only
+`retrieval_query`, per-turn evidence audits, and a fixed zero-evidence result; other text
+becomes capture. Responses exclude bodies, paths, prompts, credentials, endpoints, and
+raw errors. Save-answer remains open.
 
-- `retrieval.search({ query, limit?, pageTypes? })` uses ready SQLite FTS5 or bounded
-  `sources/`/`wiki/` lexical fallback. It returns safe summaries, scores, snippets,
-  reasons, invalid count, and fallback degradation—never bodies, private paths, raw
-  vectors, prompts, Context Packs, responses, or secrets.
-- `retrieval.ask({ query, limit?, pageTypes?, locale? })` selects at most eight items,
-  builds an internal ref/locator/budget/health Context Pack, and returns local extractive
-  text, citations, and ranked results. Zero evidence has no citations; one page is limited.
-- Home calls `agent.ask` for clearly question/search-like input. With no ready non-secret
-  runtime binding it returns `retrieval.ask` before any Agent Job, egress audit,
-  credential read, or Pi call; non-question input remains capture.
-- With a ready binding, `agent.ask` creates a query-hash-only `retrieval_query`, lets Pi
-  call one bounded search tool, rechecks Markdown/source privacy per turn, and links each
-  body-free egress audit. Drift fails closed; zero evidence returns the fixed no-citation
-  result. Its DTO exposes only request/state, `none|local|cloud`, safe retrieval output or
-  shared error—never prompts, credentials, paths, endpoints, evidence bodies, or raw errors.
-  `retrieval.saveAnswer` remains open.
+Target unified-ingress migration (not yet an implemented channel):
+
+- `agent.submitTurn` becomes the sole semantic Home command. Main appends the user event
+  and versioned `agent_turn`; preservation APIs only supply source refs.
+- Short chat creates no Source Record; large/attached evidence is stored once. Without
+  a model the same Job waits/resumes, never becoming silent capture/retrieval.
+- Existing `agent.ask`, `retrieval_query`, and `agent_ingest` stay readable until migration.
 
 ### 6.7 Permissions
 
@@ -597,6 +592,13 @@ type ProviderProfileSummary = { id: string; displayName: string; providerKind: P
 
 type ModelProfileSummary = { id: string; providerProfileId: string; modelId: string; displayName?: string; source: "provider_list" | "manual"; enabled: boolean; isDefault: boolean; createdAt: string; updatedAt: string };
 ```
+
+Target profile/API revision: required `endpointProtocol` is Responses, Chat Completions,
+or Anthropic Messages; new manual profiles use `custom`, while the Pi Owner defines the
+non-reinterpreting legacy map. `defaultBinding` is `not_configured`, `ready`, or
+`configured_unusable` with safe IDs and a typed redacted repair error. Connect runs a
+synthetic Pi generation/tool probe before staged provider/model/secret writes, then
+read-back commits all or restores all; protocol persists, probe health does not.
 
 Secrets are passed only to the Settings and Secrets Service and are never echoed back.
 

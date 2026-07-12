@@ -5,19 +5,22 @@ Last reviewed: 2026-07-11
 
 ## 1. Vision
 
-Pige is an AI-first Personal Knowledge Agent.
-
-Its long-term goal is not only personal knowledge management. Pige should become the user's unified entry point and long-term memory layer for their digital world.
+Pige is a local-first general-purpose personal Agent. Its defining advantage is a
+durable, user-owned knowledge layer that can inform ordinary conversation and action.
 
 Any digital content on the user's computer should be droppable into Pige: files, folders, images, PDFs, Office documents, web pages, emails, audio, video, screenshots, clipboard content, Git repositories, archives, cloud-drive resources, and future source types.
 
-Pige's job is to understand that content, extract durable knowledge, connect it to existing knowledge, and continuously build the user's personal knowledge system.
+Pige can answer general questions directly. When the user's own context matters, it
+retrieves that knowledge first; when new material arrives, it can preserve, understand,
+connect, and reuse it through bounded tools.
 
 In Pige, files are sources. Markdown is the knowledge layer.
 
 ## 2. Core Product Statement
 
-Pige turns user-owned materials into an Agent-maintained local Markdown knowledge base without reorganizing the user's files.
+Pige is a general Agent enhanced by an Agent-maintained local Markdown knowledge base.
+It can converse without local evidence and use personal knowledge without reorganizing
+the user's files.
 
 Local-first means durable local ownership, not network-free. After one disclosure,
 selecting a BYOK Profile authorizes routine bounded calls to that exact destination with
@@ -53,10 +56,10 @@ Supported source ownership patterns:
 
 ### 3.4 Agent-Orchestrated, Tool-Constrained
 
-After Pige deterministically preserves a capture, Pi Agent owns the semantic plan across
-inspection, extraction, OCR, retrieval, organization, analysis, and knowledge change.
-Pige exposes bounded typed tools; the Agent selects, sequences, evaluates, and replans
-their use instead of following a format-driven workflow fixed by product services.
+Every user submission enters Pi Agent. Pige first preserves attached evidence when
+needed; Pi then owns whether to answer directly, retrieve, fetch, inspect, parse, OCR,
+organize, analyze, or change knowledge. Typed tools replace format rules and fixed
+product-service workflows.
 
 The Agent owns semantic decisions, not safety boundaries. Pige still enforces source
 preservation, permissions, egress, resource limits, provenance, durable Jobs, validation,
@@ -76,7 +79,8 @@ Avoid proprietary knowledge storage. Keep user-authored and Agent-maintained kno
 
 Storage, parsers, importers, exporters, OCR, embeddings, LLMs, search, indexes, Skills, packages, and workflows should be replaceable through explicit contracts.
 
-Extensibility must remain permissioned and product-scoped. Pige is a Personal Knowledge Agent, not a generic automation console.
+Extensibility remains permissioned and product-scoped. A general Agent product does not
+make Pige a generic automation or runtime console.
 
 ### 3.7 AI-Native Development
 
@@ -99,11 +103,12 @@ Pige is not:
 - A cloud-first document warehouse.
 - A pure RAG chatbot over uploaded files.
 - A proprietary database note app.
+- A knowledge-only vertical assistant that cannot answer without vault evidence.
 - A general-purpose Agent runtime console.
 
 Pige is:
 
-- A local-first Personal Knowledge Agent.
+- A general-purpose personal Agent enhanced by local knowledge.
 - A Markdown knowledge compiler.
 - A source-preserving ingestion and retrieval system.
 - A long-term personal digital brain built from user-owned materials.

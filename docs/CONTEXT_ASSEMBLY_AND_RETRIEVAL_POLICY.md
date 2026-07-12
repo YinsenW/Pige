@@ -7,11 +7,13 @@ Date: 2026-07-09
 
 This document defines how Pige selects, budgets, orders, cites, and packages context for Agent workflows.
 
-Pige is not a generic chatbot that can stuff arbitrary history into a model prompt. It is a local-first knowledge Agent over a user-owned Markdown vault. Context assembly must be deterministic, bounded, source-aware, privacy-aware, and testable.
+Pige is a general personal Agent, not a chatbot that stuffs arbitrary history into a
+prompt. Its local-knowledge advantage must remain bounded, source-aware, and testable.
 
 The core rule:
 
-> Retrieve locally first, package only the minimum trusted policy and selected evidence needed for the workflow, and never send the whole vault or large source bodies to the model by default.
+> Retrieval is local and optional. Pi decides when it is useful; Host code packages only
+> validated selected evidence and never sends the whole vault or large source bodies.
 
 ## 2. Scope
 
@@ -76,19 +78,21 @@ Allowed context inputs:
 | Conversation history | Conversation History Service | Recent turns plus references/summaries | Do not duplicate large source bodies or saved page bodies. |
 | Tool results | Tool adapter | Compact summaries plus artifact refs | Full verbose output goes to artifacts/logs, not prompt by default. |
 
-Before prompt assembly, the unified composer input is normalized into a typed action envelope:
+Before prompt assembly, Host code separates the bounded current user instruction from
+preserved evidence refs, current selection, and explicit trusted user constraints. It
+does not classify `capture`, `query`, or `note_action`; those are Pi decisions. Typed
+settings and permission responses remain Host routes. Pasted bodies, files, URLs,
+selections, retrieved material, and tool output remain evidence and cannot authorize
+settings, permissions, providers, destructive writes, or secret use.
 
 ```ts
 type UserTaskEnvelope = {
-  intent: "capture" | "query" | "note_action" | "settings_change" | "permission_response";
+  kind: "agent_turn" | "settings_change" | "permission_response";
   instructionText?: string;
   evidenceRefs: string[];
   currentSelectionRef?: string;
-  trustedUserOverrideRefs: string[];
 };
 ```
-
-For capture intent, the captured body is evidence and is not promoted to `instructionText`. For query or note-action intent, the bounded user request is the instruction while pasted blocks, files, URLs, selections, and retrieved material remain evidence. Mixed submissions preserve the full source first, then keep only the minimal action wording as the instruction. Intent classification cannot authorize settings, permissions, provider changes, destructive writes, or secret use; those require typed tools and their owning confirmation or permission services.
 
 Forbidden context inputs:
 
@@ -102,8 +106,8 @@ Forbidden context inputs:
 
 ## 5. Retrieval Tool Internal Pipeline
 
-This deterministic pipeline executes inside a scoped retrieval tool after Pi Agent asks
-for retrieval, or directly for the explicit no-model search fallback. It ranks and
+This deterministic pipeline executes inside a scoped retrieval tool after Pi asks for
+retrieval, or from an explicit no-model search action. It ranks and
 packages evidence; it does not decide the wider Agent workflow or automatically trigger
 a knowledge write.
 
@@ -117,7 +121,7 @@ Home retrieval and Agent retrieval should follow this local-first pipeline:
 6. Apply local reranking only when the reranker is installed, healthy, and fast enough.
 7. Enforce diversity by page, source, topic, and time where useful.
 8. Select snippets with locators and citation references.
-9. Build a grounded answer context pack.
+9. Build a bounded evidence context pack.
 10. Return the bounded evidence/context pack to Pi Agent; the retrieval tool never calls
     a model or another tool.
 
@@ -150,7 +154,7 @@ type RetrievalScope =
 
 Rules:
 
-- Home questions default to vault scope.
+- When Pi selects Home retrieval without a narrower explicit scope, use vault scope.
 - Note Agent questions default to current-note scope plus related-note expansion.
 - Selection actions default to selection scope and may retrieve local neighbors only when useful.
 - Ingest starts with the current preserved source. Related summaries enter only after
@@ -205,10 +209,10 @@ type AgentContextPack = {
   contextPackId: string;
   workflow: "ingest" | "query" | "note_agent" | "selection_action" | "lint" | "repair";
   budgetClass: ContextBudgetClass;
-  retrievalScope: RetrievalScope;
+  retrievalScope?: RetrievalScope;
   policyContextId: string;
   policyHash: string;
-  indexHealth: ContextIndexHealth;
+  indexHealth?: ContextIndexHealth;
   authorityRefs: ContextItemRef[];
   taskStateRefs: ContextItemRef[];
   memoryRefs: ContextItemRef[];
@@ -241,6 +245,8 @@ Rules:
 - Job and operation records may store `contextPackId`, `policyHash`, and evidence refs for debugging and replay.
 - Context pack IDs must be stable enough for diagnostics but do not need to be durable knowledge IDs.
 - If a model call fails or is retried, retry should reuse or explicitly rebuild the context pack and record which happened.
+- The initial Agent turn may have no evidence or retrieval metadata; those fields appear
+  only after Pi selects retrieval.
 
 Current `capture_ingest` bridge:
 
@@ -273,6 +279,8 @@ Grounded answers and generated knowledge must preserve provenance.
 Rules:
 
 - Home answers must return citations for factual claims when retrieval supplied citable evidence.
+- General answers have no local citations and must not imply vault grounding. Mixed
+  answers distinguish locally supported claims from model-general material.
 - Ranked results must include snippets and match reasons.
 - Ingest outputs should cite source pages, source artifacts, or original locators.
 - Current generated ingest notes append canonical `[source:<source-id>#<locator>]` citations to the summary and each key point. Unknown ephemeral refs are rejected before write; missing refs force review and never receive a fabricated fallback locator.
@@ -282,7 +290,9 @@ Rules:
 
 ## 11. Cloud Boundary
 
-Local retrieval happens before cloud model calls.
+A cloud model call does not require retrieval. The first turn may contain only the user
+instruction, policy, and tool descriptors. If Pi selects local retrieval, a later turn
+consumes its validated evidence under a fresh egress decision.
 
 Cloud model calls receive:
 
@@ -338,10 +348,11 @@ If a setting cannot be enforced by an owning service, it must be labeled as a pr
 
 ## 14. UI Contract
 
-User-facing retrieval remains simple:
+User-facing context remains simple:
 
-- Home stays one composer for capture and questions.
-- Answers look like enhanced search: short synthesis, ranked notes/sources, snippets, citations, and open-note affordances.
+- Home stays one conversational composer for all inputs.
+- When retrieval is used, attach ranked notes, snippets, citations, and open-note
+  affordances. Otherwise do not manufacture empty search results.
 - Do not expose context budgets, ranking internals, model prompt sections, chunk IDs, or retrieval pipeline controls in the default UI.
 - Show degraded states in plain language only when they matter, such as "semantic search is still indexing".
 - Advanced diagnostic views may show redacted policy/context summaries, but only for debugging and support.

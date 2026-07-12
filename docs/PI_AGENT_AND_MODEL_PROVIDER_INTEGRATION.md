@@ -12,9 +12,9 @@ Pige's product goal is simple:
 
 > The user connects one model service that Pi Agent can call. Pige handles the rest.
 
-Pi Agent is the mandatory v0.1 core. Text, document parse, OCR, retrieval, publication,
-and exact create-note stage/review/apply plus Home review run on its spine. Broader
-routing, generic UX/recovery, permissions, and packaged paths remain partial.
+Pi Agent is the mandatory v0.1 core and decision center. Ordinary conversation, local
+knowledge use, source tools, publication, and review must share its spine. Current paths
+remain partial and do not yet prove unified ingress or complete Provider-to-Home use.
 
 Adopt, do not imitate: where Pi exposes a supported generic runtime surface,
 Pige integrates it through a thin adapter instead of copying, forking, or
@@ -53,8 +53,10 @@ parallel when a reviewed public Pi surface covers them.
 Pige owns UI; profiles/secrets; evidence, prompts, citations and validation; egress,
 permissions and tools; and all durable product records.
 
-After source preservation, Pi Agent alone selects and replans semantic tool use; host
-services gate calls and each tool executes one bounded capability.
+Every semantic Home or note submission uses the same embedded Pi entry. Source-bearing
+turns begin after Host preservation; pure questions enter directly. Pi may answer
+without tools or select and replan scoped tools. Pige owns evidence integrity, policy,
+permissions, egress, provenance, validation, and commits—not the semantic route.
 
 “Complete Pi integration” means the relevant generic `pi-agent-core` and `pi-ai`
 SDK surfaces. It does not mean packaging Pi's coding-agent product, TUI, CLI/RPC,
@@ -114,28 +116,25 @@ SBOM, and notices when npm tarballs omit them.
 
 ## 6. Provider Profile Model
 
-Pige-owned provider profiles are machine-local records.
+Pige-owned provider profiles are machine-local. The executable schema owns current
+fields; this owner defines protocol, boundary, migration, and secret-reference meaning.
 
 ```ts
 type ProviderProfile = {
-  id: string;
-  displayName: string;
-  providerKind: ProviderKind;
-  baseUrl?: string;
-  authSecretRef: string;
-  modelListStrategy: ModelListStrategy;
-  cloudBoundary: CloudBoundary;
-  boundaryVerification?: BoundaryVerification;
-  createdAt: string;
-  updatedAt: string;
+  id: string; providerKind: ProviderKind;
+  endpointProtocol: "openai_responses" | "openai_chat_completions" | "anthropic_messages";
+  baseUrl?: string; authSecretRef: string; cloudBoundary: CloudBoundary;
 };
 ```
 
-`ProviderKind`, `ModelListStrategy`, `CloudBoundary`, and `BoundaryVerification` are
-inferred from the single executable schemas in `packages/schemas/src/index.ts`; this
-profile does not own parallel enum lists.
-
 Rules:
+
+- `endpointProtocol`, not Provider kind or URL, is the target runtime-dispatch authority.
+  New manual profiles use `custom` plus an explicit protocol. A versioned migration maps
+  `openai` to Responses, `anthropic`/`anthropic_compatible` to Messages, and
+  `openai_compatible`/legacy `custom` to Chat Completions. Legacy kinds stay readable
+  and are never silently reinterpreted as Responses. This profile/schema migration and
+  three-protocol UI/runtime proof remain open.
 
 - Keys live only in the secret store; profiles hold `authSecretRef`. Reviewed adapters
   construct auth at call time; metadata cannot persist arbitrary `defaultHeaders`.
@@ -153,22 +152,13 @@ Rules:
 
 ## 7. Model Profile Model
 
-Pige-owned model profiles are machine-local records associated with a provider profile.
+Pige-owned model profiles are machine-local and associated with one provider. Their
+executable fields live in `ModelProfileSchema`; this owner defines runtime meaning.
 
 ```ts
 type ModelProfile = {
-  id: string;
-  providerProfileId: string;
-  modelId: string;
-  displayName?: string;
-  source: "provider_list" | "manual";
-  supportsTools?: boolean;
-  supportsVision?: boolean;
-  contextWindowTokens?: number;
-  defaultThinkingLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
-  enabled: boolean;
-  createdAt: string;
-  updatedAt: string;
+  id: string; providerProfileId: string; modelId: string;
+  source: "provider_list" | "manual"; enabled: boolean;
 };
 ```
 
@@ -183,6 +173,15 @@ Rules:
   uses `x-api-key`, `anthropic-version`, and `/v1/models`. Authentication, network, timeout, invalid payload, and official-provider list failures remain failures; only an explicitly unsupported compatible
   list route permits manual ID, and successful lists require a selected returned ID.
 - Pi Agent calls must resolve through a selected `ModelProfile`, not a free-text runtime string.
+- Connect runs one synthetic real Pi generation/tool round trip with the exact protocol,
+  model, endpoint, and key before persisting anything. Model-list success alone is not
+  readiness. Probe health is transient and contains no user/vault content.
+- Provider, model, and secret writes stage, read back, and commit as one recoverable
+  change or restore the prior set. Recovery never deletes a secret referenced by restored
+  metadata.
+- Redacted summaries distinguish `not_configured`, `ready`, and
+  `configured_unusable`; the last carries a typed repair action rather than looking
+  unconfigured or exposing endpoint, secret ref, or raw failure.
 - Ignore upstream-only thinking levels until schema, migration, and compatibility tests
   change together; `max` adds no visible setting.
 - Embedding and reranking models are not user BYOK provider roles in v0.1; they belong to Local Capabilities and local RAG.
@@ -296,31 +295,10 @@ Rules:
   a validated registered tool call, except deterministic source preservation and
   mechanical projections owned by the same approved commit.
 
-The Pige Tool Registry is the only product-capability surface visible to Pi Agent.
-Each registry entry MUST declare at least:
-
-```ts
-type PigeAgentTool = {
-  id: string;
-  version: string;
-  description: string;
-  capability: string;
-  inputSchema: RuntimeSchema;
-  outputSchema: RuntimeSchema;
-  effect: "read_only" | "compute" | "proposal" | "idempotent_write" | "destructive";
-  inputTrust: TrustClass;
-  outputTrust: TrustClass;
-  requiredCapabilities: string[];
-  resolveResourceScope: (input: unknown, context: PigeToolContext) => ResourceScope;
-  permission: "none_current_job" | "broker" | "always_confirm";
-  dataBoundary: DataBoundary;
-  execution: "sequential" | "parallel_read_only";
-  idempotency: IdempotencyContract;
-  limits: ToolExecutionLimits;
-  ownerService: string;
-  handler: (input: unknown, context: PigeToolContext) => Promise<PigeToolResult>;
-};
-```
+The Pige Tool Registry is Pi's only product-capability surface. Each entry declares
+stable ID/version/description/capability; strict input/output schemas and trust; effect,
+required capabilities, resource scope, permission, data boundary, execution order,
+idempotency, limits, owner service, and handler.
 
 The model sees only bounded descriptors. Calls bind run/call, catalog/policy/source,
 tool-version, and input hashes; results carry typed refs, warnings, and provenance while
@@ -337,6 +315,10 @@ separate tools. Recommendations cannot invoke another tool. Runtime may keep onl
 bounded objective/evidence-gap/next-intent/stop-condition `PlanSummary`, never private
 chain of thought; it is ephemeral and restart requires replanning. Stale, denied,
 partial, or unavailable results require revision before another side effect.
+
+Registration controls what Pi may call, not what it must call. A general answer may use
+zero tools and no local citations. Empty retrieval returns a typed result for replanning;
+only explicit vault/source-only grounding turns missing evidence into insufficiency.
 
 ## 12. Sessions, Memory, And Durable State
 
@@ -368,6 +350,8 @@ Rules:
 - `PIGE.md`, user instruction, permission policy, and security rules outrank source text and Skills.
 - Pi system prompt customization must not remove Pige's safety, citation, storage, or permission instructions.
 - Context compaction must not discard unresolved jobs, citations, source IDs, or permission-relevant state.
+- Initial context may contain only the user instruction, policy, and scoped tool
+  descriptors. Parsed or retrieved evidence enters only after its Pi-selected result.
 
 ## 14. API And IPC
 
@@ -386,20 +370,12 @@ Rules:
 
 Required tests:
 
-- Provider setup stores API key only in secret store.
-- Provider list-model discovery creates model profiles.
-- Manual model ID entry works when a compatible/custom endpoint explicitly reports that model listing is unsupported; it does not mask authentication, network, timeout, malformed-payload, or official-provider failures.
-- Default model selection affects new Pi Agent calls.
-- No Advanced/Fast model settings exist in v0.1 UI.
-- If a future model routing service is enabled, changing slots changes actual runtime model selection.
-- Pi built-in tools cannot bypass Permission Broker.
-- Pige tools require declared capabilities and scoped permissions.
-- Source prompt injection cannot change provider, model, tools, permissions, or `PIGE.md`.
-- Provider diagnostics contain redacted profile/model references only.
-- No global `~/.pi/agent/models.json` mutation occurs during normal Pige provider setup.
-- Cloud-send indicator appears when content is sent to a cloud-hosted provider.
-- Official, loopback, asserted, and unknown endpoints fail safe; confirmation resumes the same Job once without duplicate effects.
-- Provider profile persistence rejects arbitrary secret-bearing headers and base URLs containing userinfo or credential-bearing query parameters.
+- Setup proves secret-only storage, discovery/manual-ID failure distinctions, explicit
+  protocol, real Pi probe-before-save, safe commit/restore, tri-state binding, and default use.
+- Runtime proves no Advanced/Fast fiction, global Pi config mutation, ambient authority,
+  built-in permission bypass, unscoped tools, unsafe endpoints/headers, or raw diagnostics.
+- Home proves direct zero-tool/no-citation answers, Pi-selected retrieval, empty-result
+  replan, vault-only insufficiency, source-tool events, cloud status, and no Host calls.
 - The Agent Spine test matrix is owned by `docs/QUALITY_AND_TEST_STRATEGY.md` section
   6.1; it must prove containment, distinct Agent-chosen traces, replanning, tool-caused
   idempotent writes, no-model preservation, and bypass mutations. Sensitive-tool
@@ -407,36 +383,23 @@ Required tests:
 
 ## 16. Implementation Checklist
 
-Runtime implementation note:
-
-- Production `agent.runtimeStatus` reports `embedded_pi_sdk`. Status, onboarding, and
-  Job readiness require an enabled default model, matching provider, and presence-only
-  secret-binding metadata; they never resolve or decrypt provider credentials.
-- Each Agent run resolves the selected Pige provider/model profile into one isolated Pi
-  model collection; local protocol tests prove scoped model and credential binding.
-- The shared DTO retains legacy adapter-mode values for compatibility, but production
-  emits only `embedded_pi_sdk`; no alternate RPC/CLI runtime is enabled.
+Runtime currently reports only `embedded_pi_sdk`; non-secret readiness checks an enabled
+default model/provider/secret presence, and each run creates one isolated Pi model
+collection. Legacy DTO values remain readable; no alternate runtime is enabled.
 
 Phase 3 implementation note:
 
-- Normal `agent_ingest` now uses the embedded Pi Agent; the former direct
-  `ProviderModelJsonClient` path is deleted rather than retained as a fallback.
-- Text calls inspect→publish; documents may call inspect→parse→optional OCR→inspect→
-  publish. Unknown, stale, unavailable, malformed, or unauthorized calls replan or fail
-  before effects.
-- Egress is decided before credentials and rechecked before every model turn. Provider,
-  model, source revision, evidence refs, cancellation, and publication fences are
-  revalidated by Pige; raw prompts, responses, sessions, and keys are not persisted.
-- With no model, preservation stays useful and Agent work waits. Sparse/image-only PDF,
-  parser-selected PPTX media, and direct images use bounded Agent-selected OCR;
-  unavailable or empty evidence waits without a note.
-- Home uses one Pi search tool with per-turn Markdown/source-privacy/egress revalidation
-  and strict citations. No binding falls back locally before Agent work; no evidence
-  returns the fixed result without a model call.
+- Embedded Pi owns current text/document/image ingest; its selected inspect/parse/OCR/
+  retrieval/write tools replan or fail before effects. Egress, binding, evidence,
+  cancellation, and commit are rechecked; raw prompts/responses/keys do not persist.
+- No model preserves sources and waits; unavailable/empty document evidence writes no note.
+- Home currently requires one Pi search tool, routes question-like input separately,
+  and stops on empty evidence. These are explicit B3.13/E3.08 gaps; ordinary chat,
+  optional retrieval, unified input, and real Provider-to-Home proof remain open.
 
-Remaining work: finish catalog/risk routing/unified and generic proposal UX, remove fixed routes,
-add Broker/cross-process recovery and packaged BYOK proof, and re-review both Pi pins
-together whenever either changes.
+Remaining work: unify ingress, remove fixed routes, prove Provider-to-Home general and
+knowledge-enhanced turns, finish catalog/risk/proposal/Broker/recovery/packaging, and
+re-review both Pi pins together whenever either changes.
 
 ## 17. References
 

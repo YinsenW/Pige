@@ -13,10 +13,10 @@ const controlledBaseline = Object.freeze({
   p0Items: 151,
   p1Items: 9,
   p2Items: 10,
-  requirements: 98,
-  capabilities: 98,
-  builds: 140,
-  exits: 96,
+  requirements: 99,
+  capabilities: 99,
+  builds: 141,
+  exits: 97,
   deferred: 32
 });
 

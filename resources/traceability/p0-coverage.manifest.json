@@ -12,7 +12,8 @@
       "name": "Home and capture",
       "expectedItems": 17,
       "coverage": [
-        { "range": [1, 4], "requirements": ["PIGE-UI-003"], "capabilities": ["ui.home-navigation-shell"] },
+        { "range": [1, 2], "requirements": ["PIGE-UI-003"], "capabilities": ["ui.home-navigation-shell"] },
+        { "range": [3, 4], "requirements": ["PIGE-PI-005", "PIGE-UI-003"], "capabilities": ["pi.unified-agent-ingress", "ui.home-navigation-shell"] },
         { "items": [5], "requirements": ["PIGE-CAP-004"], "capabilities": ["capture.whole-window-drop"] },
         { "items": [6], "requirements": ["PIGE-CAP-003"], "capabilities": ["capture.local-voice"] },
         { "items": [7], "requirements": ["PIGE-CAP-001", "PIGE-CAP-002"], "capabilities": ["capture.preserve-source", "capture.large-paste-reference"] },
