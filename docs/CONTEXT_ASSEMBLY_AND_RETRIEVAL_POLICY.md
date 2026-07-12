@@ -405,7 +405,8 @@ Current unified Home foundation:
 - Vector retrieval and reranking improve ranking when installed but are not required for basic answers.
 - Citation refs survive prompt assembly, model output validation, conversation compaction, and job retry.
 - Memory injection is scoped, ranked, secret-scanned, and lower authority than explicit user instruction.
-- Long conversation history is summarized by references and does not duplicate source or note bodies.
+- Current follow-up uses at most 16 integrity-checked prior user/assistant messages and
+  64 KiB UTF-8; older-turn compaction/indexing remains B7.09.
 - Prompt snapshots redact secrets and include expected policy/context sections.
 - Context pack serialization works for future remote Agent backend and Mobile Lite clients without desktop-only objects.
 

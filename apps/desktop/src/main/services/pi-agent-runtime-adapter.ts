@@ -1,6 +1,12 @@
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
-import { Agent, type AgentEvent, type AgentTool, type StreamFn } from "@earendil-works/pi-agent-core";
+import {
+  Agent,
+  type AgentEvent,
+  type AgentMessage,
+  type AgentTool,
+  type StreamFn
+} from "@earendil-works/pi-agent-core";
 import {
   createModels,
   createProvider,
@@ -109,9 +115,16 @@ export interface PiAgentRunRequest {
   readonly jobId: string;
   readonly systemPrompt: string;
   readonly userPrompt: string;
+  readonly history?: readonly PiAgentHistoryMessage[];
   readonly tools: readonly PigeAgentToolDefinition[];
   readonly beforeModelTurn?: () => void | Promise<void>;
   readonly signal?: AbortSignal;
+}
+
+export interface PiAgentHistoryMessage {
+  readonly role: "user" | "assistant";
+  readonly text: string;
+  readonly createdAt: string;
 }
 
 export interface PiAgentEventRecord {
@@ -153,6 +166,8 @@ interface ScopedPiBinding {
 
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_ANTHROPIC_BASE_URL = "https://api.anthropic.com";
+const MAX_HISTORY_MESSAGES = 16;
+const MAX_HISTORY_UTF8_BYTES = 64 * 1024;
 const KEYLESS_PROVIDER_TRANSPORT_SENTINEL = "pige-keyless-provider";
 const MAX_TURN_EVENTS = 512;
 export const MAX_PIGE_TOOL_CALL_ID_UTF8_BYTES = 256;
@@ -186,6 +201,7 @@ export class PiAgentRuntimeAdapter {
     const tools = request.tools;
     assertPigeAgentToolDescriptors(tools);
     const binding = this.#createBinding(request.runtimeConfig);
+    const history = createPiHistoryMessages(request.history ?? [], binding.model);
     const toolsByName = new Map(tools.map((tool) => [tool.name, tool]));
     const events: PiAgentEventRecord[] = [];
     const invokedTools: string[] = [];
@@ -205,7 +221,8 @@ export class PiAgentRuntimeAdapter {
         systemPrompt: request.systemPrompt,
         model: binding.model,
         thinkingLevel: "off",
-        tools: tools.map(toPiTool)
+        tools: tools.map(toPiTool),
+        messages: history
       },
       streamFn: (model, context, options) => binding.streamSimple(model, context, options),
       sessionId: request.jobId,
@@ -263,7 +280,7 @@ export class PiAgentRuntimeAdapter {
         modelProfileId: request.runtimeConfig.model.id,
         modelId: binding.model.id,
         events,
-        assistantText: collectAssistantText(agent.state.messages),
+        assistantText: collectAssistantText(agent.state.messages.slice(history.length)),
         invokedTools
       };
     } finally {
@@ -280,6 +297,53 @@ export class PiAgentRuntimeAdapter {
     }
     return createProviderBinding(config);
   }
+}
+
+function createPiHistoryMessages(
+  history: readonly PiAgentHistoryMessage[],
+  model: Model<Api>
+): AgentMessage[] {
+  if (history.length > MAX_HISTORY_MESSAGES) {
+    throw new PigeDomainError("agent_runtime.turn_history_invalid", "The Agent conversation history exceeds its message limit.");
+  }
+  let bytes = 0;
+  return history.map((message) => {
+    const text = message.text.trim();
+    const timestamp = Date.parse(message.createdAt);
+    bytes += Buffer.byteLength(text, "utf8");
+    if (
+      !text ||
+      !Number.isFinite(timestamp) ||
+      bytes > MAX_HISTORY_UTF8_BYTES ||
+      (message.role !== "user" && message.role !== "assistant")
+    ) {
+      throw new PigeDomainError("agent_runtime.turn_history_invalid", "The Agent conversation history is invalid or too large.");
+    }
+    if (message.role === "user") {
+      return {
+        role: "user" as const,
+        content: [{ type: "text" as const, text }],
+        timestamp
+      };
+    }
+    return {
+      role: "assistant" as const,
+      content: [{ type: "text" as const, text }],
+      api: model.api,
+      provider: model.provider,
+      model: model.id,
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }
+      },
+      stopReason: "stop" as const,
+      timestamp
+    };
+  });
 }
 
 export function createPigeAgentToolCatalogHash(

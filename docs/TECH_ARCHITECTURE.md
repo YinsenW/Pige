@@ -479,7 +479,7 @@ Responsibilities:
   return a normalized Artifact.
 
 Pi now chooses bounded fetch for a static URL and writes one recoverable Source, Page,
-Artifact, and Operation. Multi-URL, durable follow-up, and packaged proof remain open.
+Artifact, and Operation. Multi-URL, cross-process recovery, and packaged proof remain open.
 
 ### 5.3 Parser Service
 
@@ -858,8 +858,8 @@ Context assembly rule: the retrieval pipeline produces selected evidence for an 
 
 Current Home uses durable `agent.submitTurn`: Pi may answer directly or select bounded
 retrieval or URL fetch/preserve; no usable model waits/resumes the same turn. One file
-shares the draft. Durable follow-up, multi-attachment recovery, vector/reranking, answer
-saving, and jump-to-snippet remain open.
+shares the draft; exact-tail follow-up restores bounded checked history and durable
+results. Multi-attachment recovery, vector/reranking, answer saving, and jump-to-snippet remain open.
 
 Retrieval result contract:
 

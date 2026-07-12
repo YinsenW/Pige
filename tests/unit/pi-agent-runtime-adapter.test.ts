@@ -367,6 +367,36 @@ describe("Pi Agent runtime adapter", () => {
     })).rejects.toMatchObject({ name: "AbortError" });
     expect(calls).toEqual([]);
   });
+
+  it("rehydrates bounded prior turns without returning historical assistant text as the new result", async () => {
+    const adapter = new PiAgentRuntimeAdapter({
+      fauxResponses: [{ kind: "text", text: "Current answer only." }]
+    });
+
+    const result = await adapter.run({
+      ...makeRequest([]),
+      history: [
+        { role: "user", text: "Earlier question.", createdAt: "2026-07-11T00:00:00.000Z" },
+        { role: "assistant", text: "Earlier answer.", createdAt: "2026-07-11T00:00:01.000Z" }
+      ],
+      userPrompt: "Continue the conversation."
+    });
+
+    expect(result.assistantText).toBe("Current answer only.");
+  });
+
+  it("fails closed before a provider turn when rehydrated history exceeds its bound", async () => {
+    const adapter = new PiAgentRuntimeAdapter({ fauxResponses: [{ kind: "text", text: "unreachable" }] });
+
+    await expect(adapter.run({
+      ...makeRequest([]),
+      history: Array.from({ length: 17 }, (_, index) => ({
+        role: index % 2 === 0 ? "user" as const : "assistant" as const,
+        text: `Synthetic turn ${index}`,
+        createdAt: "2026-07-11T00:00:00.000Z"
+      }))
+    })).rejects.toMatchObject({ code: "agent_runtime.turn_history_invalid" });
+  });
 });
 
 function makeRequest(tools: readonly PigeAgentToolDefinition[]) {

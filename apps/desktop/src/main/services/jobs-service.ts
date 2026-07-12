@@ -117,6 +117,12 @@ export interface CreateAgentTurnJobRequest {
   readonly sourceExpected?: boolean;
 }
 
+export interface TextAgentTurnExecution {
+  readonly job: JobRecord;
+  readonly signal: AbortSignal;
+  readonly markDurableCheckpoint: (checkpointId: string) => void;
+}
+
 export interface ReconcilePendingAgentTurnSourcesResult {
   readonly linked: number;
   readonly waiting: number;
@@ -508,8 +514,12 @@ export class JobsService {
     const activeVault = this.#vaults.current();
     const vaultPath = this.#requireActiveVaultPath();
     const timestamp = new Date().toISOString();
-    const dateKey = timestamp.slice(0, 10).replaceAll("-", "");
-    const jobId = `job_${dateKey}_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+    const matchingJobs = readJobRecordFiles(path.join(vaultPath, ".pige", "jobs"))
+      .filter(({ job }) => job.class === "agent_turn" && job.conversationEventId === request.conversationEventId);
+    if (matchingJobs.length > 1) {
+      throw new PigeDomainError("agent_runtime.turn_conflict", "Multiple Agent Jobs claim one preserved turn.");
+    }
+    const jobId = matchingJobs[0]?.job.id ?? createAgentTurnJobId(request.conversationEventId);
     const sourceIds = Array.from(new Set(
       request.sourceIds ?? (request.sourceExpected ? [createAgentTurnSourceId(jobId)] : [])
     ));
@@ -522,6 +532,30 @@ export class JobsService {
       (request.sourceExpected === true && sourceIds.length !== 1)
     ) {
       throw new PigeDomainError("agent_runtime.turn_invalid", "The unified Agent turn identity is invalid.");
+    }
+
+    const existing = matchingJobs[0];
+    if (existing) {
+      const conversationRef = existing.job.inputRefs?.find(
+        (ref) => ref.kind === "conversation" && ref.role === "agent_turn_user_event"
+      );
+      const existingSourceIds = Array.from(new Set([
+        ...(existing.job.sourceId ? [existing.job.sourceId] : []),
+        ...(existing.job.inputRefs ?? [])
+          .filter((ref) => ref.kind === "source" && ref.role === "agent_turn_source")
+          .flatMap((ref) => ref.id ? [ref.id] : [])
+      ]));
+      if (
+        existing.job.activeVaultId !== activeVault.vaultId ||
+        conversationRef?.id !== request.conversationEventId ||
+        conversationRef.locator !== request.conversationLocator ||
+        conversationRef.checksum !== request.inputHash ||
+        existingSourceIds.length !== sourceIds.length ||
+        existingSourceIds.some((sourceId, index) => sourceId !== sourceIds[index])
+      ) {
+        throw new PigeDomainError("agent_runtime.turn_conflict", "The existing Agent Job binding does not match the preserved turn.");
+      }
+      return existing.job;
     }
 
     const job = JobRecordSchema.parse({
@@ -573,6 +607,59 @@ export class JobsService {
     });
     writeJsonAtomic(createJobRecordPath(vaultPath, job.id), job);
     return job;
+  }
+
+  findAgentTurnJobByConversationEvent(conversationEventId: string): JobRecord | undefined {
+    const vaultPath = this.#requireActiveVaultPath();
+    const matches = readJobRecordFiles(path.join(vaultPath, ".pige", "jobs"))
+      .map(({ job }) => job)
+      .filter((job) => job.class === "agent_turn" && job.conversationEventId === conversationEventId);
+    if (matches.length > 1) {
+      throw new PigeDomainError("agent_runtime.turn_conflict", "Multiple Agent Jobs claim one conversation event.");
+    }
+    return matches[0];
+  }
+
+  async runTextAgentTurn<T>(
+    jobId: string,
+    execute: (execution: TextAgentTurnExecution) => Promise<T>
+  ): Promise<T> {
+    const vaultPath = this.#requireActiveVaultPath();
+    const jobFile = readJobRecordFile(vaultPath, jobId);
+    if (
+      !jobFile ||
+      jobFile.job.class !== "agent_turn" ||
+      jobFile.job.sourceId !== undefined ||
+      jobFile.job.state !== "queued"
+    ) {
+      throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The text Agent turn is not ready for execution.");
+    }
+    const execution = this.#beginCooperativeExecution(
+      jobFile.path,
+      jobFile.job,
+      "planning",
+      "Pi Agent is interpreting the preserved Home turn."
+    );
+    try {
+      return await execute({
+        job: execution.job,
+        signal: execution.control.signal,
+        markDurableCheckpoint: (checkpointId) => {
+          const current = readJobRecordAtPath(jobFile.path);
+          if (current?.cancellation?.durableWritesApplied === true) return;
+          execution.control.markDurableCheckpoint(checkpointId);
+        }
+      });
+    } catch (caught) {
+      const cancellation = resolveCancellation(execution.control, caught);
+      if (cancellation) {
+        markJobCancellationOutcome(jobFile.path, execution.job, cancellation);
+        throw new PigeDomainError("agent_runtime.turn_cancelled", "The Agent turn was cancelled at a safe checkpoint.");
+      }
+      throw caught;
+    } finally {
+      this.#finishCooperativeExecution(jobId, execution.controller);
+    }
   }
 
   attachAgentTurnSource(jobId: string, sourceId: string): JobRecord {
@@ -1003,7 +1090,20 @@ export class JobsService {
     ) {
       throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The unified Agent turn binding is invalid.");
     }
-    const validated = JobRecordSchema.parse(job);
+    if (existing.job.state === "cancel_requested" && job.state !== "cancel_requested") {
+      throw new PigeDomainError("agent_runtime.turn_cancelled", "The Agent turn has a pending cancellation request.");
+    }
+    const preserveDurableGuard = existing.job.cancellation?.durableWritesApplied === true;
+    const validated = JobRecordSchema.parse({
+      ...job,
+      ...(preserveDurableGuard ? {
+        cancellation: {
+          ...job.cancellation,
+          safeCheckpointId: existing.job.cancellation?.safeCheckpointId,
+          durableWritesApplied: true
+        }
+      } : {})
+    });
     writeJsonAtomic(existing.path, validated);
     return validated;
   }
@@ -1558,7 +1658,8 @@ export class JobsService {
                 [`conversation:${existingAssistant.id}:agent_turn_assistant_event`, {
                   kind: "conversation" as const,
                   id: existingAssistant.id,
-                  role: "agent_turn_assistant_event"
+                  role: "agent_turn_assistant_event",
+                  ...(existingAssistant.contentHash ? { checksum: existingAssistant.contentHash } : {})
                 }]
               ]).values()),
               message: "Recovered the durable assistant result for this source Agent turn."
@@ -1707,7 +1808,8 @@ export class JobsService {
               [`conversation:${assistantEvent.id}:agent_turn_assistant_event`, {
                 kind: "conversation" as const,
                 id: assistantEvent.id,
-                role: "agent_turn_assistant_event"
+                role: "agent_turn_assistant_event",
+                ...(assistantEvent.contentHash ? { checksum: assistantEvent.contentHash } : {})
               }]
             ]).values()),
             updatedAt: new Date().toISOString()
@@ -1761,7 +1863,8 @@ export class JobsService {
               [`conversation:${assistantEvent.id}:agent_turn_assistant_event`, {
                 kind: "conversation" as const,
                 id: assistantEvent.id,
-                role: "agent_turn_assistant_event"
+                role: "agent_turn_assistant_event",
+                ...(assistantEvent.contentHash ? { checksum: assistantEvent.contentHash } : {})
               }]
             ]).values()),
             updatedAt: new Date().toISOString()
@@ -2920,6 +3023,18 @@ function createAgentTurnSourceId(jobId: string): string {
     throw new PigeDomainError("agent_runtime.turn_invalid", "The unified Agent turn Job identity is invalid.");
   }
   return `src_${match[1]}_${match[2]}`;
+}
+
+function createAgentTurnJobId(conversationEventId: string): string {
+  const match = /^evt_(\d{8})_[a-z0-9]{8,}$/u.exec(conversationEventId);
+  if (!match) {
+    throw new PigeDomainError("agent_runtime.turn_invalid", "The unified Agent conversation identity is invalid.");
+  }
+  const suffix = createHash("sha256")
+    .update(`pige.agent_turn.job.v1\0${conversationEventId}`, "utf8")
+    .digest("hex")
+    .slice(0, 12);
+  return `job_${match[1]}_${suffix}`;
 }
 
 function readJobRecordAtPath(jobPath: string): JobRecord | undefined {

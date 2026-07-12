@@ -469,10 +469,9 @@ Behavior:
 - Saving useful knowledge auto-applies through a validated recoverable tool; exceptional boundaries pause.
 - There is no separate default "Ask" entry in navigation; this behavior lives inside Home.
 
-Current Home uses `agent.submitTurn` for text and one preserve-first file attachment. Pi
-may answer empty/no-evidence chat directly or select cited retrieval or bounded URL
-fetch/preserve; broken bindings show typed Configure/Retry state. Durable follow-up and
-multi-attachment recovery remain open without another mode or destination.
+Current Home restores a bounded durable transcript and keeps exact follow-up, Job retry,
+cooperative cancel, and typed Configure/Retry states in one mode-free conversation. Text
+and one preserve-first file attachment use `agent.submitTurn`; multi-attachment recovery remains open.
 
 ## 8. Note Reader
 

@@ -40,7 +40,7 @@ Current implementation state, last reconciled 2026-07-11:
 | --- | --- | --- |
 | P0 | in progress | Repository and traceability foundations have current evidence; the full P0 exit set has not been re-run as a phase-completion claim. |
 | P1 | in progress | Desktop, vault, settings, diagnostics, and runtime foundations have evidence; the full mapped exit set remains open. |
-| P2 | in progress | Capture guards plus process-local parse/OCR/Agent-ingest/index progress or cancellation have evidence; running capture, remaining classes, visible UI, voice, and full exits remain open. |
+| P2 | in progress | Capture guards plus process-local parse/OCR/Agent-ingest/Agent-turn/index progress or cancellation have evidence; running capture, remaining classes, voice, and full exits remain open. |
 | P3 | in progress | BYOK and embedded Pi text/document/image tool spines have evidence; tool breadth, provider, recovery, permission, and exits remain open. |
 | P4 | in progress | SQLite, lexical search, Library, and worker-backed rebuild foundations have evidence; the full scale and relationship exit set remains open. |
 | P5 | in progress | PDF, Office, static-web, direct-image macOS Vision OCR, Artifact, and recovery slices have evidence; cross-platform/document OCR and remaining P5 exits are still open. |
@@ -243,9 +243,9 @@ Exit criteria:
 - [E2.10] Retry is idempotent; cancellation preserves sources and leaves no half-enabled UI or ambiguous durable state.
 - [E2.11] Missing model, tool, path, or runtime dependencies enter visible retryable `waiting_dependency` with a structured repair/retry action and no source loss.
 
-Current B2.08/B2.11 evidence covers first-wins guards for capture/parse/OCR/agent_ingest,
-process-local parse/OCR/agent_ingest/index_rebuild cancellation, index progress,
-restart retention, and verified note races. Running capture/other-class cancellation,
+Current B2.08/B2.11 evidence covers first-wins guards, process-local parse/OCR/
+agent_ingest/agent_turn/index cancellation, exact Home retry/restart, index progress,
+and verified note races. Running capture/other-class cancellation,
 strict cross-process Job revision CAS, and guard-to-domain atomicity remain open.
 
 ## 8. Phase 3: BYOK And Basic Agent Ingest
@@ -283,8 +283,9 @@ parallel loops. Until E3.08 passes, pause non-blocking breadth; existing safe su
 and security/data-loss repairs may proceed.
 
 B3.14/E3.09 now proves direct/retrieved/file turns, waiting/resume, explicit protocol,
-no Host bypass, and Pi-selected URL fetch/preserve with restart recovery. Durable
-follow-up/session and signed packaged macOS/Windows BYOK remain open; E3.09 is incomplete.
+no Host bypass, Pi-selected URL fetch/preserve, exact-tail follow-up, bounded history,
+result adoption, and Pi cancellation. Multi-source recovery and
+signed packaged macOS/Windows BYOK remain open; E3.09 stays incomplete.
 
 B3.05 has the default, exact-destination disclosure, Home private allow/sensitive wait,
 matrix/profile-switch tests, and per-turn audits/drift rejection. Persisted stricter
@@ -458,8 +459,9 @@ Build:
 - [B6.14 -> E6.09] Knowledge Tree visual semantics: domain/topic branch weight and fragment leaf quantity/density remain explainable, accessible, and source-backed.
 - [B6.15 -> E6.10] Executable retrieval, linking, and summarization regression fixtures for ranking, grounding, citations, related pages, and insufficient evidence.
 
-Current Home has durable direct chat, optional Pi-selected cited retrieval, and no-binding
-wait/resume. RAG, Note Agent, durable follow-up, Broker, packaged platforms, and 10k proof remain open.
+Current Home has durable direct chat, optional cited retrieval, wait/resume, bounded
+transcript, follow-up/retry/cancel. RAG, Note Agent, compaction/indexing,
+Broker, packaged platforms, and 10k proof remain open.
 
 Deferred from this phase:
 

@@ -664,10 +664,14 @@ export type AgentTurnInputKind =
 export type AgentTurnObjective = "auto" | "capture" | "vault_only";
 
 export interface AgentSubmitTurnRequest {
+  readonly schemaVersion?: 1;
   readonly text?: string;
   readonly inputKind: AgentTurnInputKind;
   readonly objective?: AgentTurnObjective;
   readonly locale: Locale;
+  readonly clientTurnId?: string;
+  readonly conversationId?: string;
+  readonly expectedTailEventId?: string;
 }
 
 export interface AgentTurnAnswer {
@@ -682,6 +686,8 @@ export type AgentSubmitTurnResult =
       readonly requestId: string;
       readonly jobId: string;
       readonly conversationEventId: string;
+      readonly conversationId: string;
+      readonly tailEventId: string;
       readonly state: "completed";
       readonly modelUsage: HomeAgentModelUsage;
       readonly sourceIds: readonly string[];
@@ -691,6 +697,8 @@ export type AgentSubmitTurnResult =
       readonly requestId: string;
       readonly jobId: string;
       readonly conversationEventId: string;
+      readonly conversationId: string;
+      readonly tailEventId: string;
       readonly state: "waiting";
       readonly modelUsage: HomeAgentModelUsage;
       readonly sourceIds: readonly string[];
@@ -700,11 +708,41 @@ export type AgentSubmitTurnResult =
       readonly requestId: string;
       readonly jobId?: string;
       readonly conversationEventId?: string;
+      readonly conversationId?: string;
+      readonly tailEventId?: string;
       readonly state: "failed";
       readonly modelUsage: HomeAgentModelUsage;
       readonly sourceIds: readonly string[];
       readonly error: PigeErrorSummary;
     };
+
+export interface AgentConversationRequest {
+  readonly conversationId?: string;
+  readonly limit?: number;
+}
+
+export interface AgentConversationMessage {
+  readonly id: string;
+  readonly role: "user" | "assistant";
+  readonly createdAt: string;
+  readonly text: string;
+  readonly jobId?: string;
+}
+
+export interface AgentConversationTurnSummary {
+  readonly jobId: string;
+  readonly userEventId: string;
+  readonly state: JobState;
+  readonly error?: PigeErrorSummary;
+}
+
+export interface AgentConversationTimeline {
+  readonly conversationId: string;
+  readonly tailEventId: string;
+  readonly canFollowUp: boolean;
+  readonly messages: readonly AgentConversationMessage[];
+  readonly latestTurn?: AgentConversationTurnSummary;
+}
 
 export interface ToolchainToolStatus {
   readonly id: string;
@@ -841,6 +879,9 @@ export interface PigeDesktopApi {
       request: AgentSubmitTurnRequest,
       files?: readonly File[]
     ) => Promise<AgentSubmitTurnResult>;
+    readonly conversation: (
+      request?: AgentConversationRequest
+    ) => Promise<AgentConversationTimeline | undefined>;
   };
   readonly jobs: {
     readonly list: (request?: JobsListRequest) => Promise<JobsListResult>;

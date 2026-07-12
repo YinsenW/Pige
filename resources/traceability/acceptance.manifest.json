@@ -1110,10 +1110,10 @@
     },
     "PIGE-JOB-002": {
       "status": "partial",
-      "evidence": ["EV-JOB-DRAIN", "EV-JOB-RECOVERY", "EV-HOME-JOB-RECOVERY", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER"],
+      "evidence": ["EV-JOB-DRAIN", "EV-JOB-RECOVERY", "EV-HOME-JOB-RECOVERY", "EV-HOME-AGENT", "EV-HOME-FOLLOWUP", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-002",
-        "description": "Exact proposal decision recovery works; Home retry, other classes, and cross-process/kill/packaged/checkpoint/UI proof remain open.",
+        "description": "Other Job classes, cross-process CAS, kill/reopen, packaged, and checkpoint proof remain.",
         "targetBuilds": [
           "B2.08",
           "B2.11"
@@ -1171,12 +1171,10 @@
     },
     "PIGE-JOB-006": {
       "status": "partial",
-      "evidence": [
-        "EV-CAPTURE"
-      ],
+      "evidence": ["EV-CAPTURE", "EV-HOME-AGENT", "EV-HOME-FOLLOWUP"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-006",
-        "description": "Conversation browsing, restart recovery, and compaction identity/reference tests remain open.",
+        "description": "Compaction, cross-process kill/reopen, and packaged history proof remain.",
         "targetBuilds": [
           "B7.08",
           "B7.09"
@@ -1189,10 +1187,10 @@
     },
     "PIGE-JOB-007": {
       "status": "partial",
-      "evidence": ["EV-JOB-STATUS", "EV-JOB-WAIT", "EV-JOB-CANCEL", "EV-HOME-UI"],
+      "evidence": ["EV-JOB-STATUS", "EV-JOB-WAIT", "EV-JOB-CANCEL", "EV-HOME-UI", "EV-HOME-FOLLOWUP"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-007",
-        "description": "Home Activity/Undo, progress, cancel, push, and exceptional permission UI remain.",
+        "description": "Activity/Undo, progress push, non-Agent cancel, and permission UI remain.",
         "targetBuilds": [
           "B2.10",
           "B2.12"
@@ -1388,7 +1386,7 @@
     },
     "PIGE-PI-005": {
       "status": "planned",
-      "plannedTarget": "Complete unified ingress needs durable follow-up/session recovery and signed packaged direct/retrieved/file/URL proof."
+      "plannedTarget": "Signed packaged macOS/Windows BYOK proof for direct, retrieved, file, URL, and follow-up turns."
     },
     "PIGE-SETTINGS-001": {
       "status": "partial",
@@ -2520,10 +2518,10 @@
     },
     "E2.01": {
       "status": "partial",
-      "evidence": ["EV-JOB-RECOVERY", "EV-HOME-JOB-RECOVERY", "EV-CAPTURE-PUBLICATION-GUARD", "EV-PARSE-FOLLOWUP-DURABILITY", "EV-OCR-FOLLOWUP-DURABILITY"],
+      "evidence": ["EV-JOB-RECOVERY", "EV-HOME-JOB-RECOVERY", "EV-HOME-AGENT", "EV-CAPTURE-PUBLICATION-GUARD", "EV-PARSE-FOLLOWUP-DURABILITY", "EV-OCR-FOLLOWUP-DURABILITY"],
       "open": {
         "id": "OPEN-EXIT-E2.01",
-        "description": "Interrupted Home queries become retryable; full kill/reopen and resumable drainer coverage remains open.",
+        "description": "Kill/reopen and resumable drainer proof across Job classes remain open.",
         "targetBuilds": [
           "B2.08"
         ],
@@ -2627,10 +2625,10 @@
     },
     "E2.09": {
       "status": "partial",
-      "evidence": ["EV-JOB-STATUS", "EV-JOB-WAIT", "EV-JOB-CANCEL", "EV-HOME-UI"],
+      "evidence": ["EV-JOB-STATUS", "EV-JOB-WAIT", "EV-JOB-CANCEL", "EV-HOME-UI", "EV-HOME-FOLLOWUP"],
       "open": {
         "id": "OPEN-EXIT-E2.09",
-        "description": "Typed Home question/review states show; progress, cancel, push, and permission UI remain.",
+        "description": "Progress push, non-Agent cancel, and permission UI remain.",
         "targetBuilds": [
           "B2.10",
           "B2.12"
@@ -2642,10 +2640,10 @@
     },
     "E2.10": {
       "status": "partial",
-      "evidence": ["EV-JOB-RECOVERY", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER"],
+      "evidence": ["EV-JOB-RECOVERY", "EV-HOME-AGENT", "EV-HOME-FOLLOWUP", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER"],
       "open": {
         "id": "OPEN-EXIT-E2.10",
-        "description": "Exact proposal stage/decision/page/parent recovery works; other classes and cross-process/kill/packaged/checkpoint/UI proof remain open.",
+        "description": "Other Job classes, cross-process CAS, kill/reopen, packaged, and checkpoint proof remain.",
         "targetBuilds": [
           "B2.11"
         ],
@@ -2796,7 +2794,7 @@
     },
     "E3.09": {
       "status": "planned",
-      "plannedTarget": "Complete unified ingress needs durable follow-up/session recovery and signed packaged direct/retrieved/file/URL proof."
+      "plannedTarget": "Signed packaged macOS/Windows BYOK proof for direct, retrieved, file, URL, and follow-up turns."
     },
     "E4.01": {
       "status": "partial",
@@ -3047,12 +3045,10 @@
     },
     "E7.03": {
       "status": "partial",
-      "evidence": [
-        "EV-CAPTURE"
-      ],
+      "evidence": ["EV-CAPTURE", "EV-HOME-AGENT", "EV-HOME-FOLLOWUP"],
       "open": {
         "id": "OPEN-EXIT-E7.03",
-        "description": "Full executable acceptance remains open for Exit E7.03: Conversation history remains readable and restart-safe without duplicating large source assets or saved note bodies.",
+        "description": "Cross-process kill/reopen and packaged history proof remain open.",
         "targetBuilds": [
           "B7.08"
         ],
@@ -3632,6 +3628,7 @@
       "selector": "answers from bounded local evidence with citations and ranked pages"
     },
     "EV-HOME-AGENT": { "kind": "test", "path": "tests/unit/home-agent-service.test.ts", "selector": "Home Pi Agent service" },
+    "EV-HOME-FOLLOWUP": { "kind": "test", "path": "tests/unit/home-agent-conversation-ui.test.ts", "selector": "Home durable Agent conversation UI" },
     "EV-PI-URL-INGRESS": { "kind": "test", "path": "tests/unit/agent-selected-url-ingress.test.ts", "selector": "Agent-selected URL ingress" },
     "EV-HOME-UI": { "kind": "test", "path": "tests/unit/desktop-shell-contract.test.ts", "selector": "wires Home questions through Pi with visible typed outcomes and no raw provider error surface" },
     "EV-RETRIEVAL-REGRESSION-GOLDEN": { "kind": "test", "path": "tests/evals/retrieval.regression-golden.test.ts", "selector": "passes deterministic ranking, citation, distractor, related-page, and insufficient-evidence gates" },
