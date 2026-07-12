@@ -491,7 +491,7 @@ References:
 
 Status: Accepted
 Date: 2026-07-12
-Revised: 2026-07-12
+Revised: 2026-07-13
 
 Decision:
 
@@ -506,8 +506,8 @@ It proves bounded review/recovery without a generic mutation engine.
 Consequences:
 
 - Startup reconciles supported decisions without model/credentials; writes are not atomic.
-- Home review is transitional; eligibility, Activity/Undo, generic Operations, CAS/TOCTOU,
-  and platform proof remain open.
+- Home review stays transitional; exact-create Activity/Undo works. Broader eligibility,
+  generic Operations, CAS/TOCTOU, and platforms remain open.
 
 References:
 
@@ -2551,7 +2551,7 @@ Consequences:
 - Pi decides semantics; Host validates provenance, policy, concurrency, recovery, and commit.
 - Core tools need no Permission prompt; extensions/new authority stay brokered and exact
   BYOK destinations retain standing egress authority.
-- Proposals remain exception/recovery infrastructure; current proposal-first create-note is transitional.
+- Exact-page Activity/Undo is first; proposals stay transitional and non-create autonomy open.
 - Home uses quiet Activity/details/Undo, not routine confirmation cards.
 
 References:

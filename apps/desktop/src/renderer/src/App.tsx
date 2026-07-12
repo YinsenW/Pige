@@ -16,6 +16,7 @@ import type {
   DiagnosticsHealth,
   HomeAgentModelUsage,
   JobSummary,
+  KnowledgeActivitySummary,
   LibraryListResult,
   LibraryPageSummary,
   LibraryRelatedPage,
@@ -92,6 +93,9 @@ export function App(): React.JSX.Element {
   const [homeDraftText, setHomeDraftText] = useState("");
   const [captureToast, setCaptureToast] = useState<CaptureToast | null>(null);
   const [recentJobs, setRecentJobs] = useState<readonly JobSummary[]>([]);
+  const [recentActivities, setRecentActivities] = useState<readonly KnowledgeActivitySummary[]>([]);
+  const [activityUndoingId, setActivityUndoingId] = useState<string | null>(null);
+  const [activityBlockedIds, setActivityBlockedIds] = useState<readonly string[]>([]);
   const [readyProposals, setReadyProposals] = useState<readonly ProposalSummary[]>([]);
   const [libraryList, setLibraryList] = useState<LibraryListResult | null>(null);
   const [libraryError, setLibraryError] = useState<string | null>(null);
@@ -131,22 +135,24 @@ export function App(): React.JSX.Element {
     };
     homeJobStateFilter.states.push("awaiting_review");
     homeJobStateFilter.states.push("cancel_requested");
-    const [nextJobs, nextProposals] = nextOnboarding.activeVault
+    const [nextJobs, nextProposals, nextActivities] = nextOnboarding.activeVault
       ? await Promise.all([
         window.pige.jobs.list({
           limit: 6,
           classes: ["capture", "parse", "ocr", "agent_ingest", "agent_turn", "index_rebuild"],
           ...homeJobStateFilter
         }).catch(() => undefined),
-        window.pige.proposals.list({ limit: 100, states: ["ready"] }).catch(() => undefined)
+        window.pige.proposals.list({ limit: 100, states: ["ready"] }).catch(() => undefined),
+        window.pige.activity.list({ limit: 5 }).catch(() => undefined)
       ])
-      : [undefined, undefined];
+      : [undefined, undefined, undefined];
     setOnboarding(nextOnboarding);
     setRecentVaults(nextRecentVaults);
     setBackupStatus(nextBackupStatus);
     setAgentRuntimeStatus(nextAgentRuntimeStatus);
     setRecentJobs(nextJobs?.jobs ?? []);
     setReadyProposals(nextProposals?.proposals ?? []);
+    setRecentActivities(nextActivities?.activities ?? []);
   };
 
   const runVaultAction = async (action: () => Promise<void>): Promise<void> => {
@@ -301,6 +307,44 @@ export function App(): React.JSX.Element {
       return;
     }
     setCaptureToast({ kind: "error", message: t("error.generic") });
+  };
+
+  const undoActivity = async (operationId: string): Promise<void> => {
+    if (activityUndoingId) return;
+    setActivityUndoingId(operationId);
+    try {
+      const result = await window.pige.activity.undo({ operationId });
+      setActivityBlockedIds((blocked) => blocked.filter((id) => id !== operationId));
+      setCaptureToast({
+        kind: "success",
+        message: t(result.status === "already_undone" ? "activity.alreadyUndone" : "activity.undoCompleted")
+      });
+      await refreshVaultState();
+    } catch {
+      try {
+        const current = await window.pige.activity.list({ limit: 20 });
+        const exact = current.activities.find((activity) => activity.operationId === operationId);
+        if (exact?.status === "undone") {
+          setRecentActivities(current.activities.slice(0, 5));
+          setActivityBlockedIds((blocked) => blocked.filter((id) => id !== operationId));
+          setCaptureToast({ kind: "success", message: t("activity.undoCompleted") });
+        } else if (exact?.status === "applied" && exact.canUndo) {
+          setRecentActivities(current.activities.slice(0, 5));
+          setActivityBlockedIds((blocked) => blocked.filter((id) => id !== operationId));
+          setCaptureToast({ kind: "error", message: t("activity.undoFailed") });
+        } else {
+          if (exact) setRecentActivities(current.activities.slice(0, 5));
+          setActivityBlockedIds((blocked) => Array.from(new Set([...blocked, operationId])));
+          setCaptureToast({ kind: "error", message: t("activity.undoStateUnknown") });
+        }
+      } catch {
+        setActivityBlockedIds((blocked) => Array.from(new Set([...blocked, operationId])));
+        setCaptureToast({ kind: "error", message: t("activity.undoStateUnknown") });
+      }
+    } finally {
+      setActivityUndoingId(null);
+      restoreActivityFocus(operationId);
+    }
   };
 
   const handleDragEnter = (event: DragEvent<HTMLElement>): void => {
@@ -519,6 +563,9 @@ export function App(): React.JSX.Element {
             captureOnly={onboarding?.state === "capture_only"}
             agentRuntimeStatus={agentRuntimeStatus}
             recentJobs={recentJobs}
+            recentActivities={recentActivities}
+            activityUndoingId={activityUndoingId}
+            activityBlockedIds={activityBlockedIds}
             readyProposals={readyProposals}
             locale={locale}
             draftText={homeDraftText}
@@ -526,6 +573,7 @@ export function App(): React.JSX.Element {
             onFilesSelected={(files, text) => submitFiles(files, "file_picker", text)}
             onCancelJob={cancelJob}
             onRetryJob={retryJob}
+            onUndoActivity={undoActivity}
             onHomeStateChanged={refreshVaultState}
             onProposalChanged={refreshVaultState}
             onOpenModels={() => setView("models")}
@@ -534,9 +582,29 @@ export function App(): React.JSX.Element {
         )}
       </div>
       {dropActive ? <div className="drop-overlay">{t("home.dropToCapture")}</div> : null}
-      {captureToast ? <div className={`capture-toast ${captureToast.kind}`}>{captureToast.message}</div> : null}
+      {captureToast ? (
+        <div
+          className={`capture-toast ${captureToast.kind}`}
+          role={captureToast.kind === "error" ? "alert" : "status"}
+          aria-live={captureToast.kind === "error" ? "assertive" : "polite"}
+          aria-atomic="true"
+        >
+          {captureToast.message}
+        </div>
+      ) : null}
     </main>
   );
+}
+
+function restoreActivityFocus(operationId: string): void {
+  window.setTimeout(() => {
+    const undoButton = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-activity-undo-id]"))
+      .find((element) => element.dataset.activityUndoId === operationId && !element.disabled);
+    const activityRow = Array.from(document.querySelectorAll<HTMLElement>("[data-activity-row-id]"))
+      .find((element) => element.dataset.activityRowId === operationId);
+    const composer = document.querySelector<HTMLTextAreaElement>('[data-home-composer="true"]');
+    (undoButton ?? activityRow ?? composer)?.focus();
+  }, 0);
 }
 
 function LibraryPanel(props: {
@@ -904,6 +972,9 @@ function HomeComposer(props: {
   readonly captureOnly: boolean;
   readonly agentRuntimeStatus: AgentRuntimeStatus | null;
   readonly recentJobs: readonly JobSummary[];
+  readonly recentActivities: readonly KnowledgeActivitySummary[];
+  readonly activityUndoingId: string | null;
+  readonly activityBlockedIds: readonly string[];
   readonly readyProposals: readonly ProposalSummary[];
   readonly locale: Locale;
   readonly draftText: string;
@@ -914,6 +985,7 @@ function HomeComposer(props: {
   ) => Promise<AgentSubmitTurnResult | undefined>;
   readonly onCancelJob: (jobId: string) => Promise<void>;
   readonly onRetryJob: (jobId: string) => Promise<void>;
+  readonly onUndoActivity: (operationId: string) => Promise<void>;
   readonly onHomeStateChanged: () => Promise<void>;
   readonly onProposalChanged: () => Promise<void>;
   readonly onOpenModels: () => void;
@@ -940,6 +1012,7 @@ function HomeComposer(props: {
   const [noteLoadingPageId, setNoteLoadingPageId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const draftRevisionRef = useRef(0);
   const noteOpenSequence = useRef(0);
   const proposalDecisionInFlight = useRef(false);
   const proposalReviewTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -1021,6 +1094,7 @@ function HomeComposer(props: {
     setSelectedNote(null);
     setSelectedNoteRelated(null);
     const turnText = text.trim();
+    const submittedDraftRevision = draftRevisionRef.current;
     setAgentError(null);
     setAgentAnswer(null);
     setLiveAnswerEventId(null);
@@ -1054,14 +1128,20 @@ function HomeComposer(props: {
         setLiveAnswerEventId(outcome.tailEventId);
         setAgentModelUsage(outcome.modelUsage);
         setAgentRunState("completed");
-        props.onDraftChange("");
+        if (draftRevisionRef.current === submittedDraftRevision) {
+          draftRevisionRef.current += 1;
+          props.onDraftChange("");
+        }
         await refreshConversation();
         return;
       }
       setAgentModelUsage(outcome.modelUsage);
       setAgentError(outcome.error);
       setAgentRunState(outcome.state);
-      if (outcome.state === "waiting") props.onDraftChange("");
+      if (outcome.state === "waiting" && draftRevisionRef.current === submittedDraftRevision) {
+        draftRevisionRef.current += 1;
+        props.onDraftChange("");
+      }
       await refreshConversation();
     } catch {
       setAgentError({
@@ -1252,6 +1332,45 @@ function HomeComposer(props: {
           ))}
         </section>
       ) : null}
+      {props.recentActivities.length > 0 ? (
+        <section className="activity-strip" aria-label={props.t("activity.title")}>
+          <h2>{props.t("activity.title")}</h2>
+          <div className="activity-list">
+            {props.recentActivities.slice(0, 3).map((activity, index) => {
+              const activityLabel = `${props.t("activity.createdPage")}${activity.targetLabel ? `: ${activity.targetLabel}` : ""} (${index + 1})`;
+              return (
+                <article
+                  className="activity-row"
+                  key={activity.operationId}
+                  aria-label={activityLabel}
+                  data-activity-row-id={activity.operationId}
+                  tabIndex={-1}
+                >
+                  <div>
+                    <strong>
+                      {props.t("activity.createdPage")}
+                      {activity.targetLabel ? `: ${activity.targetLabel}` : ""}
+                    </strong>
+                    <span>{props.t(activity.status === "undone" ? "activity.statusUndone" : "activity.statusApplied")}</span>
+                  </div>
+                  {activity.canUndo ? (
+                    <button
+                      type="button"
+                      className="ghost"
+                      aria-label={`${props.t("activity.undo")}: ${activityLabel}`}
+                      data-activity-undo-id={activity.operationId}
+                      disabled={props.activityUndoingId !== null || props.activityBlockedIds.includes(activity.operationId)}
+                      onClick={() => void props.onUndoActivity(activity.operationId)}
+                    >
+                      {props.t(props.activityUndoingId === activity.operationId ? "activity.undoing" : "activity.undo")}
+                    </button>
+                  ) : null}
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
       {props.readyProposals.length > 0 ? (
         <section className="proposal-strip" aria-label={props.t("proposal.queueTitle")}>
           <header className="proposal-strip-header">
@@ -1355,11 +1474,15 @@ function HomeComposer(props: {
       <section className="composer">
         <textarea
           ref={composerInputRef}
+          data-home-composer="true"
           aria-label={props.t("home.composerAria")}
           placeholder={props.t("home.placeholder")}
           rows={4}
           value={text}
-          onChange={(event) => props.onDraftChange(event.target.value)}
+          onChange={(event) => {
+            draftRevisionRef.current += 1;
+            props.onDraftChange(event.target.value);
+          }}
         />
         <div className="toolbar">
           <span>{props.t("home.toolbarHint")}</span>

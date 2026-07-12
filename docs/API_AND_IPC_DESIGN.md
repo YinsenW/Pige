@@ -484,12 +484,16 @@ Rules:
 - Approve applies only the exact Job-scoped Pi create note under `wiki/generated/`:
   `approved` -> page/index/Operation -> `applied` -> idempotent log -> parent. Generic
   apply is `not_allowed`; generic reject remains state-only.
-- Home uses safe list/detail for focused review; rejected calls re-read durable state and
-  lock unknown outcomes. Writes are ordered, not transactional; unified diff, generic
-  apply, replacement UX, CAS/TOCTOU, and platform proof remain open.
-- This current exact create-note review is transitional. Normal eligible changes target
-  autonomous Operations plus Activity/Undo; no renderer Operation/Undo API is implemented
-  yet, so it must be added to this owner and executable contracts before UI completion is claimed.
+- Home rereads rejected calls; exact proposal writes are ordered, not transactional.
+  Generic apply/replacement, CAS/TOCTOU, and platforms remain open.
+
+#### 6.4.1 Knowledge Activity And Undo
+
+`activity.list` (default 5, max 20) returns safe create summaries/counts without paths,
+hashes, bodies, or source/provider data. `activity.undo` revalidates one unchanged
+hash-bound generated page, returns original/Undo IDs + status, then uses private trash,
+`trash_page`, and worker rebuild. Hashless/changed/missing/non-create stays ineligible;
+restore/redo and broad routing/Activity remain open.
 
 ### 6.5 Library And Notes
 

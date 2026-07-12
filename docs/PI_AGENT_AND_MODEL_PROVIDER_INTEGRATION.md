@@ -302,11 +302,10 @@ tool-version, and input hashes; results carry typed refs, warnings, and provenan
 large bodies remain Artifacts. Host validation precedes every result or effect.
 Job cancellation aborts Pi/active tools without persisting partial response.
 
-The target registry uses validated publication for autonomous eligible knowledge and
-`pige_stage_knowledge_note_proposal@1` only for an exceptional boundary. The current
-slice still stages every exact create note for Home review; this is truthful transitional
-recovery infrastructure, not the target default. Full eligibility routing, Activity/Undo,
-catalog, Broker, cross-process recovery, and packaged paths remain open.
+The registry supports validated direct publish and proposal staging. Fresh direct or
+proposal-applied exact creates now emit checksum-bound Operations usable by Activity/Undo;
+this does not add exception-only routing. Non-create eligibility/tools, generic exceptions,
+catalog, Broker, cross-process recovery, restore/redo, and packaged paths remain open.
 
 Source inspection, extraction, OCR, retrieval, and knowledge publication remain
 separate tools. Recommendations cannot invoke another tool. Runtime may keep only a

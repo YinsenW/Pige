@@ -381,6 +381,63 @@ button.ghost {
   font-size: 11px;
 }
 
+.activity-strip {
+  width: min(100%, 48rem);
+  min-width: 0;
+  justify-self: center;
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.activity-strip h2 {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.activity-list {
+  display: grid;
+}
+
+.activity-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid var(--border-default);
+  padding: 8px 0;
+}
+
+.activity-row:last-child {
+  border-bottom: 1px solid var(--border-default);
+}
+
+.activity-row div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.activity-row strong {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.activity-row span {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.activity-row button {
+  min-height: 28px;
+  padding: 3px 8px;
+  font-size: 11px;
+}
+
 .proposal-strip {
   width: min(100%, 48rem);
   min-width: 0;

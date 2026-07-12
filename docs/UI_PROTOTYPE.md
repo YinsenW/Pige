@@ -263,7 +263,8 @@ Behavior:
 Behavior:
 
 - Activity is secondary to the home composer.
-- Recent items summarize durable changes with provenance and Undo when recoverable.
+- Recent rows summarize durable changes. Unchanged generated pages offer direct Undo;
+  reread announces truth, restores focus, keeps eligible retry, or fails closed.
 - The user can ignore the activity area and keep adding sources or asking questions.
 
 ### 4.4 Sidebar Expanded
@@ -416,11 +417,9 @@ Processing states:
 - Needs attention.
 - Completed with warnings.
 
-Current code still stages every exact create note and shows up to three safe review cards;
-detail is escaped, decisions re-read durable truth, focus restores, and `awaiting_review`
-stays visible. This is transitional; eligibility and Activity/Undo remain open.
-
-Unified update diff, generic apply, replacement UX, bulk/dedicated management, and packaged visual proof remain open.
+Current code auto-applies fresh direct creates; three Activity rows offer exact-page Undo
+for checksum-bound created pages. Hashless/changed/missing targets are ineligible; proposals stay transitional.
+Non-create/restore/redo, broad Activity, and packaged proof remain open.
 
 ## 7. Home Conversation And Optional Local Knowledge
 
@@ -1593,6 +1592,6 @@ Can wait:
 - Opened notes can show a contextual Agent panel.
 - Selected text exposes common actions without leaving the note.
 - Settings offers preset connection, unified sync/manual inventory, and grouped Global Default without protocol/raw-ID work.
-- The user can inspect and undo autonomous changes and distinguish exceptional attention from failure.
+- Autonomous exact-page Undo is non-confirming, announced, focus-safe, and distinct from exceptional/failure states.
 - The user can tell when captured content is being sent to a cloud model provider.
 - The user can dictate into the main input on supported macOS versions without learning a separate recording workflow.

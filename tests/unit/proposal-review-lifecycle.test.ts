@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -94,6 +95,11 @@ describe("proposal review lifecycle", () => {
         policyContextId: staged.parent.policyContextId,
         policyHash: staged.parent.policyHash,
         enforcementOwners: ["Agent Orchestrator", "Change Proposal Service", "Vault Service"]
+      },
+      after: {
+        kind: "page",
+        id: `sha256:${createHash("sha256").update(create.content, "utf8").digest("hex")}`,
+        path: create.path
       }
     });
     const serializedOperation = JSON.stringify(operation);
@@ -190,7 +196,7 @@ describe("proposal review lifecycle", () => {
     });
   });
 
-  it("recovers an approved proposal by reusing committed effects without model, runtime, or credential calls", async () => {
+  it("recovers an approved proposal with a legacy hashless Operation without model, runtime, or credential calls", async () => {
     const fixture = makeVault();
     const staged = await stageReviewProposal(fixture, "Recovered note");
     const create = requireCreateOperation(staged.proposal);
@@ -210,6 +216,16 @@ describe("proposal review lifecycle", () => {
     );
     const notePath = resolveVaultPath(fixture.vaultPath, create.path);
     const committedNote = fs.readFileSync(notePath);
+    const legacyOperationPath = requireValue(listFiles(
+      path.join(fixture.vaultPath, ".pige", "operations"),
+      ".json"
+    ).find((filePath) => {
+      const operation = JSON.parse(fs.readFileSync(filePath, "utf8")) as OperationRecord;
+      return operation.kind === "create_page" && operation.proposalId === staged.proposal.id;
+    }));
+    const legacyOperation = JSON.parse(fs.readFileSync(legacyOperationPath, "utf8")) as OperationRecord;
+    const { after: _resultHash, ...hashlessLegacyOperation } = legacyOperation;
+    fs.writeFileSync(legacyOperationPath, `${JSON.stringify(hashlessLegacyOperation, null, 2)}\n`, "utf8");
     const committedOperations = operationSnapshot(fixture.vaultPath);
     expect(staged.proposals.get({ proposalId: staged.proposal.id }).proposal.state).toBe("approved");
     expect(readJob(fixture.vaultPath, staged.parent.id).state).toBe("awaiting_review");
@@ -241,6 +257,9 @@ describe("proposal review lifecycle", () => {
     expect(readOperations(fixture.vaultPath).filter((operation) =>
       operation.kind === "create_page" && operation.proposalId === staged.proposal.id
     )).toHaveLength(1);
+    expect(readOperations(fixture.vaultPath).find((operation) =>
+      operation.kind === "create_page" && operation.proposalId === staged.proposal.id
+    )?.after).toBeUndefined();
     expect(restartedProposals.get({ proposalId: staged.proposal.id }).proposal.state).toBe("applied");
     expect(readJob(fixture.vaultPath, staged.parent.id)).toMatchObject({
       state: "completed",

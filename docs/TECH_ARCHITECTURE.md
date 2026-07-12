@@ -786,9 +786,9 @@ Rules:
 
 Current implementation:
 
-- Confined proposals expose safe list/detail. Home reviews the exact Pi create note as
-  escaped text and reconciles rejected calls. This proposal-first path is transitional;
-  autonomous eligibility, Activity/Undo, generic exceptions, and replacement UX remain open.
+- Fresh direct/proposal creates bind hashes. Bounded Activity exposes safe summaries and
+  exact-page Undo via trash/`trash_page`; Activity owns recovery, Job rebuild. Non-create,
+  generic exceptions, restore/redo, CAS, batched scan/broader Activity, and packaging remain open.
 
 ### 5.5.2 Markdown Rendering And Editing Surface
 

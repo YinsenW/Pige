@@ -309,6 +309,15 @@ function makePigeApi(readCurrentProposal: () => ConfirmationProposal, overrides:
         }] : []
       })
     },
+    activity: {
+      list: async () => ({
+        scannedAt: "2026-07-12T08:00:00.000Z",
+        activeVaultId: "vault_review_fixture",
+        total: 0,
+        invalidOperationCount: 0,
+        activities: []
+      })
+    },
     proposals: {
       list: async () => ({
         scannedAt: "2026-07-12T08:00:00.000Z",

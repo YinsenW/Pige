@@ -911,20 +911,12 @@
     },
     "PIGE-VAULT-004": {
       "status": "partial",
-      "evidence": [
-        "EV-BACKUP"
-      ],
+      "evidence": ["EV-BACKUP", "EV-ACTIVITY-UNDO"],
       "open": {
         "id": "OPEN-REQ-PIGE-VAULT-004",
-        "description": "Cross-service trash/restore, compaction, cleanup, reset, package, and migration lifecycle tests remain open.",
-        "targetBuilds": [
-          "B9.07",
-          "B9.08"
-        ],
-        "targetExits": [
-          "E9.03",
-          "E9.04"
-        ]
+        "description": "Other classes and restore/compaction/cleanup/reset/package/migration tests remain.",
+        "targetBuilds": ["B9.07", "B9.08"],
+        "targetExits": ["E9.03", "E9.04"]
       }
     },
     "PIGE-VAULT-005": {
@@ -1110,7 +1102,7 @@
     },
     "PIGE-JOB-002": {
       "status": "partial",
-      "evidence": ["EV-JOB-DRAIN", "EV-JOB-RECOVERY", "EV-HOME-JOB-RECOVERY", "EV-HOME-AGENT", "EV-HOME-FOLLOWUP", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER"],
+      "evidence": ["EV-JOB-DRAIN", "EV-JOB-RECOVERY", "EV-HOME-JOB-RECOVERY", "EV-HOME-AGENT", "EV-HOME-FOLLOWUP", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-ACTIVITY-UNDO", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-002",
         "description": "Other Job classes, cross-process CAS, kill/reopen, packaged, and checkpoint proof remain.",
@@ -1157,16 +1149,12 @@
     },
     "PIGE-JOB-005": {
       "status": "partial",
-      "evidence": ["EV-AGENT-INGEST", "EV-PROPOSAL-REVIEW-LIFECYCLE"],
+      "evidence": ["EV-AGENT-INGEST", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-ACTIVITY-UNDO"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-005",
-        "description": "Complete autonomous/approved Agent-write Operation coverage remains open.",
-        "targetBuilds": [
-          "B7.04"
-        ],
-        "targetExits": [
-          "E7.01"
-        ]
+        "description": "Hashless recovery plus non-create Agent-write Operations remain.",
+        "targetBuilds": ["B7.04"],
+        "targetExits": ["E7.01"]
       }
     },
     "PIGE-JOB-006": {
@@ -1187,17 +1175,12 @@
     },
     "PIGE-JOB-007": {
       "status": "partial",
-      "evidence": ["EV-JOB-STATUS", "EV-JOB-WAIT", "EV-JOB-CANCEL", "EV-HOME-UI", "EV-HOME-FOLLOWUP"],
+      "evidence": ["EV-JOB-STATUS", "EV-JOB-WAIT", "EV-JOB-CANCEL", "EV-HOME-UI", "EV-HOME-FOLLOWUP", "EV-ACTIVITY-UNDO"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-007",
-        "description": "Activity/Undo, progress push, non-Agent cancel, and permission UI remain.",
-        "targetBuilds": [
-          "B2.10",
-          "B2.12"
-        ],
-        "targetExits": [
-          "E2.09"
-        ]
+        "description": "Broader Activity, progress, non-Agent cancel, and permission UI remain.",
+        "targetBuilds": ["B2.10", "B2.12"],
+        "targetExits": ["E2.09"]
       }
     },
     "PIGE-JOB-008": {
@@ -1336,18 +1319,12 @@
     },
     "PIGE-PI-001": {
       "status": "partial",
-      "evidence": ["EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-BOUNDARY", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-RETRIEVAL", "EV-PI-INGEST-PROPOSAL", "EV-PI-URL-INGRESS", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE"],
+      "evidence": ["EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-BOUNDARY", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-RETRIEVAL", "EV-PI-INGEST-PROPOSAL", "EV-PI-URL-INGRESS", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE", "EV-ACTIVITY-UNDO"],
       "open": {
         "id": "OPEN-REQ-PIGE-PI-001",
-        "description": "Pi core paths run; eligibility, Activity/Undo, catalog/routes, Broker, recovery, and packaged BYOK remain.",
-        "targetBuilds": [
-          "B3.06",
-          "B3.13"
-        ],
-        "targetExits": [
-          "E3.04",
-          "E3.08"
-        ]
+        "description": "Exact-create Activity/Undo works; broader eligibility, routes, Broker, recovery, and packaged BYOK remain.",
+        "targetBuilds": ["B3.06", "B3.13"],
+        "targetExits": ["E3.04", "E3.08"]
       }
     },
     "PIGE-PI-002": {
@@ -2625,17 +2602,12 @@
     },
     "E2.09": {
       "status": "partial",
-      "evidence": ["EV-JOB-STATUS", "EV-JOB-WAIT", "EV-JOB-CANCEL", "EV-HOME-UI", "EV-HOME-FOLLOWUP"],
+      "evidence": ["EV-JOB-STATUS", "EV-JOB-WAIT", "EV-JOB-CANCEL", "EV-HOME-UI", "EV-HOME-FOLLOWUP", "EV-ACTIVITY-UNDO"],
       "open": {
         "id": "OPEN-EXIT-E2.09",
-        "description": "Progress push, non-Agent cancel, and permission UI remain.",
-        "targetBuilds": [
-          "B2.10",
-          "B2.12"
-        ],
-        "targetExits": [
-          "E2.09"
-        ]
+        "description": "Broader Activity, progress, non-Agent cancel, and permission UI remain.",
+        "targetBuilds": ["B2.10", "B2.12"],
+        "targetExits": ["E2.09"]
       }
     },
     "E2.10": {
@@ -2780,16 +2752,12 @@
     },
     "E3.08": {
       "status": "partial",
-      "evidence": ["EV-BOUNDARY", "EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-RETRIEVAL", "EV-PI-INGEST-PROPOSAL", "EV-PI-URL-INGRESS", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE"],
+      "evidence": ["EV-BOUNDARY", "EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-RETRIEVAL", "EV-PI-INGEST-PROPOSAL", "EV-PI-URL-INGRESS", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE", "EV-ACTIVITY-UNDO"],
       "open": {
         "id": "OPEN-EXIT-E3.08",
-        "description": "Pi core paths run; eligibility, Activity/Undo, catalog/routes, Broker, recovery, and packaged BYOK remain.",
-        "targetBuilds": [
-          "B3.13"
-        ],
-        "targetExits": [
-          "E3.08"
-        ]
+        "description": "Exact-create Activity/Undo works; broader eligibility, routes, Broker, recovery, and packaged BYOK remain.",
+        "targetBuilds": ["B3.13"],
+        "targetExits": ["E3.08"]
       }
     },
     "E3.09": {
@@ -3024,19 +2992,12 @@
     },
     "E7.01": {
       "status": "partial",
-      "evidence": ["EV-PROPOSAL", "EV-AGENT-INGEST", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-PROPOSAL-UI"],
+      "evidence": ["EV-PROPOSAL", "EV-AGENT-INGEST", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-PROPOSAL-UI", "EV-ACTIVITY-UNDO"],
       "open": {
         "id": "OPEN-EXIT-E7.01",
-        "description": "Review is transitional; eligible apply, Activity/Undo, exception routing, and CAS/TOCTOU/platform remain.",
-        "targetBuilds": [
-          "B7.01",
-          "B7.02",
-          "B7.03",
-          "B7.04"
-        ],
-        "targetExits": [
-          "E7.01"
-        ]
+        "description": "Exact-create Undo works; non-create operations, generic exceptions, CAS/TOCTOU, and platform proof remain.",
+        "targetBuilds": ["B7.01", "B7.02", "B7.03", "B7.04"],
+        "targetExits": ["E7.01"]
       }
     },
     "E7.02": {
@@ -3119,18 +3080,12 @@
     },
     "E9.04": {
       "status": "partial",
-      "evidence": [
-        "EV-BACKUP"
-      ],
+      "evidence": ["EV-BACKUP", "EV-ACTIVITY-UNDO"],
       "open": {
         "id": "OPEN-EXIT-E9.04",
-        "description": "Cross-service destructive lifecycle tests remain open.",
-        "targetBuilds": [
-          "B9.08"
-        ],
-        "targetExits": [
-          "E9.04"
-        ]
+        "description": "Other classes and destructive lifecycle tests remain.",
+        "targetBuilds": ["B9.08"],
+        "targetExits": ["E9.04"]
       }
     },
     "E9.05": {
@@ -3520,6 +3475,7 @@
       "path": "tests/unit/agent-ingest-service.test.ts",
       "selector": "turns a preserved source into a wiki note, index entry, and operation record without storing prompts or secrets"
     },
+    "EV-ACTIVITY-UNDO": { "kind": "test", "path": "tests/unit/knowledge-activity-service.test.ts", "selector": "Knowledge Activity and Undo" },
     "EV-PI-AGENT-SPINE": { "kind": "test", "path": "tests/unit/agent-led-ingest.test.ts", "selector": "Agent-led knowledge spine" },
     "EV-PI-PDF-PARSE-TOOL": { "kind": "test", "path": "tests/unit/agent-led-pdf-parse.test.ts", "selector": "Agent-led PDF parse tool" },
     "EV-PI-PDF-OCR-TOOL": { "kind": "test", "path": "tests/unit/agent-led-pdf-ocr.test.ts", "selector": "Agent-led PDF OCR tool" },

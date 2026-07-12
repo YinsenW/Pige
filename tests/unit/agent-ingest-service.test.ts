@@ -2,16 +2,17 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { PigeDomainError } from "@pige/domain";
 import {
   AgentIngestService,
   type AgentIngestModelConfigPort
 } from "../../apps/desktop/src/main/services/agent-ingest-service";
 import { CaptureService, type SourceFetchPort } from "../../apps/desktop/src/main/services/capture-service";
+import { KnowledgeActivityService } from "../../apps/desktop/src/main/services/knowledge-activity-service";
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
-import type { JobRecord, SourceRecord } from "@pige/schemas";
+import { OperationRecordSchema, type JobRecord, type OperationRecord, type SourceRecord } from "@pige/schemas";
 import type { VaultSummary } from "@pige/contracts";
 import { ScriptedAgentIngestRuntime } from "../helpers/scripted-agent-ingest-runtime";
 
@@ -170,6 +171,11 @@ describe("agent ingest service", () => {
     expect(operation).toContain('"policyAudit"');
     expect(operation).toMatch(/"policyHash": "sha256:[a-f0-9]{64}"/u);
     expect(operation).toContain(result.pagePath);
+    expect((JSON.parse(operation) as OperationRecord).after).toEqual({
+      kind: "page",
+      id: `sha256:${createHash("sha256").update(note, "utf8").digest("hex")}`,
+      path: result.pagePath
+    });
     expect(operation).not.toContain("sk-test-source-secret");
     expect(operation).not.toContain("API_KEY");
     expect(egressOperation).toContain("Model egress allow");
@@ -187,6 +193,95 @@ describe("agent ingest service", () => {
     expect(result.operationIds).toHaveLength(2);
     expect(modelClient.lastUserPrompt).not.toContain("sk-test-source-secret");
     expect(modelClient.lastUserPrompt).toContain("[redacted-secret]");
+
+    const activity = new KnowledgeActivityService({
+      current: () => vault,
+      activeVaultPath: () => vaultPath
+    });
+    expect(activity.list().activities.find((entry) => entry.operationId === result.operationId))
+      .toMatchObject({ status: "applied", canUndo: true });
+    expect(activity.undo({ operationId: result.operationId }).status).toBe("undone");
+    expect(fs.existsSync(path.join(vaultPath, result.pagePath))).toBe(false);
+    expect(activity.list().activities.find((entry) => entry.operationId === result.operationId))
+      .toMatchObject({ status: "undone", canUndo: false });
+  });
+
+  it("never replaces an occupied deterministic create Operation with different audit facts", async () => {
+    const { vaultPath, vault } = makeVault();
+    const captured = makeCapture(vaultPath, vault).submitText({
+      text: "Evidence for an append-only create Operation.",
+      inputKind: "typed_text",
+      userIntent: "capture",
+      locale: "en"
+    });
+    const sourceRecord = readJson<SourceRecord>(findFile(
+      path.join(vaultPath, ".pige/source-records"),
+      `${captured.sourceId}.json`
+    ));
+    const job = readJson<JobRecord>(findFile(path.join(vaultPath, ".pige/jobs"), `${captured.jobId}.json`));
+    const modelClient = new CapturingModelClient({
+      title: "Append-only evidence",
+      summary: { text: "The durable Operation must not be replaced.", evidenceRefs: ["ev_01"] },
+      keyPoints: [{ text: "Keep the first audit identity", evidenceRefs: ["ev_01"] }],
+      tags: [],
+      topics: [],
+      entities: [],
+      warnings: [],
+      confidence: "high"
+    });
+    let occupiedPath: string | undefined;
+    let occupiedBytes: string | undefined;
+    const originalLink = fs.linkSync.bind(fs);
+    const linkSpy = vi.spyOn(fs, "linkSync").mockImplementation((sourcePath, targetPath) => {
+      const target = String(targetPath);
+      const source = String(sourcePath);
+      if (
+        !occupiedPath &&
+        target.endsWith(".json") &&
+        path.basename(source).startsWith(`.${path.basename(target)}.`)
+      ) {
+        const operationId = path.basename(target, ".json");
+        const occupied = OperationRecordSchema.parse({
+          id: operationId,
+          schemaVersion: 1,
+          jobId: job.id,
+          createdAt: "2026-07-12T00:00:00.000Z",
+          actor: {
+            kind: "pige_agent",
+            runtimeKind: "desktop_local",
+            clientCapabilityTier: "desktop_full"
+          },
+          permissionDecisionIds: [],
+          kind: "create_page",
+          targetRefs: [{
+            kind: "page",
+            id: "page_20260712_occupiedaudit",
+            path: "wiki/generated/2026/page_20260712_occupiedaudit.md"
+          }],
+          sourceRefs: [{ kind: "job", id: job.id }],
+          summary: "Pre-existing different create audit facts.",
+          reversible: "best_effort",
+          warnings: []
+        });
+        occupiedPath = target;
+        occupiedBytes = `${JSON.stringify(occupied, null, 2)}\n`;
+        fs.writeFileSync(target, occupiedBytes, "utf8");
+      }
+      return originalLink(sourcePath, targetPath);
+    });
+
+    try {
+      await expect(new AgentIngestService(
+        makeModelPort(() => verifiedLocalRuntimeConfig),
+        modelClient
+      ).ingestSource(vaultPath, sourceRecord, job)).rejects.toMatchObject({
+        code: "agent_ingest.page_conflict"
+      });
+    } finally {
+      linkSpy.mockRestore();
+    }
+    expect(occupiedPath).toBeDefined();
+    expect(fs.readFileSync(occupiedPath as string, "utf8")).toBe(occupiedBytes);
   });
 
   it("requires an egress decision before credential lookup or model invocation", async () => {
@@ -578,9 +673,15 @@ describe("agent ingest service", () => {
     expect(second.pagePath).toBe(first.pagePath);
     expect(second.operationId).toBe(first.operationId);
     expect(recoveredOperation).toContain("Recovered operation metadata");
+    expect((JSON.parse(recoveredOperation) as OperationRecord).after).toBeUndefined();
     expect(recoveredIndex).toContain(`[Reusable source](${first.pagePath})`);
     expect(checkpoints).toEqual(["agent_existing_note_adoption_started"]);
     expect(modelClient.callCount).toBe(1);
+    expect(new KnowledgeActivityService({
+      current: () => vault,
+      activeVaultPath: () => vaultPath
+    }).list().activities.find((activity) => activity.operationId === first.operationId))
+      .toMatchObject({ canUndo: false, undoUnavailableReason: "legacy_record" });
   });
 
   it("attributes existing notes by bounded last-job provenance and guards only new index adoption", async () => {

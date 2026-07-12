@@ -15,6 +15,8 @@ import type {
   HomeAgentAskRequest,
   JobActionRequest,
   JobsListRequest,
+  KnowledgeActivityListRequest,
+  KnowledgeActivityUndoRequest,
   LibraryListRequest,
   LibraryRelatedRequest,
   NoteGetRequest,
@@ -71,6 +73,7 @@ import {
   type ProcessQueuedParsesResult
 } from "./services/jobs-service";
 import { LibraryService } from "./services/library-service";
+import { KnowledgeActivityService } from "./services/knowledge-activity-service";
 import { AgentSubmitTurnRequestSchema, HomeAgentService } from "./services/home-agent-service";
 import { HomeAgentUrlService } from "./services/home-agent-url-service";
 import { LocalDatabaseRebuildWorkerService } from "./services/local-database-rebuild-worker-service";
@@ -104,6 +107,7 @@ let appearanceService: AppearanceService | undefined;
 let toolchainService: ToolchainService | undefined;
 let captureService: CaptureService | undefined;
 let jobsService: JobsService | undefined;
+let knowledgeActivityService: KnowledgeActivityService | undefined;
 let libraryService: LibraryService | undefined;
 let notesService: NotesService | undefined;
 let proposalService: ProposalService | undefined;
@@ -372,6 +376,13 @@ const getProposalService = (): ProposalService => {
   return proposalService;
 };
 
+const getKnowledgeActivityService = (): KnowledgeActivityService => {
+  if (!knowledgeActivityService) {
+    knowledgeActivityService = new KnowledgeActivityService(getVaultService());
+  }
+  return knowledgeActivityService;
+};
+
 const getRetrievalService = (): RetrievalService => {
   if (!retrievalService) {
     retrievalService = new RetrievalService(getVaultService(), getLocalDatabaseService());
@@ -488,6 +499,16 @@ const scheduleIndexRebuildProcessing = (): void => {
   indexRebuildDrainer.schedule();
 };
 
+const scheduleActivityIndexRebuild = (): void => {
+  void getJobsService().requestIndexRebuild().catch(() => {
+    getDiagnosticsService().recordEvent({
+      level: "warning",
+      code: "activity.index_rebuild_failed",
+      message: "Local search needs a rebuild after knowledge Undo."
+    });
+  });
+};
+
 const recordBackgroundFailure = (code: string, fallback: string): void => {
   getDiagnosticsService().recordEvent({
     level: "warning",
@@ -533,6 +554,25 @@ const resumeBackgroundJobs = (): void => {
     getJobsService().requeueWaitingParses();
     getJobsService().requeueWaitingOcr();
     getJobsService().requeueWaitingAgentIngest();
+    try {
+      const activityRecovery = getKnowledgeActivityService().recoverIncompleteUndos();
+      if (activityRecovery.recovered > 0) scheduleActivityIndexRebuild();
+      if (activityRecovery.recovered > 0 || activityRecovery.failed > 0) {
+        getDiagnosticsService().recordEvent({
+          level: activityRecovery.failed > 0 ? "warning" : "info",
+          code: activityRecovery.failed > 0 ? "activity.recovery_incomplete" : "activity.recovery_completed",
+          message: activityRecovery.failed > 0
+            ? "Some interrupted knowledge Undo work still requires repair."
+            : "Interrupted knowledge Undo work was reconciled after startup."
+        });
+      }
+    } catch {
+      getDiagnosticsService().recordEvent({
+        level: "warning",
+        code: "activity.recovery_failed",
+        message: "Knowledge Undo recovery could not inspect its durable records."
+      });
+    }
     void getJobsService().recoverProposalDecisions(getProposalService()).then((result) => {
       if (result.applied > 0 || result.rejected > 0 || result.conflicted > 0 || result.failed > 0) {
         getDiagnosticsService().recordEvent({
@@ -700,6 +740,14 @@ ipcMain.handle("jobs.retry", async (_event, request: JobActionRequest) => {
   if (result.status === "requeued" && result.job?.class === "index_rebuild") {
     scheduleIndexRebuildProcessing();
   }
+  return result;
+});
+ipcMain.handle("activity.list", (_event, request?: KnowledgeActivityListRequest) =>
+  getKnowledgeActivityService().list(request)
+);
+ipcMain.handle("activity.undo", (_event, request: KnowledgeActivityUndoRequest) => {
+  const result = getKnowledgeActivityService().undo(request);
+  scheduleActivityIndexRebuild();
   return result;
 });
 ipcMain.handle("library.list", (_event, request?: LibraryListRequest) => getLibraryService().list(request));
@@ -930,6 +978,7 @@ app.whenReady().then(() => {
     { snapshot: getAgentCapabilitySnapshot }
   );
   proposalService = new ProposalService(getVaultService());
+  knowledgeActivityService = new KnowledgeActivityService(getVaultService());
   agentIngestService = new AgentIngestService(getModelProviderRegistry(), undefined, {
     snapshot: getAgentCapabilitySnapshot
   }, undefined, undefined, createAgentIngestRetrievalPort(), createAgentIngestProposalPort());

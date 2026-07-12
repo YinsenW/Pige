@@ -450,6 +450,44 @@ export interface JobActionResult {
   readonly job?: JobSummary;
 }
 
+export interface KnowledgeActivityListRequest {
+  readonly limit?: number;
+}
+
+export type KnowledgeActivityUndoUnavailableReason =
+  | "already_undone"
+  | "content_changed"
+  | "legacy_record"
+  | "target_missing";
+
+export interface KnowledgeActivitySummary {
+  readonly operationId: string;
+  readonly kind: "create_page";
+  readonly createdAt: string;
+  readonly targetLabel?: string;
+  readonly status: "applied" | "undone";
+  readonly canUndo: boolean;
+  readonly undoUnavailableReason?: KnowledgeActivityUndoUnavailableReason;
+}
+
+export interface KnowledgeActivityListResult {
+  readonly scannedAt: string;
+  readonly activeVaultId: string;
+  readonly total: number;
+  readonly invalidOperationCount: number;
+  readonly activities: readonly KnowledgeActivitySummary[];
+}
+
+export interface KnowledgeActivityUndoRequest {
+  readonly operationId: string;
+}
+
+export interface KnowledgeActivityUndoResult {
+  readonly status: "undone" | "already_undone";
+  readonly operationId: string;
+  readonly undoOperationId: string;
+}
+
 export interface ProposalsListRequest {
   readonly limit?: number;
   readonly states?: readonly ProposalState[];
@@ -887,6 +925,10 @@ export interface PigeDesktopApi {
     readonly list: (request?: JobsListRequest) => Promise<JobsListResult>;
     readonly cancel: (request: JobActionRequest) => Promise<JobActionResult>;
     readonly retry: (request: JobActionRequest) => Promise<JobActionResult>;
+  };
+  readonly activity: {
+    readonly list: (request?: KnowledgeActivityListRequest) => Promise<KnowledgeActivityListResult>;
+    readonly undo: (request: KnowledgeActivityUndoRequest) => Promise<KnowledgeActivityUndoResult>;
   };
   readonly proposals: {
     readonly list: (request?: ProposalsListRequest) => Promise<ProposalsListResult>;
