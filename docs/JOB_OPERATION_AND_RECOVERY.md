@@ -533,14 +533,11 @@ Rules:
 
 Current Phase 3 implementation is narrower and transitional:
 
-- ProposalService confines bounded vault-relative records, rejects link aliases, fsyncs exclusive commits/decisions, and reuses one exact-intent Job slot.
-- Pi stages before body-free parent linkage. Approval runs `approved` -> exact page/index/
-  deterministic body-free Operation -> `applied` -> idempotent log -> parent completion;
-  rejection applies nothing, while conflict becomes `conflicted` plus `failed_final`.
-- Startup reconciles without model/credentials; Home re-reads durable state after rejected
-  calls and locks unknown outcomes. The sequence is not transactional; generic operations,
-  unified/replacement UX, CAS/TOCTOU, and platform proof remain open.
-- Exact create-note review is exception/recovery infrastructure; autonomous commit and Activity/Undo remain open.
+- Exact proposals remain confined, ordered, restart-reconciled support. Fresh direct/
+  proposal creates bind Markdown hash/path; hashless recovery stays non-undoable.
+- Activity admits one reversible generated-page create. Undo rechecks page/index/audit;
+  private trash and deterministic `trash_page` precede rebuild.
+- Proposal routing, non-create, generic exceptions, restore/redo, CAS/TOCTOU, broad Activity/platforms remain open.
 - `requiredPermissionIds` is a compatibility field for permission prerequisites and may contain canonical `permreq_` request IDs or `permdec_` decision IDs; a later schema may split, not reinterpret, it.
 
 ## 12. Operation Record Lifecycle
@@ -628,6 +625,8 @@ Rules:
 - An operation affected by Agent Runtime Policy Context records `policyAudit` with the context ID/hash and enforcing service names. Permissioned operations also retain permission decision IDs. Neither field contains full settings, grant bodies, paths, prompts, or secrets.
 - Before any provider credential lookup, a model-dependent Job writes an idempotent `model_egress_decision` operation containing only outcome, reason, content classes, bounded payload counts, model/source/job references, `policyAudit`, and a typed `modelEgressAudit`. Its `payloadHash` identifies the exact redacted bounded payload, `evidenceSummaryHash` identifies the source/artifact/locator summary without storing that summary body, and `decisionHash` fingerprints the complete typed decision including content classification, provider boundary, cloud policy, counts, policy hash, and permission decision. All three hashes participate in the operation identity. Reuse is allowed only when payload, evidence identity, and final decision are equivalent; changing private/privacy/sensitive metadata cannot reuse an ordinary-content audit. Confirmed or blocked attempts remain auditable even when no model call or page write occurs.
 - Source relink/root change, settings change, trash/restore, backup/restore, migration, Skill/package lifecycle, and memory trash/restore must not fall through to a generic page-update record.
+- `create_page.after` binds result hash/path; `trash_page` binds unchanged live `before`
+  and private-trash `after`; later edits are never signed retroactively.
 - Rollback is best effort and must check current file hashes before applying.
 
 ## 13. Crash Recovery
@@ -650,6 +649,7 @@ Recovery decisions:
 | --- | --- |
 | Source preserved, no selected child | Wake the Agent parent; never infer parse/OCR/retrieval from source shape. |
 | `agent_turn` has a valid assistant event | Adopt its checksum-bound output refs and finish without another model call. |
+| Generated-page Undo is interrupted | Adopt page/trash/index/quarantine/Operation only when IDs/hashes agree; else preserve/fail closed, then rebuild. |
 | Source copied, source record missing | Create repair proposal or source record if checksum/path proves source. |
 | Parse artifact exists, source page missing | Resume source page creation. |
 | Proposal ready, app crashed before display | Show proposal in Home status. |

@@ -138,9 +138,9 @@ Rules:
   selected model ID. Before Pi invocation Pige validates credential-bearing config;
   each turn rechecks non-secret binding, source/cancellation, and egress. Drift fails closed.
 - The model may cite only supplied `ev_NN` refs. Unknown refs fail before any Markdown write. A statement with an empty ref list is retained only with a warning, confidence cap, and `needs_review`; model-authored `[source:...]` or `[artifact:...]` tokens are stripped and canonical citations are rendered service-side.
-- The target auto-commits eligible reversible knowledge and stages only an exceptional
-  boundary. Current code still stages every exact create note for Home review; autonomous
-  eligibility routing and Activity/Undo remain open.
+- The target auto-commits eligible reversible knowledge and stages exceptional boundaries.
+  Current code supports direct publish and proposal staging; fresh exact-create Activity/Undo
+  works, while non-create eligibility/routing remains open.
 
 ### 5.2 Home Query
 

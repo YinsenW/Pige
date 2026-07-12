@@ -21,6 +21,10 @@ import type {
   JobActionResult,
   JobsListRequest,
   JobsListResult,
+  KnowledgeActivityListRequest,
+  KnowledgeActivityListResult,
+  KnowledgeActivityUndoRequest,
+  KnowledgeActivityUndoResult,
   LibraryListRequest,
   LibraryListResult,
   LibraryRelatedRequest,
@@ -102,6 +106,12 @@ const api: PigeDesktopApi = {
       ipcRenderer.invoke("jobs.cancel", request) as Promise<JobActionResult>,
     retry: async (request: JobActionRequest): Promise<JobActionResult> =>
       ipcRenderer.invoke("jobs.retry", request) as Promise<JobActionResult>
+  },
+  activity: {
+    list: async (request?: KnowledgeActivityListRequest): Promise<KnowledgeActivityListResult> =>
+      ipcRenderer.invoke("activity.list", request) as Promise<KnowledgeActivityListResult>,
+    undo: async (request: KnowledgeActivityUndoRequest): Promise<KnowledgeActivityUndoResult> =>
+      ipcRenderer.invoke("activity.undo", request) as Promise<KnowledgeActivityUndoResult>
   },
   proposals: {
     list: async (request?: ProposalsListRequest): Promise<ProposalsListResult> =>

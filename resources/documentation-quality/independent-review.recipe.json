@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-12T14:43:14Z",
+  "reviewedAt": "2026-07-12T17:17:07Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,7 +30,7 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "76af5e66f3527d2acd4fde8a854c244a061d70fdc24c3d1e2cbeeb22a53b4cb0"
+    "reviewedSha256": "26e2724e60b24192a39319d1c86cffeed0f0f8af463f715d2170d86d41e5ce67"
   },
   "reviewers": [
     {
@@ -296,43 +296,55 @@
         "documentation_leanness_and_maintainability"
       ],
       "independence": "Fresh read-only reviewer independently audited the exact durable Agent follow-up candidate after the checksum repair without editing files. It verified the replacement Development hashes, symmetric user/assistant history integrity, exact-tail retry/restart adoption, bounded Pi history, cooperative cancellation, Home transcript behavior, unchanged states, and explicit residual gaps."
+    },
+    {
+      "reviewerId": "autonomous-auto-apply-final-review",
+      "task": "/root/auto_apply_final_independent",
+      "independentDimensions": [
+        "navigation_and_resource_lifecycle",
+        "cross_document_contract_consistency",
+        "continuous_traceability_and_acceptance",
+        "ongoing_development_support",
+        "documentation_leanness_and_maintainability"
+      ],
+      "independence": "Fresh read-only reviewer audited the exact 19-Development plus 10-governed pre-recipe candidate without editing files. It required repair of stale proposal-first Prompt/Decision/UI wording, the Activity-versus-Job recovery owner, and the unbatched scan residual; after repair all five dimensions were CLEAR for exact checksum-bound create Activity/Undo, durable UI reconciliation, unchanged states, 1,097 claims, and fixed budgets."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "durable-agent-followup-final-review",
+      "reviewerId": "autonomous-auto-apply-final-review",
       "blockerCount": 0,
-      "summary": "Existing Home, Jobs and Agent owners absorb transcript, follow-up, retry and cancellation without a new mode, destination, document or resource lifecycle."
+      "summary": "Existing Home and Activity surfaces add no navigation or document; exact-page Undo uses recoverable private trash, a deterministic trash Operation and worker rebuild."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "durable-agent-followup-final-review",
+      "reviewerId": "autonomous-auto-apply-final-review",
       "blockerCount": 0,
-      "summary": "API, Job, Pi, context, technical, UI, Decision and Playbook owners agree on schema-v1 exact-tail binding, bounded checked history, durable result adoption and typed cancellation."
+      "summary": "API, Job, Pi, Prompt, technical, UI, Decision and Playbook owners agree on direct versus proposal create paths, exact hash eligibility, Activity recovery and Job rebuild."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "durable-agent-followup-final-review",
+      "reviewerId": "autonomous-auto-apply-final-review",
       "blockerCount": 0,
-      "summary": "One exact UI evidence row and existing Home service evidence update only partial/planned mappings; 1,096 claims are current and locked and every Requirement, Exit and phase state is unchanged."
+      "summary": "One exact Activity/Undo evidence row updates only existing partial mappings; 1,097 claims are locked and every Requirement, Exit and phase state remains unchanged."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "durable-agent-followup-final-review",
+      "reviewerId": "autonomous-auto-apply-final-review",
       "blockerCount": 0,
-      "summary": "Owners distinguish the executable follow-up/restart/cancel foundation from open cross-process CAS, multi-source, compaction/indexing, steer queues and packaged-platform proof."
+      "summary": "Owners distinguish exact generated-page Activity/Undo from open non-create eligibility, hashless recovery, batched scans, restore/redo, cross-process CAS and platform proof."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.6,
-      "reviewerId": "durable-agent-followup-final-review",
+      "reviewerId": "autonomous-auto-apply-final-review",
       "blockerCount": 0,
-      "summary": "No document or screen was added; gates pass at 4,107/4,200 entry words, 5,155 trace lines, 249,929/250,000 trace bytes and 1,209,638/1,210,000 Markdown bytes."
+      "summary": "No document, screen or prototype was added; gates pass at 4,107/4,200 entry words, 5,112 trace lines, 249,895/250,000 trace bytes and 1,209,625/1,210,000 Markdown bytes."
     }
   ],
   "verification": [
@@ -344,17 +356,17 @@
     {
       "command": "npm test && npm run typecheck && npm run build --workspace @pige/desktop",
       "status": "passed",
-      "evidence": "The exact replacement candidate passed 79 files and 749 tests with zero skips, typecheck and production build; Electron unified Agent, Pi, parser, index and real macOS Vision smokes also passed."
+      "evidence": "The exact candidate passed 80 files and 781 tests, typecheck and production build; Electron unified Agent, Pi, parser, index and real macOS Vision smokes also passed."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 passed: 4,107/4,200 entry words, zero duplicate groups, 14 mutations, 5,155 trace lines, 249,929 trace bytes, 57 Markdown files, 1,209,638 bytes, and 6.69 percent line reduction."
+      "evidence": "LEN-001 through LEN-005 passed: 4,107/4,200 entry words, zero duplicate groups, 14 mutations, 5,112 trace lines, 249,895 trace bytes, 57 Markdown files, 1,209,625 bytes, and 6.68 percent line reduction."
     },
     {
       "command": "node scripts/verify/independent-documentation-review.mjs --print-snapshot && explicit semantic-ledger comparison",
       "status": "passed",
-      "evidence": "The governed snapshot is 76af5e66f3527d2acd4fde8a854c244a061d70fdc24c3d1e2cbeeb22a53b4cb0 across 109 files; current and locked ledgers contain 1,096 claims with zero differences."
+      "evidence": "The governed snapshot is 26e2724e60b24192a39319d1c86cffeed0f0f8af463f715d2170d86d41e5ce67 across 109 files; current and locked ledgers contain 1,097 claims with zero differences."
     }
   ],
   "coordination": {
@@ -363,8 +375,8 @@
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The durable follow-up candidate keeps every phase/status and legacy no-hash record while adding exact-tail retry/restart, bounded checked history, cooperative Pi cancellation and one mode-free Home transcript.",
-    "acknowledgement": "Development froze exactly 20 files; Product Planning changed 12 governed files, UI Design accepted one existing-surface wording sync, and fresh independent review cleared the exact combined candidate."
+    "compatibility": "The exact-create candidate keeps every phase/status and legacy hashless record while adding checksum-bound Activity, exact-page Undo, recoverable trash and durable Home reconciliation.",
+    "acknowledgement": "Development froze exactly 19 files; Product Planning changed 11 governed files, UI Design accepted the existing Home surface, and fresh independent review cleared the exact combined candidate."
   },
   "resolvedBlockers": [
     "Implemented five preset-first Providers plus Custom-only protocols, conditional credentials, auto-sync/Refresh/manual inventory, grouped Global Default, typed repair and real Pi probe with journaled recovery; retained every partial/planned state.",
@@ -399,7 +411,8 @@
     "Added Pi-selected static-URL fetch/preserve with SSRF/body gates, deterministic source/page/artifact/Operation recovery and no hidden Host route; multi-URL and packaged proof remain open.",
     "Made remote/protocol/traversal Reader resources inert and blocked frame, redirect and new-window navigation without adding user friction or a new surface.",
     "Added descriptor-bound source snapshots, self-validation, adjacent private staging, fsync, no-overwrite hard-link publication and owned crash-link reconciliation while keeping non-hardlink transport and durable Backup Jobs open.",
-    "Added exact-tail durable Home follow-up with one event/Job per client turn, checksum-verified history/results, bounded Pi rehydration, restart adoption, cooperative cancellation, and localized transcript/retry/cancel UI without changing statuses."
+    "Added exact-tail durable Home follow-up with one event/Job per client turn, checksum-verified history/results, bounded Pi rehydration, restart adoption, cooperative cancellation, and localized transcript/retry/cancel UI without changing statuses.",
+    "Added checksum-bound exact create Operations plus bounded Home Activity and non-confirming exact-page Undo with recoverable trash, deterministic trash Operations, worker rebuild, startup reconciliation and durable UI truth without changing statuses."
   ],
   "nonBlockingRisks": [
     "P5 remains in progress: remaining Job-class publishers, running capture/other-class cancellation, strict cross-process Job CAS and routing, parent-directory swap, guard-to-domain atomicity, guard-without-output recovery, checkpoint arrays, cross-file transactions, Windows/Paddle, packaged-filesystem proof, and non-Agent progress/cancel UI remain open.",
@@ -408,9 +421,10 @@
     "The retrieval regression foundation remains lexical and synthetic: model-grounded summary/citation validation under cloud-send and Permission enforcement, tag/topic/entity and Knowledge Tree thresholds, vector/reranker ranking, 10k/100k and UI/packaged proof, and broader locale/query families remain open.",
     "The Knowledge Tree remains internal-only: broader relation and branch semantics, richer aggregate inputs, public IPC/preload/renderer navigation, localized empty state, 10k worker/incremental rebuild proof, packaged parity, and the separately owned visual/accessibility and Knowledge Health work remain open.",
     "Pi remains partial: full Provider catalog/help/delete, durable sync health, optional-auth UI, live DeepSeek preset/Anthropic proof, multi-source recovery, history compaction/indexing, steer queues, Broker and signed packaged BYOK remain open.",
+    "Activity/Undo remains exact checksum-bound generated create pages only; hashless recovery, non-create operations, batched scans, restore/redo, cross-process CAS/transactions and packaged platforms remain open.",
     "No-telemetry is a static executable gate; unknown SDKs, computed endpoints, indirect transports, generated configuration, and crash-hook review remain open. Diagnostics still need broader stores, recovery correlation, user clear, export cancellation, selected-path UX, and crash recovery.",
     "Backup still needs backupId/domain versions, release scans, external copies/controls, durable Jobs/checkpoints, non-hardlink publication, restore identity, pathname CAS/pre-link cleanup, dependencies and complete restore orchestration.",
-    "Trace projections use 5,155 of 5,500 lines and 249,929 of 250,000 bytes; governed Markdown uses 1,209,638 of 1,210,000 bytes. Future additions must reclaim capacity instead of raising budgets.",
+    "Trace projections use 5,112 of 5,500 lines and 249,895 of 250,000 bytes; governed Markdown uses 1,209,625 of 1,210,000 bytes. Future additions must reclaim capacity instead of raising budgets.",
     "PRD, TECH_ARCHITECTURE, and Decision Log remain large Owner documents; future Agents should continue section-targeted reads and define each fact once.",
     "The concise pre-alpha README intentionally has no install button, screenshots, or release download; add those only when a usable signed build and governed visual evidence exist.",
     "Structural UI gates do not prove packaged macOS/Windows fidelity, accessibility, or human visual approval; real capture and release evidence remain open.",

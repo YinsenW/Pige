@@ -1300,6 +1300,7 @@ export class AgentIngestService {
               output: prepared.output,
               evidencePack: currentEvidencePack,
               relatedPageIds: prepared.relatedPageIds,
+              contentHash: createModelEgressPayloadHash(prepared.noteMarkdown),
               now: prepared.now
             });
             publication = {
@@ -2540,6 +2541,7 @@ function writeCreatePageOperation(input: {
   readonly output: AgentIngestOutput;
   readonly evidencePack: EvidencePack;
   readonly relatedPageIds: readonly string[];
+  readonly contentHash: string;
   readonly now: string;
 }): OperationRecord {
   const operationId = createOperationId(input.job.id, input.pageId);
@@ -2573,13 +2575,13 @@ function writeCreatePageOperation(input: {
         id: pageId
       }))
     ],
+    after: { kind: "page", id: input.contentHash, path: input.pagePath },
     summary: `Created wiki note "${input.output.title}" from preserved source ${input.sourceRecord.id}.`,
     reversible: "best_effort",
     rollbackHint: "Move the generated wiki page to trash after checking that it has not been edited.",
     warnings: input.output.warnings
   });
-  writeJsonAtomic(resolveVaultRelativePath(input.vaultPath, createOperationPath(operation.id)), operation);
-  return operation;
+  return commitFreshCreatePageOperation(input.vaultPath, operation);
 }
 
 interface ProposalCreatePageOperationInput {
@@ -2597,7 +2599,7 @@ function preflightProposalCreatePageOperation(input: ProposalCreatePageOperation
   const operation = createProposalCreatePageOperationRecord(input);
   const operationPath = resolveVaultRelativePath(input.vaultPath, createOperationPath(operation.id));
   const existing = readProposalOperationRecord(input.vaultPath, operationPath);
-  if (existing && JSON.stringify(existing) !== JSON.stringify(operation)) {
+  if (existing && !sameProposalCreatePageOperation(existing, operation)) {
     throw proposalOperationConflict(
       "The deterministic proposal Operation identity is already used by different audit facts."
     );
@@ -2610,7 +2612,7 @@ function writeProposalCreatePageOperation(input: ProposalCreatePageOperationInpu
   const operationPath = resolveVaultRelativePath(input.vaultPath, createOperationPath(operation.id));
   const existing = readProposalOperationRecord(input.vaultPath, operationPath);
   if (existing) {
-    if (JSON.stringify(existing) !== JSON.stringify(operation)) {
+    if (!sameProposalCreatePageOperation(existing, operation)) {
       throw proposalOperationConflict(
         "The deterministic proposal Operation identity is already used by different audit facts."
       );
@@ -2628,6 +2630,37 @@ function writeProposalCreatePageOperation(input: ProposalCreatePageOperationInpu
   }
   if (JSON.stringify(committed) !== JSON.stringify(operation)) {
     throw proposalOperationConflict("The deterministic proposal Operation changed during commit.");
+  }
+  return committed;
+}
+
+function sameProposalCreatePageOperation(existing: OperationRecord, expected: OperationRecord): boolean {
+  if (JSON.stringify(existing) === JSON.stringify(expected)) return true;
+  if (existing.after !== undefined || expected.after === undefined) return false;
+  const { after: _expectedResultHash, ...legacyExpected } = expected;
+  return JSON.stringify(existing) === JSON.stringify(legacyExpected);
+}
+
+function commitFreshCreatePageOperation(vaultPath: string, operation: OperationRecord): OperationRecord {
+  const operationPath = resolveVaultRelativePath(vaultPath, createOperationPath(operation.id));
+  const existing = readProposalOperationRecord(vaultPath, operationPath);
+  if (existing) {
+    if (JSON.stringify(existing) !== JSON.stringify(operation)) {
+      throw new PigeDomainError(
+        "agent_ingest.page_conflict",
+        "The deterministic create Operation identity is already bound to different audit facts."
+      );
+    }
+    return existing;
+  }
+  assertProposalOperationParent(vaultPath, operationPath, true);
+  commitProposalOperationExclusive(vaultPath, operationPath, operation);
+  const committed = readProposalOperationRecord(vaultPath, operationPath);
+  if (!committed || JSON.stringify(committed) !== JSON.stringify(operation)) {
+    throw new PigeDomainError(
+      "agent_ingest.page_conflict",
+      "The deterministic create Operation changed during exclusive commit."
+    );
   }
   return committed;
 }
@@ -2770,6 +2803,7 @@ function createProposalCreatePageOperationRecord(
     );
   }
   const operationId = createProposalApplyOperationId(input.proposal.id);
+  const createOperation = requireProposalCreateOperation(input.proposal);
   return OperationRecordSchema.parse({
     id: operationId,
     schemaVersion: 1,
@@ -2796,6 +2830,11 @@ function createProposalCreatePageOperationRecord(
       { kind: "source", id: input.sourceRecord.id },
       ...input.proposal.sourceRefs
     ]),
+    after: {
+      kind: "page",
+      id: createModelEgressPayloadHash(createOperation.content),
+      path: createOperation.path
+    },
     summary: `Applied approved proposal ${input.proposal.id} to create one wiki page from source ${input.sourceRecord.id}.`,
     reversible: "best_effort",
     rollbackHint: "Move the created page to trash only after verifying that its content still matches the applied proposal.",

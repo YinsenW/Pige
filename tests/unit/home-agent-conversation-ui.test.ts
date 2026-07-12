@@ -8,7 +8,8 @@ import type {
   AgentConversationTimeline,
   AgentSubmitTurnRequest,
   AgentSubmitTurnResult,
-  JobSummary
+  JobSummary,
+  KnowledgeActivitySummary
 } from "@pige/contracts";
 
 const globalKeys = [
@@ -112,6 +113,34 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("does not let an earlier turn completion erase a newly typed follow-up draft", async () => {
+    const dom = createDom();
+    const harness = createHarness(completedTimeline());
+    let resolveTurn: ((result: AgentSubmitTurnResult) => void) | undefined;
+    harness.submitTurn = (request) => {
+      harness.submitRequests.push(request);
+      return new Promise((resolve) => {
+        resolveTurn = resolve;
+      });
+    };
+    const mount = await mountHome(dom, makePigeApi(harness));
+
+    await setTextareaValue(dom, mount.container, "Start the next answer.");
+    await clickButton(dom, mount.container, "Send");
+    await waitFor(dom, () => harness.submitRequests.length === 1);
+    await setTextareaValue(dom, mount.container, "Draft the follow-up while this runs.");
+
+    await act(async () => {
+      resolveTurn?.(completedResult());
+      await Promise.resolve();
+    });
+    await waitFor(dom, () => textareaValue(mount.container) === "Draft the follow-up while this runs.");
+    expect(textareaValue(mount.container)).toBe("Draft the follow-up while this runs.");
+
+    await act(async () => mount.root.unmount());
+    dom.window.close();
+  });
+
   it("retries the durable latest Job without submitting a replacement turn", async () => {
     const dom = createDom();
     const harness = createHarness({
@@ -158,6 +187,95 @@ describe("Home durable Agent conversation UI", () => {
     expect(harness.cancelJobIds).toEqual(["job_20260712_runningfixture"]);
     expect(container.textContent).toContain("Cancellation requested");
     expect(buttonsByAriaLabel(container, "Cancel")[0]?.disabled).toBe(true);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("shows compact Activity and disables repeated Undo after the durable change moves to trash", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.activities = [reversibleActivity()];
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await waitFor(dom, () => buttons(container, "Undo").length === 1);
+    expect(container.querySelector('[aria-label="Activity"]')?.textContent)
+      .toContain("Knowledge note created: Grounded boundary");
+    await clickButton(dom, container, "Undo");
+    await waitFor(dom, () => harness.undoOperationIds.length === 1);
+
+    expect(harness.undoOperationIds).toEqual(["op_20260712_activityfixture"]);
+    expect(container.textContent).toContain("Change moved to recoverable trash.");
+    expect(container.textContent).toContain("Undone");
+    expect(buttons(container, "Undo")).toHaveLength(0);
+    const successToast = container.querySelector<HTMLElement>('[role="status"]');
+    expect(successToast?.getAttribute("aria-live")).toBe("polite");
+    const activityRow = container.querySelector<HTMLElement>('[data-activity-row-id="op_20260712_activityfixture"]');
+    await waitFor(dom, () => dom.window.document.activeElement === activityRow);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("re-reads durable Activity truth after a post-commit Undo rejection", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.activities = [reversibleActivity()];
+    harness.activityUndoMode = "post_commit_reject";
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await waitFor(dom, () => buttons(container, "Undo").length === 1);
+    await clickButton(dom, container, "Undo");
+    await waitFor(dom, () => container.textContent?.includes("Undone") === true);
+
+    expect(container.textContent).toContain("Change moved to recoverable trash.");
+    expect(container.textContent).not.toContain("Pige could not safely undo this change.");
+    expect(buttons(container, "Undo")).toHaveLength(0);
+    const row = container.querySelector<HTMLElement>('[data-activity-row-id="op_20260712_activityfixture"]');
+    await waitFor(dom, () => dom.window.document.activeElement === row);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps a rejected but still-applied Undo retryable and restores focus to its action", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.activities = [reversibleActivity()];
+    harness.activityUndoMode = "retryable_reject";
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await waitFor(dom, () => buttons(container, "Undo").length === 1);
+    await clickButton(dom, container, "Undo");
+    await waitFor(dom, () => container.textContent?.includes("Pige could not safely undo this change.") === true);
+
+    const retryButton = buttons(container, "Undo")[0];
+    expect(retryButton?.disabled).toBe(false);
+    expect(container.querySelector('[role="alert"]')?.getAttribute("aria-live")).toBe("assertive");
+    await waitFor(dom, () => dom.window.document.activeElement === retryButton);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("fails closed with a live status and row focus when post-rejection truth cannot be read", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.activities = [reversibleActivity()];
+    harness.activityUndoMode = "unknown_reject";
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await waitFor(dom, () => buttons(container, "Undo").length === 1);
+    await clickButton(dom, container, "Undo");
+    await waitFor(dom, () => container.textContent?.includes("could not verify whether this change was undone") === true);
+
+    const blockedButton = buttons(container, "Undo")[0];
+    expect(blockedButton?.disabled).toBe(true);
+    const alert = container.querySelector<HTMLElement>('[role="alert"]');
+    expect(alert?.getAttribute("aria-live")).toBe("assertive");
+    expect(alert?.textContent).not.toContain("synthetic");
+    const row = container.querySelector<HTMLElement>('[data-activity-row-id="op_20260712_activityfixture"]');
+    await waitFor(dom, () => dom.window.document.activeElement === row);
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -216,9 +334,13 @@ describe("Home durable Agent conversation UI", () => {
 interface ConversationHarness {
   timeline: AgentConversationTimeline | undefined;
   jobs: JobSummary[];
+  activities: KnowledgeActivitySummary[];
   readonly submitRequests: AgentSubmitTurnRequest[];
   readonly retryJobIds: string[];
   readonly cancelJobIds: string[];
+  readonly undoOperationIds: string[];
+  activityUndoMode: "success" | "post_commit_reject" | "retryable_reject" | "unknown_reject";
+  activityListReads: number;
   submitTurn: (request: AgentSubmitTurnRequest) => Promise<AgentSubmitTurnResult>;
 }
 
@@ -226,9 +348,13 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
   const harness: ConversationHarness = {
     timeline,
     jobs: [],
+    activities: [],
     submitRequests: [],
     retryJobIds: [],
     cancelJobIds: [],
+    undoOperationIds: [],
+    activityUndoMode: "success",
+    activityListReads: 0,
     submitTurn: async (request) => {
       harness.submitRequests.push(request);
       return completedResult();
@@ -295,6 +421,42 @@ function makePigeApi(harness: ConversationHarness): object {
         return { status: "cancel_requested", job: harness.jobs.find((job) => job.id === jobId) };
       }
     },
+    activity: {
+      list: async () => {
+        harness.activityListReads += 1;
+        if (harness.activityUndoMode === "unknown_reject" && harness.undoOperationIds.length > 0) {
+          throw new Error("synthetic unreadable Activity state");
+        }
+        return {
+          scannedAt: "2026-07-12T08:00:00.000Z",
+          activeVaultId: "vault_home_conversation",
+          total: harness.activities.length,
+          invalidOperationCount: 0,
+          activities: harness.activities
+        };
+      },
+      undo: async ({ operationId }: { readonly operationId: string }) => {
+        harness.undoOperationIds.push(operationId);
+        if (harness.activityUndoMode === "success" || harness.activityUndoMode === "post_commit_reject") {
+          harness.activities = harness.activities.map((activity) => activity.operationId === operationId
+            ? {
+                ...activity,
+                status: "undone",
+                canUndo: false,
+                undoUnavailableReason: "already_undone"
+              }
+            : activity);
+        }
+        if (harness.activityUndoMode !== "success") {
+          throw new Error(`synthetic ${harness.activityUndoMode}`);
+        }
+        return {
+          status: "undone",
+          operationId,
+          undoOperationId: "op_20260712_undofixture"
+        };
+      }
+    },
     proposals: {
       list: async () => ({
         scannedAt: "2026-07-12T08:00:00.000Z",
@@ -303,7 +465,27 @@ function makePigeApi(harness: ConversationHarness): object {
         invalidProposalCount: 0,
         proposals: []
       })
+    },
+    library: {
+      list: async () => ({
+        scannedAt: "2026-07-12T08:00:00.000Z",
+        activeVaultId: "vault_home_conversation",
+        total: 0,
+        invalidPageCount: 0,
+        pages: []
+      })
     }
+  };
+}
+
+function reversibleActivity(): KnowledgeActivitySummary {
+  return {
+    operationId: "op_20260712_activityfixture",
+    kind: "create_page",
+    createdAt: "2026-07-12T08:00:00.000Z",
+    targetLabel: "Grounded boundary",
+    status: "applied",
+    canUndo: true
   };
 }
 
@@ -439,6 +621,12 @@ async function setTextareaValue(dom: JSDOM, container: HTMLElement, value: strin
     textarea.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
     await settle(dom);
   });
+}
+
+function textareaValue(container: HTMLElement): string {
+  const textarea = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Capture or ask"]');
+  if (!textarea) throw new Error("Home composer not found.");
+  return textarea.value;
 }
 
 async function clickButton(dom: JSDOM, container: HTMLElement, label: string): Promise<void> {

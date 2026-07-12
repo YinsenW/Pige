@@ -135,6 +135,37 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain("recoverProposalDecisions(getProposalService())");
   });
 
+  it("routes compact Activity and checksum-bound Undo through preload and main recovery", () => {
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
+    const undoHandler = rendererSource.slice(
+      rendererSource.indexOf("const undoActivity"),
+      rendererSource.indexOf("const handleDragEnter")
+    );
+    const mainUndoHandler = mainSource.slice(
+      mainSource.indexOf('ipcMain.handle("activity.undo"'),
+      mainSource.indexOf('ipcMain.handle("library.list"')
+    );
+
+    expect(mainSource).toContain('ipcMain.handle("activity.list"');
+    expect(mainSource).toContain('ipcMain.handle("activity.undo"');
+    expect(mainSource).toContain("recoverIncompleteUndos()");
+    expect(mainSource).toContain("scheduleActivityIndexRebuild()");
+    expect(mainUndoHandler).toContain("scheduleActivityIndexRebuild()");
+    expect(mainUndoHandler).not.toContain("getLocalDatabaseService().rebuild");
+    expect(preloadSource).toContain('ipcRenderer.invoke("activity.list", request)');
+    expect(preloadSource).toContain('ipcRenderer.invoke("activity.undo", request)');
+    expect(rendererSource).toContain('window.pige.activity.list({ limit: 5 })');
+    expect(rendererSource).toContain('className="activity-strip"');
+    expect(rendererSource).toContain('props.onUndoActivity(activity.operationId)');
+    expect(undoHandler).toContain('window.pige.activity.list({ limit: 20 })');
+    expect(undoHandler).toContain('t("activity.undoStateUnknown")');
+    expect(undoHandler).toContain("restoreActivityFocus(operationId)");
+    expect(rendererSource).toContain('aria-live={captureToast.kind === "error" ? "assertive" : "polite"}');
+    expect(undoHandler).not.toContain("caught instanceof Error ? caught.message");
+  });
+
   it("surfaces ready proposals in Home with a focused escaped preview before durable decisions", () => {
     const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
     const panelSource = fs.readFileSync(
