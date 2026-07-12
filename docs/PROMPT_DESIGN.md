@@ -131,7 +131,8 @@ Rules:
   selected model ID. Before Pi invocation Pige validates credential-bearing config;
   each turn rechecks non-secret binding, source/cancellation, and egress. Drift fails closed.
 - The model may cite only supplied `ev_NN` refs. Unknown refs fail before any Markdown write. A statement with an empty ref list is retained only with a warning, confidence cap, and `needs_review`; model-authored `[source:...]` or `[artifact:...]` tokens are stripped and canonical citations are rendered service-side.
-- The Agent may explicitly choose one terminal durable proposal stage. Automatic low-confidence/risk routing and review/apply remain open.
+- The Agent may stage one terminal durable proposal; explicit review may apply only its
+  exact create note or reject it. Automatic risk routing, review UI, and generic operations remain open.
 
 ### 5.2 Home Query
 

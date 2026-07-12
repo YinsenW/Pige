@@ -196,6 +196,7 @@ progress narrative cannot compete with the current owner.
 | `D-20260709-Phase-2-3-Minimal-Page-Reader` | Initial safe Markdown reader | `docs/API_AND_IPC_DESIGN.md`, `docs/SECURITY_THREAT_MODEL.md` |
 | `D-20260709-Phase-3-Basic-Agent-Ingest-Bridge` | Initial model-backed ingest bridge | `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`, `docs/JOB_OPERATION_AND_RECOVERY.md` |
 | `D-20260710-Phase-3-Change-Proposal-Foundation` | Initial durable proposal staging | `docs/JOB_OPERATION_AND_RECOVERY.md` |
+| `D-20260712-Deterministic-Create-Note-Proposal-Apply` | Exact create-note proposal apply | `docs/JOB_OPERATION_AND_RECOVERY.md`, `docs/API_AND_IPC_DESIGN.md` |
 
 ## 3. Accepted And Superseded Decisions
 
@@ -484,6 +485,32 @@ References:
 - `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
 - `docs/QUALITY_AND_TEST_STRATEGY.md`
 - `docs/SPEC_TRACEABILITY.md`
+
+### D-20260712-Deterministic-Create-Note-Proposal-Apply
+
+Status: Accepted
+Date: 2026-07-12
+
+Decision:
+
+Only the exact Pi-staged Job-scoped create under `wiki/generated/` may apply. Approval
+first drives an ordered recoverable page/index/Operation/proposal/log/Job sequence;
+rejection applies nothing, and conflict closes the parent.
+
+Rationale:
+
+The bounded path adds explicit review and crash recovery without a generic mutation engine.
+
+Consequences:
+
+- Existing IPC adds `applied`/`conflicted`; startup reconciles supported decisions without
+  model/credentials. This is not cross-file atomic.
+- Generic operations, UI, replacement conflicts, CAS/TOCTOU, and platform proof stay open.
+
+References:
+
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
+- `docs/API_AND_IPC_DESIGN.md`
 
 ### D-20260709-Phase-0-Dependency-Compatibility
 

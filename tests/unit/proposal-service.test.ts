@@ -165,6 +165,41 @@ describe("proposal service", () => {
     expect(fs.existsSync(path.join(vaultPath, "wiki", "new.md"))).toBe(false);
   });
 
+  it("persists idempotent applied and conflicted transitions for decision recovery", () => {
+    const { vaultPath, vault } = makeVault();
+    const service = makeService(vaultPath, vault);
+    const first = service.stage({
+      jobId: "job_20260709_abcdef123456",
+      trustLevel: "review_required",
+      summary: "Review first generated note",
+      reason: "The first note requires review.",
+      proposedOperations: [{ kind: "create", path: "wiki/generated/first.md", content: "# First\n" }]
+    });
+    const second = service.stage({
+      jobId: "job_20260709_bcdefa123456",
+      trustLevel: "review_required",
+      summary: "Review second generated note",
+      reason: "The second note requires review.",
+      proposedOperations: [{ kind: "create", path: "wiki/generated/second.md", content: "# Second\n" }]
+    });
+
+    expect(service.markApplied(first.proposal.id).status).toBe("not_allowed");
+    expect(service.approve({ proposalId: first.proposal.id }).status).toBe("approved");
+    expect(service.markApplied(first.proposal.id).status).toBe("applied");
+    expect(service.markApplied(first.proposal.id).status).toBe("applied");
+    expect(service.approve({ proposalId: second.proposal.id }).status).toBe("approved");
+    expect(service.markConflicted(second.proposal.id).status).toBe("conflicted");
+    expect(service.markConflicted(second.proposal.id).status).toBe("conflicted");
+
+    const restarted = makeService(vaultPath, vault);
+    expect(restarted.get({ proposalId: first.proposal.id }).proposal.state).toBe("applied");
+    expect(restarted.get({ proposalId: second.proposal.id }).proposal.state).toBe("conflicted");
+    expect(restarted.recoveryCandidates().map((proposal) => proposal.id)).toEqual([
+      first.proposal.id,
+      second.proposal.id
+    ]);
+  });
+
   it("counts invalid proposal records without failing lists", () => {
     const { vaultPath, vault } = makeVault();
     const service = makeService(vaultPath, vault);

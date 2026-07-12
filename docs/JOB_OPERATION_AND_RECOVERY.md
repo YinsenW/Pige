@@ -115,11 +115,9 @@ Phase 2 implementation note:
 - Phase 3 text/document pages create deterministic `agent_ingest`. Missing models wait.
   Document parse/OCR children key parent/tool/version/source revision/input, reuse across
   Pi call IDs, store capped call hashes, and resume through their Agent parent.
-- Phase 3 `agent_ingest` serializes terminal publish/proposal effects process-locally.
-  Proposal commits before body-free parent linkage to `awaiting_review`; restart adopts
-  the same Job slot without model/credential access. Cancellation before commit stops,
-  after commit preserves review; note+proposal conflicts fail closed. Cross-process CAS,
-  parent swap, cross-file atomicity, directory-swap TOCTOU, and packaged proof stay open.
+- Phase 3 `agent_ingest` serializes terminal publication/proposal process-locally;
+  Section 11 owns exact create-note staging, decisions, apply, and recovery. Cross-process
+  and cross-file guarantees remain open.
 - Phase 4 `index_rebuild` runs in a bundled worker, enters `running/indexing`, persists monotonic `index_item` progress, serializes process-local writers, and cooperatively cancels. Failure rolls back to the prior committed index; clean cancellation preserves Markdown. Cross-process writer/CAS, kill/crash/stale-worker recovery, packaged paths, and implicit first-query workerization remain open.
 - Parse/OCR/index rebuild persist monotonic progress; parse/OCR/Agent ingest/index share
   cancellation. Capture/parse/OCR/Agent ingest retain the Section 6 guard across retry;
@@ -519,9 +517,12 @@ Rules:
 
 Current Phase 3 foundation implementation:
 
-- ProposalService bounds and confines canonical vault-relative records, rejects link aliases, fsyncs create-exclusive commits/decision replacement, and reuses one exact-intent slot per Job.
-- `pige_stage_knowledge_note_proposal@1` derives one create operation, commits before linking the body-free parent in `awaiting_review`, and never writes Markdown, index, `create_page`, or log. Restart adopts the same proposal; a process-local terminal gate and cancellation fences prevent sibling publication.
-- `requiredPermissionIds` is a compatibility field for permission prerequisites and may contain canonical `permreq_` request IDs or `permdec_` decision IDs; a later schema may split, not reinterpret, it. Lists omit content; approve/reject are state-only. Review UI, apply/conflict Operations, cross-process CAS/locking, and directory-swap TOCTOU stay open.
+- ProposalService confines bounded vault-relative records, rejects link aliases, fsyncs exclusive commits/decisions, and reuses one exact-intent Job slot.
+- Pi stages before body-free parent linkage. Approval runs `approved` -> exact page/index/
+  deterministic body-free Operation -> `applied` -> idempotent log -> parent completion;
+  rejection applies nothing, while conflict becomes `conflicted` plus `failed_final`.
+- Startup reconciles supported decisions without model/runtime/credentials across decision-, page-, and parent-link windows. The sequence is not transactional; generic operations, UI, replacement conflicts, CAS/TOCTOU, and platform proof remain open.
+- `requiredPermissionIds` is a compatibility field for permission prerequisites and may contain canonical `permreq_` request IDs or `permdec_` decision IDs; a later schema may split, not reinterpret, it.
 
 ## 12. Operation Record Lifecycle
 

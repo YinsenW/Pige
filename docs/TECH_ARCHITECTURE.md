@@ -780,9 +780,9 @@ Rules:
 
 Current implementation:
 
-- Shared schemas support confined durable proposals and safe list/detail. Pi may stage
-  one deterministic create-note proposal; approve/reject are state-only. Review UI,
-  transactional apply, conflict, and Operation completion remain open.
+- Shared schemas support confined durable proposals and safe list/detail. The exact
+  Pi-staged create-note shape supports approve/apply/reject, deterministic Operation,
+  conflict closure, and restart reconciliation. Generic operations and review UI remain open.
 
 ### 5.5.2 Markdown Rendering And Editing Surface
 
@@ -1430,12 +1430,12 @@ retrieval, publication, and one terminal create-note proposal stage.
 
 ### 9.2 Knowledge Publication Boundary
 
-The publish and proposal tools accept the strict `AgentIngestOutput` owned by
-`docs/PROMPT_DESIGN.md`; source, Job, destination, trust, refs, and operation shape are
-Host context. Publish commits the validated note. Proposal staging compiles exactly one
-create operation and writes only its durable proposal before body-free Job linkage; it
-writes no Markdown, Operation, index, or log. Multi-write/apply remains open, and final
-assistant text never becomes a write request.
+The publish and proposal tools accept strict `AgentIngestOutput`; source, Job,
+destination, trust, refs, and operation shape are Host context. Staging writes no page.
+Explicit approval alone runs the same confined create-note boundary, then verifies page,
+index, deterministic body-free Operation, proposal state, log, and parent outcome through
+an ordered recoverable sequence—not a cross-file transaction. Generic operations remain
+open, and final assistant text never becomes a write request.
 
 ### 9.3 Query Output
 
@@ -1513,8 +1513,8 @@ Current embedded Agent ingest spine:
 - Inspect returns verified evidence; PDF/DOCX/PPTX parse and selected PDF/PPTX/image OCR create
   or reuse bound children; publication revalidates refs and revision.
 - Home retrieval uses one bounded search tool with per-turn evidence/egress revalidation.
-  Ingest adds bounded retrieval and one terminal proposal stage; review/apply, generic
-  recovery, full Broker, and remaining fixed routing stay open.
+  Ingest adds bounded retrieval plus exact create-note stage/review/apply/reject; review
+  UI, generic proposals/recovery, full Broker, and remaining fixed routing stay open.
 
 The v0.1 UI exposes only the P0 provider modes defined in `docs/PRD.md`, through the
 compact Add Provider flow owned by the Pi integration contract.
