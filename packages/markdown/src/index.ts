@@ -24,6 +24,7 @@ export interface PigeFrontmatter {
   readonly status?: string;
   readonly language?: string;
   readonly aliases?: readonly string[];
+  readonly tags?: readonly string[];
   readonly topics?: readonly string[];
   readonly source_ids?: readonly string[];
 }
@@ -225,12 +226,20 @@ function parseKnownFrontmatterFields(raw: string): PigeFrontmatter {
     const key = line.slice(0, separatorIndex).trim() as keyof PigeFrontmatter;
     if (!isKnownFrontmatterKey(key)) continue;
     const value = parseInlineYamlValue(line.slice(separatorIndex + 1).trim());
-    if (typeof value === "string" || typeof value === "number" || isStringArray(value)) {
+    if (key === "schema_version" && typeof value === "number") {
+      parsed[key] = value;
+    } else if (isKnownFrontmatterArrayKey(key) && isStringArray(value)) {
+      parsed[key] = value;
+    } else if (key !== "schema_version" && !isKnownFrontmatterArrayKey(key) && typeof value === "string") {
       parsed[key] = value;
     }
   }
 
   return parsed as PigeFrontmatter;
+}
+
+function isKnownFrontmatterArrayKey(key: keyof PigeFrontmatter): key is "aliases" | "tags" | "topics" | "source_ids" {
+  return ["aliases", "tags", "topics", "source_ids"].includes(key);
 }
 
 function isKnownFrontmatterKey(key: string): key is keyof PigeFrontmatter {
@@ -244,9 +253,40 @@ function isKnownFrontmatterKey(key: string): key is keyof PigeFrontmatter {
     "status",
     "language",
     "aliases",
+    "tags",
     "topics",
     "source_ids"
   ].includes(key);
+}
+
+export function normalizePigeTag(value: string): string | undefined {
+  const normalized = value.normalize("NFKC").replace(/\s+/gu, " ").trim();
+  if (
+    normalized.length === 0 ||
+    normalized.length > 48 ||
+    /[\u0000-\u001f\u007f]/u.test(normalized)
+  ) {
+    return undefined;
+  }
+  return normalized;
+}
+
+export function createPigeTagKey(value: string): string | undefined {
+  return normalizePigeTag(value)?.toLocaleLowerCase("en-US");
+}
+
+export function normalizePigeTags(values: readonly string[], maximum = 12): readonly string[] {
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  for (const value of values) {
+    const tag = normalizePigeTag(value);
+    const key = tag ? createPigeTagKey(tag) : undefined;
+    if (!tag || !key || seen.has(key)) continue;
+    seen.add(key);
+    normalized.push(tag);
+    if (normalized.length >= maximum) break;
+  }
+  return normalized;
 }
 
 function parseInlineYamlValue(value: string): string | number | readonly string[] | undefined {

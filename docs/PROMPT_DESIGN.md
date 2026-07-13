@@ -139,9 +139,9 @@ Rules:
   each turn rechecks non-secret binding, source/cancellation, and egress. Drift fails closed.
 - The model may cite only supplied `ev_NN` refs. Unknown refs fail before any Markdown write. A statement with an empty ref list is retained only with a warning, confidence cap, and `needs_review`; model-authored `[source:...]` or `[artifact:...]` tokens are stripped and canonical citations are rendered service-side.
 - Eligible reversible knowledge auto-commits; exceptions stage. Current tools cover exact
-  create, one cited append, and one high-confidence directed link after inspect/retrieval.
-  Pi gets opaque refs and bounded claims/reason, never path/base/Markdown/relation or
-  Operation authority. Broader linking and mutations remain open.
+  create, cited append, bounded high-confidence tags, and one directed link
+  after inspect/retrieval. Pi gets opaque targets and candidates/claims/reason, never
+  path/base/Markdown/relation/Operation authority. Broader organization remains open.
 
 ### 5.2 Home Query
 

@@ -13,7 +13,7 @@ import type {
   RetrievalSearchResultItem
 } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
-import { extractPigeMarkdownLinkRefs, type PigeMarkdownLinkRef } from "@pige/markdown";
+import { createPigeTagKey, extractPigeMarkdownLinkRefs, type PigeMarkdownLinkRef } from "@pige/markdown";
 import { LocalDatabaseSchemaStateSchema, type LocalDatabaseSchemaState, type MarkdownPageType } from "@pige/schemas";
 import {
   buildKnowledgeTreeSnapshot,
@@ -492,7 +492,7 @@ function getDatabasePath(vaultPath: string): string {
 }
 
 const INITIAL_MIGRATION_ID = "001_node_sqlite_initial_index";
-const CURRENT_INDEX_REVISION = 2;
+const CURRENT_INDEX_REVISION = 3;
 const DEFAULT_LIBRARY_LIMIT = 50;
 const MAX_LIBRARY_LIMIT = 200;
 const DEFAULT_SEARCH_LIMIT = 8;
@@ -696,6 +696,8 @@ function clearRebuildableRows(db: DatabaseSync): void {
 function indexPageKnowledge(db: DatabaseSync, pages: readonly MarkdownPageRecord[]): void {
   const pageById = new Map(pages.map((page) => [page.summary.pageId, page]));
   const lookup = createPageLookup(pages);
+  const insertTag = db.prepare("INSERT OR IGNORE INTO tags(tag) VALUES (?)");
+  const insertPageTag = db.prepare("INSERT OR IGNORE INTO page_tags(page_id, tag) VALUES (?, ?)");
   const insertTopic = db.prepare(`
     INSERT OR REPLACE INTO topics(topic_id, page_id, title)
     VALUES (?, ?, ?)
@@ -706,6 +708,12 @@ function indexPageKnowledge(db: DatabaseSync, pages: readonly MarkdownPageRecord
   `);
 
   for (const page of pages) {
+    for (const tag of page.knowledge.tags) {
+      const key = createPigeTagKey(tag);
+      if (!key) continue;
+      insertTag.run(key);
+      insertPageTag.run(page.summary.pageId, key);
+    }
     if (page.summary.pageType === "topic") {
       insertTopic.run(page.summary.pageId, page.summary.pageId, page.summary.title);
     }

@@ -214,9 +214,9 @@ Initial schema areas:
 - `operations_index`: fast lookup over `.pige/operations/`.
 - `schema_migrations`: local database migration state.
 
-Durable records still live in files. Database rows point to those files and make them fast to query.
-
-`docs/KNOWLEDGE_MODEL_AND_LINKING.md` is the authority for tag semantics, relationship types, graph rebuild behavior, and Knowledge Tree aggregates.
+Durable truth stays in files. Index revision 3 rebuilds canonical `tags`/`page_tags` from
+valid Markdown; malformed/over-12 pages count invalid without truncation/abort, and
+deletion reproduces facets. Markdown owns display; Knowledge Model owns semantics.
 
 ## 9. User-Facing Behavior
 

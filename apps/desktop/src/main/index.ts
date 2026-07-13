@@ -78,6 +78,7 @@ import { AgentSubmitTurnRequestSchema, HomeAgentService } from "./services/home-
 import { HomeAgentUrlService } from "./services/home-agent-url-service";
 import { LocalDatabaseRebuildWorkerService } from "./services/local-database-rebuild-worker-service";
 import { LocalDatabaseService } from "./services/local-database-service";
+import { listMarkdownTagCatalog } from "./services/markdown-page-index";
 import { LocalSettingsStore } from "./services/local-settings";
 import { ModelProviderRegistry } from "./services/model-provider-registry";
 import { NotesService } from "./services/notes-service";
@@ -299,6 +300,22 @@ const createAgentIngestRetrievalPort = (): AgentIngestRetrievalPort => ({
       );
     }
     return result;
+  },
+  listTags: (vaultPath) => {
+    if (getVaultService().activeVaultPath() !== vaultPath) {
+      throw new PigeDomainError(
+        "vault.binding_changed",
+        "The active vault changed before knowledge-tag catalog inspection."
+      );
+    }
+    const tags = listMarkdownTagCatalog(vaultPath);
+    if (getVaultService().activeVaultPath() !== vaultPath) {
+      throw new PigeDomainError(
+        "vault.binding_changed",
+        "The active vault changed during knowledge-tag catalog inspection."
+      );
+    }
+    return tags;
   }
 });
 

@@ -7,6 +7,7 @@ import {
   LocalDatabaseService,
   NodeSqliteDriver
 } from "../../apps/desktop/src/main/services/local-database-service";
+import { listMarkdownTagCatalog } from "../../apps/desktop/src/main/services/markdown-page-index";
 
 const tempRoots: string[] = [];
 
@@ -108,6 +109,44 @@ describe("local database service", () => {
     expect(JSON.stringify(outgoing)).not.toContain("example.com");
   });
 
+  it("rebuilds canonical tag facets from Markdown without treating SQLite as durable knowledge", () => {
+    const vaultPath = makeVaultRoot();
+    const service = new LocalDatabaseService();
+    writePage(vaultPath, "wiki/tags.md", {
+      id: "page_20260709_tags1234",
+      title: "Tagged Knowledge",
+      body: "The durable tag set lives in Markdown frontmatter.",
+      tags: ["Research", "research", "  Durable   Knowledge  ", "Ｒｅｓｅａｒｃｈ"]
+    });
+    writeRawPage(vaultPath, "wiki/scalar-tags.md", "page_20260709_scalartags", "tags: Research");
+    writeRawPage(vaultPath, "wiki/block-tags.md", "page_20260709_blocktags", "tags:\n  - Research");
+    writeRawPage(vaultPath, "wiki/too-many-tags.md", "page_20260709_manytags1", `tags: ${JSON.stringify(
+      Array.from({ length: 13 }, (_, index) => `tag-${index + 1}`)
+    )}`);
+
+    expect(service.rebuild(vaultPath)).toMatchObject({ pageCount: 1, invalidPageCount: 3 });
+    expect(listMarkdownTagCatalog(vaultPath)).toEqual(["Durable Knowledge", "Research"]);
+    expect(readTagProjection(vaultPath)).toEqual({
+      tags: ["durable knowledge", "research"],
+      pageTags: [
+        { pageId: "page_20260709_tags1234", tag: "durable knowledge" },
+        { pageId: "page_20260709_tags1234", tag: "research" }
+      ],
+      revision: 3
+    });
+
+    fs.rmSync(path.join(vaultPath, ".pige/db/vault.sqlite"), { force: true });
+    expect(service.listPages(vaultPath)?.total).toBe(1);
+    expect(readTagProjection(vaultPath)).toEqual({
+      tags: ["durable knowledge", "research"],
+      pageTags: [
+        { pageId: "page_20260709_tags1234", tag: "durable knowledge" },
+        { pageId: "page_20260709_tags1234", tag: "research" }
+      ],
+      revision: 3
+    });
+  });
+
   it("rebuilds after database deletion without losing Markdown knowledge", () => {
     const vaultPath = makeVaultRoot();
     const service = new LocalDatabaseService();
@@ -193,12 +232,33 @@ function openReadOnlyDatabase(vaultPath: string): DatabaseSync {
   });
 }
 
+function readTagProjection(vaultPath: string): {
+  readonly tags: readonly string[];
+  readonly pageTags: readonly { readonly pageId: string; readonly tag: string }[];
+  readonly revision: number;
+} {
+  const reader = openReadOnlyDatabase(vaultPath);
+  try {
+    return {
+      tags: reader.prepare("SELECT tag FROM tags ORDER BY tag").all().map((row) => String(row.tag)),
+      pageTags: reader.prepare("SELECT page_id, tag FROM page_tags ORDER BY page_id, tag").all().map((row) => ({
+        pageId: String(row.page_id),
+        tag: String(row.tag)
+      })),
+      revision: Number(reader.prepare("PRAGMA user_version").get()?.user_version ?? 0)
+    };
+  } finally {
+    reader.close();
+  }
+}
+
 function writePage(vaultPath: string, relativePath: string, input: {
   readonly id: string;
   readonly title: string;
   readonly body: string;
   readonly type?: string;
   readonly language?: string;
+  readonly tags?: readonly string[];
 }): void {
   const filePath = path.join(vaultPath, ...relativePath.split("/"));
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -211,9 +271,35 @@ created_at: "2026-07-09T12:00:00.000Z"
 updated_at: "2026-07-09T12:00:00.000Z"
 status: "active"
 language: "${input.language ?? "en"}"
+tags: ${JSON.stringify(input.tags ?? [])}
 source_ids: []
 ---
 
 ${input.body}
+`, "utf8");
+}
+
+function writeRawPage(
+  vaultPath: string,
+  relativePath: string,
+  pageId: string,
+  tagsLine: string
+): void {
+  const filePath = path.join(vaultPath, ...relativePath.split("/"));
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, `---
+id: "${pageId}"
+schema_version: 1
+title: "Invalid Tags"
+type: "note"
+created_at: "2026-07-09T12:00:00.000Z"
+updated_at: "2026-07-09T12:00:00.000Z"
+status: "active"
+language: "en"
+${tagsLine}
+source_ids: []
+---
+
+This page must be counted as invalid without aborting the rebuild.
 `, "utf8");
 }

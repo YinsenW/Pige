@@ -92,11 +92,11 @@ Do not use tags for:
 
 Rules:
 
-- Tags live in frontmatter as readable strings.
-- The Agent should prefer existing tags over creating near-duplicates.
-- Tag creation should be conservative. A page normally needs 0 to 6 tags, not a long keyword dump.
-- Tags can be multilingual, but the Agent should avoid creating language duplicates when an existing tag or alias already covers the same meaning.
-- Tags are filters and signals. They are not authoritative facts.
+- Tags are readable frontmatter facets, not facts; a page normally needs 0 to 6.
+- Current: after inspect/retrieval, Pi supplies one `related_NN`, 1–6 tags, cited reason,
+  and high confidence. Host updates one clean active generated note, normalizes/dedupes,
+  reuses catalog spelling, allows new tags, and caps 12/page.
+- `update_page` recovery/Activity/Undo preserves body; removal/replacement/synonyms remain open.
 
 ### 5.2 Topics
 

@@ -3,7 +3,13 @@ import fs from "node:fs";
 import path from "node:path";
 import type { RetrievalSearchResultItem } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
-import { extractPigeMarkdownLinkRefs, parsePigeFrontmatter } from "@pige/markdown";
+import {
+  createPigeTagKey,
+  extractPigeMarkdownLinkRefs,
+  normalizePigeTag,
+  normalizePigeTags,
+  parsePigeFrontmatter
+} from "@pige/markdown";
 import {
   JobRecordSchema,
   MarkdownPageStatusSchema,
@@ -56,6 +62,7 @@ export interface AgentPageUpdatePublicationBinding {
   readonly modelProfileId: string;
   readonly artifactIds: readonly string[];
   readonly relationshipTarget?: AgentPageRelationshipBinding;
+  readonly tagAdditions?: readonly string[];
 }
 
 export interface AgentPageRelationshipBinding {
@@ -89,6 +96,7 @@ export function applyAgentPageUpdate(input: {
   readonly sourceRecord: SourceRecord;
   readonly target: CurrentRetrievalPageMutationBinding;
   readonly relationshipTarget?: CurrentRetrievalPageMutationBinding;
+  readonly tagAdditions?: readonly string[];
   readonly modelProfileId: string;
   readonly policyContextId: string;
   readonly policyHash: string;
@@ -107,7 +115,11 @@ export function applyAgentPageUpdate(input: {
 }): AgentPageUpdateCommitResult {
   const job = JobRecordSchema.parse(input.job);
   const sourceRecord = SourceRecordSchema.parse(input.sourceRecord);
-  const target = input.relationshipTarget
+  const requestedTagAdditions = input.tagAdditions ? normalizeTagAdditions(input.tagAdditions) : undefined;
+  if (input.relationshipTarget && requestedTagAdditions) {
+    throw pageConflict("A page update cannot combine relationship and tag mutations.");
+  }
+  const target = input.relationshipTarget || requestedTagAdditions
     ? assertEligibleRelationshipTarget(input.vaultPath, input.target)
     : assertEligibleTarget(input.vaultPath, input.target);
   const relationshipTarget = input.relationshipTarget
@@ -128,6 +140,9 @@ export function applyAgentPageUpdate(input: {
       "The selected notes already have this stable directed link."
     );
   }
+  const tagAdditions = requestedTagAdditions
+    ? requireEffectiveTagAdditions(target.markdown, requestedTagAdditions)
+    : undefined;
   const operationId = relationshipTarget
     ? createAgentPageRelationshipOperationId(job.id, target.pageId, relationshipTarget.pageId)
     : createAgentPageUpdateOperationId(job.id, target.pageId);
@@ -135,14 +150,17 @@ export function applyAgentPageUpdate(input: {
   const stagedPath = createAgentPageUpdateStagedPath(operationId);
   const operationPath = createOperationPath(operationId);
   const updatedAt = createMonotonicUpdatedAt(target.updatedAt, job.createdAt);
-  const updateBlock = renderUpdateBlock({
+  const updateBlock = tagAdditions ? undefined : renderUpdateBlock({
     operationId,
     sourceId: sourceRecord.id,
     summary: input.summary,
     keyPoints: input.keyPoints,
     ...(relationshipTarget ? { relationshipTarget } : {})
   });
-  if (containsRestrictedModelContent(updateBlock)) {
+  if (
+    (updateBlock && containsRestrictedModelContent(updateBlock)) ||
+    (tagAdditions && containsRestrictedModelContent(tagAdditions.join("\n")))
+  ) {
     throw new PigeDomainError(
       "agent_ingest.update_content_restricted",
       "The existing-note update contains restricted content."
@@ -155,14 +173,15 @@ export function applyAgentPageUpdate(input: {
     modelProfileId: input.modelProfileId,
     confidence: input.confidence,
     updatedAt,
-    updateBlock,
-    ...(relationshipTarget ? { relationshipTarget } : {})
+    ...(updateBlock ? { updateBlock } : {}),
+    ...(relationshipTarget ? { relationshipTarget } : {}),
+    ...(tagAdditions ? { tagAdditions } : {})
   });
   assertValidAgentManagedNote(
     nextMarkdown,
     target.pageId,
     target.pagePath,
-    operationId,
+    tagAdditions ? undefined : operationId,
     relationshipTarget ? "agent-link" : "agent-update"
   );
   assertAgentPageUpdateTransition(target.markdown, nextMarkdown, {
@@ -170,7 +189,8 @@ export function applyAgentPageUpdate(input: {
     sourceId: sourceRecord.id,
     jobId: job.id,
     modelProfileId: input.modelProfileId,
-    ...(relationshipTarget ? { relationshipTarget } : {})
+    ...(relationshipTarget ? { relationshipTarget } : {}),
+    ...(tagAdditions ? { tagAdditions } : {})
   });
   if (Buffer.byteLength(nextMarkdown, "utf8") > MAX_AGENT_PAGE_UPDATE_BYTES) {
     throw new PigeDomainError("agent_ingest.update_too_large", "The existing-note update exceeds the bounded page limit.");
@@ -203,7 +223,8 @@ export function applyAgentPageUpdate(input: {
         pagePath: relationshipTarget.pagePath,
         contentHash: relationshipTarget.contentHash
       }
-    } : {})
+    } : {}),
+    ...(tagAdditions ? { tagAdditions } : {})
   };
   const expectedOperation = createUpdateOperation({
     binding,
@@ -274,6 +295,7 @@ export function recoverAgentPageUpdate(input: {
   readonly allowedCatalogHashes: {
     readonly update: readonly string[];
     readonly relationship: readonly string[];
+    readonly tags?: readonly string[];
   };
   readonly assertSourceCurrent?: () => void;
 }): AgentPageUpdateCommitResult | undefined {
@@ -281,12 +303,16 @@ export function recoverAgentPageUpdate(input: {
   const sourceRecord = SourceRecordSchema.parse(input.sourceRecord);
   const binding = readUpdateBinding(job);
   if (!binding) return undefined;
-  const expectedToolId = binding.relationshipTarget
-    ? "pige_link_knowledge_notes"
-    : "pige_update_knowledge_note";
-  const allowedCatalogHashes = binding.relationshipTarget
-    ? input.allowedCatalogHashes.relationship
-    : input.allowedCatalogHashes.update;
+  const expectedToolId = binding.tagAdditions
+    ? "pige_add_knowledge_tags"
+    : binding.relationshipTarget
+      ? "pige_link_knowledge_notes"
+      : "pige_update_knowledge_note";
+  const allowedCatalogHashes = binding.tagAdditions
+    ? input.allowedCatalogHashes.tags ?? []
+    : binding.relationshipTarget
+      ? input.allowedCatalogHashes.relationship
+      : input.allowedCatalogHashes.update;
   if (
     binding.sourceId !== sourceRecord.id ||
     binding.sourceRevisionHash !== hashJson(sourceRecord) ||
@@ -322,7 +348,7 @@ export function recoverAgentPageUpdate(input: {
       staged,
       binding.pageId,
       binding.pagePath,
-      binding.operationId,
+      binding.tagAdditions ? undefined : binding.operationId,
       binding.relationshipTarget ? "agent-link" : "agent-update"
     );
     assertAgentPageUpdateTransition(live, staged, {
@@ -330,7 +356,8 @@ export function recoverAgentPageUpdate(input: {
       sourceId: binding.sourceId,
       jobId: job.id,
       modelProfileId: binding.modelProfileId,
-      ...(binding.relationshipTarget ? { relationshipTarget: binding.relationshipTarget } : {})
+      ...(binding.relationshipTarget ? { relationshipTarget: binding.relationshipTarget } : {}),
+      ...(binding.tagAdditions ? { tagAdditions: binding.tagAdditions } : {})
     });
     preserveBeforeBytes(input.vaultPath, binding, live);
     assertValidAgentManagedNote(
@@ -355,7 +382,7 @@ export function recoverAgentPageUpdate(input: {
       live,
       binding.pageId,
       binding.pagePath,
-      binding.operationId,
+      binding.tagAdditions ? undefined : binding.operationId,
       binding.relationshipTarget ? "agent-link" : "agent-update"
     );
     assertAgentPageUpdateTransition(before, live, {
@@ -363,7 +390,8 @@ export function recoverAgentPageUpdate(input: {
       sourceId: binding.sourceId,
       jobId: job.id,
       modelProfileId: binding.modelProfileId,
-      ...(binding.relationshipTarget ? { relationshipTarget: binding.relationshipTarget } : {})
+      ...(binding.relationshipTarget ? { relationshipTarget: binding.relationshipTarget } : {}),
+      ...(binding.tagAdditions ? { tagAdditions: binding.tagAdditions } : {})
     });
   } else {
     throw pageConflict("The existing note changed while its interrupted update was awaiting recovery.");
@@ -690,6 +718,7 @@ function assertAgentPageUpdateTransition(
     readonly jobId: string;
     readonly modelProfileId: string;
     readonly relationshipTarget?: AgentPageRelationshipBinding;
+    readonly tagAdditions?: readonly string[];
   }
 ): void {
   const beforeParsed = parsePigeFrontmatter(before);
@@ -704,14 +733,20 @@ function assertAgentPageUpdateTransition(
   const confidence = readRequiredNestedScalar(afterParsed.raw, "provenance", "confidence");
   const beforeRelatedPageIds = readRequiredInlineStringArray(beforeParsed.raw, "related_page_ids", 64);
   const afterRelatedPageIds = readRequiredInlineStringArray(afterParsed.raw, "related_page_ids", 64);
+  const beforeTags = readRequiredInlineStringArray(beforeParsed.raw, "tags", 12);
+  const afterTags = readRequiredInlineStringArray(afterParsed.raw, "tags", 12);
   const expectedRelatedPageIds = expected.relationshipTarget
     ? Array.from(new Set([...beforeRelatedPageIds, expected.relationshipTarget.pageId]))
     : beforeRelatedPageIds;
+  const expectedTags = expected.tagAdditions
+    ? normalizePigeTags([...beforeTags, ...expected.tagAdditions])
+    : beforeTags;
   if (
     lastJobId !== expected.jobId ||
     modelProfileId !== expected.modelProfileId ||
     !sourceIds.includes(expected.sourceId) ||
-    JSON.stringify(afterRelatedPageIds) !== JSON.stringify(expectedRelatedPageIds)
+    JSON.stringify(afterRelatedPageIds) !== JSON.stringify(expectedRelatedPageIds) ||
+    JSON.stringify(afterTags) !== JSON.stringify(expectedTags)
   ) {
     throw pageConflict("The existing-note update changed its source, Job, or model binding.");
   }
@@ -723,6 +758,9 @@ function assertAgentPageUpdateTransition(
       "related_page_ids",
       JSON.stringify(afterRelatedPageIds)
     );
+  }
+  if (expected.tagAdditions) {
+    expectedRaw = replaceUniqueFrontmatterLine(expectedRaw, "tags", JSON.stringify(afterTags));
   }
   expectedRaw = replaceUniqueNestedFrontmatterLine(expectedRaw, "provenance", "last_job_id", JSON.stringify(lastJobId));
   expectedRaw = replaceUniqueNestedFrontmatterLine(
@@ -740,6 +778,12 @@ function assertAgentPageUpdateTransition(
   const beforeRawStart = before.indexOf("\n") + 1;
   const beforeRawEnd = beforeRawStart + beforeParsed.raw.length;
   const withExpectedFrontmatter = `${before.slice(0, beforeRawStart)}${expectedRaw}${before.slice(beforeRawEnd)}`;
+  if (expected.tagAdditions) {
+    if (after !== withExpectedFrontmatter) {
+      throw pageConflict("The knowledge-tag update changed bytes outside its bounded frontmatter fields.");
+    }
+    return;
+  }
   const separator = withExpectedFrontmatter.endsWith("\n") ? "\n" : "\n\n";
   const prefix = `${withExpectedFrontmatter}${separator}`;
   const managedKind = expected.relationshipTarget ? "agent-link" : "agent-update";
@@ -997,6 +1041,41 @@ function normalizeRelationshipTarget(value: string): string {
   return value.normalize("NFKC").replace(/\s+/gu, " ").trim().toLocaleLowerCase("en-US");
 }
 
+function normalizeTagAdditions(values: readonly string[]): readonly string[] {
+  if (values.length === 0 || values.length > 6 || values.some((value) => normalizePigeTag(value) === undefined)) {
+    throw new PigeDomainError(
+      "agent_ingest.tags_invalid",
+      "Knowledge tags must be a small bounded list of readable strings."
+    );
+  }
+  const normalized = normalizePigeTags(values, 6);
+  if (normalized.length === 0) {
+    throw new PigeDomainError("agent_ingest.tags_invalid", "No valid knowledge tag was selected.");
+  }
+  return normalized;
+}
+
+function requireEffectiveTagAdditions(markdown: string, additions: readonly string[]): readonly string[] {
+  const parsed = parsePigeFrontmatter(markdown);
+  if (!parsed) throw pageConflict("The existing note has no supported frontmatter.");
+  const current = readRequiredInlineStringArray(parsed.raw, "tags", 12);
+  if (JSON.stringify(normalizePigeTags(current)) !== JSON.stringify(current)) {
+    throw pageConflict("The existing note tags are not canonical and bounded.");
+  }
+  const existingKeys = new Set(current.map(createPigeTagKey).filter((key): key is string => !!key));
+  const effective = additions.filter((tag) => {
+    const key = createPigeTagKey(tag);
+    return !!key && !existingKeys.has(key);
+  });
+  if (effective.length === 0) {
+    throw new PigeDomainError("agent_ingest.tags_unchanged", "The selected note already has the requested tags.");
+  }
+  if (current.length + effective.length > 12) {
+    throw new PigeDomainError("agent_ingest.tags_full", "The selected note has no bounded tag slot available.");
+  }
+  return effective;
+}
+
 function createUpdatedMarkdown(input: {
   readonly markdown: string;
   readonly sourceId: string;
@@ -1004,8 +1083,9 @@ function createUpdatedMarkdown(input: {
   readonly modelProfileId: string;
   readonly confidence: "low" | "medium" | "high";
   readonly updatedAt: string;
-  readonly updateBlock: string;
+  readonly updateBlock?: string;
   readonly relationshipTarget?: AgentPageRelationshipBinding & { readonly title: string };
+  readonly tagAdditions?: readonly string[];
 }): string {
   const parsed = parsePigeFrontmatter(input.markdown);
   if (!parsed) throw pageConflict("The existing note has no supported frontmatter.");
@@ -1023,16 +1103,26 @@ function createUpdatedMarkdown(input: {
   }
   const nextSourceIds = Array.from(new Set([...sourceIds, input.sourceId]));
   const currentRelatedPageIds = readRequiredInlineStringArray(parsed.raw, "related_page_ids", 64);
+  const currentTags = readRequiredInlineStringArray(parsed.raw, "tags", 12);
   const nextRelatedPageIds = input.relationshipTarget
     ? Array.from(new Set([...currentRelatedPageIds, input.relationshipTarget.pageId]))
     : currentRelatedPageIds;
   if (nextRelatedPageIds.length > 64) {
     throw pageConflict("The existing note has no bounded relationship slot available.");
   }
+  const nextTags = input.tagAdditions
+    ? normalizePigeTags([...currentTags, ...input.tagAdditions])
+    : currentTags;
+  if (nextTags.length > 12 || (input.tagAdditions && nextTags.length <= currentTags.length)) {
+    throw pageConflict("The knowledge-tag update no longer has an effective bounded addition.");
+  }
   let raw = replaceUniqueFrontmatterLine(parsed.raw, "updated_at", JSON.stringify(input.updatedAt));
   raw = replaceUniqueFrontmatterLine(raw, "source_ids", JSON.stringify(nextSourceIds));
   if (input.relationshipTarget) {
     raw = replaceUniqueFrontmatterLine(raw, "related_page_ids", JSON.stringify(nextRelatedPageIds));
+  }
+  if (input.tagAdditions) {
+    raw = replaceUniqueFrontmatterLine(raw, "tags", JSON.stringify(nextTags));
   }
   raw = replaceUniqueNestedFrontmatterLine(raw, "provenance", "last_job_id", JSON.stringify(input.jobId));
   raw = replaceUniqueNestedFrontmatterLine(raw, "provenance", "model_profile_id", JSON.stringify(input.modelProfileId));
@@ -1040,6 +1130,7 @@ function createUpdatedMarkdown(input: {
   const rawStart = firstLineEnd;
   const rawEnd = rawStart + parsed.raw.length;
   const withFrontmatter = `${input.markdown.slice(0, rawStart)}${raw}${input.markdown.slice(rawEnd)}`;
+  if (!input.updateBlock) return withFrontmatter;
   const separator = withFrontmatter.endsWith("\n") ? "\n" : "\n\n";
   return `${withFrontmatter}${separator}${input.updateBlock}\n`;
 }
@@ -1191,9 +1282,11 @@ function createUpdateOperation(input: {
     ],
     before: { kind: "page", id: input.binding.beforeContentHash, path: input.binding.beforePath },
     after: { kind: "page", id: input.binding.contentHash, path: input.binding.pagePath },
-    summary: input.binding.relationshipTarget
-      ? `Linked existing Pige-managed note ${input.binding.pageId} to related note ${input.binding.relationshipTarget.pageId} from preserved source ${input.sourceRecord.id}.`
-      : `Updated existing Pige-managed note ${input.binding.pageId} from preserved source ${input.sourceRecord.id}.`,
+    summary: input.binding.tagAdditions
+      ? `Added ${input.binding.tagAdditions.length} bounded tag${input.binding.tagAdditions.length === 1 ? "" : "s"} to existing Pige-managed note ${input.binding.pageId} from preserved source ${input.sourceRecord.id}.`
+      : input.binding.relationshipTarget
+        ? `Linked existing Pige-managed note ${input.binding.pageId} to related note ${input.binding.relationshipTarget.pageId} from preserved source ${input.sourceRecord.id}.`
+        : `Updated existing Pige-managed note ${input.binding.pageId} from preserved source ${input.sourceRecord.id}.`,
     reversible: "yes",
     rollbackHint: "Restore the exact private before-image only while the live page matches this Operation's after hash.",
     warnings: []
@@ -1249,6 +1342,7 @@ function readUpdateBinding(job: JobRecord): AgentPageUpdatePublicationBinding | 
   const provenance = findInput("agent_tool_call_provenance");
   const target = findInput("update_target_base");
   const relationshipTarget = findInput("relationship_target");
+  const tagAdditions = findInput("tag_addition");
   const model = findInput("update_model_profile");
   const page = findOutput("expected_updated_note");
   const before = findOutput("preserved_update_before");
@@ -1259,7 +1353,7 @@ function readUpdateBinding(job: JobRecord): AgentPageUpdatePublicationBinding | 
     checkpoint.step !== AGENT_PAGE_UPDATE_CHECKPOINT_ID ||
     !["running", "done"].includes(checkpoint.state) ||
     source.length !== 1 || policy.length !== 1 || toolInput.length !== 1 || catalog.length !== 1 ||
-    provenance.length !== 1 || target.length !== 1 || relationshipTarget.length > 1 ||
+    provenance.length !== 1 || target.length !== 1 || relationshipTarget.length > 1 || tagAdditions.length > 6 ||
     model.length !== 1 || page.length !== 1 ||
     before.length !== 1 || staged.length !== 1 || operation.length !== 1 ||
     !source[0]?.id || !source[0].checksum || !policy[0]?.id || !policy[0].checksum ||
@@ -1269,6 +1363,8 @@ function readUpdateBinding(job: JobRecord): AgentPageUpdatePublicationBinding | 
       relationshipTarget[0]?.kind !== "page" || !relationshipTarget[0].id ||
       !relationshipTarget[0].path || !relationshipTarget[0].checksum
     )) ||
+    (relationshipTarget.length === 1 && tagAdditions.length > 0) ||
+    tagAdditions.some((ref) => ref.kind !== "tool" || !ref.id || normalizePigeTag(ref.id) !== ref.id) ||
     !model[0]?.id || page[0]?.kind !== "page" || page[0].id !== target[0].id ||
     page[0].path !== target[0].path || !page[0].checksum || before[0]?.kind !== "page" ||
     !before[0].path || before[0].checksum !== target[0].checksum || staged[0]?.kind !== "page" ||
@@ -1281,6 +1377,7 @@ function readUpdateBinding(job: JobRecord): AgentPageUpdatePublicationBinding | 
   const [toolId, toolVersion] = toolInput[0].id.split("@", 2);
   if (!toolId || !toolVersion) throw pageConflict("The existing-note update tool binding is invalid.");
   const relationshipRef = relationshipTarget[0];
+  const normalizedTagAdditions = normalizePigeTags(tagAdditions.map((ref) => ref.id!));
   if (
     !PageIdSchema.safeParse(target[0].id).success ||
     target[0].path !== createGeneratedNotePath(target[0].id) ||
@@ -1294,7 +1391,8 @@ function readUpdateBinding(job: JobRecord): AgentPageUpdatePublicationBinding | 
       !PageIdSchema.safeParse(relationshipRef.id).success ||
       relationshipRef.id === target[0].id ||
       relationshipRef.path !== createGeneratedNotePath(relationshipRef.id!)
-    ))
+    )) ||
+    (tagAdditions.length > 0 && normalizedTagAdditions.length !== tagAdditions.length)
   ) {
     throw pageConflict("The existing-note update checkpoint paths do not match their deterministic identities.");
   }
@@ -1325,7 +1423,8 @@ function readUpdateBinding(job: JobRecord): AgentPageUpdatePublicationBinding | 
         pagePath: relationshipRef.path!,
         contentHash: relationshipRef.checksum!
       }
-    } : {})
+    } : {}),
+    ...(normalizedTagAdditions.length > 0 ? { tagAdditions: normalizedTagAdditions } : {})
   };
 }
 
