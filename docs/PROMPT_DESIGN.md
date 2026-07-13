@@ -118,6 +118,10 @@ Rules:
 
 - The current tool set preserves evidence; selected parse/OCR requires re-inspection
   before publication and final text cannot write.
+- Structured-data tools expose only typed bounded Dataset plans and opaque refs. Cell
+  values, formulas, names, comments, and database metadata are escaped untrusted
+  evidence; they cannot authorize SQL, paths, tools, settings, providers, permissions,
+  destinations, or writes to the original source.
 - The main-process Evidence Assembly Service verifies selected source/artifact integrity, pairs parser/OCR text with its own metadata sidecar by source ID, sidecar Artifact ID, kind, and text checksum, then packages at most 24 fragments and 18,000 evidence characters inside one explicit `<untrusted_source_evidence>` block. It does not send vault paths or metadata sidecar bodies.
 - Each packaged fragment receives an ephemeral ordered `ev_NN` ref plus its durable source/Artifact locator. Native extracted text is ordered before OCR; same-parent OCR text is removed only when it repeats native text. The merged prompt representation is ephemeral and is never persisted as a second body Artifact. Optional `related_NN` search refs may populate `related_page_ids`; claims still cite current-source `ev_NN` evidence.
 - Parser coverage, truncation, OCR-pending state, and bounded parser warnings are trusted source-quality metadata outside the untrusted body. Before egress, Pige bounds and redacts every dynamic metadata string, freezes the typed prompt context, and includes only a non-secret policy summary. The prompt tells the model not to imply complete-document coverage when these fields are limited.
@@ -137,7 +141,9 @@ Rules:
 - Model Egress binds redacted evidence, frozen metadata, Provider endpoint/boundary, and
   selected model ID. Before Pi invocation Pige validates credential-bearing config;
   each turn rechecks non-secret binding, source/cancellation, and egress. Drift fails closed.
-- The model may cite only supplied `ev_NN` refs. Unknown refs fail before any Markdown write. A statement with an empty ref list is retained only with a warning, confidence cap, and `needs_review`; model-authored `[source:...]` or `[artifact:...]` tokens are stripped and canonical citations are rendered service-side.
+- The model may cite only supplied evidence refs. Unknown refs fail before a durable
+  write. Markdown citations and Dataset revision/row/range/query-result citations are
+  rendered service-side; model-authored locator tokens are never trusted.
 - Eligible reversible knowledge auto-commits; exceptions stage. Current tools cover exact
   create, cited append, bounded high-confidence tags, and one directed link
   after inspect/retrieval. Pi gets opaque targets and candidates/claims/reason, never

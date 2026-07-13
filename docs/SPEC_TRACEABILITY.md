@@ -43,6 +43,7 @@ Allowed areas (machine checked):
 - `BACKUP`
 - `CAP`
 - `CONTEXT`
+- `DATA`
 - `DB`
 - `DEP`
 - `DIAG`
@@ -79,7 +80,7 @@ Allowed verification classes are `contract`, `unit`, `integration`, `smoke`, `ev
 | PIGE-CAP-002 | Large pasted content is stored once as a managed text source and referenced from conversation history. | `docs/DATA_ARCHITECTURE.md` | P2 | M2 | unit |
 | PIGE-CAP-003 | Supported macOS versions provide local voice dictation in the Home composer; unsupported platforms show a clear unavailable state and never send dictation audio to a model provider. | `docs/PRD.md` | P2 | M2 | integration |
 | PIGE-CAP-004 | Home provides a whole-window file-drop hot zone that validates accepted files, preserves them before processing, and reports rejected display names without exposing private paths. | `docs/UI_PROTOTYPE.md` | P2 | M2 | integration |
-| PIGE-VAULT-001 | Markdown knowledge files are the durable knowledge source of truth. | `docs/DATA_ARCHITECTURE.md` | P1 | M1 | integration |
+| PIGE-VAULT-001 | Open local files are durable knowledge truth: Markdown owns narrative knowledge and versioned Dataset Bundles own structured knowledge; internal databases/indexes remain rebuildable. | `docs/DATA_ARCHITECTURE.md` | P1 | M1 | integration |
 | PIGE-VAULT-002 | Stable IDs are independent from slugs and file paths. | `docs/SYNC_CONFLICT_AND_MIGRATION.md` | P1 | M1 | unit |
 | PIGE-VAULT-003 | Original files remain user-owned; v0.1 file capture preserves them through `copy_to_source_library` or verified `reference_original` storage without forced migration. | `docs/SOURCE_STORAGE_STRATEGY.md` | P2 | M2 | integration |
 | PIGE-VAULT-004 | No actor permanently deletes durable knowledge/evidence automatically. Recoverable archive/trash is operation-recorded and undoable; permanent deletion confirms. | `docs/DATA_ARCHITECTURE.md` | P9 | M6 | integration |
@@ -105,6 +106,9 @@ Allowed verification classes are `contract`, `unit`, `integration`, `smoke`, `ev
 | PIGE-API-002 | API failures, durable Job warnings/errors, diagnostics, and UI actions use one namespaced, localized, redacted error taxonomy with stable retry and repair semantics. | `docs/API_AND_IPC_DESIGN.md` | P1 | M1 | integration |
 | PIGE-DB-001 | SQLite is rebuildable and never the sole knowledge source of truth. | `docs/LOCAL_DATABASE_DESIGN.md` | P4 | M5 | integration |
 | PIGE-DB-002 | The initial local database uses Node `node:sqlite` behind a replaceable driver abstraction and indexes the declared Library, search, graph, job, chunk, memory, and rebuild-status domains. | `docs/LOCAL_DATABASE_DESIGN.md` | P4 | M5 | integration |
+| PIGE-DATA-001 | CSV, XLSX, and supported SQLite sources preserve original evidence and materialize a lossless typed versioned Dataset Bundle without executing source code or mutating originals. | `docs/DATA_ARCHITECTURE.md` | P5 | M4 | integration |
+| PIGE-DATA-002 | Dataset inspection and natural-language analysis use bounded typed local query plans and exact revision/schema/row/range/aggregate evidence refs; whole payloads and unrestricted SQL never reach the model or renderer. | `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md` | P6 | M5 | integration |
+| PIGE-DATA-003 | Managed Collections support stable typed fields, views, relations/formulas, and reversible Agent row/schema/view changes through Activity/Undo; destructive, external-write, authority, and conflict boundaries remain exceptional. | `docs/DATA_ARCHITECTURE.md` | P7 | M5 | integration |
 | PIGE-SEC-001 | API keys are encrypted by default and excluded from backups by default. | `docs/SECURITY_THREAT_MODEL.md` | P3 | M3 | integration |
 | PIGE-SEC-002 | Sensitive external or Web Skill and package actions require Permission Broker mediation and an explicit decision or explicit user-selected default. | `docs/SECURITY_THREAT_MODEL.md` | P8 | M5 | integration |
 | PIGE-SEC-003 | Permission modes include Ask Every Time, Remember Scoped Grants, and YOLO Full Access, with explicit revocation and operation records. | `docs/SECURITY_THREAT_MODEL.md` | P8 | M5 | integration |

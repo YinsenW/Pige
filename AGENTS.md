@@ -39,7 +39,7 @@ Read `docs/VISION.md`, `docs/PRD.md`, `docs/TECH_ARCHITECTURE.md`, `docs/DATA_AR
 Use `rg` or the section map in `docs/START_HERE_FOR_AI_AGENTS.md` to find the exact sections needed. Load whole large documents only for broad architecture, product-scope, or data-ownership changes.
 
 The task router owns all specialist reading packs, including security, privacy, support,
-runtime-policy, retrieval, knowledge, recovery, settings, Pi, onboarding, and public
+runtime-policy, retrieval, structured data, knowledge, recovery, settings, Pi, onboarding, and public
 workflow triggers. Follow its matching row rather than maintaining another routing list
 here. Historical research is never default evidence; consult it only when the router
 names it for rationale or package curation.
@@ -56,7 +56,9 @@ names it for rationale or package curation.
   Agent-selected advantage, not a mandatory gate for every answer.
 - Documentation simplicity is also an engineering invariant: add a new design document only when an existing owner document cannot hold the decision cleanly; prefer task-specific section reads over loading the full documentation library.
 - PRD P0 is the `v0.1 Public Alpha` release acceptance scope, not a single task scope. Implementation work must follow Milestones and the v0.1 Implementation Playbook phase boundaries unless those owner docs are deliberately updated.
-- Markdown knowledge files are the durable knowledge source of truth.
+- Open local files are durable knowledge truth: Markdown owns narrative knowledge and
+  versioned Dataset Bundles own structured knowledge. Hidden indexes, caches, and
+  machine-local databases remain rebuildable working layers.
 - Local note storage location must be visible and controllable through Settings > Knowledge Base > Vault & Note Storage.
 - Every user-visible setting must declare owner, scope, storage, backup behavior, permission requirement, and apply behavior.
 - Agent-affecting settings must be compiled into typed Agent Runtime Policy Context and enforced by owning services; prompt text alone is never the enforcement layer.
@@ -65,7 +67,8 @@ names it for rationale or package curation.
   bodies by default. General answers need no fabricated vault evidence.
 - Original files and source assets remain user-owned evidence; Pige may reference, link, or copy them according to explicit source storage strategy, but must not force migration.
 - Data lifecycle is trash-first for durable vault data: Agent, Skill, package, cleanup, reset, cancellation, and compaction flows must not permanently delete durable knowledge, source evidence, memory, conversations, proposals, or operation records.
-- SQLite, indexes, thumbnails, and caches are rebuildable working layers.
+- Pige's internal SQLite, indexes, thumbnails, and caches are rebuildable working layers;
+  a documented SQLite payload inside a Dataset Bundle is structured knowledge, not an index.
 - API keys and tokens must not be written to Markdown, SQLite, logs, prompts, operation records, conversation logs, diagnostics, or backups by default.
 - Diagnostics and support bundles are local, user-initiated, redacted by default, and never uploaded automatically in v0.1.
 - API errors, job error summaries, diagnostics, and UI failure/status surfaces must use the shared error taxonomy with stable codes, localized message keys, redacted details, and structured retry/repair actions.

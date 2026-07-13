@@ -5,12 +5,13 @@ Date: 2026-07-09
 
 ## 1. Architecture Goals
 
-Pige must be local-first, desktop, agent-driven, and Markdown-native.
+Pige must be local-first, desktop, Agent-driven, and open-format native.
 
 Technical goals:
 
 - Run as a desktop app on macOS 26 or later, Windows 11, and Windows 10 when release tests pass. Linux support is deferred from v0.1.
-- Preserve user knowledge as local Markdown knowledge files, with source records and source assets kept as traceable evidence.
+- Preserve narrative knowledge as Markdown and structured knowledge as Dataset Bundles,
+  with source records/assets kept as traceable evidence.
 - Keep AI provider access user-controlled through BYOK.
 - Isolate the UI from filesystem and secret access.
 - Treat file parsing and web extraction as replaceable pipelines.
@@ -53,7 +54,7 @@ AI:
 
 Storage:
 
-- Markdown files as the durable knowledge source of truth.
+- Markdown and versioned Dataset Bundles as durable knowledge truth.
 - Source records plus source assets as user-owned evidence, preserved in v0.1 through exactly two strategies: managed copy or verified original reference. Filesystem-link storage remains future scope.
 - Independently configurable `knowledgeRoot` and `managedCopyRoot`; the v1 `sourceAssetRoot` field is a compatibility/UI alias for `managedCopyRoot`. Derived artifacts remain at `artifactRoot` under `<knowledgeRoot>/artifacts` in v0.1.
 - JSON manifests for small metadata.
@@ -61,6 +62,8 @@ Storage:
 - Pige-native Agent memory stored as vault-scoped text plus rebuildable local indexes.
 - Reference-based conversation history stored under `.pige/conversations/`.
 - SQLite local working database for indexes, search, graph queries, jobs, and cache state.
+- Confined Dataset-managed SQLite for mutable Collections and Parquet for immutable
+  analytical snapshots; these are portable Dataset payloads, not internal indexes.
 - Node `node:sqlite` as the initial SQLite driver behind a `LocalDatabaseDriver` abstraction, with `better-sqlite3` retained as a reviewed fallback.
 - Built-in local RAG inference engine for embeddings and optional reranking.
 - Downloadable local RAG model assets stored outside the vault.
@@ -369,6 +372,9 @@ owned by [`LOCAL_DATABASE_DESIGN.md`](LOCAL_DATABASE_DESIGN.md#4-database-scope)
 architecture only requires main-process access through the driver boundary and keeps
 both databases outside durable knowledge truth.
 
+Dataset-owned SQLite is outside this service and remains durable under Dataset Service;
+resetting the internal index must never remove or rewrite it.
+
 SQLite configuration, table/index catalog, column ownership, migration sequence,
 rebuild semantics, and database smoke recipe are owned by
 [`LOCAL_DATABASE_DESIGN.md`](LOCAL_DATABASE_DESIGN.md#6-sqlite-configuration). This
@@ -515,6 +521,25 @@ worker-protocol ownership are defined in
 [`PARSER_INGEST_SPEC.md`](PARSER_INGEST_SPEC.md#6-parse-result); the current executable
 main-process result is `DocumentParseSourceResult`. This architecture does not maintain
 a second parser result type.
+
+### 5.3.2 Dataset And Structured Query Services
+
+Dataset Service owns Dataset Bundle manifests, stable Dataset/table/column/row/view and
+revision identities, schema validation, provenance, managed-collection commits,
+analytical-snapshot publication, Activity/Undo, and backup/sync boundaries. It never
+rewrites an original CSV, workbook, or database.
+
+Dataset Query Service accepts only bounded typed plans over an exact Dataset revision.
+It returns schema, aggregates, selected rows/cells, warnings, and exact result hashes;
+it does not expose file handles, database connections, unrestricted SQL, or whole-table
+payloads to renderer or model code. Arrow is an in-memory/IPC representation only.
+DuckDB remains a replaceable candidate analytical engine behind this interface.
+
+Planned Pige-owned tools are `pige_inspect_dataset`, `pige_query_dataset`,
+`pige_create_dataset_view`, `pige_create_derived_dataset`, `pige_update_collection`,
+`pige_link_dataset_to_knowledge`, and `pige_summarize_dataset`. Owning services fix
+vault, Dataset, revision, query limits, destinations, citations, and permissions; model
+arguments cannot grant SQL, path, extension, source-write, or network authority.
 
 ### 5.3.1 OCR Service
 
@@ -824,7 +849,8 @@ P1:
 
 Important rule:
 
-Indexes are derived caches. Markdown knowledge files remain the knowledge source of truth; source records and source assets remain the durable evidence layer.
+Indexes are derived caches. Markdown and Dataset Bundles remain durable knowledge truth;
+source records and source assets remain the durable evidence layer.
 
 Retrieval pipeline:
 
@@ -1778,6 +1804,9 @@ Waiver rules:
 | Node `node:sqlite` (`db.node-sqlite`) | required | Initial v0.1 SQLite driver through the pinned Electron/Node runtime. | https://nodejs.org/api/sqlite.html | Pin through Electron/Node; rerun platform DB smoke tests before updating. | Main/worker process only; experimental API, but avoids immediate native npm module packaging. |
 | better-sqlite3 (`db.better-sqlite3`) | candidate | Fallback SQLite driver if `node:sqlite` fails release stability, performance, or packaging confidence. | https://github.com/WiseLibs/better-sqlite3 | Pin exact npm version before adoption; rebuild/package for Electron ABI on all targets. | Main/worker process only; never renderer direct access. |
 | SQLite FTS5 (`db.sqlite-fts5`) | required | Lexical search and fallback retrieval. | https://sqlite.org/fts5.html | Verify availability through selected SQLite build. | Derived index; rebuildable; CJK 2/3-gram augmentation is added by Pige indexing. |
+| Apache Parquet (`data.parquet`) | candidate | Open columnar payload for immutable Dataset analytical snapshots. | https://parquet.apache.org/ | Select and pin a concrete writer/reader only after compatibility, fuzz, license, package-size, and platform review. | Durable Dataset format; no model or renderer direct file access. |
+| Apache Arrow (`data.arrow`) | candidate | Bounded in-memory/IPC batches between Dataset adapters/query engine and owning services. | https://arrow.apache.org/docs/format/Columnar.html | Select a concrete implementation only with memory, IPC, package, and platform gates. | Runtime representation only; never the sole durable truth. |
+| DuckDB (`data.duckdb`) | candidate | Local typed analytical query over Parquet and imported snapshots behind `DatasetQueryEngine`. | https://duckdb.org/docs/stable/data/parquet/overview | Pin a current supported client only after Electron/macOS/Windows, memory, package, license, extension, and no-network tests. | No arbitrary SQL/extensions/downloads; query results are bounded and hash-bound. |
 | sqlite-vec | recommended | SQLite-backed vector search for v0.1 local RAG, behind a `VectorIndexDriver`. | https://github.com/asg017/sqlite-vec | Pin exact release/binary if adopted; because upstream is pre-v1, run packaging, extension-loading, and 100k-chunk performance tests before alpha. | Derived vector cache only; bundle only Pige-approved extension files and do not allow arbitrary SQLite extensions. |
 | yazl (`backup.yazl`; types `types.yazl`) | recommended | Streaming ZIP creation for `.pige-backup.zip`. | https://github.com/thejoshwolfe/yazl | Pin npm version; test large vault backups and cancellation. | Backup worker only; avoids buffering whole vault in memory. |
 | yauzl (`backup.yauzl`; types `types.yauzl`) | required | ZIP restore preview/extraction plus bounded OpenXML package preflight and selected-entry reads. | https://github.com/thejoshwolfe/yauzl | Pin `3.4.0`; test malformed/truncated archives, traversal, duplicate parts, entry/size/compression bounds, large-vault restore, and Office fixtures. | Restore/parser workers only; stream selected entries and never extract outside trusted staging. |
@@ -1864,7 +1893,7 @@ Reference-only capture, conversion, and local-tool evaluation:
   contracts; current Undici -> Readability/jsdom capture remains the default.
 - Static review of MarkItDown may inform Pige-owned synthetic fixture dimensions such as
   DOCX math/comments, PPTX charts/notes/grouped shapes, PDF borderless forms/tables, and
-  a later spreadsheet design. Its result contract provides Markdown and an optional
+  structured-input comparison. Its result contract provides Markdown and an optional
   title, but not Pige-typed locators, checksums, coverage, warning records, or recovery
   identity; reference status does not authorize installing or executing it.
 - OfficeCLI may inform Pige-owned Office fixtures through semantic/issue views, typed JSON,

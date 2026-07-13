@@ -28,9 +28,10 @@ when useful but is not required to begin.
 The interface should make one promise:
 
 > Ask anything, or put something in. Pige answers directly, uses your knowledge when it
-> helps, and can keep valuable results as durable Markdown.
+> helps, and can keep valuable results as durable local knowledge.
 
-The user should not need to understand tags, folders, topics, sources, or wiki structure before using Pige.
+The user should not need to understand tags, folders, topics, sources, wiki structure,
+schemas, Datasets, storage profiles, or query engines before using Pige.
 
 ## 2. Product Shape
 
@@ -53,7 +54,8 @@ Expanded state:
 
 - Sidebar opens to reveal Home, Library, Knowledge Tree, and Settings.
 - Progress, failures, Activity/Undo, and exceptional attention stay contextual, never top-level.
-- Library contains an Agent-maintained note tree, notes, sources, topics, and tags.
+- Library contains an Agent-maintained note tree, Dataset items, notes, sources, topics,
+  and tags. Dataset is a content kind, not another primary navigation item or Home mode.
 - The expanded sidebar reveals the Library tree directly, including at least three visible hierarchy levels when available.
 - Knowledge Tree is a separate semantic tree view for concepts, topics, evidence, and backlinks.
 - The app can become a three-pane knowledge workspace when needed.
@@ -369,6 +371,8 @@ On submit:
 
 - Validate and preserve accepted files, attach their refs to one Pi turn, and group
   preservation status. File type does not select the semantic workflow.
+- CSV, XLSX, and supported SQLite follow this same flow. Do not show an
+  Import/Table/Database mode; after preservation, Pi decides whether to inspect or query.
 
 ## 6. Processing Timeline
 
@@ -481,6 +485,10 @@ Behavior:
 - The user can refine the query without starting a new chat thread.
 - Saving useful knowledge auto-applies through a validated recoverable tool; exceptional boundaries pause.
 - There is no separate default "Ask" entry in navigation; this behavior lives inside Home.
+- When a final answer uses Dataset evidence, a quiet citation such as
+  `Budget.xlsx · Plan · rows 12–18` or `… · aggregate` opens the same Dataset revision and
+  highlighted evidence in Library. Drafts carry none. Never expose SQL, engine names,
+  query hashes, schema IDs, or internal paths.
 
 Current delivery and open Home recovery work are projected by the Playbook and acceptance
 manifest; this owner defines the mode-free conversation interaction.
@@ -607,6 +615,23 @@ Action behavior:
 - Translate, polish, expand, summarize, and explain can return inline output or send results to the Note Agent panel.
 - Mutations preserve base/original, record an Operation, and expose Undo; preview is optional.
 
+### 8.4 Structured Knowledge Surface
+
+Datasets open from Home citations, Activity, Library, or the preserved Source inside the
+existing content pane; this is not a new navigation destination.
+
+v0.1 shows a read-only CSV/XLSX/SQLite Dataset with a compact title, source, revision and
+warning header; stable keyboard/screen-reader table semantics; bounded paging/scrolling;
+and exact cited rows, ranges, columns, or aggregates highlighted. Formula cells show the
+cached value plus a quiet formula/stale-cache indicator. Warnings are localized and
+never raw adapter errors. The original remains separately revealable. Do not flatten
+rows into Markdown or expose storage/query-engine terminology.
+
+Editable managed Collections, fields, views, relations, and formulas are P1. When
+delivered, validated reversible changes auto-apply and appear in Activity with Undo;
+destructive/external/conflicted boundaries remain exceptional. Do not render those
+controls in the v0.1 read-only surface.
+
 ## 9. Sources View
 
 Purpose:
@@ -643,6 +668,8 @@ Phase 2/3 implementation bridge:
 - It should show page title, type, status, relative page path, language, and source count only.
 - Library rows can open a minimal rendered reader for the selected page.
 - Full Library tree, source tabs, related pages, edit mode, Note Agent, selection actions, reveal-source actions, and Knowledge Tree remain later UI slices.
+- A structured Source may link to its Dataset result. Source evidence and Dataset
+  knowledge remain distinct, and both open within Library.
 
 ## 10. Topics And Tags
 
@@ -846,7 +873,10 @@ Required controls:
 - Do not expose database file paths, cache folders, parser artifact internals, checksums, or symlink mechanics on the default page.
 - Do not offer a one-click "move current vault" in v0.1. If Pige later moves a vault itself, it must be a guarded migration wizard with preflight checks, backup, copy verification, and rollback.
 
-Reset Local Database should be framed as a repair action under Index & Maintenance. It deletes rebuildable SQLite/index files and recreates them from Markdown, source records, artifacts, memory text, proposals, and operation summaries. It must not delete notes or source assets.
+Reset Local Search Database is a repair action under Index & Maintenance. It deletes only
+rebuildable `.pige` indexes/caches and recreates them from Markdown, Dataset Bundles,
+source records/artifacts, memory, proposals, and operations. It never deletes Dataset
+payloads/revisions/views/change logs, notes, or sources.
 
 ### Model Settings
 
@@ -1546,7 +1576,7 @@ product screenshots are forbidden in committed baselines.
 - Agent progress should be cancelable when possible.
 - Completion cards distinguish created, updated, skipped, and unchanged vault outcomes.
 - Errors should preserve user input and offer retry.
-- Users should be able to open generated Markdown in the system file browser.
+- Users should be able to reveal generated durable note or Dataset results.
 - When a generated page updates existing knowledge, the UI should show "updated" separately from "created".
 - Eligible Agent edits apply visibly with provenance and Undo; exceptional boundaries pause.
 - Source warnings, including possible prompt injection, should be visible but not alarming.
@@ -1562,6 +1592,7 @@ Must implement:
 - Sidebar collapsed and expanded.
 - Processing, autonomous Activity/Undo, and exceptional needs-attention cards.
 - Library with notes, sources, topics, and tags.
+- Read-only Dataset table in the existing Library/Home result surface.
 - Expanded Library tree in the sidebar.
 - Knowledge Tree semantic tree.
 - Note reader.
@@ -1586,6 +1617,7 @@ Can wait:
 - Rich full diff confirmation UI.
 - Rich knowledge health workflows.
 - Non-desktop capture surfaces already classified as post-v0.1 in the PRD.
+- Editable Collections, relations, formulas, and custom views.
 
 ## 19. UI Acceptance Criteria
 
@@ -1599,6 +1631,8 @@ Can wait:
 - Notes can be opened and read without knowing where files are stored.
 - Home answers without local evidence when appropriate; when retrieval is used, ranked
   notes and grounded citations remain visible.
+- CSV/XLSX/SQLite use the same preserve-first Home ingress; a calm read-only table opens
+  exact cited revision/range evidence without an import mode or engine taxonomy.
 - Opened notes can show a contextual Agent panel.
 - Selected text exposes common actions without leaving the note.
 - Settings offers preset connection, unified sync/manual inventory, and grouped Global Default without protocol/raw-ID work.

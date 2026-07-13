@@ -10,13 +10,13 @@ const PLAYBOOK_PATH = "docs/V0_1_IMPLEMENTATION_PLAYBOOK.md";
 const MILESTONES_PATH = "docs/MILESTONES.md";
 
 const controlledBaseline = Object.freeze({
-  p0Items: 151,
-  p1Items: 9,
-  p2Items: 10,
-  requirements: 99,
-  capabilities: 99,
-  builds: 141,
-  exits: 97,
+  p0Items: 152,
+  p1Items: 10,
+  p2Items: 11,
+  requirements: 102,
+  capabilities: 102,
+  builds: 144,
+  exits: 100,
   deferred: 32
 });
 

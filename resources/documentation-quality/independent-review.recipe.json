@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-13T03:42:21Z",
+  "reviewedAt": "2026-07-13T04:07:48Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,12 +30,12 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "577145c40a06b295ff2134fc1f7cc6bff26f44ea22fc1b4a87e2f102b23e3dcf"
+    "reviewedSha256": "bfc61172adc3a7f5b8f4cf97901be3cdb5455a3f370799ec0b8538b8df01c124"
   },
   "reviewers": [
     {
-      "reviewerId": "home-draft-stream-final-review",
-      "task": "/root/home_draft_stream_governance_review",
+      "reviewerId": "structured-data-governance-final-review",
+      "task": "/root/structured_data_governance_review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -43,85 +43,84 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Independent read-only review audited the exact 14-Development plus three-pre-recipe-governed candidate. It verified parsed terminal-answer eligibility, sender/turn/Job binding, coalesced replacement, excluded raw/provider/control data, non-durability, authoritative final recovery, exact evidence, unchanged statuses and fixed budgets; it reported CLEAR and made no edits."
+      "independence": "Independent read-only review audited the exact structured-data governance candidate. It verified narrative-versus-structured truth, source preservation, Dataset profiles and evidence refs, typed query/security boundaries, phase separation, UI simplicity, trace closure, unchanged statuses and fixed budgets; it reported CLEAR and made no edits."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "home-draft-stream-final-review",
+      "reviewerId": "structured-data-governance-final-review",
       "blockerCount": 0,
-      "summary": "Safe draft replacement stays inside the existing Home pending bubble and conversation lifecycle without a new destination, mode or durable object."
+      "summary": "The existing task router and Owner set absorb Dataset work without a new document, top-level UI destination, mode or duplicate lifecycle owner."
     },
     {
       "id": "cross_document_contract_consistency",
-      "score": 9.9,
-      "reviewerId": "home-draft-stream-final-review",
+      "score": 9.7,
+      "reviewerId": "structured-data-governance-final-review",
       "blockerCount": 0,
-      "summary": "Existing Pi, API and UI Owners agree on exact parsed-answer eligibility, typed bindings, exclusion rules, cancellation and final-authority semantics."
+      "summary": "Owners agree that Markdown is narrative truth, Dataset Bundles are structured truth, originals are evidence and internal SQLite/indexes remain rebuildable."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "home-draft-stream-final-review",
+      "reviewerId": "structured-data-governance-final-review",
       "blockerCount": 0,
-      "summary": "Three exact tests and the Electron roundtrip project only into partial E6.01; PIGE-PI-005 and E3.09 remain planned and every existing status is unchanged."
+      "summary": "Three planned Requirements, capabilities, Builds and Exits close P5 ingest, P6 local query/citations and P7 managed Collections with no existing status change."
     },
     {
       "id": "ongoing_development_support",
-      "score": 9.8,
-      "reviewerId": "home-draft-stream-final-review",
+      "score": 9.7,
+      "reviewerId": "structured-data-governance-final-review",
       "blockerCount": 0,
-      "summary": "The publisher, adapter, main/preload/renderer boundary, focused selectors and remaining source-ingest, multi-window and signed-platform work are directly discoverable."
+      "summary": "Implementation can start with preserve-first read-only CSV/XLSX/database snapshots and typed queries while exact schemas, adapters, dependency pins and test gates remain explicit."
     },
     {
       "id": "documentation_leanness_and_maintainability",
-      "score": 9.9,
-      "reviewerId": "home-draft-stream-final-review",
+      "score": 9.6,
+      "reviewerId": "structured-data-governance-final-review",
       "blockerCount": 0,
-      "summary": "No Owner prose or Markdown document was added; Planning changes only one Playbook note, acceptance evidence, semantic lock and this current-only recipe."
+      "summary": "No Markdown file was added; 55 documents, 3,449 of 3,700 entry words and 1,143,714 of 1,210,000 governed Markdown bytes remain within ratcheted budgets."
     }
   ],
   "verification": [
     {
       "command": "npm run verify",
       "status": "passed",
-      "evidence": "The final exact candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all five documentation-quality dimensions."
+      "evidence": "The final exact governance candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all five documentation-quality dimensions."
     },
     {
-      "command": "npm test",
+      "command": "npm run verify:docs && npm run verify:decisions && npm run verify:contracts",
       "status": "passed",
-      "evidence": "The exact combined candidate passes 81 files plus one skipped file and 857 tests plus three skipped tests; local loopback tests run outside the restrictive filesystem sandbox."
+      "evidence": "The PRD contract closes at 152/10/11 P0/P1/P2 items, 102 Requirements/capabilities, 144 Builds and 100 Exits; 87 Decisions and all four cross-document contract gates pass."
     },
     {
-      "command": "focused draft/Home/runtime/shell matrix",
+      "command": "npm run verify:traceability",
       "status": "passed",
-      "evidence": "Five exact files and 83 tests prove terminal answer filtering, publisher identity/rate/sequence, UI replacement and clearing, Home lifecycle and runtime boundaries."
+      "evidence": "Semantic lock schema v3 contains 1,130 claims; new Dataset Requirements and Exits are planned, all existing Requirement/Exit statuses and all ten phase states are unchanged."
     },
     {
-      "command": "npm run verify:traceability && npm run verify:contracts",
+      "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "Semantic lock schema v3 contains 1,111 claims; exact E6.01 evidence is current, CON-001 through CON-004 pass and all Requirement, Exit and phase statuses are unchanged."
+      "evidence": "LEN-001 through LEN-005 pass with 55 Markdown files, 3,449 of 3,700 entry words, 4,584 trace lines, 228,798 trace bytes and 1,143,714 of 1,210,000 governed Markdown bytes."
     }
   ],
   "coordination": {
-    "taskId": "home-draft-stream-20260713",
-    "taskTitle": "Safe Home draft replacement executable evidence",
+    "taskId": "structured-data-governance-20260713",
+    "taskTitle": "First-class structured knowledge and Dataset Bundle governance",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "This candidate implements the already-governed non-durable Home draft boundary. It adds no schema layout, provider, permission, dependency, setting or product mode and promotes no status.",
-    "acknowledgement": "Development froze 14 exact paths; Product Planning added three governed paths plus this recipe; independent review cleared exact bytes and retained signed-platform and broader draft-source gaps."
+    "compatibility": "This documentation-only candidate adds planned structured-data scope without implementation, dependencies, schema/API channels, UI navigation, phase renumbering or status promotion. Existing work continues unchanged.",
+    "acknowledgement": "The user approved the architecture; Product Planning synchronized current Owners and trace controls, UI Design cleared the in-place read-only surface, and independent review cleared the exact candidate."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Draft presentation is limited to the exact Home terminal-answer tool; generic assistant prose is intentionally excluded.",
-    "Source-ingest terminal drafts remain unevidenced.",
-    "Multi-window concurrency and broader sender-lifecycle proof remain open.",
-    "Drafts deliberately do not replay across reconnect/restart; only durable final conversation state recovers.",
-    "Provisional text may shrink or revise and carries no citations or grounding until final validation.",
-    "The 10,000-page and broader Home UI performance boundary remains open.",
-    "Signed installed macOS/Windows BYOK and platform proof remain open."
+    "Dataset manifest, schema, change-log and evidence-reference contracts remain planned until shared executable schemas land.",
+    "Parquet, Arrow and DuckDB require exact dependency, licensing, packaging, no-network/extension and macOS/Windows validation before adoption.",
+    "CSV lexical round-trip, XLSX formula/cache semantics and hostile database fixtures still need executable losslessness and security evidence.",
+    "Managed Collection revision CAS, crash recovery, Activity/Undo and cross-process conflict handling remain unimplemented.",
+    "Large-table memory, paging, cancellation and 10-million-row packaged-platform evidence remain open.",
+    "Backup/restore and future sync must prove Dataset Bundle atomicity and compatibility before status changes."
   ]
 }

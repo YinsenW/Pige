@@ -16,6 +16,7 @@ flowchart TD
   Capture["Capture Input"] --> Source["Source Record"]
   Source --> SourceAsset["Source Asset"]
   Source --> Artifact["Extracted Artifact"]
+  Source --> Dataset["Dataset Bundle"]
   Artifact --> SourcePage["Source Page"]
   Artifact --> Chunk["Retrieval Chunk"]
   SourcePage --> WikiPage["Wiki Page"]
@@ -27,10 +28,12 @@ flowchart TD
   Job -. exceptional boundary .-> Proposal["Change Proposal"]
   Proposal --> Operation
   Operation --> WikiPage
+  Operation --> Dataset
   Operation --> Memory["Agent Memory"]
   WikiPage --> Backup["Backup"]
   SourceAsset --> Backup
   Artifact --> Backup
+  Dataset --> Backup
   Conversation --> Backup
   Memory --> Backup
 ```
@@ -39,7 +42,7 @@ flowchart TD
 
 | Term | Meaning | Durable owner |
 | --- | --- | --- |
-| Knowledge root | The local folder containing Markdown knowledge, source pages, wiki pages, control files, and durable vault metadata. | Filesystem |
+| Knowledge root | The local folder containing narrative Markdown, Dataset Bundles, source evidence, control files, and durable vault metadata. | Filesystem |
 | Managed-copy root | The configured root for Pige-owned source copies. The v0.1 in-vault default is `<knowledgeRoot>/raw`; an external root is a machine-vault binding. | Source Storage Service |
 | Artifact root | The portable root for durable derived artifacts. The v0.1 location is `<knowledgeRoot>/artifacts` and it does not move when the managed-copy root changes. | Source Storage Service and Parser/OCR Services |
 | Source asset root | Compatibility/UI term used by the v1 config and IPC DTO for the managed-copy root. It is not a parent of both `raw/` and `artifacts/`. New contracts use `managedCopyRoot` and `artifactRoot`. | Source Storage Service |
@@ -49,6 +52,10 @@ flowchart TD
 | Source page | A user-editable Markdown summary that references one canonical source-record sidecar. It is not a second source-record authority. | `sources/` |
 | Artifact | Extracted text, OCR output, rendered page image, normalized asset, or parser output derived from a source asset. | `artifacts/` |
 | Wiki page | A durable Markdown knowledge page of type `note`, `concept`, `entity`, `topic`, `claim`, or `question`. A project is represented by an entity/note; `index.md` and `log.md` are special control files, not ordinary page types. | `wiki/` |
+| Dataset Bundle | Portable structured-knowledge directory containing one versioned manifest, stable object IDs, schemas, revisions, views, provenance, and an open managed-collection or analytical-snapshot payload. | `datasets/` via Dataset Service |
+| Managed Collection | Mutable Pige-owned Dataset profile backed by a confined SQLite application file plus append-only revisions/change records. | Dataset Service |
+| Analytical Snapshot | Immutable Dataset profile backed by Parquet parts and versioned schema/provenance, normally derived from CSV, XLSX, or a read-only database snapshot. | Dataset Service |
+| Dataset evidence reference | Exact citation binding to Dataset/revision/table/schema/column and row, key, range, or aggregate query/result hashes. | Context Pack/Operation records; source data remains in Dataset Bundle |
 | Tag | Lightweight frontmatter facet used for filtering and ranking, not the main knowledge hierarchy. | Markdown frontmatter plus rebuildable indexes |
 | Knowledge relation | Typed connection such as wiki link, citation, topic membership, support, contradiction, duplicate, or supersession. | Markdown/frontmatter/managed sections/operation records |
 | Knowledge Tree | Derived semantic visualization of topics, concepts, sources, fragments, claims, questions, and relationship suggestions. | Rebuildable view |
@@ -87,6 +94,11 @@ Durable Markdown knowledge truth:
 - Proposals and operation records.
 - Vault manifests and non-secret vault config.
 
+Durable structured knowledge truth:
+
+- Dataset manifests, schemas, revisions, change records, and saved views.
+- Managed Collection SQLite payloads and immutable analytical Parquet parts.
+
 Durable source evidence:
 
 - Source records.
@@ -111,7 +123,7 @@ Machine-local durable state:
 - Permission grants.
 - Machine-local Skills/packages.
 
-Rebuildable state:
+Rebuildable state (distinct from Dataset payloads):
 
 - SQLite database.
 - FTS and vector indexes.
@@ -153,6 +165,9 @@ Canonical ID prefixes:
 | `permdec_` | Permission decision |
 | `backup_` | Backup manifest |
 | `root_` | Machine-local external root binding |
+
+Planned Dataset prefixes become executable only when shared schemas adopt them:
+`dataset_`, `table_`, `column_`, `row_`, `view_`, and `dataset_rev_`.
 
 Rules:
 
@@ -288,6 +303,8 @@ Rules:
 | Source records, source assets, managed copies, original references | Source Storage Service |
 | Source preservation during capture | Capture Service and Source Storage Service |
 | Parser output and OCR artifacts | Parser/OCR Services |
+| Dataset manifests, schemas, revisions, views, and payload commits | Dataset Service |
+| Bounded typed Dataset query plans and result hashes | Dataset Query Service |
 | Markdown generation and frontmatter | Wiki Compiler |
 | Tags, relationship writes, and backlink maintenance | Wiki Compiler, with graph indexes owned by Local Database Service |
 | Exceptional change proposals | Change Proposal Service |
@@ -311,10 +328,11 @@ Rules:
 - An artifact is not authoritative; it can be regenerated.
 - A retrieval chunk is not a note.
 - A tag is not a topic, concept, entity, or folder.
-- Knowledge Tree is a visualization over Markdown and graph indexes, not a separate source of truth.
+- Knowledge Tree is a visualization over durable knowledge and graph indexes, not a separate source of truth.
 - Conversation history is activity history, not the canonical wiki.
 - Memory is behavioral context, not general knowledge storage.
-- A database row is not durable knowledge unless backed by a durable file.
+- A row in Pige's internal database is not durable knowledge. A row inside a versioned
+  managed Dataset is durable because the Dataset Bundle, revision, and change boundary own it.
 - A Skill is not permission by itself.
 - A package being installed does not mean every capability is allowed.
 - A backup is not sync, but it must preserve sync-ready IDs.

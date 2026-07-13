@@ -14,7 +14,8 @@ Recommended v0.1 choice:
 - Fallback driver candidate: `better-sqlite3` if platform smoke tests reject `node:sqlite` for v0.1.
 - Access pattern: main process or dedicated database worker only, never renderer direct access.
 - Abstraction: `LocalDatabaseDriver` interface so Pige can switch between `node:sqlite`, `better-sqlite3`, or another SQLite driver later.
-- Source of truth: Markdown knowledge files, source records/source assets, extracted artifacts, Agent memory text, proposals, operation summaries, and vault config files.
+- Source of truth: narrative Markdown, versioned Dataset Bundles, source records/assets,
+  durable artifacts, memory, proposals, operations, and vault config files.
 - Database role: indexing, search, job acceleration, metadata joins, caches, and local app state.
 
 ## 2. Why A Database Is Still Needed
@@ -34,7 +35,10 @@ Pige benefits from a database for:
 - Deduplication hashes and path manifests.
 - Rebuild status, schema versions, and migration tracking.
 
-The database should make Pige feel fast. It should not be required to understand or recover the user's knowledge.
+The internal database should make Pige feel fast. It must not be required to recover the
+user's knowledge. A Dataset's `data/collection.sqlite` is a separate documented
+application-file format and is durable structured knowledge; none of its rows may be
+silently treated as `.pige/db/vault.sqlite` cache rows.
 
 ## 3. Source Of Truth Rules
 
@@ -45,6 +49,7 @@ Durable truth:
 - `artifacts/`: extracted text, OCR, rendered pages, and extracted media under `<knowledgeRoot>/artifacts` in v0.1, independent of `managedCopyRoot`.
 - `sources/`: Markdown source pages.
 - `wiki/`: compiled Markdown knowledge pages.
+- `datasets/`: Dataset manifests, schemas, revisions, views, changes, and open payloads.
 - `.pige/memory/`: vault-scoped Agent memory as inspectable text.
 - `.pige/proposals/`: pending confirmation proposals.
 - `.pige/operations/`: durable operation summaries.
@@ -60,7 +65,18 @@ Derived database state:
 - Cached computed summaries.
 - Local health and rebuild state.
 
-If the database is deleted, Pige should be able to rebuild it from the durable truth files, except for machine-local preferences that are intentionally not part of the vault.
+If `.pige/db/vault.sqlite` is deleted, Pige rebuilds it from durable truth without
+deleting or rewriting Dataset payloads.
+
+### 3.1 Structured Query Engine Boundary
+
+Dataset access uses a separate `DatasetQueryEngine` interface. Initial CSV/XLSX/SQLite
+support may use bounded format adapters and the managed Collection driver. DuckDB is the
+preferred candidate for later local analytical query over Parquet, but no dependency is
+selected until license, package size, Electron/macOS/Windows support, memory limits,
+extension/network behavior, and deterministic smoke tests pass. Model output supplies a
+validated typed query plan, never unrestricted SQL; renderer code never receives a
+database handle.
 
 ## 4. Database Scope
 

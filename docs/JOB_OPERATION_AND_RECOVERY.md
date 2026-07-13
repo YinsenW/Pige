@@ -138,6 +138,13 @@ The acceptance manifest records whether `capture_batch`, multi-source recovery, 
 Agent-selected continuations have executable delivery evidence; this table does not
 maintain a second status projection.
 
+Planned structured-data delivery reuses durable Jobs but does not add a Job-class enum
+in documentation before the shared schema exists. Dataset import materializes only after
+preserved source, manifest/schema plan, payload hashes, and target revision are
+checkpointed. Query is read-only and revision-bound. Collection/view/derived-Dataset
+changes require deterministic operation identity, before/after revision hashes,
+Activity/Undo where reversible, and restart reconciliation before completion.
+
 ## 5. Job State Machine
 
 Required canonical states:
@@ -619,6 +626,8 @@ Recovery decisions:
 | Action-safety guard is true after restart | Keep it monotonic; use provenance/checksums to retry, adopt same-job output, or repair a missing derived index. Missing output never proves clean cancellation. |
 | Temp file exists without operation | Validate and delete or quarantine temp file. |
 | Target page changed after proposal | Mark proposal conflicted. |
+| Dataset revision or schema changed after query/write plan | Reject stale evidence or preserve a new revision; never replay against a different base. |
+| Dataset payload exists but manifest/revision/Operation is incomplete | Adopt only when every planned ID/hash matches; otherwise quarantine/preserve and fail closed. |
 | Permission prompt was open | Recreate pending permission UI or fail clearly if context expired. |
 
 ## 14. Compaction And Retention

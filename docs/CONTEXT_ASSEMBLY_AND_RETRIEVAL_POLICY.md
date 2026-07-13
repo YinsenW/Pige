@@ -74,6 +74,7 @@ Allowed context inputs:
 | Current selection | Renderer via Note Service | Exact selected text and source span | Mutating actions must preserve span mapping. |
 | Retrieved pages/chunks | Search/Retrieval Service | Ranked snippets with citations | Never full vault. |
 | Source artifacts | Parser/OCR/Source Storage | Extracted fragments with locators | Labeled untrusted evidence. |
+| Dataset results | Dataset Query Service | Bounded schema, aggregates, selected cells/rows, and exact Dataset evidence refs | Typed query plan and result are revision/hash-bound; never whole Dataset or raw SQL. |
 | Agent memory | Agent Memory Service | Ranked compact memory entries | Secret-scanned and scoped. |
 | Conversation history | Conversation History Service | Recent turns plus references/summaries | Do not duplicate large source bodies or saved page bodies. |
 | Tool results | Tool adapter | Compact summaries plus artifact refs | Full verbose output goes to artifacts/logs, not prompt by default. |
@@ -148,6 +149,7 @@ type RetrievalScope =
   | { kind: "current_note"; pageId: string }
   | { kind: "selection"; pageId: string; spanId: string }
   | { kind: "source"; sourceId: string }
+  | { kind: "dataset"; datasetId: string; revisionId: string; tableId?: string }
   | { kind: "topic"; topicId: string }
   | { kind: "recent_activity"; since?: string };
 ```
@@ -227,9 +229,14 @@ type AgentContextPack = {
 ```ts
 type EvidenceContextRef = {
   refId: string;
-  kind: "markdown_page" | "source_page" | "source_artifact" | "ocr_artifact" | "memory";
+  kind: "markdown_page" | "source_page" | "source_artifact" | "ocr_artifact" | "dataset_result" | "memory";
   pageId?: string;
   sourceId?: string;
+  datasetId?: string;
+  datasetRevisionId?: string;
+  tableId?: string;
+  queryPlanHash?: string;
+  resultHash?: string;
   chunkId?: string;
   locator?: string;
   citationRefs: CitationRef[];
@@ -283,6 +290,9 @@ Rules:
   answers distinguish locally supported claims from model-general material.
 - Ranked results must include snippets and match reasons.
 - Ingest outputs should cite source pages, source artifacts, or original locators.
+- Dataset claims cite exact Dataset revision/table/schema plus row ID, primary key, range,
+  selected columns, or aggregate query/result hashes. Display coordinates alone are not
+  stable evidence.
 - Current generated ingest notes append canonical `[source:<source-id>#<locator>]` citations
   to supported statements. Unknown or missing refs block publication and force replan or
   abstention; Pige never fabricates a fallback locator.
@@ -301,6 +311,7 @@ Cloud model calls receive:
 - The current user message.
 - Redacted runtime policy summary.
 - Selected snippets, locators, and citations.
+- Bounded Dataset schema/aggregate/sample results selected by a typed local query.
 - Current note/selection snippets when relevant.
 - Compact memory entries when allowed.
 - Output schema.
@@ -309,6 +320,7 @@ Cloud model calls must not receive:
 
 - Full vault content.
 - Full source asset bodies unless explicitly required and allowed.
+- Whole Dataset payloads, unrestricted query text, or database handles.
 - Raw API keys or secret refs.
 - Machine-local paths that are not already user-visible and necessary.
 - Permission-store internals.
@@ -375,6 +387,10 @@ Tests must verify:
 - Source content cannot change settings, storage strategy, provider, permissions, or `PIGE.md`.
 - Retrieval works through lexical/metadata fallback without local embeddings.
 - CJK retrieval fixtures work without whitespace-only assumptions.
+- Dataset queries revalidate revision/schema, enforce row/column/byte/time/result bounds,
+  produce deterministic result hashes, and preserve exact citations across retry.
+- Formula, cell, column, and database metadata remain untrusted and cannot change query,
+  tool, provider, permission, destination, or output authority.
 
 Current Phase 5 ingest bridge:
 
