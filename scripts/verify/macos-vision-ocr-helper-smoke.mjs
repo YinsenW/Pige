@@ -10,7 +10,12 @@ if (process.platform !== "darwin") {
   process.exit(0);
 }
 
-const binaryPath = path.join(root, "artifacts/native/macos", process.arch, "pige-vision-ocr");
+const packagedResourcesPath = process.env.PIGE_PACKAGED_RESOURCES_PATH
+  ? path.resolve(process.env.PIGE_PACKAGED_RESOURCES_PATH)
+  : undefined;
+const binaryPath = packagedResourcesPath
+  ? path.join(packagedResourcesPath, "native/macos", process.arch, "pige-vision-ocr")
+  : path.join(root, "artifacts/native/macos", process.arch, "pige-vision-ocr");
 if (!fs.existsSync(binaryPath)) {
   console.error("Missing macOS Vision OCR helper. Run npm run build:native:macos-ocr first.");
   process.exit(1);
@@ -29,7 +34,9 @@ if (
   process.exit(1);
 }
 
-const fixtureRoot = path.join(root, "artifacts/test-fixtures/ocr");
+const fixtureRoot = process.env.PIGE_SMOKE_ARTIFACT_ROOT
+  ? path.resolve(process.env.PIGE_SMOKE_ARTIFACT_ROOT)
+  : path.join(root, "artifacts/test-fixtures/ocr");
 const imagePath = path.join(fixtureRoot, "macos-vision-smoke.png");
 fs.mkdirSync(fixtureRoot, { recursive: true });
 const canvas = createCanvas(1600, 500);

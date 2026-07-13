@@ -6,7 +6,10 @@ import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 
 const root = process.cwd();
-const workerPath = path.join(root, "apps/desktop/out/main/workers/local-database-rebuild-worker.js");
+const builtAppRoot = process.env.PIGE_BUILT_APP_ROOT
+  ? path.resolve(process.env.PIGE_BUILT_APP_ROOT)
+  : path.join(root, "apps/desktop");
+const workerPath = path.join(builtAppRoot, "out/main/workers/local-database-rebuild-worker.js");
 if (!fs.existsSync(workerPath)) {
   console.error(`Missing built index worker: ${path.relative(root, workerPath)}. Run npm run build first.`);
   process.exit(1);

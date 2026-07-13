@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, safeStorage, type WebContents } from "electron";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, realpathSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { PigeDomainError } from "@pige/domain";
 import type {
   AddPresetProviderRequest,
@@ -119,6 +120,7 @@ let ocrService: OcrService | undefined;
 let latestSupportBundlePreview: SupportBundlePreview | undefined;
 const restorePreviewRegistry = new RestorePreviewRegistry();
 const restorePreviewTrackedSenders = new Set<number>();
+const PACKAGED_RUNTIME_SMOKE_ARGUMENT = "--pige-packaged-runtime-smoke-report=";
 
 async function confirmSettingAction(
   sender: WebContents,
@@ -180,7 +182,7 @@ const createMainWindow = (): void => {
 
   getWindowModeService().applyStoredState(browserWindow);
 
-  if (process.env.ELECTRON_RENDERER_URL) {
+  if (!app.isPackaged && process.env.ELECTRON_RENDERER_URL) {
     void browserWindow.loadURL(process.env.ELECTRON_RENDERER_URL);
     return;
   }
@@ -1034,7 +1036,30 @@ ipcMain.handle("restore.apply", async (event, request: RestoreApplyRequest): Pro
 });
 ipcMain.handle("system.toolchainHealth", () => getToolchainService().health());
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  const packagedRuntimeSmokeReportPath = resolvePackagedRuntimeSmokeReportPath();
+  if (packagedRuntimeSmokeReportPath) {
+    try {
+      const smoke = await import(pathToFileURL(join(__dirname, "pi-agent-runtime-smoke.js")).href);
+      const pi = await smoke.runPiAgentRuntimeSmoke();
+      const home = await smoke.runHomeAgentRuntimeSmoke();
+      const runtimeIdentity = {
+        appName: app.getName(),
+        appVersion: app.getVersion(),
+        isPackaged: app.isPackaged
+      };
+      writeFileSync(packagedRuntimeSmokeReportPath, `${JSON.stringify({ runtimeIdentity, pi, home })}\n`, {
+        encoding: "utf8",
+        mode: 0o600,
+        flag: "wx"
+      });
+      app.exit(0);
+    } catch {
+      app.exit(1);
+    }
+    return;
+  }
+
   localSettingsStore = new LocalSettingsStore(app.getPath("userData"));
   appearanceService = new AppearanceService(getLocalSettingsStore(), app.getLocale());
   modelProviderRegistry = new ModelProviderRegistry(
@@ -1098,9 +1123,25 @@ function requireWindow(webContents: WebContents): BrowserWindow {
 function resolveToolchainManifestPath(): string {
   const fallback = join(process.cwd(), "resources/toolchain-manifest/toolchain.manifest.json");
   const candidates = [
+    join(process.resourcesPath, "toolchain-manifest/toolchain.manifest.json"),
     fallback,
     join(app.getAppPath(), "resources/toolchain-manifest/toolchain.manifest.json"),
     join(app.getAppPath(), "../../resources/toolchain-manifest/toolchain.manifest.json")
   ];
   return candidates.find((candidate) => existsSync(candidate)) ?? fallback;
+}
+
+function resolvePackagedRuntimeSmokeReportPath(): string | undefined {
+  if (!app.isPackaged) return undefined;
+  const argument = process.argv.find((value) => value.startsWith(PACKAGED_RUNTIME_SMOKE_ARGUMENT));
+  const requestedPath = argument?.slice(PACKAGED_RUNTIME_SMOKE_ARGUMENT.length);
+  if (!requestedPath || !isAbsolute(requestedPath)) return undefined;
+  const reportPath = resolve(requestedPath);
+  const tempRoot = realpathSync(app.getPath("temp"));
+  const reportParent = realpathSync(dirname(reportPath));
+  const relativeParent = relative(tempRoot, reportParent);
+  if (relativeParent === ".." || relativeParent.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) || isAbsolute(relativeParent)) {
+    return undefined;
+  }
+  return reportPath;
 }

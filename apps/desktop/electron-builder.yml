@@ -1,0 +1,31 @@
+appId: com.yinsenw.pige
+productName: Pige
+asar: true
+asarUnpack:
+  - "**/*.node"
+directories:
+  output: ../../artifacts/release-packageability/macos-arm64
+files:
+  - out/**
+  - package.json
+  - "!out/main/unified-agent-roundtrip-smoke.js"
+extraResources:
+  - from: ../../LICENSE
+    to: LICENSE
+  - from: ../../NOTICE
+    to: NOTICE
+  - from: ../../resources/licenses
+    to: licenses
+  - from: ../../resources/toolchain-manifest
+    to: toolchain-manifest
+  - from: ../../artifacts/release-packageability/package-resources
+    to: release
+  - from: ../../artifacts/native/macos/arm64
+    to: native/macos/arm64
+mac:
+  category: public.app-category.productivity
+  artifactName: Pige-${version}-${arch}.${ext}
+  target:
+    - dir
+    - zip
+  identity: null

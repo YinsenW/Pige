@@ -569,6 +569,13 @@ Build:
 - [B9.17 -> E9.11] Error-state, empty-state, privacy-copy, known-limitations, and basic-shortcut release polish.
 - [B9.18 -> E9.12] Language metadata for sources/pages/OCR/chunks/memory, source-language preservation, and query-language response behavior.
 
+Current packageability foundation: an unsigned macOS 26 arm64 GitHub workflow produces
+an ASAR-backed Pige ZIP under the hard size ceiling and runs packaged identity,
+renderer/preload, Pi/Home, parser/index/Vision, attribution, SBOM, and redaction checks.
+It does not complete B9.12, B9.14, B9.15, or E9.08; the supported-platform,
+signing/notarization, installer/update, memory/scale/recovery, release-note, and missing
+bundled-tool evidence remains open.
+
 Deferred from this phase:
 
 - [D9.01] Cloud sync; post-v0.1.

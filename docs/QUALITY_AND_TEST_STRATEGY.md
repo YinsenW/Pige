@@ -516,6 +516,14 @@ Scaffold and CI checks must verify:
 
 ## 13. Release Gates
 
+The current unsigned macOS arm64 packageability preflight must fail unless it proves
+the packaged app identity, ASAR/runtime resources, sandboxed preload/renderer IPC,
+embedded Pi and cited Home loops, parser/index/Vision workers, deterministic license
+attribution and CycloneDX SBOM, explicit signing state, body-free relative-path report,
+and the 330,000,000-byte ceiling. The workflow uploads only the ZIP, blockmap, and
+redacted report. This focused gate does not replace supported-platform signing,
+notarization, installer, update, memory, scale, recovery, or Public Alpha evidence.
+
 Before alpha release:
 
 - CI type-check passes.

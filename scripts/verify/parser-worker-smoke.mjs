@@ -6,10 +6,13 @@ import { Worker } from "node:worker_threads";
 import { ZipFile } from "yazl";
 
 const root = process.cwd();
-const pdfWorkerPath = path.join(root, "apps/desktop/out/main/workers/pdf-parser-worker.js");
-const pdfPageRendererWorkerPath = path.join(root, "apps/desktop/out/main/workers/pdf-page-renderer-worker.js");
-const officeWorkerPath = path.join(root, "apps/desktop/out/main/workers/office-parser-worker.js");
-const webWorkerPath = path.join(root, "apps/desktop/out/main/workers/web-extractor-worker.js");
+const builtAppRoot = process.env.PIGE_BUILT_APP_ROOT
+  ? path.resolve(process.env.PIGE_BUILT_APP_ROOT)
+  : path.join(root, "apps/desktop");
+const pdfWorkerPath = path.join(builtAppRoot, "out/main/workers/pdf-parser-worker.js");
+const pdfPageRendererWorkerPath = path.join(builtAppRoot, "out/main/workers/pdf-page-renderer-worker.js");
+const officeWorkerPath = path.join(builtAppRoot, "out/main/workers/office-parser-worker.js");
+const webWorkerPath = path.join(builtAppRoot, "out/main/workers/web-extractor-worker.js");
 
 for (const workerPath of [pdfWorkerPath, pdfPageRendererWorkerPath, officeWorkerPath, webWorkerPath]) {
   if (!fs.existsSync(workerPath)) {
