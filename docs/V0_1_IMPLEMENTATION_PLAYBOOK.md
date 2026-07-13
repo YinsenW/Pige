@@ -249,8 +249,12 @@ Exit criteria:
 
 Current B2.08/B2.11 evidence covers first-wins guards, process-local parse/OCR/
 agent_ingest/agent_turn/index cancellation, exact Home retry/restart, index progress,
-and verified note races. Running capture/other-class cancellation,
-strict cross-process Job revision CAS, and guard-to-domain atomicity remain open.
+verified note races, a fenced per-vault writer lease, and exact-record Job claim/CAS
+across the adopted capture, Agent, Dataset, retry/cancel, proposal/publication, and
+startup-recovery paths. Exact evidence includes independent Job keys, failed-sentinel
+recovery, and heartbeat/successor-safe normal, stale, and process-exit cleanup. Other
+Job classes, user-visible conflict repair, guard-to-domain/cross-file atomicity, the
+final filesystem-syscall TOCTOU interval, and Windows packaged proof remain open.
 
 ## 8. Phase 3: BYOK And Basic Agent Ingest
 

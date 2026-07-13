@@ -248,10 +248,20 @@ The schema rejects a half request pair and rejects `cancelled` with a true guard
 
 Before publication, capture/parse/OCR/Agent-ingest rereads Job; cancellation wins. An
 exclusive no-follow temp write + file/directory flush and atomic replace persists `true`
-plus a checkpoint before another cancellation check; failure leaves `true`. This proves
-single-writer ordering and Section 11's exact same-Job page recovery only. Other guard-
-without-output, completion-time Job/Operation tampering, cross-process revision CAS/parent
-swap, cross-file atomicity, and packaged proof remain open.
+plus a checkpoint before another cancellation check; failure leaves `true`. The current
+shared Job store additionally requires the active per-vault writer lease, an ephemeral
+per-Job claim, and the exact prior record revision `{ sha256, size, dev, ino }`; it
+rereads and revalidates these immediately before replace and verifies committed bytes.
+Claim/revision contention preserves the winner and cannot rewrite the loser as failed.
+Each Job has a distinct upstream lock key. Owner-sentinel initialization either cleans
+its exact opened inode on failure or leaves a uniquely named malformed sentinel that
+only stale, directory/mtime/entry-inode-revalidated cleanup may recover; unknown,
+multiple, symlinked, freshened, or successor identities fail closed. Normal, stale, and
+process-exit cleanup all use the same successor-safe ownership fence.
+This proves fenced single-writer ordering for the adopted capture, Agent, Dataset,
+retry/cancel, proposal/publication, and startup-recovery paths. Other Job classes,
+cross-file atomicity, user-visible conflict resolution, and parent-swap-resistant
+domain publication remain open.
 
 ```ts
 type JobRecord = {
@@ -626,7 +636,10 @@ Rules:
 Startup recovery flow:
 
 1. Load active vault manifest and app-local active vault path.
-2. Acquire vault lock or detect another active Pige instance.
+2. Acquire the fenced per-vault writer lease under `.pige/runtime/` or fail closed when
+   another owner is active; stale recovery must revalidate canonical vault/root and lock
+   directory identity, current mtime/freshness, and the unique sentinel name/inode twice
+   around the cleanup commit boundary before mutable services start.
 3. Scan `.pige/jobs/`, `.pige/proposals/`, `.pige/operations/`, `.pige/source-records/`, conversations, and `log.md`.
 4. Rebuild SQLite job/proposal/operation indexes if missing or dirty.
 5. Detect jobs in `running`, `cancel_requested`, `waiting_dependency`, `waiting_permission`, or partial stage states.
@@ -634,6 +647,12 @@ Startup recovery flow:
 7. Mark safe jobs resumable, retryable, or completed with warnings.
 8. Mark uncertain jobs `failed_retryable` with a recovery explanation or create a repair proposal.
 9. Resume queued high-priority work only after Home is usable.
+
+The lease and Job claims are temporary coordination state, not recovery evidence. They
+are excluded from backup/restore/sync and recreated empty; durable Job bytes,
+checkpoints, output refs, Operations, and domain hashes remain the recovery authority.
+The final `lstat`-to-`unlink`/`rmdir` syscall interval remains a platform primitive
+TOCTOU boundary; Windows and installed-package multi-process proof remain open.
 
 Recovery decisions:
 

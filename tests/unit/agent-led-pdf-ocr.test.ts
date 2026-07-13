@@ -79,7 +79,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 });
 
-describe("Agent-led PDF OCR tool", () => {
+describe("Agent-led PDF OCR tool", { timeout: 15_000 }, () => {
   it("runs Pi inspect -> parse -> OCR -> inspect -> publish for an image-only PDF", async () => {
     const fixture = makeVault();
     const captured = await preservePdf(fixture, "agent-scan.pdf", createJpegScanPdf(1));

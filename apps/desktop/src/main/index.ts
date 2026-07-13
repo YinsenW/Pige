@@ -1154,6 +1154,10 @@ app.on("window-all-closed", () => {
   }
 });
 
+app.on("before-quit", () => {
+  vaultService?.close();
+});
+
 function requireWindow(webContents: WebContents): BrowserWindow {
   const parentWindow = BrowserWindow.fromWebContents(webContents);
   if (!parentWindow) throw new Error("No active Pige window.");

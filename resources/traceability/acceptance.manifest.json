@@ -760,10 +760,10 @@
     },
     "PIGE-VAULT-006": {
       "status": "partial",
-      "evidence": ["EV-MARKDOWN-ATOMIC", "EV-DB-EXTERNAL-EDIT", "EV-SOURCE-PAGE-CONFLICT-PRESERVATION", "EV-SOURCE-PAGE-SOURCE-REVISION", "EV-GENERATED-NOTE-FINAL-FENCE", "EV-GENERATED-NOTE-CONFLICT-PRESERVATION"],
+      "evidence": ["EV-MARKDOWN-ATOMIC", "EV-DB-EXTERNAL-EDIT", "EV-SOURCE-PAGE-CONFLICT-PRESERVATION", "EV-SOURCE-PAGE-SOURCE-REVISION", "EV-GENERATED-NOTE-FINAL-FENCE", "EV-GENERATED-NOTE-CONFLICT-PRESERVATION", "EV-VAULT-WRITER-LEASE", "EV-VAULT-LEASE-FENCE", "EV-VAULT-STALE-REFRESH"],
       "open": {
         "id": "OPEN-REQ-PIGE-VAULT-006",
-        "description": "User-visible conflict resolution, strict cross-process commit-fence proof, and parent-swap-resistant destination binding remain open.",
+        "description": "The adopted vault/Job paths have a fenced successor-safe single-writer foundation; user-visible conflict resolution, cross-file/domain commit fences, the final filesystem-syscall TOCTOU interval, Windows proof, and broader destination binding remain open.",
         "targetBuilds": ["B1.25"],
         "targetExits": ["E1.21"]
       }
@@ -864,10 +864,10 @@
     },
     "PIGE-JOB-002": {
       "status": "partial",
-      "evidence": ["EV-JOB-DRAIN", "EV-JOB-RECOVERY", "EV-HOME-JOB-RECOVERY", "EV-HOME-AGENT", "EV-HOME-FOLLOWUP", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY", "EV-UPDATE-RECOVERY", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER", "EV-PI-DATASET-INGEST", "EV-DATASET-SERVICE", "EV-DATASET-WORKER-SMOKE", "EV-DATASET-CONTINUATION", "EV-DATASET-CONTINUATION-RESTART"],
+      "evidence": ["EV-JOB-DRAIN", "EV-JOB-RECOVERY", "EV-HOME-JOB-RECOVERY", "EV-HOME-AGENT", "EV-HOME-FOLLOWUP", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY", "EV-UPDATE-RECOVERY", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER", "EV-PI-DATASET-INGEST", "EV-DATASET-SERVICE", "EV-DATASET-WORKER-SMOKE", "EV-DATASET-CONTINUATION", "EV-DATASET-CONTINUATION-RESTART", "EV-JOB-RECORD-CAS", "EV-JOB-CLAIM-RECOVERY", "EV-JOB-CLAIM-INDEPENDENCE"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-002",
-        "description": "Other Job classes, cross-process CAS, kill/reopen, packaged, and checkpoint proof remain.",
+        "description": "Exact-record claim/CAS, independent keys, partial-owner recovery and successor-safe cleanup cover the adopted shared-store paths; other Job classes, cross-file/domain atomicity, final filesystem-syscall TOCTOU, Windows multi-process proof, and broader checkpoints remain.",
         "targetBuilds": ["B2.08", "B2.11"],
         "targetExits": ["E2.01", "E2.10"]
       }
@@ -2222,10 +2222,10 @@
     },
     "E1.21": {
       "status": "partial",
-      "evidence": ["EV-MARKDOWN-ATOMIC", "EV-DB-EXTERNAL-EDIT", "EV-SOURCE-PAGE-CONFLICT-PRESERVATION", "EV-SOURCE-PAGE-SOURCE-REVISION", "EV-GENERATED-NOTE-FINAL-FENCE", "EV-GENERATED-NOTE-CONFLICT-PRESERVATION"],
+      "evidence": ["EV-MARKDOWN-ATOMIC", "EV-DB-EXTERNAL-EDIT", "EV-SOURCE-PAGE-CONFLICT-PRESERVATION", "EV-SOURCE-PAGE-SOURCE-REVISION", "EV-GENERATED-NOTE-FINAL-FENCE", "EV-GENERATED-NOTE-CONFLICT-PRESERVATION", "EV-VAULT-WRITER-LEASE", "EV-VAULT-LEASE-FENCE", "EV-VAULT-STALE-REFRESH"],
       "open": {
         "id": "OPEN-EXIT-E1.21",
-        "description": "User-visible conflict resolution, strict cross-process commit-fence proof, and parent-swap-resistant destination binding remain open.",
+        "description": "The adopted vault/Job paths have a fenced successor-safe single-writer foundation; user-visible conflict resolution, cross-file/domain commit fences, the final filesystem-syscall TOCTOU interval, Windows proof, and broader destination binding remain open.",
         "targetBuilds": ["B1.25"],
         "targetExits": ["E1.21"]
       }
@@ -2355,10 +2355,10 @@
     },
     "E2.10": {
       "status": "partial",
-      "evidence": ["EV-JOB-RECOVERY", "EV-HOME-AGENT", "EV-HOME-FOLLOWUP", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-CREATE-RECOVERY", "EV-UPDATE-RECOVERY", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER"],
+      "evidence": ["EV-JOB-RECOVERY", "EV-HOME-AGENT", "EV-HOME-FOLLOWUP", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-CREATE-RECOVERY", "EV-UPDATE-RECOVERY", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER", "EV-JOB-RECORD-CAS", "EV-JOB-CLAIM-RECOVERY", "EV-JOB-CLAIM-INDEPENDENCE"],
       "open": {
         "id": "OPEN-EXIT-E2.10",
-        "description": "Other Job classes, cross-process CAS, kill/reopen, packaged, and checkpoint proof remain.",
+        "description": "Exact-record claim/CAS, independent keys, partial-owner recovery and successor-safe cleanup cover the adopted shared-store paths; other Job classes, cross-file/domain atomicity, final filesystem-syscall TOCTOU, Windows multi-process proof, and broader checkpoints remain.",
         "targetBuilds": ["B2.11"],
         "targetExits": ["E2.10"]
       }
@@ -2932,6 +2932,9 @@
     "EV-LICENSE-NOTICE": { "kind": "contract", "path": "NOTICE", "selector": "This product includes software developed for the Pige project." },
     "EV-VAULT-LAYOUT": { "kind": "test", "path": "tests/unit/vault-layout.test.ts", "selector": "creates the required readable vault files without storing machine-local absolute paths in the manifest" },
     "EV-VAULT-POLICY": { "kind": "test", "path": "tests/unit/vault-layout.test.ts", "selector": "keeps source storage policy in vault config and reflects it in the summary" },
+    "EV-VAULT-WRITER-LEASE": { "kind": "test", "path": "tests/unit/vault-writer-lease.test.ts", "selector": "allows exactly one real process and recovers the stale lock after SIGKILL" },
+    "EV-VAULT-LEASE-FENCE": { "kind": "test", "path": "tests/unit/vault-writer-lease.test.ts", "selector": "does not remove a same-name successor sentinel installed at stale-cleanup commit" },
+    "EV-VAULT-STALE-REFRESH": { "kind": "test", "path": "tests/unit/vault-writer-lease.test.ts", "selector": "does not remove a lock whose heartbeat becomes fresh at stale-cleanup commit" },
     "EV-VAULT-RESET": { "kind": "test", "path": "tests/unit/vault-layout.test.ts", "selector": "resets only rebuildable database and index roots" },
     "EV-SCHEMAS": { "kind": "implementation", "path": "packages/schemas/src/index.ts", "selector": "export const PageIdSchema" },
     "EV-STABLE-ID": { "kind": "test", "path": "tests/unit/domain.test.ts", "selector": "creates sync-ready local vault IDs" },
@@ -2984,6 +2987,9 @@
       "path": "tests/unit/jobs-service.test.ts",
       "selector": "recovers a parent crash after durable child handoff without duplicating the child"
     },
+    "EV-JOB-RECORD-CAS": { "kind": "test", "path": "tests/unit/job-record-store.test.ts", "selector": "commits exactly one compare-and-swap winner and returns a fresh byte revision" },
+    "EV-JOB-CLAIM-RECOVERY": { "kind": "test", "path": "tests/unit/job-record-store.test.ts", "selector": "recovers a stale malformed owner after claim-sentinel initialization fails" },
+    "EV-JOB-CLAIM-INDEPENDENCE": { "kind": "test", "path": "tests/unit/job-record-store.test.ts", "selector": "keeps two different active Job claims independent when the first is released" },
     "EV-HOME-JOB-RECOVERY": { "kind": "test", "path": "tests/unit/jobs-service.test.ts", "selector": "marks an interrupted Home retrieval query retryable without queuing an unsupported generic retry" },
     "EV-JOB-WAIT": {
       "kind": "test",

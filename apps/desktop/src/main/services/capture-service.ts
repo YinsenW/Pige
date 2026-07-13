@@ -25,11 +25,13 @@ import {
   type SourceKind,
   type SourceRecord
 } from "@pige/schemas";
+import { JobRecordStore } from "./job-record-store";
 import { redactSensitiveUrl, SourceFetchService, type SourceFetchSnapshot } from "./source-fetch-service";
 
 export interface CaptureVaultPort {
   current(): VaultSummary | undefined;
   activeVaultPath(): string | undefined;
+  assertWriterLease?(vaultPath: string): void;
 }
 
 export interface SourceFetchPort {
@@ -98,6 +100,7 @@ const FILE_KIND_BY_EXTENSION = new Map<string, SourceKind>([
 export class CaptureService {
   readonly #vaults: CaptureVaultPort;
   readonly #sourceFetch: SourceFetchPort;
+  readonly #jobRecordStores = new Map<string, JobRecordStore>();
 
   constructor(vaults: CaptureVaultPort, sourceFetch: SourceFetchPort = new SourceFetchService()) {
     this.#vaults = vaults;
@@ -176,7 +179,10 @@ export class CaptureService {
       conversationEventId: eventId,
       message: "Text capture preserved and queued for later processing."
     });
-    writeJsonAtomic(resolveVaultPath(vaultPath, jobRecordPath), jobRecord);
+    this.#jobRecordStore(vaultPath).createIfAbsent(
+      resolveVaultPath(vaultPath, jobRecordPath),
+      jobRecord
+    );
 
     return {
       status: "queued",
@@ -204,6 +210,7 @@ export class CaptureService {
     const jobId = createDatedId("job", dateKey);
     const eventId = createDatedId("evt", dateKey);
     persistUrlSnapshot({
+      jobRecordStore: this.#jobRecordStore(vaultPath),
       vaultPath,
       request,
       snapshot,
@@ -417,7 +424,10 @@ export class CaptureService {
             conversationEventId: eventId,
             message: "File capture preserved and queued for later processing."
           });
-          writeJsonAtomic(resolveVaultPath(vaultPath, jobRecordPath), jobRecord);
+          this.#jobRecordStore(vaultPath).createIfAbsent(
+            resolveVaultPath(vaultPath, jobRecordPath),
+            jobRecord
+          );
         }
 
         sourceIds.push(sourceId);
@@ -438,9 +448,24 @@ export class CaptureService {
       preservedAt: timestamp
     };
   }
+
+  #jobRecordStore(vaultPath: string): JobRecordStore {
+    const rootPath = path.join(vaultPath, ".pige", "jobs");
+    const existing = this.#jobRecordStores.get(rootPath);
+    if (existing) return existing;
+    const store = this.#vaults.assertWriterLease
+      ? new JobRecordStore({
+          rootPath,
+          assertWriterLease: () => this.#vaults.assertWriterLease?.(vaultPath)
+        })
+      : new JobRecordStore({ rootPath, unsafeAllowUnfenced: true });
+    this.#jobRecordStores.set(rootPath, store);
+    return store;
+  }
 }
 
 function persistUrlSnapshot(input: {
+  readonly jobRecordStore?: JobRecordStore;
   readonly vaultPath: string;
   readonly request: {
     readonly inputKind: AgentSubmitTurnRequest["inputKind"];
@@ -567,6 +592,9 @@ function persistUrlSnapshot(input: {
   );
 
   if (!input.legacyCapture) return;
+  if (!input.jobRecordStore) {
+    throw new PigeDomainError("job.writer_lease_required", "The capture Job writer is unavailable.");
+  }
   const conversationId = `conv_${dateKey}`;
   const conversationPath = vaultRelativePath(
     ".pige",
@@ -597,7 +625,7 @@ function persistUrlSnapshot(input: {
     conversationEventId: input.legacyCapture.eventId,
     message: "URL capture fetched, preserved, and queued for later processing."
   });
-  writeJsonAtomic(
+  input.jobRecordStore.createIfAbsent(
     resolveVaultPath(
       input.vaultPath,
       vaultRelativePath(".pige", "jobs", monthKey, `${input.legacyCapture.jobId}.json`)
