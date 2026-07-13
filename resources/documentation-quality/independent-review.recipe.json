@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-13T10:34:43Z",
+  "reviewedAt": "2026-07-13T12:55:44Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,11 +30,11 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "54034513b1e74ee08706fd8a3301f2bb41ab9923334af278ab46e606ae1f3c10"
+    "reviewedSha256": "3e3189d0b80d315cd0f5b5752151d6dc5d907a2066843bc051dbcdcd1ef286df"
   },
   "reviewers": [
     {
-      "reviewerId": "public-alpha-mainflow-ui-design-final-review",
+      "reviewerId": "public-alpha-continuity-ui-design-final-review",
       "task": "019f4bc2-4fa4-7921-9c7c-3e0dd11f9d94 final read-only UI Design Sync",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
@@ -43,82 +43,82 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "UI Design independently verified the exact replacement hash and made no edits. It blocked the prior candidate on two intermediate-state defects, then re-audited and accepted the repaired text, picker, drop, restart, locale and accessibility behavior."
+      "independence": "UI Design independently verified the exact frozen Development hash and made no edits. It reviewed real safe replacements, final-only citations, Enter and IME handling, durable Dataset reopen, layout, accessibility and cancellation behavior against the assembled evidence."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.7,
-      "reviewerId": "public-alpha-mainflow-ui-design-final-review",
+      "reviewerId": "public-alpha-continuity-ui-design-final-review",
       "blockerCount": 0,
-      "summary": "The first-Home guide stays inside Home, explicit choices persist per vault, and model repair remains one contextual action rather than a new destination or recurring prompt."
+      "summary": "Home keeps one provisional answer in the existing conversation surface, replaces it with the durable final, and retains the same composer, citation and Dataset navigation lifecycle."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "public-alpha-mainflow-ui-design-final-review",
+      "reviewerId": "public-alpha-continuity-ui-design-final-review",
       "blockerCount": 0,
-      "summary": "API, Onboarding, Settings and UI owners agree on machine-local dismissal, preserve-first Pi continuation and one status owner across text, picker and drop states."
+      "summary": "Pi, API, Prompt, Job, UI, quality and performance owners agree on two answer-only draft sources, authoritative final data, IME-safe submission and same-turn Dataset continuation."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "public-alpha-mainflow-ui-design-final-review",
+      "reviewerId": "public-alpha-continuity-ui-design-final-review",
       "blockerCount": 0,
-      "summary": "Four exact tests bind preference, guide, stable source wait and intermediate drop ownership only to existing partial settings, UI, Job and Exit rows; statuses do not change."
+      "summary": "Seven exact selectors bind safe fallback rejection, Enter submission, Dataset continuation and restart, durable table reopen, and assembled worker composition only to existing partial rows."
     },
     {
       "id": "ongoing_development_support",
-      "score": 9.7,
-      "reviewerId": "public-alpha-mainflow-ui-design-final-review",
+      "score": 9.8,
+      "reviewerId": "public-alpha-continuity-ui-design-final-review",
       "blockerCount": 0,
-      "summary": "The batch closes three adjacent first-run and Home status defects without changing durable Agent orchestration, Dataset routing or the remaining Public Alpha feature and platform backlog."
+      "summary": "The batch closes adjacent Public Alpha continuity defects while preserving one Pi-owned ingress, final schema and citation authority, durable recovery and existing provider and platform boundaries."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "public-alpha-mainflow-ui-design-final-review",
+      "reviewerId": "public-alpha-continuity-ui-design-final-review",
       "blockerCount": 0,
-      "summary": "Four existing Owner sections and one acceptance manifest absorb the observable delta; no new document, PRD rewrite, Playbook expansion, prototype refresh or status promotion is introduced."
+      "summary": "Nine existing Owner sections and the acceptance projection absorb the observable and recovery delta; no new document, prototype, dependency, schema, setting or status is introduced."
     }
   ],
   "verification": [
     {
       "command": "npm run verify",
       "status": "passed",
-      "evidence": "The final exact Public Alpha Home usability candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all five documentation-quality dimensions."
+      "evidence": "The exact Public Alpha continuity candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all five documentation-quality dimensions."
     },
     {
-      "command": "npm run verify:contracts && npx vitest run tests/unit/home-agent-conversation-ui.test.ts tests/unit/desktop-shell-contract.test.ts tests/unit/local-settings.test.ts tests/unit/schemas.test.ts",
+      "command": "npm run verify:contracts && npx vitest run tests/unit/pi-agent-runtime-adapter.test.ts tests/unit/home-agent-conversation-ui.test.ts tests/unit/unified-agent-ingress.test.ts tests/unit/bundled-worker-availability.test.ts",
       "status": "passed",
-      "evidence": "All four contract gates and negative fixtures pass; 4 focused files and 48 tests prove the typed onboarding channel, machine-local restart persistence, one model action and picker/drop intermediate-state ownership."
+      "evidence": "All contract gates and negative fixtures pass; exact selectors prove answer-only progressive replacement, fail-closed presentation fallback, IME-safe Enter, one-turn Dataset continuation/restart and assembled worker availability."
     },
     {
       "command": "npm run verify:traceability",
       "status": "passed",
-      "evidence": "Semantic lock schema v3 contains 1,152 claims; four exact evidence additions project only to existing partial rows, while every Requirement, Exit and phase state remains unchanged."
+      "evidence": "Semantic lock schema v3 contains 1,159 claims; seven exact evidence additions project only to existing partial rows, while every Requirement, Exit and phase state remains unchanged."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 pass after the net-small Owner and acceptance projection, without a new governed document or unrelated contract expansion."
+      "evidence": "LEN-001 through LEN-005 pass after the bounded Owner and evidence projection, without a new governed document, prototype refresh or unrelated contract expansion."
     }
   ],
   "coordination": {
-    "taskId": "public-alpha-mainflow-usability-20260713",
-    "taskTitle": "Public Alpha first-Home and source-wait status ownership",
+    "taskId": "public-alpha-continuity-20260713",
+    "taskTitle": "Public Alpha safe Home streaming, Enter submission and durable continuity",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The candidate keeps preserve-first unified ingress and Pi-selected Dataset work unchanged. It adds one bounded machine-local per-vault guide preference and consolidates existing Home status ownership without durable schema, dependency, provider, permission or phase changes.",
-    "acknowledgement": "Development froze the exact replacement after one consolidated HOLD repair. UI Design accepted the replacement hash; Product Planning synchronized only affected Owners and existing acceptance rows before one semantic and snapshot bind."
+    "compatibility": "The candidate preserves the terminal Home schema and durable final as authority. It adds safe progressive presentation, IME-safe Enter, same-parent Dataset continuation and missing-runtime recovery repairs without a dependency, durable schema, provider, permission or phase change.",
+    "acknowledgement": "Development froze one exact combined candidate after assembled Electron and packaged evidence. UI Design accepted the exact hash; Product Planning synchronized only affected Owners and existing partial acceptance rows before one semantic and snapshot bind."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "The guide dismissal is intentionally machine-local and does not travel with backup or another device.",
-    "Broader Activity, progress, non-Agent cancellation and permission UI remain open outside this status-ownership batch.",
-    "Signed Windows and full installed-platform accessibility evidence remain open.",
-    "This batch does not add Dataset materialization without Pi or expand the structured-data feature surface."
+    "Real progressive timing is proved with an OpenAI Responses-compatible loopback; Chat Completions and Anthropic Messages retain adapter regressions without new live-provider timing evidence.",
+    "The presentation fallback may use one extra provider turn and fails closed when exact answer reproduction cannot produce usable safe replacements.",
+    "Package proof remains unsigned local macOS arm64; Windows, signed and notarized macOS, and live-provider platform matrices remain open.",
+    "New assembled GUI evidence covers TXT, Markdown and CSV; PDF, Office and image paths retain their existing parser and OCR smoke boundaries."
   ]
 }

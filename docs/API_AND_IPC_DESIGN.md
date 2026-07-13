@@ -608,10 +608,16 @@ Rules:
 - `text` is the complete replacement snapshot, not an append delta. It is non-empty,
   escaped by renderer, bounded by the final 8,000-character answer limit, and may shrink
   when the provider repairs an in-progress tool argument.
-- The Host may emit only the already-parsed `answer` string from the exact terminal Home
-  tool after control/restricted-content filtering. It must not parse or forward partial
-  JSON, generic Pi text, thinking, tool arguments, citations, grounding, model/provider
-  identifiers, raw payloads, errors, or credentials.
+- The normal path emits only the already-parsed `answer` string from the exact terminal
+  Home tool after control/restricted-content filtering. If that provider exposes no
+  useful incremental arguments, the Host may first validate and execute that exact tool,
+  then accept one presentation-only assistant-text stream whose every snapshot is a
+  prefix of the validated answer and whose end is byte-for-byte equal. Further tools,
+  altered/incomplete text, and unusable long-answer streaming fail closed.
+- The Host must not parse or forward partial JSON, pre-authorization/generic Pi text,
+  thinking, tool arguments, citations, grounding, model/provider identifiers, raw
+  payloads, errors, or credentials. The presentation turn grants no new authority and
+  never changes the already validated final result.
 - Main coalesces updates to a bounded rate. Renderer ignores stale, duplicated,
   out-of-order, wrong-sender, or wrong-turn events and replaces one escaped draft bubble;
   it never appends fragments into durable conversation state.

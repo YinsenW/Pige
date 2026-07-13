@@ -11,6 +11,10 @@ for (const file of files) {
     console.error(`${file} must use schemaVersion 1 and fixtures array.`);
     process.exit(1);
   }
+  if (file === "public-alpha-scenario.manifest.json" && manifest.fixtures.length === 0) {
+    console.error(`${file} must bind at least one scripted Public Alpha scenario.`);
+    process.exit(1);
+  }
   for (const fixture of manifest.fixtures) {
     for (const field of ["id", "path", "kind", "license", "redactionStatus", "sizeClass", "owner", "updatePolicy"]) {
       if (typeof fixture[field] !== "string" || fixture[field].length === 0) {

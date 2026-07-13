@@ -177,6 +177,13 @@ Current Home/Pi evidence lives in acceptance. Direct answers, optional bounded r
 strict Host-resolved citations, untrusted evidence, per-turn revalidation, typed waiting,
 and vault-only insufficiency remain the prompt/runtime contract.
 
+The model completes Home through `pige_finish_home_turn`, not ordinary prose. If the Host
+returns an explicit presentation-only authorization after validating that terminal tool,
+the next Pi turn must reproduce exactly the previously submitted `answer` as assistant
+text, with no prefix, suffix, citation, or further tool call. Runtime enforcement blocks
+other tools and rejects any non-prefix, incomplete, restricted, or changed reproduction;
+the prompt is not the security boundary.
+
 ### 5.3 Note Agent
 
 Goal:

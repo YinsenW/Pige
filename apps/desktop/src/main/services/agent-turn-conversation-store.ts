@@ -275,9 +275,11 @@ export class AgentTurnConversationStore {
       if (events.length === 0) continue;
       const locatorConversationId = conversationIdFromLocator(candidate.locator);
       assertConversationEventsBelong(events, locatorConversationId);
-      const tail = events.at(-1);
-      if (!tail) continue;
-      const sortKey = `${tail.createdAt}\0${tail.id}\0${tail.conversationId}`;
+      const latestMessage = [...events].reverse().find(
+        (event) => event.type === "user_message" || event.type === "assistant_message"
+      );
+      if (!latestMessage) continue;
+      const sortKey = `${latestMessage.createdAt}\0${latestMessage.id}\0${latestMessage.conversationId}`;
       if (!latest || sortKey > latest.sortKey) latest = { events, sortKey };
     }
     return latest ? createTimeline(latest.events, boundedLimit) : undefined;
@@ -697,7 +699,15 @@ function selectRecentMessages(
       role: event.type === "user_message" ? "user" : "assistant",
       createdAt: event.createdAt,
       text: event.text,
-      ...(event.jobId === undefined ? {} : { jobId: event.jobId })
+      ...(event.jobId === undefined ? {} : { jobId: event.jobId }),
+      ...(event.type === "assistant_message" && event.answerGrounding !== undefined ? {
+        answer: {
+          answer: event.text,
+          grounding: event.answerGrounding,
+          citations: event.answerCitations ?? [],
+          ...(event.answerDatasetResult === undefined ? {} : { datasetResult: event.answerDatasetResult })
+        }
+      } : {})
     });
     textBytes += bytes;
   }

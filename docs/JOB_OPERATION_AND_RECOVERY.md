@@ -151,9 +151,13 @@ preserved CSV, XLSX, or supported SQLite source. The deterministic child binds i
 parent, tool/catalog/policy/source revision, and canonical input before work; the Bundle
 materializes only after manifest/schema plan, payload hashes, and target revision are
 checkpointed. Retry/restart adopts the same verified child, Bundle, and Operation, while
-cancellation before bundle commit preserves only source evidence. Dataset query remains
-read-only and revision-bound; Collection/view/derived-Dataset changes still require
-deterministic operation identity, revision fences, Activity/Undo, and restart recovery.
+cancellation before bundle commit preserves only source evidence. For a Home attachment,
+successful materialization records the Dataset/revision refs and requeues the same
+`agent_turn` at `planning`; Pi then answers the original request through the bounded
+Dataset query tool. Restart adopts that continuation without another source loop or
+Dataset revision. Dataset query remains read-only and revision-bound; Collection/view/
+derived-Dataset changes still require deterministic operation identity, revision fences,
+Activity/Undo, and restart recovery.
 
 ## 5. Job State Machine
 
@@ -387,7 +391,9 @@ Examples:
 
 - If a file drop copied the source and the app crashed before parsing, retry should reuse the existing source record and managed copy.
 - If an operation created a source page but indexing failed, retry should not create a duplicate source page.
-- If a model call completed but the write did not apply, retry may call the model again only when no durable proposal or operation exists.
+- If a model call completed but the write did not apply, retry may call the model again only when no durable proposal or operation exists. A committed compatible Operation is
+  reconciled before model-readiness checks; recovery must not require credentials or a
+  replacement model turn merely to adopt an already durable effect.
 - If a wiki note already exists for the deterministic source-derived page ID, retry treats the note as existing rather than creating a duplicate.
 - If a backup zip finalization failed, retry creates a new archive path or replaces only a verified incomplete temp file.
 

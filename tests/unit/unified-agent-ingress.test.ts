@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -12,9 +13,18 @@ import type {
 import type { JobRecord } from "@pige/schemas";
 import {
   AgentIngestService,
+  type AgentIngestCapabilityPort,
   type AgentIngestModelConfigPort
 } from "../../apps/desktop/src/main/services/agent-ingest-service";
 import { CaptureService } from "../../apps/desktop/src/main/services/capture-service";
+import { executeDatasetQuery } from "../../apps/desktop/src/main/services/dataset-query-core";
+import { DatasetQueryService } from "../../apps/desktop/src/main/services/dataset-query-service";
+import {
+  DATASET_QUERY_PROTOCOL_VERSION,
+  type DatasetQueryExecutor
+} from "../../apps/desktop/src/main/services/dataset-query-types";
+import { DatasetService, type DatasetImportPlanner } from "../../apps/desktop/src/main/services/dataset-service";
+import type { DatasetIngestPlan } from "../../apps/desktop/src/main/services/dataset-ingest-types";
 import {
   HomeAgentService,
   type HomeAgentModelPort,
@@ -59,6 +69,247 @@ afterEach(() => {
 });
 
 describe("Unified Agent ingress", () => {
+  it("continues one preserved CSV turn through Pi-selected materialization and a cited Dataset answer", async () => {
+    const fixture = makeVault();
+    const sourceFile = path.join(path.dirname(fixture.vaultPath), "regional-counts.csv");
+    const sourceBytes = Buffer.from("name,count\nAda,3\nGrace,5\n", "utf8");
+    fs.writeFileSync(sourceFile, sourceBytes);
+    const models = createMutableModels(true);
+    const datasetService = new DatasetService(new StaticDatasetPlanner(csvPlan(sourceBytes)));
+    const ingestRuntime = new PiAgentRuntimeAdapter({
+      fauxResponses: [
+        { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
+        { kind: "tool_call", toolName: "pige_inspect_dataset", args: {} }
+      ]
+    });
+    const homeRuntime = new PiAgentRuntimeAdapter({
+      fauxResponses: [
+        { kind: "tool_call", toolName: "pige_query_dataset", args: { action: "catalog" } },
+        {
+          kind: "tool_call",
+          toolName: "pige_query_dataset",
+          args: {
+            action: "query",
+            datasetRef: "dataset_1",
+            tableRef: "table_1",
+            select: ["column_1", "column_2"],
+            orderBy: [{ by: "column_2", direction: "desc" }],
+            limit: 2
+          }
+        },
+        {
+          kind: "tool_call",
+          toolName: "pige_finish_home_turn",
+          args: {
+            answer: "Grace has the largest count in the attached Dataset. [D1]",
+            citationRefs: ["citation_1"],
+            grounding: "local_knowledge"
+          }
+        }
+      ]
+    });
+    const jobs = new JobsService(
+      fixture.vaultPort,
+      new AgentIngestService(models, ingestRuntime, datasetCapabilities),
+      undefined,
+      undefined,
+      undefined,
+      datasetService
+    );
+    const home = new HomeAgentService(
+      fixture.vaultPort,
+      models,
+      neverRetrieval,
+      jobs,
+      homeRuntime,
+      datasetCapabilities,
+      undefined,
+      undefined,
+      new DatasetQueryService(directDatasetExecutor)
+    );
+    const prepared = home.prepareSourceTurn({
+      text: "Which person has the largest count?",
+      inputKind: "file_picker",
+      objective: "auto",
+      locale: "en"
+    });
+    const preserved = await new CaptureService(fixture.vaultPort).preserveFilesForAgentTurn({
+      filePaths: [sourceFile],
+      inputKind: "file_picker",
+      userIntent: "unknown",
+      locale: "en"
+    }, { jobId: prepared.jobId, sourceId: prepared.sourceId });
+
+    const outcome = await home.submitPreparedSourceTurn(prepared);
+
+    expect(
+      outcome.state,
+      JSON.stringify({ outcome, jobs: readJobs(fixture.vaultPath) })
+    ).toBe("completed");
+    expect(outcome).toMatchObject({
+      state: "completed",
+      jobId: prepared.jobId,
+      sourceIds: preserved.sourceIds,
+      answer: {
+        answer: "Grace has the largest count in the attached Dataset. [D1]",
+        grounding: "local_knowledge",
+        citations: [expect.objectContaining({ kind: "dataset", refId: "citation_1" })],
+        datasetResult: expect.objectContaining({ returnedRowCount: 2, matchedRowCount: 2 })
+      }
+    });
+    expect(readJobs(fixture.vaultPath).filter((job) => job.class === "agent_turn")).toEqual([
+      expect.objectContaining({
+        id: prepared.jobId,
+        state: "completed",
+        outputRefs: expect.arrayContaining([
+          expect.objectContaining({ kind: "dataset", role: "agent_dataset" }),
+          expect.objectContaining({ kind: "dataset_revision", role: "agent_dataset_revision" }),
+          expect.objectContaining({ kind: "conversation", role: "agent_turn_assistant_event" })
+        ])
+      })
+    ]);
+    expect(jobs.list({ classes: ["dataset_import"] }).jobs).toHaveLength(1);
+    expect(home.conversation()?.messages.at(-1)).toMatchObject({
+      role: "assistant",
+      answer: expect.objectContaining({
+        answer: "Grace has the largest count in the attached Dataset. [D1]",
+        datasetResult: expect.objectContaining({ returnedRowCount: 2 })
+      })
+    });
+  });
+
+  it("restarts from the durable Dataset continuation without rematerializing or another source loop", async () => {
+    const fixture = makeVault();
+    const sourceFile = path.join(path.dirname(fixture.vaultPath), "restart-counts.csv");
+    const sourceBytes = Buffer.from("name,count\nAda,3\nGrace,5\n", "utf8");
+    fs.writeFileSync(sourceFile, sourceBytes);
+    const models = createMutableModels(true);
+    const planner = new StaticDatasetPlanner(csvPlan(sourceBytes));
+    const datasetService = new DatasetService(planner);
+    const firstSourceRuntime = new PiAgentRuntimeAdapter({
+      fauxResponses: [
+        { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
+        { kind: "tool_call", toolName: "pige_inspect_dataset", args: {} }
+      ]
+    });
+    const firstJobs = new JobsService(
+      fixture.vaultPort,
+      new AgentIngestService(models, firstSourceRuntime, datasetCapabilities),
+      undefined,
+      undefined,
+      undefined,
+      datasetService
+    );
+    const firstHome = new HomeAgentService(fixture.vaultPort, models, neverRetrieval, firstJobs);
+    const prepared = firstHome.prepareSourceTurn({
+      text: "Which person has the largest count after restart?",
+      inputKind: "file_drop",
+      objective: "auto",
+      locale: "en"
+    });
+    await new CaptureService(fixture.vaultPort).preserveFilesForAgentTurn({
+      filePaths: [sourceFile],
+      inputKind: "file_drop",
+      userIntent: "unknown",
+      locale: "en"
+    }, { jobId: prepared.jobId, sourceId: prepared.sourceId });
+    firstJobs.attachAgentTurnSource(prepared.jobId, prepared.sourceId);
+
+    expect(await firstJobs.processQueuedAgentIngest({ jobIds: [prepared.jobId] })).toEqual({
+      processed: 1,
+      completed: 1,
+      failed: 0
+    });
+    expect(firstJobs.readAgentTurnJob(prepared.jobId)).toMatchObject({
+      state: "queued",
+      stage: "planning",
+      outputRefs: expect.arrayContaining([
+        expect.objectContaining({ kind: "dataset", role: "agent_dataset" }),
+        expect.objectContaining({ kind: "dataset_revision", role: "agent_dataset_revision" })
+      ])
+    });
+    expect(planner.callCount).toBe(1);
+    expect(firstHome.conversation())
+      .toMatchObject({ canFollowUp: false, messages: [{ role: "user" }] });
+
+    let sourceRuntimeCalls = 0;
+    const restartedJobs = new JobsService(
+      fixture.vaultPort,
+      new AgentIngestService(models, {
+        run: async () => {
+          sourceRuntimeCalls += 1;
+          throw new Error("A durable Dataset continuation must not re-enter source ingest.");
+        }
+      }, datasetCapabilities),
+      undefined,
+      undefined,
+      undefined,
+      datasetService
+    );
+    const restartedHome = new HomeAgentService(
+      fixture.vaultPort,
+      models,
+      neverRetrieval,
+      restartedJobs,
+      new PiAgentRuntimeAdapter({
+        fauxResponses: [
+          { kind: "tool_call", toolName: "pige_query_dataset", args: { action: "catalog" } },
+          {
+            kind: "tool_call",
+            toolName: "pige_query_dataset",
+            args: {
+              action: "query",
+              datasetRef: "dataset_1",
+              tableRef: "table_1",
+              select: ["column_1", "column_2"],
+              orderBy: [{ by: "column_2", direction: "desc" }],
+              limit: 2
+            }
+          },
+          {
+            kind: "tool_call",
+            toolName: "pige_finish_home_turn",
+            args: {
+              answer: "Grace remains the largest count after restart. [D1]",
+              citationRefs: ["citation_1"],
+              grounding: "local_knowledge"
+            }
+          }
+        ]
+      }),
+      datasetCapabilities,
+      undefined,
+      undefined,
+      new DatasetQueryService(directDatasetExecutor)
+    );
+
+    expect(await restartedHome.resumeWaitingTurns(20)).toEqual({
+      requeued: 0,
+      processed: 1,
+      completed: 1,
+      waiting: 0,
+      failed: 0
+    });
+    expect(sourceRuntimeCalls).toBe(0);
+    expect(planner.callCount).toBe(1);
+    expect(readJobs(fixture.vaultPath).filter((job) => job.class === "dataset_import")).toHaveLength(1);
+    expect(restartedHome.conversation()?.messages.at(-1))
+      .toMatchObject({
+      role: "assistant",
+      answer: expect.objectContaining({
+        answer: "Grace remains the largest count after restart. [D1]",
+        datasetResult: expect.objectContaining({ returnedRowCount: 2 })
+      })
+      });
+    expect(await restartedHome.resumeWaitingTurns(20)).toEqual({
+      requeued: 0,
+      processed: 0,
+      completed: 0,
+      waiting: 0,
+      failed: 0
+    });
+  });
+
   it("preserves one dropped source and lets the agent_turn own inspect and publication", async () => {
     const fixture = makeVault();
     const sourceFile = path.join(path.dirname(fixture.vaultPath), "unified-source.txt");
@@ -307,6 +558,141 @@ const neverRetrieval: HomeAgentRetrievalPort = {
     throw new Error("Source-only unified ingress must not use the Home retrieval port.");
   }
 };
+
+const datasetCapabilities: AgentIngestCapabilityPort = {
+  snapshot: () => ({
+    localDatabaseStatus: "not_initialized",
+    parserToolchainReady: false,
+    datasetToolchainReady: true,
+    ocrEngines: [],
+    speechInputAvailable: false,
+    embeddingModelInstalled: false,
+    lexicalSearchAvailable: false,
+    vectorSearchAvailable: false,
+    rerankerAvailable: false
+  })
+};
+
+const directDatasetExecutor: DatasetQueryExecutor = {
+  execute: async (input) => executeDatasetQuery({
+    ...input,
+    schemaVersion: DATASET_QUERY_PROTOCOL_VERSION,
+    requestId: "unified-agent-dataset-query"
+  })
+};
+
+class StaticDatasetPlanner implements DatasetImportPlanner {
+  callCount = 0;
+
+  constructor(private readonly result: DatasetIngestPlan) {}
+
+  isAvailable(): boolean {
+    return true;
+  }
+
+  async plan(): Promise<DatasetIngestPlan> {
+    this.callCount += 1;
+    return this.result;
+  }
+}
+
+function csvPlan(bytes: Buffer): DatasetIngestPlan {
+  const values = [["Ada", "3"], ["Grace", "5"]];
+  return {
+    schemaVersion: 1,
+    planner: { id: "dataset_ingest", version: "1" },
+    source: {
+      kind: "csv_file",
+      byteLength: bytes.length,
+      sha256: createHash("sha256").update(bytes).digest("hex"),
+      encoding: "utf-8",
+      bom: false,
+      delimiter: ",",
+      quote: "\"",
+      nullTokens: ["NULL", "\\N"],
+      lineEndings: ["lf"]
+    },
+    target: {
+      profile: "managed_collection",
+      owner: "dataset_service",
+      sourceDisposition: "preserve_as_evidence"
+    },
+    limits: {
+      maxSourceBytes: 1024 * 1024,
+      maxRows: 100,
+      maxColumns: 10,
+      maxCells: 1000,
+      maxCellBytes: 1024,
+      maxPlanValueBytes: 1024 * 1024,
+      maxTables: 10,
+      maxArchiveEntries: 100,
+      maxArchiveUncompressedBytes: 1024 * 1024,
+      maxXmlEntryBytes: 1024 * 1024,
+      maxSelectedXmlBytes: 1024 * 1024
+    },
+    stats: { tableCount: 1, rowCount: 2, columnCount: 2, cellCount: 4, retainedValueBytes: 10 },
+    tables: [{
+      ordinal: 1,
+      sourceName: "records",
+      sourceLocator: "csv:table:1",
+      sourceMetadata: { delimiter: "," },
+      header: {
+        mode: "auto",
+        used: true,
+        sourceRow: {
+          ordinal: 0,
+          sourceRow: 1,
+          cells: [
+            datasetCell(1, "csv.text", "name", { kind: "text", value: "name" }),
+            datasetCell(2, "csv.text", "count", { kind: "text", value: "count" })
+          ]
+        }
+      },
+      columns: [
+        {
+          ordinal: 1,
+          sourceName: "name",
+          suggestedName: "name",
+          projectedType: "text",
+          sourceTypes: ["csv.text"],
+          stats: { missing: 0, empty: 0, null: 0, value: 2 }
+        },
+        {
+          ordinal: 2,
+          sourceName: "count",
+          suggestedName: "count",
+          projectedType: "integer",
+          sourceTypes: ["csv.integer"],
+          stats: { missing: 0, empty: 0, null: 0, value: 2 }
+        }
+      ],
+      rows: values.map((row, index) => ({
+        ordinal: index + 1,
+        sourceRow: index + 2,
+        cells: [
+          datasetCell(1, "csv.text", row[0]!, { kind: "text", value: row[0]! }),
+          datasetCell(2, "csv.integer", row[1]!, { kind: "integer", value: row[1]! })
+        ]
+      }))
+    }],
+    warnings: []
+  };
+}
+
+function datasetCell(
+  columnOrdinal: number,
+  sourceType: string,
+  raw: string,
+  projection: { readonly kind: "text" | "integer"; readonly value: string }
+) {
+  return {
+    columnOrdinal,
+    state: "value" as const,
+    sourceType,
+    lexical: { raw, text: raw, quoted: false },
+    projection
+  };
+}
 
 function groundedOutput(title: string) {
   return {

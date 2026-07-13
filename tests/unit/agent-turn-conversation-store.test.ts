@@ -186,6 +186,10 @@ describe("Agent turn conversation store", () => {
       userTurn.locator,
       jobId
     );
+    const timeline = new AgentTurnConversationStore().readConversationTimeline(
+      vaultPath,
+      userTurn.event.conversationId
+    );
     const events = readEvents(vaultPath, userTurn.locator);
     const persistedText = readConversationFile(vaultPath, userTurn.locator);
 
@@ -199,6 +203,11 @@ describe("Agent turn conversation store", () => {
       answerDatasetResult: answer.datasetResult
     });
     expect(assistant.contentHash).toMatch(/^sha256:[a-f0-9]{64}$/u);
+    expect(timeline?.messages.at(-1)).toMatchObject({
+      id: assistant.id,
+      role: "assistant",
+      answer
+    });
     expect(persistedText).not.toContain("SELECT ");
     expect(persistedText).not.toContain("/private/");
     expect(persistedText).not.toContain("providerData");

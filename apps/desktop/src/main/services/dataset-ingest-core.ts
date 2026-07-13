@@ -670,7 +670,7 @@ function readVerifiedSource(filePath: string, maxBytes: number): VerifiedSourceB
     return {
       bytes,
       byteLength: bytes.length,
-      sha256: `sha256:${createHash("sha256").update(bytes).digest("hex")}`
+      sha256: createHash("sha256").update(bytes).digest("hex")
     };
   } catch (caught) {
     if (caught instanceof PigeDomainError) throw caught;

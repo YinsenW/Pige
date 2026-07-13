@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { ProposalReviewPanel } from "./components/ProposalReviewPanel";
 import deMessages from "./locales/de/messages.json";
 import enMessages from "./locales/en/messages.json";
@@ -1355,6 +1355,10 @@ function HomeComposer(props: {
   const [noteLoadingPageId, setNoteLoadingPageId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const composerSubmitInFlightRef = useRef(false);
+  const composerCompositionActiveRef = useRef(false);
+  const composerCompositionRaceRef = useRef(false);
+  const composerCompositionTimerRef = useRef<number | undefined>(undefined);
   const draftRevisionRef = useRef(0);
   const noteOpenSequence = useRef(0);
   const proposalDecisionInFlight = useRef(false);
@@ -1453,6 +1457,12 @@ function HomeComposer(props: {
     setAgentDraft(event);
   }), []);
 
+  useEffect(() => () => {
+    if (composerCompositionTimerRef.current !== undefined) {
+      window.clearTimeout(composerCompositionTimerRef.current);
+    }
+  }, []);
+
   useEffect(() => {
     conversationLoadSequence.current += 1;
     setConversationTimeline(undefined);
@@ -1471,11 +1481,19 @@ function HomeComposer(props: {
 
   useEffect(() => {
     if (!latestTurn) return;
+    const activeDraft = activeAgentDraftRef.current;
+    if (
+      activeDraft &&
+      (agentRunState === "accepted" || agentRunState === "running") &&
+      (activeDraft.jobId === undefined || activeDraft.jobId !== latestTurn.jobId)
+    ) {
+      return;
+    }
     const nextState = homeUiStateForJobState(latestTurn.state);
     if (nextState) setAgentRunState(nextState);
     setAgentError(latestTurn.error ?? null);
     if (latestTurn.state !== "queued" && latestTurn.state !== "running") clearAgentDraft();
-  }, [latestTurn?.jobId, latestTurn?.state, latestTurn?.error?.code]);
+  }, [agentRunState, latestTurn?.jobId, latestTurn?.state, latestTurn?.error?.code]);
 
   useEffect(() => {
     if (!props.activeVault?.vaultId || !isConversationPollingState(latestTurn?.state)) return;
@@ -1484,7 +1502,8 @@ function HomeComposer(props: {
   }, [props.activeVault?.vaultId, latestTurn?.jobId, latestTurn?.state]);
 
   const submitHomeInput = async (): Promise<void> => {
-    if (!text.trim()) return;
+    if (!text.trim() || composerSubmitInFlightRef.current) return;
+    composerSubmitInFlightRef.current = true;
     setCaptureError(null);
     setAgentError(null);
     setAgentRunState("idle");
@@ -1558,7 +1577,34 @@ function HomeComposer(props: {
       });
       setAgentRunState("failed");
       await refreshConversation();
+    } finally {
+      composerSubmitInFlightRef.current = false;
     }
+  };
+
+  const handleComposerKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>): void => {
+    if (event.key !== "Enter") return;
+    const nativeEvent = event.nativeEvent;
+    if (
+      nativeEvent.isComposing ||
+      nativeEvent.keyCode === 229 ||
+      composerCompositionActiveRef.current ||
+      composerCompositionRaceRef.current
+    ) {
+      return;
+    }
+    if (event.shiftKey) return;
+    event.preventDefault();
+    if (
+      event.repeat ||
+      composerSubmitInFlightRef.current ||
+      agentRunState === "accepted" ||
+      agentRunState === "running" ||
+      !text.trim()
+    ) {
+      return;
+    }
+    void submitHomeInput();
   };
 
   const submitHomeFiles = async (
@@ -1928,7 +1974,11 @@ function HomeComposer(props: {
               <span className="conversation-message-role">
                 {props.t(message.role === "user" ? "home.userMessage" : "home.assistantMessage")}
               </span>
-              <p>{message.text}</p>
+              {message.answer?.datasetResult ? (
+                <DatasetAnswerResult answer={message.answer} modelUsage="none" t={props.t} />
+              ) : (
+                <p>{message.text}</p>
+              )}
             </article>
           ))}
           {agentDraft ? (
@@ -1997,6 +2047,26 @@ function HomeComposer(props: {
             draftRevisionRef.current += 1;
             props.onDraftChange(event.target.value);
           }}
+          onCompositionStart={() => {
+            composerCompositionActiveRef.current = true;
+            composerCompositionRaceRef.current = false;
+            if (composerCompositionTimerRef.current !== undefined) {
+              window.clearTimeout(composerCompositionTimerRef.current);
+              composerCompositionTimerRef.current = undefined;
+            }
+          }}
+          onCompositionEnd={() => {
+            composerCompositionActiveRef.current = false;
+            composerCompositionRaceRef.current = true;
+            if (composerCompositionTimerRef.current !== undefined) {
+              window.clearTimeout(composerCompositionTimerRef.current);
+            }
+            composerCompositionTimerRef.current = window.setTimeout(() => {
+              composerCompositionRaceRef.current = false;
+              composerCompositionTimerRef.current = undefined;
+            }, 0);
+          }}
+          onKeyDown={handleComposerKeyDown}
         />
         <div className="toolbar">
           <span>{props.t("home.toolbarHint")}</span>

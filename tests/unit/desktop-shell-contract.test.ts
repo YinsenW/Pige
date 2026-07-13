@@ -42,6 +42,21 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain('browserWindow.once("closed", () => mainWindows.delete(browserWindow));');
   });
 
+  it("assembles the background index worker and repository toolchain manifest in a development build", () => {
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const readyPath = mainSource.slice(
+      mainSource.indexOf("app.whenReady().then"),
+      mainSource.indexOf('app.on("window-all-closed"')
+    );
+
+    expect(readyPath).toContain(
+      "new LocalDatabaseService(undefined, new LocalDatabaseRebuildWorkerService())"
+    );
+    expect(mainSource).toContain(
+      'join(process.cwd(), "../../resources/toolchain-manifest/toolchain.manifest.json")'
+    );
+  });
+
   it("never lets a packaged app replace its local renderer through a development URL", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const devRendererBranch = mainSource.slice(
@@ -127,7 +142,8 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).toContain('ipcRenderer.removeListener("agent.turnDraft", handleDraft)');
     expect(contractsSource).toContain("export interface AgentTurnDraftEvent");
     expect(contractsSource).toContain("readonly onTurnDraft:");
-    expect(runtimeSource).toContain("readSafeTerminalDraft(event, request.terminalDraft)");
+    expect(runtimeSource).toContain("terminalDrafts.observe(event)");
+    expect(runtimeSource).toContain("terminalDrafts.afterToolExecute(executedTool, args, result)");
     expect(runtimeSource).toContain('toolName: "pige_finish_home_turn"');
     expect(preloadSource).not.toContain('ipcRenderer.invoke("capture.submit');
     expect(preloadSource).not.toContain('ipcRenderer.invoke("retrieval.ask"');

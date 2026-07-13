@@ -12,12 +12,19 @@ const desktopRoot = path.resolve(path.dirname(scriptPath), "..");
 const repoRoot = path.resolve(desktopRoot, "../..");
 const MODEL_ID = "pige-roundtrip-model";
 const PROVIDER_NAME = "Roundtrip Responses";
+const STREAMING_API_PROMPT = "Verify the selected model binding.";
 const DIRECT_PROMPT = "Reply directly with the roundtrip greeting.";
 const GROUNDING_PROMPT = "What is the roundtrip launch phrase in my local knowledge?";
-const DIRECT_ANSWER = "The real Pi roundtrip is ready.";
+const DIRECT_ANSWER = "The real Pi roundtrip is ready, and this longer answer arrives through several safe visible replacements before completion.";
 const GROUNDED_ANSWER = "The roundtrip launch phrase is heliotrope seven. [1]";
 const SOURCE_PROMPT = "Inspect this attachment and answer without creating a note.";
 const SOURCE_ANSWER = "The preserved attachment is available to the unified Agent.";
+const MARKDOWN_PROMPT = "Inspect this Markdown attachment and answer without creating a note.";
+const MARKDOWN_ANSWER = "The preserved Markdown attachment is available to the unified Agent.";
+const ACTIVITY_PROMPT = "Create a grounded knowledge note from this attachment.";
+const ACTIVITY_TITLE = "Unified Agent activity note";
+const DATASET_PROMPT = "Which person has the largest count in this attached Dataset?";
+const DATASET_ANSWER = "Grace has the largest count in the attached Dataset. [D1]";
 const CHILD_RESULT_PREFIX = "PIGE_ROUNDTRIP_RESULT ";
 const MAX_CHILD_MS = 90_000;
 
@@ -33,37 +40,81 @@ async function runOrchestrator() {
   const rootPath = fs.mkdtempSync(path.join(os.tmpdir(), "pige-unified-roundtrip-"));
   const userDataPath = path.join(rootPath, "user-data");
   const attachmentPath = path.join(rootPath, "unified-agent-source.txt");
+  const markdownAttachmentPath = path.join(rootPath, "unified-agent-source.md");
+  const activityAttachmentPath = path.join(rootPath, "unified-agent-activity.txt");
+  const datasetAttachmentPath = path.join(rootPath, "unified-agent-dataset.csv");
   fs.writeFileSync(attachmentPath, "Synthetic unified Agent attachment evidence.\n", "utf8");
+  fs.writeFileSync(markdownAttachmentPath, "# Synthetic Markdown evidence\n\nThe Markdown source crosses the real file ingress.\n", "utf8");
+  fs.writeFileSync(activityAttachmentPath, "Synthetic reversible knowledge for Activity and Undo.\n", "utf8");
+  fs.writeFileSync(datasetAttachmentPath, "name,count\nAda,3\nGrace,5\n", "utf8");
   const syntheticToken = `synthetic-${crypto.randomBytes(24).toString("hex")}`;
   const requests = [];
-  const server = await startProviderServer(requests);
+  const streamTiming = {};
+  const server = await startProviderServer(requests, streamTiming);
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Loopback provider did not bind safely.");
   const baseUrl = `http://127.0.0.1:${address.port}/v1`;
 
   try {
-    const connect = await runChild("connect", { rootPath, userDataPath, baseUrl, syntheticToken, attachmentPath });
-    const reopen = await runChild("reopen", { rootPath, userDataPath, baseUrl, syntheticToken, attachmentPath });
+    const connect = await runChild("connect", {
+      rootPath,
+      userDataPath,
+      baseUrl,
+      syntheticToken,
+      attachmentPath,
+      markdownAttachmentPath,
+      activityAttachmentPath,
+      datasetAttachmentPath
+    });
+    const reopen = await runChild("reopen", {
+      rootPath,
+      userDataPath,
+      baseUrl,
+      syntheticToken,
+      attachmentPath,
+      markdownAttachmentPath,
+      activityAttachmentPath,
+      datasetAttachmentPath
+    });
 
     assert.equal(connect.bindingState, "ready");
+    assert.equal(connect.sourceToolchainReady, true);
     assert.equal(connect.modelUsage, "local");
     assert.equal(connect.providerFormSubmitted, true);
     assert.equal(connect.secretFieldCleared, true);
     assert.equal(connect.defaultProviderLabel, PROVIDER_NAME);
     assert.equal(connect.defaultModelLabel, MODEL_ID);
-    assert.ok(connect.draftEventCount >= 1);
+    assert.ok(connect.draftEventCount >= 3);
     assert.equal(connect.draftFinalMatches, true);
     assert.equal(connect.draftShapeSafe, true);
+    assert.ok(connect.firstDraftReceivedAt < connect.apiCompletedAt);
+    assert.ok(Number.isFinite(streamTiming.firstSafeAnswerMaterialAt));
+    assert.ok(connect.firstDraftReceivedAt >= streamTiming.firstSafeAnswerMaterialAt);
+    assert.ok(connect.firstDraftReceivedAt - streamTiming.firstSafeAnswerMaterialAt < 1_000);
     assert.equal(connect.directVisible, true);
+    assert.equal(connect.enterSubmitted, true);
+    assert.equal(connect.directProvisionalVisible, true);
+    assert.ok(connect.directDraftEventCount >= 3);
     assert.equal(connect.groundedVisible, true);
+    assert.equal(connect.groundedCitationsDuringDraft, false);
     assert.equal(connect.citationVisible, true);
     assert.equal(connect.sourceVisible, true);
+    assert.equal(connect.markdownVisible, true);
+    assert.equal(connect.activityVisible, true);
+    assert.equal(connect.activityUndone, true);
+    assert.equal(connect.datasetVisible, true);
+    assert.equal(connect.datasetCitationVisible, true);
+    assert.equal(connect.datasetImportJobCount, 1);
+    assert.deepEqual(connect.failedRetryableJobClasses, []);
     assert.equal(reopen.bindingState, "ready");
     assert.equal(reopen.runtimeState, "ready");
     assert.equal(reopen.providerProfileId, connect.providerProfileId);
     assert.equal(reopen.modelProfileId, connect.modelProfileId);
     assert.equal(reopen.providerVisible, true);
     assert.equal(reopen.directVisible, true);
+    assert.equal(reopen.datasetVisible, true);
+    assert.equal(reopen.datasetCitationVisible, true);
+    assert.equal(reopen.activityUndoneVisible, true);
 
     assert.equal(requests.filter((request) => request.method === "GET" && request.path === "/v1/models").length, 2);
     assert.ok(requests.filter((request) => request.method === "POST" && request.path === "/v1/responses").length >= 7);
@@ -73,6 +124,9 @@ async function runOrchestrator() {
     assert.ok(requests.some((request) => request.body.includes('"name":"pige_search_knowledge"')));
     assert.ok(requests.some((request) => request.body.includes('"name":"pige_finish_home_turn"')));
     assert.ok(requests.some((request) => request.body.includes('"name":"pige_inspect_source"')));
+    assert.ok(requests.some((request) => request.body.includes('"name":"pige_inspect_dataset"')));
+    assert.ok(requests.some((request) => request.body.includes('"name":"pige_query_dataset"')));
+    assert.ok(requests.some((request) => request.body.includes('"name":"pige_create_knowledge_note"')));
     assert.ok(requests.some((request) => request.body.includes('"name":"pige_respond_to_user"')));
     assert.ok(requests.some((request) => request.body.includes('"type":"function_call_output"')));
 
@@ -91,7 +145,11 @@ async function runOrchestrator() {
 
     console.log(
       `Electron unified Agent roundtrip OK: persisted ${connect.providerProfileId}/${connect.modelProfileId}, ` +
-      `reopened binding, real Responses tool loop and safe draft bridge, visible direct/cited Home and preserved-source results.`
+      `reopened binding, real Responses tool loop and ${connect.draftEventCount} safe draft replacements ` +
+      `(${connect.firstDraftReceivedAt - streamTiming.firstSafeAnswerMaterialAt}ms from first safe material), ` +
+      `${connect.directDraftEventCount} authorized fallback replacements plus Enter submission, ` +
+      `visible direct/cited Home, preserved-source, ` +
+      `TXT/Markdown ingress, Dataset continuation, zero retryable Jobs, and reversible Activity/Undo results.`
     );
   } finally {
     await new Promise((resolve) => server.close(resolve));
@@ -109,6 +167,9 @@ async function runChild(phase, values) {
       PIGE_ROUNDTRIP_BASE_URL: values.baseUrl,
       PIGE_ROUNDTRIP_SYNTHETIC_TOKEN: values.syntheticToken,
       PIGE_ROUNDTRIP_ATTACHMENT_PATH: values.attachmentPath,
+      PIGE_ROUNDTRIP_MARKDOWN_ATTACHMENT_PATH: values.markdownAttachmentPath,
+      PIGE_ROUNDTRIP_ACTIVITY_ATTACHMENT_PATH: values.activityAttachmentPath,
+      PIGE_ROUNDTRIP_DATASET_ATTACHMENT_PATH: values.datasetAttachmentPath,
       PIGE_ROUNDTRIP_STAGE_PATH: path.join(values.rootPath, `stage-${phase}.txt`)
     }),
     stdio: ["ignore", "pipe", "pipe"]
@@ -128,11 +189,41 @@ async function runChild(phase, values) {
     const marker = stderr.split(/\r?\n/u).find((line) => line.startsWith("PIGE_ROUNDTRIP_ERROR "));
     const stagePath = path.join(values.rootPath, `stage-${phase}.txt`);
     const stage = fs.existsSync(stagePath) ? fs.readFileSync(stagePath, "utf8").trim() : "unknown";
-    throw new Error(marker ?? `Electron unified Agent ${phase} phase failed at ${stage}.`);
+    const jobs = readSafeJobFailureSummary(values.rootPath);
+    throw new Error(`${marker ?? `Electron unified Agent ${phase} phase failed at ${stage}.`} jobs=${JSON.stringify(jobs)}`);
   }
   const marker = stdout.split(/\r?\n/u).find((line) => line.startsWith(CHILD_RESULT_PREFIX));
   if (!marker) throw new Error(`Electron unified Agent ${phase} phase returned no result.`);
   return JSON.parse(marker.slice(CHILD_RESULT_PREFIX.length));
+}
+
+function readSafeJobFailureSummary(rootPath) {
+  const jobsPath = path.join(rootPath, "vaults", "Roundtrip Vault", ".pige", "jobs");
+  if (!fs.existsSync(jobsPath)) return [];
+  const files = [];
+  const pending = [jobsPath];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const absolute = path.join(current, entry.name);
+      if (entry.isDirectory()) pending.push(absolute);
+      else if (entry.isFile() && entry.name.endsWith(".json")) files.push(absolute);
+    }
+  }
+  return files.flatMap((filePath) => {
+      try {
+        const job = JSON.parse(fs.readFileSync(filePath, "utf8"));
+        return [{
+          class: typeof job.class === "string" ? job.class : "unknown",
+          state: typeof job.state === "string" ? job.state : "unknown",
+          message: typeof job.message === "string" ? job.message : undefined,
+          errorCode: typeof job.error?.code === "string" ? job.error.code : undefined,
+          waitingDependency: typeof job.waitingDependency === "string" ? job.waitingDependency : undefined
+        }];
+      } catch {
+        return [{ class: "invalid", state: "invalid" }];
+      }
+    });
 }
 
 async function runElectronPhase() {
@@ -142,6 +233,9 @@ async function runElectronPhase() {
   const baseUrl = requireEnv("PIGE_ROUNDTRIP_BASE_URL");
   const syntheticToken = requireEnv("PIGE_ROUNDTRIP_SYNTHETIC_TOKEN");
   const attachmentPath = requireEnv("PIGE_ROUNDTRIP_ATTACHMENT_PATH");
+  const markdownAttachmentPath = requireEnv("PIGE_ROUNDTRIP_MARKDOWN_ATTACHMENT_PATH");
+  const activityAttachmentPath = requireEnv("PIGE_ROUNDTRIP_ACTIVITY_ATTACHMENT_PATH");
+  const datasetAttachmentPath = requireEnv("PIGE_ROUNDTRIP_DATASET_ATTACHMENT_PATH");
   const stagePath = requireEnv("PIGE_ROUNDTRIP_STAGE_PATH");
   const { app, BrowserWindow, dialog } = await import("electron");
   fs.mkdirSync(userDataPath, { recursive: true });
@@ -188,9 +282,21 @@ async function runElectronPhase() {
       : await runReopenRenderer(browserWindow);
     if (phase === "connect") {
       markStage("renderer_source");
-      await prepareSourceRenderer(browserWindow);
+      await prepareSourceRenderer(browserWindow, SOURCE_PROMPT);
       await setRendererFileInput(browserWindow, attachmentPath);
-      result = { ...result, ...(await readSourceRendererResult(browserWindow)) };
+      result = { ...result, ...(await readSourceRendererResult(browserWindow, SOURCE_ANSWER, "sourceVisible")) };
+      markStage("renderer_markdown");
+      await prepareSourceRenderer(browserWindow, MARKDOWN_PROMPT);
+      await setRendererFileInput(browserWindow, markdownAttachmentPath);
+      result = { ...result, ...(await readSourceRendererResult(browserWindow, MARKDOWN_ANSWER, "markdownVisible")) };
+      markStage("renderer_activity");
+      await prepareSourceRenderer(browserWindow, ACTIVITY_PROMPT);
+      await setRendererFileInput(browserWindow, activityAttachmentPath);
+      result = { ...result, ...(await readActivityRendererResult(browserWindow)) };
+      markStage("renderer_dataset");
+      await prepareSourceRenderer(browserWindow, DATASET_PROMPT);
+      await setRendererFileInput(browserWindow, datasetAttachmentPath);
+      result = { ...result, ...(await readDatasetRendererResult(browserWindow)) };
     }
     console.log(`${CHILD_RESULT_PREFIX}${JSON.stringify(result)}`);
     browserWindow.destroy();
@@ -249,17 +355,72 @@ async function runConnectRenderer(browserWindow, input) {
         element.dispatchEvent(new Event("input", { bubbles: true }));
         element.dispatchEvent(new Event("change", { bubbles: true }));
       };
-      const submitVisibleTurn = async (prompt, expected) => {
+      const submitVisibleTurn = async (prompt, expected, options = {}) => {
         await clickNav("Home");
         const composer = await waitFor(() => document.querySelector('textarea[aria-label="Capture or ask"]'), "Home composer");
         setValue(composer, prompt);
-        const send = await waitFor(() => document.querySelector('button[aria-label="Send"]:not(:disabled)'), "Home send");
-        send.click();
-        await waitFor(() => document.body.textContent?.includes(expected), "visible Home result");
-        return document.body.textContent?.includes(expected) === true;
+        const draftEvents = [];
+        const stopDrafts = window.pige.agent.onTurnDraft((event) => draftEvents.push({ event, receivedAt: Date.now() }));
+        let enterSubmitted = false;
+        try {
+          if (options.sendWithEnter) {
+            const enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+            composer.dispatchEvent(enter);
+            enterSubmitted = enter.defaultPrevented;
+          } else {
+            const send = await waitFor(() => document.querySelector('button[aria-label="Send"]:not(:disabled)'), "Home send");
+            send.click();
+          }
+          if (options.stage) mark(options.stage + "_submitted");
+          let provisional = null;
+          if (options.expectDraft) {
+            try {
+              provisional = await waitFor(
+                () => document.querySelector('[data-agent-draft="true"]'),
+                "visible provisional Home answer"
+              );
+            } catch (error) {
+              if (options.stage) mark(options.stage + "_draft_missing_" + Math.min(draftEvents.length, 9));
+              throw error;
+            }
+            if (options.stage) mark(options.stage + "_draft_visible");
+          }
+          const citationsDuringDraft = Boolean(provisional && document.querySelector(".retrieval-citations, .dataset-citations"));
+          await waitFor(
+            () => document.body.textContent?.includes(expected) && !document.querySelector('[data-agent-draft="true"]')
+              ? true
+              : undefined,
+            "authoritative visible Home result"
+          );
+          if (options.stage) mark(options.stage + "_final_visible");
+          return {
+            visible: document.body.textContent?.includes(expected) === true,
+            enterSubmitted,
+            provisionalVisible: Boolean(provisional),
+            draftEventCount: draftEvents.length,
+            citationsDuringDraft
+          };
+        } finally {
+          stopDrafts();
+        }
       };
 
       await waitFor(() => window.pige, "preload bridge");
+      const toolchain = await window.pige.system.toolchainHealth();
+      const requiredSourceTools = [
+        "pdf-parser",
+        "pdf-parser-runtime",
+        "office-docx-parser",
+        "office-openxml-parser",
+        "office-archive-runtime",
+        "web-readability-parser",
+        "web-dom-runtime",
+        "web-fetch-runtime"
+      ];
+      const sourceToolchainReady = requiredSourceTools.every((toolId) =>
+        toolchain.tools.some((tool) => tool.id === toolId && tool.status === "ready")
+      );
+      if (!sourceToolchainReady) throw new Error("Bundled source toolchain is not ready in the assembled app.");
       mark("models_nav");
       await clickNav("Models");
       mark("provider_form");
@@ -327,24 +488,26 @@ async function runConnectRenderer(browserWindow, input) {
 
       mark("api_turn");
       const draftEvents = [];
-      const stopDrafts = window.pige.agent.onTurnDraft((event) => draftEvents.push(event));
+      const stopDrafts = window.pige.agent.onTurnDraft((event) => draftEvents.push({ event, receivedAt: Date.now() }));
       let apiOutcome;
+      let apiCompletedAt;
       try {
         apiOutcome = await window.pige.agent.submitTurn({
-          text: "Verify the selected model binding.",
+          text: ${JSON.stringify(STREAMING_API_PROMPT)},
           inputKind: "typed_text",
           objective: "auto",
           locale: "en",
           clientTurnId: "turn_20260713_roundtripdraft"
         });
+        apiCompletedAt = Date.now();
       } finally {
         stopDrafts();
       }
       if (apiOutcome.state !== "completed" || apiOutcome.modelUsage === "none") {
         throw new Error("Renderer API did not use the configured model.");
       }
-      const finalDraft = draftEvents.at(-1);
-      const draftShapeSafe = draftEvents.every((event, index) => {
+      const finalDraft = draftEvents.at(-1)?.event;
+      const draftShapeSafe = draftEvents.every(({ event }, index) => {
         const keys = Object.keys(event).sort().join(",");
         return keys === "apiVersion,clientTurnId,conversationEventId,conversationId,jobId,kind,requestId,sequence,text" &&
           event.apiVersion === 1 &&
@@ -356,15 +519,24 @@ async function runConnectRenderer(browserWindow, input) {
         throw new Error("Safe Home draft replacement did not cross the real preload bridge.");
       }
       mark("direct_ui");
-      const directVisible = await submitVisibleTurn(${JSON.stringify(DIRECT_PROMPT)}, ${JSON.stringify(DIRECT_ANSWER)});
+      const directTurn = await submitVisibleTurn(
+        ${JSON.stringify(DIRECT_PROMPT)},
+        ${JSON.stringify(DIRECT_ANSWER)},
+        { sendWithEnter: true, expectDraft: true, stage: "direct_ui" }
+      );
       mark("grounded_ui");
-      const groundedVisible = await submitVisibleTurn(${JSON.stringify(GROUNDING_PROMPT)}, ${JSON.stringify(GROUNDED_ANSWER)});
+      const groundedTurn = await submitVisibleTurn(
+        ${JSON.stringify(GROUNDING_PROMPT)},
+        ${JSON.stringify(GROUNDED_ANSWER)},
+        { expectDraft: true, stage: "grounded_ui" }
+      );
       const citationVisible = await waitFor(
         () => document.querySelector(".retrieval-citations") ? true : undefined,
         "visible Home citations"
       );
       return {
         bindingState: summary.defaultBinding.state,
+        sourceToolchainReady,
         providerProfileId: summary.defaultBinding.providerProfileId,
         modelProfileId: summary.defaultBinding.modelProfileId,
         modelUsage: apiOutcome.modelUsage,
@@ -373,10 +545,16 @@ async function runConnectRenderer(browserWindow, input) {
         defaultProviderLabel,
         defaultModelLabel,
         draftEventCount: draftEvents.length,
+        firstDraftReceivedAt: draftEvents[0]?.receivedAt,
+        apiCompletedAt,
         draftFinalMatches: finalDraft.text === ${JSON.stringify(DIRECT_ANSWER)},
         draftShapeSafe,
-        directVisible,
-        groundedVisible,
+        directVisible: directTurn.visible,
+        enterSubmitted: directTurn.enterSubmitted,
+        directProvisionalVisible: directTurn.provisionalVisible,
+        directDraftEventCount: directTurn.draftEventCount,
+        groundedVisible: groundedTurn.visible,
+        groundedCitationsDuringDraft: groundedTurn.citationsDuringDraft,
         citationVisible
       };
     })()
@@ -435,6 +613,33 @@ async function runReopenRenderer(browserWindow) {
       );
       mark("home_reopen");
       await clickNav("Home");
+      mark("dataset_reopen_wait");
+      const datasetVisible = await waitFor(
+        () => {
+          const answer = document.querySelector(".dataset-answer");
+          return answer?.textContent?.includes(${JSON.stringify(DATASET_ANSWER)}) &&
+            answer.textContent.includes("Grace") ? true : undefined;
+        },
+        "restarted Dataset answer"
+      );
+      mark("dataset_reopen_visible");
+      const datasetCitationVisible = await waitFor(
+        () => document.querySelector(".dataset-citations") ? true : undefined,
+        "restarted Dataset citation"
+      );
+      mark("activity_reopen_wait");
+      const activityUndone = await waitFor(async () => {
+        const value = await window.pige.activity.list({ limit: 10 });
+        return value.activities.find((activity) =>
+          activity.targetLabel === ${JSON.stringify(ACTIVITY_TITLE)} && activity.status === "undone"
+        );
+      }, "restarted undone Activity");
+      mark("activity_reopen_visible_wait");
+      const activityUndoneVisible = await waitFor(
+        () => document.querySelector('[data-activity-row-id="' + activityUndone.operationId + '"]') ? true : undefined,
+        "restarted visible undone Activity"
+      );
+      mark("direct_reopen_wait");
       const composer = await waitFor(() => document.querySelector('textarea[aria-label="Capture or ask"]'), "Home composer");
       setValue(composer, ${JSON.stringify(DIRECT_PROMPT)});
       const send = await waitFor(() => document.querySelector('button[aria-label="Send"]:not(:disabled)'), "Home send");
@@ -443,25 +648,29 @@ async function runReopenRenderer(browserWindow) {
         () => document.body.textContent?.includes(${JSON.stringify(DIRECT_ANSWER)}),
         "restarted visible Home result"
       );
+      mark("direct_reopen_visible");
       return {
         bindingState: summary.defaultBinding.state,
         runtimeState: runtimeStatus.state,
         providerProfileId: summary.defaultBinding.providerProfileId,
         modelProfileId: summary.defaultBinding.modelProfileId,
         providerVisible: Boolean(providerVisible),
-        directVisible: Boolean(directVisible)
+        directVisible: Boolean(directVisible),
+        datasetVisible: Boolean(datasetVisible),
+        datasetCitationVisible: Boolean(datasetCitationVisible),
+        activityUndoneVisible: Boolean(activityUndoneVisible)
       };
     })()
   `, true);
 }
 
-async function prepareSourceRenderer(browserWindow) {
+async function prepareSourceRenderer(browserWindow, prompt) {
   return browserWindow.webContents.executeJavaScript(`
     (() => {
       const composer = document.querySelector('.composer textarea');
       if (!composer) throw new Error('Home composer is unavailable for the source turn.');
       const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(composer), 'value');
-      descriptor.set.call(composer, ${JSON.stringify(SOURCE_PROMPT)});
+      descriptor.set.call(composer, ${JSON.stringify(prompt)});
       composer.dispatchEvent(new Event('input', { bubbles: true }));
       composer.dispatchEvent(new Event('change', { bubbles: true }));
       return true;
@@ -488,21 +697,139 @@ async function setRendererFileInput(browserWindow, attachmentPath) {
   }
 }
 
-async function readSourceRendererResult(browserWindow) {
+async function readSourceRendererResult(browserWindow, expectedAnswer, resultKey) {
   return browserWindow.webContents.executeJavaScript(`
     (async () => {
       const startedAt = Date.now();
       while (Date.now() - startedAt < 45000) {
         const answer = document.querySelector('.retrieval-answer');
         const completed = document.querySelector('.agent-run-state.state-completed');
-        if (answer?.textContent?.includes(${JSON.stringify(SOURCE_ANSWER)}) && completed) {
-          return { sourceVisible: true };
+        if (answer?.textContent?.includes(${JSON.stringify(expectedAnswer)}) && completed) {
+          return { [${JSON.stringify(resultKey)}]: true };
         }
         const failed = document.querySelector('.agent-run-state.state-failed');
         if (failed) throw new Error('Unified source turn failed visibly.');
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
       throw new Error('Timed out waiting for the unified source result.');
+    })()
+  `, true);
+}
+
+async function readActivityRendererResult(browserWindow) {
+  return browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      const waitFor = async (predicate, label, timeoutMs = 45000) => {
+        const startedAt = Date.now();
+        while (Date.now() - startedAt < timeoutMs) {
+          const value = await predicate();
+          if (value) return value;
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        throw new Error("Timed out waiting for " + label);
+      };
+      const activity = await waitFor(async () => {
+        const value = await window.pige.activity.list({ limit: 10 });
+        return value.activities.find((candidate) =>
+          candidate.targetLabel === ${JSON.stringify(ACTIVITY_TITLE)} &&
+          candidate.status === "applied" &&
+          candidate.canUndo
+        );
+      }, "reversible Activity");
+      const row = await waitFor(
+        () => document.querySelector('[data-activity-row-id="' + activity.operationId + '"]'),
+        "visible Activity row"
+      );
+      const undo = row.querySelector('[data-activity-undo-id="' + activity.operationId + '"]:not(:disabled)');
+      if (!undo) throw new Error("Visible Activity is missing its bounded Undo action.");
+      undo.click();
+      await waitFor(async () => {
+        const value = await window.pige.activity.list({ limit: 10 });
+        return value.activities.find((candidate) =>
+          candidate.operationId === activity.operationId && candidate.status === "undone"
+        );
+      }, "durable Activity Undo");
+      await waitFor(
+        () => {
+          const current = document.querySelector('[data-activity-row-id="' + activity.operationId + '"]');
+          return current && !current.querySelector('[data-activity-undo-id]') ? true : undefined;
+        },
+        "visible undone Activity"
+      );
+      return {
+        activityVisible: true,
+        activityUndone: true,
+        activityOperationId: activity.operationId
+      };
+    })()
+  `, true);
+}
+
+async function readDatasetRendererResult(browserWindow) {
+  return browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      let lastStage = "";
+      const mark = (stage) => {
+        if (stage === lastStage) return;
+        lastStage = stage;
+        globalThis.__pigeRoundtripStage = stage;
+        console.info("PIGE_ROUNDTRIP_STAGE " + stage);
+      };
+      mark("dataset_wait");
+      const waitFor = async (predicate, label, timeoutMs = 60000) => {
+        const startedAt = Date.now();
+        while (Date.now() - startedAt < timeoutMs) {
+          const value = await predicate();
+          if (value) return value;
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        throw new Error("Timed out waiting for " + label);
+      };
+      const datasetVisible = await waitFor(
+        async () => {
+          const answer = document.querySelector(".dataset-answer");
+          if (answer?.textContent?.includes(${JSON.stringify(DATASET_ANSWER)}) && answer.textContent.includes("Grace")) {
+            mark("dataset_visible");
+            return true;
+          }
+          const jobs = await window.pige.jobs.list({ limit: 100 });
+          const parent = jobs.jobs.find((job) => job.class === "agent_turn" &&
+            ["queued", "running", "waiting_dependency", "failed_retryable", "failed_final"].includes(job.state));
+          const child = jobs.jobs.find((job) => job.class === "dataset_import");
+          const parentState = parent?.state ?? "none";
+          const childState = child?.state ?? "none";
+          mark("dataset_" + parentState + "_" + childState);
+          if (parentState === "failed_final" || parentState === "failed_retryable" || childState === "failed_final") {
+            throw new Error("Dataset continuation reached a durable failure state.");
+          }
+          return undefined;
+        },
+        "visible Dataset answer"
+      );
+      const datasetCitationVisible = await waitFor(
+        () => document.querySelector(".dataset-citations") ? true : undefined,
+        "visible Dataset citation"
+      );
+      const jobs = await window.pige.jobs.list({ limit: 100 });
+      const datasetImportJobCount = jobs.jobs.filter((job) => job.class === "dataset_import").length;
+      if (datasetImportJobCount !== 1) {
+        throw new Error("Dataset source turn did not preserve exactly one deterministic import child.");
+      }
+      const settledJobs = await waitFor(async () => {
+        const current = await window.pige.jobs.list({ limit: 100 });
+        return current.jobs.some((job) =>
+          job.class === "index_rebuild" && (job.state === "queued" || job.state === "running")
+        ) ? undefined : current.jobs;
+      }, "settled background jobs");
+      return {
+        datasetVisible: Boolean(datasetVisible),
+        datasetCitationVisible: Boolean(datasetCitationVisible),
+        datasetImportJobCount,
+        failedRetryableJobClasses: settledJobs
+          .filter((job) => job.state === "failed_retryable")
+          .map((job) => job.class)
+          .sort()
+      };
     })()
   `, true);
 }
@@ -528,7 +855,7 @@ async function waitForRenderer(browserWindow) {
   });
 }
 
-async function startProviderServer(requests) {
+async function startProviderServer(requests, streamTiming) {
   const server = http.createServer(async (request, response) => {
     const body = await readBody(request);
     requests.push({
@@ -549,12 +876,76 @@ async function startProviderServer(requests) {
     const parsed = JSON.parse(body);
     const serializedInput = JSON.stringify(parsed.input ?? "");
     const serializedTools = JSON.stringify(parsed.tools ?? "");
+    const latestUserText = readLatestUserText(parsed.input);
+    if (serializedInput.includes("authorized one presentation-only answer phase")) {
+      const authorizedAnswer = readLatestFinishAnswer(parsed.input);
+      await writeStreamingTextResponse(response, authorizedAnswer, `authorized-home-${requests.length}`);
+      return;
+    }
     if (serializedInput.includes('"call_id":"call_provider_probe"') && serializedInput.includes("function_call_output")) {
       writeTextResponse(response, "probe ready", "provider-probe-2");
       return;
     }
     if (serializedTools.includes("pige_provider_probe")) {
       writeToolCallResponse(response, "pige_provider_probe", "call_provider_probe", "provider-probe-1");
+      return;
+    }
+    if (serializedInput.includes('"call_id":"call_dataset_query"') && serializedInput.includes("function_call_output")) {
+      writeToolCallResponse(response, "pige_finish_home_turn", "call_dataset_finish", "dataset-finish-1", {
+        answer: DATASET_ANSWER,
+        citationRefs: ["citation_1"],
+        grounding: "local_knowledge"
+      });
+      return;
+    }
+    if (serializedInput.includes('"call_id":"call_dataset_catalog"') && serializedInput.includes("function_call_output")) {
+      const catalogOutput = findFunctionCallOutput(parsed.input, "call_dataset_catalog");
+      const refs = readDatasetCatalogRefs(catalogOutput);
+      writeToolCallResponse(response, "pige_query_dataset", "call_dataset_query", "dataset-query-1", {
+        action: "query",
+        datasetRef: refs.datasetRef,
+        tableRef: refs.tableRef,
+        select: refs.columnRefs,
+        orderBy: [{ by: refs.columnRefs[1] ?? refs.columnRefs[0], direction: "desc" }],
+        limit: 2
+      });
+      return;
+    }
+    if (latestUserText.includes(DATASET_PROMPT) && serializedTools.includes("pige_query_dataset")) {
+      writeToolCallResponse(response, "pige_query_dataset", "call_dataset_catalog", "dataset-catalog-1", {
+        action: "catalog"
+      });
+      return;
+    }
+    if (serializedInput.includes('"call_id":"call_dataset_source_inspect"') && serializedInput.includes("function_call_output")) {
+      writeToolCallResponse(response, "pige_inspect_dataset", "call_dataset_materialize", "dataset-materialize-1");
+      return;
+    }
+    if (latestUserText.includes(DATASET_PROMPT) && serializedTools.includes("pige_inspect_source")) {
+      writeToolCallResponse(response, "pige_inspect_source", "call_dataset_source_inspect", "dataset-source-inspect-1");
+      return;
+    }
+    if (serializedInput.includes('"call_id":"call_activity_inspect"') && serializedInput.includes("function_call_output")) {
+      writeToolCallResponse(response, "pige_create_knowledge_note", "call_activity_create", "activity-create-1", {
+        title: ACTIVITY_TITLE,
+        summary: {
+          text: "The synthetic source proves one reversible knowledge action through the real app boundary.",
+          evidenceRefs: ["ev_01"]
+        },
+        keyPoints: [{
+          text: "Activity exposes the applied Operation and Undo preserves recoverable history.",
+          evidenceRefs: ["ev_01"]
+        }],
+        tags: ["roundtrip"],
+        topics: ["Public Alpha"],
+        entities: [],
+        warnings: [],
+        confidence: "high"
+      });
+      return;
+    }
+    if (latestUserText.includes(ACTIVITY_PROMPT) && serializedTools.includes("pige_inspect_source")) {
+      writeToolCallResponse(response, "pige_inspect_source", "call_activity_inspect", "activity-inspect-1");
       return;
     }
     if (serializedInput.includes('"call_id":"call_home_search"') && serializedInput.includes("function_call_output")) {
@@ -565,13 +956,14 @@ async function startProviderServer(requests) {
       });
       return;
     }
-    if (serializedInput.includes(GROUNDING_PROMPT)) {
+    if (latestUserText.includes(GROUNDING_PROMPT)) {
       writeToolCallResponse(response, "pige_search_knowledge", "call_home_search", "home-grounded-1");
       return;
     }
     if (serializedInput.includes('"call_id":"call_source_inspect"') && serializedInput.includes("function_call_output")) {
-      writeToolCallResponse(response, "pige_respond_to_user", "call_source_respond", "source-respond-1", {
-        answer: SOURCE_ANSWER,
+      const markdownTurn = latestUserText.includes(MARKDOWN_PROMPT);
+      writeToolCallResponse(response, "pige_respond_to_user", "call_source_respond", markdownTurn ? "markdown-respond-1" : "source-respond-1", {
+        answer: markdownTurn ? MARKDOWN_ANSWER : SOURCE_ANSWER,
         evidenceRefs: ["ev_01"]
       });
       return;
@@ -580,17 +972,102 @@ async function startProviderServer(requests) {
       writeToolCallResponse(response, "pige_inspect_source", "call_source_inspect", "source-inspect-1");
       return;
     }
-    writeToolCallResponse(response, "pige_finish_home_turn", `call_home_finish_${requests.length}`, `home-direct-${requests.length}`, {
+    const directArgs = {
       answer: DIRECT_ANSWER,
       citationRefs: [],
       grounding: "general"
-    });
+    };
+    if (latestUserText.includes(STREAMING_API_PROMPT)) {
+      await writeStreamingToolCallResponse(
+        response,
+        "pige_finish_home_turn",
+        `call_home_finish_${requests.length}`,
+        `home-direct-${requests.length}`,
+        directArgs,
+        streamTiming
+      );
+      return;
+    }
+    writeToolCallResponse(
+      response,
+      "pige_finish_home_turn",
+      `call_home_finish_${requests.length}`,
+      `home-direct-${requests.length}`,
+      directArgs
+    );
   });
   await new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(0, "127.0.0.1", resolve);
   });
   return server;
+}
+
+function readLatestUserText(input) {
+  if (!Array.isArray(input)) return "";
+  for (let index = input.length - 1; index >= 0; index -= 1) {
+    const item = input[index];
+    if (!item || typeof item !== "object" || item.role !== "user") continue;
+    if (typeof item.content === "string") return item.content;
+    if (!Array.isArray(item.content)) return "";
+    return item.content
+      .map((part) => part && typeof part === "object" && typeof part.text === "string" ? part.text : "")
+      .join("\n");
+  }
+  return "";
+}
+
+function findFunctionCallOutput(input, callId) {
+  const pending = [input];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (Array.isArray(current)) {
+      pending.push(...current);
+      continue;
+    }
+    if (!current || typeof current !== "object") continue;
+    if (current.type === "function_call_output" && current.call_id === callId && typeof current.output === "string") {
+      return current.output;
+    }
+    pending.push(...Object.values(current));
+  }
+  throw new Error(`Loopback provider could not find ${callId} output.`);
+}
+
+function readLatestFinishAnswer(input) {
+  if (!Array.isArray(input)) throw new Error("Authorized Home presentation input is invalid.");
+  for (let index = input.length - 1; index >= 0; index -= 1) {
+    const item = input[index];
+    if (!item || typeof item !== "object" || item.type !== "function_call" || item.name !== "pige_finish_home_turn") {
+      continue;
+    }
+    const args = typeof item.arguments === "string" ? JSON.parse(item.arguments) : item.arguments;
+    if (!args || typeof args !== "object" || typeof args.answer !== "string" || !args.answer) {
+      throw new Error("Authorized Home presentation answer is missing.");
+    }
+    return args.answer;
+  }
+  throw new Error("Authorized Home presentation has no validated finish call.");
+}
+
+function readDatasetCatalogRefs(output) {
+  const start = output.indexOf("{");
+  const end = output.lastIndexOf("}");
+  if (start < 0 || end <= start) throw new Error("Dataset catalog output is not a bounded JSON envelope.");
+  const catalog = JSON.parse(output.slice(start, end + 1));
+  const dataset = catalog.datasets?.[0];
+  const table = dataset?.tables?.[0];
+  const columnRefs = Array.isArray(table?.columns)
+    ? table.columns.map((column) => column?.columnRef).filter((value) => typeof value === "string").slice(0, 2)
+    : [];
+  if (
+    typeof dataset?.datasetRef !== "string" ||
+    typeof table?.tableRef !== "string" ||
+    columnRefs.length < 2
+  ) {
+    throw new Error("Dataset catalog did not expose one queryable two-column table.");
+  }
+  return { datasetRef: dataset.datasetRef, tableRef: table.tableRef, columnRefs };
 }
 
 function writeToolCallResponse(response, name, callId, suffix, args = {}) {
@@ -632,6 +1109,72 @@ function writeToolCallResponse(response, name, callId, suffix, args = {}) {
   writeResponseEvent(response, {
     type: "response.completed",
     sequence_number: 4,
+    response: openAiResponse(`resp_${suffix}`, "completed", [item])
+  });
+  response.end("data: [DONE]\n\n");
+}
+
+async function writeStreamingToolCallResponse(response, name, callId, suffix, args, timing) {
+  const argumentsJson = JSON.stringify(args);
+  const item = {
+    id: `fc_${suffix}`,
+    type: "function_call",
+    status: "completed",
+    arguments: argumentsJson,
+    call_id: callId,
+    name
+  };
+  beginEventStream(response);
+  writeResponseEvent(response, {
+    type: "response.created",
+    sequence_number: 0,
+    response: openAiResponse(`resp_${suffix}`, "in_progress", [])
+  });
+  writeResponseEvent(response, {
+    type: "response.output_item.added",
+    sequence_number: 1,
+    output_index: 0,
+    item: { ...item, status: "in_progress", arguments: "" }
+  });
+  let offset = 0;
+  let sequence = 2;
+  while (offset < argumentsJson.length) {
+    const nextOffset = Math.min(argumentsJson.length, offset + 28);
+    const delta = argumentsJson.slice(offset, nextOffset);
+    writeResponseEvent(response, {
+      type: "response.function_call_arguments.delta",
+      sequence_number: sequence,
+      output_index: 0,
+      item_id: item.id,
+      delta
+    });
+    if (
+      timing.firstSafeAnswerMaterialAt === undefined &&
+      nextOffset >= '{"answer":"'.length + 32
+    ) {
+      timing.firstSafeAnswerMaterialAt = Date.now();
+    }
+    offset = nextOffset;
+    sequence += 1;
+    await new Promise((resolve) => setTimeout(resolve, 110));
+  }
+  writeResponseEvent(response, {
+    type: "response.function_call_arguments.done",
+    sequence_number: sequence,
+    output_index: 0,
+    item_id: item.id,
+    name,
+    arguments: argumentsJson
+  });
+  writeResponseEvent(response, {
+    type: "response.output_item.done",
+    sequence_number: sequence + 1,
+    output_index: 0,
+    item
+  });
+  writeResponseEvent(response, {
+    type: "response.completed",
+    sequence_number: sequence + 2,
     response: openAiResponse(`resp_${suffix}`, "completed", [item])
   });
   response.end("data: [DONE]\n\n");
@@ -680,6 +1223,62 @@ function writeTextResponse(response, text, suffix) {
   writeResponseEvent(response, {
     type: "response.completed",
     sequence_number: 4,
+    response: openAiResponse(`resp_${suffix}`, "completed", [completedItem])
+  });
+  response.end("data: [DONE]\n\n");
+}
+
+async function writeStreamingTextResponse(response, text, suffix) {
+  const initialItem = {
+    id: `msg_${suffix}`,
+    type: "message",
+    status: "in_progress",
+    role: "assistant",
+    content: [{ type: "output_text", text: "", annotations: [], logprobs: [] }]
+  };
+  const completedItem = {
+    ...initialItem,
+    status: "completed",
+    content: [{ type: "output_text", text, annotations: [], logprobs: [] }]
+  };
+  beginEventStream(response);
+  writeResponseEvent(response, {
+    type: "response.created",
+    sequence_number: 0,
+    response: openAiResponse(`resp_${suffix}`, "in_progress", [])
+  });
+  writeResponseEvent(response, {
+    type: "response.output_item.added",
+    sequence_number: 1,
+    output_index: 0,
+    item: initialItem
+  });
+  let offset = 0;
+  let sequence = 2;
+  while (offset < text.length) {
+    const nextOffset = Math.min(text.length, offset + 24);
+    writeResponseEvent(response, {
+      type: "response.output_text.delta",
+      sequence_number: sequence,
+      output_index: 0,
+      content_index: 0,
+      item_id: initialItem.id,
+      delta: text.slice(offset, nextOffset),
+      logprobs: []
+    });
+    offset = nextOffset;
+    sequence += 1;
+    await new Promise((resolve) => setTimeout(resolve, 110));
+  }
+  writeResponseEvent(response, {
+    type: "response.output_item.done",
+    sequence_number: sequence,
+    output_index: 0,
+    item: completedItem
+  });
+  writeResponseEvent(response, {
+    type: "response.completed",
+    sequence_number: sequence + 1,
     response: openAiResponse(`resp_${suffix}`, "completed", [completedItem])
   });
   response.end("data: [DONE]\n\n");

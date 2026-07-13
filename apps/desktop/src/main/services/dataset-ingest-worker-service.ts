@@ -33,7 +33,7 @@ export class DatasetIngestWorkerService implements DatasetImportPlanner {
   isAvailable(): boolean {
     try {
       return Boolean(
-        this.#resolveModule("fast-xml-parser/package.json") &&
+        this.#resolveModule("fast-xml-parser") &&
         this.#resolveModule("yauzl/package.json")
       );
     } catch {

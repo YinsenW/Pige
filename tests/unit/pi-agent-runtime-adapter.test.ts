@@ -98,17 +98,31 @@ describe("Pi Agent runtime adapter", () => {
   });
 
   it("emits only parsed safe answer snapshots from the exact terminal Home tool", async () => {
+    await expectExactAuthorizedDrafts("openai_responses");
+  });
+
+  it.each([
+    "openai_chat_completions",
+    "anthropic_messages"
+  ] as const)("emits only exact authorized safe answer snapshots for %s", async (endpointProtocol) => {
+    await expectExactAuthorizedDrafts(endpointProtocol);
+  });
+
+  it("fails closed when the authorized presentation text differs from the validated terminal answer", async () => {
     const drafts: string[] = [];
-    const answer = "This bounded Home answer is safe to show while final validation finishes.";
+    const answer = "This validated answer must be reproduced exactly in the authorized presentation phase.";
     const adapter = new PiAgentRuntimeAdapter({
       fauxResponses: [{
         kind: "tool_call",
         toolName: "pige_finish_home_turn",
         args: { answer, citationRefs: [], grounding: "general" }
+      }, {
+        kind: "text",
+        text: "Injected replacement text must never cross the safe draft boundary."
       }]
     });
 
-    await adapter.run({
+    await expect(adapter.run({
       ...makeRequest([makeFinishHomeTool()]),
       terminalDraft: {
         toolName: "pige_finish_home_turn",
@@ -116,12 +130,10 @@ describe("Pi Agent runtime adapter", () => {
         maxCharacters: 8_000,
         onSnapshot: (text) => drafts.push(text)
       }
-    });
+    })).rejects.toMatchObject({ code: "model_provider.output_invalid" });
 
-    expect(drafts.length).toBeGreaterThan(1);
-    expect(drafts.at(-1)).toBe(answer);
-    expect(drafts.every((draft) => answer.startsWith(draft))).toBe(true);
-    expect(drafts.join(" ")).not.toContain("citationRefs");
+    expect(drafts).toEqual([Array.from(answer).slice(0, 32).join("")]);
+    expect(drafts.join(" ")).not.toContain("Injected replacement");
   });
 
   it("does not expose generic Pi text as a Home draft", async () => {
@@ -471,6 +483,42 @@ describe("Pi Agent runtime adapter", () => {
     })).rejects.toMatchObject({ code: "agent_runtime.turn_history_invalid" });
   });
 });
+
+async function expectExactAuthorizedDrafts(
+  endpointProtocol: "openai_responses" | "openai_chat_completions" | "anthropic_messages"
+): Promise<void> {
+  const drafts: string[] = [];
+  const answer = "This bounded Home answer is safe to show while final validation finishes.";
+  const adapter = new PiAgentRuntimeAdapter({
+    fauxResponses: [{
+      kind: "tool_call",
+      toolName: "pige_finish_home_turn",
+      args: { answer, citationRefs: [], grounding: "general" }
+    }, {
+      kind: "text",
+      text: answer
+    }]
+  });
+
+  await adapter.run({
+    ...makeRequest([makeFinishHomeTool()]),
+    runtimeConfig: {
+      ...runtimeConfig,
+      provider: { ...runtimeConfig.provider, endpointProtocol }
+    },
+    terminalDraft: {
+      toolName: "pige_finish_home_turn",
+      argumentName: "answer",
+      maxCharacters: 8_000,
+      onSnapshot: (text) => drafts.push(text)
+    }
+  });
+
+  expect(drafts.length).toBeGreaterThan(1);
+  expect(drafts.at(-1)).toBe(answer);
+  expect(drafts.every((draft) => answer.startsWith(draft))).toBe(true);
+  expect(drafts.join(" ")).not.toContain("citationRefs");
+}
 
 function makeRequest(tools: readonly PigeAgentToolDefinition[]) {
   return {

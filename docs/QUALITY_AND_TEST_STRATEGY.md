@@ -250,10 +250,13 @@ Tests must verify:
   only isolated `Models` through the sole adapter.
 - Renderer→preload→main proves direct, Pi-selected retrieve, preserve-first source,
   wait/resume, and removal of capture/retrieval semantic bypass from the Home renderer.
-- Draft-stream tests use the exact terminal Home tool and prove parsed `answer`-only
-  replacement snapshots, sender/request/turn/Job binding, monotonic sequence, bounds,
-  coalescing, escaping, and repair that can shrink prior text. They reject raw Pi text,
-  partial JSON, thinking, other tool arguments, citations/grounding, IDs, provider
+- Draft-stream tests use the exact terminal Home tool and prove multiple `answer`-only
+  replacement snapshots for incremental parsed arguments and the post-validation
+  presentation fallback. The fallback blocks further tools, accepts only prefixes of the
+  validated answer, ends exactly equal, and fails closed for altered/incomplete output.
+  Tests also cover sender/request/turn/Job binding, monotonic sequence, bounds,
+  coalescing, escaping, and repair that can shrink prior text. They reject ambient Pi
+  text, partial JSON, thinking, other tool arguments, citations/grounding, IDs, provider
   payloads, restricted/control content, wrong sender, stale sequence, and post-cancel events.
 - Final validation replaces the draft exactly once and alone creates durable assistant/
   Job output. Schema/citation/source drift, provider failure, and cancellation leave no
