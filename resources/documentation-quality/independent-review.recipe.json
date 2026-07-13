@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-13T09:16:12Z",
+  "reviewedAt": "2026-07-13T10:34:43Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,12 +30,12 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "72d64c1af505b3d6004cc100794df1b146dcac6eb33c01af500d91dfc51117c3"
+    "reviewedSha256": "54034513b1e74ee08706fd8a3301f2bb41ab9923334af278ab46e606ae1f3c10"
   },
   "reviewers": [
     {
-      "reviewerId": "knowledge-tree-ui-final-review",
-      "task": "/root/dataset_query_governance_review",
+      "reviewerId": "public-alpha-mainflow-ui-design-final-review",
+      "task": "019f4bc2-4fa4-7921-9c7c-3e0dd11f9d94 final read-only UI Design Sync",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -43,83 +43,82 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Independent read-only review audited the exact Knowledge Tree UI candidate, Owner and acceptance projections, unchanged statuses, and navigation lifecycle. It first blocked an overclaimed focus-return sentence, then cleared the exact documentation-only repair and made no edits."
+      "independence": "UI Design independently verified the exact replacement hash and made no edits. It blocked the prior candidate on two intermediate-state defects, then re-audited and accepted the repaired text, picker, drop, restart, locale and accessibility behavior."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.7,
-      "reviewerId": "knowledge-tree-ui-final-review",
+      "reviewerId": "public-alpha-mainflow-ui-design-final-review",
       "blockerCount": 0,
-      "summary": "Main-owned body-free tree, degraded state, Note Reader navigation and exact-button-or-heading focus return are accurately located in existing owners."
+      "summary": "The first-Home guide stays inside Home, explicit choices persist per vault, and model repair remains one contextual action rather than a new destination or recurring prompt."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "knowledge-tree-ui-final-review",
+      "reviewerId": "public-alpha-mainflow-ui-design-final-review",
       "blockerCount": 0,
-      "summary": "API, Knowledge Model, UI and Playbook agree on the current public hierarchy, metrics, navigation and remaining semantic/scale/platform boundaries."
+      "summary": "API, Onboarding, Settings and UI owners agree on machine-local dismissal, preserve-first Pi continuation and one status owner across text, picker and drop states."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "knowledge-tree-ui-final-review",
+      "reviewerId": "public-alpha-mainflow-ui-design-final-review",
       "blockerCount": 0,
-      "summary": "Three exact Service, IPC and UI evidence claims project only to existing partial rows; all Requirement, Exit and phase states remain unchanged."
+      "summary": "Four exact tests bind preference, guide, stable source wait and intermediate drop ownership only to existing partial settings, UI, Job and Exit rows; statuses do not change."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.7,
-      "reviewerId": "knowledge-tree-ui-final-review",
+      "reviewerId": "public-alpha-mainflow-ui-design-final-review",
       "blockerCount": 0,
-      "summary": "Current read-only public tree and later aggregate, scale, accessibility, health/edit and packaged-platform work remain distinctly actionable."
+      "summary": "The batch closes three adjacent first-run and Home status defects without changing durable Agent orchestration, Dataset routing or the remaining Public Alpha feature and platform backlog."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "knowledge-tree-ui-final-review",
+      "reviewerId": "public-alpha-mainflow-ui-design-final-review",
       "blockerCount": 0,
-      "summary": "Four existing Owner sections and two control manifests absorb the slice without a new document, duplicate contract or unrelated expansion."
+      "summary": "Four existing Owner sections and one acceptance manifest absorb the observable delta; no new document, PRD rewrite, Playbook expansion, prototype refresh or status promotion is introduced."
     }
   ],
   "verification": [
     {
       "command": "npm run verify",
       "status": "passed",
-      "evidence": "The final exact Knowledge Tree UI candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all five documentation-quality dimensions."
+      "evidence": "The final exact Public Alpha Home usability candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all five documentation-quality dimensions."
     },
     {
-      "command": "npm run verify:docs && npm run verify:decisions && npm run verify:contracts",
+      "command": "npm run verify:contracts && npx vitest run tests/unit/home-agent-conversation-ui.test.ts tests/unit/desktop-shell-contract.test.ts tests/unit/local-settings.test.ts tests/unit/schemas.test.ts",
       "status": "passed",
-      "evidence": "The PRD contract closes at 152/10/11 P0/P1/P2 items, 102 Requirements/capabilities, 144 Builds and 100 Exits; 87 Decisions and all four cross-document contract gates pass."
+      "evidence": "All four contract gates and negative fixtures pass; 4 focused files and 48 tests prove the typed onboarding channel, machine-local restart persistence, one model action and picker/drop intermediate-state ownership."
     },
     {
       "command": "npm run verify:traceability",
       "status": "passed",
-      "evidence": "Semantic lock schema v3 contains 1,148 claims; three Knowledge Tree evidence claims are bound only to existing partial rows, while every Requirement, Exit and phase state remains unchanged."
+      "evidence": "Semantic lock schema v3 contains 1,152 claims; four exact evidence additions project only to existing partial rows, while every Requirement, Exit and phase state remains unchanged."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 pass with 55 Markdown files, 3,449 of 3,700 entry words, 4,626 trace lines, 235,050 trace bytes and 1,151,019 of 1,210,000 governed Markdown bytes."
+      "evidence": "LEN-001 through LEN-005 pass after the net-small Owner and acceptance projection, without a new governed document or unrelated contract expansion."
     }
   ],
   "coordination": {
-    "taskId": "knowledge-tree-ui-20260713",
-    "taskTitle": "Bounded public Knowledge Tree UI executable evidence",
+    "taskId": "public-alpha-mainflow-usability-20260713",
+    "taskTitle": "Public Alpha first-Home and source-wait status ownership",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "This candidate exposes the existing rebuildable semantic aggregate through one body-free Library bridge and localized read-only UI. It adds no durable state, model route, dependency, graph editor, phase renumbering or status promotion.",
-    "acknowledgement": "Development froze the exact code/test and assembled Electron evidence. UI Design accepted the bounded slice; Product Planning synchronized only affected Owners and existing acceptance rows, and independent review cleared the exact wording repair."
+    "compatibility": "The candidate keeps preserve-first unified ingress and Pi-selected Dataset work unchanged. It adds one bounded machine-local per-vault guide preference and consolidates existing Home status ownership without durable schema, dependency, provider, permission or phase changes.",
+    "acknowledgement": "Development froze the exact replacement after one consolidated HOLD repair. UI Design accepted the replacement hash; Product Planning synchronized only affected Owners and existing acceptance rows before one semantic and snapshot bind."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Broader relationship and branch inputs, incremental rebuild and 10k proof remain open.",
-    "Complete visual-density and assistive-technology matrices remain open.",
-    "Signed macOS and Windows packaged-platform parity remains open.",
-    "A returned deep node may restore focus to the Knowledge Tree heading when its invoking control is no longer rendered; this fallback is contract-owned.",
-    "Knowledge Health, manual taxonomy, editing and advanced graph analytics remain open."
+    "The guide dismissal is intentionally machine-local and does not travel with backup or another device.",
+    "Broader Activity, progress, non-Agent cancellation and permission UI remain open outside this status-ownership batch.",
+    "Signed Windows and full installed-platform accessibility evidence remain open.",
+    "This batch does not add Dataset materialization without Pi or expand the structured-data feature surface."
   ]
 }

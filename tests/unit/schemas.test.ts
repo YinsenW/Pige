@@ -74,12 +74,14 @@ describe("schemas", () => {
         sidebarOpen: true,
         compactSize: { width: 420, height: 760 }
       },
+      dismissedFirstHomeVaultIds: ["vault_20260709_ab12cd"],
       recentVaults: []
     });
 
     expect(settings.window?.mode).toBe("compact");
     expect(settings.appLocale).toBe("en");
     expect(settings.window?.sidebarOpen).toBe(true);
+    expect(settings.dismissedFirstHomeVaultIds).toEqual(["vault_20260709_ab12cd"]);
   });
 
   it("validates toolchain manifests", () => {

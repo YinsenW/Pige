@@ -216,6 +216,13 @@ Behavior:
 - No mode chips: Pi decides semantics; Host handles exceptional boundaries.
 - Host UI does not classify by punctuation, URL, attachment, or file type. Pi may answer
   directly or retrieve; citations appear only when local evidence is used.
+- The first idle capture-only Home shows one compact inline choice above the composer:
+  `Connect Model` or quiet `Continue capture-only`. Either explicit choice dismisses it
+  for that vault on this machine; it is not a modal, destination, or recurring banner.
+- A current model-repair turn or preserved source waiting for a model replaces that guide
+  and owns one status plus at most one model action. Picker and Home drop use the same
+  ownership through intermediate refresh and settled states; never duplicate composer,
+  Job-row, or page-level provider guidance.
 
 The timeline is not the permanent knowledge store. Important outputs should be written to Markdown pages, source pages, `index.md`, and `log.md`.
 
@@ -1297,6 +1304,8 @@ Step 2: Model setup.
 Step 3: Start capture.
 
 - Land directly in Home.
+- If setup was skipped, show the compact Connect/continue choice once; the choice stays
+  dismissed for that vault on this machine and never blocks capture.
 
 First-run should be short. The app should not become a marketing landing page.
 

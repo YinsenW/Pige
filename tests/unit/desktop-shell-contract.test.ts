@@ -149,10 +149,15 @@ describe("desktop shell build contract", () => {
     expect(homeComposer).not.toContain("window.pige.capture.submitText");
     expect(homeComposer).not.toContain("window.pige.capture.submitUrl");
     expect(homeComposer).toContain("classifyTextTransportKind(turnText)");
+    expect(rendererSource).toContain('if (view === "home")');
+    expect(rendererSource).toContain("setHomeFileDropRequest({");
+    expect(rendererSource).toContain('void submitFiles(files, "file_drop", undefined, clientTurnId, "shell")');
+    expect(homeComposer).toContain("props.fileDropRequest");
+    expect(homeComposer).toContain("void submitHomeFiles(request.files, request.text, request.clientTurnId)");
     expect(homeComposer).toContain('data-agent-draft="true"');
     expect(homeComposer).toContain("aria-busy={agentDraft !== null}");
     expect(homeComposer).toContain("event.sequence <= active.sequence");
-    expect(rendererSource).toContain('view === "home" ? homeDraftText : undefined');
+    expect(rendererSource).toContain('...(homeDraftText.trim() ? { text: homeDraftText } : {})');
     expect(homeComposer).toContain("const text = props.draftText");
     expect(homeComposer).toContain("props.onDraftChange(event.target.value)");
     expect(homeComposer).toContain('job.class !== "retrieval_query"');
@@ -371,8 +376,11 @@ describe("desktop shell build contract", () => {
 
   it("wires onboarding readiness to the non-secret provider runtime binding check", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
     expect(mainSource.match(/getModelProviderRegistry\(\)\.hasDefaultRuntimeBinding\(\)/gu)).toHaveLength(2);
     expect(mainSource).not.toContain("getModelProviderRegistry().hasDefaultModel()");
+    expect(mainSource).toContain('ipcMain.handle("onboarding.dismissFirstHome"');
+    expect(preloadSource).toContain('ipcRenderer.invoke("onboarding.dismissFirstHome")');
   });
 
   it("does not forward dynamic caught messages into persisted diagnostics", () => {

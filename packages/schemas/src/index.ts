@@ -539,6 +539,7 @@ export const MachineLocalSettingsSchema = z.object({
   activeVaultPath: z.string().min(1).optional(),
   appLocale: LocaleSchema.optional(),
   window: WindowPreferencesSchema.optional(),
+  dismissedFirstHomeVaultIds: z.array(VaultIdSchema).max(32).optional(),
   recentVaults: z.array(
     z.object({
       vaultId: VaultIdSchema,

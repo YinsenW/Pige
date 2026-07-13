@@ -10,7 +10,8 @@ import type {
   AgentSubmitTurnResult,
   AgentTurnDraftEvent,
   JobSummary,
-  KnowledgeActivitySummary
+  KnowledgeActivitySummary,
+  OnboardingStatus
 } from "@pige/contracts";
 
 const globalKeys = [
@@ -36,6 +37,220 @@ afterEach(() => {
 });
 
 describe("Home durable Agent conversation UI", () => {
+  it("persists the explicit choice to continue capture-only and does not show the first-Home guide again", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.onboarding = captureOnlyOnboarding(true);
+    const api = makePigeApi(harness);
+    const firstMount = await mountHome(dom, api);
+
+    expect(firstMount.container.textContent).toContain(
+      "You can save content now. Connect a model to ask Pi Agent."
+    );
+    expect(buttons(firstMount.container, "Connect Model")).toHaveLength(1);
+    expect(buttons(firstMount.container, "Continue capture-only")).toHaveLength(1);
+
+    await clickButton(dom, firstMount.container, "Continue capture-only");
+    await waitFor(dom, () => harness.dismissFirstHomeCalls === 1);
+    expect(firstMount.container.textContent).not.toContain(
+      "You can save content now. Connect a model to ask Pi Agent."
+    );
+
+    await act(async () => firstMount.root.unmount());
+    const reopened = await mountHome(dom, api);
+    expect(reopened.container.textContent).not.toContain(
+      "You can save content now. Connect a model to ask Pi Agent."
+    );
+
+    await act(async () => reopened.root.unmount());
+    dom.window.close();
+  });
+
+  it("gives a missing-model text turn sole ownership of the model repair action", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.onboarding = captureOnlyOnboarding(true);
+    let resolveTurn: ((result: AgentSubmitTurnResult) => void) | undefined;
+    harness.submitTurn = (request) => {
+      harness.submitRequests.push(request);
+      return new Promise((resolve) => { resolveTurn = resolve; });
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    expect(buttons(container, "Connect Model")).toHaveLength(1);
+    await setTextareaValue(dom, container, "Please help me plan today.");
+    await clickButton(dom, container, "Send");
+    await waitFor(dom, () => harness.submitRequests.length === 1);
+
+    expect(container.textContent).not.toContain(
+      "You can save content now. Connect a model to ask Pi Agent."
+    );
+    expect(modelActionButtons(container)).toHaveLength(0);
+
+    await act(async () => {
+      resolveTurn?.(missingModelResult());
+      await settle(dom);
+    });
+    await waitFor(dom, () => buttons(container, "Open Models").length === 1);
+    expect(modelActionButtons(container)).toHaveLength(1);
+    expect(buttons(container, "Connect Model")).toHaveLength(0);
+    expect(container.textContent).not.toContain(
+      "You can save content now. Connect a model to ask Pi Agent."
+    );
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps one model action when existing source waits and a current text repair coexist", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.onboarding = captureOnlyOnboarding(true);
+    harness.jobs = [
+      sourceWaitingForModelJob(),
+      {
+        ...sourceWaitingForModelJob(),
+        id: "job_20260713_sourcewait02",
+        sourceId: "src_20260713_sourcewait02",
+        sourceDisplayName: "second-source.csv"
+      }
+    ];
+    harness.submitTurn = async (request) => {
+      harness.submitRequests.push(request);
+      return missingModelResult();
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await waitFor(dom, () => modelActionButtons(container).length === 1);
+    expect(buttons(container, "Connect Model")).toHaveLength(1);
+    await setTextareaValue(dom, container, "Help with a separate question.");
+    await clickButton(dom, container, "Send");
+    await waitFor(dom, () => buttons(container, "Open Models").length === 1);
+
+    expect(modelActionButtons(container)).toHaveLength(1);
+    expect(buttons(container, "Connect Model")).toHaveLength(0);
+    expect(buttons(container, "Open Models")).toHaveLength(1);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("shows one truthful source-saved model wait and one repair action across restart", async () => {
+    const dom = createDom();
+    const harness = createHarness({
+      conversationId: "conv_20260713_sourcewait",
+      tailEventId: "event_20260713_sourcewait",
+      canFollowUp: false,
+      messages: [{
+        id: "event_20260713_sourcewait",
+        role: "user",
+        createdAt: "2026-07-13T08:00:00.000Z",
+        text: "Review the attached source.",
+        jobId: "job_20260713_sourcewait"
+      }],
+      latestTurn: {
+        jobId: "job_20260713_sourcewait",
+        userEventId: "event_20260713_sourcewait",
+        state: "waiting_dependency",
+        error: defaultModelMissingError()
+      }
+    });
+    harness.onboarding = captureOnlyOnboarding(true);
+    harness.jobs = [sourceWaitingForModelJob()];
+    const api = makePigeApi(harness);
+    const firstMount = await mountHome(dom, api);
+    const expectedStatus = "Source saved. Connect a model for the Agent to continue.";
+
+    await waitFor(dom, () => countText(firstMount.container, expectedStatus) === 1);
+    expect(countText(firstMount.container, expectedStatus)).toBe(1);
+    expect(buttons(firstMount.container, "Connect Model")).toHaveLength(1);
+    expect(firstMount.container.textContent).not.toContain("Waiting for a local capability");
+    expect(firstMount.container.textContent).not.toContain("Connect a model service before asking Pi Agent.");
+    expect(firstMount.container.textContent).not.toContain(
+      "You can save content now. Connect a model to ask Pi Agent."
+    );
+
+    await act(async () => firstMount.root.unmount());
+    const reopened = await mountHome(dom, api);
+    await waitFor(dom, () => countText(reopened.container, expectedStatus) === 1);
+    expect(buttons(reopened.container, "Connect Model")).toHaveLength(1);
+    expect(reopened.container.textContent).not.toContain("Waiting for a local capability");
+
+    await clickButton(dom, reopened.container, "Connect Model");
+    await waitFor(dom, () => harness.dismissFirstHomeCalls === 1);
+    await waitFor(dom, () => reopened.container.querySelector("h1")?.textContent === "Models");
+
+    await act(async () => reopened.root.unmount());
+    dom.window.close();
+  });
+
+  it("gives a picker source Job sole status ownership before submission resolves", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.onboarding = captureOnlyOnboarding(true);
+    let resolveTurn: ((result: AgentSubmitTurnResult) => void) | undefined;
+    harness.submitTurn = (request) => {
+      harness.submitRequests.push(request);
+      harness.jobs = [sourceWaitingForModelJob()];
+      return new Promise((resolve) => { resolveTurn = resolve; });
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    const expectedStatus = "Source saved. Connect a model for the Agent to continue.";
+
+    await attachFile(dom, container, "public-alpha.csv", "item,score\nAlpha,9\n");
+    await waitFor(dom, () => countText(container, expectedStatus) === 1);
+    expect(countText(container, expectedStatus)).toBe(1);
+    expect(buttons(container, "Connect Model")).toHaveLength(1);
+    expect(modelActionButtons(container)).toHaveLength(1);
+    expect(container.textContent).not.toContain("Pi Agent is working.");
+    expect(container.textContent).not.toContain("Connect a model service before asking Pi Agent.");
+    expect(container.textContent).not.toContain("Open Models");
+    expect(container.textContent).not.toContain("Waiting for a local capability");
+
+    await act(async () => {
+      resolveTurn?.(sourceWaitingForModelResult());
+      await settle(dom);
+    });
+    await waitFor(dom, () => countText(container, expectedStatus) === 1);
+    expect(modelActionButtons(container)).toHaveLength(1);
+    expect(container.textContent).not.toContain("Pi Agent is working.");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("routes a full-window Home drop through the same intermediate source owner", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.onboarding = captureOnlyOnboarding(true);
+    let resolveTurn: ((result: AgentSubmitTurnResult) => void) | undefined;
+    harness.submitTurn = (request) => {
+      harness.submitRequests.push(request);
+      harness.jobs = [sourceWaitingForModelJob()];
+      return new Promise((resolve) => { resolveTurn = resolve; });
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    const expectedStatus = "Source saved. Connect a model for the Agent to continue.";
+
+    await dropFile(dom, container, "public-alpha.csv", "item,score\nAlpha,9\n");
+    await waitFor(dom, () => countText(container, expectedStatus) === 1);
+    expect(harness.submitRequests).toHaveLength(1);
+    expect(modelActionButtons(container)).toHaveLength(1);
+    expect(container.textContent).not.toContain("Pi Agent is working.");
+    expect(container.textContent).not.toContain("Waiting for a local capability");
+
+    await act(async () => {
+      resolveTurn?.(sourceWaitingForModelResult());
+      await settle(dom);
+    });
+    await waitFor(dom, () => countText(container, expectedStatus) === 1);
+    expect(modelActionButtons(container)).toHaveLength(1);
+    expect(container.textContent).not.toContain("Pi Agent is working.");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("restores a bounded timeline and submits the next message as one exact durable follow-up", async () => {
     const dom = createDom();
     let uuidCalls = 0;
@@ -519,6 +734,7 @@ describe("Home durable Agent conversation UI", () => {
 
 interface ConversationHarness {
   timeline: AgentConversationTimeline | undefined;
+  onboarding: OnboardingStatus;
   jobs: JobSummary[];
   activities: KnowledgeActivitySummary[];
   readonly submitRequests: AgentSubmitTurnRequest[];
@@ -528,6 +744,7 @@ interface ConversationHarness {
   readonly draftListeners: Set<(event: AgentTurnDraftEvent) => void>;
   activityUndoMode: "success" | "post_commit_reject" | "retryable_reject" | "unknown_reject";
   activityListReads: number;
+  dismissFirstHomeCalls: number;
   submitTurn: (request: AgentSubmitTurnRequest) => Promise<AgentSubmitTurnResult>;
   emitDraft: (event: AgentTurnDraftEvent) => void;
 }
@@ -535,6 +752,7 @@ interface ConversationHarness {
 function createHarness(timeline: AgentConversationTimeline | undefined): ConversationHarness {
   const harness: ConversationHarness = {
     timeline,
+    onboarding: readyOnboarding(),
     jobs: [],
     activities: [],
     submitRequests: [],
@@ -544,6 +762,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     draftListeners: new Set(),
     activityUndoMode: "success",
     activityListReads: 0,
+    dismissFirstHomeCalls: 0,
     submitTurn: async (request) => {
       harness.submitRequests.push(request);
       return completedResult();
@@ -568,15 +787,25 @@ function makePigeApi(harness: ConversationHarness): object {
       toolchainHealth: async () => ({ status: "ready" })
     },
     vault: {
-      onboardingStatus: async () => ({
-        state: "ready",
-        hasDefaultModel: true,
-        activeVault: { vaultId: "vault_home_conversation", name: "Conversation Vault" }
-      }),
+      onboardingStatus: async () => harness.onboarding,
+      dismissFirstHomeGuide: async () => {
+        harness.dismissFirstHomeCalls += 1;
+        harness.onboarding = { ...harness.onboarding, showFirstHomeGuide: false };
+        return harness.onboarding;
+      },
       recent: async () => []
     },
     backup: {
       status: async () => null
+    },
+    models: {
+      summary: async () => ({
+        presets: [],
+        providers: [],
+        models: [],
+        hasDefaultModel: false,
+        defaultBinding: { state: "not_configured" }
+      })
     },
     agent: {
       runtimeStatus: async () => null,
@@ -814,6 +1043,34 @@ function failedResult(): AgentSubmitTurnResult {
   };
 }
 
+function sourceWaitingForModelResult(): AgentSubmitTurnResult {
+  return {
+    requestId: "request_20260713_sourcewait",
+    jobId: "job_20260713_sourcewait",
+    conversationEventId: "event_20260713_sourcewait",
+    conversationId: "conv_20260713_sourcewait",
+    tailEventId: "event_20260713_sourcewait",
+    state: "waiting",
+    modelUsage: "none",
+    sourceIds: ["src_20260713_sourcewait"],
+    error: defaultModelMissingError()
+  };
+}
+
+function missingModelResult(): AgentSubmitTurnResult {
+  return {
+    requestId: "request_20260713_modelwait",
+    jobId: "job_20260713_modelwait",
+    conversationEventId: "event_20260713_modelwait",
+    conversationId: "conv_20260713_modelwait",
+    tailEventId: "event_20260713_modelwait",
+    state: "waiting",
+    modelUsage: "none",
+    sourceIds: [],
+    error: defaultModelMissingError()
+  };
+}
+
 function cancelledResult(): AgentSubmitTurnResult {
   return {
     requestId: "request_20260713_cancelledturn",
@@ -858,6 +1115,63 @@ function runningAgentJob(): JobSummary {
     message: "Agent turn running",
     createdAt: "2026-07-12T10:00:00.000Z",
     updatedAt: "2026-07-12T10:00:00.000Z"
+  };
+}
+
+function sourceWaitingForModelJob(): JobSummary {
+  return {
+    id: "job_20260713_sourcewait",
+    class: "agent_turn",
+    state: "waiting_dependency",
+    stage: "waiting_for_model",
+    sourceId: "src_20260713_sourcewait",
+    sourceKind: "csv_file",
+    sourceDisplayName: "public-alpha.csv",
+    message: "Source preserved; waiting for model.",
+    createdAt: "2026-07-13T08:00:00.000Z",
+    updatedAt: "2026-07-13T08:00:01.000Z"
+  };
+}
+
+function readyOnboarding(): OnboardingStatus {
+  return {
+    state: "ready",
+    hasDefaultModel: true,
+    showFirstHomeGuide: false,
+    activeVault: homeVaultSummary()
+  };
+}
+
+function captureOnlyOnboarding(showFirstHomeGuide: boolean): OnboardingStatus {
+  return {
+    state: "capture_only",
+    hasDefaultModel: false,
+    showFirstHomeGuide,
+    activeVault: homeVaultSummary()
+  };
+}
+
+function homeVaultSummary() {
+  return {
+    vaultId: "vault_home_conversation",
+    name: "Conversation Vault",
+    activeVaultPathDisplay: "/tmp/Conversation Vault",
+    knowledgeRootDisplay: "/tmp/Conversation Vault",
+    sourceAssetRootDisplay: "/tmp/Conversation Vault/raw",
+    sourceAssetRootKind: "inside_vault" as const,
+    defaultSourceStorageStrategy: "copy_to_source_library" as const,
+    schemaVersion: 1
+  };
+}
+
+function defaultModelMissingError() {
+  return {
+    code: "model_provider.default_model_missing",
+    domain: "model_provider" as const,
+    messageKey: "errors.model_provider.default_model_missing",
+    retryable: true,
+    severity: "error" as const,
+    userAction: "configure_model" as const
   };
 }
 
@@ -937,6 +1251,32 @@ async function setTextareaValue(dom: JSDOM, container: HTMLElement, value: strin
   });
 }
 
+async function attachFile(dom: JSDOM, container: HTMLElement, name: string, content: string): Promise<void> {
+  const input = container.querySelector<HTMLInputElement>('input[type="file"]');
+  if (!input) throw new Error("Home file input not found.");
+  const file = new dom.window.File([content], name, { type: "text/csv" });
+  Object.defineProperty(input, "files", { configurable: true, value: [file] });
+  await act(async () => {
+    input.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    await settle(dom);
+  });
+}
+
+async function dropFile(dom: JSDOM, container: HTMLElement, name: string, content: string): Promise<void> {
+  const shell = container.querySelector<HTMLElement>("main.shell");
+  if (!shell) throw new Error("Application shell not found.");
+  const file = new dom.window.File([content], name, { type: "text/csv" });
+  const event = new dom.window.Event("drop", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "dataTransfer", {
+    configurable: true,
+    value: { files: [file], types: ["Files"] }
+  });
+  await act(async () => {
+    shell.dispatchEvent(event);
+    await settle(dom);
+  });
+}
+
 function textareaValue(container: HTMLElement): string {
   const textarea = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Capture or ask"]');
   if (!textarea) throw new Error("Home composer not found.");
@@ -964,6 +1304,11 @@ function buttons(container: HTMLElement, label: string): HTMLButtonElement[] {
 function buttonsByAriaLabel(container: HTMLElement, label: string): HTMLButtonElement[] {
   return Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
     .filter((candidate) => candidate.getAttribute("aria-label") === label);
+}
+
+function modelActionButtons(container: HTMLElement): HTMLButtonElement[] {
+  return Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
+    .filter((candidate) => candidate.textContent === "Connect Model" || candidate.textContent === "Open Models");
 }
 
 function countText(container: HTMLElement, text: string): number {

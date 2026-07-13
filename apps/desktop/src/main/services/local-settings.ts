@@ -40,12 +40,33 @@ export class LocalSettingsStore {
     return this.read().appLocale ?? fallback;
   }
 
+  hasDismissedFirstHome(vaultId: string): boolean {
+    return this.read().dismissedFirstHomeVaultIds?.includes(vaultId) ?? false;
+  }
+
+  dismissFirstHome(vaultId: string): MachineLocalSettings {
+    const settings = this.read();
+    const nextSettings = createMachineLocalSettings({
+      activeVaultPath: settings.activeVaultPath,
+      appLocale: settings.appLocale,
+      window: settings.window,
+      dismissedFirstHomeVaultIds: [
+        vaultId,
+        ...(settings.dismissedFirstHomeVaultIds ?? []).filter((id) => id !== vaultId)
+      ].slice(0, 32),
+      recentVaults: settings.recentVaults
+    });
+    this.write(nextSettings);
+    return nextSettings;
+  }
+
   setAppLocale(appLocale: Locale): MachineLocalSettings {
     const settings = this.read();
     const nextSettings = createMachineLocalSettings({
       activeVaultPath: settings.activeVaultPath,
       appLocale,
       window: settings.window,
+      dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
       recentVaults: settings.recentVaults
     });
     this.write(nextSettings);
@@ -58,6 +79,7 @@ export class LocalSettingsStore {
       activeVaultPath: settings.activeVaultPath,
       appLocale: settings.appLocale,
       window,
+      dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
       recentVaults: settings.recentVaults
     });
     this.write(nextSettings);
@@ -82,6 +104,7 @@ export class LocalSettingsStore {
       activeVaultPath: vaultPath,
       appLocale: settings.appLocale,
       window: settings.window,
+      dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
       recentVaults: nextRecent
     });
     this.write(nextSettings);
@@ -93,6 +116,7 @@ export class LocalSettingsStore {
     const nextSettings = createMachineLocalSettings({
       appLocale: settings.appLocale,
       window: settings.window,
+      dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
       recentVaults: settings.recentVaults
     });
     this.write(nextSettings);
@@ -105,6 +129,7 @@ export class LocalSettingsStore {
       activeVaultPath: settings.activeVaultPath,
       appLocale: settings.appLocale,
       window: settings.window,
+      dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
       recentVaults: settings.recentVaults.filter((recent) => recent.vaultId !== vaultId)
     });
     this.write(nextSettings);
@@ -126,6 +151,7 @@ function createMachineLocalSettings(input: {
   readonly activeVaultPath?: string | undefined;
   readonly appLocale?: Locale | undefined;
   readonly window?: WindowPreferences | undefined;
+  readonly dismissedFirstHomeVaultIds?: readonly string[] | undefined;
   readonly recentVaults: RecentVaultSettings;
 }): MachineLocalSettings {
   const settings: MachineLocalSettings = {
@@ -143,6 +169,10 @@ function createMachineLocalSettings(input: {
 
   if (input.window) {
     settings.window = input.window;
+  }
+
+  if (input.dismissedFirstHomeVaultIds?.length) {
+    settings.dismissedFirstHomeVaultIds = [...input.dismissedFirstHomeVaultIds];
   }
 
   return settings;
