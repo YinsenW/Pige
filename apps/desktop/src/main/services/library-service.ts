@@ -1,6 +1,8 @@
 import type {
   LibraryListRequest,
   LibraryListResult,
+  KnowledgeTreeResult,
+  KnowledgeTreeSnapshot,
   LibraryRelatedRequest,
   LibraryRelatedResult,
   VaultSummary
@@ -98,6 +100,40 @@ export class LibraryService {
       degradedReason: "local_database_not_ready"
     };
   }
+
+  tree(): KnowledgeTreeResult {
+    const activeVault = this.#vaults.current();
+    const vaultPath = this.#vaults.activeVaultPath();
+    if (!activeVault || !vaultPath) {
+      throw new PigeDomainError("vault_missing", "No active Pige vault is selected.");
+    }
+
+    const snapshot = this.#database?.knowledgeTree(vaultPath);
+    return {
+      ...(snapshot ?? emptyKnowledgeTreeSnapshot()),
+      queriedAt: new Date().toISOString(),
+      activeVaultId: activeVault.vaultId,
+      degraded: !snapshot,
+      ...(!snapshot ? { degradedReason: "local_database_not_ready" as const } : {})
+    };
+  }
+}
+
+function emptyKnowledgeTreeSnapshot(): KnowledgeTreeSnapshot {
+  return {
+    schemaVersion: 1,
+    state: "empty",
+    invalidPageCount: 0,
+    totals: {
+      pageCount: 0,
+      topicCount: 0,
+      conceptCount: 0,
+      fragmentPageCount: 0,
+      sourceCount: 0,
+      leafCount: 0
+    },
+    roots: []
+  };
 }
 
 function clampLimit(limit: number | undefined): number {

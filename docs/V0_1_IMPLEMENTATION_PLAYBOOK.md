@@ -497,6 +497,13 @@ remains planned pending independent Dataset browsing/paging and citation-open hi
 analytical snapshots/Parquet, joins or composition, large-scale and signed-platform proof,
 and broader cross-process recovery/CAS.
 
+B6.12/B6.14 current evidence covers the main-owned `library.tree` bridge, rebuildable
+Markdown-derived semantic hierarchy, deterministic weight/fragment/source/leaf metrics,
+localized loading/empty/degraded/error states, keyboard disclosures, and source-backed
+Note Reader navigation. E6.07 remains partial and E6.09 remains planned
+pending broader aggregate semantics, 10k/incremental and packaged-platform parity, plus
+the remaining visual-density and accessibility matrix.
+
 Deferred from this phase:
 
 - [D6.01] Advanced dashboards; deferred beyond v0.1.
