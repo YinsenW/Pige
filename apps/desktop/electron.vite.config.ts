@@ -7,6 +7,7 @@ import { PDF_PAGE_RENDERER_WORKER_ENTRY_NAME } from "./src/shared/pdf-page-rende
 import { PRELOAD_ENTRY_FILENAME } from "./src/shared/preload-entry";
 import { PDF_PARSER_WORKER_ENTRY_NAME } from "./src/shared/pdf-parser-entry";
 import { WEB_EXTRACTOR_WORKER_ENTRY_NAME } from "./src/shared/web-extractor-entry";
+import { DATASET_INGEST_WORKER_ENTRY_NAME } from "./src/shared/dataset-ingest-worker";
 
 const alias = (path: string): string => fileURLToPath(new URL(path, import.meta.url));
 
@@ -18,6 +19,7 @@ export default defineConfig({
           index: alias("./src/main/index.ts"),
           "pi-agent-runtime-smoke": alias("./src/main/smokes/pi-agent-runtime-smoke.ts"),
           "unified-agent-roundtrip-smoke": alias("./src/main/smokes/unified-agent-roundtrip-smoke.ts"),
+          [DATASET_INGEST_WORKER_ENTRY_NAME]: alias("./src/main/workers/dataset-ingest-worker.ts"),
           [LOCAL_DATABASE_REBUILD_WORKER_ENTRY_NAME]: alias("./src/main/workers/local-database-rebuild-worker.ts"),
           [OFFICE_PARSER_WORKER_ENTRY_NAME]: alias("./src/main/workers/office-parser-worker.ts"),
           [PDF_PAGE_RENDERER_WORKER_ENTRY_NAME]: alias("./src/main/workers/pdf-page-renderer-worker.ts"),

@@ -100,6 +100,7 @@ Required v0.1 job classes:
 | `capture` | text, file, URL, image drop | source record, source asset/reference, conversation event | Before source finalization only | Yes |
 | `parse` | PDF/DOCX/PPTX/text extraction | extracted artifact, parser metadata | Yes where tool supports | Yes |
 | `ocr` | screenshot or rendered PDF page OCR | OCR artifact, confidence metadata | Yes where tool supports | Yes |
+| `dataset_import` | Pi-selected CSV/XLSX/SQLite materialization | Dataset manifest/schema/revision/payload and operation | Yes before bundle commit | Yes |
 | `agent_ingest` | summarize, tag, link, compile pages | source page, wiki pages, proposal/operation | During model/tool stages | Yes |
 | `agent_turn` | unified Home text or one preserved attachment | conversation events, answer/source/proposal refs | During model/tool stages | Yes |
 | `retrieval_query` | legacy Home grounded-answer record | conversation event, optional saved page | Yes | Usually yes |
@@ -138,12 +139,14 @@ The acceptance manifest records whether `capture_batch`, multi-source recovery, 
 Agent-selected continuations have executable delivery evidence; this table does not
 maintain a second status projection.
 
-Planned structured-data delivery reuses durable Jobs but does not add a Job-class enum
-in documentation before the shared schema exists. Dataset import materializes only after
-preserved source, manifest/schema plan, payload hashes, and target revision are
-checkpointed. Query is read-only and revision-bound. Collection/view/derived-Dataset
-changes require deterministic operation identity, before/after revision hashes,
-Activity/Undo where reversible, and restart reconciliation before completion.
+`dataset_import` is the executable child class for Pi-selected materialization of a
+preserved CSV, XLSX, or supported SQLite source. The deterministic child binds its Agent
+parent, tool/catalog/policy/source revision, and canonical input before work; the Bundle
+materializes only after manifest/schema plan, payload hashes, and target revision are
+checkpointed. Retry/restart adopts the same verified child, Bundle, and Operation, while
+cancellation before bundle commit preserves only source evidence. Dataset query remains
+read-only and revision-bound; Collection/view/derived-Dataset changes still require
+deterministic operation identity, revision fences, Activity/Undo, and restart recovery.
 
 ## 5. Job State Machine
 
@@ -170,6 +173,7 @@ Stage names may describe the active phase:
 capturing_source
 fetching
 parsing
+importing
 ocr
 embedding
 retrieving
@@ -563,6 +567,7 @@ Executable operation-kind vocabulary (machine checked):
 - `create_source_record`, `update_source_record`, `relink_source`.
 - `copy_source_asset`, `move_source_asset`, `trash_source_asset`, `restore_source_asset`.
 - `create_artifact`, `trash_artifact`, `restore_artifact`.
+- `create_dataset_revision`.
 - `create_page`, `update_page`, `rename_page`, `archive_page`, `trash_page`, `restore_page`.
 - `update_index`.
 - `create_memory`, `update_memory`, `trash_memory`, `restore_memory`.
@@ -578,6 +583,7 @@ Lifecycle coverage:
 | --- | --- |
 | Source record/evidence | create/update/relink source record; copy/move/trash/restore source asset |
 | Durable artifact | create/trash/restore artifact |
+| Dataset revision | create dataset revision with manifest/schema/payload/source hashes |
 | Markdown page | create/update/rename/archive/trash/restore page |
 | Memory | create/update/trash/restore memory through the memory lifecycle |
 | Skills/packages | install/disable/uninstall Skill or package |

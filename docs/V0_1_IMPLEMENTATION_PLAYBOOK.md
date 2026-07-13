@@ -384,6 +384,16 @@ foundation: explicit-user gates, non-networked staged and record commits, indepe
 recovery, and vault invariance. Production transport/wiring, OCR/UI, supply-chain,
 platform, cross-process, and full recovery proof remain open.
 
+B5.13 foundation evidence covers preserve-first CSV/XLSX/SQLite capture, Pi-selected
+`pige_inspect_dataset@1`, one deterministic `dataset_import` child, bounded worker plans,
+independent Dataset Service validation, versioned `managed_collection` Bundle publication,
+`create_dataset_revision`, capability wait/requeue, cancellation before commit, and
+byte-idempotent retry/restart. CSV lexical states, XLSX formula/cache metadata, and
+read-only defensive SQLite tables are covered without evaluation or source mutation.
+E5.06 remains planned pending complete backup/restore and migration evidence, broader
+cross-process recovery/CAS, large-scale and signed macOS/Windows proof, and the remaining
+governed structured-source matrix.
+
 Evidence exists for preserved PDF -> recoverable local worker -> deterministic text/metadata artifacts -> page locators -> checksum-safe source-page refresh -> OCR handoff -> Agent ingest when text coverage is useful.
 
 Agent-led Office evidence proves preserve→inspect→parse→inspect→publish for useful

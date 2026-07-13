@@ -66,6 +66,8 @@ import { BackupRestoreService } from "./services/backup-service";
 import { CoalescedBatchDrainer } from "./services/background-job-drainer";
 import { CaptureService } from "./services/capture-service";
 import { DiagnosticsService } from "./services/diagnostics-service";
+import { DatasetIngestWorkerService } from "./services/dataset-ingest-worker-service";
+import { DatasetService } from "./services/dataset-service";
 import { DocumentParserService } from "./services/document-parser-service";
 import {
   JobsService,
@@ -121,6 +123,7 @@ let notesService: NotesService | undefined;
 let proposalService: ProposalService | undefined;
 let retrievalService: RetrievalService | undefined;
 let documentParserService: DocumentParserService | undefined;
+let datasetService: DatasetService | undefined;
 let ocrService: OcrService | undefined;
 let latestSupportBundlePreview: SupportBundlePreview | undefined;
 const restorePreviewRegistry = new RestorePreviewRegistry();
@@ -266,7 +269,8 @@ const getJobsService = (): JobsService => {
       getAgentIngestService(),
       getLocalDatabaseService(),
       getDocumentParserService(),
-      getOcrService()
+      getOcrService(),
+      getDatasetService()
     );
   }
   return jobsService;
@@ -275,6 +279,11 @@ const getJobsService = (): JobsService => {
 const getDocumentParserService = (): DocumentParserService => {
   if (!documentParserService) documentParserService = new DocumentParserService();
   return documentParserService;
+};
+
+const getDatasetService = (): DatasetService => {
+  if (!datasetService) datasetService = new DatasetService(new DatasetIngestWorkerService());
+  return datasetService;
 };
 
 const getOcrService = (): OcrService => {
@@ -383,6 +392,9 @@ const getAgentCapabilitySnapshot = (): AgentIngestCapabilitySnapshot => {
   return {
     localDatabaseStatus,
     parserToolchainReady: parser.canParse("pdf_file") && parser.canParse("docx_file") && parser.canParse("pptx_file"),
+    datasetToolchainReady: getDatasetService().canMaterialize("csv_file") &&
+      getDatasetService().canMaterialize("xlsx_file") &&
+      getDatasetService().canMaterialize("sqlite_file"),
     ocrEngines: imageOcrReady && process.platform === "darwin" ? ["apple_vision"] : [],
     speechInputAvailable: false,
     embeddingModelInstalled: false,
@@ -1101,6 +1113,7 @@ app.whenReady().then(async () => {
     snapshot: getAgentCapabilitySnapshot
   }, undefined, undefined, createAgentIngestRetrievalPort(), createAgentIngestProposalPort());
   documentParserService = new DocumentParserService();
+  datasetService = new DatasetService(new DatasetIngestWorkerService());
   ocrService = new OcrService();
   toolchainService = new ToolchainService(resolveToolchainManifestPath());
   captureService = new CaptureService(getVaultService());
@@ -1109,7 +1122,8 @@ app.whenReady().then(async () => {
     getAgentIngestService(),
     getLocalDatabaseService(),
     getDocumentParserService(),
-    getOcrService()
+    getOcrService(),
+    getDatasetService()
   );
   initializeActiveDatabase();
   diagnosticsService = new DiagnosticsService(app.getPath("userData"));

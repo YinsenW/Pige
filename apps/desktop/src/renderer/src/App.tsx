@@ -1563,10 +1563,10 @@ function HomeComposer(props: {
           <span>{props.t("home.toolbarHint")}</span>
           <input
             ref={fileInputRef}
-              className="visually-hidden"
-              type="file"
-              accept=".md,.markdown,.txt,.pdf,.docx,.pptx,.png,.jpg,.jpeg,.webp,.gif,.tif,.tiff,.bmp,text/plain,text/markdown,image/*"
-              onChange={(event) => {
+            className="visually-hidden"
+            type="file"
+            accept=".md,.markdown,.txt,.pdf,.docx,.pptx,.csv,.xlsx,.sqlite,.sqlite3,.db,.png,.jpg,.jpeg,.webp,.gif,.tif,.tiff,.bmp,text/plain,text/markdown,image/*"
+            onChange={(event) => {
               const files = Array.from(event.currentTarget.files ?? []);
               event.currentTarget.value = "";
               setAgentAnswer(null);

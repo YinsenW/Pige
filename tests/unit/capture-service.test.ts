@@ -214,6 +214,109 @@ describe("capture service", () => {
     expect(conversationLog).not.toContain("%PDF-1.7");
   });
 
+  it("preserves structured files for Agent-selected Dataset materialization without host parsing", async () => {
+    const { vaultPath, vault } = makeVault();
+    const parent = path.dirname(vaultPath);
+    const files = [
+      { name: "records.csv", body: Buffer.from("name,count\nAda,3\n", "utf8") },
+      { name: "workbook.xlsx", body: Buffer.from("PK\u0003\u0004xlsx") },
+      { name: "archive.sqlite", body: Buffer.from("SQLite format 3\u0000") }
+    ];
+    const filePaths = files.map((file) => {
+      const filePath = path.join(parent, file.name);
+      fs.writeFileSync(filePath, file.body);
+      return filePath;
+    });
+
+    const result = await makeService(vaultPath, vault).submitFiles({
+      filePaths,
+      inputKind: "file_drop",
+      userIntent: "capture",
+      locale: "en"
+    });
+
+    expect(result.status).toBe("queued");
+    expect(result.rejectedFiles).toHaveLength(0);
+    const sourceRecords = result.sourceIds.map((sourceId) =>
+      JSON.parse(fs.readFileSync(findFile(path.join(vaultPath, ".pige/source-records"), `${sourceId}.json`), "utf8")) as {
+        kind: string;
+        metadata: { datasetToolAvailable: boolean; parserRequired: boolean; parserStatus: string };
+      }
+    );
+
+    expect(sourceRecords.map((record) => record.kind).sort()).toEqual([
+      "csv_file",
+      "sqlite_file",
+      "xlsx_file"
+    ]);
+    for (const record of sourceRecords) {
+      expect(record.metadata).toEqual(expect.objectContaining({
+        datasetToolAvailable: true,
+        parserRequired: false,
+        parserStatus: "waiting_agent_dataset_tool"
+      }));
+    }
+  });
+
+  it.each(["-journal", "-wal", "-shm"])(
+    "rejects managed SQLite capture with a live %s sidecar before durable writes",
+    async (sidecarSuffix) => {
+      const { vaultPath, vault } = makeVault();
+      const sourcePath = path.join(path.dirname(vaultPath), "live.sqlite");
+      const sourceBody = Buffer.from("SQLite format 3\u0000");
+      const sidecarBody = `synthetic live SQLite sidecar ${sidecarSuffix}`;
+      fs.writeFileSync(sourcePath, sourceBody);
+      fs.writeFileSync(`${sourcePath}${sidecarSuffix}`, sidecarBody, "utf8");
+
+      const result = await makeService(vaultPath, vault).submitFiles({
+        filePaths: [sourcePath],
+        inputKind: "file_picker",
+        userIntent: "capture",
+        locale: "en"
+      });
+
+      expect(result.status).toBe("rejected");
+      expect(result.sourceIds).toEqual([]);
+      expect(result.jobIds).toEqual([]);
+      expect(result.conversationEventIds).toEqual([]);
+      expect(result.rejectedFiles).toEqual([{ displayName: "live.sqlite", reason: "copy_failed" }]);
+      expect(findFileOptional(path.join(vaultPath, "raw"), ".sqlite")).toBeUndefined();
+      expect(findFileOptional(path.join(vaultPath, ".pige/source-records"), ".json")).toBeUndefined();
+      expect(findFileOptional(path.join(vaultPath, ".pige/jobs"), ".json")).toBeUndefined();
+      expect(findFileOptional(path.join(vaultPath, ".pige/conversations"), ".jsonl")).toBeUndefined();
+      expect(fs.readFileSync(sourcePath)).toEqual(sourceBody);
+      expect(fs.readFileSync(`${sourcePath}${sidecarSuffix}`, "utf8")).toBe(sidecarBody);
+    }
+  );
+
+  it("retains live SQLite sidecar metadata when capture references the original", async () => {
+    const { vaultPath } = makeVault();
+    const vault = updateVaultSourceStorageStrategy(vaultPath, "reference_original");
+    const sourcePath = path.join(path.dirname(vaultPath), "live-reference.sqlite");
+    fs.writeFileSync(sourcePath, Buffer.from("SQLite format 3\u0000"));
+    fs.writeFileSync(`${sourcePath}-wal`, "synthetic uncheckpointed WAL", "utf8");
+
+    const result = await makeService(vaultPath, vault).submitFiles({
+      filePaths: [sourcePath],
+      inputKind: "file_picker",
+      userIntent: "capture",
+      locale: "en"
+    });
+    const sourceId = requireFirst(result.sourceIds);
+    const source = JSON.parse(fs.readFileSync(
+      findFile(path.join(vaultPath, ".pige/source-records"), `${sourceId}.json`),
+      "utf8"
+    )) as SourceRecord;
+
+    expect(result.status).toBe("queued");
+    expect(result.rejectedFiles).toEqual([]);
+    expect(source.storageStrategy).toBe("reference_original");
+    expect(source.metadata.sqliteLiveSidecars).toEqual(["-wal"]);
+    expect(source.managedCopy).toBeUndefined();
+    expect(source.original?.path).toBe(sourcePath);
+    expect(findFileOptional(path.join(vaultPath, "raw"), ".sqlite")).toBeUndefined();
+  });
+
   it("preserves URL captures as raw web snapshots plus extracted text without duplicating bodies in conversation history", async () => {
     const { vaultPath, vault } = makeVault();
     const secretUrl = "https://example.com/article?token=secret-token&view=full";

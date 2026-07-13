@@ -9,6 +9,8 @@ import type {
 export const INSPECT_SOURCE_TOOL_NAME = "pige_inspect_source";
 export const PARSE_SOURCE_TOOL_NAME = "pige_parse_source";
 export const PARSE_SOURCE_TOOL_VERSION = "1";
+export const INSPECT_DATASET_TOOL_NAME = "pige_inspect_dataset";
+export const INSPECT_DATASET_TOOL_VERSION = "1";
 export const OCR_SOURCE_TOOL_NAME = "pige_ocr_source";
 export const OCR_SOURCE_TOOL_VERSION = "1";
 export const SEARCH_KNOWLEDGE_TOOL_NAME = "pige_search_knowledge";
@@ -27,6 +29,7 @@ export const STAGE_KNOWLEDGE_NOTE_PROPOSAL_TOOL_VERSION = "1";
 
 export type AgentIngestToolCapability =
   | "read_current_source"
+  | "materialize_current_dataset"
   | "parse_current_source"
   | "ocr_current_source"
   | "read_current_vault_knowledge"
@@ -40,6 +43,7 @@ export type AgentIngestToolCapability =
 export interface AgentIngestToolAuthorizationRequest {
   readonly toolName:
     | typeof INSPECT_SOURCE_TOOL_NAME
+    | typeof INSPECT_DATASET_TOOL_NAME
     | typeof PARSE_SOURCE_TOOL_NAME
     | typeof OCR_SOURCE_TOOL_NAME
     | typeof SEARCH_KNOWLEDGE_TOOL_NAME
@@ -66,6 +70,12 @@ export interface AgentIngestInspectToolResult {
 }
 
 export interface AgentIngestParseToolResult {
+  readonly modelText: string;
+  readonly details: Readonly<Record<string, unknown>>;
+  readonly terminate?: boolean;
+}
+
+export interface AgentIngestDatasetToolResult {
   readonly modelText: string;
   readonly details: Readonly<Record<string, unknown>>;
   readonly terminate?: boolean;
@@ -128,6 +138,7 @@ export interface AgentIngestAddTagsToolInput {
 
 export interface AgentIngestToolHost {
   inspect(signal: AbortSignal): Promise<AgentIngestInspectToolResult>;
+  materializeDataset?(context: PigeAgentToolCallContext): Promise<AgentIngestDatasetToolResult>;
   parse?(context: PigeAgentToolCallContext): Promise<AgentIngestParseToolResult>;
   ocr?(context: PigeAgentToolCallContext): Promise<AgentIngestOcrToolResult>;
   search?(
@@ -231,6 +242,43 @@ export function createAgentIngestToolRegistry(input: {
       }),
       execute: async (_args, signal): Promise<PigeAgentToolResult> => input.host.inspect(signal)
     },
+    ...(input.host.materializeDataset ? [{
+      name: INSPECT_DATASET_TOOL_NAME,
+      label: "Materialize preserved structured data",
+      description: "Inspect and materialize the current preserved CSV, XLSX, or SQLite source as one bounded, versioned Pige Dataset Bundle. Takes no path, SQL, source ID, table selection, or destination authority.",
+      parameters: EMPTY_OBJECT_SCHEMA,
+      version: INSPECT_DATASET_TOOL_VERSION,
+      capability: "materialize_current_dataset",
+      outputSchema: TOOL_RESULT_OUTPUT_SCHEMA,
+      effect: "idempotent_write",
+      inputTrust: "model_generated",
+      outputTrust: "host_validated",
+      dataBoundary: CURRENT_SOURCE_DATA_BOUNDARY,
+      execution: "sequential",
+      idempotency: CURRENT_SOURCE_IDEMPOTENCY,
+      limits: {
+        maxInputBytes: 2,
+        maxOutputBytes: 65_536,
+        timeoutMs: 180_000
+      },
+      ownerService: "DatasetService",
+      authorize: (_args, context) => input.authorization.authorize({
+        toolName: INSPECT_DATASET_TOOL_NAME,
+        capability: "materialize_current_dataset",
+        jobId: input.jobId,
+        sourceId: input.sourceId,
+        toolCallId: context.toolCallId
+      }),
+      execute: async (_args, _signal, context): Promise<PigeAgentToolResult> => {
+        if (!context || !input.host.materializeDataset) {
+          throw new PigeDomainError(
+            "agent_runtime.dataset_tool_unavailable",
+            "The current-source Dataset tool is unavailable."
+          );
+        }
+        return input.host.materializeDataset(context).then((result) => ({ ...result, terminate: true }));
+      }
+    } satisfies PigeAgentToolDescriptor] : []),
     {
       name: PARSE_SOURCE_TOOL_NAME,
       label: "Parse preserved source",
@@ -548,6 +596,9 @@ export const allowCurrentAgentIngestTools: AgentIngestToolAuthorizationPort = {
     }
     if (request.toolName === PARSE_SOURCE_TOOL_NAME) {
       return request.capability === "parse_current_source";
+    }
+    if (request.toolName === INSPECT_DATASET_TOOL_NAME) {
+      return request.capability === "materialize_current_dataset";
     }
     if (request.toolName === OCR_SOURCE_TOOL_NAME) {
       return request.capability === "ocr_current_source";
