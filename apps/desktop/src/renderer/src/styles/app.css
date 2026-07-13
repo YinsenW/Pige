@@ -720,6 +720,15 @@ button.ghost {
   color: var(--text-secondary);
 }
 
+.conversation-message.provisional p {
+  color: var(--text-secondary);
+}
+
+.conversation-message.provisional .conversation-message-role::after {
+  content: "\2026";
+  padding-left: 4px;
+}
+
 .retrieval-results,
 .home-reader {
   width: min(100%, 1120px);

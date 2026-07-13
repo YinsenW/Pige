@@ -106,6 +106,53 @@ describe("Home Pi Agent service", () => {
     expect(durableAudit).not.toContain(fixture.vaultPath);
   });
 
+  it("binds safe provisional answer snapshots to the exact non-durable Home turn identity", async () => {
+    const fixture = makeFixture();
+    const drafts: Array<{
+      readonly requestId: string;
+      readonly clientTurnId: string;
+      readonly jobId: string;
+      readonly conversationId: string;
+      readonly conversationEventId: string;
+      readonly text: string;
+    }> = [];
+    const answer = "This provisional answer stays bound to one exact durable Home turn.";
+    const service = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      new PiAgentRuntimeAdapter({
+        fauxResponses: [finishHome({ answer, citationRefs: [], grounding: "general" })]
+      })
+    );
+
+    const outcome = await service.submitTurn({
+      text: "Give me a direct bounded answer.",
+      inputKind: "typed_text",
+      objective: "auto",
+      locale: "en",
+      clientTurnId: "turn_20260713_streamfixture"
+    }, {
+      onDraft: (draft) => drafts.push(draft)
+    });
+
+    expect(outcome.state).toBe("completed");
+    if (outcome.state !== "completed") throw new Error("Expected a completed streamed Home turn.");
+    expect(drafts.at(-1)).toEqual({
+      requestId: outcome.requestId,
+      clientTurnId: "turn_20260713_streamfixture",
+      jobId: outcome.jobId,
+      conversationId: outcome.conversationId,
+      conversationEventId: outcome.conversationEventId,
+      text: answer
+    });
+    expect(drafts.every((draft) => answer.startsWith(draft.text))).toBe(true);
+    const jobs = readRecords<JobRecord>(path.join(fixture.vaultPath, ".pige", "jobs"));
+    const operations = readRecords<OperationRecord>(path.join(fixture.vaultPath, ".pige", "operations"));
+    expect(JSON.stringify({ jobs, operations })).not.toContain(answer);
+  });
+
   it("preserves one Agent turn and waits without retrieval when no runtime binding exists", async () => {
     const fixture = makeFixture();
     let runtimeConfigReads = 0;

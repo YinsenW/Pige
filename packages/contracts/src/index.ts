@@ -782,6 +782,18 @@ export interface AgentConversationTimeline {
   readonly latestTurn?: AgentConversationTurnSummary;
 }
 
+export interface AgentTurnDraftEvent {
+  readonly apiVersion: 1;
+  readonly kind: "draft_replace";
+  readonly requestId: string;
+  readonly clientTurnId: string;
+  readonly jobId: string;
+  readonly conversationId: string;
+  readonly conversationEventId: string;
+  readonly sequence: number;
+  readonly text: string;
+}
+
 export interface ToolchainToolStatus {
   readonly id: string;
   readonly name: string;
@@ -931,6 +943,7 @@ export interface PigeDesktopApi {
     readonly conversation: (
       request?: AgentConversationRequest
     ) => Promise<AgentConversationTimeline | undefined>;
+    readonly onTurnDraft: (listener: (event: AgentTurnDraftEvent) => void) => () => void;
   };
   readonly jobs: {
     readonly list: (request?: JobsListRequest) => Promise<JobsListResult>;

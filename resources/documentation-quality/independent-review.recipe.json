@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-13T02:33:24Z",
+  "reviewedAt": "2026-07-13T03:42:21Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -25,17 +25,17 @@
       "packages/schemas/src/index.ts",
       "package.json"
     ],
-    "scope": "Manual review binds public and documentation surfaces, control manifests, verifier code, and shared executable schemas. Focused automated gates execute current implementation and test evidence on every run.",
+    "scope": "Manual review binds public/documentation surfaces, control manifests, verifier code and shared executable schemas; automated gates execute current implementation evidence separately.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "5fc0993a6ef68bd0e3e4cbbdf147ba3845329aa04fe62e1dca2f16638e2f388b"
+    "reviewedSha256": "577145c40a06b295ff2134fc1f7cc6bff26f44ea22fc1b4a87e2f102b23e3dcf"
   },
   "reviewers": [
     {
-      "reviewerId": "release-packageability-final-review",
-      "task": "/root/packageability_governance_review",
+      "reviewerId": "home-draft-stream-final-review",
+      "task": "/root/home_draft_stream_governance_review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -43,85 +43,85 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Independent read-only review audited the exact 14-Development plus 8-pre-recipe-governed candidate. It verified exact build-only builder/ASAR pins and integrities, runtime-SBOM exclusion, truthful unsigned macOS arm64 packageability scope, unchanged planned release states, explicit residual release gaps, the 1,108-claim lock, current-only Owners, and fixed budgets. It reported CLEAR on all five dimensions and made no file edits."
+      "independence": "Independent read-only review audited the exact 14-Development plus three-pre-recipe-governed candidate. It verified parsed terminal-answer eligibility, sender/turn/Job binding, coalesced replacement, excluded raw/provider/control data, non-durability, authoritative final recovery, exact evidence, unchanged statuses and fixed budgets; it reported CLEAR and made no edits."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "release-packageability-final-review",
+      "reviewerId": "home-draft-stream-final-review",
       "blockerCount": 0,
-      "summary": "Packageability uses existing Release, Technical, Quality, Playbook and acceptance owners; no document, user destination or lifecycle surface is added."
+      "summary": "Safe draft replacement stays inside the existing Home pending bubble and conversation lifecycle without a new destination, mode or durable object."
     },
     {
       "id": "cross_document_contract_consistency",
-      "score": 9.8,
-      "reviewerId": "release-packageability-final-review",
+      "score": 9.9,
+      "reviewerId": "home-draft-stream-final-review",
       "blockerCount": 0,
-      "summary": "Owners and machine manifests agree on exact builder/ASAR pins, build-only authority, runtime-SBOM exclusion, unsigned preflight scope and remaining release requirements."
+      "summary": "Existing Pi, API and UI Owners agree on exact parsed-answer eligibility, typed bindings, exclusion rules, cancellation and final-authority semantics."
     },
     {
       "id": "continuous_traceability_and_acceptance",
-      "score": 9.7,
-      "reviewerId": "release-packageability-final-review",
+      "score": 9.8,
+      "reviewerId": "home-draft-stream-final-review",
       "blockerCount": 0,
-      "summary": "The 1,108-claim ledger binds only four narrowed planned targets; all 10 phase, 99 Requirement and 97 Exit status values remain unchanged."
+      "summary": "Three exact tests and the Electron roundtrip project only into partial E6.01; PIGE-PI-005 and E3.09 remain planned and every existing status is unchanged."
     },
     {
       "id": "ongoing_development_support",
-      "score": 9.7,
-      "reviewerId": "release-packageability-final-review",
+      "score": 9.8,
+      "reviewerId": "home-draft-stream-final-review",
       "blockerCount": 0,
-      "summary": "The workflow, package configuration, report boundary, dependency records, exact update gates and remaining supported-platform work are directly discoverable."
+      "summary": "The publisher, adapter, main/preload/renderer boundary, focused selectors and remaining source-ingest, multi-window and signed-platform work are directly discoverable."
     },
     {
       "id": "documentation_leanness_and_maintainability",
-      "score": 9.8,
-      "reviewerId": "release-packageability-final-review",
+      "score": 9.9,
+      "reviewerId": "home-draft-stream-final-review",
       "blockerCount": 0,
-      "summary": "No Markdown file was added; 55 documents, 3,385 of 3,700 entry words and 1,115,813 of 1,210,000 governed Markdown bytes remain within ratcheted budgets."
+      "summary": "No Owner prose or Markdown document was added; Planning changes only one Playbook note, acceptance evidence, semantic lock and this current-only recipe."
     }
   ],
   "verification": [
     {
       "command": "npm run verify",
       "status": "passed",
-      "evidence": "The final exact candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, 51 dependency records with zero waivers, fixtures, Pi/import boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all five quality dimensions."
+      "evidence": "The final exact candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all five documentation-quality dimensions."
     },
     {
-      "command": "exact frozen Development test/build/package matrix",
+      "command": "npm test",
       "status": "passed",
-      "evidence": "The unchanged 14-path Development aggregate 9ac112f94d18b6c5d007770a003c273c4bba7878b2c54c1eaab3750cbd186594 passed 81 files and 848 tests, typecheck, production build, source smokes, macOS arm64 packaging, packaged smoke and npm audit with zero vulnerabilities."
+      "evidence": "The exact combined candidate passes 81 files plus one skipped file and 857 tests plus three skipped tests; local loopback tests run outside the restrictive filesystem sandbox."
     },
     {
-      "command": "npm run verify:documentation-leanness",
+      "command": "focused draft/Home/runtime/shell matrix",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 pass with 55 Markdown files, 3,385 of 3,700 entry words, 4,522 trace lines, 224,922 of 250,000 trace bytes and 1,115,813 of 1,210,000 governed Markdown bytes."
+      "evidence": "Five exact files and 83 tests prove terminal answer filtering, publisher identity/rate/sequence, UI replacement and clearing, Home lifecycle and runtime boundaries."
     },
     {
-      "command": "node scripts/verify/independent-documentation-review.mjs --print-snapshot && explicit status/semantic comparison",
+      "command": "npm run verify:traceability && npm run verify:contracts",
       "status": "passed",
-      "evidence": "The reviewed 108-file snapshot is 5fc0993a6ef68bd0e3e4cbbdf147ba3845329aa04fe62e1dca2f16638e2f388b; the lock contains 1,108 claims and all phase, Requirement and Exit statuses are unchanged."
+      "evidence": "Semantic lock schema v3 contains 1,111 claims; exact E6.01 evidence is current, CON-001 through CON-004 pass and all Requirement, Exit and phase statuses are unchanged."
     }
   ],
   "coordination": {
-    "taskId": "019f44e0-b6a1-7bb0-a1ca-5fb43b2725c2",
-    "taskTitle": "macOS arm64 release packageability foundation",
+    "taskId": "home-draft-stream-20260713",
+    "taskTitle": "Safe Home draft replacement executable evidence",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "This candidate adds an unsigned macOS arm64 packageability preflight and exact build-only release dependencies. It does not claim Public Alpha readiness, alter runtime data or permission behavior, or change any phase, Requirement or Exit status.",
-    "acknowledgement": "Development froze 14 exact paths; Product Planning added eight governed paths plus this current-only recipe; independent review cleared the bounded projection and retained all supported-platform and release-hardening gaps."
+    "compatibility": "This candidate implements the already-governed non-durable Home draft boundary. It adds no schema layout, provider, permission, dependency, setting or product mode and promotes no status.",
+    "acknowledgement": "Development froze 14 exact paths; Product Planning added three governed paths plus this recipe; independent review cleared exact bytes and retained signed-platform and broader draft-source gaps."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "The generated packageability report is workflow/local-run evidence and is not committed in this reviewed worktree; governance validates its recipe and bounded contract, not a stored packaged binary.",
-    "The artifact is unsigned and unnotarized; nested-helper signing, hardened runtime, notarization and installed signed-app proof remain required.",
-    "Only macOS 26 arm64 packageability is covered; macOS x64 and supported Windows packaging and runtime parity remain open.",
-    "DMG/NSIS installers, update metadata and alpha-to-alpha update behavior are not implemented or evidenced.",
-    "Packaged idle/ordinary memory, post-heavy-Job recovery and 10,000-page/100,000-chunk scale reports remain open.",
-    "Git, Bun, uv and PaddleOCR are absent from this packageability artifact and are reported as missing rather than silently claimed bundled.",
-    "Release notes, final supported-platform attribution review and manual signed installed-platform acceptance remain open."
+    "Draft presentation is limited to the exact Home terminal-answer tool; generic assistant prose is intentionally excluded.",
+    "Source-ingest terminal drafts remain unevidenced.",
+    "Multi-window concurrency and broader sender-lifecycle proof remain open.",
+    "Drafts deliberately do not replay across reconnect/restart; only durable final conversation state recovers.",
+    "Provisional text may shrink or revise and carries no citations or grounding until final validation.",
+    "The 10,000-page and broader Home UI performance boundary remains open.",
+    "Signed installed macOS/Windows BYOK and platform proof remain open."
   ]
 }

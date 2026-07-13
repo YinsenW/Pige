@@ -26,6 +26,7 @@ import { anthropicMessagesApi } from "@earendil-works/pi-ai/api/anthropic-messag
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
 import { openAIResponsesApi } from "@earendil-works/pi-ai/api/openai-responses.lazy";
 import { PigeDomainError } from "@pige/domain";
+import { containsRestrictedModelContent } from "./model-egress-content";
 import type { ModelProviderRuntimeConfig } from "./model-provider-registry";
 import { normalizeProviderBaseUrl } from "./provider-base-url";
 
@@ -118,7 +119,15 @@ export interface PiAgentRunRequest {
   readonly history?: readonly PiAgentHistoryMessage[];
   readonly tools: readonly PigeAgentToolDefinition[];
   readonly beforeModelTurn?: () => void | Promise<void>;
+  readonly terminalDraft?: PiAgentTerminalDraftBoundary;
   readonly signal?: AbortSignal;
+}
+
+export interface PiAgentTerminalDraftBoundary {
+  readonly toolName: "pige_finish_home_turn";
+  readonly argumentName: "answer";
+  readonly maxCharacters: 8_000;
+  readonly onSnapshot: (text: string) => void;
 }
 
 export interface PiAgentHistoryMessage {
@@ -170,6 +179,7 @@ const MAX_HISTORY_MESSAGES = 16;
 const MAX_HISTORY_UTF8_BYTES = 64 * 1024;
 const KEYLESS_PROVIDER_TRANSPORT_SENTINEL = "pige-keyless-provider";
 const MAX_TURN_EVENTS = 512;
+const MIN_PARTIAL_DRAFT_CHARACTERS = 32;
 export const MAX_PIGE_TOOL_CALL_ID_UTF8_BYTES = 256;
 
 const PIGE_AGENT_TOOL_CATALOG_HASH_DOMAIN = "pige.agent_tool_catalog.v1";
@@ -256,6 +266,14 @@ export class PiAgentRuntimeAdapter {
       }
       const record = toEventRecord(event);
       events.push(record);
+      const terminalDraft = readSafeTerminalDraft(event, request.terminalDraft);
+      if (terminalDraft !== undefined) {
+        try {
+          request.terminalDraft?.onSnapshot(terminalDraft);
+        } catch {
+          // Presentation delivery is non-authoritative and cannot fail the Pi turn.
+        }
+      }
       if (event.type === "tool_execution_start") invokedTools.push(event.toolName);
     });
     const onAbort = (): void => agent.abort();
@@ -574,6 +592,48 @@ function toEventRecord(event: AgentEvent): PiAgentEventRecord {
     return { type: event.type, toolName: event.toolName };
   }
   return { type: event.type };
+}
+
+function readSafeTerminalDraft(
+  event: AgentEvent,
+  boundary: PiAgentTerminalDraftBoundary | undefined
+): string | undefined {
+  if (!boundary || event.type !== "message_update") return undefined;
+  const update = event.assistantMessageEvent;
+  if (
+    update.type !== "toolcall_start" &&
+    update.type !== "toolcall_delta" &&
+    update.type !== "toolcall_end"
+  ) {
+    return undefined;
+  }
+  const content = update.partial.content[update.contentIndex];
+  if (
+    !content ||
+    content.type !== "toolCall" ||
+    content.name !== boundary.toolName ||
+    !isRecord(content.arguments)
+  ) {
+    return undefined;
+  }
+  const candidate = content.arguments[boundary.argumentName];
+  if (typeof candidate !== "string") return undefined;
+  const text = candidate.trim();
+  const characterCount = Array.from(text).length;
+  if (
+    characterCount === 0 ||
+    characterCount > boundary.maxCharacters ||
+    (update.type !== "toolcall_end" && characterCount < MIN_PARTIAL_DRAFT_CHARACTERS) ||
+    containsUnsafeDraftControlCharacter(text) ||
+    containsRestrictedModelContent(text)
+  ) {
+    return undefined;
+  }
+  return text;
+}
+
+function containsUnsafeDraftControlCharacter(value: string): boolean {
+  return /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/u.test(value);
 }
 
 function collectAssistantText(messages: readonly unknown[]): string {

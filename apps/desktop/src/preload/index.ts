@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, webUtils } from "electron";
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from "electron";
 import type {
   AddPresetProviderRequest,
   AddManualProviderRequest,
@@ -7,6 +7,7 @@ import type {
   AgentConversationTimeline,
   AgentSubmitTurnRequest,
   AgentSubmitTurnResult,
+  AgentTurnDraftEvent,
   AgentRuntimeStatus,
   AppHealth,
   BackupCreateResult,
@@ -97,6 +98,11 @@ const api: PigeDesktopApi = {
         .map((file) => webUtils.getPathForFile(file))
         .filter((filePath): filePath is string => filePath.length > 0);
       return ipcRenderer.invoke("agent.submitTurn", { request, filePaths }) as Promise<AgentSubmitTurnResult>;
+    },
+    onTurnDraft: (listener: (event: AgentTurnDraftEvent) => void): (() => void) => {
+      const handleDraft = (_event: IpcRendererEvent, draft: AgentTurnDraftEvent): void => listener(draft);
+      ipcRenderer.on("agent.turnDraft", handleDraft);
+      return () => ipcRenderer.removeListener("agent.turnDraft", handleDraft);
     }
   },
   jobs: {
