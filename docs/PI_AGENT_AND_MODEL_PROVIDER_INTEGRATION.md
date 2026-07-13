@@ -302,10 +302,10 @@ tool-version, and input hashes; results carry typed refs, warnings, and provenan
 large bodies remain Artifacts. Host validation precedes every result or effect.
 Job cancellation aborts Pi/active tools without persisting partial response.
 
-Exact create, one cited append, and `pige_link_knowledge_notes@1` emit checksum-bound
-Activity/Undo. After inspect + one retrieval, link input is two opaque refs, cited reason,
-and high confidence; Host owns direction, paths/IDs, bytes, Operation, eligibility, and
-target binding. Other linking/mutations, Broker, CAS, redo, and packaged paths remain open.
+Exact create, cited append, `pige_add_knowledge_tags@1`, and directed link emit Activity/
+Undo. After inspect/retrieval, tagging supplies one opaque target, 1–6 candidates, cited
+reason, and high confidence; Host owns catalog/normalization/eligibility/limits/bytes/
+Operation. Other organization, Broker, CAS, redo, and platforms remain open.
 
 Source inspection, extraction, OCR, retrieval, and knowledge publication remain
 separate tools. Recommendations cannot invoke another tool. Runtime may keep only a

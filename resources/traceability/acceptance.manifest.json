@@ -769,11 +769,7 @@
     },
     "PIGE-SCHEMA-001": {
       "status": "partial",
-      "evidence": [
-        "EV-MARKDOWN",
-        "EV-AGENT-INGEST",
-        "EV-SOURCE-PAGE-PATH-PROJECTION"
-      ],
+      "evidence": ["EV-MARKDOWN", "EV-AGENT-INGEST", "EV-SOURCE-PAGE-PATH-PROJECTION", "EV-TAG-NORMALIZATION"],
       "open": {
         "id": "OPEN-REQ-PIGE-SCHEMA-001",
         "description": "All managed page types and bounded sidecar fields still need schema round-trip coverage.",
@@ -788,7 +784,7 @@
     },
     "PIGE-KNOW-001": {
       "status": "partial",
-      "evidence": ["EV-LIBRARY", "EV-DB-LINKS"],
+      "evidence": ["EV-LIBRARY", "EV-DB-LINKS", "EV-DB-TAGS"],
       "open": {
         "id": "OPEN-REQ-PIGE-KNOW-001",
         "description": "Durable lifecycle fixtures for topic, concept, entity, claim, and question pages remain open.",
@@ -808,10 +804,10 @@
     },
     "PIGE-KNOW-003": {
       "status": "partial",
-      "evidence": ["EV-PROPOSAL", "EV-PI-INGEST-LINK", "EV-LINK-RECOVERY"],
+      "evidence": ["EV-PROPOSAL", "EV-PI-INGEST-LINK", "EV-LINK-RECOVERY", "EV-PI-INGEST-TAGS", "EV-TAG-RECOVERY"],
       "open": {
         "id": "OPEN-REQ-PIGE-KNOW-003",
-        "description": "One cited directed links_to between clean generated notes is proved; other links/pages/types, hierarchy/organize/merge, conflicts, CAS/TOCTOU, and platforms remain.",
+        "description": "One cited directed link and bounded additive tags on clean generated notes are proved; removal/replacement/synonyms, other pages/types/organization, conflicts, CAS, and platforms remain.",
         "targetBuilds": ["B7.01", "B7.02", "B7.03", "B7.04"],
         "targetExits": ["E7.01"]
       }
@@ -2386,10 +2382,7 @@
     },
     "E3.04": {
       "status": "partial",
-      "evidence": [
-        "EV-AGENT-INGEST",
-        "EV-SOURCE-PAGE-PATH-PROJECTION"
-      ],
+      "evidence": ["EV-AGENT-INGEST", "EV-SOURCE-PAGE-PATH-PROJECTION", "EV-TAG-NORMALIZATION"],
       "open": {
         "id": "OPEN-EXIT-E3.04",
         "description": "Cited autonomous source/wiki/index/log/Operation acceptance remains open.",
@@ -2505,12 +2498,10 @@
     },
     "E4.05": {
       "status": "partial",
-      "evidence": [
-        "EV-DB-REBUILD"
-      ],
+      "evidence": ["EV-DB-REBUILD", "EV-DB-TAGS"],
       "open": {
         "id": "OPEN-EXIT-E4.05",
-        "description": "Full executable acceptance remains open for Exit E4.05: Schema migration and reset cover pages, sources, jobs, operations, tags, and links without turning SQLite into durable truth.",
+        "description": "Tag-facet migration/reset is proved; remaining page/source/job/operation/link domains and packaged migration proof remain open.",
         "targetBuilds": [
           "B4.01"
         ],
@@ -2677,10 +2668,10 @@
     },
     "E7.01": {
       "status": "partial",
-      "evidence": ["EV-PROPOSAL", "EV-AGENT-INGEST", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-PROPOSAL-UI", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY", "EV-PI-INGEST-UPDATE", "EV-UPDATE-RECOVERY", "EV-PI-INGEST-LINK", "EV-LINK-RECOVERY"],
+      "evidence": ["EV-PROPOSAL", "EV-AGENT-INGEST", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-PROPOSAL-UI", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY", "EV-PI-INGEST-UPDATE", "EV-UPDATE-RECOVERY", "EV-PI-INGEST-LINK", "EV-LINK-RECOVERY", "EV-PI-INGEST-TAGS", "EV-TAG-RECOVERY"],
       "open": {
         "id": "OPEN-EXIT-E7.01",
-        "description": "Exact create/additive update/one directed link have Undo; other links/pages/mutations, restore/redo, exceptions, CAS/transactions, and platforms remain.",
+        "description": "Exact create/append, bounded tags, and one directed link have Undo; removal/replacement/synonyms, other pages/mutations, restore/redo, exceptions, CAS, and platforms remain.",
         "targetBuilds": ["B7.01", "B7.02", "B7.03", "B7.04"],
         "targetExits": ["E7.01"]
       }
@@ -2881,162 +2872,42 @@
       "path": "docs/V0_1_IMPLEMENTATION_PLAYBOOK.md",
       "selector": "If all items pass, begin Phase 0 only"
     },
-    "EV-LICENSE-PACKAGE": {
-      "kind": "implementation",
-      "path": "package.json",
-      "selector": "\"license\": \"Apache-2.0\""
-    },
-    "EV-LICENSE-TEXT": {
-      "kind": "contract",
-      "path": "LICENSE",
-      "selector": "Apache License"
-    },
-    "EV-LICENSE-NOTICE": {
-      "kind": "contract",
-      "path": "NOTICE",
-      "selector": "This product includes software developed for the Pige project."
-    },
-    "EV-VAULT-LAYOUT": {
-      "kind": "test",
-      "path": "tests/unit/vault-layout.test.ts",
-      "selector": "creates the required readable vault files without storing machine-local absolute paths in the manifest"
-    },
-    "EV-VAULT-POLICY": {
-      "kind": "test",
-      "path": "tests/unit/vault-layout.test.ts",
-      "selector": "keeps source storage policy in vault config and reflects it in the summary"
-    },
-    "EV-VAULT-RESET": {
-      "kind": "test",
-      "path": "tests/unit/vault-layout.test.ts",
-      "selector": "resets only rebuildable database and index roots"
-    },
-    "EV-SCHEMAS": {
-      "kind": "implementation",
-      "path": "packages/schemas/src/index.ts",
-      "selector": "export const PageIdSchema"
-    },
-    "EV-STABLE-ID": {
-      "kind": "test",
-      "path": "tests/unit/domain.test.ts",
-      "selector": "creates sync-ready local vault IDs"
-    },
-    "EV-SYNC-CONFLICT": {
-      "kind": "test",
-      "path": "tests/unit/durable-contract-schemas.test.ts",
-      "selector": "uses one stable ID vocabulary and rejects retired aliases"
-    },
-    "EV-MARKDOWN-ATOMIC": {
-      "kind": "test",
-      "path": "tests/unit/source-page-service.test.ts",
-      "selector": "recovers a completed page write after a crash before checksum finalization"
-    },
-    "EV-SOURCE-PAGE-CONFLICT-PRESERVATION": {
-      "kind": "test",
-      "path": "tests/unit/source-page-service.test.ts",
-      "selector": "preserves a user edit that lands after the pending Source Record commit"
-    },
-    "EV-SOURCE-PAGE-SOURCE-REVISION": {
-      "kind": "test",
-      "path": "tests/unit/source-page-service.test.ts",
-      "selector": "preserves a newer Source Record revision detected before pending replacement"
-    },
-    "EV-SOURCE-PAGE-BASELINE": {
-      "kind": "test",
-      "path": "tests/unit/source-page-service.test.ts",
-      "selector": "rejects a stale Source Record baseline before source-page projection begins"
-    },
-    "EV-SOURCE-PAGE-PATH-PROJECTION": {
-      "kind": "test",
-      "path": "tests/unit/source-page-service.test.ts",
-      "selector": "accepts an absolute Source Record path only inside the vault Source Record root"
-    },
-    "EV-SOURCE-PAGE-PATH-CONFINEMENT": {
-      "kind": "test",
-      "path": "tests/unit/source-page-service.test.ts",
-      "selector": "rejects an absolute Source Record path outside the vault Source Record root"
-    },
-    "EV-SOURCE-PAGE-PREVIEW-BOUNDARY": {
-      "kind": "test",
-      "path": "tests/unit/source-page-service.test.ts",
-      "selector": "rejects a symlinked extracted-text preview without leaking external text"
-    },
-    "EV-APP-SHELL": {
-      "kind": "implementation",
-      "path": "apps/desktop/src/renderer/src/App.tsx",
-      "selector": "mode-${windowState?.mode ?? \"compact\"}"
-    },
-    "EV-SETTINGS": {
-      "kind": "test",
-      "path": "tests/unit/settings-registry.test.ts",
-      "selector": "classifies implemented user-visible and agent-affecting settings"
-    },
-    "EV-LOCAL-SETTINGS": {
-      "kind": "test",
-      "path": "tests/unit/local-settings.test.ts",
-      "selector": "preserves machine-local window preferences when activating a vault"
-    },
-    "EV-SETTING-GUARD": {
-      "kind": "test",
-      "path": "tests/unit/setting-action-guard.test.ts",
-      "selector": "fails closed for a Permission Broker requirement until a broker decision exists"
-    },
-    "EV-POLICY": {
-      "kind": "test",
-      "path": "tests/unit/agent-policy-context.test.ts",
-      "selector": "builds a non-secret policy context from vault config"
-    },
-    "EV-DIAGNOSTICS": {
-      "kind": "test",
-      "path": "tests/unit/diagnostics-service.test.ts",
-      "selector": "exports only bounded redacted local support bundle content"
-    },
+    "EV-LICENSE-PACKAGE": { "kind": "implementation", "path": "package.json", "selector": "\"license\": \"Apache-2.0\"" },
+    "EV-LICENSE-TEXT": { "kind": "contract", "path": "LICENSE", "selector": "Apache License" },
+    "EV-LICENSE-NOTICE": { "kind": "contract", "path": "NOTICE", "selector": "This product includes software developed for the Pige project." },
+    "EV-VAULT-LAYOUT": { "kind": "test", "path": "tests/unit/vault-layout.test.ts", "selector": "creates the required readable vault files without storing machine-local absolute paths in the manifest" },
+    "EV-VAULT-POLICY": { "kind": "test", "path": "tests/unit/vault-layout.test.ts", "selector": "keeps source storage policy in vault config and reflects it in the summary" },
+    "EV-VAULT-RESET": { "kind": "test", "path": "tests/unit/vault-layout.test.ts", "selector": "resets only rebuildable database and index roots" },
+    "EV-SCHEMAS": { "kind": "implementation", "path": "packages/schemas/src/index.ts", "selector": "export const PageIdSchema" },
+    "EV-STABLE-ID": { "kind": "test", "path": "tests/unit/domain.test.ts", "selector": "creates sync-ready local vault IDs" },
+    "EV-SYNC-CONFLICT": { "kind": "test", "path": "tests/unit/durable-contract-schemas.test.ts", "selector": "uses one stable ID vocabulary and rejects retired aliases" },
+    "EV-MARKDOWN-ATOMIC": { "kind": "test", "path": "tests/unit/source-page-service.test.ts", "selector": "recovers a completed page write after a crash before checksum finalization" },
+    "EV-SOURCE-PAGE-CONFLICT-PRESERVATION": { "kind": "test", "path": "tests/unit/source-page-service.test.ts", "selector": "preserves a user edit that lands after the pending Source Record commit" },
+    "EV-SOURCE-PAGE-SOURCE-REVISION": { "kind": "test", "path": "tests/unit/source-page-service.test.ts", "selector": "preserves a newer Source Record revision detected before pending replacement" },
+    "EV-SOURCE-PAGE-BASELINE": { "kind": "test", "path": "tests/unit/source-page-service.test.ts", "selector": "rejects a stale Source Record baseline before source-page projection begins" },
+    "EV-SOURCE-PAGE-PATH-PROJECTION": { "kind": "test", "path": "tests/unit/source-page-service.test.ts", "selector": "accepts an absolute Source Record path only inside the vault Source Record root" },
+    "EV-SOURCE-PAGE-PATH-CONFINEMENT": { "kind": "test", "path": "tests/unit/source-page-service.test.ts", "selector": "rejects an absolute Source Record path outside the vault Source Record root" },
+    "EV-SOURCE-PAGE-PREVIEW-BOUNDARY": { "kind": "test", "path": "tests/unit/source-page-service.test.ts", "selector": "rejects a symlinked extracted-text preview without leaking external text" },
+    "EV-APP-SHELL": { "kind": "implementation", "path": "apps/desktop/src/renderer/src/App.tsx", "selector": "mode-${windowState?.mode ?? \"compact\"}" },
+    "EV-SETTINGS": { "kind": "test", "path": "tests/unit/settings-registry.test.ts", "selector": "classifies implemented user-visible and agent-affecting settings" },
+    "EV-LOCAL-SETTINGS": { "kind": "test", "path": "tests/unit/local-settings.test.ts", "selector": "preserves machine-local window preferences when activating a vault" },
+    "EV-SETTING-GUARD": { "kind": "test", "path": "tests/unit/setting-action-guard.test.ts", "selector": "fails closed for a Permission Broker requirement until a broker decision exists" },
+    "EV-POLICY": { "kind": "test", "path": "tests/unit/agent-policy-context.test.ts", "selector": "builds a non-secret policy context from vault config" },
+    "EV-DIAGNOSTICS": { "kind": "test", "path": "tests/unit/diagnostics-service.test.ts", "selector": "exports only bounded redacted local support bundle content" },
     "EV-NO-TELEMETRY": { "kind": "verifier", "path": "scripts/verify/no-telemetry.mjs", "selector": "No-telemetry policy OK" },
     "EV-DIAG-PERSISTENCE-SAFETY": { "kind": "test", "path": "tests/unit/diagnostics-service.test.ts", "selector": "replaces opaque top-level diagnostic messages while preserving safe evidence" },
     "EV-DIAG-RETENTION": { "kind": "test", "path": "tests/unit/diagnostics-service.test.ts", "selector": "retains non-error events for 14 days and error events for 30 days at exact boundaries" },
     "EV-DIAG-ROTATION": { "kind": "test", "path": "tests/unit/diagnostics-service.test.ts", "selector": "repeatedly rotates within one total budget and preserves the newest useful evidence" },
-    "EV-TOOLCHAIN": {
-      "kind": "test",
-      "path": "tests/unit/toolchain-service.test.ts",
-      "selector": "reports needs_repair when required bundled tools are missing"
-    },
-    "EV-PROVIDER": {
-      "kind": "test",
-      "path": "tests/unit/model-provider-registry.test.ts",
-      "selector": "model provider registry"
-    },
-    "EV-PROVIDER-CONNECTION": {
-      "kind": "test",
-      "path": "tests/unit/model-provider-connection.test.ts",
-      "selector": "model provider connection tester"
-    },
-    "EV-RUNTIME": {
-      "kind": "test",
-      "path": "tests/unit/agent-runtime-service.test.ts",
-      "selector": "becomes ready without resolving credential-bearing runtime configuration"
-    },
+    "EV-TOOLCHAIN": { "kind": "test", "path": "tests/unit/toolchain-service.test.ts", "selector": "reports needs_repair when required bundled tools are missing" },
+    "EV-PROVIDER": { "kind": "test", "path": "tests/unit/model-provider-registry.test.ts", "selector": "model provider registry" },
+    "EV-PROVIDER-CONNECTION": { "kind": "test", "path": "tests/unit/model-provider-connection.test.ts", "selector": "model provider connection tester" },
+    "EV-RUNTIME": { "kind": "test", "path": "tests/unit/agent-runtime-service.test.ts", "selector": "becomes ready without resolving credential-bearing runtime configuration" },
     "EV-RUNTIME-NONSECRET-BINDING": { "kind": "test", "path": "tests/unit/model-provider-registry.test.ts", "selector": "checks the selected runtime binding by secret reference without decrypting credentials" },
     "EV-JOB-NONSECRET-READINESS": { "kind": "test", "path": "tests/unit/jobs-service.test.ts", "selector": "schedules Agent ingest readiness without resolving runtime credentials" },
-    "EV-RUNTIME-CONTRACT": {
-      "kind": "implementation",
-      "path": "packages/contracts/src/index.ts",
-      "selector": "export interface RuntimeCapabilities"
-    },
-    "EV-OCR-ADAPTER": {
-      "kind": "test",
-      "path": "tests/unit/macos-vision-ocr-adapter.test.ts",
-      "selector": "preferredLanguages"
-    },
-    "EV-DROP-ZONE": {
-      "kind": "implementation",
-      "path": "apps/desktop/src/renderer/src/App.tsx",
-      "selector": "onDrop={handleDrop}"
-    },
-    "EV-CAPTURE": {
-      "kind": "test",
-      "path": "tests/unit/capture-service.test.ts",
-      "selector": "preserves text capture as a managed source, source record, conversation event, and queued job"
-    },
+    "EV-RUNTIME-CONTRACT": { "kind": "implementation", "path": "packages/contracts/src/index.ts", "selector": "export interface RuntimeCapabilities" },
+    "EV-OCR-ADAPTER": { "kind": "test", "path": "tests/unit/macos-vision-ocr-adapter.test.ts", "selector": "preferredLanguages" },
+    "EV-DROP-ZONE": { "kind": "implementation", "path": "apps/desktop/src/renderer/src/App.tsx", "selector": "onDrop={handleDrop}" },
+    "EV-CAPTURE": { "kind": "test", "path": "tests/unit/capture-service.test.ts", "selector": "preserves text capture as a managed source, source record, conversation event, and queued job" },
     "EV-LARGE-PASTE": {
       "kind": "test",
       "path": "tests/unit/capture-service.test.ts",
@@ -3106,6 +2977,9 @@
     "EV-PI-INGEST-RETRIEVAL": { "kind": "test", "path": "tests/unit/agent-led-ingest-retrieval.test.ts", "selector": "Agent-selected ingest retrieval tool" },
     "EV-PI-INGEST-UPDATE": { "kind": "test", "path": "tests/unit/agent-led-ingest-retrieval.test.ts", "selector": "lets real Pi select one related managed note update with a durable checkpoint and no create fallback" },
     "EV-UPDATE-RECOVERY": { "kind": "test", "path": "tests/unit/agent-led-ingest-retrieval.test.ts", "selector": "retries a page-first Agent update through Jobs without runtime config, credentials, or another Pi turn" },
+    "EV-TAG-NORMALIZATION": { "kind": "test", "path": "tests/unit/agent-led-ingest-retrieval.test.ts", "selector": "writes newly generated note tags through the same canonical normalization used by later organization" },
+    "EV-PI-INGEST-TAGS": { "kind": "test", "path": "tests/unit/agent-led-ingest-retrieval.test.ts", "selector": "lets real Pi add bounded tags to one retrieved note with rebuildable facets, Activity, and exact Undo" },
+    "EV-TAG-RECOVERY": { "kind": "test", "path": "tests/unit/agent-led-ingest-retrieval.test.ts", "selector": "recovers a page-first knowledge-tag change from its exact checkpoint without another model turn" },
     "EV-PI-INGEST-LINK": { "kind": "test", "path": "tests/unit/agent-led-ingest-retrieval.test.ts", "selector": "lets real Pi link two current generated notes and rebuilds the exact link, backlink, Activity, and Undo" },
     "EV-LINK-RECOVERY": { "kind": "test", "path": "tests/unit/agent-led-ingest-retrieval.test.ts", "selector": "recovers a page-first note link with the exact destination revision and no duplicate Operation" },
     "EV-PI-INGEST-PROPOSAL": { "kind": "test", "path": "tests/unit/agent-led-ingest-proposal.test.ts", "selector": "Agent-selected ingest proposal tool" },
@@ -3127,84 +3001,25 @@
       "path": "tests/evals/agent-ingest-untrusted-source.test.ts",
       "selector": "keeps URL, PDF, Office, and image-OCR instructions inside the evidence boundary"
     },
-    "EV-UNTRUSTED-OUTPUT-SCHEMA": {
-      "kind": "test",
-      "path": "tests/evals/agent-ingest-untrusted-source.test.ts",
-      "selector": "rejects model-authored control-plane and destination fields before generated-note writes"
-    },
-    "EV-LOW-CONFIDENCE": {
-      "kind": "test",
-      "path": "tests/unit/agent-ingest-service.test.ts",
-      "selector": "marks low-confidence or warning-bearing generated notes as needing review"
-    },
-    "EV-SAFE-AUTO-APPLY": {
-      "kind": "test",
-      "path": "tests/unit/agent-ingest-service.test.ts",
-      "selector": "turns a preserved source into a wiki note, index entry, and operation record without storing prompts or secrets"
-    },
-    "EV-EGRESS": {
-      "kind": "test",
-      "path": "tests/unit/security-contract-schemas.test.ts",
-      "selector": "enforces fail-safe model-egress outcomes from boundary, policy, and content class"
-    },
+    "EV-UNTRUSTED-OUTPUT-SCHEMA": { "kind": "test", "path": "tests/evals/agent-ingest-untrusted-source.test.ts", "selector": "rejects model-authored control-plane and destination fields before generated-note writes" },
+    "EV-LOW-CONFIDENCE": { "kind": "test", "path": "tests/unit/agent-ingest-service.test.ts", "selector": "marks low-confidence or warning-bearing generated notes as needing review" },
+    "EV-SAFE-AUTO-APPLY": { "kind": "test", "path": "tests/unit/agent-ingest-service.test.ts", "selector": "turns a preserved source into a wiki note, index entry, and operation record without storing prompts or secrets" },
+    "EV-EGRESS": { "kind": "test", "path": "tests/unit/security-contract-schemas.test.ts", "selector": "enforces fail-safe model-egress outcomes from boundary, policy, and content class" },
     "EV-MODEL-EGRESS-POLICY": { "kind": "test", "path": "tests/unit/model-egress-policy.test.ts", "selector": "model egress policy" },
-    "EV-EGRESS-SERVICE": {
-      "kind": "test",
-      "path": "tests/unit/agent-ingest-service.test.ts",
-      "selector": "requires an egress decision before credential lookup or model invocation"
-    },
-    "EV-EGRESS-PROFILE-BINDING": {
-      "kind": "test",
-      "path": "tests/unit/agent-ingest-service.test.ts",
-      "selector": "rejects a same-ID provider endpoint change before prompt rendering or credential lookup"
-    },
-    "EV-EGRESS-RUNTIME-BINDING": {
-      "kind": "test",
-      "path": "tests/unit/agent-ingest-service.test.ts",
-      "selector": "rejects a same-ID runtime endpoint or model change before model invocation"
-    },
-    "EV-LIBRARY": {
-      "kind": "test",
-      "path": "tests/unit/library-service.test.ts",
-      "selector": "lists pages through the local database index when available"
-    },
-    "EV-DB-REBUILD": {
-      "kind": "test",
-      "path": "tests/unit/local-database-service.test.ts",
-      "selector": "rebuilds after database deletion without losing Markdown knowledge"
-    },
+    "EV-EGRESS-SERVICE": { "kind": "test", "path": "tests/unit/agent-ingest-service.test.ts", "selector": "requires an egress decision before credential lookup or model invocation" },
+    "EV-EGRESS-PROFILE-BINDING": { "kind": "test", "path": "tests/unit/agent-ingest-service.test.ts", "selector": "rejects a same-ID provider endpoint change before prompt rendering or credential lookup" },
+    "EV-EGRESS-RUNTIME-BINDING": { "kind": "test", "path": "tests/unit/agent-ingest-service.test.ts", "selector": "rejects a same-ID runtime endpoint or model change before model invocation" },
+    "EV-LIBRARY": { "kind": "test", "path": "tests/unit/library-service.test.ts", "selector": "lists pages through the local database index when available" },
+    "EV-DB-REBUILD": { "kind": "test", "path": "tests/unit/local-database-service.test.ts", "selector": "rebuilds after database deletion without losing Markdown knowledge" },
     "EV-INDEX-REBUILD-WORKER": { "kind": "test", "path": "tests/unit/jobs-service.test.ts", "selector": "cooperatively cancels a running index worker without changing durable Markdown" },
-    "EV-DB-EXTERNAL-EDIT": {
-      "kind": "test",
-      "path": "tests/unit/local-database-service.test.ts",
-      "selector": "detects external Markdown edits and refreshes the FTS index"
-    },
-    "EV-DB-LINKS": {
-      "kind": "test",
-      "path": "tests/unit/local-database-service.test.ts",
-      "selector": "indexes wiki links and local Markdown links as rebuildable related pages"
-    },
+    "EV-DB-EXTERNAL-EDIT": { "kind": "test", "path": "tests/unit/local-database-service.test.ts", "selector": "detects external Markdown edits and refreshes the FTS index" },
+    "EV-DB-LINKS": { "kind": "test", "path": "tests/unit/local-database-service.test.ts", "selector": "indexes wiki links and local Markdown links as rebuildable related pages" },
+    "EV-DB-TAGS": { "kind": "test", "path": "tests/unit/local-database-service.test.ts", "selector": "rebuilds canonical tag facets from Markdown without treating SQLite as durable knowledge" },
     "EV-KNOWLEDGE-TREE-AGGREGATE": { "kind": "test", "path": "tests/unit/knowledge-tree-aggregate.test.ts", "selector": "rebuilds an explainable domain, topic, concept, and source tree from durable Markdown" },
-    "EV-DB-DRIVER": {
-      "kind": "test",
-      "path": "tests/unit/local-database-service.test.ts",
-      "selector": "initializes the node sqlite migration state behind the driver abstraction"
-    },
-    "EV-READER-RELATED": {
-      "kind": "test",
-      "path": "tests/unit/library-service.test.ts",
-      "selector": "returns related pages through the local database without exposing note bodies"
-    },
-    "EV-CJK": {
-      "kind": "test",
-      "path": "tests/unit/retrieval-service.test.ts",
-      "selector": "uses CJK-friendly character grams instead of whitespace-only matching"
-    },
-    "EV-RETRIEVAL": {
-      "kind": "test",
-      "path": "tests/unit/retrieval-service.test.ts",
-      "selector": "answers from bounded local evidence with citations and ranked pages"
-    },
+    "EV-DB-DRIVER": { "kind": "test", "path": "tests/unit/local-database-service.test.ts", "selector": "initializes the node sqlite migration state behind the driver abstraction" },
+    "EV-READER-RELATED": { "kind": "test", "path": "tests/unit/library-service.test.ts", "selector": "returns related pages through the local database without exposing note bodies" },
+    "EV-CJK": { "kind": "test", "path": "tests/unit/retrieval-service.test.ts", "selector": "uses CJK-friendly character grams instead of whitespace-only matching" },
+    "EV-RETRIEVAL": { "kind": "test", "path": "tests/unit/retrieval-service.test.ts", "selector": "answers from bounded local evidence with citations and ranked pages" },
     "EV-HOME-AGENT": { "kind": "test", "path": "tests/unit/home-agent-service.test.ts", "selector": "Home Pi Agent service" },
     "EV-HOME-FOLLOWUP": { "kind": "test", "path": "tests/unit/home-agent-conversation-ui.test.ts", "selector": "Home durable Agent conversation UI" },
     "EV-PI-URL-INGRESS": { "kind": "test", "path": "tests/unit/agent-selected-url-ingress.test.ts", "selector": "Agent-selected URL ingress" },
@@ -3282,61 +3097,21 @@
       "path": "tests/unit/jobs-service.test.ts",
       "selector": "persists parse follow-up jobs before the parent can leave its recoverable state"
     },
-    "EV-OCR-FOLLOWUP-DURABILITY": {
-      "kind": "test",
-      "path": "tests/unit/jobs-service.test.ts",
-      "selector": "persists Agent follow-up before an OCR parent can leave its recoverable state"
-    },
-    "EV-WAITING-AGENT-REQUEUE": {
-      "kind": "test",
-      "path": "tests/unit/jobs-service.test.ts",
-      "selector": "requeues waiting Agent ingest jobs after a default model becomes ready"
-    },
-    "EV-OCR-NATIVE-FALLBACK": {
-      "kind": "test",
-      "path": "tests/unit/jobs-service.test.ts",
-      "selector": "releases verified native PDF text when OCR becomes unavailable after parsing"
-    },
-    "EV-AGENT-EVIDENCE-REVISION": {
-      "kind": "test",
-      "path": "tests/unit/jobs-service.test.ts",
-      "selector": "requeues Agent ingest when OCR changes the evidence during a model call"
-    },
-    "EV-PDF-REFERENCE-ORIGINAL": {
-      "kind": "test",
-      "path": "tests/unit/pdf-ocr-artifact-service.test.ts",
-      "selector": "keeps empty OCR body-free and supports a referenced original PDF"
-    },
-    "EV-PROPOSAL": {
-      "kind": "test",
-      "path": "tests/unit/proposal-service.test.ts",
-      "selector": "stages durable proposals and lists safe summaries without proposed content"
-    },
+    "EV-OCR-FOLLOWUP-DURABILITY": { "kind": "test", "path": "tests/unit/jobs-service.test.ts", "selector": "persists Agent follow-up before an OCR parent can leave its recoverable state" },
+    "EV-WAITING-AGENT-REQUEUE": { "kind": "test", "path": "tests/unit/jobs-service.test.ts", "selector": "requeues waiting Agent ingest jobs after a default model becomes ready" },
+    "EV-OCR-NATIVE-FALLBACK": { "kind": "test", "path": "tests/unit/jobs-service.test.ts", "selector": "releases verified native PDF text when OCR becomes unavailable after parsing" },
+    "EV-AGENT-EVIDENCE-REVISION": { "kind": "test", "path": "tests/unit/jobs-service.test.ts", "selector": "requeues Agent ingest when OCR changes the evidence during a model call" },
+    "EV-PDF-REFERENCE-ORIGINAL": { "kind": "test", "path": "tests/unit/pdf-ocr-artifact-service.test.ts", "selector": "keeps empty OCR body-free and supports a referenced original PDF" },
+    "EV-PROPOSAL": { "kind": "test", "path": "tests/unit/proposal-service.test.ts", "selector": "stages durable proposals and lists safe summaries without proposed content" },
     "EV-PROPOSAL-UI": { "kind": "test", "path": "tests/unit/proposal-review-home.test.ts", "selector": "Home proposal review" },
-    "EV-BACKUP": {
-      "kind": "test",
-      "path": "tests/unit/backup-service.test.ts",
-      "selector": "creates a zip backup with durable vault files and restores it into a new vault without rebuildable cache files"
-    },
+    "EV-BACKUP": { "kind": "test", "path": "tests/unit/backup-service.test.ts", "selector": "creates a zip backup with durable vault files and restores it into a new vault without rebuildable cache files" },
     "EV-BACKUP-ATOMIC-FINALIZATION": { "kind": "test", "path": "tests/unit/backup-service.test.ts", "selector": "publishes a validated adjacent staging archive and leaves no staging residue" },
     "EV-BACKUP-DURABLE-COVERAGE": { "kind": "test", "path": "tests/unit/backup-service.test.ts", "selector": "body-free path-safe manifest aligned with ZIP entries" },
-    "EV-RESTORE-CONFLICT": {
-      "kind": "test",
-      "path": "tests/unit/backup-service.test.ts",
-      "selector": "flags checksum mismatches during restore preview and blocks restore apply"
-    },
+    "EV-RESTORE-CONFLICT": { "kind": "test", "path": "tests/unit/backup-service.test.ts", "selector": "flags checksum mismatches during restore preview and blocks restore apply" },
     "EV-RESTORE-PREVIEW-FENCE": { "kind": "test", "path": "tests/unit/desktop-shell-contract.test.ts", "selector": "binds restore apply to the exact preview token across renderer, preload, and main" },
     "EV-RESTORE-PUBLICATION": { "kind": "test", "path": "tests/unit/backup-service.test.ts", "selector": "reserves the final destination without replacement and commits the vault manifest last" },
-    "EV-I18N": {
-      "kind": "test",
-      "path": "tests/unit/i18n-catalog.test.ts",
-      "selector": "keeps every v0.1 locale populated with the same keys"
-    },
-    "EV-RENDERER": {
-      "kind": "test",
-      "path": "tests/unit/markdown-renderer.test.ts",
-      "selector": "sanitizes raw HTML and renders Pige inline references as safe anchors"
-    },
+    "EV-I18N": { "kind": "test", "path": "tests/unit/i18n-catalog.test.ts", "selector": "keeps every v0.1 locale populated with the same keys" },
+    "EV-RENDERER": { "kind": "test", "path": "tests/unit/markdown-renderer.test.ts", "selector": "sanitizes raw HTML and renders Pige inline references as safe anchors" },
     "EV-READER-RESOURCE-SAFETY": { "kind": "test", "path": "tests/unit/markdown-renderer.test.ts", "selector": "keeps reader content from navigating or loading remote resources" },
     "EV-RENDERER-NAVIGATION-GUARD": { "kind": "test", "path": "tests/unit/renderer-navigation-guard.test.ts", "selector": "blocks main-frame, child-frame, redirect, and new-window navigation" },
     "EV-SECURITY-POLICY": {

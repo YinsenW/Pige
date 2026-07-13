@@ -786,10 +786,10 @@ Rules:
 
 Current implementation:
 
-- Current: exact create, one cited append, and one high-confidence directed `links_to`
-  between two retrieved clean generated notes. Host owns direction, targets, bytes, and
-  Operation; only source changes, Activity/Undo restores it, and rebuild derives backlink.
-  Other link/mutation shapes, CAS/transactions, history, redo, and packaging remain open.
+- Current: exact create, cited append, bounded tags, and one directed link on clean
+  retrieved generated notes. Host owns target/catalog/normalization/limits/bytes/Operation;
+  Activity/Undo/recovery and rebuild follow Markdown. Replacement/removal/synonyms,
+  broad organization, CAS, redo, and platforms remain open.
 
 ### 5.5.2 Markdown Rendering And Editing Surface
 

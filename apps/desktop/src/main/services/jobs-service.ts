@@ -3470,6 +3470,11 @@ function recordAgentPageUpdateCheckpoint(
       checksum: binding.relationshipTarget.contentHash,
       role: "relationship_target"
     }] : []),
+    ...(binding.tagAdditions ?? []).map((tag) => ({
+      kind: "tool" as const,
+      id: tag,
+      role: "tag_addition"
+    })),
     {
       kind: "tool" as const,
       id: binding.modelProfileId,

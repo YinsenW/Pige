@@ -532,12 +532,11 @@ Rules:
 
 Current Phase 3 implementation is narrower and transitional:
 
-- Exact create/update retains confined source/policy/catalog/input/call, target/base,
-  private before/staged bytes, and Operation bindings; legacy unbound create stays
-  non-undoable. One directed link reuses `update_page`, binding its read-only target until
-  source effect; page-first recovery may adopt after later target drift without Pi.
-- Create Undo uses `trash_page`; update/link Undo restores exact source bytes and rebuild
-  removes derived edges. Other mutations, redo, CAS/transactions, history, and platforms remain open.
+- Exact create/update binds source/policy/catalog/input/call, target/base, before/staged,
+  and Operation; legacy unbound create stays non-undoable. Link/tags reuse `update_page`;
+  tag recovery binds additions/catalog and page-first adoption needs no Pi.
+- Create Undo uses `trash_page`; other Undo restores exact bytes and rebuilds. Remaining
+  mutations, redo, CAS/transactions, history, and platforms stay open.
 - `requiredPermissionIds` is a compatibility field for permission prerequisites and may contain canonical `permreq_` request IDs or `permdec_` decision IDs; a later schema may split, not reinterpret, it.
 
 ## 12. Operation Record Lifecycle

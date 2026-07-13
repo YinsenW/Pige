@@ -1,7 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { LibraryPageSummary } from "@pige/contracts";
-import { parsePigeFrontmatter, type PigeFrontmatter } from "@pige/markdown";
+import {
+  createPigeTagKey,
+  normalizePigeTag,
+  normalizePigeTags,
+  parsePigeFrontmatter,
+  type PigeFrontmatter
+} from "@pige/markdown";
 import {
   MarkdownPageStatusSchema,
   MarkdownPageTypeSchema,
@@ -16,6 +22,7 @@ export interface MarkdownPageRecord {
 
 export interface MarkdownPageKnowledgeFields {
   readonly aliases: readonly string[];
+  readonly tags: readonly string[];
   readonly topics: readonly string[];
 }
 
@@ -60,6 +67,19 @@ export function findMarkdownPageById(vaultPath: string, pageId: string): Markdow
     }
   }
   return undefined;
+}
+
+export function listMarkdownTagCatalog(vaultPath: string): readonly string[] {
+  const tags = new Map<string, string>();
+  for (const page of scanMarkdownPages(vaultPath).pages) {
+    for (const tag of page.knowledge.tags) {
+      const key = createPigeTagKey(tag);
+      if (key && !tags.has(key)) tags.set(key, tag);
+    }
+  }
+  return Array.from(tags.entries())
+    .sort(([left], [right]) => left.localeCompare(right, "en-US"))
+    .map(([, tag]) => tag);
 }
 
 export function readMarkdownPageByRelativePath(
@@ -107,12 +127,21 @@ export function readMarkdownPageBody(filePath: string): string {
 function readMarkdownPageRecord(vaultPath: string, filePath: string): MarkdownPageRecord | undefined {
   const parsed = parsePigeFrontmatter(readFilePrefix(filePath));
   if (!parsed) return undefined;
+  const hasTagsField = parsed.raw.split(/\r?\n/u).some((line) => line.startsWith("tags:"));
+  const rawTags = parsed.frontmatter.tags;
+  if (
+    (hasTagsField && !Array.isArray(rawTags)) ||
+    (rawTags && (rawTags.length > 12 || rawTags.some((tag) => normalizePigeTag(tag) === undefined)))
+  ) {
+    return undefined;
+  }
   const summary = frontmatterToSummary(vaultPath, filePath, parsed.frontmatter);
   return summary ? {
     summary,
     absolutePath: filePath,
     knowledge: {
       aliases: sanitizeKnowledgeRefs(parsed.frontmatter.aliases),
+      tags: normalizePigeTags(rawTags ?? [], rawTags?.length ?? 12),
       topics: sanitizeKnowledgeRefs(parsed.frontmatter.topics)
     }
   } : undefined;

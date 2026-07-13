@@ -81,9 +81,14 @@ Field rules:
 - `status`: one of `active`, `archived`, `draft`, `needs_review`, `missing_source`, `conflict`.
 - `language`: BCP 47 tag when known.
 - `language_confidence`: `0` to `1`; omit only when unknown.
+- `tags`: optional inline array of at most 12 unique NFKC/space-normalized 1–48-character,
+  control-free strings; case-insensitive dedupe. Missing is compatible; scalar/numeric/
+  block/over-limit forms are invalid, never coerced or truncated.
 - `source_ids`: source record IDs used by the page.
 - `related_page_ids`: stable IDs, not file paths.
 - `provenance`: Pige-managed, never a place for secrets or full prompts.
+
+Tag updates change `tags` plus metadata, preserve other bytes, and Undo exact before bytes.
 
 ## 5. Page-Type Fields
 
