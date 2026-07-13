@@ -37,6 +37,7 @@ import {
   type HomeAgentRetrievalPort
 } from "../../apps/desktop/src/main/services/home-agent-service";
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
+import { containsRestrictedModelContent } from "../../apps/desktop/src/main/services/model-egress-content";
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
 import { PiAgentRuntimeAdapter } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
@@ -155,6 +156,77 @@ describe("Dataset Query Service", () => {
       select: ["column_2"],
       limit: 1
     })).rejects.toMatchObject({ code: "dataset.query.ref_invalid" });
+  });
+
+  it("limits an attachment continuation catalog to its exact source, Dataset, and revision", async () => {
+    const fixture = await createManagedFixture();
+    const additional = await materializeAdditionalDataset(fixture, "bounded-current.csv");
+    const service = new DatasetQueryService(directExecutor);
+
+    const globalCatalog = await service.createCatalog(fixture.vaultPath);
+    const globalEvidence = await service.revalidateCatalog(fixture.vaultPath, globalCatalog);
+    expect(globalEvidence.evidence.sourceIds).toEqual(expect.arrayContaining([
+      fixture.sourceId,
+      additional.sourceId
+    ]));
+    expect(globalEvidence.evidence.restrictedContent).toBe(true);
+
+    const scopedCatalog = await service.createCatalog(fixture.vaultPath, undefined, {
+      sourceId: additional.sourceId,
+      datasetId: additional.manifest.datasetId,
+      revisionId: additional.manifest.activeRevision
+    });
+    const scopedEvidence = await service.revalidateCatalog(fixture.vaultPath, scopedCatalog);
+    expect(scopedEvidence).toMatchObject({
+      drifted: false,
+      evidence: {
+        sourceIds: [additional.sourceId],
+        privateContent: false,
+        sensitiveContent: false,
+        restrictedContent: false
+      }
+    });
+    expect(scopedEvidence.evidence.modelText).not.toContain(fixture.sourceId);
+
+    await expect(service.createCatalog(fixture.vaultPath, undefined, {
+      sourceId: fixture.sourceId,
+      datasetId: additional.manifest.datasetId,
+      revisionId: additional.manifest.activeRevision
+    })).rejects.toMatchObject({ code: "dataset.query.scope_invalid" });
+  });
+
+  it("keeps a scoped ordinary CSV result eligible for the next Home model turn", async () => {
+    const fixture = await createManagedFixture();
+    const additional = await materializeAdditionalDataset(
+      fixture,
+      "dataset-scope-20260713.csv",
+      createMainflowDatasetPlan
+    );
+    const service = new DatasetQueryService(directExecutor);
+    const catalog = await service.createCatalog(fixture.vaultPath, undefined, {
+      sourceId: additional.sourceId,
+      datasetId: additional.manifest.datasetId,
+      revisionId: additional.manifest.activeRevision
+    });
+    const result = await service.execute(fixture.vaultPath, catalog, {
+      action: "query",
+      datasetRef: "dataset_1",
+      tableRef: "table_1",
+      select: ["column_1", "column_2", "column_3"],
+      orderBy: [{ by: "column_3", direction: "desc" }],
+      limit: 1
+    });
+    const homePayload = JSON.stringify({
+      query: "List the project with the highest score.",
+      conversationHistory: [],
+      localEvidence: null,
+      sourceEvidence: null,
+      datasetEvidence: result.evidence.modelText
+    });
+
+    expect(result.preview.rows[0]?.values).toEqual(["Aurora", "synthetic-team", "91"]);
+    expect(result.evidence.restrictedContent).toBe(false);
+    expect(containsRestrictedModelContent(homePayload)).toBe(false);
   });
 
   it("returns a neutral auditable catalog snapshot while refusing a drifted catalog", async () => {
@@ -554,6 +626,137 @@ async function createManagedFixture(options: { readonly privateEvidence?: boolea
     schemaPath: path.join(bundlePath, ...manifest.schema.path.split("/")),
     payloadPath: path.join(bundlePath, ...manifest.payload.path.split("/")),
     manifest
+  };
+}
+
+async function materializeAdditionalDataset(
+  fixture: ManagedFixture,
+  fileName: string,
+  plan: (sourceBytes: Buffer) => DatasetIngestPlan = createPlan
+): Promise<{ readonly sourceId: string; readonly manifest: ReturnType<typeof DatasetManifestSchema.parse> }> {
+  const sourceBytes = plan === createMainflowDatasetPlan
+    ? Buffer.from("project,owner,score\nAurora,synthetic-team,91\nBeacon,synthetic-team,84\nCascade,synthetic-team,76\n", "utf8")
+    : Buffer.from("name,amount\nGrace,5\nLin,8\n", "utf8");
+  const sourcePath = path.join(fixture.root, fileName);
+  fs.writeFileSync(sourcePath, sourceBytes);
+  const vault = loadVaultSummary(fixture.vaultPath);
+  const capture = await new CaptureService({
+    current: () => vault,
+    activeVaultPath: () => fixture.vaultPath
+  }).submitFiles({
+    filePaths: [sourcePath],
+    inputKind: "file_drop",
+    userIntent: "capture",
+    locale: "en"
+  });
+  const sourceId = requireValue(capture.sourceIds[0]);
+  const sourceRecordPath = findFile(
+    path.join(fixture.vaultPath, ".pige/source-records"),
+    `${sourceId}.json`
+  );
+  const sourceRecord = SourceRecordSchema.parse(readJson(sourceRecordPath));
+  const job = JobRecordSchema.parse({
+    id: `job_20260713_${createHash("sha256").update(`${fixture.root}:${fileName}`).digest("hex").slice(0, 12)}`,
+    class: "dataset_import",
+    state: "running",
+    sourceId,
+    createdAt: "2026-07-13T00:00:00.000Z",
+    updatedAt: "2026-07-13T00:00:00.000Z",
+    policyContextId: "policy_dataset_query_scope_test",
+    policyHash: `sha256:${"d".repeat(64)}`,
+    message: "Scoped Dataset query fixture import."
+  });
+  await new DatasetService({
+    isAvailable: () => true,
+    plan: async () => plan(sourceBytes)
+  }).materializeSource(fixture.vaultPath, sourceRecord, sourceRecordPath, job);
+  const bundlePath = fs.readdirSync(path.join(fixture.vaultPath, "datasets"), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => path.join(fixture.vaultPath, "datasets", entry.name))
+    .find((candidate) => {
+      const manifest = DatasetManifestSchema.parse(readJson(path.join(candidate, "dataset.json")));
+      return manifest.sourceId === sourceId;
+    });
+  if (!bundlePath) throw new Error("Expected the additional Dataset Bundle.");
+  return {
+    sourceId,
+    manifest: DatasetManifestSchema.parse(readJson(path.join(bundlePath, "dataset.json")))
+  };
+}
+
+function createMainflowDatasetPlan(sourceBytes: Buffer): DatasetIngestPlan {
+  const sourceRows = [
+    ["Aurora", "synthetic-team", "91"],
+    ["Beacon", "synthetic-team", "84"],
+    ["Cascade", "synthetic-team", "76"]
+  ];
+  return {
+    schemaVersion: 1,
+    planner: { id: "dataset_ingest", version: "1" },
+    source: {
+      kind: "csv_file",
+      byteLength: sourceBytes.length,
+      sha256: createHash("sha256").update(sourceBytes).digest("hex"),
+      encoding: "utf-8",
+      bom: false,
+      delimiter: ",",
+      quote: "\"",
+      nullTokens: ["NULL", "\\N"],
+      lineEndings: ["lf"]
+    },
+    target: { profile: "managed_collection", owner: "dataset_service", sourceDisposition: "preserve_as_evidence" },
+    limits: {
+      maxSourceBytes: 1024 * 1024,
+      maxRows: 100,
+      maxColumns: 10,
+      maxCells: 1000,
+      maxCellBytes: 4096,
+      maxPlanValueBytes: 1024 * 1024,
+      maxTables: 10,
+      maxArchiveEntries: 100,
+      maxArchiveUncompressedBytes: 1024 * 1024,
+      maxXmlEntryBytes: 1024 * 1024,
+      maxSelectedXmlBytes: 1024 * 1024
+    },
+    stats: { tableCount: 1, rowCount: 3, columnCount: 3, cellCount: 9, retainedValueBytes: sourceBytes.length },
+    tables: [{
+      ordinal: 0,
+      sourceName: "projects",
+      sourceLocator: "csv:projects",
+      sourceMetadata: { delimiter: "," },
+      header: { mode: "absent", used: false },
+      columns: [
+        createMainflowColumn(0, "project", "text", 3),
+        createMainflowColumn(1, "owner", "text", 3),
+        createMainflowColumn(2, "score", "integer", 3)
+      ],
+      rows: sourceRows.map((row, rowIndex) => ({
+        ordinal: rowIndex,
+        sourceRow: rowIndex + 2,
+        cells: [
+          valueCell(0, row[0] ?? "", "text", { kind: "text", value: row[0] ?? "" }),
+          valueCell(1, row[1] ?? "", "text", { kind: "text", value: row[1] ?? "" }),
+          valueCell(2, row[2] ?? "", "integer", { kind: "integer", value: row[2] ?? "" })
+        ]
+      }))
+    }],
+    warnings: []
+  };
+}
+
+function createMainflowColumn(
+  ordinal: number,
+  name: string,
+  projectedType: "text" | "integer",
+  values: number
+) {
+  return {
+    ordinal,
+    sourceName: name,
+    suggestedName: name,
+    projectedType,
+    sourceTypes: [projectedType],
+    stats: { missing: 0, empty: 0, null: 0, value: values }
   };
 }
 

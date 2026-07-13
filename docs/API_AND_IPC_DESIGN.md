@@ -130,6 +130,10 @@ Error code rules:
 - Shared warning/error objects are strict: unknown fields such as raw prompts, response/source bodies, or private paths are rejected instead of being preserved beside `redactedDetails`.
 - Renderer UI chooses affordances from `severity`, `retryable`, and `userAction`; it must not parse localized text to decide behavior.
 - API errors, job error summaries, and diagnostic errors that describe the same failure should share the same `code`, `domain`, `messageKey`, and `retryable` value.
+- A source-backed Agent turn that still omits every registered terminal action after its
+  single bounded correction uses stable `agent_runtime.knowledge_action_missing` truth.
+  Its Job summary is body-free and redacted; it never persists provider prose, prompts,
+  source bodies, or raw tool arguments as the explanation.
 
 ## 5. Event Model
 

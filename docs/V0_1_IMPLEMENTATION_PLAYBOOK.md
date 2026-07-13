@@ -285,7 +285,10 @@ B3.14/E3.09 now proves direct/retrieved/file turns, waiting/resume, explicit pro
 no Host bypass, Pi-selected URL fetch/preserve, exact-tail follow-up, bounded history,
 result adoption, Pi cancellation, multiple safe terminal-answer replacements on both
 incremental tool arguments and an exact post-validation presentation turn, plus IME-safe
-Enter-to-send through typed main/preload/renderer bindings. Source-ingest terminal drafts,
+Enter-to-send through typed main/preload/renderer bindings. Current evidence also keeps
+high-frequency provider deltas outside the smaller structural event budget and permits
+one bounded registered-terminal-action correction after a source-inspection prose stop;
+the second omission fails with stable body-free error. Source-ingest terminal drafts,
 live Chat/Anthropic timing, multi-window proof,
 multi-source recovery, and signed packaged macOS/Windows BYOK remain open; E3.09 stays
 incomplete.
@@ -498,7 +501,9 @@ B6.16 foundation evidence covers one Pi-selected `pige_query_dataset@1` catalog/
 opaque refs and strict typed plans, exact managed-collection revision/privacy binding,
 bounded worker execution, deterministic result hashes/citations, neutral drift audit,
 checksum-bound conversation/Job recovery, one escaped accessible Home table, and durable
-table/citation restoration after reopen. E6.11
+table/citation restoration after reopen. A preserved-source continuation narrows its
+catalog to the exact source/Dataset/revision and excludes unrelated historical Datasets.
+E6.11
 remains planned pending independent Dataset browsing/paging and citation-open highlighting,
 analytical snapshots/Parquet, joins or composition, large-scale and signed-platform proof,
 and broader cross-process recovery/CAS.

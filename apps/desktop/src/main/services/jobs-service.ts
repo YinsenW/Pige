@@ -23,6 +23,7 @@ import {
   type JobRecord,
   type JobStage,
   type JobState,
+  type PigeErrorSummary,
   type SourceKind,
   type SourceRecord
 } from "@pige/schemas";
@@ -2162,7 +2163,8 @@ export class JobsService {
             jobFile.path,
             runningJob,
             "Agent ingest failed. Preserved source and source page remain retryable.",
-            durableState
+            durableState,
+            createAgentIngestRetryError(caught)
           );
         }
         failed += 1;
@@ -4377,15 +4379,48 @@ function markJobFailedRetryable(
   filePath: string,
   job: JobRecord,
   message: string,
-  durableState?: JobDurableWriteState
+  durableState?: JobDurableWriteState,
+  error?: PigeErrorSummary
 ): void {
   const current = readJobRecordAtPath(filePath) ?? job;
   writeJsonAtomic(filePath, JobRecordSchema.parse({
     ...withDurableWriteState(current, durableState),
     state: "failed_retryable",
     updatedAt: new Date().toISOString(),
-    message
+    message,
+    ...(error ? { error } : {})
   }));
+}
+
+function createAgentIngestRetryError(caught: unknown): PigeErrorSummary {
+  if (caught instanceof PigeDomainError && caught.code === "model_provider.call_failed") {
+    return {
+      code: caught.code,
+      domain: "model_provider",
+      messageKey: "errors.model_provider.call_failed",
+      retryable: true,
+      severity: "error",
+      userAction: "retry"
+    };
+  }
+  if (caught instanceof PigeDomainError && caught.code === "agent_runtime.knowledge_action_missing") {
+    return {
+      code: caught.code,
+      domain: "agent_runtime",
+      messageKey: "errors.agent_runtime.source_turn_failed",
+      retryable: true,
+      severity: "error",
+      userAction: "retry"
+    };
+  }
+  return {
+    code: "agent_runtime.source_turn_failed",
+    domain: "agent_runtime",
+    messageKey: "errors.agent_runtime.source_turn_failed",
+    retryable: true,
+    severity: "error",
+    userAction: "retry"
+  };
 }
 
 function markJobWaitingDependency(

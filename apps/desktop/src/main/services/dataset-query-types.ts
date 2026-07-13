@@ -201,6 +201,12 @@ export interface DatasetQueryCatalog {
   readonly catalogHash: string;
 }
 
+export interface DatasetQueryCatalogScope {
+  readonly sourceId: string;
+  readonly datasetId: string;
+  readonly revisionId: string;
+}
+
 export interface DatasetQueryEvidenceSnapshot {
   readonly evidenceHash: string;
   readonly privateContent: boolean;

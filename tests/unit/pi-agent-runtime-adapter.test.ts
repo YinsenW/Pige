@@ -97,6 +97,26 @@ describe("Pi Agent runtime adapter", () => {
     expect(result.events.at(-1)?.type).toBe("agent_end");
   });
 
+  it("does not exhaust the structural event budget on bounded high-frequency provider deltas", async () => {
+    const calls: string[] = [];
+    const published: unknown[] = [];
+    const title = `Bounded ${"stream ".repeat(1_600)}`;
+    const adapter = new PiAgentRuntimeAdapter({
+      fauxResponses: [{
+        kind: "tool_call",
+        toolName: "pige_create_knowledge_note",
+        args: { title }
+      }]
+    });
+
+    const result = await adapter.run(makeRequest(makeTools(calls, published)));
+
+    expect(calls).toEqual(["publish"]);
+    expect(published).toEqual([{ title }]);
+    expect(result.events.filter((event) => event.type === "message_update")).toHaveLength(1);
+    expect(result.events.at(-1)?.type).toBe("agent_end");
+  });
+
   it("emits only parsed safe answer snapshots from the exact terminal Home tool", async () => {
     await expectExactAuthorizedDrafts("openai_responses");
   });

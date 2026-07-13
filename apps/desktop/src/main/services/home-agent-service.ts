@@ -49,6 +49,7 @@ import type { AgentIngestCapabilityPort } from "./agent-ingest-service";
 import {
   DatasetQueryToolRequestSchema,
   type DatasetQueryCatalog,
+  type DatasetQueryCatalogScope,
   type DatasetQueryEvidenceRevalidation,
   type DatasetQueryEvidenceSnapshot,
   type DatasetQueryExecutionResult,
@@ -108,7 +109,11 @@ export interface HomeAgentRuntimePort {
 }
 
 export interface HomeAgentDatasetQueryPort {
-  createCatalog(vaultPath: string, signal?: AbortSignal): Promise<DatasetQueryCatalog>;
+  createCatalog(
+    vaultPath: string,
+    signal?: AbortSignal,
+    scope?: DatasetQueryCatalogScope
+  ): Promise<DatasetQueryCatalog>;
   revalidateCatalog(
     vaultPath: string,
     catalog: DatasetQueryCatalog,
@@ -513,11 +518,13 @@ export class HomeAgentService {
         throw createUnavailableRuntimeError(this.#models.summary().defaultBinding);
       }
       session.modelUsage = toHomeModelUsage(runtimeBinding.provider);
+      let datasetCatalogScope: DatasetQueryCatalogScope | undefined;
       if (sourceTurn) {
         const sourceJob = await this.#jobs.processAgentTurnSource(session.current.id);
         session.current = sourceJob;
         const datasetContinuation = isDatasetQueryContinuationJob(sourceJob);
         if (datasetContinuation) {
+          datasetCatalogScope = readDatasetQueryContinuationScope(sourceJob);
           session.modelInvocationStarted = true;
           runtimeBinding = resolveReadyHomeRuntimeBinding(this.#models);
           if (!runtimeBinding) {
@@ -670,7 +677,8 @@ export class HomeAgentService {
             history,
             jobExecution.signal,
             assertConversationCurrent,
-            publishDraft
+            publishDraft,
+            datasetCatalogScope
           );
           jobExecution.markDurableCheckpoint("agent_turn_assistant_event_publication_started");
           const assistantEvent = this.#conversations.appendAssistantTurn(
@@ -949,7 +957,9 @@ export class HomeAgentService {
             currentBinding.provider,
             history,
             jobExecution.signal,
-            assertConversationCurrent
+            assertConversationCurrent,
+            undefined,
+            datasetContinuation ? readDatasetQueryContinuationScope(job) : undefined
           );
           jobExecution.markDurableCheckpoint("agent_turn_assistant_event_publication_started");
           const assistantEvent = this.#conversations.appendAssistantTurn(
@@ -1050,7 +1060,8 @@ export class HomeAgentService {
     history: readonly PiAgentHistoryMessage[] = [],
     signal?: AbortSignal,
     assertConversationCurrent?: () => void,
-    publishDraft?: (text: string) => void
+    publishDraft?: (text: string) => void,
+    datasetCatalogScope?: DatasetQueryCatalogScope
   ): Promise<{ readonly answer: AgentTurnAnswer; readonly sourceIds: readonly string[] }> {
     const query = request.text.trim();
     if (history.some((message) => containsRestrictedModelContent(message.text))) {
@@ -1345,7 +1356,11 @@ export class HomeAgentService {
               if (datasetCatalog || datasetResult) {
                 throw new PigeDomainError("dataset.query.catalog_repeated", "The Dataset catalog may be read once per Agent turn.");
               }
-              datasetCatalog = await this.#datasets?.createCatalog(vaultPath, context.signal);
+              datasetCatalog = await this.#datasets?.createCatalog(
+                vaultPath,
+                context.signal,
+                datasetCatalogScope
+              );
               if (!datasetCatalog || !this.#datasets) {
                 throw new PigeDomainError("dataset.query.unavailable", "The Dataset query service is unavailable.");
               }
@@ -2512,13 +2527,25 @@ function isDatasetQueryContinuationJob(job: JobRecord): boolean {
   ) {
     return false;
   }
+  return readDatasetQueryContinuationScope(job) !== undefined;
+}
+
+function readDatasetQueryContinuationScope(
+  job: JobRecord
+): DatasetQueryCatalogScope | undefined {
+  if (!job.sourceId) return undefined;
   const datasetRefs = (job.outputRefs ?? []).filter(
     (ref) => ref.kind === "dataset" && ref.role === "agent_dataset" && Boolean(ref.id)
   );
   const revisionRefs = (job.outputRefs ?? []).filter(
     (ref) => ref.kind === "dataset_revision" && ref.role === "agent_dataset_revision" && Boolean(ref.id)
   );
-  return datasetRefs.length === 1 && revisionRefs.length === 1;
+  const datasetId = datasetRefs[0]?.id;
+  const revisionId = revisionRefs[0]?.id;
+  if (datasetRefs.length !== 1 || revisionRefs.length !== 1 || !datasetId || !revisionId) {
+    return undefined;
+  }
+  return { sourceId: job.sourceId, datasetId, revisionId };
 }
 
 function resolveReadyHomeRuntimeBinding(models: HomeAgentModelPort): {

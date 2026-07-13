@@ -1,6 +1,9 @@
 import http, { type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
-import { PiAgentRuntimeAdapter } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
+import {
+  PiAgentRuntimeAdapter,
+  type PigeAgentToolDefinition
+} from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
 import { createModelRuntimeBindingIdentity } from "../../apps/desktop/src/main/services/model-runtime-binding";
 
@@ -183,6 +186,87 @@ describe("Pi AI provider binding", () => {
     ]);
   });
 
+  it("replays a reviewed DeepSeek reasoning tool call with the official Pi model metadata", async () => {
+    const requests: CapturedRequest[] = [];
+    const baseUrl = await startServer(requests, (response) => {
+      if (requests.length === 1) {
+        respondOpenAiToolCall(response);
+        return;
+      }
+      const body = JSON.parse(requests.at(-1)?.body ?? "{}") as {
+        messages?: Array<{ role?: string; tool_calls?: unknown; reasoning_content?: unknown }>;
+      };
+      const assistantToolCall = body.messages?.find(
+        (message) => message.role === "assistant" && message.tool_calls !== undefined
+      );
+      if (assistantToolCall?.reasoning_content !== "") {
+        response.writeHead(400, { "content-type": "application/json" });
+        response.end(JSON.stringify({ error: { code: "missing_reasoning_content" } }));
+        return;
+      }
+      respondOpenAi(response);
+    });
+    const baseConfig = makeConfig(
+      "openai_chat_completions",
+      "openai_compatible",
+      baseUrl,
+      "deepseek-v4-pro",
+      "deepseek_reasoning"
+    );
+    const config: ModelProviderRuntimeConfig = {
+      ...baseConfig,
+      provider: { ...baseConfig.provider, presetId: "deepseek" }
+    };
+    const inspectTool: PigeAgentToolDefinition = {
+      name: "pige_inspect_source",
+      label: "Inspect source",
+      description: "Return one bounded synthetic source inspection.",
+      version: "1",
+      capability: "read_current_source",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+      outputSchema: {
+        type: "object",
+        properties: { status: { type: "string" } },
+        required: ["status"],
+        additionalProperties: false
+      },
+      effect: "read_only",
+      inputTrust: "model_generated",
+      outputTrust: "untrusted_source",
+      dataBoundary: {
+        resourceScope: "current_source",
+        pathAuthority: "host_only",
+        sourceIdAuthority: "host_only",
+        modelAuthority: "none"
+      },
+      execution: "sequential",
+      idempotency: { mode: "idempotent", scope: "current_source" },
+      limits: { maxInputBytes: 64, maxOutputBytes: 256, timeoutMs: 1_000 },
+      ownerService: "PiAgentProviderBindingTest",
+      execute: async () => ({
+        modelText: JSON.stringify({ status: "ready" }),
+        details: { status: "ready" }
+      })
+    };
+
+    const result = await new PiAgentRuntimeAdapter().run({
+      runtimeConfig: config,
+      jobId: "job_20260713_deepseekreplay",
+      systemPrompt: "Use only the supplied Pige tool, then acknowledge its result.",
+      userPrompt: "Inspect the synthetic source.",
+      tools: [inspectTool]
+    });
+
+    expect(result.assistantText).toBe("openai binding ok");
+    expect(requests).toHaveLength(2);
+    const replayBody = JSON.parse(requests[1]?.body ?? "{}") as {
+      messages?: Array<{ role?: string; tool_calls?: unknown; reasoning_content?: unknown }>;
+    };
+    expect(replayBody.messages?.find(
+      (message) => message.role === "assistant" && message.tool_calls !== undefined
+    )).toMatchObject({ reasoning_content: "" });
+  });
+
   it("treats endpoint protocol changes as binding identity drift", () => {
     const config = makeConfig(
       "openai_chat_completions",
@@ -265,6 +349,37 @@ function respondOpenAi(response: ServerResponse): void {
     created: 1,
     model: "openai-selected",
     choices: [{ index: 0, delta: {}, finish_reason: "stop" }]
+  })}\n\n`);
+  response.end("data: [DONE]\n\n");
+}
+
+function respondOpenAiToolCall(response: ServerResponse): void {
+  response.writeHead(200, { "content-type": "text/event-stream" });
+  response.write(`data: ${JSON.stringify({
+    id: "chatcmpl-deepseek-tool",
+    object: "chat.completion.chunk",
+    created: 1,
+    model: "deepseek-v4-pro",
+    choices: [{
+      index: 0,
+      delta: {
+        role: "assistant",
+        tool_calls: [{
+          index: 0,
+          id: "call_deepseek_replay",
+          type: "function",
+          function: { name: "pige_inspect_source", arguments: "{}" }
+        }]
+      },
+      finish_reason: null
+    }]
+  })}\n\n`);
+  response.write(`data: ${JSON.stringify({
+    id: "chatcmpl-deepseek-tool",
+    object: "chat.completion.chunk",
+    created: 1,
+    model: "deepseek-v4-pro",
+    choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }]
   })}\n\n`);
   response.end("data: [DONE]\n\n");
 }

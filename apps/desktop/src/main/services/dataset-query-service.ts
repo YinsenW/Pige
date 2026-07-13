@@ -9,10 +9,13 @@ import type {
 import { PigeDomainError } from "@pige/domain";
 import {
   DatasetAnswerCitationSchema,
+  DatasetIdSchema,
   DatasetManifestSchema,
   DatasetQueryPreviewSchema,
+  DatasetRevisionIdSchema,
   DatasetRevisionSchema,
   DatasetSchemaRecordSchema,
+  SourceIdSchema,
   SourceRecordSchema,
   type DatasetLogicalType,
   type DatasetManifest,
@@ -31,6 +34,7 @@ import {
   type ColumnOpaqueRef,
   type DatasetOpaqueRef,
   type DatasetQueryCatalog,
+  type DatasetQueryCatalogScope,
   type DatasetQueryCoreResult,
   type DatasetQueryEvidenceRevalidation,
   type DatasetQueryEvidenceSnapshot,
@@ -146,6 +150,7 @@ interface CatalogState {
   readonly envelope: CatalogEnvelope;
   readonly modelText: string;
   readonly evidence: DatasetQueryEvidenceSnapshot;
+  readonly scope?: DatasetQueryCatalogScope;
   queryStarted: boolean;
 }
 
@@ -177,8 +182,12 @@ export class DatasetQueryService {
     this.#limits = Object.freeze({ ...limits });
   }
 
-  async createCatalog(vaultPath: string, signal?: AbortSignal): Promise<DatasetQueryCatalog> {
-    const state = await this.#buildCatalog(vaultPath, signal);
+  async createCatalog(
+    vaultPath: string,
+    signal?: AbortSignal,
+    scope?: DatasetQueryCatalogScope
+  ): Promise<DatasetQueryCatalog> {
+    const state = await this.#buildCatalog(vaultPath, signal, validateCatalogScope(scope));
     this.#catalogs.set(state.catalog, state);
     return state.catalog;
   }
@@ -305,7 +314,7 @@ export class DatasetQueryService {
   ): Promise<{ readonly current: CatalogState; readonly drifted: boolean }> {
     const previous = this.#catalogs.get(catalog);
     if (!previous || hashCanonical(catalog) !== hashCanonical(previous.catalog)) throw unboundCatalogError();
-    const current = await this.#buildCatalog(vaultPath, signal);
+    const current = await this.#buildCatalog(vaultPath, signal, previous.scope);
     if (current.vaultPath !== previous.vaultPath || current.realVaultPath !== previous.realVaultPath) {
       throw staleEvidenceError();
     }
@@ -318,7 +327,11 @@ export class DatasetQueryService {
     };
   }
 
-  async #buildCatalog(vaultPath: string, signal?: AbortSignal): Promise<CatalogState> {
+  async #buildCatalog(
+    vaultPath: string,
+    signal?: AbortSignal,
+    scope?: DatasetQueryCatalogScope
+  ): Promise<CatalogState> {
     assertNotAborted(signal);
     const vault = await assertVaultAndDatasetsRoot(vaultPath, signal);
     const entries = await fs.promises.readdir(vault.datasetsPath, { withFileTypes: true });
@@ -341,13 +354,32 @@ export class DatasetQueryService {
       }
     }
     bundleNames.sort(binaryCompare);
-    const selectedNames = bundleNames.slice(0, this.#limits.maxCatalogDatasets);
+    const selectedNames = scope
+      ? bundleNames.filter((name) => name.endsWith(`--${scope.datasetId}`))
+      : bundleNames.slice(0, this.#limits.maxCatalogDatasets);
+    if (scope && selectedNames.length !== 1) {
+      throw new PigeDomainError(
+        "dataset.query.scope_invalid",
+        "The source-bound Dataset catalog does not resolve to exactly one managed Bundle."
+      );
+    }
     const snapshots: BundleSnapshot[] = [];
     for (const name of selectedNames) {
       assertNotAborted(signal);
       snapshots.push(await readBundleSnapshot(vault, `datasets/${name}`, this.#limits, signal));
     }
     snapshots.sort((left, right) => binaryCompare(left.manifest.datasetId, right.manifest.datasetId));
+    if (scope && (
+      snapshots.length !== 1 ||
+      snapshots[0]?.source.sourceId !== scope.sourceId ||
+      snapshots[0]?.manifest.datasetId !== scope.datasetId ||
+      snapshots[0]?.manifest.activeRevision !== scope.revisionId
+    )) {
+      throw new PigeDomainError(
+        "dataset.query.scope_invalid",
+        "The source-bound Dataset catalog does not match its durable continuation binding."
+      );
+    }
 
     let tableNumber = 0;
     let columnNumber = 0;
@@ -390,7 +422,7 @@ export class DatasetQueryService {
     }
     let envelope = createCatalogEnvelope(
       datasets,
-      bundleNames.length - snapshots.length,
+      scope ? 0 : bundleNames.length - snapshots.length,
       omittedTables,
       omittedColumns,
       this.#limits
@@ -400,7 +432,7 @@ export class DatasetQueryService {
       omittedColumns += 1;
       envelope = createCatalogEnvelope(
         datasets,
-        bundleNames.length - snapshots.length,
+        scope ? 0 : bundleNames.length - snapshots.length,
         omittedTables,
         omittedColumns,
         this.#limits
@@ -423,6 +455,7 @@ export class DatasetQueryService {
       envelope,
       modelText,
       evidence,
+      ...(scope ? { scope } : {}),
       queryStarted: false
     };
   }
@@ -1302,6 +1335,28 @@ function validateServiceLimits(limits: DatasetQueryLimits): void {
       throw new PigeDomainError("dataset.query.limit_invalid", "Dataset query service limits cannot exceed the repository policy.");
     }
   }
+}
+
+function validateCatalogScope(
+  scope: DatasetQueryCatalogScope | undefined
+): DatasetQueryCatalogScope | undefined {
+  if (!scope) return undefined;
+  const parsed = {
+    sourceId: SourceIdSchema.safeParse(scope.sourceId),
+    datasetId: DatasetIdSchema.safeParse(scope.datasetId),
+    revisionId: DatasetRevisionIdSchema.safeParse(scope.revisionId)
+  };
+  if (!parsed.sourceId.success || !parsed.datasetId.success || !parsed.revisionId.success) {
+    throw new PigeDomainError(
+      "dataset.query.scope_invalid",
+      "The source-bound Dataset catalog scope is invalid."
+    );
+  }
+  return Object.freeze({
+    sourceId: parsed.sourceId.data,
+    datasetId: parsed.datasetId.data,
+    revisionId: parsed.revisionId.data
+  });
 }
 
 function createUntrustedEnvelope(value: unknown): string {

@@ -154,8 +154,10 @@ checkpointed. Retry/restart adopts the same verified child, Bundle, and Operatio
 cancellation before bundle commit preserves only source evidence. For a Home attachment,
 successful materialization records the Dataset/revision refs and requeues the same
 `agent_turn` at `planning`; Pi then answers the original request through the bounded
-Dataset query tool. Restart adopts that continuation without another source loop or
-Dataset revision. Dataset query remains read-only and revision-bound; Collection/view/
+Dataset query tool. That continuation catalog is limited to the exact current source,
+Dataset, and revision refs; unrelated historical Datasets cannot block or enter the
+answer context. Restart adopts that continuation without another source loop or Dataset
+revision. Dataset query remains read-only and revision-bound; Collection/view/
 derived-Dataset changes still require deterministic operation identity, revision fences,
 Activity/Undo, and restart recovery.
 
@@ -341,6 +343,8 @@ Rules:
 
 - Job warnings and errors must not store raw source bodies, prompts, model responses, secrets, or full unredacted external paths.
 - A retryable job error must say whether retry resumes from a checkpoint or restarts the failed stage.
+- Retryable Agent-parent failures persist one stable shared error summary even when the
+  runtime/provider exception is transient; the summary remains body-free and redacted.
 - `code`, `domain`, `messageKey`, `retryable`, and `userAction` must match the API/diagnostic error for the same failure.
 - UI status cards should use `userAction` to choose the primary action, such as retry, repair tool, configure model, grant permission, or choose path.
 

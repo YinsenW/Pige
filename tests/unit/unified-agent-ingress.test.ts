@@ -21,12 +21,14 @@ import { executeDatasetQuery } from "../../apps/desktop/src/main/services/datase
 import { DatasetQueryService } from "../../apps/desktop/src/main/services/dataset-query-service";
 import {
   DATASET_QUERY_PROTOCOL_VERSION,
+  type DatasetQueryCatalogScope,
   type DatasetQueryExecutor
 } from "../../apps/desktop/src/main/services/dataset-query-types";
 import { DatasetService, type DatasetImportPlanner } from "../../apps/desktop/src/main/services/dataset-service";
 import type { DatasetIngestPlan } from "../../apps/desktop/src/main/services/dataset-ingest-types";
 import {
   HomeAgentService,
+  type HomeAgentDatasetQueryPort,
   type HomeAgentModelPort,
   type HomeAgentRetrievalPort
 } from "../../apps/desktop/src/main/services/home-agent-service";
@@ -108,6 +110,20 @@ describe("Unified Agent ingress", () => {
         }
       ]
     });
+    const datasetQueries = new DatasetQueryService(directDatasetExecutor);
+    let observedCatalogScope: DatasetQueryCatalogScope | undefined;
+    const scopedDatasets: HomeAgentDatasetQueryPort = {
+      createCatalog: (vaultPath, signal, scope) => {
+        observedCatalogScope = scope;
+        return datasetQueries.createCatalog(vaultPath, signal, scope);
+      },
+      revalidateCatalog: (vaultPath, catalog, signal) =>
+        datasetQueries.revalidateCatalog(vaultPath, catalog, signal),
+      execute: (vaultPath, catalog, request, signal) =>
+        datasetQueries.execute(vaultPath, catalog, request, signal),
+      revalidateResult: (vaultPath, result, signal) =>
+        datasetQueries.revalidateResult(vaultPath, result, signal)
+    };
     const jobs = new JobsService(
       fixture.vaultPort,
       new AgentIngestService(models, ingestRuntime, datasetCapabilities),
@@ -125,7 +141,7 @@ describe("Unified Agent ingress", () => {
       datasetCapabilities,
       undefined,
       undefined,
-      new DatasetQueryService(directDatasetExecutor)
+      scopedDatasets
     );
     const prepared = home.prepareSourceTurn({
       text: "Which person has the largest count?",
@@ -169,6 +185,16 @@ describe("Unified Agent ingress", () => {
       })
     ]);
     expect(jobs.list({ classes: ["dataset_import"] }).jobs).toHaveLength(1);
+    const durableParent = requireValue(readJobs(fixture.vaultPath).find((job) => job.id === prepared.jobId));
+    expect(observedCatalogScope).toEqual({
+      sourceId: prepared.sourceId,
+      datasetId: requireValue(durableParent.outputRefs?.find(
+        (ref) => ref.kind === "dataset" && ref.role === "agent_dataset"
+      )?.id),
+      revisionId: requireValue(durableParent.outputRefs?.find(
+        (ref) => ref.kind === "dataset_revision" && ref.role === "agent_dataset_revision"
+      )?.id)
+    });
     expect(home.conversation()?.messages.at(-1)).toMatchObject({
       role: "assistant",
       answer: expect.objectContaining({
@@ -408,6 +434,93 @@ describe("Unified Agent ingress", () => {
     expect(jobs.list({ limit: 20 }).jobs).toEqual([
       expect.objectContaining({ id: prepared.jobId, class: "agent_turn", state: "completed" })
     ]);
+  });
+
+  it("uses one bounded correction turn when a provider stops after inspection without a terminal tool", async () => {
+    const fixture = makeVault();
+    const sourceFile = path.join(path.dirname(fixture.vaultPath), "terminal-recovery-source.md");
+    fs.writeFileSync(sourceFile, "# Recovery\n\nThe source remains bounded evidence.\n", "utf8");
+    const models = createMutableModels(true);
+    const jobs = new JobsService(fixture.vaultPort, new AgentIngestService(models, new PiAgentRuntimeAdapter({
+      fauxResponses: [
+        { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
+        { kind: "text", text: "I inspected the source but stopped too early." },
+        {
+          kind: "tool_call",
+          toolName: "pige_respond_to_user",
+          args: { answer: "The bounded correction completed the source turn.", evidenceRefs: ["ev_01"] }
+        }
+      ]
+    })));
+    const home = new HomeAgentService(fixture.vaultPort, models, neverRetrieval, jobs);
+    const prepared = home.prepareSourceTurn({
+      inputKind: "file_picker",
+      objective: "auto",
+      locale: "en"
+    });
+    await new CaptureService(fixture.vaultPort).preserveFilesForAgentTurn({
+      filePaths: [sourceFile],
+      inputKind: "file_picker",
+      userIntent: "unknown",
+      locale: "en"
+    }, { jobId: prepared.jobId, sourceId: prepared.sourceId });
+
+    const outcome = await home.submitPreparedSourceTurn(prepared);
+
+    expect(outcome).toMatchObject({
+      state: "completed",
+      jobId: prepared.jobId,
+      answer: {
+        answer: "The bounded correction completed the source turn.",
+        grounding: "source"
+      }
+    });
+    expect(jobs.readAgentTurnJob(prepared.jobId)).toMatchObject({ state: "completed" });
+  });
+
+  it("persists a body-free terminal-action error when the bounded correction still stops as prose", async () => {
+    const fixture = makeVault();
+    const sourceFile = path.join(path.dirname(fixture.vaultPath), "terminal-missing-source.txt");
+    fs.writeFileSync(sourceFile, "The source remains retryable when no terminal tool succeeds.\n", "utf8");
+    const models = createMutableModels(true);
+    const jobs = new JobsService(fixture.vaultPort, new AgentIngestService(models, new PiAgentRuntimeAdapter({
+      fauxResponses: [
+        { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
+        { kind: "text", text: "First incomplete response." },
+        { kind: "text", text: "Second incomplete response." }
+      ]
+    })));
+    const home = new HomeAgentService(fixture.vaultPort, models, neverRetrieval, jobs);
+    const prepared = home.prepareSourceTurn({
+      inputKind: "file_drop",
+      objective: "auto",
+      locale: "en"
+    });
+    await new CaptureService(fixture.vaultPort).preserveFilesForAgentTurn({
+      filePaths: [sourceFile],
+      inputKind: "file_drop",
+      userIntent: "unknown",
+      locale: "en"
+    }, { jobId: prepared.jobId, sourceId: prepared.sourceId });
+
+    const outcome = await home.submitPreparedSourceTurn(prepared);
+
+    expect(outcome).toMatchObject({
+      state: "failed",
+      error: {
+        code: "agent_runtime.knowledge_action_missing",
+        messageKey: "errors.agent_runtime.source_turn_failed",
+        retryable: true,
+        userAction: "retry"
+      }
+    });
+    expect(jobs.readAgentTurnJob(prepared.jobId)).toMatchObject({
+      state: "failed_retryable",
+      error: {
+        code: "agent_runtime.knowledge_action_missing",
+        messageKey: "errors.agent_runtime.source_turn_failed"
+      }
+    });
   });
 
   it("reconciles a crash after SourceRecord persistence and before Agent turn linkage", async () => {
@@ -728,6 +841,11 @@ function makeVault(): {
 function readJobs(vaultPath: string): JobRecord[] {
   return listFiles(path.join(vaultPath, ".pige", "jobs"), ".json")
     .map((filePath) => JSON.parse(fs.readFileSync(filePath, "utf8")) as JobRecord);
+}
+
+function requireValue<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error("Expected a defined test value.");
+  return value;
 }
 
 function listFiles(root: string, suffix: string): string[] {

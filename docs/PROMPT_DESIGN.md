@@ -132,6 +132,11 @@ Rules:
 - The publication handler writes the validated note, Operation, and index. After its
   typed result, Jobs Service appends log and completes the Job; recovery is idempotent,
   not cross-file atomic. Raw prompts or provider responses are not persisted by default.
+- After source inspection, a turn that stops as prose without attempting a registered
+  terminal knowledge action may receive one bounded correction naming only the current
+  registered terminal actions. A second prose stop fails with stable typed error; an
+  invalid or denied terminal attempt is never silently replaced by another action.
+  Runtime/tool validation, not this correction prompt, remains the authority.
 - If `confidence` is `"low"` or warnings exist, apply only conservative supported content,
   mark a non-blocking quality warning, or abstain; confidence alone cannot demand approval.
 - Service-side quality guards add a warning and cap model-reported `high` confidence at `medium` when document extraction was range-limited or visible content still needs OCR. Prompt compliance alone is not the enforcement layer.

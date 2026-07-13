@@ -42,6 +42,7 @@ import {
 import {
   ADD_KNOWLEDGE_TAGS_TOOL_NAME,
   ADD_KNOWLEDGE_TAGS_TOOL_VERSION,
+  CREATE_KNOWLEDGE_NOTE_TOOL_NAME,
   INSPECT_DATASET_TOOL_NAME,
   INSPECT_DATASET_TOOL_VERSION,
   LINK_KNOWLEDGE_NOTES_TOOL_NAME,
@@ -112,6 +113,22 @@ export interface AgentIngestModelConfigPort {
 export interface AgentIngestRuntimePort {
   run(request: PiAgentRunRequest): Promise<PiAgentRunResult>;
 }
+
+const AGENT_INGEST_TERMINAL_TOOL_NAMES: ReadonlySet<string> = new Set([
+  RESPOND_TO_USER_TOOL_NAME,
+  INSPECT_DATASET_TOOL_NAME,
+  CREATE_KNOWLEDGE_NOTE_TOOL_NAME,
+  UPDATE_KNOWLEDGE_NOTE_TOOL_NAME,
+  ADD_KNOWLEDGE_TAGS_TOOL_NAME,
+  LINK_KNOWLEDGE_NOTES_TOOL_NAME,
+  STAGE_KNOWLEDGE_NOTE_PROPOSAL_TOOL_NAME
+]);
+
+const AGENT_INGEST_TERMINAL_RECOVERY_PROMPT = [
+  "The prior response stopped without completing a registered terminal Pige action.",
+  "Re-evaluate the existing typed tool results and call exactly one registered terminal tool now.",
+  "Do not answer as prose and do not invent evidence, tools, or authority."
+].join(" ");
 
 export interface AgentIngestRetrievalPort {
   search(vaultPath: string, request: RetrievalSearchRequest): RetrievalSearchResult;
@@ -2054,6 +2071,12 @@ export class AgentIngestService {
         userPrompt,
         tools,
         beforeModelTurn: authorizeCurrentModelTurn,
+        terminalActionRecovery: {
+          requiredToolNames: tools
+            .map((tool) => tool.name)
+            .filter((name) => AGENT_INGEST_TERMINAL_TOOL_NAMES.has(name)),
+          prompt: AGENT_INGEST_TERMINAL_RECOVERY_PROMPT
+        },
         ...(hooks.signal ? { signal: hooks.signal } : {})
       });
     } catch (caught) {
