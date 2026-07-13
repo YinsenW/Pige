@@ -108,6 +108,18 @@ Skip path:
 - Pige enters `capture_only`.
 - Pige must clearly state that captures are saved locally and Agent organization will resume after a model is configured.
 
+First Home after create/open:
+
+- In `capture_only`, show one compact inline guide above the composer: content can be
+  saved now; connecting a model enables Pi Agent conversation and continuation.
+- Offer exactly `Connect Model` and quiet `Continue capture-only`; neither action adds a
+  screen or blocks capture.
+- Either explicit choice dismisses the guide for that vault on this machine. The bounded
+  vault-ID preference is machine-local, excluded from backup, and absent from the vault.
+- An active model-repair turn or preserved source waiting for a model replaces the guide
+  with its single owning status/action. Never show a duplicate provider CTA or mislabel a
+  model wait as a missing local capability.
+
 Rules:
 
 - Keys go only to the secret store; provider/model behavior follows the Pi owner.
@@ -322,6 +334,7 @@ First-run data writes:
 | --- | --- | --- | --- |
 | Active vault path | Vault Runtime Service | OS app data | No |
 | Recent vault list | Vault Runtime Service | OS app data | No |
+| First-Home guide dismissal by vault ID | Vault Runtime Service | OS app data | No |
 | Vault identity | Vault Runtime Service | `.pige/manifest.json` | Yes |
 | Vault preferences | Settings Service | `.pige/config.json` | Yes |
 | Default `PIGE.md` | Vault Service | `PIGE.md` | Yes |
@@ -348,8 +361,12 @@ Required tests:
 - Setup auto-syncs one inventory, probes one model, and chooses an enabled default.
 - Incomplete discovery offers typed Retry/manual fallback, never empty-success/raw error.
 - Skip model enters `capture_only`.
+- First capture-only Home offers one Connect/continue choice and keeps that explicit
+  per-vault choice dismissed after restart.
 - Capture-only text/file capture creates source record and durable conversation reference.
 - Model-dependent jobs become `waiting_dependency`, not silent failures.
+- Active text repair and preserved-source model waits keep one localized status owner and
+  one relevant model action, including picker/drop intermediate refresh states.
 - Configuring a model resumes waiting jobs without duplicating source records.
 - Restore from first run restores into a new folder and does not import secrets.
 - First-run strings exist in all v0.1 locales.

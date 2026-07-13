@@ -50,6 +50,9 @@ export class VaultService {
       state: activeVault ? (hasDefaultModel ? "ready" : "capture_only") : "blocked_no_vault",
       ...(activeVault ? { activeVault } : {}),
       hasDefaultModel,
+      showFirstHomeGuide: Boolean(
+        activeVault && !hasDefaultModel && !this.#settings.hasDismissedFirstHome(activeVault.vaultId)
+      ),
       waitingDependencyCounts: {
         modelProvider: activeVault && !hasDefaultModel ? 1 : 0,
         localTool: 0,
@@ -59,6 +62,12 @@ export class VaultService {
         externalSource: 0
       }
     };
+  }
+
+  dismissFirstHomeGuide(): OnboardingStatus {
+    const activeVault = this.#requireActiveVault();
+    this.#settings.dismissFirstHome(activeVault.vaultId);
+    return this.onboardingStatus();
   }
 
   async create(parentWindow: BrowserWindow, request: CreateVaultRequest): Promise<VaultActionResult> {

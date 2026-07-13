@@ -154,6 +154,10 @@ Rules:
 
 ### 6.1 Vault
 
+Current renderer/preload command:
+
+- `onboarding.dismissFirstHome`
+
 Internal compatibility/recovery commands (not current renderer/preload ingress):
 
 - `vault.create`
@@ -205,6 +209,7 @@ type OnboardingStatus = {
   state: "blocked_no_vault" | "capture_only" | "ready";
   activeVault?: VaultSummary;
   hasDefaultModel: boolean;
+  showFirstHomeGuide: boolean;
   waitingDependencyCounts?: {
     modelProvider: number;
     localTool: number;
@@ -240,6 +245,10 @@ Rules:
 
 - The renderer may display these paths, but it never receives direct filesystem capability.
 - First-run, capture-only mode, and onboarding state follow `docs/ONBOARDING_AND_FIRST_RUN.md`.
+- `onboarding.dismissFirstHome` takes no renderer-supplied vault ID. Main resolves the
+  active vault, records only its stable ID in bounded machine-local settings, and returns
+  refreshed `OnboardingStatus`; the preference is idempotent, non-secret, and excluded
+  from vault files and backup.
 - `vault.create` takes a parent folder and vault name selected through a trusted OS file dialog.
 - `vault.open` takes a folder selected through a trusted OS file dialog and validates Pige compatibility.
 - Active vault path and recent vault list are machine-local settings; they are not written into `.pige/manifest.json`.

@@ -836,6 +836,7 @@ ipcMain.handle("retrieval.ask", (_event, request: RetrievalAskRequest) => getRet
 ipcMain.handle("vault.current", () => getVaultService().current());
 ipcMain.handle("vault.recent", () => getVaultService().recent());
 ipcMain.handle("onboarding.status", () => getVaultService().onboardingStatus());
+ipcMain.handle("onboarding.dismissFirstHome", () => getVaultService().dismissFirstHomeGuide());
 ipcMain.handle("vault.create", async (event, request: CreateVaultRequest) => {
   const parentWindow = BrowserWindow.fromWebContents(event.sender);
   if (!parentWindow) throw new Error("No active window for vault creation.");

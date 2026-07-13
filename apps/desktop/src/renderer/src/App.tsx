@@ -65,6 +65,17 @@ type ActiveAgentDraftBinding = {
   conversationEventId?: string;
   sequence: number;
 };
+type ActiveSourceTurnBinding = {
+  readonly clientTurnId: string;
+  readonly jobId: string | null;
+  readonly pending: boolean;
+  readonly sourceDisplayName: string | null;
+};
+type HomeFileDropRequest = {
+  readonly clientTurnId: string;
+  readonly files: readonly File[];
+  readonly text?: string;
+};
 
 const initialVaultName = "Pige Vault";
 const localeLabels: Record<Locale, string> = {
@@ -104,6 +115,7 @@ export function App(): React.JSX.Element {
   const [toolchainHealth, setToolchainHealth] = useState<ToolchainHealth | null>(null);
   const [dropActive, setDropActive] = useState(false);
   const [homeDraftText, setHomeDraftText] = useState("");
+  const [homeFileDropRequest, setHomeFileDropRequest] = useState<HomeFileDropRequest | null>(null);
   const [captureToast, setCaptureToast] = useState<CaptureToast | null>(null);
   const [recentJobs, setRecentJobs] = useState<readonly JobSummary[]>([]);
   const [recentActivities, setRecentActivities] = useState<readonly KnowledgeActivitySummary[]>([]);
@@ -215,6 +227,19 @@ export function App(): React.JSX.Element {
     setModelSummary(await window.pige.models.summary());
   };
 
+  const dismissFirstHomeGuide = async (): Promise<void> => {
+    try {
+      setOnboarding(await window.pige.vault.dismissFirstHomeGuide());
+    } catch {
+      setCaptureToast({ kind: "error", message: t("error.generic") });
+    }
+  };
+
+  const openModelsFromHome = async (): Promise<void> => {
+    await dismissFirstHomeGuide();
+    setView("models");
+  };
+
   const refreshLibrary = async (): Promise<void> => {
     setLibraryError(null);
     try {
@@ -276,15 +301,16 @@ export function App(): React.JSX.Element {
     files: readonly File[],
     inputKind: "file_drop" | "file_picker",
     text?: string,
-    clientTurnId = createAgentClientTurnId()
+    clientTurnId = createAgentClientTurnId(),
+    statusOwner: "home" | "shell" = "shell"
   ): Promise<AgentSubmitTurnResult | undefined> => {
     if (files.length === 0) return undefined;
     if (files.length > 1) {
-      setCaptureToast({ kind: "error", message: t("home.oneFilePerTurn") });
+      if (statusOwner === "shell") setCaptureToast({ kind: "error", message: t("home.oneFilePerTurn") });
       return undefined;
     }
     if (!onboarding?.activeVault) {
-      setCaptureToast({ kind: "error", message: t("home.createVaultBeforeDrop") });
+      if (statusOwner === "shell") setCaptureToast({ kind: "error", message: t("home.createVaultBeforeDrop") });
       return undefined;
     }
 
@@ -301,13 +327,15 @@ export function App(): React.JSX.Element {
       await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
       await refreshVaultState();
       const result = await submission;
-      setCaptureToast(result.state === "completed"
-        ? { kind: "success", message: result.answer.answer }
-        : { kind: "error", message: t(result.error.messageKey) });
+      if (statusOwner === "shell") {
+        setCaptureToast(result.state === "completed"
+          ? { kind: "success", message: result.answer.answer }
+          : { kind: "error", message: t(result.error.messageKey) });
+      }
       await refreshVaultState();
       return result;
     } catch {
-      setCaptureToast({ kind: "error", message: t("error.generic") });
+      if (statusOwner === "shell") setCaptureToast({ kind: "error", message: t("error.generic") });
       return undefined;
     }
   };
@@ -396,11 +424,17 @@ export function App(): React.JSX.Element {
     if (!dragEventHasFiles(event)) return;
     event.preventDefault();
     setDropActive(false);
-    void submitFiles(
-      Array.from(event.dataTransfer.files),
-      "file_drop",
-      view === "home" ? homeDraftText : undefined
-    );
+    const files = Array.from(event.dataTransfer.files);
+    const clientTurnId = createAgentClientTurnId();
+    if (view === "home") {
+      setHomeFileDropRequest({
+        clientTurnId,
+        files,
+        ...(homeDraftText.trim() ? { text: homeDraftText } : {})
+      });
+      return;
+    }
+    void submitFiles(files, "file_drop", undefined, clientTurnId, "shell");
   };
 
   const activeVault = onboarding?.activeVault;
@@ -651,13 +685,20 @@ export function App(): React.JSX.Element {
             locale={locale}
             draftText={homeDraftText}
             onDraftChange={setHomeDraftText}
-            onFilesSelected={(files, text, clientTurnId) => submitFiles(files, "file_picker", text, clientTurnId)}
+            showFirstHomeGuide={onboarding?.showFirstHomeGuide === true}
+            fileDropRequest={homeFileDropRequest}
+            onFileDropRequestConsumed={(clientTurnId) => {
+              setHomeFileDropRequest((current) => current?.clientTurnId === clientTurnId ? null : current);
+            }}
+            onFilesSelected={(files, text, clientTurnId) =>
+              submitFiles(files, "file_picker", text, clientTurnId, "home")}
             onCancelJob={cancelJob}
             onRetryJob={retryJob}
             onUndoActivity={undoActivity}
             onHomeStateChanged={refreshVaultState}
             onProposalChanged={refreshVaultState}
-            onOpenModels={() => setView("models")}
+            onOpenModels={openModelsFromHome}
+            onDismissFirstHome={dismissFirstHomeGuide}
             t={t}
           />
         )}
@@ -1275,6 +1316,9 @@ function HomeComposer(props: {
   readonly locale: Locale;
   readonly draftText: string;
   readonly onDraftChange: (text: string) => void;
+  readonly showFirstHomeGuide: boolean;
+  readonly fileDropRequest: HomeFileDropRequest | null;
+  readonly onFileDropRequestConsumed: (clientTurnId: string) => void;
   readonly onFilesSelected: (
     files: readonly File[],
     text: string | undefined,
@@ -1285,17 +1329,18 @@ function HomeComposer(props: {
   readonly onUndoActivity: (operationId: string) => Promise<void>;
   readonly onHomeStateChanged: () => Promise<void>;
   readonly onProposalChanged: () => Promise<void>;
-  readonly onOpenModels: () => void;
+  readonly onOpenModels: () => Promise<void>;
+  readonly onDismissFirstHome: () => Promise<void>;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const text = props.draftText;
-  const [captureStatus, setCaptureStatus] = useState<string | null>(null);
   const [captureError, setCaptureError] = useState<string | null>(null);
   const [agentAnswer, setAgentAnswer] = useState<AgentTurnAnswer | null>(null);
   const [agentDraft, setAgentDraft] = useState<AgentTurnDraftEvent | null>(null);
   const [agentRunState, setAgentRunState] = useState<HomeAgentUiState>("idle");
   const [agentError, setAgentError] = useState<PigeErrorSummary | null>(null);
   const [agentModelUsage, setAgentModelUsage] = useState<HomeAgentModelUsage>("none");
+  const [activeSourceTurn, setActiveSourceTurn] = useState<ActiveSourceTurnBinding | null>(null);
   const [conversationTimeline, setConversationTimeline] = useState<AgentConversationTimeline | undefined>();
   const [liveAnswerEventId, setLiveAnswerEventId] = useState<string | null>(null);
   const [selectedProposal, setSelectedProposal] = useState<ConfirmationProposal | null>(null);
@@ -1318,6 +1363,7 @@ function HomeComposer(props: {
   const proposalFocusReturnPending = useRef(false);
   const proposalQueueHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const conversationLoadSequence = useRef(0);
+  const handledFileDropClientTurnIdRef = useRef<string | null>(null);
   const activeVaultIdRef = useRef<string | undefined>(props.activeVault?.vaultId);
   const activeAgentDraftRef = useRef<ActiveAgentDraftBinding | null>(null);
   activeVaultIdRef.current = props.activeVault?.vaultId;
@@ -1332,6 +1378,25 @@ function HomeComposer(props: {
     latestTurn.state === "cancelled" ||
     latestTurn.state === "waiting_dependency"
   ) ? latestTurn : undefined;
+  const sourceWaitingForModelJobs = props.recentJobs.filter(isSourceWaitingForModel);
+  const activeSourceWaitingForModelJob = activeSourceTurn?.jobId
+    ? sourceWaitingForModelJobs.find((job) => job.id === activeSourceTurn.jobId)
+    : activeSourceTurn?.pending && activeSourceTurn.sourceDisplayName
+      ? sourceWaitingForModelJobs.find((job) => job.sourceDisplayName === activeSourceTurn.sourceDisplayName)
+      : undefined;
+  const latestSourceWaitingForModelJob = latestTurn
+    ? sourceWaitingForModelJobs.find((job) => job.id === latestTurn.jobId)
+    : undefined;
+  const sourceWaitOwner = activeSourceWaitingForModelJob ?? latestSourceWaitingForModelJob;
+  const sourceWaitOwnsAgentState = sourceWaitOwner !== undefined;
+  const composerModelRepairOwnsState = agentError?.userAction === "configure_model" &&
+    !sourceWaitOwnsAgentState;
+  const sourceModelActionOwner = composerModelRepairOwnsState
+    ? undefined
+    : sourceWaitOwner ?? sourceWaitingForModelJobs[0];
+  const showFirstHomeGuide = props.showFirstHomeGuide &&
+    agentRunState === "idle" &&
+    sourceWaitingForModelJobs.length === 0;
   const visibleConversationMessages = (conversationTimeline?.messages ?? []).filter((message) =>
     !(agentAnswer && message.role === "assistant" && message.id === liveAnswerEventId)
   );
@@ -1396,6 +1461,7 @@ function HomeComposer(props: {
     clearAgentDraft();
     setAgentError(null);
     setAgentModelUsage("none");
+    setActiveSourceTurn(null);
     setAgentRunState("idle");
     if (props.activeVault?.vaultId) void refreshConversation();
     return () => {
@@ -1420,10 +1486,10 @@ function HomeComposer(props: {
   const submitHomeInput = async (): Promise<void> => {
     if (!text.trim()) return;
     setCaptureError(null);
-    setCaptureStatus(null);
     setAgentError(null);
     setAgentRunState("idle");
     setAgentModelUsage("none");
+    setActiveSourceTurn(null);
     noteOpenSequence.current += 1;
     setSelectedNote(null);
     setSelectedNoteRelated(null);
@@ -1494,6 +1560,61 @@ function HomeComposer(props: {
       await refreshConversation();
     }
   };
+
+  const submitHomeFiles = async (
+    files: readonly File[],
+    submittedText: string | undefined,
+    clientTurnId: string
+  ): Promise<void> => {
+    const sourceDisplayName = files[0]?.name ?? null;
+    setCaptureError(null);
+    setAgentAnswer(null);
+    setLiveAnswerEventId(null);
+    setAgentError(null);
+    setAgentModelUsage("none");
+    setAgentRunState("running");
+    setActiveSourceTurn({ clientTurnId, jobId: null, pending: true, sourceDisplayName });
+    beginAgentDraft(clientTurnId);
+    try {
+      const result = await props.onFilesSelected(files, submittedText, clientTurnId);
+      clearAgentDraft();
+      if (!result) {
+        setActiveSourceTurn(null);
+        setAgentRunState("failed");
+        return;
+      }
+      setActiveSourceTurn({
+        clientTurnId,
+        jobId: result.jobId ?? null,
+        pending: false,
+        sourceDisplayName
+      });
+      setAgentModelUsage(result.modelUsage);
+      setAgentRunState(result.state);
+      if (result.state === "completed") {
+        setAgentAnswer(result.answer);
+        setLiveAnswerEventId(result.tailEventId);
+        setAgentError(null);
+        props.onDraftChange("");
+      } else {
+        setAgentAnswer(null);
+        setAgentError(result.error);
+      }
+      await refreshConversation();
+    } catch {
+      clearAgentDraft();
+      setActiveSourceTurn(null);
+      setAgentRunState("failed");
+    }
+  };
+
+  useEffect(() => {
+    const request = props.fileDropRequest;
+    if (!request || handledFileDropClientTurnIdRef.current === request.clientTurnId) return;
+    handledFileDropClientTurnIdRef.current = request.clientTurnId;
+    props.onFileDropRequestConsumed(request.clientTurnId);
+    void submitHomeFiles(request.files, request.text, request.clientTurnId);
+  }, [props.fileDropRequest?.clientTurnId]);
 
   const retryLatestConversationTurn = async (): Promise<void> => {
     if (!retryableLatestTurn) return;
@@ -1629,45 +1750,75 @@ function HomeComposer(props: {
         <span className="vault-chip">{props.activeVault?.name ?? props.t("home.noVault")}</span>
         {props.captureOnly || props.agentRuntimeStatus ? <span className="mode-chip">{agentStatusLabel}</span> : null}
       </div>
+      {showFirstHomeGuide ? (
+        <section className="first-home-guide" aria-label={props.t("home.firstGuideAria")}>
+          <p>{props.t("home.firstGuideText")}</p>
+          <div className="first-home-guide-actions">
+            <button type="button" onClick={() => void props.onOpenModels()}>{props.t("home.connectModel")}</button>
+            <button type="button" className="ghost" onClick={() => void props.onDismissFirstHome()}>
+              {props.t("home.continueCaptureOnly")}
+            </button>
+          </div>
+        </section>
+      ) : null}
       {props.recentJobs.length > 0 ? (
         <section className="job-strip" aria-label={props.t("home.recentCaptures")}>
           <span className="job-strip-title">
-            {props.t("home.processing")}
+            {props.t("home.recentWork")}
           </span>
-          {props.recentJobs.slice(0, 3).map((job) => (
-            <div className="job-pill" key={job.id}>
-              <span
-                className={`job-state-dot state-${job.state}`}
-                title={props.t(jobStateMessageKey(job.state))}
-                aria-label={props.t(jobStateMessageKey(job.state))}
-              />
-              <span>{job.sourceDisplayName ?? job.sourceId ?? job.id}</span>
-              {job.state === "queued" || (
-                job.class === "agent_turn" && (job.state === "running" || job.state === "cancel_requested")
-              ) ? (
-                <button
-                  className="job-action"
-                  type="button"
-                  title={props.t("home.cancelJob")}
-                  aria-label={props.t("home.cancelJob")}
-                  disabled={job.state === "cancel_requested"}
-                  onClick={() => void props.onCancelJob(job.id)}
-                >
-                  {props.t("home.cancelJob")}
-                </button>
-              ) : job.state === "failed_retryable" && job.class !== "retrieval_query" ? (
-                <button
-                  className="job-action"
-                  type="button"
-                  title={props.t("home.retryJob")}
-                  aria-label={props.t("home.retryJob")}
-                  onClick={() => void props.onRetryJob(job.id)}
-                >
-                  {props.t("home.retryJob")}
-                </button>
-              ) : null}
-            </div>
-          ))}
+          {props.recentJobs.slice(0, 3).map((job) => {
+            const sourceWaitingForModel = isSourceWaitingForModel(job);
+            const ownsSourceModelAction = sourceWaitingForModel && job.id === sourceModelActionOwner?.id;
+            const statusMessageKey = jobStateMessageKey(job);
+            return (
+              <div
+                className={`job-pill${sourceWaitingForModel ? " source-waiting-model" : ""}`}
+                key={job.id}
+                role={sourceWaitingForModel ? "status" : undefined}
+                aria-live={sourceWaitingForModel ? "polite" : undefined}
+              >
+                <span
+                  className={`job-state-dot state-${job.state}`}
+                  title={props.t(statusMessageKey)}
+                  aria-label={props.t(statusMessageKey)}
+                />
+                <span className="job-copy">
+                  <span className="job-source-name">{job.sourceDisplayName ?? job.sourceId ?? job.id}</span>
+                  {sourceWaitingForModel ? (
+                    <span className="job-status-label">{props.t(statusMessageKey)}</span>
+                  ) : null}
+                </span>
+                {ownsSourceModelAction ? (
+                  <button className="job-action" type="button" onClick={() => void props.onOpenModels()}>
+                    {props.t("home.connectModel")}
+                  </button>
+                ) : sourceWaitingForModel ? null : job.state === "queued" || (
+                  job.class === "agent_turn" && (job.state === "running" || job.state === "cancel_requested")
+                ) ? (
+                  <button
+                    className="job-action"
+                    type="button"
+                    title={props.t("home.cancelJob")}
+                    aria-label={props.t("home.cancelJob")}
+                    disabled={job.state === "cancel_requested"}
+                    onClick={() => void props.onCancelJob(job.id)}
+                  >
+                    {props.t("home.cancelJob")}
+                  </button>
+                ) : job.state === "failed_retryable" && job.class !== "retrieval_query" ? (
+                  <button
+                    className="job-action"
+                    type="button"
+                    title={props.t("home.retryJob")}
+                    aria-label={props.t("home.retryJob")}
+                    onClick={() => void props.onRetryJob(job.id)}
+                  >
+                    {props.t("home.retryJob")}
+                  </button>
+                ) : null}
+              </div>
+            );
+          })}
         </section>
       ) : null}
       {props.recentActivities.length > 0 ? (
@@ -1857,35 +2008,8 @@ function HomeComposer(props: {
             onChange={(event) => {
               const files = Array.from(event.currentTarget.files ?? []);
               event.currentTarget.value = "";
-              setAgentAnswer(null);
-              setLiveAnswerEventId(null);
-              setAgentError(null);
-              setAgentModelUsage("none");
-              setAgentRunState("running");
               const clientTurnId = createAgentClientTurnId();
-              beginAgentDraft(clientTurnId);
-              void props.onFilesSelected(files, text, clientTurnId).then(async (result) => {
-                clearAgentDraft();
-                if (!result) {
-                  setAgentRunState("failed");
-                  return;
-                }
-                setAgentModelUsage(result.modelUsage);
-                setAgentRunState(result.state);
-                if (result.state === "completed") {
-                  setAgentAnswer(result.answer);
-                  setLiveAnswerEventId(result.tailEventId);
-                  setAgentError(null);
-                  props.onDraftChange("");
-                } else {
-                  setAgentAnswer(null);
-                  setAgentError(result.error);
-                }
-                await refreshConversation();
-              }).catch(() => {
-                clearAgentDraft();
-                setAgentRunState("failed");
-              });
+              void submitHomeFiles(files, text, clientTurnId);
             }}
           />
           <button
@@ -1905,8 +2029,7 @@ function HomeComposer(props: {
             {agentRunState === "accepted" || agentRunState === "running" ? props.t("home.agentRunning") : props.t("home.send")}
           </button>
         </div>
-        {captureStatus ? <p className="capture-status">{captureStatus}</p> : null}
-        {agentRunState !== "idle" ? (
+        {agentRunState !== "idle" && !sourceWaitOwnsAgentState ? (
           <div className={`agent-run-state state-${agentRunState}`} role="status" aria-live="polite">
             <span className="agent-run-dot" aria-hidden="true" />
             <span>{agentError ? props.t(agentError.messageKey) : props.t(`home.agentState.${agentRunState}`)}</span>
@@ -1914,7 +2037,7 @@ function HomeComposer(props: {
               <span className="agent-cloud-boundary">{props.t(cloudUsageMessageKey)}</span>
             ) : null}
             {agentError?.userAction === "configure_model" ? (
-              <button type="button" className="ghost" onClick={props.onOpenModels}>{props.t("home.openModels")}</button>
+              <button type="button" className="ghost" onClick={() => void props.onOpenModels()}>{props.t("home.openModels")}</button>
             ) : null}
             {retryableLatestTurn ? (
               <button type="button" className="ghost" onClick={() => void retryLatestConversationTurn()}>
@@ -1929,12 +2052,20 @@ function HomeComposer(props: {
   );
 }
 
-function jobStateMessageKey(state: JobState): string {
-  if (state === "queued") return "home.jobQueued";
-  if (state === "running") return "home.jobRunning";
-  if (state === "cancel_requested") return "home.jobCancelRequested";
-  if (state === "waiting_dependency") return "home.jobWaiting";
-  if (state === "awaiting_review") return "home.jobReview";
+function isSourceWaitingForModel(job: JobSummary): boolean {
+  return job.class === "agent_turn" &&
+    job.state === "waiting_dependency" &&
+    job.stage === "waiting_for_model" &&
+    Boolean(job.sourceId);
+}
+
+function jobStateMessageKey(job: JobSummary): string {
+  if (isSourceWaitingForModel(job)) return "home.sourceSavedWaitingModel";
+  if (job.state === "queued") return "home.jobQueued";
+  if (job.state === "running") return "home.jobRunning";
+  if (job.state === "cancel_requested") return "home.jobCancelRequested";
+  if (job.state === "waiting_dependency") return "home.jobWaiting";
+  if (job.state === "awaiting_review") return "home.jobReview";
   return "home.jobFailed";
 }
 

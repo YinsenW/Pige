@@ -77,6 +77,7 @@ export interface OnboardingStatus {
   readonly state: "blocked_no_vault" | "capture_only" | "ready";
   readonly activeVault?: VaultSummary;
   readonly hasDefaultModel: boolean;
+  readonly showFirstHomeGuide: boolean;
   readonly waitingDependencyCounts?: {
     readonly modelProvider: number;
     readonly localTool: number;
@@ -1096,6 +1097,7 @@ export interface PigeDesktopApi {
     readonly current: () => Promise<VaultSummary | undefined>;
     readonly recent: () => Promise<readonly RecentVaultSummary[]>;
     readonly onboardingStatus: () => Promise<OnboardingStatus>;
+    readonly dismissFirstHomeGuide: () => Promise<OnboardingStatus>;
     readonly create: (request: CreateVaultRequest) => Promise<VaultActionResult>;
     readonly open: () => Promise<VaultActionResult>;
     readonly revealKnowledgeRoot: () => Promise<void>;

@@ -891,10 +891,10 @@
     },
     "PIGE-JOB-004": {
       "status": "partial",
-      "evidence": ["EV-JOB-WAIT", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-WAITING-AGENT-REQUEUE", "EV-OCR-NATIVE-FALLBACK", "EV-PI-DATASET-INGEST"],
+      "evidence": ["EV-JOB-WAIT", "EV-SOURCE-WAIT-STATUS", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-WAITING-AGENT-REQUEUE", "EV-OCR-NATIVE-FALLBACK", "EV-PI-DATASET-INGEST"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-004",
-        "description": "Tool, path, and runtime dependency classes plus structured repair actions remain open.",
+        "description": "Preserved-source model wait now has one truthful repair path; tool, path, and runtime dependency classes remain open.",
         "targetBuilds": [
           "B2.13"
         ],
@@ -931,10 +931,10 @@
     },
     "PIGE-JOB-007": {
       "status": "partial",
-      "evidence": ["EV-JOB-STATUS", "EV-JOB-WAIT", "EV-JOB-CANCEL", "EV-HOME-UI", "EV-HOME-FOLLOWUP", "EV-ACTIVITY-UNDO"],
+      "evidence": ["EV-JOB-STATUS", "EV-JOB-WAIT", "EV-JOB-CANCEL", "EV-HOME-UI", "EV-HOME-FOLLOWUP", "EV-SOURCE-WAIT-STATUS", "EV-SOURCE-WAIT-RACE", "EV-ACTIVITY-UNDO"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-007",
-        "description": "Broader Activity, progress, non-Agent cancel, and permission UI remain.",
+        "description": "Preserved-source model wait has one status owner/action; broader Activity, progress, non-Agent cancel, and permission UI remain.",
         "targetBuilds": ["B2.10", "B2.12"],
         "targetExits": ["E2.09"]
       }
@@ -1137,7 +1137,8 @@
       "status": "partial",
       "evidence": [
         "EV-SETTINGS",
-        "EV-LOCAL-SETTINGS"
+        "EV-LOCAL-SETTINGS",
+        "EV-FIRST-HOME-PREFERENCE"
       ],
       "open": {
         "id": "OPEN-REQ-PIGE-SETTINGS-001",
@@ -1155,7 +1156,8 @@
       "status": "partial",
       "evidence": [
         "EV-SETTINGS",
-        "EV-LOCAL-SETTINGS"
+        "EV-LOCAL-SETTINGS",
+        "EV-FIRST-HOME-PREFERENCE"
       ],
       "open": {
         "id": "OPEN-REQ-PIGE-SETTINGS-002",
@@ -1693,13 +1695,14 @@
       "status": "partial",
       "evidence": [
         "EV-APP-SHELL",
+        "EV-FIRST-HOME-GUIDE",
         "EV-DATASET-QUERY-UI",
         "EV-KNOWLEDGE-TREE-IPC",
         "EV-KNOWLEDGE-TREE-UI"
       ],
       "open": {
         "id": "OPEN-REQ-PIGE-UI-003",
-        "description": "Home Dataset output and the localized Knowledge Tree are public; broader continuity, Library depth, and full six-locale/platform acceptance remain open.",
+        "description": "Capture-only Home has one persisted Connect/continue choice; broader continuity, Library depth, and full six-locale/platform acceptance remain open.",
         "targetBuilds": [
           "B1.03",
           "B1.07",
@@ -1907,11 +1910,12 @@
     "E1.02": {
       "status": "partial",
       "evidence": [
-        "EV-APP-SHELL"
+        "EV-APP-SHELL",
+        "EV-FIRST-HOME-GUIDE"
       ],
       "open": {
         "id": "OPEN-EXIT-E1.02",
-        "description": "Capture-only, context-continuity, three-level Library, and six-locale UI acceptance remain open.",
+        "description": "Capture-only first-Home choice is executable; context continuity, three-level Library, and full six-locale/platform acceptance remain open.",
         "targetBuilds": [
           "B1.03"
         ],
@@ -1957,7 +1961,8 @@
       "status": "partial",
       "evidence": [
         "EV-SETTINGS",
-        "EV-LOCAL-SETTINGS"
+        "EV-LOCAL-SETTINGS",
+        "EV-FIRST-HOME-PREFERENCE"
       ],
       "open": {
         "id": "OPEN-EXIT-E1.05",
@@ -2335,10 +2340,10 @@
     },
     "E2.09": {
       "status": "partial",
-      "evidence": ["EV-JOB-STATUS", "EV-JOB-WAIT", "EV-JOB-CANCEL", "EV-HOME-UI", "EV-HOME-FOLLOWUP", "EV-ACTIVITY-UNDO"],
+      "evidence": ["EV-JOB-STATUS", "EV-JOB-WAIT", "EV-JOB-CANCEL", "EV-HOME-UI", "EV-HOME-FOLLOWUP", "EV-SOURCE-WAIT-STATUS", "EV-SOURCE-WAIT-RACE", "EV-ACTIVITY-UNDO"],
       "open": {
         "id": "OPEN-EXIT-E2.09",
-        "description": "Broader Activity, progress, non-Agent cancel, and permission UI remain.",
+        "description": "Preserved-source model wait has one status owner/action; broader Activity, progress, non-Agent cancel, and permission UI remain.",
         "targetBuilds": ["B2.10", "B2.12"],
         "targetExits": ["E2.09"]
       }
@@ -2355,10 +2360,10 @@
     },
     "E2.11": {
       "status": "partial",
-      "evidence": ["EV-JOB-WAIT", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-WAITING-AGENT-REQUEUE", "EV-OCR-NATIVE-FALLBACK"],
+      "evidence": ["EV-JOB-WAIT", "EV-SOURCE-WAIT-STATUS", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-WAITING-AGENT-REQUEUE", "EV-OCR-NATIVE-FALLBACK"],
       "open": {
         "id": "OPEN-EXIT-E2.11",
-        "description": "Tool, path, and runtime dependency classes and repair-action metadata remain open.",
+        "description": "Preserved-source model wait now has one truthful repair path; tool, path, and runtime dependency classes remain open.",
         "targetBuilds": [
           "B2.13"
         ],
@@ -2936,6 +2941,7 @@
     "EV-APP-SHELL": { "kind": "implementation", "path": "apps/desktop/src/renderer/src/App.tsx", "selector": "mode-${windowState?.mode ?? \"compact\"}" },
     "EV-SETTINGS": { "kind": "test", "path": "tests/unit/settings-registry.test.ts", "selector": "classifies implemented user-visible and agent-affecting settings" },
     "EV-LOCAL-SETTINGS": { "kind": "test", "path": "tests/unit/local-settings.test.ts", "selector": "preserves machine-local window preferences when activating a vault" },
+    "EV-FIRST-HOME-PREFERENCE": { "kind": "test", "path": "tests/unit/local-settings.test.ts", "selector": "persists an explicit first-Home choice across settings rewrites and restart" },
     "EV-SETTING-GUARD": { "kind": "test", "path": "tests/unit/setting-action-guard.test.ts", "selector": "fails closed for a Permission Broker requirement until a broker decision exists" },
     "EV-POLICY": { "kind": "test", "path": "tests/unit/agent-policy-context.test.ts", "selector": "builds a non-secret policy context from vault config" },
     "EV-DIAGNOSTICS": { "kind": "test", "path": "tests/unit/diagnostics-service.test.ts", "selector": "exports only bounded redacted local support bundle content" },
@@ -3085,6 +3091,9 @@
     "EV-HOME-DRAFT-PUBLISHER": { "kind": "test", "path": "tests/unit/agent-turn-draft-publisher.test.ts", "selector": "Agent turn draft publisher" },
     "EV-HOME-DRAFT-UI": { "kind": "test", "path": "tests/unit/home-agent-conversation-ui.test.ts", "selector": "replaces one escaped provisional answer and ignores stale or wrong-turn drafts before the final" },
     "EV-HOME-FOLLOWUP": { "kind": "test", "path": "tests/unit/home-agent-conversation-ui.test.ts", "selector": "Home durable Agent conversation UI" },
+    "EV-FIRST-HOME-GUIDE": { "kind": "test", "path": "tests/unit/home-agent-conversation-ui.test.ts", "selector": "persists the explicit choice to continue capture-only and does not show the first-Home guide again" },
+    "EV-SOURCE-WAIT-STATUS": { "kind": "test", "path": "tests/unit/home-agent-conversation-ui.test.ts", "selector": "shows one truthful source-saved model wait and one repair action across restart" },
+    "EV-SOURCE-WAIT-RACE": { "kind": "test", "path": "tests/unit/home-agent-conversation-ui.test.ts", "selector": "routes a full-window Home drop through the same intermediate source owner" },
     "EV-PI-URL-INGRESS": { "kind": "test", "path": "tests/unit/agent-selected-url-ingress.test.ts", "selector": "Agent-selected URL ingress" },
     "EV-HOME-UI": { "kind": "test", "path": "tests/unit/desktop-shell-contract.test.ts", "selector": "wires Home questions through Pi with visible typed outcomes and no raw provider error surface" },
     "EV-RETRIEVAL-REGRESSION-GOLDEN": { "kind": "test", "path": "tests/evals/retrieval.regression-golden.test.ts", "selector": "passes deterministic ranking, citation, distractor, related-page, and insufficient-evidence gates" },

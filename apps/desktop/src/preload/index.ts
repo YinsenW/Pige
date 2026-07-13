@@ -155,6 +155,8 @@ const api: PigeDesktopApi = {
       ipcRenderer.invoke("vault.recent") as Promise<readonly RecentVaultSummary[]>,
     onboardingStatus: async (): Promise<OnboardingStatus> =>
       ipcRenderer.invoke("onboarding.status") as Promise<OnboardingStatus>,
+    dismissFirstHomeGuide: async (): Promise<OnboardingStatus> =>
+      ipcRenderer.invoke("onboarding.dismissFirstHome") as Promise<OnboardingStatus>,
     create: async (request: CreateVaultRequest): Promise<VaultActionResult> =>
       ipcRenderer.invoke("vault.create", request) as Promise<VaultActionResult>,
     open: async (): Promise<VaultActionResult> => ipcRenderer.invoke("vault.open") as Promise<VaultActionResult>,

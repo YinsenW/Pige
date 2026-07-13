@@ -50,4 +50,24 @@ describe("local settings store", () => {
       sidebarOpen: true
     });
   });
+
+  it("persists an explicit first-Home choice across settings rewrites and restart", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-local-settings-test-"));
+    tempRoots.push(root);
+    const vaultId = "vault_20260709_ab12cd";
+    const store = new LocalSettingsStore(root);
+
+    expect(store.hasDismissedFirstHome(vaultId)).toBe(false);
+    store.dismissFirstHome(vaultId);
+    store.setAppLocale("en");
+    store.setWindowPreferences({
+      mode: "compact",
+      alwaysOnTop: false,
+      sidebarOpen: false
+    });
+
+    const reopened = new LocalSettingsStore(root);
+    expect(reopened.hasDismissedFirstHome(vaultId)).toBe(true);
+    expect(reopened.read().dismissedFirstHomeVaultIds).toEqual([vaultId]);
+  });
 });

@@ -149,6 +149,7 @@ This table is the v0.1 baseline. Implementation can split storage files differen
 | Startup behavior | General | `machine_local` | Window Service, Vault Runtime Service | OS app data | No | `none` | Next launch |
 | Active vault path | Vault & Note Storage | `machine_local` | Vault Runtime Service | OS app data | No | `permission_and_confirmation` | Requires safe vault switch |
 | Recent vault list | Vault & Note Storage | `machine_local` | Vault Runtime Service | OS app data | No | `none` | Immediate |
+| First-Home guide dismissal | Home | `machine_vault_binding` | Vault Runtime Service | OS app data keyed by `vault_id` | No | `none` | Immediate after explicit Connect/continue choice; older settings default to showing it |
 | Vault ID | Vault & Note Storage | `vault_identity` | Vault Runtime Service | `.pige/manifest.json` | Yes | `explicit_confirmation` | Immutable after creation unless migration |
 | Vault schema version | Vault & Note Storage | `vault_identity` | Migration Service | `.pige/manifest.json` | Yes | `explicit_confirmation` | Migration controlled |
 | Default source storage strategy | Vault & Note Storage | `vault_portable` | Source Storage Service | `.pige/config.json` | Yes | `none` | New file captures only; text and URL snapshots are necessarily managed copies |

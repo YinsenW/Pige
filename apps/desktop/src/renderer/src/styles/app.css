@@ -306,6 +306,42 @@ button.ghost {
   color: var(--accent);
 }
 
+.first-home-guide {
+  width: min(100%, 48rem);
+  min-width: 0;
+  justify-self: center;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--surface-subtle);
+}
+
+.first-home-guide p {
+  min-width: 0;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.first-home-guide-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.first-home-guide-actions button {
+  min-height: 30px;
+  white-space: nowrap;
+}
+
 .job-strip {
   width: min(100%, 48rem);
   justify-self: center;
@@ -336,10 +372,37 @@ button.ghost {
   gap: 6px;
 }
 
+.job-pill.source-waiting-model {
+  flex: 1 1 100%;
+  align-items: center;
+  border-radius: 8px;
+  white-space: normal;
+}
+
 .job-pill span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.job-pill .job-copy {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 1px;
+}
+
+.job-pill .job-source-name {
+  white-space: nowrap;
+}
+
+.job-pill .job-status-label {
+  overflow: visible;
+  color: var(--text-secondary);
+  line-height: 1.35;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .job-state-dot {
@@ -718,6 +781,26 @@ button.ghost {
 
 .conversation-message.role-user p {
   color: var(--text-secondary);
+}
+
+@media (max-width: 620px) {
+  .first-home-guide {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .first-home-guide-actions {
+    flex-wrap: wrap;
+  }
+
+  .job-pill.source-waiting-model {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .job-pill.source-waiting-model .job-action {
+    margin-left: 13px;
+  }
 }
 
 .conversation-message.provisional p {
