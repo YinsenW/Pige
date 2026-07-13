@@ -52,6 +52,7 @@ Durable sync-ready objects:
 - Source asset reference or managed source copy.
 - Extracted artifact.
 - Markdown page.
+- Dataset, table, column, row, view, and Dataset revision.
 - Conversation.
 - Conversation event.
 - Job.
@@ -78,6 +79,8 @@ src_20260709_ab12cd34
 art_20260709_ab12cd34_text
 evt_20260709_f9e23456
 op_20260709_3456abcd
+dataset_20260713_ab12cd34
+dataset_rev_20260713_3456abcd
 ```
 
 The date helps debugging, but code treats the whole ID as opaque. New writers never emit retired `pg_`, `artifact_`, or `event_` aliases. A documented legacy reader may retain an old ID for compatibility, but migration must not silently rename that durable object; acceptance is not permission for new output.
@@ -187,6 +190,7 @@ Conflict cases:
 | Case | Example | v0.1 behavior |
 | --- | --- | --- |
 | Same ID, same path, different content | User edited Markdown during an Operation. | Lossless base/current/proposed merge; otherwise stage conflict. |
+| Dataset revision/schema changed | Collection row/schema or analytical snapshot changed after a query/Operation base. | Revalidate exact revision and typed base; apply a lossless revisioned change or preserve both/stage conflict. |
 | Same ID, moved path | User moved note outside Pige. | Rebind safely or preserve both; unresolved conflict stages. |
 | Different IDs, same slug/title | Imported duplicate topic. | Keep both; merge only with proven identity and recovery. |
 | Delete vs update | Archive races update. | Preserve both states; unresolved intent stages, never silently resurrect/delete. |
@@ -199,7 +203,8 @@ Conflict cases:
 Rules:
 
 - Pige never silently overwrites user-edited Markdown when base hash changed.
-- Pige never silently deletes durable Markdown, source assets, memory, conversations, proposals, or operations.
+- Pige never silently deletes durable Markdown, Dataset Bundles, source assets, memory,
+  conversations, proposals, or operations.
 - Uncertainty preserves both, replans, warns, or abstains; only unreconcilable loss stages a proposal.
 - Conflict proposals should show current content, proposed change, base metadata, affected paths, and possible actions.
 - `docs/SOURCE_STORAGE_STRATEGY.md` section 5 owns the Source Record/Source Page projection commit protocol and its residual concurrency windows; this document owns only the general conflict outcome and does not restate that mechanism.
@@ -273,6 +278,8 @@ Version domains are separate:
 | App version | `0.1.0` | App update and release notes. |
 | Vault schema version | `.pige/manifest.json` | Durable vault compatibility. |
 | Markdown schema version | page frontmatter `schema_version` | Page/frontmatter migration. |
+| Dataset Bundle schema version | `datasets/*/dataset.json` | Dataset manifest/profile migration. |
+| Dataset table/schema revision | Dataset `schemas/`, `revisions/`, `changes/` | Stable-ID, type, view, and row evolution. |
 | Source record schema version | `.pige/source-records/*.json` | Source metadata and root-locator migration. |
 | Conversation event schema version | `.pige/conversations/*.jsonl` event | Conversation migration. |
 | Job schema version | `.pige/jobs/*.json` | Workflow/checkpoint migration. |
@@ -304,6 +311,7 @@ Migration classes:
 | Transform durable migration | Rename field, normalize structure | Preview, backup or restore point, operation record. |
 | Risky durable migration | Rewrite Markdown bodies, move many files | Explicit confirmation and backup. |
 | External reference/root migration | Source path strategy, managed-copy root ID/path basis | Preflight every source checksum/binding, preserve old locator until commit, and provide repair plan. |
+| Dataset payload/profile migration | Collection SQLite, Parquet parts, manifest/schema revisions | Validate lossless round-trip and hashes in staging; preserve prior active revision until commit. |
 
 Migration rules:
 
@@ -433,6 +441,9 @@ Required tests:
 - External managed-copy root switch does not retarget existing source-record `rootId` values.
 - Missing external root moves dependent jobs to `waiting_dependency` and never falls back to another absolute path.
 - Database/index reset does not change durable IDs.
+- Dataset imports preserve lexical cell values and stable IDs; schema/type evolution keeps
+  old revisions readable, and internal database reset leaves Dataset payloads untouched.
+- Concurrent row/schema/view edits use exact base revisions and never silently overwrite.
 - Future remote/mobile job records can reference objects without desktop-only paths.
 
 Fixture vaults:

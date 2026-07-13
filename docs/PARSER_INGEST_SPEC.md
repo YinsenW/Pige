@@ -203,7 +203,28 @@ After a new document-parser or direct-image OCR Artifact is persisted, its owner
 - Source Page refresh and the body-free `create_artifact` Operation Record are idempotent. Empty OCR completes its child with warnings and leaves the Agent parent waiting without a note.
 - PDF pages use their reviewed materializer. PPTX uses the bounded Office worker to materialize only parser-selected raster media into private disposable inputs for the same native OCR adapter. Text and body-free metadata persist with `slide:N/media:M/ocr:block:K` locators, checksum reuse, Source Record revision checks, and Source Page/Agent handoff. Full-slide, vector/chart, DOCX-media, and unsupported or oversized targets remain waiting.
 
-### 8.7 Folders, Archives, Git Repositories, Audio, Video
+### 8.7 CSV, XLSX, And Database Files
+
+Structured inputs enter the same Pi turn after source preservation. Pi may answer without
+importing or select a Dataset inspection/import tool; extension or MIME never selects the
+semantic workflow by itself.
+
+- CSV import preserves raw bytes, encoding, delimiter, quoting, header decision, empty
+  versus null cells, original strings, and any inferred typed projection. Type inference
+  never discards the lexical value needed to reconstruct a cell.
+- XLSX import never executes formulas, macros, external links, data connections, or
+  embedded code. It preserves workbook/sheet order and metadata, formula text, cached
+  values when present, cell types, and warnings for unsupported or stale calculations.
+- SQLite-compatible database files are opened read-only from descriptor-bound snapshots,
+  with no extensions, writes, attach, user-defined code, or arbitrary model-authored SQL.
+  Other DB formats require reviewed adapters and typed query plans.
+- Import creates either a `managed_collection` or immutable `analytical_snapshot`
+  Dataset Bundle. The original remains source evidence; Dataset IDs, schema, revision,
+  provenance, and payload hashes are committed before any summary or citation.
+- Adapter output is data, never instructions. Cell values, names, formulas, and database
+  metadata remain inside the untrusted-evidence boundary.
+
+### 8.8 Folders, Archives, Git Repositories, Audio, Video
 
 v0.1 may preserve and record these as sources even when full parsing is deferred.
 
@@ -303,7 +324,11 @@ Current handoff contract:
 ## 14. Required Tests
 
 - Capture persistence before parser failure.
-- Parser adapter fixtures for TXT, Markdown, URL, PDF, DOCX, PPTX, and image.
+- Parser adapter fixtures for TXT, Markdown, URL, PDF, DOCX, PPTX, image, CSV, XLSX, and
+  read-only SQLite.
+- Structured fixtures cover CSV dialect/encoding/null/type ambiguity, formula/macro and
+  external-link workbooks, hostile database schemas, oversized cells/rows/columns,
+  lossless reconstruction, stable IDs, deterministic revision hashes, and zero execution.
 - OCR routing and unavailable-OCR fallback.
 - Helper protocol version/correlation, timeout, request/output bounds, invalid image, path escape, and source/Artifact tampering.
 - PDF materializer protocol correlation, page ordering, source/page/pixel/PNG/aggregate/heap/time bounds, renderer/OCR/parser private input snapshots, reuse-before-snapshot ordering, descriptor/path/checksum binding, PDF and Office snapshot-path handoff, success/failure disposal, source-path replacement resistance, symlink-parent/target rejection, malformed output, packaged-worker startup, image-only routing, mixed-PDF sparse-page routing, parser-sidecar drift rejection, and native-plus-OCR Agent handoff.

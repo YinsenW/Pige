@@ -528,6 +528,18 @@ Current bridge queries:
 - Notes APIs do not accept arbitrary renderer-provided filesystem paths. They resolve page IDs by scanning `sources/` and `wiki/` with the same page-index rules as Library.
 - Raw HTML is disabled or sanitized before reaching the renderer. Scripts, event handlers, `javascript:` links, prompts, secrets, raw frontmatter, and arbitrary filesystem handles must not be returned.
 
+Planned Dataset read boundary:
+
+- Renderer receives Dataset/table/view/revision IDs, bounded schema summaries, paginated
+  typed cells, warnings, and exact evidence refs—not paths, database handles, SQL, Arrow
+  buffers, Parquet/SQLite bytes, or whole tables.
+- Each page/query request binds the active vault and Dataset revision, declares selected
+  columns/filters/sort/aggregate through a strict typed plan, and returns a cursor plus
+  deterministic result hash. Stale revisions fail with a typed repair/retry action.
+- Managed Collection mutations later use separate commands that bind expected revision
+  and produce Operation/Activity/Undo. No Dataset IPC channel is implemented or reserved
+  by this design text; shared contracts and owner tests must land with the first channel.
+
 ### 6.6 Retrieval
 
 Commands:

@@ -12,7 +12,8 @@ This document is the sole owner of P0-P9 phase numbers, stable Build commitments
 
 The PRD owns scope. Phases must compose into one usable journey: install, open a vault,
 connect BYOK, converse through Pi, preserve sources, use local knowledge when relevant,
-grow portable Markdown autonomously with Activity/Undo, resolve rare exceptions, and back up/restore safely.
+grow portable Markdown and Dataset knowledge with Activity/Undo, resolve rare exceptions,
+and back up/restore safely.
 
 ## 3. Implementation Strategy
 
@@ -59,7 +60,9 @@ Do not start Phase 0 scaffolding until the design baseline is ready enough that 
 Ready for Phase 0 means:
 
 - Product positioning, v0.1 scope, milestone sequence, and PRD P0 interpretation agree across PRD, Milestones, this playbook, Spec Traceability, and Decision Log.
-- Non-negotiable invariants in `AGENTS.md`, `README.md`, and owner docs agree on Markdown source of truth, source ownership, rebuildable indexes, secrets, permissions, privacy, no hidden downloads, and simplicity-first UI.
+- Non-negotiable invariants in `AGENTS.md`, `README.md`, and owner docs agree on open
+  durable truth, source ownership, rebuildable indexes, secrets, permissions, privacy,
+  no hidden downloads, and simplicity-first UI.
 - Core owner docs exist for product, architecture, data, Markdown schema, source storage, ingest, jobs, settings, Agent policy context, retrieval context, security, performance, quality, release, UI, I18N, memory, Skills, repository structure, coding conventions, and contribution workflow.
 - Task-specific reading packs route future agents to owner docs without requiring the full design library by default.
 - Durable data ownership, backup/restore inclusion, sync-ready IDs, trash-first lifecycle, and rebuildable-cache boundaries are stable enough to scaffold packages and schemas.
@@ -350,7 +353,11 @@ Exit criteria:
 
 ## 10. Phase 5: Web, Document, And OCR Ingest
 
-Context pack: `docs/PRD.md` input handling; `docs/PARSER_INGEST_SPEC.md`; `docs/TECH_ARCHITECTURE.md` parser and OCR sections; `docs/SECURITY_THREAT_MODEL.md`; `docs/PERFORMANCE_AND_RELIABILITY.md`; `docs/RELEASE_ENGINEERING.md`.
+Context pack: `docs/PRD.md` input handling; `docs/PARSER_INGEST_SPEC.md`;
+`docs/DATA_ARCHITECTURE.md`; `docs/LOCAL_DATABASE_DESIGN.md`;
+`docs/TECH_ARCHITECTURE.md` parser/OCR/Dataset sections;
+`docs/SECURITY_THREAT_MODEL.md`; `docs/PERFORMANCE_AND_RELIABILITY.md`;
+`docs/RELEASE_ENGINEERING.md`.
 
 Build:
 
@@ -366,6 +373,8 @@ Build:
 - [B5.10 -> E5.02] Toolchain manifests, health checks, and explicit install, test, update, disable, remove, and repair lifecycle for optional PaddleOCR dependencies and language packs.
 - [B5.11 -> E5.03] Untrusted-source boundary enforcement across URL, document, image, OCR, and extracted-artifact Agent handoff.
 - [B5.12 -> E5.04] Multilingual source-to-note golden fixtures and executable citation, unsupported-claim, and low-confidence assertions.
+- [B5.13 -> E5.06] Preserve CSV/XLSX/SQLite sources and materialize a lossless typed,
+  versioned Dataset Bundle without executing source code or mutating originals.
 
 Transitional implementation evidence/tool substrate snapshot; P5 remains in progress.
 The arrows below describe tested bridge behavior, not target semantic orchestration:
@@ -435,10 +444,16 @@ Exit criteria:
 - [E5.03] Suspicious source instructions are delimited as untrusted content and cannot change settings, permissions, providers, tools, or `PIGE.md`.
 - [E5.04] Multilingual source-to-note golden fixtures pass schema, citation, unsupported-claim, and low-confidence routing checks.
 - [E5.05] Images, screenshots, image-only PDF pages, and image-heavy slides become searchable when a supported local OCR capability is available, otherwise jobs remain visibly retryable.
+- [E5.06] CSV, XLSX, and supported SQLite inputs preserve original bytes and produce a
+  validated Dataset manifest/schema/revision/payload or typed safe exception; formulas,
+  macros, external links, extensions, triggers, and arbitrary SQL never execute.
 
 ## 11. Phase 6: Home Conversation, Local Knowledge, RAG, And Reader
 
-Context pack: `docs/PRD.md` retrieval and reader sections; `docs/PROMPT_DESIGN.md`; `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`; `docs/MARKDOWN_SCHEMA.md`; `docs/KNOWLEDGE_MODEL_AND_LINKING.md`; `docs/UI_PROTOTYPE.md`; `docs/PERFORMANCE_AND_RELIABILITY.md`; `docs/I18N_DESIGN.md`.
+Context pack: `docs/PRD.md` retrieval and reader sections; `docs/PROMPT_DESIGN.md`;
+`docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`; `docs/DATA_ARCHITECTURE.md`;
+`docs/MARKDOWN_SCHEMA.md`; `docs/KNOWLEDGE_MODEL_AND_LINKING.md`;
+`docs/UI_PROTOTYPE.md`; `docs/PERFORMANCE_AND_RELIABILITY.md`; `docs/I18N_DESIGN.md`.
 
 Build:
 
@@ -457,6 +472,8 @@ Build:
 - [B6.13 -> E6.08] Source-preserving Markdown editing with valid frontmatter, links, citations, and IME-safe input.
 - [B6.14 -> E6.09] Knowledge Tree visual semantics: domain/topic branch weight and fragment leaf quantity/density remain explainable, accessible, and source-backed.
 - [B6.15 -> E6.10] Executable retrieval, linking, and summarization regression fixtures for ranking, grounding, citations, related pages, and insufficient evidence.
+- [B6.16 -> E6.11] Bounded local Dataset inspection/query and table view with exact
+  revision/schema/row/range/aggregate evidence refs; whole Dataset payloads stay local.
 
 Current Home has durable direct chat, optional cited retrieval, wait/resume, bounded
 transcript, follow-up/retry/cancel. RAG, Note Agent, compaction/indexing,
@@ -482,6 +499,9 @@ Exit criteria:
 - [E6.08] Markdown editing preserves valid frontmatter, clean portable source, wiki links, citations, IME composition, and external-edit conflict safety.
 - [E6.09] Knowledge Tree visual weight and density encodings are deterministic, keyboard/screen-reader interpretable, and traceable to rebuildable source-backed aggregates without exposing advanced graph analytics.
 - [E6.10] Retrieval, linking, and summarization fixtures enforce ranking, grounding, citation coverage, related-page, and insufficient-evidence thresholds without accepting a narrower ingest-only report.
+- [E6.11] Natural-language Dataset questions execute only validated bounded local query
+  plans and return deterministic result hashes/citations; stale revisions, oversized
+  results, unsupported queries, and untrusted cells fail or narrow visibly.
 
 ## 12. Phase 7: Autonomous Knowledge, Memory, And Conversation Polish
 
@@ -498,6 +518,8 @@ Build:
 - [B7.07 -> E7.05] Secret scanning before memory persistence.
 - [B7.08 -> E7.03] Conversation-history browsing and job references.
 - [B7.09 -> E7.04] Conversation-retention compaction for successful job detail.
+- [B7.10 -> E7.06] Managed Collections with typed fields, views, relations/formulas, and
+  reversible Agent row/schema/view changes through Activity/Undo.
 
 Deferred from this phase:
 
@@ -515,6 +537,9 @@ Exit criteria:
 - [E7.03] Conversation history remains readable and restart-safe without duplicating large source assets or saved note bodies.
 - [E7.04] Compaction preserves event identity, source/job/operation references, decisions, and user-visible summaries while discarding only rebuildable detail.
 - [E7.05] Secret scanning precedes memory; scoped reversible memory may grow autonomously, while sensitive/authority-changing memory uses exceptional intervention.
+- [E7.06] Validated Collection changes preserve stable Dataset/table/column/row/view IDs,
+  revisions, and operation history; eligible local changes auto-apply with Undo, while
+  destructive loss, external database writes, new authority, or unresolved conflict pause.
 
 ## 13. Phase 8: Skills, Packages, And Permission Broker
 

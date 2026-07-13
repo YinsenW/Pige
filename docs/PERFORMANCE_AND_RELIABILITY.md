@@ -27,6 +27,8 @@ v0.1 should be engineered and tested against:
 - 2,000 source files.
 - 500 PDFs.
 - 200 DOCX/PPTX files.
+- 100 Dataset Bundles, including one 10-million-row analytical snapshot and one
+  100,000-row managed Collection fixture.
 - 20,000 images or extracted visual assets.
 - 1 year of conversation event records.
 - 1,000 Agent memory records.
@@ -49,6 +51,8 @@ These targets are baseline test fixtures. Real-world results depend on machine c
 | Library list with warm DB and 10,000 pages | Under 1 second initial render |
 | Home query lexical first results | Under 2 seconds on warm DB |
 | Home query semantic rerank | May continue in background with visible status |
+| Open normal Dataset table | Show schema/header and first bounded page under 1 second on warm local data |
+| Bounded Dataset aggregate/filter query | Under 2 seconds for normal fixtures; larger scans show progress/cancel |
 | Eligible Home draft snapshot to visible replacement | Under 250 ms at p95; provider generation time is measured separately |
 | Settings open | Under 500 ms |
 | Permission dialog display | Immediate after sensitive action request |
@@ -116,7 +120,7 @@ Installer:
 
 Vault:
 
-- Source assets and Markdown knowledge files are user-owned durable data.
+- Source assets, Markdown, and Dataset Bundles are user-owned durable data.
 - Generated artifacts are included by default because they make backup/restore useful.
 - Database, indexes, thumbnails, and model files are excluded from vault backup by default.
 
@@ -293,6 +297,20 @@ Fallback behavior:
   keep any sufficient verified native text usable without presenting incomplete OCR as
   complete coverage.
 
+### 9.3 Structured Data
+
+- Import, type inference, Parquet writing, and analytical scans run outside renderer and
+  yield/cancel through the Job boundary; previews page rows and never materialize a whole
+  large table in renderer or model memory.
+- Every adapter/query declares source bytes, row/column/cell, decompressed size, memory,
+  time, output-row, and output-byte ceilings. Bounds are shared with tests rather than
+  copied into prompts.
+- Dataset query results are streamed internally in bounded batches, then reduced to a
+  capped typed result with deterministic hash/citations. Temporary batches are released;
+  durable payloads are committed only through Dataset Service.
+- Large snapshots may partition by stable policy; compaction never changes the active
+  logical revision or silently drops rows/columns.
+
 ## 10. Conversation History Performance
 
 Pige keeps complete conversation history, but uses reference-based storage.
@@ -358,7 +376,8 @@ Disk pressure:
 - Show local model and cache sizes.
 - Let user remove model files.
 - Let user clear caches/indexes.
-- Never silently delete source records, source assets, notes, memory, conversations, or operation records.
+- Never silently delete source records/assets, notes, Dataset Bundles, memory,
+  conversations, or operation records.
 
 Network pressure:
 

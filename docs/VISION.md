@@ -14,11 +14,12 @@ Pige can answer general questions directly. When the user's own context matters,
 retrieves that knowledge first; when new material arrives, it can preserve, understand,
 connect, and reuse it through bounded tools.
 
-In Pige, files are sources. Markdown is the knowledge layer.
+In Pige, files are sources. Markdown is narrative knowledge; Dataset Bundles are
+structured knowledge.
 
 ## 2. Core Product Statement
 
-Pige is a general Agent enhanced by an Agent-maintained local Markdown knowledge base.
+Pige is a general Agent enhanced by an Agent-maintained local knowledge base.
 **Input once. Knowledge grows naturally.** It converses without local evidence and uses
 personal knowledge without reorganizing files. Local-first is durable ownership, not
 network-free or confirmation-first: one BYOK disclosure grants routine bounded calls to
@@ -32,11 +33,17 @@ The capture surface should accept anything reasonable and preserve the input bef
 
 Droppable does not mean every format is perfectly understood on day one. It means Pige preserves the source, records what it knows, and degrades gracefully when parsers, OCR, or tools are missing.
 
-### 3.2 Markdown Is The Knowledge Source Of Truth
+### 3.2 Durable Knowledge Uses Open Local Formats
 
-Markdown files are Pige's only long-term knowledge source of truth.
+Markdown files are Pige's long-term narrative knowledge truth. Versioned Dataset Bundles
+are the corresponding truth for typed tables, Collections, and analytical snapshots;
+they use documented manifests and open SQLite or Parquet payloads rather than flattening
+every row into prose.
 
-SQLite, FTS indexes, vector indexes, embeddings, caches, thumbnails, and model outputs are working layers or derived artifacts. They can be rebuilt from Markdown, source records, source assets, operation records, and memory files.
+Pige's internal SQLite, FTS/vector indexes, embeddings, caches, thumbnails, and model
+outputs remain working layers. They can be rebuilt from Markdown, Dataset Bundles,
+source records/assets, operation records, and memory files. A SQLite file inside a
+Dataset Bundle is user knowledge; `.pige/db/vault.sqlite` is not.
 
 Original files are evidence and source material. They remain important, preserved, and user-owned, but they are not the compiled knowledge layer.
 
@@ -63,13 +70,15 @@ chooses a conservative representation or abstention. Better models should increa
 autonomy inside the same service-enforced safety architecture.
 
 Folder management is secondary. Pige's main artifact is an AI-readable, user-readable
-Markdown knowledge base with provenance.
+local knowledge base with provenance.
 
 ### 3.5 Open By Default
 
 Knowledge must remain inspectable and portable without Pige.
 
-Avoid proprietary knowledge storage. Keep user-authored and Agent-maintained knowledge in plain Markdown with stable frontmatter, IDs, links, citations, and source references.
+Avoid proprietary knowledge storage. Keep prose in plain Markdown and structured data in
+documented Dataset Bundles with stable IDs, revisions, schemas, citations, and source
+references.
 
 ### 3.6 Everything Is Extensible
 
@@ -98,14 +107,14 @@ Pige is not:
 - A generic filesystem manager.
 - A cloud-first document warehouse.
 - A pure RAG chatbot over uploaded files.
-- A proprietary database note app.
+- A proprietary database note app whose knowledge cannot be recovered from open files.
 - A knowledge-only vertical assistant that cannot answer without vault evidence.
 - A general-purpose Agent runtime console.
 
 Pige is:
 
 - A general-purpose personal Agent enhanced by local knowledge.
-- A Markdown knowledge compiler.
+- A narrative and structured knowledge compiler.
 - A source-preserving ingestion and retrieval system.
 - A long-term personal digital brain built from user-owned materials.
 

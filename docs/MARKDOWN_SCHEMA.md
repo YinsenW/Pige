@@ -21,7 +21,8 @@ Use this document when implementing:
 
 ## 2. Schema Principles
 
-- Markdown knowledge files are the knowledge source of truth.
+- Markdown files are narrative knowledge truth. Structured Dataset truth is owned by
+  `docs/DATA_ARCHITECTURE.md`; this schema never serializes whole tables into prose.
 - YAML frontmatter is required for every Pige-managed page except `log.md` entries.
 - IDs are stable and do not depend on file path, title, slug, or language.
 - Source asset bodies are not copied into unrelated pages or conversation logs.

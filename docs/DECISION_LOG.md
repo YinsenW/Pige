@@ -239,8 +239,9 @@ References:
 
 ### D-20260709-Local-First-Markdown
 
-Status: Accepted
+Status: Superseded
 Date: 2026-07-09
+Superseded by: D-20260713-Open-Local-Narrative-And-Structured-Truth
 
 Decision:
 
@@ -263,6 +264,45 @@ References:
 - `docs/DATA_ARCHITECTURE.md`
 - `docs/SOURCE_STORAGE_STRATEGY.md`
 - `docs/LOCAL_DATABASE_DESIGN.md`
+
+### D-20260713-Open-Local-Narrative-And-Structured-Truth
+
+Status: Accepted
+Date: 2026-07-13
+Supersedes: D-20260709-Local-First-Markdown
+
+Decision:
+
+Pige uses two first-class open local durable forms: Markdown for narrative knowledge and
+versioned Dataset Bundles for structured knowledge. Dataset Bundles use one documented
+envelope with managed-collection SQLite or analytical-snapshot Parquet payloads;
+original CSV/XLSX/database files remain source evidence. Pige's internal SQLite and
+indexes remain rebuildable.
+
+Rationale:
+
+Flattening typed rows, schemas, formulas, and large tables into Markdown loses structure,
+queryability, and scale. A portable bundle preserves local ownership without turning a
+hidden application database into the only truth or creating separate product modes.
+
+Consequences:
+
+- Pi remains the semantic orchestrator and uses typed bounded Dataset tools/query plans,
+  never unrestricted SQL or direct file/database authority.
+- v0.1 first proves preserve-first CSV/XLSX/SQLite import, read-only local query/table
+  view, and exact Dataset citations; editable managed Collections are P1.
+- Reversible local Collection/view changes use Operations/Activity/Undo. Original or
+  external database writes, destruction, new authority, and unresolved conflicts pause.
+- Arrow is runtime-only and DuckDB/Parquet implementations remain candidates until
+  dependency, security, package, and platform gates select exact pins.
+
+References:
+
+- `docs/DATA_ARCHITECTURE.md`
+- `docs/DOMAIN_MODEL.md`
+- `docs/PARSER_INGEST_SPEC.md`
+- `docs/LOCAL_DATABASE_DESIGN.md`
+- `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`
 
 ### D-20260709-Reference-Based-Conversation-History
 
@@ -1014,7 +1054,11 @@ Revised: 2026-07-12
 
 Decision:
 
-Pige uses a trash-first and operation-recorded lifecycle for durable vault data. Agent, Skill, package, cleanup, reset, cancellation, and compaction flows must not permanently delete durable Markdown knowledge, source evidence, memory, conversations, proposals, or operation records. Rebuildable databases, indexes, caches, temp files, local model files, and tool assets can be reset or removed through their owning services because they are not the knowledge source of truth.
+Pige uses a trash-first and operation-recorded lifecycle for durable vault data. Agent,
+Skill, package, cleanup, reset, cancellation, and compaction flows must not permanently
+delete durable Markdown/Dataset knowledge, source evidence, memory, conversations,
+proposals, or operations. Internal indexes/caches, temp files, local models, and tool
+assets can be reset through owners because they are not durable knowledge truth.
 
 Rationale:
 

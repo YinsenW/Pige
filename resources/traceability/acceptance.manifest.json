@@ -33,7 +33,7 @@
       "builds": ["B2.05"],
       "exits": ["E2.07"]
     },
-    "vault.markdown-truth": {
+    "vault.open-local-truth": {
       "requirement": "PIGE-VAULT-001",
       "builds": ["B1.02", "B1.05", "B1.06", "B1.15", "B1.16"],
       "exits": ["E1.01", "E1.03", "E1.08", "E1.09"]
@@ -234,6 +234,21 @@
         "E7.02",
         "E7.05"
       ]
+    },
+    "data.structured-ingest": {
+      "requirement": "PIGE-DATA-001",
+      "builds": ["B5.13"],
+      "exits": ["E5.06"]
+    },
+    "data.local-query": {
+      "requirement": "PIGE-DATA-002",
+      "builds": ["B6.16"],
+      "exits": ["E6.11"]
+    },
+    "data.managed-collections": {
+      "requirement": "PIGE-DATA-003",
+      "builds": ["B7.10"],
+      "exits": ["E7.06"]
     },
     "backup.default-inclusions": {
       "requirement": "PIGE-BACKUP-001",
@@ -656,7 +671,7 @@
       ],
       "open": {
         "id": "OPEN-REQ-PIGE-VAULT-001",
-        "description": "Cross-service proof that every durable knowledge write remains Markdown-owned is incomplete.",
+        "description": "Markdown narrative ownership is proven in bounded paths; Dataset structured ownership and complete cross-service durable/rebuildable classification remain open.",
         "targetBuilds": [
           "B1.02",
           "B1.05",
@@ -968,6 +983,18 @@
           "E4.05"
         ]
       }
+    },
+    "PIGE-DATA-001": {
+      "status": "planned",
+      "plannedTarget": "Lossless preserve-first CSV/XLSX/SQLite Dataset import, manifest/schema/revision, no-execution, recovery, and backup fixtures."
+    },
+    "PIGE-DATA-002": {
+      "status": "planned",
+      "plannedTarget": "Bounded typed local Dataset query/table-view integration with deterministic result hashes, exact citations, stale-revision rejection, and no whole-payload egress."
+    },
+    "PIGE-DATA-003": {
+      "status": "planned",
+      "plannedTarget": "Managed Collection field/view/relation/formula lifecycle with stable IDs, revision conflicts, Activity/Undo, backup, and safe exceptional boundaries."
     },
     "PIGE-SEC-001": {
       "status": "partial",
@@ -2575,6 +2602,10 @@
         ]
       }
     },
+    "E5.06": {
+      "status": "planned",
+      "plannedTarget": "CSV/XLSX/SQLite lossless typed Dataset import, source-preservation, no-execution, deterministic retry/recovery, and packaged-platform report."
+    },
     "E6.01": {
       "status": "partial",
       "evidence": ["EV-RETRIEVAL", "EV-HOME-AGENT", "EV-HOME-UI", "EV-HOME-DRAFT-ADAPTER", "EV-HOME-DRAFT-PUBLISHER", "EV-HOME-DRAFT-UI", "EV-PI-ELECTRON-SMOKE"],
@@ -2666,6 +2697,10 @@
         "targetExits": ["E6.10"]
       }
     },
+    "E6.11": {
+      "status": "planned",
+      "plannedTarget": "Dataset table-view and typed-query report proving bounds, deterministic hashes, exact citations, stale-revision rejection, and zero whole-payload/model/renderer authority."
+    },
     "E7.01": {
       "status": "partial",
       "evidence": ["EV-PROPOSAL", "EV-AGENT-INGEST", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-PROPOSAL-UI", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY", "EV-PI-INGEST-UPDATE", "EV-UPDATE-RECOVERY", "EV-PI-INGEST-LINK", "EV-LINK-RECOVERY", "EV-PI-INGEST-TAGS", "EV-TAG-RECOVERY"],
@@ -2701,6 +2736,10 @@
     "E7.05": {
       "status": "planned",
       "plannedTarget": "Memory lifecycle, provenance, backup, and secret-scan integration report."
+    },
+    "E7.06": {
+      "status": "planned",
+      "plannedTarget": "Managed Collection typed fields, views, relations/formulas, revision conflict, Activity/Undo, and exception-boundary integration report."
     },
     "E8.01": {
       "status": "planned",

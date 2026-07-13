@@ -193,6 +193,13 @@ Mitigations:
 - OpenXML preflight rejects unsafe or overlong entry names, duplicate parts, encrypted/unsupported entries, invalid sizes, excessive counts, oversized expansion, suspicious compression ratios, oversized selected XML, missing required parts, and DOCTYPE declarations before semantic conversion. DOCX preflight covers every XML/relationship part Mammoth could reach, not only the main document.
 - DOCX conversion disables embedded style maps and external file access. Mammoth HTML is treated as untrusted intermediate data, normalized to plain text/locators, and never rendered in the product UI.
 - PPTX parsing disables entity processing and value coercion, validates XML with a nesting cap, resolves internal relationships relative to their owning package part, rejects traversal and duplicate IDs, and records but never opens external targets.
+- CSV/XLSX/database adapters treat names, cells, formulas, comments, schemas, and metadata
+  as untrusted data. They never execute workbook macros/formulas, external links, database
+  extensions, triggers, user code, or model-authored SQL. Database snapshots open
+  read-only through descriptor-bound copies; Dataset queries use typed bounded plans.
+- Dataset payloads and manifests are confined below the active vault, revision/hash-bound,
+  and inaccessible to renderer/model code as file handles. Analytical engines run with
+  networking and extension loading disabled and cannot attach arbitrary paths.
 - Parser-owned provenance fields cannot be overwritten by adapter metadata. Checksummed source, sidecar, and text artifacts are verified before reuse and before Agent cloud handoff.
 - Direct macOS image OCR runs in an app-owned native helper process, not the renderer or a shell. The helper receives one bounded schema-versioned stdin request, emits one bounded stdout response, has a reduced environment, performs no network access or downloads, and exposes no source path in argv or user-visible errors.
 - Runtime verifies the helper as a regular executable against an adjacent architecture/version/size/SHA-256 manifest before declaring OCR ready. Public packaging must also sign the nested helper and verify it inside the signed application.
@@ -207,6 +214,8 @@ Acceptance:
 - ZIP extraction cannot write outside staging.
 - Parser failure cannot corrupt vault pages.
 - A malformed image or helper failure cannot invoke shell/network behavior, overwrite the preserved source, escape the vault, or create Agent ingest from unvalidated text.
+- A hostile CSV/workbook/database cannot execute code, load an extension or external
+  resource, mutate the original, escape its Dataset Bundle, or bypass query/result limits.
 
 ### 6.6 External Skill And Package Execution
 

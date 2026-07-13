@@ -7,14 +7,16 @@ Date: 2026-07-09
 
 This document defines how Pige handles original user files and other source assets.
 
-Pige's knowledge source of truth is Markdown. Original files are evidence and input material. The user owns them, and Pige must not force them into one storage location.
+Markdown is narrative truth and Dataset Bundles are structured truth. Original files are
+evidence and input material; Pige must not force or silently rewrite them.
 
 ## 2. Core Distinction
 
 Pige has two separate storage concerns:
 
 1. Knowledge storage.
-   Agent-maintained Markdown pages, source pages, indexes, logs, memory, operation records, and portable vault metadata.
+   Agent-maintained Markdown, Dataset Bundles, source pages, logs, memory, operation
+   records, and portable vault metadata.
 
 2. Source asset storage.
    Original files, downloaded snapshots, copied documents, screenshots, images, archives, and other evidence used to create or update Markdown knowledge.
@@ -205,6 +207,9 @@ type SourceRecord = {
 };
 ```
 
+Planned structured import adds `csv_file`, `xlsx_file`, and `sqlite_file` only through a
+versioned shared-schema change; this document does not make those values executable.
+
 Rules:
 
 - `packages/schemas/src/index.ts` is the executable field/enum authority. New IDs use `src_`, `page_`, and `art_`; `artifact_` is not emitted.
@@ -227,15 +232,17 @@ shared-schema reads supply schema v1 and keep their vault-relative paths valid u
 section 3.1. This compatibility rule never changes the selected storage strategy or
 weakens descriptor, checksum, containment, adapter-input, or durable-write validation.
 
-## 6. Markdown Knowledge Contract
+## 6. Knowledge Projection Contract
 
-Every source that contributes knowledge should create or update Markdown.
+Narrative sources create or update Markdown. Structured sources create a Dataset Bundle
+when typed rows/columns are the useful knowledge; a bounded Markdown source page or
+summary may describe the Dataset but must not duplicate every row.
 
 At minimum:
 
-- A source page under `sources/`.
-- Source references in generated wiki pages.
-- Citations or provenance blocks that point back to the source record and locator.
+- A source record and inspectable source page under `sources/`.
+- Either referenced Markdown knowledge or a Dataset manifest/revision with source binding.
+- Citations that point to the source locator or exact Dataset evidence reference.
 
 The Markdown source page should survive even if the original file becomes unavailable. It should state whether the original is copied, referenced, linked, missing, or changed.
 

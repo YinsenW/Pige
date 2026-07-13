@@ -58,17 +58,18 @@ single owner; it must not create a competing technical definition.
 Pige is a local-first general-purpose personal Agent. One Home conversation accepts
 ordinary questions, tasks, sources, and files. Local knowledge strengthens a turn when
 relevant; it is not required for an Agent response. Useful material can become an
-interlinked Markdown wiki owned by the user. **Input once, knowledge grows naturally:**
+interlinked Markdown wiki or typed Dataset owned by the user. **Input once, knowledge
+grows naturally:**
 normal validated reversible knowledge work is autonomous by default.
 
 The product combines three familiar metaphors:
 
 - Flomo-like lightweight capture.
 - ChatGPT-like conversational input.
-- Obsidian-like local Markdown vault.
+- Open local vault for narrative and structured knowledge.
 
-Unlike ordinary assistants, Pige can compile useful work into durable Markdown and use
-it in later conversations.
+Unlike ordinary assistants, Pige can compile useful work into durable Markdown or
+Dataset knowledge and use it in later conversations.
 
 ## 2. Product Positioning
 
@@ -82,7 +83,7 @@ Sections 8–10 own the accepted release inputs and degraded behavior.
 Short positioning:
 
 > Ask anything. When your knowledge matters, Pige retrieves and cites it; when something
-> is worth keeping, Pige can turn it into portable Markdown.
+> is worth keeping, Pige can turn it into portable local knowledge.
 
 Product contrast:
 
@@ -130,8 +131,8 @@ order. A lower group cannot weaken a higher group merely to simplify implementat
 
 1. Captures and durable user data MUST survive parser, model, dependency, cancellation,
    crash, and restart failures. Recovery beats completing an uncertain automation.
-2. Markdown remains the durable knowledge source of truth; databases, indexes,
-   thumbnails, embeddings, and caches remain rebuildable working layers.
+2. Markdown remains narrative truth and versioned Dataset Bundles are structured truth;
+   internal databases, indexes, thumbnails, embeddings, and caches remain rebuildable.
 3. Original files remain user-owned. Pige may make a managed copy or retain a verified
    reference according to the source-storage contract, but MUST NOT force migration,
    silently rewrite evidence, or treat a future link strategy as a v0.1 strategy.
@@ -153,7 +154,8 @@ order. A lower group cannot weaken a higher group merely to simplify implementat
    safety, but cannot infer semantic intent with punctuation, URL, MIME, or file rules.
 3. The Agent autonomously maintains naming, linking, filing, summaries, and structure.
    Users guide, inspect, correct, or undo outcomes; they do not supervise each step.
-4. Ordinary answers may remain conversational; reusable outcomes can become Markdown.
+4. Ordinary answers may remain conversational; reusable outcomes can become Markdown or
+   a Dataset revision/view.
 5. When local knowledge is relevant, retrieval returns grounded synthesis plus ranked,
    inspectable notes. Empty or irrelevant retrieval does not block ordinary conversation.
 6. The interface MUST be keyboard usable, screen-reader understandable, contrast-safe,
@@ -518,8 +520,8 @@ v0.1 product rules:
 - Moving a vault is not a simple inline setting in v0.1. The supported path is to reveal,
   move with the operating system, and open the compatible folder, or restore into a new
   folder.
-- Index/database repair is visibly separate from durable note storage and cannot delete
-  the knowledge source of truth.
+- Index/database repair is visibly separate from durable knowledge storage and cannot
+  delete Markdown or Dataset Bundles.
 
 Default paths, root identity, settings fields, atomic writes, external-change detection,
 job compaction, durable/rebuildable inventories, backup behavior, and migration safety
@@ -551,6 +553,7 @@ Coding Agents, not separate feature backlogs.
 | Paste a useful article URL. | Preserve the source, extract readable content, create a source-backed Markdown result, and connect useful knowledge without asking for a folder first. | `PIGE-CAP-001`, `PIGE-INGEST-003`, `PIGE-KNOW-006` |
 | Capture a messy idea. | Preserve it immediately and produce a readable titled note when a model is available. | `PIGE-CAP-001`, `PIGE-KNOW-006` |
 | Drop a PDF, document, screenshot, or scanned page. | Preserve the input, recover useful text and evidence locators with the best available local parser/OCR path, and expose any partial result or warning. | `PIGE-INGEST-003`, `PIGE-INGEST-004` |
+| Drop a CSV, workbook, or supported database snapshot. | Preserve the original, create a lossless typed Dataset when Pi chooses structured import, and answer through bounded local queries with exact citations. | `PIGE-DATA-001`, `PIGE-DATA-002` |
 | Ask a general question or work through a task. | Answer normally; if personal knowledge is relevant, retrieve it locally and expose citations. | `PIGE-PI-001`, `PIGE-SEARCH-001`, `PIGE-CONTEXT-001` |
 | Open or select text in a note. | Support reading, contextual questions, and reversible transformations without losing the note or its sources. | `PIGE-UI-001`, `PIGE-UI-005`, `PIGE-UI-006` |
 | Correct Pige or explicitly ask it to remember a preference. | Apply the current correction, and keep any durable memory local, inspectable, scoped, and reversible. | `PIGE-MEM-001` |
@@ -612,6 +615,8 @@ Home and capture:
 - Local tool manager for explicitly installing and managing a supported optional OCR fallback.
 - Processing status visible in the home timeline.
 - Status states for queued, processing, failed, and exceptional intervention captures.
+- CSV, XLSX, and supported local database snapshot ingest into a preserved, versioned
+  Dataset with typed local query and exact row/range/aggregate citations.
 
 Agent output:
 
@@ -633,7 +638,8 @@ Vault:
 - User-selected local knowledge root folder.
 - Independently configurable managed-copy location for source copies and web snapshots; derived artifacts remain portable with the vault.
 - Default vault path per platform.
-- Markdown storage.
+- Open durable knowledge storage: Markdown for narrative knowledge and Dataset Bundles
+  for structured knowledge.
 - Managed source copies remain durable and resolvable under the selected managed-copy location.
 - Extracted parser and OCR artifacts remain durable, portable, and regenerable without changing source evidence.
 - Markdown source pages remain part of the portable knowledge root.
@@ -816,6 +822,8 @@ Safety and trust:
 - Retrieval history so useful searches can be revisited or saved as wiki pages.
 - Git-friendly change history.
 - Import from an existing Obsidian vault.
+- Editable managed Collections with typed fields, views, relations/formulas, and
+  reversible Agent maintenance beyond the read-only v0.1 Dataset vertical.
 
 ### 8.3 P2 Later
 
@@ -829,6 +837,8 @@ Safety and trust:
 - Collaboration workflow.
 - Fully open unreviewed third-party plugin marketplace.
 - Advanced graph analytics and dense network visualization.
+- Live external database/connectors, credentialed refresh, and explicit write-back; local
+  file snapshots remain the v0.1 boundary.
 
 ## 9. Explicit Non-Goals For v0.1
 
@@ -1002,6 +1012,28 @@ Parser-selected page routing, sparse/image-only decisions, sidecars, checksums, 
 adapters, confidence handling, bounds, tool identity, and platform-specific APIs are
 owned by `docs/PARSER_INGEST_SPEC.md`, `docs/PERFORMANCE_AND_RELIABILITY.md`,
 `docs/TECH_ARCHITECTURE.md`, and `docs/I18N_DESIGN.md`.
+
+### 10.7 Structured Data
+
+CSV, XLSX, and supported database files are first-class sources. Pige preserves the
+original before Pi decides whether to inspect, query, summarize, or materialize a
+Dataset. It MUST NOT flatten large tables into Markdown, execute workbook code, mutate
+an external database, or require users to choose storage/query engines.
+
+v0.1 minimum outcome:
+
+- Lossless source preservation plus a typed, versioned Dataset Bundle.
+- Read-only table inspection and bounded local query over CSV, XLSX, and supported local
+  database snapshots.
+- Exact Dataset revision/schema/row/range/aggregate citations in Agent answers.
+- A calm table surface with schema/warning visibility; engine names stay hidden.
+- Clear typed failure/manual recovery when format, formula state, size, or adapter support
+  is insufficient; the original remains safe.
+
+Editable Notion-like Collections, relations, formulas, and custom views are P1. Their
+normal validated reversible changes auto-apply with Activity/Undo; original overwrite,
+external database writes, destructive changes, new authority, and unreconcilable
+conflicts remain exceptional.
 
 ## 11. Agent Workflows
 

@@ -9,7 +9,9 @@ This document defines how Pige stores, indexes, references, backs up, restores, 
 
 The central goal:
 
-> Keep the user's durable knowledge readable as Markdown files, while preserving or referencing original source assets according to explicit storage strategy. Databases, indexes, caches, and model artifacts only make the product fast and intelligent.
+> Keep durable knowledge readable in open local formats: Markdown for narrative knowledge
+> and versioned Dataset Bundles for structured knowledge. Preserve or reference original
+> sources; hidden indexes, caches, and machine-local databases only make Pige faster.
 
 ## 2. Scale Targets
 
@@ -18,7 +20,9 @@ v0.1 should be designed for a serious individual user:
 - Notes and source pages: 10,000.
 - Vault size: 100 GB.
 - Retrieval chunks: 100,000.
-- Mixed source types: text, Markdown, URLs, images, PDFs, DOCX, PPTX, OCR artifacts, generated wiki pages, conversation events, Agent memory, Skills, and operation records.
+- Mixed source types: text, Markdown, URLs, images, PDFs, DOCX, PPTX, CSV, XLSX,
+  database snapshots, OCR artifacts, Dataset Bundles, wiki pages, conversations, memory,
+  Skills, and operations.
 
 These targets define architecture and test fixtures. They are not a promise that every old machine will hit every latency goal.
 
@@ -26,7 +30,7 @@ These targets define architecture and test fixtures. They are not a promise that
 
 Pige data belongs to these classes.
 
-### 3.1 Durable Markdown Knowledge Truth
+### 3.1 Durable Narrative Knowledge Truth
 
 This is Pige's long-term knowledge layer. It should be readable, editable, backed up, and recoverable without trusting a hidden database.
 
@@ -46,9 +50,68 @@ Rule:
 
 - This data is backed up by default unless the user explicitly excludes a sensitive category such as memory.
 
-### 3.1.1 Durable Source Evidence
+### 3.1.1 Durable Structured Knowledge Truth
 
-This is evidence used to produce and verify Markdown knowledge. It is user-owned source material, but it is not the compiled knowledge source of truth.
+A Dataset Bundle is the portable authority for structured knowledge. It is a normal
+directory with a versioned manifest, stable schema/column IDs, immutable revisions, and
+open payloads. It is backed up and restored as one logical object.
+
+```txt
+datasets/<slug>--<dataset_id>/
+  dataset.json
+  schemas/
+  data/
+    collection.sqlite
+    part-*.parquet
+  revisions/
+  changes/*.jsonl
+  views/*.json
+```
+
+Two storage profiles share this envelope:
+
+- `managed_collection`: mutable Pige-owned tables use a confined SQLite application file
+  plus append-only changes and revisions. This SQLite is durable user knowledge, not
+  `.pige/db/vault.sqlite`.
+- `analytical_snapshot`: large imported/snapshotted tables use immutable Parquet parts
+  plus versioned schema and provenance. It is read-only until a derived Dataset is
+  created.
+
+`dataset.json` selects exactly one profile and active revision. It binds Dataset/source
+IDs and source revision, table/schema IDs, payload paths/hashes/row counts, format and
+writer versions, created/updated times, and compatibility range. A profile does not
+create both payload types unless an explicit derived revision declares both roles.
+
+```ts
+type DatasetEvidenceRef = {
+  datasetId: string;
+  revisionId: string;
+  tableId: string;
+  schemaId: string;
+  columnIds: string[];
+  rowIds?: string[];
+  primaryKeys?: Array<Record<string, string>>;
+  range?: { startRow: number; endRow: number };
+  queryPlanHash?: string;
+  resultHash: string;
+  sourceId: string;
+  sourceRevisionHash: string;
+};
+```
+
+Row numbers are display locators, not identity. Managed Collections use stable row IDs;
+snapshots use declared primary keys when trustworthy or revision-bound row positions.
+
+Arrow may be used only as a bounded in-memory/IPC representation. DuckDB is a candidate
+query engine, never durable truth; adopting it requires dependency, extension, packaging,
+security, and platform review. Runtime queries must not install extensions or download
+dependencies.
+
+### 3.1.2 Durable Source Evidence
+
+This evidence produces and verifies Markdown or Dataset knowledge. An original CSV,
+workbook, or database file remains user-owned evidence even after a Dataset snapshot is
+created.
 
 Examples:
 
@@ -178,6 +241,7 @@ Pige Vault/
   log.md
   raw/
   artifacts/
+  datasets/
   sources/
   wiki/
   assets/
@@ -199,11 +263,12 @@ Pige Vault/
 
 Rules:
 
-- `sources/` and `wiki/` are the primary Markdown knowledge layer.
+- `sources/` and `wiki/` own narrative knowledge; `datasets/` owns structured knowledge.
 - `raw/` is a default managed source asset folder, not the only possible source location.
 - Managed source copies are immutable after capture unless the user explicitly deletes them.
 - Original files referenced outside the vault are not moved, deleted, or rewritten by Pige.
-- `sources/` and `wiki/` are normal Markdown and can be edited outside Pige.
+- `sources/` and `wiki/` are normal Markdown; Dataset Bundles use documented manifests
+  and open SQLite/Parquet payloads with versioned change boundaries.
 - `.pige/db/`, `.pige/indexes/`, and `.pige/cache/` are rebuildable.
 - `.pige/source-records/`, `.pige/conversations/`, `.pige/jobs/`, `.pige/proposals/`, `.pige/operations/`, `.pige/memory/`, and `.pige/skills/` are durable vault data unless explicitly excluded by the user.
 
@@ -269,6 +334,9 @@ Source locator compatibility:
 | OCR text | `artifacts/` | Durable artifact | Yes | Yes, but tool/model-dependent | Yes |
 | Source page | `sources/` | Yes for user-readable knowledge; bounded projection only for source metadata | Yes | No | Yes |
 | Wiki page | `wiki/` | Yes | Yes | No | Yes |
+| Dataset Bundle | `datasets/<slug>--<dataset_id>/` | Yes for structured knowledge | Yes | No | Yes |
+| Dataset managed collection | Dataset `data/collection.sqlite` plus revisions/change log | Yes; Pige-owned application-file profile | Yes | No | Yes |
+| Dataset analytical parts | Dataset `data/part-*.parquet` plus manifest/schema | Yes; immutable snapshot profile | Yes | No | Yes |
 | Asset referenced by Markdown | `assets/` | Yes | Yes | No | Yes |
 | Conversation event | `.pige/conversations/` | Yes for chat history | Yes | No | Yes |
 | Vault job record | `.pige/jobs/` | Yes until completed/compacted | Yes | Partially | Yes |
@@ -284,7 +352,7 @@ Source locator compatibility:
 | Recent vault list | OS app data | Machine-local preference | No | No | No |
 | External managed-copy root binding | OS app data `vault-bindings.json`, keyed by `vault_id` and stable `rootId` | Machine-local path resolution | No; manifest records dependency without raw path | No | Root ID is sync-ready; path must be rebound |
 | Machine-local job record | OS app data | Machine-local operational state | No | Partially | Future explicit export only |
-| SQLite database | `.pige/db/` | No | No | Yes | No |
+| Internal SQLite database | `.pige/db/` | No | No | Yes | No |
 | FTS/vector indexes | `.pige/indexes/` | No | No | Yes | No |
 | Cache files | `.pige/cache/` | No | No | Yes | No |
 | API keys | OS keychain/app secret store | Yes, machine-local | No | No | Future explicit export only |
@@ -302,7 +370,8 @@ Lifecycle rules:
 - Pige may create/update/link/organize/archive recoverably with Operations/Undo, but no
   actor auto-deletes durable knowledge/evidence permanently.
 - Permanent/trash-bypass/managed-evidence deletion confirms; external originals are never modified.
-- Rebuildable databases, indexes, and caches can be reset without confirmation beyond the repair action because Markdown/source evidence remains durable.
+- Rebuildable databases, indexes, and caches can be reset without confirmation beyond
+  the repair action because Markdown, Dataset Bundles, and source evidence remain durable.
 - Irreversible cleanup confirms; reversible cleanup records an Operation/tombstone.
 - Cancelling a job stops or prevents later processing only; it must not delete source records, source assets, conversation events, proposals, operations, memory, or Markdown.
 - If an object participates in future sync, deletion must leave enough metadata to distinguish intentional deletion from missing local data.
@@ -310,6 +379,7 @@ Lifecycle rules:
 | Data class | User action | Pige Agent / external extension action | Automatic cleanup | Record required | Backup behavior |
 | --- | --- | --- | --- | --- | --- |
 | Source/wiki pages | Archive/trash with Undo; permanent delete confirms | Pige auto-maintains recoverably; extensions use brokered services | No permanent cleanup | Operation/tombstone | Trash included |
+| Dataset Bundles | Archive/trash with Undo; permanent delete confirms | Validated collection edits/derived views may auto-apply with Activity/Undo | No permanent cleanup | Operation/change record/tombstone | Included |
 | Managed source copies | Delete only after explicit confirmation and warning | Never | No | Operation record plus source record update/tombstone | Included unless excluded by user |
 | Referenced original files | Reveal, relink, mark missing | Never modify/delete | Never | Source availability warning or relink operation | Path/URI listed as external dependency |
 | Source records | Archive with owner; permanent delete confirms | Pige updates provenance; no independent delete | No | Operation/tombstone | Included |
@@ -337,7 +407,8 @@ Trash rules:
 Compaction rules:
 
 - Compaction reduces storage volume by replacing detailed successful job payloads or verbose tool logs with refs, summaries, timings, warnings, and operation IDs.
-- Compaction must not remove source records, source assets, Markdown pages, memory entries, conversation turns, unresolved proposals, failed jobs, permission decisions, or operation audit trails.
+- Compaction must not remove source records/assets, Markdown pages, Dataset revisions,
+  memory, conversation turns, unresolved proposals, failed jobs, decisions, or operations.
 - Compaction is not data erasure and must not be described as deletion in the UI.
 
 ## 6. Conversation Data
@@ -402,7 +473,9 @@ This preserves the user's memory of the interaction while preventing uncontrolle
 
 Every durable object that may participate in future sync needs a stable ID.
 
-Canonical prefixes are owned by the executable schemas in `packages/schemas/src/index.ts`: `vault_`, `src_`, `page_`, `cap_`, `art_`, `conv_`, `evt_`, `job_`, `proposal_`, `op_`, `backup_`, and `root_`, plus the memory/Skill/package/asset/chunk families defined in `docs/DOMAIN_MODEL.md`.
+Implemented prefixes are owned by executable schemas. Planned Dataset contracts reserve
+`dataset_`, `table_`, `column_`, `row_`, `view_`, and `dataset_rev_`; implementation must
+add them to shared schemas before emitting durable records.
 
 Rules:
 
@@ -422,6 +495,8 @@ page_20260709_ef34ab56
 conv_20260709
 evt_20260709_7890abcd
 art_20260709_ab12cd34_text
+dataset_20260713_ab12cd34
+table_20260713_ef34ab56
 ```
 
 ## 9. Manifest Design
@@ -439,6 +514,7 @@ art_20260709_ab12cd34_text
   "durable_roots": [
     "raw",
     "artifacts",
+    "datasets",
     "sources",
     "wiki",
     "assets",
@@ -491,9 +567,10 @@ SQLite remains rebuildable.
 1. Ensure the source record and storage strategy are durable.
 2. Start Pi Agent with bounded source metadata and tool contracts.
 3. Persist validated Artifacts from Agent-selected tools.
-4. Commit validated autonomous publication or an approved exception atomically.
-5. Derive source-page/index/log projections and append Operation provenance.
-6. Update database and indexes.
+4. Materialize a validated Markdown page or Dataset revision through its owning service.
+5. Commit validated autonomous publication or an approved exception atomically.
+6. Derive source-page/index/log projections and append Operation provenance.
+7. Update rebuildable indexes.
 
 If the app crashes after step 1, Pige can resume or explain exactly which source asset/reference needs repair.
 
@@ -502,7 +579,8 @@ Detailed job checkpoint, retry, cancellation, proposal, and operation recovery r
 ### 10.3 Query
 
 1. Pi Agent selects a scoped retrieval tool.
-2. The tool reads indexes or falls back to Markdown and returns a bounded cited Context Pack.
+2. The tool reads indexes, Markdown, or a typed Dataset query and returns a bounded cited
+   Context Pack. It never sends a whole Dataset to the model by default.
 3. Pi Agent may answer directly or synthesize selected evidence; without a usable model,
    the same durable `agent_turn` waits instead of returning a silent local answer.
 4. Save the answer to conversation history.
@@ -540,6 +618,7 @@ Default backup includes:
 - In-vault `raw/` managed source copies.
 - Reachable external managed copies selected by canonical source records. If a required root is unavailable, backup pauses for repair or requires an explicit “continue incomplete” decision and records the omission.
 - `artifacts/`.
+- `datasets/`, including manifests, schemas, payloads, revisions, changes, and views.
 - `.pige/source-records/`.
 - `sources/`.
 - `wiki/`.
@@ -603,7 +682,8 @@ Selecting a new destination folder does not by itself select a mode. Two simulta
 Restore flow:
 
 1. Inspect backup manifest.
-2. Show vault name, source count, note count, conversation count, memory count, app version, schema version, and backup date.
+2. Show vault name, source/note/Dataset counts, conversation count, memory count, app
+   version, schema version, and backup date.
 3. Ask for `replace_existing` or `clone_as_new`; default to `clone_as_new` when both the original and restored vault will remain available.
 4. Validate checksums where available.
 5. Rebuild SQLite database and indexes.
@@ -634,11 +714,14 @@ Sync is not part of v0.1, but data must avoid future sync-hostile choices.
 Requirements:
 
 - Stable IDs for durable objects.
+- Dataset, table, column, row, view, and revision IDs remain independent from display
+  names, sheet order, filenames, and physical part layout.
 - Checksums for managed source copies, available referenced originals, and important artifacts.
 - `created_at`, `updated_at`, and `last_agent_touch_at` fields.
 - Operation summaries for Agent writes.
 - Conflict detection based on ID, path, timestamp, checksum, and last known base hash.
 - No hidden knowledge state only in SQLite.
+- Dataset schemas, revisions, and query provenance never exist only in the internal index.
 - No machine-local-only data required to understand the vault.
 
 Conflict classes:
@@ -689,11 +772,14 @@ Primary growth risks:
 - Rendered page images.
 - Vector indexes.
 - Local model files.
+- Dataset revisions, analytical parts, and retained change history.
 - Logs and operation records.
 
 Controls:
 
 - Store source bodies once and reference them.
+- Compact or partition analytical snapshots by versioned policy without losing the
+  manifest-selected active revision; never rewrite a source workbook/database in place.
 - Keep rendered page images only when needed for OCR or source inspection.
 - Allow cache/index reset.
 - Compact successful job details after the retention window.

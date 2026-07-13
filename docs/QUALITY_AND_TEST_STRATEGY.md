@@ -119,6 +119,17 @@ Document fixtures:
 - PPTX with text boxes and selected embedded-raster OCR.
 - Corrupt or unsupported file.
 
+Structured-data fixtures:
+
+- CSV dialects/encodings with quoted delimiters, null/empty ambiguity, leading zeros,
+  large integers, dates, decimals, multiline cells, and reversible lexical values.
+- XLSX with multiple sheets, formulas/cached values, stale formulas, merged cells,
+  comments, hidden sheets, macros, external links, and unsupported features.
+- Read-only SQLite with multiple tables/views, hostile names, triggers/extensions,
+  malformed pages, oversized values, and schema changes.
+- Managed Collection revisions covering stable row/column IDs, view changes, conflicts,
+  Activity/Undo, and rebuild from durable Dataset files.
+
 Image/OCR fixtures:
 
 - Clean screenshot.
@@ -166,7 +177,9 @@ Current adversarial boundary seed:
 Public Alpha usability scenario fixture:
 
 - At least 25 mixed sources captured across a scripted multi-session run.
-- Must include typed text, large pasted text, URL, Markdown, TXT, text PDF, image-only PDF, DOCX, PPTX, screenshot/image OCR, and at least two multilingual CJK/Latin sources.
+- Must include typed text, large pasted text, URL, Markdown, TXT, text PDF, image-only
+  PDF, DOCX, PPTX, screenshot/image OCR, CSV, XLSX, supported SQLite, and at least two
+  multilingual CJK/Latin sources.
 - Must include at least one failed or degraded path: denied permission, missing optional OCR/RAG model, failed parser/OCR warning, network fetch failure, app restart with queued job, or external Markdown edit.
 - Must include one Home retrieval question, Note Agent, selection action, autonomous
   write/Undo, exceptional proposal, memory path, backup, fresh-folder restore, and search.
@@ -201,7 +214,9 @@ Every feature that writes files must test:
 - Delete/archive moves to recoverable trash when required.
 - Data lifecycle follows `docs/DATA_ARCHITECTURE.md`: eligible knowledge changes are
   operation-recorded/recoverable, durable deletion is trash-first, and indexes/caches rebuild.
-- Agent, Skill, package, cleanup, reset, and compaction flows cannot permanently delete source records, managed source copies, Markdown pages, memory, conversations, proposals, or operations.
+- Agent, Skill, package, cleanup, reset, and compaction flows cannot permanently delete
+  source records/copies, Markdown pages, Dataset Bundles, memory, conversations,
+  proposals, or operations.
 - Trash entries preserve object IDs, previous paths, operation IDs, and checksums when available.
 - Source record creation and source asset preservation happen before parsing/model calls.
 - Backup includes or excludes the new file type correctly.
@@ -394,6 +409,21 @@ Tests must verify:
 - Cloud model receives selected snippets, not the entire vault.
 - Query answers are stored in conversation history without duplicating source bodies.
 
+### 9.1 Structured Data Gates
+
+Tests must verify:
+
+- CSV/XLSX/SQLite originals persist before parsing and are never rewritten or executed.
+- Import preserves lexical cell values, typed projection, workbook/database provenance,
+  stable IDs, schema/revision hashes, and deterministic retry/recovery.
+- Dataset Bundle manifests/payloads survive internal database deletion, backup/restore,
+  rename, and migration without becoming hidden cache state.
+- Typed queries enforce Dataset revision, schema, row/column/byte/time/result bounds and
+  deterministic query/result hashes; model/renderer receive no handles or raw SQL.
+- Citations resolve exact rows/keys/ranges/columns or aggregates and fail on stale data.
+- Reversible managed Collection edits auto-apply with Operation/Undo; destructive,
+  external-write, authority, and unresolved-conflict cases stop safely.
+
 ## 10. UI And Accessibility Gates
 
 Tests must verify:
@@ -454,12 +484,14 @@ Documentation checks must verify:
 - Local Markdown links, the document inventory, resource indexes, parser/OCR manifest alignment, placeholder reclamation, and review freshness pass their focused verifiers.
 - The traceability verifier proves unique Requirement definitions, complete P0 coverage, normalized Requirement/Build/Exit mappings, exact evidence, structured open work, phase completion, and all mutation cases. This document does not repeat those registries or mutation catalogs.
 - The PRD contract verifier proves one AI-native authority statement, ordered product
-  priorities, a default user model, observable/degraded states, exact 151/9/10
+  priorities, a default user model, observable/degraded states, exact 152/10/11
   P0/P1/P2 scope, registered owner references, and absence of current-status or
   technical-owner leakage; its mutation suite must reject structural, scope, evidence,
   dependency/model, type/schema, path, and owner-reference regressions.
 - Decision Log verification passes for unique/date-aligned IDs, required rationale/consequences/references, legal lifecycle state, bidirectional supersession, and stale temporal wording.
-- Cross-document contract verification passes for stable IDs, Markdown/source authority, Job lifecycle, asset roots, backup/restore, provider, permissions, secret use, and model egress.
+- Cross-document contract verification passes for stable IDs, Markdown/Dataset/source
+  authority, Job lifecycle, asset roots, backup/restore, provider, permissions, secrets,
+  and model egress.
 - Documentation leanness verification enforces an always-read attention budget, single-owner projections, normalized trace manifests, a bounded inventory, and material reduction from the audited baseline. Its copy/paste gate rejects every unapproved repeated short normative line, consecutive list or table-data window, mixed multiline block, external URL, same-name typed declaration, and exact or high-coverage long prose/fenced block; each run also executes mutation and false-positive controls.
 - The manifest-backed documentation scorecard reports at least `9.5/10` independently for all five dimensions.
 - Fixture and release-evidence paths remain centralized in `docs/REPOSITORY_STRUCTURE.md`, not duplicated as conflicting ad hoc paths.

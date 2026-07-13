@@ -35,6 +35,7 @@ Scope discipline:
 
 For milestone planning, v0.1 is a local-first desktop Agent: BYOK/Pi conversation and
 optional local knowledge must work; sources survive failure; Markdown stays portable;
+structured Dataset knowledge also stays portable and locally queryable;
 eligible changes remain recoverable through Activity/Undo; exact exceptions stay decidable.
 
 Platform scope remains macOS 26+, Windows 11, and Windows 10 when release tests pass; Linux and the items in section 5 remain deferred.
@@ -52,9 +53,9 @@ The relationship is intentionally not one-to-one: M5 requires four implementatio
 | P2 | M2 | Capture preservation, local dictation, jobs, retry, and progress |
 | P3 | M3 | BYOK, unified Home ingress, and the Pi Agent tool-loop spine |
 | P4 | M5 | Rebuildable database, lexical search, Library, and graph foundations |
-| P5 | M4 | URL, document, image, parser, artifact, and OCR tool breadth |
-| P6 | M5 | Retrieval, local RAG, reader/editing, backlinks, and Knowledge Tree |
-| P7 | M5 | Autonomous operations/Undo, exceptional decisions, memory, and conversation lifecycle |
+| P5 | M4 | URL, document, image, structured-data, parser, artifact, and OCR tool breadth |
+| P6 | M5 | Retrieval, local RAG/query, reader/table views, backlinks, and Knowledge Tree |
+| P7 | M5 | Autonomous note/Collection operations and Undo, exceptions, memory, and conversations |
 | P8 | M5 | Skills, complete curated Pi package lifecycle, and permissions |
 | P9 | M6, M7 | Backup/restore, Knowledge Health, migration, accessibility, localization, packaging, update, and release evidence |
 
@@ -80,7 +81,8 @@ Acceptance:
 
 - A user can install/run the app, create a vault, see minimal Home, and inspect vault files.
 - A user can find the local note storage location from Settings and reveal it in Finder/File Explorer.
-- The app can create, migrate, reset, and rebuild the local vault database without deleting Markdown knowledge files, source records, or source assets.
+- The app can create, migrate, reset, and rebuild its internal database without deleting
+  Markdown, Dataset Bundles, source records, or source assets.
 - The app can report that the bundled core toolchain is ready or needs repair.
 - The app language can be switched among the six v0.1 locales without hard-coded UI text appearing in core screens.
 - The secret-storage adapter can protect a synthetic value through OS keychain or encrypted local storage without writing it to the vault; M3 proves provider API keys and the explicit portable/developer warning flow end to end.
@@ -123,9 +125,11 @@ Outcome:
 
 Acceptance:
 
-- A user can paste an article URL and drop a PDF/DOCX/PPTX/image, then find useful generated notes and source pages.
+- A user can paste an article URL and drop a PDF/DOCX/PPTX/image/CSV/XLSX/supported
+  SQLite source, then find useful notes, source pages, or a typed Dataset.
 - An image-only PDF page or screenshot becomes searchable when OCR is available.
 - Common document ingest does not trigger a runtime dependency download.
+- Structured import preserves the original and cannot execute workbook/database code.
 
 ### M5: Knowledge Navigation And Autonomous Evolution
 
@@ -133,6 +137,7 @@ Outcome:
 
 - The generated wiki is browsable and controllable.
 - Knowledge can be retrieved through natural language search, ranked notes, and grounded summaries.
+- Structured knowledge can be inspected and queried locally with exact Dataset citations.
 
 Acceptance:
 
