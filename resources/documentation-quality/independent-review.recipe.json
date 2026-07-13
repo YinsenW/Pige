@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-13T08:21:44Z",
+  "reviewedAt": "2026-07-13T09:16:12Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,11 +30,11 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "e5f88307d5d8774b69654d943e5cf9d6656a9343bef9864dd03d146cf8d7ad51"
+    "reviewedSha256": "72d64c1af505b3d6004cc100794df1b146dcac6eb33c01af500d91dfc51117c3"
   },
   "reviewers": [
     {
-      "reviewerId": "dataset-query-citations-final-review",
+      "reviewerId": "knowledge-tree-ui-final-review",
       "task": "/root/dataset_query_governance_review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
@@ -43,51 +43,51 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Independent read-only review audited the exact replacement Dataset query candidate, real privacy-drift repair, focused selectors, eight evidence projections, Owner wording, unchanged statuses and explicit residual boundaries; it reported CLEAR and made no edits."
+      "independence": "Independent read-only review audited the exact Knowledge Tree UI candidate, Owner and acceptance projections, unchanged statuses, and navigation lifecycle. It first blocked an overclaimed focus-return sentence, then cleared the exact documentation-only repair and made no edits."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
-      "score": 9.8,
-      "reviewerId": "dataset-query-citations-final-review",
+      "score": 9.7,
+      "reviewerId": "knowledge-tree-ui-final-review",
       "blockerCount": 0,
-      "summary": "Current capability, owner boundaries and open Dataset-query work remain directly locatable in existing topic documents without a new owner or navigation surface."
+      "summary": "Main-owned body-free tree, degraded state, Note Reader navigation and exact-button-or-heading focus return are accurately located in existing owners."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "dataset-query-citations-final-review",
+      "reviewerId": "knowledge-tree-ui-final-review",
       "blockerCount": 0,
-      "summary": "API, Context, Job, Database, Pi, Tech, UI and Playbook agree on one typed catalog/query, bounded worker, exact citations and privacy-drift audit."
+      "summary": "API, Knowledge Model, UI and Playbook agree on the current public hierarchy, metrics, navigation and remaining semantic/scale/platform boundaries."
     },
     {
       "id": "continuous_traceability_and_acceptance",
-      "score": 9.9,
-      "reviewerId": "dataset-query-citations-final-review",
+      "score": 9.8,
+      "reviewerId": "knowledge-tree-ui-final-review",
       "blockerCount": 0,
-      "summary": "Eight exact evidence claims project only to existing partial acceptance rows; PIGE-DATA-002, E6.11, every status and every phase state remain unchanged."
+      "summary": "Three exact Service, IPC and UI evidence claims project only to existing partial rows; all Requirement, Exit and phase states remain unchanged."
     },
     {
       "id": "ongoing_development_support",
-      "score": 9.8,
-      "reviewerId": "dataset-query-citations-final-review",
+      "score": 9.7,
+      "reviewerId": "knowledge-tree-ui-final-review",
       "blockerCount": 0,
-      "summary": "The contract distinguishes current implementation, data ownership, safety fences and the next query, browsing, composition and platform slices."
+      "summary": "Current read-only public tree and later aggregate, scale, accessibility, health/edit and packaged-platform work remain distinctly actionable."
     },
     {
       "id": "documentation_leanness_and_maintainability",
-      "score": 9.7,
-      "reviewerId": "dataset-query-citations-final-review",
+      "score": 9.8,
+      "reviewerId": "knowledge-tree-ui-final-review",
       "blockerCount": 0,
-      "summary": "Localized current-state synchronization adds no Owner document, duplicates no large contract and remains within every documentation budget."
+      "summary": "Four existing Owner sections and two control manifests absorb the slice without a new document, duplicate contract or unrelated expansion."
     }
   ],
   "verification": [
     {
       "command": "npm run verify",
       "status": "passed",
-      "evidence": "The final exact Dataset query candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all five documentation-quality dimensions."
+      "evidence": "The final exact Knowledge Tree UI candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all five documentation-quality dimensions."
     },
     {
       "command": "npm run verify:docs && npm run verify:decisions && npm run verify:contracts",
@@ -97,30 +97,29 @@
     {
       "command": "npm run verify:traceability",
       "status": "passed",
-      "evidence": "Semantic lock schema v3 contains 1,145 claims; eight Dataset query evidence claims are bound only to existing partial rows, while Dataset Requirements, Exits and all ten phase states remain unchanged."
+      "evidence": "Semantic lock schema v3 contains 1,148 claims; three Knowledge Tree evidence claims are bound only to existing partial rows, while every Requirement, Exit and phase state remains unchanged."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 pass with 55 Markdown files, 3,449 of 3,700 entry words, 4,618 trace lines, 234,014 trace bytes and 1,148,963 of 1,210,000 governed Markdown bytes."
+      "evidence": "LEN-001 through LEN-005 pass with 55 Markdown files, 3,449 of 3,700 entry words, 4,626 trace lines, 235,050 trace bytes and 1,151,019 of 1,210,000 governed Markdown bytes."
     }
   ],
   "coordination": {
-    "taskId": "dataset-query-citations-20260713",
-    "taskTitle": "Dataset typed local query and exact citations executable evidence",
+    "taskId": "knowledge-tree-ui-20260713",
+    "taskTitle": "Bounded public Knowledge Tree UI executable evidence",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "This candidate adds one bounded Pi-selected local Dataset query and exact cited Home result over the existing managed-collection Bundle. It adds no public Dataset API, query builder, edit surface, dependency, phase renumbering or status promotion.",
-    "acknowledgement": "Development froze replacement bytes after repairing the real privacy-drift audit boundary. Product Planning synchronized only affected Owners and existing partial acceptance rows; independent review cleared the exact replacement candidate."
+    "compatibility": "This candidate exposes the existing rebuildable semantic aggregate through one body-free Library bridge and localized read-only UI. It adds no durable state, model route, dependency, graph editor, phase renumbering or status promotion.",
+    "acknowledgement": "Development froze the exact code/test and assembled Electron evidence. UI Design accepted the bounded slice; Product Planning synchronized only affected Owners and existing acceptance rows, and independent review cleared the exact wording repair."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "The query engine is limited to the fixed Pige managed_collection SQLite payload; analytical snapshots, Parquet and DuckDB remain open.",
-    "Each Home turn permits one catalog followed by one query; joins, composition and multi-Dataset analysis remain open.",
-    "Independent Dataset browsing, paging, citation-open and result highlighting remain open.",
-    "Formula and warning detail, large-table UX, complete locale acceptance and signed platform evidence remain open.",
-    "Readable revision or privacy drift receives a replacement audit; corrupt or unsafe evidence fails closed earlier.",
-    "Conversation owns checksum-bound preview and citations while Job refs remain body-free; future wording and implementation must preserve that distinction."
+    "Broader relationship and branch inputs, incremental rebuild and 10k proof remain open.",
+    "Complete visual-density and assistive-technology matrices remain open.",
+    "Signed macOS and Windows packaged-platform parity remains open.",
+    "A returned deep node may restore focus to the Knowledge Tree heading when its invoking control is no longer rendered; this fallback is contract-owned.",
+    "Knowledge Health, manual taxonomy, editing and advanced graph analytics remain open."
   ]
 }

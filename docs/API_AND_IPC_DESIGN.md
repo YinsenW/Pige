@@ -519,6 +519,10 @@ Current bridge queries:
 - It returns safe summaries only: page ID, title, type, status, relative Markdown page path, timestamps, language, and source IDs.
 - It counts invalid or incomplete frontmatter and skips those files so one malformed page does not block the Library.
 - It must not return source record paths, managed copy paths, original absolute paths, source bodies, note bodies, prompts, model responses, or secrets.
+- `library.tree()` returns one typed body-free semantic aggregate from the rebuildable
+  Local Database index: nodes, stable refs, deterministic metrics, and safe page
+  navigation. If the index is unavailable it returns a typed degraded empty result; it
+  never grants renderer filesystem access or fabricates hierarchy.
 - `library.related({ pageId, limit? })` returns safe outgoing-link and backlink summaries from the rebuildable Local Database graph index when ready.
 - If the graph index is unavailable or the page cannot be resolved, `library.related` returns an empty degraded result instead of falling back to renderer filesystem access.
 - `library.related` returns only resolved page summaries and the visible link target text; unresolved targets stay in the database for future Knowledge Health but are not exposed as arbitrary files.

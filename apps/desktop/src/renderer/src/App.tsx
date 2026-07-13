@@ -18,6 +18,9 @@ import type {
   HomeAgentModelUsage,
   JobSummary,
   KnowledgeActivitySummary,
+  KnowledgeTreeNode,
+  KnowledgeTreePageRef,
+  KnowledgeTreeResult,
   LibraryListResult,
   LibraryPageSummary,
   LibraryRelatedPage,
@@ -50,7 +53,7 @@ import type {
   WindowLayoutMode
 } from "@pige/schemas";
 
-type View = "home" | "library" | "settings" | "models";
+type View = "home" | "library" | "knowledgeTree" | "settings" | "models";
 type CaptureToast = { readonly kind: "success" | "error"; readonly message: string };
 type NoteRelatedState = LibraryRelatedResult | "loading" | "unavailable" | null;
 type HomeAgentUiState = "idle" | "accepted" | "running" | "waiting" | "failed" | "completed";
@@ -108,11 +111,13 @@ export function App(): React.JSX.Element {
   const [activityBlockedIds, setActivityBlockedIds] = useState<readonly string[]>([]);
   const [readyProposals, setReadyProposals] = useState<readonly ProposalSummary[]>([]);
   const [libraryList, setLibraryList] = useState<LibraryListResult | null>(null);
+  const [knowledgeTree, setKnowledgeTree] = useState<KnowledgeTreeResult | null>(null);
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [selectedNote, setSelectedNote] = useState<NoteRenderResult | null>(null);
   const [selectedNoteRelated, setSelectedNoteRelated] = useState<NoteRelatedState>(null);
   const [noteLoadingPageId, setNoteLoadingPageId] = useState<string | null>(null);
   const noteOpenSequence = useRef(0);
+  const knowledgeTreeReturnFocusKey = useRef<string | null>(null);
 
   useEffect(() => {
     void window.pige.getHealth().then(setHealth);
@@ -219,6 +224,16 @@ export function App(): React.JSX.Element {
     }
   };
 
+  const refreshKnowledgeTree = async (): Promise<void> => {
+    setLibraryError(null);
+    setKnowledgeTree(null);
+    try {
+      setKnowledgeTree(await window.pige.library.tree());
+    } catch {
+      setLibraryError(t("knowledgeTree.error"));
+    }
+  };
+
   const openNote = async (pageId: string): Promise<void> => {
     const requestId = noteOpenSequence.current + 1;
     noteOpenSequence.current = requestId;
@@ -230,9 +245,9 @@ export function App(): React.JSX.Element {
       if (requestId !== noteOpenSequence.current) return;
       setSelectedNote(note);
       void loadNoteRelated(pageId, requestId, noteOpenSequence, setSelectedNoteRelated);
-    } catch (caught) {
+    } catch {
       if (requestId !== noteOpenSequence.current) return;
-      setLibraryError(caught instanceof Error ? caught.message : t("error.generic"));
+      setLibraryError(t("error.generic"));
     } finally {
       if (requestId === noteOpenSequence.current) setNoteLoadingPageId(null);
     }
@@ -471,12 +486,18 @@ export function App(): React.JSX.Element {
       <div className="workspace">
         {sidebarOpen ? (
           <aside className="sidebar">
-            <button className={view === "home" ? "nav-item active" : "nav-item"} type="button" onClick={() => setView("home")}>
+            <button
+              className={view === "home" ? "nav-item active" : "nav-item"}
+              type="button"
+              aria-current={view === "home" ? "page" : undefined}
+              onClick={() => setView("home")}
+            >
               {t("nav.home")}
             </button>
             <button
               className={view === "library" ? "nav-item active" : "nav-item"}
               type="button"
+              aria-current={view === "library" ? "page" : undefined}
               onClick={() => {
                 setView("library");
                 void refreshLibrary();
@@ -485,8 +506,24 @@ export function App(): React.JSX.Element {
               {t("nav.library")}
             </button>
             <button
+              className={view === "knowledgeTree" ? "nav-item active" : "nav-item"}
+              type="button"
+              aria-current={view === "knowledgeTree" ? "page" : undefined}
+              onClick={() => {
+                noteOpenSequence.current += 1;
+                knowledgeTreeReturnFocusKey.current = null;
+                setSelectedNote(null);
+                setSelectedNoteRelated(null);
+                setView("knowledgeTree");
+                void refreshKnowledgeTree();
+              }}
+            >
+              {t("nav.knowledgeTree")}
+            </button>
+            <button
               className={view === "settings" ? "nav-item active" : "nav-item"}
               type="button"
+              aria-current={view === "settings" ? "page" : undefined}
               onClick={() => setView("settings")}
             >
               {t("nav.vaultSettings")}
@@ -494,6 +531,7 @@ export function App(): React.JSX.Element {
             <button
               className={view === "models" ? "nav-item active" : "nav-item"}
               type="button"
+              aria-current={view === "models" ? "page" : undefined}
               onClick={() => {
                 setView("models");
                 void refreshModels();
@@ -537,6 +575,38 @@ export function App(): React.JSX.Element {
             }}
             t={t}
           />
+        ) : view === "knowledgeTree" && activeVault ? (
+          selectedNote ? (
+            <LibraryPanel
+              libraryList={libraryList}
+              selectedNote={selectedNote}
+              selectedNoteRelated={selectedNoteRelated}
+              noteLoadingPageId={noteLoadingPageId}
+              error={libraryError}
+              readerBackLabel={t("knowledgeTree.back")}
+              onRefresh={refreshLibrary}
+              onOpenNote={openNote}
+              onCloseNote={() => {
+                noteOpenSequence.current += 1;
+                setSelectedNote(null);
+                setSelectedNoteRelated(null);
+                restoreKnowledgeTreeFocus(knowledgeTreeReturnFocusKey.current);
+              }}
+              t={t}
+            />
+          ) : (
+            <KnowledgeTreePanel
+              tree={knowledgeTree}
+              error={libraryError}
+              noteLoadingPageId={noteLoadingPageId}
+              onRefresh={refreshKnowledgeTree}
+              onOpenNote={async (pageId, focusKey) => {
+                knowledgeTreeReturnFocusKey.current = focusKey;
+                await openNote(pageId);
+              }}
+              t={t}
+            />
+          )
         ) : view === "settings" && activeVault ? (
           <VaultSettingsPanel
             busy={busy}
@@ -618,12 +688,22 @@ function restoreActivityFocus(operationId: string): void {
   }, 0);
 }
 
+function restoreKnowledgeTreeFocus(focusKey: string | null): void {
+  window.setTimeout(() => {
+    const exact = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-knowledge-open-key]"))
+      .find((element) => element.dataset.knowledgeOpenKey === focusKey && !element.disabled);
+    const treeHeading = document.querySelector<HTMLElement>("#knowledge-tree-heading");
+    (exact ?? treeHeading)?.focus();
+  }, 0);
+}
+
 function LibraryPanel(props: {
   readonly libraryList: LibraryListResult | null;
   readonly selectedNote: NoteRenderResult | null;
   readonly selectedNoteRelated: NoteRelatedState;
   readonly noteLoadingPageId: string | null;
   readonly error: string | null;
+  readonly readerBackLabel?: string;
   readonly onRefresh: () => Promise<void>;
   readonly onOpenNote: (pageId: string) => Promise<void>;
   readonly onCloseNote: () => void;
@@ -635,7 +715,7 @@ function LibraryPanel(props: {
     return (
       <section className="library-page reader-page" aria-label={props.t("note.reader")}>
         <button type="button" className="ghost back-button" onClick={props.onCloseNote}>
-          {props.t("note.backToLibrary")}
+          {props.readerBackLabel ?? props.t("note.backToLibrary")}
         </button>
         <NoteReader
           note={props.selectedNote}
@@ -692,6 +772,207 @@ function LibraryPanel(props: {
       )}
     </section>
   );
+}
+
+export function KnowledgeTreePanel(props: {
+  readonly tree: KnowledgeTreeResult | null;
+  readonly error: string | null;
+  readonly noteLoadingPageId: string | null;
+  readonly onRefresh: () => Promise<void>;
+  readonly onOpenNote: (pageId: string, focusKey: string) => Promise<void>;
+  readonly t: (key: string) => string;
+}): React.JSX.Element {
+  const roots = props.tree?.roots ?? [];
+  const maxWeight = Math.max(1, ...roots.map((root) => root.metrics.weight));
+
+  return (
+    <section className="knowledge-tree-page" aria-labelledby="knowledge-tree-heading">
+      <header className="knowledge-tree-header">
+        <div>
+          <h1 id="knowledge-tree-heading" tabIndex={-1}>{props.t("knowledgeTree.title")}</h1>
+          <p className="muted">{props.t("knowledgeTree.subtitle")}</p>
+        </div>
+        <button type="button" className="secondary" onClick={() => void props.onRefresh()}>
+          {props.t("knowledgeTree.refresh")}
+        </button>
+      </header>
+
+      <div className="knowledge-tree-totals" aria-label={props.t("knowledgeTree.summary")}>
+        <span>{props.t("knowledgeTree.domains")}: {roots.length}</span>
+        <span>{props.t("knowledgeTree.topics")}: {props.tree?.totals.topicCount ?? 0}</span>
+        <span>{props.t("knowledgeTree.concepts")}: {props.tree?.totals.conceptCount ?? 0}</span>
+        <span>{props.t("knowledgeTree.fragments")}: {props.tree?.totals.fragmentPageCount ?? 0}</span>
+        <span>{props.t("knowledgeTree.sources")}: {props.tree?.totals.sourceCount ?? 0}</span>
+      </div>
+
+      {props.error ? <p className="error" role="alert">{props.error}</p> : null}
+      {!props.tree && !props.error ? (
+        <p className="knowledge-tree-empty" role="status">{props.t("knowledgeTree.loading")}</p>
+      ) : props.tree?.degraded ? (
+        <p className="knowledge-tree-empty" role="status">{props.t("knowledgeTree.degraded")}</p>
+      ) : roots.length === 0 ? (
+        <p className="knowledge-tree-empty">{props.t("knowledgeTree.empty")}</p>
+      ) : (
+        <ul className="knowledge-tree-roots" aria-label={props.t("knowledgeTree.title")}>
+          {roots.map((root, index) => (
+            <KnowledgeTreeNodeView
+              key={root.id}
+              node={root}
+              pathKey={`root-${index}`}
+              maxWeight={maxWeight}
+              defaultExpanded
+              noteLoadingPageId={props.noteLoadingPageId}
+              onOpenNote={props.onOpenNote}
+              t={props.t}
+            />
+          ))}
+        </ul>
+      )}
+
+      {props.tree && props.tree.invalidPageCount > 0 ? (
+        <p className="knowledge-tree-warning">
+          {props.t("knowledgeTree.invalid")}: {props.tree.invalidPageCount}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+function KnowledgeTreeNodeView(props: {
+  readonly node: KnowledgeTreeNode;
+  readonly pathKey: string;
+  readonly maxWeight: number;
+  readonly defaultExpanded?: boolean;
+  readonly noteLoadingPageId: string | null;
+  readonly onOpenNote: (pageId: string, focusKey: string) => Promise<void>;
+  readonly t: (key: string) => string;
+}): React.JSX.Element {
+  const [expanded, setExpanded] = useState(props.defaultExpanded ?? false);
+  const hasContents = props.node.children.length > 0 || props.node.pageRefs.length > 0;
+  const groupId = `knowledge-tree-group-${props.pathKey}`;
+  const title = knowledgeTreeNodeTitle(props.node, props.t);
+  const density = knowledgeTreeDensity(props.node);
+  const navigationFocusKey = `${props.pathKey}-node`;
+
+  return (
+    <li className={`knowledge-tree-node kind-${props.node.kind} density-${density}${props.node.status === "needs_review" ? " needs-review" : ""}`}>
+      <div className="knowledge-tree-node-row">
+        {hasContents ? (
+          <button
+            type="button"
+            className="knowledge-tree-disclosure"
+            aria-label={`${expanded ? props.t("knowledgeTree.collapse") : props.t("knowledgeTree.expand")}: ${title}`}
+            title={`${expanded ? props.t("knowledgeTree.collapse") : props.t("knowledgeTree.expand")}: ${title}`}
+            aria-expanded={expanded}
+            aria-controls={groupId}
+            onClick={() => setExpanded((current) => !current)}
+          >
+            <span aria-hidden="true">{expanded ? "▾" : "▸"}</span>
+          </button>
+        ) : <span className="knowledge-tree-disclosure-spacer" aria-hidden="true" />}
+
+        <div className="knowledge-tree-node-main">
+          <div className="knowledge-tree-node-title">
+            {props.node.navigation ? (
+              <button
+                type="button"
+                className="knowledge-tree-open"
+                data-knowledge-open-key={navigationFocusKey}
+                disabled={props.noteLoadingPageId === props.node.navigation.pageId}
+                onClick={() => void props.onOpenNote(props.node.navigation!.pageId, navigationFocusKey)}
+              >
+                {title}
+              </button>
+            ) : <strong>{title}</strong>}
+            <span>{props.t(`knowledgeTree.kind.${props.node.kind}`)}</span>
+          </div>
+          <meter
+            className="knowledge-tree-weight"
+            min={0}
+            max={props.maxWeight}
+            value={Math.min(props.node.metrics.weight, props.maxWeight)}
+            aria-label={`${props.t("knowledgeTree.weight")}: ${props.node.metrics.weight}`}
+          />
+          <div className="knowledge-tree-node-metrics">
+            <span>{props.t("knowledgeTree.weight")}: {props.node.metrics.weight}</span>
+            <span>{props.t("knowledgeTree.fragments")}: {props.node.metrics.fragmentPageCount}</span>
+            <span>{props.t("knowledgeTree.sources")}: {props.node.metrics.sourceCount}</span>
+            <span>{props.t("knowledgeTree.leaves")}: {props.node.metrics.leafCount}</span>
+            {props.node.relatedParentPageIds.length > 0 ? (
+              <span>{props.t("knowledgeTree.relatedBranches")}: {props.node.relatedParentPageIds.length}</span>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
+      {hasContents && expanded ? (
+        <ul id={groupId} className="knowledge-tree-children">
+          {props.node.children.map((child, index) => (
+            <KnowledgeTreeNodeView
+              key={child.id}
+              node={child}
+              pathKey={`${props.pathKey}-child-${index}`}
+              maxWeight={props.maxWeight}
+              noteLoadingPageId={props.noteLoadingPageId}
+              onOpenNote={props.onOpenNote}
+              t={props.t}
+            />
+          ))}
+          {props.node.pageRefs.map((page, index) => (
+            <KnowledgeTreePageLeaf
+              key={page.pageId}
+              page={page}
+              focusKey={`${props.pathKey}-page-${index}`}
+              noteLoadingPageId={props.noteLoadingPageId}
+              onOpenNote={props.onOpenNote}
+              t={props.t}
+            />
+          ))}
+        </ul>
+      ) : null}
+    </li>
+  );
+}
+
+function KnowledgeTreePageLeaf(props: {
+  readonly page: KnowledgeTreePageRef;
+  readonly focusKey: string;
+  readonly noteLoadingPageId: string | null;
+  readonly onOpenNote: (pageId: string, focusKey: string) => Promise<void>;
+  readonly t: (key: string) => string;
+}): React.JSX.Element {
+  return (
+    <li className={`knowledge-tree-page-leaf${props.page.status === "needs_review" ? " needs-review" : ""}`}>
+      <span aria-hidden="true" className="knowledge-tree-leaf-mark" />
+      <button
+        type="button"
+        className="knowledge-tree-open"
+        data-knowledge-open-key={props.focusKey}
+        disabled={props.noteLoadingPageId === props.page.pageId}
+        onClick={() => void props.onOpenNote(props.page.pageId, props.focusKey)}
+      >
+        {props.page.title}
+      </button>
+      <span>{props.t(`library.type.${props.page.pageType}`)}</span>
+      {props.page.sourceIds.length > 0 ? (
+        <span>{props.t("knowledgeTree.sources")}: {props.page.sourceIds.length}</span>
+      ) : null}
+    </li>
+  );
+}
+
+function knowledgeTreeNodeTitle(node: KnowledgeTreeNode, t: (key: string) => string): string {
+  if (node.synthetic) return t("knowledgeTree.unassigned");
+  if (node.kind === "source" && !node.navigation) return t("knowledgeTree.sourceEvidence");
+  return node.title;
+}
+
+function knowledgeTreeDensity(node: KnowledgeTreeNode): "none" | "light" | "medium" | "strong" {
+  const evidenceCount = node.metrics.fragmentPageCount + node.metrics.sourceCount;
+  if (evidenceCount === 0) return "none";
+  if (evidenceCount <= 2) return "light";
+  if (evidenceCount <= 6) return "medium";
+  return "strong";
 }
 
 function LibraryPageRow(props: {

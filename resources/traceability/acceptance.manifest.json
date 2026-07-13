@@ -812,10 +812,10 @@
     },
     "PIGE-KNOW-002": {
       "status": "partial",
-      "evidence": ["EV-DB-LINKS", "EV-KNOWLEDGE-TREE-AGGREGATE"],
+      "evidence": ["EV-DB-LINKS", "EV-KNOWLEDGE-TREE-AGGREGATE", "EV-KNOWLEDGE-TREE-SERVICE", "EV-KNOWLEDGE-TREE-UI"],
       "open": {
         "id": "OPEN-REQ-PIGE-KNOW-002",
-        "description": "Broader relationship and branch semantics, chunk/citation/recency/confidence/growth aggregate inputs, 10k worker-backed and incremental rebuild proof, and packaged-platform aggregate parity remain open.",
+        "description": "Public body-free tree navigation works; broader relationship/branch inputs, 10k worker-backed and incremental rebuild proof, and packaged-platform aggregate parity remain open.",
         "targetBuilds": ["B6.09", "B6.12"],
         "targetExits": ["E6.07"]
       }
@@ -832,7 +832,7 @@
     },
     "PIGE-KNOW-004": {
       "status": "planned",
-      "plannedTarget": "Public Knowledge Tree IPC/renderer navigation, Library-tree distinction, localized empty state, and packaged UI integration tests."
+      "plannedTarget": "Full Knowledge Tree acceptance across broader aggregate semantics, scale/incremental rebuild, health/edit boundaries, and signed packaged platforms."
     },
     "PIGE-KNOW-005": {
       "status": "planned",
@@ -1693,11 +1693,13 @@
       "status": "partial",
       "evidence": [
         "EV-APP-SHELL",
-        "EV-DATASET-QUERY-UI"
+        "EV-DATASET-QUERY-UI",
+        "EV-KNOWLEDGE-TREE-IPC",
+        "EV-KNOWLEDGE-TREE-UI"
       ],
       "open": {
         "id": "OPEN-REQ-PIGE-UI-003",
-        "description": "Home renders one escaped accessible Dataset result; broader continuity, Library depth, and six-locale acceptance remain open.",
+        "description": "Home Dataset output and the localized Knowledge Tree are public; broader continuity, Library depth, and full six-locale/platform acceptance remain open.",
         "targetBuilds": [
           "B1.03",
           "B1.07",
@@ -1714,7 +1716,7 @@
     },
     "PIGE-UI-004": {
       "status": "planned",
-      "plannedTarget": "Knowledge Tree visual-weight, density, navigation, keyboard, and accessible-description tests."
+      "plannedTarget": "Remaining Knowledge Tree density/scale, compact-platform, assistive-technology, and signed packaged visual acceptance."
     },
     "PIGE-UI-005": {
       "status": "planned",
@@ -2675,10 +2677,10 @@
     },
     "E6.07": {
       "status": "partial",
-      "evidence": ["EV-DB-LINKS", "EV-KNOWLEDGE-TREE-AGGREGATE"],
+      "evidence": ["EV-DB-LINKS", "EV-KNOWLEDGE-TREE-AGGREGATE", "EV-KNOWLEDGE-TREE-SERVICE", "EV-KNOWLEDGE-TREE-IPC", "EV-KNOWLEDGE-TREE-UI"],
       "open": {
         "id": "OPEN-EXIT-E6.07",
-        "description": "Public Knowledge Tree IPC/preload/renderer and source-backed navigation, broader relationship/branch aggregate semantics, 10k worker-backed and incremental rebuild performance, and packaged-platform aggregate parity remain open.",
+        "description": "Public source-backed Knowledge Tree navigation works; broader relationship/branch semantics, 10k worker-backed and incremental rebuild performance, and packaged-platform aggregate parity remain open.",
         "targetBuilds": ["B6.09", "B6.12"],
         "targetExits": ["E6.07"]
       }
@@ -2689,7 +2691,7 @@
     },
     "E6.09": {
       "status": "planned",
-      "plannedTarget": "Knowledge Tree visual semantics and accessibility report."
+      "plannedTarget": "Complete Knowledge Tree density/weight accessibility and signed compact/desktop platform report."
     },
     "E6.10": {
       "status": "partial",
@@ -3071,6 +3073,9 @@
     "EV-DB-LINKS": { "kind": "test", "path": "tests/unit/local-database-service.test.ts", "selector": "indexes wiki links and local Markdown links as rebuildable related pages" },
     "EV-DB-TAGS": { "kind": "test", "path": "tests/unit/local-database-service.test.ts", "selector": "rebuilds canonical tag facets from Markdown without treating SQLite as durable knowledge" },
     "EV-KNOWLEDGE-TREE-AGGREGATE": { "kind": "test", "path": "tests/unit/knowledge-tree-aggregate.test.ts", "selector": "rebuilds an explainable domain, topic, concept, and source tree from durable Markdown" },
+    "EV-KNOWLEDGE-TREE-SERVICE": { "kind": "test", "path": "tests/unit/library-service.test.ts", "selector": "serves a body-free Knowledge Tree rebuilt from durable Markdown" },
+    "EV-KNOWLEDGE-TREE-IPC": { "kind": "test", "path": "tests/unit/desktop-shell-contract.test.ts", "selector": "keeps Knowledge Tree aggregation in main while exposing a body-free renderer bridge" },
+    "EV-KNOWLEDGE-TREE-UI": { "kind": "test", "path": "tests/unit/knowledge-tree-ui.test.ts", "selector": "Knowledge Tree renderer" },
     "EV-DB-DRIVER": { "kind": "test", "path": "tests/unit/local-database-service.test.ts", "selector": "initializes the node sqlite migration state behind the driver abstraction" },
     "EV-READER-RELATED": { "kind": "test", "path": "tests/unit/library-service.test.ts", "selector": "returns related pages through the local database without exposing note bodies" },
     "EV-CJK": { "kind": "test", "path": "tests/unit/retrieval-service.test.ts", "selector": "uses CJK-friendly character grams instead of whitespace-only matching" },

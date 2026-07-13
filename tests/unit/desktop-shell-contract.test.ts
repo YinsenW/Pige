@@ -224,6 +224,27 @@ describe("desktop shell build contract", () => {
     expect(undoHandler).not.toContain("caught instanceof Error ? caught.message");
   });
 
+  it("keeps Knowledge Tree aggregation in main while exposing a body-free renderer bridge", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
+    const librarySource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/services/library-service.ts"),
+      "utf8"
+    );
+
+    expect(contractsSource).toContain("export interface KnowledgeTreeResult extends KnowledgeTreeSnapshot");
+    expect(contractsSource).toContain("readonly tree: () => Promise<KnowledgeTreeResult>");
+    expect(mainSource).toContain('ipcMain.handle("library.tree", () => getLibraryService().tree())');
+    expect(preloadSource).toContain('ipcRenderer.invoke("library.tree")');
+    expect(librarySource).toContain("this.#database?.knowledgeTree(vaultPath)");
+    expect(rendererSource).toContain('type View = "home" | "library" | "knowledgeTree" | "settings" | "models";');
+    expect(rendererSource).toContain('className="knowledge-tree-roots"');
+    expect(rendererSource).toContain("<meter");
+    expect(rendererSource).not.toContain("window.pige.filesystem");
+  });
+
   it("surfaces ready proposals in Home with a focused escaped preview before durable decisions", () => {
     const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
     const panelSource = fs.readFileSync(
@@ -266,7 +287,7 @@ describe("desktop shell build contract", () => {
     expect(proposalStyles).toContain("overflow-wrap: anywhere;");
     expect(proposalStyles).toContain("max-height: min(46vh, 30rem);");
     expect(proposalStyles).toContain("position: sticky;");
-    expect(rendererSource).toContain('type View = "home" | "library" | "settings" | "models";');
+    expect(rendererSource).toContain('type View = "home" | "library" | "knowledgeTree" | "settings" | "models";');
     expect(rendererSource).not.toContain('type View = "review"');
   });
 

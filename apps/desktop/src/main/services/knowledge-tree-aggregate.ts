@@ -1,63 +1,28 @@
-import type { LibraryPageSummary } from "@pige/contracts";
+import type {
+  KnowledgeTreeMetrics,
+  KnowledgeTreeNavigation,
+  KnowledgeTreeNode,
+  KnowledgeTreeNodeKind,
+  KnowledgeTreePageRef,
+  KnowledgeTreeSnapshot,
+  LibraryPageSummary
+} from "@pige/contracts";
 
-export type KnowledgeTreeNodeKind = "domain" | "topic" | "concept" | "source";
+export type {
+  KnowledgeTreeMetrics,
+  KnowledgeTreeNavigation,
+  KnowledgeTreeNode,
+  KnowledgeTreeNodeKind,
+  KnowledgeTreePageRef,
+  KnowledgeTreeSnapshot
+} from "@pige/contracts";
+
 export type KnowledgeTreeRelationType = "has_topic" | "links_to";
 
 export interface KnowledgeTreeRelationInput {
   readonly fromPageId: string;
   readonly toPageId: string;
   readonly relationType: KnowledgeTreeRelationType;
-}
-
-export interface KnowledgeTreeNavigation {
-  readonly pageId: string;
-  readonly pagePath: string;
-}
-
-export interface KnowledgeTreePageRef extends KnowledgeTreeNavigation {
-  readonly title: string;
-  readonly pageType: LibraryPageSummary["pageType"];
-  readonly status: LibraryPageSummary["status"];
-  readonly sourceIds: readonly string[];
-}
-
-export interface KnowledgeTreeMetrics {
-  readonly structuralPageCount: number;
-  readonly fragmentPageCount: number;
-  readonly sourceCount: number;
-  readonly leafCount: number;
-  readonly weight: number;
-}
-
-export interface KnowledgeTreeNode {
-  readonly id: string;
-  readonly kind: KnowledgeTreeNodeKind;
-  readonly title: string;
-  readonly synthetic?: true;
-  readonly pageType?: LibraryPageSummary["pageType"];
-  readonly status?: LibraryPageSummary["status"];
-  readonly navigation?: KnowledgeTreeNavigation;
-  readonly sourceId?: string;
-  readonly relatedParentPageIds: readonly string[];
-  readonly pageRefs: readonly KnowledgeTreePageRef[];
-  readonly sourceRefs: readonly string[];
-  readonly metrics: KnowledgeTreeMetrics;
-  readonly children: readonly KnowledgeTreeNode[];
-}
-
-export interface KnowledgeTreeSnapshot {
-  readonly schemaVersion: 1;
-  readonly state: "empty" | "ready";
-  readonly invalidPageCount: number;
-  readonly totals: {
-    readonly pageCount: number;
-    readonly topicCount: number;
-    readonly conceptCount: number;
-    readonly fragmentPageCount: number;
-    readonly sourceCount: number;
-    readonly leafCount: number;
-  };
-  readonly roots: readonly KnowledgeTreeNode[];
 }
 
 interface MutableStructuralNode {

@@ -194,25 +194,94 @@ source_ids: []
       degradedReason: "local_database_not_ready"
     });
   });
+
+  it("serves a body-free Knowledge Tree rebuilt from durable Markdown", () => {
+    const { vaultPath, vault } = makeVault();
+    const library = makeIndexedLibrary(vaultPath, vault);
+    writeLibraryPage(vaultPath, "wiki/topics/local-first.md", {
+      id: "page_20260713_domain01",
+      title: "Local-first",
+      type: "topic",
+      body: "PRIVATE_DOMAIN_BODY"
+    });
+    writeLibraryPage(vaultPath, "wiki/concepts/retrieval.md", {
+      id: "page_20260713_concept1",
+      title: "Retrieval",
+      type: "concept",
+      topics: ["Local-first"],
+      sourceIds: ["src_20260713_retrieval1"],
+      body: "PRIVATE_CONCEPT_BODY"
+    });
+    writeLibraryPage(vaultPath, "wiki/notes/ranking.md", {
+      id: "page_20260713_note0001",
+      title: "Ranking notes",
+      topics: ["Local-first"],
+      sourceIds: ["src_20260713_ranking01"],
+      body: "PRIVATE_NOTE_BODY"
+    });
+
+    const result = library.tree();
+
+    expect(result).toMatchObject({
+      activeVaultId: vault.vaultId,
+      schemaVersion: 1,
+      state: "ready",
+      degraded: false,
+      totals: {
+        pageCount: 3,
+        topicCount: 1,
+        conceptCount: 1,
+        fragmentPageCount: 1,
+        sourceCount: 2
+      }
+    });
+    expect(result.roots[0]).toMatchObject({
+      title: "Local-first",
+      kind: "domain",
+      navigation: { pageId: "page_20260713_domain01", pagePath: "wiki/topics/local-first.md" }
+    });
+    expect(result.roots[0]?.children[0]?.title).toBe("Retrieval");
+    expect(JSON.stringify(result)).not.toContain("PRIVATE_");
+    expect(JSON.stringify(result)).not.toContain(vaultPath);
+  });
+
+  it("returns a typed empty degraded Knowledge Tree when the local index is unavailable", () => {
+    const { vaultPath, vault } = makeVault();
+    const { library } = makeServices(vaultPath, vault);
+
+    expect(library.tree()).toMatchObject({
+      activeVaultId: vault.vaultId,
+      schemaVersion: 1,
+      state: "empty",
+      degraded: true,
+      degradedReason: "local_database_not_ready",
+      invalidPageCount: 0,
+      roots: []
+    });
+  });
 });
 
 function writeLibraryPage(vaultPath: string, relativePath: string, input: {
   readonly id: string;
   readonly title: string;
   readonly body: string;
+  readonly type?: string;
+  readonly topics?: readonly string[];
+  readonly sourceIds?: readonly string[];
 }): void {
   const filePath = path.join(vaultPath, ...relativePath.split("/"));
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, `---
 id: "${input.id}"
 schema_version: 1
-title: "${input.title}"
-type: "note"
+title: ${JSON.stringify(input.title)}
+type: ${JSON.stringify(input.type ?? "note")}
 created_at: "2026-07-09T12:00:00.000Z"
 updated_at: "2026-07-09T12:00:00.000Z"
 status: "active"
 language: "en"
-source_ids: []
+topics: ${JSON.stringify(input.topics ?? [])}
+source_ids: ${JSON.stringify(input.sourceIds ?? [])}
 ---
 
 # ${input.title}

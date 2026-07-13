@@ -26,6 +26,7 @@ import type {
   KnowledgeActivityListResult,
   KnowledgeActivityUndoRequest,
   KnowledgeActivityUndoResult,
+  KnowledgeTreeResult,
   LibraryListRequest,
   LibraryListResult,
   LibraryRelatedRequest,
@@ -132,6 +133,8 @@ const api: PigeDesktopApi = {
   library: {
     list: async (request?: LibraryListRequest): Promise<LibraryListResult> =>
       ipcRenderer.invoke("library.list", request) as Promise<LibraryListResult>,
+    tree: async (): Promise<KnowledgeTreeResult> =>
+      ipcRenderer.invoke("library.tree") as Promise<KnowledgeTreeResult>,
     related: async (request: LibraryRelatedRequest): Promise<LibraryRelatedResult> =>
       ipcRenderer.invoke("library.related", request) as Promise<LibraryRelatedResult>
   },

@@ -578,6 +578,66 @@ export interface LibraryListResult {
   readonly pages: readonly LibraryPageSummary[];
 }
 
+export type KnowledgeTreeNodeKind = "domain" | "topic" | "concept" | "source";
+
+export interface KnowledgeTreeNavigation {
+  readonly pageId: string;
+  readonly pagePath: string;
+}
+
+export interface KnowledgeTreePageRef extends KnowledgeTreeNavigation {
+  readonly title: string;
+  readonly pageType: LibraryPageSummary["pageType"];
+  readonly status: LibraryPageSummary["status"];
+  readonly sourceIds: readonly string[];
+}
+
+export interface KnowledgeTreeMetrics {
+  readonly structuralPageCount: number;
+  readonly fragmentPageCount: number;
+  readonly sourceCount: number;
+  readonly leafCount: number;
+  readonly weight: number;
+}
+
+export interface KnowledgeTreeNode {
+  readonly id: string;
+  readonly kind: KnowledgeTreeNodeKind;
+  readonly title: string;
+  readonly synthetic?: true;
+  readonly pageType?: LibraryPageSummary["pageType"];
+  readonly status?: LibraryPageSummary["status"];
+  readonly navigation?: KnowledgeTreeNavigation;
+  readonly sourceId?: string;
+  readonly relatedParentPageIds: readonly string[];
+  readonly pageRefs: readonly KnowledgeTreePageRef[];
+  readonly sourceRefs: readonly string[];
+  readonly metrics: KnowledgeTreeMetrics;
+  readonly children: readonly KnowledgeTreeNode[];
+}
+
+export interface KnowledgeTreeSnapshot {
+  readonly schemaVersion: 1;
+  readonly state: "empty" | "ready";
+  readonly invalidPageCount: number;
+  readonly totals: {
+    readonly pageCount: number;
+    readonly topicCount: number;
+    readonly conceptCount: number;
+    readonly fragmentPageCount: number;
+    readonly sourceCount: number;
+    readonly leafCount: number;
+  };
+  readonly roots: readonly KnowledgeTreeNode[];
+}
+
+export interface KnowledgeTreeResult extends KnowledgeTreeSnapshot {
+  readonly queriedAt: string;
+  readonly activeVaultId: string;
+  readonly degraded: boolean;
+  readonly degradedReason?: "local_database_not_ready";
+}
+
 export interface LibraryRelatedRequest {
   readonly pageId: string;
   readonly limit?: number;
@@ -1022,6 +1082,7 @@ export interface PigeDesktopApi {
   };
   readonly library: {
     readonly list: (request?: LibraryListRequest) => Promise<LibraryListResult>;
+    readonly tree: () => Promise<KnowledgeTreeResult>;
     readonly related: (request: LibraryRelatedRequest) => Promise<LibraryRelatedResult>;
   };
   readonly notes: {

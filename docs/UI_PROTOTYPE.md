@@ -746,7 +746,21 @@ Visual encoding:
 - Leaf color depth represents density: deeper color means more accumulated fragments or stronger evidence.
 - New or low-confidence growth can use lighter leaves until evidence reinforces it.
 
-Prototype:
+Current bounded slice:
+
+- Knowledge Tree is a separate sidebar destination, not a folder browser or graph editor.
+- A compact heading, Refresh action, totals, and nested disclosures expose domains,
+  concepts, source evidence, and supporting notes.
+- Native meters and adjacent text state exact weight, fragment, source, and leaf counts;
+  color or thickness is never the only explanation.
+- Navigable nodes open the existing confined Note Reader. Back restores focus to the
+  invoking tree button when it is still rendered, otherwise to the Knowledge Tree heading.
+  Opaque source IDs without a navigable Source Page display only a localized
+  `Source evidence` label.
+- Loading, ready, empty, degraded, and error states are localized. Force graphs, manual
+  taxonomy, editing, health workflows, and advanced graph analytics remain open.
+
+Illustrative hierarchy:
 
 ```txt
 Knowledge Tree
@@ -758,12 +772,6 @@ Main trunk: Local-first
     Leaves: preferences, corrections, scenarios
   Branch: OCR Pipeline
     Leaves: screenshots, scanned PDFs, slides
-
-Right Panel
-  Current trunk: Local-first
-  42 notes
-  108 fragments
-  3 branch growth suggestions
 ```
 
 ## 12. Knowledge Health

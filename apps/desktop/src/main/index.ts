@@ -819,6 +819,7 @@ ipcMain.handle("activity.undo", (_event, request: KnowledgeActivityUndoRequest) 
   return result;
 });
 ipcMain.handle("library.list", (_event, request?: LibraryListRequest) => getLibraryService().list(request));
+ipcMain.handle("library.tree", () => getLibraryService().tree());
 ipcMain.handle("library.related", (_event, request: LibraryRelatedRequest) => getLibraryService().related(request));
 ipcMain.handle("notes.get", (_event, request: NoteGetRequest) => getNotesService().get(request));
 ipcMain.handle("notes.render", (_event, request: NoteRenderRequest) => getNotesService().render(request));
