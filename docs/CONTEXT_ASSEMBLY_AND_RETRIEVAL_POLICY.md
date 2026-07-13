@@ -143,7 +143,10 @@ Current Home Dataset bridge permits one bounded catalog followed by one typed qu
 Pi selects `pige_query_dataset@1`. The model receives only opaque Dataset/table/column
 refs, a strict filter/group/aggregate/order/limit vocabulary, and the bounded escaped
 result; SQL, paths, handles, whole payloads, repeated query, and page/URL evidence mixing
-fail closed. Dataset Service revalidates the exact manifest/revision/schema/payload and
+fail closed. For a preserved-source continuation, the catalog is additionally restricted
+to the exact durable source, Dataset, and revision refs created for that turn; unrelated
+historical Dataset records are omitted rather than becoming context or blockers. Dataset
+Service revalidates the exact manifest/revision/schema/payload and
 Source Record privacy identity before later model turns. A readable drift exposes only a
 fixed neutral marker plus current classification for a distinct body-free egress audit,
 then stops; corrupt or unsafe state never becomes context. Final answers must bind the

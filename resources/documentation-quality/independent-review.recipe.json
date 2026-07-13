@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-13T12:55:44Z",
+  "reviewedAt": "2026-07-13T15:00:21Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,11 +30,11 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "3e3189d0b80d315cd0f5b5752151d6dc5d907a2066843bc051dbcdcd1ef286df"
+    "reviewedSha256": "eba2521321d6f05fa50fbc12de9a537b4477cc1bd7799e01f6fbac2ba05eb839"
   },
   "reviewers": [
     {
-      "reviewerId": "public-alpha-continuity-ui-design-final-review",
+      "reviewerId": "agent-ingress-continuity-ui-design-final-review",
       "task": "019f4bc2-4fa4-7921-9c7c-3e0dd11f9d94 final read-only UI Design Sync",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
@@ -43,82 +43,82 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "UI Design independently verified the exact frozen Development hash and made no edits. It reviewed real safe replacements, final-only citations, Enter and IME handling, durable Dataset reopen, layout, accessibility and cancellation behavior against the assembled evidence."
+      "independence": "UI Design independently reviewed the exact frozen Development candidate and made no edits. It accepted first-pass CSV/TXT/Markdown completion, visible Dataset result/citation, restart restoration and historical-only prior failures; it classified the brief action-free waiting_dependency label as later non-blocking copy polish."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.7,
-      "reviewerId": "public-alpha-continuity-ui-design-final-review",
+      "reviewerId": "agent-ingress-continuity-ui-design-final-review",
       "blockerCount": 0,
-      "summary": "Home keeps one provisional answer in the existing conversation surface, replaces it with the durable final, and retains the same composer, citation and Dataset navigation lifecycle."
+      "summary": "The existing Home, source Job and Dataset result surfaces retain one lifecycle: first-pass CSV/TXT/Markdown turns converge to durable results without a new route, mode, page or repair action."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "public-alpha-continuity-ui-design-final-review",
+      "reviewerId": "agent-ingress-continuity-ui-design-final-review",
       "blockerCount": 0,
-      "summary": "Pi, API, Prompt, Job, UI, quality and performance owners agree on two answer-only draft sources, authoritative final data, IME-safe submission and same-turn Dataset continuation."
+      "summary": "Pi, API, Prompt, Job, Context, quality and Playbook owners agree on separate raw/structural event bounds, one registered-terminal correction, exact source-bound Dataset continuation and Pige-owned Provider authority."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "public-alpha-continuity-ui-design-final-review",
+      "reviewerId": "agent-ingress-continuity-ui-design-final-review",
       "blockerCount": 0,
-      "summary": "Seven exact selectors bind safe fallback rejection, Enter submission, Dataset continuation and restart, durable table reopen, and assembled worker composition only to existing partial rows."
+      "summary": "Three new exact selectors bind structural streaming pressure and terminal correction/failure; existing Provider and Dataset suites cover metadata and exact continuation scope. Only existing partial acceptance rows change."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "public-alpha-continuity-ui-design-final-review",
+      "reviewerId": "agent-ingress-continuity-ui-design-final-review",
       "blockerCount": 0,
-      "summary": "The batch closes adjacent Public Alpha continuity defects while preserving one Pi-owned ingress, final schema and citation authority, durable recovery and existing provider and platform boundaries."
+      "summary": "The bounded repair gives Development one deterministic first-pass source path while preserving Pi orchestration, final schema/citation authority, durable source identity, redacted failures and existing residual boundaries."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "public-alpha-continuity-ui-design-final-review",
+      "reviewerId": "agent-ingress-continuity-ui-design-final-review",
       "blockerCount": 0,
-      "summary": "Nine existing Owner sections and the acceptance projection absorb the observable and recovery delta; no new document, prototype, dependency, schema, setting or status is introduced."
+      "summary": "Seven existing Owner/quality/Playbook files plus acceptance absorb the repair; no PRD, Decision, document, prototype, dependency, schema, setting, UI workflow or status is introduced."
     }
   ],
   "verification": [
     {
       "command": "npm run verify",
       "status": "passed",
-      "evidence": "The exact Public Alpha continuity candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all five documentation-quality dimensions."
+      "evidence": "The exact first-pass source-ingress continuity candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all five documentation-quality dimensions."
     },
     {
-      "command": "npm run verify:contracts && npx vitest run tests/unit/pi-agent-runtime-adapter.test.ts tests/unit/home-agent-conversation-ui.test.ts tests/unit/unified-agent-ingress.test.ts tests/unit/bundled-worker-availability.test.ts",
+      "command": "npm run verify:contracts && npm test -- tests/unit/pi-agent-runtime-adapter.test.ts tests/unit/pi-agent-provider-binding.test.ts tests/unit/unified-agent-ingress.test.ts tests/unit/dataset-query-service.test.ts",
       "status": "passed",
-      "evidence": "All contract gates and negative fixtures pass; exact selectors prove answer-only progressive replacement, fail-closed presentation fallback, IME-safe Enter, one-turn Dataset continuation/restart and assembled worker availability."
+      "evidence": "CON-001 through CON-004 and negative fixtures pass; 4 files / 54 tests prove structural stream pressure, exact DeepSeek metadata binding, bounded terminal correction/failure and current-source Dataset scope."
     },
     {
       "command": "npm run verify:traceability",
       "status": "passed",
-      "evidence": "Semantic lock schema v3 contains 1,159 claims; seven exact evidence additions project only to existing partial rows, while every Requirement, Exit and phase state remains unchanged."
+      "evidence": "Semantic lock schema v3 contains 1,162 claims; three exact evidence additions and three acceptance projections change only existing partial rows, while every Requirement, Exit and phase state remains unchanged."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 pass after the bounded Owner and evidence projection, without a new governed document, prototype refresh or unrelated contract expansion."
+      "evidence": "LEN-001 through LEN-005 pass after the bounded Owner and evidence projection, without PRD or Decision churn, a new governed document, prototype refresh or unrelated contract expansion."
     }
   ],
   "coordination": {
-    "taskId": "public-alpha-continuity-20260713",
-    "taskTitle": "Public Alpha safe Home streaming, Enter submission and durable continuity",
+    "taskId": "agent-ingress-first-pass-continuity-20260713",
+    "taskTitle": "First-pass CSV, TXT and Markdown ingress continuity repair",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The candidate preserves the terminal Home schema and durable final as authority. It adds safe progressive presentation, IME-safe Enter, same-parent Dataset continuation and missing-runtime recovery repairs without a dependency, durable schema, provider, permission or phase change.",
-    "acknowledgement": "Development froze one exact combined candidate after assembled Electron and packaged evidence. UI Design accepted the exact hash; Product Planning synchronized only affected Owners and existing partial acceptance rows before one semantic and snapshot bind."
+    "compatibility": "The candidate preserves one Pi-owned ingress, terminal schemas, source/Dataset identity and durable final authority. It repairs stream-event accounting, exact reviewed DeepSeek metadata, one source-terminal correction, scoped Dataset continuation and redacted retryable summaries without a dependency, durable schema, public IPC, UI or phase change.",
+    "acknowledgement": "Development froze one exact 10-file candidate after assembled Electron and packaged evidence. UI Design accepted the exact candidate; Product Planning synchronized only affected Owners and existing partial acceptance rows before one semantic and snapshot bind."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Real progressive timing is proved with an OpenAI Responses-compatible loopback; Chat Completions and Anthropic Messages retain adapter regressions without new live-provider timing evidence.",
-    "The presentation fallback may use one extra provider turn and fails closed when exact answer reproduction cannot produce usable safe replacements.",
-    "Package proof remains unsigned local macOS arm64; Windows, signed and notarized macOS, and live-provider platform matrices remain open.",
-    "New assembled GUI evidence covers TXT, Markdown and CSV; PDF, Office and image paths retain their existing parser and OCR smoke boundaries."
+    "During active Markdown advancement the generic waiting_dependency row may briefly say Waiting for a local capability; it has no action and converges, but later status-copy/state-owner polish remains.",
+    "Historical failed Jobs remain visible by design and are not rewritten or deleted by this repair.",
+    "The exact reviewed DeepSeek preset/model overlay is bounded to matching public Pi 0.80.6 metadata; unknown and Custom models retain the conservative fallback.",
+    "Package proof remains unsigned local macOS arm64; Windows, signed and notarized macOS, and broader live-provider/platform matrices remain open."
   ]
 }

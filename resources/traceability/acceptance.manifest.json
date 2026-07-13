@@ -954,7 +954,8 @@
     "PIGE-API-002": {
       "status": "partial",
       "evidence": [
-        "EV-ERROR"
+        "EV-ERROR",
+        "EV-PI-TERMINAL-MISSING"
       ],
       "open": {
         "id": "OPEN-REQ-PIGE-API-002",
@@ -1087,10 +1088,10 @@
     },
     "PIGE-PI-001": {
       "status": "partial",
-      "evidence": ["EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-BOUNDARY", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-RETRIEVAL", "EV-PI-INGEST-UPDATE", "EV-UPDATE-RECOVERY", "EV-PI-INGEST-PROPOSAL", "EV-PI-URL-INGRESS", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY", "EV-PI-DATASET-INGEST", "EV-DATASET-CONTINUATION", "EV-PI-DATASET-QUERY", "EV-DATASET-QUERY-CORE", "EV-DATASET-QUERY-WORKER-SMOKE", "EV-BUNDLED-WORKER-AVAILABILITY", "EV-ASSEMBLED-RUNTIME-COMPOSITION"],
+      "evidence": ["EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-BOUNDARY", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-RETRIEVAL", "EV-PI-INGEST-UPDATE", "EV-UPDATE-RECOVERY", "EV-PI-INGEST-PROPOSAL", "EV-PI-URL-INGRESS", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE", "EV-PI-STREAM-STRUCTURAL-BUDGET", "EV-PI-TERMINAL-RECOVERY", "EV-PI-TERMINAL-MISSING", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY", "EV-PI-DATASET-INGEST", "EV-DATASET-CONTINUATION", "EV-PI-DATASET-QUERY", "EV-DATASET-QUERY-CORE", "EV-DATASET-QUERY-WORKER-SMOKE", "EV-BUNDLED-WORKER-AVAILABILITY", "EV-ASSEMBLED-RUNTIME-COMPOSITION"],
       "open": {
         "id": "OPEN-REQ-PIGE-PI-001",
-        "description": "Hash-bound create/update recovery and one bounded Dataset-query route work; broader eligibility, query composition, Broker, and packaged BYOK remain.",
+        "description": "Hash-bound create/update recovery, one bounded source-terminal correction, and one Dataset-query route work; broader eligibility, query composition, Broker, and packaged BYOK remain.",
         "targetBuilds": ["B3.06", "B3.13"],
         "targetExits": ["E3.04", "E3.08"]
       }
@@ -2481,10 +2482,10 @@
     },
     "E3.08": {
       "status": "partial",
-      "evidence": ["EV-BOUNDARY", "EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-RETRIEVAL", "EV-PI-INGEST-UPDATE", "EV-UPDATE-RECOVERY", "EV-PI-INGEST-PROPOSAL", "EV-PI-URL-INGRESS", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY"],
+      "evidence": ["EV-BOUNDARY", "EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-RETRIEVAL", "EV-PI-INGEST-UPDATE", "EV-UPDATE-RECOVERY", "EV-PI-INGEST-PROPOSAL", "EV-PI-URL-INGRESS", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE", "EV-PI-STREAM-STRUCTURAL-BUDGET", "EV-PI-TERMINAL-RECOVERY", "EV-PI-TERMINAL-MISSING", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY"],
       "open": {
         "id": "OPEN-EXIT-E3.08",
-        "description": "Hash-bound exact create/additive-update recovery/Undo works; broader eligibility, routes, Broker, and packaged BYOK remain.",
+        "description": "Hash-bound exact create/additive-update recovery/Undo and one bounded source-terminal correction work; broader eligibility, routes, Broker, and packaged BYOK remain.",
         "targetBuilds": ["B3.13"],
         "targetExits": ["E3.08"]
       }
@@ -3055,6 +3056,9 @@
     "EV-PI-INGEST-PROPOSAL": { "kind": "test", "path": "tests/unit/agent-led-ingest-proposal.test.ts", "selector": "Agent-selected ingest proposal tool" },
     "EV-PROPOSAL-REVIEW-LIFECYCLE": { "kind": "test", "path": "tests/unit/proposal-review-lifecycle.test.ts", "selector": "proposal review lifecycle" },
     "EV-PI-TOOL-CALL-ID": { "kind": "test", "path": "tests/unit/pi-agent-runtime-adapter.test.ts", "selector": "passes a bounded opaque Pi tool call ID to authorization and execution without recording it" },
+    "EV-PI-STREAM-STRUCTURAL-BUDGET": { "kind": "test", "path": "tests/unit/pi-agent-runtime-adapter.test.ts", "selector": "does not exhaust the structural event budget on bounded high-frequency provider deltas" },
+    "EV-PI-TERMINAL-RECOVERY": { "kind": "test", "path": "tests/unit/unified-agent-ingress.test.ts", "selector": "uses one bounded correction turn when a provider stops after inspection without a terminal tool" },
+    "EV-PI-TERMINAL-MISSING": { "kind": "test", "path": "tests/unit/unified-agent-ingress.test.ts", "selector": "persists a body-free terminal-action error when the bounded correction still stops as prose" },
     "EV-PI-PROVIDER-BINDING": { "kind": "test", "path": "tests/unit/pi-agent-provider-binding.test.ts", "selector": "Pi AI provider binding" },
     "EV-PI-RUNTIME-BOUNDARY": { "kind": "verifier", "path": "scripts/verify/pi-runtime-boundary.mjs", "selector": "Pi runtime boundary OK: one contained adapter owns official Pi imports, isolated auth/models, and sequential Pige tools." },
     "EV-PI-RUNTIME-MUTATIONS": { "kind": "verifier", "path": "scripts/verify/pi-runtime-boundary-negative-cases.mjs", "selector": "Pi runtime boundary mutations OK:" },

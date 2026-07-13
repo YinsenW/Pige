@@ -246,8 +246,14 @@ Tests must verify:
 - Pi compatibility tests bind exact same-version packages; reject deep/compat/global or
   out-of-adapter imports; and cover event/tool order, validation, abort/continue,
   queues/context, selected auth, no ambient authority, and packaged runtime on update.
+- Streaming stress tests prove high-frequency provider deltas still reach the safe draft
+  controller, cannot exhaust the smaller structural event budget, and stop at the
+  independent raw-update hard cap.
 - `v0.80.6` tests keep transitive compat globals/catalog/default dispatch inert and use
   only isolated `Models` through the sole adapter.
+- Provider binding tests prove an exact reviewed DeepSeek preset/model can reuse matching
+  public Pi model metadata without changing the Pige endpoint, Profile/model identity,
+  scoped credential adapter, or Custom/unknown fallback.
 - Renderer→preload→main proves direct, Pi-selected retrieve, preserve-first source,
   wait/resume, and removal of capture/retrieval semantic bypass from the Home renderer.
 - Draft-stream tests use the exact terminal Home tool and prove multiple `answer`-only
@@ -264,6 +270,9 @@ Tests must verify:
 - Initial context has instruction/policy/tools; evidence follows selected calls. Without
   a model, one durable turn waits and performs no semantic work.
 - Only registered tool calls write; retry/restart reuses call/Operation identity.
+- Source-turn tests permit one registered-terminal-action correction only after a prose
+  stop with no terminal attempt; the second stop persists a stable body-free error, while
+  invalid or denied terminal attempts receive no silent correction retry.
 - Static plus mutation gates reject direct feature/provider loops, host-fixed tool
   order, unregistered or incomplete tools, nested tool/model execution, final-text
   writes, policy/catalog/source drift, and renderer bypass.
@@ -423,6 +432,8 @@ Tests must verify:
   rename, and migration without becoming hidden cache state.
 - Typed queries enforce Dataset revision, schema, row/column/byte/time/result bounds and
   deterministic query/result hashes; model/renderer receive no handles or raw SQL.
+- Source-bound Dataset continuation exposes only the exact current source/Dataset/revision
+  catalog and excludes unrelated historical Dataset records.
 - Citations resolve exact rows/keys/ranges/columns or aggregates and fail on stale data.
 - Reversible managed Collection edits auto-apply with Operation/Undo; destructive,
   external-write, authority, and unresolved-conflict cases stop safely.

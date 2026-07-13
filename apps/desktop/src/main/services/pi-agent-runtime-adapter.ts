@@ -25,6 +25,7 @@ import {
 import { anthropicMessagesApi } from "@earendil-works/pi-ai/api/anthropic-messages.lazy";
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
 import { openAIResponsesApi } from "@earendil-works/pi-ai/api/openai-responses.lazy";
+import { DEEPSEEK_MODELS } from "@earendil-works/pi-ai/providers/deepseek.models";
 import { PigeDomainError } from "@pige/domain";
 import { containsRestrictedModelContent } from "./model-egress-content";
 import type { ModelProviderRuntimeConfig } from "./model-provider-registry";
@@ -119,8 +120,14 @@ export interface PiAgentRunRequest {
   readonly history?: readonly PiAgentHistoryMessage[];
   readonly tools: readonly PigeAgentToolDefinition[];
   readonly beforeModelTurn?: () => void | Promise<void>;
+  readonly terminalActionRecovery?: PiAgentTerminalActionRecovery;
   readonly terminalDraft?: PiAgentTerminalDraftBoundary;
   readonly signal?: AbortSignal;
+}
+
+export interface PiAgentTerminalActionRecovery {
+  readonly requiredToolNames: readonly string[];
+  readonly prompt: string;
 }
 
 export interface PiAgentTerminalDraftBoundary {
@@ -178,7 +185,7 @@ const DEFAULT_ANTHROPIC_BASE_URL = "https://api.anthropic.com";
 const MAX_HISTORY_MESSAGES = 16;
 const MAX_HISTORY_UTF8_BYTES = 64 * 1024;
 const KEYLESS_PROVIDER_TRANSPORT_SENTINEL = "pige-keyless-provider";
-const MAX_TURN_EVENTS = 512;
+const MAX_TURN_EVENT_RECORDS = 512;
 const MIN_INCREMENTAL_DRAFT_SPAN_MS = 80;
 const DRAFT_PUBLISH_SETTLE_MS = 90;
 const AUTHORIZED_DRAFT_PREFIX_CHARACTERS = 32;
@@ -191,6 +198,7 @@ const MAX_DESCRIPTOR_DESCRIPTION_UTF8_BYTES = 2_048;
 const MAX_DESCRIPTOR_SCHEMA_UTF8_BYTES = 65_536;
 const MAX_DESCRIPTOR_CATALOG_UTF8_BYTES = 524_288;
 const MAX_DESCRIPTOR_LIMIT_BYTES = 1_048_576;
+const MAX_TURN_STREAM_UPDATES = MAX_DESCRIPTOR_LIMIT_BYTES;
 const MAX_DESCRIPTOR_TIMEOUT_MS = 600_000;
 const MAX_CANONICAL_JSON_DEPTH = 32;
 const MAX_CANONICAL_JSON_NODES = 8_192;
@@ -212,12 +220,19 @@ export class PiAgentRuntimeAdapter {
     if (request.signal?.aborted) throw createAbortError();
     const tools = request.tools;
     assertPigeAgentToolDescriptors(tools);
+    const terminalActionRecovery = validateTerminalActionRecovery(
+      request.terminalActionRecovery,
+      tools
+    );
     const binding = this.#createBinding(request.runtimeConfig);
     const history = createPiHistoryMessages(request.history ?? [], binding.model);
     const toolsByName = new Map(tools.map((tool) => [tool.name, tool]));
     const terminalDrafts = new SafeTerminalDraftController(request.terminalDraft);
     const events: PiAgentEventRecord[] = [];
     const invokedTools: string[] = [];
+    let terminalActionAttempted = false;
+    let terminalRecoveryQueued = false;
+    let streamUpdateCount = 0;
     let hasBeforeModelTurnFailure = false;
     let beforeModelTurnFailure: unknown;
     const runBeforeModelTurn = async (): Promise<void> => {
@@ -269,14 +284,43 @@ export class PiAgentRuntimeAdapter {
     });
 
     const unsubscribe = agent.subscribe((event) => {
-      if (events.length >= MAX_TURN_EVENTS) {
+      if (event.type === "message_update") {
+        streamUpdateCount += 1;
+        if (streamUpdateCount > MAX_TURN_STREAM_UPDATES) {
+          agent.abort();
+          return;
+        }
+      }
+      const record = toEventRecord(event);
+      if (!appendEventRecord(events, record)) {
         agent.abort();
         return;
       }
-      const record = toEventRecord(event);
-      events.push(record);
       terminalDrafts.observe(event);
+      if (
+        terminalActionRecovery &&
+        event.type === "tool_execution_start" &&
+        terminalActionRecovery.requiredToolNames.includes(event.toolName)
+      ) {
+        terminalActionAttempted = true;
+        agent.clearFollowUpQueue();
+      }
       if (event.type === "tool_execution_start") invokedTools.push(event.toolName);
+      if (
+        terminalActionRecovery &&
+        event.type === "turn_end" &&
+        event.message.role === "assistant" &&
+        event.message.stopReason === "stop" &&
+        !terminalActionAttempted &&
+        !terminalRecoveryQueued
+      ) {
+        terminalRecoveryQueued = true;
+        agent.followUp({
+          role: "user",
+          content: terminalActionRecovery.prompt,
+          timestamp: Date.now()
+        });
+      }
     });
     const onAbort = (): void => agent.abort();
     if (request.signal?.aborted) {
@@ -400,18 +444,7 @@ function createProviderBinding(config: ModelProviderRuntimeConfig): ScopedPiBind
   const baseUrl = resolveProviderBaseUrl(config);
   const providerId = `pige:${config.provider.id}`;
   const keyless = config.apiKey === undefined && config.provider.authRequirement !== "api_key";
-  const model: Model<Api> = {
-    id: config.model.modelId,
-    name: config.model.displayName ?? config.model.modelId,
-    api,
-    provider: providerId,
-    baseUrl,
-    reasoning: false,
-    input: ["text"],
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    contextWindow: 32_768,
-    maxTokens: 4_096
-  };
+  const model = createScopedPiModel(config, api, providerId, baseUrl);
   const credentials = new ScopedCredentialStore(providerId, config.apiKey);
   const models = createModels({ credentials, authContext: denyAmbientAuthContext });
   models.setProvider(createProvider({
@@ -447,6 +480,39 @@ function createProviderBinding(config: ModelProviderRuntimeConfig): ScopedPiBind
   return {
     model: selected,
     streamSimple: (model, context, options) => models.streamSimple(model, context, options)
+  };
+}
+
+function createScopedPiModel(
+  config: ModelProviderRuntimeConfig,
+  api: Api,
+  providerId: string,
+  baseUrl: string
+): Model<Api> {
+  const reviewedModel = config.provider.presetId === "deepseek" && api === "openai-completions"
+    ? Object.values(DEEPSEEK_MODELS).find((candidate) => candidate.id === config.model.modelId)
+    : undefined;
+  if (reviewedModel) {
+    return {
+      ...reviewedModel,
+      id: config.model.modelId,
+      name: config.model.displayName ?? reviewedModel.name,
+      api,
+      provider: providerId,
+      baseUrl
+    };
+  }
+  return {
+    id: config.model.modelId,
+    name: config.model.displayName ?? config.model.modelId,
+    api,
+    provider: providerId,
+    baseUrl,
+    reasoning: false,
+    input: ["text"],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 32_768,
+    maxTokens: 4_096
   };
 }
 
@@ -608,6 +674,18 @@ function toEventRecord(event: AgentEvent): PiAgentEventRecord {
     return { type: event.type, toolName: event.toolName };
   }
   return { type: event.type };
+}
+
+function appendEventRecord(
+  events: PiAgentEventRecord[],
+  record: PiAgentEventRecord
+): boolean {
+  if (record.type === "message_update" && events.at(-1)?.type === "message_update") {
+    return true;
+  }
+  if (events.length >= MAX_TURN_EVENT_RECORDS) return false;
+  events.push(record);
+  return true;
 }
 
 function readSafeTerminalDraft(
@@ -839,6 +917,31 @@ function collectAssistantText(messages: readonly unknown[]): string {
     }
   }
   return values.join("\n").trim();
+}
+
+function validateTerminalActionRecovery(
+  recovery: PiAgentTerminalActionRecovery | undefined,
+  tools: readonly PigeAgentToolDefinition[]
+): PiAgentTerminalActionRecovery | undefined {
+  if (!recovery) return undefined;
+  const requiredToolNames = Array.from(new Set(recovery.requiredToolNames));
+  const registeredToolNames = new Set(tools.map((tool) => tool.name));
+  const prompt = recovery.prompt.trim();
+  if (
+    requiredToolNames.length === 0 ||
+    requiredToolNames.length > 16 ||
+    requiredToolNames.some((name) => !registeredToolNames.has(name)) ||
+    prompt.length === 0 ||
+    Buffer.byteLength(prompt, "utf8") > 2_048 ||
+    containsUnsafeDraftControlCharacter(prompt) ||
+    containsRestrictedModelContent(prompt)
+  ) {
+    throw new PigeDomainError(
+      "agent_runtime.terminal_recovery_invalid",
+      "The bounded terminal-action recovery contract is invalid."
+    );
+  }
+  return Object.freeze({ requiredToolNames, prompt });
 }
 
 function assertPigeAgentToolDescriptors(

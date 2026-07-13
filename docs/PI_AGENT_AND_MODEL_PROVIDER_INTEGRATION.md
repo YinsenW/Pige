@@ -173,6 +173,10 @@ Rules:
 - Connect discovers non-durably, selects or requests a bootstrap ID, runs a real synthetic
   Pi generation/tool probe, then readback-commits all or restores all.
 - Pi AI remains the provider runtime; Pige neither copies its catalog nor adds a parallel SDK.
+- An exact reviewed preset/model may overlay Pi's matching public model metadata when
+  protocol mechanics require it, while retaining the Pige Profile ID, endpoint, model ID,
+  and scoped credential adapter. Unknown and Custom models keep the conservative explicit
+  protocol fallback; an upstream catalog match never changes Pige-owned authority.
 - Redacted summaries distinguish `not_configured`, `ready`, and
   `configured_unusable`; the last carries a typed repair action rather than looking
   unconfigured or exposing endpoint, secret ref, or raw failure.
@@ -328,6 +332,13 @@ Registration controls what Pi may call, not what it must call. A general answer 
 zero tools and no local citations. Empty retrieval returns a typed result for replanning;
 only explicit vault/source-only grounding turns missing evidence into insufficiency.
 
+After a preserved-source inspection, stopping as ordinary prose without attempting any
+registered terminal knowledge action may receive one bounded correction turn naming only
+the currently registered terminal actions. A second prose stop fails with
+`agent_runtime.knowledge_action_missing`. Once the model attempts a terminal action,
+including an invalid or denied one, Pige does not silently substitute or retry another;
+the typed tool/error path remains authoritative.
+
 ## 12. Sessions, Memory, And Durable State
 
 Pi has session persistence concepts. Pige has its own durable state model.
@@ -360,6 +371,11 @@ Pige never emits pre-authorization assistant prose, thinking, raw JSON/tool argu
 provider events, model refs, grounding, or citations. Replacement snapshots may shrink
 or revise prior text. The presentation fallback may make one additional provider turn;
 it grants no new tool, data, or destination authority.
+
+Pi event retention and provider-stream safety are separate bounds. Every raw update is
+still inspected by the safe draft controller and counts toward an independent hard cap;
+consecutive body-free `message_update` records may coalesce in the structural turn-event
+history so token cadence cannot exhaust the smaller tool/lifecycle event budget.
 
 The draft is escaped, non-durable, and non-authoritative. Full output schema, evidence,
 source revision, grounding, and citations still validate before the assistant event and
