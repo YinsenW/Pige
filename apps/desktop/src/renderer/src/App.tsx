@@ -9,6 +9,7 @@ import zhHansMessages from "./locales/zh-Hans/messages.json";
 import type {
   AgentConversationTimeline,
   AgentTurnAnswer,
+  AgentTurnDraftEvent,
   AgentSubmitTurnResult,
   AgentRuntimeStatus,
   AppHealth,
@@ -52,6 +53,14 @@ type View = "home" | "library" | "settings" | "models";
 type CaptureToast = { readonly kind: "success" | "error"; readonly message: string };
 type NoteRelatedState = LibraryRelatedResult | "loading" | "unavailable" | null;
 type HomeAgentUiState = "idle" | "accepted" | "running" | "waiting" | "failed" | "completed";
+type ActiveAgentDraftBinding = {
+  readonly clientTurnId: string;
+  requestId?: string;
+  jobId?: string;
+  conversationId?: string;
+  conversationEventId?: string;
+  sequence: number;
+};
 
 const initialVaultName = "Pige Vault";
 const localeLabels: Record<Locale, string> = {
@@ -250,7 +259,8 @@ export function App(): React.JSX.Element {
   const submitFiles = async (
     files: readonly File[],
     inputKind: "file_drop" | "file_picker",
-    text?: string
+    text?: string,
+    clientTurnId = createAgentClientTurnId()
   ): Promise<AgentSubmitTurnResult | undefined> => {
     if (files.length === 0) return undefined;
     if (files.length > 1) {
@@ -265,7 +275,7 @@ export function App(): React.JSX.Element {
     try {
       const submission = window.pige.agent.submitTurn({
         schemaVersion: 1,
-        clientTurnId: createAgentClientTurnId(),
+        clientTurnId,
         ...(text?.trim() ? { text: text.trim() } : {}),
         inputKind,
         objective: "auto",
@@ -570,7 +580,7 @@ export function App(): React.JSX.Element {
             locale={locale}
             draftText={homeDraftText}
             onDraftChange={setHomeDraftText}
-            onFilesSelected={(files, text) => submitFiles(files, "file_picker", text)}
+            onFilesSelected={(files, text, clientTurnId) => submitFiles(files, "file_picker", text, clientTurnId)}
             onCancelJob={cancelJob}
             onRetryJob={retryJob}
             onUndoActivity={undoActivity}
@@ -985,7 +995,8 @@ function HomeComposer(props: {
   readonly onDraftChange: (text: string) => void;
   readonly onFilesSelected: (
     files: readonly File[],
-    text?: string
+    text: string | undefined,
+    clientTurnId: string
   ) => Promise<AgentSubmitTurnResult | undefined>;
   readonly onCancelJob: (jobId: string) => Promise<void>;
   readonly onRetryJob: (jobId: string) => Promise<void>;
@@ -999,6 +1010,7 @@ function HomeComposer(props: {
   const [captureStatus, setCaptureStatus] = useState<string | null>(null);
   const [captureError, setCaptureError] = useState<string | null>(null);
   const [agentAnswer, setAgentAnswer] = useState<AgentTurnAnswer | null>(null);
+  const [agentDraft, setAgentDraft] = useState<AgentTurnDraftEvent | null>(null);
   const [agentRunState, setAgentRunState] = useState<HomeAgentUiState>("idle");
   const [agentError, setAgentError] = useState<PigeErrorSummary | null>(null);
   const [agentModelUsage, setAgentModelUsage] = useState<HomeAgentModelUsage>("none");
@@ -1025,6 +1037,7 @@ function HomeComposer(props: {
   const proposalQueueHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const conversationLoadSequence = useRef(0);
   const activeVaultIdRef = useRef<string | undefined>(props.activeVault?.vaultId);
+  const activeAgentDraftRef = useRef<ActiveAgentDraftBinding | null>(null);
   activeVaultIdRef.current = props.activeVault?.vaultId;
   const agentStatusLabel = props.agentRuntimeStatus?.state === "ready" ? props.t("home.agentReady") : props.t("home.captureOnly");
   const plannedModelUsage = homeRuntimeModelUsage(props.agentRuntimeStatus);
@@ -1040,6 +1053,16 @@ function HomeComposer(props: {
   const visibleConversationMessages = (conversationTimeline?.messages ?? []).filter((message) =>
     !(agentAnswer && message.role === "assistant" && message.id === liveAnswerEventId)
   );
+
+  const beginAgentDraft = (clientTurnId: string): void => {
+    activeAgentDraftRef.current = { clientTurnId, sequence: 0 };
+    setAgentDraft(null);
+  };
+
+  const clearAgentDraft = (): void => {
+    activeAgentDraftRef.current = null;
+    setAgentDraft(null);
+  };
 
   const refreshConversation = async (): Promise<AgentConversationTimeline | undefined> => {
     const vaultId = props.activeVault?.vaultId;
@@ -1060,11 +1083,35 @@ function HomeComposer(props: {
     }
   };
 
+  useEffect(() => window.pige.agent.onTurnDraft?.((event) => {
+    if (!isAgentTurnDraftEvent(event)) return;
+    const active = activeAgentDraftRef.current;
+    if (!active || event.clientTurnId !== active.clientTurnId || event.sequence <= active.sequence) return;
+    if (
+      active.requestId !== undefined &&
+      (
+        event.requestId !== active.requestId ||
+        event.jobId !== active.jobId ||
+        event.conversationId !== active.conversationId ||
+        event.conversationEventId !== active.conversationEventId
+      )
+    ) {
+      return;
+    }
+    active.requestId ??= event.requestId;
+    active.jobId ??= event.jobId;
+    active.conversationId ??= event.conversationId;
+    active.conversationEventId ??= event.conversationEventId;
+    active.sequence = event.sequence;
+    setAgentDraft(event);
+  }), []);
+
   useEffect(() => {
     conversationLoadSequence.current += 1;
     setConversationTimeline(undefined);
     setLiveAnswerEventId(null);
     setAgentAnswer(null);
+    clearAgentDraft();
     setAgentError(null);
     setAgentModelUsage("none");
     setAgentRunState("idle");
@@ -1079,6 +1126,7 @@ function HomeComposer(props: {
     const nextState = homeUiStateForJobState(latestTurn.state);
     if (nextState) setAgentRunState(nextState);
     setAgentError(latestTurn.error ?? null);
+    if (latestTurn.state !== "queued" && latestTurn.state !== "running") clearAgentDraft();
   }, [latestTurn?.jobId, latestTurn?.state, latestTurn?.error?.code]);
 
   useEffect(() => {
@@ -1110,6 +1158,7 @@ function HomeComposer(props: {
       ? conversationTimeline
       : undefined;
     const clientTurnId = createAgentClientTurnId();
+    beginAgentDraft(clientTurnId);
     try {
       const submission = window.pige.agent.submitTurn({
         schemaVersion: 1,
@@ -1128,6 +1177,7 @@ function HomeComposer(props: {
       await props.onHomeStateChanged().catch(() => undefined);
       const outcome = await submission;
       if (outcome.state === "completed") {
+        clearAgentDraft();
         setAgentAnswer(outcome.answer);
         setLiveAnswerEventId(outcome.tailEventId);
         setAgentModelUsage(outcome.modelUsage);
@@ -1139,6 +1189,7 @@ function HomeComposer(props: {
         await refreshConversation();
         return;
       }
+      clearAgentDraft();
       setAgentModelUsage(outcome.modelUsage);
       setAgentError(outcome.error);
       setAgentRunState(outcome.state);
@@ -1148,6 +1199,7 @@ function HomeComposer(props: {
       }
       await refreshConversation();
     } catch {
+      clearAgentDraft();
       setAgentError({
         code: "model_provider.call_failed",
         domain: "model_provider",
@@ -1428,8 +1480,12 @@ function HomeComposer(props: {
           ) : null}
         </section>
       ) : null}
-      {conversationTimeline && visibleConversationMessages.length > 0 ? (
-        <section className="conversation-timeline" aria-label={props.t("home.conversation")}>
+      {visibleConversationMessages.length > 0 || agentDraft ? (
+        <section
+          className="conversation-timeline"
+          aria-label={props.t("home.conversation")}
+          aria-busy={agentDraft !== null}
+        >
           {visibleConversationMessages.map((message) => (
             <article
               className={`conversation-message role-${message.role}`}
@@ -1442,6 +1498,18 @@ function HomeComposer(props: {
               <p>{message.text}</p>
             </article>
           ))}
+          {agentDraft ? (
+            <article
+              className="conversation-message role-assistant provisional"
+              data-agent-draft="true"
+              data-draft-sequence={agentDraft.sequence}
+            >
+              <span className="conversation-message-role">
+                {props.t("home.assistantMessage")}
+              </span>
+              <p>{agentDraft.text}</p>
+            </article>
+          ) : null}
         </section>
       ) : null}
       {selectedNote ? (
@@ -1506,7 +1574,10 @@ function HomeComposer(props: {
               setAgentError(null);
               setAgentModelUsage("none");
               setAgentRunState("running");
-              void props.onFilesSelected(files, text).then(async (result) => {
+              const clientTurnId = createAgentClientTurnId();
+              beginAgentDraft(clientTurnId);
+              void props.onFilesSelected(files, text, clientTurnId).then(async (result) => {
+                clearAgentDraft();
                 if (!result) {
                   setAgentRunState("failed");
                   return;
@@ -1523,6 +1594,9 @@ function HomeComposer(props: {
                   setAgentError(result.error);
                 }
                 await refreshConversation();
+              }).catch(() => {
+                clearAgentDraft();
+                setAgentRunState("failed");
               });
             }}
           />
@@ -1597,6 +1671,27 @@ function canFollowUpToConversation(timeline: AgentConversationTimeline | undefin
     timeline.latestTurn?.state === "completed" ||
     timeline.latestTurn?.state === "completed_with_warnings"
   );
+}
+
+function isAgentTurnDraftEvent(value: unknown): value is AgentTurnDraftEvent {
+  if (!value || typeof value !== "object") return false;
+  const event = value as Partial<AgentTurnDraftEvent>;
+  const identifiers = [
+    event.requestId,
+    event.clientTurnId,
+    event.jobId,
+    event.conversationId,
+    event.conversationEventId
+  ];
+  return event.apiVersion === 1 &&
+    event.kind === "draft_replace" &&
+    identifiers.every((identifier) => typeof identifier === "string" && identifier.length > 0 && identifier.length <= 256) &&
+    Number.isSafeInteger(event.sequence) &&
+    (event.sequence ?? 0) > 0 &&
+    typeof event.text === "string" &&
+    Array.from(event.text).length > 0 &&
+    Array.from(event.text).length <= 8_000 &&
+    !/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/u.test(event.text);
 }
 
 function createAgentClientTurnId(now = new Date()): string {

@@ -60,6 +60,7 @@ import {
   type AgentIngestRetrievalPort
 } from "./services/agent-ingest-service";
 import { AgentRuntimeService } from "./services/agent-runtime-service";
+import { AgentTurnDraftPublisher } from "./services/agent-turn-draft-publisher";
 import { AppearanceService } from "./services/appearance-service";
 import { BackupRestoreService } from "./services/backup-service";
 import { CoalescedBatchDrainer } from "./services/background-job-drainer";
@@ -75,7 +76,11 @@ import {
 } from "./services/jobs-service";
 import { LibraryService } from "./services/library-service";
 import { KnowledgeActivityService } from "./services/knowledge-activity-service";
-import { AgentSubmitTurnRequestSchema, HomeAgentService } from "./services/home-agent-service";
+import {
+  AgentSubmitTurnRequestSchema,
+  HomeAgentService,
+  type HomeAgentDraftSnapshot
+} from "./services/home-agent-service";
 import { HomeAgentUrlService } from "./services/home-agent-url-service";
 import { LocalDatabaseRebuildWorkerService } from "./services/local-database-rebuild-worker-service";
 import { LocalDatabaseService } from "./services/local-database-service";
@@ -677,7 +682,7 @@ ipcMain.handle("agent.ask", (_event, request: HomeAgentAskRequest) => getHomeAge
 ipcMain.handle("agent.conversation", (_event, request?: AgentConversationRequest) =>
   getHomeAgentService().conversation(request)
 );
-ipcMain.handle("agent.submitTurn", async (_event, payload: {
+ipcMain.handle("agent.submitTurn", async (event, payload: {
   readonly request: AgentSubmitTurnRequest;
   readonly filePaths?: readonly string[];
 }) => {
@@ -699,39 +704,50 @@ ipcMain.handle("agent.submitTurn", async (_event, payload: {
     ...(request.conversationId === undefined ? {} : { conversationId: request.conversationId }),
     ...(request.expectedTailEventId === undefined ? {} : { expectedTailEventId: request.expectedTailEventId })
   };
-  if (filePaths.length === 0) {
-    return getHomeAgentService().submitTurn(normalizedRequest);
-  }
-  if (request.inputKind !== "file_drop" && request.inputKind !== "file_picker") {
-    throw new PigeDomainError(
-      "agent_runtime.turn_binding_invalid",
-      "An attached source requires a file-drop or file-picker Agent input kind."
-    );
-  }
-  const home = getHomeAgentService();
-  const prepared = home.prepareSourceTurn(normalizedRequest);
-  try {
-    const preserved = await getCaptureService().preserveFilesForAgentTurn({
-      filePaths,
-      inputKind: request.inputKind === "file_drop" ? "file_drop" : "file_picker",
-      userIntent: request.objective === "capture" ? "capture" : "unknown",
-      locale: request.locale
-    }, {
-      jobId: prepared.jobId,
-      sourceId: prepared.sourceId
-    });
-    if (
-      preserved.status === "rejected" ||
-      preserved.sourceIds.length !== 1 ||
-      preserved.sourceIds[0] !== prepared.sourceId
-    ) {
-      home.failPreparedSourceTurn(prepared);
-      throw new PigeDomainError("capture.file_rejected", "The selected attachment could not be preserved safely.");
+  const draftPublisher = new AgentTurnDraftPublisher({
+    clientTurnId: normalizedRequest.clientTurnId,
+    send: (draft) => {
+      if (!event.sender.isDestroyed()) event.sender.send("agent.turnDraft", draft);
     }
-    return home.submitPreparedSourceTurn(prepared);
-  } catch (caught) {
-    home.failPreparedSourceTurn(prepared);
-    throw caught;
+  });
+  const draftContext = { onDraft: (draft: HomeAgentDraftSnapshot) => draftPublisher.publish(draft) };
+  try {
+    if (filePaths.length === 0) {
+      return await getHomeAgentService().submitTurn(normalizedRequest, draftContext);
+    }
+    if (request.inputKind !== "file_drop" && request.inputKind !== "file_picker") {
+      throw new PigeDomainError(
+        "agent_runtime.turn_binding_invalid",
+        "An attached source requires a file-drop or file-picker Agent input kind."
+      );
+    }
+    const home = getHomeAgentService();
+    const prepared = home.prepareSourceTurn(normalizedRequest);
+    try {
+      const preserved = await getCaptureService().preserveFilesForAgentTurn({
+        filePaths,
+        inputKind: request.inputKind === "file_drop" ? "file_drop" : "file_picker",
+        userIntent: request.objective === "capture" ? "capture" : "unknown",
+        locale: request.locale
+      }, {
+        jobId: prepared.jobId,
+        sourceId: prepared.sourceId
+      });
+      if (
+        preserved.status === "rejected" ||
+        preserved.sourceIds.length !== 1 ||
+        preserved.sourceIds[0] !== prepared.sourceId
+      ) {
+        home.failPreparedSourceTurn(prepared);
+        throw new PigeDomainError("capture.file_rejected", "The selected attachment could not be preserved safely.");
+      }
+      return await home.submitPreparedSourceTurn(prepared, draftContext);
+    } catch (caught) {
+      home.failPreparedSourceTurn(prepared);
+      throw caught;
+    }
+  } finally {
+    draftPublisher.close();
   }
 });
 ipcMain.handle("capture.submitText", (_event, request: SubmitTextCaptureRequest) => {

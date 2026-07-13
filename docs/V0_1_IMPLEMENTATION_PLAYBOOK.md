@@ -280,8 +280,10 @@ tools/routes, replay, exceptions, Broker, and fixed routes remain; no deep/forke
 
 B3.14/E3.09 now proves direct/retrieved/file turns, waiting/resume, explicit protocol,
 no Host bypass, Pi-selected URL fetch/preserve, exact-tail follow-up, bounded history,
-result adoption, and Pi cancellation. Multi-source recovery and
-signed packaged macOS/Windows BYOK remain open; E3.09 stays incomplete.
+result adoption, Pi cancellation, and safe terminal-answer draft replacement through
+typed main/preload/renderer bindings. Source-ingest terminal drafts, multi-window proof,
+multi-source recovery, and signed packaged macOS/Windows BYOK remain open; E3.09 stays
+incomplete.
 
 B3.05 has the default, exact-destination disclosure, Home private allow/sensitive wait,
 matrix/profile-switch tests, and per-turn audits/drift rejection. Persisted stricter

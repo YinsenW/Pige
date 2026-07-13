@@ -97,6 +97,15 @@ export interface HomeAgentRuntimePort {
   run(request: PiAgentRunRequest): Promise<PiAgentRunResult>;
 }
 
+export interface HomeAgentDraftSnapshot {
+  readonly requestId: string;
+  readonly clientTurnId: string;
+  readonly jobId: string;
+  readonly conversationId: string;
+  readonly conversationEventId: string;
+  readonly text: string;
+}
+
 export interface HomeAgentUrlPort {
   fetch(request: FetchHomeAgentUrlRequest): Promise<HomeAgentUrlEvidence>;
   readCurrent(request: ReadHomeAgentUrlRequest): HomeAgentUrlEvidence;
@@ -358,11 +367,15 @@ export class HomeAgentService {
     };
   }
 
-  submitPreparedSourceTurn(prepared: PreparedSourceAgentTurn): Promise<AgentSubmitTurnResult> {
+  submitPreparedSourceTurn(
+    prepared: PreparedSourceAgentTurn,
+    context: { readonly onDraft?: (snapshot: HomeAgentDraftSnapshot) => void } = {}
+  ): Promise<AgentSubmitTurnResult> {
     this.#jobs.attachAgentTurnSource(prepared.jobId, prepared.sourceId);
     return this.submitTurn(prepared.request, {
       sourceIds: [prepared.sourceId],
-      prepared
+      prepared,
+      ...context
     });
   }
 
@@ -375,6 +388,7 @@ export class HomeAgentService {
     context: {
       readonly sourceIds?: readonly string[];
       readonly prepared?: PreparedSourceAgentTurn;
+      readonly onDraft?: (snapshot: HomeAgentDraftSnapshot) => void;
     } = {}
   ): Promise<AgentSubmitTurnResult> {
     let requestId = `turn_${randomUUID().replaceAll("-", "")}`;
@@ -582,6 +596,17 @@ export class HomeAgentService {
         activeTurn,
         conversationContextHash
       );
+      const draftClientTurnId = validatedRequest.clientTurnId;
+      const publishDraft = draftClientTurnId && context.onDraft
+        ? (text: string): void => context.onDraft?.({
+            requestId,
+            clientTurnId: draftClientTurnId,
+            jobId: activeSession.current.id,
+            conversationId: activeTurn.event.conversationId,
+            conversationEventId: activeTurn.event.id,
+            text
+          })
+        : undefined;
       const { execution, assistantEvent } = await this.#jobs.runTextAgentTurn(
         activeSession.current.id,
         async (jobExecution) => {
@@ -600,7 +625,8 @@ export class HomeAgentService {
             runtimeBinding.provider,
             history,
             jobExecution.signal,
-            assertConversationCurrent
+            assertConversationCurrent,
+            publishDraft
           );
           jobExecution.markDurableCheckpoint("agent_turn_assistant_event_publication_started");
           const assistantEvent = this.#conversations.appendAssistantTurn(
@@ -972,7 +998,8 @@ export class HomeAgentService {
     defaultProvider: ProviderProfileSummary,
     history: readonly PiAgentHistoryMessage[] = [],
     signal?: AbortSignal,
-    assertConversationCurrent?: () => void
+    assertConversationCurrent?: () => void,
+    publishDraft?: (text: string) => void
   ): Promise<{ readonly answer: AgentTurnAnswer; readonly sourceIds: readonly string[] }> {
     const query = request.text.trim();
     if (history.some((message) => containsRestrictedModelContent(message.text))) {
@@ -1274,7 +1301,15 @@ export class HomeAgentService {
           modelTurnEpoch += 1;
           authorizeCurrentModelTurn();
           session.modelInvocationStarted = true;
-        }
+        },
+        ...(publishDraft ? {
+          terminalDraft: {
+            toolName: HOME_FINISH_TOOL_NAME,
+            argumentName: "answer",
+            maxCharacters: MAX_ANSWER_CHARACTERS,
+            onSnapshot: publishDraft
+          }
+        } : {})
       });
     } catch (caught) {
       if (urlToolFailure) throw urlToolFailure;

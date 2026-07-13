@@ -8,6 +8,7 @@ import type {
   AgentConversationTimeline,
   AgentSubmitTurnRequest,
   AgentSubmitTurnResult,
+  AgentTurnDraftEvent,
   JobSummary,
   KnowledgeActivitySummary
 } from "@pige/contracts";
@@ -138,6 +139,126 @@ describe("Home durable Agent conversation UI", () => {
     expect(textareaValue(mount.container)).toBe("Draft the follow-up while this runs.");
 
     await act(async () => mount.root.unmount());
+    dom.window.close();
+  });
+
+  it("replaces one escaped provisional answer and ignores stale or wrong-turn drafts before the final", async () => {
+    const dom = createDom();
+    const harness = createHarness(completedTimeline());
+    let resolveTurn: ((result: AgentSubmitTurnResult) => void) | undefined;
+    harness.submitTurn = (request) => {
+      harness.submitRequests.push(request);
+      return new Promise((resolve) => { resolveTurn = resolve; });
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await setTextareaValue(dom, container, "Stream one safe answer.");
+    await clickButton(dom, container, "Send");
+    await waitFor(dom, () => harness.submitRequests.length === 1);
+    const clientTurnId = harness.submitRequests[0]?.clientTurnId;
+    if (!clientTurnId) throw new Error("Expected a client turn identity.");
+
+    await act(async () => {
+      harness.emitDraft(draftEvent({ clientTurnId: "turn_20260713_wrongturn000", sequence: 1, text: "Wrong turn." }));
+      harness.emitDraft(draftEvent({ clientTurnId, sequence: 1, text: "<img src=x onerror=alert(1)> Safe draft one." }));
+      await settle(dom);
+    });
+    const provisional = container.querySelector<HTMLElement>('[data-agent-draft="true"]');
+    expect(provisional?.textContent).toContain("<img src=x onerror=alert(1)> Safe draft one.");
+    expect(provisional?.querySelector("img")).toBeNull();
+    expect(provisional?.closest("[aria-busy]")?.getAttribute("aria-busy")).toBe("true");
+    expect(provisional?.getAttribute("aria-live")).toBeNull();
+
+    await act(async () => {
+      harness.emitDraft(draftEvent({ clientTurnId, sequence: 1, text: "Stale replacement." }));
+      harness.emitDraft(draftEvent({ clientTurnId, sequence: 2, text: "Safe draft two." }));
+      await settle(dom);
+    });
+    expect(container.querySelector('[data-agent-draft="true"]')?.textContent).toContain("Safe draft two.");
+    expect(container.textContent).not.toContain("Stale replacement.");
+
+    await act(async () => {
+      resolveTurn?.(completedResult());
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.querySelector('[data-agent-draft="true"]') === null);
+    expect(countText(container, "Here is the second answer.")).toBe(1);
+
+    await act(async () => root.unmount());
+    const reopened = await mountHome(dom, makePigeApi(harness));
+    await act(async () => {
+      harness.emitDraft(draftEvent({ clientTurnId, sequence: 3, text: "Must not replay after reopen." }));
+      await settle(dom);
+    });
+    expect(reopened.container.querySelector('[data-agent-draft="true"]')).toBeNull();
+    expect(reopened.container.textContent).not.toContain("Must not replay after reopen.");
+    await act(async () => reopened.root.unmount());
+    dom.window.close();
+  });
+
+  it("clears a provisional answer when the authoritative turn fails", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    let resolveTurn: ((result: AgentSubmitTurnResult) => void) | undefined;
+    harness.submitTurn = (request) => {
+      harness.submitRequests.push(request);
+      return new Promise((resolve) => { resolveTurn = resolve; });
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await setTextareaValue(dom, container, "Fail after a safe draft.");
+    await clickButton(dom, container, "Send");
+    await waitFor(dom, () => harness.submitRequests.length === 1);
+    const clientTurnId = harness.submitRequests[0]?.clientTurnId;
+    if (!clientTurnId) throw new Error("Expected a client turn identity.");
+    await act(async () => {
+      harness.emitDraft(draftEvent({ clientTurnId, sequence: 1, text: "Temporary safe answer." }));
+      await settle(dom);
+    });
+    expect(container.textContent).toContain("Temporary safe answer.");
+
+    await act(async () => {
+      resolveTurn?.(failedResult());
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.querySelector('[data-agent-draft="true"]') === null);
+    expect(container.textContent).not.toContain("Temporary safe answer.");
+    expect(container.textContent).toContain("The model service did not complete this answer. Try again.");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("clears a provisional answer when cancellation settles the active turn", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    let resolveTurn: ((result: AgentSubmitTurnResult) => void) | undefined;
+    harness.submitTurn = (request) => {
+      harness.submitRequests.push(request);
+      return new Promise((resolve) => { resolveTurn = resolve; });
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await setTextareaValue(dom, container, "Cancel after a safe draft.");
+    await clickButton(dom, container, "Send");
+    await waitFor(dom, () => harness.submitRequests.length === 1);
+    const clientTurnId = harness.submitRequests[0]?.clientTurnId;
+    if (!clientTurnId) throw new Error("Expected a client turn identity.");
+    await act(async () => {
+      harness.emitDraft(draftEvent({ clientTurnId, sequence: 1, text: "Temporary answer before cancellation." }));
+      await settle(dom);
+    });
+    expect(container.textContent).toContain("Temporary answer before cancellation.");
+
+    await act(async () => {
+      resolveTurn?.(cancelledResult());
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.querySelector('[data-agent-draft="true"]') === null);
+    expect(container.textContent).not.toContain("Temporary answer before cancellation.");
+    expect(container.textContent).toContain("The Agent turn was cancelled. You can retry it.");
+
+    await act(async () => root.unmount());
     dom.window.close();
   });
 
@@ -339,7 +460,8 @@ describe("Home durable Agent conversation UI", () => {
     );
 
     expect(submitFiles).toContain("schemaVersion: 1");
-    expect(submitFiles).toContain("clientTurnId: createAgentClientTurnId()");
+    expect(submitFiles).toContain("clientTurnId = createAgentClientTurnId()");
+    expect(submitFiles).toContain("clientTurnId,");
     expect(submitFiles).not.toContain("conversationId:");
     expect(retryLatestTurn).toContain("props.onRetryJob(retryableLatestTurn.jobId)");
     expect(retryLatestTurn).not.toContain("submitTurn");
@@ -370,9 +492,11 @@ interface ConversationHarness {
   readonly retryJobIds: string[];
   readonly cancelJobIds: string[];
   readonly undoOperationIds: string[];
+  readonly draftListeners: Set<(event: AgentTurnDraftEvent) => void>;
   activityUndoMode: "success" | "post_commit_reject" | "retryable_reject" | "unknown_reject";
   activityListReads: number;
   submitTurn: (request: AgentSubmitTurnRequest) => Promise<AgentSubmitTurnResult>;
+  emitDraft: (event: AgentTurnDraftEvent) => void;
 }
 
 function createHarness(timeline: AgentConversationTimeline | undefined): ConversationHarness {
@@ -384,11 +508,15 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     retryJobIds: [],
     cancelJobIds: [],
     undoOperationIds: [],
+    draftListeners: new Set(),
     activityUndoMode: "success",
     activityListReads: 0,
     submitTurn: async (request) => {
       harness.submitRequests.push(request);
       return completedResult();
+    },
+    emitDraft: (event) => {
+      for (const listener of harness.draftListeners) listener(event);
     }
   };
   return harness;
@@ -420,7 +548,11 @@ function makePigeApi(harness: ConversationHarness): object {
     agent: {
       runtimeStatus: async () => null,
       conversation: async () => harness.timeline,
-      submitTurn: (request: AgentSubmitTurnRequest) => harness.submitTurn(request)
+      submitTurn: (request: AgentSubmitTurnRequest) => harness.submitTurn(request),
+      onTurnDraft: (listener: (event: AgentTurnDraftEvent) => void) => {
+        harness.draftListeners.add(listener);
+        return () => harness.draftListeners.delete(listener);
+      }
     },
     jobs: {
       list: async () => ({
@@ -575,6 +707,56 @@ function completedResult(): AgentSubmitTurnResult {
       grounding: "general",
       citations: []
     }
+  };
+}
+
+function failedResult(): AgentSubmitTurnResult {
+  return {
+    requestId: "request_20260713_failedturn",
+    jobId: "job_20260713_failedturn",
+    conversationEventId: "event_20260713_failedturn",
+    conversationId: "conv_20260713_failedturn",
+    tailEventId: "event_20260713_failedturn",
+    state: "failed",
+    modelUsage: "cloud",
+    sourceIds: [],
+    error: safeCallError()
+  };
+}
+
+function cancelledResult(): AgentSubmitTurnResult {
+  return {
+    requestId: "request_20260713_cancelledturn",
+    jobId: "job_20260713_cancelledturn",
+    conversationEventId: "event_20260713_cancelledturn",
+    conversationId: "conv_20260713_cancelledturn",
+    tailEventId: "event_20260713_cancelledturn",
+    state: "failed",
+    modelUsage: "cloud",
+    sourceIds: [],
+    error: {
+      code: "agent_runtime.turn_cancelled",
+      domain: "agent_runtime",
+      messageKey: "errors.agent_runtime.turn_cancelled",
+      retryable: true,
+      severity: "info",
+      userAction: "retry"
+    }
+  };
+}
+
+function draftEvent(overrides: Partial<AgentTurnDraftEvent> = {}): AgentTurnDraftEvent {
+  return {
+    apiVersion: 1,
+    kind: "draft_replace",
+    requestId: "job_20260713_streamfixture",
+    clientTurnId: "turn_20260713_streamfixture",
+    jobId: "job_20260713_streamfixture",
+    conversationId: "conv_20260713_streamfixture",
+    conversationEventId: "event_20260713_streamfixture",
+    sequence: 1,
+    text: "Safe provisional answer.",
+    ...overrides
   };
 }
 

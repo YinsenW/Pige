@@ -97,6 +97,79 @@ describe("Pi Agent runtime adapter", () => {
     expect(result.events.at(-1)?.type).toBe("agent_end");
   });
 
+  it("emits only parsed safe answer snapshots from the exact terminal Home tool", async () => {
+    const drafts: string[] = [];
+    const answer = "This bounded Home answer is safe to show while final validation finishes.";
+    const adapter = new PiAgentRuntimeAdapter({
+      fauxResponses: [{
+        kind: "tool_call",
+        toolName: "pige_finish_home_turn",
+        args: { answer, citationRefs: [], grounding: "general" }
+      }]
+    });
+
+    await adapter.run({
+      ...makeRequest([makeFinishHomeTool()]),
+      terminalDraft: {
+        toolName: "pige_finish_home_turn",
+        argumentName: "answer",
+        maxCharacters: 8_000,
+        onSnapshot: (text) => drafts.push(text)
+      }
+    });
+
+    expect(drafts.length).toBeGreaterThan(1);
+    expect(drafts.at(-1)).toBe(answer);
+    expect(drafts.every((draft) => answer.startsWith(draft))).toBe(true);
+    expect(drafts.join(" ")).not.toContain("citationRefs");
+  });
+
+  it("does not expose generic Pi text as a Home draft", async () => {
+    const drafts: string[] = [];
+    const adapter = new PiAgentRuntimeAdapter({
+      fauxResponses: [{ kind: "text", text: "Raw provider prose must never become a Home draft." }]
+    });
+
+    await adapter.run({
+      ...makeRequest([]),
+      terminalDraft: {
+        toolName: "pige_finish_home_turn",
+        argumentName: "answer",
+        maxCharacters: 8_000,
+        onSnapshot: (text) => drafts.push(text)
+      }
+    });
+
+    expect(drafts).toEqual([]);
+  });
+
+  it.each([
+    "path=/Users/alice/private/notes.md",
+    '{"apiKey":"opaque-value-123456"}',
+    "Safe words followed by a control\u0000character"
+  ])("does not emit a restricted or control-bearing terminal draft: %s", async (answer) => {
+    const drafts: string[] = [];
+    const adapter = new PiAgentRuntimeAdapter({
+      fauxResponses: [{
+        kind: "tool_call",
+        toolName: "pige_finish_home_turn",
+        args: { answer, citationRefs: [], grounding: "general" }
+      }]
+    });
+
+    await adapter.run({
+      ...makeRequest([makeFinishHomeTool()]),
+      terminalDraft: {
+        toolName: "pige_finish_home_turn",
+        argumentName: "answer",
+        maxCharacters: 8_000,
+        onSnapshot: (text) => drafts.push(text)
+      }
+    });
+
+    expect(drafts).toEqual([]);
+  });
+
   it("lets Pi recover from an unknown tool result without granting ambient capabilities", async () => {
     const calls: string[] = [];
     const published: unknown[] = [];
@@ -451,4 +524,25 @@ function makeTools(calls: string[], published: unknown[]): PigeAgentToolDefiniti
       }
     }
   ];
+}
+
+function makeFinishHomeTool(): PigeAgentToolDefinition {
+  return {
+    ...BASE_TOOL_DESCRIPTOR,
+    name: "pige_finish_home_turn",
+    label: "Finish Home turn",
+    description: "Return one bounded validated Home answer.",
+    parameters: {
+      type: "object",
+      properties: {
+        answer: { type: "string" },
+        citationRefs: { type: "array", items: { type: "string" } },
+        grounding: { type: "string" }
+      },
+      required: ["answer", "citationRefs", "grounding"],
+      additionalProperties: false
+    },
+    authorize: () => true,
+    execute: async () => ({ modelText: "Home turn finished.", details: {}, terminate: true })
+  };
 }

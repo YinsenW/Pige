@@ -105,16 +105,30 @@ describe("desktop shell build contract", () => {
   });
 
   it("wires Home questions through Pi with visible typed outcomes and no raw provider error surface", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
     const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
+    const runtimeSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/services/pi-agent-runtime-adapter.ts"),
+      "utf8"
+    );
     const homeComposer = rendererSource.slice(
       rendererSource.indexOf("function HomeComposer"),
       rendererSource.indexOf("function jobStateMessageKey")
     );
 
     expect(mainSource).toContain('ipcMain.handle("agent.submitTurn"');
+    expect(mainSource).toContain('event.sender.send("agent.turnDraft", draft)');
+    expect(mainSource).toContain("return await getHomeAgentService().submitTurn(normalizedRequest, draftContext)");
+    expect(mainSource).toContain("draftPublisher.close()");
     expect(preloadSource).toContain('ipcRenderer.invoke("agent.submitTurn", { request, filePaths })');
+    expect(preloadSource).toContain('ipcRenderer.on("agent.turnDraft", handleDraft)');
+    expect(preloadSource).toContain('ipcRenderer.removeListener("agent.turnDraft", handleDraft)');
+    expect(contractsSource).toContain("export interface AgentTurnDraftEvent");
+    expect(contractsSource).toContain("readonly onTurnDraft:");
+    expect(runtimeSource).toContain("readSafeTerminalDraft(event, request.terminalDraft)");
+    expect(runtimeSource).toContain('toolName: "pige_finish_home_turn"');
     expect(preloadSource).not.toContain('ipcRenderer.invoke("capture.submit');
     expect(preloadSource).not.toContain('ipcRenderer.invoke("retrieval.ask"');
     expect(homeComposer).toContain("window.pige.agent.submitTurn");
@@ -135,6 +149,9 @@ describe("desktop shell build contract", () => {
     expect(homeComposer).not.toContain("window.pige.capture.submitText");
     expect(homeComposer).not.toContain("window.pige.capture.submitUrl");
     expect(homeComposer).toContain("classifyTextTransportKind(turnText)");
+    expect(homeComposer).toContain('data-agent-draft="true"');
+    expect(homeComposer).toContain("aria-busy={agentDraft !== null}");
+    expect(homeComposer).toContain("event.sequence <= active.sequence");
     expect(rendererSource).toContain('view === "home" ? homeDraftText : undefined');
     expect(homeComposer).toContain("const text = props.draftText");
     expect(homeComposer).toContain("props.onDraftChange(event.target.value)");

@@ -51,6 +51,9 @@ async function runOrchestrator() {
     assert.equal(connect.secretFieldCleared, true);
     assert.equal(connect.defaultProviderLabel, PROVIDER_NAME);
     assert.equal(connect.defaultModelLabel, MODEL_ID);
+    assert.ok(connect.draftEventCount >= 1);
+    assert.equal(connect.draftFinalMatches, true);
+    assert.equal(connect.draftShapeSafe, true);
     assert.equal(connect.directVisible, true);
     assert.equal(connect.groundedVisible, true);
     assert.equal(connect.citationVisible, true);
@@ -88,7 +91,7 @@ async function runOrchestrator() {
 
     console.log(
       `Electron unified Agent roundtrip OK: persisted ${connect.providerProfileId}/${connect.modelProfileId}, ` +
-      `reopened binding, real Responses tool loop, visible direct/cited Home and preserved-source results.`
+      `reopened binding, real Responses tool loop and safe draft bridge, visible direct/cited Home and preserved-source results.`
     );
   } finally {
     await new Promise((resolve) => server.close(resolve));
@@ -323,14 +326,34 @@ async function runConnectRenderer(browserWindow, input) {
       }
 
       mark("api_turn");
-      const apiOutcome = await window.pige.agent.submitTurn({
-        text: "Verify the selected model binding.",
-        inputKind: "typed_text",
-        objective: "auto",
-        locale: "en"
-      });
+      const draftEvents = [];
+      const stopDrafts = window.pige.agent.onTurnDraft((event) => draftEvents.push(event));
+      let apiOutcome;
+      try {
+        apiOutcome = await window.pige.agent.submitTurn({
+          text: "Verify the selected model binding.",
+          inputKind: "typed_text",
+          objective: "auto",
+          locale: "en",
+          clientTurnId: "turn_20260713_roundtripdraft"
+        });
+      } finally {
+        stopDrafts();
+      }
       if (apiOutcome.state !== "completed" || apiOutcome.modelUsage === "none") {
         throw new Error("Renderer API did not use the configured model.");
+      }
+      const finalDraft = draftEvents.at(-1);
+      const draftShapeSafe = draftEvents.every((event, index) => {
+        const keys = Object.keys(event).sort().join(",");
+        return keys === "apiVersion,clientTurnId,conversationEventId,conversationId,jobId,kind,requestId,sequence,text" &&
+          event.apiVersion === 1 &&
+          event.kind === "draft_replace" &&
+          event.clientTurnId === "turn_20260713_roundtripdraft" &&
+          event.sequence === index + 1;
+      });
+      if (!finalDraft || finalDraft.text !== ${JSON.stringify(DIRECT_ANSWER)} || !draftShapeSafe) {
+        throw new Error("Safe Home draft replacement did not cross the real preload bridge.");
       }
       mark("direct_ui");
       const directVisible = await submitVisibleTurn(${JSON.stringify(DIRECT_PROMPT)}, ${JSON.stringify(DIRECT_ANSWER)});
@@ -346,6 +369,9 @@ async function runConnectRenderer(browserWindow, input) {
         secretFieldCleared: Boolean(secretFieldCleared),
         defaultProviderLabel,
         defaultModelLabel,
+        draftEventCount: draftEvents.length,
+        draftFinalMatches: finalDraft.text === ${JSON.stringify(DIRECT_ANSWER)},
+        draftShapeSafe,
         directVisible,
         groundedVisible,
         citationVisible
