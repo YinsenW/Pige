@@ -75,6 +75,27 @@ describe("toolchain service", () => {
     expect(health.tools[0]?.resolvedPath).toBeUndefined();
   });
 
+  it("accepts a public package root when package exports hide package.json", () => {
+    const manifestPath = makeManifest([
+      {
+        id: "office-openxml-parser",
+        name: "OpenXML parser",
+        required: true,
+        bundledModule: "fast-xml-parser/package.json"
+      }
+    ]);
+    const requested: string[] = [];
+    const health = new ToolchainService(manifestPath, (moduleId) => {
+      requested.push(moduleId);
+      if (moduleId.endsWith("/package.json")) throw new Error("ERR_PACKAGE_PATH_NOT_EXPORTED");
+      return `/private/node_modules/${moduleId}/lib/fxp.cjs`;
+    }).health();
+
+    expect(health.status).toBe("ready");
+    expect(health.tools[0]).toMatchObject({ id: "office-openxml-parser", status: "ready" });
+    expect(requested).toEqual(["fast-xml-parser/package.json", "fast-xml-parser"]);
+  });
+
   it("reports a missing bundled module through the same repair contract", () => {
     const manifestPath = makeManifest([
       {

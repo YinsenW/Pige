@@ -155,7 +155,9 @@ Rules:
 
 v0.1 default choices:
 
-- `electron-builder` for packaging, signing integration, and update metadata.
+- `electron-builder@26.15.3` for packaging, signing integration, and update metadata.
+- `@electron/asar@4.2.0` only for bounded build-time ASAR inspection/extraction in
+  packageability verification; it is not a packaged runtime dependency.
 - `electron-updater` for GitHub Releases based updates.
 - GitHub Releases as v0.1 update host.
 - Native Electron `autoUpdater` remains a fallback only if the packaging stack changes.
@@ -391,7 +393,23 @@ Release evidence layout:
 - Release evidence must reference fixture manifest versions, app build ID, platform, installer artifact IDs, backup manifest summary, restore result, and unresolved blockers.
 - Release evidence must not include private vault content, source bodies, raw prompts, raw model responses, secrets, tokens, or unredacted private paths.
 
-Current local evidence is limited to a macOS 26 arm64 source build and native smoke. It does not prove x64 compilation, application-resource embedding, nested release signing, hardened-runtime behavior, notarization, or installed-app discovery; those remain release blockers until CI/package artifacts provide the evidence above.
+Current packageability foundation, last reconciled 2026-07-13:
+
+- A separate `macos-26` arm64 workflow installs from the lockfile, audits runtime
+  dependencies, produces an unsigned ASAR-backed `.app` plus ZIP, runs packaged smoke,
+  and uploads the ZIP, blockmap, and body-free report.
+- The packaged smoke verifies `Pige` identity, `com.yinsenw.pige`, sandboxed
+  renderer/preload IPC, embedded Pi and cited Home turns, parser/index workers, the
+  packaged Vision helper, exact runtime attribution, CycloneDX 1.6 SBOM, license
+  resources, a 330,000,000-byte ceiling, and explicit unsigned/not-notarized state.
+- Generated package metadata contains only relative paths, hashes, counts, booleans,
+  versions, and reviewed attribution; build-only builder/ASAR tooling is excluded from
+  the runtime SBOM.
+
+This is packageability preflight, not Public Alpha release acceptance. macOS x64,
+Windows, signed nested helpers, hardened runtime, signing/notarization, DMG/NSIS and
+update metadata, installed-app memory/scale/post-heavy recovery, release notes, bundled
+Git/Bun/uv, PaddleOCR, and manual signed-platform evidence remain open.
 
 ## 17. v0.1 Release Gates
 

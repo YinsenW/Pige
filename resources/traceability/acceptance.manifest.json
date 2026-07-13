@@ -1412,7 +1412,7 @@
     },
     "PIGE-REL-001": {
       "status": "planned",
-      "plannedTarget": "Supported-platform alpha artifacts and alpha-to-alpha update report."
+      "plannedTarget": "The unsigned macOS arm64 packageability preflight is only a foundation; supported macOS/Windows alpha artifacts plus an alpha-to-alpha update report remain required."
     },
     "PIGE-REL-002": {
       "status": "verified",
@@ -1428,11 +1428,11 @@
     },
     "PIGE-REL-004": {
       "status": "planned",
-      "plannedTarget": "Scale, installer-size, idle-memory, and active-memory threshold reports."
+      "plannedTarget": "The macOS arm64 ZIP ceiling is preflight evidence only; 10,000-page/100,000-chunk scale and packaged idle, ordinary-use, and post-heavy-Job memory reports remain required."
     },
     "PIGE-REL-005": {
       "status": "planned",
-      "plannedTarget": "Platform, release-note, attribution, and signing/notarization-status reports."
+      "plannedTarget": "Deterministic attribution, CycloneDX SBOM, and explicit unsigned status are preflight foundations; supported-platform release notes plus signing/notarization reports remain required."
     },
     "PIGE-I18N-001": {
       "status": "partial",
@@ -2751,7 +2751,7 @@
       "open": { "id": "OPEN-EXIT-E9.06", "description": "Six-locale workflow smoke remains open.", "targetBuilds": ["B9.10"], "targetExits": ["E9.06"] }
     },
     "E9.07": { "status": "planned", "plannedTarget": "Keyboard, focus, accessible-name, contrast, reduced-motion, and narrow-layout report." },
-    "E9.08": { "status": "planned", "plannedTarget": "Platform, scale, installer-size, memory, attribution, release-note, and signing-status reports." },
+    "E9.08": { "status": "planned", "plannedTarget": "The unsigned macOS arm64 packageability preflight remains below exit: supported platforms, signing/notarization, installer/update, scale, memory/recovery, release-note, and final attribution evidence are still required." },
     "E9.09": { "status": "planned", "plannedTarget": "Alpha-to-alpha update and active-risky-job safeguard report." },
     "E9.10": { "status": "planned", "plannedTarget": "25-source Public Alpha scenario generated report." },
     "E9.11": {

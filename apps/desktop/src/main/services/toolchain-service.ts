@@ -48,6 +48,11 @@ function canResolveModule(moduleId: string, resolveModule: (moduleId: string) =>
   try {
     return Boolean(resolveModule(moduleId));
   } catch {
-    return false;
+    if (!moduleId.endsWith("/package.json")) return false;
+    try {
+      return Boolean(resolveModule(moduleId.slice(0, -"/package.json".length)));
+    } catch {
+      return false;
+    }
   }
 }

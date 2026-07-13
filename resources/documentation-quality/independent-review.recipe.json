@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-13T01:50:12Z",
+  "reviewedAt": "2026-07-13T02:33:24Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,12 +30,12 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "2e7652b2db5a204837ea5626cb3d0c2d944c3291919161e68f4e647a29a751e5"
+    "reviewedSha256": "5fc0993a6ef68bd0e3e4cbbdf147ba3845329aa04fe62e1dca2f16638e2f388b"
   },
   "reviewers": [
     {
-      "reviewerId": "documentation-governance-streaming-final-review",
-      "task": "/root/autonomous_tags_final_review",
+      "reviewerId": "release-packageability-final-review",
+      "task": "/root/packageability_governance_review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -43,85 +43,85 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Independent read-only review covered the exact documentation-governance candidate. It accepted retirement of two historical audits, current-state ownership in Playbook and acceptance, schema-v3 compact semantic locks with all 1,108 IDs preserved, unchanged phase and acceptance states, net-lower budgets, and a safe non-durable Home draft-replacement contract that exposes no raw provider, Pi, tool, reasoning, citation, credential, or error payload. The reviewer made no file edits."
+      "independence": "Independent read-only review audited the exact 14-Development plus 8-pre-recipe-governed candidate. It verified exact build-only builder/ASAR pins and integrities, runtime-SBOM exclusion, truthful unsigned macOS arm64 packageability scope, unchanged planned release states, explicit residual release gaps, the 1,108-claim lock, current-only Owners, and fixed budgets. It reported CLEAR on all five dimensions and made no file edits."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "documentation-governance-streaming-final-review",
+      "reviewerId": "release-packageability-final-review",
       "blockerCount": 0,
-      "summary": "The router and document map own the current library; two historical non-normative audits are removed without live references, while Git retains their rationale."
+      "summary": "Packageability uses existing Release, Technical, Quality, Playbook and acceptance owners; no document, user destination or lifecycle surface is added."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "documentation-governance-streaming-final-review",
+      "reviewerId": "release-packageability-final-review",
       "blockerCount": 0,
-      "summary": "PRD, subject Owners, Playbook, acceptance, decisions, API, UI, Job and Pi agree on current-state ownership and the safe Home draft boundary."
+      "summary": "Owners and machine manifests agree on exact builder/ASAR pins, build-only authority, runtime-SBOM exclusion, unsigned preflight scope and remaining release requirements."
     },
     {
       "id": "continuous_traceability_and_acceptance",
-      "score": 9.8,
-      "reviewerId": "documentation-governance-streaming-final-review",
+      "score": 9.7,
+      "reviewerId": "release-packageability-final-review",
       "blockerCount": 0,
-      "summary": "All 1,108 claim IDs remain independently locked, multiline phase items are fully digested, and every phase, Requirement and Exit state remains unchanged."
+      "summary": "The 1,108-claim ledger binds only four narrowed planned targets; all 10 phase, 99 Requirement and 97 Exit status values remain unchanged."
     },
     {
       "id": "ongoing_development_support",
-      "score": 9.8,
-      "reviewerId": "documentation-governance-streaming-final-review",
+      "score": 9.7,
+      "reviewerId": "release-packageability-final-review",
       "blockerCount": 0,
-      "summary": "Agents receive a smaller routed entry pack, stable Owners retain durable rules, and Playbook plus acceptance own current executable inventory and open work."
+      "summary": "The workflow, package configuration, report boundary, dependency records, exact update gates and remaining supported-platform work are directly discoverable."
     },
     {
       "id": "documentation_leanness_and_maintainability",
-      "score": 9.7,
-      "reviewerId": "documentation-governance-streaming-final-review",
+      "score": 9.8,
+      "reviewerId": "release-packageability-final-review",
       "blockerCount": 0,
-      "summary": "The library is reduced to 55 Markdown files, entry reading is 3,362 of 3,700 words, and governed Markdown is 1,112,939 of 1,210,000 bytes with no budget increase."
+      "summary": "No Markdown file was added; 55 documents, 3,385 of 3,700 entry words and 1,115,813 of 1,210,000 governed Markdown bytes remain within ratcheted budgets."
     }
   ],
   "verification": [
     {
       "command": "npm run verify",
       "status": "passed",
-      "evidence": "The final exact candidate passes documentation, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependency, fixture, boundary, no-telemetry, source-artifact and LEN-001 through LEN-005 gates."
+      "evidence": "The final exact candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, 51 dependency records with zero waivers, fixtures, Pi/import boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all five quality dimensions."
     },
     {
-      "command": "npm test",
+      "command": "exact frozen Development test/build/package matrix",
       "status": "passed",
-      "evidence": "The unchanged product code passes 80 test files plus one skipped file, with 843 passing tests and three explicitly skipped tests."
+      "evidence": "The unchanged 14-path Development aggregate 9ac112f94d18b6c5d007770a003c273c4bba7878b2c54c1eaab3750cbd186594 passed 81 files and 848 tests, typecheck, production build, source smokes, macOS arm64 packaging, packaged smoke and npm audit with zero vulnerabilities."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "Leanness gates pass with 55 Markdown files, 3,362 of 3,700 entry words, 4,522 trace lines, 224,497 of 250,000 trace bytes and 1,112,939 of 1,210,000 governed Markdown bytes."
+      "evidence": "LEN-001 through LEN-005 pass with 55 Markdown files, 3,385 of 3,700 entry words, 4,522 trace lines, 224,922 of 250,000 trace bytes and 1,115,813 of 1,210,000 governed Markdown bytes."
     },
     {
-      "command": "node scripts/verify/independent-documentation-review.mjs --print-snapshot && explicit status and semantic-ledger comparison",
+      "command": "node scripts/verify/independent-documentation-review.mjs --print-snapshot && explicit status/semantic comparison",
       "status": "passed",
-      "evidence": "The reviewed 107-file governed snapshot is 2e7652b2db5a204837ea5626cb3d0c2d944c3291919161e68f4e647a29a751e5; current and locked ledgers contain 1,108 claims, and phase, Requirement and Exit states are unchanged."
+      "evidence": "The reviewed 108-file snapshot is 5fc0993a6ef68bd0e3e4cbbdf147ba3845329aa04fe62e1dca2f16638e2f388b; the lock contains 1,108 claims and all phase, Requirement and Exit statuses are unchanged."
     }
   ],
   "coordination": {
     "taskId": "019f44e0-b6a1-7bb0-a1ca-5fb43b2725c2",
-    "taskTitle": "Documentation governance consolidation and safe Home draft streaming",
+    "taskTitle": "macOS arm64 release packageability foundation",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "This candidate changes documentation governance and defines a planned safe streaming boundary only. It does not change product code, executable behavior, phase state, Requirement state, Exit state, or packageability evidence.",
-    "acknowledgement": "Product Planning completed the user-approved three-stage documentation consolidation in one isolated worktree; independent read-only review accepted all five dimensions and the final gates bind the exact current snapshot."
+    "compatibility": "This candidate adds an unsigned macOS arm64 packageability preflight and exact build-only release dependencies. It does not claim Public Alpha readiness, alter runtime data or permission behavior, or change any phase, Requirement or Exit status.",
+    "acknowledgement": "Development froze 14 exact paths; Product Planning added eight governed paths plus this current-only recipe; independent review cleared the bounded projection and retained all supported-platform and release-hardening gaps."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "The draft_replace protocol is a planned contract with no executable evidence; PIGE-PI-005 and E3.09 remain planned and E6.01 remains partial.",
-    "Implementation must consume the typed already-parsed terminal answer snapshot and must never expose raw partial JSON, provider deltas, Pi events, reasoning, tool arguments, citations, grounding, identifiers, credentials, or raw errors.",
-    "Sender, request, client-turn, conversation, Job, user-event, monotonic-sequence, coalescing and cancellation tests remain required before streaming can be claimed executable.",
-    "Draft loss on crash or reconnect is intentional because drafts are non-durable; the UI must retain truthful pending or recovered durable state without replaying provisional text.",
-    "External or manual consumers of the semantic manifest must update for schema-v3 base64url digests even though repository gates are migrated.",
-    "Current implementation and open-work truth now depends on disciplined Playbook and acceptance updates; stable subject contracts must not regrow rolling status inventories.",
-    "Historical rationale for the two reclaimed audit files remains available through Git history rather than the active documentation library."
+    "The generated packageability report is workflow/local-run evidence and is not committed in this reviewed worktree; governance validates its recipe and bounded contract, not a stored packaged binary.",
+    "The artifact is unsigned and unnotarized; nested-helper signing, hardened runtime, notarization and installed signed-app proof remain required.",
+    "Only macOS 26 arm64 packageability is covered; macOS x64 and supported Windows packaging and runtime parity remain open.",
+    "DMG/NSIS installers, update metadata and alpha-to-alpha update behavior are not implemented or evidenced.",
+    "Packaged idle/ordinary memory, post-heavy-Job recovery and 10,000-page/100,000-chunk scale reports remain open.",
+    "Git, Bun, uv and PaddleOCR are absent from this packageability artifact and are reported as missing rather than silently claimed bundled.",
+    "Release notes, final supported-platform attribution review and manual signed installed-platform acceptance remain open."
   ]
 }

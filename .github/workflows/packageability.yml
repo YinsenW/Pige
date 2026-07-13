@@ -1,0 +1,50 @@
+name: Packageability
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  macos-arm64:
+    name: macOS 26 arm64 packageability
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24.14.0"
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Audit packaged runtime dependencies
+        run: npm audit --omit=dev
+
+      - name: Build unsigned macOS arm64 artifact
+        run: npm run package:dir:mac:arm64
+
+      - name: Smoke packaged application
+        run: npm run smoke:packaged:mac:arm64
+        env:
+          PIGE_REPORT_BUILD_ID: ${{ github.sha }}
+
+      - name: Upload packageability evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pige-macos-arm64-packageability-${{ github.sha }}
+          path: |
+            artifacts/release-packageability/macos-arm64/Pige-0.0.0-arm64.zip
+            artifacts/release-packageability/macos-arm64/Pige-0.0.0-arm64.zip.blockmap
+            artifacts/test-reports/packageability/macos-arm64/${{ github.sha }}/report.json
+          if-no-files-found: error
+          retention-days: 14

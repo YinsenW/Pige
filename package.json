@@ -25,6 +25,9 @@
     "smoke:pi-agent-runtime": "npm run smoke:electron-pi-agent --workspace @pige/desktop",
     "smoke:persisted-provider-canary": "npm run smoke:electron-persisted-provider --workspace @pige/desktop",
     "smoke:unified-agent-roundtrip": "npm run smoke:electron-unified-agent-roundtrip --workspace @pige/desktop",
+    "prepare:package:mac:arm64": "node scripts/release/prepare-package-resources.mjs --platform=macos --arch=arm64",
+    "package:dir:mac:arm64": "npm run build && npm run prepare:package:mac:arm64 && npm run package:dir:mac:arm64 --workspace @pige/desktop",
+    "smoke:packaged:mac:arm64": "node scripts/release/packaged-electron-smoke.mjs --platform=mac --arch=arm64",
     "lint": "npm run verify:boundaries",
     "format:check": "npm run verify:whitespace",
     "verify": "npm run verify:docs && npm run verify:decisions && npm run verify:ui-visual && npm run verify:independent-documentation-review && npm run verify:traceability && npm run verify:contracts && npm run verify:dependencies && npm run verify:fixtures && npm run verify:boundaries && npm run verify:no-telemetry && npm run verify:source-artifacts && npm run verify:documentation-leanness && npm run verify:documentation-quality",
@@ -56,6 +59,7 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@electron/asar": "4.2.0",
     "@types/jsdom": "28.0.3",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
@@ -63,6 +67,7 @@
     "@types/yazl": "3.3.1",
     "@vitejs/plugin-react": "5.2.0",
     "electron": "43.1.0",
+    "electron-builder": "26.15.3",
     "electron-vite": "5.0.0",
     "typescript": "7.0.2",
     "vite": "7.3.6",

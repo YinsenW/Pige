@@ -42,6 +42,18 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain('browserWindow.once("closed", () => mainWindows.delete(browserWindow));');
   });
 
+  it("never lets a packaged app replace its local renderer through a development URL", () => {
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const devRendererBranch = mainSource.slice(
+      mainSource.indexOf("if (!app.isPackaged && process.env.ELECTRON_RENDERER_URL)"),
+      mainSource.indexOf("const getLocalSettingsStore")
+    );
+
+    expect(devRendererBranch).toContain("browserWindow.loadURL(process.env.ELECTRON_RENDERER_URL)");
+    expect(devRendererBranch).toContain('browserWindow.loadFile(join(__dirname, "../renderer/index.html"))');
+    expect(mainSource).not.toContain("if (process.env.ELECTRON_RENDERER_URL)");
+  });
+
   it("guards sensitive settings in the main process before mutation", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const resetHandler = mainSource.slice(
