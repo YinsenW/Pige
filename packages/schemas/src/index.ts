@@ -815,6 +815,182 @@ export const DatasetManifestSchema = z.object({
   updatedAt: z.string().datetime({ offset: true })
 }).passthrough();
 
+const Sha256HashSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/);
+const DatasetQueryCountSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+const DatasetCitationRefIdSchema = z.string().min(1).max(64);
+const DatasetQueryDatasetIdSchema = DatasetIdSchema.max(128);
+const DatasetQueryRevisionIdSchema = DatasetRevisionIdSchema.max(128);
+const DatasetQueryTableIdSchema = TableIdSchema.max(128);
+const DatasetQueryColumnIdSchema = ColumnIdSchema.max(128);
+const DatasetQueryRowIdSchema = RowIdSchema.max(128);
+const DatasetQuerySourceIdSchema = SourceIdSchema.max(128);
+const DatasetQueryTextSchema = z.string().max(4096).refine(
+  (value) => new TextEncoder().encode(value).byteLength <= 4096,
+  "Dataset query text must not exceed 4096 UTF-8 bytes."
+);
+
+export const DatasetQueryScalarSchema = z.union([
+  DatasetQueryTextSchema,
+  z.number().finite(),
+  z.boolean(),
+  z.null()
+]);
+
+const DatasetEvidenceRangeSchema = z.object({
+  startRow: DatasetQueryCountSchema,
+  endRow: DatasetQueryCountSchema
+}).strict().superRefine((range, context) => {
+  if (range.endRow < range.startRow) {
+    context.addIssue({
+      code: "custom",
+      path: ["endRow"],
+      message: "Dataset evidence range endRow must not precede startRow."
+    });
+  }
+});
+
+export const DatasetEvidenceRefSchema = z.object({
+  datasetId: DatasetQueryDatasetIdSchema,
+  revisionId: DatasetQueryRevisionIdSchema,
+  tableId: DatasetQueryTableIdSchema,
+  schemaId: Sha256HashSchema,
+  columnIds: z.array(DatasetQueryColumnIdSchema).min(1).max(24),
+  rowIds: z.array(DatasetQueryRowIdSchema).min(1).max(50).optional(),
+  range: DatasetEvidenceRangeSchema.optional(),
+  queryPlanHash: Sha256HashSchema,
+  resultHash: Sha256HashSchema,
+  sourceId: DatasetQuerySourceIdSchema,
+  sourceRevisionHash: Sha256HashSchema
+}).strict().superRefine((evidence, context) => {
+  if (new Set(evidence.columnIds).size !== evidence.columnIds.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["columnIds"],
+      message: "Dataset evidence column IDs must be unique."
+    });
+  }
+  if (evidence.rowIds && new Set(evidence.rowIds).size !== evidence.rowIds.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["rowIds"],
+      message: "Dataset evidence row IDs must be unique."
+    });
+  }
+});
+
+export const RetrievalAnswerCitationSchema = z.object({
+  refId: z.string().min(1).max(64),
+  label: z.string().min(1).max(160),
+  pageId: PageIdSchema,
+  title: z.string().min(1).max(240),
+  pageType: MarkdownPageTypeSchema,
+  locator: z.string().min(1).max(512)
+}).strict();
+
+export const DatasetAnswerCitationSchema = z.object({
+  kind: z.literal("dataset"),
+  refId: DatasetCitationRefIdSchema,
+  label: z.string().min(1).max(160),
+  title: z.string().min(1).max(240),
+  locator: z.string().min(1).max(512),
+  evidence: DatasetEvidenceRefSchema
+}).strict();
+
+export const AgentAnswerCitationSchema = z.union([
+  RetrievalAnswerCitationSchema,
+  DatasetAnswerCitationSchema
+]);
+
+const AgentAnswerCitationsSchema = z.array(AgentAnswerCitationSchema).max(8);
+
+export const DatasetQueryPreviewColumnSchema = z.object({
+  key: z.string().min(1).max(120),
+  label: z.string().min(1).max(512),
+  logicalType: DatasetLogicalTypeSchema,
+  sourceColumnId: DatasetQueryColumnIdSchema.optional(),
+  aggregate: z.string().min(1).max(120).optional()
+}).strict();
+
+export const DatasetQueryPreviewRowSchema = z.object({
+  rowId: DatasetQueryRowIdSchema.optional(),
+  values: z.array(DatasetQueryScalarSchema).max(32)
+}).strict();
+
+export const DatasetQueryPreviewSchema = z.object({
+  datasetId: DatasetQueryDatasetIdSchema,
+  revisionId: DatasetQueryRevisionIdSchema,
+  tableId: DatasetQueryTableIdSchema,
+  tableName: z.string().min(1).max(512),
+  planHash: Sha256HashSchema,
+  resultHash: Sha256HashSchema,
+  columns: z.array(DatasetQueryPreviewColumnSchema).min(1).max(32),
+  rows: z.array(DatasetQueryPreviewRowSchema).max(50),
+  matchedRowCount: DatasetQueryCountSchema,
+  returnedRowCount: DatasetQueryCountSchema,
+  truncated: z.boolean(),
+  citationRefs: z.array(DatasetCitationRefIdSchema).min(1).max(8)
+}).strict().superRefine((preview, context) => {
+  if (preview.returnedRowCount !== preview.rows.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["returnedRowCount"],
+      message: "Dataset preview returnedRowCount must match the number of rows."
+    });
+  }
+  if (preview.matchedRowCount < preview.returnedRowCount) {
+    context.addIssue({
+      code: "custom",
+      path: ["matchedRowCount"],
+      message: "Dataset preview matchedRowCount must include every returned row."
+    });
+  }
+  if (preview.truncated !== (preview.matchedRowCount > preview.returnedRowCount)) {
+    context.addIssue({
+      code: "custom",
+      path: ["truncated"],
+      message: "Dataset preview truncation must agree with matched and returned row counts."
+    });
+  }
+  if (new Set(preview.columns.map((column) => column.key)).size !== preview.columns.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["columns"],
+      message: "Dataset preview column keys must be unique."
+    });
+  }
+  const rowIds = preview.rows.flatMap((row) => row.rowId === undefined ? [] : [row.rowId]);
+  if (new Set(rowIds).size !== rowIds.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["rows"],
+      message: "Dataset preview row IDs must be unique when present."
+    });
+  }
+  if (new Set(preview.citationRefs).size !== preview.citationRefs.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["citationRefs"],
+      message: "Dataset preview citation refs must be unique."
+    });
+  }
+  if (new TextEncoder().encode(JSON.stringify(preview)).byteLength > 64 * 1024) {
+    context.addIssue({
+      code: "custom",
+      path: [],
+      message: "Dataset preview must not exceed 65536 UTF-8 bytes."
+    });
+  }
+  preview.rows.forEach((row, index) => {
+    if (row.values.length !== preview.columns.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["rows", index, "values"],
+        message: "Dataset preview row width must match the declared columns."
+      });
+    }
+  });
+});
+
 export const ConversationEventSchema = z.object({
   schemaVersion: z.literal(1).default(1),
   id: ConversationEventIdSchema,
@@ -852,15 +1028,59 @@ export const ConversationEventSchema = z.object({
     "source",
     "insufficient_evidence"
   ]).optional(),
-  answerCitations: z.array(z.object({
-    refId: z.string().min(1).max(64),
-    label: z.string().min(1).max(160),
-    pageId: PageIdSchema,
-    title: z.string().min(1).max(240),
-    pageType: MarkdownPageTypeSchema,
-    locator: z.string().min(1).max(512)
-  }).strict()).max(8).optional()
-}).passthrough();
+  answerCitations: AgentAnswerCitationsSchema.optional(),
+  answerDatasetResult: DatasetQueryPreviewSchema.optional()
+}).passthrough().superRefine((event, context) => {
+  const citations = event.answerCitations ?? [];
+  const citationRefIds = citations.map((citation) => citation.refId);
+  if (new Set(citationRefIds).size !== citationRefIds.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["answerCitations"],
+      message: "Assistant answer citation refs must be unique."
+    });
+  }
+
+  const preview = event.answerDatasetResult;
+  if (!preview) return;
+  const datasetCitations = citations.filter(
+    (citation): citation is z.infer<typeof DatasetAnswerCitationSchema> =>
+      "kind" in citation && citation.kind === "dataset"
+  );
+  const datasetCitationsByRef = new Map(datasetCitations.map((citation) => [citation.refId, citation]));
+  for (const [index, refId] of preview.citationRefs.entries()) {
+    const citation = datasetCitationsByRef.get(refId);
+    if (!citation) {
+      context.addIssue({
+        code: "custom",
+        path: ["answerDatasetResult", "citationRefs", index],
+        message: "Dataset preview citation refs must resolve to Dataset answer citations."
+      });
+      continue;
+    }
+    const evidence = citation.evidence;
+    if (
+      evidence.datasetId !== preview.datasetId ||
+      evidence.revisionId !== preview.revisionId ||
+      evidence.tableId !== preview.tableId ||
+      evidence.queryPlanHash !== preview.planHash ||
+      evidence.resultHash !== preview.resultHash
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["answerCitations", citations.indexOf(citation), "evidence"],
+        message: "Dataset citation evidence must match the persisted preview identity and hashes."
+      });
+    }
+  }
+  if (datasetCitations.some((citation) => !preview.citationRefs.includes(citation.refId))) {
+    context.addIssue({
+      code: "custom",
+      path: ["answerDatasetResult", "citationRefs"],
+      message: "Every Dataset answer citation must be referenced by the persisted preview."
+    });
+  }
+});
 
 export const JobClassSchema = z.enum([
   "capture_batch",
@@ -1649,9 +1869,16 @@ export type CloudBoundary = z.infer<typeof CloudBoundarySchema>;
 export type CloudSendPolicy = z.infer<typeof CloudSendPolicySchema>;
 export type ConfirmationProposal = z.infer<typeof ConfirmationProposalSchema>;
 export type ConversationEvent = z.infer<typeof ConversationEventSchema>;
+export type AgentAnswerCitation = z.infer<typeof AgentAnswerCitationSchema>;
+export type DatasetAnswerCitation = z.infer<typeof DatasetAnswerCitationSchema>;
 export type DatasetColumn = z.infer<typeof DatasetColumnSchema>;
+export type DatasetEvidenceRef = z.infer<typeof DatasetEvidenceRefSchema>;
 export type DatasetLogicalType = z.infer<typeof DatasetLogicalTypeSchema>;
 export type DatasetManifest = z.infer<typeof DatasetManifestSchema>;
+export type DatasetQueryPreview = z.infer<typeof DatasetQueryPreviewSchema>;
+export type DatasetQueryPreviewColumn = z.infer<typeof DatasetQueryPreviewColumnSchema>;
+export type DatasetQueryPreviewRow = z.infer<typeof DatasetQueryPreviewRowSchema>;
+export type DatasetQueryScalar = z.infer<typeof DatasetQueryScalarSchema>;
 export type DatasetRevision = z.infer<typeof DatasetRevisionSchema>;
 export type DatasetSchemaRecord = z.infer<typeof DatasetSchemaRecordSchema>;
 export type DatasetTable = z.infer<typeof DatasetTableSchema>;
@@ -1692,6 +1919,7 @@ export type ProviderEndpointProtocol = z.infer<typeof ProviderEndpointProtocolSc
 export type ProviderAuthRequirement = z.infer<typeof ProviderAuthRequirementSchema>;
 export type ProviderProfile = z.infer<typeof ProviderProfileSchema>;
 export type ProviderProfilesFile = z.infer<typeof ProviderProfilesFileSchema>;
+export type RetrievalAnswerCitation = z.infer<typeof RetrievalAnswerCitationSchema>;
 export type SettingApplyBehavior = z.infer<typeof SettingApplyBehaviorSchema>;
 export type SettingPermissionRequirement = z.infer<typeof SettingPermissionRequirementSchema>;
 export type SettingScope = z.infer<typeof SettingScopeSchema>;

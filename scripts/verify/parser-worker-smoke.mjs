@@ -1,7 +1,10 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 import { Worker } from "node:worker_threads";
 import { ZipFile } from "yazl";
 
@@ -14,8 +17,24 @@ const pdfPageRendererWorkerPath = path.join(builtAppRoot, "out/main/workers/pdf-
 const officeWorkerPath = path.join(builtAppRoot, "out/main/workers/office-parser-worker.js");
 const webWorkerPath = path.join(builtAppRoot, "out/main/workers/web-extractor-worker.js");
 const datasetWorkerPath = path.join(builtAppRoot, "out/main/workers/dataset-ingest-worker.js");
+const datasetQueryWorkerPath = path.join(builtAppRoot, "out/main/workers/dataset-query-worker.js");
+const datasetQuerySmokeIds = Object.freeze({
+  dataset: "dataset_20260713_workersmoke01",
+  revision: "dataset_rev_20260713_workersmoke01",
+  table: "table_workersmoke01",
+  nameColumn: "column_workersmokename",
+  cohortColumn: "column_workersmokecohort",
+  amountColumn: "column_workersmokeamount"
+});
 
-for (const workerPath of [pdfWorkerPath, pdfPageRendererWorkerPath, officeWorkerPath, webWorkerPath, datasetWorkerPath]) {
+for (const workerPath of [
+  pdfWorkerPath,
+  pdfPageRendererWorkerPath,
+  officeWorkerPath,
+  webWorkerPath,
+  datasetWorkerPath,
+  datasetQueryWorkerPath
+]) {
   if (!fs.existsSync(workerPath)) {
     console.error(`Missing built parser worker: ${path.relative(root, workerPath)}. Run npm run build first.`);
     process.exit(1);
@@ -160,10 +179,168 @@ try {
   fs.rmSync(datasetSmokeRoot, { recursive: true, force: true });
 }
 
+const datasetQuerySmokeLimits = Object.freeze({
+  maxCatalogDirectoryEntries: 256,
+  maxCatalogDatasets: 16,
+  maxCatalogTables: 32,
+  maxCatalogColumns: 128,
+  maxBundleEntries: 4096,
+  maxJsonBytes: 8 * 1024 * 1024,
+  maxSourceRecordBytes: 1024 * 1024,
+  maxPayloadBytes: 512 * 1024 * 1024,
+  maxSelectedColumns: 12,
+  maxFilters: 8,
+  maxGroupByColumns: 2,
+  maxAggregates: 8,
+  maxOrderBy: 2,
+  maxReferencedColumns: 24,
+  maxFilterTextBytes: 4 * 1024,
+  maxResultRows: 50,
+  maxResultColumns: 32,
+  maxResultBytes: 64 * 1024,
+  maxCellBytes: 4 * 1024,
+  maxScanRows: 100000,
+  maxScanCells: 500000,
+  maxScanBytes: 32 * 1024 * 1024,
+  maxGroups: 1000,
+  timeoutMs: 30000,
+  workerOldGenerationMb: 256
+});
+const datasetQuerySmokeRoot = fs.mkdtempSync(path.join(os.tmpdir(), "pige-dataset-query-worker-smoke-"));
+try {
+  const payloadPath = path.join(datasetQuerySmokeRoot, "collection.sqlite");
+  createDatasetQuerySmokePayload(payloadPath);
+  const request = {
+    schemaVersion: 1,
+    requestId: "dataset-query-worker-success-smoke",
+    payloadPath,
+    binding: {
+      datasetId: datasetQuerySmokeIds.dataset,
+      revisionId: datasetQuerySmokeIds.revision,
+      schemaChecksum: `sha256:${"a".repeat(64)}`,
+      payloadChecksum: checksumFile(payloadPath)
+    },
+    table: {
+      id: datasetQuerySmokeIds.table,
+      name: "Worker smoke",
+      rowCount: 3,
+      columnCount: 3
+    },
+    columns: [
+      { id: datasetQuerySmokeIds.nameColumn, name: "Name", ordinal: 0, logicalType: "string" },
+      { id: datasetQuerySmokeIds.cohortColumn, name: "Cohort", ordinal: 1, logicalType: "string" },
+      { id: datasetQuerySmokeIds.amountColumn, name: "Amount", ordinal: 2, logicalType: "integer" }
+    ],
+    plan: {
+      selectColumnIds: [datasetQuerySmokeIds.nameColumn, datasetQuerySmokeIds.amountColumn],
+      filters: [{ columnId: datasetQuerySmokeIds.cohortColumn, op: "eq", value: "keep" }],
+      groupByColumnIds: [],
+      aggregates: [],
+      orderBy: [{ by: datasetQuerySmokeIds.amountColumn, direction: "desc" }],
+      limit: 2
+    },
+    limits: datasetQuerySmokeLimits
+  };
+  const planHash = canonicalHash("pige:dataset-query-plan:v1", {
+    schemaVersion: request.schemaVersion,
+    datasetId: request.binding.datasetId,
+    revisionId: request.binding.revisionId,
+    schemaChecksum: request.binding.schemaChecksum,
+    payloadChecksum: request.binding.payloadChecksum,
+    tableId: request.table.id,
+    selectColumnIds: request.plan.selectColumnIds,
+    filters: request.plan.filters,
+    groupByColumnIds: request.plan.groupByColumnIds,
+    aggregates: request.plan.aggregates,
+    orderBy: request.plan.orderBy,
+    limit: request.plan.limit
+  });
+  const expectedWithoutHash = {
+    planHash,
+    columns: [
+      {
+        key: datasetQuerySmokeIds.nameColumn,
+        label: "Name",
+        logicalType: "string",
+        sourceColumnId: datasetQuerySmokeIds.nameColumn
+      },
+      {
+        key: datasetQuerySmokeIds.amountColumn,
+        label: "Amount",
+        logicalType: "integer",
+        sourceColumnId: datasetQuerySmokeIds.amountColumn
+      }
+    ],
+    rows: [
+      {
+        rowId: "row_workersmokelin",
+        ordinal: 2,
+        sourceRow: 4,
+        values: ["Lin", "7"],
+        states: ["value", "value"]
+      },
+      {
+        rowId: "row_workersmokeada",
+        ordinal: 0,
+        sourceRow: 2,
+        values: ["Ada", "3"],
+        states: ["value", "value"]
+      }
+    ],
+    sourceMatchedRowCount: 2,
+    matchedRowCount: 2,
+    returnedRowCount: 2,
+    truncated: false,
+    usedColumnIds: [
+      datasetQuerySmokeIds.nameColumn,
+      datasetQuerySmokeIds.cohortColumn,
+      datasetQuerySmokeIds.amountColumn
+    ],
+    returnedRowIds: ["row_workersmokelin", "row_workersmokeada"],
+    range: { startRow: 2, endRow: 4 }
+  };
+  const expectedResult = {
+    ...expectedWithoutHash,
+    resultHash: canonicalHash("pige:dataset-query-result:v1", expectedWithoutHash)
+  };
+
+  await expectWorkerSuccess(datasetQueryWorkerPath, request, (response) =>
+    isDeepStrictEqual(response, {
+      schemaVersion: 1,
+      requestId: request.requestId,
+      ok: true,
+      result: expectedResult
+    })
+  );
+
+  const missingRequest = {
+    ...request,
+    requestId: "dataset-query-worker-missing-payload-smoke",
+    payloadPath: path.join(datasetQuerySmokeRoot, "missing.sqlite")
+  };
+  await expectWorkerError(
+    datasetQueryWorkerPath,
+    missingRequest,
+    "dataset.query.payload_unavailable",
+    (response) => isDeepStrictEqual(response, {
+      schemaVersion: 1,
+      requestId: missingRequest.requestId,
+      ok: false,
+      error: {
+        code: "dataset.query.payload_unavailable",
+        message: "The managed Dataset query snapshot is unavailable."
+      }
+    })
+  );
+} finally {
+  fs.rmSync(datasetQuerySmokeRoot, { recursive: true, force: true });
+}
+
 console.log("Built document and web parser workers loaded and returned valid protocol responses. PDF pages and selected PPTX media also materialized as bounded image bytes.");
 console.log("Built Dataset worker loaded and returned a valid bounded managed-collection import plan.");
+console.log("Built Dataset query worker projected and filtered a fixed-schema private SQLite snapshot with deterministic protocol hashes, then rejected a missing snapshot through its typed protocol.");
 
-async function expectWorkerError(workerPath, request, expectedCode) {
+async function expectWorkerError(workerPath, request, expectedCode, validate = () => true) {
   const worker = new Worker(pathToFileURL(workerPath), {
     name: `pige-smoke-${request.requestId}`,
     resourceLimits: { maxOldGenerationSizeMb: 512 }
@@ -187,7 +364,13 @@ async function expectWorkerError(workerPath, request, expectedCode) {
       });
       worker.postMessage(request);
     });
-    if (!response || response.requestId !== request.requestId || response.ok !== false || response.error?.code !== expectedCode) {
+    if (
+      !response ||
+      response.requestId !== request.requestId ||
+      response.ok !== false ||
+      response.error?.code !== expectedCode ||
+      !validate(response)
+    ) {
       throw new Error(`Unexpected worker response from ${workerPath}: ${JSON.stringify(response)}`);
     }
   } finally {
@@ -229,6 +412,134 @@ function waitForWorker(worker, workerPath, request) {
     });
     worker.postMessage(request);
   });
+}
+
+function createDatasetQuerySmokePayload(payloadPath) {
+  const database = new DatabaseSync(payloadPath);
+  try {
+    database.exec(`
+      CREATE TABLE pige_dataset_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
+      CREATE TABLE pige_dataset_tables (
+        table_id TEXT PRIMARY KEY,
+        ordinal INTEGER NOT NULL,
+        source_name TEXT NOT NULL,
+        source_locator TEXT NOT NULL,
+        source_metadata_json TEXT NOT NULL,
+        header_json TEXT NOT NULL,
+        row_count INTEGER NOT NULL,
+        column_count INTEGER NOT NULL
+      ) STRICT;
+      CREATE TABLE pige_dataset_columns (
+        column_id TEXT PRIMARY KEY,
+        table_id TEXT NOT NULL REFERENCES pige_dataset_tables(table_id),
+        ordinal INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        projected_type TEXT NOT NULL,
+        source_types_json TEXT NOT NULL,
+        stats_json TEXT NOT NULL,
+        UNIQUE(table_id, ordinal)
+      ) STRICT;
+      CREATE TABLE pige_dataset_rows (
+        row_id TEXT PRIMARY KEY,
+        table_id TEXT NOT NULL REFERENCES pige_dataset_tables(table_id),
+        ordinal INTEGER NOT NULL,
+        source_row INTEGER NOT NULL,
+        UNIQUE(table_id, ordinal)
+      ) STRICT;
+      CREATE TABLE pige_dataset_cells (
+        row_id TEXT NOT NULL REFERENCES pige_dataset_rows(row_id),
+        column_id TEXT NOT NULL REFERENCES pige_dataset_columns(column_id),
+        state TEXT NOT NULL,
+        source_type TEXT NOT NULL,
+        lexical_raw TEXT,
+        lexical_text TEXT,
+        quoted INTEGER,
+        projection_kind TEXT NOT NULL,
+        projection_json TEXT,
+        formula_json TEXT,
+        source_style_json TEXT,
+        PRIMARY KEY(row_id, column_id)
+      ) STRICT;
+    `);
+    const insertMeta = database.prepare("INSERT INTO pige_dataset_meta VALUES (?, ?)");
+    insertMeta.run("format", "pige-managed-collection-v1");
+    insertMeta.run("dataset_id", datasetQuerySmokeIds.dataset);
+    insertMeta.run("revision_id", datasetQuerySmokeIds.revision);
+    insertMeta.run("source_sha256", "c".repeat(64));
+    insertMeta.run("planner", "dataset_ingest@1");
+    database.prepare("INSERT INTO pige_dataset_tables VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(
+      datasetQuerySmokeIds.table,
+      0,
+      "Worker smoke",
+      "synthetic:worker-smoke",
+      "{}",
+      JSON.stringify(["Name", "Cohort", "Amount"]),
+      3,
+      3
+    );
+    const insertColumn = database.prepare("INSERT INTO pige_dataset_columns VALUES (?, ?, ?, ?, ?, ?, ?)");
+    for (const [id, ordinal, name, projectedType] of [
+      [datasetQuerySmokeIds.nameColumn, 0, "Name", "text"],
+      [datasetQuerySmokeIds.cohortColumn, 1, "Cohort", "text"],
+      [datasetQuerySmokeIds.amountColumn, 2, "Amount", "integer"]
+    ]) {
+      insertColumn.run(id, datasetQuerySmokeIds.table, ordinal, name, projectedType, "[]", "{}");
+    }
+    const insertRow = database.prepare("INSERT INTO pige_dataset_rows VALUES (?, ?, ?, ?)");
+    const insertCell = database.prepare("INSERT INTO pige_dataset_cells VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    for (const row of [
+      { id: "row_workersmokeada", ordinal: 0, sourceRow: 2, name: "Ada", cohort: "keep", amount: 3 },
+      { id: "row_workersmokegrace", ordinal: 1, sourceRow: 3, name: "Grace", cohort: "skip", amount: 5 },
+      { id: "row_workersmokelin", ordinal: 2, sourceRow: 4, name: "Lin", cohort: "keep", amount: 7 }
+    ]) {
+      insertRow.run(row.id, datasetQuerySmokeIds.table, row.ordinal, row.sourceRow);
+      for (const [columnId, value] of [
+        [datasetQuerySmokeIds.nameColumn, row.name],
+        [datasetQuerySmokeIds.cohortColumn, row.cohort]
+      ]) {
+        insertCell.run(
+          row.id,
+          columnId,
+          "value",
+          "text",
+          value,
+          value,
+          0,
+          "text",
+          JSON.stringify({ kind: "text", value }),
+          null,
+          null
+        );
+      }
+      const amount = String(row.amount);
+      insertCell.run(
+        row.id,
+        datasetQuerySmokeIds.amountColumn,
+        "value",
+        "integer",
+        amount,
+        amount,
+        0,
+        "integer",
+        JSON.stringify({ kind: "integer", value: amount }),
+        null,
+        null
+      );
+    }
+  } finally {
+    database.close();
+  }
+}
+
+function checksumFile(filePath) {
+  return `sha256:${createHash("sha256").update(fs.readFileSync(filePath)).digest("hex")}`;
+}
+
+function canonicalHash(domain, value) {
+  return `sha256:${createHash("sha256")
+    .update(`${domain}\0`, "utf8")
+    .update(JSON.stringify(value), "utf8")
+    .digest("hex")}`;
 }
 
 function createVectorPdf() {

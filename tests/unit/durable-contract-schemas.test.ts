@@ -2,8 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   ArtifactIdSchema,
   BackupManifestSchema,
+  ConversationEventSchema,
   ConversationEventIdSchema,
+  DatasetAnswerCitationSchema,
+  DatasetEvidenceRefSchema,
   DatasetManifestSchema,
+  DatasetQueryPreviewSchema,
+  DatasetQueryScalarSchema,
   DatasetRevisionSchema,
   DatasetSchemaRecordSchema,
   JobClassSchema,
@@ -16,7 +21,63 @@ import {
 } from "@pige/schemas";
 
 const checksum = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const planHash = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+const resultHash = "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+const sourceRevisionHash = "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
 const timestamp = "2026-07-10T00:00:00.000Z";
+
+function datasetAnswerFixture() {
+  const evidence = {
+    datasetId: "dataset_20260713_abcdef123456",
+    revisionId: "dataset_rev_20260713_abcdef123456",
+    tableId: "table_abcdef123456",
+    schemaId: checksum,
+    columnIds: ["column_abcdef123456", "column_bcdefa123456"],
+    rowIds: ["row_abcdef123456"],
+    range: { startRow: 1, endRow: 1 },
+    queryPlanHash: planHash,
+    resultHash,
+    sourceId: "src_20260713_abcdef12",
+    sourceRevisionHash
+  };
+  const citation = {
+    kind: "dataset" as const,
+    refId: "dataset_citation_1",
+    label: "[D1]",
+    title: "Regional totals",
+    locator: "dataset:regional-totals#rows:1",
+    evidence
+  };
+  const preview = {
+    datasetId: evidence.datasetId,
+    revisionId: evidence.revisionId,
+    tableId: evidence.tableId,
+    tableName: "Regional totals",
+    planHash,
+    resultHash,
+    columns: [
+      {
+        key: "region",
+        label: "Region",
+        logicalType: "string" as const,
+        sourceColumnId: evidence.columnIds[0]
+      },
+      {
+        key: "record_count",
+        label: "Records",
+        logicalType: "integer" as const,
+        sourceColumnId: evidence.columnIds[1],
+        aggregate: "count"
+      }
+    ],
+    rows: [{ rowId: evidence.rowIds[0], values: ["North", 3] }],
+    matchedRowCount: 1,
+    returnedRowCount: 1,
+    truncated: false,
+    citationRefs: [citation.refId]
+  };
+  return { citation, evidence, preview };
+}
 
 describe("durable contract schemas", () => {
   it("uses one stable ID vocabulary and rejects retired aliases", () => {
@@ -279,6 +340,149 @@ describe("durable contract schemas", () => {
       ...revision,
       source: { ...revision.source, sourceKind: "pdf_file" }
     })).toThrow();
+  });
+
+  it("keeps legacy page citations readable while accepting bounded Dataset citations and previews", () => {
+    const legacy = ConversationEventSchema.parse({
+      id: "evt_20260713_legacypage01",
+      conversationId: "conv_20260713_legacy",
+      type: "assistant_message",
+      createdAt: timestamp,
+      text: "Legacy page-grounded answer.",
+      answerGrounding: "local_knowledge",
+      answerCitations: [{
+        refId: "citation_1",
+        label: "[1]",
+        pageId: "page_20260713_abcdef12",
+        title: "Legacy page",
+        pageType: "note",
+        locator: "snippet:1"
+      }]
+    });
+    const { citation, preview } = datasetAnswerFixture();
+    const dataset = ConversationEventSchema.parse({
+      id: "evt_20260713_datasetanswer1",
+      conversationId: "conv_20260713_dataset",
+      type: "assistant_message",
+      createdAt: timestamp,
+      text: "North has three records.",
+      answerGrounding: "local_knowledge",
+      answerCitations: [citation],
+      answerDatasetResult: preview
+    });
+
+    expect(legacy.schemaVersion).toBe(1);
+    expect(legacy.answerCitations?.[0]).not.toHaveProperty("kind");
+    expect(dataset.schemaVersion).toBe(1);
+    expect(DatasetAnswerCitationSchema.parse(citation)).toEqual(citation);
+    expect(dataset.answerCitations?.[0]).toEqual(citation);
+    expect(dataset.answerDatasetResult).toEqual(preview);
+  });
+
+  it("rejects non-finite or oversized Dataset query values and unbounded preview shapes", () => {
+    const { preview } = datasetAnswerFixture();
+
+    for (const value of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      expect(() => DatasetQueryScalarSchema.parse(value)).toThrow();
+    }
+    expect(() => DatasetQueryScalarSchema.parse("x".repeat(4097))).toThrow();
+    expect(() => DatasetQueryScalarSchema.parse("😀".repeat(2048))).toThrow("UTF-8 bytes");
+    expect(() => DatasetQueryPreviewSchema.parse({
+      ...preview,
+      matchedRowCount: Number.POSITIVE_INFINITY
+    })).toThrow();
+    expect(() => DatasetQueryPreviewSchema.parse({
+      ...preview,
+      columns: Array.from({ length: 33 }, (_, index) => ({
+        key: `column_${index}`,
+        label: `Column ${index}`,
+        logicalType: "string"
+      })),
+      rows: [] as const,
+      matchedRowCount: 0,
+      returnedRowCount: 0,
+      truncated: false
+    })).toThrow();
+    expect(() => DatasetQueryPreviewSchema.parse({
+      ...preview,
+      rows: Array.from({ length: 51 }, (_, index) => ({
+        rowId: `row_${String(index).padStart(12, "0")}`,
+        values: ["North", index]
+      })),
+      matchedRowCount: 51,
+      returnedRowCount: 51
+    })).toThrow();
+    expect(() => DatasetQueryPreviewSchema.parse({
+      ...preview,
+      rows: Array.from({ length: 20 }, (_, index) => ({
+        rowId: `row_${String(index).padStart(12, "0")}`,
+        values: ["x".repeat(2000), "y".repeat(2000)]
+      })),
+      matchedRowCount: 20,
+      returnedRowCount: 20
+    })).toThrow("65536 UTF-8 bytes");
+    expect(() => DatasetQueryPreviewSchema.parse({ ...preview, rawSql: "SELECT * FROM records" })).toThrow(
+      "Unrecognized key"
+    );
+  });
+
+  it("rejects malformed Dataset identity, hashes, row widths, counts, and citation bindings", () => {
+    const { citation, evidence, preview } = datasetAnswerFixture();
+    expect(() => DatasetEvidenceRefSchema.parse({ ...evidence, datasetId: "dataset_invalid" })).toThrow();
+    expect(() => DatasetEvidenceRefSchema.parse({
+      ...evidence,
+      datasetId: `dataset_20260713_${"a".repeat(200)}`
+    })).toThrow();
+    expect(() => DatasetEvidenceRefSchema.parse({ ...evidence, schemaId: "schema_without_checksum" })).toThrow();
+    expect(() => DatasetEvidenceRefSchema.parse({ ...evidence, queryPlanHash: "sha256:not-a-hash" })).toThrow();
+    expect(() => DatasetEvidenceRefSchema.parse({
+      ...evidence,
+      columnIds: Array.from(
+        { length: 25 },
+        (_, index) => `column_${String(index).padStart(12, "0")}`
+      )
+    })).toThrow();
+    expect(() => DatasetEvidenceRefSchema.parse({
+      ...evidence,
+      range: { startRow: 2, endRow: 1 }
+    })).toThrow("endRow");
+    expect(() => DatasetQueryPreviewSchema.parse({
+      ...preview,
+      rows: [{ ...preview.rows[0], values: ["North"] }]
+    })).toThrow("row width");
+    expect(() => DatasetQueryPreviewSchema.parse({
+      ...preview,
+      returnedRowCount: 0
+    })).toThrow("returnedRowCount");
+    expect(() => DatasetQueryPreviewSchema.parse({
+      ...preview,
+      matchedRowCount: 1,
+      returnedRowCount: 1,
+      truncated: true
+    })).toThrow("truncation");
+    expect(() => ConversationEventSchema.parse({
+      id: "evt_20260713_datasetbadref",
+      conversationId: "conv_20260713_dataset",
+      type: "assistant_message",
+      createdAt: timestamp,
+      text: "Mismatched Dataset citation ref.",
+      answerGrounding: "local_knowledge",
+      answerCitations: [citation],
+      answerDatasetResult: { ...preview, citationRefs: ["dataset_citation_2"] }
+    })).toThrow("citation refs");
+    expect(() => ConversationEventSchema.parse({
+      id: "evt_20260713_datasetbadhash",
+      conversationId: "conv_20260713_dataset",
+      type: "assistant_message",
+      createdAt: timestamp,
+      text: "Mismatched Dataset result hash.",
+      answerGrounding: "local_knowledge",
+      answerCitations: [{
+        ...citation,
+        evidence: { ...evidence, resultHash: sourceRevisionHash }
+      }],
+      answerDatasetResult: preview
+    })).toThrow("match the persisted preview");
   });
 
   it("pairs cancellation request identity while allowing a durable safety fact without a request", () => {

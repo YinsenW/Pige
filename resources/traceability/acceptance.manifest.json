@@ -915,10 +915,10 @@
     },
     "PIGE-JOB-006": {
       "status": "partial",
-      "evidence": ["EV-CAPTURE", "EV-HOME-AGENT", "EV-HOME-FOLLOWUP"],
+      "evidence": ["EV-CAPTURE", "EV-HOME-AGENT", "EV-HOME-FOLLOWUP", "EV-DATASET-QUERY-DURABILITY", "EV-DATASET-QUERY-INTEGRITY"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-006",
-        "description": "Compaction, cross-process kill/reopen, and packaged history proof remain.",
+        "description": "Dataset result restart and checksum rejection work; compaction, cross-process kill/reopen, and packaged history proof remain.",
         "targetBuilds": [
           "B7.08",
           "B7.09"
@@ -1041,10 +1041,10 @@
     },
     "PIGE-SEC-005": {
       "status": "partial",
-      "evidence": ["EV-EGRESS", "EV-MODEL-EGRESS-POLICY", "EV-POLICY", "EV-DESKTOP-SETTING-GUARD", "EV-EGRESS-SERVICE", "EV-EGRESS-PROFILE-BINDING", "EV-EGRESS-RUNTIME-BINDING", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-HOME-AGENT", "EV-PI-INGEST-RETRIEVAL"],
+      "evidence": ["EV-EGRESS", "EV-MODEL-EGRESS-POLICY", "EV-POLICY", "EV-DESKTOP-SETTING-GUARD", "EV-EGRESS-SERVICE", "EV-EGRESS-PROFILE-BINDING", "EV-EGRESS-RUNTIME-BINDING", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-HOME-AGENT", "EV-PI-INGEST-RETRIEVAL", "EV-DATASET-QUERY-DRIFT-AUDIT"],
       "open": {
         "id": "OPEN-REQ-PIGE-SEC-005",
-        "description": "The ordinary_allowed default, exact connection disclosure, Home and bounded ingest-retrieval private-allow/sensitive-pre-credential gates, matrix, and audit/drift are enforced. Stricter-policy persistence/IPC/UI, confirmation resume, and remaining provider paths stay open.",
+        "description": "The ordinary_allowed default, exact connection disclosure, Home, bounded ingest retrieval, and Dataset-query privacy/drift audit gates are enforced. Stricter-policy persistence/IPC/UI, confirmation resume, and remaining provider paths stay open.",
         "targetBuilds": [
           "B3.05"
         ],
@@ -1087,10 +1087,10 @@
     },
     "PIGE-PI-001": {
       "status": "partial",
-      "evidence": ["EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-BOUNDARY", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-RETRIEVAL", "EV-PI-INGEST-UPDATE", "EV-UPDATE-RECOVERY", "EV-PI-INGEST-PROPOSAL", "EV-PI-URL-INGRESS", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY", "EV-PI-DATASET-INGEST"],
+      "evidence": ["EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-BOUNDARY", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-RETRIEVAL", "EV-PI-INGEST-UPDATE", "EV-UPDATE-RECOVERY", "EV-PI-INGEST-PROPOSAL", "EV-PI-URL-INGRESS", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY", "EV-PI-DATASET-INGEST", "EV-PI-DATASET-QUERY", "EV-DATASET-QUERY-CORE", "EV-DATASET-QUERY-WORKER-SMOKE"],
       "open": {
         "id": "OPEN-REQ-PIGE-PI-001",
-        "description": "Hash-bound exact create/additive-update recovery/Undo works; broader eligibility, routes, Broker, and packaged BYOK remain.",
+        "description": "Hash-bound create/update recovery and one bounded Dataset-query route work; broader eligibility, query composition, Broker, and packaged BYOK remain.",
         "targetBuilds": ["B3.06", "B3.13"],
         "targetExits": ["E3.04", "E3.08"]
       }
@@ -1285,10 +1285,10 @@
     },
     "PIGE-CONTEXT-001": {
       "status": "partial",
-      "evidence": ["EV-CONTEXT", "EV-AGENT-EVIDENCE-REVISION", "EV-HOME-AGENT", "EV-PI-INGEST-RETRIEVAL"],
+      "evidence": ["EV-CONTEXT", "EV-AGENT-EVIDENCE-REVISION", "EV-HOME-AGENT", "EV-PI-INGEST-RETRIEVAL", "EV-DATASET-QUERY-SERVICE", "EV-DATASET-QUERY-DRIFT-AUDIT"],
       "open": {
         "id": "OPEN-REQ-PIGE-CONTEXT-001",
-        "description": "Home and one bounded ingest-retrieval path are integrated; Note Agent, selection, memory, and compaction paths remain.",
+        "description": "Home, bounded ingest retrieval, and one bound Dataset-query path are integrated; Note Agent, mixed-source selection, memory, and compaction remain.",
         "targetBuilds": [
           "B6.04"
         ],
@@ -1299,10 +1299,10 @@
     },
     "PIGE-CONTEXT-002": {
       "status": "partial",
-      "evidence": ["EV-CONTEXT", "EV-HOME-AGENT", "EV-PI-INGEST-RETRIEVAL"],
+      "evidence": ["EV-CONTEXT", "EV-HOME-AGENT", "EV-PI-INGEST-RETRIEVAL", "EV-DATASET-QUERY-SERVICE", "EV-DATASET-QUERY-DURABILITY", "EV-DATASET-QUERY-INTEGRITY"],
       "open": {
         "id": "OPEN-REQ-PIGE-CONTEXT-002",
-        "description": "Home and one bounded ingest-retrieval path are integrated; Note Agent, selection, memory, and compaction paths remain.",
+        "description": "Home, bounded ingest retrieval, and exact Dataset preview/citation packs are integrated; Note Agent, mixed-source selection, memory, and compaction remain.",
         "targetBuilds": [
           "B6.04"
         ],
@@ -1692,11 +1692,12 @@
     "PIGE-UI-003": {
       "status": "partial",
       "evidence": [
-        "EV-APP-SHELL"
+        "EV-APP-SHELL",
+        "EV-DATASET-QUERY-UI"
       ],
       "open": {
         "id": "OPEN-REQ-PIGE-UI-003",
-        "description": "Unified Agent-first Home, continuity, Library depth, and six-locale acceptance remain open.",
+        "description": "Home renders one escaped accessible Dataset result; broader continuity, Library depth, and six-locale acceptance remain open.",
         "targetBuilds": [
           "B1.03",
           "B1.07",
@@ -2611,10 +2612,10 @@
     },
     "E6.01": {
       "status": "partial",
-      "evidence": ["EV-RETRIEVAL", "EV-HOME-AGENT", "EV-HOME-UI", "EV-HOME-DRAFT-ADAPTER", "EV-HOME-DRAFT-PUBLISHER", "EV-HOME-DRAFT-UI", "EV-PI-ELECTRON-SMOKE"],
+      "evidence": ["EV-RETRIEVAL", "EV-HOME-AGENT", "EV-HOME-UI", "EV-HOME-DRAFT-ADAPTER", "EV-HOME-DRAFT-PUBLISHER", "EV-HOME-DRAFT-UI", "EV-PI-ELECTRON-SMOKE", "EV-PI-DATASET-QUERY", "EV-DATASET-QUERY-UI"],
       "open": {
         "id": "OPEN-EXIT-E6.01",
-        "description": "Ranked retrieval and safe terminal-answer draft replacement work; 10k, source-ingest/multi-window draft boundaries, and signed installed macOS/Windows UI remain open.",
+        "description": "Ranked retrieval, safe draft replacement, and one bounded Dataset table work; 10k, mixed-source/query breadth, and signed installed macOS/Windows UI remain open.",
         "targetBuilds": [
           "B6.01",
           "B6.02"
@@ -2630,10 +2631,10 @@
     },
     "E6.03": {
       "status": "partial",
-      "evidence": ["EV-CONTEXT", "EV-AGENT-EVIDENCE-REVISION", "EV-HOME-AGENT", "EV-PI-INGEST-RETRIEVAL"],
+      "evidence": ["EV-CONTEXT", "EV-AGENT-EVIDENCE-REVISION", "EV-HOME-AGENT", "EV-PI-INGEST-RETRIEVAL", "EV-DATASET-QUERY-SERVICE", "EV-DATASET-QUERY-DRIFT-AUDIT", "EV-DATASET-QUERY-DURABILITY"],
       "open": {
         "id": "OPEN-EXIT-E6.03",
-        "description": "Home and one bounded ingest-retrieval selected-evidence/privacy path are proven; Note Agent, selection, memory, compaction, and remote packs remain open.",
+        "description": "Home, bounded ingest retrieval, and one Dataset selected-evidence/privacy path are proven; Note Agent, mixed selection, memory, compaction, and remote packs remain open.",
         "targetBuilds": [
           "B6.04"
         ],
@@ -3020,6 +3021,14 @@
     "EV-DATASET-SERVICE": { "kind": "test", "path": "tests/unit/dataset-service.test.ts", "selector": "Dataset Service" },
     "EV-PI-DATASET-INGEST": { "kind": "test", "path": "tests/unit/agent-led-dataset-ingest.test.ts", "selector": "Agent-selected Dataset ingest tool" },
     "EV-DATASET-WORKER-SMOKE": { "kind": "verifier", "path": "scripts/verify/parser-worker-smoke.mjs", "selector": "Built Dataset worker loaded and returned a valid bounded managed-collection import plan." },
+    "EV-DATASET-QUERY-CORE": { "kind": "test", "path": "tests/unit/dataset-query-core.test.ts", "selector": "Dataset query core" },
+    "EV-DATASET-QUERY-SERVICE": { "kind": "test", "path": "tests/unit/dataset-query-service.test.ts", "selector": "Dataset Query Service" },
+    "EV-DATASET-QUERY-DRIFT-AUDIT": { "kind": "test", "path": "tests/unit/dataset-query-service.test.ts", "selector": "writes a replacement egress audit before blocking real Dataset privacy drift" },
+    "EV-PI-DATASET-QUERY": { "kind": "test", "path": "tests/unit/home-agent-service.test.ts", "selector": "lets Pi catalog and query one bounded Dataset before returning exact Dataset citations" },
+    "EV-DATASET-QUERY-DURABILITY": { "kind": "test", "path": "tests/unit/agent-turn-conversation-store.test.ts", "selector": "persists and restarts an exact bounded Dataset citation and preview roundtrip" },
+    "EV-DATASET-QUERY-INTEGRITY": { "kind": "test", "path": "tests/unit/agent-turn-conversation-store.test.ts", "selector": "fails assistant integrity when persisted Dataset preview or citation content is tampered" },
+    "EV-DATASET-QUERY-UI": { "kind": "test", "path": "tests/unit/home-agent-conversation-ui.test.ts", "selector": "renders a bounded Agent-selected Dataset result as an accessible table with exact citations" },
+    "EV-DATASET-QUERY-WORKER-SMOKE": { "kind": "verifier", "path": "scripts/verify/parser-worker-smoke.mjs", "selector": "Built Dataset query worker projected and filtered a fixed-schema private SQLite snapshot with deterministic protocol hashes, then rejected a missing snapshot through its typed protocol." },
     "EV-PI-INGEST-RETRIEVAL": { "kind": "test", "path": "tests/unit/agent-led-ingest-retrieval.test.ts", "selector": "Agent-selected ingest retrieval tool" },
     "EV-PI-INGEST-UPDATE": { "kind": "test", "path": "tests/unit/agent-led-ingest-retrieval.test.ts", "selector": "lets real Pi select one related managed note update with a durable checkpoint and no create fallback" },
     "EV-UPDATE-RECOVERY": { "kind": "test", "path": "tests/unit/agent-led-ingest-retrieval.test.ts", "selector": "retries a page-first Agent update through Jobs without runtime config, credentials, or another Pi turn" },

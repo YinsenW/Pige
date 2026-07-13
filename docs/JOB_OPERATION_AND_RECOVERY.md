@@ -126,6 +126,13 @@ conversation event, Job output, checkpoint, recovery input, or assistant truth. 
 fully validated assistant event and terminal Job result survive restart. Cancellation or
 failure stops further draft delivery and cannot promote the last draft to durable output.
 
+A validated Home Dataset answer stores one bounded preview and exact Dataset citation in
+the checksum-bound assistant event. Its `agent_turn` output refs bind source, Dataset,
+revision, table, and assistant checksum; restart adopts the same event without another
+query/model turn, while preview or citation tampering fails timeline/history recovery.
+Whole Dataset payloads, SQL, paths, handles, and raw provider output never enter the Job
+or conversation record.
+
 Jobs may have parent-child structure:
 
 - A multi-file drop creates one parent `capture_batch` job and one child job per source.

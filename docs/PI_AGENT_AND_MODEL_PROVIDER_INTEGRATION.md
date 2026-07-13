@@ -297,8 +297,16 @@ SQL, table-selection, source-ID, or destination authority. The Host binds the ex
 source revision and deterministic `dataset_import` child; a bounded worker produces an
 untrusted plan, Dataset Service independently validates it and commits one versioned
 Bundle plus `create_dataset_revision` Operation. The typed result terminates that ingest
-turn without a hidden parse, query, or note workflow. Dataset query and editing tools
-remain later-phase registry work.
+turn without a hidden parse, query, or note workflow.
+
+Home also registers `pige_query_dataset@1` as an optional read-only tool. Pi may request
+one bounded opaque catalog, then one strict typed query, then a validated terminal answer.
+The Host owns vault/Dataset/revision/schema/payload/privacy bindings, query limits, worker
+execution, result hashes, and citations; Pi receives no SQL, path, handle, extension, or
+whole-payload authority. Readable drift supplies only a neutral stale marker for current
+body-free audit classification and stops before another model turn. Dataset editing,
+derived views, joins, multi-Dataset composition, and other structured tools remain later
+registry work.
 
 The model sees only bounded descriptors. Calls bind run/call, catalog/policy/source,
 tool-version, and input hashes; results carry typed refs, warnings, and provenance while

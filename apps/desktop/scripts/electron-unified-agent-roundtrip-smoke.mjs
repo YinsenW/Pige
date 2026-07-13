@@ -359,7 +359,10 @@ async function runConnectRenderer(browserWindow, input) {
       const directVisible = await submitVisibleTurn(${JSON.stringify(DIRECT_PROMPT)}, ${JSON.stringify(DIRECT_ANSWER)});
       mark("grounded_ui");
       const groundedVisible = await submitVisibleTurn(${JSON.stringify(GROUNDING_PROMPT)}, ${JSON.stringify(GROUNDED_ANSWER)});
-      const citationVisible = document.querySelector(".retrieval-citations") !== null;
+      const citationVisible = await waitFor(
+        () => document.querySelector(".retrieval-citations") ? true : undefined,
+        "visible Home citations"
+      );
       return {
         bindingState: summary.defaultBinding.state,
         providerProfileId: summary.defaultBinding.providerProfileId,

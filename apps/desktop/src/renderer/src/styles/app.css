@@ -788,6 +788,96 @@ button.ghost {
   font-size: 12px;
 }
 
+.dataset-answer {
+  width: min(100%, 1120px);
+  min-width: 0;
+  justify-self: center;
+  display: grid;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.dataset-answer-header {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+  border-bottom: 1px solid var(--border-light);
+  padding: 4px 0 12px;
+}
+
+.dataset-answer-header > div {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.dataset-answer-count {
+  margin: 0;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.dataset-table-scroll {
+  min-width: 0;
+  max-width: 100%;
+  overflow: auto;
+  border-block: 1px solid var(--border-light);
+}
+
+.dataset-table-scroll:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.dataset-table {
+  width: 100%;
+  min-width: max-content;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.dataset-table caption {
+  padding: 10px 8px;
+  color: var(--text-primary);
+  font-weight: 600;
+  text-align: left;
+}
+
+.dataset-table th,
+.dataset-table td {
+  max-width: 320px;
+  padding: 8px;
+  border-top: 1px solid var(--border-light);
+  color: var(--text-primary);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.dataset-table th {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.dataset-citations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.dataset-citations span {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .retrieval-header {
   min-width: 0;
   display: grid;
@@ -1637,8 +1727,13 @@ dd {
   }
 
   .library-header,
-  .retrieval-header {
+  .retrieval-header,
+  .dataset-answer-header {
     grid-template-columns: 1fr;
+  }
+
+  .dataset-answer-count {
+    white-space: normal;
   }
 
   .library-row-meta,

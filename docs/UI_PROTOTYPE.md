@@ -490,8 +490,10 @@ Behavior:
   highlighted evidence in Library. Drafts carry none. Never expose SQL, engine names,
   query hashes, schema IDs, or internal paths.
 
-Current delivery and open Home recovery work are projected by the Playbook and acceptance
-manifest; this owner defines the mode-free conversation interaction.
+Current Home can render one Agent-selected Dataset result as an escaped accessible table
+with exact citations inside the conversation. Independent Dataset browsing/paging,
+citation-open highlighting, formula/warning detail, large-table polish, and packaged
+platform proof remain open; the Playbook and acceptance manifest own delivery evidence.
 
 ## 8. Note Reader
 

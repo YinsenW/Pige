@@ -67,6 +67,7 @@ import { CoalescedBatchDrainer } from "./services/background-job-drainer";
 import { CaptureService } from "./services/capture-service";
 import { DiagnosticsService } from "./services/diagnostics-service";
 import { DatasetIngestWorkerService } from "./services/dataset-ingest-worker-service";
+import { DatasetQueryService } from "./services/dataset-query-service";
 import { DatasetService } from "./services/dataset-service";
 import { DocumentParserService } from "./services/document-parser-service";
 import {
@@ -123,6 +124,7 @@ let notesService: NotesService | undefined;
 let proposalService: ProposalService | undefined;
 let retrievalService: RetrievalService | undefined;
 let documentParserService: DocumentParserService | undefined;
+let datasetQueryService: DatasetQueryService | undefined;
 let datasetService: DatasetService | undefined;
 let ocrService: OcrService | undefined;
 let latestSupportBundlePreview: SupportBundlePreview | undefined;
@@ -286,6 +288,11 @@ const getDatasetService = (): DatasetService => {
   return datasetService;
 };
 
+const getDatasetQueryService = (): DatasetQueryService => {
+  if (!datasetQueryService) datasetQueryService = new DatasetQueryService();
+  return datasetQueryService;
+};
+
 const getOcrService = (): OcrService => {
   if (!ocrService) ocrService = new OcrService();
   return ocrService;
@@ -369,7 +376,8 @@ const getHomeAgentService = (): HomeAgentService => {
       undefined,
       { snapshot: getAgentCapabilitySnapshot },
       undefined,
-      getHomeAgentUrlService()
+      getHomeAgentUrlService(),
+      getDatasetQueryService()
     );
   }
   return homeAgentService;

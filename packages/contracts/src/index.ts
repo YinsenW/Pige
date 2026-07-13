@@ -5,6 +5,7 @@ import type {
   CloudSendPolicy,
   ChangeOperation,
   ConfirmationProposal,
+  DatasetLogicalType,
   Locale,
   JobClass,
   JobRecord,
@@ -663,6 +664,64 @@ export interface RetrievalAnswerCitation {
   readonly locator: string;
 }
 
+export type DatasetQueryScalar = string | number | boolean | null;
+
+export interface DatasetEvidenceRef {
+  readonly datasetId: string;
+  readonly revisionId: string;
+  readonly tableId: string;
+  readonly schemaId: string;
+  readonly columnIds: readonly string[];
+  readonly rowIds?: readonly string[] | undefined;
+  readonly range?: {
+    readonly startRow: number;
+    readonly endRow: number;
+  } | undefined;
+  readonly queryPlanHash: string;
+  readonly resultHash: string;
+  readonly sourceId: string;
+  readonly sourceRevisionHash: string;
+}
+
+export interface DatasetAnswerCitation {
+  readonly kind: "dataset";
+  readonly refId: string;
+  readonly label: string;
+  readonly title: string;
+  readonly locator: string;
+  readonly evidence: DatasetEvidenceRef;
+}
+
+export type AgentAnswerCitation = RetrievalAnswerCitation | DatasetAnswerCitation;
+
+export interface DatasetQueryPreviewColumn {
+  readonly key: string;
+  readonly label: string;
+  readonly logicalType: DatasetLogicalType;
+  readonly sourceColumnId?: string | undefined;
+  readonly aggregate?: string | undefined;
+}
+
+export interface DatasetQueryPreviewRow {
+  readonly rowId?: string | undefined;
+  readonly values: readonly DatasetQueryScalar[];
+}
+
+export interface DatasetQueryPreview {
+  readonly datasetId: string;
+  readonly revisionId: string;
+  readonly tableId: string;
+  readonly tableName: string;
+  readonly planHash: string;
+  readonly resultHash: string;
+  readonly columns: readonly DatasetQueryPreviewColumn[];
+  readonly rows: readonly DatasetQueryPreviewRow[];
+  readonly matchedRowCount: number;
+  readonly returnedRowCount: number;
+  readonly truncated: boolean;
+  readonly citationRefs: readonly string[];
+}
+
 export interface RetrievalAskResult extends RetrievalSearchResult {
   readonly answeredAt: string;
   readonly answer: string;
@@ -715,8 +774,9 @@ export interface AgentSubmitTurnRequest {
 export interface AgentTurnAnswer {
   readonly answer: string;
   readonly grounding: "general" | "local_knowledge" | "source" | "insufficient_evidence";
-  readonly citations: readonly RetrievalAnswerCitation[];
+  readonly citations: readonly AgentAnswerCitation[];
   readonly retrieval?: RetrievalSearchResult;
+  readonly datasetResult?: DatasetQueryPreview | undefined;
 }
 
 export type AgentSubmitTurnResult =
