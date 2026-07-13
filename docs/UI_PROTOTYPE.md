@@ -208,6 +208,9 @@ Behavior:
 
 - No required sidebar, no required category picker, no upfront mode selection.
 - The bottom composer is the only dominant control.
+- `Enter` sends one non-empty Home turn. `Shift+Enter` inserts a newline; Enter during
+  IME composition or its immediate completion race never submits. Repeat or in-flight
+  input cannot create a duplicate turn, and the visible Send button remains available.
 - Menu and settings are present but visually quiet.
 - User can type a question, paste a URL, paste long text, attach a file, or drag files anywhere onto the window.
 - On supported macOS versions, the microphone button starts voice dictation into the same input.

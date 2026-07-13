@@ -1109,7 +1109,7 @@ app.whenReady().then(async () => {
     () => getModelProviderRegistry().hasDefaultRuntimeBinding()
   );
   windowModeService = new WindowModeService(getLocalSettingsStore());
-  localDatabaseService = new LocalDatabaseService();
+  localDatabaseService = new LocalDatabaseService(undefined, new LocalDatabaseRebuildWorkerService());
   backupRestoreService = new BackupRestoreService();
   agentRuntimeService = new AgentRuntimeService(
     getVaultService(),
@@ -1164,6 +1164,7 @@ function resolveToolchainManifestPath(): string {
   const fallback = join(process.cwd(), "resources/toolchain-manifest/toolchain.manifest.json");
   const candidates = [
     join(process.resourcesPath, "toolchain-manifest/toolchain.manifest.json"),
+    join(process.cwd(), "../../resources/toolchain-manifest/toolchain.manifest.json"),
     fallback,
     join(app.getAppPath(), "resources/toolchain-manifest/toolchain.manifest.json"),
     join(app.getAppPath(), "../../resources/toolchain-manifest/toolchain.manifest.json")

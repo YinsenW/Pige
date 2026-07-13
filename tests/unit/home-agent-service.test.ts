@@ -140,7 +140,10 @@ describe("Home Pi Agent service", () => {
       makeRetrievalPort(fixture.vault.vaultId),
       new JobsService(fixture.vaults),
       new PiAgentRuntimeAdapter({
-        fauxResponses: [finishHome({ answer, citationRefs: [], grounding: "general" })]
+        fauxResponses: [
+          finishHome({ answer, citationRefs: [], grounding: "general" }),
+          { kind: "text", text: answer }
+        ]
       })
     );
 

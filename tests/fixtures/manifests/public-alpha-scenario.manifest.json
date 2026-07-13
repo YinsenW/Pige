@@ -1,4 +1,22 @@
 {
   "schemaVersion": 1,
-  "fixtures": []
+  "fixtures": [
+    {
+      "id": "electron-public-alpha-continuity",
+      "path": "apps/desktop/scripts/electron-unified-agent-roundtrip-smoke.mjs",
+      "kind": "scripted-electron-public-alpha-mainflow",
+      "license": "Apache-2.0 (Pige synthetic fixture)",
+      "expectedOutputRefs": [
+        "package.json",
+        "apps/desktop/package.json"
+      ],
+      "redactionStatus": "synthetic_no_sensitive_data",
+      "sizeClass": "small",
+      "requiredPlatformCapabilities": [
+        "electron"
+      ],
+      "owner": "Release and Public Alpha",
+      "updatePolicy": "Update with the real Provider, Home, source, Dataset, restart, Activity, and Undo Electron scenario."
+    }
+  ]
 }

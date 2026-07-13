@@ -57,7 +57,7 @@ export class OfficeParserWorkerAdapter implements OfficeTextExtractor {
     try {
       return Boolean(
         this.#resolveModule("mammoth/package.json") &&
-        this.#resolveModule("fast-xml-parser/package.json") &&
+        this.#resolveModule("fast-xml-parser") &&
         this.#resolveModule("yauzl/package.json")
       );
     } catch {

@@ -60,7 +60,8 @@ These targets are baseline test fixtures. Real-world results depend on machine c
 Draft-stream rules:
 
 - Record submit-to-first-safe-draft and final-answer latency separately. Provider/network
-  time may vary, but Pige's parsed-snapshot-to-render overhead must stay within the table.
+  time may vary, but Pige's first eligible safe-material-to-render overhead must stay
+  within the table for both incremental-argument and post-validation presentation paths.
 - Draft replacement is coalesced and bounded; it must not block typing, duplicate text,
   rerender the whole timeline, or grow memory with every intermediate snapshot.
 - Cancellation stops draft delivery promptly. Restart loads no provisional buffer and

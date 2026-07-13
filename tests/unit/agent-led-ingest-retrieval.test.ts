@@ -1091,7 +1091,7 @@ describe("Agent-selected ingest retrieval tool", () => {
     const restarted = new JobsService(
       fixture.vaultPort,
       new AgentIngestService(
-        modelPort(localRuntimeConfig, () => { runtimeConfigReads += 1; }),
+        unavailableModelPort(() => { runtimeConfigReads += 1; }),
         new FunctionalRuntime(async () => {
           runtimeCalls += 1;
           throw new Error("Recovery must not enter Pi.");
@@ -2901,6 +2901,20 @@ function modelPort(
     getDefaultRuntimeConfig: () => {
       onRuntimeConfigRead();
       return runtimeConfig;
+    }
+  };
+}
+
+function unavailableModelPort(
+  onRuntimeConfigRead: () => void = () => undefined
+): AgentIngestModelConfigPort {
+  return {
+    getDefaultModel: () => undefined,
+    getDefaultProvider: () => undefined,
+    hasDefaultRuntimeBinding: () => false,
+    getDefaultRuntimeConfig: () => {
+      onRuntimeConfigRead();
+      return undefined;
     }
   };
 }

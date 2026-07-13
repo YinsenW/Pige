@@ -347,18 +347,26 @@ messages/64 KiB; history cannot become the current result. Pige events/Jobs, not
 sessions, are authoritative. Compaction/indexing and steer queues remain open.
 
 Home draft streaming is a Host-owned presentation boundary, not raw Pi/provider output.
-Only an exact `pige_finish_home_turn` update may contribute, and only its already-parsed,
-bounded `answer` string after control/restricted-content filtering. Pige emits a
-sender/turn/Job-bound, monotonically sequenced `draft_replace` snapshot; it never emits
-thinking, generic assistant prose, raw JSON/tool arguments, provider events, model refs,
-grounding, or citations. Replacement snapshots may shrink or revise prior text.
+The preferred path accepts only already-parsed, bounded `answer` snapshots from the exact
+`pige_finish_home_turn` call after control/restricted-content filtering. When a provider
+does not expose useful incremental tool arguments, successful execution of that exact
+terminal tool may open one presentation-only Pi turn: further tools are blocked, and only
+assistant-text prefixes of the already validated answer are accepted until the text
+matches it exactly. Any alteration, incomplete reproduction, or unusable long-answer
+stream fails closed instead of silently becoming completion-only output.
+
+Both paths emit sender/turn/Job-bound, monotonically sequenced `draft_replace` snapshots.
+Pige never emits pre-authorization assistant prose, thinking, raw JSON/tool arguments,
+provider events, model refs, grounding, or citations. Replacement snapshots may shrink
+or revise prior text. The presentation fallback may make one additional provider turn;
+it grants no new tool, data, or destination authority.
 
 The draft is escaped, non-durable, and non-authoritative. Full output schema, evidence,
 source revision, grounding, and citations still validate before the assistant event and
 Job result commit. That durable final replaces the draft; failure/cancellation removes or
 marks it, cancellation ends the stream, and restart restores only durable conversation
-state. Pi `text_delta` is not a Home answer because the answer belongs to the terminal
-tool argument.
+state. Ambient Pi `text_delta` is never a Home answer; text deltas are eligible only in
+the exact post-validation presentation phase and must reproduce the authorized answer.
 
 Agent memory:
 

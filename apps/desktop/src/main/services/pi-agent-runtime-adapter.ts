@@ -179,7 +179,9 @@ const MAX_HISTORY_MESSAGES = 16;
 const MAX_HISTORY_UTF8_BYTES = 64 * 1024;
 const KEYLESS_PROVIDER_TRANSPORT_SENTINEL = "pige-keyless-provider";
 const MAX_TURN_EVENTS = 512;
-const MIN_PARTIAL_DRAFT_CHARACTERS = 32;
+const MIN_INCREMENTAL_DRAFT_SPAN_MS = 80;
+const DRAFT_PUBLISH_SETTLE_MS = 90;
+const AUTHORIZED_DRAFT_PREFIX_CHARACTERS = 32;
 export const MAX_PIGE_TOOL_CALL_ID_UTF8_BYTES = 256;
 
 const PIGE_AGENT_TOOL_CATALOG_HASH_DOMAIN = "pige.agent_tool_catalog.v1";
@@ -213,6 +215,7 @@ export class PiAgentRuntimeAdapter {
     const binding = this.#createBinding(request.runtimeConfig);
     const history = createPiHistoryMessages(request.history ?? [], binding.model);
     const toolsByName = new Map(tools.map((tool) => [tool.name, tool]));
+    const terminalDrafts = new SafeTerminalDraftController(request.terminalDraft);
     const events: PiAgentEventRecord[] = [];
     const invokedTools: string[] = [];
     let hasBeforeModelTurnFailure = false;
@@ -231,7 +234,10 @@ export class PiAgentRuntimeAdapter {
         systemPrompt: request.systemPrompt,
         model: binding.model,
         thinkingLevel: "off",
-        tools: tools.map(toPiTool),
+        tools: tools.map((tool) => toPiTool(tool, {
+          afterExecute: (executedTool, args, result) =>
+            terminalDrafts.afterToolExecute(executedTool, args, result)
+        })),
         messages: history
       },
       streamFn: (model, context, options) => binding.streamSimple(model, context, options),
@@ -244,6 +250,9 @@ export class PiAgentRuntimeAdapter {
         return undefined;
       },
       beforeToolCall: async ({ toolCall, args }) => {
+        if (terminalDrafts.blocksToolCalls()) {
+          return { block: true, reason: "Pige authorized answer presentation; no further tool call is allowed." };
+        }
         const tool = toolsByName.get(toolCall.name);
         if (!tool) {
           return { block: true, reason: "The requested tool is not registered for this Pige action." };
@@ -266,14 +275,7 @@ export class PiAgentRuntimeAdapter {
       }
       const record = toEventRecord(event);
       events.push(record);
-      const terminalDraft = readSafeTerminalDraft(event, request.terminalDraft);
-      if (terminalDraft !== undefined) {
-        try {
-          request.terminalDraft?.onSnapshot(terminalDraft);
-        } catch {
-          // Presentation delivery is non-authoritative and cannot fail the Pi turn.
-        }
-      }
+      terminalDrafts.observe(event);
       if (event.type === "tool_execution_start") invokedTools.push(event.toolName);
     });
     const onAbort = (): void => agent.abort();
@@ -287,6 +289,7 @@ export class PiAgentRuntimeAdapter {
       await runBeforeModelTurn();
       if (request.signal?.aborted) throw createAbortError();
       await agent.prompt(request.userPrompt);
+      await terminalDrafts.assertCompleteAndSettle();
       if (request.signal?.aborted) throw createAbortError();
       if (hasBeforeModelTurnFailure) throw beforeModelTurnFailure;
       if (agent.state.errorMessage) {
@@ -557,7 +560,18 @@ class ScopedCredentialStore implements CredentialStore {
   }
 }
 
-function toPiTool(tool: PigeAgentToolDescriptor): AgentTool<TSchema, Readonly<Record<string, unknown>>> {
+interface PiToolExecutionHooks {
+  readonly afterExecute: (
+    tool: PigeAgentToolDescriptor,
+    args: unknown,
+    result: PigeAgentToolResult
+  ) => PigeAgentToolResult | Promise<PigeAgentToolResult>;
+}
+
+function toPiTool(
+  tool: PigeAgentToolDescriptor,
+  hooks?: PiToolExecutionHooks
+): AgentTool<TSchema, Readonly<Record<string, unknown>>> {
   return {
     name: tool.name,
     label: tool.label,
@@ -571,10 +585,12 @@ function toPiTool(tool: PigeAgentToolDescriptor): AgentTool<TSchema, Readonly<Re
       assertToolInputWithinLimit(args, tool.limits.maxInputBytes);
       const result = await tool.execute(args, effectiveSignal, context);
       assertPigeAgentToolResult(result, tool.limits.maxOutputBytes);
+      const presentedResult = hooks ? await hooks.afterExecute(tool, args, result) : result;
+      assertPigeAgentToolResult(presentedResult, tool.limits.maxOutputBytes);
       return {
-        content: [{ type: "text", text: result.modelText }],
-        details: result.details,
-        ...(result.terminate === undefined ? {} : { terminate: result.terminate })
+        content: [{ type: "text", text: presentedResult.modelText }],
+        details: presentedResult.details,
+        ...(presentedResult.terminate === undefined ? {} : { terminate: presentedResult.terminate })
       };
     }
   };
@@ -617,19 +633,195 @@ function readSafeTerminalDraft(
     return undefined;
   }
   const candidate = content.arguments[boundary.argumentName];
+  return readSafeTerminalAnswer(candidate, boundary);
+}
+
+function readSafeTerminalAnswer(
+  candidate: unknown,
+  boundary: PiAgentTerminalDraftBoundary
+): string | undefined {
   if (typeof candidate !== "string") return undefined;
   const text = candidate.trim();
   const characterCount = Array.from(text).length;
   if (
     characterCount === 0 ||
     characterCount > boundary.maxCharacters ||
-    (update.type !== "toolcall_end" && characterCount < MIN_PARTIAL_DRAFT_CHARACTERS) ||
     containsUnsafeDraftControlCharacter(text) ||
     containsRestrictedModelContent(text)
   ) {
     return undefined;
   }
   return text;
+}
+
+type TerminalDraftMode = "collecting" | "incremental" | "authorized_text" | "complete" | "invalid";
+
+class SafeTerminalDraftController {
+  readonly #boundary: PiAgentTerminalDraftBoundary | undefined;
+  #mode: TerminalDraftMode = "collecting";
+  #pendingToolSnapshots: Array<{ readonly text: string; readonly receivedAt: number }> = [];
+  #lastToolSnapshot: string | undefined;
+  #authorizedAnswer: string | undefined;
+  #authorizedTextContentIndex: number | undefined;
+  #lastAuthorizedText: string | undefined;
+  #lastPresentedText: string | undefined;
+  #presentationSnapshotCount = 0;
+  #presentationEmitted = false;
+  #presentationNeedsSettle = false;
+
+  constructor(boundary: PiAgentTerminalDraftBoundary | undefined) {
+    this.#boundary = boundary;
+  }
+
+  observe(event: AgentEvent): void {
+    if (!this.#boundary || event.type !== "message_update") return;
+    if (this.#mode === "authorized_text" || this.#mode === "complete" || this.#mode === "invalid") {
+      this.#observeAuthorizedText(event);
+      return;
+    }
+    const update = event.assistantMessageEvent;
+    if (
+      update.type !== "toolcall_start" &&
+      update.type !== "toolcall_delta" &&
+      update.type !== "toolcall_end"
+    ) {
+      return;
+    }
+    const snapshot = readSafeTerminalDraft(event, this.#boundary);
+    if (!snapshot || snapshot === this.#lastToolSnapshot) return;
+    this.#lastToolSnapshot = snapshot;
+    if (update.type === "toolcall_end") {
+      if (this.#mode === "incremental") this.#emit(snapshot);
+      return;
+    }
+    const receivedAt = Date.now();
+    this.#pendingToolSnapshots.push({ text: snapshot, receivedAt });
+    const first = this.#pendingToolSnapshots[0];
+    if (
+      this.#mode === "collecting" &&
+      first &&
+      this.#pendingToolSnapshots.length >= 2 &&
+      receivedAt - first.receivedAt >= MIN_INCREMENTAL_DRAFT_SPAN_MS
+    ) {
+      this.#mode = "incremental";
+      this.#emit(first.text);
+      this.#emit(snapshot);
+      this.#pendingToolSnapshots = [];
+      return;
+    }
+    if (this.#mode === "incremental") this.#emit(snapshot);
+  }
+
+  blocksToolCalls(): boolean {
+    return this.#mode === "authorized_text" || this.#mode === "complete" || this.#mode === "invalid";
+  }
+
+  async afterToolExecute(
+    tool: PigeAgentToolDescriptor,
+    args: unknown,
+    result: PigeAgentToolResult
+  ): Promise<PigeAgentToolResult> {
+    if (!this.#boundary || tool.name !== this.#boundary.toolName || result.terminate !== true) {
+      return result;
+    }
+    if (this.#mode === "incremental") {
+      await this.#settlePresentation();
+      return result;
+    }
+    if (!isRecord(args)) return result;
+    const answer = readSafeTerminalAnswer(args[this.#boundary.argumentName], this.#boundary);
+    if (!answer) return result;
+    this.#authorizedAnswer = answer;
+    this.#mode = "authorized_text";
+    this.#pendingToolSnapshots = [];
+    const prefix = Array.from(answer).slice(0, AUTHORIZED_DRAFT_PREFIX_CHARACTERS).join("");
+    this.#emit(prefix);
+    return {
+      ...result,
+      modelText: [
+        "Pige validated the terminal Home result and authorized one presentation-only answer phase.",
+        "Output exactly the answer field you just submitted as assistant text, with no prefix, suffix, citation, tool call, or change."
+      ].join(" "),
+      terminate: false
+    };
+  }
+
+  async assertCompleteAndSettle(): Promise<void> {
+    if (this.#authorizedAnswer !== undefined && this.#mode !== "complete") {
+      throw new PigeDomainError(
+        "model_provider.output_invalid",
+        "The provider could not produce the exact authorized Home answer stream."
+      );
+    }
+    if (
+      this.#authorizedAnswer !== undefined &&
+      Array.from(this.#authorizedAnswer).length > AUTHORIZED_DRAFT_PREFIX_CHARACTERS &&
+      this.#presentationSnapshotCount < 2
+    ) {
+      throw new PigeDomainError(
+        "model_provider.output_invalid",
+        "The provider completed the authorized Home answer without usable text streaming."
+      );
+    }
+    await this.#settlePresentation();
+  }
+
+  #observeAuthorizedText(event: Extract<AgentEvent, { type: "message_update" }>): void {
+    if (this.#mode !== "authorized_text") return;
+    const update = event.assistantMessageEvent;
+    if (update.type !== "text_start" && update.type !== "text_delta" && update.type !== "text_end") return;
+    const content = update.partial.content[update.contentIndex];
+    if (!content || content.type !== "text") {
+      this.#mode = "invalid";
+      return;
+    }
+    if (this.#authorizedTextContentIndex === undefined) {
+      this.#authorizedTextContentIndex = update.contentIndex;
+    } else if (this.#authorizedTextContentIndex !== update.contentIndex) {
+      this.#mode = "invalid";
+      return;
+    }
+    const candidate = content.text;
+    if (!candidate) return;
+    if (candidate === this.#lastAuthorizedText) {
+      if (update.type === "text_end") {
+        this.#mode = candidate === this.#authorizedAnswer ? "complete" : "invalid";
+      }
+      return;
+    }
+    if (
+      !this.#authorizedAnswer?.startsWith(candidate) ||
+      containsUnsafeDraftControlCharacter(candidate) ||
+      containsRestrictedModelContent(candidate)
+    ) {
+      this.#mode = "invalid";
+      return;
+    }
+    this.#lastAuthorizedText = candidate;
+    this.#emit(candidate);
+    if (update.type === "text_end") {
+      this.#mode = candidate === this.#authorizedAnswer ? "complete" : "invalid";
+    }
+  }
+
+  #emit(text: string): void {
+    if (!this.#boundary || !text || text === this.#lastPresentedText) return;
+    this.#lastPresentedText = text;
+    this.#presentationSnapshotCount += 1;
+    this.#presentationEmitted = true;
+    this.#presentationNeedsSettle = true;
+    try {
+      this.#boundary.onSnapshot(text);
+    } catch {
+      // Presentation delivery is non-authoritative and cannot fail the Pi turn.
+    }
+  }
+
+  async #settlePresentation(): Promise<void> {
+    if (!this.#presentationEmitted || !this.#presentationNeedsSettle) return;
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_PUBLISH_SETTLE_MS));
+    this.#presentationNeedsSettle = false;
+  }
 }
 
 function containsUnsafeDraftControlCharacter(value: string): boolean {

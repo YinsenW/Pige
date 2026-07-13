@@ -886,6 +886,7 @@ export interface AgentConversationMessage {
   readonly createdAt: string;
   readonly text: string;
   readonly jobId?: string;
+  readonly answer?: AgentTurnAnswer;
 }
 
 export interface AgentConversationTurnSummary {

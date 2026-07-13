@@ -850,7 +850,7 @@
     },
     "PIGE-JOB-001": {
       "status": "partial",
-      "evidence": ["EV-JOB-RECOVERY", "EV-HOME-AGENT", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PARSE-FOLLOWUP-DURABILITY", "EV-OCR-FOLLOWUP-DURABILITY", "EV-PI-DATASET-INGEST"],
+      "evidence": ["EV-JOB-RECOVERY", "EV-HOME-AGENT", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PARSE-FOLLOWUP-DURABILITY", "EV-OCR-FOLLOWUP-DURABILITY", "EV-PI-DATASET-INGEST", "EV-DATASET-CONTINUATION", "EV-DATASET-CONTINUATION-RESTART"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-001",
         "description": "Home model work is Job-first; remaining parser, permission, backup, and migration paths need assertions.",
@@ -864,7 +864,7 @@
     },
     "PIGE-JOB-002": {
       "status": "partial",
-      "evidence": ["EV-JOB-DRAIN", "EV-JOB-RECOVERY", "EV-HOME-JOB-RECOVERY", "EV-HOME-AGENT", "EV-HOME-FOLLOWUP", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY", "EV-UPDATE-RECOVERY", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER", "EV-PI-DATASET-INGEST", "EV-DATASET-SERVICE", "EV-DATASET-WORKER-SMOKE"],
+      "evidence": ["EV-JOB-DRAIN", "EV-JOB-RECOVERY", "EV-HOME-JOB-RECOVERY", "EV-HOME-AGENT", "EV-HOME-FOLLOWUP", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY", "EV-UPDATE-RECOVERY", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER", "EV-PI-DATASET-INGEST", "EV-DATASET-SERVICE", "EV-DATASET-WORKER-SMOKE", "EV-DATASET-CONTINUATION", "EV-DATASET-CONTINUATION-RESTART"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-002",
         "description": "Other Job classes, cross-process CAS, kill/reopen, packaged, and checkpoint proof remain.",
@@ -891,7 +891,7 @@
     },
     "PIGE-JOB-004": {
       "status": "partial",
-      "evidence": ["EV-JOB-WAIT", "EV-SOURCE-WAIT-STATUS", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-WAITING-AGENT-REQUEUE", "EV-OCR-NATIVE-FALLBACK", "EV-PI-DATASET-INGEST"],
+      "evidence": ["EV-JOB-WAIT", "EV-SOURCE-WAIT-STATUS", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-WAITING-AGENT-REQUEUE", "EV-OCR-NATIVE-FALLBACK", "EV-PI-DATASET-INGEST", "EV-DATASET-CONTINUATION"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-004",
         "description": "Preserved-source model wait now has one truthful repair path; tool, path, and runtime dependency classes remain open.",
@@ -915,7 +915,7 @@
     },
     "PIGE-JOB-006": {
       "status": "partial",
-      "evidence": ["EV-CAPTURE", "EV-HOME-AGENT", "EV-HOME-FOLLOWUP", "EV-DATASET-QUERY-DURABILITY", "EV-DATASET-QUERY-INTEGRITY"],
+      "evidence": ["EV-CAPTURE", "EV-HOME-AGENT", "EV-HOME-FOLLOWUP", "EV-DATASET-QUERY-DURABILITY", "EV-DATASET-QUERY-INTEGRITY", "EV-DATASET-TIMELINE-RESTORE"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-006",
         "description": "Dataset result restart and checksum rejection work; compaction, cross-process kill/reopen, and packaged history proof remain.",
@@ -1087,7 +1087,7 @@
     },
     "PIGE-PI-001": {
       "status": "partial",
-      "evidence": ["EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-BOUNDARY", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-RETRIEVAL", "EV-PI-INGEST-UPDATE", "EV-UPDATE-RECOVERY", "EV-PI-INGEST-PROPOSAL", "EV-PI-URL-INGRESS", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY", "EV-PI-DATASET-INGEST", "EV-PI-DATASET-QUERY", "EV-DATASET-QUERY-CORE", "EV-DATASET-QUERY-WORKER-SMOKE"],
+      "evidence": ["EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-BOUNDARY", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-RETRIEVAL", "EV-PI-INGEST-UPDATE", "EV-UPDATE-RECOVERY", "EV-PI-INGEST-PROPOSAL", "EV-PI-URL-INGRESS", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY", "EV-PI-DATASET-INGEST", "EV-DATASET-CONTINUATION", "EV-PI-DATASET-QUERY", "EV-DATASET-QUERY-CORE", "EV-DATASET-QUERY-WORKER-SMOKE", "EV-BUNDLED-WORKER-AVAILABILITY", "EV-ASSEMBLED-RUNTIME-COMPOSITION"],
       "open": {
         "id": "OPEN-REQ-PIGE-PI-001",
         "description": "Hash-bound create/update recovery and one bounded Dataset-query route work; broader eligibility, query composition, Broker, and packaged BYOK remain.",
@@ -1510,7 +1510,9 @@
         "EV-RUNTIME",
         "EV-RUNTIME-CONTRACT",
         "EV-OCR-ADAPTER",
-        "EV-OCR-SERVICE"
+        "EV-OCR-SERVICE",
+        "EV-BUNDLED-WORKER-AVAILABILITY",
+        "EV-ASSEMBLED-RUNTIME-COMPOSITION"
       ],
       "open": {
         "id": "OPEN-REQ-PIGE-RUNTIME-001",
@@ -1696,7 +1698,9 @@
       "evidence": [
         "EV-APP-SHELL",
         "EV-FIRST-HOME-GUIDE",
+        "EV-HOME-ENTER",
         "EV-DATASET-QUERY-UI",
+        "EV-DATASET-TIMELINE-RESTORE",
         "EV-KNOWLEDGE-TREE-IPC",
         "EV-KNOWLEDGE-TREE-UI"
       ],
@@ -2233,7 +2237,7 @@
     },
     "E2.01": {
       "status": "partial",
-      "evidence": ["EV-JOB-RECOVERY", "EV-HOME-JOB-RECOVERY", "EV-HOME-AGENT", "EV-CAPTURE-PUBLICATION-GUARD", "EV-PARSE-FOLLOWUP-DURABILITY", "EV-OCR-FOLLOWUP-DURABILITY"],
+      "evidence": ["EV-JOB-RECOVERY", "EV-HOME-JOB-RECOVERY", "EV-HOME-AGENT", "EV-CAPTURE-PUBLICATION-GUARD", "EV-PARSE-FOLLOWUP-DURABILITY", "EV-OCR-FOLLOWUP-DURABILITY", "EV-DATASET-CONTINUATION", "EV-DATASET-CONTINUATION-RESTART"],
       "open": {
         "id": "OPEN-EXIT-E2.01",
         "description": "Kill/reopen and resumable drainer proof across Job classes remain open.",
@@ -2360,7 +2364,7 @@
     },
     "E2.11": {
       "status": "partial",
-      "evidence": ["EV-JOB-WAIT", "EV-SOURCE-WAIT-STATUS", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-WAITING-AGENT-REQUEUE", "EV-OCR-NATIVE-FALLBACK"],
+      "evidence": ["EV-JOB-WAIT", "EV-SOURCE-WAIT-STATUS", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-WAITING-AGENT-REQUEUE", "EV-OCR-NATIVE-FALLBACK", "EV-DATASET-CONTINUATION"],
       "open": {
         "id": "OPEN-EXIT-E2.11",
         "description": "Preserved-source model wait now has one truthful repair path; tool, path, and runtime dependency classes remain open.",
@@ -2619,7 +2623,7 @@
     },
     "E6.01": {
       "status": "partial",
-      "evidence": ["EV-RETRIEVAL", "EV-HOME-AGENT", "EV-HOME-UI", "EV-HOME-DRAFT-ADAPTER", "EV-HOME-DRAFT-PUBLISHER", "EV-HOME-DRAFT-UI", "EV-PI-ELECTRON-SMOKE", "EV-PI-DATASET-QUERY", "EV-DATASET-QUERY-UI"],
+      "evidence": ["EV-RETRIEVAL", "EV-HOME-AGENT", "EV-HOME-UI", "EV-HOME-DRAFT-ADAPTER", "EV-HOME-DRAFT-FAIL-CLOSED", "EV-HOME-DRAFT-PUBLISHER", "EV-HOME-DRAFT-UI", "EV-HOME-ENTER", "EV-PI-ELECTRON-SMOKE", "EV-PI-DATASET-QUERY", "EV-DATASET-QUERY-UI", "EV-DATASET-TIMELINE-RESTORE"],
       "open": {
         "id": "OPEN-EXIT-E6.01",
         "description": "Ranked retrieval, safe draft replacement, and one bounded Dataset table work; 10k, mixed-source/query breadth, and signed installed macOS/Windows UI remain open.",
@@ -3037,6 +3041,9 @@
     "EV-DATASET-QUERY-INTEGRITY": { "kind": "test", "path": "tests/unit/agent-turn-conversation-store.test.ts", "selector": "fails assistant integrity when persisted Dataset preview or citation content is tampered" },
     "EV-DATASET-QUERY-UI": { "kind": "test", "path": "tests/unit/home-agent-conversation-ui.test.ts", "selector": "renders a bounded Agent-selected Dataset result as an accessible table with exact citations" },
     "EV-DATASET-QUERY-WORKER-SMOKE": { "kind": "verifier", "path": "scripts/verify/parser-worker-smoke.mjs", "selector": "Built Dataset query worker projected and filtered a fixed-schema private SQLite snapshot with deterministic protocol hashes, then rejected a missing snapshot through its typed protocol." },
+    "EV-DATASET-CONTINUATION": { "kind": "test", "path": "tests/unit/unified-agent-ingress.test.ts", "selector": "continues one preserved CSV turn through Pi-selected materialization and a cited Dataset answer" },
+    "EV-DATASET-CONTINUATION-RESTART": { "kind": "test", "path": "tests/unit/unified-agent-ingress.test.ts", "selector": "restarts from the durable Dataset continuation without rematerializing or another source loop" },
+    "EV-DATASET-TIMELINE-RESTORE": { "kind": "test", "path": "tests/unit/home-agent-conversation-ui.test.ts", "selector": "restores the bounded Dataset table and exact citations from the durable conversation timeline" },
     "EV-PI-INGEST-RETRIEVAL": { "kind": "test", "path": "tests/unit/agent-led-ingest-retrieval.test.ts", "selector": "Agent-selected ingest retrieval tool" },
     "EV-PI-INGEST-UPDATE": { "kind": "test", "path": "tests/unit/agent-led-ingest-retrieval.test.ts", "selector": "lets real Pi select one related managed note update with a durable checkpoint and no create fallback" },
     "EV-UPDATE-RECOVERY": { "kind": "test", "path": "tests/unit/agent-led-ingest-retrieval.test.ts", "selector": "retries a page-first Agent update through Jobs without runtime config, credentials, or another Pi turn" },
@@ -3053,6 +3060,8 @@
     "EV-PI-RUNTIME-MUTATIONS": { "kind": "verifier", "path": "scripts/verify/pi-runtime-boundary-negative-cases.mjs", "selector": "Pi runtime boundary mutations OK:" },
     "EV-PI-IMPORT-SNAPSHOT": { "kind": "verifier", "path": "scripts/verify/pi-import-side-effects.mjs", "selector": "Pi import side-effect snapshot OK:" },
     "EV-PI-ELECTRON-SMOKE": { "kind": "implementation", "path": "apps/desktop/scripts/electron-unified-agent-roundtrip-smoke.mjs", "selector": "Electron unified Agent roundtrip OK:" },
+    "EV-BUNDLED-WORKER-AVAILABILITY": { "kind": "test", "path": "tests/unit/bundled-worker-availability.test.ts", "selector": "recognizes the installed worker dependencies from the assembled main-process location" },
+    "EV-ASSEMBLED-RUNTIME-COMPOSITION": { "kind": "test", "path": "tests/unit/desktop-shell-contract.test.ts", "selector": "assembles the background index worker and repository toolchain manifest in a development build" },
     "EV-GENERATED-NOTE-FINAL-FENCE": {
       "kind": "test", "path": "tests/unit/jobs-service.test.ts", "selector": "requeues Agent ingest when SourceRecord changes at the final note commit fence"
     },
@@ -3088,8 +3097,10 @@
     "EV-RETRIEVAL": { "kind": "test", "path": "tests/unit/retrieval-service.test.ts", "selector": "answers from bounded local evidence with citations and ranked pages" },
     "EV-HOME-AGENT": { "kind": "test", "path": "tests/unit/home-agent-service.test.ts", "selector": "Home Pi Agent service" },
     "EV-HOME-DRAFT-ADAPTER": { "kind": "test", "path": "tests/unit/pi-agent-runtime-adapter.test.ts", "selector": "emits only parsed safe answer snapshots from the exact terminal Home tool" },
+    "EV-HOME-DRAFT-FAIL-CLOSED": { "kind": "test", "path": "tests/unit/pi-agent-runtime-adapter.test.ts", "selector": "fails closed when the authorized presentation text differs from the validated terminal answer" },
     "EV-HOME-DRAFT-PUBLISHER": { "kind": "test", "path": "tests/unit/agent-turn-draft-publisher.test.ts", "selector": "Agent turn draft publisher" },
     "EV-HOME-DRAFT-UI": { "kind": "test", "path": "tests/unit/home-agent-conversation-ui.test.ts", "selector": "replaces one escaped provisional answer and ignores stale or wrong-turn drafts before the final" },
+    "EV-HOME-ENTER": { "kind": "test", "path": "tests/unit/home-agent-conversation-ui.test.ts", "selector": "sends a non-empty Home turn on Enter and blocks an empty Enter" },
     "EV-HOME-FOLLOWUP": { "kind": "test", "path": "tests/unit/home-agent-conversation-ui.test.ts", "selector": "Home durable Agent conversation UI" },
     "EV-FIRST-HOME-GUIDE": { "kind": "test", "path": "tests/unit/home-agent-conversation-ui.test.ts", "selector": "persists the explicit choice to continue capture-only and does not show the first-Home guide again" },
     "EV-SOURCE-WAIT-STATUS": { "kind": "test", "path": "tests/unit/home-agent-conversation-ui.test.ts", "selector": "shows one truthful source-saved model wait and one repair action across restart" },

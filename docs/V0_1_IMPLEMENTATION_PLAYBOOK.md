@@ -283,8 +283,10 @@ tools/routes, replay, exceptions, Broker, and fixed routes remain; no deep/forke
 
 B3.14/E3.09 now proves direct/retrieved/file turns, waiting/resume, explicit protocol,
 no Host bypass, Pi-selected URL fetch/preserve, exact-tail follow-up, bounded history,
-result adoption, Pi cancellation, and safe terminal-answer draft replacement through
-typed main/preload/renderer bindings. Source-ingest terminal drafts, multi-window proof,
+result adoption, Pi cancellation, multiple safe terminal-answer replacements on both
+incremental tool arguments and an exact post-validation presentation turn, plus IME-safe
+Enter-to-send through typed main/preload/renderer bindings. Source-ingest terminal drafts,
+live Chat/Anthropic timing, multi-window proof,
 multi-source recovery, and signed packaged macOS/Windows BYOK remain open; E3.09 stays
 incomplete.
 
@@ -388,7 +390,9 @@ B5.13 foundation evidence covers preserve-first CSV/XLSX/SQLite capture, Pi-sele
 `pige_inspect_dataset@1`, one deterministic `dataset_import` child, bounded worker plans,
 independent Dataset Service validation, versioned `managed_collection` Bundle publication,
 `create_dataset_revision`, capability wait/requeue, cancellation before commit, and
-byte-idempotent retry/restart. CSV lexical states, XLSX formula/cache metadata, and
+byte-idempotent retry/restart. A preserved Home CSV now continues through the same parent
+turn from materialization to a cited Dataset answer and restart adoption without a second
+source loop or Dataset revision. CSV lexical states, XLSX formula/cache metadata, and
 read-only defensive SQLite tables are covered without evaluation or source mutation.
 E5.06 remains planned pending complete backup/restore and migration evidence, broader
 cross-process recovery/CAS, large-scale and signed macOS/Windows proof, and the remaining
@@ -486,13 +490,15 @@ Build:
   revision/schema/row/range/aggregate evidence refs; whole Dataset payloads stay local.
 
 Current Home has durable direct chat, optional cited retrieval, wait/resume, bounded
-transcript, follow-up/retry/cancel. RAG, Note Agent, compaction/indexing,
+transcript, follow-up/retry/cancel, IME-safe Enter-to-send, and visibly progressive safe
+answer replacement. RAG, Note Agent, compaction/indexing,
 Broker, packaged platforms, and 10k proof remain open.
 
 B6.16 foundation evidence covers one Pi-selected `pige_query_dataset@1` catalog/query,
 opaque refs and strict typed plans, exact managed-collection revision/privacy binding,
 bounded worker execution, deterministic result hashes/citations, neutral drift audit,
-checksum-bound conversation/Job recovery, and one escaped accessible Home table. E6.11
+checksum-bound conversation/Job recovery, one escaped accessible Home table, and durable
+table/citation restoration after reopen. E6.11
 remains planned pending independent Dataset browsing/paging and citation-open highlighting,
 analytical snapshots/Parquet, joins or composition, large-scale and signed-platform proof,
 and broader cross-process recovery/CAS.

@@ -639,9 +639,7 @@ export class JobsService {
     const jobFile = readJobRecordFile(vaultPath, jobId);
     if (
       !jobFile ||
-      jobFile.job.class !== "agent_turn" ||
-      jobFile.job.sourceId !== undefined ||
-      jobFile.job.state !== "queued"
+      !isQueuedHomeAgentTurn(jobFile.job)
     ) {
       throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The text Agent turn is not ready for execution.");
     }
@@ -1130,7 +1128,7 @@ export class JobsService {
     if (!before?.sourceId) {
       throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The source-bearing Agent turn is invalid.");
     }
-    if (before.state === "queued") {
+    if (before.state === "queued" && !isDatasetQueryContinuationTurn(before)) {
       await this.processQueuedAgentIngest({ jobIds: [jobId], sourceIds: [before.sourceId], limit: 1 });
     }
     const after = this.readAgentTurnJob(jobId);
@@ -1146,9 +1144,9 @@ export class JobsService {
     for (const jobFile of readJobRecordFiles(path.join(vaultPath, ".pige", "jobs"))) {
       if (
         jobFile.job.class !== "agent_turn" ||
-        jobFile.job.sourceId !== undefined ||
         jobFile.job.state !== "waiting_dependency" ||
-        jobFile.job.stage !== "waiting_for_model"
+        jobFile.job.stage !== "waiting_for_model" ||
+        (jobFile.job.sourceId !== undefined && !hasDatasetQueryContinuationRefs(jobFile.job))
       ) {
         continue;
       }
@@ -1162,6 +1160,7 @@ export class JobsService {
       writeJsonAtomic(jobFile.path, JobRecordSchema.parse({
         ...current,
         state: "queued",
+        ...(jobFile.job.sourceId === undefined ? {} : { stage: "planning" as const }),
         updatedAt: new Date().toISOString(),
         message: "The preserved Agent turn is queued after model setup became ready."
       }));
@@ -1174,7 +1173,7 @@ export class JobsService {
     const vaultPath = this.#requireActiveVaultPath();
     return readJobRecordFiles(path.join(vaultPath, ".pige", "jobs"))
       .map((jobFile) => jobFile.job)
-      .filter((job) => job.class === "agent_turn" && job.sourceId === undefined && job.state === "queued")
+      .filter(isQueuedHomeAgentTurn)
       .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
       .slice(0, clampLimit(limit));
   }
@@ -1218,6 +1217,7 @@ export class JobsService {
     let requeued = 0;
     for (const jobFile of readJobRecordFiles(path.join(vaultPath, ".pige", "jobs"))) {
       if (!isAgentKnowledgeTurn(jobFile.job) || jobFile.job.state !== "waiting_dependency") continue;
+      if (hasDatasetQueryContinuationRefs(jobFile.job)) continue;
       const sourceRecord = jobFile.job.sourceId ? readSourceRecord(vaultPath, jobFile.job.sourceId) : undefined;
       const agentSelectedOcr = Boolean(sourceRecord && supportsAgentSelectedOcr(sourceRecord.kind));
       const waitingAgentOcr = agentSelectedOcr &&
@@ -1808,8 +1808,7 @@ export class JobsService {
           continue;
         }
       }
-      const durableProposalAvailable = agentIngest?.hasDurableProposal(vaultPath, jobFile.job.id) === true;
-      if (!agentIngest || (!durableProposalAvailable && !canRunAgentIngest(agentIngest))) {
+      if (!agentIngest) {
         markJobWaitingDependency(jobFile.path, jobFile.job, "Waiting for a tested default model before Agent ingest.");
         failed += 1;
         continue;
@@ -1992,18 +1991,41 @@ export class JobsService {
                 role: "agent_dataset_revision"
               }]
             ]).values()),
+            operationIds: Array.from(new Set([...(current.operationIds ?? []), ...result.operationIds])),
             updatedAt: new Date().toISOString()
           });
           writeJsonAtomic(jobFile.path, activeJob);
           if (preservedAgentTurn) {
-            const conversations = new AgentTurnConversationStore();
-            conversations.findAssistantTurn(vaultPath, preservedAgentTurn.locator, runningJob.id) ??
-              conversations.appendAssistantTurn(
-                vaultPath,
-                preservedAgentTurn,
-                runningJob.id,
-                `Pi Agent materialized the preserved structured source as a validated Dataset with ${result.tableCount} table${result.tableCount === 1 ? "" : "s"}.`
+            const latest = readJobRecordAtPath(jobFile.path) ?? activeJob;
+            if (latest.state === "cancel_requested") {
+              const completedJob = this.#completeCooperativeExecution(
+                jobFile.path,
+                runningJob,
+                result.warnings.length > 0 ? "completed_with_warnings" : "completed",
+                `Pi Agent materialized a validated Dataset revision with ${result.tableCount} table${result.tableCount === 1 ? "" : "s"} before cancellation.`,
+                "dataset",
+                execution.control.durableWriteState(),
+                result.operationIds
               );
+              if (completedJob.state === "cancelled") failed += 1;
+              else completed += 1;
+              continue;
+            }
+            const {
+              error: _error,
+              waitingDependency: _waitingDependency,
+              finishedAt: _finishedAt,
+              ...continuation
+            } = latest;
+            writeJsonAtomic(jobFile.path, JobRecordSchema.parse({
+              ...withDurableWriteState(continuation, execution.control.durableWriteState()),
+              state: "queued",
+              stage: "planning",
+              updatedAt: new Date().toISOString(),
+              message: "Pi Agent materialized the selected Dataset and queued the same Home turn for its answer."
+            }));
+            completed += 1;
+            continue;
           }
           const completedJob = this.#completeCooperativeExecution(
             jobFile.path,
@@ -3135,6 +3157,27 @@ function isAgentKnowledgeTurn(job: JobRecord): boolean {
   return job.class === "agent_ingest" || job.class === "agent_turn";
 }
 
+function hasDatasetQueryContinuationRefs(job: JobRecord): boolean {
+  if (job.class !== "agent_turn" || !job.sourceId) return false;
+  const datasetRefs = (job.outputRefs ?? []).filter(
+    (ref) => ref.kind === "dataset" && ref.role === "agent_dataset" && Boolean(ref.id)
+  );
+  const revisionRefs = (job.outputRefs ?? []).filter(
+    (ref) => ref.kind === "dataset_revision" && ref.role === "agent_dataset_revision" && Boolean(ref.id)
+  );
+  return datasetRefs.length === 1 && revisionRefs.length === 1;
+}
+
+function isDatasetQueryContinuationTurn(job: JobRecord): boolean {
+  return hasDatasetQueryContinuationRefs(job) && job.stage === "planning";
+}
+
+function isQueuedHomeAgentTurn(job: JobRecord): boolean {
+  return job.class === "agent_turn" &&
+    job.state === "queued" &&
+    (job.sourceId === undefined || isDatasetQueryContinuationTurn(job));
+}
+
 function findQueuedCaptureJobFiles(vaultPath: string, request: ProcessQueuedCapturesRequest): { path: string; job: JobRecord }[] {
   const limit = clampLimit(request.limit);
   if (request.jobIds && request.jobIds.length > 0) {
@@ -3161,13 +3204,23 @@ function findQueuedAgentIngestJobFiles(
     return request.jobIds
       .map((jobId) => readJobRecordFile(vaultPath, jobId))
       .filter((jobFile): jobFile is { path: string; job: JobRecord } => Boolean(jobFile))
-      .filter((jobFile) => isAgentKnowledgeTurn(jobFile.job) && jobFile.job.state === "queued" && Boolean(jobFile.job.sourceId))
+      .filter((jobFile) =>
+        isAgentKnowledgeTurn(jobFile.job) &&
+        jobFile.job.state === "queued" &&
+        Boolean(jobFile.job.sourceId) &&
+        !isDatasetQueryContinuationTurn(jobFile.job)
+      )
       .filter((jobFile) => sourceIds.size === 0 || (jobFile.job.sourceId ? sourceIds.has(jobFile.job.sourceId) : false))
       .slice(0, limit);
   }
 
   return readJobRecordFiles(path.join(vaultPath, ".pige", "jobs"))
-    .filter((jobFile) => isAgentKnowledgeTurn(jobFile.job) && jobFile.job.state === "queued" && Boolean(jobFile.job.sourceId))
+    .filter((jobFile) =>
+      isAgentKnowledgeTurn(jobFile.job) &&
+      jobFile.job.state === "queued" &&
+      Boolean(jobFile.job.sourceId) &&
+      !isDatasetQueryContinuationTurn(jobFile.job)
+    )
     .filter((jobFile) => sourceIds.size === 0 || (jobFile.job.sourceId ? sourceIds.has(jobFile.job.sourceId) : false))
     .sort((left, right) => left.job.createdAt.localeCompare(right.job.createdAt))
     .slice(0, limit);

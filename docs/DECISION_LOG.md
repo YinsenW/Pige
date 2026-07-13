@@ -2579,21 +2579,28 @@ Date: 2026-07-13
 
 Decision:
 
-Home streams model-backed progress as bounded `draft_replace` snapshots extracted only
-from the parsed `answer` field of the exact terminal Pige tool. Drafts are temporary and
-sender/turn/Job-bound; the fully validated durable assistant result remains authoritative.
+Home streams model-backed progress as bounded `draft_replace` snapshots from the exact
+terminal Pige answer boundary. It prefers parsed incremental `answer` arguments; when a
+provider supplies them too late, successful terminal validation may authorize one
+tool-blocked presentation turn that can emit only prefixes of that exact answer and must
+finish equal. Drafts are temporary and sender/turn/Job-bound; the fully validated durable
+assistant result remains authoritative.
 
 Rationale:
 
 Waiting for the complete tool result makes normal conversation feel stalled, but raw Pi
 text/tool deltas expose unvalidated JSON, provider behavior, citations, or control data.
-Replacement snapshots support provider repair/backtracking without inventing a second
-answer protocol or persisting untrusted partial output.
+Replacement snapshots support provider repair/backtracking without persisting untrusted
+partial output. The exact post-validation presentation phase keeps completion-only tool
+protocols responsive without granting ambient assistant text or another semantic answer.
 
 Consequences:
 
 - No thinking, generic Pi prose, raw provider event, tool JSON, citation, grounding,
   identifier, credential, or restricted/control content reaches renderer as a draft.
+- The fallback blocks further tools, rejects altered/incomplete reproduction, may use one
+  additional provider turn, and fails closed when a long answer cannot produce multiple
+  usable replacements.
 - Sequence/binding/bounds, escaping, coalescing, cancellation, and wrong-sender rejection
   are typed and tested; replacement may shorten earlier text.
 - Final schema/evidence/source/citation validation and durable conversation/Job commit are

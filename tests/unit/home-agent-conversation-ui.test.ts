@@ -22,7 +22,9 @@ const globalKeys = [
   "HTMLElement",
   "HTMLTextAreaElement",
   "Event",
-  "MouseEvent"
+  "MouseEvent",
+  "KeyboardEvent",
+  "CompositionEvent"
 ] as const;
 const originalDescriptors = new Map<PropertyKey, PropertyDescriptor | undefined>();
 
@@ -37,6 +39,101 @@ afterEach(() => {
 });
 
 describe("Home durable Agent conversation UI", () => {
+  it("sends a non-empty Home turn on Enter and blocks an empty Enter", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    const emptyPrevented = await dispatchComposerKey(dom, container, { key: "Enter" });
+    expect(emptyPrevented).toBe(true);
+    expect(harness.submitRequests).toHaveLength(0);
+
+    await setTextareaValue(dom, container, "Send this Home turn.");
+    const sendPrevented = await dispatchComposerKey(dom, container, { key: "Enter" });
+    expect(sendPrevented).toBe(true);
+    await waitFor(dom, () => harness.submitRequests.length === 1);
+    expect(harness.submitRequests[0]?.text).toBe("Send this Home turn.");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("leaves Shift+Enter to the native multiline textarea without submitting", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await setTextareaValue(dom, container, "First line");
+    const prevented = await dispatchComposerKey(dom, container, { key: "Enter", shiftKey: true });
+    expect(prevented).toBe(false);
+    expect(harness.submitRequests).toHaveLength(0);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("does not submit during IME composition or the composition-end Enter race", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    await setTextareaValue(dom, container, "中文输入");
+    const textarea = homeComposer(container);
+    const composingEnter = new dom.window.KeyboardEvent("keydown", {
+      key: "Enter",
+      bubbles: true,
+      cancelable: true,
+      isComposing: true
+    });
+    const compositionRaceEnter = new dom.window.KeyboardEvent("keydown", {
+      key: "Enter",
+      bubbles: true,
+      cancelable: true
+    });
+
+    await act(async () => {
+      textarea.dispatchEvent(new dom.window.CompositionEvent("compositionstart", { bubbles: true }));
+      textarea.dispatchEvent(composingEnter);
+      textarea.dispatchEvent(new dom.window.CompositionEvent("compositionend", { bubbles: true }));
+      textarea.dispatchEvent(compositionRaceEnter);
+      await Promise.resolve();
+    });
+    expect(harness.submitRequests).toHaveLength(0);
+    expect(composingEnter.defaultPrevented).toBe(false);
+    expect(compositionRaceEnter.defaultPrevented).toBe(false);
+
+    await settle(dom);
+    await dispatchComposerKey(dom, container, { key: "Enter" });
+    await waitFor(dom, () => harness.submitRequests.length === 1);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("prevents repeat and second Enter submission while the first turn is in flight", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    let resolveTurn: ((result: AgentSubmitTurnResult) => void) | undefined;
+    harness.submitTurn = (request) => {
+      harness.submitRequests.push(request);
+      return new Promise((resolve) => { resolveTurn = resolve; });
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await setTextareaValue(dom, container, "Only one turn.");
+    await dispatchComposerKey(dom, container, { key: "Enter" });
+    await waitFor(dom, () => harness.submitRequests.length === 1);
+    await dispatchComposerKey(dom, container, { key: "Enter", repeat: true });
+    await dispatchComposerKey(dom, container, { key: "Enter" });
+    expect(harness.submitRequests).toHaveLength(1);
+
+    await act(async () => {
+      resolveTurn?.(completedResult());
+      await settle(dom);
+    });
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("persists the explicit choice to continue capture-only and does not show the first-Home guide again", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
@@ -362,6 +459,27 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("restores the bounded Dataset table and exact citations from the durable conversation timeline", async () => {
+    const dom = createDom();
+    const harness = createHarness(completedDatasetTimeline());
+    const api = makePigeApi(harness);
+
+    const firstMount = await mountHome(dom, api);
+    await waitFor(dom, () => firstMount.container.querySelector(".dataset-table") !== null);
+    expect(firstMount.container.textContent).toContain("D1 Sales by region");
+    expect(firstMount.container.textContent).toContain("North120.5");
+    await act(async () => firstMount.root.unmount());
+
+    const reopened = await mountHome(dom, api);
+    await waitFor(dom, () => reopened.container.querySelector(".dataset-table") !== null);
+    expect(reopened.container.textContent).toContain("Rows: 2/2");
+    expect(reopened.container.textContent).toContain("D1 Sales by region");
+    expect(reopened.container.textContent).not.toContain("dataset_20260713_salesdataset01");
+
+    await act(async () => reopened.root.unmount());
+    dom.window.close();
+  });
+
   it("does not let an earlier turn completion erase a newly typed follow-up draft", async () => {
     const dom = createDom();
     const harness = createHarness(completedTimeline());
@@ -441,6 +559,52 @@ describe("Home durable Agent conversation UI", () => {
     expect(reopened.container.querySelector('[data-agent-draft="true"]')).toBeNull();
     expect(reopened.container.textContent).not.toContain("Must not replay after reopen.");
     await act(async () => reopened.root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps the active draft when an older completed conversation load arrives late", async () => {
+    const dom = createDom();
+    const harness = createHarness(completedTimeline());
+    let resolveConversation: ((timeline: AgentConversationTimeline | undefined) => void) | undefined;
+    let resolveTurn: ((result: AgentSubmitTurnResult) => void) | undefined;
+    harness.submitTurn = (request) => {
+      harness.submitRequests.push(request);
+      return new Promise((resolve) => { resolveTurn = resolve; });
+    };
+    const api = makePigeApi(harness) as {
+      readonly agent: {
+        conversation: () => Promise<AgentConversationTimeline | undefined>;
+      };
+    };
+    api.agent.conversation = () => new Promise((resolve) => { resolveConversation = resolve; });
+    const { container, root } = await mountHome(dom, api);
+
+    await setTextareaValue(dom, container, "Start while the old conversation loads.");
+    await dispatchComposerKey(dom, container, { key: "Enter" });
+    await waitFor(dom, () => harness.submitRequests.length === 1);
+    const clientTurnId = harness.submitRequests[0]?.clientTurnId;
+    if (!clientTurnId) throw new Error("Expected a client turn identity.");
+    await act(async () => {
+      harness.emitDraft(draftEvent({ clientTurnId, sequence: 1, text: "Current provisional answer." }));
+      await settle(dom);
+    });
+    expect(container.querySelector('[data-agent-draft="true"]')?.textContent)
+      .toContain("Current provisional answer.");
+
+    await act(async () => {
+      resolveConversation?.(completedTimeline());
+      await settle(dom);
+    });
+    expect(container.querySelector('[data-agent-draft="true"]')?.textContent)
+      .toContain("Current provisional answer.");
+
+    await act(async () => {
+      resolveTurn?.(completedResult());
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.querySelector('[data-agent-draft="true"]') === null);
+
+    await act(async () => root.unmount());
     dom.window.close();
   });
 
@@ -954,6 +1118,38 @@ function completedTimeline(): AgentConversationTimeline {
   };
 }
 
+function completedDatasetTimeline(): AgentConversationTimeline {
+  const completed = datasetCompletedResult();
+  if (completed.state !== "completed") throw new Error("Expected a completed Dataset fixture.");
+  return {
+    conversationId: completed.conversationId,
+    tailEventId: completed.tailEventId,
+    canFollowUp: true,
+    messages: [
+      {
+        id: completed.conversationEventId,
+        role: "user",
+        createdAt: "2026-07-13T08:00:00.000Z",
+        text: "Show sales totals by region.",
+        jobId: completed.jobId
+      },
+      {
+        id: completed.tailEventId,
+        role: "assistant",
+        createdAt: "2026-07-13T08:00:01.000Z",
+        text: completed.answer.answer,
+        jobId: completed.jobId,
+        answer: completed.answer
+      }
+    ],
+    latestTurn: {
+      jobId: completed.jobId,
+      userEventId: completed.conversationEventId,
+      state: "completed"
+    }
+  };
+}
+
 function completedResult(): AgentSubmitTurnResult {
   return {
     requestId: "request_20260712_turn02",
@@ -1226,7 +1422,9 @@ function installDom(dom: JSDOM): void {
     HTMLElement: dom.window.HTMLElement,
     HTMLTextAreaElement: dom.window.HTMLTextAreaElement,
     Event: dom.window.Event,
-    MouseEvent: dom.window.MouseEvent
+    MouseEvent: dom.window.MouseEvent,
+    KeyboardEvent: dom.window.KeyboardEvent,
+    CompositionEvent: dom.window.CompositionEvent
   };
   for (const key of globalKeys) {
     Object.defineProperty(globalThis, key, { configurable: true, value: values[key], writable: true });
@@ -1239,8 +1437,7 @@ function installDom(dom: JSDOM): void {
 }
 
 async function setTextareaValue(dom: JSDOM, container: HTMLElement, value: string): Promise<void> {
-  const textarea = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Capture or ask"]');
-  if (!textarea) throw new Error("Home composer not found.");
+  const textarea = homeComposer(container);
   const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, "value")?.set;
   if (!setter) throw new Error("Textarea setter not found.");
   await act(async () => {
@@ -1249,6 +1446,30 @@ async function setTextareaValue(dom: JSDOM, container: HTMLElement, value: strin
     textarea.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
     await settle(dom);
   });
+}
+
+async function dispatchComposerKey(
+  dom: JSDOM,
+  container: HTMLElement,
+  init: KeyboardEventInit
+): Promise<boolean> {
+  const textarea = homeComposer(container);
+  const event = new dom.window.KeyboardEvent("keydown", {
+    bubbles: true,
+    cancelable: true,
+    ...init
+  });
+  await act(async () => {
+    textarea.dispatchEvent(event);
+    await settle(dom);
+  });
+  return event.defaultPrevented;
+}
+
+function homeComposer(container: HTMLElement): HTMLTextAreaElement {
+  const textarea = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Capture or ask"]');
+  if (!textarea) throw new Error("Home composer not found.");
+  return textarea;
 }
 
 async function attachFile(dom: JSDOM, container: HTMLElement, name: string, content: string): Promise<void> {

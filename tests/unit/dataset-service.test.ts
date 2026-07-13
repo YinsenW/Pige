@@ -6,8 +6,12 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DatasetManifestSchema, DatasetRevisionSchema, DatasetSchemaRecordSchema, JobRecordSchema, SourceRecordSchema } from "@pige/schemas";
 import { CaptureService } from "../../apps/desktop/src/main/services/capture-service";
+import { planDatasetIngest } from "../../apps/desktop/src/main/services/dataset-ingest-core";
 import { DatasetService, type DatasetImportPlanner } from "../../apps/desktop/src/main/services/dataset-service";
-import type { DatasetIngestPlan } from "../../apps/desktop/src/main/services/dataset-ingest-types";
+import {
+  DATASET_INGEST_DEFAULT_LIMITS,
+  type DatasetIngestPlan
+} from "../../apps/desktop/src/main/services/dataset-ingest-types";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
 
 const roots: string[] = [];
@@ -18,6 +22,28 @@ afterEach(() => {
 });
 
 describe("Dataset Service", () => {
+  it("publishes the exact plan produced by the bounded Dataset ingest core", async () => {
+    const fixture = await makeCsvFixture();
+    const planner: DatasetImportPlanner = {
+      isAvailable: () => true,
+      plan: (filePath, sourceKind) => planDatasetIngest({
+        requestId: "dataset-service-core-plan",
+        filePath,
+        sourceKind,
+        limits: { ...DATASET_INGEST_DEFAULT_LIMITS }
+      })
+    };
+
+    const result = await new DatasetService(planner).materializeSource(
+      fixture.vaultPath,
+      fixture.sourceRecord,
+      fixture.sourceRecordPath,
+      fixture.job
+    );
+
+    expect(result).toMatchObject({ created: true, tableCount: 1, rowCount: 2 });
+  });
+
   it("publishes and reuses one validated managed Dataset Bundle for the same preserved source revision", async () => {
     const fixture = await makeCsvFixture();
     const plan = csvPlan(fixture.sourceBytes);

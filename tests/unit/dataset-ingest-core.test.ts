@@ -41,6 +41,7 @@ describe("Dataset ingest core", () => {
     expect(second).toEqual(first);
     expect(first.source).toMatchObject({
       kind: "csv_file",
+      sha256: sha256File(filePath),
       encoding: "utf-8",
       delimiter: ",",
       lineEndings: ["crlf", "none"]
