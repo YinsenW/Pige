@@ -38,35 +38,11 @@ Read `docs/VISION.md`, `docs/PRD.md`, `docs/TECH_ARCHITECTURE.md`, `docs/DATA_AR
 
 Use `rg` or the section map in `docs/START_HERE_FOR_AI_AGENTS.md` to find the exact sections needed. Load whole large documents only for broad architecture, product-scope, or data-ownership changes.
 
-If a task touches security, permissions, external tools, package execution, model calls, web fetch, secrets, updates, backup, restore, storage, source files, or migrations, also read the matching specialized design document before editing.
-
-If a task touches Markdown structure, parser/OCR ingest, prompt templates, IPC/API contracts, repository structure, coding conventions, or contribution workflow, read the matching specialized document listed in `docs/START_HERE_FOR_AI_AGENTS.md` before editing.
-
-If a task touches settings or preferences that affect Agent goals, prompt context, tool policy, storage behavior, language behavior, confirmation behavior, model behavior, retrieval behavior, or local capability behavior, read `docs/AGENT_RUNTIME_POLICY_CONTEXT.md` before editing.
-
-If a task touches context assembly, retrieval snippets, prompt context packing, token/context budgets, citations, grounded answers, memory injection, or conversation compaction, read `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md` before editing.
-
-If a task touches tags, topics, concepts, entities, backlinks, relationship types, Knowledge Tree, graph indexes, or knowledge-linking behavior, read `docs/KNOWLEDGE_MODEL_AND_LINKING.md` before editing.
-
-If a task touches long-running jobs, proposals, operation records, retry, cancellation, compaction, crash recovery, backup/restore job state, or future remote/mobile job contracts, read `docs/JOB_OPERATION_AND_RECOVERY.md` before editing.
-
-If a task touches stable IDs, future sync readiness, conflict detection, tombstones, external edits, schema versions, migrations, backup compatibility, restore compatibility, Git-friendliness, or future sync adapters, read `docs/SYNC_CONFLICT_AND_MIGRATION.md` before editing.
-
-If a task adds or changes any user-visible setting, preference, provider profile, local capability option, permission default, update preference, backup preference, vault preference, or settings storage behavior, read `docs/SETTINGS_AND_PREFERENCES.md` before editing.
-
-If a task touches Pi Agent runtime integration, BYOK provider profiles, provider model-list discovery, manual model IDs, default model selection, future model routing, Pi tools, Pi extensions, or Pi session/config behavior, read `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md` before editing.
-
-If a task touches diagnostics, logs, crash reports, support bundles, telemetry, local metrics, redaction, support export, or debug data retention, read `docs/DIAGNOSTICS_AND_OBSERVABILITY.md` before editing.
-
-If a task touches security reports, vulnerability disclosure, exploit handling, security advisories, or private security triage, read `SECURITY.md` before editing or responding.
-
-If a task touches privacy-facing behavior, cloud-send policy, telemetry, diagnostics export, support bundles, BYOK data use, update checks, optional downloads, Skill/package network use, or public privacy copy, read `PRIVACY.md` before editing.
-
-If a task touches user support, public issue triage, bug reports, support bundles in issues, reproduction guidance, or maintainer/user support copy, read `SUPPORT.md` before editing or responding.
-
-If a task touches first-run, onboarding, capture-only mode, setup skipping, missing model behavior, startup vault recovery, or dependency-waiting jobs, read `docs/ONBOARDING_AND_FIRST_RUN.md` before editing.
-
-Historical/audit/research documents such as `docs/DESIGN_REVIEW.md`, `docs/DESIGN_BASELINE_AUDIT.md`, and `docs/PI_PACKAGE_RESEARCH.md` are not default reading. Use them when the task asks for rationale, package curation, or baseline audit history.
+The task router owns all specialist reading packs, including security, privacy, support,
+runtime-policy, retrieval, knowledge, recovery, settings, Pi, onboarding, and public
+workflow triggers. Follow its matching row rather than maintaining another routing list
+here. Historical research is never default evidence; consult it only when the router
+names it for rationale or package curation.
 
 ## 2. Non-Negotiable Invariants
 
@@ -141,40 +117,15 @@ Before finishing:
 
 ## 4. Documentation Update Rule
 
-PRD and subject owners form a bidirectional contract. The PRD owns user value, observable behavior, defaults, degradation, release scope, and acceptance intent; subject owners own implementation and boundary details. Semantic changes must propagate in both directions in the same change, including affected trace/acceptance projections and verification. Editorial or structural changes require a no-contract-impact rationale, not unrelated rewrites. Define facts once and reference them elsewhere; follow the impact classes and propagation matrix in `docs/AI_DEVELOPMENT_GUIDE.md`.
+PRD and subject owners form a bidirectional contract. The PRD owns user value,
+observable behavior, defaults, degradation, release scope, and acceptance intent;
+subject owners own implementation and boundary detail. Product Planning applies the
+impact classes and propagation matrix in `docs/AI_DEVELOPMENT_GUIDE.md`; other roles
+hand off facts unless explicitly delegated. Semantic changes update affected owners,
+trace/acceptance projections, and durable decisions in the same candidate. Editorial
+changes record a concrete no-contract-impact rationale. Define each fact once.
 
-This synchronization duty is not universal edit authority. Product Planning updates
-product, technical, development-management, and governance contracts; UI Design supplies
-detailed visual guidance. Development and Project Management hand off facts and edit
-those materials only under explicit, scoped delegation.
-
-Product Planning synchronizes affected design documents in the same candidate when implementation alters:
-
-- Data ownership or vault layout.
-- Source storage strategy, source ownership, source references, managed source copies, or source asset root behavior.
-- Markdown schema, page frontmatter, citations, managed blocks, or `PIGE.md` behavior.
-- Tags, topics, concepts, entities, relationship types, backlinks, Knowledge Tree, graph indexes, or knowledge-linking behavior.
-- Job classes/states, checkpoints, proposals, operation records, retry, cancellation, compaction, crash recovery, or remote/mobile job contracts.
-- Stable IDs, future sync readiness, conflict detection, tombstones, external edits, schema versions, migrations, backup/restore compatibility, Git-friendliness, or sync adapter boundaries.
-- Settings ownership, setting scope, setting storage location, provider profile behavior, local capability settings, backup preferences, or settings export/import behavior.
-- Agent Runtime Policy Context, Agent-affecting setting effects, policy snapshots, or policy enforcement behavior.
-- Context assembly, retrieval scope, snippet selection, context budgets, citation packing, memory injection, prompt context order, or conversation compaction.
-- First-run, onboarding, capture-only mode, setup skipping, startup vault recovery, or dependency-waiting behavior.
-- Pi Agent adapter behavior, provider/model profile behavior, model-list discovery, manual model IDs, default model selection, model routing gates, Pi tool wrapping, or Pi config/session boundaries.
-- Diagnostics, logs, crash reports, local metrics, support bundles, redaction rules, telemetry policy, or debug data retention.
-- Error taxonomy, localized failure messages, retry/repair actions, diagnostics correlation, or user-visible failure/status behavior.
-- Security report handling, vulnerability disclosure, exploit reproduction, advisory text, or security triage behavior.
-- Privacy policy, public privacy copy, cloud-send behavior, telemetry, diagnostics export, BYOK data-use behavior, update checks, optional downloads, or Skill/package network behavior.
-- Support policy, issue templates, public bug triage, reproduction instructions, support bundle sharing, or support copy.
-- Parser ingest contracts, prompt templates, IPC/API contracts, repository structure, coding conventions, or contribution workflow.
-- Database schema or index semantics.
-- External dependencies, model files, bundled tools, or package choices.
-- Permission model, Skill/package capabilities, or security boundaries.
-- Backup, restore, migration, update, or release behavior.
-- UI workflows or user-visible product behavior.
-- Performance budgets, test gates, or platform support.
-
-Product Planning records a new durable decision in `docs/DECISION_LOG.md`.
+This synchronization duty is not universal edit authority. Product Planning synchronizes affected design documents; other roles edit them only under explicit, scoped delegation.
 
 ## 5. Stop Conditions
 

@@ -1,7 +1,7 @@
 # Decision Log
 
 Status: Active decision ledger
-Last reviewed: 2026-07-11
+Last reviewed: 2026-07-13
 
 ## 1. Purpose
 
@@ -441,19 +441,21 @@ Date: 2026-07-09
 
 Decision:
 
-v0.1 default implementation choices are CodeMirror 6 for source-preserving Markdown editing, unified/remark/rehype for Markdown parsing/rendering, `@mozilla/readability` for article extraction, Mammoth for DOCX plus yauzl and fast-xml-parser for Pige-owned OpenXML inspection/PPTX extraction, yazl/yauzl for backup ZIP creation/restore, Electron `safeStorage` for encrypted local secrets, sqlite-vec behind a `VectorIndexDriver` for vector search, electron-builder/electron-updater with GitHub Releases for alpha updates, and Dependabot/CodeQL/npm audit for dependency security gates.
+Pre-implementation dependency defaults are selected in the Technical Architecture
+registry before feature code lands, with adapters where packaging or compatibility may
+force replacement.
 
 Rationale:
 
-The previous design correctly identified the dependency areas but left too many "choose before coding" holes. Selecting defaults now gives future AI agents a concrete path while preserving replacement adapters where packaging or fixture tests fail.
+Explicit reviewed defaults prevent each implementation Agent from reopening supply-chain
+choices while retaining tested exit paths.
 
 Consequences:
 
-- Implementation still pins exact versions and records licenses/checksums before code lands.
-- sqlite-vec remains behind an adapter because upstream is pre-v1 and packaging must be proven.
-- Electron `safeStorage` unavailable-encryption behavior must be tested; plaintext mode remains explicit and warned.
-- Backup uses streaming ZIP libraries rather than buffering large vaults in memory.
-- Release automation uses GitHub-native security and update infrastructure for v0.1 alpha.
+- Exact versions, licenses, integrity, distribution, data boundary, update policy, and
+  replacement path enter the registry/manifests before adoption.
+- Storage, vector, archive, parser, editor, release, and security choices remain behind
+  their owner-defined adapters and gates.
 
 References:
 
@@ -472,14 +474,14 @@ Phase and slice completion is determined by documented exit criteria and require
 
 Rationale:
 
-The implementation playbook already owns actionable phase criteria. Repeating a separate slogan across control documents created duplicate guidance and conversational boilerplate without improving verification.
+The Playbook owns actionable phase criteria; repeated completion slogans add no proof.
 
 Consequences:
 
-- Each phase must define what is in scope, what is out of scope, and which checks prove the phase is ready to stop.
-- Failed required checks block completion; non-blocking remainder moves to backlog or later-phase work.
-- Unfinished product surfaces remain disabled and explicitly documented as deferred.
-- Routine progress updates and automatic goal continuations report only new work or changed state. Handoffs report artifacts, verification, failures, risks, and deferrals without restating this decision or labeling the result with a recurring slogan.
+- Scope, exclusions, and required checks determine completion; failed checks block while
+  non-blocking work moves to its controlled destination.
+- Unfinished surfaces stay honest. Routine updates report deltas; handoffs report evidence,
+  failures, risks, and deferrals without ceremonial repetition.
 
 References:
 
@@ -954,24 +956,22 @@ Date: 2026-07-09
 
 Decision:
 
-Pige keeps the existing specialized design documents, but AI agents must not load the full design library by default. Routine work starts from `AGENTS.md`, `README.md`, `docs/START_HERE_FOR_AI_AGENTS.md`, and the smallest task-specific reading pack. Large documents are read by relevant section unless the task is broad.
+Pige keeps distinct owner contracts, but Agents load only the three-file entry pack plus
+the smallest routed task pack and relevant large-document sections.
 
 Rationale:
 
-The design baseline is intentionally comprehensive, but the repository already contains more than 100,000 words of design material. Loading too many documents wastes context, weakens model attention, and can mix unrelated constraints. The product needs both durable design contracts and disciplined context budgeting.
+Durable contracts need breadth; individual tasks need attention. Loading the full library
+wastes context and mixes unrelated constraints.
 
 Consequences:
 
-- `docs/START_HERE_FOR_AI_AGENTS.md` owns the documentation context budget and document tiers.
-- `docs/START_HERE_FOR_AI_AGENTS.md` is the only canonical owner of task-specific reading packs; `docs/AI_DEVELOPMENT_GUIDE.md` must link to it instead of duplicating the full routing table.
-- `docs/START_HERE_FOR_AI_AGENTS.md` also owns the large-document section map so agents can read PRD, Tech Architecture, Data Architecture, UI Prototype, the Implementation Playbook, and the Decision Log by relevant section.
-- The document map in `docs/START_HERE_FOR_AI_AGENTS.md` records each mapped file's tier, owner role, and default read behavior so future agents can route context without loading every design file.
-- `README.md` should stay a compact orientation page, not the full design inventory or external dependency registry.
-- The compact entry order is `AGENTS.md`, `README.md`, then `docs/START_HERE_FOR_AI_AGENTS.md`, followed by the task-specific pack.
-- Historical, audit, and research documents are not default implementation reading.
-- Historical, audit, research, and prototype documents should clearly mark their authority level so future agents do not treat rationale snapshots as default implementation contracts.
-- New design documents require a clear owner role; otherwise new guidance should be a section in the existing owner document.
-- Future agents should use search and section-level reads for PRD, Tech Architecture, and Data Architecture unless the task is broad.
+- START_HERE alone owns task packs; the machine document map owns inventory/lifecycle;
+  README stays a compact public orientation.
+- AGENTS → README → START_HERE is the bounded entry order. Search and section reads are
+  default; historical/research material is non-current.
+- A new document needs a distinct owner that cannot fit an existing contract, plus map,
+  routing, lifecycle, and capacity evidence.
 
 References:
 
@@ -1043,19 +1043,18 @@ Date: 2026-07-09
 
 Decision:
 
-Pige v0.1 should scaffold as a lightweight workspace monorepo. The desktop app lives in `apps/desktop/`; reusable domain types, serializable contracts, schemas, Markdown helpers, knowledge-model helpers, and fixture helpers live in `packages/*`.
+Pige uses a lightweight workspace monorepo: desktop runtime in `apps/desktop/`, reusable
+runtime-neutral contracts/helpers in `packages/*`.
 
 Rationale:
 
-Pige starts as a desktop Electron app, but the architecture deliberately reserves future Web/mobile clients and remote Agent backends. Keeping all domain contracts and reusable logic inside a desktop `src/` tree would make future extraction harder and would increase the chance that renderer, main-process, and platform-specific assumptions leak into shared logic.
+Shared contracts must not inherit Electron/renderer assumptions and block future clients.
 
 Consequences:
 
-- `apps/desktop/` owns Electron main/preload/renderer code and desktop adapters.
-- `packages/*` must stay runtime-neutral unless explicitly platform-specific.
-- Packages must not import from `apps/desktop/`.
-- Renderer code must not import main-process services, adapters, filesystem, database, shell, parser, model, or secret APIs.
-- Phase 0 scaffold must include workspace config, path aliases, package manifests, and import-boundary checks.
+- Desktop owns Electron/adapters; packages stay runtime-neutral and never import the app.
+- Renderer cannot import privileged main/filesystem/database/shell/parser/model/secret code;
+  workspace aliases and executable import boundaries enforce this split.
 
 References:
 
@@ -1066,23 +1065,22 @@ References:
 
 ### D-20260709-Dependencies-Need-Machine-Readable-Manifests
 
-Status: Accepted
+Status: Superseded
 Date: 2026-07-09
+Superseded by: D-20260709-Dependency-Manifests-Are-Schema-Governed
 
 Decision:
 
-Pige keeps the Technical Architecture external dependency registry as the human-readable source for dependency rationale and boundaries, and adds machine-readable dependency manifests under `resources/dependency-manifest/` during implementation. Concrete packages, binaries, optional model assets, provider SDKs, parser/OCR tools, release tools, and CI/security tools must be represented in both layers before release.
+Dependencies need both the human Technical Architecture registry and machine records.
 
 Rationale:
 
-The registry tells human and AI maintainers why a dependency exists, but release safety needs checks that can run in CI. Without a machine-readable manifest, future AI agents could add npm packages, bundled binaries, provider SDKs, CI actions, or optional model downloads without license review, checksum policy, data-boundary review, or an exit path.
+This initial decision established dual ownership; the schema-governed replacement below
+defines the complete current contract.
 
 Consequences:
 
-- `docs/TECH_ARCHITECTURE.md` remains the canonical design registry.
-- `resources/dependency-manifest/` becomes the implementation manifest location once scaffolded.
-- `resources/toolchain-manifest/`, model manifests, provider catalog snapshots, lockfiles, SBOM/license notices, and release scripts must reference or align with dependency manifest records.
-- CI and release gates should block unregistered production/runtime/release dependencies and missing license/checksum policy metadata.
+- Follow `D-20260709-Dependency-Manifests-Are-Schema-Governed`.
 
 References:
 
@@ -1103,16 +1101,15 @@ Pige uses one shared error taxonomy across API/IPC responses, durable job error 
 
 Rationale:
 
-Agent products fail in many places: parsers, OCR, model providers, permissions, local tools, backup, restore, updates, and file paths. If each service invents error strings independently, future AI agents will create inconsistent UI states, unlocalized messages, fragile string matching, and diagnostic records that cannot be correlated. A shared taxonomy keeps recovery behavior predictable without adding user-facing complexity.
+Independent error strings create inconsistent recovery, localization, redaction, and
+diagnostic correlation. One typed taxonomy keeps failure UX predictable.
 
 Consequences:
 
-- Error codes use stable `<domain>.<reason>[.<detail>]` strings and never include private identifiers or user content.
-- API `PigeError`, job `PigeErrorSummary`, and `DiagnosticError` should share code, domain, message key, retryability, and user action for the same failure.
-- `packages/schemas/src/index.ts` owns the executable error enums and API/Job/diagnostic schemas; `packages/contracts/src/index.ts` re-exports their inferred types so process boundaries do not copy the vocabulary.
-- Durable Job `warnings` and `error` fields reject arbitrary records and validate through `PigeWarningSchema` and `PigeErrorSummarySchema`.
-- Renderer status cards choose affordances from structured fields, not localized text.
-- Tests must verify localization coverage, redaction, and cross-surface consistency for fixture failures.
+- Stable namespaced codes contain no private content. Shared schemas own code/domain,
+  message key, retryability, severity, action, warnings, and redacted diagnostics.
+- Renderer derives localized affordances from structure; tests enforce redaction and
+  cross-surface consistency.
 
 References:
 
@@ -1309,10 +1306,8 @@ Pige needs many fixtures, but future AI agents should not have to load the full 
 
 Consequences:
 
-- Release-gate fixtures must be represented in fixture manifests.
-- Public Alpha usability evidence uses the release-evidence path defined in Repository Structure and Release Engineering.
-- Generated reports are redacted by default and must not include private vault content, raw source bodies, prompts, model responses, secrets, or private absolute paths.
-- CI should validate fixture manifests before release-gate suites run.
+- Release fixtures are manifest-backed; generated reports use the owner-defined
+  `artifacts/` layout, remain redacted, and are validated before release suites.
 
 References:
 
@@ -1325,6 +1320,7 @@ References:
 
 Status: Accepted
 Date: 2026-07-09
+Supersedes: D-20260709-Dependencies-Need-Machine-Readable-Manifests
 
 Decision:
 
@@ -1336,11 +1332,8 @@ Pige depends on a broad supply chain: Electron, React, TypeScript, Pi Agent/AI, 
 
 Consequences:
 
-- `resources/dependency-manifest/dependency-manifest.schema.json` owns the machine-readable schema.
-- `resources/dependency-manifest/dependencies.manifest.json` owns approved implementation dependency records.
-- `resources/dependency-manifest/dependency-waivers.manifest.json` owns temporary exceptions with expiry, owner, risk, mitigation, and replacement plan.
-- Expired waivers block release.
-- Waivers cannot permit unknown executable provenance, unclear licensing, hidden task-time downloads, secret exposure, renderer trust-boundary bypass, or ignored available signature/checksum checks for bundled executables.
+- Schema, approved records, and expiring waivers have separate machine owners. Expired or
+  unsafe-provenance/license/download/secret/renderer/integrity exceptions block release.
 
 References:
 
@@ -1365,9 +1358,8 @@ The first scaffold commit sets the shape future AI agents will follow. If it mis
 
 Consequences:
 
-- The project setup reading pack is intentionally larger than a normal feature pack.
-- Phase 0 can still use section reads for large files, but it must inspect the owner contracts before scaffolding.
-- Future changes to workspace shape, dependency manifests, fixture manifests, or CI gates must update the same owner pack.
+- The setup pack is intentionally broader than feature packs but still uses section reads;
+  workspace, manifest, fixture, evidence, and CI changes revisit the same owners.
 
 References:
 
@@ -1434,7 +1426,6 @@ References:
 - `docs/START_HERE_FOR_AI_AGENTS.md`
 - `docs/QUALITY_AND_TEST_STRATEGY.md`
 - `docs/SPEC_TRACEABILITY.md`
-- `docs/DESIGN_BASELINE_AUDIT.md`
 
 ### D-20260709-Phase-1-Provider-And-Settings-Registry
 
@@ -1842,14 +1833,12 @@ Readability's supported Node path needs a DOM implementation, while jsdom gives 
 
 Consequences:
 
-- jsdom scripts and subresources are not enabled; hostile page scripts remain inert in fixtures.
-- Production connections are pinned to validated DNS answers and every redirect gets a new validation and dispatcher.
-- URL capture enforces five redirects, 10 seconds through body reads, and 2 MiB of decompressed response bytes.
-- Web extraction enforces a 5-second worker deadline, 256 MiB old-generation cap, 2,097,152 decoded input characters, 20,000 Readability elements, 1,000,000 output characters, 64 redacted HTTP(S) image references, one active extraction, and at most eight pending extractions per adapter.
-- Source Records persist extraction identity/version/mode/counts/truncation and selected bounded metadata. Conversation history remains reference-only.
-- Reduced or truncated extraction enters Agent quality context as a non-blocking warning;
-  Pi narrows, replans, or abstains unless a true exception applies.
-- Dependency, toolchain, hostile fixture, built-worker smoke, SSRF, charset, body-timeout, response-size, fallback, and Agent-handoff evidence must pass before release.
+- Scripts/subresources stay disabled; every production connection and redirect uses a
+  newly validated address-pinned dispatcher.
+- Parser, body, redirect, queue, heap, time, element, output, and image limits are owned
+  by the Parser, Security, and Performance contracts rather than repeated here.
+- Source Records keep bounded extraction identity/quality metadata; conversations stay
+  reference-only, and reduced evidence causes Agent warning/replan/abstention.
 
 References:
 
@@ -1958,16 +1947,13 @@ PDF.js is Apache-2.0, works with Pige's Node 24 baseline, avoids a hidden task-t
 
 Consequences:
 
-- The adapter is exposed to Pi Agent as a bounded PDF inspect/extract tool when both bundled modules resolve. DOCX/PPTX parsing is governed separately by `D-20260710-Bounded-Office-Openxml-Worker`; this decision owns only the PDF adapter.
-- Source preservation and durable queueing remain host responsibilities. Any current format-triggered parse/Agent continuation is a transitional bridge and does not define the target orchestration contract.
-- The worker gets one preserved PDF path and byte/page limits, has no artifact-write authority, and runs with timeout/heap limits.
-- Text and metadata use deterministic paths. The sidecar stores locators, counts, warnings, quality, checksums, and OCR candidates without duplicating page text.
-- One deterministic `create_artifact` Operation Record preserves audit references and warnings without duplicating the extracted body; retry can repair it idempotently.
-- The tool returns coverage, OCR candidates, warnings, and locators to Pi Agent; Pi Agent decides whether to inspect further, invoke OCR, continue with bounded evidence, or wait for a capability.
-- Page-limit truncation and OCR-pending state are trusted quality metadata; service guards
-  cap high confidence and force conservative replan/warning/abstention, not approval by default.
-- Source-page refresh uses durable previous/target checksums so interrupted Pige writes are recoverable and external user edits are never silently overwritten.
-- Release packaging must prove the platform-specific native canvas binary and worker entry are present on every supported macOS/Windows target.
+- Pi receives a bounded PDF inspect/extract tool; Host owns preservation, deterministic
+  Artifacts/Operations, sidecars, source-page conflict fencing, and recovery.
+- The worker receives one verified disposable input, has no vault-write authority, and
+  obeys the Parser/Performance limits.
+- Quality, locators, warnings, and OCR candidates guide Pi; truncation or dependency wait
+  cannot silently become high-confidence publication.
+- Release evidence must prove the worker and native canvas runtime on supported packages.
 
 References:
 
@@ -1993,13 +1979,13 @@ Mammoth provides the required DOCX headings, lists, tables, links, and image ref
 
 Consequences:
 
-- The Office worker receives one preserved source path and hard byte, entry, expanded-size, XML, slide, text, timeout, and heap limits; only main-process Parser Service may write vault artifacts.
-- DOCX conversion disables embedded style maps and external-file access, replaces images with local references, and never renders converter HTML.
-- PPTX parsing rejects unsafe paths, duplicate parts/relationships, suspicious compression, DOCTYPE, invalid/deep XML, and unsafe internal relationships; external targets are counted but never opened.
-- Deterministic text and text-free metadata artifacts carry checksum/size references. Source, parser version, sidecar, and text integrity are verified before reuse or Agent handoff.
-- The tool returns text quality, media/OCR candidates, Artifact IDs, warnings, and bounded locators to Pi Agent; Pi Agent chooses the next tool call or a visible dependency wait.
-- Interrupted idempotent tool Jobs are recoverable child work of the Agent Job; uncertain or cancellation-in-progress work becomes explicitly retryable without inventing a host-fixed next step.
-- Dependency updates require real semantic DOCX, relationship-ordered PPTX, hostile archive/XML, worker packaging, artifact integrity, and restart recovery gates.
+- The bounded Office worker receives one verified disposable input and no vault-write
+  authority; main-process Parser Service owns deterministic Artifacts and recovery.
+- DOCX external/style execution stays disabled. PPTX archive, relationship, compression,
+  XML, path, and external-target rules fail closed under the Parser/Security limits.
+- Pi receives quality, media/OCR candidates, refs, warnings, and locators and chooses the
+  next tool or dependency wait; Jobs never invent a fixed continuation.
+- Updates repeat semantic-format, hostile-input, packaging, integrity, and recovery gates.
 
 References:
 
@@ -2025,14 +2011,14 @@ The macOS 26 Vision API provides high-quality local recognition without a model 
 
 Consequences:
 
-- The helper uses a single bounded JSON request/response protocol, sanitized environment, no shell, no OCR network access, and no task-time dependency download.
-- Runtime verifies an adjacent helper manifest and exact binary checksum before declaring the capability available. Release builds must compile each architecture, sign the nested helper, package its manifest, and prove packaged recognition before notarization.
-- Direct `image_file` OCR is implemented. PDF pages, slide images, and embedded Office media stay dependency-waiting until reviewed render/materialization adapters produce bounded pixel Artifacts; locator strings are not image inputs.
-- OCR text and metadata remain derived, checksummed, rebuildable Artifacts. The metadata sidecar contains locators, geometry, confidence, language/image metadata, warnings, and checksums without copying the recognized body.
-- Preserved source integrity is checked before and after recognition. Valid artifacts are reused after restart, stale derived artifacts are regenerated, source/path integrity failures do not invoke Vision, and empty recognition returns an explicit empty tool result for Pi Agent to replan without a knowledge write.
-- Low-confidence or truncated OCR remains evidence with non-blocking quality warnings; Pi
-  narrows, replans, or abstains unless a true exception applies.
-- Windows AI OCR and user-consented PaddleOCR fallback remain separate future slices behind the same capability boundary.
+- The helper uses a bounded typed protocol, sanitized environment, no shell/network, and
+  no task-time download; runtime verifies its manifest and checksum.
+- Only reviewed pixel Artifacts enter OCR. Derived text/metadata remain checksummed and
+  rebuildable, with source integrity checked around recognition.
+- Empty, low-confidence, truncated, stale, or invalid results replan/warn/abstain rather
+  than manufacture knowledge.
+- Release proves compiled, signed, packaged helper recognition per supported target;
+  Windows/Paddle remain separate adapters behind the same boundary.
 
 References:
 
@@ -2058,10 +2044,10 @@ Three independently numbered delivery plans made the same Phase label mean diffe
 
 Consequences:
 
-- Architecture and specialized contracts own services and behavior but do not define alternate numbered phase plans.
-- Every Playbook Build commitment maps to a stable exit criterion; every active requirement maps to one Phase, one compatible Milestone, verification, status, and evidence or planned target.
-- Definition rows do not count as their own references, and historical/research material cannot be the sole current owner or implementation evidence.
-- Existing in-flight work keeps its current P0-P9 and M0-M7 labels. It absorbs new requirement/evidence mapping at the next natural handoff unless a live security, privacy, durable-data, migration, or incompatible-contract risk requires immediate coordination.
+- Owners cannot define alternate numbered plans. Builds map to Exits; Requirements map
+  once to Phase/Milestone, verification, acceptance, and evidence/planned target.
+- Historical/research material cannot own current implementation evidence; stable P/M
+  labels change only through the canonical owners.
 
 References:
 
@@ -2086,12 +2072,10 @@ Link checks and large design coverage can both be green while semantic contracts
 
 Consequences:
 
-- `resources/documentation-quality/documentation-quality.manifest.json` owns gate IDs, weights, dimensions, and the threshold.
-- `resources/documentation-quality/documentation-leanness.manifest.json` owns the audited context, inventory, projection, and physical-volume budgets.
-- `scripts/verify/documentation-quality.mjs` evaluates current repository evidence and writes a generated report under `artifacts/documentation-quality/`.
-- Critical security routing, durable-data ambiguity, incompatible normative contract, false-positive traceability, or unmapped v0.1 scope prevents the affected dimension from reaching the threshold.
-- Normal repository verification runs document-map/link, decision lifecycle, traceability, contract-consistency, and scorecard gates.
-- The scorecard measures documentation control, not product completion. Planned product requirements remain honestly planned and still block their release phase when applicable.
+- Quality/leanness manifests own dimensions, weights, thresholds, inventories, projections,
+  and budgets; verification writes only generated reports under `artifacts/`.
+- Critical routing/data/contract/trace gaps cap the affected score. Documentation health
+  never promotes planned product acceptance.
 
 References:
 
@@ -2116,13 +2100,11 @@ An ID table and existing file paths can be structurally green while omitting P0 
 
 Consequences:
 
-- PRD section 8.1 currently contains 151 P0 bullets; adding, removing, or moving one requires an explicit coverage-manifest update.
-- Every active requirement appears in exactly one Playbook Phase gate and one Milestone gate, and maps to Builds whose declared Exits are present in the same acceptance link.
-- Every Exit has `planned`, `partial`, or `verified` status. A phase cannot be `complete` while any assigned requirement or Exit is incomplete.
-- Every partial Requirement and Exit names a structured open gap with controlled Build and Exit destinations.
-- Test/verifier evidence names an exact selector. Recipe-backed generated or manual release reports may live under gitignored `artifacts/`; historical material cannot prove current implementation.
-- Traceability scoring runs five separate checks and mutation cases. Automated self-scoring does not by itself promote `PIGE-DOC-005` or E0.11 from `partial`.
-- Existing P0-P9 and M0-M7 labels remain unchanged. Active development adopts the added IDs and evidence selectors at the next natural handoff unless a safety or incompatible-contract issue requires immediate action.
+- Coverage updates with PRD P0; each Requirement maps once to Phase/Milestone and
+  controlled Builds/Exits. Incomplete acceptance prevents phase completion.
+- Partial rows own structured destinations; verified executable evidence names and runs
+  exact selectors. Recipe-backed reports stay under `artifacts/`; history proves no code.
+- Five independent trace gates and mutations prevent aggregate/self-scoring promotion.
 
 References:
 
@@ -2152,12 +2134,10 @@ The setting was already user-visible, but a hard-coded copy path made it decorat
 
 Consequences:
 
-- A missing referenced original becomes a reconnectable dependency; checksum, symlink, or path-boundary violations fail closed.
-- Managed-copy and referenced-original files share parser, OCR, and Agent ingest behavior after source verification.
-- Temporary worker inputs are checksum-bound, private, and disposed after adapter use; verified Artifact reuse avoids creating an unnecessary copy.
-- Markdown projections never expose operational original or managed-copy paths.
-- Existing managed-copy Source Records remain valid and are not rewritten when the default changes.
-- Planning impact is Medium and additive within the existing P5/P6 source-ingest boundaries; no Phase, Milestone, stable ID, or migration renumbering is required.
+- Both strategies share verified parser/OCR/Agent behavior; missing/drifted/escaping inputs
+  fail closed and operational paths never enter Markdown/renderer output.
+- External adapters receive private checksum-bound disposable inputs; existing records
+  remain valid when defaults change.
 
 References:
 
@@ -2184,13 +2164,12 @@ String markers and test-title checks can stay green while an executable schema a
 
 Consequences:
 
-- A durable Job uses `state`; an extra `status` or other undeclared root field is rejected.
-- An Operation Record rejects undeclared root fields such as `rawPrompt`, and `model_egress_decision` requires its typed body-free audit object.
-- A `reference_original` Source Record cannot also contain `managedCopy`, and readers never choose a locator independently of `storageStrategy`.
-- Built-in OpenAI and Anthropic records without `builtin_verified` boundary metadata fail schema validation.
-- Changed selected payload, prompt metadata, endpoint, model identity, evidence identity, or final classification/decision creates a distinct audit operation; a retry reuses an audit only when the complete approved identity is equivalent.
-- CON-001 through CON-004 execute their mapped tests, while CON-005 validates and executes the semantic anchor map.
-- The change keeps all current stable IDs, Phase labels, Milestone labels, and implementation ordering intact; active development absorbs the stricter boundary without renumbering planning controls.
+- Strict schemas reject undeclared durable fields, contradictory source locators, and
+  unverified built-in provider boundaries.
+- Body-free egress audits bind payload, prompt metadata, destination/model, evidence,
+  classification, and decision identity; only an equivalent retry reuses one.
+- Contract gates execute shared schema/service tests and semantic anchors without changing
+  stable planning IDs or phase ownership.
 
 References:
 
@@ -2200,11 +2179,6 @@ References:
 - `docs/AGENT_RUNTIME_POLICY_CONTEXT.md`
 - `docs/QUALITY_AND_TEST_STRATEGY.md`
 - `packages/schemas/src/index.ts`
-- `apps/desktop/src/main/services/source-file-access.ts`
-- `apps/desktop/src/main/services/agent-ingest-service.ts`
-- `tests/unit/durable-contract-schemas.test.ts`
-- `tests/unit/security-contract-schemas.test.ts`
-- `tests/unit/agent-ingest-service.test.ts`
 
 ### D-20260710-Semantic-Traceability-Lock-And-Executable-Evidence
 
@@ -2214,7 +2188,12 @@ Revised: 2026-07-10
 
 Decision:
 
-The acceptance manifest uses schema version 3 with normalized `capabilities`, `requirements`, `exits`, evidence, and phase-state owners. The semantic-claims lock uses schema version 2 with one SHA-256 digest per canonical claim instead of full preimages. Together they bind PRD item text, Requirement identity/ownership, capability delivery assignments, Build/Exit/Deferred text, Phase state, evidence selectors, acceptance status, and open destinations. The lock changes only after an explicit semantic review.
+The acceptance manifest uses schema version 3 with normalized `capabilities`,
+`requirements`, `exits`, evidence, and phase-state owners. The semantic-claims lock uses schema version 3
+with one compact base64url SHA-256 digest per canonical claim instead of
+full preimages. Together they bind PRD text, Requirement/capability delivery, Build/Exit/
+Deferred text, Phase state, evidence, acceptance, and open destinations. The lock changes
+only after explicit semantic review.
 
 Rationale:
 
@@ -2222,12 +2201,12 @@ Cross-linked mapping tables can remain structurally green when related Requireme
 
 Consequences:
 
-- Every partial Requirement and every partial Exit has a stable open ID, a concrete description, and controlled Build/Exit destinations.
-- Spec owns Requirement ID, text, owner, Phase, Milestone, and verification class; acceptance alone owns current status, exact evidence/planned targets, and open work.
-- Test and verifier evidence used to claim `verified` acceptance is path-constrained and executed by the traceability gate. Recipe-backed generated/manual reports retain source-recipe hash validation.
-- Missing, extra, altered, or coordinated P0, capability, Requirement, Build, Exit, Deferred, Phase-state, evidence, and open-gap claims fail against `resources/traceability/semantic-claims.manifest.json` until a reviewer explicitly accepts the semantic change.
-- `PIGE-VAULT-003` stays within the v0.1 owner contract: managed-copy and verified referenced-original preservation, with cross-root reference recovery assigned to B2.07/E2.08. Advanced `link_to_original` remains explicitly deferred by D2.04 rather than expanding v0.1.
-- Active development need not stop or rewrite completed work. Teams consume the stricter evidence/open format at the next natural handoff unless a live acceptance contradiction is discovered; no Build, Exit, Phase, Milestone, or requirement ID is renumbered.
+- Spec owns Requirement identity and assignment; acceptance alone owns current status,
+  exact evidence/planned targets, structured open work, and controlled destinations.
+- Verified executable evidence is path-constrained and run; recipe-backed reports retain
+  recipe-hash validation.
+- Missing, extra, altered, or coordinated semantic claims fail per Claim ID until an
+  explicit reviewed lock update; format migration cannot silently change claim meaning.
 
 References:
 
@@ -2254,14 +2233,13 @@ PDF page locators already identify an exact rasterization target, and both runti
 
 Consequences:
 
-- The renderer has independent file/page/pixel/PNG/aggregate/heap/time limits, no network path, strict worker-response validation, symlink rejection, and an installed-worker smoke requirement.
-- Main-process `PdfOcrArtifactService` owns deterministic rendered-page, render-manifest, OCR-text, and OCR-metadata writes; source bytes remain immutable and may be a managed copy or verified referenced original. Render/OCR manifests bind parser-metadata identity and the exact candidate-page set, and persistence rereads the latest Source Record before merge.
-- Rendering and recognition use separate idempotent body-free Operation Records. Complete checksummed output is reused; incomplete render/recognition returns a retryable or dependency-waiting tool result to the Agent Job.
-- Pi Agent decides whether a mixed PDF needs bounded OCR enrichment before synthesis. Complete
-  empty enrichment preserves verified native evidence; unavailable OCR lets Pi wait or continue
-  with an explicit quality warning under policy.
-- The native Canvas worker requires macOS arm64/x64 and Windows x64 installed-package startup and crash-soak evidence. The port can move to an Electron utility process, Poppler, PDFium, or another reviewed renderer if worker-thread/native-module evidence is insufficient.
-- B5.08 and E5.05 remain partial until slide/media materialization, Windows/PaddleOCR fallback, progress/cancellation, and supported-package evidence are complete.
+- The worker has no network/vault authority and obeys independent source, page, pixel,
+  encoded-output, aggregate, heap, time, response, and symlink limits.
+- Main owns deterministic render/OCR Artifacts, manifests, Source Record rereads, and
+  separate idempotent Operations; complete output reuses, incomplete output stays typed.
+- Pi chooses bounded enrichment; empty/unavailable OCR preserves native evidence and
+  triggers policy-aware wait, warning, replan, or abstention.
+- Packaging and replacement evidence remain owned by Release/Performance and acceptance.
 
 References:
 
@@ -2270,13 +2248,7 @@ References:
 - `docs/PERFORMANCE_AND_RELIABILITY.md`
 - `docs/SECURITY_THREAT_MODEL.md`
 - `docs/RELEASE_ENGINEERING.md`
-- `apps/desktop/src/main/services/pdf-page-renderer-service.ts`
-- `apps/desktop/src/main/services/pdf-ocr-artifact-service.ts`
 - `resources/parser-manifests/pdf-page-materializer.manifest.json`
-- `tests/unit/pdf-page-renderer-core.test.ts`
-- `tests/unit/pdf-page-renderer-service.test.ts`
-- `tests/unit/pdf-ocr-artifact-service.test.ts`
-- `tests/unit/jobs-service.test.ts`
 
 ### D-20260710-Multi-Artifact-Evidence-And-Claim-Citations
 
@@ -2294,16 +2266,14 @@ Choosing the first OCR/text Artifact or the first metadata sidecar loses native 
 
 Consequences:
 
-- Native evidence is ordered before OCR. OCR is deduplicated only when same-parent native text already contains it; mixed packs reserve bounded capacity for supplemental OCR so native-first ordering cannot consume the entire context.
-- Current ingest caps the pack at 24 fragments and 18,000 evidence characters. Citation-locator
-  collisions across distinct Artifacts get deterministic suffixes. Truncation, unpaired
-  metadata, low OCR confidence, and missing refs emit non-blocking quality warnings.
-- Unknown refs fail before Markdown write. Empty refs cannot support autonomous publication;
-  Pi replans or abstains. Model citation tokens are stripped; Pige renders
-  `[source:<source-id>#<locator>]` from validated refs.
-- PDF parser sidecars include exact page character spans for new output. Legacy one-page/marker-based sidecars remain readable, but cannot override a checksum-matched structured span.
-- Pi runtime Model Egress still occurs before prompt rendering or credential lookup. The audit binds the ordered redacted evidence selection, bounded/redacted dynamic prompt metadata, and concrete non-secret Provider/Model routing identities; same-ID endpoint or model changes fail closed before model invocation.
-- The deterministic B5.12 seed covers English direct text and Simplified Chinese low-confidence OCR plus fabricated-claim, cited-body-support, missing-ref, and unavailable-ref negative controls. E5.04 remains partial until all required fixture families and thresholds are present.
+- Native-first packs reserve bounded supplemental OCR capacity; sidecar/body identity,
+  locators, collisions, truncation, and quality warnings remain deterministic.
+- Unknown/empty refs cannot authorize publication. Pige strips model citation syntax and
+  renders canonical citations only from validated ephemeral refs.
+- Model Egress binds the ordered redacted selection, prompt metadata, and non-secret
+  destination/model identities before prompt rendering or credential lookup.
+- Exact pack limits, multilingual/evidence fixtures, and remaining acceptance gaps live
+  in the Context, Prompt, Quality, and acceptance owners.
 
 References:
 
@@ -2311,10 +2281,6 @@ References:
 - `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`
 - `docs/MARKDOWN_SCHEMA.md`
 - `docs/PARSER_INGEST_SPEC.md`
-- `apps/desktop/src/main/services/evidence-assembly-service.ts`
-- `apps/desktop/src/main/services/agent-ingest-service.ts`
-- `tests/unit/evidence-assembly-service.test.ts`
-- `tests/evals/agent-ingest.multilingual-golden.test.ts`
 
 ### D-20260710-Single-Owner-Documentation-Projections
 
@@ -2561,6 +2527,41 @@ References:
 - `docs/JOB_OPERATION_AND_RECOVERY.md`
 - `docs/KNOWLEDGE_MODEL_AND_LINKING.md`
 - `docs/UI_PROTOTYPE.md`
+
+### D-20260713-Safe-Home-Draft-Replacement
+
+Status: Accepted
+Date: 2026-07-13
+
+Decision:
+
+Home streams model-backed progress as bounded `draft_replace` snapshots extracted only
+from the parsed `answer` field of the exact terminal Pige tool. Drafts are temporary and
+sender/turn/Job-bound; the fully validated durable assistant result remains authoritative.
+
+Rationale:
+
+Waiting for the complete tool result makes normal conversation feel stalled, but raw Pi
+text/tool deltas expose unvalidated JSON, provider behavior, citations, or control data.
+Replacement snapshots support provider repair/backtracking without inventing a second
+answer protocol or persisting untrusted partial output.
+
+Consequences:
+
+- No thinking, generic Pi prose, raw provider event, tool JSON, citation, grounding,
+  identifier, credential, or restricted/control content reaches renderer as a draft.
+- Sequence/binding/bounds, escaping, coalescing, cancellation, and wrong-sender rejection
+  are typed and tested; replacement may shorten earlier text.
+- Final schema/evidence/source/citation validation and durable conversation/Job commit are
+  unchanged. Final replaces the draft; failure/cancel clears it; restart replays none.
+
+References:
+
+- `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/UI_PROTOTYPE.md`
+- `docs/PERFORMANCE_AND_RELIABILITY.md`
+- `docs/QUALITY_AND_TEST_STRATEGY.md`
 
 ## 4. Deferred Decisions
 

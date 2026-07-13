@@ -37,6 +37,7 @@ capture.submit
 jobs.cancel
 library.query
 agent.submitTurn
+agent.turnDraft
 notes.open
 notes.saveDraft
 permissions.resolve
@@ -541,6 +542,10 @@ Queries:
 - `agent.conversation`
 - `retrieval.search`
 
+Events:
+
+- `agent.turnDraft`
+
 Retrieval DTOs and internal context-pack refs must follow `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`. Renderer-facing responses show grounded answers, ranked results, snippets, citations, and degraded-search state; they do not expose raw prompts, context budgets, full retrieved bodies, raw vector data, or secret-bearing policy details.
 
 Current renderer uses schema-v1 `agent.submitTurn`. Optional client/conversation/tail IDs
@@ -550,6 +555,43 @@ follow-up eligibility, and safe latest Job state; Home requests 24. Durable resu
 conversation/tail IDs. One file is preserved; no model waits/resumes without fallback.
 Responses exclude bodies, paths, prompts, credentials, endpoints, and raw errors. Legacy
 handlers stay readable; save-answer/multi-attachment recovery remain open.
+
+`agent.turnDraft` is a sender-scoped presentation event for an active
+`agent.submitTurn`, not a durable result or raw runtime stream:
+
+```ts
+type AgentTurnDraftEvent = {
+  apiVersion: 1;
+  kind: "draft_replace";
+  requestId: string;
+  clientTurnId: string;
+  jobId: string;
+  conversationId: string;
+  conversationEventId: string;
+  sequence: number;
+  text: string;
+};
+```
+
+Rules:
+
+- Main sends only to the WebContents that initiated the exact turn. All IDs must match
+  the active request/Job/user event, and `sequence` increases monotonically from one.
+- `text` is the complete replacement snapshot, not an append delta. It is non-empty,
+  escaped by renderer, bounded by the final 8,000-character answer limit, and may shrink
+  when the provider repairs an in-progress tool argument.
+- The Host may emit only the already-parsed `answer` string from the exact terminal Home
+  tool after control/restricted-content filtering. It must not parse or forward partial
+  JSON, generic Pi text, thinking, tool arguments, citations, grounding, model/provider
+  identifiers, raw payloads, errors, or credentials.
+- Main coalesces updates to a bounded rate. Renderer ignores stale, duplicated,
+  out-of-order, wrong-sender, or wrong-turn events and replaces one escaped draft bubble;
+  it never appends fragments into durable conversation state.
+- The completed `agent.submitTurn` result and durable `agent.conversation` event remain
+  authoritative. Final replaces the draft atomically; failure/cancellation clears or
+  marks it through localized state, stops later events, and never persists it.
+- Reconnect/restart does not replay drafts. It reads only the durable conversation/Job
+  result and may resume the Job through the existing recovery contract.
 
 ### 6.7 Permissions
 

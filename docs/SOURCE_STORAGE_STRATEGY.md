@@ -221,16 +221,11 @@ Rules:
 - If sidecar and Markdown disagree, operational services use the sidecar, preserve user-authored Markdown, mark the projection stale/conflicted, and create a repair operation/proposal. They never copy a Markdown path back into the sidecar silently.
 - Deleting the sidecar is data loss, not an index reset. Markdown can help identify the source ID, but cannot reconstruct missing root bindings, checksums, original locators, or artifact provenance without an explicit repair flow.
 
-Current implementation note (Phase 2 foundation, extended by the active source-storage contract):
-
-- Text captures are stored as managed text sources under `raw/text/YYYY/MM/`.
-- Dropped or selected `.md`, `.markdown`, `.txt`, `.pdf`, `.docx`, `.pptx`, and common image files obey `sourceStorage.defaultStrategy`: managed-copy mode writes `raw/files/YYYY/MM/` with source-ID filenames; reference mode stores the verified original locator without creating a duplicate.
-- File source records always store original URI/path metadata, display name, size, mtime, checksum, and source kind; `managedCopy` exists only for managed-copy mode. Parser, OCR, and Agent readers resolve the locator selected by `storageStrategy` and fail closed on contradictory records, missing or changed files, symlinks, or escaping inputs. Before PDF/Office parsing, page rendering, or native OCR crosses into an external adapter, the Source Storage boundary opens the selected file, binds descriptor/path identity, copies and hashes bytes into a private temporary input, rechecks the recorded size/checksum and live identity, and then makes the copy read-only where supported. The adapter receives only that disposable path; the original or managed-copy pathname is never its input. Supported POSIX systems add no-follow open semantics, while every platform performs the before/after identity checks. This closes the preserved-source verification-to-worker-open replacement window for current parser/OCR calls; it does not replace each durable-write owner's destination-containment checks or strict cross-process SourceRecord-to-note CAS.
-- When a minimal source page is created, the source record stores `knowledgePageId` and `knowledgePagePath` so recovery and future indexes can connect source evidence to Markdown.
-- Conversation events store source IDs, display names, and source kinds, not file bodies or absolute paths returned to the renderer.
-- PDF/DOCX/PPTX/image source records initially set `parserRequired: true` and `parserStatus: "waiting_parser_or_ocr"`. Bundled PDF and Office adapters advance matching records to `parsed` or `parsed_needs_ocr` and write deterministic `extracted_text`/`metadata` Artifacts. Supported macOS direct-image OCR advances images to `ocr_completed` or `ocr_completed_empty`, writes deterministic `ocr`/metadata Artifacts with checksum/size references, and never rewrites the managed image; unavailable engines leave the Job waiting without changing source ownership.
-- Archives, folders, audio, video, legacy Office formats, SVG, and unknown files remain later work and may be rejected by the current file-capture entry point until the corresponding phase is implemented.
-- Existing Phase 2 sidecars omit `schemaVersion`, `rootId`, and `pathBasis`; shared-schema reads supply `schemaVersion: 1`, and their vault-relative paths remain valid under the compatibility rule in section 3.1. This compatibility note does not require new file captures to use managed-copy mode.
+Current format support and executable evidence live in the Playbook and acceptance
+manifest. Existing Phase 2 sidecars may omit `schemaVersion`, `rootId`, and `pathBasis`;
+shared-schema reads supply schema v1 and keep their vault-relative paths valid under
+section 3.1. This compatibility rule never changes the selected storage strategy or
+weakens descriptor, checksum, containment, adapter-input, or durable-write validation.
 
 ## 6. Markdown Knowledge Contract
 

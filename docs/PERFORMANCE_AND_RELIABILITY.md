@@ -49,8 +49,18 @@ These targets are baseline test fixtures. Real-world results depend on machine c
 | Library list with warm DB and 10,000 pages | Under 1 second initial render |
 | Home query lexical first results | Under 2 seconds on warm DB |
 | Home query semantic rerank | May continue in background with visible status |
+| Eligible Home draft snapshot to visible replacement | Under 250 ms at p95; provider generation time is measured separately |
 | Settings open | Under 500 ms |
 | Permission dialog display | Immediate after sensitive action request |
+
+Draft-stream rules:
+
+- Record submit-to-first-safe-draft and final-answer latency separately. Provider/network
+  time may vary, but Pige's parsed-snapshot-to-render overhead must stay within the table.
+- Draft replacement is coalesced and bounded; it must not block typing, duplicate text,
+  rerender the whole timeline, or grow memory with every intermediate snapshot.
+- Cancellation stops draft delivery promptly. Restart loads no provisional buffer and
+  does not spend recovery time replaying it.
 
 ### 3.2 Memory Budgets
 

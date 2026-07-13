@@ -8,11 +8,11 @@
     "markdownBytes": 1274010
   },
   "budgets": {
-    "maximumMarkdownFiles": 57,
+    "maximumMarkdownFiles": 55,
     "maximumMarkdownLines": 23820,
     "maximumMarkdownWords": 163500,
     "maximumMarkdownBytes": 1210000,
-    "maximumAlwaysReadWords": 4200,
+    "maximumAlwaysReadWords": 3700,
     "maximumTraceManifestLines": 5500,
     "maximumTraceManifestBytes": 250000
   },

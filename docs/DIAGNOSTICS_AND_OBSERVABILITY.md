@@ -225,13 +225,9 @@ Support bundle UX:
 - Export to a user-selected local path.
 - Do not upload automatically.
 
-Phase 1 implementation note:
-
-- `diagnostics.previewSupportBundle` returns included/excluded categories, estimated size, and privacy warnings.
-- `diagnostics.exportSupportBundle` requires a current preview ID and writes a local JSON bundle selected through an OS save dialog.
-- The current bundle includes app runtime metadata, diagnostics health, and bounded redacted recent diagnostic events.
-- Optional note/source/prompt excerpts are not implemented in Phase 1 and remain excluded by default.
-- Redaction is applied recursively to exported string fields before serialization; export does not mutate durable vault files.
+Current bundle evidence and excluded/open categories live in acceptance. Preview binding,
+user-selected local export, recursive redaction, and no durable-vault mutation remain the
+stable contract.
 
 ## 10. Redaction Rules
 

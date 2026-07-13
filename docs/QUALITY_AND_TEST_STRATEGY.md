@@ -235,6 +235,14 @@ Tests must verify:
   only isolated `Models` through the sole adapter.
 - Renderer→preload→main proves direct, Pi-selected retrieve, preserve-first source,
   wait/resume, and removal of capture/retrieval semantic bypass from the Home renderer.
+- Draft-stream tests use the exact terminal Home tool and prove parsed `answer`-only
+  replacement snapshots, sender/request/turn/Job binding, monotonic sequence, bounds,
+  coalescing, escaping, and repair that can shrink prior text. They reject raw Pi text,
+  partial JSON, thinking, other tool arguments, citations/grounding, IDs, provider
+  payloads, restricted/control content, wrong sender, stale sequence, and post-cancel events.
+- Final validation replaces the draft exactly once and alone creates durable assistant/
+  Job output. Schema/citation/source drift, provider failure, and cancellation leave no
+  durable draft; restart/conversation recovery never replays one.
 - Initial context has instruction/policy/tools; evidence follows selected calls. Without
   a model, one durable turn waits and performs no semantic work.
 - Only registered tool calls write; retry/restart reuses call/Operation identity.
@@ -432,6 +440,8 @@ Required gates:
 - Idle memory stays below target where Electron overhead allows.
 - Ordinary active memory stays below target outside heavy jobs.
 - Heavy workers release memory after completion.
+- Safe Home draft propagation meets the p95 overhead target without typing/timeline
+  regression, unbounded event growth, or draft replay after restart.
 - Backup and restore show progress and can be cancelled safely where feasible.
 
 ## 12. Documentation Control Gates

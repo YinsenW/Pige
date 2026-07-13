@@ -173,7 +173,7 @@ const cases = [
       const claims = model.semanticClaims.claims.requirementAcceptance;
       const removed = Object.keys(claims)[0];
       delete claims[removed];
-      claims["CLM-REQ-ACCEPT-EXTRA-999"] = "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+      claims["CLM-REQ-ACCEPT-EXTRA-999"] = "b64u:__________________________________________8";
     },
     expected: [
       "Acceptance manifest contains unsupported field requirementLinks",
@@ -184,7 +184,7 @@ const cases = [
     name: "rejects historical material as implementation evidence",
     check: "TRC-005",
     mutate(model) {
-      model.acceptance.evidenceCatalog["EV-CAPTURE"].path = "docs/DESIGN_REVIEW.md";
+      model.acceptance.evidenceCatalog["EV-CAPTURE"].path = "docs/PI_PACKAGE_RESEARCH.md";
       model.acceptance.evidenceCatalog["EV-CAPTURE"].selector = "#";
     },
     expected: "uses historical evidence"

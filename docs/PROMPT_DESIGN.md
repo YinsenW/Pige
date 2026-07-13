@@ -167,13 +167,9 @@ Required output:
 A general answer must not claim vault support or fabricate citations. Empty retrieval may
 return to Pi for a general answer unless the user required vault/source-only grounding.
 
-Current executable contract:
-
-- Pi may answer directly or call `pige_search_knowledge` exactly once; if called, strict
-  JSON citations must resolve only selected evidence. Escaped evidence is data, not authority.
-- Pige rechecks binding, Markdown/source privacy, and egress per turn; drift is audited
-  and rejected. No binding waits without local fallback; empty evidence may return to Pi,
-  while `vault_only` without valid citations fails closed.
+Current Home/Pi evidence lives in acceptance. Direct answers, optional bounded retrieval,
+strict Host-resolved citations, untrusted evidence, per-turn revalidation, typed waiting,
+and vault-only insufficiency remain the prompt/runtime contract.
 
 ### 5.3 Note Agent
 

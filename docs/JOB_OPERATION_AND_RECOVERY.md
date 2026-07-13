@@ -86,46 +86,9 @@ Rules:
 - Vault-scoped job records are included in vault backup by default according to backup policy.
 - Machine-local job records are excluded from vault backup by default and exportable only through explicit diagnostics/settings export.
 
-Phase 2 implementation note:
-
-- Capture jobs are written as JSON records under `.pige/jobs/YYYY/MM/`.
-- `jobs.list` provides a read-only Home status summary by scanning those durable records after launch.
-- Job summaries expose safe identity/state plus optional stage/progress; they never expose paths, bodies, prompts, responses, or secrets.
-- Invalid job JSON is counted and skipped rather than blocking Home.
-- `jobs.cancel` directly cancels eligible non-running work only when its action-safety
-  guard is false/absent; active in-process parse/OCR/Agent ingest/index rebuild becomes `cancel_requested`.
-- `jobs.retry` can mark eligible failed/waiting/cancelled jobs back to `queued` for later processing.
-- Capture enters `running/capturing_source`; source preservation does not set the guard.
-  A once-only checkpoint precedes its first Source Record/Page projection; running capture cancellation remains open.
-- Preserved PDF/DOCX/PPTX/image captures create metadata-only pages and Agent-ingest Jobs;
-  Pi may persist deterministic parse/OCR children. Already-persisted schema-compatible
-  Office parse/OCR and image OCR Jobs remain processable; ordinary capture does not
-  recreate their host routes.
-- Parse/OCR routing and evidence gates are owned by `PARSER_INGEST_SPEC.md`; Artifact,
-  sidecar, and revision boundaries by `TECH_ARCHITECTURE.md` and
-  `SOURCE_STORAGE_STRATEGY.md`. Jobs wait on insufficient evidence, keep incomplete work
-  retryable, reuse verified output, and never start Agent ingest from unreadable evidence.
-- Capture, parse, and OCR runners persist and link each deterministic parse, OCR, or Agent-ingest child before parent terminalization. Interrupted `running` parents auto-requeue; handled finalization failures remain `failed_retryable` for explicit retry. Both reuse the linked child. This guarantee is separate from the deferred `capture_batch` hierarchy.
-- Startup and vault activation first reconcile interrupted jobs. Proven-idempotent capture/parse/OCR/Agent-ingest/index jobs are requeued; cancellation-in-progress and unproven classes become `failed_retryable`. Capture/parse/OCR/Agent ingest drain in batches of 20; index rebuild uses a coalesced limit-1 drainer. Waiting Agent ingest still honors current model/OCR readiness.
-- Home's contextual processing strip includes active capture, parse, OCR, Agent ingest, and index jobs. It remains hidden when no work needs attention and uses compact localized status indicators rather than a new queue destination.
-- Home `agent_turn` binds one schema-v1 client turn to one hashed event/Job. Exact retry/
-  restart adopts it; changed input/metadata/binding or stale tail fails. Reads verify new
-  user/assistant hashes; legacy no-hash events remain readable. JobsService cancels Pi/
-  tools and adopts valid assistant output without another model call or overwritten
-  source checkpoints. Legacy `retrieval_query` remains readable; cross-process CAS,
-  pushed progress, and multi-source recovery remain open.
-- Source-page writes use pending/previous/target checksums so a crash can be reconciled without confusing Pige's partial write with a user edit.
-- Phase 3 text/document pages create deterministic `agent_ingest`. Missing models wait.
-  Document parse/OCR children key parent/tool/version/source revision/input, reuse across
-  Pi call IDs, store capped call hashes, and resume through their Agent parent.
-- Phase 3 `agent_ingest` serializes terminal publication/proposal process-locally;
-  Section 11 owns exact create-note staging, decisions, apply, and recovery. Cross-process
-  and cross-file guarantees remain open.
-- Phase 4 `index_rebuild` runs in a bundled worker, enters `running/indexing`, persists monotonic `index_item` progress, serializes process-local writers, and cooperatively cancels. Failure rolls back to the prior committed index; clean cancellation preserves Markdown. Cross-process writer/CAS, kill/crash/stale-worker recovery, packaged paths, and implicit first-query workerization remain open.
-- Parse/OCR/index rebuild persist monotonic progress; parse/OCR/Agent ingest/index share
-  cancellation. Capture/parse/OCR/Agent ingest retain the Section 6 guard across retry;
-  post-guard cancellation cannot become clean `cancelled`. Other writers/classes,
-  cross-process CAS, checkpoints, pushed/numeric UI, and compaction remain open.
+Current implementation evidence, class-specific recovery coverage, and structured open
+work live only in the Playbook and acceptance manifest. The sections below own the
+stable lifecycle, ordering, cancellation, action-safety, and compatibility rules.
 
 ## 4. Job Classes
 
@@ -157,6 +120,11 @@ Source Record; one attachment reconciles preservation/linkage crashes. Legacy re
 remain readable and Pi-selected URL work uses the turn; multi-source/cross-process
 recovery remains open.
 
+An in-progress Home `draft_replace` is sender/turn/Job-bound temporary UI state, never a
+conversation event, Job output, checkpoint, recovery input, or assistant truth. Only the
+fully validated assistant event and terminal Job result survive restart. Cancellation or
+failure stops further draft delivery and cannot promote the last draft to durable output.
+
 Jobs may have parent-child structure:
 
 - A multi-file drop creates one parent `capture_batch` job and one child job per source.
@@ -166,10 +134,9 @@ Jobs may have parent-child structure:
   projection may finish inside the approved write recovery boundary.
 - Backup/restore may create child jobs for scan, manifest, compression, extraction, and rebuild.
 
-Current implementation boundary: multi-file capture currently groups child `capture` jobs with one `captureId` but does not yet persist the `capture_batch` parent. That bridge stays readable; the parent record and aggregate recovery semantics are required before the batch contract is claimed complete.
-
-Current format/quality continuations are transitional; B3.13 replaces their branching
-with Pi tool-call children while retaining durability.
+The acceptance manifest records whether `capture_batch`, multi-source recovery, and
+Agent-selected continuations have executable delivery evidence; this table does not
+maintain a second status projection.
 
 ## 5. Job State Machine
 
@@ -530,14 +497,10 @@ Rules:
 - Rejection should record enough reason to avoid repeated suggestions when possible.
 - Approval creates operation records; the proposal then becomes `applied`.
 
-Current Phase 3 implementation is narrower and transitional:
-
-- Exact create/update binds source/policy/catalog/input/call, target/base, before/staged,
-  and Operation; legacy unbound create stays non-undoable. Link/tags reuse `update_page`;
-  tag recovery binds additions/catalog and page-first adoption needs no Pi.
-- Create Undo uses `trash_page`; other Undo restores exact bytes and rebuilds. Remaining
-  mutations, redo, CAS/transactions, history, and platforms stay open.
-- `requiredPermissionIds` is a compatibility field for permission prerequisites and may contain canonical `permreq_` request IDs or `permdec_` decision IDs; a later schema may split, not reinterpret, it.
+`requiredPermissionIds` is a compatibility field for permission prerequisites and may
+contain canonical `permreq_` request IDs or `permdec_` decision IDs; a later schema may
+split, not reinterpret, it. Current supported operations, recovery evidence, and open
+mutation families live in acceptance.
 
 ## 12. Operation Record Lifecycle
 
@@ -726,7 +689,9 @@ Durable execution gates:
 - Staging paths are job-local temporary references, not durable output truth. A restart reconciles them using checkpoint hashes; cancellation removes only proven incomplete staging data.
 - A successful backup/restore job links the `backup_created`/`restore_applied` operation. Failure/cancellation never registers a staging directory as a vault or overwrites a valid archive/vault silently.
 
-Current boundary: the backup/restore service validates and stages archives but does not yet emit the full durable jobs/checkpoints. Backup publishes adjacent archives atomically where hard links work. Restore binds preview bytes, owned staging/reservation, no-replace files, manifest-last publication, and matching-partial retry. Non-hardlink backup, restore modes/restart, strict CAS, and platforms remain open. Legacy format-v1 stays readable per `docs/SYNC_CONFLICT_AND_MIGRATION.md`.
+Legacy format-v1 stays readable per `docs/SYNC_CONFLICT_AND_MIGRATION.md`. Current
+backup/restore checkpoint delivery and residual transport/restart/platform work live in
+the Playbook and acceptance manifest.
 
 Migration rules:
 

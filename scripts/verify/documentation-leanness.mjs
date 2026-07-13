@@ -1131,7 +1131,11 @@ const checks = new Map();
     (sum, group) => sum + (group && typeof group === "object" && !Array.isArray(group) ? Object.keys(group).length : 0),
     0
   );
-  if (lock.schemaVersion !== 2 || !String(lock.algorithm ?? "").toLowerCase().includes("sha256") || digestCount !== lock.claimCount || digestCount === 0) {
+  const digestsAreCompactSha256 = Object.values(lock.claims ?? {}).every((group) =>
+    group && typeof group === "object" && !Array.isArray(group)
+      && Object.values(group).every((digest) => /^b64u:[A-Za-z0-9_-]{43}$/u.test(digest))
+  );
+  if (lock.schemaVersion !== 3 || lock.algorithm !== "sha256-base64url(canonical claim JSON)" || !digestsAreCompactSha256 || digestCount !== lock.claimCount || digestCount === 0) {
     failures.push("semantic claims are not stored as an explicit per-claim SHA-256 digest map");
   }
   checks.set("LEN-003", result("LEN-003", failures, `Trace projections use ${metrics.traceManifestLines} lines and ${metrics.traceManifestBytes} bytes without manual gate rows.`));
