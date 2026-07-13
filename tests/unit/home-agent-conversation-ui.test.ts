@@ -114,6 +114,39 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("renders a bounded Agent-selected Dataset result as an accessible table with exact citations", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.submitTurn = async (request) => {
+      harness.submitRequests.push(request);
+      return datasetCompletedResult();
+    };
+    const mount = await mountHome(dom, makePigeApi(harness));
+
+    await setTextareaValue(dom, mount.container, "Show sales totals by region.");
+    await clickButton(dom, mount.container, "Send");
+    await waitFor(dom, () => mount.container.querySelector(".dataset-table") !== null);
+
+    const table = mount.container.querySelector<HTMLTableElement>(".dataset-table");
+    expect(table?.caption?.textContent).toBe("Sales");
+    expect(Array.from(table?.querySelectorAll("th") ?? []).map((cell) => cell.textContent)).toEqual([
+      "Region",
+      "Total sales"
+    ]);
+    expect(Array.from(table?.querySelectorAll("tbody tr") ?? []).map((row) => row.textContent)).toEqual([
+      "North120.5",
+      "South87"
+    ]);
+    expect(mount.container.textContent).toContain("Dataset result");
+    expect(mount.container.textContent).toContain("Rows: 2/2");
+    expect(mount.container.textContent).toContain("D1 Sales by region");
+    expect(mount.container.textContent).not.toContain("collection.sqlite");
+    expect(mount.container.textContent).not.toContain("dataset_20260713_salesdataset01");
+
+    await act(async () => mount.root.unmount());
+    dom.window.close();
+  });
+
   it("does not let an earlier turn completion erase a newly typed follow-up draft", async () => {
     const dom = createDom();
     const harness = createHarness(completedTimeline());
@@ -706,6 +739,63 @@ function completedResult(): AgentSubmitTurnResult {
       answer: "Here is the second answer.",
       grounding: "general",
       citations: []
+    }
+  };
+}
+
+function datasetCompletedResult(): AgentSubmitTurnResult {
+  const hash = `sha256:${"a".repeat(64)}`;
+  const resultHash = `sha256:${"b".repeat(64)}`;
+  return {
+    requestId: "request_20260713_datasetturn",
+    jobId: "job_20260713_datasetturn",
+    conversationEventId: "evt_20260713_datasetuser",
+    conversationId: "conv_20260713_dataset",
+    tailEventId: "evt_20260713_datasetassistant",
+    state: "completed",
+    modelUsage: "cloud",
+    sourceIds: [],
+    answer: {
+      answer: "North has the largest total sales in this bounded result.",
+      grounding: "local_knowledge",
+      citations: [{
+        kind: "dataset",
+        refId: "citation_1",
+        label: "D1",
+        title: "Sales by region",
+        locator: "Sales / grouped result",
+        evidence: {
+          datasetId: "dataset_20260713_salesdataset01",
+          revisionId: "dataset_rev_20260713_salesrevision01",
+          tableId: "table_salesdatasettable01",
+          schemaId: hash,
+          columnIds: ["column_salesregioncol01", "column_salestotalcol001"],
+          queryPlanHash: hash,
+          resultHash,
+          sourceId: "src_20260713_salessrc",
+          sourceRevisionHash: hash
+        }
+      }],
+      datasetResult: {
+        datasetId: "dataset_20260713_salesdataset01",
+        revisionId: "dataset_rev_20260713_salesrevision01",
+        tableId: "table_salesdatasettable01",
+        tableName: "Sales",
+        planHash: hash,
+        resultHash,
+        columns: [
+          { key: "region", label: "Region", logicalType: "string", sourceColumnId: "column_salesregioncol01" },
+          { key: "sum_sales", label: "Total sales", logicalType: "number", aggregate: "sum" }
+        ],
+        rows: [
+          { values: ["North", 120.5] },
+          { values: ["South", 87] }
+        ],
+        matchedRowCount: 2,
+        returnedRowCount: 2,
+        truncated: false,
+        citationRefs: ["citation_1"]
+      }
     }
   };
 }

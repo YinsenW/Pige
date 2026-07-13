@@ -3,6 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type {
+  DatasetAnswerCitation,
+  DatasetQueryPreview,
   HomeAgentAskRequest,
   ModelProfileSummary,
   ProviderProfileSummary,
@@ -14,9 +16,17 @@ import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/ser
 import { AgentTurnConversationStore } from "../../apps/desktop/src/main/services/agent-turn-conversation-store";
 import {
   HomeAgentService,
+  type HomeAgentDatasetQueryPort,
   type HomeAgentModelPort,
   type HomeAgentRetrievalPort
 } from "../../apps/desktop/src/main/services/home-agent-service";
+import type {
+  DatasetQueryCatalog,
+  DatasetQueryEvidenceRevalidation,
+  DatasetQueryEvidenceSnapshot,
+  DatasetQueryExecutionResult,
+  DatasetQueryToolRequest
+} from "../../apps/desktop/src/main/services/dataset-query-types";
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
 import { readMarkdownPageByRelativePath } from "../../apps/desktop/src/main/services/markdown-page-index";
 import {
@@ -27,7 +37,14 @@ import {
 } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
 import { buildLocalExtractiveAskResult } from "../../apps/desktop/src/main/services/retrieval-service";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
-import { SourceRecordSchema, type JobRecord, type OperationRecord, type SourceRecord } from "@pige/schemas";
+import {
+  DatasetAnswerCitationSchema,
+  DatasetQueryPreviewSchema,
+  SourceRecordSchema,
+  type JobRecord,
+  type OperationRecord,
+  type SourceRecord
+} from "@pige/schemas";
 
 const tempRoots: string[] = [];
 const HOME_PAGE_ID = "page_20260711_launchabc";
@@ -273,6 +290,155 @@ describe("Home Pi Agent service", () => {
     expect(readRecords<JobRecord>(path.join(retrievalFixture.vaultPath, ".pige", "jobs"))).toEqual([
       expect.objectContaining({ class: "agent_turn", state: "completed" })
     ]);
+  });
+
+  it("lets Pi catalog and query one bounded Dataset before returning exact Dataset citations", async () => {
+    const fixture = makeFixture();
+    DatasetAnswerCitationSchema.parse(DATASET_CITATION);
+    DatasetQueryPreviewSchema.parse(DATASET_PREVIEW);
+    const datasets = new StaticDatasetQueryPort();
+    let searchCalls = 0;
+    const outcome = await new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId, { onSearch: () => { searchCalls += 1; } }),
+      new JobsService(fixture.vaults),
+      new PiAgentRuntimeAdapter({
+        fauxResponses: [
+          { kind: "tool_call", toolName: "pige_query_dataset", args: { action: "catalog" } },
+          {
+            kind: "tool_call",
+            toolName: "pige_query_dataset",
+            args: {
+              action: "query",
+              datasetRef: "dataset_1",
+              tableRef: "table_1",
+              select: ["column_1"],
+              groupBy: ["column_1"],
+              aggregates: [{ op: "sum", column: "column_2" }],
+              orderBy: [{ by: "aggregate_1", direction: "desc" }],
+              limit: 10
+            }
+          },
+          finishHome({
+            answer: "North has the largest total sales in the bounded Dataset result. [D1]",
+            citationRefs: ["citation_1"],
+            grounding: "local_knowledge"
+          })
+        ]
+      }),
+      undefined,
+      undefined,
+      undefined,
+      datasets
+    ).submitTurn({
+      text: "Which region has the largest total sales?",
+      inputKind: "typed_text",
+      objective: "auto",
+      locale: "en"
+    });
+
+    expect(outcome).toMatchObject({
+      state: "completed",
+      modelUsage: "cloud",
+      sourceIds: [DATASET_SOURCE_ID],
+      answer: {
+        grounding: "local_knowledge",
+        citations: [{ kind: "dataset", refId: "citation_1" }],
+        datasetResult: {
+          tableName: "Sales",
+          returnedRowCount: 2,
+          matchedRowCount: 2,
+          truncated: false
+        }
+      }
+    });
+    expect(searchCalls).toBe(0);
+    expect(datasets.calls).toEqual(["catalog", "query"]);
+    expect(datasets.query).toMatchObject({
+      action: "query",
+      datasetRef: "dataset_1",
+      tableRef: "table_1",
+      aggregates: [{ op: "sum", column: "column_2" }]
+    });
+    const jobs = readRecords<JobRecord>(path.join(fixture.vaultPath, ".pige", "jobs"));
+    expect(jobs).toEqual([
+      expect.objectContaining({
+        class: "agent_turn",
+        state: "completed",
+        outputRefs: expect.arrayContaining([
+          expect.objectContaining({ kind: "source", id: DATASET_SOURCE_ID, role: "agent_turn_dataset_source" }),
+          expect.objectContaining({ kind: "dataset", id: DATASET_ID, role: "answer_dataset_citation" }),
+          expect.objectContaining({ kind: "dataset_revision", id: DATASET_REVISION_ID, role: "answer_dataset_query_result" }),
+          expect.objectContaining({ kind: "table", id: DATASET_TABLE_ID, role: "answer_dataset_table" })
+        ])
+      })
+    ]);
+    const durable = JSON.stringify({
+      jobs,
+      operations: readRecords<OperationRecord>(path.join(fixture.vaultPath, ".pige", "operations"))
+    });
+    expect(durable).not.toContain(fixture.vaultPath);
+    expect(durable).not.toContain("SELECT");
+    expect(durable).not.toContain("North");
+  });
+
+  it("writes a replacement egress audit and stops before another model turn when Dataset evidence drifts", async () => {
+    const fixture = makeFixture();
+    const datasets = new StaticDatasetQueryPort(true);
+    let runtimeConfigReads = 0;
+    const outcome = await new HomeAgentService(
+      fixture.vaults,
+      makeModels(() => { runtimeConfigReads += 1; }),
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      new PiAgentRuntimeAdapter({
+        fauxResponses: [
+          { kind: "tool_call", toolName: "pige_query_dataset", args: { action: "catalog" } },
+          {
+            kind: "tool_call",
+            toolName: "pige_query_dataset",
+            args: {
+              action: "query",
+              datasetRef: "dataset_1",
+              tableRef: "table_1",
+              select: ["column_1"],
+              groupBy: ["column_1"],
+              aggregates: [{ op: "sum", column: "column_2" }],
+              limit: 10
+            }
+          },
+          finishHome({
+            answer: "This turn must never reach its terminal provider response.",
+            citationRefs: ["citation_1"],
+            grounding: "local_knowledge"
+          })
+        ]
+      }),
+      undefined,
+      undefined,
+      undefined,
+      datasets
+    ).submitTurn({
+      text: "Summarize this Dataset.",
+      inputKind: "typed_text",
+      objective: "auto",
+      locale: "en"
+    });
+
+    expect(outcome).toMatchObject({
+      state: "failed",
+      modelUsage: "cloud",
+      error: { code: "model_provider.egress_blocked" }
+    });
+    expect(runtimeConfigReads).toBe(1);
+    expect(datasets.resultRevalidations).toBe(2);
+    const operations = readRecords<OperationRecord>(path.join(fixture.vaultPath, ".pige", "operations"));
+    expect(new Set(operations.map((operation) => operation.modelEgressAudit?.evidenceSummaryHash)).size)
+      .toBe(operations.length);
+    expect(operations.find((operation) => operation.modelEgressAudit?.contentClasses.includes("private")))
+      .toMatchObject({ modelEgressAudit: { contentClasses: ["private"], outcome: "allow" } });
+    expect(JSON.stringify(operations)).not.toContain("North");
   });
 
   it("fails closed when a vault-only turn ignores selected evidence instead of citing it", async () => {
@@ -1430,6 +1596,121 @@ describe("Home Pi Agent service", () => {
     ]);
   });
 });
+
+const DATASET_HASH = `sha256:${"a".repeat(64)}`;
+const DATASET_RESULT_HASH = `sha256:${"b".repeat(64)}`;
+const DATASET_ID = "dataset_20260713_salesdataset01";
+const DATASET_REVISION_ID = "dataset_rev_20260713_salesrevision01";
+const DATASET_TABLE_ID = "table_salesdatasettable01";
+const DATASET_SOURCE_ID = "src_20260713_salessrc";
+
+const DATASET_PREVIEW: DatasetQueryPreview = {
+  datasetId: DATASET_ID,
+  revisionId: DATASET_REVISION_ID,
+  tableId: DATASET_TABLE_ID,
+  tableName: "Sales",
+  planHash: DATASET_HASH,
+  resultHash: DATASET_RESULT_HASH,
+  columns: [
+    {
+      key: "region",
+      label: "Region",
+      logicalType: "string",
+      sourceColumnId: "column_salesregioncol01"
+    },
+    { key: "sum_sales", label: "Total sales", logicalType: "number", aggregate: "sum" }
+  ],
+  rows: [
+    { values: ["North", 120.5] },
+    { values: ["South", 87] }
+  ],
+  matchedRowCount: 2,
+  returnedRowCount: 2,
+  truncated: false,
+  citationRefs: ["citation_1"]
+};
+
+const DATASET_CITATION: DatasetAnswerCitation = {
+  kind: "dataset",
+  refId: "citation_1",
+  label: "D1",
+  title: "Sales by region",
+  locator: "Sales / grouped result",
+  evidence: {
+    datasetId: DATASET_ID,
+    revisionId: DATASET_REVISION_ID,
+    tableId: DATASET_TABLE_ID,
+    schemaId: DATASET_HASH,
+    columnIds: ["column_salesregioncol01", "column_salestotalcol001"],
+    queryPlanHash: DATASET_HASH,
+    resultHash: DATASET_RESULT_HASH,
+    sourceId: DATASET_SOURCE_ID,
+    sourceRevisionHash: DATASET_HASH
+  }
+};
+
+class StaticDatasetQueryPort implements HomeAgentDatasetQueryPort {
+  readonly calls: string[] = [];
+  query: DatasetQueryToolRequest | undefined;
+  resultRevalidations = 0;
+  readonly #catalog: DatasetQueryCatalog = { schemaVersion: 1, catalogHash: DATASET_HASH };
+  readonly #catalogEvidence: DatasetQueryEvidenceSnapshot = {
+    evidenceHash: DATASET_HASH,
+    privateContent: false,
+    sensitiveContent: false,
+    restrictedContent: false,
+    modelText: "<PIGE_UNTRUSTED_EVIDENCE_V1>\n{\"datasetRef\":\"dataset_1\",\"tableRef\":\"table_1\"}\n</PIGE_UNTRUSTED_EVIDENCE_V1>",
+    sourceIds: [DATASET_SOURCE_ID]
+  };
+  readonly #result: DatasetQueryExecutionResult = {
+    preview: DATASET_PREVIEW,
+    citations: [DATASET_CITATION],
+    evidence: {
+      evidenceHash: DATASET_RESULT_HASH,
+      privateContent: false,
+      sensitiveContent: false,
+      restrictedContent: false,
+      modelText: "<PIGE_UNTRUSTED_EVIDENCE_V1>\n{\"citationRef\":\"citation_1\",\"rows\":2}\n</PIGE_UNTRUSTED_EVIDENCE_V1>",
+      sourceIds: [DATASET_SOURCE_ID]
+    }
+  };
+
+  constructor(private readonly driftResult = false) {}
+
+  async createCatalog(): Promise<DatasetQueryCatalog> {
+    this.calls.push("catalog");
+    return this.#catalog;
+  }
+
+  async revalidateCatalog(): Promise<DatasetQueryEvidenceRevalidation> {
+    return { evidence: this.#catalogEvidence, drifted: false };
+  }
+
+  async execute(
+    _vaultPath: string,
+    _catalog: DatasetQueryCatalog,
+    request: DatasetQueryToolRequest
+  ): Promise<DatasetQueryExecutionResult> {
+    this.calls.push("query");
+    this.query = request;
+    return this.#result;
+  }
+
+  async revalidateResult(): Promise<DatasetQueryEvidenceRevalidation> {
+    this.resultRevalidations += 1;
+    if (this.driftResult && this.resultRevalidations >= 2) {
+      return {
+        drifted: true,
+        evidence: {
+          ...this.#result.evidence,
+          evidenceHash: `sha256:${"c".repeat(64)}`,
+          privateContent: true
+        }
+      };
+    }
+    return { evidence: this.#result.evidence, drifted: false };
+  }
+}
 
 const DEFAULT_PROVIDER: ProviderProfileSummary = {
   id: "provider_home",

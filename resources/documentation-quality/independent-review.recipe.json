@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-13T06:08:44Z",
+  "reviewedAt": "2026-07-13T08:21:44Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,12 +30,12 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "a61754b374fc482e2ff1465bbdd1bb9289d8fefb846bfcd7ea53f3a8c553c3eb"
+    "reviewedSha256": "e5f88307d5d8774b69654d943e5cf9d6656a9343bef9864dd03d146cf8d7ad51"
   },
   "reviewers": [
     {
-      "reviewerId": "dataset-ingest-p1-repair-final-review",
-      "task": "/root/dataset_p1_repair_review",
+      "reviewerId": "dataset-query-citations-final-review",
+      "task": "/root/dataset_query_governance_review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -43,51 +43,51 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Independent read-only review audited the exact replacement Dataset ingest candidate. It first blocked an incomplete runtime-union guard, then rechecked the repaired hash, all five P1 boundaries, focused selectors, governance projections, unchanged statuses and fixed budgets; it reported CLEAR and made no edits."
+      "independence": "Independent read-only review audited the exact replacement Dataset query candidate, real privacy-drift repair, focused selectors, eight evidence projections, Owner wording, unchanged statuses and explicit residual boundaries; it reported CLEAR and made no edits."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "dataset-ingest-p1-repair-final-review",
+      "reviewerId": "dataset-query-citations-final-review",
       "blockerCount": 0,
-      "summary": "The existing Dataset, Pi, Job and Playbook Owners absorb the executable ingest foundation without a new document, top-level UI destination, mode or duplicate lifecycle owner."
+      "summary": "Current capability, owner boundaries and open Dataset-query work remain directly locatable in existing topic documents without a new owner or navigation surface."
     },
     {
       "id": "cross_document_contract_consistency",
-      "score": 9.7,
-      "reviewerId": "dataset-ingest-p1-repair-final-review",
+      "score": 9.8,
+      "reviewerId": "dataset-query-citations-final-review",
       "blockerCount": 0,
-      "summary": "Owners agree on preserve-first source evidence, Pi-selected materialization, Dataset Bundle structured truth, deterministic Jobs/Operations and unchanged later-phase query/edit boundaries."
+      "summary": "API, Context, Job, Database, Pi, Tech, UI and Playbook agree on one typed catalog/query, bounded worker, exact citations and privacy-drift audit."
     },
     {
       "id": "continuous_traceability_and_acceptance",
-      "score": 9.8,
-      "reviewerId": "dataset-ingest-p1-repair-final-review",
+      "score": 9.9,
+      "reviewerId": "dataset-query-citations-final-review",
       "blockerCount": 0,
-      "summary": "Four exact Dataset evidence claims and six existing partial acceptance projections bind the implemented ingest foundation while Dataset Requirements, Exits and all phase states remain unchanged."
+      "summary": "Eight exact evidence claims project only to existing partial acceptance rows; PIGE-DATA-002, E6.11, every status and every phase state remain unchanged."
     },
     {
       "id": "ongoing_development_support",
-      "score": 9.7,
-      "reviewerId": "dataset-ingest-p1-repair-final-review",
+      "score": 9.8,
+      "reviewerId": "dataset-query-citations-final-review",
       "blockerCount": 0,
-      "summary": "Executable selectors cover bounded CSV/XLSX/SQLite planning, independent validation, deterministic publication, wait/retry/restart and clean cancellation; query, edit and broader recovery remain explicit follow-up."
+      "summary": "The contract distinguishes current implementation, data ownership, safety fences and the next query, browsing, composition and platform slices."
     },
     {
       "id": "documentation_leanness_and_maintainability",
-      "score": 9.6,
-      "reviewerId": "dataset-ingest-p1-repair-final-review",
+      "score": 9.7,
+      "reviewerId": "dataset-query-citations-final-review",
       "blockerCount": 0,
-      "summary": "No Markdown file was added; 55 documents, 3,449 of 3,700 entry words and 1,145,708 of 1,210,000 governed Markdown bytes remain within ratcheted budgets."
+      "summary": "Localized current-state synchronization adds no Owner document, duplicates no large contract and remains within every documentation budget."
     }
   ],
   "verification": [
     {
       "command": "npm run verify",
       "status": "passed",
-      "evidence": "The final exact Dataset ingest candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all five documentation-quality dimensions."
+      "evidence": "The final exact Dataset query candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all five documentation-quality dimensions."
     },
     {
       "command": "npm run verify:docs && npm run verify:decisions && npm run verify:contracts",
@@ -97,30 +97,30 @@
     {
       "command": "npm run verify:traceability",
       "status": "passed",
-      "evidence": "Semantic lock schema v3 contains 1,137 claims; four Dataset evidence claims are bound, Dataset Requirements and Exits remain planned, and all existing Requirement/Exit statuses and all ten phase states are unchanged."
+      "evidence": "Semantic lock schema v3 contains 1,145 claims; eight Dataset query evidence claims are bound only to existing partial rows, while Dataset Requirements, Exits and all ten phase states remain unchanged."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 pass with 55 Markdown files, 3,449 of 3,700 entry words, 4,601 trace lines, 230,997 trace bytes and 1,145,708 of 1,210,000 governed Markdown bytes."
+      "evidence": "LEN-001 through LEN-005 pass with 55 Markdown files, 3,449 of 3,700 entry words, 4,618 trace lines, 234,014 trace bytes and 1,148,963 of 1,210,000 governed Markdown bytes."
     }
   ],
   "coordination": {
-    "taskId": "dataset-ingest-foundation-20260713",
-    "taskTitle": "Agent-selected Dataset ingest foundation executable evidence",
+    "taskId": "dataset-query-citations-20260713",
+    "taskTitle": "Dataset typed local query and exact citations executable evidence",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "This candidate adds only the bounded CSV/XLSX/SQLite ingest foundation under the already-governed Dataset architecture. It adds no query/edit surface, public Dataset IPC/UI, dependency, phase renumbering or status promotion.",
-    "acknowledgement": "Development froze the exact replacement code/test surface after repairing five P1 boundaries and the runtime-union follow-up. Product Planning synchronized only affected Owners and acceptance evidence; independent review cleared the exact replacement candidate."
+    "compatibility": "This candidate adds one bounded Pi-selected local Dataset query and exact cited Home result over the existing managed-collection Bundle. It adds no public Dataset API, query builder, edit surface, dependency, phase renumbering or status promotion.",
+    "acknowledgement": "Development froze replacement bytes after repairing the real privacy-drift audit boundary. Product Planning synchronized only affected Owners and existing partial acceptance rows; independent review cleared the exact replacement candidate."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Phase 6 Dataset query, explainability and cell/table citation surfaces remain planned.",
-    "Phase 7 Dataset view, edit, Activity/Undo and trash lifecycle remain planned.",
-    "Parquet and DuckDB require exact dependency, licensing, packaging, no-network/extension and macOS/Windows validation before adoption.",
-    "Large-scale and signed-platform evidence remain open.",
-    "Strict cross-process CAS/locking, directory-swap TOCTOU and broader Dataset recovery/concurrency remain open.",
-    "Backup/restore and future sync must prove Dataset Bundle atomicity and compatibility before status changes."
+    "The query engine is limited to the fixed Pige managed_collection SQLite payload; analytical snapshots, Parquet and DuckDB remain open.",
+    "Each Home turn permits one catalog followed by one query; joins, composition and multi-Dataset analysis remain open.",
+    "Independent Dataset browsing, paging, citation-open and result highlighting remain open.",
+    "Formula and warning detail, large-table UX, complete locale acceptance and signed platform evidence remain open.",
+    "Readable revision or privacy drift receives a replacement audit; corrupt or unsafe evidence fails closed earlier.",
+    "Conversation owns checksum-bound preview and citations while Job refs remain body-free; future wording and implementation must preserve that distinction."
   ]
 }

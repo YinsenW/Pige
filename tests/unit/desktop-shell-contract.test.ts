@@ -324,11 +324,28 @@ describe("desktop shell build contract", () => {
   it("exposes structured sources through unified Agent ingress and the bundled Dataset capability", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
+    const buildSource = fs.readFileSync(path.resolve("apps/desktop/electron.vite.config.ts"), "utf8");
+    const queryServiceSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/services/dataset-query-service.ts"),
+      "utf8"
+    );
+    const queryWorkerSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/workers/dataset-query-worker.ts"),
+      "utf8"
+    );
 
     expect(rendererSource).toContain(".csv,.xlsx,.sqlite,.sqlite3,.db");
+    expect(rendererSource).toContain("function DatasetAnswerResult");
     expect(mainSource).toContain("new DatasetService(new DatasetIngestWorkerService())");
+    expect(mainSource).toContain("new DatasetQueryService()");
+    expect(mainSource).toContain("getDatasetQueryService()");
     expect(mainSource).toContain('getDatasetService().canMaterialize("csv_file")');
     expect(mainSource).toContain("getDatasetService()\n    );");
+    expect(buildSource).toContain("DATASET_QUERY_WORKER_ENTRY_NAME");
+    expect(buildSource).toContain('alias("./src/main/workers/dataset-query-worker.ts")');
+    expect(queryServiceSource).not.toContain("node:sqlite");
+    expect(queryServiceSource).not.toContain('from "./dataset-query-core"');
+    expect(queryWorkerSource).toContain('from "../services/dataset-query-core"');
   });
 
   it("wires onboarding readiness to the non-secret provider runtime binding check", () => {

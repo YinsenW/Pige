@@ -528,17 +528,20 @@ Current bridge queries:
 - Notes APIs do not accept arbitrary renderer-provided filesystem paths. They resolve page IDs by scanning `sources/` and `wiki/` with the same page-index rules as Library.
 - Raw HTML is disabled or sanitized before reaching the renderer. Scripts, event handlers, `javascript:` links, prompts, secrets, raw frontmatter, and arbitrary filesystem handles must not be returned.
 
-Planned Dataset read boundary:
+Current Home Dataset read boundary:
 
-- Renderer receives Dataset/table/view/revision IDs, bounded schema summaries, paginated
-  typed cells, warnings, and exact evidence refs—not paths, database handles, SQL, Arrow
-  buffers, Parquet/SQLite bytes, or whole tables.
-- Each page/query request binds the active vault and Dataset revision, declares selected
-  columns/filters/sort/aggregate through a strict typed plan, and returns a cursor plus
-  deterministic result hash. Stale revisions fail with a typed repair/retry action.
+- Existing `agent.submitTurn` may return one bounded Dataset result preview and exact
+  Dataset citation after Pi selects the typed local query tool; `agent.conversation`
+  restores that checksum-bound result after restart. Renderer receives display columns,
+  bounded typed rows, counts, truncation, and citations—not paths, database handles, SQL,
+  query-engine metadata, payload bytes, or whole tables.
+- The main process binds the active vault, manifest/revision/schema/payload and Source
+  Record privacy revision. Stale evidence writes the current body-free replacement audit
+  and fails before another model turn; corrupt or unsafe evidence fails closed.
+- No standalone Dataset IPC channel exists in this slice. Library paging, citation-open
+  highlighting, independent Dataset browsing, and public query-builder APIs remain open.
 - Managed Collection mutations later use separate commands that bind expected revision
-  and produce Operation/Activity/Undo. No Dataset IPC channel is implemented or reserved
-  by this design text; shared contracts and owner tests must land with the first channel.
+  and produce Operation/Activity/Undo.
 
 ### 6.6 Retrieval
 

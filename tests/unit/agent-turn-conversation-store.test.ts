@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import type { AgentTurnAnswer } from "@pige/contracts";
 import { AgentTurnConversationStore } from "../../apps/desktop/src/main/services/agent-turn-conversation-store";
 
 const tempRoots: string[] = [];
@@ -164,6 +165,149 @@ describe("Agent turn conversation store", () => {
       vaultPath,
       userTurn.event.conversationId
     ))).toMatchObject({ code: "agent_runtime.turn_changed" });
+  });
+
+  it("persists and restarts an exact bounded Dataset citation and preview roundtrip", () => {
+    const vaultPath = makeVault();
+    const writer = new AgentTurnConversationStore();
+    const userTurn = writer.appendUserTurn(vaultPath, "Which region has three records?");
+    const jobId = "job_20260713_datasetround1";
+    const answer = makeDatasetAnswer();
+
+    const assistant = writer.appendAssistantTurn(vaultPath, userTurn, jobId, answer);
+    const adopted = new AgentTurnConversationStore().appendAssistantTurn(
+      vaultPath,
+      userTurn,
+      jobId,
+      answer
+    );
+    const restarted = new AgentTurnConversationStore().findAssistantTurn(
+      vaultPath,
+      userTurn.locator,
+      jobId
+    );
+    const events = readEvents(vaultPath, userTurn.locator);
+    const persistedText = readConversationFile(vaultPath, userTurn.locator);
+
+    expect(adopted).toEqual(assistant);
+    expect(restarted).toEqual(assistant);
+    expect(events[1]).toEqual(assistant);
+    expect(assistant).toMatchObject({
+      schemaVersion: 1,
+      answerGrounding: "local_knowledge",
+      answerCitations: answer.citations,
+      answerDatasetResult: answer.datasetResult
+    });
+    expect(assistant.contentHash).toMatch(/^sha256:[a-f0-9]{64}$/u);
+    expect(persistedText).not.toContain("SELECT ");
+    expect(persistedText).not.toContain("/private/");
+    expect(persistedText).not.toContain("providerData");
+
+    const changedAnswer: AgentTurnAnswer = {
+      ...answer,
+      datasetResult: {
+        ...(answer.datasetResult as NonNullable<AgentTurnAnswer["datasetResult"]>),
+        rows: [{ rowId: "row_abcdef123456", values: ["North", 4] }]
+      }
+    };
+    expect(captureError(() => writer.appendAssistantTurn(
+      vaultPath,
+      userTurn,
+      jobId,
+      changedAnswer
+    ))).toMatchObject({ code: "agent_runtime.turn_conflict" });
+  });
+
+  it("reads a pre-Dataset checksum-bound structured page assistant event", () => {
+    const vaultPath = makeVault();
+    const locator = ".pige/conversations/2026/07/conv_20260713_legacy.jsonl";
+    const filePath = conversationPath(vaultPath, locator);
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    const userEvent = {
+      id: "evt_20260713_legacyuser01",
+      conversationId: "conv_20260713_legacy",
+      type: "user_message",
+      createdAt: "2026-07-13T01:00:00.000Z",
+      text: "Legacy page question."
+    };
+    const jobId = "job_20260713_legacypage1";
+    const citations = [{
+      refId: "citation_1",
+      label: "[1]",
+      pageId: "page_20260713_abcdef12",
+      title: "Legacy page",
+      pageType: "note",
+      locator: "snippet:1"
+    }];
+    const answerPayload = {
+      text: "Legacy page-grounded answer.",
+      grounding: "local_knowledge",
+      citations
+    };
+    const assistantEvent = {
+      id: "evt_20260713_legacyanswer1",
+      conversationId: userEvent.conversationId,
+      type: "assistant_message",
+      createdAt: "2026-07-13T01:00:01.000Z",
+      parentEventId: userEvent.id,
+      jobId,
+      text: answerPayload.text,
+      answerGrounding: answerPayload.grounding,
+      answerCitations: citations,
+      contentHash: hashValue(
+        `pige.agent_assistant.v1\0${jobId}\0${userEvent.id}\0${JSON.stringify(answerPayload)}`
+      )
+    };
+    fs.writeFileSync(
+      filePath,
+      `${JSON.stringify(userEvent)}\n${JSON.stringify(assistantEvent)}\n`,
+      "utf8"
+    );
+
+    expect(new AgentTurnConversationStore().findAssistantTurn(vaultPath, locator, jobId)).toMatchObject({
+      text: answerPayload.text,
+      answerGrounding: answerPayload.grounding,
+      answerCitations: citations,
+      contentHash: assistantEvent.contentHash
+    });
+  });
+
+  it("fails assistant integrity when persisted Dataset preview or citation content is tampered", () => {
+    for (const target of ["preview", "citation"] as const) {
+      const vaultPath = makeVault();
+      const service = new AgentTurnConversationStore();
+      const userTurn = service.appendUserTurn(vaultPath, `Dataset tamper check for ${target}.`);
+      const jobId = `job_20260713_${target}tamper1`;
+      service.appendAssistantTurn(vaultPath, userTurn, jobId, makeDatasetAnswer());
+      const events = readEvents(vaultPath, userTurn.locator);
+      const assistant = events[1];
+      if (!assistant) throw new Error("Expected a persisted assistant event.");
+
+      if (target === "preview") {
+        const preview = assistant.answerDatasetResult as {
+          rows: Array<{ values: Array<string | number | boolean | null> }>;
+        };
+        const row = preview.rows[0];
+        if (!row) throw new Error("Expected a persisted Dataset preview row.");
+        row.values[1] = 4;
+      } else {
+        const citations = assistant.answerCitations as Array<{ label: string }>;
+        const citation = citations[0];
+        if (!citation) throw new Error("Expected a persisted Dataset citation.");
+        citation.label = "[D2]";
+      }
+      fs.writeFileSync(
+        conversationPath(vaultPath, userTurn.locator),
+        `${events.map((event) => JSON.stringify(event)).join("\n")}\n`,
+        "utf8"
+      );
+
+      expect(captureError(() => new AgentTurnConversationStore().findAssistantTurn(
+        vaultPath,
+        userTurn.locator,
+        jobId
+      ))).toMatchObject({ code: "agent_runtime.turn_changed" });
+    }
   });
 
   it("fails closed when an earlier checksum-bound user turn changes before follow-up history is read", () => {
@@ -512,6 +656,65 @@ function readEvents(vaultPath: string, locator: string): Array<Record<string, un
 
 function hashValue(value: string): string {
   return `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
+}
+
+function makeDatasetAnswer(): AgentTurnAnswer {
+  const schemaId = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  const planHash = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+  const resultHash = "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+  const sourceRevisionHash = "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
+  return {
+    answer: "North has three records.",
+    grounding: "local_knowledge",
+    citations: [{
+      kind: "dataset",
+      refId: "dataset_citation_1",
+      label: "[D1]",
+      title: "Regional totals",
+      locator: "dataset:regional-totals#rows:1",
+      evidence: {
+        datasetId: "dataset_20260713_abcdef123456",
+        revisionId: "dataset_rev_20260713_abcdef123456",
+        tableId: "table_abcdef123456",
+        schemaId,
+        columnIds: ["column_abcdef123456", "column_bcdefa123456"],
+        rowIds: ["row_abcdef123456"],
+        range: { startRow: 1, endRow: 1 },
+        queryPlanHash: planHash,
+        resultHash,
+        sourceId: "src_20260713_abcdef12",
+        sourceRevisionHash
+      }
+    }],
+    datasetResult: {
+      datasetId: "dataset_20260713_abcdef123456",
+      revisionId: "dataset_rev_20260713_abcdef123456",
+      tableId: "table_abcdef123456",
+      tableName: "Regional totals",
+      planHash,
+      resultHash,
+      columns: [
+        {
+          key: "region",
+          label: "Region",
+          logicalType: "string",
+          sourceColumnId: "column_abcdef123456"
+        },
+        {
+          key: "record_count",
+          label: "Records",
+          logicalType: "integer",
+          sourceColumnId: "column_bcdefa123456",
+          aggregate: "count"
+        }
+      ],
+      rows: [{ rowId: "row_abcdef123456", values: ["North", 3] }],
+      matchedRowCount: 1,
+      returnedRowCount: 1,
+      truncated: false,
+      citationRefs: ["dataset_citation_1"]
+    }
+  };
 }
 
 function captureError(action: () => unknown): unknown {

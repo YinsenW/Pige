@@ -108,7 +108,7 @@ export class AgentTurnConversationStore {
     if (userTurn.event.type !== "user_message") {
       throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The Agent conversation binding is invalid.");
     }
-    const normalized = normalizeAssistantAnswer(answer);
+    const candidateAnswer = normalizeAssistantAnswer(answer);
     const durableUser = this.readUserTurn(
       vaultPath,
       userTurn.locator,
@@ -122,17 +122,22 @@ export class AgentTurnConversationStore {
     if (!dateKey) {
       throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The Agent conversation binding is invalid.");
     }
-    const event = ConversationEventSchema.parse({
+    const eventWithoutHash = ConversationEventSchema.parse({
       id: `evt_${dateKey}_${hashHex(`pige.agent_assistant.v1\0${jobId}\0${durableUser.event.id}`).slice(0, 16)}`,
       conversationId: durableUser.event.conversationId,
       type: "assistant_message",
       createdAt: new Date().toISOString(),
       parentEventId: durableUser.event.id,
       jobId,
-      text: normalized.text,
-      contentHash: createAssistantContentHash(jobId, durableUser.event.id, normalized),
-      ...(normalized.grounding === undefined ? {} : { answerGrounding: normalized.grounding }),
-      ...(normalized.citations === undefined ? {} : { answerCitations: normalized.citations })
+      text: candidateAnswer.text,
+      ...(candidateAnswer.grounding === undefined ? {} : { answerGrounding: candidateAnswer.grounding }),
+      ...(candidateAnswer.citations === undefined ? {} : { answerCitations: candidateAnswer.citations }),
+      ...(candidateAnswer.datasetResult === undefined ? {} : { answerDatasetResult: candidateAnswer.datasetResult })
+    });
+    const normalized = normalizeStoredAssistant(eventWithoutHash);
+    const event = ConversationEventSchema.parse({
+      ...eventWithoutHash,
+      contentHash: createAssistantContentHash(jobId, durableUser.event.id, normalized)
     });
 
     return appendEvent(vaultPath, durableUser.locator, event, false, (events) => {
@@ -414,10 +419,13 @@ function assertMatchingAssistant(
   answer: ReturnType<typeof normalizeAssistantAnswer>
 ): void {
   const legacyParentMatches = event.parentEventId === undefined || event.parentEventId === parentEventId;
-  const answerMetadataMatches = answer.structured === false || (
-    event.answerGrounding === answer.grounding &&
-    JSON.stringify(event.answerCitations ?? []) === JSON.stringify(answer.citations ?? [])
-  );
+  const answerMetadataMatches = answer.structured === false
+    ? event.answerGrounding === undefined &&
+      event.answerCitations === undefined &&
+      event.answerDatasetResult === undefined
+    : event.answerGrounding === answer.grounding &&
+      JSON.stringify(event.answerCitations ?? []) === JSON.stringify(answer.citations ?? []) &&
+      JSON.stringify(event.answerDatasetResult ?? null) === JSON.stringify(answer.datasetResult ?? null);
   if (event.text !== answer.text || !legacyParentMatches || !answerMetadataMatches) {
     throw new PigeDomainError("agent_runtime.turn_conflict", "The Agent job already has a different assistant result.");
   }
@@ -434,6 +442,7 @@ function normalizeAssistantAnswer(answer: string | AgentTurnAnswer): {
   readonly structured: boolean;
   readonly grounding?: AgentTurnAnswer["grounding"];
   readonly citations?: AgentTurnAnswer["citations"];
+  readonly datasetResult?: AgentTurnAnswer["datasetResult"];
 } {
   if (typeof answer === "string") {
     return { text: validateTurnText(answer), structured: false };
@@ -442,7 +451,8 @@ function normalizeAssistantAnswer(answer: string | AgentTurnAnswer): {
     text: validateTurnText(answer.answer),
     structured: true,
     grounding: answer.grounding,
-    citations: answer.citations
+    citations: answer.citations,
+    ...(answer.datasetResult === undefined ? {} : { datasetResult: answer.datasetResult })
   };
 }
 
@@ -450,7 +460,11 @@ function normalizeStoredAssistant(event: ConversationEvent): ReturnType<typeof n
   if (event.type !== "assistant_message" || typeof event.text !== "string") {
     throw new PigeDomainError("agent_runtime.turn_conflict", "The durable assistant result is invalid.");
   }
-  if (event.answerGrounding === undefined && event.answerCitations === undefined) {
+  if (
+    event.answerGrounding === undefined &&
+    event.answerCitations === undefined &&
+    event.answerDatasetResult === undefined
+  ) {
     return { text: validateTurnText(event.text), structured: false };
   }
   if (event.answerGrounding === undefined) {
@@ -460,7 +474,8 @@ function normalizeStoredAssistant(event: ConversationEvent): ReturnType<typeof n
     text: validateTurnText(event.text),
     structured: true,
     grounding: event.answerGrounding,
-    citations: event.answerCitations ?? []
+    citations: event.answerCitations ?? [],
+    ...(event.answerDatasetResult === undefined ? {} : { datasetResult: event.answerDatasetResult })
   };
 }
 
@@ -484,10 +499,12 @@ function createAssistantContentHash(
   parentEventId: string,
   answer: ReturnType<typeof normalizeAssistantAnswer>
 ): string {
-  return hashValue(`pige.agent_assistant.v1\0${jobId}\0${parentEventId}\0${JSON.stringify({
+  const hashVersion = answer.datasetResult === undefined ? "v1" : "v2";
+  return hashValue(`pige.agent_assistant.${hashVersion}\0${jobId}\0${parentEventId}\0${JSON.stringify({
     text: answer.text,
     grounding: answer.grounding ?? null,
-    citations: answer.citations ?? null
+    citations: answer.citations ?? null,
+    ...(answer.datasetResult === undefined ? {} : { datasetResult: answer.datasetResult })
   })}`);
 }
 

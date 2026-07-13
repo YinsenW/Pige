@@ -70,13 +70,15 @@ deleting or rewriting Dataset payloads.
 
 ### 3.1 Structured Query Engine Boundary
 
-Dataset access uses a separate `DatasetQueryEngine` interface. Initial CSV/XLSX/SQLite
-support may use bounded format adapters and the managed Collection driver. DuckDB is the
-preferred candidate for later local analytical query over Parquet, but no dependency is
-selected until license, package size, Electron/macOS/Windows support, memory limits,
-extension/network behavior, and deterministic smoke tests pass. Model output supplies a
-validated typed query plan, never unrestricted SQL; renderer code never receives a
-database handle.
+Dataset access uses a separate query interface. The current managed-collection foundation
+has main-process Dataset Query Service validate opaque refs and revision/privacy bindings,
+copy the exact payload into a private `0600` snapshot, and send one strict typed plan to a
+bounded worker. Only that worker opens the fixed Pige SQLite application schema in
+read-only defensive mode with extensions disabled, an authorizer, row/cell/byte/group/
+result limits, timeout, and cancellation. Main and renderer receive no SQL or database
+handle. DuckDB remains a candidate for later local analytical query over Parquet; no
+dependency is selected until licensing, package size, Electron/macOS/Windows, memory,
+extension/network behavior, and deterministic smoke tests pass.
 
 ## 4. Database Scope
 

@@ -535,11 +535,13 @@ it does not expose file handles, database connections, unrestricted SQL, or whol
 payloads to renderer or model code. Arrow is an in-memory/IPC representation only.
 DuckDB remains a replaceable candidate analytical engine behind this interface.
 
-Planned Pige-owned tools are `pige_inspect_dataset`, `pige_query_dataset`,
-`pige_create_dataset_view`, `pige_create_derived_dataset`, `pige_update_collection`,
-`pige_link_dataset_to_knowledge`, and `pige_summarize_dataset`. Owning services fix
-vault, Dataset, revision, query limits, destinations, citations, and permissions; model
-arguments cannot grant SQL, path, extension, source-write, or network authority.
+Current Pige-owned tools are bounded `pige_inspect_dataset@1` for materialization and
+read-only `pige_query_dataset@1` for one Home catalog/query/result sequence. Dataset
+Service and a distinct bounded worker own payload access; main Dataset Query Service does
+not import the query core or `node:sqlite`. Planned tools include Dataset views, derived
+Datasets, Collection updates, knowledge links, and summaries. Owning services fix vault,
+Dataset, revision, query limits, destinations, citations, and permissions; model arguments
+cannot grant SQL, path, extension, source-write, or network authority.
 
 ### 5.3.1 OCR Service
 

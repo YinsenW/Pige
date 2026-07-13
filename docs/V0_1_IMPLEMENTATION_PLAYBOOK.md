@@ -489,6 +489,14 @@ Current Home has durable direct chat, optional cited retrieval, wait/resume, bou
 transcript, follow-up/retry/cancel. RAG, Note Agent, compaction/indexing,
 Broker, packaged platforms, and 10k proof remain open.
 
+B6.16 foundation evidence covers one Pi-selected `pige_query_dataset@1` catalog/query,
+opaque refs and strict typed plans, exact managed-collection revision/privacy binding,
+bounded worker execution, deterministic result hashes/citations, neutral drift audit,
+checksum-bound conversation/Job recovery, and one escaped accessible Home table. E6.11
+remains planned pending independent Dataset browsing/paging and citation-open highlighting,
+analytical snapshots/Parquet, joins or composition, large-scale and signed-platform proof,
+and broader cross-process recovery/CAS.
+
 Deferred from this phase:
 
 - [D6.01] Advanced dashboards; deferred beyond v0.1.

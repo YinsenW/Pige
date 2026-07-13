@@ -32,6 +32,7 @@ import type {
   ProposalDecisionResult,
   ProposalSummary,
   RecentVaultSummary,
+  RetrievalAnswerCitation,
   RetrievalAskResult,
   RetrievalSearchResultItem,
   RestorePreviewResult,
@@ -1533,6 +1534,12 @@ function HomeComposer(props: {
             t={props.t}
           />
         </section>
+      ) : agentAnswer?.datasetResult ? (
+        <DatasetAnswerResult
+          answer={agentAnswer}
+          modelUsage={agentModelUsage}
+          t={props.t}
+        />
       ) : agentAnswer?.retrieval ? (
         <RetrievalResults
           result={toRetrievalAskResult(agentAnswer)}
@@ -1712,6 +1719,65 @@ function proposalOutcomeForDurableState(
   return undefined;
 }
 
+function DatasetAnswerResult(props: {
+  readonly answer: AgentTurnAnswer;
+  readonly modelUsage: HomeAgentModelUsage;
+  readonly t: (key: string) => string;
+}): React.JSX.Element {
+  const result = props.answer.datasetResult;
+  if (!result) throw new Error("Dataset result metadata is unavailable.");
+  const citations = props.answer.citations.filter((citation) =>
+    "kind" in citation && citation.kind === "dataset"
+  );
+  return (
+    <section className="dataset-answer" aria-label={props.t("dataset.result")}>
+      <header className="dataset-answer-header">
+        <div>
+          <p className="retrieval-eyebrow">{props.t("dataset.result")}</p>
+          <p className="retrieval-answer-text">{props.answer.answer}</p>
+          {props.modelUsage === "cloud" ? (
+            <p className="muted retrieval-cloud-boundary">{props.t("retrieval.cloudSent")}</p>
+          ) : null}
+        </div>
+        <p className="muted dataset-answer-count">
+          {props.t("dataset.rows")}: {result.returnedRowCount}/{result.matchedRowCount}
+        </p>
+      </header>
+      <div className="dataset-table-scroll" tabIndex={0} aria-label={props.t("dataset.table")}>
+        <table className="dataset-table">
+          <caption>{result.tableName}</caption>
+          <thead>
+            <tr>
+              {result.columns.map((column) => <th scope="col" key={column.key}>{column.label}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {result.rows.map((row, rowIndex) => (
+              <tr key={row.rowId ?? `${result.resultHash}:${rowIndex}`}>
+                {row.values.map((value, columnIndex) => (
+                  <td key={result.columns[columnIndex]?.key ?? columnIndex}>{formatDatasetScalar(value)}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {result.truncated ? <p className="muted retrieval-warning">{props.t("dataset.truncated")}</p> : null}
+      {citations.length > 0 ? (
+        <div className="dataset-citations" aria-label={props.t("dataset.citations")}>
+          {citations.map((citation) => <span key={citation.refId}>{citation.label} {citation.title}</span>)}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function formatDatasetScalar(value: string | number | boolean | null): string {
+  if (value === null) return "-";
+  if (typeof value === "boolean") return value ? "true" : "false";
+  return String(value);
+}
+
 function RetrievalResults(props: {
   readonly result: RetrievalAskResult;
   readonly modelUsage: HomeAgentModelUsage;
@@ -1784,6 +1850,9 @@ function toRetrievalAskResult(answer: AgentTurnAnswer): RetrievalAskResult {
   if (!answer.retrieval) {
     throw new Error("Agent retrieval metadata is unavailable.");
   }
+  const citations = answer.citations.filter(
+    (citation): citation is RetrievalAnswerCitation => !("kind" in citation)
+  );
   return {
     ...answer.retrieval,
     answeredAt: new Date().toISOString(),
@@ -1791,14 +1860,14 @@ function toRetrievalAskResult(answer: AgentTurnAnswer): RetrievalAskResult {
     answerMode: "model_grounded",
     confidence: answer.grounding === "insufficient_evidence"
       ? "insufficient"
-      : answer.citations.length > 1
+      : citations.length > 1
         ? "grounded"
         : "limited",
-    citations: answer.citations,
+    citations,
     warnings: answer.grounding === "insufficient_evidence"
       ? ["insufficient_evidence"]
       : [
-          ...(answer.citations.length === 1 ? ["limited_evidence" as const] : []),
+          ...(citations.length === 1 ? ["limited_evidence" as const] : []),
           ...(answer.retrieval.degraded ? ["search_degraded" as const] : [])
         ]
   };
