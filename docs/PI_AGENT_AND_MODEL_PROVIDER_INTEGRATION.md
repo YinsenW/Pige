@@ -180,15 +180,9 @@ Rules:
   change together; `max` adds no visible setting.
 - Embedding and reranking models are not user BYOK provider roles in v0.1; they belong to Local Capabilities and local RAG.
 
-Current preset foundation:
-
-- Presets cover OpenAI/Responses, Anthropic/Messages, Gemini, DeepSeek/Chat and no-auth
-  Ollama; Custom exposes three protocols. Optional-key UI proof is open.
-- `presetId` reconnect preserves identity/choices and never replaces same-Endpoint Custom.
-  Connect/Refresh journals restore incomplete writes; old secrets follow journal removal.
-- Loopback proves renderer-to-Pi connect/restart. A legacy Custom DeepSeek proves secret
-  resolution, Chat direct/restart-cited Home and clean diagnostics, not preset Connect.
-- Open: catalog/delete/sync, live DeepSeek preset/Anthropic, multi-source recovery, and packaged platforms.
+The Playbook and acceptance manifest own the current preset inventory, executable proof,
+and remaining provider/platform delivery gaps; the rules above remain the stable model
+profile contract.
 
 ## 8. Pi Custom Models Boundary
 
@@ -335,6 +329,20 @@ Home follow-up creates fresh isolated Pi from at most 16 checked prior user/assi
 messages/64 KiB; history cannot become the current result. Pige events/Jobs, not Pi
 sessions, are authoritative. Compaction/indexing and steer queues remain open.
 
+Home draft streaming is a Host-owned presentation boundary, not raw Pi/provider output.
+Only an exact `pige_finish_home_turn` update may contribute, and only its already-parsed,
+bounded `answer` string after control/restricted-content filtering. Pige emits a
+sender/turn/Job-bound, monotonically sequenced `draft_replace` snapshot; it never emits
+thinking, generic assistant prose, raw JSON/tool arguments, provider events, model refs,
+grounding, or citations. Replacement snapshots may shrink or revise prior text.
+
+The draft is escaped, non-durable, and non-authoritative. Full output schema, evidence,
+source revision, grounding, and citations still validate before the assistant event and
+Job result commit. That durable final replaces the draft; failure/cancellation removes or
+marks it, cancellation ends the stream, and restart restores only durable conversation
+state. Pi `text_delta` is not a Home answer because the answer belongs to the terminal
+tool argument.
+
 Agent memory:
 
 - Pige-native memory remains the default.
@@ -393,14 +401,9 @@ Runtime reports only `embedded_pi_sdk`; non-secret readiness checks an enabled d
 model/provider and required-auth satisfaction, and each run creates one isolated Pi model
 collection. Legacy DTO values remain readable; no alternate runtime is enabled.
 
-Phase 3 implementation note:
-
-- Embedded Pi owns current text/document/image ingest; its selected inspect/parse/OCR/
-  retrieval/write tools replan or fail before effects. Egress, binding, evidence,
-  cancellation, and commit are rechecked; raw prompts/responses/keys do not persist.
-- No model preserves sources and waits; unavailable/empty document evidence writes no note.
-- Home `agent.submitTurn` supports direct, cited retrieval, URL, and one-file turns;
-  missing/broken bindings wait with typed repair and legacy handlers stay readable.
+Current Pi tool/turn coverage and open work live in the Playbook and acceptance manifest.
+The adapter, revalidation, no-model preservation, typed repair, and legacy-read rules in
+this owner remain normative.
 
 Re-review both Pi pins together whenever either changes.
 

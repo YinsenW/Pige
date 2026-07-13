@@ -228,13 +228,9 @@ OCR priority:
 
 OCR output is an extracted artifact. It does not replace the source asset.
 
-Current implementation scope:
-
-- `macos_vision_document` and `macos_vision_text` support direct rasters, Agent-selected bounded PDF candidates, and parser-selected PPTX raster media on macOS 26.
-- Full-slide, vector/chart and DOCX-media OCR, Windows AI, Paddle install/repair, and cross-platform packaged proof remain waiting.
-- Engine/confidence/warnings and bounded `ocr:block:N`, `page:N/ocr:block:M`, or
-  `slide:N/media:M/ocr:block:K` locators wrap untrusted OCR text. Low confidence or
-  truncation forces conservative replan, warning, or abstention—not routine approval.
+Current engine/platform coverage and open OCR work live in acceptance. Every implemented
+adapter must still emit bounded engine/confidence/warning locators, treat OCR as untrusted,
+and replan, warn, or abstain on low-confidence/truncated output.
 
 ## 10. Parse Quality
 

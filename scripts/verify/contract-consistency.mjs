@@ -189,16 +189,19 @@ requireText("docs/DATA_ARCHITECTURE.md", [
   "Existing source records keep their prior `rootId`",
   "`replace_existing`",
   "`clone_as_new`",
-  "registering both paths is forbidden"
+  "Two simultaneously registered paths must never share one `vault_id`"
 ]);
 requireText("docs/SYNC_CONFLICT_AND_MIGRATION.md", [
   "sidecar remains operational authority",
   "never retarget to the current default root"
 ]);
 requireText("docs/JOB_OPERATION_AND_RECOVERY.md", [
-  "backup/restore service validates and stages archives but does not yet emit the full durable jobs/checkpoints",
+  "Backup creates a durable `backup` job before preflight",
   "`replace_existing` preserves the vault ID",
   "`clone_as_new` mints a vault ID"
+]);
+requireText("resources/traceability/acceptance.manifest.json", [
+  "Durable backup Job/checkpoint resume and external-dependency completeness remain open."
 ]);
 
 requireText("docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md", [
@@ -321,8 +324,6 @@ const normativeFiles = [
     .map((entry) => `docs/${entry.name}`)
     .filter((file) => ![
       "docs/DECISION_LOG.md",
-      "docs/DESIGN_REVIEW.md",
-      "docs/DESIGN_BASELINE_AUDIT.md",
       "docs/PI_PACKAGE_RESEARCH.md"
     ].includes(file))
 ];

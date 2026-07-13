@@ -75,6 +75,7 @@ if (process.argv.includes("--print-snapshot")) {
 
 const errors = [];
 if (recipe.schemaVersion !== 1 || recipe.status !== "passed") errors.push("recipe must use schemaVersion 1 and status passed");
+if (recipeBytes.length > 12_000) errors.push(`current independent-review recipe exceeds 12000 bytes: ${recipeBytes.length}`);
 const configuredSnapshotRoots = new Set(recipe.snapshot?.roots ?? []);
 for (const required of requiredSnapshotRoots) {
   if (!configuredSnapshotRoots.has(required)) errors.push(`independent review snapshot is missing governed root ${required}`);
@@ -91,6 +92,7 @@ if (!Number.isInteger(recipe.snapshot?.minimumFileCount) || fileDigests.length <
 
 const reviewers = new Map();
 const reviewerTasks = new Set();
+if ((recipe.reviewers ?? []).length > 3) errors.push("current independent-review recipe retains more than three reviewers");
 for (const reviewer of recipe.reviewers ?? []) {
   if (!reviewer.reviewerId || reviewers.has(reviewer.reviewerId)) errors.push(`duplicate or missing reviewer ID: ${reviewer.reviewerId ?? "missing"}`);
   reviewers.set(reviewer.reviewerId, reviewer);
@@ -125,6 +127,8 @@ for (const verification of recipe.verification ?? []) {
   }
 }
 if ((recipe.verification ?? []).length < 3) errors.push("independent review must name at least three verification commands");
+if ((recipe.resolvedBlockers ?? []).length !== 0) errors.push("resolved blockers belong in Git/CI history, not the current independent-review recipe");
+if ((recipe.nonBlockingRisks ?? []).length > 8) errors.push("current independent-review recipe retains more than eight non-blocking risks");
 
 const coordination = recipe.coordination ?? {};
 if (coordination.status !== "acknowledged" || coordination.planningCost !== "Medium" || coordination.action !== "Active-phase follow-up") {

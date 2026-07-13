@@ -64,11 +64,9 @@ Language selector labels:
 - Français
 - Deutsch
 
-Phase 1 implementation note:
-
-- The desktop shell uses simple key/value message catalogs for core screens and verifies that all six locale files contain the same non-empty keys.
-- ICU-style messages remain required when a string needs pluralization, dates, relative time, or grammatical variants.
-- The app locale defaults from the supported system locale and can be overridden in machine-local settings without writing to the vault.
+Current locale-catalog evidence and open ICU/platform work live in acceptance. The
+catalog parity, system-default, machine-local override, and grammatical-format rules
+below remain normative regardless of implementation phase.
 
 ## 4. Content Language Metadata
 

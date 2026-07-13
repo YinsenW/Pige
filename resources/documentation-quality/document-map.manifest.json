@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "entryBudget": {
-    "maximumWords": 4200,
+    "maximumWords": 3700,
     "paths": [
       "AGENTS.md",
       "README.md",
@@ -91,8 +91,6 @@
     ["LICENSE", "Routing/control", "Apache 2.0 license text", "Read for licensing or distribution changes", "Public workflow"],
     ["NOTICE", "Routing/control", "Apache distribution notice and attribution", "Read for notice or attribution changes", "Public workflow"],
     [".github/pull_request_template.md", "Routing/control", "Pull request intake, safety checks, and active-development impact notification", "Read for GitHub PR workflow changes", "Public workflow"],
-    ["docs/DESIGN_REVIEW.md", "Historical/research", "Historical accepted design improvements and rationale", "Not default reading; use for rationale only", "Historical"],
-    ["docs/DESIGN_BASELINE_AUDIT.md", "Historical/research", "Historical pre-implementation audit and readiness evidence", "Not default reading; use for baseline audit history", "Historical"],
     ["docs/PI_PACKAGE_RESEARCH.md", "Historical/research", "Dated Pi package catalog research and curation rationale", "Read only when package curation is in scope", "Historical"],
     ["docs/prototypes/README.md", "Historical/research", "Rendered key-screen prototype index and screenshots", "Read only for UI review or interaction validation", "Prototype evidence"],
     ["resources/curated-packages/README.md", "Resource", "Placeholder and admission rule for curated Pi package manifests", "Read at the owning extension phase boundaries", "Phase-gated resource"],

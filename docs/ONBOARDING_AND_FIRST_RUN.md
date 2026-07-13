@@ -280,10 +280,8 @@ Required controls:
 - Connect Provider.
 - Skip model for now.
 
-Phase 1 implementation note:
-
-- The first-run Restore Backup control may be present as a disabled entry point until `restore.preview` and `restore.apply` are implemented by the Backup Service.
-- The disabled entry point must not imply that data is already protected by Pige backups.
+Current onboarding/restore delivery lives in acceptance. Any disabled future control must
+remain visibly unavailable and must not imply that Pige already protects the user's data.
 
 Required copy:
 

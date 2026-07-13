@@ -103,4 +103,6 @@ The complete document map is `resources/documentation-quality/document-map.manif
 
 This file must not copy the context-pack or handoff field lists. `docs/AI_DEVELOPMENT_GUIDE.md` is their single owner. Repository-level red lines and stop conditions remain in `AGENTS.md`; phase completion and in-flight coordination remain in `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`.
 
-Historical/research routing remains non-default: `docs/DESIGN_REVIEW.md`, `docs/DESIGN_BASELINE_AUDIT.md`, `docs/PI_PACKAGE_RESEARCH.md`, and `docs/prototypes/README.md` preserve rationale or evidence and cannot prove current implementation.
+Historical/research routing remains non-default: `docs/PI_PACKAGE_RESEARCH.md` preserves
+dated package-curation rationale and `docs/prototypes/README.md` indexes visual evidence;
+neither can prove current implementation.

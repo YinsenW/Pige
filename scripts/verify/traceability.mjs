@@ -102,6 +102,32 @@ function parseAllowedAreas(spec) {
   return new Set([...(section?.[1] ?? "").matchAll(/^- `([A-Z][A-Z0-9]*)`$/gm)].map((match) => match[1]));
 }
 
+function parseMarkdownListItems(block) {
+  const items = [];
+  let current;
+  const finish = () => {
+    if (!current) return;
+    items.push({
+      firstLine: current[0],
+      line: current.join("\n"),
+      text: current.map((line, index) => index === 0 ? line : line.trim()).join(" ").replace(/\s+/gu, " ")
+    });
+    current = undefined;
+  };
+  for (const line of block.split("\n")) {
+    if (line.startsWith("- ")) {
+      finish();
+      current = [line];
+    } else if (current && /^\s{2,}\S/u.test(line)) {
+      current.push(line);
+    } else {
+      finish();
+    }
+  }
+  finish();
+  return items;
+}
+
 function parsePhaseSections(playbook) {
   const sections = new Map();
   const headings = [...playbook.matchAll(/^## \d+\. Phase ([0-9]):.*$/gm)];
@@ -116,20 +142,20 @@ function parsePhaseSections(playbook) {
     const builds = new Map();
     const exits = new Map();
     const deferred = new Map();
-    for (const line of buildBlock.split("\n").filter((item) => item.startsWith("- "))) {
-      const match = line.match(/^- \[B([0-9])\.(\d{2}) -> E([0-9])\.(\d{2})\] (.+)$/);
-      if (match) builds.set(`B${match[1]}.${match[2]}`, { id: `B${match[1]}.${match[2]}`, phase: `P${number}`, exit: `E${match[3]}.${match[4]}`, text: match[5], line });
-      else builds.set(`INVALID-BUILD-${builds.size}`, { phase: `P${number}`, line });
+    for (const item of parseMarkdownListItems(buildBlock)) {
+      const match = item.text.match(/^- \[B([0-9])\.(\d{2}) -> E([0-9])\.(\d{2})\] (.+)$/);
+      if (match) builds.set(`B${match[1]}.${match[2]}`, { id: `B${match[1]}.${match[2]}`, phase: `P${number}`, exit: `E${match[3]}.${match[4]}`, text: match[5], line: item.line });
+      else builds.set(`INVALID-BUILD-${builds.size}`, { phase: `P${number}`, line: item.line });
     }
-    for (const line of exitBlock.split("\n").filter((item) => item.startsWith("- "))) {
-      const match = line.match(/^- \[E([0-9])\.(\d{2})\] (.+)$/);
-      if (match) exits.set(`E${match[1]}.${match[2]}`, { id: `E${match[1]}.${match[2]}`, phase: `P${number}`, text: match[3], line });
-      else exits.set(`INVALID-EXIT-${exits.size}`, { phase: `P${number}`, line });
+    for (const item of parseMarkdownListItems(exitBlock)) {
+      const match = item.text.match(/^- \[E([0-9])\.(\d{2})\] (.+)$/);
+      if (match) exits.set(`E${match[1]}.${match[2]}`, { id: `E${match[1]}.${match[2]}`, phase: `P${number}`, text: match[3], line: item.line });
+      else exits.set(`INVALID-EXIT-${exits.size}`, { phase: `P${number}`, line: item.line });
     }
-    for (const line of deferredBlock.split("\n").filter((item) => item.startsWith("- "))) {
-      const match = line.match(/^- \[D([0-9])\.(\d{2})\] (.+)$/);
-      if (match) deferred.set(`D${match[1]}.${match[2]}`, { id: `D${match[1]}.${match[2]}`, phase: `P${number}`, text: match[3], line });
-      else deferred.set(`INVALID-DEFERRED-${deferred.size}`, { phase: `P${number}`, line });
+    for (const item of parseMarkdownListItems(deferredBlock)) {
+      const match = item.text.match(/^- \[D([0-9])\.(\d{2})\] (.+)$/);
+      if (match) deferred.set(`D${match[1]}.${match[2]}`, { id: `D${match[1]}.${match[2]}`, phase: `P${number}`, text: match[3], line: item.line });
+      else deferred.set(`INVALID-DEFERRED-${deferred.size}`, { phase: `P${number}`, line: item.line });
     }
     sections.set(`P${number}`, { number, text, buildBlock, deferredBlock, exitBlock, builds, exits, deferred });
   }
@@ -186,7 +212,7 @@ function parseP0Items(prd, manifest) {
 }
 
 function parseHistoricalPaths(startHere) {
-  const paths = new Set(["docs/DESIGN_REVIEW.md", "docs/DESIGN_BASELINE_AUDIT.md", "docs/PI_PACKAGE_RESEARCH.md"]);
+  const paths = new Set(["docs/PI_PACKAGE_RESEARCH.md"]);
   for (const line of startHere.split("\n")) {
     if (!line.startsWith("| `")) continue;
     const cells = line.slice(1, -1).split("|").map((cell) => cell.trim());
@@ -318,6 +344,11 @@ function normalizeClaimText(value) {
 function claimHash(value) {
   const canonical = typeof value === "string" ? normalizeClaimText(value) : JSON.stringify(value);
   return `sha256:${crypto.createHash("sha256").update(canonical, "utf8").digest("hex")}`;
+}
+
+function compactClaimDigest(value) {
+  const canonical = typeof value === "string" ? normalizeClaimText(value) : JSON.stringify(value);
+  return `b64u:${crypto.createHash("sha256").update(canonical, "utf8").digest("base64url")}`;
 }
 
 function claimId(kind, id) {
@@ -539,13 +570,13 @@ function buildSemanticClaimLedger(model) {
       if (claimIds.has(value.claimId)) throw new Error(`Duplicate canonical semantic claim ID ${value.claimId}.`);
       claimIds.add(value.claimId);
       claimCount += 1;
-      claims[section][value.claimId] = claimHash({ section, key, value });
+      claims[section][value.claimId] = compactClaimDigest({ section, key, value });
     }
   }
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     normalization: preimages.normalization,
-    algorithm: "sha256(canonical claim JSON)",
+    algorithm: "sha256-base64url(canonical claim JSON)",
     claimCount,
     claims
   };
@@ -553,7 +584,7 @@ function buildSemanticClaimLedger(model) {
 
 function checkLockedClaimSections(model, sections, errors) {
   const locked = model.semanticClaims;
-  if (!locked || locked.schemaVersion !== 2 || !locked.claims) {
+  if (!locked || locked.schemaVersion !== 3 || !locked.claims) {
     add(errors, "Independent semantic-claims manifest is missing or invalid.");
     return;
   }

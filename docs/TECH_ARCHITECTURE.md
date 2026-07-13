@@ -249,11 +249,8 @@ Capture types:
 - `screenshot_image`.
 - `unknown_file`.
 
-Current implementation:
-
-- Text and supported files are preserved as managed sources or verified references;
-  bounded metadata-only/direct-text source projections may follow.
-- PDF/DOCX/PPTX/images queue Agent ingest; Pi parse/OCR calls persist deterministic children.
+Current delivery and open work are projected only by the Playbook and acceptance
+manifest; this owner defines the preservation and service boundary.
 
 ### 5.1.1 Source Storage Service
 
@@ -291,15 +288,8 @@ Jobs should be stored under `.pige/jobs/` as recoverable JSON records. Derived j
 
 Completed job records may eventually be compacted after their durable effects are represented in source pages, wiki pages, operation summaries, and `log.md`.
 
-Current implementation:
-
-- Durable records expose safe summaries, retry/cancel, monotonic progress, action-safety
-  guards, bounded drainers, and conservative restart recovery for implemented classes.
-- Worker-backed parse/OCR/index and fenced Agent writes preserve validated partial
-  output. Exact evidence and remaining cross-process, platform, batch, scheduling, and
-  compaction gaps are owned by the Job contract and acceptance manifest.
-- Current direct continuations are transitional; B3.13 replaces new branching with an
-  Agent parent and tool-call children while recovery resumes only selected calls.
+The Job owner defines lifecycle and recovery; the Playbook and acceptance manifest own
+implemented-class evidence and remaining delivery gaps.
 
 ### 5.1.3 Library Service
 
@@ -311,13 +301,9 @@ Responsibilities:
 - Count and skip invalid frontmatter so the Library remains usable after external edits.
 - Avoid returning source record paths, managed copy paths, original absolute paths, page bodies, prompts, model responses, or secrets.
 
-Current implementation:
-
-- `library.list` scans Markdown frontmatter directly from the active vault.
-- Reads are bounded to the beginning of each Markdown file for metadata extraction.
-- `library.list` uses the Local Database page index when ready and keeps the Markdown scan fallback.
-- `library.related` returns safe resolved outgoing-link and backlink summaries from rebuildable SQLite graph tables.
-- Library tree queries and richer graph browsing remain later phases.
+API channel detail and delivery evidence live in the API owner and acceptance manifest;
+this service contract remains independent of whether a query uses Markdown fallback or a
+ready rebuildable index.
 
 ### 5.1.4 Conversation History Service
 
@@ -362,7 +348,9 @@ Driver plan:
 - Access through a `LocalDatabaseDriver` interface.
 - Database work runs in Electron main process or a dedicated worker/utility process.
 - Long rebuilds, large search indexing, and embedding metadata writes should not block renderer interactions.
-- Explicit Job rebuilds use the bundled v1 request-bound worker at `out/main/workers/local-database-rebuild-worker.js`, with bounded progress/result, a 15-minute timeout, 512 MiB V8 old-generation limit, termination on every settlement, and built-artifact smoke. Implicit first-query rebuild remains synchronous; strict cross-process writer/CAS and packaged-platform proof remain open.
+- Explicit rebuilds use the Job/worker boundary and bounded resource policy owned by the
+  Local Database, Job, and Performance contracts; exact evidence and open delivery work
+  remain in acceptance.
 
 Driver contract:
 
@@ -784,12 +772,8 @@ Rules:
 - Pending confirmation proposals should be written to `.pige/proposals/`.
 - Rollback should be possible for applied change sets while original file checksums still match.
 
-Current implementation:
-
-- Current: exact create, cited append, bounded tags, and one directed link on clean
-  retrieved generated notes. Host owns target/catalog/normalization/limits/bytes/Operation;
-  Activity/Undo/recovery and rebuild follow Markdown. Replacement/removal/synonyms,
-  broad organization, CAS, redo, and platforms remain open.
+The acceptance manifest is the sole current inventory of auto-applied operation kinds,
+Activity/Undo evidence, and remaining mutation/recovery work.
 
 ### 5.5.2 Markdown Rendering And Editing Surface
 
@@ -812,11 +796,8 @@ Candidate implementation:
 - A source editor can start with a Markdown text editor plus rendered read/preview mode.
 - Syntax highlighting, table overflow handling, code copy buttons, and citation badges should live in the renderer layer, not in generated Markdown source.
 
-Current implementation:
-
-- `NotesService` opens by stable ID and renders sanitized Markdown; remote/protocol/
-  traversal resources are inert and Electron denies frame, redirect, and window
-  navigation. Editing, source actions, Note Agent, and long-page rendering remain open.
+Reader delivery evidence and open interaction work live in acceptance; this owner keeps
+the renderer, sanitization, source-preservation, and process boundary stable.
 
 ### 5.6 Search And Retrieval Service
 
@@ -1371,13 +1352,8 @@ Responsibilities:
 - Use the API Owner's request/response DTOs; do not create another manifest or IPC shape
   in architecture prose.
 
-Current implementation:
-
-- ZIP create snapshots by descriptor, validates adjacent private staging, fsyncs, and
-  publishes by no-overwrite hard link with owned crash-link recovery. Restore binds archive
-  bytes plus one sender lease, validates owned staging, and publishes no-replace under an
-  owned reservation with manifest last and explicit-retry reconciliation. Identity modes,
-  external/migration handling, durable Jobs, dirfd CAS, progress, and platforms remain open.
+Backup/restore delivery and residual platform/recovery gaps are owned by the Playbook and
+acceptance manifest; this architecture keeps service placement and owner references only.
 
 ### 5.11 Diagnostics Service
 
@@ -1526,16 +1502,6 @@ Model list behavior:
   secrets are cleaned only after journal removal. Other single-model edits use atomic replace.
 - Pi owns the real bootstrap probe. Presets hide protocol/Endpoint; Custom reveals them;
   Pi AI stays the sole runtime, with no copied layer or Advanced/Fast routing.
-
-Current embedded Agent ingest spine:
-
-- Normal text/document/image ingest runs through the sole embedded Pi adapter with one selected
-  provider/model binding and no direct-provider fallback.
-- Inspect returns verified evidence; PDF/DOCX/PPTX parse and selected PDF/PPTX/image OCR create
-  or reuse bound children; publication revalidates refs and revision.
-- Home retrieval uses one bounded search tool with per-turn evidence/egress revalidation.
-  Ingest adds bounded retrieval plus exact create-note stage/review/apply/reject and Home
-  review; generic proposals/recovery, full Broker, and remaining fixed routing stay open.
 
 The v0.1 UI exposes only the P0 provider modes defined in `docs/PRD.md`, through the
 compact Add Provider flow owned by the Pi integration contract.

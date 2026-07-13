@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-13T00:33:13Z",
+  "reviewedAt": "2026-07-13T01:50:12Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,335 +30,11 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "350bd835717e703c84252061485a249f442970f74e6c2f51a8d28a9885fff61a"
+    "reviewedSha256": "2e7652b2db5a204837ea5626cb3d0c2d944c3291919161e68f4e647a29a751e5"
   },
   "reviewers": [
     {
-      "reviewerId": "provider-settings-simplification-final-review",
-      "task": "/root/provider_docs_independent_review",
-      "independentDimensions": [
-        "navigation_and_resource_lifecycle",
-        "cross_document_contract_consistency",
-        "continuous_traceability_and_acceptance",
-        "ongoing_development_support",
-        "documentation_leanness_and_maintainability"
-      ],
-      "independence": "Fresh read-only reviewer audited the exact 19-file pre-recipe Provider Settings candidate and rejected a corrupted board, stale UI copy, incomplete manual-bootstrap sequencing, unsafe status DTOs, key-only auth assumptions, unspecified enablement, incomplete DeepSeek boundary proof, and capacity overflow. After repair it accepted preset-first setup, Custom-only protocols, unified model inventory, grouped Global Default, real Pi pre-write probe, conditional auth, unchanged states, 1,091 claims, clean UI assets, and fixed budgets; all five dimensions were CLEAR with no reviewer edits."
-    },
-    {
-      "reviewerId": "general-agent-unified-ingress-final-review",
-      "task": "/root/general_agent_final_review",
-      "independentDimensions": [
-        "navigation_and_resource_lifecycle",
-        "cross_document_contract_consistency",
-        "continuous_traceability_and_acceptance",
-        "ongoing_development_support",
-        "documentation_leanness_and_maintainability"
-      ],
-      "independence": "Fresh read-only reviewer audited all 25 changed files and the exact 109-file pre-recipe snapshot. It accepted the general-purpose Agent positioning, one Pi ingress after preservation, optional cited retrieval, durable no-model waiting, explicit provider protocols, safe binding status, pre-save Pi probe and rollback target, honest unimplemented states, 1,091-claim lock, superseded decisions and fixed budgets; all five dimensions were CLEAR with no reviewer edits."
-    },
-    {
-      "reviewerId": "proposal-home-review-ui-final-review",
-      "task": "/root/proposal_ui_final_review",
-      "independentDimensions": [
-        "navigation_and_resource_lifecycle",
-        "cross_document_contract_consistency",
-        "continuous_traceability_and_acceptance",
-        "ongoing_development_support",
-        "documentation_leanness_and_maintainability"
-      ],
-      "independence": "Fresh read-only reviewer audited the repaired 12-Development plus 10-governed pre-recipe candidate. It rejected one stale Prompt claim, then accepted exact Home cards/focused review, durable rejected-call reconciliation, ready retry, unknown fail-closed, escaped Markdown, localized outcomes, ARIA/focus behavior, existing IPC, exact evidence, unchanged states, residual generic/platform gaps, semantic lock, and budgets with no reviewer edits."
-    },
-    {
-      "reviewerId": "proposal-review-apply-final-review",
-      "task": "/root/proposal_apply_final_review",
-      "independentDimensions": [
-        "navigation_and_resource_lifecycle",
-        "cross_document_contract_consistency",
-        "continuous_traceability_and_acceptance",
-        "ongoing_development_support",
-        "documentation_leanness_and_maintainability"
-      ],
-      "independence": "Fresh read-only reviewer rejected stale Prompt scope, incorrect apply/log ordering and generic-reject wording, and one missing E3.06 evidence mapping. After exact repair it accepted the 10-Development plus 9-governed pre-recipe candidate: bounded create-note review/apply/reject/conflict recovery, applied/conflicted API results, unchanged states, explicit transaction/CAS/TOCTOU/UI/platform gaps, semantic lock, and budgets were CLEAR with no reviewer edits."
-    },
-    {
-      "reviewerId": "pi-ingest-proposal-final-review",
-      "task": "/root/proposal_final_independent_review",
-      "independentDimensions": [
-        "navigation_and_resource_lifecycle",
-        "cross_document_contract_consistency",
-        "continuous_traceability_and_acceptance",
-        "ongoing_development_support",
-        "documentation_leanness_and_maintainability"
-      ],
-      "independence": "Fresh read-only reviewer audited the exact 9-Development plus 8-governed pre-recipe candidate. It traced deterministic Agent-selected staging, full bounded proposal content versus body-free parent/list summaries, commit-before-link recovery, terminal/cancellation fences, confined storage, state-only decisions, exact evidence, unchanged partial states, and retained routing/apply/CAS/TOCTOU/platform gaps; all five dimensions were CLEAR with no edits."
-    },
-    {
-      "reviewerId": "pi-ingest-retrieval-final-review",
-      "task": "/root/final_independent_governed_review",
-      "independentDimensions": [
-        "navigation_and_resource_lifecycle",
-        "cross_document_contract_consistency",
-        "continuous_traceability_and_acceptance",
-        "ongoing_development_support",
-        "documentation_leanness_and_maintainability"
-      ],
-      "independence": "Fresh read-only reviewer audited the exact 6-Development plus 8-governed pre-recipe candidate. It traced optional local ingest retrieval, current Markdown/SourceRecord revalidation, opaque related refs versus current-source citations, ordinary_allowed and higher-risk gates, terminal failure/publication fences, exact evidence, unchanged states, retained replay/cancellation/Broker/recovery/platform gaps, semantic lock, and budgets; all five dimensions were CLEAR with no edits."
-    },
-    {
-      "reviewerId": "ordinary-allowed-default-review",
-      "task": "/root/ordinary_default_independent_review",
-      "independentDimensions": [
-        "navigation_and_resource_lifecycle",
-        "cross_document_contract_consistency",
-        "continuous_traceability_and_acceptance",
-        "ongoing_development_support",
-        "documentation_leanness_and_maintainability"
-      ],
-      "independence": "Independent read-only review accepted the exact 6-Development plus 4-Planning delta. It verified the default and stricter-policy hash binding, exact Connect disclosure, full known/unknown/local/content matrix, Home private allow and sensitive pre-credential stop, Profile-switch isolation, unchanged partial states, and explicit persistence/IPC/UI and confirmation-resume gaps with no edits."
-    },
-    {
-      "reviewerId": "local-first-byok-friction-review",
-      "task": "/root/cloud_ux_independent_review",
-      "independentDimensions": [
-        "navigation_and_resource_lifecycle",
-        "cross_document_contract_consistency",
-        "continuous_traceability_and_acceptance",
-        "ongoing_development_support",
-        "documentation_leanness_and_maintainability"
-      ],
-      "independence": "Independent read-only review covered all five dimensions on the exact existing-resource-only candidate. It required unambiguous sensitive handling, removal of a stale prompt-first recommendation, exact Profile/endpoint authority, and restoration of a decision anchor; after repair it accepted ordinary_allowed for known destinations, higher-risk gates, stricter modes, truthful partial/open status, and no Pige telemetry/proxy or inherited authority."
-    },
-    {
-      "reviewerId": "provider-home-final-review",
-      "task": "/root/provider_home_independent_review",
-      "independentDimensions": [
-        "navigation_and_resource_lifecycle",
-        "cross_document_contract_consistency",
-        "continuous_traceability_and_acceptance",
-        "ongoing_development_support",
-        "documentation_leanness_and_maintainability"
-      ],
-      "independence": "Fresh read-only reviewer audited the exact 54-file Provider/Home candidate after four privacy repairs. It traced OpenAI key-only setup, global default, agent.ask/local fallback, query-hash Jobs, per-turn evidence audits, drift/confinement, UI/prototypes, exact evidence, unchanged statuses, residual gaps, 1,079 claims, screenshots, and budgets; all five dimensions passed with zero blockers and no edits."
-    },
-    {
-      "reviewerId": "pi-image-ocr-tool-recovery-review",
-      "task": "/root/image_ocr_final_review",
-      "independentDimensions": [
-        "navigation_and_resource_lifecycle",
-        "cross_document_contract_consistency",
-        "continuous_traceability_and_acceptance",
-        "ongoing_development_support",
-        "documentation_leanness_and_maintainability"
-      ],
-      "independence": "Fresh read-only reviewer audited the exact direct-image candidate without editing files, rejected an engine-ownership phrase and an overbroad E2.06 projection, then accepted the repaired wording. It traced preservation into Pi-selected OCR, no-child/waiting-child recovery, completed-empty parking across restart, deterministic reuse, cancellation, reference-original and legacy compatibility, Owner/acceptance mappings, unchanged statuses, residual gaps, semantic lock, and budgets; all five dimensions have zero blockers."
-    },
-    {
-      "reviewerId": "readme-role-job-architecture-review",
-      "task": "/root/pi_update_architecture",
-      "independentDimensions": [
-        "navigation_and_resource_lifecycle",
-        "cross_document_contract_consistency",
-        "continuous_traceability_and_acceptance",
-        "ongoing_development_support",
-        "documentation_leanness_and_maintainability"
-      ],
-      "independence": "Read-only architecture reviewer rejected the first L2 delta for missing capture/Agent evidence and imprecise guard recovery wording, then independently verified the exact repair, Owner/acceptance consistency, capture and index_rebuild limits, semantic lock, budgets, and zero-blocker score without editing files."
-    },
-    {
-      "reviewerId": "readme-agent-governance-review",
-      "task": "/root/pi_update_architecture/final_readme_governance",
-      "independentDimensions": [
-        "navigation_and_resource_lifecycle",
-        "cross_document_contract_consistency",
-        "continuous_traceability_and_acceptance",
-        "ongoing_development_support",
-        "documentation_leanness_and_maintainability"
-      ],
-      "independence": "At the pre-implementation checkpoint, this read-only reviewer challenged semantic-lock drift, document-budget overflow, no-model onboarding, legacy runtime wording, tool contracts, and fixed host sequencing; after repair it accepted that earlier approved-but-unimplemented exception without editing files."
-    },
-    {
-      "reviewerId": "agent-pipeline-final-consistency",
-      "task": "/root/agent_pipeline_final_consistency",
-      "independentDimensions": [
-        "navigation_and_resource_lifecycle",
-        "cross_document_contract_consistency",
-        "continuous_traceability_and_acceptance",
-        "ongoing_development_support",
-        "documentation_leanness_and_maintainability"
-      ],
-      "independence": "Independent read-only final reviewer traced the current diff across product, architecture, Pi, parser, jobs, prompt, context, onboarding, API/data, milestones, decisions, playbook, quality, and acceptance. It found and required repair of nested-model retrieval, final-text write, capture-only, URL, selection-action, legacy-decision, and size conflicts, then reported no remaining status promotion or implementation overclaim."
-    },
-    {
-      "reviewerId": "job-trace-governance-risk-review",
-      "task": "/root/pi_update_risk",
-      "independentDimensions": [
-        "navigation_and_resource_lifecycle",
-        "cross_document_contract_consistency",
-        "continuous_traceability_and_acceptance",
-        "ongoing_development_support",
-        "documentation_leanness_and_maintainability"
-      ],
-      "independence": "Read-only risk reviewer checked the L2 action-safety state paths, exact evidence selectors and projections, semantic-lock delta, unchanged partial states, and residual cross-process/platform gaps without editing files."
-    },
-    {
-      "reviewerId": "b510-local-tool-delta-review",
-      "task": "/root/b510_delta_map",
-      "independentDimensions": [
-        "navigation_and_resource_lifecycle",
-        "cross_document_contract_consistency",
-        "continuous_traceability_and_acceptance",
-        "ongoing_development_support",
-        "documentation_leanness_and_maintainability"
-      ],
-      "independence": "Read-only delta reviewer challenged an initial status interpretation and missing open facts, then accepted the exact minimal repair: fake/local-only Owner wording, one E5.02 evidence projection, unchanged planned/partial/in-progress states, complete production gaps, and current semantic lock without editing files."
-    },
-    {
-      "reviewerId": "b615-retrieval-regression-delta-review",
-      "task": "/root/b615_delta_map",
-      "independentDimensions": [
-        "navigation_and_resource_lifecycle",
-        "cross_document_contract_consistency",
-        "continuous_traceability_and_acceptance",
-        "ongoing_development_support",
-        "documentation_leanness_and_maintainability"
-      ],
-      "independence": "Read-only delta reviewer rejected the mutable action pin and non-minimal registry edits, then accepted the repaired full-SHA CI report boundary, exact Quality/TECH/dependency/acceptance projection, unchanged partial/in-progress states, complete retrieval gaps, 1,058-claim semantic delta, and budgets without editing files."
-    },
-    {
-      "reviewerId": "b612-knowledge-tree-delta-review",
-      "task": "/root/b612_delta_map",
-      "independentDimensions": [
-        "navigation_and_resource_lifecycle",
-        "cross_document_contract_consistency",
-        "continuous_traceability_and_acceptance",
-        "ongoing_development_support",
-        "documentation_leanness_and_maintainability"
-      ],
-      "independence": "Read-only delta reviewer rejected an Owner rewrite that weakened prior link/security facts and acceptance gaps owned by UI or Knowledge Health, then accepted the exact repair: preserved Phase 4 rules, isolated B6.12 aggregate facts, one selector, unchanged states, correct destinations, semantic delta, and budgets without editing files."
-    },
-    {
-      "reviewerId": "p4-index-rebuild-delta-review",
-      "task": "/root/p4_index_delta_review",
-      "independentDimensions": [
-        "navigation_and_resource_lifecycle",
-        "cross_document_contract_consistency",
-        "continuous_traceability_and_acceptance",
-        "ongoing_development_support",
-        "documentation_leanness_and_maintainability"
-      ],
-      "independence": "Read-only delta reviewer rejected an inaccurate maintenance/drainer claim, ambiguous RSS limit, incorrect action-safety propagation, weak smoke-only cancellation evidence, and stale Playbook wording; it then accepted the exact repaired worker/cancellation/recovery candidate with unchanged states and complete residual gaps without editing files."
-    },
-    {
-      "reviewerId": "pi-core-diagnostics-backup-review",
-      "task": "/root/pi_contract_audit",
-      "independentDimensions": [
-        "navigation_and_resource_lifecycle",
-        "cross_document_contract_consistency",
-        "continuous_traceability_and_acceptance",
-        "ongoing_development_support",
-        "documentation_leanness_and_maintainability"
-      ],
-      "independence": "Read-only reviewer rejected Pi completion without a real upstream loop, unsafe diagnostic details and top-level messages, overbroad backup evidence, and a conflicting AI SDK runtime path; after repair it accepted the exact 104-file candidate, 1,063-claim lock, unchanged states, and explicit residual gaps without editing files."
-    },
-    {
-      "reviewerId": "undici-8-7-dependency-review",
-      "task": "/root/undici_dependency_audit",
-      "independentDimensions": [
-        "navigation_and_resource_lifecycle",
-        "cross_document_contract_consistency",
-        "continuous_traceability_and_acceptance",
-        "ongoing_development_support",
-        "documentation_leanness_and_maintainability"
-      ],
-      "independence": "Fresh read-only dependency reviewer found the original workspace-lock verifier false negative and Decision lifecycle risk, then independently accepted the repaired 106-file Undici 8.7 candidate, exact owner alignment, unchanged semantic lock and statuses, and explicit platform/HTTP2 residuals without editing files."
-    },
-    {
-      "reviewerId": "autonomous-combined-final-review",
-      "task": "/root/final_doc_review",
-      "independentDimensions": [
-        "navigation_and_resource_lifecycle",
-        "cross_document_contract_consistency",
-        "continuous_traceability_and_acceptance",
-        "ongoing_development_support",
-        "documentation_leanness_and_maintainability"
-      ],
-      "independence": "Fresh read-only reviewer audited the exact 61-path Autonomous-by-Default plus URL, Reader and Backup candidate without editing files. It accepted Pi-selected restart-recoverable static-URL fetch, inert remote/traversal Reader resources, Electron navigation denial, validated adjacent no-overwrite backup publication, exact residual gaps, unchanged states, and the minimal four-evidence projection with zero blockers."
-    },
-    {
-      "reviewerId": "durable-agent-followup-final-review",
-      "task": "/root/followup_final_independent_review",
-      "independentDimensions": [
-        "navigation_and_resource_lifecycle",
-        "cross_document_contract_consistency",
-        "continuous_traceability_and_acceptance",
-        "ongoing_development_support",
-        "documentation_leanness_and_maintainability"
-      ],
-      "independence": "Fresh read-only reviewer independently audited the exact durable Agent follow-up candidate after the checksum repair without editing files. It verified the replacement Development hashes, symmetric user/assistant history integrity, exact-tail retry/restart adoption, bounded Pi history, cooperative cancellation, Home transcript behavior, unchanged states, and explicit residual gaps."
-    },
-    {
-      "reviewerId": "autonomous-auto-apply-final-review",
-      "task": "/root/auto_apply_final_independent",
-      "independentDimensions": [
-        "navigation_and_resource_lifecycle",
-        "cross_document_contract_consistency",
-        "continuous_traceability_and_acceptance",
-        "ongoing_development_support",
-        "documentation_leanness_and_maintainability"
-      ],
-      "independence": "Fresh read-only reviewer audited the exact 19-Development plus 10-governed pre-recipe candidate without editing files. It required repair of stale proposal-first Prompt/Decision/UI wording, the Activity-versus-Job recovery owner, and the unbatched scan residual; after repair all five dimensions were CLEAR for exact checksum-bound create Activity/Undo, durable UI reconciliation, unchanged states, 1,097 claims, and fixed budgets."
-    },
-    {
-      "reviewerId": "hash-bound-create-recovery-final-review",
-      "task": "/root/recovered_create_final_review",
-      "independentDimensions": [
-        "navigation_and_resource_lifecycle",
-        "cross_document_contract_consistency",
-        "continuous_traceability_and_acceptance",
-        "ongoing_development_support",
-        "documentation_leanness_and_maintainability"
-      ],
-      "independence": "Fresh read-only reviewer audited the exact 4-Development plus 6-governed pre-recipe candidate without editing files. It accepted checkpoint-proven same-Job page-first recovery, checksum-bound create Operations, Activity eligibility, the single exact evidence projection, unchanged states, 1,098 claims and fixed budgets while retaining historical hashless, non-create, completion-tampering, CAS/transaction and platform gaps."
-    },
-    {
-      "reviewerId": "restore-ownership-final-review",
-      "task": "/root/restore_final_independent_review",
-      "independentDimensions": [
-        "navigation_and_resource_lifecycle",
-        "cross_document_contract_consistency",
-        "continuous_traceability_and_acceptance",
-        "ongoing_development_support",
-        "documentation_leanness_and_maintainability"
-      ],
-      "independence": "Fresh read-only reviewer audited the exact restore candidate without editing files. It accepted the separate sender-scoped opaque lease and main-only archive checksum binding, owned staging and reservation, checksum-checked no-replace publication with manifest last, explicit-retry-only reconciliation, exact two-selector projection, unchanged states, 1,100-claim lock, fixed budgets, and retained identity, Job/restart, migration, error, CAS, rebuild and packaged-platform gaps."
-    },
-    {
-      "reviewerId": "autonomous-update-final-review",
-      "task": "/root/autonomous_update_final_independent",
-      "independentDimensions": [
-        "navigation_and_resource_lifecycle",
-        "cross_document_contract_consistency",
-        "continuous_traceability_and_acceptance",
-        "ongoing_development_support",
-        "documentation_leanness_and_maintainability"
-      ],
-      "independence": "Fresh read-only reviewer audited the repaired exact 19-Development plus 10-governed pre-recipe candidate without editing files. It accepted Operation occupancy preflight, one Pi-selected cited additive generated-note update, page-first recovery, exact create/update Activity and Undo, two evidence mappings, unchanged states, 1,102 claims, fixed budgets, and retained mutation/CAS/transaction/history/platform gaps."
-    },
-    {
-      "reviewerId": "autonomous-linking-final-review",
-      "task": "/root/autonomous_linking_final_review",
-      "independentDimensions": [
-        "navigation_and_resource_lifecycle",
-        "cross_document_contract_consistency",
-        "continuous_traceability_and_acceptance",
-        "ongoing_development_support",
-        "documentation_leanness_and_maintainability"
-      ],
-      "independence": "Fresh read-only reviewer audited the exact 5-Development plus 9-governed pre-recipe candidate without editing files. It accepted one high-confidence cited directed links_to between two clean generated notes, source-only mutation, read-only target binding, page-first recovery, exact Activity/Undo and derived backlink rebuild, two evidence mappings only to partial PIGE-KNOW-003/E7.01, 1,104 locked claims, fixed budgets, and retained broader link/mutation/CAS/transaction/platform gaps."
-    },
-    {
-      "reviewerId": "autonomous-tags-final-review",
+      "reviewerId": "documentation-governance-streaming-final-review",
       "task": "/root/autonomous_tags_final_review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
@@ -367,133 +43,85 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Fresh read-only reviewer audited the exact 11-Development plus 11-governed pre-recipe candidate without editing files. It accepted additive tags on one clean retrieved generated note, canonical normalization/catalog reuse with valid new-tag fallback, 6/action and 12/page limits, update_page Activity/Undo and page-first recovery, SQLite revision-3 facet rebuild and invalid-page counting, four narrow evidence mappings, unchanged states, 1,108 locked claims, fixed budgets, and retained removal/synonym/CAS/transaction/platform gaps."
+      "independence": "Independent read-only review covered the exact documentation-governance candidate. It accepted retirement of two historical audits, current-state ownership in Playbook and acceptance, schema-v3 compact semantic locks with all 1,108 IDs preserved, unchanged phase and acceptance states, net-lower budgets, and a safe non-durable Home draft-replacement contract that exposes no raw provider, Pi, tool, reasoning, citation, credential, or error payload. The reviewer made no file edits."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "autonomous-tags-final-review",
+      "reviewerId": "documentation-governance-streaming-final-review",
       "blockerCount": 0,
-      "summary": "No navigation, mode or root is added; Pi selects one opaque target while Host reuses existing update/Undo and SQLite stays rebuildable."
+      "summary": "The router and document map own the current library; two historical non-normative audits are removed without live references, while Git retains their rationale."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "autonomous-tags-final-review",
+      "reviewerId": "documentation-governance-streaming-final-review",
       "blockerCount": 0,
-      "summary": "Knowledge, Markdown, Database, Job, Technical, Pi, Prompt, Playbook and Decision agree on bounded additive tags and Host-owned normalization."
+      "summary": "PRD, subject Owners, Playbook, acceptance, decisions, API, UI, Job and Pi agree on current-state ownership and the safe Home draft boundary."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "autonomous-tags-final-review",
+      "reviewerId": "documentation-governance-streaming-final-review",
       "blockerCount": 0,
-      "summary": "Four exact normalization, tagging, recovery and rebuild selectors map only six partial entries; 1,108 claims are locked and every state is unchanged."
+      "summary": "All 1,108 claim IDs remain independently locked, multiline phase items are fully digested, and every phase, Requirement and Exit state remains unchanged."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "autonomous-tags-final-review",
+      "reviewerId": "documentation-governance-streaming-final-review",
       "blockerCount": 0,
-      "summary": "Owners bind source/target/catalog/additions before effect, preserve exact Undo and page-first recovery, and retain replacement, synonyms, CAS and platforms."
+      "summary": "Agents receive a smaller routed entry pack, stable Owners retain durable rules, and Playbook plus acceptance own current executable inventory and open work."
     },
     {
       "id": "documentation_leanness_and_maintainability",
-      "score": 9.6,
-      "reviewerId": "autonomous-tags-final-review",
+      "score": 9.7,
+      "reviewerId": "documentation-governance-streaming-final-review",
       "blockerCount": 0,
-      "summary": "No document, screen or prototype was added; gates pass at 4,107/4,200 entry words, 4,522 trace lines, 249,899/250,000 trace bytes and 1,209,982/1,210,000 Markdown bytes."
+      "summary": "The library is reduced to 55 Markdown files, entry reading is 3,362 of 3,700 words, and governed Markdown is 1,112,939 of 1,210,000 bytes with no budget increase."
     }
   ],
   "verification": [
     {
       "command": "npm run verify",
       "status": "passed",
-      "evidence": "Full verification passed on the exact combined candidate: docs, 85 decisions, UI visual, independent review, TRC-001 through TRC-005, CON-001 through CON-004, 49 dependencies, fixtures, Pi/import boundaries, no telemetry, source artifacts, LEN-001 through LEN-005, and all five quality dimensions."
+      "evidence": "The final exact candidate passes documentation, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependency, fixture, boundary, no-telemetry, source-artifact and LEN-001 through LEN-005 gates."
     },
     {
-      "command": "npm test && npm run typecheck && npm run build --workspace @pige/desktop",
+      "command": "npm test",
       "status": "passed",
-      "evidence": "The exact candidate passed 81 files and 846 tests, typecheck and production build; Electron Pi, index, parser and real macOS Vision smokes also passed."
+      "evidence": "The unchanged product code passes 80 test files plus one skipped file, with 843 passing tests and three explicitly skipped tests."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 passed: 4,107/4,200 entry words, zero duplicate groups, 14 mutations, 4,522 trace lines, 249,899 trace bytes, 57 Markdown files, 1,209,982 bytes, and 6.62 percent line reduction."
+      "evidence": "Leanness gates pass with 55 Markdown files, 3,362 of 3,700 entry words, 4,522 trace lines, 224,497 of 250,000 trace bytes and 1,112,939 of 1,210,000 governed Markdown bytes."
     },
     {
-      "command": "node scripts/verify/independent-documentation-review.mjs --print-snapshot && explicit semantic-ledger comparison",
+      "command": "node scripts/verify/independent-documentation-review.mjs --print-snapshot && explicit status and semantic-ledger comparison",
       "status": "passed",
-      "evidence": "The governed snapshot is 350bd835717e703c84252061485a249f442970f74e6c2f51a8d28a9885fff61a across 109 files; current and locked ledgers contain 1,108 claims with zero differences."
+      "evidence": "The reviewed 107-file governed snapshot is 2e7652b2db5a204837ea5626cb3d0c2d944c3291919161e68f4e647a29a751e5; current and locked ledgers contain 1,108 claims, and phase, Requirement and Exit states are unchanged."
     }
   ],
   "coordination": {
     "taskId": "019f44e0-b6a1-7bb0-a1ca-5fb43b2725c2",
-    "taskTitle": "开发实现",
+    "taskTitle": "Documentation governance consolidation and safe Home draft streaming",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The tag candidate keeps every phase/status and prior knowledge behavior while adding one bounded additive generated-note tag action plus rebuildable facets and Activity/Undo.",
-    "acknowledgement": "Development froze exactly 11 files; Product Planning changed 12 governed files, no PRD/API/UI/schema/prototype sync was needed, and fresh independent review cleared the candidate."
+    "compatibility": "This candidate changes documentation governance and defines a planned safe streaming boundary only. It does not change product code, executable behavior, phase state, Requirement state, Exit state, or packageability evidence.",
+    "acknowledgement": "Product Planning completed the user-approved three-stage documentation consolidation in one isolated worktree; independent read-only review accepted all five dimensions and the final gates bind the exact current snapshot."
   },
-  "resolvedBlockers": [
-    "Implemented five preset-first Providers plus Custom-only protocols, conditional credentials, auto-sync/Refresh/manual inventory, grouped Global Default, typed repair and real Pi probe with journaled recovery; retained every partial/planned state.",
-    "Implemented durable Home text and one preserve-first file through one Pi turn with direct chat, optional cited retrieval, waiting/resume and no renderer semantic fallback; kept multi-source and packaged proof open.",
-    "Implemented the governed ordinary_allowed default and exact Connect disclosure, with matrix, policy-hash, Home private/sensitive, restricted, unknown/local, and Profile-switch evidence while keeping persistence/IPC/UI and confirmation resume open.",
-    "Defined local-first without BYOK friction: one exact-destination disclosure, ordinary_allowed routine use with quiet status, sensitive confirmation, restricted blocking, unknown/changed reconfirmation, optional stricter modes, and no inherited authority; kept the old executable default explicitly open.",
-    "Rewrote README as a concise product entry with user value, honest current capability, the Agent-first roadmap, privacy boundaries, and the Agent-authored automation goal instead of a technical inventory.",
-    "Made Product Planning the sole product, technical, development-management, and governance contract editor; kept detailed UI guidance with UI Design, code/evidence with Development, and delivery/Git/CI/releases with Project Management; cross-role edits require explicit scoped delegation.",
-    "Added Agent role, cross-role delegation, and Product Planning design-sync status to context, handoff, and PR intake; routed public design contributions to Planning or UI Design and added missing-field and missing-routing mutations.",
-    "Kept the PRD as the AI Coding Agent product contract and made PRD/Owner impact bidirectional without duplicating full definitions across documents.",
-    "Removed repeated parse/OCR and UI checklist prose in favor of exact Owner pointers; retained zero duplicate groups and reduced governed Markdown lines by 8.67 percent from baseline.",
-    "Adopted exact Pi v0.80.6 core/AI under the approved containment exception with bundled license text, isolated models/auth, one importer, inert compat defaults, import-side-effect and mutation gates, and no second AI SDK.",
-    "Synchronized single-writer pre-publication guard persistence, capture projection fencing, process-local Agent-ingest cancellation, monotonic restart recovery, and exact evidence without promoting partial states.",
-    "Synchronized the B6.15 CI-produced body-free retrieval report, one exact upload selector, immutable upload-action pin, honest partial states, and complete model/linking/vector/locale/scale/platform gaps without changing runtime behavior.",
-    "Synchronized the B6.12 rebuildable Knowledge Tree aggregate foundation, one exact selector, honest partial/planned states, preserved Phase 4 link boundaries, and correct UI/Health ownership without exposing a public tree contract.",
-    "Synchronized the explicit P4 index-rebuild worker, process-local progress/cancellation, bounded resource protocol, rollback semantics, one exact selector, unchanged verified/partial states, and complete scale/cross-process/recovery/platform gaps.",
-    "Made Pi Agent the sole post-preservation semantic orchestrator, defined schema-complete single-effect Pige tools and Host gates, removed the mistaken AI SDK path, and kept the direct bridge and fixed parser/OCR continuations explicitly transitional without promotion.",
-    "Reconciled capture-only, URL extraction, parser/OCR, retrieval, selection, publication, prompt/context, Jobs, API/data, milestones, and legacy decisions with the Agent-led contract; implemented text and supported-PDF parse/OCR verticals while keeping B3.13/E3.08 partial.",
-    "Bound fail-closed diagnostic detail and top-level-message persistence/export, retention, rotation, and 11-case no-telemetry evidence; scoped backup evidence to current registered in-vault roots while preserving every broader gap.",
-    "Repaired CON-002 so it isolates JobRecordSchema, checks root strictness and cross-field cancellation invariants, and rejects three in-memory false-positive mutations instead of matching a later unrelated schema.",
-    "Upgraded the direct desktop runtime to Undici 8.7.0 while preserving manual per-hop validation, fresh address-pinned Agents and explicit HTTP/1.1; added workspace-aware lock verification and four multi-version cases without changing acceptance or product status.",
-    "Persisted and linked deterministic capture/parse/OCR children before parent terminalization, with crash recovery reusing one child instead of losing or duplicating semantic continuation.",
-    "Separated non-secret runtime readiness from credential-bearing runtime resolution; status, onboarding, and scheduling now prove zero decryption before model-egress allow.",
-    "Added an Agent-selected PDF parse tool whose deterministic child identity binds the semantic action while raw Pi call IDs remain non-durable and only capped parent-scoped hashes are retained as provenance.",
-    "Added Agent-selected PDF OCR over parser-verified pages with one deterministic child, retry/wait reuse, cancellation propagation, empty-output stop, and re-inspection before cited publication.",
-    "Moved DOCX/PPTX parse and parser-selected PPTX media OCR onto Pi tool events with deterministic children, idempotent retry, cancellation, no-readable-evidence stop, and capability recovery both before and after an OCR child exists.",
-    "Moved direct-image OCR onto Pi tool events with no pre-tool child, deterministic reuse, capability recovery, cancellation, empty-output parking across restart, wrong-tool rejection, and managed/reference source proof.",
-    "Added the reviewed OpenAI key-only preset and global default plus a Pi-grounded Home query vertical with no-model local fallback, body-free per-turn audits, exact Markdown/source privacy drift checks, confined records, untrusted evidence, fixed zero-evidence output, typed UI states, and no raw key/path/body/error exposure.",
-    "Added one optional Agent-selected local ingest search with bounded opaque refs, current Markdown/SourceRecord revalidation, per-turn drift audits, terminal failure/publication fences, stable related_page_ids, and post-publication Operation recovery without a retrieval Job or state promotion.",
-    "Added Home proposal cards and focused escaped review over the exact Pi create-note lifecycle, with durable rejected-call reconciliation, ready retry, unknown fail-closed, localized outcomes, double-action guards, and bounded ARIA/focus behavior.",
-    "Made Input Once, Knowledge Grows Naturally and Autonomous by Default the target: validated reversible Pige-owned knowledge work auto-applies with Activity/Undo, while intervention is limited to destructive loss, authority escalation, changed destination, unreconcilable conflict or an explicit stricter policy.",
-    "Added Pi-selected static-URL fetch/preserve with SSRF/body gates, deterministic source/page/artifact/Operation recovery and no hidden Host route; multi-URL and packaged proof remain open.",
-    "Made remote/protocol/traversal Reader resources inert and blocked frame, redirect and new-window navigation without adding user friction or a new surface.",
-    "Added descriptor-bound source snapshots, self-validation, adjacent private staging, fsync, no-overwrite hard-link publication and owned crash-link reconciliation while keeping non-hardlink transport and durable Backup Jobs open.",
-    "Added exact-tail durable Home follow-up with one event/Job per client turn, checksum-verified history/results, bounded Pi rehydration, restart adoption, cooperative cancellation, and localized transcript/retry/cancel UI without changing statuses.",
-    "Added checksum-bound exact create Operations plus bounded Home Activity and non-confirming exact-page Undo with recoverable trash, deterministic trash Operations, worker rebuild, startup reconciliation and durable UI truth without changing statuses.",
-    "Bound same-Job exact create publication before page link to source revision, Job policy, page bytes and deterministic Operation identity; page-first recovery now emits one checksum-bound Operation without retroactively attesting historical or drifted bytes.",
-    "Bound restore preview/apply to exact archive bytes and one sender-scoped lease, validated owned staging, reserved a fresh destination, published checksum-checked files without replacement and the manifest last, and reconciled only matching owned partials on explicit retry.",
-    "Added one Pi-selected cited additive update for eligible generated notes with pre-mutation Operation occupancy checks, exact byte preservation, page-first recovery, distinct Activity and checksum-current inverse update Undo.",
-    "Added one evidence-backed directed links_to between two clean generated notes with source-only Markdown mutation, target binding, page-first recovery, Activity/Undo and derived backlink rebuild.",
-    "Added one Pi-selected bounded additive tag action with shared normalization, catalog spelling reuse, exact update/Undo/recovery and SQLite revision-3 Markdown facet rebuild."
-  ],
+  "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "P5 remains in progress: remaining Job-class publishers, running capture/other-class cancellation, strict cross-process Job CAS and routing, parent-directory swap, guard-to-domain atomicity, other guard-without-output recovery, checkpoint arrays, cross-file transactions, Windows/Paddle, packaged-filesystem proof, and non-Agent progress/cancel UI remain open.",
-    "Explicit index rebuild is process-local only: implicit first-query rebuild, formal 10k CPU/RSS/latency, incremental/staging-swap, cross-process writer/CAS/routing, complete kill/crash/stale-worker recovery, packaged macOS/Windows paths, and visible progress/cancel UI remain open.",
-    "The local-tool lifecycle remains a fake/local service foundation: real Paddle/Python/model/language-pack transport, ordinary-ingest no-hidden-install proof, production app-data/catalog/permission/pre-vault Job/Operation wiring, OCR/UI, supply chain, packaged platforms, cross-process locking, complete recovery/GC/quarantine purge, and background lifecycle controls remain open.",
-    "The retrieval regression foundation remains lexical and synthetic: model-grounded summary/citation validation under cloud-send and Permission enforcement, tag/topic/entity and Knowledge Tree thresholds, vector/reranker ranking, 10k/100k and UI/packaged proof, and broader locale/query families remain open.",
-    "The Knowledge Tree remains internal-only: broader relation and branch semantics, richer aggregate inputs, public IPC/preload/renderer navigation, localized empty state, 10k worker/incremental rebuild proof, packaged parity, and the separately owned visual/accessibility and Knowledge Health work remain open.",
-    "Pi remains partial: full Provider catalog/help/delete, durable sync health, optional-auth UI, live DeepSeek preset/Anthropic proof, multi-source recovery, history compaction/indexing, steer queues, Broker and signed packaged BYOK remain open.",
-    "Activity/Undo covers exact create, cited append, bounded additive tags and one directed link; removal/replacement/synonyms, other mutations, redo/history, restore, CAS/transactions and packaged platforms remain open.",
-    "No-telemetry is a static executable gate; unknown SDKs, computed endpoints, indirect transports, generated configuration, and crash-hook review remain open. Diagnostics still need broader stores, recovery correlation, user clear, export cancellation, selected-path UX, and crash recovery.",
-    "Backup/restore still need backupId/domain versions, release scans, external copies/controls, non-hardlink backup publication, explicit restore identity modes, durable restore Jobs/restart, dependency/schema migration, typed errors, dirfd/openat CAS, complete rebuild and packaged platforms.",
-    "Trace projections use 4,522 of 5,500 lines and 249,899 of 250,000 bytes; governed Markdown uses 1,209,982 of 1,210,000 bytes. Future additions must reclaim capacity instead of raising budgets.",
-    "PRD, TECH_ARCHITECTURE, and Decision Log remain large Owner documents; future Agents should continue section-targeted reads and define each fact once.",
-    "The concise pre-alpha README intentionally has no install button, screenshots, or release download; add those only when a usable signed build and governed visual evidence exist.",
-    "Structural UI gates do not prove packaged macOS/Windows fidelity, accessibility, or human visual approval; real capture and release evidence remain open.",
-    "External-reference pins are review-time facts. Any experiment must repeat license, provenance, supply-chain, privacy, isolation, platform, and replacement checks; no reviewed project is authorized for code or asset copying by its reference row.",
-    "Undici 8.7 still needs signed/packaged macOS and Windows runtime proof. The local TLS smoke proves the assembled Electron-main ABI and transport constraints, not the complete production SourceFetchService path, system proxy matrix, or packaged parity; HTTP/2 remains disabled until separately pinned and tested."
+    "The draft_replace protocol is a planned contract with no executable evidence; PIGE-PI-005 and E3.09 remain planned and E6.01 remains partial.",
+    "Implementation must consume the typed already-parsed terminal answer snapshot and must never expose raw partial JSON, provider deltas, Pi events, reasoning, tool arguments, citations, grounding, identifiers, credentials, or raw errors.",
+    "Sender, request, client-turn, conversation, Job, user-event, monotonic-sequence, coalescing and cancellation tests remain required before streaming can be claimed executable.",
+    "Draft loss on crash or reconnect is intentional because drafts are non-durable; the UI must retain truthful pending or recovered durable state without replaying provisional text.",
+    "External or manual consumers of the semantic manifest must update for schema-v3 base64url digests even though repository gates are migrated.",
+    "Current implementation and open-work truth now depends on disciplined Playbook and acceptance updates; stable subject contracts must not regrow rolling status inventories.",
+    "Historical rationale for the two reclaimed audit files remains available through Git history rather than the active documentation library."
   ]
 }

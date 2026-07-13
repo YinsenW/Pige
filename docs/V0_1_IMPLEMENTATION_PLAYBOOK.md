@@ -34,22 +34,23 @@ Phase completion rule:
 - Completion must not leave half-enabled product surfaces, partially exposed contracts, or documentation that implies unavailable behavior is ready.
 - Non-blocking improvements belong to later-phase work; the number of work rounds neither proves completion nor requires a phase to continue.
 
-Current implementation state, last reconciled 2026-07-11:
+Current implementation state, last reconciled 2026-07-13:
 
 | Phase | State | Interpretation |
 | --- | --- | --- |
-| P0 | in progress | Repository and traceability foundations have current evidence; the full P0 exit set has not been re-run as a phase-completion claim. |
-| P1 | in progress | Desktop, vault, settings, diagnostics, and runtime foundations have evidence; the full mapped exit set remains open. |
-| P2 | in progress | Capture guards plus process-local parse/OCR/Agent-ingest/Agent-turn/index progress or cancellation have evidence; running capture, remaining classes, voice, and full exits remain open. |
-| P3 | in progress | BYOK and embedded Pi text/document/image tool spines have evidence; tool breadth, provider, recovery, permission, and exits remain open. |
-| P4 | in progress | SQLite, lexical search, Library, and worker-backed rebuild foundations have evidence; the full scale and relationship exit set remains open. |
-| P5 | in progress | PDF, Office, static-web, direct-image macOS Vision OCR, Artifact, and recovery slices have evidence; cross-platform/document OCR and remaining P5 exits are still open. |
-| P6 | in progress | Lexical retrieval, cited Home answers, Reader, backlinks, and related-context foundations exist; local RAG, editing, Knowledge Tree, and full exits remain open. |
-| P7 | planned | Foundations may exist, but autonomous Operation/Undo, exceptional decisions, memory, and conversation acceptance remains assigned below. |
-| P8 | planned | Skill, package, and permission-broker acceptance remains assigned below. |
-| P9 | planned | Backup/release foundations may exist, but full recovery, health, localization, accessibility, and release evidence remains open. |
+| P0 | in progress | Repository/trace foundations have evidence; completion remains open. |
+| P1 | in progress | Desktop, vault, settings, diagnostics, and runtime foundations have evidence; completion remains open. |
+| P2 | in progress | Capture plus bounded process-local Job/recovery foundations have evidence; completion remains open. |
+| P3 | in progress | BYOK and embedded Pi tool/turn foundations have evidence; completion remains open. |
+| P4 | in progress | SQLite, lexical search, Library, and rebuild foundations have evidence; completion remains open. |
+| P5 | in progress | Web/document/OCR Artifact and recovery slices have evidence; completion remains open. |
+| P6 | in progress | Retrieval, cited Home, Reader, and relationship foundations have evidence; completion remains open. |
+| P7 | planned | Autonomous knowledge, memory, and conversation acceptance remains below. |
+| P8 | planned | Skill, package, and Permission Broker acceptance remains below. |
+| P9 | planned | Backup, restore, health, localization, accessibility, and release acceptance remains below. |
 
-This table prevents a working sub-slice from being mistaken for phase completion. The per-Requirement and Exit status, exact evidence selectors, and open work in `resources/traceability/acceptance.manifest.json` are the detailed source for handoff decisions.
+Acceptance owns per-Requirement/Exit evidence and open work; no row above claims phase
+completion.
 
 ## 3.1 Pre-Phase 0 Design Readiness Gate
 
@@ -271,7 +272,7 @@ Build:
   preservation Pi Agent alone selects semantic tools, with no host-fixed/parallel path.
 - [B3.14 -> E3.09] Versioned unified `agent_turn` ingress: probed explicit-protocol Provider binding,
   ordinary/no-evidence conversation, optional local retrieval, source tools, durable
-  waiting/resume, and no renderer/Host intent heuristic.
+  waiting/resume, safe replacement-draft streaming, and no renderer/Host intent heuristic.
 
 Agent Spine Gate: Pi handles preserved input, selected parse/OCR/retrieval, cited create/
 append, bounded tags/link, and transitional review. B3.13/E3.08 remains partial: broader
@@ -313,7 +314,8 @@ Exit criteria:
 - [E3.09] One real DeepSeek-first app path persists the user turn and `agent_turn`, keeps
   Global Default across restart, uses the selected probed binding with truthful status,
   waits/resumes without a model, answers ordinary empty-vault chat, retrieves cited
-  knowledge when Pi chooses, and uses file/URL tools without heuristic or silent fallback.
+  knowledge when Pi chooses, safely replaces a provisional draft with the durable final,
+  and uses file/URL tools without heuristic or silent fallback.
 
 ## 9. Phase 4: Local Database And Search Foundation
 
@@ -438,7 +440,7 @@ Context pack: `docs/PRD.md` retrieval and reader sections; `docs/PROMPT_DESIGN.m
 
 Build:
 
-- [B6.01 -> E6.01] Unified Home conversation UI with optional local retrieval.
+- [B6.01 -> E6.01] Unified Home conversation UI with safe draft replacement and optional local retrieval.
 - [B6.02 -> E6.01] Ranked lexical and metadata results.
 - [B6.03 -> E6.04] Grounded citations when evidence is used; no fabricated citations for general answers.
 - [B6.04 -> E6.03] Optional bounded Context Pack for Home, Note Agent, and selection actions.
@@ -467,8 +469,8 @@ Deferred from this phase:
 Exit criteria:
 
 - [E6.01] Home supports ordinary Agent conversation with or without retrieval; selected
-  local evidence stays ranked and cited, and explicit no-model search remains clearly
-  distinct from Agent synthesis.
+  local evidence stays ranked and cited, provisional text stays visibly non-authoritative
+  until final validation, and explicit no-model search remains distinct from Agent synthesis.
 - [E6.02] Semantic retrieval works after an explicit verified local-model download and index rebuild; disable/remove leaves lexical fallback intact.
 - [E6.03] Model calls receive selected snippets, policy/budget metadata, and citation refs, not the full vault or unbounded conversation history.
 - [E6.04] Retrieval fixtures pass expected top-result, grounded-summary, citation-coverage, and insufficient-evidence checks.

@@ -245,21 +245,9 @@ Keep this invariant:
 
 > If `.pige/db/vault.sqlite` disappears, Pige may be slower until it rebuilds, but the user's knowledge must still be intact.
 
-Phase 1 implementation note:
-
-- The first implementation introduces `LocalDatabaseDriver` and writes `.pige/db/schema-state.json` with an empty migration list through a `pending_sqlite_driver`.
-- This proves reset/rebuild ownership and migration-state shape before adding native SQLite packaging.
-- The pending driver is not a substitute for v0.1 SQLite search/indexing. Phase 4 replaces it with `node_sqlite` and updates dependency manifests.
-
-Phase 4 implementation note:
-
-- The initial real driver is `node_sqlite`.
-- It creates `.pige/db/vault.sqlite`, migration state, page metadata tables, initial graph/job/source placeholder tables, and `pages_fts` for lexical search.
-- It indexes sanitized/redacted Markdown bodies and CJK 2/3-gram augmentation so Chinese, Japanese, and Korean queries do not depend only on whitespace tokenization.
-- It parses durable Markdown wiki links and local Markdown links into `links`, `backlinks`, and resolved `relation_edges` rows. Unresolved link targets remain rebuildable graph metadata for future Knowledge Health.
-- Library and retrieval use SQLite when ready and fall back to Markdown scanning when the database is unavailable.
-- `maintenance.rebuildLocalDatabase` creates an `index_rebuild` Job; a bundled worker reports progress/counts. Failure rolls back to the prior WAL-committed index; safe cancellation preserves Markdown.
-- Rebuild uses bounded two-pass, one-body-at-a-time reads. Implicit first-query rebuild stays synchronous; 10,000-page, incremental/staging-swap, packaged-platform, cross-process, and complete recovery proof remain open.
+Current driver, schema, rebuild, locale-search, graph, worker, scale, and platform evidence
+live in the Playbook and acceptance manifest. Legacy `pending_sqlite_driver` migration
+state remains readable; it never substitutes for the real driver contract above.
 
 ## 11. References
 

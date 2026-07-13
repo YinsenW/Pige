@@ -1101,7 +1101,7 @@
     },
     "PIGE-PI-005": {
       "status": "planned",
-      "plannedTarget": "Signed packaged macOS/Windows BYOK proof for direct, retrieved, file, URL, and follow-up turns."
+      "plannedTarget": "Signed packaged macOS/Windows BYOK proof for direct, retrieved, file, URL, follow-up, and safe draft-replacement turns."
     },
     "PIGE-SETTINGS-001": {
       "status": "partial",
@@ -2449,7 +2449,7 @@
     },
     "E3.09": {
       "status": "planned",
-      "plannedTarget": "Signed packaged macOS/Windows BYOK proof for direct, retrieved, file, URL, and follow-up turns."
+      "plannedTarget": "Signed packaged macOS/Windows BYOK proof for direct, retrieved, file, URL, follow-up, and safe draft-replacement turns."
     },
     "E4.01": {
       "status": "partial",
@@ -2580,7 +2580,7 @@
       "evidence": ["EV-RETRIEVAL", "EV-HOME-AGENT", "EV-HOME-UI"],
       "open": {
         "id": "OPEN-EXIT-E6.01",
-        "description": "Ranked retrieval works; optional Pi use, general/no-evidence conversation, 10k, and packaged UI remain open.",
+        "description": "Ranked retrieval works; optional Pi use, general/no-evidence conversation, safe draft replacement, 10k, and packaged UI remain open.",
         "targetBuilds": [
           "B6.01",
           "B6.02"

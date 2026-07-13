@@ -579,15 +579,9 @@ Settings export/import behavior is governed by `docs/SETTINGS_AND_PREFERENCES.md
 
 The default should include Agent memory because it is part of the user's Pige experience.
 
-Current implementation:
-
-- Backup creates a local `.pige-backup.zip` with `pige-backup-manifest.json` at the archive root and vault files under `vault/`.
-- The target manifest contract is `BackupManifestSchema` in `packages/schemas/src/index.ts`. It records format/version, backup ID, app version, vault ID/name/schema, per-domain durable schema ranges, created time, counts, include flags, structured external dependencies, excluded roots, and one SHA-256 checksum per included file.
-- Existing format-v1 backups without `backupId` or `domainSchemaVersions` remain readable as legacy input. Restore preview must scan/derive compatible ranges conservatively; it must not invent a successful compatibility result when a durable domain cannot be identified.
-- The format-v1 writer snapshots via no-follow descriptors, validates source/stage manifests and entry checksums, and publishes adjacent 0600 staging by fsynced no-overwrite hard link; owned dead-PID links reconcile.
-- Domain versions, external copies/dependencies, include controls, durable Jobs/checkpoints, non-hardlink destinations, restore identity, pathname CAS, and pre-link cleanup remain open.
-- Advanced options such as excluding memory/conversations, fast-restore database cache, non-secret provider metadata export, and copying externally referenced originals remain future visible options.
-- API keys, tokens, machine-local settings, local model files, bundled tool binaries, `.pige/db/`, `.pige/indexes/`, and `.pige/cache/` are not included by default.
+Current backup evidence and open delivery work live in the Playbook and acceptance
+manifest. Format-v1 archives remain readable legacy input, but cannot invent unknown
+domain compatibility; the inclusion/exclusion and execution rules here remain normative.
 
 Backup execution contract:
 
@@ -618,17 +612,10 @@ Restore flow:
 
 Restore must work without `.pige/db/`, `.pige/indexes/`, local model files, or machine-local settings.
 
-Current implementation:
-
-- Preview/apply binds one no-follow archive descriptor and SHA-256 token; apply fully
-  extracts and validates in owned 0700 staging before destination publication.
-- Apply claims an exclusive sibling reservation + matching inner marker, fsyncs and
-  no-replace links checksum-checked files, publishes `.pige/manifest.json` last, and fsyncs
-  target parents. Explicit retry adopts only matching owned partials; unknown/drifted
-  archive or destination bytes are preserved and fail closed.
-- It does not overwrite the current vault or import secrets, but still preserves the
-  backup `vault_id` in a new folder; registering both paths is forbidden. Identity modes, durable restart checkpoints,
-  schema/dependency migration, strict dirfd CAS, complete rebuild, and platforms remain open.
+Current restore evidence and residual migration/restart/platform work live in the
+Playbook and acceptance manifest. Preview/apply must still bind exact archive bytes,
+owned staging/reservation, no-replace publication, explicit identity mode, and
+conflict-preserving retry before a destination becomes a vault.
 
 Restore execution contract:
 

@@ -428,6 +428,20 @@ request benefits from it; retrieved evidence remains visible and cited. With irr
 or empty evidence, Pi may answer normally without local citations. An explicit
 vault-only request instead reports insufficient evidence.
 
+While a model-backed turn runs, Home first shows its compact working state, then replaces
+one escaped assistant draft in place as safe answer snapshots arrive. The draft is
+visually part of the pending turn, carries no citations or grounding badge, and may
+shrink or revise; it is not a saved message. Do not announce every replacement through a
+live region—keep the turn `aria-busy`, expose a bounded status, and announce the final or
+failure once.
+
+The validated durable answer replaces the draft without duplicating a bubble. On
+failure/cancellation, remove the provisional text or mark the pending bubble with the
+existing localized recovery state; never leave it looking like a completed answer.
+Reopen/restart shows only durable messages. Verified citations and evidence rows appear
+only with the final result. Raw provider/Pi deltas, thinking, tool JSON, IDs, and errors
+never enter this surface.
+
 Prototype:
 
 ```txt
@@ -468,9 +482,8 @@ Behavior:
 - Saving useful knowledge auto-applies through a validated recoverable tool; exceptional boundaries pause.
 - There is no separate default "Ask" entry in navigation; this behavior lives inside Home.
 
-Current Home restores a bounded durable transcript and keeps exact follow-up, Job retry,
-cooperative cancel, and typed Configure/Retry states in one mode-free conversation. Text
-and one preserve-first file attachment use `agent.submitTurn`; multi-attachment recovery remains open.
+Current delivery and open Home recovery work are projected by the Playbook and acceptance
+manifest; this owner defines the mode-free conversation interaction.
 
 ## 8. Note Reader
 
@@ -873,11 +886,8 @@ Above Connect disclose the exact destination once; sensitive asks, restricted ne
 sends, unknown/changed reconfirms. Hide marketplaces, matrices, routing, Advanced/Fast,
 local tools, Skills, backup, and memory.
 
-Current executable checkpoint is one inline page: five presets and collapsed Custom,
-then Provider inventories and grouped Global Default, with Refresh/manual fallback,
-enable/alias and localized transient errors. Summary/Manage detail, durable sync health,
-visible probe progress, key-help, delete, provider-named Home status, and localized native
-confirmation remain target polish; images show direction, not frozen renderer evidence.
+The Playbook and acceptance manifest own current Provider-screen evidence and remaining
+polish; prototype images express direction, not frozen renderer status.
 
 ### Deferred Model Routing Settings
 

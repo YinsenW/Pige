@@ -250,6 +250,8 @@ Default home requirements:
   attachment presence, MIME, or source kind. Explicit user instructions may constrain Pi.
 - If local knowledge is relevant, Pi prefers bounded local retrieval and cites what it
   uses. Otherwise it answers normally without fabricated local citations.
+- Model-backed answers replace a safe provisional draft in place while Pi works; the
+  final Host-validated durable answer is authoritative, and citations appear only then.
 - Voice input should be available from the composer toolbar as a low-friction alternative to typing.
 
 #### 6.1.1 Window And Layout Modes
@@ -1043,6 +1045,9 @@ Required outcomes:
    citation; only an explicit vault-only request returns insufficient evidence.
 4. Valuable answers become Markdown through a validated autonomous write tool; only an
    exceptional boundary uses a proposal.
+5. Home does not wait behind a spinner when safe answer text is available. It renders a
+   bounded non-durable replacement draft, then atomically replaces it with the validated
+   final answer or clears it on failure/cancellation; restart restores durable state only.
 
 Without a model, source-bearing inputs remain safe and wait for setup/resume. Any
 deterministic local search fallback is explicit and never presented as Agent synthesis.
@@ -1466,7 +1471,8 @@ capture, query, list, indexing, parser, OCR, reader, and scale budgets are owned
 `docs/PERFORMANCE_AND_RELIABILITY.md`.
 
 Product-visible behavior remains mandatory: capture preservation feels immediate;
-typing and reading do not visibly lag; long work shows progress; lexical results may
+typing and reading do not visibly lag; model answers expose safe incremental progress;
+long work shows progress; lexical results may
 appear before slower semantic work; rebuilds remain background/resumable; and exceeding
 a budget degrades visibly rather than losing data.
 

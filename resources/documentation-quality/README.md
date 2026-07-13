@@ -10,7 +10,10 @@ inventory/context budgets, and current independent-review recipe.
 - `documentation-quality.manifest.json` defines the stable automated dimensions, weighted checks, and minimum score.
 - `document-map.manifest.json` owns the governed file inventory, owner/read/lifecycle metadata, and always-read word budget.
 - `documentation-leanness.manifest.json` records the audited physical baseline and the inventory, trace-projection, similarity, and reduction budgets.
-- `independent-review.recipe.json` records independent reviewers, per-dimension scores, resolved blockers, the parallel-development acknowledgement, and the exact governed repository snapshot they reviewed.
+- `independent-review.recipe.json` records only the current independent proof: at most
+  three reviewers, per-dimension scores, current non-blocking risks, coordination, and
+  the exact governed snapshot. Superseded reviewers and resolved blockers remain in Git
+  and CI history instead of accumulating in the live recipe.
 
 `scripts/verify/document-map.mjs` and `scripts/verify/documentation-leanness.mjs` reject
 unmapped growth, duplicated owner structures, stale aliases, redundant trace projections,
