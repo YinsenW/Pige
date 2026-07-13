@@ -29,6 +29,8 @@ import {
 import {
   AgentIngestService,
   createProposalApplyOperationId,
+  type AgentIngestDatasetToolExecution,
+  type AgentIngestDatasetToolRequest,
   type AgentIngestOcrToolExecution,
   type AgentIngestOcrToolRequest,
   type AgentIngestParseToolExecution,
@@ -38,6 +40,7 @@ import {
   type AgentIngestProposalBinding
 } from "./agent-ingest-service";
 import type { DocumentParserPort } from "./document-parser-service";
+import type { DatasetMaterializerPort } from "./dataset-service";
 import { SourcePageService } from "./source-page-service";
 import type { LocalDatabaseService } from "./local-database-service";
 import type { OcrPort, OcrSourceCapability } from "./ocr-service";
@@ -86,6 +89,9 @@ export interface ProcessQueuedParsesResult extends ProcessQueuedCapturesResult {
   readonly agentReadySourceIds: readonly string[];
   readonly ocrWaitingSourceIds: readonly string[];
 }
+
+export type ProcessQueuedDatasetImportsRequest = ProcessQueuedParsesRequest;
+export type ProcessQueuedDatasetImportsResult = ProcessQueuedCapturesResult;
 
 export interface RequeueWaitingAgentIngestResult {
   readonly requeued: number;
@@ -174,6 +180,7 @@ const RETRYABLE_STATES = new Set<JobState>(["failed_retryable", "waiting_depende
 const COOPERATIVELY_CANCELABLE_CLASSES = new Set<JobClass>([
   "parse",
   "ocr",
+  "dataset_import",
   "agent_turn",
   "agent_ingest",
   "index_rebuild"
@@ -186,6 +193,7 @@ export class JobsService {
   readonly #database: LocalDatabaseService | undefined;
   readonly #documentParser: DocumentParserPort | undefined;
   readonly #ocr: OcrPort | undefined;
+  readonly #datasets: DatasetMaterializerPort | undefined;
   readonly #activeExecutions = new Map<string, AbortController>();
   #indexRebuildTail: Promise<void> = Promise.resolve();
 
@@ -194,7 +202,8 @@ export class JobsService {
     agentIngest?: AgentIngestService,
     database?: LocalDatabaseService,
     documentParser?: DocumentParserPort,
-    ocr?: OcrPort
+    ocr?: OcrPort,
+    datasets?: DatasetMaterializerPort
   ) {
     this.#vaults = vaults;
     this.#sourcePages = new SourcePageService();
@@ -202,6 +211,7 @@ export class JobsService {
     this.#database = database;
     this.#documentParser = documentParser;
     this.#ocr = ocr;
+    this.#datasets = datasets;
   }
 
   list(request: JobsListRequest = {}): JobsListResult {
@@ -1179,6 +1189,7 @@ export class JobsService {
         (jobFile.job.class === "capture" ||
           jobFile.job.class === "parse" ||
           jobFile.job.class === "ocr" ||
+          jobFile.job.class === "dataset_import" ||
           jobFile.job.class === "agent_turn" ||
           jobFile.job.class === "agent_ingest" ||
           jobFile.job.class === "index_rebuild");
@@ -1231,6 +1242,12 @@ export class JobsService {
         supportsAgentSelectedParser(sourceRecord.kind) &&
         hasWaitingAgentParseChild(vaultPath, jobFile.job) &&
         !this.#documentParser?.canParse(sourceRecord.kind)
+      ) continue;
+      if (
+        sourceRecord &&
+        supportsAgentSelectedDataset(sourceRecord.kind) &&
+        hasWaitingAgentDatasetChild(vaultPath, jobFile.job) &&
+        !this.#datasets?.canMaterialize(sourceRecord.kind)
       ) continue;
       writeJsonAtomic(jobFile.path, JobRecordSchema.parse({
         ...jobFile.job,
@@ -1504,6 +1521,119 @@ export class JobsService {
     };
   }
 
+  async processQueuedDatasetImports(
+    request: ProcessQueuedDatasetImportsRequest = {}
+  ): Promise<ProcessQueuedDatasetImportsResult> {
+    const vaultPath = this.#requireActiveVaultPath();
+    const jobFiles = findQueuedDatasetImportJobFiles(vaultPath, request);
+    let completed = 0;
+    let failed = 0;
+
+    for (const jobFile of jobFiles) {
+      const sourceRecordFile = jobFile.job.sourceId
+        ? readSourceRecordFile(vaultPath, jobFile.job.sourceId)
+        : undefined;
+      if (!sourceRecordFile) {
+        markJobFailedRetryable(
+          jobFile.path,
+          jobFile.job,
+          "Source record is missing. Preserved Dataset import remains retryable."
+        );
+        failed += 1;
+        continue;
+      }
+      const datasets = this.#datasets;
+      if (!datasets || !datasets.canMaterialize(sourceRecordFile.sourceRecord.kind)) {
+        markJobWaitingDependency(
+          jobFile.path,
+          jobFile.job,
+          "Waiting for the bundled local Dataset materialization capability."
+        );
+        failed += 1;
+        continue;
+      }
+
+      const execution = this.#beginCooperativeExecution(
+        jobFile.path,
+        jobFile.job,
+        "importing",
+        "Materializing a bounded local Dataset Bundle from preserved structured evidence."
+      );
+      const runningJob = execution.job;
+      const detachParentAbort = bridgeParentAbortToChild(
+        jobFile.path,
+        execution.controller,
+        request.abortSignal
+      );
+      try {
+        execution.control.reportProgress({ completedUnits: 0, totalUnits: 1, unit: "dataset" });
+        const result = await datasets.materializeSource(
+          vaultPath,
+          sourceRecordFile.sourceRecord,
+          sourceRecordFile.path,
+          runningJob,
+          execution.control
+        );
+        const current = readJobRecordAtPath(jobFile.path) ?? runningJob;
+        writeJsonAtomic(jobFile.path, JobRecordSchema.parse({
+          ...current,
+          outputRefs: Array.from(new Map([
+            ...(current.outputRefs ?? []).map((ref) => [`${ref.kind}:${ref.id}:${ref.role ?? ""}`, ref] as const),
+            [`dataset:${result.datasetId}:dataset_bundle`, {
+              kind: "dataset" as const,
+              id: result.datasetId,
+              role: "dataset_bundle"
+            }],
+            [`dataset_revision:${result.revisionId}:dataset_active_revision`, {
+              kind: "dataset_revision" as const,
+              id: result.revisionId,
+              role: "dataset_active_revision"
+            }]
+          ]).values()),
+          updatedAt: new Date().toISOString()
+        }));
+        const completedJob = this.#completeCooperativeExecution(
+          jobFile.path,
+          runningJob,
+          result.warnings.length > 0 ? "completed_with_warnings" : "completed",
+          `Materialized Dataset revision with ${result.tableCount} table${result.tableCount === 1 ? "" : "s"} and ${result.rowCount} row${result.rowCount === 1 ? "" : "s"}.`,
+          "dataset",
+          execution.control.durableWriteState(),
+          result.operationIds
+        );
+        if (completedJob.state === "cancelled") {
+          failed += 1;
+        } else {
+          appendLog(
+            vaultPath,
+            `${new Date().toISOString()} Materialized Dataset \`${result.datasetId}\` revision \`${result.revisionId}\` from source \`${sourceRecordFile.sourceRecord.id}\`: ${result.tableCount} tables, ${result.rowCount} rows.`
+          );
+          completed += 1;
+        }
+      } catch (caught) {
+        const cancellation = resolveCancellation(execution.control, caught);
+        if (cancellation) {
+          markJobCancellationOutcome(jobFile.path, runningJob, cancellation);
+        } else {
+          const failure = datasetImportFailure(caught);
+          if (failure.waiting) {
+            markJobWaitingDependency(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
+          } else if (failure.final) {
+            markJobFailedFinal(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
+          } else {
+            markJobFailedRetryable(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
+          }
+        }
+        failed += 1;
+      } finally {
+        detachParentAbort();
+        this.#finishCooperativeExecution(runningJob.id, execution.controller);
+      }
+    }
+
+    return { processed: jobFiles.length, completed, failed };
+  }
+
   async processQueuedOcr(request: ProcessQueuedOcrRequest = {}): Promise<ProcessQueuedOcrResult> {
     const vaultPath = this.#requireActiveVaultPath();
     const jobFiles = findQueuedOcrJobFiles(vaultPath, request);
@@ -1756,6 +1886,12 @@ export class JobsService {
             parseRequest,
             execution.control
           ),
+          materializeCurrentDataset: (datasetRequest) => this.#runAgentSelectedDatasetTool(
+            vaultPath,
+            runningJob,
+            datasetRequest,
+            execution.control
+          ),
           ocrCurrentSource: (ocrRequest) => this.#runAgentSelectedOcrTool(
             vaultPath,
             runningJob,
@@ -1832,6 +1968,49 @@ export class JobsService {
             "completed",
             "Pi Agent answered from the inspected preserved source without publishing a note.",
             "source",
+            execution.control.durableWriteState(),
+            result.operationIds
+          );
+          if (completedJob.state === "cancelled") failed += 1;
+          else completed += 1;
+          continue;
+        }
+        if (result.outcome === "dataset_materialized") {
+          const current = readJobRecordAtPath(jobFile.path) ?? activeJob;
+          activeJob = JobRecordSchema.parse({
+            ...current,
+            outputRefs: Array.from(new Map([
+              ...(current.outputRefs ?? []).map((ref) => [`${ref.kind}:${ref.id}:${ref.role ?? ""}`, ref] as const),
+              [`dataset:${result.datasetId}:agent_dataset`, {
+                kind: "dataset" as const,
+                id: result.datasetId,
+                role: "agent_dataset"
+              }],
+              [`dataset_revision:${result.revisionId}:agent_dataset_revision`, {
+                kind: "dataset_revision" as const,
+                id: result.revisionId,
+                role: "agent_dataset_revision"
+              }]
+            ]).values()),
+            updatedAt: new Date().toISOString()
+          });
+          writeJsonAtomic(jobFile.path, activeJob);
+          if (preservedAgentTurn) {
+            const conversations = new AgentTurnConversationStore();
+            conversations.findAssistantTurn(vaultPath, preservedAgentTurn.locator, runningJob.id) ??
+              conversations.appendAssistantTurn(
+                vaultPath,
+                preservedAgentTurn,
+                runningJob.id,
+                `Pi Agent materialized the preserved structured source as a validated Dataset with ${result.tableCount} table${result.tableCount === 1 ? "" : "s"}.`
+              );
+          }
+          const completedJob = this.#completeCooperativeExecution(
+            jobFile.path,
+            runningJob,
+            result.warnings.length > 0 ? "completed_with_warnings" : "completed",
+            `Pi Agent materialized a validated Dataset revision with ${result.tableCount} table${result.tableCount === 1 ? "" : "s"} and ${result.rowCount} row${result.rowCount === 1 ? "" : "s"}.`,
+            "dataset",
             execution.control.durableWriteState(),
             result.operationIds
           );
@@ -2330,6 +2509,113 @@ export class JobsService {
     throw new PigeDomainError("parser.tool_failed_retryable", "The durable document parse child remains retryable.");
   }
 
+  async #runAgentSelectedDatasetTool(
+    vaultPath: string,
+    parentJob: JobRecord,
+    request: AgentIngestDatasetToolRequest,
+    parentControl: JobExecutionControl
+  ): Promise<AgentIngestDatasetToolExecution> {
+    assertAgentDatasetToolRequest(parentJob, request);
+    const currentParent = readJobRecordFile(vaultPath, parentJob.id);
+    if (!currentParent) {
+      throw new PigeDomainError("agent_runtime.tool_parent_missing", "The active Agent Job is unavailable.");
+    }
+    if (currentParent.job.state === "cancel_requested" || currentParent.job.state === "cancelled") {
+      throw new JobCancellationError({
+        durableWritesApplied: currentParent.job.cancellation?.durableWritesApplied === true,
+        ...(currentParent.job.cancellation?.safeCheckpointId
+          ? { safeCheckpointId: currentParent.job.cancellation.safeCheckpointId }
+          : {})
+      });
+    }
+    if (currentParent.job.state !== "running" || !isAgentKnowledgeTurn(currentParent.job)) {
+      throw new PigeDomainError("agent_runtime.tool_parent_inactive", "The Agent tool parent is not the active ingest Job.");
+    }
+    if (currentParent.job.policyHash !== request.policyHash) {
+      throw new PigeDomainError("agent_runtime.tool_binding_changed", "The Agent policy binding changed before tool dispatch.");
+    }
+
+    const sourceFile = readSourceRecordFile(vaultPath, request.sourceRecord.id);
+    if (
+      !sourceFile ||
+      sourceRecordRevision(sourceFile.sourceRecord) !== sourceRecordRevision(request.sourceRecord)
+    ) {
+      throw new PigeDomainError("agent_ingest.source_changed", "The selected source changed before Dataset dispatch.");
+    }
+    if (!supportsAgentSelectedDataset(sourceFile.sourceRecord.kind)) {
+      throw new PigeDomainError(
+        "dataset.unsupported_source",
+        "The Agent-selected Dataset tool does not support this preserved source type."
+      );
+    }
+
+    const datasetReady = Boolean(this.#datasets?.canMaterialize(sourceFile.sourceRecord.kind));
+    let child = ensureAgentDatasetToolJob(
+      vaultPath,
+      currentParent.job,
+      sourceFile.sourceRecord,
+      request,
+      datasetReady ? "queued" : "waiting_dependency"
+    );
+    if (child.state === "completed" || child.state === "completed_with_warnings") {
+      markAgentDatasetOutputDurable(parentControl);
+      return createAgentDatasetToolExecution(child, sourceFile.sourceRecord, "reused");
+    }
+    if (!datasetReady) {
+      return createAgentDatasetToolExecution(
+        child,
+        sourceFile.sourceRecord,
+        "waiting_dependency",
+        "dataset_materializer_unavailable"
+      );
+    }
+    if (child.state === "failed_final") {
+      throw new PigeDomainError("dataset.tool_failed_final", "The durable Dataset child cannot be retried safely.");
+    }
+    if (child.state === "running" || child.state === "cancel_requested") {
+      throw new PigeDomainError(
+        "dataset.tool_recovery_required",
+        "The durable Dataset child requires startup recovery before reuse."
+      );
+    }
+    if (child.state !== "queued") {
+      const retry = this.retry({ jobId: child.id });
+      if (retry.status !== "requeued" || !retry.job) {
+        throw new PigeDomainError("dataset.tool_retry_failed", "The durable Dataset child could not be requeued.");
+      }
+      child = readJobRecordFile(vaultPath, child.id)?.job ?? child;
+    }
+    await this.processQueuedDatasetImports({
+      jobIds: [child.id],
+      limit: 1,
+      abortSignal: request.signal
+    });
+    child = readJobRecordFile(vaultPath, child.id)?.job ?? child;
+    const refreshedSource = readSourceRecord(vaultPath, sourceFile.sourceRecord.id) ?? sourceFile.sourceRecord;
+    if (child.state === "completed" || child.state === "completed_with_warnings") {
+      markAgentDatasetOutputDurable(parentControl);
+      return createAgentDatasetToolExecution(child, refreshedSource, "materialized");
+    }
+    if (child.state === "waiting_dependency") {
+      return createAgentDatasetToolExecution(
+        child,
+        refreshedSource,
+        "waiting_dependency",
+        "dataset_materializer_unavailable"
+      );
+    }
+    if (request.signal.aborted || child.state === "cancelled" || child.state === "cancel_requested") {
+      throw new JobCancellationError({
+        durableWritesApplied: child.cancellation?.durableWritesApplied === true,
+        ...(child.cancellation?.safeCheckpointId ? { safeCheckpointId: child.cancellation.safeCheckpointId } : {})
+      });
+    }
+    if (child.state === "failed_final") {
+      throw new PigeDomainError("dataset.tool_failed_final", "The durable Dataset child failed validation.");
+    }
+    throw new PigeDomainError("dataset.tool_failed_retryable", "The durable Dataset child remains retryable.");
+  }
+
   async #runAgentSelectedOcrTool(
     vaultPath: string,
     parentJob: JobRecord,
@@ -2656,6 +2942,12 @@ export class JobsService {
   }
 }
 
+function markAgentDatasetOutputDurable(control: JobExecutionControl): void {
+  const safeCheckpointId = "agent_dataset_child_output_adoption_started";
+  control.throwIfCancellationRequested({ durableWritesApplied: true, safeCheckpointId });
+  control.markDurableCheckpoint(safeCheckpointId);
+}
+
 class FileBackedJobExecutionControl implements JobExecutionControl {
   readonly signal: AbortSignal;
   readonly #jobPath: string;
@@ -2899,6 +3191,29 @@ function findQueuedParseJobFiles(
       .slice(0, limit);
   }
 
+  return readJobRecordFiles(path.join(vaultPath, ".pige", "jobs"))
+    .filter(matches)
+    .sort((left, right) => left.job.createdAt.localeCompare(right.job.createdAt))
+    .slice(0, limit);
+}
+
+function findQueuedDatasetImportJobFiles(
+  vaultPath: string,
+  request: ProcessQueuedDatasetImportsRequest
+): { path: string; job: JobRecord }[] {
+  const limit = clampLimit(request.limit);
+  const sourceIds = new Set(request.sourceIds ?? []);
+  const matches = (jobFile: { path: string; job: JobRecord }): boolean =>
+    jobFile.job.class === "dataset_import" &&
+    jobFile.job.state === "queued" &&
+    (sourceIds.size === 0 || (jobFile.job.sourceId ? sourceIds.has(jobFile.job.sourceId) : false));
+  if (request.jobIds && request.jobIds.length > 0) {
+    return request.jobIds
+      .map((jobId) => readJobRecordFile(vaultPath, jobId))
+      .filter((jobFile): jobFile is { path: string; job: JobRecord } => Boolean(jobFile))
+      .filter(matches)
+      .slice(0, limit);
+  }
   return readJobRecordFiles(path.join(vaultPath, ".pige", "jobs"))
     .filter(matches)
     .sort((left, right) => left.job.createdAt.localeCompare(right.job.createdAt))
@@ -4387,6 +4702,21 @@ function assertAgentParseToolRequest(parentJob: JobRecord, request: AgentIngestP
   }
 }
 
+function assertAgentDatasetToolRequest(parentJob: JobRecord, request: AgentIngestDatasetToolRequest): void {
+  if (
+    request.sourceRecord.id !== parentJob.sourceId ||
+    !isBoundedOpaqueToolCallId(request.toolCallId) ||
+    !/^[a-z][a-z0-9_]{2,63}$/u.test(request.toolId) ||
+    !/^[a-z0-9][a-z0-9._-]{0,31}$/u.test(request.toolVersion) ||
+    !isSha256(request.canonicalInputHash) ||
+    !isSha256(request.catalogHash) ||
+    request.compatibleCatalogHashes?.some((hash) => !isSha256(hash)) === true ||
+    !isSha256(request.policyHash)
+  ) {
+    throw new PigeDomainError("agent_runtime.tool_binding_invalid", "The Agent Dataset tool binding is invalid.");
+  }
+}
+
 function assertAgentOcrToolRequest(parentJob: JobRecord, request: AgentIngestOcrToolRequest): void {
   if (
     request.sourceRecord.id !== parentJob.sourceId ||
@@ -4501,6 +4831,60 @@ function ensureAgentOcrToolJob(
         ? "Agent selected bounded OCR for the verified preserved image; durable OCR child queued."
         : `Agent selected bounded OCR for parser-verified ${documentLabel(sourceRecord.kind)} targets; durable OCR child queued.`
       : `Agent selected ${documentLabel(sourceRecord.kind)} OCR; waiting for the reviewed local OCR capability.`
+  });
+  return ensureRequiredChildJob(vaultPath, parentJob, requested, (existing) => {
+    assertAgentToolChildBinding(existing, requested, request.compatibleCatalogHashes);
+    return JobRecordSchema.parse({
+      ...existing,
+      inputRefs: mergeAgentToolCallProvenance(existing.inputRefs ?? [], provenanceHash)
+    });
+  });
+}
+
+function ensureAgentDatasetToolJob(
+  vaultPath: string,
+  parentJob: JobRecord,
+  sourceRecord: SourceRecord,
+  request: AgentIngestDatasetToolRequest,
+  state: Extract<JobState, "queued" | "waiting_dependency">
+): JobRecord {
+  const sourceRevision = sourceInputRevision(sourceRecord);
+  const actionDigest = createAgentToolActionDigest({
+    identityVersion: 1,
+    parentJobId: parentJob.id,
+    toolId: request.toolId,
+    toolVersion: request.toolVersion,
+    sourceId: sourceRecord.id,
+    sourceRevision,
+    canonicalInputHash: request.canonicalInputHash
+  });
+  const jobId = createAgentToolJobId(parentJob.id, "dataset_import", actionDigest);
+  const provenanceHash = createToolCallProvenanceHash(parentJob.id, request.toolCallId);
+  const now = new Date().toISOString();
+  const requested = JobRecordSchema.parse({
+    id: jobId,
+    class: "dataset_import",
+    state,
+    parentJobId: parentJob.id,
+    createdAt: now,
+    updatedAt: now,
+    sourceId: sourceRecord.id,
+    ...(parentJob.captureId ? { captureId: parentJob.captureId } : {}),
+    ...(parentJob.conversationEventId ? { conversationEventId: parentJob.conversationEventId } : {}),
+    policyContextId: parentJob.policyContextId,
+    policyHash: request.policyHash,
+    inputRefs: createAgentToolInputRefs({
+      sourceRecord,
+      sourceRevision,
+      toolId: request.toolId,
+      toolVersion: request.toolVersion,
+      canonicalInputHash: request.canonicalInputHash,
+      catalogHash: request.catalogHash,
+      provenanceHash
+    }),
+    message: state === "queued"
+      ? "Agent selected bounded Dataset materialization for the verified structured source; durable child queued."
+      : "Agent selected Dataset materialization; waiting for the bundled local capability."
   });
   return ensureRequiredChildJob(vaultPath, parentJob, requested, (existing) => {
     assertAgentToolChildBinding(existing, requested, request.compatibleCatalogHashes);
@@ -4642,9 +5026,14 @@ function isBoundedOpaqueToolCallId(value: string): boolean {
 
 function createAgentToolJobId(
   parentJobId: string,
-  jobClass: "parse" | "ocr",
+  jobClass: "parse" | "ocr" | "dataset_import",
   actionDigest: string
 ): string {
+  if (jobClass === "dataset_import") {
+    const dateKey = /^job_(\d{8})_/u.exec(parentJobId)?.[1] ??
+      new Date().toISOString().slice(0, 10).replaceAll("-", "");
+    return `job_${dateKey}_${actionDigest.slice(0, 10)}ds`;
+  }
   return createParserOrOcrJobId(parentJobId, jobClass, actionDigest);
 }
 
@@ -4655,6 +5044,11 @@ function isAgentSelectedParseJob(job: JobRecord): boolean {
 
 function isAgentSelectedOcrJob(job: JobRecord): boolean {
   return job.class === "ocr" &&
+    job.inputRefs?.some((ref) => ref.kind === "tool" && ref.role === AGENT_TOOL_INPUT_ROLE) === true;
+}
+
+function isAgentSelectedDatasetJob(job: JobRecord): boolean {
+  return job.class === "dataset_import" &&
     job.inputRefs?.some((ref) => ref.kind === "tool" && ref.role === AGENT_TOOL_INPUT_ROLE) === true;
 }
 
@@ -4669,6 +5063,13 @@ function hasWaitingAgentOcrChild(vaultPath: string, parent: JobRecord): boolean 
   return (parent.childJobIds ?? []).some((childId) => {
     const child = readJobRecordFile(vaultPath, childId)?.job;
     return child?.state === "waiting_dependency" && isAgentSelectedOcrJob(child);
+  });
+}
+
+function hasWaitingAgentDatasetChild(vaultPath: string, parent: JobRecord): boolean {
+  return (parent.childJobIds ?? []).some((childId) => {
+    const child = readJobRecordFile(vaultPath, childId)?.job;
+    return child?.state === "waiting_dependency" && isAgentSelectedDatasetJob(child);
   });
 }
 
@@ -4706,7 +5107,9 @@ function bridgeParentAbortToChild(
         },
         message: current.class === "ocr"
           ? "Parent Agent cancellation requested; stopping the active OCR child."
-          : "Parent Agent cancellation requested; stopping the active parser child."
+          : current.class === "dataset_import"
+            ? "Parent Agent cancellation requested; stopping the active Dataset child."
+            : "Parent Agent cancellation requested; stopping the active parser child."
       }));
     }
     controller.abort();
@@ -4739,6 +5142,37 @@ function createAgentParseToolExecution(
     needsOcr: sourceRecord.metadata.needsOcr === true,
     agentTextReady: sourceRecord.metadata.agentTextReady === true,
     warnings: parserWarnings,
+    ...(dependencyCode ? { dependencyCode } : {})
+  };
+}
+
+function createAgentDatasetToolExecution(
+  child: JobRecord,
+  sourceRecord: SourceRecord,
+  status: AgentIngestDatasetToolExecution["status"],
+  dependencyCode?: string
+): AgentIngestDatasetToolExecution {
+  const datasetId = typeof sourceRecord.metadata.datasetId === "string"
+    ? sourceRecord.metadata.datasetId
+    : undefined;
+  const revisionId = typeof sourceRecord.metadata.datasetRevisionId === "string"
+    ? sourceRecord.metadata.datasetRevisionId
+    : undefined;
+  const warnings = Array.isArray(sourceRecord.metadata.datasetWarnings)
+    ? sourceRecord.metadata.datasetWarnings
+      .filter((value): value is string => typeof value === "string")
+      .slice(0, 16)
+    : [];
+  return {
+    status,
+    childJobId: child.id,
+    sourceRecord,
+    ...(datasetId ? { datasetId } : {}),
+    ...(revisionId ? { revisionId } : {}),
+    tableCount: safeNonNegativeInteger(sourceRecord.metadata.datasetTableCount),
+    rowCount: safeNonNegativeInteger(sourceRecord.metadata.datasetRowCount),
+    warnings,
+    operationIds: child.operationIds ?? [],
     ...(dependencyCode ? { dependencyCode } : {})
   };
 }
@@ -4804,6 +5238,10 @@ function isSha256(value: string): boolean {
 
 function supportsAgentSelectedParser(sourceKind: SourceKind): boolean {
   return sourceKind === "pdf_file" || sourceKind === "docx_file" || sourceKind === "pptx_file";
+}
+
+function supportsAgentSelectedDataset(sourceKind: SourceKind): boolean {
+  return sourceKind === "csv_file" || sourceKind === "xlsx_file" || sourceKind === "sqlite_file";
 }
 
 function supportsAgentSelectedOcr(sourceKind: SourceKind): boolean {
@@ -5012,6 +5450,40 @@ function parseFailure(caught: unknown, sourceKind: SourceKind): { readonly final
     }
   }
   return { final: false, waiting: false, message: `${label} parsing failed. Preserved source and validated partial artifacts remain retryable.` };
+}
+
+function datasetImportFailure(caught: unknown): { readonly final: boolean; readonly waiting: boolean; readonly message: string } {
+  if (caught instanceof PigeDomainError) {
+    if (caught.code === "source.external_unavailable") {
+      return {
+        final: false,
+        waiting: true,
+        message: "The referenced structured source is unavailable. Reconnect it before retrying Dataset materialization."
+      };
+    }
+    if (/^source\.(?:checksum_mismatch|managed_unavailable|path_outside_vault|reference_invalid)$/u.test(caught.code)) {
+      return {
+        final: true,
+        waiting: false,
+        message: "The preserved structured source cannot be verified safely. Re-import it to create a new source version."
+      };
+    }
+    if (
+      /^dataset\.ingest\.(?:csv|xlsx|sqlite|limit)\./u.test(caught.code) ||
+      /^dataset\.(?:import\.(?:invalid|unsupported|source_changed)|path_(?:invalid|unsafe)|identity_conflict|operation_conflict)$/u.test(caught.code)
+    ) {
+      return {
+        final: true,
+        waiting: false,
+        message: "The preserved structured source cannot be materialized safely within current Dataset bounds. Original evidence remains available."
+      };
+    }
+  }
+  return {
+    final: false,
+    waiting: false,
+    message: "Dataset materialization failed. Preserved source and validated immutable outputs remain retryable."
+  };
 }
 
 function isDeterministicParserInputFailure(code: string): boolean {

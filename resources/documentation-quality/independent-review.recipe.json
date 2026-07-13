@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-13T04:07:48Z",
+  "reviewedAt": "2026-07-13T06:08:44Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,12 +30,12 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "bfc61172adc3a7f5b8f4cf97901be3cdb5455a3f370799ec0b8538b8df01c124"
+    "reviewedSha256": "a61754b374fc482e2ff1465bbdd1bb9289d8fefb846bfcd7ea53f3a8c553c3eb"
   },
   "reviewers": [
     {
-      "reviewerId": "structured-data-governance-final-review",
-      "task": "/root/structured_data_governance_review",
+      "reviewerId": "dataset-ingest-p1-repair-final-review",
+      "task": "/root/dataset_p1_repair_review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -43,51 +43,51 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Independent read-only review audited the exact structured-data governance candidate. It verified narrative-versus-structured truth, source preservation, Dataset profiles and evidence refs, typed query/security boundaries, phase separation, UI simplicity, trace closure, unchanged statuses and fixed budgets; it reported CLEAR and made no edits."
+      "independence": "Independent read-only review audited the exact replacement Dataset ingest candidate. It first blocked an incomplete runtime-union guard, then rechecked the repaired hash, all five P1 boundaries, focused selectors, governance projections, unchanged statuses and fixed budgets; it reported CLEAR and made no edits."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "structured-data-governance-final-review",
+      "reviewerId": "dataset-ingest-p1-repair-final-review",
       "blockerCount": 0,
-      "summary": "The existing task router and Owner set absorb Dataset work without a new document, top-level UI destination, mode or duplicate lifecycle owner."
+      "summary": "The existing Dataset, Pi, Job and Playbook Owners absorb the executable ingest foundation without a new document, top-level UI destination, mode or duplicate lifecycle owner."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.7,
-      "reviewerId": "structured-data-governance-final-review",
+      "reviewerId": "dataset-ingest-p1-repair-final-review",
       "blockerCount": 0,
-      "summary": "Owners agree that Markdown is narrative truth, Dataset Bundles are structured truth, originals are evidence and internal SQLite/indexes remain rebuildable."
+      "summary": "Owners agree on preserve-first source evidence, Pi-selected materialization, Dataset Bundle structured truth, deterministic Jobs/Operations and unchanged later-phase query/edit boundaries."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "structured-data-governance-final-review",
+      "reviewerId": "dataset-ingest-p1-repair-final-review",
       "blockerCount": 0,
-      "summary": "Three planned Requirements, capabilities, Builds and Exits close P5 ingest, P6 local query/citations and P7 managed Collections with no existing status change."
+      "summary": "Four exact Dataset evidence claims and six existing partial acceptance projections bind the implemented ingest foundation while Dataset Requirements, Exits and all phase states remain unchanged."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.7,
-      "reviewerId": "structured-data-governance-final-review",
+      "reviewerId": "dataset-ingest-p1-repair-final-review",
       "blockerCount": 0,
-      "summary": "Implementation can start with preserve-first read-only CSV/XLSX/database snapshots and typed queries while exact schemas, adapters, dependency pins and test gates remain explicit."
+      "summary": "Executable selectors cover bounded CSV/XLSX/SQLite planning, independent validation, deterministic publication, wait/retry/restart and clean cancellation; query, edit and broader recovery remain explicit follow-up."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.6,
-      "reviewerId": "structured-data-governance-final-review",
+      "reviewerId": "dataset-ingest-p1-repair-final-review",
       "blockerCount": 0,
-      "summary": "No Markdown file was added; 55 documents, 3,449 of 3,700 entry words and 1,143,714 of 1,210,000 governed Markdown bytes remain within ratcheted budgets."
+      "summary": "No Markdown file was added; 55 documents, 3,449 of 3,700 entry words and 1,145,708 of 1,210,000 governed Markdown bytes remain within ratcheted budgets."
     }
   ],
   "verification": [
     {
       "command": "npm run verify",
       "status": "passed",
-      "evidence": "The final exact governance candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all five documentation-quality dimensions."
+      "evidence": "The final exact Dataset ingest candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all five documentation-quality dimensions."
     },
     {
       "command": "npm run verify:docs && npm run verify:decisions && npm run verify:contracts",
@@ -97,30 +97,30 @@
     {
       "command": "npm run verify:traceability",
       "status": "passed",
-      "evidence": "Semantic lock schema v3 contains 1,130 claims; new Dataset Requirements and Exits are planned, all existing Requirement/Exit statuses and all ten phase states are unchanged."
+      "evidence": "Semantic lock schema v3 contains 1,137 claims; four Dataset evidence claims are bound, Dataset Requirements and Exits remain planned, and all existing Requirement/Exit statuses and all ten phase states are unchanged."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 pass with 55 Markdown files, 3,449 of 3,700 entry words, 4,584 trace lines, 228,798 trace bytes and 1,143,714 of 1,210,000 governed Markdown bytes."
+      "evidence": "LEN-001 through LEN-005 pass with 55 Markdown files, 3,449 of 3,700 entry words, 4,601 trace lines, 230,997 trace bytes and 1,145,708 of 1,210,000 governed Markdown bytes."
     }
   ],
   "coordination": {
-    "taskId": "structured-data-governance-20260713",
-    "taskTitle": "First-class structured knowledge and Dataset Bundle governance",
+    "taskId": "dataset-ingest-foundation-20260713",
+    "taskTitle": "Agent-selected Dataset ingest foundation executable evidence",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "This documentation-only candidate adds planned structured-data scope without implementation, dependencies, schema/API channels, UI navigation, phase renumbering or status promotion. Existing work continues unchanged.",
-    "acknowledgement": "The user approved the architecture; Product Planning synchronized current Owners and trace controls, UI Design cleared the in-place read-only surface, and independent review cleared the exact candidate."
+    "compatibility": "This candidate adds only the bounded CSV/XLSX/SQLite ingest foundation under the already-governed Dataset architecture. It adds no query/edit surface, public Dataset IPC/UI, dependency, phase renumbering or status promotion.",
+    "acknowledgement": "Development froze the exact replacement code/test surface after repairing five P1 boundaries and the runtime-union follow-up. Product Planning synchronized only affected Owners and acceptance evidence; independent review cleared the exact replacement candidate."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Dataset manifest, schema, change-log and evidence-reference contracts remain planned until shared executable schemas land.",
-    "Parquet, Arrow and DuckDB require exact dependency, licensing, packaging, no-network/extension and macOS/Windows validation before adoption.",
-    "CSV lexical round-trip, XLSX formula/cache semantics and hostile database fixtures still need executable losslessness and security evidence.",
-    "Managed Collection revision CAS, crash recovery, Activity/Undo and cross-process conflict handling remain unimplemented.",
-    "Large-table memory, paging, cancellation and 10-million-row packaged-platform evidence remain open.",
+    "Phase 6 Dataset query, explainability and cell/table citation surfaces remain planned.",
+    "Phase 7 Dataset view, edit, Activity/Undo and trash lifecycle remain planned.",
+    "Parquet and DuckDB require exact dependency, licensing, packaging, no-network/extension and macOS/Windows validation before adoption.",
+    "Large-scale and signed-platform evidence remain open.",
+    "Strict cross-process CAS/locking, directory-swap TOCTOU and broader Dataset recovery/concurrency remain open.",
     "Backup/restore and future sync must prove Dataset Bundle atomicity and compatibility before status changes."
   ]
 }

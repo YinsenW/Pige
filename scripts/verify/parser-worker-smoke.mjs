@@ -13,8 +13,9 @@ const pdfWorkerPath = path.join(builtAppRoot, "out/main/workers/pdf-parser-worke
 const pdfPageRendererWorkerPath = path.join(builtAppRoot, "out/main/workers/pdf-page-renderer-worker.js");
 const officeWorkerPath = path.join(builtAppRoot, "out/main/workers/office-parser-worker.js");
 const webWorkerPath = path.join(builtAppRoot, "out/main/workers/web-extractor-worker.js");
+const datasetWorkerPath = path.join(builtAppRoot, "out/main/workers/dataset-ingest-worker.js");
 
-for (const workerPath of [pdfWorkerPath, pdfPageRendererWorkerPath, officeWorkerPath, webWorkerPath]) {
+for (const workerPath of [pdfWorkerPath, pdfPageRendererWorkerPath, officeWorkerPath, webWorkerPath, datasetWorkerPath]) {
   if (!fs.existsSync(workerPath)) {
     console.error(`Missing built parser worker: ${path.relative(root, workerPath)}. Run npm run build first.`);
     process.exit(1);
@@ -130,7 +131,37 @@ await expectWorkerSuccess(webWorkerPath, {
   }
 }, (response) => response.result?.text?.includes("bundled web extractor"));
 
+const datasetSmokeRoot = fs.mkdtempSync(path.join(os.tmpdir(), "pige-dataset-worker-smoke-"));
+try {
+  const csvPath = path.join(datasetSmokeRoot, "records.csv");
+  fs.writeFileSync(csvPath, "name,count\nAda,3\nGrace,5\n", "utf8");
+  await expectWorkerSuccess(datasetWorkerPath, {
+    requestId: "dataset-worker-smoke",
+    filePath: csvPath,
+    sourceKind: "csv_file",
+    limits: {
+      maxSourceBytes: 1024 * 1024,
+      maxRows: 100,
+      maxColumns: 10,
+      maxCells: 1000,
+      maxCellBytes: 1024,
+      maxPlanValueBytes: 1024 * 1024,
+      maxTables: 10,
+      maxArchiveEntries: 100,
+      maxArchiveUncompressedBytes: 1024 * 1024,
+      maxXmlEntryBytes: 1024 * 1024,
+      maxSelectedXmlBytes: 1024 * 1024
+    }
+  }, (response) => response.plan?.source?.kind === "csv_file" &&
+    response.plan?.stats?.tableCount === 1 &&
+    response.plan?.stats?.rowCount === 2 &&
+    response.plan?.target?.profile === "managed_collection");
+} finally {
+  fs.rmSync(datasetSmokeRoot, { recursive: true, force: true });
+}
+
 console.log("Built document and web parser workers loaded and returned valid protocol responses. PDF pages and selected PPTX media also materialized as bounded image bytes.");
+console.log("Built Dataset worker loaded and returned a valid bounded managed-collection import plan.");
 
 async function expectWorkerError(workerPath, request, expectedCode) {
   const worker = new Worker(pathToFileURL(workerPath), {

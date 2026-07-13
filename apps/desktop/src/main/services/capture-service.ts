@@ -80,6 +80,11 @@ const FILE_KIND_BY_EXTENSION = new Map<string, SourceKind>([
   [".pdf", "pdf_file"],
   [".docx", "docx_file"],
   [".pptx", "pptx_file"],
+  [".csv", "csv_file"],
+  [".xlsx", "xlsx_file"],
+  [".sqlite", "sqlite_file"],
+  [".sqlite3", "sqlite_file"],
+  [".db", "sqlite_file"],
   [".png", "image_file"],
   [".jpg", "image_file"],
   [".jpeg", "image_file"],
@@ -329,6 +334,12 @@ export class CaptureService {
         continue;
       }
 
+      const sqliteSidecars = sourceKind === "sqlite_file" ? detectSqliteSidecars(filePath) : [];
+      if (storageStrategy === "copy_to_source_library" && sqliteSidecars.length > 0) {
+        rejectedFiles.push({ displayName, reason: "copy_failed" });
+        continue;
+      }
+
       const sourceId = agentTurnBinding?.sourceId ?? createDatedId("src", dateKey);
       const jobId = createDatedId("job", dateKey);
       const eventId = createDatedId("evt", dateKey);
@@ -368,8 +379,14 @@ export class CaptureService {
             captureId,
             ...(agentTurnBinding ? { agentTurnJobId: agentTurnBinding.jobId } : {}),
             originalExtension: extension,
-            parserStatus: isTextLikeFileSource(sourceKind) ? "text_ready" : "waiting_parser_or_ocr",
-            parserRequired: !isTextLikeFileSource(sourceKind)
+            parserStatus: isTextLikeFileSource(sourceKind)
+              ? "text_ready"
+              : isStructuredFileSource(sourceKind)
+                ? "waiting_agent_dataset_tool"
+                : "waiting_parser_or_ocr",
+            parserRequired: !isTextLikeFileSource(sourceKind) && !isStructuredFileSource(sourceKind),
+            ...(isStructuredFileSource(sourceKind) ? { datasetToolAvailable: true } : {}),
+            ...(sqliteSidecars.length > 0 ? { sqliteLiveSidecars: sqliteSidecars } : {})
           },
           createdAt: timestamp,
           updatedAt: timestamp
@@ -750,6 +767,14 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
 
 function isTextLikeFileSource(sourceKind: SourceKind): boolean {
   return sourceKind === "markdown_file" || sourceKind === "plain_text_file";
+}
+
+function isStructuredFileSource(sourceKind: SourceKind): boolean {
+  return sourceKind === "csv_file" || sourceKind === "xlsx_file" || sourceKind === "sqlite_file";
+}
+
+function detectSqliteSidecars(filePath: string): readonly string[] {
+  return ["-journal", "-wal", "-shm"].filter((suffix) => fs.existsSync(`${filePath}${suffix}`));
 }
 
 function createDatedId(prefix: "cap" | "src" | "job" | "evt", dateKey: string): string {

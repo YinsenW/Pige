@@ -321,6 +321,16 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain("{ snapshot: getAgentCapabilitySnapshot }");
   });
 
+  it("exposes structured sources through unified Agent ingress and the bundled Dataset capability", () => {
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
+
+    expect(rendererSource).toContain(".csv,.xlsx,.sqlite,.sqlite3,.db");
+    expect(mainSource).toContain("new DatasetService(new DatasetIngestWorkerService())");
+    expect(mainSource).toContain('getDatasetService().canMaterialize("csv_file")');
+    expect(mainSource).toContain("getDatasetService()\n    );");
+  });
+
   it("wires onboarding readiness to the non-secret provider runtime binding check", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     expect(mainSource.match(/getModelProviderRegistry\(\)\.hasDefaultRuntimeBinding\(\)/gu)).toHaveLength(2);

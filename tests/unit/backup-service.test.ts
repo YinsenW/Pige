@@ -33,6 +33,7 @@ const DURABLE_FIXTURES: Readonly<Record<DurableRoot, FixtureFile>> = {
   artifacts: { path: "artifacts/ocr.txt", canary: "durable-artifact-body-canary" },
   sources: { path: "sources/source.md", canary: "durable-source-page-body-canary" },
   wiki: { path: "wiki/note.md", canary: "durable-wiki-body-canary" },
+  datasets: { path: "datasets/example--dataset_20260713_abcdef123456/dataset.json", canary: "durable-dataset-canary" },
   assets: { path: "assets/source-image.png", canary: "durable-asset-body-canary" },
   ".pige/source-records": {
     path: ".pige/source-records/source.json",

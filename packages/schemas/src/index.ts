@@ -23,6 +23,12 @@ export const RootBindingIdSchema = z.string().regex(/^root_[a-z0-9][a-z0-9_]{5,}
 export const BackupIdSchema = z.string().regex(/^backup_\d{8}_[a-z0-9]{8,}$/);
 export const PermissionRequestIdSchema = z.string().regex(/^permreq_\d{8}_[a-z0-9]{8,}$/);
 export const PermissionDecisionIdSchema = z.string().regex(/^permdec_\d{8}_[a-z0-9]{8,}$/);
+export const DatasetIdSchema = z.string().regex(/^dataset_\d{8}_[a-z0-9]{12,}$/);
+export const DatasetRevisionIdSchema = z.string().regex(/^dataset_rev_\d{8}_[a-z0-9]{12,}$/);
+export const TableIdSchema = z.string().regex(/^table_[a-z0-9]{12,}$/);
+export const ColumnIdSchema = z.string().regex(/^column_[a-z0-9]{12,}$/);
+export const RowIdSchema = z.string().regex(/^row_[a-z0-9]{12,}$/);
+export const ViewIdSchema = z.string().regex(/^view_[a-z0-9]{12,}$/);
 
 // Phase 2 URL capture emitted source-derived artifact IDs before `art_` became
 // canonical. Sidecar readers retain that legacy identity for compatibility;
@@ -42,6 +48,9 @@ export const SourceKindSchema = z.enum([
   "pdf_file",
   "docx_file",
   "pptx_file",
+  "csv_file",
+  "xlsx_file",
+  "sqlite_file",
   "image_file",
   "audio_file",
   "video_file",
@@ -682,6 +691,130 @@ export const SourceRecordSchema = z.object({
   }
 });
 
+export const DatasetLogicalTypeSchema = z.enum([
+  "string",
+  "integer",
+  "number",
+  "boolean",
+  "date",
+  "datetime",
+  "binary",
+  "unknown"
+]);
+
+export const DatasetColumnSchema = z.object({
+  id: ColumnIdSchema,
+  name: z.string().min(1).max(512),
+  sourceName: z.string().max(512).optional(),
+  ordinal: z.number().int().nonnegative(),
+  sourceType: z.string().min(1).max(160),
+  sourceTypes: z.array(z.string().min(1).max(160)).max(64).optional(),
+  sourceMetadata: z.record(
+    z.string().min(1).max(120),
+    z.union([z.string().max(4096), z.number().finite(), z.boolean()])
+  ).optional(),
+  logicalType: DatasetLogicalTypeSchema,
+  nullable: z.boolean(),
+  stats: z.object({
+    missing: z.number().int().nonnegative(),
+    empty: z.number().int().nonnegative(),
+    null: z.number().int().nonnegative(),
+    value: z.number().int().nonnegative()
+  }).strict().optional()
+}).strict();
+
+export const DatasetTableSchema = z.object({
+  id: TableIdSchema,
+  name: z.string().min(1).max(512),
+  sourceLocator: z.string().min(1).max(1024),
+  sourceMetadata: z.record(
+    z.string().min(1).max(120),
+    z.union([z.string().max(4096), z.number().finite(), z.boolean()])
+  ).optional(),
+  header: z.object({
+    mode: z.enum(["auto", "present", "absent"]),
+    used: z.boolean(),
+    sourceRow: z.number().int().positive().optional()
+  }).strict().optional(),
+  ordinal: z.number().int().nonnegative(),
+  rowCount: z.number().int().nonnegative(),
+  columnCount: z.number().int().nonnegative(),
+  columns: z.array(DatasetColumnSchema).max(4096)
+}).strict().superRefine((table, context) => {
+  if (table.columnCount !== table.columns.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["columnCount"],
+      message: "Dataset table columnCount must match the number of declared columns."
+    });
+  }
+  const ordinals = new Set(table.columns.map((column) => column.ordinal));
+  if (ordinals.size !== table.columns.length) {
+    context.addIssue({ code: "custom", path: ["columns"], message: "Dataset column ordinals must be unique." });
+  }
+});
+
+export const DatasetSchemaRecordSchema = z.object({
+  schemaVersion: z.literal(1),
+  datasetId: DatasetIdSchema,
+  revisionId: DatasetRevisionIdSchema,
+  tables: z.array(DatasetTableSchema).min(1).max(1024),
+  createdAt: z.string().datetime({ offset: true })
+}).passthrough();
+
+const DatasetFileRefSchema = z.object({
+  path: z.string().min(1).max(1024),
+  checksum: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  size: z.number().int().nonnegative()
+}).strict();
+
+export const DatasetRevisionSchema = z.object({
+  schemaVersion: z.literal(1),
+  id: DatasetRevisionIdSchema,
+  datasetId: DatasetIdSchema,
+  parentRevisionId: DatasetRevisionIdSchema.nullable(),
+  source: z.object({
+    sourceId: SourceIdSchema,
+    sourceKind: z.enum(["csv_file", "xlsx_file", "sqlite_file"]),
+    sourceRecordHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+    sourceAssetChecksum: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+    sourceAssetSize: z.number().int().nonnegative()
+  }).strict(),
+  schema: DatasetFileRefSchema,
+  payload: DatasetFileRefSchema.extend({ format: z.literal("sqlite") }).strict(),
+  adapter: z.object({ id: z.string().min(1).max(120), version: z.string().min(1).max(80) }).strict(),
+  writer: z.object({ id: z.string().min(1).max(120), version: z.string().min(1).max(80) }).strict(),
+  stats: z.object({
+    tableCount: z.number().int().nonnegative(),
+    rowCount: z.number().int().nonnegative(),
+    columnCount: z.number().int().nonnegative(),
+    cellCount: z.number().int().nonnegative(),
+    retainedValueBytes: z.number().int().nonnegative()
+  }).strict(),
+  warnings: z.array(z.string().min(1).max(160)).max(64),
+  operationId: OperationIdSchema,
+  createdAt: z.string().datetime({ offset: true })
+}).passthrough();
+
+export const DatasetManifestSchema = z.object({
+  format: z.literal("pige-dataset"),
+  formatVersion: z.literal(1),
+  datasetId: DatasetIdSchema,
+  profile: z.literal("managed_collection"),
+  title: z.string().min(1).max(240),
+  sourceId: SourceIdSchema,
+  activeRevision: DatasetRevisionIdSchema,
+  revision: DatasetFileRefSchema,
+  schema: DatasetFileRefSchema,
+  payload: DatasetFileRefSchema.extend({ format: z.literal("sqlite") }).strict(),
+  compatibility: z.object({
+    minReaderFormatVersion: z.literal(1),
+    maxReaderFormatVersion: z.literal(1)
+  }).strict(),
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true })
+}).passthrough();
+
 export const ConversationEventSchema = z.object({
   schemaVersion: z.literal(1).default(1),
   id: ConversationEventIdSchema,
@@ -734,6 +867,7 @@ export const JobClassSchema = z.enum([
   "capture",
   "parse",
   "ocr",
+  "dataset_import",
   "agent_turn",
   "agent_ingest",
   "retrieval_query",
@@ -765,6 +899,7 @@ export const JobStageSchema = z.enum([
   "capturing_source",
   "fetching",
   "parsing",
+  "importing",
   "ocr",
   "embedding",
   "retrieving",
@@ -794,6 +929,9 @@ export const JobRefSchema = z.object({
     "source",
     "source_asset",
     "artifact",
+    "dataset",
+    "dataset_revision",
+    "table",
     "page",
     "conversation",
     "proposal",
@@ -980,6 +1118,9 @@ export const OperationRefSchema = z.object({
     "source",
     "page",
     "artifact",
+    "dataset",
+    "dataset_revision",
+    "table",
     "asset",
     "memory",
     "skill",
@@ -993,7 +1134,8 @@ export const OperationRefSchema = z.object({
     "proposal"
   ]),
   id: z.string().min(1),
-  path: z.string().min(1).optional()
+  path: z.string().min(1).optional(),
+  checksum: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional()
 }).strict();
 
 export const ModelEgressAuditSchema = z.object({
@@ -1098,6 +1240,7 @@ export const OperationRecordSchema = z.object({
     "trash_source_asset",
     "restore_source_asset",
     "create_artifact",
+    "create_dataset_revision",
     "trash_artifact",
     "restore_artifact",
     "create_page",
@@ -1166,7 +1309,8 @@ export const BackupDomainSchemaVersionsSchema = z.object({
   proposals: DurableSchemaVersionRangeSchema,
   operations: DurableSchemaVersionRangeSchema,
   memory: DurableSchemaVersionRangeSchema,
-  skills: DurableSchemaVersionRangeSchema
+  skills: DurableSchemaVersionRangeSchema,
+  datasets: DurableSchemaVersionRangeSchema.optional()
 });
 
 export const BackupExternalDependencySchema = z.object({
@@ -1505,6 +1649,12 @@ export type CloudBoundary = z.infer<typeof CloudBoundarySchema>;
 export type CloudSendPolicy = z.infer<typeof CloudSendPolicySchema>;
 export type ConfirmationProposal = z.infer<typeof ConfirmationProposalSchema>;
 export type ConversationEvent = z.infer<typeof ConversationEventSchema>;
+export type DatasetColumn = z.infer<typeof DatasetColumnSchema>;
+export type DatasetLogicalType = z.infer<typeof DatasetLogicalTypeSchema>;
+export type DatasetManifest = z.infer<typeof DatasetManifestSchema>;
+export type DatasetRevision = z.infer<typeof DatasetRevisionSchema>;
+export type DatasetSchemaRecord = z.infer<typeof DatasetSchemaRecordSchema>;
+export type DatasetTable = z.infer<typeof DatasetTableSchema>;
 export type JobClass = z.infer<typeof JobClassSchema>;
 export type JobCheckpoint = z.infer<typeof JobCheckpointSchema>;
 export type JobRef = z.infer<typeof JobRefSchema>;

@@ -22,6 +22,7 @@ export const PIGE_DURABLE_ROOTS = [
   "artifacts",
   "sources",
   "wiki",
+  "datasets",
   "assets",
   ".pige/source-records",
   ".pige/conversations",

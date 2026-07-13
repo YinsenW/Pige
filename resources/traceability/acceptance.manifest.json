@@ -615,7 +615,8 @@
       "evidence": [
         "EV-CAPTURE",
         "EV-FILE-CAPTURE",
-        "EV-DOCUMENT-CAPTURE"
+        "EV-DOCUMENT-CAPTURE",
+        "EV-PI-DATASET-INGEST"
       ],
       "open": {
         "id": "OPEN-REQ-PIGE-CAP-001",
@@ -667,11 +668,13 @@
       "evidence": [
         "EV-VAULT-LAYOUT",
         "EV-VAULT-RESET",
-        "EV-DB-REBUILD"
+        "EV-DB-REBUILD",
+        "EV-DATASET-INGEST-CORE",
+        "EV-DATASET-SERVICE"
       ],
       "open": {
         "id": "OPEN-REQ-PIGE-VAULT-001",
-        "description": "Markdown narrative ownership is proven in bounded paths; Dataset structured ownership and complete cross-service durable/rebuildable classification remain open.",
+        "description": "Markdown narrative ownership and bounded managed-collection Dataset publication are proven; analytical snapshots and complete cross-service durable/rebuildable classification remain open.",
         "targetBuilds": [
           "B1.02",
           "B1.05",
@@ -847,7 +850,7 @@
     },
     "PIGE-JOB-001": {
       "status": "partial",
-      "evidence": ["EV-JOB-RECOVERY", "EV-HOME-AGENT", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PARSE-FOLLOWUP-DURABILITY", "EV-OCR-FOLLOWUP-DURABILITY"],
+      "evidence": ["EV-JOB-RECOVERY", "EV-HOME-AGENT", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PARSE-FOLLOWUP-DURABILITY", "EV-OCR-FOLLOWUP-DURABILITY", "EV-PI-DATASET-INGEST"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-001",
         "description": "Home model work is Job-first; remaining parser, permission, backup, and migration paths need assertions.",
@@ -861,7 +864,7 @@
     },
     "PIGE-JOB-002": {
       "status": "partial",
-      "evidence": ["EV-JOB-DRAIN", "EV-JOB-RECOVERY", "EV-HOME-JOB-RECOVERY", "EV-HOME-AGENT", "EV-HOME-FOLLOWUP", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY", "EV-UPDATE-RECOVERY", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER"],
+      "evidence": ["EV-JOB-DRAIN", "EV-JOB-RECOVERY", "EV-HOME-JOB-RECOVERY", "EV-HOME-AGENT", "EV-HOME-FOLLOWUP", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY", "EV-UPDATE-RECOVERY", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER", "EV-PI-DATASET-INGEST", "EV-DATASET-SERVICE", "EV-DATASET-WORKER-SMOKE"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-002",
         "description": "Other Job classes, cross-process CAS, kill/reopen, packaged, and checkpoint proof remain.",
@@ -888,7 +891,7 @@
     },
     "PIGE-JOB-004": {
       "status": "partial",
-      "evidence": ["EV-JOB-WAIT", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-WAITING-AGENT-REQUEUE", "EV-OCR-NATIVE-FALLBACK"],
+      "evidence": ["EV-JOB-WAIT", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-WAITING-AGENT-REQUEUE", "EV-OCR-NATIVE-FALLBACK", "EV-PI-DATASET-INGEST"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-004",
         "description": "Tool, path, and runtime dependency classes plus structured repair actions remain open.",
@@ -1084,7 +1087,7 @@
     },
     "PIGE-PI-001": {
       "status": "partial",
-      "evidence": ["EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-BOUNDARY", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-RETRIEVAL", "EV-PI-INGEST-UPDATE", "EV-UPDATE-RECOVERY", "EV-PI-INGEST-PROPOSAL", "EV-PI-URL-INGRESS", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY"],
+      "evidence": ["EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-BOUNDARY", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-RETRIEVAL", "EV-PI-INGEST-UPDATE", "EV-UPDATE-RECOVERY", "EV-PI-INGEST-PROPOSAL", "EV-PI-URL-INGRESS", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY", "EV-PI-DATASET-INGEST"],
       "open": {
         "id": "OPEN-REQ-PIGE-PI-001",
         "description": "Hash-bound exact create/additive-update recovery/Undo works; broader eligibility, routes, Broker, and packaged BYOK remain.",
@@ -3013,6 +3016,10 @@
     "EV-PI-PDF-OCR-TOOL": { "kind": "test", "path": "tests/unit/agent-led-pdf-ocr.test.ts", "selector": "Agent-led PDF OCR tool" },
     "EV-PI-OFFICE-PARSE-OCR-TOOL": { "kind": "test", "path": "tests/unit/agent-led-office-parse.test.ts", "selector": "Agent-led Office parse tool" },
     "EV-PI-IMAGE-OCR-TOOL": { "kind": "test", "path": "tests/unit/agent-led-image-ocr.test.ts", "selector": "Agent-led image OCR tool" },
+    "EV-DATASET-INGEST-CORE": { "kind": "test", "path": "tests/unit/dataset-ingest-core.test.ts", "selector": "Dataset ingest core" },
+    "EV-DATASET-SERVICE": { "kind": "test", "path": "tests/unit/dataset-service.test.ts", "selector": "Dataset Service" },
+    "EV-PI-DATASET-INGEST": { "kind": "test", "path": "tests/unit/agent-led-dataset-ingest.test.ts", "selector": "Agent-selected Dataset ingest tool" },
+    "EV-DATASET-WORKER-SMOKE": { "kind": "verifier", "path": "scripts/verify/parser-worker-smoke.mjs", "selector": "Built Dataset worker loaded and returned a valid bounded managed-collection import plan." },
     "EV-PI-INGEST-RETRIEVAL": { "kind": "test", "path": "tests/unit/agent-led-ingest-retrieval.test.ts", "selector": "Agent-selected ingest retrieval tool" },
     "EV-PI-INGEST-UPDATE": { "kind": "test", "path": "tests/unit/agent-led-ingest-retrieval.test.ts", "selector": "lets real Pi select one related managed note update with a durable checkpoint and no create fallback" },
     "EV-UPDATE-RECOVERY": { "kind": "test", "path": "tests/unit/agent-led-ingest-retrieval.test.ts", "selector": "retries a page-first Agent update through Jobs without runtime config, credentials, or another Pi turn" },

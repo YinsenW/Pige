@@ -3,6 +3,9 @@ import {
   ArtifactIdSchema,
   BackupManifestSchema,
   ConversationEventIdSchema,
+  DatasetManifestSchema,
+  DatasetRevisionSchema,
+  DatasetSchemaRecordSchema,
   JobClassSchema,
   JobRecordSchema,
   JobStateSchema,
@@ -199,6 +202,82 @@ describe("durable contract schemas", () => {
         accessedExternalFiles: false,
         permissionDecisionIds: ["perm_20260710_abcdef12"]
       }
+    })).toThrow();
+  });
+
+  it("binds Dataset manifests, revisions, schemas, and payloads to stable durable identities", () => {
+    const datasetId = "dataset_20260713_abcdef123456";
+    const revisionId = "dataset_rev_20260713_abcdef123456";
+    const fileRef = { path: "schemas/revision.json", checksum, size: 128 };
+    const schema = DatasetSchemaRecordSchema.parse({
+      schemaVersion: 1,
+      datasetId,
+      revisionId,
+      tables: [{
+        id: "table_abcdef123456",
+        name: "records",
+        sourceLocator: "csv:records",
+        ordinal: 0,
+        rowCount: 2,
+        columnCount: 1,
+        columns: [{
+          id: "column_abcdef123456",
+          name: "value",
+          ordinal: 0,
+          sourceType: "csv_text",
+          logicalType: "string",
+          nullable: false
+        }]
+      }],
+      createdAt: timestamp
+    });
+    const revision = DatasetRevisionSchema.parse({
+      schemaVersion: 1,
+      id: revisionId,
+      datasetId,
+      parentRevisionId: null,
+      source: {
+        sourceId: "src_20260713_abcdef12",
+        sourceKind: "csv_file",
+        sourceRecordHash: checksum,
+        sourceAssetChecksum: checksum,
+        sourceAssetSize: 42
+      },
+      schema: fileRef,
+      payload: { path: "data/collection.sqlite", checksum, size: 256, format: "sqlite" },
+      adapter: { id: "pige.csv", version: "1" },
+      writer: { id: "pige.managed-collection", version: "1" },
+      stats: { tableCount: 1, rowCount: 2, columnCount: 1, cellCount: 2, retainedValueBytes: 8 },
+      warnings: [],
+      operationId: "op_20260713_abcdef12",
+      createdAt: timestamp
+    });
+    const manifest = DatasetManifestSchema.parse({
+      format: "pige-dataset",
+      formatVersion: 1,
+      datasetId,
+      profile: "managed_collection",
+      title: "Records",
+      sourceId: revision.source.sourceId,
+      activeRevision: revisionId,
+      revision: { ...fileRef, path: "revisions/revision.json" },
+      schema: fileRef,
+      payload: revision.payload,
+      compatibility: { minReaderFormatVersion: 1, maxReaderFormatVersion: 1 },
+      createdAt: timestamp,
+      updatedAt: timestamp
+    });
+
+    expect(schema.tables[0]?.rowCount).toBe(2);
+    expect(revision.source.sourceKind).toBe("csv_file");
+    expect(manifest.activeRevision).toBe(revisionId);
+    expect(() => DatasetSchemaRecordSchema.parse({
+      ...schema,
+      tables: [{ ...schema.tables[0], columnCount: 2 }]
+    })).toThrow("columnCount");
+    expect(() => DatasetRevisionSchema.parse({
+      ...revision,
+      source: { ...revision.source, sourceKind: "pdf_file" }
     })).toThrow();
   });
 

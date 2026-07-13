@@ -291,6 +291,15 @@ stable ID/version/description/capability; strict input/output schemas and trust;
 required capabilities, resource scope, permission, data boundary, execution order,
 idempotency, limits, owner service, and handler.
 
+The current structured-ingest foundation registers `pige_inspect_dataset@1` only for the
+preserved current CSV, XLSX, or SQLite source. Its input is `{}`: Pi receives no path,
+SQL, table-selection, source-ID, or destination authority. The Host binds the exact
+source revision and deterministic `dataset_import` child; a bounded worker produces an
+untrusted plan, Dataset Service independently validates it and commits one versioned
+Bundle plus `create_dataset_revision` Operation. The typed result terminates that ingest
+turn without a hidden parse, query, or note workflow. Dataset query and editing tools
+remain later-phase registry work.
+
 The model sees only bounded descriptors. Calls bind run/call, catalog/policy/source,
 tool-version, and input hashes; results carry typed refs, warnings, and provenance while
 large bodies remain Artifacts. Host validation precedes every result or effect.
