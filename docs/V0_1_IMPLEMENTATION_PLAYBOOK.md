@@ -668,12 +668,13 @@ Build:
 - [B9.17 -> E9.11] Error-state, empty-state, privacy-copy, known-limitations, and basic-shortcut release polish.
 - [B9.18 -> E9.12] Language metadata for sources/pages/OCR/chunks/memory, source-language preservation, and query-language response behavior.
 
-Current packageability foundation: an unsigned macOS 26 arm64 GitHub workflow produces
-an ASAR-backed Pige ZIP under the hard size ceiling and runs packaged identity,
-renderer/preload, Pi/Home, parser/index/Vision, attribution, SBOM, and redaction checks.
-It does not complete B9.12, B9.14, B9.15, or E9.08; the supported-platform,
-signing/notarization, installer/update, memory/scale/recovery, release-note, and missing
-bundled-tool evidence remains open.
+Current packageability foundation: unsigned macOS 26 arm64 and Windows x64 GitHub jobs
+produce ASAR-backed Pige artifacts under the hard size ceiling and run packaged identity,
+actual BrowserWindow renderer/preload/health IPC, Pi/Home, parser/index, attribution,
+SBOM, redaction, and platform-resource checks; macOS additionally proves packaged Vision.
+It does not complete B9.12, B9.14, B9.15, or E9.08; supported-version breadth,
+signing/notarization, installed upgrade/uninstall and update, Windows native OCR,
+memory/scale/recovery, release-note, and missing bundled-tool evidence remains open.
 
 Current restore foundation covers bounded B9.03/B9.04/B9.05/B9.06 portions: preview is
 archive/sender/mode-bound; clone and replace publish only to owned fresh destinations;

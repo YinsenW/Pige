@@ -1,10 +1,16 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import {
+  assertPackageabilityHost,
+  resolvePackageabilityPlatform
+} from "./packageability-platforms.mjs";
 
 const root = process.cwd();
 const options = parseOptions(process.argv.slice(2));
 if (!options.platform || !options.arch) throw new Error("Package resource preparation requires --platform and --arch.");
+const target = resolvePackageabilityPlatform(options.platform, options.arch);
+assertPackageabilityHost(target);
 
 const desktopRoot = path.join(root, "apps/desktop");
 const desktopPackage = readJson(path.join(desktopRoot, "package.json"));
@@ -14,7 +20,7 @@ const legalRoot = path.join(outputRoot, "legal");
 const licenseRoot = path.join(legalRoot, "third-party-licenses");
 const sbomRoot = path.join(outputRoot, "sbom");
 
-fs.rmSync(path.join(root, "artifacts/release-packageability/macos-arm64"), { recursive: true, force: true });
+fs.rmSync(path.join(root, "artifacts/release-packageability", target.outputDirectory), { recursive: true, force: true });
 fs.rmSync(outputRoot, { recursive: true, force: true });
 fs.mkdirSync(licenseRoot, { recursive: true });
 fs.mkdirSync(sbomRoot, { recursive: true });
@@ -103,28 +109,32 @@ for (const entry of packages) {
   });
 }
 
-const helperPath = path.join(root, "artifacts/native/macos/arm64/pige-vision-ocr");
-const helperManifest = readJson(path.join(root, "artifacts/native/macos/arm64/pige-vision-ocr.manifest.json"));
-if (!fs.statSync(helperPath).isFile()) throw new Error("The macOS Vision OCR helper must be built before package resources.");
-const helperRef = `pkg:generic/pige-vision-ocr@${encodeURIComponent(helperManifest.helperVersion)}`;
-components.push({
-  type: "file",
-  "bom-ref": helperRef,
-  name: "pige-vision-ocr",
-  version: helperManifest.helperVersion,
-  hashes: [{ alg: "SHA-256", content: checksumFile(helperPath).replace("sha256:", "") }],
-  properties: [
-    { name: "pige:platform", value: helperManifest.platform },
-    { name: "pige:arch", value: helperManifest.arch },
-    { name: "pige:protocolVersion", value: String(helperManifest.protocolVersion) }
-  ]
-});
+const nativeComponentRefs = [];
+if (target.platform === "macos") {
+  const helperPath = path.join(root, "artifacts/native/macos/arm64/pige-vision-ocr");
+  const helperManifest = readJson(path.join(root, "artifacts/native/macos/arm64/pige-vision-ocr.manifest.json"));
+  if (!fs.statSync(helperPath).isFile()) throw new Error("The macOS Vision OCR helper must be built before package resources.");
+  const helperRef = `pkg:generic/pige-vision-ocr@${encodeURIComponent(helperManifest.helperVersion)}`;
+  nativeComponentRefs.push(helperRef);
+  components.push({
+    type: "file",
+    "bom-ref": helperRef,
+    name: "pige-vision-ocr",
+    version: helperManifest.helperVersion,
+    hashes: [{ alg: "SHA-256", content: checksumFile(helperPath).replace("sha256:", "") }],
+    properties: [
+      { name: "pige:platform", value: helperManifest.platform },
+      { name: "pige:arch", value: helperManifest.arch },
+      { name: "pige:protocolVersion", value: String(helperManifest.protocolVersion) }
+    ]
+  });
+}
 
 const appRef = "pkg:generic/pige@0.0.0";
 const sbom = {
   bomFormat: "CycloneDX",
   specVersion: "1.6",
-  serialNumber: deterministicSerialNumber(lockfile, options),
+  serialNumber: deterministicSerialNumber(lockfile, { platform: target.platform, arch: target.arch }),
   version: 1,
   metadata: {
     component: {
@@ -134,19 +144,22 @@ const sbom = {
       version: desktopPackage.version,
       licenses: [{ expression: "Apache-2.0" }],
       properties: [
-        { name: "pige:platform", value: options.platform },
-        { name: "pige:arch", value: options.arch }
+        { name: "pige:platform", value: target.platform },
+        { name: "pige:arch", value: target.arch }
       ]
     }
   },
   components: components.sort((left, right) => left["bom-ref"].localeCompare(right["bom-ref"])),
   dependencies: [
-    { ref: appRef, dependsOn: [...directRuntimeRefs, npmPurl("electron", readInstalledVersion("electron")), helperRef].sort() },
+    {
+      ref: appRef,
+      dependsOn: [...directRuntimeRefs, npmPurl("electron", readInstalledVersion("electron")), ...nativeComponentRefs].sort()
+    },
     ...packages.map((entry) => ({
       ref: entry.bomRef,
       dependsOn: [...(dependencyEdges.get(entry.bomRef) ?? [])].sort()
     })),
-    { ref: helperRef, dependsOn: [] }
+    ...nativeComponentRefs.map((ref) => ({ ref, dependsOn: [] }))
   ].sort((left, right) => left.ref.localeCompare(right.ref))
 };
 
@@ -154,8 +167,8 @@ const attributionPath = path.join(legalRoot, "third-party-attribution.json");
 const sbomPath = path.join(sbomRoot, "pige.cdx.json");
 writeJson(attributionPath, {
   schemaVersion: 1,
-  platform: options.platform,
-  arch: options.arch,
+  platform: target.platform,
+  arch: target.arch,
   packages: attributions
 });
 writeJson(sbomPath, sbom);
@@ -169,8 +182,8 @@ const generatedFiles = listFiles(outputRoot)
   }));
 writeJson(path.join(outputRoot, "package-resource-manifest.json"), {
   schemaVersion: 1,
-  platform: options.platform,
-  arch: options.arch,
+  platform: target.platform,
+  arch: target.arch,
   packageCount: packages.length,
   files: generatedFiles
 });
@@ -277,7 +290,7 @@ function createFallbackLicenseSource(packageJson, expression) {
       source: "reviewed_upstream_project_license"
     };
   }
-  if (packageJson.name === "@napi-rs/canvas-darwin-arm64") {
+  if (packageJson.name?.startsWith("@napi-rs/canvas-")) {
     return {
       fileName: "LICENSE",
       sourcePath: path.join(root, "node_modules/@napi-rs/canvas/LICENSE"),

@@ -48,3 +48,41 @@ jobs:
             artifacts/test-reports/packageability/macos-arm64/${{ github.sha }}/report.json
           if-no-files-found: error
           retention-days: 14
+
+  windows-x64:
+    name: Windows x64 packageability
+    runs-on: windows-2025
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24.14.0"
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Audit packaged runtime dependencies
+        run: npm audit --omit=dev
+
+      - name: Build unsigned Windows x64 artifact
+        run: npm run package:dir:win:x64
+
+      - name: Smoke packaged application
+        run: npm run smoke:packaged:win:x64
+        env:
+          PIGE_REPORT_BUILD_ID: ${{ github.sha }}
+
+      - name: Upload packageability evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pige-windows-x64-packageability-${{ github.sha }}
+          path: |
+            artifacts/release-packageability/windows-x64/Pige-0.0.0-x64-setup.exe
+            artifacts/test-reports/packageability/windows-x64/${{ github.sha }}/report.json
+          if-no-files-found: error
+          retention-days: 14

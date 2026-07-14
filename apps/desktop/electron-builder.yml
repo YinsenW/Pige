@@ -20,12 +20,24 @@ extraResources:
     to: toolchain-manifest
   - from: ../../artifacts/release-packageability/package-resources
     to: release
-  - from: ../../artifacts/native/macos/arm64
-    to: native/macos/arm64
 mac:
   category: public.app-category.productivity
   artifactName: Pige-${version}-${arch}.${ext}
+  extraResources:
+    - from: ../../artifacts/native/macos/arm64
+      to: native/macos/arm64
   target:
     - dir
     - zip
   identity: null
+win:
+  artifactName: Pige-${version}-${arch}-setup.${ext}
+  target:
+    - dir
+    - nsis
+nsis:
+  artifactName: Pige-${version}-${arch}-setup.${ext}
+  oneClick: false
+  perMachine: false
+  allowElevation: false
+  allowToChangeInstallationDirectory: true

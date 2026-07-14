@@ -309,8 +309,13 @@ function removeOwnedFile(filePath: string, identity: fs.Stats): void {
   }
 }
 
-function isUnsupportedDirectoryFsync(caught: unknown): boolean {
-  return isErrno(caught, "EINVAL") || isErrno(caught, "ENOTSUP") || isErrno(caught, "EBADF");
+export function isUnsupportedDirectoryFsync(
+  caught: unknown,
+  platform = process.platform
+): boolean {
+  const portableUnsupported = ["EINVAL", "EISDIR", "ENOSYS", "ENOTSUP", "EOPNOTSUPP"];
+  return portableUnsupported.some((code) => isErrno(caught, code)) ||
+    (platform === "win32" && ["EBADF", "EPERM"].some((code) => isErrno(caught, code)));
 }
 
 function isErrno(caught: unknown, code: string): boolean {
