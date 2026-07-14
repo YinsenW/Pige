@@ -20,7 +20,9 @@ Quality bar:
 - No demo-only storage layer.
 - No dev-server-only experience for normal users.
 - No hidden dependency download during ordinary capture, ingest, search, or review.
-- No permissionless external Skill/package action that reads outside scope, writes, deletes, calls network, runs shell, changes settings, or touches secrets.
+- No permissionless Agent/Skill/package/local-tool action outside standing knowledge-
+  Markdown or exact user-selected-source authority that reads, writes, deletes, commits,
+  calls network, runs shell, changes settings, or touches secrets.
 
 Scope discipline:
 

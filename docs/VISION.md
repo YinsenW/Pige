@@ -60,14 +60,17 @@ Supported source ownership patterns:
 
 ### 3.4 Autonomous By Default, Tool-Constrained
 
-Every submission enters Pi. It answers or selects typed tools to retrieve, parse,
-organize, link, summarize, and grow knowledge. Normal validated reversible work applies
-autonomously. Host services enforce preservation, egress, provenance, limits, Jobs,
-validation, Operations, and recovery. Intervene only for irreversible destruction,
-authority/security escalation, destination drift, unreconcilable conflict, or an explicit
-stricter user policy; uncertainty
-chooses a conservative representation or abstention. Better models should increase
-autonomy inside the same service-enforced safety architecture.
+Pige is Pi Agent's local product shell, not another semantic workflow engine. Submission
+immediately creates one Pi Job; source preservation is its first checkpoint. Pi answers,
+uses/revisits typed tools, authors Markdown, and repairs validation until a valid result,
+grounded abstention, or real external block. Host services enforce evidence, authority,
+egress, limits, Operations, commit, and recovery without choosing the semantic route.
+
+Capability is broader than authority: Pi may request arbitrary filesystem/commit tools.
+Recoverable active-vault knowledge Markdown and the exact source selected by drop/picker
+are prompt-free; other scopes pause for a user decision, and always-confirmed effects
+keep their stronger gate. Better models therefore increase autonomy without redesigning
+the safety or interaction model.
 
 Folder management is secondary. Pige's main artifact is an AI-readable, user-readable
 local knowledge base with provenance.

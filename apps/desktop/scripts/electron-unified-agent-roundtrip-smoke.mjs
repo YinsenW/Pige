@@ -158,7 +158,7 @@ async function runOrchestrator() {
     assert.equal(connect.directVisible, true);
     assert.equal(connect.enterSubmitted, true);
     assert.equal(connect.directProvisionalVisible, true);
-    assert.ok(connect.directDraftEventCount >= 3);
+    assert.ok(connect.directDraftEventCount >= 1);
     assert.equal(connect.groundedVisible, true);
     assert.equal(connect.groundedCitationsDuringDraft, false);
     assert.equal(connect.citationVisible, true);
@@ -349,7 +349,7 @@ async function runOrchestrator() {
       `Electron unified Agent roundtrip OK: persisted ${connect.providerProfileId}/${connect.modelProfileId}, ` +
       `reopened binding, real Responses tool loop and ${connect.draftEventCount} safe draft replacements ` +
       `(${connect.firstDraftReceivedAt - streamTiming.firstSafeAnswerMaterialAt}ms from first safe material), ` +
-      `${connect.directDraftEventCount} authorized fallback replacements plus Enter submission, ` +
+      `${connect.directDraftEventCount} parsed terminal-answer replacement(s) with no presentation-only provider turn plus Enter submission, ` +
       `visible direct/cited Home, preserved-source, ` +
       `TXT/Markdown ingress, Dataset continuation, restart-adopted and live one-use model egress approvals, ` +
       `durable denial without a provider request, a restart-recovered Permission Broker allow-once action ` +
@@ -1842,11 +1842,6 @@ async function startProviderServer(requests, streamTiming) {
     const serializedInput = JSON.stringify(parsed.input ?? "");
     const serializedTools = JSON.stringify(parsed.tools ?? "");
     const latestUserText = readLatestUserText(parsed.input);
-    if (serializedInput.includes("authorized one presentation-only answer phase")) {
-      const authorizedAnswer = readLatestFinishAnswer(parsed.input);
-      await writeStreamingTextResponse(response, authorizedAnswer, `authorized-home-${requests.length}`);
-      return;
-    }
     if (serializedInput.includes('"call_id":"call_provider_probe"') && serializedInput.includes("function_call_output")) {
       writeTextResponse(response, "probe ready", "provider-probe-2");
       return;
@@ -2036,22 +2031,6 @@ function findFunctionCallOutput(input, callId) {
   throw new Error(`Loopback provider could not find ${callId} output.`);
 }
 
-function readLatestFinishAnswer(input) {
-  if (!Array.isArray(input)) throw new Error("Authorized Home presentation input is invalid.");
-  for (let index = input.length - 1; index >= 0; index -= 1) {
-    const item = input[index];
-    if (!item || typeof item !== "object" || item.type !== "function_call" || item.name !== "pige_finish_home_turn") {
-      continue;
-    }
-    const args = typeof item.arguments === "string" ? JSON.parse(item.arguments) : item.arguments;
-    if (!args || typeof args !== "object" || typeof args.answer !== "string" || !args.answer) {
-      throw new Error("Authorized Home presentation answer is missing.");
-    }
-    return args.answer;
-  }
-  throw new Error("Authorized Home presentation has no validated finish call.");
-}
-
 function readDatasetCatalogRefs(output) {
   const start = output.indexOf("{");
   const end = output.lastIndexOf("}");
@@ -2143,6 +2122,12 @@ async function writeStreamingToolCallResponse(response, name, callId, suffix, ar
   while (offset < argumentsJson.length) {
     const nextOffset = Math.min(argumentsJson.length, offset + 28);
     const delta = argumentsJson.slice(offset, nextOffset);
+    if (
+      timing.firstSafeAnswerMaterialAt === undefined &&
+      nextOffset > '{"answer":"'.length
+    ) {
+      timing.firstSafeAnswerMaterialAt = Date.now();
+    }
     writeResponseEvent(response, {
       type: "response.function_call_arguments.delta",
       sequence_number: sequence,
@@ -2150,12 +2135,6 @@ async function writeStreamingToolCallResponse(response, name, callId, suffix, ar
       item_id: item.id,
       delta
     });
-    if (
-      timing.firstSafeAnswerMaterialAt === undefined &&
-      nextOffset >= '{"answer":"'.length + 32
-    ) {
-      timing.firstSafeAnswerMaterialAt = Date.now();
-    }
     offset = nextOffset;
     sequence += 1;
     await new Promise((resolve) => setTimeout(resolve, 110));

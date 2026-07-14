@@ -20,7 +20,8 @@ import {
   type CredentialStore,
   type Model,
   type ProviderStreams,
-  type TSchema
+  type TSchema,
+  validateToolArguments
 } from "@earendil-works/pi-ai";
 import { anthropicMessagesApi } from "@earendil-works/pi-ai/api/anthropic-messages.lazy";
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
@@ -121,8 +122,72 @@ export interface PiAgentRunRequest {
   readonly tools: readonly PigeAgentToolDefinition[];
   readonly beforeModelTurn?: () => void | Promise<void>;
   readonly terminalActionRecovery?: PiAgentTerminalActionRecovery;
+  readonly completionRepair?: PiAgentCompletionRepairBoundary;
   readonly terminalDraft?: PiAgentTerminalDraftBoundary;
   readonly signal?: AbortSignal;
+}
+
+export type AgentRepairCategory =
+  | "schema_invalid"
+  | "tool_input_invalid"
+  | "grounding_invalid"
+  | "citation_invalid"
+  | "evidence_stale"
+  | "result_incomplete";
+
+export interface AgentRepairFeedback {
+  readonly apiVersion: 1;
+  readonly kind: "repair_required";
+  readonly category: AgentRepairCategory;
+  readonly fieldRefs: readonly string[];
+  readonly allowedOpaqueRefs: readonly string[];
+  readonly repairHintKey: string;
+  readonly failureFingerprint: string;
+}
+
+export interface PiAgentCompletionRepairBoundary {
+  readonly terminalToolNames: readonly string[];
+  readonly maxWallTimeMs: number;
+  readonly maxToolCalls: number;
+  readonly maxWorkBytes: number;
+  readonly maxRepeatedFailureFingerprints: number;
+}
+
+export class AgentRepairRequiredError extends Error {
+  readonly feedback: AgentRepairFeedback;
+
+  constructor(feedback: AgentRepairFeedback) {
+    super(serializeAgentRepairFeedback(feedback));
+    this.name = "AgentRepairRequiredError";
+    this.feedback = feedback;
+  }
+}
+
+export function createAgentRepairFeedback(input: {
+  readonly category: AgentRepairCategory;
+  readonly fieldRefs?: readonly string[];
+  readonly allowedOpaqueRefs?: readonly string[];
+  readonly repairHintKey: string;
+  readonly progressFingerprint?: string;
+}): AgentRepairFeedback {
+  const fieldRefs = normalizeRepairRefs(input.fieldRefs ?? [], 16);
+  const allowedOpaqueRefs = normalizeRepairRefs(input.allowedOpaqueRefs ?? [], 32);
+  const repairHintKey = normalizeRepairHintKey(input.repairHintKey);
+  return Object.freeze({
+    apiVersion: 1,
+    kind: "repair_required",
+    category: input.category,
+    fieldRefs,
+    allowedOpaqueRefs,
+    repairHintKey,
+    failureFingerprint: createHash("sha256").update(canonicalJson({
+      category: input.category,
+      fieldRefs,
+      allowedOpaqueRefs,
+      repairHintKey,
+      progressFingerprint: input.progressFingerprint ?? null
+    }), "utf8").digest("hex")
+  });
 }
 
 export interface PiAgentTerminalActionRecovery {
@@ -186,9 +251,7 @@ const MAX_HISTORY_MESSAGES = 16;
 const MAX_HISTORY_UTF8_BYTES = 64 * 1024;
 const KEYLESS_PROVIDER_TRANSPORT_SENTINEL = "pige-keyless-provider";
 const MAX_TURN_EVENT_RECORDS = 512;
-const MIN_INCREMENTAL_DRAFT_SPAN_MS = 80;
 const DRAFT_PUBLISH_SETTLE_MS = 90;
-const AUTHORIZED_DRAFT_PREFIX_CHARACTERS = 32;
 export const MAX_PIGE_TOOL_CALL_ID_UTF8_BYTES = 256;
 
 const PIGE_AGENT_TOOL_CATALOG_HASH_DOMAIN = "pige.agent_tool_catalog.v1";
@@ -224,6 +287,9 @@ export class PiAgentRuntimeAdapter {
       request.terminalActionRecovery,
       tools
     );
+    const completionRepair = new CompletionRepairController(
+      validateCompletionRepairBoundary(request.completionRepair, tools)
+    );
     const binding = this.#createBinding(request.runtimeConfig);
     const history = createPiHistoryMessages(request.history ?? [], binding.model);
     const toolsByName = new Map(tools.map((tool) => [tool.name, tool]));
@@ -239,6 +305,7 @@ export class PiAgentRuntimeAdapter {
     let abortForPermissionFailure: (() => void) | undefined;
     const runBeforeModelTurn = async (): Promise<void> => {
       try {
+        completionRepair.assertCanContinue();
         await request.beforeModelTurn?.();
       } catch (caught) {
         hasBeforeModelTurnFailure = true;
@@ -252,8 +319,15 @@ export class PiAgentRuntimeAdapter {
         model: binding.model,
         thinkingLevel: "off",
         tools: tools.map((tool) => toPiTool(tool, {
+          onRepair: (executedTool, feedback) => {
+            completionRepair.recordRepair(feedback);
+            terminalDrafts.rejectAttempt(executedTool.name);
+          },
           afterExecute: (executedTool, args, result) =>
-            terminalDrafts.afterToolExecute(executedTool, args, result),
+            terminalDrafts.afterToolExecute(executedTool, args, result).then((presented) => {
+              if (presented.terminate === true) completionRepair.recordTerminalAccepted(executedTool.name);
+              return presented;
+            }),
           onError: (caught) => {
             if (
               !permissionControlFlowFailure &&
@@ -277,13 +351,11 @@ export class PiAgentRuntimeAdapter {
         return undefined;
       },
       beforeToolCall: async ({ toolCall, args }) => {
-        if (terminalDrafts.blocksToolCalls()) {
-          return { block: true, reason: "Pige authorized answer presentation; no further tool call is allowed." };
-        }
         const tool = toolsByName.get(toolCall.name);
         if (!tool) {
           return { block: true, reason: "The requested tool is not registered for this Pige action." };
         }
+        completionRepair.recordToolCall(tool.name, args);
         const context = createPigeAgentToolCallContext(toolCall.id, request.signal ?? NEVER_ABORTED_SIGNAL);
         if (!context || !isWithinCanonicalJsonByteLimit(args, tool.limits.maxInputBytes)) {
           return { block: true, reason: "Pige rejected invalid tool-call metadata or arguments." };
@@ -310,6 +382,22 @@ export class PiAgentRuntimeAdapter {
         return;
       }
       terminalDrafts.observe(event);
+      if (
+        request.completionRepair &&
+        event.type === "turn_end" &&
+        event.message.role === "assistant" &&
+        event.message.stopReason === "stop" &&
+        !completionRepair.terminalAccepted()
+      ) {
+        const feedback = completionRepair.recordMissingTerminalAction();
+        if (feedback) {
+          agent.followUp({
+            role: "user",
+            content: createRepairFollowUpPrompt(feedback),
+            timestamp: Date.now()
+          });
+        }
+      }
       if (
         terminalActionRecovery &&
         event.type === "tool_execution_start" &&
@@ -355,9 +443,13 @@ export class PiAgentRuntimeAdapter {
       await terminalDrafts.assertCompleteAndSettle();
       if (request.signal?.aborted) throw createAbortError();
       if (hasBeforeModelTurnFailure) throw beforeModelTurnFailure;
+      if (agent.state.errorMessage && completionRepair.repairAttempted()) {
+        completionRepair.assertCompleted();
+      }
       if (agent.state.errorMessage) {
         throw new PigeDomainError("model_provider.call_failed", "The embedded Pi Agent turn failed.");
       }
+      completionRepair.assertCompleted();
       return {
         adapterMode: "embedded_pi_sdk",
         providerProfileId: request.runtimeConfig.provider.id,
@@ -646,6 +738,10 @@ class ScopedCredentialStore implements CredentialStore {
 }
 
 interface PiToolExecutionHooks {
+  readonly onRepair: (
+    tool: PigeAgentToolDescriptor,
+    feedback: AgentRepairFeedback
+  ) => void;
   readonly afterExecute: (
     tool: PigeAgentToolDescriptor,
     args: unknown,
@@ -658,19 +754,47 @@ function toPiTool(
   tool: PigeAgentToolDescriptor,
   hooks?: PiToolExecutionHooks
 ): AgentTool<TSchema, Readonly<Record<string, unknown>>> {
-  return {
+  const piTool: AgentTool<TSchema, Readonly<Record<string, unknown>>> = {
     name: tool.name,
     label: tool.label,
     description: tool.description,
     parameters: tool.parameters as TSchema,
     executionMode: tool.execution === "parallel_read_only" ? "parallel" : "sequential",
+    prepareArguments: (args) => {
+      try {
+        return validateToolArguments(piTool, {
+          type: "toolCall",
+          id: "pige_tool_argument_validation",
+          name: tool.name,
+          arguments: args as Record<string, unknown>
+        });
+      } catch {
+        const feedback = createAgentRepairFeedback({
+          category: "tool_input_invalid",
+          fieldRefs: [`tool.${tool.name}.input`],
+          repairHintKey: "repair.tool_input.use_registered_schema",
+          progressFingerprint: createOpaqueProgressFingerprint(args)
+        });
+        hooks?.onRepair(tool, feedback);
+        throw new AgentRepairRequiredError(feedback);
+      }
+    },
     execute: async (toolCallId, args, signal) => {
       try {
         const effectiveSignal = signal ?? new AbortController().signal;
         const context = createPigeAgentToolCallContext(toolCallId, effectiveSignal);
         if (!context) throw invalidToolCallError();
         assertToolInputWithinLimit(args, tool.limits.maxInputBytes);
-        const result = await tool.execute(args, effectiveSignal, context);
+        let result: PigeAgentToolResult;
+        try {
+          result = await tool.execute(args, effectiveSignal, context);
+        } catch (caught) {
+          if (caught instanceof AgentRepairRequiredError) {
+            hooks?.onRepair(tool, caught.feedback);
+            throw new AgentRepairRequiredError(caught.feedback);
+          }
+          throw caught;
+        }
         assertPigeAgentToolResult(result, tool.limits.maxOutputBytes);
         const presentedResult = hooks ? await hooks.afterExecute(tool, args, result) : result;
         assertPigeAgentToolResult(presentedResult, tool.limits.maxOutputBytes);
@@ -685,6 +809,7 @@ function toPiTool(
       }
     }
   };
+  return piTool;
 }
 
 function toEventRecord(event: AgentEvent): PiAgentEventRecord {
@@ -757,18 +882,10 @@ function readSafeTerminalAnswer(
   return text;
 }
 
-type TerminalDraftMode = "collecting" | "incremental" | "authorized_text" | "complete" | "invalid";
-
 class SafeTerminalDraftController {
   readonly #boundary: PiAgentTerminalDraftBoundary | undefined;
-  #mode: TerminalDraftMode = "collecting";
-  #pendingToolSnapshots: Array<{ readonly text: string; readonly receivedAt: number }> = [];
   #lastToolSnapshot: string | undefined;
-  #authorizedAnswer: string | undefined;
-  #authorizedTextContentIndex: number | undefined;
-  #lastAuthorizedText: string | undefined;
   #lastPresentedText: string | undefined;
-  #presentationSnapshotCount = 0;
   #presentationEmitted = false;
   #presentationNeedsSettle = false;
 
@@ -778,45 +895,15 @@ class SafeTerminalDraftController {
 
   observe(event: AgentEvent): void {
     if (!this.#boundary || event.type !== "message_update") return;
-    if (this.#mode === "authorized_text" || this.#mode === "complete" || this.#mode === "invalid") {
-      this.#observeAuthorizedText(event);
-      return;
-    }
-    const update = event.assistantMessageEvent;
-    if (
-      update.type !== "toolcall_start" &&
-      update.type !== "toolcall_delta" &&
-      update.type !== "toolcall_end"
-    ) {
-      return;
-    }
     const snapshot = readSafeTerminalDraft(event, this.#boundary);
     if (!snapshot || snapshot === this.#lastToolSnapshot) return;
     this.#lastToolSnapshot = snapshot;
-    if (update.type === "toolcall_end") {
-      if (this.#mode === "incremental") this.#emit(snapshot);
-      return;
-    }
-    const receivedAt = Date.now();
-    this.#pendingToolSnapshots.push({ text: snapshot, receivedAt });
-    const first = this.#pendingToolSnapshots[0];
-    if (
-      this.#mode === "collecting" &&
-      first &&
-      this.#pendingToolSnapshots.length >= 2 &&
-      receivedAt - first.receivedAt >= MIN_INCREMENTAL_DRAFT_SPAN_MS
-    ) {
-      this.#mode = "incremental";
-      this.#emit(first.text);
-      this.#emit(snapshot);
-      this.#pendingToolSnapshots = [];
-      return;
-    }
-    if (this.#mode === "incremental") this.#emit(snapshot);
+    this.#emit(snapshot);
   }
 
-  blocksToolCalls(): boolean {
-    return this.#mode === "authorized_text" || this.#mode === "complete" || this.#mode === "invalid";
+  rejectAttempt(toolName: string): void {
+    if (toolName !== this.#boundary?.toolName) return;
+    this.#lastToolSnapshot = undefined;
   }
 
   async afterToolExecute(
@@ -827,90 +914,21 @@ class SafeTerminalDraftController {
     if (!this.#boundary || tool.name !== this.#boundary.toolName || result.terminate !== true) {
       return result;
     }
-    if (this.#mode === "incremental") {
-      await this.#settlePresentation();
-      return result;
+    if (isRecord(args)) {
+      const answer = readSafeTerminalAnswer(args[this.#boundary.argumentName], this.#boundary);
+      if (answer) this.#emit(answer);
     }
-    if (!isRecord(args)) return result;
-    const answer = readSafeTerminalAnswer(args[this.#boundary.argumentName], this.#boundary);
-    if (!answer) return result;
-    this.#authorizedAnswer = answer;
-    this.#mode = "authorized_text";
-    this.#pendingToolSnapshots = [];
-    const prefix = Array.from(answer).slice(0, AUTHORIZED_DRAFT_PREFIX_CHARACTERS).join("");
-    this.#emit(prefix);
-    return {
-      ...result,
-      modelText: [
-        "Pige validated the terminal Home result and authorized one presentation-only answer phase.",
-        "Output exactly the answer field you just submitted as assistant text, with no prefix, suffix, citation, tool call, or change."
-      ].join(" "),
-      terminate: false
-    };
+    await this.#settlePresentation();
+    return result;
   }
 
   async assertCompleteAndSettle(): Promise<void> {
-    if (this.#authorizedAnswer !== undefined && this.#mode !== "complete") {
-      throw new PigeDomainError(
-        "model_provider.output_invalid",
-        "The provider could not produce the exact authorized Home answer stream."
-      );
-    }
-    if (
-      this.#authorizedAnswer !== undefined &&
-      Array.from(this.#authorizedAnswer).length > AUTHORIZED_DRAFT_PREFIX_CHARACTERS &&
-      this.#presentationSnapshotCount < 2
-    ) {
-      throw new PigeDomainError(
-        "model_provider.output_invalid",
-        "The provider completed the authorized Home answer without usable text streaming."
-      );
-    }
     await this.#settlePresentation();
-  }
-
-  #observeAuthorizedText(event: Extract<AgentEvent, { type: "message_update" }>): void {
-    if (this.#mode !== "authorized_text") return;
-    const update = event.assistantMessageEvent;
-    if (update.type !== "text_start" && update.type !== "text_delta" && update.type !== "text_end") return;
-    const content = update.partial.content[update.contentIndex];
-    if (!content || content.type !== "text") {
-      this.#mode = "invalid";
-      return;
-    }
-    if (this.#authorizedTextContentIndex === undefined) {
-      this.#authorizedTextContentIndex = update.contentIndex;
-    } else if (this.#authorizedTextContentIndex !== update.contentIndex) {
-      this.#mode = "invalid";
-      return;
-    }
-    const candidate = content.text;
-    if (!candidate) return;
-    if (candidate === this.#lastAuthorizedText) {
-      if (update.type === "text_end") {
-        this.#mode = candidate === this.#authorizedAnswer ? "complete" : "invalid";
-      }
-      return;
-    }
-    if (
-      !this.#authorizedAnswer?.startsWith(candidate) ||
-      containsUnsafeDraftControlCharacter(candidate) ||
-      containsRestrictedModelContent(candidate)
-    ) {
-      this.#mode = "invalid";
-      return;
-    }
-    this.#lastAuthorizedText = candidate;
-    this.#emit(candidate);
-    if (update.type === "text_end") {
-      this.#mode = candidate === this.#authorizedAnswer ? "complete" : "invalid";
-    }
   }
 
   #emit(text: string): void {
     if (!this.#boundary || !text || text === this.#lastPresentedText) return;
     this.#lastPresentedText = text;
-    this.#presentationSnapshotCount += 1;
     this.#presentationEmitted = true;
     this.#presentationNeedsSettle = true;
     try {
@@ -942,6 +960,173 @@ function collectAssistantText(messages: readonly unknown[]): string {
     }
   }
   return values.join("\n").trim();
+}
+
+class CompletionRepairController {
+  readonly #boundary: PiAgentCompletionRepairBoundary | undefined;
+  readonly #startedAt = Date.now();
+  readonly #failureCounts = new Map<string, number>();
+  #toolCalls = 0;
+  #workBytes = 0;
+  #acceptedTerminal = false;
+  #fatalFailure: PigeDomainError | undefined;
+
+  constructor(boundary: PiAgentCompletionRepairBoundary | undefined) {
+    this.#boundary = boundary;
+  }
+
+  recordToolCall(toolName: string, args: unknown): void {
+    if (!this.#boundary) return;
+    this.#toolCalls += 1;
+    this.#workBytes += Buffer.byteLength(toolName, "utf8") + canonicalJsonByteLength(args);
+    this.#assertBudget();
+  }
+
+  recordRepair(feedback: AgentRepairFeedback): void {
+    if (!this.#boundary) return;
+    this.#workBytes += Buffer.byteLength(serializeAgentRepairFeedback(feedback), "utf8");
+    const count = (this.#failureCounts.get(feedback.failureFingerprint) ?? 0) + 1;
+    this.#failureCounts.set(feedback.failureFingerprint, count);
+    if (count > this.#boundary.maxRepeatedFailureFingerprints) {
+      this.#failProtocol("Pi repeated the same invalid completion without observable repair progress.");
+    }
+    this.#assertBudget();
+  }
+
+  recordMissingTerminalAction(): AgentRepairFeedback | undefined {
+    if (!this.#boundary || this.#acceptedTerminal) return undefined;
+    const feedback = createAgentRepairFeedback({
+      category: "result_incomplete",
+      fieldRefs: ["terminal_action"],
+      repairHintKey: "repair.result.call_registered_terminal_tool",
+      progressFingerprint: "terminal_action_missing"
+    });
+    this.recordRepair(feedback);
+    return this.#fatalFailure ? undefined : feedback;
+  }
+
+  recordTerminalAccepted(toolName: string): void {
+    if (!this.#boundary?.terminalToolNames.includes(toolName)) return;
+    this.#acceptedTerminal = true;
+  }
+
+  terminalAccepted(): boolean {
+    return this.#acceptedTerminal;
+  }
+
+  repairAttempted(): boolean {
+    return this.#failureCounts.size > 0;
+  }
+
+  assertCanContinue(): void {
+    if (!this.#boundary) return;
+    this.#assertBudget();
+    if (this.#fatalFailure) throw this.#fatalFailure;
+  }
+
+  assertCompleted(): void {
+    if (!this.#boundary) return;
+    this.assertCanContinue();
+    if (!this.#acceptedTerminal) {
+      this.#failProtocol("Pi ended without an accepted registered terminal result.");
+      throw this.#fatalFailure;
+    }
+  }
+
+  #assertBudget(): void {
+    if (!this.#boundary || this.#fatalFailure) return;
+    if (
+      Date.now() - this.#startedAt > this.#boundary.maxWallTimeMs ||
+      this.#toolCalls > this.#boundary.maxToolCalls ||
+      this.#workBytes > this.#boundary.maxWorkBytes
+    ) {
+      this.#failProtocol("Pi exceeded the bounded autonomous completion work budget.");
+    }
+  }
+
+  #failProtocol(message: string): void {
+    this.#fatalFailure ??= new PigeDomainError("model_provider.tool_protocol_incompatible", message);
+  }
+}
+
+function validateCompletionRepairBoundary(
+  boundary: PiAgentCompletionRepairBoundary | undefined,
+  tools: readonly PigeAgentToolDefinition[]
+): PiAgentCompletionRepairBoundary | undefined {
+  if (!boundary) return undefined;
+  const terminalToolNames = Array.from(new Set(boundary.terminalToolNames));
+  const registered = new Set(tools.map((tool) => tool.name));
+  if (
+    terminalToolNames.length === 0 ||
+    terminalToolNames.length > 16 ||
+    terminalToolNames.some((name) => !registered.has(name)) ||
+    !Number.isSafeInteger(boundary.maxWallTimeMs) ||
+    boundary.maxWallTimeMs < 1_000 ||
+    boundary.maxWallTimeMs > 600_000 ||
+    !Number.isSafeInteger(boundary.maxToolCalls) ||
+    boundary.maxToolCalls < 1 ||
+    boundary.maxToolCalls > 256 ||
+    !Number.isSafeInteger(boundary.maxWorkBytes) ||
+    boundary.maxWorkBytes < 4_096 ||
+    boundary.maxWorkBytes > MAX_DESCRIPTOR_LIMIT_BYTES ||
+    !Number.isSafeInteger(boundary.maxRepeatedFailureFingerprints) ||
+    boundary.maxRepeatedFailureFingerprints < 1 ||
+    boundary.maxRepeatedFailureFingerprints > 16
+  ) {
+    throw new PigeDomainError(
+      "agent_runtime.completion_repair_invalid",
+      "The bounded autonomous completion repair contract is invalid."
+    );
+  }
+  return Object.freeze({ ...boundary, terminalToolNames });
+}
+
+function createRepairFollowUpPrompt(feedback: AgentRepairFeedback): string {
+  return [
+    "Pige has not accepted a terminal result. Continue autonomously within the registered tools.",
+    `Use this body-free repair feedback only: ${serializeAgentRepairFeedback(feedback)}`
+  ].join(" ");
+}
+
+function serializeAgentRepairFeedback(feedback: AgentRepairFeedback): string {
+  return canonicalJson(feedback);
+}
+
+function normalizeRepairRefs(values: readonly string[], limit: number): readonly string[] {
+  const normalized = Array.from(new Set(values.map((value) => value.trim()))).sort();
+  if (
+    normalized.length > limit ||
+    normalized.some((value) => !/^[A-Za-z0-9_.:-]{1,128}$/u.test(value))
+  ) {
+    throw new PigeDomainError("agent_runtime.repair_feedback_invalid", "The internal repair references are invalid.");
+  }
+  return Object.freeze(normalized);
+}
+
+function normalizeRepairHintKey(value: string): string {
+  const normalized = value.trim();
+  if (!/^[a-z][a-z0-9_.-]{2,127}$/u.test(normalized)) {
+    throw new PigeDomainError("agent_runtime.repair_feedback_invalid", "The internal repair hint is invalid.");
+  }
+  return normalized;
+}
+
+function createOpaqueProgressFingerprint(value: unknown): string {
+  let serialized: string;
+  try {
+    serialized = canonicalJson(value);
+  } catch {
+    serialized = typeof value;
+  }
+  return createHash("sha256").update(serialized, "utf8").digest("hex");
+}
+
+function canonicalJsonByteLength(value: unknown): number {
+  try {
+    return Buffer.byteLength(canonicalJson(value), "utf8");
+  } catch {
+    return MAX_DESCRIPTOR_LIMIT_BYTES + 1;
+  }
 }
 
 function validateTerminalActionRecovery(

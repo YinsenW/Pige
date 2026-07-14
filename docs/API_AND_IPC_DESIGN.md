@@ -132,10 +132,38 @@ Error code rules:
 - Shared warning/error objects are strict: unknown fields such as raw prompts, response/source bodies, or private paths are rejected instead of being preserved beside `redactedDetails`.
 - Renderer UI chooses affordances from `severity`, `retryable`, and `userAction`; it must not parse localized text to decide behavior.
 - API errors, job error summaries, and diagnostic errors that describe the same failure should share the same `code`, `domain`, `messageKey`, and `retryable` value.
-- A source-backed Agent turn that still omits every registered terminal action after its
-  single bounded correction uses stable `agent_runtime.knowledge_action_missing` truth.
-  Its Job summary is body-free and redacted; it never persists provider prose, prompts,
-  source bodies, or raw tool arguments as the explanation.
+- Recoverable Agent-output/tool validation is internal Pi progress, not an API/UI error.
+  It returns the bounded internal repair result below and keeps the same Job active.
+  `model_provider.output_invalid` and `agent_runtime.knowledge_action_missing` must not be
+  emitted merely because the first candidate/terminal attempt was invalid or omitted.
+  A terminal user-facing error is reserved for a true external block or demonstrated
+  provider/tool-protocol incompatibility after autonomous repair; its Job summary remains
+  body-free and redacted.
+
+Internal Agent repair result; this never crosses renderer IPC directly:
+
+```ts
+type AgentRepairFeedback = {
+  apiVersion: 1;
+  kind: "repair_required";
+  category:
+    | "schema_invalid"
+    | "tool_input_invalid"
+    | "grounding_invalid"
+    | "citation_invalid"
+    | "evidence_stale"
+    | "result_incomplete";
+  fieldRefs: string[];
+  allowedOpaqueRefs: string[];
+  repairHintKey: string;
+  failureFingerprint: string;
+};
+```
+
+`fieldRefs`, opaque refs, and fixed `repairHintKey` values are bounded and Host-authored.
+They contain no model/source body, prompt, raw tool arguments, path, endpoint, credential,
+policy secret, or private diagnostic detail. Authority/safety denial is a distinct blocked
+tool result and cannot be converted into `repair_required`.
 
 ## 5. Event Model
 
@@ -614,22 +642,23 @@ Rules:
 - `text` is the complete replacement snapshot, not an append delta. It is non-empty,
   escaped by renderer, bounded by the final 8,000-character answer limit, and may shrink
   when the provider repairs an in-progress tool argument.
-- The normal path emits only the already-parsed `answer` string from the exact terminal
-  Home tool after control/restricted-content filtering. If that provider exposes no
-  useful incremental arguments, the Host may first validate and execute that exact tool,
-  then accept one presentation-only assistant-text stream whose every snapshot is a
-  prefix of the validated answer and whose end is byte-for-byte equal. Further tools,
-  altered/incomplete text, and unusable long-answer streaming fail closed.
+- Main emits only bounded answer snapshots from a reviewed Pi-owned answer/parsed terminal
+  channel after control/restricted-content filtering. It never starts a second provider
+  turn solely to reproduce an already generated final for presentation. A repair may
+  replace or shrink the provisional answer; incomplete or changed draft text is not a Job
+  failure and never bypasses final validation.
 - The Host must not parse or forward partial JSON, pre-authorization/generic Pi text,
   thinking, tool arguments, citations, grounding, model/provider identifiers, raw
-  payloads, errors, or credentials. The presentation turn grants no new authority and
-  never changes the already validated final result.
+  payloads, errors, or credentials. Draft delivery grants no new authority and never
+  changes the accepted final result.
 - Main coalesces updates to a bounded rate. Renderer ignores stale, duplicated,
   out-of-order, wrong-sender, or wrong-turn events and replaces one escaped draft bubble;
   it never appends fragments into durable conversation state.
 - The completed `agent.submitTurn` result and durable `agent.conversation` event remain
-  authoritative. Final replaces the draft atomically; failure/cancellation clears or
-  marks it through localized state, stops later events, and never persists it.
+  authoritative. An accepted final replaces the latest repaired draft atomically;
+  cancellation or a true external block clears/marks it through localized state, stops
+  later events, and never persists provisional text. Intermediate validation rejection
+  stays inside Pi and does not produce a renderer retry action.
 - Reconnect/restart does not replay drafts. It reads only the durable conversation/Job
   result and may resume the Job through the existing recovery contract.
 

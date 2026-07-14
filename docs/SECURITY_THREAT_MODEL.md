@@ -395,12 +395,12 @@ Permission scopes:
 
 `provider_profile` is a resource scope, not a decision-duration scope. The executable decision-record matrix is owned by `PermissionDecisionRecordSchema` and summarized in `docs/TECH_ARCHITECTURE.md`: denials use `never`; one-action authorization uses `once`; reusable human grants use `actor_version`, `resource_scope`, or `profile_default`; saved-grant/YOLO auto-allows are system-authored one-action records and cannot mint another persistent grant.
 
-External/extension permission modes:
+Permission modes for non-default Agent/extension authority:
 
 - Ask Every Time: prompt for every sensitive action unless an explicit saved grant exists.
 - Remember Scoped Grants: save a revocable actor/capability/resource scope.
 - YOLO Full Access: auto-allow eligible external declared capabilities until disabled.
-  It is unnecessary for Pige-owned core knowledge tools and never exposes raw secrets.
+  It is unnecessary for standing-authority knowledge Markdown and never exposes raw secrets.
 
 Authorization and confirmation are separate gates:
 

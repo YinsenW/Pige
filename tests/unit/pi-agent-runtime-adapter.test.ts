@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { PigeDomainError } from "@pige/domain";
 import {
+  AgentRepairRequiredError,
   MAX_PIGE_TOOL_CALL_ID_UTF8_BYTES,
   PiAgentRuntimeAdapter,
+  createAgentRepairFeedback,
   createPigeAgentToolCatalogHash,
   type PigeAgentToolDefinition
 } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
@@ -161,21 +163,18 @@ describe("Pi Agent runtime adapter", () => {
     await expectExactAuthorizedDrafts(endpointProtocol);
   });
 
-  it("fails closed when the authorized presentation text differs from the validated terminal answer", async () => {
+  it("completes from the parsed terminal answer without a presentation-only provider turn", async () => {
     const drafts: string[] = [];
-    const answer = "This validated answer must be reproduced exactly in the authorized presentation phase.";
+    const answer = "This validated answer is emitted only from parsed terminal arguments.";
     const adapter = new PiAgentRuntimeAdapter({
       fauxResponses: [{
         kind: "tool_call",
         toolName: "pige_finish_home_turn",
         args: { answer, citationRefs: [], grounding: "general" }
-      }, {
-        kind: "text",
-        text: "Injected replacement text must never cross the safe draft boundary."
       }]
     });
 
-    await expect(adapter.run({
+    const result = await adapter.run({
       ...makeRequest([makeFinishHomeTool()]),
       terminalDraft: {
         toolName: "pige_finish_home_turn",
@@ -183,10 +182,131 @@ describe("Pi Agent runtime adapter", () => {
         maxCharacters: 8_000,
         onSnapshot: (text) => drafts.push(text)
       }
-    })).rejects.toMatchObject({ code: "model_provider.output_invalid" });
+    });
 
-    expect(drafts).toEqual([Array.from(answer).slice(0, 32).join("")]);
-    expect(drafts.join(" ")).not.toContain("Injected replacement");
+    expect(drafts.at(-1)).toBe(answer);
+    expect(result.assistantText).toBe("");
+  });
+
+  it("repairs invalid terminal arguments and accepts a later valid result in the same Job", async () => {
+    const drafts: string[] = [];
+    const adapter = new PiAgentRuntimeAdapter({
+      fauxResponses: [
+        {
+          kind: "tool_call",
+          toolName: "pige_finish_home_turn",
+          args: { answer: "Missing grounding", citationRefs: [] }
+        },
+        {
+          kind: "tool_call",
+          toolName: "pige_finish_home_turn",
+          args: { answer: "Corrected", citationRefs: [], grounding: "general" }
+        }
+      ]
+    });
+
+    const result = await adapter.run({
+      ...makeRequest([makeFinishHomeTool()]),
+      completionRepair: makeCompletionRepairBoundary(),
+      terminalDraft: {
+        toolName: "pige_finish_home_turn",
+        argumentName: "answer",
+        maxCharacters: 8_000,
+        onSnapshot: (text) => drafts.push(text)
+      }
+    });
+
+    expect(result.invokedTools).toEqual(["pige_finish_home_turn", "pige_finish_home_turn"]);
+    expect(result.events.filter((event) => event.type === "tool_execution_end")).toEqual([
+      expect.objectContaining({ isError: true }),
+      expect.objectContaining({ isError: false })
+    ]);
+    expect(drafts).toEqual(["Missing grounding", "Corrected"]);
+    expect(drafts.join(" ")).not.toContain("citationRefs");
+  });
+
+  it("continues after more than one prose omission before a registered terminal action", async () => {
+    const adapter = new PiAgentRuntimeAdapter({
+      fauxResponses: [
+        { kind: "text", text: "First incomplete prose response." },
+        { kind: "text", text: "Second incomplete prose response." },
+        {
+          kind: "tool_call",
+          toolName: "pige_finish_home_turn",
+          args: { answer: "Terminal completion", citationRefs: [], grounding: "general" }
+        }
+      ]
+    });
+
+    const result = await adapter.run({
+      ...makeRequest([makeFinishHomeTool()]),
+      completionRepair: makeCompletionRepairBoundary()
+    });
+
+    expect(result.invokedTools).toEqual(["pige_finish_home_turn"]);
+  });
+
+  it("allows a safe read revisit after rejected terminal evidence and then completes", async () => {
+    const reads: string[] = [];
+    const finishTool = makeFinishHomeTool({ rejectCitation: "citation_9" });
+    const readTool: PigeAgentToolDefinition = {
+      ...BASE_TOOL_DESCRIPTOR,
+      name: "pige_search_knowledge",
+      label: "Search",
+      description: "Read current bounded evidence.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+      execute: async () => {
+        reads.push("read");
+        return { modelText: "citation_1", details: {} };
+      }
+    };
+    const adapter = new PiAgentRuntimeAdapter({
+      fauxResponses: [
+        { kind: "tool_call", toolName: readTool.name, args: {} },
+        {
+          kind: "tool_call",
+          toolName: finishTool.name,
+          args: { answer: "Wrong ref", citationRefs: ["citation_9"], grounding: "local_knowledge" }
+        },
+        { kind: "tool_call", toolName: readTool.name, args: {} },
+        {
+          kind: "tool_call",
+          toolName: finishTool.name,
+          args: { answer: "Correct ref", citationRefs: ["citation_1"], grounding: "local_knowledge" }
+        }
+      ]
+    });
+
+    const result = await adapter.run({
+      ...makeRequest([readTool, finishTool]),
+      completionRepair: makeCompletionRepairBoundary()
+    });
+
+    expect(reads).toEqual(["read", "read"]);
+    expect(result.invokedTools).toEqual([
+      "pige_search_knowledge",
+      "pige_finish_home_turn",
+      "pige_search_knowledge",
+      "pige_finish_home_turn"
+    ]);
+  });
+
+  it("fails with a typed protocol incompatibility after bounded repeated non-progress", async () => {
+    const adapter = new PiAgentRuntimeAdapter({
+      fauxResponses: Array.from({ length: 4 }, () => ({
+        kind: "tool_call" as const,
+        toolName: "pige_finish_home_turn",
+        args: { answer: "Still missing required fields" }
+      }))
+    });
+
+    await expect(adapter.run({
+      ...makeRequest([makeFinishHomeTool()]),
+      completionRepair: {
+        ...makeCompletionRepairBoundary(),
+        maxRepeatedFailureFingerprints: 2
+      }
+    })).rejects.toMatchObject({ code: "model_provider.tool_protocol_incompatible" });
   });
 
   it("does not expose generic Pi text as a Home draft", async () => {
@@ -480,11 +600,15 @@ describe("Pi Agent runtime adapter", () => {
         });
         return { modelText: "unreachable", details: {} };
       }
-    }];
+    }, makeFinishHomeTool()];
     const adapter = new PiAgentRuntimeAdapter({
       fauxResponses: [{ kind: "tool_call", toolName: "pige_inspect_source", args: {} }]
     });
-    const run = adapter.run({ ...makeRequest(tools), signal: controller.signal });
+    const run = adapter.run({
+      ...makeRequest(tools),
+      completionRepair: makeCompletionRepairBoundary(),
+      signal: controller.signal
+    });
     await started;
     controller.abort();
 
@@ -547,9 +671,6 @@ async function expectExactAuthorizedDrafts(
       kind: "tool_call",
       toolName: "pige_finish_home_turn",
       args: { answer, citationRefs: [], grounding: "general" }
-    }, {
-      kind: "text",
-      text: answer
     }]
   });
 
@@ -567,7 +688,7 @@ async function expectExactAuthorizedDrafts(
     }
   });
 
-  expect(drafts.length).toBeGreaterThan(1);
+  expect(drafts.length).toBeGreaterThan(0);
   expect(drafts.at(-1)).toBe(answer);
   expect(drafts.every((draft) => answer.startsWith(draft))).toBe(true);
   expect(drafts.join(" ")).not.toContain("citationRefs");
@@ -627,7 +748,17 @@ function makeTools(calls: string[], published: unknown[]): PigeAgentToolDefiniti
   ];
 }
 
-function makeFinishHomeTool(): PigeAgentToolDefinition {
+function makeCompletionRepairBoundary() {
+  return {
+    terminalToolNames: ["pige_finish_home_turn"],
+    maxWallTimeMs: 30_000,
+    maxToolCalls: 32,
+    maxWorkBytes: 64 * 1_024,
+    maxRepeatedFailureFingerprints: 3
+  } as const;
+}
+
+function makeFinishHomeTool(options: { readonly rejectCitation?: string } = {}): PigeAgentToolDefinition {
   return {
     ...BASE_TOOL_DESCRIPTOR,
     name: "pige_finish_home_turn",
@@ -644,6 +775,23 @@ function makeFinishHomeTool(): PigeAgentToolDefinition {
       additionalProperties: false
     },
     authorize: () => true,
-    execute: async () => ({ modelText: "Home turn finished.", details: {}, terminate: true })
+    execute: async (args) => {
+      if (
+        options.rejectCitation &&
+        typeof args === "object" &&
+        args !== null &&
+        Array.isArray((args as { citationRefs?: unknown }).citationRefs) &&
+        (args as { citationRefs: unknown[] }).citationRefs.includes(options.rejectCitation)
+      ) {
+        throw new AgentRepairRequiredError(createAgentRepairFeedback({
+          category: "citation_invalid",
+          fieldRefs: ["citationRefs"],
+          allowedOpaqueRefs: ["citation_1"],
+          repairHintKey: "repair.citations.use_allowed_refs",
+          progressFingerprint: options.rejectCitation
+        }));
+      }
+      return { modelText: "Home turn finished.", details: {}, terminate: true };
+    }
   };
 }

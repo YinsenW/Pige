@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-14T08:53:56Z",
+  "reviewedAt": "2026-07-14T09:43:33Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,12 +30,12 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "493c19b5a506b7da87d5c3d8314dab179f8779935e0f78a572f7c27af4022e79"
+    "reviewedSha256": "2c08fefcb6d25714071246e4e8aba9180d332599b1e541c2a1f2d557b06bdbd7"
   },
   "reviewers": [
     {
-      "reviewerId": "permission-broker-current-action-ui-review",
-      "task": "Production Ready Permission Broker current-action core exact-hash ACCEPTED/CLEAR",
+      "reviewerId": "pi-agent-autonomous-delivery-ui-review",
+      "task": "Rebased Pi autonomous-delivery exact-hash final Design Sync ACCEPTED/CLEAR",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -43,83 +43,84 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "UI Design independently verified exact Development patch b56b558d9980ddd4d0352b80208304fed517c98362a6ba62592bed81c527ddda and returned ACCEPTED/CLEAR without edits: Deny/Allow once only, one matching status owner, safe localized summaries, durable uncertainty reread, stale identity guards, resolving semantics, six locales, accessibility and narrow layout. Product Planning independently bound Owner, acceptance and residual facts without changing the 28 Development paths."
+      "independence": "UI Design independently verified exact Development patch 0dadc5626a878e8e7f700ab274b89a98eb9b4d0dec96edf3d5e47107c1e3f115 and returned ACCEPTED/CLEAR without edits: one existing draft bubble, final-only citations and grounding, no extra card/CTA/navigation, typed protocol-incompatibility repair, and unchanged Permission Broker status ownership. Product Planning separately reconciled Owner, acceptance and residual facts without changing the five Development paths."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
-      "score": 9.8,
-      "reviewerId": "permission-broker-current-action-ui-review",
+      "score": 9.7,
+      "reviewerId": "pi-agent-autonomous-delivery-ui-review",
       "blockerCount": 0,
-      "summary": "One compact current-action card owns the pending decision, suppresses only its matching Job, restores ordinary Job truth after resolution, and adds no settings page, grant manager, YOLO flow or navigation branch."
+      "summary": "Autonomous repair remains inside the same Home Job and existing provisional bubble; it adds no card, CTA, navigation or modal. The already-published Broker card remains unchanged, while the focused permission modal is recorded only as a planned convergence target."
     },
     {
       "id": "cross_document_contract_consistency",
-      "score": 9.8,
-      "reviewerId": "permission-broker-current-action-ui-review",
+      "score": 9.7,
+      "reviewerId": "pi-agent-autonomous-delivery-ui-review",
       "blockerCount": 0,
-      "summary": "Security, Pi, Runtime Policy, API, Job, Architecture, UI, Quality, Playbook and Decision owners agree on capability-versus-authority, exact current-action binding, body-free machine-local lifecycle, one-use Job CAS and fail-closed restart."
+      "summary": "Vision, PRD, Pi, Prompt, Runtime Policy, Security, API, Job, Architecture, UI, Quality, Playbook and Decision owners agree that one submission owns one Pi Job, repairable rejection returns to Pi, Pi authors Markdown, and Host authority and commit gates remain binding."
     },
     {
       "id": "continuous_traceability_and_acceptance",
-      "score": 9.8,
-      "reviewerId": "permission-broker-current-action-ui-review",
+      "score": 9.7,
+      "reviewerId": "pi-agent-autonomous-delivery-ui-review",
       "blockerCount": 0,
-      "summary": "Exact broker, Home, recovery, adapter, schema and UI selectors prove the bounded foundation, while PIGE-SEC-002, PIGE-PI-003 and E8.02 remain planned because no production external caller, grants, capacity or signed-platform matrix exists."
+      "summary": "Exact Home and Pi selectors prove same-Job terminal/citation repair, safe read revisit, bounded non-progress, parsed drafts and removal of the presentation-only provider turn. Requirement, Exit and phase statuses remain unchanged, and Broker production callers remain open."
     },
     {
       "id": "ongoing_development_support",
-      "score": 9.8,
-      "reviewerId": "permission-broker-current-action-ui-review",
+      "score": 9.7,
+      "reviewerId": "pi-agent-autonomous-delivery-ui-review",
       "blockerCount": 0,
-      "summary": "Development gets one executable current-action layer: exact request identity, Deny/Allow once, same-Job pause/resume, pre-effect revalidation, one-use completion marker and deterministic restart adoption without saved-grant or package breadth."
+      "summary": "Development gets one bounded completion contract: typed body-free feedback, accepted-terminal-only durability, progress limits, safe tool revisits and distinct incompatibility, while Permission Broker, egress, cancellation, conflict and privacy hard boundaries retain precedence."
     },
     {
       "id": "documentation_leanness_and_maintainability",
-      "score": 9.8,
-      "reviewerId": "permission-broker-current-action-ui-review",
+      "score": 9.7,
+      "reviewerId": "pi-agent-autonomous-delivery-ui-review",
       "blockerCount": 0,
-      "summary": "Existing owners, one superseding Decision, Playbook and trace surfaces absorb the user-directed authority model and exact implementation; no new document, dependency, setting, provider, prototype image or status promotion is introduced."
+      "summary": "Existing owners, one superseding Decision, Playbook and trace surfaces absorb the exact repair and authorship contract; no new document, dependency, setting, provider, prototype image, implementation scope or status promotion is introduced."
     }
   ],
   "verification": [
     {
       "command": "npm run verify",
       "status": "passed",
-      "evidence": "The exact Permission Broker current-action candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all five documentation-quality dimensions."
+      "evidence": "The exact five-file Pi autonomous-delivery plus governed candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all five documentation-quality dimensions."
     },
     {
-      "command": "npm run verify:contracts && npx vitest run tests/unit/permission-broker-service.test.ts tests/unit/permission-broker-home-agent.test.ts tests/unit/permission-broker-job-recovery.test.ts tests/unit/permissioned-external-capability-service.test.ts tests/unit/home-agent-conversation-ui.test.ts tests/unit/desktop-shell-contract.test.ts tests/unit/pi-agent-runtime-adapter.test.ts tests/unit/security-contract-schemas.test.ts",
+      "command": "npm run verify:contracts && npx vitest run tests/unit/home-agent-service.test.ts tests/unit/pi-agent-runtime-adapter.test.ts tests/unit/permission-broker-home-agent.test.ts tests/unit/permission-broker-job-recovery.test.ts tests/unit/permissioned-external-capability-service.test.ts",
       "status": "passed",
-      "evidence": "CON-001 through CON-004 and negative fixtures pass; the 8-file / 126-test focused matrix proves exact binding, adversarial storage, one-use execution, restart reconciliation, safe IPC/UI, cancellation and completion-uncertain fail-closed behavior."
+      "evidence": "CON-001 through CON-004 and negative fixtures pass; focused Home/Pi and Broker overlap matrices prove same-Job repair, no presentation-only model turn, strict hard-boundary precedence, restart-safe allow-once and denial without effect."
     },
     {
       "command": "npm run verify:traceability",
       "status": "passed",
-      "evidence": "Semantic lock schema v3 contains 1,184 claims. Planned targets truthfully distinguish the executable current-action foundation from missing production callers, grants, capacity and platform proof; every Requirement, Exit and phase state remains unchanged."
+      "evidence": "Semantic lock schema v3 contains 1,184 claims. Changed Pi, evaluation and Home projections bind exact executable repair while preserving planned production Broker callers and every Requirement, Exit and phase state."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 pass after consolidating the authority model and current foundation in existing owners, without a new governed document, dependency, setting, saved-grant/YOLO implementation or unrelated feature breadth."
+      "evidence": "LEN-001 through LEN-005 pass after consolidating autonomous completion, Pi Markdown authorship and capability-versus-authority wording in existing owners, without a new document, dependency, setting, prototype or unrelated feature breadth."
     }
   ],
   "coordination": {
-    "taskId": "production-ready-permission-broker-current-action-20260714",
-    "taskTitle": "Permission Broker current-action core",
+    "taskId": "pi-agent-autonomous-delivery-rebased-20260714",
+    "taskTitle": "Pi Agent autonomous completion and delivery",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The candidate adds strict Permission Action binding/lifecycle records and two IPC channels without changing dependencies, provider/model egress, Restore, saved grants, YOLO, settings, package/Skill lifecycle or public phase/status state. The production external adapter registry remains empty.",
-    "acknowledgement": "Development froze exact 28-path b56b558d after full, assembled restart/allow/deny, package and adversarial evidence. UI Design returned exact-hash ACCEPTED/CLEAR. Product Planning synchronized only affected authority, API, Job, Pi, UI, quality, Decision and planned acceptance surfaces; the separate Pi autonomous-delivery lane remains unpublished for post-merge rebase."
+    "compatibility": "The exact five-file implementation changes Home/Pi completion and draft sourcing only. It preserves the merged Permission Broker onError, allow-once/deny/restart behavior, model egress, data layouts, dependencies, settings and public status states; broader Pi-authored ingest and production arbitrary-path callers remain open.",
+    "acknowledgement": "Development froze exact 0dadc562 rebased bytes after focused/full, assembled Broker-plus-repair, package and worker evidence. UI Design returned exact-hash ACCEPTED/CLEAR without edits. Product Planning reconciled the prior autonomy governance delta onto the published Broker baseline and changed only affected owners, acceptance, semantic and current recipe surfaces."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "The production external adapter registry is empty; assembled injection proves the Broker core, not a shipped arbitrary-path, Skill, package or local-tool capability.",
-    "Saved grants, Remember, YOLO, grant revocation/provenance, Permission settings and broader actor/package lifecycle remain open.",
-    "Broker record capacity/compaction and broader cross-process concurrency remain open.",
-    "The final path-based link/rename/unlink syscall TOCTOU interval remains a platform primitive boundary.",
-    "Signed installed Windows/macOS and real production-caller matrices remain open."
+    "This slice proves Home repair; legacy agent_ingest correction and durable mid-repair Pi transcript/checkpoint adoption remain open.",
+    "Progress-aware bounds still require broad live-provider cost, latency and repeated-failure tuning.",
+    "Live timing is Responses-compatible loopback; Chat Completions, Anthropic Messages and packaged live-network matrices remain open.",
+    "Permission Broker hard boundaries remain authoritative; the production external adapter registry is still empty and the focused permission modal, saved grants and YOLO remain planned.",
+    "The final path-based syscall TOCTOU interval and broader cross-process matrices remain platform primitive boundaries.",
+    "Signed installed macOS/Windows proof remains open."
   ]
 }

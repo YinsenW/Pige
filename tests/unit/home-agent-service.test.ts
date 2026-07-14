@@ -472,10 +472,59 @@ describe("Home Pi Agent service", () => {
     expect(outcome).toMatchObject({
       state: "failed",
       modelUsage: "cloud",
-      error: { code: "model_provider.output_invalid", userAction: "retry" }
+      error: { code: "model_provider.tool_protocol_incompatible", userAction: "configure_model" }
     });
     expect(readRecords<JobRecord>(path.join(fixture.vaultPath, ".pige", "jobs"))).toEqual([
-      expect.objectContaining({ class: "agent_turn", state: "failed_retryable" })
+      expect.objectContaining({ class: "agent_turn", state: "failed_final" })
+    ]);
+  });
+
+  it("repairs invalid citations in the same durable turn before publishing one assistant result", async () => {
+    const fixture = makeFixture();
+    const service = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      new PiAgentRuntimeAdapter({
+        fauxResponses: [
+          { kind: "tool_call", toolName: "pige_search_knowledge", args: {} },
+          finishHome({
+            answer: "Missing the required citation.",
+            citationRefs: [],
+            grounding: "general"
+          }),
+          finishHome({
+            answer: "The launch is Tuesday.",
+            citationRefs: ["citation_1"],
+            grounding: "local_knowledge"
+          })
+        ]
+      })
+    );
+
+    const outcome = await service.submitTurn({
+      text: "Answer only from my vault.",
+      inputKind: "typed_text",
+      objective: "vault_only",
+      locale: "en"
+    });
+
+    expect(outcome).toMatchObject({
+      state: "completed",
+      answer: {
+        answer: "The launch is Tuesday.",
+        grounding: "local_knowledge",
+        citations: [expect.objectContaining({ refId: "citation_1" })]
+      }
+    });
+    expect(service.conversation().messages.filter((message) => message.role === "assistant")).toHaveLength(1);
+    expect(readRecords<JobRecord>(path.join(fixture.vaultPath, ".pige", "jobs"))).toEqual([
+      expect.objectContaining({
+        class: "agent_turn",
+        state: "completed",
+        outputRefs: expect.arrayContaining([expect.objectContaining({ kind: "conversation" })])
+      })
     ]);
   });
 
@@ -757,18 +806,26 @@ describe("Home Pi Agent service", () => {
   it("fails closed when Pi skips local search or returns unvalidated citations", async () => {
     const fixture = makeFixture();
     const cases = [
-      new PiAgentRuntimeAdapter({
+      {
+        runtime: new PiAgentRuntimeAdapter({
         fauxResponses: [finishHome({ answer: "Ungrounded", citationRefs: [], grounding: "general" })]
-      }),
-      new PiAgentRuntimeAdapter({
+        }),
+        code: "model_provider.output_invalid",
+        messageKey: "errors.model_provider.output_invalid"
+      },
+      {
+        runtime: new PiAgentRuntimeAdapter({
         fauxResponses: [
           { kind: "tool_call", toolName: "pige_search_knowledge", args: {} },
           finishHome({ answer: "Invented", citationRefs: ["citation_99"], grounding: "local_knowledge" })
         ]
-      })
+        }),
+        code: "model_provider.tool_protocol_incompatible",
+        messageKey: "errors.model_provider.binding_unusable"
+      }
     ];
 
-    for (const runtime of cases) {
+    for (const { runtime, code, messageKey } of cases) {
       const outcome = await new HomeAgentService(
         fixture.vaults,
         makeModels(),
@@ -780,8 +837,8 @@ describe("Home Pi Agent service", () => {
       expect(outcome).toMatchObject({
         state: "failed",
         error: {
-          code: "model_provider.output_invalid",
-          messageKey: "errors.model_provider.output_invalid"
+          code,
+          messageKey
         }
       });
     }

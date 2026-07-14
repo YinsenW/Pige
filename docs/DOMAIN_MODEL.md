@@ -75,7 +75,7 @@ flowchart TD
 | Skill | Human-readable workflow extension. Pure Skills are Markdown instruction packs; external/Web Skills may request capabilities. | App bundle, `.pige/skills/`, or app data |
 | Package | Reviewed Pi package or future extension package that can provide capabilities, tools, or Skills. | App data and Package Manager records |
 | Local tool | Bundled or explicitly downloaded tool/model runtime such as Git, Bun, uv, PDF parser, PaddleOCR, or Qwen embedding model. | App bundle/app data |
-| Permission request | Authorization for an external actor or new capability scope; core tools do not create one. | Machine-local permission store |
+| Permission request | Authorization for an Agent/Skill/package/local-tool action outside standing active-vault knowledge-Markdown or exact user-selected-source authority; a Pige-owned tool may create one. | Machine-local permission store |
 | Backup | Portable zip containing durable vault data according to backup policy. | User-selected output path |
 | Diagnostic event | Redacted machine-local operational record used to understand failures without storing user content or secrets. | OS app data diagnostics store |
 | Support bundle | User-initiated local diagnostic export, redacted by default and previewed before creation. | User-selected output path |
@@ -287,8 +287,10 @@ Default permission modes:
 
 Rules:
 
-- Security Threat Model owns brokered actors/capabilities and egress classes. Pige-owned
-  bounded core tools use service enforcement and need no grant or YOLO.
+- Security Threat Model owns brokered actors/capabilities and egress classes.
+  Active-vault knowledge-Markdown and exact selected-source actions use standing/gesture
+  authority; any Pige-owned or extension tool outside it needs an exact decision, grant,
+  or eligible YOLO result.
 - Grants must be scoped, revocable, and machine-local by default.
 - Denial must leave the app stable and explainable.
 - YOLO Full Access can only be enabled by the human user in Settings.

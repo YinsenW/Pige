@@ -61,7 +61,8 @@ Draft-stream rules:
 
 - Record submit-to-first-safe-draft and final-answer latency separately. Provider/network
   time may vary, but Pige's first eligible safe-material-to-render overhead must stay
-  within the table for both incremental-argument and post-validation presentation paths.
+  within the table for the reviewed Pi-owned answer channel. Pige must not make another
+  provider call solely to reproduce an already accepted answer for presentation.
 - Draft replacement is coalesced and bounded; it must not block typing, duplicate text,
   rerender the whole timeline, or grow memory with every intermediate snapshot.
 - Cancellation stops draft delivery promptly. Restart loads no provisional buffer and

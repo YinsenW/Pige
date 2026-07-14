@@ -630,8 +630,11 @@ OCR merge rules:
 
 ### 5.4 Agent Orchestrator
 
-All semantic Home and note submissions enter Agent Orchestrator through the approved Pi
-adapter. Pure questions enter directly; source-bearing turns first preserve evidence.
+The desktop application is a product shell and local capability/commit layer around Pi
+Agent, not a second semantic orchestrator. Every Home or note submission immediately
+creates one Pi-owned Agent Job through the approved adapter. Pure questions enter Pi
+directly; source-bearing turns use evidence preservation as the first checkpoint of that
+same Job before Pi may inspect the durable ref.
 Pi may answer without tools or select, evaluate, and replan bounded Pige tools for fetch,
 inspection, extraction, OCR, retrieval, organization, analysis, and knowledge change.
 Host services may constrain, execute, persist, refuse, or resume an already selected
@@ -646,9 +649,11 @@ The boundary has three planes:
   Jobs, provenance, validation, exceptional intervention, and atomic publication.
 
 Agent decisions never weaken the host plane. A refusal returns a typed result to Pi or
-stops safely; it does not authorize a Host-selected fallback. Mechanical refresh follows the
-validated tool result; it is neither a second semantic orchestrator nor an atomic
-cross-file claim.
+stops safely; it does not authorize a Host-selected fallback. Recoverable validation
+rejection returns bounded typed repair feedback to the same upstream Pi loop so Pi can
+replan, revisit tools, correct output, or abstain. It does not terminate the Job merely
+because the first candidate was invalid. Mechanical refresh follows the validated tool
+result; it is neither a second semantic orchestrator nor an atomic cross-file claim.
 
 Responsibilities:
 
@@ -657,13 +662,21 @@ Responsibilities:
 - Build workflow prompts.
 - Select an internal model call profile from app defaults.
 - Run the embedded Pi Agent loop through the one approved adapter.
-- Present only the task-scoped Pige tool catalog and dispatch validated tool calls.
-- Plan wiki changes.
-- Submit structured changes through registered tools; the owner validates autonomous
+- Present the capability-scoped Pige tool catalog and each tool's current authority gate.
+  Task binding limits the current effect; it does not let Host intent heuristics hide an
+  otherwise relevant brokerable filesystem/commit tool merely because the exact path is
+  not pre-authorized. Pi may request it and pause for permission.
+- Keep recoverable schema/tool/citation/evidence rejection inside that Pi loop as typed
+  feedback until an accepted result, grounded abstention, or true external boundary.
+- Run Pi as the owner of wiki-change planning and bounded Markdown authorship.
+- Submit Pi-authored changes through registered tools; the owner validates autonomous
   eligibility or stages an exception, then commits through recoverable writes.
 - Report created, updated, and flagged pages.
 - Treat extracted source content as untrusted data.
-- Produce structured changes; model output never writes files directly.
+- Produce structured write-tool calls; generic assistant prose never implicitly writes a
+  file. Pi may request arbitrary path/filesystem/commit actions through registered tools,
+  but receives no ambient Node handle and no effect occurs outside standing authority
+  until Permission Broker authorizes the exact action.
 
 `docs/PROMPT_DESIGN.md` is the detailed contract for prompt hierarchy, context packaging, untrusted source blocks, structured outputs, and prompt tests.
 
@@ -733,9 +746,11 @@ v0.1 rules:
 
 Responsibilities:
 
-- Convert Agent structured output into Markdown files.
-- Maintain frontmatter.
-- Maintain tags, wiki links, source citations, related sections, and backlinks according to `docs/KNOWLEDGE_MODEL_AND_LINKING.md`.
+- Commit schema-valid Markdown authored by Pi through an explicit knowledge-write tool;
+  do not summarize, reorganize, or semantically rewrite it.
+- Add or validate only Host-owned frontmatter such as stable IDs, timestamps, provenance,
+  base hashes, and writer versions.
+- Validate Pi-authored tags, wiki links, source citations, related sections, and backlinks according to `docs/KNOWLEDGE_MODEL_AND_LINKING.md`.
 - Update `index.md`.
 - Append to `log.md`.
 - Avoid duplicate page creation.
@@ -745,7 +760,8 @@ Responsibilities:
 
 Knowledge-linking ownership:
 
-- Wiki Compiler owns durable Markdown writes for links, citations, tags, and managed related sections.
+- Pi owns the intended knowledge content and relationships. Wiki Compiler owns their
+  confined, validated, atomic Markdown commit and recovery.
 - Local Database Service owns rebuildable graph indexes.
 - Search and Retrieval Service consumes graph signals for ranking and match reasons.
 - Renderer visualizes backlinks, related pages, Library trees, and Knowledge Tree without owning graph truth.
@@ -753,7 +769,7 @@ Knowledge-linking ownership:
 
 All writes should use a transaction-like approach:
 
-1. Generate proposed changes.
+1. Receive Pi-authored Markdown changes through the validated scoped tool call.
 2. Validate paths and frontmatter.
 3. Write temporary files.
 4. Rename into place.
@@ -762,8 +778,11 @@ All writes should use a transaction-like approach:
 
 ### 5.5.1 Change Proposal Service
 
-The Agent never mutates wiki files directly. Every change is a validated ChangeSet;
-eligible work commits with an Operation, while exceptional work stages a Proposal.
+Pi can request arbitrary filesystem/commit capability, but it receives no ambient
+filesystem handle. It directly authors the Markdown content and intended changes carried
+by a validated ChangeSet. The ChangeSet and writer are a permission, conflict, commit,
+recovery, and Undo envelope—not another content planner. Eligible work commits with an
+Operation, while exceptional work stages a Proposal.
 
 Proposal and operation state transitions follow `docs/JOB_OPERATION_AND_RECOVERY.md`.
 
@@ -869,7 +888,9 @@ Context assembly rule: the retrieval pipeline produces selected evidence for an 
 Current Home uses durable `agent.submitTurn`: Pi may answer directly or select bounded
 retrieval or URL fetch/preserve; no usable model waits/resumes the same turn. One file
 shares the draft; exact-tail follow-up restores bounded checked history and durable
-results. Multi-attachment recovery, vector/reranking, answer saving, and jump-to-snippet remain open.
+results. The target completion path permits Pi-owned validation repair and iterative
+authorized read-only tools without a Host-authored one-correction route. Multi-attachment
+recovery, vector/reranking, answer saving, and jump-to-snippet remain open.
 
 Retrieval result contract:
 
@@ -1452,12 +1473,15 @@ The initial Agent input contains preserved-source identity, bounded safe metadat
 policy, and tool contracts—not host-preselected text. Evidence enters as bounded tool
 results with durable Artifact/locator refs. Text/document/image verticals freeze
 source/job scope and expose inspect, parse, selected OCR, optional bounded local
-retrieval, publication, and one terminal create-note proposal stage.
+retrieval, and repeatable validated knowledge-write tools; they do not impose a
+Host-fixed terminal publication stage.
 
 ### 9.2 Knowledge Publication Boundary
 
-The publish and proposal tools accept strict `AgentIngestOutput`; source, Job,
-destination, trust, refs, and operation shape are Host context. Staging writes no page.
+The publish and proposal tools accept strict Pi-authored `AgentIngestOutput`; source,
+Job, destination, trust, refs, and operation shape are Host context. Host code validates
+and commits the requested Markdown but does not generate a replacement note or choose a
+different semantic route. Staging writes no page.
 Explicit approval alone runs the same confined create-note boundary, then verifies page,
 index, deterministic body-free Operation, proposal state, log, and parent outcome through
 an ordered recoverable sequence—not a cross-file transaction. Generic operations remain
@@ -1475,10 +1499,12 @@ type QueryOutput = {
 };
 ```
 
-`proposalRef` can only reference a validated proposal/publication tool result; query
-text is never converted directly into a Markdown write. Ranked results and citations
-may be empty for a general answer. Local evidence requires citations; zero retrieval
-results return control to Pi unless the user required vault-only grounding.
+`proposalRef` can only reference a validated proposal/publication tool result. Plain
+assistant text is never implicitly converted into a write; Pi explicitly selects a
+knowledge-write tool and supplies its Markdown when durable knowledge is valuable.
+Ranked results and citations may be empty for a general answer. Local evidence requires
+citations; zero retrieval results return control to Pi unless the user required
+vault-only grounding.
 
 ## 10. Model Provider Architecture
 

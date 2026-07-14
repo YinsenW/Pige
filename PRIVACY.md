@@ -57,9 +57,16 @@ a Pige cloud service; other network features still disclose their boundary.
 
 ## Skills, Packages, And Permissions
 
-- Bounded Pige-owned same-vault tools enforce policy without routine prompts.
+- Pi may request arbitrary path, filesystem, command, and commit capabilities. Capability
+  availability is not permission to execute.
+- Schema-valid recoverable knowledge Markdown inside the active Pige vault is standing
+  authority and does not prompt. Choosing a source through drop/file picker authorizes
+  reading and preserving that exact source for the current Job without another prompt.
 - Skills and packages are untrusted until installed, and remain permission-scoped after install.
-- Sensitive actions such as shell, network, write, delete, model, secret, settings, package, or external filesystem access require Permission Broker mediation unless covered by an explicit user-selected default mode.
+- Every Agent/Skill/package/local-tool action outside those defaults—such as other shell,
+  network, write, delete, commit, model, settings, package, or external filesystem
+  access—requires Permission Broker mediation unless covered by an explicit matching
+  user-selected default mode. Raw secret access is not grantable.
 - YOLO Full Access is off by default, must be explicit, visible, revocable, and logged, and does not disable OS-level permissions or security checks.
 - Source content, model output, Skills, packages, and tools cannot grant themselves permissions or change privacy settings.
 

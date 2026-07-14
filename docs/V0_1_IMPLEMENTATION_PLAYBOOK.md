@@ -269,32 +269,39 @@ Build:
 - [B3.04 -> E3.01] Unified Provider model inventory with auto-sync/Refresh, merged manual fallback, enable/alias controls, and provider-grouped Global Default.
 - [B3.05 -> E3.03] Typed pre-prompt/pre-credential egress decision with `ordinary_allowed` default, non-blocking cloud status, and user-selected stricter behavior.
 - [B3.06 -> E3.04] Basic ingest prompt path with untrusted-source boundaries.
-- [B3.07 -> E3.05] Structured validation plus uncertainty replan/warn/abstain/exception routing.
+- [B3.07 -> E3.05] Structured validation feedback plus autonomous correction,
+  replan/narrow/abstain/exception routing inside the same Agent Job.
 - [B3.08 -> E3.04] Source-page generation.
 - [B3.09 -> E3.04] Simple wiki-page generation.
 - [B3.10 -> E3.04] Append-only `log.md` update.
 - [B3.11 -> E3.06] Transitional deterministic create-note proposal/recovery foundation for exceptional review.
 - [B3.12 -> E3.07] Agent output/change summary for knowledge fields, citations, writes,
   Operations/Undo, and created/updated/linked/skipped/failed/needs-attention results.
-- [B3.13 -> E3.08] Embedded Pi plus a schema-complete Pige Tool Registry; after source
-  preservation Pi Agent alone selects semantic tools, with no host-fixed/parallel path.
+- [B3.13 -> E3.08] Embedded Pi plus a schema-complete Pige Tool Registry; submission
+  creates the Agent Job, source preservation is its first checkpoint, and Pi alone
+  selects, revisits, and replans semantic tools, Pi-authored Markdown writes, and rejected
+  output, with no host-fixed/parallel path or one-correction script.
 - [B3.14 -> E3.09] Versioned unified `agent_turn` ingress: probed explicit-protocol Provider binding,
   ordinary/no-evidence conversation, optional local retrieval, source tools, durable
-  waiting/resume, safe replacement-draft streaming, and no renderer/Host intent heuristic.
+  waiting/resume, Agent-owned completion/repair, safe replacement-draft streaming, and no
+  renderer/Host intent heuristic.
 
 Agent Spine Gate: Pi handles preserved input, selected parse/OCR/retrieval, cited create/
 append, bounded tags/link, and transitional review. B3.13/E3.08 remains partial: broader
-tools/routes, replay, exceptions, Broker, and fixed routes remain; no deep/forked loop.
+tools/routes, legacy ingest repair, durable mid-repair recovery, real production Broker
+callers, and broader exceptions remain; no deep/forked loop.
 
 B3.14/E3.09 now proves direct/retrieved/file turns, waiting/resume, explicit protocol,
 no Host bypass, Pi-selected URL fetch/preserve, exact-tail follow-up, bounded history,
 result adoption, Pi cancellation, multiple safe terminal-answer replacements on both
-incremental tool arguments and an exact post-validation presentation turn, plus IME-safe
-Enter-to-send through typed main/preload/renderer bindings. Current evidence also keeps
-high-frequency provider deltas outside the smaller structural event budget and permits
-one bounded registered-terminal-action correction after a source-inspection prose stop;
-the second omission fails with stable body-free error. Source-ingest terminal drafts,
-live Chat/Anthropic timing, multi-window proof,
+incremental parsed terminal arguments without a post-validation presentation-only model
+turn, plus IME-safe Enter-to-send through typed main/preload/renderer bindings. Current
+evidence also keeps high-frequency provider deltas outside the smaller structural event
+budget and proves same-Job repair of invalid terminal input/citations, more than one prose
+omission, a safe read revisit, bounded repeated non-progress, and a distinct typed
+provider-protocol incompatibility outcome. Legacy agent_ingest repair, durable mid-repair
+checkpoint/restart adoption, source-ingest terminal drafts, live Chat/Anthropic timing,
+multi-window proof,
 multi-source recovery, and signed packaged macOS/Windows BYOK remain open; E3.09 stays
 incomplete.
 
@@ -321,20 +328,28 @@ Exit criteria:
 - [E3.02] API keys do not appear in vault files, SQLite, logs, persisted prompts, diagnostics, operations, or backups.
 - [E3.03] Every external model attempt obtains a typed pre-prompt/pre-credential decision. Connected known destinations default to uninterrupted ordinary/private/bounded-large use with visible status; sensitive, restricted, unknown, changed, and stricter-policy cases enforce their gates.
 - [E3.04] Pasted text can autonomously become a cited source page, schema-valid wiki note, index update, append-only log, and Operation when eligibility passes.
-- [E3.05] Invalid/hostile output is rejected; uncertainty replans, narrows, warns, preserves alternatives, abstains, or routes only a true exception without unsafe writes.
+- [E3.05] Invalid/hostile output cannot write; recoverable schema/citation/grounding/tool
+  rejection returns bounded typed feedback and Pi autonomously corrects, replans, narrows,
+  preserves alternatives, or abstains. Only a true exception or external block exits the
+  Agent Job without a valid result.
 - [E3.06] Irreversible/security/destination/conflict/stricter-policy exceptions stage
   durably; current exact create-note review is transitional recovery evidence.
 - [E3.07] Agent ingest emits required knowledge/citation/write fields and a deterministic created/updated/linked/skipped/failed/needs-attention summary with recovery refs.
-- [E3.08] One preserved-source Pi vertical uses the selected model and registered tools
-  to cited Markdown. One Host/catalog proves distinct Agent-chosen traces and replan;
+- [E3.08] One source submission enters one Pi Job whose first preservation checkpoint and
+  subsequent selected model/registered tools produce Pi-authored cited Markdown. One
+  Host/catalog proves distinct Agent-chosen traces and replan;
   parser/OCR stays idle before its event, no-model preserves only, writes are tool-caused
-  and retry-safe, and mutation gates reject direct/fixed/bypass paths. Sensitive-tool
-  Pige-owned eligible writes need no Permission prompt; external/new-capability Broker acceptance remains Phase 8.
+  and retry-safe, typed validation rejection remains inside Pi until accepted/abstained,
+  and mutation gates reject direct/fixed/bypass paths. Active-vault eligible knowledge-
+  Markdown writes need no Permission prompt; Pi-requested Pige-owned or extension scopes
+  outside standing authority remain Phase 8 Broker acceptance.
 - [E3.09] One real DeepSeek-first app path persists the user turn and `agent_turn`, keeps
   Global Default across restart, uses the selected probed binding with truthful status,
   waits/resumes without a model, answers ordinary empty-vault chat, retrieves cited
-  knowledge when Pi chooses, safely replaces a provisional draft with the durable final,
-  and uses file/URL tools without heuristic or silent fallback.
+  knowledge when Pi chooses, repairs rejected candidates and tool inputs without a manual
+  retry, safely replaces a provisional draft with the durable final, and uses file/URL
+  tools without heuristic, fixed correction count, presentation-only provider call, or
+  silent fallback.
 
 ## 9. Phase 4: Local Database And Search Foundation
 
@@ -503,8 +518,11 @@ Build:
 
 Current Home has durable direct chat, optional cited retrieval, wait/resume, bounded
 transcript, follow-up/retry/cancel, IME-safe Enter-to-send, and visibly progressive safe
-answer replacement. RAG, Note Agent, compaction/indexing,
-Broker, packaged platforms, and 10k proof remain open.
+answer replacement. Recoverable terminal/citation validation now returns typed feedback
+to Pi and completes inside the same Home Job without a user retry or presentation-only
+provider turn. Durable mid-repair recovery, legacy agent_ingest repair, RAG, Note Agent,
+compaction/indexing, real production Broker callers, packaged platforms, and 10k proof
+remain open.
 
 B6.16 foundation evidence covers one Pi-selected `pige_query_dataset@1` catalog/query,
 opaque refs and strict typed plans, exact managed-collection revision/privacy binding,
@@ -534,7 +552,8 @@ Exit criteria:
 
 - [E6.01] Home supports ordinary Agent conversation with or without retrieval; selected
   local evidence stays ranked and cited, provisional text stays visibly non-authoritative
-  until final validation, and explicit no-model search remains distinct from Agent synthesis.
+  until final validation, recoverable validation is repaired inside Pi rather than exposed
+  as a user retry, and explicit no-model search remains distinct from Agent synthesis.
 - [E6.02] Semantic retrieval works after an explicit verified local-model download and index rebuild; disable/remove leaves lexical fallback intact.
 - [E6.03] Model calls receive selected snippets, policy/budget metadata, and citation refs, not the full vault or unbounded conversation history.
 - [E6.04] Retrieval fixtures pass expected top-result, grounded-summary, citation-coverage, and insufficient-evidence checks.

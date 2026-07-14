@@ -256,11 +256,11 @@ Tests must verify:
   scoped credential adapter, or Custom/unknown fallback.
 - Renderer→preload→main proves direct, Pi-selected retrieve, preserve-first source,
   wait/resume, and removal of capture/retrieval semantic bypass from the Home renderer.
-- Draft-stream tests use the exact terminal Home tool and prove multiple `answer`-only
-  replacement snapshots for incremental parsed arguments and the post-validation
-  presentation fallback. The fallback blocks further tools, accepts only prefixes of the
-  validated answer, ends exactly equal, and fails closed for altered/incomplete output.
-  Tests also cover sender/request/turn/Job binding, monotonic sequence, bounds,
+- Draft-stream tests prove multiple `answer`-only replacement snapshots from the reviewed
+  Pi answer boundary without a second provider turn solely for presentation. A rejected
+  candidate may shrink or replace the provisional text and does not fail the Job; only the
+  accepted validated result becomes durable. Tests also cover sender/request/turn/Job
+  binding, monotonic sequence, bounds,
   coalescing, escaping, and repair that can shrink prior text. They reject ambient Pi
   text, partial JSON, thinking, other tool arguments, citations/grounding, IDs, provider
   payloads, restricted/control content, wrong sender, stale sequence, and post-cancel events.
@@ -270,14 +270,24 @@ Tests must verify:
 - Initial context has instruction/policy/tools; evidence follows selected calls. Without
   a model, one durable turn waits and performs no semantic work.
 - Only registered tool calls write; retry/restart reuses call/Operation identity.
-- Source-turn tests permit one registered-terminal-action correction only after a prose
-  stop with no terminal attempt; the second stop persists a stable body-free error, while
-  invalid or denied terminal attempts receive no silent correction retry.
+- Autonomous-completion tests reject a one-correction script. They prove malformed terminal
+  input, unknown citation, stale evidence, and incomplete grounding return bounded typed
+  feedback to Pi; Pi can retrieve/inspect/revise and then complete the same Job. Repeated
+  identical non-progress is bounded, denied authority remains blocked, cancellation wins,
+  and no intermediate candidate becomes a conversation event, Job result, or Operation.
+- Tool-freedom tests prove the Host does not select a semantic route, relevant registered
+  core tools remain available, read-only/idempotent tools may be revisited, and corrected
+  side-effect calls retain deterministic identity without duplicate writes.
+- User-visible tests prove recoverable validation never shows the generic output-invalid
+  retry state; persistent provider/tool-protocol incompatibility and true external blocks
+  use their distinct typed actions.
 - Static plus mutation gates reject direct feature/provider loops, host-fixed tool
   order, unregistered or incomplete tools, nested tool/model execution, final-text
   writes, policy/catalog/source drift, and renderer bypass.
 - No Advanced/Fast model assignment UI exists in v0.1 unless a real routing service is implemented and tested.
-- Pige-owned Pi tools cannot bypass service validation; external extensions cannot bypass Permission Broker.
+- Pige-owned Pi tools cannot bypass service validation or Permission Broker when their
+  exact action falls outside standing Markdown/current-source authority; external
+  extensions cannot bypass Permission Broker.
 - Pige does not mutate the user's global `~/.pi/agent/models.json` during normal provider setup.
 - Cloud-send indicators appear when content is sent to a cloud-hosted provider.
 - Current-action model-egress tests keep ordinary allowed calls prompt-free, block

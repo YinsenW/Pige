@@ -967,7 +967,7 @@ Provider setup discloses the destination once. Saved authority is exact to that 
 
 Voice input, OCR, local RAG, parser health, and bundled toolchain status belong to Local Capabilities. Models should not contain those controls.
 
-### External Extension Permission Mode And Grants
+### Agent Capability Permission Mode And Grants
 
 ```txt
 Permissions
@@ -987,19 +987,24 @@ Off
 Enable...
 ```
 
-These modes govern extensions/new scopes, not core knowledge tools or connected BYOK:
+These modes cover eligible requests outside standing authority; actor/tool names do not
+grant authority. Active-vault recoverable knowledge Markdown and exact selected-source
+admission remain prompt-free. Other filesystem, network, shell, package, credential-use,
+or commit effects open Permission Broker and resume the same Job after resolution.
 
-- Ask every time: prompt for each sensitive action unless a saved grant exists.
-- Remember scoped grants: the normal power-user mode; prompts can be saved permanently for a scoped actor/capability/resource.
-- YOLO full access: auto-allows eligible external scopes; never secrets or exceptional/egress gates.
+- Ask every time: prompt for each eligible capability action.
+- Remember scoped grants: prompts may offer `Always Allow` for an exact stable
+  actor/version/capability/resource scope.
+- YOLO full access: auto-allows eligible external scopes; never raw secrets,
+  destructive/irreversible effects, policy changes, original-source mutation, or
+  exceptional Model Egress gates.
 
 Common grant scopes:
 
 - Only this URL.
-Scope choices are rendered from the Permission Broker request. Their exact resource
-semantics and allowed scope vocabulary are owned by
-[`SECURITY_THREAT_MODEL.md`](SECURITY_THREAT_MODEL.md#7-permission-model); UI copy may
-group adjacent source/note or file/folder choices without redefining authorization.
+`Always Allow` appears only for a Broker-defined stable scope such as one file, folder,
+URL, or domain. The [Security permission model](SECURITY_THREAT_MODEL.md#7-permission-model)
+owns authority and scope semantics; this document owns their presentation only.
 
 YOLO enable dialog:
 
@@ -1015,7 +1020,7 @@ Actions will still be logged. You can turn this off anytime.
 Cancel        Enable YOLO
 ```
 
-When YOLO is enabled, Settings and permission-sensitive areas should show a compact persistent indicator such as `YOLO: On`. The indicator should be calm and visible, not a warning banner that dominates the product.
+When YOLO is enabled, show a calm persistent `YOLO: On` indicator.
 
 ### Agent And Memory Settings
 
@@ -1092,28 +1097,53 @@ Skill details should show:
 
 Skills should feel like small knowledge workflows, not apps. Pure Skills are Markdown instruction packs. External/Web Skills can declare sensitive capabilities, but the UI must show those capabilities before enabling and route runtime actions through the Permission Broker.
 
-Focused permission dialog:
+Focused permission dialog target:
 
 ```txt
-Pi Agent requests an external capability
+Pi Agent wants to commit an external file change
 
 Action
-Reviewed localized action
+Write one file outside this vault
 
 Target
-Reviewed bounded resource summary
+Selected project · docs/meeting-notes.md
 
-Deny        Allow Once
+Command
+Create or replace this file for the current task
+
+Deny        Allow Once        Always Allow
 ```
 
-The current-action foundation renders one compact card/modal with reviewed localized
-actor, action and resource summaries, `Deny` focused by default, and `Allow once` only.
-It never renders raw reason, action input, path, command, hash, credential, record, or
-transport error. Disable both actions while resolving; durable reread restores a still-
-pending decision or converges committed truth, while unreadable/stale identity fails
-closed without actions. Suppress only the matching Job row while active, then restore
-ordinary Job ownership. Saved-grant/Always Allow/YOLO UI remains planned. Destructive
-actions use their stronger confirmation and never default to Allow.
+The target permission request opens one compact, calm modal owned by the active Agent
+Job; it is not a passive inline status or a second workflow. It uses `role="dialog"`, moves
+and traps focus inside while open, and restores focus to the invoking task/composer
+control after resolution. Action, target, and command summary are bounded, localized,
+and authored from the typed Host request—not copied from model prose, a tool description,
+raw `reason`, `commandPreview`, `affectedPaths`, shell text, or an unredacted absolute
+path. A Pige-owned tool name cannot bypass this dialog when its requested effect is
+outside standing authority.
+
+`Deny` is the default/cancel-safe action; Escape or closing the dialog denies that exact
+pending request. `Allow Once` authorizes only the bound current action. `Always Allow`
+appears only when Permission Broker marks the actor/version/capability/resource scope as
+eligible for a saved grant. While the dialog is active, suppress the exact matching Job
+from Recent Work so the user never sees a second progress/failure owner. Disable all
+actions while resolving. After allow or deny, close the dialog, restore focus, and let
+the ordinary Job row return with its resumed or terminal truth.
+
+The implemented current-action foundation is narrower: one compact Home card with safe
+localized actor/action/resource summaries, `Deny` focused by default, and `Allow once`
+only. It already provides one status owner, durable reread, exact identity guards, and
+fail-closed uncertainty. Converging that card to the focused modal plus saved-grant/
+Always Allow/YOLO presentation remains planned and is not claimed by current evidence.
+
+Destructive, irreversible, policy-changing, original-source mutation, and other always-
+confirm effects use stronger explicit consequence copy with the safe action as default;
+`Always Allow`, saved grants, and YOLO never suppress that confirmation. Raw secret access
+remains blocked rather than promptable. If YOLO full access is enabled, only eligible
+Permission Broker actions skip the dialog; the timeline may show a subtle `Auto-allowed
+by YOLO` event with details available on inspection. Stricter Model Egress Decisions keep
+their own focused confirmation.
 
 ### Local Capabilities Settings
 
