@@ -13,6 +13,7 @@
       "Claims that route availability, manual inspection, or a prototype screenshot proves production implementation"
     ]
   },
+  "reference_metrics_artifact": "./pige-ui-reference-metrics.json",
   "target": {
     "geometry_tolerance_px": 1,
     "type_baseline_tolerance_px": 1,
@@ -41,6 +42,7 @@
     "settings_row_height_px": 64,
     "compact_home_width_px": 400,
     "sidebar_width_px": 280,
+    "settings_sidebar_width_px": 275,
     "reader_width_px": 680,
     "note_agent_width_px": 432,
     "composer_radius_px": 22,
@@ -48,7 +50,7 @@
     "relaxed_motion_ms": 300
   },
   "accessibility_evidence": {
-    "routes_with_accessible_name_scan": 51,
+    "routes_with_accessible_name_scan": 52,
     "interactive_elements_with_structural_scan": 191,
     "unnamed_visible_controls": 0,
     "duplicate_ids": 0,
@@ -81,24 +83,36 @@
     "compact_home": { "width_px": 400, "height_px": 688, "titlebar_px": 46, "composer_radius_px": 22, "heading": "24px / 30px / 500" },
     "expanded_home": { "width_px": 680, "height_px": 688, "sidebar_px": 280, "home_px": 400 },
     "intermediate_reader": { "window_px": 1112, "reader_px": 680, "note_agent_px": 432, "library_drawer_px": 280, "drawer_does_not_resize_window": true },
-    "settings": { "width_px": 1180, "height_px": 672, "sidebar_px": 280, "body_scroll_matches_viewport": true },
+    "settings": {
+      "width_px": 1180,
+      "height_px": 672,
+      "sidebar_px": 275,
+      "light_sidebar_srgb": "#f1f2f3",
+      "dark_sidebar_srgb": "#444646",
+      "dark_surface_srgb": "#181818",
+      "dark_elevated_srgb": "#242424",
+      "body_scroll_matches_viewport": true
+    },
     "note": "At taller viewports Settings reaches its 820 px cap; at 720 px it retains a 24 px safe inset without overflow. Wide three-pane review remains bound to the 1536 x 1024 target viewport."
   },
   "prototype_baseline_assets": [
-    "./baselines/home-compact-1280x720.png",
-    "./baselines/home-expanded-1280x720.png",
-    "./baselines/reader-intermediate-1280x720.png",
-    "./baselines/settings-general-1280x720.png",
-    "./baselines/first-run-1280x720.png",
-    "./baselines/reader-narrow-1280x720.png"
+    "./baselines/home-compact-1280x720.jpg",
+    "./baselines/home-expanded-1280x720.jpg",
+    "./baselines/reader-intermediate-1280x720.jpg",
+    "./baselines/settings-general-1280x720.jpg",
+    "./baselines/settings-appearance-dark-1280x720.jpg",
+    "./baselines/first-run-1280x720.jpg",
+    "./baselines/reader-narrow-1280x720.jpg"
   ],
+  "prototype_baseline_encoding": "JPEG emitted by the approved in-app browser capture surface; use for human visual review, not lossless pixel-color truth",
   "prototype_baseline_sha256": {
-    "first-run-1280x720.png": "8115f4e79284d44b46a8d415479054dfdb7bb77cc5b2f2cdcba49c92e6184fad",
-    "home-compact-1280x720.png": "ec72a9a96cb80b4577a24e91b0909b5c8e1fcab2c8a4f8bf797d482b8dc6286f",
-    "home-expanded-1280x720.png": "b35b09fe1d39fe5e3e181d6fd5ca552965f92a207201325043c5eefb91386405",
-    "reader-intermediate-1280x720.png": "c3c95d1b4566e202c960c985dd9c7f725ba84af5c49986309a8d8784a7732ba4",
-    "reader-narrow-1280x720.png": "d670cc370ec2e54c70325d7a3232e0d0088ee311068411cc71ae352719389a46",
-    "settings-general-1280x720.png": "9d217707e44cfa8cbe3e8e4a32c34d851a8052b34df11be5e0ae26c314ce8449"
+    "first-run-1280x720.jpg": "8115f4e79284d44b46a8d415479054dfdb7bb77cc5b2f2cdcba49c92e6184fad",
+    "home-compact-1280x720.jpg": "ec72a9a96cb80b4577a24e91b0909b5c8e1fcab2c8a4f8bf797d482b8dc6286f",
+    "home-expanded-1280x720.jpg": "b35b09fe1d39fe5e3e181d6fd5ca552965f92a207201325043c5eefb91386405",
+    "reader-intermediate-1280x720.jpg": "c3c95d1b4566e202c960c985dd9c7f725ba84af5c49986309a8d8784a7732ba4",
+    "reader-narrow-1280x720.jpg": "d670cc370ec2e54c70325d7a3232e0d0088ee311068411cc71ae352719389a46",
+    "settings-appearance-dark-1280x720.jpg": "a011c7e455de74bb76e67d76004e9395d0f63dacc576e414d0297744ec6eb3a7",
+    "settings-general-1280x720.jpg": "60cbb638893867ddd8680fc91b3a6c14d0dd8d6414c499c014f61ecb208c9fec"
   },
   "canonical_surfaces": [
     {
@@ -187,16 +201,17 @@
       "id": "VR-SETTINGS",
       "route": "?panel=general#settings",
       "viewport": { "width": 1536, "height": 960 },
-      "prototype_geometry": { "window_width_px": 1180, "window_height_px": 820, "sidebar_width_px": 280 },
+      "prototype_geometry": { "window_width_px": 1180, "window_height_px": 820, "sidebar_width_px": 275 },
       "checks": {
         "manual_visual": "passed",
+        "light_and_dark_shared_primitives": "passed",
         "route_size_stability": "passed",
         "pointer_and_keyboard_focus": "passed",
         "raster_overlay": "pending",
         "small_viewport": "passed"
       },
       "remaining": [
-        "Lock sidebar gray, row height, separators, control alignment, and content measure by overlay.",
+        "Measured light/dark settings surfaces and the 275 px sidebar are locked; row rhythm, typography, separators, and control alignment still require equivalent-content overlay evidence.",
         "Verify scroll ownership and non-clipped actions at the minimum supported viewport."
       ]
     }
@@ -212,12 +227,12 @@
   },
   "responsive_evidence": {
     "main_routes_at_400_and_760_px": 72,
-    "settings_routes_at_400_and_760_px": 30,
-    "all_routes_at_1536_px": 51,
-    "all_routes_with_400_px_long_copy_stress": 51,
+    "settings_routes_at_400_and_760_px": 32,
+    "all_routes_at_1536_px": 52,
+    "all_routes_with_400_px_long_copy_stress": 52,
     "additional_679_px_routes_checked": 26,
     "explicit_679_to_680_sidebar_boundary_checks": 2,
-    "total_render_checks": 232,
+    "total_render_checks": 236,
     "horizontal_overflow_failures": 0,
     "visible_control_clipping_failures": 0,
     "fixed_during_review": [

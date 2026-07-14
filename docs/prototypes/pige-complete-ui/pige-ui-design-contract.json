@@ -5,6 +5,7 @@
   "element_map": "./pige-ui-element-map.json",
   "coverage_matrix": "./pige-ui-coverage-matrix.json",
   "visual_review_ledger": "./pige-ui-visual-review-ledger.json",
+  "reference_metrics": "./pige-ui-reference-metrics.json",
   "reference": {
     "product_bundle": "ChatGPT-branded Codex desktop client",
     "package_name": "openai-codex-electron",
@@ -63,6 +64,7 @@
       "settings_row": 64,
       "home": 400,
       "sidebar": 280,
+      "settings_sidebar": 275,
       "reader": 680,
       "note_agent": 432,
       "composer_action": 28,
@@ -142,6 +144,7 @@
   "settings": [
     { "id": "S01", "route": "?panel=general#settings", "name": "General", "status": "verified" },
     { "id": "S02", "route": "?panel=appearance#settings", "name": "Appearance and language", "status": "verified" },
+    { "id": "S02D", "route": "?panel=appearance&theme=dark#settings", "name": "Appearance in dark theme", "status": "verified" },
     { "id": "S03", "route": "?panel=vault#settings", "name": "Vault and note storage", "status": "verified" },
     { "id": "S04", "route": "?panel=restore#settings", "name": "Restore preview and identity mode", "status": "verified" },
     { "id": "S05", "route": "?panel=maintenance#settings", "name": "Index and maintenance", "status": "verified" },
@@ -168,17 +171,17 @@
   ],
   "browser_regression": {
     "main_routes_checked": 36,
-    "settings_routes_checked": 15,
+    "settings_routes_checked": 16,
     "interaction_flows_checked": 29,
     "responsive_render_checks": 232,
-    "prototype_baseline_screenshots": 6,
-    "accessible_name_routes_checked": 51,
+    "prototype_baseline_screenshots": 7,
+    "accessible_name_routes_checked": 52,
     "horizontal_overflow_failures": 0,
     "visible_control_clipping_failures": 0,
     "failed_routes": [],
     "console_errors": [],
     "known_visual_discrepancies": [
-      "Raster overlay and image-difference thresholds are not yet locked for the six canonical surfaces.",
+      "Automated raster overlay remains open beyond the measured shared primitives and seven Pige-only canonical baselines.",
       "Full Tab-order, narrow-drawer focus containment, screen-reader, and six-locale text-expansion review remains open."
     ]
   }

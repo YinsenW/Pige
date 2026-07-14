@@ -403,7 +403,7 @@
       "source": "UI_PROTOTYPE 2.1, 16.2, 19",
       "prototype": "covered",
       "production": "partial",
-      "prototype_evidence": ["visual-review-harness.html", "232 browser-rendered canonical/narrow/long-copy/boundary checks", "six Pige-only baseline screenshots", "pige-ui-visual-review-ledger.json"],
+      "prototype_evidence": ["visual-review-harness.html", "236 browser-rendered canonical/narrow/long-copy/boundary checks", "seven Pige-only JPEG baseline screenshots", "pige-ui-reference-metrics.json", "pige-ui-visual-review-ledger.json"],
       "production_evidence": ["responsive CSS foundations"],
       "gap": "Prototype has zero horizontal overflow or visible-control clipping across all routes at 400, 760, and 1536 px plus 400 px long-copy stress; targeted 679/680 checks lock the overlay-to-fixed-rail boundary. Production must repeat the governed matrix on assembled macOS and Windows builds.",
       "priority": "P0"

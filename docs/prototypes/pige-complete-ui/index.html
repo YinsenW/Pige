@@ -1668,10 +1668,10 @@
 
     .settings-window {
       --settings-surface: #fff;
-      --settings-sidebar: #f3f3f3;
+      --settings-sidebar: #f1f2f3;
       --settings-elevated: #fff;
       --settings-hover: rgba(0,0,0,.045);
-      --settings-active: rgba(0,0,0,.075);
+      --settings-active: rgba(0,0,0,.04);
       --settings-text: #1a1c1f;
       --settings-secondary: rgba(26,28,31,.7);
       --settings-tertiary: #707472;
@@ -1682,7 +1682,7 @@
       width: min(1180px, calc(100vw - 48px));
       height: min(820px, calc(100vh - 48px));
       min-height: min(680px, calc(100vh - 48px));
-      grid-template-columns: 280px minmax(0, 1fr);
+      grid-template-columns: 275px minmax(0, 1fr);
       overflow: hidden;
       border-radius: var(--radius-window);
       background: var(--settings-surface);
@@ -1698,10 +1698,10 @@
 
     .settings-window[data-theme="dark"] {
       --settings-surface: #181818;
-      --settings-sidebar: #212121;
-      --settings-elevated: #212121;
+      --settings-sidebar: #444646;
+      --settings-elevated: #242424;
       --settings-hover: rgba(255,255,255,.06);
-      --settings-active: rgba(255,255,255,.1);
+      --settings-active: rgba(255,255,255,.085);
       --settings-text: #fff;
       --settings-secondary: rgba(255,255,255,.7);
       --settings-tertiary: rgba(255,255,255,.5);
@@ -3647,10 +3647,19 @@
 
     const initialParams = new URLSearchParams(location.search);
     const initialScreen = initialParams.get('screen') || 'home';
+    const initialTheme = initialParams.get('theme');
     updateSendState();
     filterLibraryResults();
     if (location.hash === '#settings') {
       settingsWindow.dataset.state = initialParams.get('state') || '';
+      if (initialTheme === 'light' || initialTheme === 'dark') {
+        settingsWindow.dataset.theme = initialTheme;
+        document.querySelectorAll('.theme-option').forEach(option => {
+          const selected = option.dataset.themeChoice === initialTheme;
+          option.classList.toggle('active', selected);
+          option.setAttribute('aria-checked', String(selected));
+        });
+      }
       openSettingsWindow(initialParams.get('panel') || 'general');
     } else {
       setScreen(initialScreen, {

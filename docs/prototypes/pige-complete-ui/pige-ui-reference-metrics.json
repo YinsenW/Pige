@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Pige clean-room observable reference metrics",
+  "status": "UI Design measurement evidence; not third-party source or production fidelity evidence",
+  "boundary": {
+    "source_assets_committed": false,
+    "allowed_use": "Measure shared layout primitives, grayscale surfaces, spacing, radii, type scale, icon geometry, motion, focus, and state hierarchy.",
+    "prohibited_use": "Do not copy or redistribute third-party screenshots, CSS, JavaScript, components, fonts, icons, brand artwork, or private implementation code.",
+    "comparison_scope": "Only compare semantically shared primitives. Different product content is never treated as a whole-page pixel match."
+  },
+  "reference_sources": [
+    {
+      "filename": "1Capture_2026-07-14_23.24.27@2x.png",
+      "surface": "light settings",
+      "scale_factor": 2,
+      "image_px": { "width": 4040, "height": 2120 },
+      "observable_window_px": { "left": 100, "top": 80, "right": 3939, "bottom": 1999 },
+      "derived_window_logical_px": { "width": 1920, "height": 960 },
+      "committed": false
+    },
+    {
+      "filename": "1Capture_2026-07-14_23.23.16@2x.png",
+      "surface": "dark settings",
+      "scale_factor": 2,
+      "image_px": { "width": 4040, "height": 2120 },
+      "observable_window_px": { "left": 100, "top": 80, "right": 3939, "bottom": 1999 },
+      "derived_window_logical_px": { "width": 1920, "height": 960 },
+      "committed": false
+    },
+    {
+      "filename": "1Capture_2026-07-14_23.24.06@2x.png",
+      "surface": "dark appearance",
+      "scale_factor": 2,
+      "image_px": { "width": 4040, "height": 2120 },
+      "observable_window_px": { "left": 100, "top": 80, "right": 3939, "bottom": 1999 },
+      "derived_window_logical_px": { "width": 1920, "height": 960 },
+      "committed": false
+    }
+  ],
+  "measurement_method": {
+    "geometry": "Inspect the first and last non-black window pixels at source scale, then divide by the declared 2x scale.",
+    "color": "Sample flat interior pixels away from text, borders, shadows, antialiasing, and transparency edges.",
+    "selected_state": "Sample the flat center of the selected navigation row and compare the composited result, not the alpha token alone.",
+    "repeatability": "Source filename, source coordinates, derived logical value, Pige token, and tolerance are recorded together."
+  },
+  "shared_primitive_measurements": [
+    {
+      "id": "settings-sidebar-width",
+      "source_coordinate_px": { "boundary_x": 650, "window_left_x": 100 },
+      "reference_logical_px": 275,
+      "pige_target_logical_px": 275,
+      "tolerance_px": 1,
+      "status": "matched"
+    },
+    {
+      "id": "settings-light-main-surface",
+      "source_coordinate_px": { "x": 2000, "y": 1000 },
+      "reference_srgb": "#ffffff",
+      "pige_token": "#ffffff",
+      "status": "matched"
+    },
+    {
+      "id": "settings-light-sidebar-surface",
+      "source_coordinate_px": { "x": 200, "y": 1000 },
+      "reference_srgb": "#f1f2f3",
+      "pige_token": "#f1f2f3",
+      "status": "matched"
+    },
+    {
+      "id": "settings-dark-main-surface",
+      "source_coordinate_px": { "x": 2000, "y": 1000 },
+      "reference_srgb": "#181818",
+      "pige_token": "#181818",
+      "status": "matched"
+    },
+    {
+      "id": "settings-dark-sidebar-surface",
+      "source_coordinate_px": { "x": 200, "y": 1000 },
+      "reference_srgb": "#444646",
+      "pige_token": "#444646",
+      "status": "matched"
+    },
+    {
+      "id": "settings-dark-elevated-card",
+      "source_coordinate_px": { "x": 2000, "y": 750 },
+      "reference_srgb": "#242424",
+      "pige_token": "#242424",
+      "status": "matched"
+    },
+    {
+      "id": "settings-dark-selected-row",
+      "source_coordinate_px": { "x": 200, "y": 450 },
+      "reference_srgb": "#545656",
+      "pige_base_token": "#444646",
+      "pige_overlay_token": "rgba(255,255,255,0.085)",
+      "pige_composited_srgb": "#545656",
+      "status": "matched"
+    }
+  ],
+  "pige_only_baseline": {
+    "route": "?panel=appearance&theme=dark#settings",
+    "viewport_px": { "width": 1280, "height": 720 },
+    "artifact": "./baselines/settings-appearance-dark-1280x720.jpg",
+    "encoding": "JPEG emitted by the approved in-app browser capture surface",
+    "use": "Human visual regression and geometry review; exact color truth comes from the measured token contract above."
+  },
+  "tolerances": {
+    "geometry_px": 1,
+    "type_baseline_px": 1,
+    "color_delta_e_2000_max": 1.5,
+    "jpeg_baseline_is_not_lossless_pixel_evidence": true
+  }
+}

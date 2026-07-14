@@ -22,13 +22,14 @@ Open:
 
 - `pige-key-screens.html`: full prototype board.
 - `pige-key-screens-board.png`: full board screenshot.
-- `pige-complete-ui/index.html`: 51-route interactive high-fidelity prototype.
+- `pige-complete-ui/index.html`: 52-route interactive prototype; dark Appearance is addressable.
 - `pige-complete-ui/pige-ui-design-contract.json`: tokens, fixed rail geometry, interaction rules, and browser regression facts.
 - `pige-complete-ui/pige-ui-element-map.json`: semantic/function mapping for all 191 controls.
 - `pige-complete-ui/pige-ui-coverage-matrix.json`: requirement-to-prototype-to-production coverage and remaining gaps.
 - `pige-complete-ui/pige-ui-visual-review-ledger.json`: clean-room reference boundary, measured evidence, accessibility checks, and open pixel-difference work.
+- `pige-complete-ui/pige-ui-reference-metrics.json`: clean-room settings geometry/color measurements; references are not committed.
 - `pige-complete-ui/visual-review-harness.html`: explicit-width visual review harness.
-- `pige-complete-ui/baselines/`: six Pige-only browser baselines; external reference screenshots are intentionally not committed.
+- `pige-complete-ui/baselines/`: seven hashed Pige-only JPEG baselines; references excluded; JPEG is not lossless evidence.
 
 Individual screens:
 
