@@ -74,8 +74,14 @@ function validContent(): string {
 describe("DiagnosticsExportWorkerService", () => {
   it("keeps the built diagnostics worker in the packaged ASAR contract", () => {
     const packageSmoke = fs.readFileSync(path.resolve("scripts/release/packaged-electron-smoke.mjs"), "utf8");
+    const workerSmoke = fs.readFileSync(path.resolve("scripts/verify/diagnostics-export-worker-smoke.mjs"), "utf8");
     expect(packageSmoke).toContain('"/out/main/workers/diagnostics-export-worker.js"');
     expect(packageSmoke).toContain('runNodeSmoke("scripts/verify/diagnostics-export-worker-smoke.mjs"');
+    expect(packageSmoke).toContain("PIGE_DIAGNOSTICS_EXPORT_WORKER_SMOKE_FAILURE=([a-z_]+)");
+    expect(packageSmoke).not.toContain("result.stderr.trim");
+    expect(workerSmoke).toContain("installSuccessorOrVerifyWindowsHandleFence");
+    expect(workerSmoke).toContain('["EACCES", "EBUSY", "EPERM"]');
+    expect(workerSmoke).toContain("successor_descriptor_validation");
   });
 
   it("accepts only the matching exact success response", async () => {

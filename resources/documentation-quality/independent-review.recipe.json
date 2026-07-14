@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-14T22:56:24Z",
+  "reviewedAt": "2026-07-14T23:17:47Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -31,12 +31,12 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "8dd2f0ae01cf578c1f6103c7f06230eee840b7b40071b58d8801ef2770d88be3"
+    "reviewedSha256": "8c326e50e72afa8b8f44b3f83ae6ef33d661cc2a728bcdb5e492393b87b126e3"
   },
   "reviewers": [
     {
-      "reviewerId": "diagnostics-successor-fence-independent-review",
-      "task": "Diagnostics existing-destination successor fencing replacement review",
+      "reviewerId": "diagnostics-windows-portability-independent-review",
+      "task": "Diagnostics worker-smoke Windows portability replacement review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -44,42 +44,42 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "The independent replacement reviewer examined the frozen held-descriptor lifecycle, lstat/fstat binding, successor rejection, cleanup paths and built-worker proof and returned CLEAR before this rebind."
+      "independence": "The independent replacement reviewer examined the frozen platform-split successor proof, enumerated body-free phase reporting, stderr suppression and held-descriptor cleanup and returned CLEAR before this rebind."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "diagnostics-successor-fence-independent-review",
+      "reviewerId": "diagnostics-windows-portability-independent-review",
       "blockerCount": 0,
       "summary": "Existing Diagnostics, API, Quality and B1.14 acceptance owners locate preview, export, cancellation and residual boundaries without a new document or product surface."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "diagnostics-successor-fence-independent-review",
+      "reviewerId": "diagnostics-windows-portability-independent-review",
       "blockerCount": 0,
-      "summary": "Owners agree on sender binding, bounded worker output, held temp/existing-destination descriptors, lstat/fstat identity, successor rejection, safe cancellation and local-only redacted data."
+      "summary": "Owners agree on sender binding, bounded worker output, held descriptors, Linux successor rejection, Windows held-handle refusal with original-object revalidation, safe cancellation and body-free phase evidence."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "diagnostics-successor-fence-independent-review",
+      "reviewerId": "diagnostics-windows-portability-independent-review",
       "blockerCount": 0,
       "summary": "Five exact selectors update only existing partial PIGE-DIAG-002 and E1.07 projections; semantic lock v3 has 1,197 claims and every Requirement, Exit and phase status remains unchanged."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.7,
-      "reviewerId": "diagnostics-successor-fence-independent-review",
+      "reviewerId": "diagnostics-windows-portability-independent-review",
       "blockerCount": 0,
-      "summary": "Development gets one executable contract for bounded publication, held-descriptor closure, unchanged-destination success and fail-closed successor replacement."
+      "summary": "Development gets one executable cross-platform contract: existing-destination replacement must succeed, Linux successor installation is rejected after recreation, and Windows handle refusal revalidates and releases the original exactly once."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "diagnostics-successor-fence-independent-review",
+      "reviewerId": "diagnostics-windows-portability-independent-review",
       "blockerCount": 0,
       "summary": "No Markdown file or decision is added; owner replacement text and semantic-neutral manifest compression keep every leanness budget unchanged and green."
     }
@@ -107,18 +107,18 @@
     }
   ],
   "coordination": {
-    "taskId": "diagnostics-successor-fence-20260715",
-    "taskTitle": "Diagnostics existing-destination successor fencing replacement",
+    "taskId": "diagnostics-windows-portability-20260715",
+    "taskTitle": "Diagnostics worker-smoke Windows portability replacement",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "This replacement fences an existing output through a held descriptor while preserving the bounded worker, cancellation, redaction, local-only export, dependencies and all statuses.",
-    "acknowledgement": "Development froze replacement and final 24-path identities; independent review returned CLEAR. Product Planning minimally rebound existing owners, semantic lock and this recipe without changing Development files."
+    "compatibility": "This replacement makes the existing held-descriptor successor proof portable without weakening success, rejection, cancellation, redaction, local-only export, dependencies or statuses.",
+    "acknowledgement": "Development froze the three-path replacement and final 24-path identities; independent review returned CLEAR. Product Planning refreshed only current evidence, semantic lock and this recipe without changing Development files."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
     "Optional reviewed bundle content, progress and restart-resumable export semantics remain open.",
-    "Online Linux plus replacement Windows/macOS PR gates remain required before publication.",
+    "Real Windows Packageability remains required before merge; replacement Linux/macOS PR gates also remain publication evidence.",
     "Final check-to-rename and release-to-unlink syscall intervals remain open; the export stays process-local rather than a durable Job."
   ]
 }

@@ -492,7 +492,15 @@ function runNodeSmoke(scriptPath, extraEnvironment) {
     timeout: 60_000,
     maxBuffer: 4 * 1024 * 1024
   });
-  if (result.status !== 0) throw new Error(`${path.basename(scriptPath)} failed with status ${String(result.status)}.`);
+  if (result.status !== 0) {
+    const safeStage = /PIGE_DIAGNOSTICS_EXPORT_WORKER_SMOKE_FAILURE=([a-z_]+)/u.exec(
+      result.stderr ?? ""
+    )?.[1];
+    const stageSuffix = safeStage ? ` at ${safeStage}` : "";
+    throw new Error(
+      `${path.basename(scriptPath)} failed with status ${String(result.status)}${stageSuffix}.`
+    );
+  }
 }
 
 function readApplicationIdentity({ target, appPath, runtimeIdentity }) {

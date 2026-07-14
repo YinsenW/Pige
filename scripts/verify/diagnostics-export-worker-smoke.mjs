@@ -13,6 +13,7 @@ if (!fs.existsSync(workerPath)) {
   throw new Error("Built diagnostics export worker is missing.");
 }
 
+let smokeStage = "initial_publish";
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "pige-diagnostics-worker-smoke-"));
 try {
   const content = createSafeBundle();
@@ -34,6 +35,7 @@ try {
     throw new Error("Built diagnostics export worker did not publish the exact bounded bundle.");
   }
 
+  smokeStage = "existing_destination_commit";
   const existingPath = path.join(tempRoot, "existing.json");
   fs.writeFileSync(existingPath, "previous", { encoding: "utf8", mode: 0o600 });
   const existingPrepared = prepareOutput(existingPath, "cccccccc-cccc-4ccc-8ccc-cccccccccccc");
@@ -52,29 +54,36 @@ try {
     throw new Error("Built diagnostics export worker did not replace its bound existing destination.");
   }
 
+  smokeStage = "successor_setup";
   const successorPath = path.join(tempRoot, "successor.json");
   fs.writeFileSync(successorPath, "original", { encoding: "utf8", mode: 0o600 });
   const successorPrepared = prepareOutput(
     successorPath,
     "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
   );
-  fs.rmSync(successorPath);
-  fs.writeFileSync(successorPath, "successor", { encoding: "utf8", mode: 0o600 });
-  const successor = await runWorker({
-    protocolVersion: 1,
-    requestId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
-    outputPath: successorPath,
-    content,
-    prepared: successorPrepared.request
-  }, successorPrepared);
-  if (
-    successor.kind !== "failure" ||
-    successor.code !== "diagnostics.export_blocked" ||
-    fs.readFileSync(successorPath, "utf8") !== "successor"
-  ) {
-    throw new Error("Built diagnostics export worker did not reject a successor destination.");
+  const successorInstalled = installSuccessorOrVerifyWindowsHandleFence(
+    successorPath,
+    successorPrepared
+  );
+  if (successorInstalled) {
+    smokeStage = "successor_worker_response";
+    const successor = await runWorker({
+      protocolVersion: 1,
+      requestId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      outputPath: successorPath,
+      content,
+      prepared: successorPrepared.request
+    }, successorPrepared);
+    if (
+      successor.kind !== "failure" ||
+      successor.code !== "diagnostics.export_blocked" ||
+      fs.readFileSync(successorPath, "utf8") !== "successor"
+    ) {
+      throw new Error("Built diagnostics export worker did not reject a successor destination.");
+    }
   }
 
+  smokeStage = "unsafe_content";
   const blockedPath = path.join(tempRoot, "blocked.json");
   const blockedPrepared = prepareOutput(blockedPath, "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
   const blocked = await runWorker({
@@ -93,8 +102,55 @@ try {
   }
 
   console.log("Built diagnostics export worker published one exact local bundle and blocked one unsafe bundle.");
+} catch {
+  console.error(`PIGE_DIAGNOSTICS_EXPORT_WORKER_SMOKE_FAILURE=${smokeStage}`);
+  process.exitCode = 1;
 } finally {
-  fs.rmSync(tempRoot, { recursive: true, force: true });
+  try {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  } catch {
+    console.error("PIGE_DIAGNOSTICS_EXPORT_WORKER_SMOKE_FAILURE=cleanup");
+    process.exitCode = 1;
+  }
+}
+
+function installSuccessorOrVerifyWindowsHandleFence(successorPath, prepared) {
+  try {
+    fs.rmSync(successorPath);
+    fs.writeFileSync(successorPath, "successor", { encoding: "utf8", mode: 0o600 });
+    return true;
+  } catch (error) {
+    if (process.platform !== "win32" || !isExpectedWindowsHandleFenceError(error)) throw error;
+    smokeStage = "successor_descriptor_validation";
+    try {
+      const descriptor = prepared.initialDestinationDescriptor;
+      if (descriptor === undefined) throw new Error("Successor smoke lost its held destination descriptor.");
+      const opened = fs.fstatSync(descriptor);
+      const buffer = Buffer.alloc(Buffer.byteLength("original"));
+      const bytesRead = fs.readSync(descriptor, buffer, 0, buffer.length, 0);
+      if (!opened.isFile() || bytesRead !== buffer.length || buffer.toString("utf8") !== "original") {
+        throw new Error("Windows held destination descriptor did not retain the original object.");
+      }
+      const named = readIdentity(successorPath);
+      if (named && (
+        !named.isFile() ||
+        named.isSymbolicLink() ||
+        named.dev !== opened.dev ||
+        named.ino !== opened.ino ||
+        fs.readFileSync(successorPath, "utf8") !== "original"
+      )) {
+        throw new Error("Windows held destination pathname changed unexpectedly.");
+      }
+    } finally {
+      releaseOutput(prepared);
+    }
+    return false;
+  }
+}
+
+function isExpectedWindowsHandleFenceError(error) {
+  return error !== null && typeof error === "object" &&
+    new Set(["EACCES", "EBUSY", "EPERM"]).has(error.code);
 }
 
 function runWorker(request, prepared) {
