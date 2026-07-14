@@ -371,7 +371,11 @@ Apply rules:
 
 Compatibility rules:
 
-- Format-v1 manifests created by the current foundation may omit `backupId` and `domainSchemaVersions` and may use legacy string external dependencies. They remain parseable as legacy input.
+- Format-v1 manifests created by the current foundation may omit `backupId` and
+  `domainSchemaVersions` and may use legacy string external dependencies. They remain
+  parseable as legacy input. Missing `backupId` derives only a `derived_legacy` lineage
+  ID from the canonical archive SHA-256 digest plus exact `createdAt`; it does not mutate
+  the archive or claim that the manifest originally contained an ID.
 - Preview derives missing domain ranges only by bounded inspection of included durable files. If a domain cannot be identified safely, preview blocks apply or requires a supported migration; it never assumes version 1 merely because the archive format is 1.
 - Every durable domain has its own supported read and migration range. A newer unsupported domain blocks write/apply even when the vault schema itself is supported.
 - Unknown additive manifest fields are preserved/ignored safely according to format compatibility; unknown archive entries not listed in the manifest remain an error.
@@ -380,12 +384,19 @@ Restore rules:
 
 - Restore preview checks schema compatibility before apply.
 - Restore uses an explicit identity mode; destination path alone has no identity meaning.
-- `replace_existing` preserves `vault_id` and durable IDs, requires the old vault to be closed, creates a rollback point/confirmation, and swaps its machine binding only after staged validation.
+- `replace_existing` preserves `vault_id` and durable IDs, pauses and closes the old
+  vault, creates a verified rollback Backup Job/Operation after explicit confirmation,
+  publishes a fresh destination, and CAS-swaps its machine binding only after validation.
+  The old physical folder stays intact but unregistered; CAS failure leaves the old
+  binding authoritative.
 - `clone_as_new` mints a new `vault_id`, preserves object IDs within the new vault namespace, records `origin_vault_id`/`restored_from_backup_id`, and never inherits permission grants, YOLO state, provider secrets, or raw external bindings.
 - Two registered vault paths must not share one `vault_id`.
 - Derived DB/indexes rebuild after restore.
 - If the current app cannot read the backup schema, show a clear unsupported message.
-- Restore apply is a durable `restore` job with staging/checkpoints and a `restore_applied` operation; backup creation is a durable `backup` job ending in `backup_created`. The checkpoint contract is owned by `docs/JOB_OPERATION_AND_RECOVERY.md`.
+- Restore apply is a machine-local durable `restore` Job with staging/checkpoints and a
+  vault-scoped `restore_applied` Operation linked in both directions; backup creation is a
+  durable `backup` Job ending in `backup_created`. The checkpoint contract is owned by
+  `docs/JOB_OPERATION_AND_RECOVERY.md`.
 
 ## 14. Sync Adapter Boundary
 
@@ -440,7 +451,8 @@ Required tests:
 - Backup/restore preserves durable object IDs and schema versions; vault ID follows the explicit replace/clone mode.
 - Legacy format-v1 backup without domain ranges is scanned conservatively and never receives an invented compatibility pass.
 - Backup domain range outside the app's supported reader/migration range blocks restore apply.
-- `replace_existing` preserves one vault ID/path binding; `clone_as_new` mints a vault ID and records lineage.
+- `replace_existing` preserves one vault ID and moves its registered path binding to a
+  fresh committed destination; `clone_as_new` mints a vault ID and records lineage.
 - External managed-copy root switch does not retarget existing source-record `rootId` values.
 - Missing external root moves dependent jobs to `waiting_dependency` and never falls back to another absolute path.
 - Database/index reset does not change durable IDs.

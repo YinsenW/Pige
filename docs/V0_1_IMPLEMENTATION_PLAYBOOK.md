@@ -648,6 +648,15 @@ It does not complete B9.12, B9.14, B9.15, or E9.08; the supported-platform,
 signing/notarization, installer/update, memory/scale/recovery, release-note, and missing
 bundled-tool evidence remains open.
 
+Current restore foundation covers bounded B9.03/B9.04/B9.05/B9.06 portions: preview is
+archive/sender/mode-bound; clone and replace publish only to owned fresh destinations;
+replace uses a verified rollback backup and exact machine-binding CAS; a machine-local
+Restore Job resumes eight checkpoints and links one vault `restore_applied` Operation;
+derived indexes rebuild after commit; and six-locale preview/native safety copy is
+redacted. E9.02 remains partial: versioned dependency/domain migrations, general
+cross-file transactions and final syscall TOCTOU, old-source cleanup, signed installed
+macOS/Windows evidence, and the broader restore/platform matrix remain open.
+
 Deferred from this phase:
 
 - [D9.01] Cloud sync; post-v0.1.

@@ -30,6 +30,21 @@ export interface VaultWriterLeasePort {
 
 export type VaultWriterLeaseFactory = (vaultPath: string) => VaultWriterLeasePort;
 
+export interface VaultRestoreTransition {
+  readonly previousVaultPath?: string;
+  readonly previousVault?: VaultSummary;
+  assertHeld(): void;
+  commit(vaultPath: string, vault: VaultSummary): void;
+  rollback(): void;
+}
+
+interface ActiveRestoreTransition {
+  readonly token: symbol;
+  readonly previousVaultPath?: string;
+  readonly previousVault?: VaultSummary;
+  readonly previousWriterLease?: VaultWriterLeasePort;
+}
+
 export class VaultService {
   readonly #settings: LocalSettingsStore;
   readonly #hasDefaultModel: () => boolean;
@@ -37,6 +52,7 @@ export class VaultService {
   #activeVaultPath: string | undefined;
   #activeVault: VaultSummary | undefined;
   #activeWriterLease: VaultWriterLeasePort | undefined;
+  #restoreTransition: ActiveRestoreTransition | undefined;
 
   constructor(
     settings: LocalSettingsStore,
@@ -50,16 +66,19 @@ export class VaultService {
   }
 
   current(): VaultSummary | undefined {
+    this.#assertNoRestoreTransition();
     if (this.#activeVault) this.#assertActiveWriterLease();
     return this.#activeVault;
   }
 
   activeVaultPath(): string | undefined {
+    this.#assertNoRestoreTransition();
     if (this.#activeVaultPath) this.#assertActiveWriterLease();
     return this.#activeVaultPath;
   }
 
   assertWriterLease(vaultPath: string): void {
+    this.#assertNoRestoreTransition();
     if (
       !this.#activeVaultPath ||
       path.resolve(vaultPath) !== this.#activeVaultPath
@@ -74,6 +93,7 @@ export class VaultService {
     this.#activeWriterLease = undefined;
     this.#activeVaultPath = undefined;
     this.#activeVault = undefined;
+    this.#restoreTransition = undefined;
     try {
       lease?.release();
     } catch {
@@ -113,6 +133,7 @@ export class VaultService {
   }
 
   async create(parentWindow: BrowserWindow, request: CreateVaultRequest): Promise<VaultActionResult> {
+    this.#assertNoRestoreTransition();
     const selection = await dialog.showOpenDialog(parentWindow, {
       title: "Choose where to create the Pige vault",
       defaultPath: app.getPath("documents"),
@@ -138,6 +159,7 @@ export class VaultService {
   }
 
   async open(parentWindow: BrowserWindow): Promise<VaultActionResult> {
+    this.#assertNoRestoreTransition();
     const selection = await dialog.showOpenDialog(parentWindow, {
       title: "Open a Pige vault",
       defaultPath: app.getPath("documents"),
@@ -160,6 +182,7 @@ export class VaultService {
   }
 
   openPath(vaultPathInput: string): VaultActionResult {
+    this.#assertNoRestoreTransition();
     const vaultPath = path.resolve(vaultPathInput);
     if (!isPigeVault(vaultPath)) {
       throw new PigeDomainError("vault_not_compatible", "Selected folder is not a compatible Pige vault.");
@@ -193,7 +216,101 @@ export class VaultService {
   }
 
   removeRecent(vaultId: string): RecentVaultSummary[] {
+    this.#assertNoRestoreTransition();
     return this.#settings.removeRecentVault(vaultId);
+  }
+
+  beginRestoreTransition(input: {
+    readonly expectedActiveVaultPath?: string;
+    readonly expectedActiveVaultId?: string;
+  } = {}): VaultRestoreTransition {
+    this.#assertNoRestoreTransition();
+    if (this.#activeVaultPath || this.#activeVault || this.#activeWriterLease) {
+      this.#assertActiveWriterLease();
+    }
+
+    const expectedPath = input.expectedActiveVaultPath && path.resolve(input.expectedActiveVaultPath);
+    if (
+      (input.expectedActiveVaultPath !== undefined && expectedPath !== this.#activeVaultPath) ||
+      (input.expectedActiveVaultId !== undefined && input.expectedActiveVaultId !== this.#activeVault?.vaultId)
+    ) {
+      throw new PigeDomainError("vault.binding_changed", "The active vault changed before restore coordination.");
+    }
+
+    const state: ActiveRestoreTransition = {
+      token: Symbol("vault-restore-transition"),
+      ...(this.#activeVaultPath ? { previousVaultPath: this.#activeVaultPath } : {}),
+      ...(this.#activeVault ? { previousVault: this.#activeVault } : {}),
+      ...(this.#activeWriterLease ? { previousWriterLease: this.#activeWriterLease } : {})
+    };
+    this.#restoreTransition = state;
+    let finished = false;
+
+    const assertHeld = (): void => {
+      if (finished || this.#restoreTransition?.token !== state.token) {
+        throw new PigeDomainError("vault.binding_changed", "The restore transition is no longer current.");
+      }
+      if (
+        this.#activeVaultPath !== state.previousVaultPath ||
+        this.#activeVault?.vaultId !== state.previousVault?.vaultId ||
+        this.#activeWriterLease !== state.previousWriterLease
+      ) {
+        throw new PigeDomainError("vault.binding_changed", "The active vault changed during restore coordination.");
+      }
+      state.previousWriterLease?.assertHeld();
+    };
+
+    return {
+      ...(state.previousVaultPath ? { previousVaultPath: state.previousVaultPath } : {}),
+      ...(state.previousVault ? { previousVault: state.previousVault } : {}),
+      assertHeld,
+      commit: (vaultPathInput, vault) => {
+        assertHeld();
+        const requestedPath = path.resolve(vaultPathInput);
+        if (state.previousVaultPath && requestedPath === state.previousVaultPath) {
+          throw new PigeDomainError("restore.destination_conflict", "Restore must commit to a fresh destination.");
+        }
+
+        const nextLease = this.#acquireWriterLease(requestedPath);
+        let settingsCommitted = false;
+        try {
+          nextLease.assertHeld();
+          assertHeld();
+          this.#settings.swapActiveVaultBinding({
+            ...(state.previousVaultPath ? { expectedActiveVaultPath: state.previousVaultPath } : {}),
+            ...(state.previousVault ? { expectedActiveVaultId: state.previousVault.vaultId } : {}),
+            nextVaultPath: nextLease.vaultPath,
+            nextVault: vault
+          });
+          settingsCommitted = true;
+        } finally {
+          if (!settingsCommitted) {
+            try {
+              nextLease.release();
+            } catch {
+              // A failed new lease cannot authorize binding or cleanup.
+            }
+          }
+        }
+
+        this.#activeWriterLease = nextLease;
+        this.#activeVaultPath = nextLease.vaultPath;
+        this.#activeVault = vault;
+        this.#restoreTransition = undefined;
+        finished = true;
+        try {
+          state.previousWriterLease?.release();
+        } catch {
+          // The old binding is already replaced and no longer grants write authority here.
+        }
+      },
+      rollback: () => {
+        assertHeld();
+        this.#settings.assertActiveVaultBinding(state.previousVaultPath, state.previousVault?.vaultId);
+        this.#restoreTransition = undefined;
+        finished = true;
+      }
+    };
   }
 
   #restoreActiveVaultFromSettings(): void {
@@ -219,6 +336,7 @@ export class VaultService {
   }
 
   #setActiveVault(vaultPath: string, vault: VaultSummary): void {
+    this.#assertNoRestoreTransition();
     const requestedPath = path.resolve(vaultPath);
     if (this.#activeWriterLease?.vaultPath === requestedPath) {
       this.#activeWriterLease.assertHeld();
@@ -259,7 +377,14 @@ export class VaultService {
     this.#activeWriterLease.assertHeld();
   }
 
+  #assertNoRestoreTransition(): void {
+    if (this.#restoreTransition) {
+      throw new PigeDomainError("restore.in_progress", "The active vault is closed for restore coordination.");
+    }
+  }
+
   #requireActiveVault(): VaultSummary {
+    this.#assertNoRestoreTransition();
     if (!this.#activeVault) {
       throw new PigeDomainError("vault_missing", "No active Pige vault is selected.");
     }
@@ -268,6 +393,7 @@ export class VaultService {
   }
 
   #requireActiveVaultPath(): string {
+    this.#assertNoRestoreTransition();
     if (!this.#activeVaultPath) {
       throw new PigeDomainError("vault_missing", "No active Pige vault is selected.");
     }

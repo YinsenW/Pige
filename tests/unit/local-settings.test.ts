@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { LocalSettingsStore } from "../../apps/desktop/src/main/services/local-settings";
+import { acquireVaultWriterLease } from "../../apps/desktop/src/main/services/vault-writer-lease";
 import type { VaultSummary } from "@pige/contracts";
 
 const tempRoots: string[] = [];
@@ -70,4 +71,95 @@ describe("local settings store", () => {
     expect(reopened.hasDismissedFirstHome(vaultId)).toBe(true);
     expect(reopened.read().dismissedFirstHomeVaultIds).toEqual([vaultId]);
   });
+
+  it("atomically swaps one active vault binding without retaining a duplicate identity", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-local-settings-test-"));
+    tempRoots.push(root);
+    const store = new LocalSettingsStore(root);
+    const original = makeVaultSummary("vault_20260709_ab12cd", "Original");
+    const restored = makeVaultSummary(original.vaultId, "Restored");
+    const originalPath = path.join(root, "Original");
+    const restoredPath = path.join(root, "Restored");
+    store.setActiveVault(originalPath, original);
+
+    store.swapActiveVaultBinding({
+      expectedActiveVaultPath: originalPath,
+      expectedActiveVaultId: original.vaultId,
+      nextVaultPath: restoredPath,
+      nextVault: restored
+    });
+
+    const settings = store.read();
+    expect(settings.activeVaultPath).toBe(restoredPath);
+    expect(settings.recentVaults).toEqual([
+      expect.objectContaining({ vaultId: original.vaultId, path: restoredPath })
+    ]);
+  });
+
+  it("rejects a stale binding swap without changing the committed settings bytes", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-local-settings-test-"));
+    tempRoots.push(root);
+    const store = new LocalSettingsStore(root);
+    const original = makeVaultSummary("vault_20260709_ab12cd", "Original");
+    const originalPath = path.join(root, "Original");
+    store.setActiveVault(originalPath, original);
+    const settingsPath = path.join(root, "settings.json");
+    const before = fs.readFileSync(settingsPath);
+
+    expect(() => store.swapActiveVaultBinding({
+      expectedActiveVaultPath: path.join(root, "Stale"),
+      expectedActiveVaultId: original.vaultId,
+      nextVaultPath: path.join(root, "Restored"),
+      nextVault: original
+    })).toThrowError(expect.objectContaining({ code: "vault.binding_changed" }));
+
+    expect(fs.readFileSync(settingsPath)).toEqual(before);
+  });
+
+  it("fails closed when settings are replaced by a symbolic link", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-local-settings-test-"));
+    const externalRoot = fs.mkdtempSync(path.join(os.tmpdir(), "pige-local-settings-external-"));
+    tempRoots.push(root, externalRoot);
+    const externalPath = path.join(externalRoot, "settings.json");
+    fs.writeFileSync(externalPath, '{"schemaVersion":1,"recentVaults":[]}\n', "utf8");
+    fs.symlinkSync(externalPath, path.join(root, "settings.json"));
+    const store = new LocalSettingsStore(root);
+
+    expect(() => store.read()).toThrowError(expect.objectContaining({
+      code: "settings.read_failed"
+    }));
+    expect(fs.readFileSync(externalPath, "utf8")).toContain('"recentVaults":[]');
+  });
+
+  it("serializes settings mutations behind the machine-local writer lease", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-local-settings-test-"));
+    tempRoots.push(root);
+    const store = new LocalSettingsStore(root);
+    const lease = acquireVaultWriterLease(root);
+
+    try {
+      expect(() => store.setAppLocale("fr")).toThrowError(expect.objectContaining({
+        code: "vault.writer_locked"
+      }));
+      expect(store.read().appLocale).toBeUndefined();
+    } finally {
+      lease.release();
+    }
+
+    expect(store.setAppLocale("fr").appLocale).toBe("fr");
+  });
 });
+
+function makeVaultSummary(vaultId: string, name: string): VaultSummary {
+  const displayRoot = `/tmp/${name}`;
+  return {
+    vaultId,
+    name,
+    activeVaultPathDisplay: displayRoot,
+    knowledgeRootDisplay: displayRoot,
+    sourceAssetRootDisplay: `${displayRoot}/raw`,
+    sourceAssetRootKind: "inside_vault",
+    defaultSourceStorageStrategy: "copy_to_source_library",
+    schemaVersion: 1
+  };
+}

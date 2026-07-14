@@ -1027,36 +1027,56 @@ export interface BackupCreateResult {
   readonly manifest?: BackupManifestSummary;
 }
 
+export type RestoreMode = "clone_as_new" | "replace_existing";
+
+export type RestorePreviewWarning =
+  | {
+      readonly code: "invalid_archive_entries";
+      readonly count: number;
+    }
+  | {
+      readonly code: "excluded_rebuildable_roots";
+      readonly count: number;
+    }
+  | {
+      readonly code: "external_originals_not_included";
+      readonly count: number;
+    };
+
 export type RestorePreviewResult =
   | {
       readonly status: "ready";
-      readonly backupPath: string;
-      readonly previewToken: string;
+      readonly previewId: string;
       readonly manifest: BackupManifestSummary;
       readonly invalidFileCount: number;
-      readonly warnings: readonly string[];
+      readonly warnings: readonly RestorePreviewWarning[];
+      readonly permittedModes: readonly RestoreMode[];
+      readonly defaultMode: RestoreMode;
     }
   | {
       readonly status: "canceled";
-      readonly backupPath?: never;
-      readonly previewToken?: never;
+      readonly previewId?: never;
       readonly manifest?: never;
       readonly invalidFileCount?: never;
       readonly warnings?: never;
+      readonly permittedModes?: never;
+      readonly defaultMode?: never;
     };
 
 export interface RestoreApplyRequest {
-  readonly backupPath: string;
-  readonly previewToken: string;
+  readonly previewId: string;
+  readonly mode: RestoreMode;
 }
 
-export interface RestoreApplyResult {
-  readonly status: "restored" | "canceled";
-  readonly restoredVaultPath?: string;
-  readonly vault?: VaultSummary;
-  readonly localDatabaseRebuild?: LocalDatabaseRebuildResult;
-  readonly manifest?: BackupManifestSummary;
-}
+export type RestoreApplyResult =
+  | {
+      readonly status: "restored";
+      readonly jobId: string;
+    }
+  | {
+      readonly status: "canceled";
+      readonly jobId?: never;
+    };
 
 export interface CreateVaultRequest {
   readonly vaultName: string;

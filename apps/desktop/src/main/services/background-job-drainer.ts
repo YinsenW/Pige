@@ -13,7 +13,9 @@ export class CoalescedBatchDrainer<Result extends BatchDrainResult> {
   readonly #options: CoalescedBatchDrainerOptions<Result>;
   #running = false;
   #requested = false;
+  #pauseCount = 0;
   #idleWaiters: (() => void)[] = [];
+  #quiesceWaiters: (() => void)[] = [];
 
   constructor(options: CoalescedBatchDrainerOptions<Result>) {
     this.#options = options;
@@ -21,7 +23,7 @@ export class CoalescedBatchDrainer<Result extends BatchDrainResult> {
 
   schedule(): void {
     this.#requested = true;
-    if (this.#running) return;
+    if (this.#running || this.#pauseCount > 0) return;
     this.#running = true;
     void this.#drain();
   }
@@ -31,24 +33,55 @@ export class CoalescedBatchDrainer<Result extends BatchDrainResult> {
     return new Promise((resolve) => this.#idleWaiters.push(resolve));
   }
 
+  async pause(): Promise<() => void> {
+    this.#pauseCount += 1;
+    if (this.#running) {
+      await new Promise<void>((resolve) => this.#quiesceWaiters.push(resolve));
+    }
+
+    let resumed = false;
+    return () => {
+      if (resumed) return;
+      resumed = true;
+      this.#pauseCount = Math.max(0, this.#pauseCount - 1);
+      if (this.#pauseCount === 0) {
+        if (this.#requested) {
+          this.schedule();
+        } else if (!this.#running) {
+          for (const resolve of this.#idleWaiters.splice(0)) resolve();
+        }
+      }
+    };
+  }
+
   async #drain(): Promise<void> {
     try {
+      drainRequested:
       do {
         this.#requested = false;
         for (;;) {
+          if (this.#pauseCount > 0) {
+            this.#requested = true;
+            break drainRequested;
+          }
           const result = await this.#options.runBatch();
           if (result.processed === 0) break;
           await this.#options.onBatch?.(result);
           await (this.#options.yieldControl ?? yieldToMainLoop)();
+          if (this.#pauseCount > 0) {
+            this.#requested = true;
+            break drainRequested;
+          }
         }
       } while (this.#requested);
     } catch (caught) {
       this.#options.onError(caught);
     } finally {
       this.#running = false;
-      if (this.#requested) {
+      for (const resolve of this.#quiesceWaiters.splice(0)) resolve();
+      if (this.#requested && this.#pauseCount === 0) {
         this.schedule();
-      } else {
+      } else if (!this.#requested) {
         for (const resolve of this.#idleWaiters.splice(0)) resolve();
       }
     }

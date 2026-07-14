@@ -1,7 +1,7 @@
 # Decision Log
 
 Status: Active decision ledger
-Last reviewed: 2026-07-13
+Last reviewed: 2026-07-14
 
 ## 1. Purpose
 
@@ -1922,11 +1922,12 @@ References:
 
 Status: Accepted
 Date: 2026-07-10
+Revised: 2026-07-14
 Supersedes: D-20260709-Phase-1-Window-And-Backup-Entry-Points
 
 Decision:
 
-Window layout preferences remain machine-local and are owned by Window Mode Service. Backup and restore controls must reflect real Backup Service capability rather than a fixed phase placeholder; the implemented local ZIP create, preview, and safe new-folder restore path is governed by `D-20260710-Basic-Local-Zip-Backup-And-Safe-Restore`.
+Window layout preferences remain machine-local and are owned by Window Mode Service. Backup and restore controls must reflect real Backup Service capability rather than a fixed phase placeholder; the current local ZIP, explicit restore identity, and durable recovery path is governed by `D-20260714-Explicit-Restore-Identity-And-Durable-Recovery`.
 
 Rationale:
 
@@ -1945,13 +1946,14 @@ References:
 - `docs/UI_PROTOTYPE.md`
 - `docs/API_AND_IPC_DESIGN.md`
 - `docs/DATA_ARCHITECTURE.md`
-- `D-20260710-Basic-Local-Zip-Backup-And-Safe-Restore`
+- `D-20260714-Explicit-Restore-Identity-And-Durable-Recovery`
 
 ### D-20260710-Basic-Local-Zip-Backup-And-Safe-Restore
 
-Status: Accepted
+Status: Superseded
 Date: 2026-07-10
 Revised: 2026-07-10
+Superseded by: D-20260714-Explicit-Restore-Identity-And-Durable-Recovery
 
 Decision:
 
@@ -1974,6 +1976,55 @@ References:
 - `docs/DATA_ARCHITECTURE.md`
 - `docs/TECH_ARCHITECTURE.md`
 - `docs/UI_PROTOTYPE.md`
+
+### D-20260714-Explicit-Restore-Identity-And-Durable-Recovery
+
+Status: Accepted
+Date: 2026-07-14
+Supersedes: D-20260710-Basic-Local-Zip-Backup-And-Safe-Restore
+
+Decision:
+
+Pige keeps local `.pige-backup.zip` as the portable backup form and makes restore identity
+explicit. `clone_as_new` mints a vault identity and lineage. `replace_existing` preserves
+the logical vault identity but never overwrites the old folder in place: after explicit
+confirmation it pauses mutable work, creates and validates a rollback backup, restores to
+a fresh destination, then CAS-switches the machine-local binding. Restore coordination is
+a machine-local durable Job linked bidirectionally to one vault-scoped
+`restore_applied` Operation.
+
+Rationale:
+
+A restore may start before any vault exists, so assigning its coordinator Job to staging
+or a destination vault would create false ownership and break crash recovery. Explicit
+identity modes prevent two registered paths from sharing one vault identity. Fresh-folder
+publication plus a verified rollback backup preserves user bytes while still allowing
+same-vault recovery. A deterministic `derived_legacy` lineage ID keeps readable format-v1
+archives idempotent without rewriting history.
+
+Consequences:
+
+- Preview and apply bind exact archive bytes, sender generation, explicit mode, owned
+  destination, and one apply lease; renderer never receives raw archive paths or entries.
+- The machine-local Restore Job exists before extraction, survives restart, and is never
+  copied into staging or the restored vault. Its stable IDs link to `restore_applied`.
+- `replace_existing` retains the old physical folder unregistered; a failed binding CAS
+  leaves the old binding authoritative and the new destination unregistered.
+- Missing legacy `backupId` derives only a marked lineage identity from the canonical
+  archive digest and exact `createdAt`; new backups always publish a real ID.
+- General cross-file transactions, final filesystem-syscall TOCTOU, permanent cleanup of
+  old source folders, versioned dependency/domain migration matrices, and signed
+  installed-platform proof remain outside this decision's delivered evidence.
+
+References:
+
+- `docs/DATA_ARCHITECTURE.md`
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/SETTINGS_AND_PREFERENCES.md`
+- `docs/SYNC_CONFLICT_AND_MIGRATION.md`
+- `docs/PERFORMANCE_AND_RELIABILITY.md`
+- `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
 
 ### D-20260710-Pdfjs-Worker-For-Embedded-Pdf-Text
 
