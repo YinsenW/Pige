@@ -677,14 +677,16 @@ and rechecks the download on a fresh runner; no Developer ID/trust is claimed.
 B9.12/B9.14/B9.15/E9.08 remain open for platform breadth, trusted signing,
 installed/update, Windows OCR, scale/recovery, release notes and missing tools.
 
-Current restore foundation covers bounded B9.03/B9.04/B9.05/B9.06 portions: preview is
-archive/sender/mode-bound; clone and replace publish only to owned fresh destinations;
-replace uses a verified rollback backup and exact machine-binding CAS; a machine-local
-Restore Job resumes eight checkpoints and links one vault `restore_applied` Operation;
-derived indexes rebuild after commit; and six-locale preview/native safety copy is
-redacted. E9.02 remains partial: versioned dependency/domain migrations, general
-cross-file transactions and final syscall TOCTOU, old-source cleanup, signed installed
-macOS/Windows evidence, and the broader restore/platform matrix remain open.
+Current Backup foundation covers bounded B9.01/B9.02: one pre-scan durable Job resumes five
+identity/checksum checkpoints, no-replace publishes a validated archive, links one
+`backup_created`, and restores truthful Settings state/actions. Rollback reuses checkpoints.
+E9.01 stays partial for external managed roots, richer versioned Operation facts, final
+syscall/cross-file atomicity and broader Windows/platform recovery.
+
+Current restore foundation covers bounded B9.03–B9.06: bound preview; owned fresh clone/
+replace publication; verified rollback; binding CAS; eight-checkpoint machine Job; linked
+`restore_applied`; post-commit rebuild; redacted six-locale safety copy. E9.02 stays partial
+for migrations, transactions/final-syscall TOCTOU, cleanup and signed platform matrices.
 
 Deferred from this phase:
 

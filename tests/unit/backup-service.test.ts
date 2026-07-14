@@ -7,10 +7,11 @@ import { pipeline } from "node:stream/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { openPromise } from "yauzl";
 import { ZipFile } from "yazl";
-import { BackupManifestSchema, type BackupManifest } from "@pige/schemas";
+import { BackupManifestSchema, JobRecordSchema, SourceRecordSchema, type BackupManifest } from "@pige/schemas";
 import {
   BackupRestoreService,
   createRestoreDestinationIdentity,
+  type BackupCreateCheckpointEvent,
   type RestoreCoreApplyInput,
   type RestoreCorePreviewResult
 } from "../../apps/desktop/src/main/services/backup-service";
@@ -26,6 +27,7 @@ import {
 const tempRoots: string[] = [];
 const BACKUP_MANIFEST_ENTRY = "pige-backup-manifest.json";
 const BACKUP_ROOT_FILES = ["PIGE.md", "index.md", "log.md", ".pige/manifest.json", ".pige/config.json"] as const;
+const FIXTURE_CHECKSUM = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
 
 type DurableRoot = (typeof PIGE_DURABLE_ROOTS)[number];
 
@@ -39,20 +41,48 @@ const DURABLE_FIXTURES: Readonly<Record<DurableRoot, FixtureFile>> = {
   artifacts: { path: "artifacts/ocr.txt", canary: "durable-artifact-body-canary" },
   sources: { path: "sources/source.md", canary: "durable-source-page-body-canary" },
   wiki: { path: "wiki/note.md", canary: "durable-wiki-body-canary" },
-  datasets: { path: "datasets/example--dataset_20260713_abcdef123456/dataset.json", canary: "durable-dataset-canary" },
+  datasets: {
+    path: "datasets/example--dataset_20260713_abcdef123456/dataset.json",
+    canary: `${JSON.stringify({ schemaVersion: 1, canary: "durable-dataset-canary" })}\n`
+  },
   assets: { path: "assets/source-image.png", canary: "durable-asset-body-canary" },
   ".pige/source-records": {
     path: ".pige/source-records/source.json",
-    canary: "durable-source-record-body-canary"
+    canary: serializeSourceRecord({
+      id: "src_20260714_backupfixture01",
+      kind: "plain_text_file",
+      storageStrategy: "copy_to_source_library",
+      managedCopy: {
+        path: "raw/managed-source.bin",
+        checksum: FIXTURE_CHECKSUM,
+        size: Buffer.byteLength("durable-raw-body-canary")
+      },
+      artifacts: [],
+      metadata: {},
+      createdAt: "2026-07-14T00:00:00.000Z",
+      updatedAt: "2026-07-14T00:00:00.000Z"
+    })
   },
   ".pige/conversations": {
     path: ".pige/conversations/conversation.jsonl",
-    canary: "durable-conversation-body-canary"
+    canary: `${JSON.stringify({ schemaVersion: 1, canary: "durable-conversation-body-canary" })}\n`
   },
-  ".pige/jobs": { path: ".pige/jobs/job.json", canary: "durable-job-body-canary" },
-  ".pige/proposals": { path: ".pige/proposals/proposal.json", canary: "durable-proposal-body-canary" },
-  ".pige/operations": { path: ".pige/operations/operation.json", canary: "durable-operation-body-canary" },
-  ".pige/memory": { path: ".pige/memory/memory.json", canary: "durable-memory-body-canary" },
+  ".pige/jobs": {
+    path: ".pige/jobs/job.json",
+    canary: `${JSON.stringify({ schemaVersion: 1, canary: "durable-job-body-canary" })}\n`
+  },
+  ".pige/proposals": {
+    path: ".pige/proposals/proposal.json",
+    canary: `${JSON.stringify({ schemaVersion: 1, canary: "durable-proposal-body-canary" })}\n`
+  },
+  ".pige/operations": {
+    path: ".pige/operations/operation.json",
+    canary: `${JSON.stringify({ schemaVersion: 1, canary: "durable-operation-body-canary" })}\n`
+  },
+  ".pige/memory": {
+    path: ".pige/memory/memory.json",
+    canary: `${JSON.stringify({ schemaVersion: 1, canary: "durable-memory-body-canary" })}\n`
+  },
   ".pige/skills": { path: ".pige/skills/skill.md", canary: "durable-skill-body-canary" },
   ".pige/trash": { path: ".pige/trash/deleted.md", canary: "durable-trash-body-canary" }
 };
@@ -256,8 +286,8 @@ describe("backup restore service", () => {
     const excludedRelativePath = `.pige/jobs/2026/07/${excludedJobId}.json`;
     const retainedRelativePath = ".pige/jobs/2026/07/job_20260714_retainedjob01.json";
     writeFixtureFiles(vaultPath, [
-      { path: excludedRelativePath, canary: "running rollback job" },
-      { path: retainedRelativePath, canary: "retained durable job" }
+      { path: excludedRelativePath, canary: `${JSON.stringify({ schemaVersion: 1, excluded: true })}\n` },
+      { path: retainedRelativePath, canary: `${JSON.stringify({ schemaVersion: 1, retained: true })}\n` }
     ]);
 
     await new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test", {
@@ -271,6 +301,376 @@ describe("backup restore service", () => {
     expect(generated.manifest.files.map(({ path: filePath }) => filePath))
       .toContain(retainedRelativePath);
     expect(generated.entries.has(`vault/${retainedRelativePath}`)).toBe(true);
+  });
+
+  it("reports body-free create phases in order and preserves stable backup identity", async () => {
+    const { root, vaultPath } = makeVault();
+    const backupPath = path.join(root, "stable-identity.pige-backup.zip");
+    writeVaultFixture(vaultPath);
+    const events: BackupCreateCheckpointEvent[] = [];
+    const options = {
+      backupId: "backup_20260714_stableidentity01",
+      createdAt: "2026-07-14T08:09:10.000Z",
+      stagingOwnerKey: "job_20260714_stablebackup01",
+      onPhase: (event: BackupCreateCheckpointEvent) => events.push(event)
+    };
+
+    await new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test", options);
+    const archive = await readGeneratedBackup(backupPath);
+
+    expect(events.map(({ phase }) => phase)).toEqual([
+      "preflight",
+      "manifest_written",
+      "files_hashed",
+      "archive_staged",
+      "archive_finalized"
+    ]);
+    expect(events.slice(0, 1).every((event) => Object.keys(event).sort().join(",") ===
+      "backupId,createdAt,phase,stagingOwnerKey")).toBe(true);
+    expect(events.slice(1, 3).every((event) => event.manifestChecksum?.startsWith("sha256:"))).toBe(true);
+    expect(events.slice(3).every((event) =>
+      event.manifestChecksum?.startsWith("sha256:") && event.archiveDigest?.startsWith("sha256:")
+    )).toBe(true);
+    expect(JSON.stringify(events)).not.toContain(root);
+    expect(JSON.stringify(events)).not.toContain(vaultPath);
+    expect(archive.manifest).toMatchObject({
+      backupId: options.backupId,
+      createdAt: options.createdAt,
+      domainSchemaVersions: createDomainSchemaVersionFixture()
+    });
+  });
+
+  it("derives truthful min/max durable-domain schema versions and rejects malformed records", async () => {
+    const versioned = makeVault();
+    const versionedBackup = path.join(versioned.root, "versioned-domains.pige-backup.zip");
+    writeVaultFixture(versioned.vaultPath);
+    writeFixtureFiles(versioned.vaultPath, [
+      {
+        path: "wiki/future.md",
+        canary: "---\nschema_version: 3\nid: page_20260714_futureversion01\ntitle: Future\ntype: note\nstatus: active\ncreated_at: 2026-07-14T00:00:00.000Z\nupdated_at: 2026-07-14T00:00:00.000Z\n---\n# Future\n"
+      },
+      {
+        path: ".pige/jobs/2026/07/job_20260714_futureversion01.json",
+        canary: `${JSON.stringify({ schemaVersion: 2, opaqueFutureJob: true })}\n`
+      },
+      {
+        path: ".pige/conversations/conversation_future.jsonl",
+        canary: `${JSON.stringify({ schemaVersion: 4, opaqueFutureEvent: true })}\n`
+      },
+      {
+        path: ".pige/memory/future.md",
+        canary: "---\nschema_version: 5\n---\nFuture memory\n"
+      }
+    ]);
+
+    await new BackupRestoreService().createBackup(
+      versioned.vaultPath,
+      versionedBackup,
+      "0.1.0-test"
+    );
+    const archive = await readGeneratedBackup(versionedBackup);
+
+    expect(archive.manifest.domainSchemaVersions).toMatchObject({
+      markdownPages: { min: 1, max: 3 },
+      jobs: { min: 1, max: 2 },
+      conversationEvents: { min: 1, max: 4 },
+      memory: { min: 1, max: 5 }
+    });
+
+    const futureOnly = makeVault();
+    const futureOnlyBackup = path.join(futureOnly.root, "future-only-domain.pige-backup.zip");
+    writeFixtureFiles(futureOnly.vaultPath, [{
+      path: ".pige/jobs/2026/07/job_20260714_futureonly01.json",
+      canary: `${JSON.stringify({ schemaVersion: 3, opaqueFutureJob: true })}\n`
+    }]);
+    await new BackupRestoreService().createBackup(
+      futureOnly.vaultPath,
+      futureOnlyBackup,
+      "0.1.0-test"
+    );
+    expect((await readGeneratedBackup(futureOnlyBackup)).manifest.domainSchemaVersions.jobs)
+      .toEqual({ min: 3, max: 3 });
+
+    const malformed = makeVault();
+    const malformedBackup = path.join(malformed.root, "malformed-domain.pige-backup.zip");
+    writeVaultFixture(malformed.vaultPath);
+    writeFixtureFiles(malformed.vaultPath, [{
+      path: ".pige/operations/2026/07/op_20260714_malformed01.json",
+      canary: "{not-json\n"
+    }]);
+
+    await expect(new BackupRestoreService().createBackup(
+      malformed.vaultPath,
+      malformedBackup,
+      "0.1.0-test"
+    )).rejects.toMatchObject({ code: "backup.schema_version_invalid" });
+    expect(fs.existsSync(malformedBackup)).toBe(false);
+
+    const primitive = makeVault();
+    const primitiveBackup = path.join(primitive.root, "primitive-domain.pige-backup.zip");
+    writeVaultFixture(primitive.vaultPath);
+    writeFixtureFiles(primitive.vaultPath, [{
+      path: ".pige/operations/2026/07/op_20260714_primitive01.json",
+      canary: "42\n"
+    }]);
+    await expect(new BackupRestoreService().createBackup(
+      primitive.vaultPath,
+      primitiveBackup,
+      "0.1.0-test"
+    )).rejects.toMatchObject({ code: "backup.schema_version_invalid" });
+  });
+
+  it("excludes historical Backup Jobs so machine-local destination paths never enter portable bytes", async () => {
+    const { root, vaultPath } = makeVault();
+    const backupPath = path.join(root, "portable-history.pige-backup.zip");
+    writeVaultFixture(vaultPath);
+    const historicalPath = "/Users/private/Exports/previous-backup.pige-backup.zip";
+    const job = JobRecordSchema.parse({
+      schemaVersion: 1,
+      id: "job_20260714_historicalbackup01",
+      class: "backup",
+      state: "completed",
+      stage: "backing_up",
+      priority: "interactive",
+      scope: "vault",
+      createdAt: "2026-07-14T00:00:00.000Z",
+      updatedAt: "2026-07-14T00:00:00.000Z",
+      finishedAt: "2026-07-14T00:00:00.000Z",
+      activeVaultId: "vault_20260714_testfixture01",
+      actor: { kind: "user", runtimeKind: "desktop_local", clientCapabilityTier: "desktop_full" },
+      inputRefs: [{ kind: "external_uri", path: historicalPath, role: "backup_destination" }],
+      outputRefs: [],
+      operationIds: [],
+      privacy: {
+        usedCloudModel: false,
+        usedNetwork: false,
+        usedShell: false,
+        accessedExternalFiles: true,
+        permissionDecisionIds: []
+      },
+      message: "Historical Backup Job."
+    });
+    writeFixtureFiles(vaultPath, [{
+      path: ".pige/jobs/2026/07/job_20260714_historicalbackup01.json",
+      canary: `${JSON.stringify(job)}\n`
+    }, {
+      path: ".pige/jobs/2026/07/job_20260714_futurebackup01.json",
+      canary: `${JSON.stringify({
+        schemaVersion: 99,
+        class: "backup",
+        futureShape: true,
+        inputRefs: [{ kind: "external_uri", path: "/private/future-backup.zip" }]
+      })}\n`
+    }]);
+
+    await new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test");
+    const archive = await readGeneratedBackup(backupPath);
+
+    expect(archive.manifest.files.some(({ path: filePath }) =>
+      filePath.endsWith("job_20260714_historicalbackup01.json")
+    )).toBe(false);
+    expect(archive.manifestText).not.toContain(historicalPath);
+    expect(archive.manifestText).not.toContain("/private/future-backup.zip");
+    expect([...archive.entries.keys()].some((entry) => entry.includes("historicalbackup01"))).toBe(false);
+    expect([...archive.entries.keys()].some((entry) => entry.includes("futurebackup01"))).toBe(false);
+  });
+
+  it("adopts an exact deterministic staged archive and exact final destination", async () => {
+    const { root, vaultPath } = makeVault();
+    const backupPath = path.join(root, "adoptable-backup.pige-backup.zip");
+    writeVaultFixture(vaultPath);
+    const stagedFailure = new Error("checkpoint persistence failed after staging");
+    const identity = {
+      backupId: "backup_20260714_adoptable01",
+      createdAt: "2026-07-14T09:00:00.000Z",
+      stagingOwnerKey: "job_20260714_adoptable01"
+    };
+    let durableManifestChecksum: `sha256:${string}` | undefined;
+    let durableArchiveDigest: `sha256:${string}` | undefined;
+
+    await expect(new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test", {
+      ...identity,
+      onPhase(event) {
+        durableManifestChecksum = event.manifestChecksum ?? durableManifestChecksum;
+        durableArchiveDigest = event.archiveDigest ?? durableArchiveDigest;
+        if (event.phase === "archive_staged") throw stagedFailure;
+      }
+    })).rejects.toBe(stagedFailure);
+
+    const stagedPaths = listBackupStagingFiles(backupPath);
+    expect(stagedPaths).toHaveLength(1);
+    expect(fs.existsSync(backupPath)).toBe(false);
+    const stagedBytes = fs.readFileSync(stagedPaths[0]!);
+    fs.writeFileSync(path.join(vaultPath, "wiki", "note.md"), "# Changed after staged checkpoint\n", "utf8");
+
+    await expect(new BackupRestoreService().createBackup(
+      vaultPath,
+      backupPath,
+      "0.1.0-test",
+      identity
+    )).rejects.toMatchObject({ code: "backup.staging_conflict" });
+    expect(fs.readFileSync(stagedPaths[0]!)).toEqual(stagedBytes);
+
+    await expect(new BackupRestoreService().createBackup(
+      vaultPath,
+      backupPath,
+      "0.1.0-test",
+      {
+        ...identity,
+        expectedManifestChecksum: durableManifestChecksum,
+        expectedArchiveDigest: durableArchiveDigest
+      }
+    )).resolves.toMatchObject({ status: "created", backupPath });
+    expect(fs.readFileSync(backupPath)).toEqual(stagedBytes);
+    expect(listBackupStagingFiles(backupPath)).toEqual([]);
+    const finalBytes = fs.readFileSync(backupPath);
+    fs.writeFileSync(path.join(vaultPath, "wiki", "note.md"), "# Changed after final checkpoint\n", "utf8");
+
+    await expect(new BackupRestoreService().createBackup(
+      vaultPath,
+      backupPath,
+      "0.1.0-test",
+      {
+        ...identity,
+        expectedManifestChecksum: durableManifestChecksum,
+        expectedArchiveDigest: durableArchiveDigest
+      }
+    )).resolves.toMatchObject({ status: "created", backupPath });
+    expect(fs.readFileSync(backupPath)).toEqual(finalBytes);
+
+    await expect(new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test", {
+      ...identity,
+      backupId: "backup_20260714_conflicting01"
+    })).rejects.toMatchObject({ code: "backup.destination_exists" });
+    expect(fs.readFileSync(backupPath)).toEqual(finalBytes);
+  });
+
+  it("cancels before publication by removing only exact owned staging and adopts after publication", async () => {
+    const { root, vaultPath } = makeVault();
+    const backupPath = path.join(root, "cancelled-backup.pige-backup.zip");
+    const unrelatedPath = path.join(root, `.${path.basename(backupPath)}.unrelated.tmp`);
+    writeVaultFixture(vaultPath);
+    fs.writeFileSync(unrelatedPath, "unrelated", "utf8");
+    const beforePublish = new AbortController();
+    const identity = {
+      backupId: "backup_20260714_cancelled01",
+      createdAt: "2026-07-14T10:00:00.000Z",
+      stagingOwnerKey: "job_20260714_cancelled01"
+    };
+
+    await expect(new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test", {
+      ...identity,
+      signal: beforePublish.signal,
+      onPhase(event) {
+        if (event.phase === "archive_staged") beforePublish.abort();
+      }
+    })).rejects.toMatchObject({ name: "AbortError" });
+    expect(fs.existsSync(backupPath)).toBe(false);
+    expect(listBackupStagingFiles(backupPath)).toEqual([unrelatedPath]);
+
+    const afterPublish = new AbortController();
+    let manifestChecksum: `sha256:${string}` | undefined;
+    let archiveDigest: `sha256:${string}` | undefined;
+    await expect(new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test", {
+      ...identity,
+      signal: afterPublish.signal,
+      onPhase(event) {
+        manifestChecksum = event.manifestChecksum ?? manifestChecksum;
+        archiveDigest = event.archiveDigest ?? archiveDigest;
+        if (event.phase === "archive_finalized") afterPublish.abort();
+      }
+    })).resolves.toMatchObject({ status: "created" });
+    await expect(new BackupRestoreService().createBackup(
+      vaultPath,
+      backupPath,
+      "0.1.0-test",
+      {
+        ...identity,
+        expectedManifestChecksum: manifestChecksum,
+        expectedArchiveDigest: archiveDigest
+      }
+    )).resolves.toMatchObject({ status: "created" });
+    expect(fs.readFileSync(unrelatedPath, "utf8")).toBe("unrelated");
+  });
+
+  it("removes exact staged output when a remote cancellation reaches the checkpoint callback", async () => {
+    const { root, vaultPath } = makeVault();
+    const backupPath = path.join(root, "remote-cancelled-backup.pige-backup.zip");
+    const unrelatedPath = path.join(root, `.${path.basename(backupPath)}.unrelated.tmp`);
+    writeVaultFixture(vaultPath);
+    fs.writeFileSync(unrelatedPath, "unrelated", "utf8");
+    const cancellation = new Error("Remote cancellation won the Job CAS.");
+    cancellation.name = "AbortError";
+
+    await expect(new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test", {
+      backupId: "backup_20260714_remotecancel01",
+      createdAt: "2026-07-14T10:30:00.000Z",
+      stagingOwnerKey: "job_20260714_remotecancel01",
+      onPhase(event) {
+        if (event.phase === "archive_staged") throw cancellation;
+      }
+    })).rejects.toBe(cancellation);
+
+    expect(fs.existsSync(backupPath)).toBe(false);
+    expect(listBackupStagingFiles(backupPath)).toEqual([unrelatedPath]);
+    expect(fs.readFileSync(unrelatedPath, "utf8")).toBe("unrelated");
+  });
+
+  it("projects referenced originals without paths and fails closed for external managed roots", async () => {
+    const referenced = makeVault();
+    const referencedBackup = path.join(referenced.root, "referenced-original.pige-backup.zip");
+    writeSourceRecord(referenced.vaultPath, {
+      id: "src_20260714_externaloriginal01",
+      kind: "pdf_file",
+      storageStrategy: "reference_original",
+      original: {
+        uri: "file:///Users/private/financial-report.pdf",
+        path: "/Users/private/financial-report.pdf",
+        displayName: "financial-report.pdf"
+      },
+      artifacts: [],
+      metadata: {},
+      createdAt: "2026-07-14T00:00:00.000Z",
+      updatedAt: "2026-07-14T00:00:00.000Z"
+    });
+
+    await new BackupRestoreService().createBackup(referenced.vaultPath, referencedBackup, "0.1.0-test");
+    const referencedArchive = await readGeneratedBackup(referencedBackup);
+    expect(referencedArchive.manifest.externalDependencies).toEqual([{
+      kind: "external_original",
+      sourceId: "src_20260714_externaloriginal01",
+      included: false,
+      requiredForCompleteRestore: false
+    }]);
+    expect(referencedArchive.manifestText).not.toContain("/Users/private");
+    expect(referencedArchive.manifestText).not.toContain("financial-report.pdf");
+
+    const managed = makeVault();
+    const managedBackup = path.join(managed.root, "external-managed.pige-backup.zip");
+    writeSourceRecord(managed.vaultPath, {
+      id: "src_20260714_externalmanaged01",
+      kind: "pdf_file",
+      storageStrategy: "copy_to_source_library",
+      managedCopy: {
+        rootId: "root_external01",
+        pathBasis: "root_relative",
+        path: "private/financial-report.pdf",
+        checksum: FIXTURE_CHECKSUM,
+        size: 42
+      },
+      artifacts: [],
+      metadata: {},
+      createdAt: "2026-07-14T00:00:00.000Z",
+      updatedAt: "2026-07-14T00:00:00.000Z"
+    });
+
+    await expect(new BackupRestoreService().createBackup(
+      managed.vaultPath,
+      managedBackup,
+      "0.1.0-test"
+    )).rejects.toMatchObject({ code: "backup.external_managed_copy_unsupported" });
+    expect(fs.existsSync(managedBackup)).toBe(false);
+    expect(listBackupStagingFiles(managedBackup)).toEqual([]);
   });
 
   it("derives one exact legacy lineage ID from archive bytes and createdAt", async () => {
@@ -673,6 +1073,49 @@ describe("backup restore service", () => {
     await expect(
       new BackupRestoreService().createBackup(vaultPath, path.join(vaultPath, "inside.pige-backup.zip"))
     ).rejects.toMatchObject({ code: "backup.path_inside_vault" });
+    const missingParent = path.join(vaultPath, "must-not-be-created");
+    await expect(
+      new BackupRestoreService().createBackup(vaultPath, path.join(missingParent, "inside.zip"))
+    ).rejects.toMatchObject({ code: "backup.path_inside_vault" });
+    expect(fs.existsSync(missingParent)).toBe(false);
+  });
+
+  it("canonicalizes destination aliases and rejects a symlink alias into the active vault", async () => {
+    const { root, vaultPath } = makeVault();
+    const alias = path.join(root, "vault-alias");
+    fs.symlinkSync(vaultPath, alias, "dir");
+
+    await expect(new BackupRestoreService().createBackup(
+      vaultPath,
+      path.join(alias, "aliased-inside.zip"),
+      "0.1.0-test"
+    )).rejects.toMatchObject({ code: "backup.path_inside_vault" });
+
+    expect(fs.existsSync(path.join(vaultPath, "aliased-inside.pige-backup.zip"))).toBe(false);
+  });
+
+  it("fails closed when the canonical destination parent is replaced before staging", async () => {
+    const { root, vaultPath } = makeVault();
+    const destinationParent = path.join(root, "exports");
+    const displacedParent = path.join(root, "exports-displaced");
+    const backupPath = path.join(destinationParent, "parent-swap.zip");
+    writeVaultFixture(vaultPath);
+    fs.mkdirSync(destinationParent, { recursive: true });
+    let swapped = false;
+
+    await expect(new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test", {
+      onPhase(event) {
+        if (!swapped && event.phase === "manifest_written") {
+          fs.renameSync(destinationParent, displacedParent);
+          fs.mkdirSync(destinationParent);
+          swapped = true;
+        }
+      }
+    })).rejects.toMatchObject({ code: "backup.destination_changed" });
+
+    expect(swapped).toBe(true);
+    expect(fs.readdirSync(destinationParent)).toEqual([]);
+    expect(fs.readdirSync(displacedParent)).toEqual([]);
   });
 
   it("publishes a validated adjacent staging archive and leaves no staging residue", async () => {
@@ -1409,6 +1852,17 @@ function createTestRestoreInput(
     pathSafety,
     ...(overrides.onPhase ? { onPhase: overrides.onPhase } : {})
   };
+}
+
+function serializeSourceRecord(input: unknown): string {
+  return `${JSON.stringify(SourceRecordSchema.parse(input), null, 2)}\n`;
+}
+
+function writeSourceRecord(vaultPath: string, input: unknown): void {
+  const record = SourceRecordSchema.parse(input);
+  const targetPath = path.join(vaultPath, ".pige", "source-records", `${record.id}.json`);
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+  fs.writeFileSync(targetPath, `${JSON.stringify(record, null, 2)}\n`, "utf8");
 }
 
 function writeVaultFixture(vaultPath: string): readonly FixtureFile[] {

@@ -182,6 +182,63 @@ describe("jobs service", () => {
     expect(result.jobs).toHaveLength(0);
   });
 
+  it("projects user and rollback Backup ownership with only typed safe errors", () => {
+    const { vaultPath, vault } = makeVault();
+    const { jobs } = makeServices(vaultPath, vault);
+    const jobsPath = path.join(vaultPath, ".pige", "jobs", "2026", "07");
+    fs.mkdirSync(jobsPath, { recursive: true });
+    const records = [
+      {
+        id: "job_20260710_backupuser1",
+        inputRefs: [{ kind: "external_uri", path: "/private/hidden-user-backup.zip", role: "backup_destination" }],
+        error: {
+          code: "backup.destination_changed",
+          domain: "backup",
+          messageKey: "errors.backup.destination_changed",
+          retryable: false,
+          severity: "error",
+          userAction: "choose_path"
+        }
+      },
+      {
+        id: "job_20260710_backuproll1",
+        inputRefs: [{ kind: "external_uri", path: "/private/hidden-rollback.zip", role: "rollback_backup_destination" }]
+      }
+    ] as const;
+    for (const record of records) {
+      fs.writeFileSync(path.join(jobsPath, `${record.id}.json`), `${JSON.stringify({
+        schemaVersion: 1,
+        class: "backup",
+        state: record.error ? "failed_final" : "running",
+        stage: "backing_up",
+        priority: "interactive",
+        scope: "vault",
+        createdAt: "2026-07-10T01:00:00.000Z",
+        updatedAt: "2026-07-10T01:01:00.000Z",
+        activeVaultId: vault.vaultId,
+        inputRefs: record.inputRefs,
+        outputRefs: [],
+        checkpoints: [],
+        ...(record.error ? { error: record.error } : {}),
+        message: "Internal Backup message with /private/hidden details.",
+        id: record.id
+      }, null, 2)}\n`, "utf8");
+    }
+
+    const summaries = jobs.list({ classes: ["backup"], limit: 10 }).jobs;
+
+    expect(new Map(summaries.map((job) => [job.id, job.backupKind]))).toEqual(new Map([
+      ["job_20260710_backupuser1", "user_backup"],
+      ["job_20260710_backuproll1", "restore_rollback"]
+    ]));
+    expect(summaries.find((job) => job.id === "job_20260710_backupuser1")?.error).toEqual(expect.objectContaining({
+      code: "backup.destination_changed",
+      userAction: "choose_path"
+    }));
+    expect(JSON.stringify(summaries)).not.toContain("hidden-user-backup.zip");
+    expect(JSON.stringify(summaries)).not.toContain("hidden-rollback.zip");
+  });
+
   it("reconciles interrupted jobs conservatively on startup", () => {
     const { vaultPath, vault } = makeVault();
     const { jobs } = makeServices(vaultPath, vault);
@@ -200,6 +257,7 @@ describe("jobs service", () => {
       { id: "job_20260710_parse0001", class: "parse", state: "running" },
       { id: "job_20260710_ocr000001", class: "ocr", state: "running" },
       { id: "job_20260710_agent0001", class: "agent_ingest", state: "running" },
+      { id: "job_20260710_backup001", class: "backup", state: "running" },
       { id: "job_20260710_restore01", class: "restore", state: "running" },
       {
         id: "job_20260710_cancel001",
@@ -236,6 +294,9 @@ describe("jobs service", () => {
       "job_20260710_restore01"
     ]);
     expect(retryable.every((job) => job.message.includes("explicit retry"))).toBe(true);
+    expect(jobs.list({ classes: ["backup"], limit: 10 }).jobs).toEqual([
+      expect.objectContaining({ id: "job_20260710_backup001", state: "running" })
+    ]);
 
     const retryableWithoutDurableOutput = requireValue(
       retryable.find((job) => job.id === "job_20260710_restore01")

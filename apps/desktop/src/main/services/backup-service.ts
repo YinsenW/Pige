@@ -20,13 +20,18 @@ import type {
   VaultSummary
 } from "@pige/contracts";
 import { PIGE_APP_MIN_VERSION, PigeDomainError } from "@pige/domain";
+import { parsePigeFrontmatter } from "@pige/markdown";
 import {
+  BackupDomainSchemaVersionsSchema,
   BackupIdSchema,
   BackupManifestSchema,
   JobIdSchema,
+  SourceRecordSchema,
   VaultIdSchema,
   VaultManifestSchema,
+  type BackupDomainSchemaVersions,
   type BackupManifest,
+  type SourceRecord,
   type VaultManifest
 } from "@pige/schemas";
 import {
@@ -120,6 +125,61 @@ export interface RestoreCoreApplyResult {
 
 export interface BackupCreateOptions {
   readonly excludeJobId?: string;
+  readonly backupId?: string;
+  readonly createdAt?: string;
+  readonly stagingOwnerKey?: string;
+  readonly expectedDestinationFence?: BackupDestinationFence;
+  readonly expectedManifestChecksum?: `sha256:${string}`;
+  readonly expectedArchiveDigest?: `sha256:${string}`;
+  readonly signal?: AbortSignal;
+  readonly onPhase?: BackupCreatePhaseReporter;
+}
+
+export interface BackupDestinationFence {
+  readonly destinationPath: string;
+  readonly ancestorPath: string;
+  readonly ancestorDevice: number;
+  readonly ancestorInode: number;
+}
+
+export type BackupCreateCheckpointPhase =
+  | "preflight"
+  | "manifest_written"
+  | "files_hashed"
+  | "archive_staged"
+  | "archive_finalized";
+
+export interface BackupCreateCheckpointEvent {
+  readonly phase: BackupCreateCheckpointPhase;
+  readonly backupId: string;
+  readonly createdAt: string;
+  readonly stagingOwnerKey: string;
+  readonly manifestChecksum?: `sha256:${string}`;
+  readonly archiveDigest?: `sha256:${string}`;
+}
+
+export type BackupCreatePhaseReporter = (
+  event: BackupCreateCheckpointEvent
+) => void | Promise<void>;
+
+interface BackupCreateIdentity {
+  readonly backupId: string;
+  readonly createdAt: string;
+  readonly stagingOwnerKey: string;
+}
+
+interface BackupPreflightResult {
+  readonly relativePaths: readonly string[];
+  readonly sourceRecordChecksums: ReadonlyMap<string, string>;
+  readonly domainSchemaVersions: BackupDomainSchemaVersions;
+  readonly externalDependencies: BackupManifest["externalDependencies"];
+}
+
+interface AdoptedBackupArchive {
+  readonly manifest: BackupManifest;
+  readonly manifestChecksum: `sha256:${string}`;
+  readonly archiveDigest: `sha256:${string}`;
+  readonly identity: fs.Stats;
 }
 
 interface RestoreArchiveSnapshot {
@@ -233,105 +293,229 @@ export class BackupRestoreService {
     appVersion = PIGE_APP_MIN_VERSION,
     options: BackupCreateOptions = {}
   ): Promise<BackupCreateResult> {
-    const vaultPath = path.resolve(vaultPathInput);
-    const backupFilePath = normalizeBackupFilePath(backupFilePathInput);
-    if (!isPigeVault(vaultPath)) {
+    const resolvedVaultPath = path.resolve(vaultPathInput);
+    const identity = createBackupIdentity(options);
+    const checkpointContext = identity satisfies Omit<BackupCreateCheckpointEvent, "phase">;
+    if (!isPigeVault(resolvedVaultPath)) {
       throw new PigeDomainError("backup.vault_invalid", "Active vault is not a compatible Pige vault.");
     }
-    if (isSameOrInside(backupFilePath, vaultPath)) {
+    const vaultPath = fs.realpathSync.native(resolvedVaultPath);
+    const destinationFence = captureBackupDestinationFence(backupFilePathInput);
+    assertExpectedBackupDestinationFence(destinationFence, options.expectedDestinationFence);
+    const canonicalBackupFilePath = destinationFence.destinationPath;
+    if (isSameOrInside(canonicalBackupFilePath, vaultPath)) {
       throw new PigeDomainError("backup.path_inside_vault", "Backup file cannot be created inside the active vault.");
     }
-    fs.mkdirSync(path.dirname(backupFilePath), { recursive: true });
+    const backupFilePath = prepareBackupDestinationPath(canonicalBackupFilePath);
+    assertBackupDestinationFence(destinationFence);
+    const destinationParentIdentity = captureBackupDestinationParent(backupFilePath);
     reconcilePublishedBackupStagingLinks(backupFilePath);
+    assertBackupDestinationParent(backupFilePath, destinationParentIdentity);
+    const stagingPath = createBackupStagingPath(backupFilePath, identity.stagingOwnerKey);
+    const vaultId = readVaultManifest(vaultPath).vault_id;
     if (fs.existsSync(backupFilePath)) {
-      throw new PigeDomainError("backup.destination_exists", "Backup file already exists.");
+      assertDurableAdoptionDigests(options, "destination");
+      const adopted = await inspectAdoptableBackupArchive(
+        backupFilePath,
+        identity,
+        vaultId,
+        appVersion,
+        options,
+        "destination"
+      );
+      assertBackupDestinationParent(backupFilePath, destinationParentIdentity);
+      assertAdoptableFinalLinkOwnership(stagingPath, backupFilePath, adopted.identity);
+      removeExactAdoptedStagingLink(stagingPath, backupFilePath);
+      await reportAdoptedBackupPhases(options.onPhase, checkpointContext, adopted);
+      return {
+        status: "created",
+        backupPath: backupFilePath,
+        manifest: toManifestSummary(adopted.manifest)
+      };
     }
-
-    const manifest = createBackupManifest(vaultPath, appVersion, options);
+    if (fs.existsSync(stagingPath)) {
+      assertDurableAdoptionDigests(options, "existing_staging");
+      const adopted = await inspectAdoptableBackupArchive(
+        stagingPath,
+        identity,
+        vaultId,
+        appVersion,
+        options,
+        "existing_staging"
+      );
+      await reportAdoptedBackupPhases(options.onPhase, checkpointContext, adopted, false);
+      if (options.signal?.aborted) {
+        removeOwnedFile(stagingPath, adopted.identity);
+        throwIfBackupAborted(options.signal);
+      }
+      publishAdoptedBackupStaging(
+        stagingPath,
+        backupFilePath,
+        adopted,
+        destinationParentIdentity
+      );
+      await reportBackupCreatePhase(options.onPhase, checkpointContext, "archive_finalized", {
+        manifestChecksum: adopted.manifestChecksum,
+        archiveDigest: adopted.archiveDigest
+      });
+      return {
+        status: "created",
+        backupPath: backupFilePath,
+        manifest: toManifestSummary(adopted.manifest)
+      };
+    }
+    throwIfBackupAborted(options.signal);
+    const preflight = inspectBackupPreflight(vaultPath, options);
+    await reportBackupCreatePhase(options.onPhase, checkpointContext, "preflight");
+    throwIfBackupAborted(options.signal);
+    const manifest = createBackupManifest(vaultPath, appVersion, identity, preflight, options.signal);
     const manifestText = `${JSON.stringify(manifest, null, 2)}\n`;
-    const stagingPath = createBackupStagingPath(backupFilePath);
+    const manifestChecksum = checksumBuffer(Buffer.from(manifestText, "utf8"));
+    await reportBackupCreatePhase(options.onPhase, checkpointContext, "manifest_written", { manifestChecksum });
+    throwIfBackupAborted(options.signal);
+    await reportBackupCreatePhase(options.onPhase, checkpointContext, "files_hashed", { manifestChecksum });
+    throwIfBackupAborted(options.signal);
+    const result: BackupCreateResult = {
+      status: "created",
+      backupPath: backupFilePath,
+      manifest: toManifestSummary(manifest)
+    };
     let descriptor: number | undefined;
     let stagingIdentity: fs.Stats | undefined;
+    let stagingValidated = false;
+    let cleanupStaging = true;
     let linkedDestination = false;
     let finalized = false;
 
     try {
-      const flags = fs.constants.O_WRONLY |
-        fs.constants.O_CREAT |
-        fs.constants.O_EXCL |
-        (fs.constants.O_NOFOLLOW ?? 0);
-      descriptor = fs.openSync(stagingPath, flags, 0o600);
-      const openedStat = fs.fstatSync(descriptor);
-      const openedPathStat = fs.lstatSync(stagingPath);
-      if (
-        openedStat.nlink !== 1 ||
-        openedPathStat.nlink !== 1 ||
-        !sameFileIdentity(openedStat, openedPathStat)
-      ) {
-        throw new PigeDomainError("backup.staging_changed", "Backup staging archive is not private.");
-      }
-      stagingIdentity = openedStat;
-
-      const zipFile = new ZipFile();
-      zipFile.addBuffer(
-        Buffer.from(manifestText, "utf8"),
-        BACKUP_MANIFEST_FILE,
-        { mtime: new Date(manifest.createdAt) }
-      );
-      for (const file of manifest.files) {
-        const sourcePath = path.join(vaultPath, ...file.path.split("/"));
-        zipFile.addFile(sourcePath, `${BACKUP_VAULT_DIR}/${file.path}`, {
-          mtime: fs.statSync(sourcePath).mtime
+      assertBackupDestinationParent(backupFilePath, destinationParentIdentity);
+      if (fs.existsSync(backupFilePath)) {
+        const destinationIdentity = await assertExactBackupArchive(
+          backupFilePath,
+          manifest,
+          manifestText,
+          options.signal,
+          "destination"
+        );
+        assertAdoptableFinalLinkOwnership(stagingPath, backupFilePath, destinationIdentity);
+        const archiveDigest = checksumFile(backupFilePath) as `sha256:${string}`;
+        removeExactAdoptedStagingLink(stagingPath, backupFilePath);
+        await reportBackupCreatePhase(options.onPhase, checkpointContext, "archive_staged", {
+          manifestChecksum,
+          archiveDigest
         });
+        await reportBackupCreatePhase(options.onPhase, checkpointContext, "archive_finalized", {
+          manifestChecksum,
+          archiveDigest
+        });
+        return result;
       }
-      zipFile.end();
 
-      await pipeline(
-        zipFile.outputStream,
-        fs.createWriteStream(stagingPath, { fd: descriptor, autoClose: false })
-      );
-      fs.fsyncSync(descriptor);
-      const writtenStat = fs.fstatSync(descriptor);
-      const writtenPathStat = fs.lstatSync(stagingPath);
-      if (
-        writtenStat.nlink !== 1 ||
-        writtenPathStat.nlink !== 1 ||
-        !sameInodeIdentity(openedStat, writtenStat) ||
-        !sameFileIdentity(writtenStat, writtenPathStat)
-      ) {
-        throw new PigeDomainError("backup.staging_changed", "Backup staging archive changed while it was written.");
-      }
-      stagingIdentity = writtenStat;
-      fs.closeSync(descriptor);
-      descriptor = undefined;
+      if (fs.existsSync(stagingPath)) {
+        stagingIdentity = await assertExactBackupArchive(
+          stagingPath,
+          manifest,
+          manifestText,
+          options.signal,
+          "existing_staging"
+        );
+        stagingValidated = true;
+        cleanupStaging = false;
+      } else {
+        const flags = fs.constants.O_WRONLY |
+          fs.constants.O_CREAT |
+          fs.constants.O_EXCL |
+          (fs.constants.O_NOFOLLOW ?? 0);
+        descriptor = fs.openSync(stagingPath, flags, 0o600);
+        const openedStat = fs.fstatSync(descriptor);
+        const openedPathStat = fs.lstatSync(stagingPath);
+        if (
+          openedStat.nlink !== 1 ||
+          openedPathStat.nlink !== 1 ||
+          !sameFileIdentity(openedStat, openedPathStat)
+        ) {
+          throw new PigeDomainError("backup.staging_changed", "Backup staging archive is not private.");
+        }
+        stagingIdentity = openedStat;
 
-      const stagedManifestText = await readZipTextEntry(stagingPath, BACKUP_MANIFEST_FILE);
-      if (stagedManifestText !== manifestText) {
-        throw new PigeDomainError("backup.validation_failed", "Staged backup manifest does not match the source snapshot.");
-      }
-      parseBackupManifest(JSON.parse(stagedManifestText) as unknown);
-      const validation = await validateBackupZip(stagingPath, manifest);
-      if (validation.invalidFiles.length > 0) {
-        throw new PigeDomainError("backup.validation_failed", "Staged backup files failed validation.");
-      }
-      const validatedPathStat = fs.lstatSync(stagingPath);
-      if (validatedPathStat.nlink !== 1 || !sameFileRevision(stagingIdentity, validatedPathStat)) {
-        throw new PigeDomainError("backup.staging_changed", "Backup staging archive changed during validation.");
-      }
-      const stagedArchiveChecksum = checksumFile(stagingPath);
+        const zipFile = new ZipFile();
+        zipFile.addBuffer(
+          Buffer.from(manifestText, "utf8"),
+          BACKUP_MANIFEST_FILE,
+          { mtime: new Date(manifest.createdAt) }
+        );
+        for (const file of manifest.files) {
+          throwIfBackupAborted(options.signal);
+          const sourcePath = path.join(vaultPath, ...file.path.split("/"));
+          zipFile.addFile(sourcePath, `${BACKUP_VAULT_DIR}/${file.path}`, {
+            mtime: fs.statSync(sourcePath).mtime
+          });
+        }
+        zipFile.end();
 
-      const result: BackupCreateResult = {
-        status: "created",
-        backupPath: backupFilePath,
-        manifest: toManifestSummary(manifest)
-      };
+        const output = fs.createWriteStream(stagingPath, { fd: descriptor, autoClose: false });
+        if (options.signal) {
+          await pipeline(zipFile.outputStream, output, { signal: options.signal });
+        } else {
+          await pipeline(zipFile.outputStream, output);
+        }
+        fs.fsyncSync(descriptor);
+        const writtenStat = fs.fstatSync(descriptor);
+        const writtenPathStat = fs.lstatSync(stagingPath);
+        if (
+          writtenStat.nlink !== 1 ||
+          writtenPathStat.nlink !== 1 ||
+          !sameInodeIdentity(openedStat, writtenStat) ||
+          !sameFileIdentity(writtenStat, writtenPathStat)
+        ) {
+          throw new PigeDomainError("backup.staging_changed", "Backup staging archive changed while it was written.");
+        }
+        stagingIdentity = writtenStat;
+        fs.closeSync(descriptor);
+        descriptor = undefined;
+
+        const validatedIdentity = await assertExactBackupArchive(
+          stagingPath,
+          manifest,
+          manifestText,
+          options.signal,
+          "staging"
+        );
+        if (!sameFileRevision(stagingIdentity, validatedIdentity)) {
+          throw new PigeDomainError("backup.staging_changed", "Backup staging archive changed during validation.");
+        }
+        stagingIdentity = validatedIdentity;
+        stagingValidated = true;
+        cleanupStaging = false;
+      }
+      const stagedArchiveChecksum = checksumFile(stagingPath) as `sha256:${string}`;
+      try {
+        await reportBackupCreatePhase(options.onPhase, checkpointContext, "archive_staged", {
+          manifestChecksum,
+          archiveDigest: stagedArchiveChecksum
+        });
+      } catch (caught) {
+        if (isBackupAbortError(caught)) cleanupStaging = true;
+        throw caught;
+      }
+      if (options.signal?.aborted) cleanupStaging = true;
+      throwIfBackupAborted(options.signal);
+      cleanupStaging = true;
 
       try {
+        assertBackupDestinationParent(backupFilePath, destinationParentIdentity);
         fs.linkSync(stagingPath, backupFilePath);
         linkedDestination = true;
       } catch (caught) {
         if (isErrno(caught, "EEXIST")) {
-          throw new PigeDomainError("backup.destination_exists", "Backup file already exists.");
+          await assertExactBackupArchive(backupFilePath, manifest, manifestText, undefined, "destination");
+          removeOwnedFile(stagingPath, stagingIdentity);
+          finalized = true;
+          await reportBackupCreatePhase(options.onPhase, checkpointContext, "archive_finalized", {
+            manifestChecksum,
+            archiveDigest: stagedArchiveChecksum
+          });
+          return result;
         }
         if (isAtomicLinkUnsupported(caught)) {
           throw new PigeDomainError(
@@ -367,6 +551,11 @@ export class BackupRestoreService {
       }
       finalized = true;
       fsyncDirectoryBestEffort(path.dirname(backupFilePath));
+      assertBackupDestinationParent(backupFilePath, destinationParentIdentity);
+      await reportBackupCreatePhase(options.onPhase, checkpointContext, "archive_finalized", {
+        manifestChecksum,
+        archiveDigest: stagedArchiveChecksum
+      });
       return result;
     } finally {
       if (descriptor !== undefined) {
@@ -384,7 +573,7 @@ export class BackupRestoreService {
       if (!finalized && linkedDestination && stagingIdentity) {
         removeOwnedFile(backupFilePath, stagingIdentity);
       }
-      if (stagingIdentity) {
+      if (stagingIdentity && (cleanupStaging || finalized || !stagingValidated)) {
         removeOwnedFile(stagingPath, stagingIdentity);
       }
     }
@@ -607,13 +796,22 @@ export class BackupRestoreService {
 function createBackupManifest(
   vaultPath: string,
   appVersion: string,
-  options: BackupCreateOptions = {}
+  identity: BackupCreateIdentity,
+  preflight: BackupPreflightResult,
+  signal?: AbortSignal
 ): BackupManifest {
   const vaultManifest = readVaultManifest(vaultPath);
-  const createdAt = new Date().toISOString();
-  const files = collectBackupFiles(vaultPath, options).map((relativePath) => {
+  const files = preflight.relativePaths.map((relativePath) => {
+    throwIfBackupAborted(signal);
     const absolutePath = path.join(vaultPath, ...relativePath.split("/"));
-    const snapshot = snapshotBackupSourceFile(absolutePath);
+    const snapshot = snapshotBackupSourceFile(absolutePath, signal);
+    const preflightChecksum = preflight.sourceRecordChecksums.get(relativePath);
+    if (preflightChecksum && snapshot.checksum !== preflightChecksum) {
+      throw new PigeDomainError(
+        "backup.source_changed",
+        "A source record changed after backup preflight."
+      );
+    }
     return {
       path: relativePath,
       size: snapshot.size,
@@ -622,15 +820,15 @@ function createBackupManifest(
   });
   const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
 
-  return {
+  return BackupManifestSchema.parse({
     format: BACKUP_FORMAT,
     formatVersion: BACKUP_FORMAT_VERSION,
-    backupId: createBackupId(createdAt),
+    backupId: identity.backupId,
     appVersion,
     vaultId: vaultManifest.vault_id,
     vaultName: path.basename(vaultPath),
     vaultSchemaVersion: vaultManifest.vault_schema_version,
-    createdAt,
+    createdAt: identity.createdAt,
     fileCount: files.length,
     totalBytes,
     noteCount: countFiles(path.join(vaultPath, "wiki"), (filePath) => filePath.endsWith(".md")),
@@ -639,10 +837,222 @@ function createBackupManifest(
     memoryCount: countFiles(path.join(vaultPath, ".pige/memory")),
     includesSecrets: false,
     includes: DEFAULT_INCLUDES,
+    domainSchemaVersions: preflight.domainSchemaVersions,
     excludedRoots: [...PIGE_REBUILDABLE_ROOTS, ...PIGE_TRANSIENT_RUNTIME_ROOTS],
-    externalDependencies: [],
+    externalDependencies: preflight.externalDependencies,
     files
+  });
+}
+
+function createBackupIdentity(options: BackupCreateOptions): BackupCreateIdentity {
+  const createdAt = options.createdAt ?? new Date().toISOString();
+  if (
+    !Number.isFinite(Date.parse(createdAt)) ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/u.test(createdAt)
+  ) {
+    throw new PigeDomainError("backup.identity_invalid", "Backup creation timestamp is invalid.");
+  }
+  let backupId: string;
+  try {
+    backupId = BackupIdSchema.parse(options.backupId ?? createBackupId(createdAt));
+  } catch {
+    throw new PigeDomainError("backup.identity_invalid", "Backup identity is invalid.");
+  }
+  const stagingOwnerKey = options.stagingOwnerKey ?? options.excludeJobId ?? backupId;
+  if (!/^[-A-Za-z0-9._:]{1,256}$/u.test(stagingOwnerKey)) {
+    throw new PigeDomainError("backup.identity_invalid", "Backup staging owner identity is invalid.");
+  }
+  return { backupId, createdAt, stagingOwnerKey };
+}
+
+function inspectBackupPreflight(
+  vaultPath: string,
+  options: BackupCreateOptions
+): BackupPreflightResult {
+  const relativePaths = collectBackupFiles(vaultPath, options);
+  const includedPaths = new Set(relativePaths);
+  const sourceRecordChecksums = new Map<string, string>();
+  const externalDependencies: BackupManifest["externalDependencies"] = [];
+  const sourceRecordPrefix = ".pige/source-records/";
+
+  for (const relativePath of relativePaths) {
+    if (!relativePath.startsWith(sourceRecordPrefix) || !relativePath.endsWith(".json")) continue;
+    throwIfBackupAborted(options.signal);
+    const absolutePath = path.join(vaultPath, ...relativePath.split("/"));
+    const inspected = readValidatedBackupSourceRecord(absolutePath);
+    const record = inspected.record;
+    sourceRecordChecksums.set(relativePath, inspected.checksum);
+
+    if (record.storageStrategy === "reference_original") {
+      externalDependencies.push({
+        kind: "external_original",
+        sourceId: record.id,
+        included: false,
+        requiredForCompleteRestore: false
+      });
+      continue;
+    }
+
+    const managedCopy = record.managedCopy;
+    if (!managedCopy) {
+      throw new PigeDomainError("backup.source_record_invalid", "A managed source record has no managed copy.");
+    }
+    if (managedCopy.rootId && managedCopy.rootId !== "root_vault_managed") {
+      throw new PigeDomainError(
+        "backup.external_managed_copy_unsupported",
+        "External managed-copy roots require a validated machine-local binding before backup."
+      );
+    }
+    assertSafeVaultRelativePath(managedCopy.path);
+    if (!includedPaths.has(managedCopy.path)) {
+      throw new PigeDomainError(
+        "backup.managed_copy_missing",
+        "A required in-vault managed source copy is unavailable."
+      );
+    }
+  }
+
+  externalDependencies.sort((left, right) => {
+    const leftId = typeof left === "string" ? left : `${left.kind}:${left.sourceId ?? left.rootId ?? ""}`;
+    const rightId = typeof right === "string" ? right : `${right.kind}:${right.sourceId ?? right.rootId ?? ""}`;
+    return leftId.localeCompare(rightId);
+  });
+
+  return {
+    relativePaths,
+    sourceRecordChecksums,
+    domainSchemaVersions: deriveBackupDomainSchemaVersions(vaultPath, relativePaths),
+    externalDependencies
   };
+}
+
+type BackupDomainName = keyof BackupDomainSchemaVersions;
+
+function deriveBackupDomainSchemaVersions(
+  vaultPath: string,
+  relativePaths: readonly string[]
+): BackupDomainSchemaVersions {
+  const versions = new Map<BackupDomainName, Set<number>>();
+  const domainNames: readonly BackupDomainName[] = [
+    "markdownPages",
+    "sourceRecords",
+    "conversationEvents",
+    "jobs",
+    "proposals",
+    "operations",
+    "memory",
+    "skills",
+    "datasets"
+  ];
+  for (const domain of domainNames) versions.set(domain, new Set());
+
+  for (const relativePath of relativePaths) {
+    const domain = durableDomainForPath(relativePath);
+    if (!domain) continue;
+    const absolutePath = path.join(vaultPath, ...relativePath.split("/"));
+    for (const version of readDurableDomainVersions(absolutePath, domain)) {
+      versions.get(domain)!.add(version);
+    }
+  }
+
+  return BackupDomainSchemaVersionsSchema.parse(Object.fromEntries(domainNames.map((domain) => {
+    const recorded = [...versions.get(domain)!].sort((left, right) => left - right);
+    const present = recorded.length > 0 ? recorded : [1];
+    return [domain, { min: present[0]!, max: present[present.length - 1]! }];
+  })));
+}
+
+function durableDomainForPath(relativePath: string): BackupDomainName | undefined {
+  if ((relativePath.startsWith("wiki/") || relativePath.startsWith("sources/")) && relativePath.endsWith(".md")) {
+    return "markdownPages";
+  }
+  if (relativePath.startsWith(".pige/source-records/") && relativePath.endsWith(".json")) {
+    return "sourceRecords";
+  }
+  if (relativePath.startsWith(".pige/conversations/") && relativePath.endsWith(".jsonl")) {
+    return "conversationEvents";
+  }
+  if (relativePath.startsWith(".pige/jobs/") && relativePath.endsWith(".json")) return "jobs";
+  if (relativePath.startsWith(".pige/proposals/") && relativePath.endsWith(".json")) return "proposals";
+  if (relativePath.startsWith(".pige/operations/") && relativePath.endsWith(".json")) return "operations";
+  if (relativePath.startsWith(".pige/memory/") && /\.(?:json|md)$/u.test(relativePath)) return "memory";
+  if (relativePath.startsWith(".pige/skills/") && /\.(?:json|md)$/u.test(relativePath)) return "skills";
+  if (relativePath.startsWith("datasets/") && relativePath.endsWith(".json")) return "datasets";
+  return undefined;
+}
+
+function readDurableDomainVersions(
+  absolutePath: string,
+  domain: BackupDomainName
+): readonly number[] {
+  try {
+    const body = fs.readFileSync(absolutePath, "utf8");
+    if (domain === "markdownPages" || absolutePath.endsWith(".md")) {
+      const version = parsePigeFrontmatter(body)?.frontmatter.schema_version;
+      return version === undefined ? [1] : [parseDurableSchemaVersion(version)];
+    }
+    if (domain === "conversationEvents") {
+      const values = body.split(/\r?\n/gu).filter((line) => line.trim() !== "");
+      return values.length === 0
+        ? [1]
+        : values.map((line) => readJsonSchemaVersion(JSON.parse(line) as unknown));
+    }
+    return [readJsonSchemaVersion(JSON.parse(body) as unknown)];
+  } catch (caught) {
+    if (caught instanceof PigeDomainError) throw caught;
+    throw new PigeDomainError(
+      "backup.schema_version_invalid",
+      `A ${domain} record has invalid schema-version structure.`
+    );
+  }
+}
+
+function readJsonSchemaVersion(value: unknown): number {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new PigeDomainError("backup.schema_version_invalid", "A durable JSON record must be an object.");
+  }
+  return parseDurableSchemaVersion((value as Record<string, unknown>).schemaVersion ?? 1);
+}
+
+function parseDurableSchemaVersion(value: unknown): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) {
+    throw new PigeDomainError("backup.schema_version_invalid", "A durable schema version is invalid.");
+  }
+  return value;
+}
+
+function readValidatedBackupSourceRecord(filePath: string): {
+  readonly record: SourceRecord;
+  readonly checksum: string;
+} {
+  const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0);
+  let descriptor: number | undefined;
+  try {
+    descriptor = fs.openSync(filePath, flags);
+    const before = fs.fstatSync(descriptor);
+    const pathBefore = fs.lstatSync(filePath);
+    if (before.nlink !== 1 || pathBefore.nlink !== 1 || !sameFileRevision(before, pathBefore)) {
+      throw new PigeDomainError("backup.source_changed", "A source record changed during backup preflight.");
+    }
+    const bytes = fs.readFileSync(descriptor);
+    const after = fs.fstatSync(descriptor);
+    const pathAfter = fs.lstatSync(filePath);
+    if (!sameFileRevision(before, after) || !sameFileRevision(after, pathAfter)) {
+      throw new PigeDomainError("backup.source_changed", "A source record changed during backup preflight.");
+    }
+    return {
+      record: SourceRecordSchema.parse(JSON.parse(bytes.toString("utf8")) as unknown),
+      checksum: `sha256:${createHash("sha256").update(bytes).digest("hex")}`
+    };
+  } catch (caught) {
+    if (caught instanceof PigeDomainError) throw caught;
+    throw new PigeDomainError(
+      "backup.source_record_invalid",
+      "A source record is not compatible with durable backup."
+    );
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
+  }
 }
 
 export function createRestoreDestinationIdentity(
@@ -685,9 +1095,29 @@ function collectBackupFiles(
     }
   }
 
+  for (const file of Array.from(files)) {
+    if (isHistoricalBackupJob(vaultPath, file)) files.delete(file);
+  }
+
   if (excludedJobPath) files.delete(excludedJobPath);
 
   return Array.from(files).sort();
+}
+
+function isHistoricalBackupJob(vaultPath: string, relativePath: string): boolean {
+  if (!relativePath.startsWith(".pige/jobs/") || !relativePath.endsWith(".json")) return false;
+  try {
+    const filePath = path.join(vaultPath, ...relativePath.split("/"));
+    const value = JSON.parse(fs.readFileSync(filePath, "utf8")) as unknown;
+    return Boolean(
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      (value as Record<string, unknown>).class === "backup"
+    );
+  } catch {
+    return false;
+  }
 }
 
 function backupJobRelativePath(jobIdInput: string): string {
@@ -812,7 +1242,8 @@ async function readZipTextEntry(source: string | number, entryName: string): Pro
 
 async function validateBackupZip(
   source: string | number,
-  manifest: BackupManifest
+  manifest: BackupManifest,
+  signal?: AbortSignal
 ): Promise<{ readonly invalidFiles: readonly string[] }> {
   const invalidFiles = new Set<string>();
   const manifestFilesByPath = new Map(manifest.files.map((file) => [file.path, file]));
@@ -822,6 +1253,7 @@ async function validateBackupZip(
   const zipFile = await openBackupZip(source);
   try {
     for await (const entry of zipFile.eachEntry()) {
+      throwIfBackupAborted(signal);
       assertSafeZipEntryName(entry.fileName);
       if (seenEntryNames.has(entry.fileName)) {
         throw new PigeDomainError("restore.entry_duplicate", "Backup contains duplicate ZIP entries.");
@@ -843,7 +1275,7 @@ async function validateBackupZip(
         invalidFiles.add(relativePath);
         continue;
       }
-      const checksum = await checksumZipEntry(zipFile, entry);
+      const checksum = await checksumZipEntry(zipFile, entry, signal);
       if (checksum !== manifestFile.checksum) invalidFiles.add(relativePath);
     }
   } finally {
@@ -858,6 +1290,217 @@ async function validateBackupZip(
   }
 
   return { invalidFiles: Array.from(invalidFiles).sort() };
+}
+
+async function assertExactBackupArchive(
+  archivePath: string,
+  expectedManifest: BackupManifest,
+  expectedManifestText: string,
+  signal: AbortSignal | undefined,
+  kind: "destination" | "existing_staging" | "staging"
+): Promise<fs.Stats> {
+  try {
+    throwIfBackupAborted(signal);
+    const before = fs.lstatSync(archivePath);
+    if (!before.isFile() || before.isSymbolicLink() || before.nlink < 1 || before.nlink > 2) {
+      throw new Error("Backup archive identity is not private.");
+    }
+    const manifestText = await readZipTextEntry(archivePath, BACKUP_MANIFEST_FILE);
+    if (manifestText !== expectedManifestText) {
+      throw new Error("Backup manifest does not match the requested identity and source snapshot.");
+    }
+    const parsedManifest = parseBackupManifest(JSON.parse(manifestText) as unknown);
+    if (JSON.stringify(parsedManifest) !== JSON.stringify(expectedManifest)) {
+      throw new Error("Backup manifest is not the exact expected manifest.");
+    }
+    const validation = await validateBackupZip(archivePath, parsedManifest, signal);
+    if (validation.invalidFiles.length > 0) {
+      throw new Error("Backup archive files do not match the expected manifest.");
+    }
+    await readAndAssertArchivedVaultManifest(archivePath, parsedManifest);
+    throwIfBackupAborted(signal);
+    const after = fs.lstatSync(archivePath);
+    if (!sameFileRevision(before, after)) {
+      throw new Error("Backup archive changed during validation.");
+    }
+    return after;
+  } catch (caught) {
+    if (signal?.aborted) throwIfBackupAborted(signal);
+    if (kind === "destination") {
+      throw new PigeDomainError(
+        "backup.destination_exists",
+        "Backup destination already contains a different file."
+      );
+    }
+    if (kind === "existing_staging") {
+      throw new PigeDomainError(
+        "backup.staging_conflict",
+        "Backup staging contains output for a different identity or source snapshot."
+      );
+    }
+    throw new PigeDomainError("backup.validation_failed", "Staged backup files failed validation.");
+  }
+}
+
+async function inspectAdoptableBackupArchive(
+  archivePath: string,
+  identity: BackupCreateIdentity,
+  vaultId: string,
+  appVersion: string,
+  options: BackupCreateOptions,
+  kind: "destination" | "existing_staging"
+): Promise<AdoptedBackupArchive> {
+  try {
+    const before = fs.lstatSync(archivePath);
+    if (!before.isFile() || before.isSymbolicLink() || before.nlink < 1 || before.nlink > 2) {
+      throw new Error("Backup archive identity is unsafe.");
+    }
+    const manifestText = await readZipTextEntry(archivePath, BACKUP_MANIFEST_FILE);
+    if (manifestText === undefined) {
+      throw new Error("Backup manifest is missing.");
+    }
+    const manifest = parseBackupManifest(JSON.parse(manifestText) as unknown);
+    if (
+      manifest.backupId !== identity.backupId ||
+      manifest.createdAt !== identity.createdAt ||
+      manifest.vaultId !== vaultId ||
+      manifest.appVersion !== appVersion
+    ) {
+      throw new Error("Backup archive identity does not match its durable Job.");
+    }
+    const manifestChecksum = checksumBuffer(Buffer.from(manifestText, "utf8"));
+    if (
+      options.expectedManifestChecksum !== undefined &&
+      manifestChecksum !== options.expectedManifestChecksum
+    ) {
+      throw new Error("Backup manifest digest changed after its durable checkpoint.");
+    }
+    const validation = await validateBackupZip(archivePath, manifest);
+    if (validation.invalidFiles.length > 0) {
+      throw new Error("Backup archive files do not match its manifest.");
+    }
+    await readAndAssertArchivedVaultManifest(archivePath, manifest);
+    const archiveDigest = checksumFile(archivePath) as `sha256:${string}`;
+    if (
+      options.expectedArchiveDigest !== undefined &&
+      archiveDigest !== options.expectedArchiveDigest
+    ) {
+      throw new Error("Backup archive digest changed after its durable checkpoint.");
+    }
+    const after = fs.lstatSync(archivePath);
+    if (!sameFileRevision(before, after)) {
+      throw new Error("Backup archive changed during recovery validation.");
+    }
+    return { manifest, manifestChecksum, archiveDigest, identity: after };
+  } catch (caught) {
+    if (kind === "destination") {
+      throw new PigeDomainError("backup.destination_exists", "Backup destination contains conflicting output.");
+    }
+    throw new PigeDomainError("backup.staging_conflict", "Backup staging conflicts with its durable checkpoint.");
+  }
+}
+
+function assertDurableAdoptionDigests(
+  options: BackupCreateOptions,
+  kind: "destination" | "existing_staging"
+): void {
+  if (kind === "destination") {
+    if (options.expectedManifestChecksum) return;
+    throw new PigeDomainError(
+      "backup.destination_exists",
+      "Backup destination has no matching durable archive checkpoint."
+    );
+  }
+  if (options.expectedManifestChecksum) return;
+  throw new PigeDomainError(
+    "backup.staging_conflict",
+    "Backup staging has no matching durable manifest checkpoint."
+  );
+}
+
+async function reportAdoptedBackupPhases(
+  reporter: BackupCreatePhaseReporter | undefined,
+  context: Pick<BackupCreateCheckpointEvent, "backupId" | "createdAt" | "stagingOwnerKey">,
+  adopted: AdoptedBackupArchive,
+  finalized = true
+): Promise<void> {
+  await reportBackupCreatePhase(reporter, context, "preflight");
+  await reportBackupCreatePhase(reporter, context, "manifest_written", {
+    manifestChecksum: adopted.manifestChecksum
+  });
+  await reportBackupCreatePhase(reporter, context, "files_hashed", {
+    manifestChecksum: adopted.manifestChecksum
+  });
+  await reportBackupCreatePhase(reporter, context, "archive_staged", {
+    manifestChecksum: adopted.manifestChecksum,
+    archiveDigest: adopted.archiveDigest
+  });
+  if (finalized) {
+    await reportBackupCreatePhase(reporter, context, "archive_finalized", {
+      manifestChecksum: adopted.manifestChecksum,
+      archiveDigest: adopted.archiveDigest
+    });
+  }
+}
+
+function publishAdoptedBackupStaging(
+  stagingPath: string,
+  backupFilePath: string,
+  adopted: AdoptedBackupArchive,
+  destinationParentIdentity: fs.Stats
+): void {
+  let linked = false;
+  try {
+    try {
+      assertBackupDestinationParent(backupFilePath, destinationParentIdentity);
+      fs.linkSync(stagingPath, backupFilePath);
+      linked = true;
+    } catch (caught) {
+      if (isErrno(caught, "EEXIST")) {
+        const destinationDigest = checksumFile(backupFilePath);
+        if (destinationDigest !== adopted.archiveDigest) {
+          throw new PigeDomainError("backup.destination_exists", "Backup destination contains conflicting output.");
+        }
+        removeOwnedFile(stagingPath, adopted.identity);
+        return;
+      }
+      if (isAtomicLinkUnsupported(caught)) {
+        throw new PigeDomainError(
+          "backup.atomic_publish_unsupported",
+          "The selected destination does not support atomic backup publication."
+        );
+      }
+      if (isAtomicLinkDenied(caught)) {
+        throw new PigeDomainError(
+          "backup.destination_not_writable",
+          "The selected destination does not permit atomic backup publication."
+        );
+      }
+      throw caught;
+    }
+    const staging = fs.lstatSync(stagingPath);
+    const destination = fs.lstatSync(backupFilePath);
+    if (
+      staging.nlink !== 2 ||
+      destination.nlink !== 2 ||
+      !sameFileDataRevision(adopted.identity, staging) ||
+      !sameFileDataRevision(staging, destination) ||
+      checksumFile(backupFilePath) !== adopted.archiveDigest
+    ) {
+      throw new PigeDomainError("backup.finalization_failed", "Backup archive changed during finalization.");
+    }
+    fsyncDirectoryIfSupported(path.dirname(backupFilePath));
+    fs.rmSync(stagingPath);
+    const finalized = fs.lstatSync(backupFilePath);
+    if (finalized.nlink !== 1 || !sameFileDataRevision(destination, finalized)) {
+      throw new PigeDomainError("backup.finalization_failed", "Backup archive did not finalize privately.");
+    }
+    fsyncDirectoryBestEffort(path.dirname(backupFilePath));
+    assertBackupDestinationParent(backupFilePath, destinationParentIdentity);
+  } catch (caught) {
+    if (linked) removeOwnedFile(backupFilePath, adopted.identity);
+    throw caught;
+  }
 }
 
 async function extractBackupVault(
@@ -960,10 +1603,15 @@ function toManifestSummary(manifest: BackupManifest): BackupManifestSummary {
   };
 }
 
-async function checksumZipEntry(zipFile: { openReadStreamPromise: (entry: Entry) => Promise<NodeJS.ReadableStream> }, entry: Entry): Promise<string> {
+async function checksumZipEntry(
+  zipFile: { openReadStreamPromise: (entry: Entry) => Promise<NodeJS.ReadableStream> },
+  entry: Entry,
+  signal?: AbortSignal
+): Promise<string> {
   const hash = createHash("sha256");
   const stream = await zipFile.openReadStreamPromise(entry);
   for await (const chunk of stream) {
+    throwIfBackupAborted(signal);
     hash.update(chunk);
   }
   return `sha256:${hash.digest("hex")}`;
@@ -992,6 +1640,10 @@ function checksumFile(filePath: string): string {
     fs.closeSync(file);
   }
   return `sha256:${hash.digest("hex")}`;
+}
+
+function checksumBuffer(value: Buffer): `sha256:${string}` {
+  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
 
 function openRestoreArchive(filePath: string): RestoreArchiveHandle {
@@ -1176,6 +1828,27 @@ async function reportRestoreCorePhase(
   phase: RestoreCoreCheckpointPhase
 ): Promise<void> {
   await reporter?.({ phase, ...context });
+}
+
+async function reportBackupCreatePhase(
+  reporter: BackupCreatePhaseReporter | undefined,
+  context: Pick<BackupCreateCheckpointEvent, "backupId" | "createdAt" | "stagingOwnerKey">,
+  phase: BackupCreateCheckpointPhase,
+  details: Pick<BackupCreateCheckpointEvent, "manifestChecksum" | "archiveDigest"> = {}
+): Promise<void> {
+  await reporter?.({ phase, ...context, ...details });
+}
+
+function throwIfBackupAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) return;
+  if (signal.reason instanceof Error) throw signal.reason;
+  const error = new Error("Backup creation was cancelled.");
+  error.name = "AbortError";
+  throw error;
+}
+
+function isBackupAbortError(caught: unknown): boolean {
+  return Boolean(caught && typeof caught === "object" && "name" in caught && caught.name === "AbortError");
 }
 
 function captureRestoreDestinationCoordinates(
@@ -2069,7 +2742,10 @@ function fsyncFile(filePath: string): void {
   }
 }
 
-function snapshotBackupSourceFile(filePath: string): { readonly size: number; readonly checksum: string } {
+function snapshotBackupSourceFile(
+  filePath: string,
+  signal?: AbortSignal
+): { readonly size: number; readonly checksum: string } {
   const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0);
   const descriptor = fs.openSync(filePath, flags);
   try {
@@ -2087,6 +2763,7 @@ function snapshotBackupSourceFile(filePath: string): { readonly size: number; re
     const buffer = Buffer.alloc(1024 * 1024);
     let bytesRead = 0;
     do {
+      throwIfBackupAborted(signal);
       bytesRead = fs.readSync(descriptor, buffer, 0, buffer.length, null);
       if (bytesRead > 0) hash.update(buffer.subarray(0, bytesRead));
     } while (bytesRead > 0);
@@ -2144,17 +2821,219 @@ function createPreviewWarnings(
   ];
 }
 
-function normalizeBackupFilePath(filePathInput: string): string {
+export function canonicalizeBackupDestinationPath(filePathInput: string): string {
   const resolved = path.resolve(filePathInput);
-  if (resolved.endsWith(".pige-backup.zip")) return resolved;
-  if (resolved.endsWith(".zip")) return `${resolved.slice(0, -4)}.pige-backup.zip`;
-  return `${resolved}.pige-backup.zip`;
+  const normalized = resolved.endsWith(".pige-backup.zip")
+    ? resolved
+    : resolved.endsWith(".zip")
+      ? `${resolved.slice(0, -4)}.pige-backup.zip`
+      : `${resolved}.pige-backup.zip`;
+  const canonicalParent = resolveCanonicalBackupDirectory(path.dirname(normalized));
+  return path.join(canonicalParent, path.basename(normalized));
 }
 
-function createBackupStagingPath(backupFilePath: string): string {
+export function captureBackupDestinationFence(filePathInput: string): BackupDestinationFence {
+  const destinationPath = canonicalizeBackupDestinationPath(filePathInput);
+  let ancestorPath = path.dirname(destinationPath);
+  while (!fs.existsSync(ancestorPath)) {
+    const parent = path.dirname(ancestorPath);
+    if (parent === ancestorPath) {
+      throw new PigeDomainError("backup.destination_changed", "Backup destination ancestor is unavailable.");
+    }
+    ancestorPath = parent;
+  }
+  try {
+    const ancestor = fs.lstatSync(ancestorPath);
+    if (
+      !ancestor.isDirectory() ||
+      ancestor.isSymbolicLink() ||
+      fs.realpathSync.native(ancestorPath) !== ancestorPath
+    ) {
+      throw new Error("Backup destination ancestor is unsafe.");
+    }
+    return {
+      destinationPath,
+      ancestorPath,
+      ancestorDevice: ancestor.dev,
+      ancestorInode: ancestor.ino
+    };
+  } catch (caught) {
+    if (caught instanceof PigeDomainError) throw caught;
+    throw new PigeDomainError("backup.destination_changed", "Backup destination ancestor is unavailable or unsafe.");
+  }
+}
+
+export function prepareBackupDestinationPath(filePathInput: string): string {
+  const canonical = canonicalizeBackupDestinationPath(filePathInput);
+  const canonicalParent = ensureCanonicalBackupDirectory(path.dirname(canonical));
+  return path.join(canonicalParent, path.basename(canonical));
+}
+
+function assertExpectedBackupDestinationFence(
+  current: BackupDestinationFence,
+  expected: BackupDestinationFence | undefined
+): void {
+  if (!expected) return;
+  if (
+    current.destinationPath !== expected.destinationPath ||
+    current.ancestorPath !== expected.ancestorPath ||
+    current.ancestorDevice !== expected.ancestorDevice ||
+    current.ancestorInode !== expected.ancestorInode
+  ) {
+    throw new PigeDomainError("backup.destination_changed", "Backup destination binding changed before execution.");
+  }
+}
+
+function assertBackupDestinationFence(expected: BackupDestinationFence): void {
+  try {
+    const current = fs.lstatSync(expected.ancestorPath);
+    if (
+      !current.isDirectory() ||
+      current.isSymbolicLink() ||
+      fs.realpathSync.native(expected.ancestorPath) !== expected.ancestorPath ||
+      current.dev !== expected.ancestorDevice ||
+      current.ino !== expected.ancestorInode
+    ) {
+      throw new Error("Backup destination ancestor changed.");
+    }
+  } catch {
+    throw new PigeDomainError("backup.destination_changed", "Backup destination ancestor changed during backup.");
+  }
+}
+
+function resolveCanonicalBackupDirectory(directoryPathInput: string): string {
+  let existing = path.resolve(directoryPathInput);
+  const missingSegments: string[] = [];
+  while (!fs.existsSync(existing)) {
+    const parent = path.dirname(existing);
+    if (parent === existing) {
+      throw new PigeDomainError("backup.destination_not_writable", "Backup destination parent is unavailable.");
+    }
+    missingSegments.unshift(path.basename(existing));
+    existing = parent;
+  }
+  try {
+    const existingStat = fs.statSync(existing);
+    if (!existingStat.isDirectory()) throw new Error("Backup destination ancestor is not a directory.");
+    return path.join(fs.realpathSync.native(existing), ...missingSegments);
+  } catch (caught) {
+    if (caught instanceof PigeDomainError) throw caught;
+    throw new PigeDomainError(
+      "backup.destination_not_writable",
+      "Backup destination parent cannot be resolved safely."
+    );
+  }
+}
+
+function ensureCanonicalBackupDirectory(directoryPathInput: string): string {
+  let existing = path.resolve(directoryPathInput);
+  const missingSegments: string[] = [];
+  while (!fs.existsSync(existing)) {
+    const parent = path.dirname(existing);
+    if (parent === existing) {
+      throw new PigeDomainError("backup.destination_not_writable", "Backup destination parent is unavailable.");
+    }
+    missingSegments.unshift(path.basename(existing));
+    existing = parent;
+  }
+  let canonical: string;
+  try {
+    const existingStat = fs.statSync(existing);
+    if (!existingStat.isDirectory()) throw new Error("Backup destination ancestor is not a directory.");
+    canonical = fs.realpathSync.native(existing);
+    for (const segment of missingSegments) {
+      const next = path.join(canonical, segment);
+      try {
+        fs.mkdirSync(next, { mode: 0o700 });
+      } catch (caught) {
+        if (!isErrno(caught, "EEXIST")) throw caught;
+      }
+      const nextStat = fs.lstatSync(next);
+      if (!nextStat.isDirectory() || nextStat.isSymbolicLink() || fs.realpathSync.native(next) !== next) {
+        throw new Error("Backup destination directory changed during creation.");
+      }
+      canonical = next;
+    }
+  } catch (caught) {
+    if (caught instanceof PigeDomainError) throw caught;
+    throw new PigeDomainError(
+      "backup.destination_not_writable",
+      "Backup destination parent cannot be prepared safely."
+    );
+  }
+  return canonical;
+}
+
+function captureBackupDestinationParent(backupFilePath: string): fs.Stats {
+  const parent = path.dirname(backupFilePath);
+  try {
+    const stat = fs.lstatSync(parent);
+    if (!stat.isDirectory() || stat.isSymbolicLink() || fs.realpathSync.native(parent) !== parent) {
+      throw new Error("Backup destination parent is unsafe.");
+    }
+    return stat;
+  } catch {
+    throw new PigeDomainError(
+      "backup.destination_changed",
+      "Backup destination parent is unavailable or unsafe."
+    );
+  }
+}
+
+function assertBackupDestinationParent(backupFilePath: string, expected: fs.Stats): void {
+  const current = captureBackupDestinationParent(backupFilePath);
+  if (current.dev !== expected.dev || current.ino !== expected.ino) {
+    throw new PigeDomainError("backup.destination_changed", "Backup destination parent changed during backup.");
+  }
+}
+
+function createBackupStagingPath(backupFilePath: string, stagingOwnerKey: string): string {
+  const ownerDigest = createHash("sha256")
+    .update("pige:backup-staging-owner:v1\0", "utf8")
+    .update(stagingOwnerKey, "utf8")
+    .digest("hex")
+    .slice(0, 32);
   return path.join(
     path.dirname(backupFilePath),
-    `.${path.basename(backupFilePath)}.${process.pid}.${randomUUID()}.tmp`
+    `.${path.basename(backupFilePath)}.${ownerDigest}.tmp`
+  );
+}
+
+function removeExactAdoptedStagingLink(stagingPath: string, destinationPath: string): void {
+  try {
+    const staging = fs.lstatSync(stagingPath);
+    const destination = fs.lstatSync(destinationPath);
+    if (
+      !staging.isSymbolicLink() &&
+      staging.nlink === destination.nlink &&
+      sameFileDataRevision(staging, destination)
+    ) {
+      fs.rmSync(stagingPath);
+      fsyncDirectoryBestEffort(path.dirname(destinationPath));
+    }
+  } catch {
+    // A final archive is authoritative; uncertain staging is preserved for explicit repair.
+  }
+}
+
+function assertAdoptableFinalLinkOwnership(
+  stagingPath: string,
+  destinationPath: string,
+  destinationIdentity: fs.Stats
+): void {
+  if (destinationIdentity.nlink === 1) return;
+  try {
+    const staging = fs.lstatSync(stagingPath);
+    if (
+      staging.nlink === destinationIdentity.nlink &&
+      sameFileDataRevision(staging, destinationIdentity)
+    ) return;
+  } catch {
+    // The conflict below is the safe result for an unexplained destination link.
+  }
+  throw new PigeDomainError(
+    "backup.destination_exists",
+    "Backup destination publication ownership cannot be proven."
   );
 }
 

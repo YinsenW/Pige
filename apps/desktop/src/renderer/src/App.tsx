@@ -136,6 +136,7 @@ export function App(): React.JSX.Element {
   const [supportBundlePreview, setSupportBundlePreview] = useState<SupportBundlePreview | null>(null);
   const [modelSummary, setModelSummary] = useState<ModelProviderSettingsSummary | null>(null);
   const [backupStatus, setBackupStatus] = useState<BackupRestoreStatus | null>(null);
+  const [backupJobs, setBackupJobs] = useState<readonly JobSummary[]>([]);
   const [agentRuntimeStatus, setAgentRuntimeStatus] = useState<AgentRuntimeStatus | null>(null);
   const [locale, setLocale] = useState<Locale>("zh-Hans");
   const [availableLocales, setAvailableLocales] = useState<readonly Locale[]>(["zh-Hans", "en", "ja", "ko", "fr", "de"]);
@@ -170,10 +171,14 @@ export function App(): React.JSX.Element {
   }, []);
 
   useEffect(() => {
-    if (!recentJobs.some((job) => job.state === "queued" || job.state === "running")) return;
+    const homeWorkActive = recentJobs.some((job) => job.state === "queued" || job.state === "running");
+    const backupWorkActive = backupJobs.some((job) =>
+      job.state === "queued" || job.state === "running" || job.state === "cancel_requested"
+    );
+    if (!homeWorkActive && !backupWorkActive) return;
     const timer = window.setTimeout(() => void refreshVaultState(), 1_200);
     return () => window.clearTimeout(timer);
-  }, [recentJobs]);
+  }, [recentJobs, backupJobs]);
 
   const t = (key: string): string => messageCatalogs[locale][key] ?? messageCatalogs.en[key] ?? key;
 
@@ -191,22 +196,28 @@ export function App(): React.JSX.Element {
     homeJobStateFilter.states.push("cancel_requested");
     homeJobStateFilter.states.push("waiting_permission");
     homeJobStateFilter.states.push("waiting_model_egress");
-    const [nextJobs, nextProposals, nextActivities] = nextOnboarding.activeVault
+    const [nextJobs, nextBackupJobs, nextProposals, nextActivities] = nextOnboarding.activeVault
       ? await Promise.all([
         window.pige.jobs.list({
           limit: 6,
           classes: ["capture", "parse", "ocr", "agent_ingest", "agent_turn", "index_rebuild"],
           ...homeJobStateFilter
         }).catch(() => undefined),
+        window.pige.jobs.list({
+          limit: 20,
+          classes: ["backup"],
+          states: ["queued", "running", "cancel_requested", "failed_retryable", "failed_final"]
+        }).catch(() => undefined),
         window.pige.proposals.list({ limit: 100, states: ["ready"] }).catch(() => undefined),
         window.pige.activity.list({ limit: 5 }).catch(() => undefined)
       ])
-      : [undefined, undefined, undefined];
+      : [undefined, undefined, undefined, undefined];
     setOnboarding(nextOnboarding);
     setRecentVaults(nextRecentVaults);
     setBackupStatus(nextBackupStatus);
     setAgentRuntimeStatus(nextAgentRuntimeStatus);
     setRecentJobs(nextJobs?.jobs ?? []);
+    setBackupJobs(nextBackupJobs?.jobs.filter((job) => job.backupKind === "user_backup") ?? []);
     setReadyProposals(nextProposals?.proposals ?? []);
     setRecentActivities(nextActivities?.activities ?? []);
   };
@@ -679,6 +690,7 @@ export function App(): React.JSX.Element {
             localDatabaseStatus={localDatabaseStatus}
             supportBundlePreview={supportBundlePreview}
             backupStatus={backupStatus}
+            backupJobs={backupJobs}
             toolchainHealth={toolchainHealth}
             recentVaults={recentVaults}
             onOpen={openVault}
@@ -3049,6 +3061,15 @@ function classifyTextTransportKind(text: string): "typed_text" | "typed_url" {
   }
 }
 
+function backupJobMessageKey(job: JobSummary): string {
+  if (job.state === "queued" || job.state === "running") return "backup.running";
+  if (job.state === "cancel_requested") return "backup.cancelRequested";
+  if (job.state === "failed_retryable" && job.error?.userAction === "retry") {
+    return "backup.failedRetryable";
+  }
+  return "backup.failedFinal";
+}
+
 interface VaultSettingsPanelProps {
   readonly busy: boolean;
   readonly error: string | null;
@@ -3057,6 +3078,7 @@ interface VaultSettingsPanelProps {
   readonly localDatabaseStatus: LocalDatabaseStatus | null;
   readonly supportBundlePreview: SupportBundlePreview | null;
   readonly backupStatus: BackupRestoreStatus | null;
+  readonly backupJobs: readonly JobSummary[];
   readonly toolchainHealth: ToolchainHealth | null;
   readonly recentVaults: readonly RecentVaultSummary[];
   readonly onOpen: () => Promise<void>;
@@ -3072,6 +3094,7 @@ interface VaultSettingsPanelProps {
 function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
   const [backupNotice, setBackupNotice] = useState<string | null>(null);
   const [backupBusy, setBackupBusy] = useState(false);
+  const activeBackupJob = props.backupJobs[0];
   const restore = useRestoreFlow(async () => {
     setBackupNotice(props.t("backup.restored"));
     await props.onRefresh();
@@ -3084,12 +3107,23 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
     setBackupBusy(true);
     try {
       await action();
-    } catch (caught) {
-      props.onError(caught instanceof Error ? caught.message : "Something went wrong.");
+    } catch {
+      setBackupNotice(props.t("backup.actionFailed"));
+      await props.onRefresh().catch(() => undefined);
     } finally {
       setBackupBusy(false);
     }
   };
+
+  useEffect(() => {
+    if (!backupBusy) return;
+    const timer = window.setInterval(() => void props.onRefresh(), 1_200);
+    return () => window.clearInterval(timer);
+  }, [backupBusy, props.onRefresh]);
+
+  useEffect(() => {
+    if (activeBackupJob) setBackupNotice(null);
+  }, [activeBackupJob?.id, activeBackupJob?.state]);
 
   const createBackup = async (): Promise<void> =>
     runBackupAction(async () => {
@@ -3098,6 +3132,20 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
         setBackupNotice(`${props.t("backup.created")}: ${result.manifest.fileCount}`);
         await props.onRefresh();
       }
+    });
+
+  const cancelBackup = async (): Promise<void> =>
+    runBackupAction(async () => {
+      if (!activeBackupJob) return;
+      await window.pige.jobs.cancel({ jobId: activeBackupJob.id });
+      await props.onRefresh();
+    });
+
+  const retryBackup = async (): Promise<void> =>
+    runBackupAction(async () => {
+      if (!activeBackupJob) return;
+      await window.pige.jobs.retry({ jobId: activeBackupJob.id });
+      await props.onRefresh();
     });
 
   const updatePolicy = async (defaultStrategy: SourceStorageStrategy): Promise<void> => {
@@ -3223,6 +3271,22 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
         <p className="muted">
           {props.backupStatus?.messageKey ? props.t(props.backupStatus.messageKey) : props.t("backup.loading")}
         </p>
+        {activeBackupJob ? (
+          <div className="backup-job-status" role="status" aria-live="polite">
+            <p>{props.t(backupJobMessageKey(activeBackupJob))}</p>
+            <div className="settings-actions">
+              {activeBackupJob.state === "queued" || activeBackupJob.state === "running" ? (
+                <button type="button" className="secondary" disabled={backupBusy} onClick={() => void cancelBackup()}>
+                  {props.t("home.cancelJob")}
+                </button>
+              ) : activeBackupJob.state === "failed_retryable" && activeBackupJob.error?.userAction === "retry" ? (
+                <button type="button" className="secondary" disabled={backupBusy} onClick={() => void retryBackup()}>
+                  {props.t("home.retryJob")}
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
         <div className="settings-actions">
           <button
             type="button"

@@ -392,9 +392,8 @@ Rules:
 
 ### 6.3 Jobs
 
-Job DTOs and events must follow the durable lifecycle in `docs/JOB_OPERATION_AND_RECOVERY.md`.
-
-`JobClass`, `JobState`, and the durable field name `state` come directly from `packages/schemas/src/index.ts`. IPC must not add alternate class/state vocabularies. `status` below belongs only to action results.
+Job DTOs/events follow `docs/JOB_OPERATION_AND_RECOVERY.md`; `JobClass`, `JobState` and
+durable `state` come from schemas. IPC adds no aliases; `status` is action-result-only.
 
 Commands:
 
@@ -433,6 +432,8 @@ type JobSummary = {
   conversationEventId?: string;
   sourceDisplayName?: string;
   sourceKind?: SourceKind;
+  backupKind?: "user_backup" | "restore_rollback";
+  error?: PigeErrorSummary;
   stage?: JobStage;
   progress?: JobProgress;
   message: string;
@@ -462,7 +463,9 @@ type JobActionResult = {
 Rules:
 
 - `jobs.list` scans the active vault's durable `.pige/jobs/` records and returns safe summaries for Home status.
-- Job summaries may include source display name and source kind from the matching source record, but must not include source record paths, managed copy paths, original absolute paths, file bodies, prompts, model responses, or secrets.
+- Summaries may include source display name/kind and Backup ownership/error types, never
+  record/copy/original/destination paths, bodies, prompts, responses, secrets, raw error
+  detail or archive internals. Settings filters rollback children.
 - Invalid job JSON is counted and skipped so Home can still open.
 - `jobs.cancel` directly cancels eligible queued/waiting/retryable work only with a
   false/absent action-safety guard; active process-local parse/OCR/`agent_turn`/Agent
@@ -889,27 +892,23 @@ type RestoreApplyResult =
 
 Rules:
 
-- `backup.create` uses a trusted main-process save dialog and creates a local `.pige-backup.zip`.
-- Target preview is main-picker-only: validate manifest/entries, paths/sizes/checksums,
-  schema ranges, legacy input and redacted dependencies; return permitted modes plus an
-  archive-bound ID. It exposes app/schema versions and only validated typed warning
-  categories/counts; renderer never receives raw warning strings, archive entries, file
-  names, absolute paths, or archive internals.
+- `backup.create` uses a trusted main-process save dialog, persists one durable Backup Job
+  before scan, and returns only after cancellation or exact terminal completion.
+- `backup.status` derives `lastBackupAt` from the newest completed user Backup Job, never
+  from rollback children or ephemeral renderer state.
+- Main-picker preview validates manifest/entries, paths/sizes/checksums, schema ranges,
+  legacy input and redacted dependencies, then returns modes, archive-bound ID,
+  app/schema versions and typed warning counts—never raw warning/entry/name/path detail.
 - Apply requires that current ID plus explicit mode: `replace_existing` preserves
   `vault_id`; `clone_as_new` mints one and records lineage. A folder is not a mode.
-- Main retains the archive-checksum token; renderer sees a random per-WebContents/
-  generation token. One atomic
-  apply lease blocks replay; cancel/retryable failure releases it, while success, archive
-  invalidation, or sender destruction consumes it.
+- Main retains archive checksum; renderer sees a random sender/generation token. One apply
+  lease blocks replay: cancel/retryable failure releases, success/invalidation/destruction consumes.
 - Apply reopens the descriptor-bound archive and validates owned 0700 staging;
   Data Architecture owns its reserved, no-replace, manifest-last publication.
-- `restore.apply` returns only cancellation or the durable machine-local Restore Job ID.
-  It never returns a `VaultSummary`, manifest, rebuild DTO, raw destination path, or
-  storage-root display path; renderer refreshes ordinary vault state after success.
-- Main owns the six-locale destination picker and irreversible `replace_existing`
-  confirmation. Cancel remains the native default, and confirmation states the verified
-  rollback backup, fresh destination, logical binding switch, and lack of Undo in this
-  flow.
+- `restore.apply` returns only cancel or machine-local Restore Job ID, never vault,
+  manifest, rebuild or path DTO; renderer refreshes normal vault state.
+- Main owns six-locale picker and irreversible replace confirmation; Cancel is default and
+  copy states rollback backup, fresh destination, binding switch and no Undo.
 - The machine-local Restore Job and vault-scoped `restore_applied` Operation link by ID.
   Versioned dependency/schema migration matrices, generic cross-file transactionality,
   final syscall TOCTOU, complete platform proof, and broader progress remain open.

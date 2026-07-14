@@ -277,6 +277,15 @@ export class JobsService implements PermissionedExternalJobPort {
     };
   }
 
+  summarize(job: JobRecord): JobSummary {
+    const activeVault = this.#vaults.current();
+    const vaultPath = this.#vaults.activeVaultPath();
+    if (!activeVault || !vaultPath || job.activeVaultId !== activeVault.vaultId) {
+      throw new PigeDomainError("job.binding_changed", "The Job no longer belongs to the active vault.");
+    }
+    return toJobSummary(vaultPath, job);
+  }
+
   resolveModelEgress(request: ModelEgressResolveRequest): ModelEgressResolveResult {
     const approvals = this.#requireModelEgressApprovals();
     const activeVault = this.#vaults.current();
@@ -1942,6 +1951,7 @@ export class JobsService implements PermissionedExternalJobPort {
     let failedRetryable = 0;
     for (const jobFile of readJobRecordFiles(this.#jobRecordStore(vaultPath), path.join(vaultPath, ".pige", "jobs"))) {
       if (jobFile.job.state !== "running" && jobFile.job.state !== "cancel_requested") continue;
+      if (jobFile.job.class === "backup") continue;
       const uncertainPermissionRequestId = uncompletedConsumedPermissionRequestId(jobFile.job);
       if (uncertainPermissionRequestId) {
         const now = new Date().toISOString();
@@ -4572,6 +4582,13 @@ function permissionUsesNetwork(capability: PermissionCapability): boolean {
 
 function toJobSummary(vaultPath: string, job: JobRecord): JobSummary {
   const sourceRecord = job.sourceId ? readSourceRecord(vaultPath, job.sourceId) : undefined;
+  const backupKind = job.class === "backup"
+    ? job.inputRefs?.some((ref) => ref.role === "backup_destination")
+      ? "user_backup"
+      : job.inputRefs?.some((ref) => ref.role === "rollback_backup_destination")
+        ? "restore_rollback"
+        : undefined
+    : undefined;
   return {
     id: job.id,
     class: job.class,
@@ -4589,6 +4606,8 @@ function toJobSummary(vaultPath: string, job: JobRecord): JobSummary {
       : {}),
     ...(sourceRecord?.kind ? { sourceKind: sourceRecord.kind } : {}),
     ...(sourceRecord ? { sourceDisplayName: sourceRecord.original?.displayName ?? sourceRecord.kind } : {}),
+    ...(backupKind ? { backupKind } : {}),
+    ...(job.error ? { error: job.error } : {}),
     message: job.message,
     createdAt: job.createdAt,
     updatedAt: job.updatedAt

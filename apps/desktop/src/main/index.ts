@@ -15,6 +15,7 @@ import type {
   ExportSupportBundleRequest,
   HomeAgentAskRequest,
   JobActionRequest,
+  JobActionResult,
   JobsListRequest,
   KnowledgeActivityListRequest,
   KnowledgeActivityUndoRequest,
@@ -75,6 +76,7 @@ import {
 import { AgentRuntimeService } from "./services/agent-runtime-service";
 import { AgentTurnDraftPublisher } from "./services/agent-turn-draft-publisher";
 import { AppearanceService } from "./services/appearance-service";
+import { BackupCoordinatorService } from "./services/backup-coordinator-service";
 import { BackupRestoreService } from "./services/backup-service";
 import { CoalescedBatchDrainer } from "./services/background-job-drainer";
 import { CaptureService } from "./services/capture-service";
@@ -115,6 +117,7 @@ import { ProposalService } from "./services/proposal-service";
 import { installRendererNavigationGuard } from "./services/renderer-navigation-guard";
 import { RestorePreviewRegistry } from "./services/restore-preview-registry";
 import { RestoreCoordinatorService } from "./services/restore-coordinator-service";
+import { writeBackupCreatedOperation } from "./services/restore-job-store";
 import { RetrievalService } from "./services/retrieval-service";
 import { JsonSecretStore } from "./services/secret-store";
 import { guardSettingAction, type SettingActionConfirmation } from "./services/setting-action-guard";
@@ -133,6 +136,7 @@ let permissionBrokerService: PermissionBrokerService | undefined;
 let permissionedExternalCapabilityRegistry: PermissionedExternalCapabilityRegistry | undefined;
 let windowModeService: WindowModeService | undefined;
 let backupRestoreService: BackupRestoreService | undefined;
+let backupCoordinatorService: BackupCoordinatorService | undefined;
 let restoreCoordinatorService: RestoreCoordinatorService | undefined;
 let agentRuntimeService: AgentRuntimeService | undefined;
 let agentIngestService: AgentIngestService | undefined;
@@ -425,6 +429,25 @@ const getBackupRestoreService = (): BackupRestoreService => {
     backupRestoreService = new BackupRestoreService();
   }
   return backupRestoreService;
+};
+
+const getBackupCoordinatorService = (): BackupCoordinatorService => {
+  if (!backupCoordinatorService) {
+    backupCoordinatorService = new BackupCoordinatorService({
+      vault: getVaultService(),
+      backupService: getBackupRestoreService(),
+      appVersion: app.getVersion(),
+      writeBackupCreatedOperation: (input) => writeBackupCreatedOperation({
+        job: input.job,
+        vaultPath: input.vaultPath,
+        vaultId: input.vaultId,
+        backupId: input.backupId,
+        archiveDigest: input.archiveDigest,
+        assertVaultWriterLease: input.assertVaultWriterLease
+      })
+    });
+  }
+  return backupCoordinatorService;
 };
 
 const getRestoreCoordinatorService = (): RestoreCoordinatorService => {
@@ -849,6 +872,24 @@ const recordBackgroundFailure = (code: string, fallback: string): void => {
 };
 
 const resumeBackgroundJobs = (): void => {
+  void getBackupCoordinatorService().recoverInterrupted().then((backupRecovery) => {
+    if (backupRecovery.recovered > 0 || backupRecovery.failed > 0) {
+      getDiagnosticsService().recordEvent({
+        level: backupRecovery.failed > 0 ? "warning" : "info",
+        code: backupRecovery.failed > 0
+          ? "backup.recovery_incomplete"
+          : "backup.recovery_completed",
+        message: backupRecovery.failed > 0
+          ? "Some interrupted Backup Jobs still require repair."
+          : "Interrupted Backup Jobs were reconciled from durable checkpoints."
+      });
+    }
+  }).catch(() => {
+    recordBackgroundFailure(
+      "backup.recovery_incomplete",
+      "Interrupted Backup Jobs could not be reconciled safely."
+    );
+  });
   try {
     const urlSourceHandoffs = getJobsService().reconcilePendingAgentTurnUrlSources();
     if (urlSourceHandoffs.linked > 0 || urlSourceHandoffs.failed > 0) {
@@ -1076,8 +1117,28 @@ ipcMain.handle("capture.submitFiles", async (_event, request: SubmitFilesCapture
   return result;
 });
 ipcMain.handle("jobs.list", (_event, request?: JobsListRequest) => getJobsService().list(request));
-ipcMain.handle("jobs.cancel", (_event, request: JobActionRequest) => getJobsService().cancel(request));
+ipcMain.handle("jobs.cancel", async (_event, request: JobActionRequest): Promise<JobActionResult> => {
+  const backup = await getBackupCoordinatorService().cancel(request);
+  if (backup) {
+    return projectBackupJobAction(
+      backup.id,
+      backup.state === "cancel_requested"
+        ? "cancel_requested"
+        : backup.state === "cancelled"
+          ? "cancelled"
+          : "not_allowed"
+    );
+  }
+  return getJobsService().cancel(request);
+});
 ipcMain.handle("jobs.retry", async (_event, request: JobActionRequest) => {
+  const backup = await getBackupCoordinatorService().retry(request);
+  if (backup) {
+    return {
+      status: backup.status,
+      job: getJobsService().summarize(backup.job)
+    } satisfies JobActionResult;
+  }
   const result = getJobsService().retry(request);
   if (result.status === "requeued" && result.job?.class === "capture") {
     scheduleCaptureProcessing();
@@ -1313,7 +1374,19 @@ ipcMain.handle("models.setDefaultModel", async (_event, request: SetDefaultModel
 ipcMain.handle("settings.appearance", () => getAppearanceService().summary());
 ipcMain.handle("settings.setLocale", (_event, request: SetLocaleRequest) => getAppearanceService().setLocale(request));
 ipcMain.handle("settings.registry", () => getSettingsRegistry());
-ipcMain.handle("backup.status", () => getBackupRestoreService().status(getVaultService().current()));
+ipcMain.handle("backup.status", () => {
+  const activeVault = getVaultService().current();
+  if (!activeVault) return getBackupRestoreService().status(undefined);
+  const lastBackup = getJobsService().list({
+    classes: ["backup"],
+    states: ["completed", "completed_with_warnings"],
+    limit: 100
+  }).jobs.find((job) => job.backupKind === "user_backup");
+  return getBackupRestoreService().status({
+    ...activeVault,
+    ...(lastBackup ? { lastBackupAt: lastBackup.updatedAt } : {})
+  });
+});
 ipcMain.handle("backup.create", async (event): Promise<BackupCreateResult> => {
   const activeVault = getVaultService().current();
   const activeVaultPath = getVaultService().activeVaultPath();
@@ -1328,7 +1401,20 @@ ipcMain.handle("backup.create", async (event): Promise<BackupCreateResult> => {
   if (selection.canceled || !selection.filePath) {
     return { status: "canceled" };
   }
-  return getBackupRestoreService().createBackup(activeVaultPath, selection.filePath, app.getVersion());
+  const job = await getBackupCoordinatorService().create(selection.filePath);
+  if (job.state === "cancelled") return { status: "canceled" };
+  if (job.state !== "completed" && job.state !== "completed_with_warnings") {
+    throw new PigeDomainError(
+      job.error?.code ?? "backup.execution_failed",
+      "The durable Backup Job did not complete."
+    );
+  }
+  const archivePath = job.outputRefs?.find((ref) => ref.role === "backup_archive")?.path;
+  if (!archivePath) {
+    throw new PigeDomainError("backup.job_conflict", "The completed Backup Job has no archive reference.");
+  }
+  const inspected = await getBackupRestoreService().inspectRestoreArchive(archivePath);
+  return { status: "created", backupPath: archivePath, manifest: inspected.manifest };
 });
 ipcMain.handle("restore.preview", async (event): Promise<RestorePreviewResult> => {
   const senderId = event.sender.id;
@@ -1595,6 +1681,16 @@ app.on("before-quit", () => {
   restoreCoordinatorService?.close();
   vaultService?.close();
 });
+
+function projectBackupJobAction(
+  jobId: string,
+  status: "cancel_requested" | "cancelled" | "requeued" | "not_allowed"
+): JobActionResult {
+  const job = getJobsService().list({ classes: ["backup"], limit: 100 }).jobs.find(
+    (candidate) => candidate.id === jobId
+  );
+  return { status, ...(job ? { job } : {}) };
+}
 
 function createRestoreDestinationPath(
   parentPathInput: string,

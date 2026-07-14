@@ -875,7 +875,8 @@ Create Backup
 Restore Backup
 ```
 
-Vault & Note Storage is required in v0.1 because Pige is a local-file product. In Chinese, label it plainly as "仓库与笔记存储". The page should be boring in the best way: it tells the user where their notes live and gives them safe local control. Backup and restore are present because they protect the vault, but the page's first job is Obsidian-like vault location management.
+Vault & Note Storage ("仓库与笔记存储") is calm local-file control: location first;
+backup/restore protect the vault without displacing storage ownership.
 
 Required controls:
 
@@ -886,7 +887,8 @@ Required controls:
 - Open another existing vault folder.
 - Create a new vault by choosing a parent folder and vault name.
 - Show recent vaults with "remove from list" behavior that does not delete files.
-- Show last backup state and entry points for Create Backup and Restore Backup.
+- Own restarted user Backup here: localized state/valid actions, no raw Job/path/message,
+  error or rollback child. Latest completed user Backup derives Last backup; keep both entries.
 - Show schema version and basic counts when available: notes, sources, managed source copies, referenced originals, and artifacts.
 - Warn against nested vaults and app/system data folders.
 - Do not hide note storage controls inside backup, export, diagnostics, or index maintenance.
