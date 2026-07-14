@@ -34,6 +34,47 @@ try {
     throw new Error("Built diagnostics export worker did not publish the exact bounded bundle.");
   }
 
+  const existingPath = path.join(tempRoot, "existing.json");
+  fs.writeFileSync(existingPath, "previous", { encoding: "utf8", mode: 0o600 });
+  const existingPrepared = prepareOutput(existingPath, "cccccccc-cccc-4ccc-8ccc-cccccccccccc");
+  const existing = await runWorker({
+    protocolVersion: 1,
+    requestId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    outputPath: existingPath,
+    content,
+    prepared: existingPrepared.request
+  }, existingPrepared);
+  if (
+    existing.kind !== "success" ||
+    existing.bytesWritten !== Buffer.byteLength(content) ||
+    fs.readFileSync(existingPath, "utf8") !== content
+  ) {
+    throw new Error("Built diagnostics export worker did not replace its bound existing destination.");
+  }
+
+  const successorPath = path.join(tempRoot, "successor.json");
+  fs.writeFileSync(successorPath, "original", { encoding: "utf8", mode: 0o600 });
+  const successorPrepared = prepareOutput(
+    successorPath,
+    "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+  );
+  fs.rmSync(successorPath);
+  fs.writeFileSync(successorPath, "successor", { encoding: "utf8", mode: 0o600 });
+  const successor = await runWorker({
+    protocolVersion: 1,
+    requestId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    outputPath: successorPath,
+    content,
+    prepared: successorPrepared.request
+  }, successorPrepared);
+  if (
+    successor.kind !== "failure" ||
+    successor.code !== "diagnostics.export_blocked" ||
+    fs.readFileSync(successorPath, "utf8") !== "successor"
+  ) {
+    throw new Error("Built diagnostics export worker did not reject a successor destination.");
+  }
+
   const blockedPath = path.join(tempRoot, "blocked.json");
   const blockedPrepared = prepareOutput(blockedPath, "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
   const blocked = await runWorker({
@@ -97,10 +138,41 @@ function prepareOutput(outputPath, generation) {
   const parentRealPath = fs.realpathSync(path.dirname(outputPath));
   const parent = fs.statSync(parentRealPath);
   const destination = path.join(parentRealPath, path.basename(outputPath));
+  const initialDestination = readIdentity(destination);
+  let initialDestinationDescriptor;
+  if (initialDestination) {
+    initialDestinationDescriptor = fs.openSync(
+      destination,
+      fs.constants.O_RDONLY |
+        (fs.constants.O_NONBLOCK ?? 0) |
+        (fs.constants.O_NOFOLLOW ?? 0)
+    );
+    const opened = fs.fstatSync(initialDestinationDescriptor);
+    const named = fs.lstatSync(destination);
+    if (
+      !opened.isFile() ||
+      !named.isFile() ||
+      named.isSymbolicLink() ||
+      opened.dev !== initialDestination.dev ||
+      opened.ino !== initialDestination.ino ||
+      opened.dev !== named.dev ||
+      opened.ino !== named.ino
+    ) {
+      fs.closeSync(initialDestinationDescriptor);
+      throw new Error("Built diagnostics export worker smoke destination binding failed.");
+    }
+  }
   const temporaryPath = path.join(parentRealPath, `.pige-support-${generation}.tmp`);
-  const temporaryDescriptor = fs.openSync(temporaryPath, "wx", 0o600);
+  let temporaryDescriptor;
+  try {
+    temporaryDescriptor = fs.openSync(temporaryPath, "wx", 0o600);
+  } catch (error) {
+    if (initialDestinationDescriptor !== undefined) fs.closeSync(initialDestinationDescriptor);
+    throw error;
+  }
   const temporary = fs.fstatSync(temporaryDescriptor);
   return {
+    initialDestinationDescriptor,
     temporaryDescriptor,
     temporaryPath,
     request: {
@@ -109,6 +181,13 @@ function prepareOutput(outputPath, generation) {
       parentRealPath,
       parentDevice: parent.dev,
       parentInode: parent.ino,
+      ...(initialDestinationDescriptor !== undefined && initialDestination
+        ? {
+            initialDestinationDescriptor,
+            initialDestinationDevice: initialDestination.dev,
+            initialDestinationInode: initialDestination.ino
+          }
+        : {}),
       temporaryPath,
       temporaryDescriptor,
       temporaryDevice: temporary.dev,
@@ -117,11 +196,26 @@ function prepareOutput(outputPath, generation) {
   };
 }
 
+function readIdentity(filePath) {
+  try {
+    return fs.lstatSync(filePath);
+  } catch (error) {
+    if (error && typeof error === "object" && error.code === "ENOENT") return undefined;
+    throw error;
+  }
+}
+
 function releaseOutput(prepared) {
   try {
     fs.rmSync(prepared.temporaryPath, { force: true });
   } finally {
-    fs.closeSync(prepared.temporaryDescriptor);
+    try {
+      fs.closeSync(prepared.temporaryDescriptor);
+    } finally {
+      if (prepared.initialDestinationDescriptor !== undefined) {
+        fs.closeSync(prepared.initialDestinationDescriptor);
+      }
+    }
   }
 }
 

@@ -191,13 +191,13 @@ paths, or Provider metadata require preview review.
 UX shows categories, estimated size, privacy warning, preview, cancel, and a trusted local
 destination; it never uploads. Current B1.14 evidence binds the preview and one
 `exportRequestId` to its sender, then writes at most 2 MiB in a worker limited to 64 MiB
-old-generation memory and 30 seconds. Main retains the exact private temporary descriptor
-and validates confinement, parent/destination identity, exact bytes/mode, and publication.
-Unsafe nested bodies, symlink/root/replacement drift, and redaction failure
-fail closed. Cancel, renderer destruction, or timeout terminates the worker; a cancel after
-exact publication adopts the committed output. Export is process-local, not a durable or
-restart-resumable Job. Optional reviewed content, progress, and broader platform/path
-evidence remain open.
+old-generation and 30 seconds. Main holds private temp and existing-destination
+descriptors through completion, binds lstat/fstat, and rechecks the held fd, recorded identity
+and named path before rename; successors fail closed and every path closes both descriptors.
+Unsafe bodies, symlink/root drift, redaction failure, cancel, sender loss, or timeout fail
+closed; post-publication cancel adopts the exact output. Export is process-local,
+not a durable Job. Final check-to-rename/release-to-unlink syscall windows, optional content,
+progress, restart, and broader platform/path evidence remain open.
 
 ## 10. Redaction Rules
 

@@ -4,8 +4,11 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   assertSafeDiagnosticExportText,
+  commitPreparedDiagnosticsExportFile,
   DiagnosticsExportBlockedError,
+  prepareDiagnosticsExportFile,
   reconcileDiagnosticsExportFile,
+  releasePreparedDiagnosticsExportFile,
   writeDiagnosticsExportFile
 } from "../../apps/desktop/src/main/services/diagnostics-export-core";
 
@@ -178,5 +181,65 @@ describe("diagnostics export core", () => {
 
     expect(() => writeDiagnosticsExportFile(outputPath, safeBundle())).toThrow(DiagnosticsExportBlockedError);
     expect(fs.readFileSync(outputPath, "utf8")).toBe("successor");
+  });
+
+  it("closes the held destination descriptor when temporary preparation fails", () => {
+    const root = makeRoot();
+    const outputPath = path.join(root, "support.json");
+    fs.writeFileSync(outputPath, "original", "utf8");
+    const openSync = fs.openSync.bind(fs);
+    let destinationDescriptor: number | undefined;
+    vi.spyOn(fs, "openSync").mockImplementation((candidate, flags, mode) => {
+      if (path.basename(String(candidate)) === "support.json") {
+        destinationDescriptor = openSync(candidate, flags, mode);
+        return destinationDescriptor;
+      }
+      if (String(candidate).includes(".pige-support-")) {
+        throw new Error("synthetic temporary open failure");
+      }
+      return openSync(candidate, flags, mode);
+    });
+
+    expect(() => prepareDiagnosticsExportFile(outputPath)).toThrow("synthetic temporary open failure");
+    expect(destinationDescriptor).toBeTypeOf("number");
+    expect(() => fs.fstatSync(Number(destinationDescriptor))).toThrow(
+      expect.objectContaining({ code: "EBADF" })
+    );
+    expect(fs.readdirSync(root)).toEqual(["support.json"]);
+  });
+
+  it("closes the held destination descriptor when a prepared export is released", () => {
+    const root = makeRoot();
+    const outputPath = path.join(root, "support.json");
+    fs.writeFileSync(outputPath, "original", "utf8");
+    const prepared = prepareDiagnosticsExportFile(outputPath);
+    const descriptor = prepared.initialDestinationDescriptor;
+    expect(descriptor).toBeTypeOf("number");
+
+    releasePreparedDiagnosticsExportFile(prepared);
+
+    expect(() => fs.fstatSync(Number(descriptor))).toThrow(expect.objectContaining({ code: "EBADF" }));
+    expect(fs.readdirSync(root)).toEqual(["support.json"]);
+  });
+
+  it("closes the held destination descriptor when commit fails", () => {
+    const root = makeRoot();
+    const outputPath = path.join(root, "support.json");
+    fs.writeFileSync(outputPath, "original", "utf8");
+    const prepared = prepareDiagnosticsExportFile(outputPath);
+    const descriptor = prepared.initialDestinationDescriptor;
+    expect(descriptor).toBeTypeOf("number");
+    fs.rmSync(outputPath);
+    fs.writeFileSync(outputPath, "successor", "utf8");
+
+    try {
+      expect(() => commitPreparedDiagnosticsExportFile(prepared, safeBundle())).toThrow(
+        DiagnosticsExportBlockedError
+      );
+    } finally {
+      releasePreparedDiagnosticsExportFile(prepared);
+    }
+
+    expect(() => fs.fstatSync(Number(descriptor))).toThrow(expect.objectContaining({ code: "EBADF" }));
   });
 });

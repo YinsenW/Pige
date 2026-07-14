@@ -13,6 +13,7 @@ export interface PreparedDiagnosticsExportFile {
   readonly parentRealPath: string;
   readonly parentDevice: number;
   readonly parentInode: number;
+  readonly initialDestinationDescriptor?: number;
   readonly initialDestinationDevice?: number;
   readonly initialDestinationInode?: number;
   readonly temporaryPath: string;
@@ -204,8 +205,30 @@ export function prepareDiagnosticsExportFile(
   }
 
   const temporaryPath = path.join(parentRealPath, `.pige-support-${generation}.tmp`);
-  const temporaryDescriptor = fs.openSync(temporaryPath, "wx", 0o600);
+  let initialDestinationDescriptor: number | undefined;
+  let temporaryDescriptor: number | undefined;
   try {
+    if (initialDestinationIdentity) {
+      initialDestinationDescriptor = fs.openSync(
+        destination,
+        fs.constants.O_RDONLY |
+          (fs.constants.O_NONBLOCK ?? 0) |
+          (fs.constants.O_NOFOLLOW ?? 0)
+      );
+      const openedDestinationIdentity = fs.fstatSync(initialDestinationDescriptor);
+      const namedDestinationIdentity = fs.lstatSync(destination);
+      if (
+        !openedDestinationIdentity.isFile() ||
+        !namedDestinationIdentity.isFile() ||
+        namedDestinationIdentity.isSymbolicLink() ||
+        !sameIdentity(initialDestinationIdentity, openedDestinationIdentity) ||
+        !sameIdentity(openedDestinationIdentity, namedDestinationIdentity)
+      ) {
+        throw new DiagnosticsExportBlockedError("Support bundle destination changed during preparation.");
+      }
+    }
+
+    temporaryDescriptor = fs.openSync(temporaryPath, "wx", 0o600);
     const temporaryIdentity = fs.fstatSync(temporaryDescriptor);
     if (!temporaryIdentity.isFile()) {
       throw new DiagnosticsExportBlockedError("Support bundle temporary file is invalid.");
@@ -216,8 +239,9 @@ export function prepareDiagnosticsExportFile(
       parentRealPath,
       parentDevice: parentIdentity.dev,
       parentInode: parentIdentity.ino,
-      ...(initialDestinationIdentity
+      ...(initialDestinationDescriptor !== undefined && initialDestinationIdentity
         ? {
+            initialDestinationDescriptor,
             initialDestinationDevice: initialDestinationIdentity.dev,
             initialDestinationInode: initialDestinationIdentity.ino
           }
@@ -228,8 +252,15 @@ export function prepareDiagnosticsExportFile(
       temporaryInode: temporaryIdentity.ino
     };
   } catch (caught) {
-    fs.closeSync(temporaryDescriptor);
-    fs.rmSync(temporaryPath, { force: true });
+    try {
+      try {
+        if (temporaryDescriptor !== undefined) fs.closeSync(temporaryDescriptor);
+      } finally {
+        if (initialDestinationDescriptor !== undefined) fs.closeSync(initialDestinationDescriptor);
+      }
+    } finally {
+      fs.rmSync(temporaryPath, { force: true });
+    }
     throw caught;
   }
 }
@@ -304,7 +335,13 @@ export function releasePreparedDiagnosticsExportFile(prepared: PreparedDiagnosti
   } catch {
     // A committed or externally removed temporary file needs no cleanup.
   } finally {
-    fs.closeSync(prepared.temporaryDescriptor);
+    try {
+      fs.closeSync(prepared.temporaryDescriptor);
+    } finally {
+      if (prepared.initialDestinationDescriptor !== undefined) {
+        fs.closeSync(prepared.initialDestinationDescriptor);
+      }
+    }
   }
 }
 
@@ -396,11 +433,21 @@ function matchesPreparedDestination(
   prepared: PreparedDiagnosticsExportFile,
   current: fs.Stats | undefined
 ): boolean {
-  if (prepared.initialDestinationDevice === undefined || prepared.initialDestinationInode === undefined) {
+  if (
+    prepared.initialDestinationDescriptor === undefined ||
+    prepared.initialDestinationDevice === undefined ||
+    prepared.initialDestinationInode === undefined
+  ) {
     return current === undefined;
   }
-  return current !== undefined && current.isFile() && !current.isSymbolicLink() &&
-    current.dev === prepared.initialDestinationDevice && current.ino === prepared.initialDestinationInode;
+  try {
+    const held = fs.fstatSync(prepared.initialDestinationDescriptor);
+    return current !== undefined && held.isFile() && current.isFile() && !current.isSymbolicLink() &&
+      held.dev === prepared.initialDestinationDevice && held.ino === prepared.initialDestinationInode &&
+      sameIdentity(held, current);
+  } catch {
+    return false;
+  }
 }
 
 function escapeRegExp(value: string): string {

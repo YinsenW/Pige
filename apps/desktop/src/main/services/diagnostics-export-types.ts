@@ -14,6 +14,7 @@ export interface DiagnosticsExportWorkerRequest {
     readonly parentRealPath: string;
     readonly parentDevice: number;
     readonly parentInode: number;
+    readonly initialDestinationDescriptor?: number;
     readonly initialDestinationDevice?: number;
     readonly initialDestinationInode?: number;
     readonly temporaryPath: string;

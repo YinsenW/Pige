@@ -75,7 +75,12 @@ function isPreparedExport(value: unknown, outputPath: string): value is Prepared
     "outputPath", "destination", "parentRealPath", "parentDevice", "parentInode",
     "temporaryPath", "temporaryDescriptor", "temporaryDevice", "temporaryInode"
   ];
-  const allowedWithDestination = [...allowed, "initialDestinationDevice", "initialDestinationInode"];
+  const allowedWithDestination = [
+    ...allowed,
+    "initialDestinationDescriptor",
+    "initialDestinationDevice",
+    "initialDestinationInode"
+  ];
   if (!hasExactKeys(value, value.initialDestinationDevice === undefined ? allowed : allowedWithDestination)) {
     return false;
   }
@@ -88,7 +93,8 @@ function isPreparedExport(value: unknown, outputPath: string): value is Prepared
     isNonNegativeSafeInteger(value.temporaryDescriptor) &&
     isNonNegativeSafeInteger(value.temporaryDevice) && isNonNegativeSafeInteger(value.temporaryInode) &&
     (value.initialDestinationDevice === undefined ||
-      (isNonNegativeSafeInteger(value.initialDestinationDevice) &&
+      (isNonNegativeSafeInteger(value.initialDestinationDescriptor) &&
+        isNonNegativeSafeInteger(value.initialDestinationDevice) &&
         isNonNegativeSafeInteger(value.initialDestinationInode)));
 }
 
