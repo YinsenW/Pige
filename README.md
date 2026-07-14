@@ -1,5 +1,7 @@
 # Pige
 
+<img src="resources/brand/pige-icon/master/pige-icon-1024.png" alt="Pige app icon" width="112">
+
 ## Your general Agent, grounded in what you know.
 
 Pige is a local-first general-purpose Agent with personal knowledge as its strongest

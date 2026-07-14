@@ -92,6 +92,7 @@ Use the smallest complete pack for the work. The table lists task-specific owner
 | Future mobile/cloud runtime boundary | `docs/FUTURE_MOBILE_AND_CLOUD_ARCHITECTURE.md`, `docs/TECH_ARCHITECTURE.md`, `docs/DATA_ARCHITECTURE.md`, `docs/DECISION_LOG.md` |
 | Backup, restore, migration | `docs/DATA_ARCHITECTURE.md`, `docs/RELEASE_ENGINEERING.md`, `docs/PERFORMANCE_AND_RELIABILITY.md` |
 | Packaging, signing, update, dependency upgrades | `docs/RELEASE_ENGINEERING.md`, `docs/TECH_ARCHITECTURE.md`, `docs/REPOSITORY_STRUCTURE.md`, `docs/QUALITY_AND_TEST_STRATEGY.md`, `docs/SECURITY_THREAT_MODEL.md` |
+| App icon and platform artwork | `docs/UI_PROTOTYPE.md`, `resources/brand/pige-icon/README.md`, `docs/RELEASE_ENGINEERING.md` |
 | I18N and accessibility | `docs/I18N_DESIGN.md`, `docs/UI_PROTOTYPE.md`, `docs/QUALITY_AND_TEST_STRATEGY.md` |
 | Tests, fixtures, requirement evidence, and release acceptance | `docs/QUALITY_AND_TEST_STRATEGY.md`, `docs/SPEC_TRACEABILITY.md`, the matching phase in `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`, `resources/traceability/p0-coverage.manifest.json`, `resources/traceability/acceptance.manifest.json`, `resources/traceability/semantic-claims.manifest.json`, `docs/PERFORMANCE_AND_RELIABILITY.md` |
 | AI output quality evaluation, golden fixtures, retrieval relevance | `docs/QUALITY_AND_TEST_STRATEGY.md`, `docs/PROMPT_DESIGN.md`, `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`, `docs/SPEC_TRACEABILITY.md` |
