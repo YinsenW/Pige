@@ -11,7 +11,8 @@
   "scripts": {
     "dev": "node ../../scripts/build/macos-vision-ocr-helper.mjs && electron-vite dev",
     "build": "node ../../scripts/build/macos-vision-ocr-helper.mjs && electron-vite build",
-    "package:dir:mac:arm64": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --config electron-builder.yml --mac --arm64",
+    "package:dir:mac:arm64": "node ../../scripts/release/run-electron-builder.mjs --platform=macos --arch=arm64",
+    "package:dir:win:x64": "node ../../scripts/release/run-electron-builder.mjs --platform=windows --arch=x64",
     "smoke:electron-undici-transport": "electron scripts/electron-undici-transport-smoke.mjs",
     "smoke:electron-pi-agent": "electron scripts/electron-pi-agent-runtime-smoke.mjs",
     "smoke:electron-persisted-provider": "node scripts/electron-persisted-provider-canary.mjs",
