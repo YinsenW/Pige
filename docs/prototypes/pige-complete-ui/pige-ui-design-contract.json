@@ -77,6 +77,15 @@
     "Enter sends, Shift+Enter inserts a newline, and active IME plus the 80 ms composition-end race cannot send.",
     "Reduced motion removes spatial interpolation without removing state feedback."
   ],
+  "interaction_contract": [
+    "The Settings entry navigates deterministically in the prototype; production opens the same route in its independent stable-size BrowserWindow.",
+    "Every notebook group is a native button with aria-expanded, keyboard activation, animated disclosure, and session-restored expansion state.",
+    "Every visible notebook row opens the three-pane reader and updates the breadcrumb, Markdown title, Agent pane title, and active-row state.",
+    "Knowledge Tree nodes are selectable controls and update one shared detail surface without adding modal or navigation complexity.",
+    "Library search filters notes, sources, topics, and tags as the user types and exposes an explicit empty result state.",
+    "First-run vault choices, permission decisions, model-egress decisions, voice completion, retry, Activity Undo, selection actions, and note proposals all resolve visibly and disable stale actions.",
+    "No visible primary control is a decorative dead end; intentionally illustrative secondary controls return localized prototype feedback."
+  ],
   "review": {
     "base_url": "http://127.0.0.1:4174/docs/prototypes/pige-complete-ui/",
     "serve_from": "repository root",
@@ -142,6 +151,7 @@
   "browser_regression": {
     "main_routes_checked": 23,
     "settings_routes_checked": 15,
+    "interaction_flows_checked": 12,
     "failed_routes": [],
     "console_errors": [],
     "known_visual_discrepancies": []

@@ -240,14 +240,23 @@
 
     .notebook-title {
       display: flex;
+      width: 100%;
       align-items: center;
       gap: 8px;
       padding: 7px 9px;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
       color: #4f5552;
+      font-family: inherit;
       font-size: 13px;
+      text-align: left;
+      cursor: pointer;
     }
 
-    .notebook-title::before { content: "⌄"; color: var(--text-tertiary); }
+    .notebook-title:hover { background: var(--surface-hover); color: var(--text-primary); }
+    .notebook-chevron { width: 12px; color: var(--text-tertiary); transition: transform 160ms var(--ease-basic); }
+    .notebook-title[aria-expanded="false"] .notebook-chevron { transform: rotate(-90deg); }
     .notebook-title::after {
       width: 6px;
       height: 6px;
@@ -257,7 +266,14 @@
       content: "";
     }
 
-    .notebook-pages { padding-left: 22px; }
+    .notebook-pages {
+      max-height: 240px;
+      padding-left: 22px;
+      overflow: hidden;
+      opacity: 1;
+      transition: max-height 180ms var(--ease-enter), opacity 120ms var(--ease-basic);
+    }
+    .notebook-group.collapsed .notebook-pages { max-height: 0; opacity: 0; pointer-events: none; }
 
     .vault-status {
       display: flex;
@@ -1401,7 +1417,9 @@
     .tree-svg .branch-strong { stroke: #72998f; stroke-width: 8; }
     .tree-svg .branch { stroke: #9ab8b0; stroke-width: 4; }
     .tree-svg .twig { stroke: #c7d8d3; stroke-width: 2; }
-    .tree-node { position: absolute; z-index: 2; display: grid; max-width: 130px; gap: 2px; padding: 7px 9px; border: .5px solid var(--border-subtle); border-radius: 10px; background: rgba(255,255,255,.94); box-shadow: var(--shadow-sm); font-size: 11px; }
+    .tree-node { position: absolute; z-index: 2; display: grid; max-width: 130px; gap: 2px; padding: 7px 9px; border: .5px solid var(--border-subtle); border-radius: 10px; background: rgba(255,255,255,.94); box-shadow: var(--shadow-sm); color: var(--text-primary); font-family: inherit; font-size: 11px; text-align: left; cursor: pointer; transition: border-color 120ms var(--ease-basic), box-shadow 120ms var(--ease-basic), transform 120ms var(--ease-basic); }
+    .tree-node:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+    .tree-node.active { border-color: color-mix(in oklab, var(--accent) 58%, var(--border-subtle)); box-shadow: 0 0 0 2px var(--accent-soft), var(--shadow-sm); }
     .tree-node strong { font-size: 11px; font-weight: 500; }
     .tree-node span { color: var(--text-tertiary); font-size: 9px; }
     .tree-node.root { left: 42%; bottom: 24px; }
@@ -1425,13 +1443,17 @@
     .library-search-field input::placeholder { color: var(--text-tertiary); }
     .search-group { margin-top: 24px; }
     .search-group h2 { margin: 0 0 8px; color: var(--text-tertiary); font-size: 10px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; }
-    .search-result { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 7px 8px; border-radius: 10px; }
+    .search-result { display: flex; width: 100%; align-items: center; gap: 10px; min-height: 48px; padding: 7px 8px; border: 0; border-radius: 10px; background: transparent; color: inherit; font-family: inherit; text-align: left; cursor: pointer; }
     .search-result:hover { background: var(--surface-hover); }
+    .search-result[hidden],
+    .search-group[hidden] { display: none; }
     .search-result-icon { display: grid; width: 30px; height: 30px; flex: 0 0 auto; place-items: center; border-radius: 8px; background: var(--surface-hover); color: var(--text-secondary); font-size: 10px; }
     .search-result-copy { display: grid; gap: 2px; min-width: 0; }
     .search-result-copy strong { font-size: 12px; font-weight: 500; }
     .search-result-copy span { color: var(--text-tertiary); font-size: 10px; }
     .search-result small { margin-left: auto; color: var(--text-tertiary); font-size: 9px; }
+    .search-empty { display: none; margin-top: 28px; color: var(--text-tertiary); font-size: 12px; text-align: center; }
+    .search-empty.visible { display: block; }
 
     .first-run-view { display: grid; place-items: center; padding: 32px; }
     .first-run-card { width: min(430px, 100%); padding: 28px; }
@@ -1447,6 +1469,7 @@
     .first-run-choice { display: flex; width: 100%; align-items: center; gap: 10px; min-height: 58px; padding: 10px 12px; border: .5px solid var(--border-subtle); border-radius: 12px; background: var(--surface); color: inherit; text-align: left; cursor: pointer; }
     .first-run-choice + .first-run-choice { margin-top: 8px; }
     .first-run-choice:hover { background: var(--surface-hover); }
+    .first-run-choice.selected { border-color: color-mix(in oklab, var(--accent) 55%, var(--border-subtle)); background: var(--accent-soft); box-shadow: 0 0 0 2px var(--accent-soft); }
     .first-run-choice svg { width: 20px; height: 20px; color: var(--text-secondary); fill: none; stroke: currentColor; stroke-width: 1.8; }
     .first-run-choice-copy { display: grid; gap: 2px; min-width: 0; }
     .first-run-choice-copy strong { font-size: 12px; font-weight: 500; }
@@ -1456,6 +1479,9 @@
     .primary-button { min-height: 32px; padding: 6px 12px; border: .5px solid var(--border-subtle); border-radius: 9px; background: var(--surface); color: var(--text-primary); font-size: 12px; font-weight: 500; cursor: pointer; }
     .quiet-button:hover { background: var(--surface-hover); }
     .primary-button { border-color: var(--text-primary); background: var(--text-primary); color: var(--surface); }
+    .quiet-button:disabled,
+    .primary-button:disabled { cursor: default; opacity: .45; }
+    .resolved-card { padding: 12px 14px; border: .5px solid var(--border-subtle); border-radius: 14px; background: var(--surface-subtle); color: var(--text-secondary); font-size: 11px; }
 
     .home-demo { display: none; width: 100%; margin-top: 24px; }
     .app-window[data-screen="home"] .task-panel,
@@ -1978,28 +2004,28 @@
             </button>
           </nav>
           <div class="sidebar-label">笔记库</div>
-          <div class="notebook-group">
-            <div class="notebook-title">Pico8</div>
-            <div class="notebook-pages">
-              <button class="sidebar-note" type="button">了解 PICO-8 项目</button>
+          <div class="notebook-group" data-notebook="pico8">
+            <button class="notebook-title" type="button" aria-expanded="true" aria-controls="notebook-pico8-pages"><span class="notebook-chevron" aria-hidden="true">⌄</span><span>Pico8</span></button>
+            <div class="notebook-pages" id="notebook-pico8-pages">
+              <button class="sidebar-note" type="button" data-note-title="了解 PICO-8 项目" data-note-group="Pico8">了解 PICO-8 项目</button>
             </div>
           </div>
-          <div class="notebook-group">
-            <div class="notebook-title">Pige</div>
-            <div class="notebook-pages">
-              <button class="sidebar-note" type="button">开发实现</button>
-              <button class="sidebar-note" id="openProductNote" type="button">产品规划</button>
-              <button class="sidebar-note" type="button">项目管理</button>
-              <button class="sidebar-note" type="button">UI 设计</button>
+          <div class="notebook-group" data-notebook="pige">
+            <button class="notebook-title" type="button" aria-expanded="true" aria-controls="notebook-pige-pages"><span class="notebook-chevron" aria-hidden="true">⌄</span><span>Pige</span></button>
+            <div class="notebook-pages" id="notebook-pige-pages">
+              <button class="sidebar-note" type="button" data-note-title="开发实现" data-note-group="Pige">开发实现</button>
+              <button class="sidebar-note" id="openProductNote" type="button" data-note-title="产品规划" data-note-group="Pige">产品规划</button>
+              <button class="sidebar-note" type="button" data-note-title="项目管理" data-note-group="Pige">项目管理</button>
+              <button class="sidebar-note" type="button" data-note-title="UI 设计" data-note-group="Pige">UI 设计</button>
             </div>
           </div>
-          <div class="notebook-group">
-            <div class="notebook-title">Codex</div>
-            <div class="notebook-pages">
-              <button class="sidebar-note" type="button">数据重构</button>
+          <div class="notebook-group" data-notebook="codex">
+            <button class="notebook-title" type="button" aria-expanded="true" aria-controls="notebook-codex-pages"><span class="notebook-chevron" aria-hidden="true">⌄</span><span>Codex</span></button>
+            <div class="notebook-pages" id="notebook-codex-pages">
+              <button class="sidebar-note" type="button" data-note-title="数据重构" data-note-group="Codex">数据重构</button>
             </div>
           </div>
-          <a class="vault-status" id="openSettings" href="./#settings" target="pige-settings" aria-label="打开设置">
+          <a class="vault-status" id="openSettings" href="./?panel=general#settings" data-open-settings="general" aria-label="打开设置">
             <span class="vault-avatar" aria-hidden="true">YW</span>
             <span class="vault-copy"><strong>Yinsen W</strong><small>本地知识库</small></span>
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></svg>
@@ -2061,13 +2087,13 @@
                   <span class="decision-eyebrow">需要本次确认</span>
                   <h2>Pige 想要执行一个外部操作</h2>
                   <p>此操作会离开当前仓库边界。这里仅显示操作类型和原因，不显示文件路径、命令正文或凭据。</p>
-                  <div class="decision-actions"><button class="quiet-button" type="button">拒绝</button><button class="primary-button" type="button">允许一次</button></div>
+                  <div class="decision-actions"><button class="quiet-button" type="button" data-decision-action="deny" data-decision-kind="permission">拒绝</button><button class="primary-button" type="button" data-decision-action="allow" data-decision-kind="permission">允许一次</button></div>
                 </section>
                 <section class="decision-card egress-card" aria-label="模型发送确认">
                   <span class="decision-eyebrow">需要本次确认</span>
                   <h2>发送这次选定内容？</h2>
                   <p>这次请求包含敏感内容。这里只说明确认原因，不显示服务地址、模型标识、正文、引用或凭据。</p>
-                  <div class="decision-actions"><button class="quiet-button" type="button">不发送</button><button class="primary-button" type="button">允许一次</button></div>
+                  <div class="decision-actions"><button class="quiet-button" type="button" data-decision-action="deny" data-decision-kind="egress">不发送</button><button class="primary-button" type="button" data-decision-action="allow" data-decision-kind="egress">允许一次</button></div>
                 </section>
                 <section class="home-demo-card model-missing-card" aria-label="等待模型">
                   <h2>来源已保存</h2>
@@ -2079,14 +2105,14 @@
                   <h2 style="margin:5px 0;font-size:13px">“我想记录一个关于本地知识库的想法…”</h2>
                   <div class="voice-wave" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span></div>
                   <p style="margin:0;color:var(--text-secondary);font-size:11px">停止后文字仍可编辑，不会自动发送。</p>
-                  <div class="decision-actions"><button class="quiet-button" type="button">停止录音</button><button class="primary-button" type="button">完成</button></div>
+                  <div class="decision-actions"><button class="quiet-button" type="button" data-voice-action="stop">停止录音</button><button class="primary-button" type="button" data-voice-action="complete">完成</button></div>
                 </section>
                 <section class="home-demo-card error-card" aria-label="处理失败">
                   <span class="decision-eyebrow">来源已保留</span>
                   <h2 style="margin:5px 0;font-size:13px">暂时无法完成处理</h2>
                   <p style="margin:0;color:var(--text-secondary);font-size:11px;line-height:1.55">Pige 没有删除原始来源。你可以重试当前任务，或稍后从最近工作继续。</p>
                   <div class="error-code">PIGE-PROVIDER-TEMPORARY</div>
-                  <div class="decision-actions"><button class="primary-button" type="button">重试</button></div>
+                  <div class="decision-actions"><button class="primary-button" type="button" data-retry-job>重试</button></div>
                 </section>
                 <section class="home-demo-card ingress-card file-ingress-card" aria-label="文件已进入 Agent">
                   <span class="decision-eyebrow">来源已保存</span>
@@ -2130,8 +2156,8 @@
                 </div>
               </div>
               <div class="activity-demo-list">
-                <div class="activity-row"><span class="activity-row-dot"></span><span class="activity-row-copy"><strong>已创建“市场调研资料”</strong><span>来源、Dataset 与引用均已保存</span></span><button type="button">打开</button></div>
-                <div class="activity-row"><span class="activity-row-dot"></span><span class="activity-row-copy"><strong>已更新“产品定位”</strong><span>增加 1 个来源引用和 2 个链接</span></span><button type="button">撤销</button></div>
+                <div class="activity-row"><span class="activity-row-dot"></span><span class="activity-row-copy"><strong>已创建“市场调研资料”</strong><span>来源、Dataset 与引用均已保存</span></span><button type="button" data-activity-action="open">打开</button></div>
+                <div class="activity-row"><span class="activity-row-dot"></span><span class="activity-row-copy"><strong>已更新“产品定位”</strong><span>增加 1 个来源引用和 2 个链接</span></span><button type="button" data-activity-action="undo">撤销</button></div>
               </div>
             </section>
 
@@ -2170,14 +2196,14 @@
                   <path class="twig" d="M104 274 C70 250 46 238 22 230 M104 274 C76 302 56 318 34 326"/>
                   <path class="twig" d="M520 238 C548 216 566 202 588 196 M520 238 C550 262 570 278 590 292"/>
                 </svg>
-                <div class="tree-node root"><strong>个人知识</strong><span>4 个主要领域</span></div>
-                <div class="tree-node a"><strong>产品设计</strong><span>42 条证据</span></div>
-                <div class="tree-node b"><strong>Agent 架构</strong><span>37 条证据</span></div>
-                <div class="tree-node c"><strong>本地优先</strong><span>28 条证据</span></div>
-                <div class="tree-node d"><strong>知识检索</strong><span>21 条证据</span></div>
+                <button class="tree-node root active" type="button" data-knowledge-title="个人知识" data-knowledge-detail="4 个主要领域共同构成当前知识树。选择任一分支可查看其证据边界。"><strong>个人知识</strong><span>4 个主要领域</span></button>
+                <button class="tree-node a" type="button" data-knowledge-title="产品设计" data-knowledge-detail="42 条已确认的笔记、来源引用和关系构成此分支。"><strong>产品设计</strong><span>42 条证据</span></button>
+                <button class="tree-node b" type="button" data-knowledge-title="Agent 架构" data-knowledge-detail="37 条证据记录 Pi 编排、工具边界与可恢复任务。"><strong>Agent 架构</strong><span>37 条证据</span></button>
+                <button class="tree-node c" type="button" data-knowledge-title="本地优先" data-knowledge-detail="28 条证据说明本地存储、可迁移 Markdown 与最小云端上下文。"><strong>本地优先</strong><span>28 条证据</span></button>
+                <button class="tree-node d" type="button" data-knowledge-title="知识检索" data-knowledge-detail="21 条证据连接全文检索、语义检索、引用与上下文组装。"><strong>知识检索</strong><span>21 条证据</span></button>
               </section>
               <aside class="knowledge-side">
-                <section class="knowledge-card"><h2>最近生长</h2><p>新来源强化了“本地优先”与“可恢复工作流”的关系。</p><div class="knowledge-list"><div class="knowledge-row"><span class="knowledge-dot"></span><span>本地优先</span><small>+4</small></div><div class="knowledge-row"><span class="knowledge-dot"></span><span>安全恢复</span><small>+3</small></div></div></section>
+                <section class="knowledge-card"><h2 id="knowledgeSelectionTitle">个人知识</h2><p id="knowledgeSelectionDetail">4 个主要领域共同构成当前知识树。选择任一分支可查看其证据边界。</p><div class="knowledge-list"><div class="knowledge-row"><span class="knowledge-dot"></span><span>本地优先</span><small>+4</small></div><div class="knowledge-row"><span class="knowledge-dot"></span><span>安全恢复</span><small>+3</small></div></div></section>
                 <section class="knowledge-card"><h2>需要确认</h2><p>合并或移动既有主题会影响多篇笔记，因此不会自动应用。</p><div class="knowledge-list"><div class="knowledge-row"><span class="knowledge-dot" style="background:#c98a22"></span><span>合并两个相近主题</span><small>查看</small></div></div></section>
                 <section class="knowledge-card"><h2>证据边界</h2><p>树形视图来自 Markdown、引用和已确认关系；数据库图索引可以随时重建。</p></section>
               </aside>
@@ -2188,10 +2214,11 @@
         <section class="library-search-view" id="librarySearchView" aria-label="搜索知识库">
           <header class="view-toolbar"><span>搜索知识库</span><span class="toolbar-meta">笔记、来源、主题与标签</span></header>
           <div class="library-search-content">
-            <label class="library-search-field"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><input type="search" value="本地优先" aria-label="搜索知识库" /></label>
-            <section class="search-group"><h2>笔记</h2><div class="search-result"><span class="search-result-icon">MD</span><span class="search-result-copy"><strong>产品定位</strong><span>“Pige 是一个本地优先的通用知识 Agent…”</span></span><small>92%</small></div><div class="search-result"><span class="search-result-icon">MD</span><span class="search-result-copy"><strong>数据架构</strong><span>Markdown 是可携带的知识真相层</span></span><small>86%</small></div></section>
-            <section class="search-group"><h2>来源</h2><div class="search-result"><span class="search-result-icon">PDF</span><span class="search-result-copy"><strong>Local-first software</strong><span>产品研究.pdf · 第 4 页</span></span><small>1 个引用</small></div></section>
-            <section class="search-group"><h2>主题与标签</h2><div class="search-result"><span class="search-result-icon">#</span><span class="search-result-copy"><strong>本地优先</strong><span>主题 · 28 条证据 · 12 个反向链接</span></span><small>打开</small></div></section>
+            <label class="library-search-field"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><input id="librarySearchInput" type="search" value="本地优先" aria-label="搜索知识库" /></label>
+            <section class="search-group"><h2>笔记</h2><button class="search-result" type="button" data-search-text="产品定位 本地优先 通用知识 Agent" data-note-title="产品定位" data-note-group="Pige"><span class="search-result-icon">MD</span><span class="search-result-copy"><strong>产品定位</strong><span>“Pige 是一个本地优先的通用知识 Agent…”</span></span><small>92%</small></button><button class="search-result" type="button" data-search-text="数据架构 Markdown 可携带 知识真相层" data-note-title="数据架构" data-note-group="Codex"><span class="search-result-icon">MD</span><span class="search-result-copy"><strong>数据架构</strong><span>Markdown 是可携带的知识真相层</span></span><small>86%</small></button></section>
+            <section class="search-group"><h2>来源</h2><button class="search-result" type="button" data-search-text="Local-first software 产品研究 PDF 本地优先" data-search-action="source"><span class="search-result-icon">PDF</span><span class="search-result-copy"><strong>Local-first software</strong><span>产品研究.pdf · 第 4 页</span></span><small>1 个引用</small></button></section>
+            <section class="search-group"><h2>主题与标签</h2><button class="search-result" type="button" data-search-text="本地优先 主题 证据 反向链接" data-search-action="topic"><span class="search-result-icon">#</span><span class="search-result-copy"><strong>本地优先</strong><span>主题 · 28 条证据 · 12 个反向链接</span></span><small>打开</small></button></section>
+            <p class="search-empty" id="librarySearchEmpty" role="status">没有找到匹配的笔记、来源或主题</p>
           </div>
         </section>
 
@@ -2201,9 +2228,9 @@
             <div class="first-run-step vault">
               <h1>选择你的本地知识库</h1>
               <p>Pige 把笔记和可恢复的知识保存在你选择的文件夹里。你可以稍后在设置中看到并更改它。</p>
-              <button class="first-run-choice" type="button"><svg viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v10H3z"/></svg><span class="first-run-choice-copy"><strong>创建新的 Pige 仓库</strong><span>选择父文件夹，并创建一个新的本地知识库</span></span></button>
-              <button class="first-run-choice" type="button"><svg viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v10H3z"/><path d="M12 12v4M10 14h4"/></svg><span class="first-run-choice-copy"><strong>打开已有仓库</strong><span>选择一个已有的 Pige 仓库文件夹</span></span></button>
-              <div class="first-run-actions"><button class="quiet-button" type="button">稍后设置</button><button class="primary-button" type="button" data-next-screen="first-run-model">继续</button></div>
+              <button class="first-run-choice" type="button" data-vault-choice="create" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v10H3z"/></svg><span class="first-run-choice-copy"><strong>创建新的 Pige 仓库</strong><span>选择父文件夹，并创建一个新的本地知识库</span></span></button>
+              <button class="first-run-choice" type="button" data-vault-choice="open" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v10H3z"/><path d="M12 12v4M10 14h4"/></svg><span class="first-run-choice-copy"><strong>打开已有仓库</strong><span>选择一个已有的 Pige 仓库文件夹</span></span></button>
+              <div class="first-run-actions"><button class="quiet-button" type="button" data-first-run-later>稍后设置</button><button class="primary-button" id="firstRunContinue" type="button" data-next-screen="first-run-model" disabled>继续</button></div>
             </div>
             <div class="first-run-step model">
               <h1>连接一个模型</h1>
@@ -2216,7 +2243,7 @@
 
         <article class="markdown-reader" id="markdownReader" aria-label="Markdown 阅读器">
           <header class="reader-toolbar">
-            <span>笔记库</span><span>›</span><span>Pige</span><span>›</span><span>产品规划</span><span>›</span><strong>产品定位.md</strong>
+            <span>笔记库</span><span>›</span><span id="readerGroup">Pige</span><span>›</span><span id="readerNoteParent">产品规划</span><span>›</span><strong id="readerNoteFile">产品定位.md</strong>
             <div class="reader-toolbar-actions">
               <button class="icon-button prototype-action" type="button" aria-label="编辑笔记" title="编辑笔记">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>
@@ -2230,8 +2257,8 @@
             </div>
           </header>
           <div class="markdown-body">
-            <div class="selection-toolbar" role="toolbar" aria-label="所选文字操作"><button type="button">解释</button><button type="button">总结</button><button type="button">建立链接</button><button type="button">更多</button></div>
-            <h1>产品定位</h1>
+            <div class="selection-toolbar" role="toolbar" aria-label="所选文字操作"><button type="button" data-selection-action="解释">解释</button><button type="button" data-selection-action="总结">总结</button><button type="button" data-selection-action="建立链接">建立链接</button><button type="button" data-selection-action="更多">更多</button></div>
+            <h1 id="readerNoteTitle">产品定位</h1>
             <div class="note-meta"><span>创建于 2026-07-10 10:30</span><span>更新于 2026-07-11 14:20</span></div>
 
             <h2>1. Pige 是什么</h2>
@@ -2276,7 +2303,7 @@
         <div class="note-agent-inner">
           <header class="note-agent-header">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/></svg>
-            <span>产品定位.md</span>
+            <span id="noteAgentTitle">产品定位.md</span>
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6" transform="rotate(90 12 12)"/></svg>
             <button class="icon-button" id="closeProductNote" type="button" aria-label="关闭笔记" title="关闭笔记">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
@@ -2316,7 +2343,7 @@
               <h2>更新“核心理念”</h2>
               <p>新来源提供了更明确的表述。Pige 不会在确认前改写现有段落。</p>
               <div class="diff-preview"><div class="diff-line remove">− 知识沉淀在本地，安全可控。</div><div class="diff-line add">+ 知识以 Markdown 沉淀在本地，并保留可追溯来源。</div></div>
-              <div class="proposal-actions"><button class="quiet-button" type="button">拒绝</button><button class="quiet-button" type="button">稍后</button><button class="primary-button" type="button">应用更改</button></div>
+              <div class="proposal-actions"><button class="quiet-button" type="button" data-proposal-action="reject">拒绝</button><button class="quiet-button" type="button" data-proposal-action="later">稍后</button><button class="primary-button" type="button" data-proposal-action="apply">应用更改</button></div>
             </section>
           </div>
           <div class="note-composer-wrap">
@@ -2640,8 +2667,18 @@
     const messagePreview = document.querySelector('#messagePreview');
     const openProductNote = document.querySelector('#openProductNote');
     const closeProductNote = document.querySelector('#closeProductNote');
+    const readerGroup = document.querySelector('#readerGroup');
+    const readerNoteParent = document.querySelector('#readerNoteParent');
+    const readerNoteFile = document.querySelector('#readerNoteFile');
+    const readerNoteTitle = document.querySelector('#readerNoteTitle');
+    const noteAgentTitle = document.querySelector('#noteAgentTitle');
     const noteComposerInput = document.querySelector('#noteComposerInput');
     const noteSendButton = document.querySelector('#noteSendButton');
+    const librarySearchInput = document.querySelector('#librarySearchInput');
+    const librarySearchEmpty = document.querySelector('#librarySearchEmpty');
+    const knowledgeSelectionTitle = document.querySelector('#knowledgeSelectionTitle');
+    const knowledgeSelectionDetail = document.querySelector('#knowledgeSelectionDetail');
+    const firstRunContinue = document.querySelector('#firstRunContinue');
     const openSettings = document.querySelector('#openSettings');
     const closeSettings = document.querySelector('#closeSettings');
     const settingsWindow = document.querySelector('#settingsWindow');
@@ -2711,17 +2748,43 @@
       });
     }
 
+    function navigateSettings(page = 'general') {
+      location.assign(`./?panel=${encodeURIComponent(page)}#settings`);
+    }
+
     function closeSettingsWindow() {
-      if (location.hash === '#settings' && window.opener && !window.opener.closed) {
-        window.close();
-        return;
-      }
       document.body.classList.remove('settings-active');
-      history.replaceState(null, '', `${location.pathname}${location.search}`);
       window.setTimeout(() => {
         settingsWindow.hidden = true;
-        openSettings.focus({ preventScroll: true });
+        location.assign('./?screen=home&sidebar=1');
       }, 180);
+    }
+
+    function openNote(title = '产品定位', group = 'Pige') {
+      const fileName = `${title}.md`;
+      readerGroup.textContent = group;
+      readerNoteParent.textContent = title;
+      readerNoteFile.textContent = fileName;
+      readerNoteTitle.textContent = title;
+      noteAgentTitle.textContent = fileName;
+      document.querySelectorAll('.sidebar-note').forEach(note => {
+        note.classList.toggle('active', note.dataset.noteTitle === title && note.dataset.noteGroup === group);
+      });
+      setScreen('note');
+    }
+
+    function filterLibraryResults() {
+      const query = librarySearchInput.value.trim().toLocaleLowerCase('zh-CN');
+      let visible = 0;
+      document.querySelectorAll('.search-result').forEach(result => {
+        const matches = !query || result.dataset.searchText.toLocaleLowerCase('zh-CN').includes(query);
+        result.hidden = !matches;
+        if (matches) visible += 1;
+      });
+      document.querySelectorAll('.search-group').forEach(group => {
+        group.hidden = !Array.from(group.querySelectorAll('.search-result')).some(result => !result.hidden);
+      });
+      librarySearchEmpty.classList.toggle('visible', visible === 0);
     }
 
     function updateSendState() {
@@ -2781,12 +2844,12 @@
     function setNoteOpen(open) {
       mainLayout.classList.toggle('note-open', open);
       appWindow.classList.toggle('note-mode', open);
-      openProductNote.classList.toggle('active', open);
       if (open) {
         setSidebar(!window.matchMedia('(max-width: 760px)').matches);
         document.querySelectorAll('.nav-item').forEach(entry => entry.classList.remove('active'));
         window.setTimeout(() => noteComposerInput.focus({ preventScroll: true }), 420);
       } else {
+        document.querySelectorAll('.sidebar-note').forEach(note => note.classList.remove('active'));
         document.querySelector('[data-view="home"]').classList.add('active');
       }
     }
@@ -2880,7 +2943,31 @@
       taskToggle.setAttribute('aria-expanded', 'true');
     });
 
-    openProductNote.addEventListener('click', () => setScreen('note'));
+    document.querySelectorAll('.notebook-title').forEach(button => {
+      const group = button.closest('.notebook-group');
+      const pages = group.querySelector('.notebook-pages');
+      const storageKey = `pige.prototype.notebook.${group.dataset.notebook}.expanded`;
+      const stored = sessionStorage.getItem(storageKey);
+      if (stored === 'false') {
+        group.classList.add('collapsed');
+        button.setAttribute('aria-expanded', 'false');
+        pages.inert = true;
+        pages.setAttribute('aria-hidden', 'true');
+      }
+      button.addEventListener('click', () => {
+        const expanded = button.getAttribute('aria-expanded') !== 'true';
+        button.setAttribute('aria-expanded', String(expanded));
+        group.classList.toggle('collapsed', !expanded);
+        pages.inert = !expanded;
+        pages.setAttribute('aria-hidden', String(!expanded));
+        sessionStorage.setItem(storageKey, String(expanded));
+      });
+    });
+
+    document.querySelectorAll('.sidebar-note').forEach(note => {
+      note.addEventListener('click', () => openNote(note.dataset.noteTitle, note.dataset.noteGroup));
+    });
+
     closeProductNote.addEventListener('click', () => setScreen('home', { sidebar: true }));
 
     noteComposerInput.addEventListener('input', () => {
@@ -2911,7 +2998,7 @@
       item.addEventListener('click', () => {
         document.querySelectorAll('.nav-item').forEach(entry => entry.classList.remove('active'));
         item.classList.add('active');
-        openProductNote.classList.remove('active');
+        document.querySelectorAll('.sidebar-note').forEach(note => note.classList.remove('active'));
         if (item.dataset.view === 'home') {
           setScreen('home', { sidebar: true });
         } else if (item.dataset.view === 'knowledge') {
@@ -2921,14 +3008,141 @@
     });
 
     document.querySelectorAll('[data-open-settings]').forEach(button => {
-      button.addEventListener('click', () => {
+      button.addEventListener('click', event => {
+        event.preventDefault();
         const panel = button.dataset.openSettings || 'general';
-        window.open(`./?panel=${encodeURIComponent(panel)}#settings`, 'pige-settings');
+        navigateSettings(panel);
       });
     });
 
     document.querySelectorAll('[data-next-screen]').forEach(button => {
       button.addEventListener('click', () => setScreen(button.dataset.nextScreen));
+    });
+
+    document.querySelectorAll('[data-knowledge-title]').forEach(button => {
+      button.addEventListener('click', () => {
+        document.querySelectorAll('[data-knowledge-title]').forEach(node => node.classList.toggle('active', node === button));
+        knowledgeSelectionTitle.textContent = button.dataset.knowledgeTitle;
+        knowledgeSelectionDetail.textContent = button.dataset.knowledgeDetail;
+      });
+    });
+
+    librarySearchInput.addEventListener('input', filterLibraryResults);
+    document.querySelectorAll('.search-result').forEach(result => {
+      result.addEventListener('click', () => {
+        if (result.dataset.noteTitle) {
+          openNote(result.dataset.noteTitle, result.dataset.noteGroup || 'Pige');
+          return;
+        }
+        if (result.dataset.searchAction === 'topic') {
+          setScreen('knowledge');
+          const topic = document.querySelector('[data-knowledge-title="本地优先"]');
+          if (topic) topic.click();
+          return;
+        }
+        showToast('已打开来源预览（原型状态）');
+      });
+    });
+
+    document.querySelectorAll('[data-vault-choice]').forEach(choice => {
+      choice.addEventListener('click', () => {
+        document.querySelectorAll('[data-vault-choice]').forEach(option => {
+          const selected = option === choice;
+          option.classList.toggle('selected', selected);
+          option.setAttribute('aria-pressed', String(selected));
+        });
+        firstRunContinue.disabled = false;
+        showToast(choice.dataset.vaultChoice === 'create' ? '已选择创建新仓库' : '已选择打开已有仓库');
+      });
+    });
+
+    document.querySelector('[data-first-run-later]').addEventListener('click', () => setScreen('first-run-model'));
+
+    document.querySelectorAll('[data-decision-action]').forEach(button => {
+      button.addEventListener('click', () => {
+        const card = button.closest('.decision-card');
+        const buttons = Array.from(card.querySelectorAll('button'));
+        buttons.forEach(action => { action.disabled = true; });
+        const allowed = button.dataset.decisionAction === 'allow';
+        const kind = button.dataset.decisionKind;
+        const message = kind === 'egress'
+          ? (allowed ? '已允许这一次模型发送；不会保存授权。' : '已取消发送；选定内容未离开设备。')
+          : (allowed ? '已允许这一次外部操作；任务将从原位置继续。' : '已拒绝外部操作；没有执行任何动作。');
+        window.setTimeout(() => { card.innerHTML = `<div class="resolved-card" role="status">${message}</div>`; }, 180);
+      });
+    });
+
+    document.querySelectorAll('[data-voice-action]').forEach(button => {
+      button.addEventListener('click', () => {
+        const card = button.closest('.voice-card');
+        card.querySelectorAll('button').forEach(action => { action.disabled = true; });
+        if (button.dataset.voiceAction === 'complete') {
+          composerInput.value = '我想记录一个关于本地知识库的想法…';
+          updateSendState();
+          setScreen('home', { sidebar: false });
+          window.setTimeout(() => composerInput.focus({ preventScroll: true }), 180);
+          return;
+        }
+        card.querySelector('.decision-eyebrow').textContent = '录音已停止';
+        card.querySelector('.voice-wave').remove();
+        card.querySelector('p').textContent = '文字已保留，可完成后继续编辑；不会自动发送。';
+        card.querySelector('[data-voice-action="complete"]').disabled = false;
+      });
+    });
+
+    document.querySelector('[data-retry-job]').addEventListener('click', event => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      button.textContent = '正在重试…';
+      window.setTimeout(() => {
+        setScreen('home-file');
+        showToast('已从原任务继续处理');
+      }, 480);
+    });
+
+    document.querySelectorAll('[data-activity-action]').forEach(button => {
+      button.addEventListener('click', () => {
+        if (button.dataset.activityAction === 'open') {
+          openNote('市场调研资料', 'Pige');
+          appWindow.dataset.screen = 'dataset';
+          return;
+        }
+        const row = button.closest('.activity-row');
+        row.querySelector('.activity-row-copy strong').textContent = '已撤销“产品定位”的更新';
+        row.querySelector('.activity-row-copy span').textContent = '原始笔记和来源仍然保留';
+        button.textContent = '已撤销';
+        button.disabled = true;
+        showToast('更新已撤销');
+      });
+    });
+
+    document.querySelectorAll('[data-selection-action]').forEach(button => {
+      button.addEventListener('click', () => {
+        const action = button.dataset.selectionAction;
+        if (action === '解释' || action === '总结') {
+          noteComposerInput.value = `${action}所选内容：输入一次，Agent 自主理解、整理与沉淀。`;
+          noteSendButton.disabled = false;
+          noteComposerInput.focus({ preventScroll: true });
+          return;
+        }
+        showToast(action === '建立链接' ? '已准备建立知识链接（原型状态）' : '已打开更多文字操作（原型状态）');
+      });
+    });
+
+    document.querySelectorAll('[data-proposal-action]').forEach(button => {
+      button.addEventListener('click', () => {
+        const proposal = button.closest('.proposal-panel');
+        const action = button.dataset.proposalAction;
+        proposal.querySelectorAll('button').forEach(control => { control.disabled = true; });
+        if (action === 'apply') {
+          document.querySelector('.markdown-body blockquote').textContent = '知识以 Markdown 沉淀在本地，并保留可追溯来源。';
+          proposal.innerHTML = '<div class="resolved-card" role="status">更改已应用；原内容仍可从操作记录撤销。</div>';
+        } else if (action === 'later') {
+          proposal.innerHTML = '<div class="resolved-card" role="status">已保留提案，稍后仍可继续处理。</div>';
+        } else {
+          proposal.innerHTML = '<div class="resolved-card" role="status">已拒绝提案；笔记没有被修改。</div>';
+        }
+      });
     });
 
     closeSettings.addEventListener('click', closeSettingsWindow);
@@ -3022,6 +3236,7 @@
     const initialParams = new URLSearchParams(location.search);
     const initialScreen = initialParams.get('screen') || 'home';
     updateSendState();
+    filterLibraryResults();
     if (location.hash === '#settings') {
       settingsWindow.dataset.state = initialParams.get('state') || '';
       openSettingsWindow(initialParams.get('panel') || 'general');
