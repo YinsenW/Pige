@@ -756,7 +756,7 @@
       "name": "actions/upload-artifact",
       "category": "ci",
       "status": "required",
-      "usage": "Upload synthetic body-free retrieval regression reports from CI.",
+      "usage": "Upload reviewed body-free CI reports and unsigned packageability artifacts from clean builds.",
       "packageManager": "github-action",
       "packageId": "actions/upload-artifact",
       "version": "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
@@ -772,9 +772,9 @@
       "sizeClass": "tiny",
       "updatePolicy": "security-update",
       "replacementPath": "Replace with an equivalent CI artifact uploader or retain reports in the CI provider.",
-      "lastReviewedAt": "2026-07-11",
+      "lastReviewedAt": "2026-07-14",
       "reviewedBy": "Codex",
-      "notes": "Pinned to the verified v7.0.1 release commit; only synthetic body-free reports are uploaded and nothing is distributed with the app runtime."
+      "notes": "Pinned to the verified v7.0.1 release commit; uploads include reviewed body-free reports plus unsigned macOS/Windows packageability artifacts from clean builds, never user vault data or credentials."
     },
     {
       "registryRef": "runtime.pi-agent-core",

@@ -1371,7 +1371,7 @@
     "PIGE-BACKUP-004":{"status":"partial","evidence":["EV-BACKUP","EV-RESTORE-CONFLICT","EV-RESTORE-PREVIEW-FENCE","EV-RESTORE-PUBLICATION","EV-RESTORE-LEGACY-LINEAGE","EV-RESTORE-IDENTITY-RECOVERY","EV-RESTORE-REPLACE-ROLLBACK","EV-RESTORE-JOB-RECOVERY","EV-RESTORE-DURABLE-OPERATION","EV-RESTORE-STARTUP-ADOPTION","EV-RESTORE-SAFE-UI"],"open":{"id":"OPEN-REQ-PIGE-BACKUP-004","description":"Explicit identity modes, machine-local Restore Job/restart adoption, linked Operation, safe preview and binding CAS are covered; versioned dependency/domain migrations, general cross-file transactions, final syscall TOCTOU, old-source cleanup, and signed installed macOS/Windows restore matrices remain.","targetBuilds":["B9.03","B9.04","B9.05","B9.06"],"targetExits":["E9.02"]}},
     "PIGE-REL-001": {
       "status": "planned",
-      "plannedTarget": "The unsigned macOS arm64 packageability preflight is only a foundation; supported macOS/Windows alpha artifacts plus an alpha-to-alpha update report remain required."
+      "plannedTarget": "Unsigned macOS arm64 and Windows x64 packageability now proves GitHub-built artifacts and packaged runtime; signed supported-version artifacts and alpha-to-alpha update remain required."
     },
     "PIGE-REL-002": {
       "status": "verified",
@@ -1387,11 +1387,11 @@
     },
     "PIGE-REL-004": {
       "status": "planned",
-      "plannedTarget": "The macOS arm64 ZIP ceiling is preflight evidence only; 10,000-page/100,000-chunk scale and packaged idle, ordinary-use, and post-heavy-Job memory reports remain required."
+      "plannedTarget": "macOS arm64 ZIP and Windows x64 NSIS size checks are preflight only; scale and packaged idle, ordinary, and post-heavy-Job memory reports remain required."
     },
     "PIGE-REL-005": {
       "status": "planned",
-      "plannedTarget": "Deterministic attribution, CycloneDX SBOM, and explicit unsigned status are preflight foundations; supported-platform release notes plus signing/notarization reports remain required."
+      "plannedTarget": "Both preflights prove attribution, CycloneDX SBOM, bounded reports, and unsigned state; release notes and signing/notarization reports remain required."
     },
     "PIGE-I18N-001":{"status":"partial","evidence":["EV-I18N","EV-RESTORE-SAFE-UI"],"open":{"id":"OPEN-REQ-PIGE-I18N-001","description":"Restore preview/native safety copy has six-locale coverage; the remaining release-critical workflow smoke and narrow-layout matrix remain open.","targetBuilds":["B9.10"],"targetExits":["E9.06"]}},
     "PIGE-I18N-002": {
@@ -2675,7 +2675,7 @@
     "E9.05": { "status": "planned", "plannedTarget": "Deterministic Knowledge Health with eligible Operation/Undo repair and exact-exception routing." },
     "E9.06":{"status":"partial","evidence":["EV-I18N","EV-RESTORE-SAFE-UI"],"open":{"id":"OPEN-EXIT-E9.06","description":"Restore preview/native safety copy has six-locale coverage; the remaining release-critical workflow smoke and narrow-layout matrix remain open.","targetBuilds":["B9.10"],"targetExits":["E9.06"]}},
     "E9.07": { "status": "planned", "plannedTarget": "Keyboard, focus, accessible-name, contrast, reduced-motion, and narrow-layout report." },
-    "E9.08": { "status": "planned", "plannedTarget": "The unsigned macOS arm64 packageability preflight remains below exit: supported platforms, signing/notarization, installer/update, scale, memory/recovery, release-note, and final attribution evidence are still required." },
+    "E9.08": { "status": "planned", "plannedTarget": "Unsigned macOS arm64 and Windows x64 packageability remains below exit: version breadth, signing/notarization, installed update lifecycle, scale/memory/recovery, release notes, and final attribution remain open." },
     "E9.09": { "status": "planned", "plannedTarget": "Alpha-to-alpha update and active-risky-job safeguard report." },
     "E9.10": { "status": "planned", "plannedTarget": "25-source Public Alpha scenario generated report." },
     "E9.11": {
