@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-14T11:10:58Z",
+  "reviewedAt": "2026-07-14T12:00:00Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -17,6 +17,7 @@
       "LICENSE",
       "NOTICE",
       "docs",
+      "resources/brand",
       "resources/documentation-quality",
       "resources/parser-manifests",
       "resources/traceability",
@@ -30,12 +31,12 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "732fe296c73449714cc2d290fe2285378dfd2c873f4c031bc2ed02807029c9a5"
+    "reviewedSha256": "f3604e234e42235c159e576e98f08b0a3d96fece8cff573d2218beac324e41c0"
   },
   "reviewers": [
     {
-      "reviewerId": "windows-packageability-pm-review",
-      "task": "Windows x64 packageability current-only governance review",
+      "reviewerId": "pige-icon-ui-design-review",
+      "task": "Approved Pige app icon exact-hash packaged visual review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -43,86 +44,83 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Project Management independently reviewed the exact eleven-file Development candidate and seven pre-recipe governed files read-only. It verified the cross-platform evidence boundary, unchanged statuses, four-claim semantic delta, dependency record and capacity gates, returned CLEAR, and made no file edits."
+      "independence": "UI Design independently reviewed the exact thirty-path icon integration candidate read-only, including real packaged Finder presentation, platform export identity, builder bindings, Windows frame inventory, documentation boundaries and unchanged mobile/runtime claims. It returned ACCEPTED/CLEAR and made no edits during the final exact-hash review."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "windows-packageability-pm-review",
+      "reviewerId": "pige-icon-ui-design-review",
       "blockerCount": 0,
-      "summary": "Existing Release, Quality, Technical Architecture, Playbook, dependency and trace owners absorb the Windows x64 packageability evidence; no document, user data lifecycle or product surface is added."
+      "summary": "README introduces the approved mark at the product title, START_HERE routes icon work to the existing UI and Release owners, and the dedicated asset README owns source/export inventory without creating a broad branding document."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "windows-packageability-pm-review",
+      "reviewerId": "pige-icon-ui-design-review",
       "blockerCount": 0,
-      "summary": "Owners agree on unsigned macOS arm64 and Windows x64 packageability, exact ASAR validation, an app-owned packaged BrowserWindow renderer/preload/health probe, body-free reports, and still-open signing, installed, update, OCR and platform-breadth work."
+      "summary": "README, UI Prototype, asset inventory, electron-builder bindings and packageability assertions agree on the exact deep-teal circle and white-pigeon mark, platform-owned masks, desktop packaging, and future-ready but non-implemented mobile exports."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "windows-packageability-pm-review",
+      "reviewerId": "pige-icon-ui-design-review",
       "blockerCount": 0,
-      "summary": "Semantic lock v3 retains 1,184 claims and changes only the planned residuals for PIGE-REL-001, PIGE-REL-004, PIGE-REL-005 and E9.08; all Requirement, Exit and phase status values remain unchanged."
+      "summary": "The icon is a presentation and release-resource integration with no Requirement, Exit, phase, acceptance-state or semantic-claim change; exact asset and packaged/source identities are bound by the current-only review and executable packageability selector."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.7,
-      "reviewerId": "windows-packageability-pm-review",
+      "reviewerId": "pige-icon-ui-design-review",
       "blockerCount": 0,
-      "summary": "Development gets one strict cross-platform preflight contract: canonical ASAR entries, real packaged renderer/preload/IPC readiness, reviewed failure stages, platform-specific resources, and explicit missing-tool truth without a public-release overclaim."
+      "summary": "Development gets one canonical master plus explicit macOS, Windows, iOS and Android export inventories, exact desktop builder paths, native Windows frame checks and clear guidance that mobile assets do not imply mobile runtime support."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "windows-packageability-pm-review",
+      "reviewerId": "pige-icon-ui-design-review",
       "blockerCount": 0,
-      "summary": "No Markdown file or durable decision is added; the exact existing owner sections and four compact planned targets keep LEN-001 through LEN-005 within their ratcheted budgets."
+      "summary": "One distinct asset-inventory Markdown resource is registered in the document map; README and START_HERE changes are compact, no broad brand document or durable decision is added, and the ratcheted 56-file/1,213,000-byte budgets remain green."
     }
   ],
   "verification": [
     {
       "command": "npm run verify",
       "status": "passed",
-      "evidence": "The exact eleven-file Development plus eight-file governed candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all five documentation-quality dimensions."
+      "evidence": "The exact thirty-path icon integration plus five-path Planning bind passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all five documentation-quality dimensions."
     },
     {
-      "command": "GitHub Packageability run 29327101120",
+      "command": "UI Design exact-hash packaged visual review",
       "status": "passed",
-      "evidence": "Windows x64 job 87065940770 and macOS 26 arm64 job 87065940791 pass exact unsigned builds, strict ASAR/resources/SBOM checks, actual packaged renderer/preload/health IPC, embedded Pi/Home, parser/index workers, bounded reports and artifact upload; macOS retains packaged Vision proof."
+      "evidence": "UI Design matched full-index SHA-256 1d1201745499ed45df6c8053a6c7f2bb53fdd17497ebcd09af0f6e9b19ab5c1, asset aggregate f48feba876d54e0a4e8253f189e6c84490877a01f2f45e167eb1c5776d182ca3 and packaged/source ICNS identity 3bd6cf05756148f560c0c6c20d95d5db24f13c3fab293f2bb82601f8f43e7a53, then returned ACCEPTED/CLEAR from real Finder evidence."
     },
     {
-      "command": "npm run verify:dependencies && npm run verify:contracts && npm run verify:traceability",
+      "command": "npm run verify:contracts && npm run verify:traceability && npm run verify:ui-visual",
       "status": "passed",
-      "evidence": "The candidate retains 56 dependency records with zero waivers, CON-001 through CON-004, semantic lock v3 with 1,184 claims, and four planned acceptance changes without Requirement, Exit or phase status drift."
+      "evidence": "The candidate retains CON-001 through CON-004, semantic lock v3 with 1,184 claims, the existing UI visual contract and every Requirement, Exit, phase and acceptance status without drift."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 pass with 55 Markdown files, 3,449 of 3,700 entry words, 4,577 trace lines, 249,904 of 250,000 trace bytes and 1,209,093 governed Markdown bytes."
+      "evidence": "LEN-001 through LEN-005 pass with 56 Markdown files, 3,466 of 3,700 entry words, 4,577 trace lines, 249,904 of 250,000 trace bytes and 1,212,614 of 1,213,000 governed Markdown bytes."
     }
   ],
   "coordination": {
-    "taskId": "windows-x64-packageability-20260714",
-    "taskTitle": "Windows x64 packageability preflight",
+    "taskId": "pige-icon-brand-sync-20260714",
+    "taskTitle": "Approved Pige app icon desktop integration",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "This candidate extends the existing unsigned packageability preflight from macOS arm64 to Windows x64 and repairs reviewed Windows directory-fsync portability. It preserves macOS behavior and does not claim public installers, signed or installed-platform readiness, updater behavior, Windows OCR, Windows 10/11 breadth, or E9.08 completion.",
-    "acknowledgement": "Development froze exact eleven-file bytes after local and online Windows/macOS evidence. Product Planning synchronized seven pre-recipe owners and the current recipe without changing Development files. Project Management independently reviewed the exact candidate and returned CLEAR."
+    "compatibility": "This candidate introduces the user-approved Pige mark on the repository introduction and desktop package resources. It preserves product claims and every status, leaves platform mask treatment to each OS, and treats iOS/Android files as future-ready exports rather than mobile implementation evidence.",
+    "acknowledgement": "UI Design supplied the approved assets and exact-hash packaged visual acceptance. Development bound the desktop builder and Windows inventory test. Product Planning added only the README introduction, task router, document-map/leanness registration and current-only recipe without altering the frozen thirty-path candidate."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Both artifacts are unsigned packageability preflights, not public installers or production-ready releases.",
-    "One Windows 2025 x64 runner does not prove Windows 10 and Windows 11 breadth, installed upgrade/uninstall, or broader hardware compatibility.",
-    "Windows native OCR remains unavailable in this candidate; macOS packaged Vision evidence is preserved.",
-    "Signing, notarization, hardened runtime and manual signed installed-platform evidence remain open.",
-    "Update metadata and alpha-to-alpha update behavior remain open.",
-    "Packaged memory, 10,000-page/100,000-chunk scale and post-heavy-Job recovery reports remain open.",
-    "Git, Bun, uv and PaddleOCR remain explicit missing tools rather than being silently reported ready.",
-    "Online packageability artifacts expire; governance binds the reproducible workflow and bounded report contract rather than committing generated binaries."
+    "Finder evidence covers the reviewed macOS packaged presentation; exact Windows ICO frames are contract-tested, while broader installed Windows visual evidence remains part of the existing platform matrix.",
+    "iOS and Android exports are future-ready source assets only; no mobile runtime, project, store listing or release support is claimed.",
+    "Signing, notarization, hardened runtime, store metadata and manual signed installed-platform evidence remain open under the existing release contract.",
+    "Platform-owned masks and adaptive-icon treatment can change final silhouette presentation without changing the approved core mark.",
+    "The repository-relative README image depends on Git hosting support for PNG rendering; accessible alt text preserves a concise textual identity when images are unavailable."
   ]
 }

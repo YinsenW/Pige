@@ -11,6 +11,7 @@ import {
 import { isUnsupportedDirectoryFsync } from "../../apps/desktop/src/main/services/local-settings";
 
 const root = process.cwd();
+const iconRoot = path.join(root, "resources/brand/pige-icon");
 
 describe("release packageability platforms", () => {
   it("binds macOS arm64 package resources and artifact identity", () => {
@@ -117,4 +118,63 @@ describe("release packageability platforms", () => {
     expect(workflow).toContain("runs-on: windows-2025");
     expect(workflow).toContain("npm run smoke:packaged:win:x64");
   });
+
+  it("wires the approved Pige icon exports into macOS and Windows packages", () => {
+    const builderConfig = fs.readFileSync(path.join(root, "apps/desktop/electron-builder.yml"), "utf8");
+    expect(builderConfig).toContain("icon: ../../resources/brand/pige-icon/macos/Pige.icns");
+    expect(builderConfig).toContain("icon: ../../resources/brand/pige-icon/windows/Pige.ico");
+
+    const master = readPngHeader(path.join(iconRoot, "master/pige-icon-1024.png"));
+    expect(master).toEqual({ width: 1024, height: 1024, bitDepth: 8, colorType: 2 });
+
+    const icns = fs.readFileSync(path.join(iconRoot, "macos/Pige.icns"));
+    expect(icns.subarray(0, 4).toString("ascii")).toBe("icns");
+    expect(icns.readUInt32BE(4)).toBe(icns.length);
+
+    const ico = fs.readFileSync(path.join(iconRoot, "windows/Pige.ico"));
+    expect(ico.readUInt16LE(0)).toBe(0);
+    expect(ico.readUInt16LE(2)).toBe(1);
+    const frameCount = ico.readUInt16LE(4);
+    const frames = Array.from({ length: frameCount }, (_, index) => {
+      const offset = 6 + index * 16;
+      return {
+        width: ico[offset] || 256,
+        height: ico[offset + 1] || 256,
+        bitDepth: ico.readUInt16LE(offset + 6),
+        bytes: ico.readUInt32LE(offset + 8),
+        offset: ico.readUInt32LE(offset + 12)
+      };
+    });
+    expect(frames.map(({ width, height, bitDepth }) => ({ width, height, bitDepth }))).toEqual(
+      [16, 24, 32, 48, 64, 128, 256].map((size) => ({ width: size, height: size, bitDepth: 32 }))
+    );
+    for (const frame of frames) {
+      expect(frame.bytes).toBeGreaterThan(0);
+      expect(frame.offset + frame.bytes).toBeLessThanOrEqual(ico.length);
+    }
+
+    for (const size of [16, 24, 32, 48, 64, 128, 256, 512]) {
+      expect(readPngHeader(path.join(iconRoot, `windows/pige-${size}.png`))).toMatchObject({
+        width: size,
+        height: size
+      });
+    }
+  });
 });
+
+function readPngHeader(filePath: string): {
+  width: number;
+  height: number;
+  bitDepth: number;
+  colorType: number;
+} {
+  const content = fs.readFileSync(filePath);
+  expect(content.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  expect(content.subarray(12, 16).toString("ascii")).toBe("IHDR");
+  return {
+    width: content.readUInt32BE(16),
+    height: content.readUInt32BE(20),
+    bitDepth: content.readUInt8(24),
+    colorType: content.readUInt8(25)
+  };
+}

@@ -22,6 +22,7 @@ extraResources:
     to: release
 mac:
   category: public.app-category.productivity
+  icon: ../../resources/brand/pige-icon/macos/Pige.icns
   artifactName: Pige-${version}-${arch}.${ext}
   extraResources:
     - from: ../../artifacts/native/macos/arm64
@@ -31,6 +32,7 @@ mac:
     - zip
   identity: null
 win:
+  icon: ../../resources/brand/pige-icon/windows/Pige.ico
   artifactName: Pige-${version}-${arch}-setup.${ext}
   target:
     - dir
