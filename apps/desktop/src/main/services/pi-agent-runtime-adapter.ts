@@ -235,6 +235,8 @@ export class PiAgentRuntimeAdapter {
     let streamUpdateCount = 0;
     let hasBeforeModelTurnFailure = false;
     let beforeModelTurnFailure: unknown;
+    let permissionControlFlowFailure: PigeDomainError | undefined;
+    let abortForPermissionFailure: (() => void) | undefined;
     const runBeforeModelTurn = async (): Promise<void> => {
       try {
         await request.beforeModelTurn?.();
@@ -251,7 +253,17 @@ export class PiAgentRuntimeAdapter {
         thinkingLevel: "off",
         tools: tools.map((tool) => toPiTool(tool, {
           afterExecute: (executedTool, args, result) =>
-            terminalDrafts.afterToolExecute(executedTool, args, result)
+            terminalDrafts.afterToolExecute(executedTool, args, result),
+          onError: (caught) => {
+            if (
+              !permissionControlFlowFailure &&
+              caught instanceof PigeDomainError &&
+              caught.code.startsWith("permission.")
+            ) {
+              permissionControlFlowFailure = caught;
+              abortForPermissionFailure?.();
+            }
+          }
         })),
         messages: history
       },
@@ -282,6 +294,7 @@ export class PiAgentRuntimeAdapter {
         return undefined;
       }
     });
+    abortForPermissionFailure = () => agent.abort();
 
     const unsubscribe = agent.subscribe((event) => {
       if (event.type === "message_update") {
@@ -332,7 +345,13 @@ export class PiAgentRuntimeAdapter {
     try {
       await runBeforeModelTurn();
       if (request.signal?.aborted) throw createAbortError();
-      await agent.prompt(request.userPrompt);
+      try {
+        await agent.prompt(request.userPrompt);
+      } catch (caught) {
+        if (permissionControlFlowFailure) throw permissionControlFlowFailure;
+        throw caught;
+      }
+      if (permissionControlFlowFailure) throw permissionControlFlowFailure;
       await terminalDrafts.assertCompleteAndSettle();
       if (request.signal?.aborted) throw createAbortError();
       if (hasBeforeModelTurnFailure) throw beforeModelTurnFailure;
@@ -632,6 +651,7 @@ interface PiToolExecutionHooks {
     args: unknown,
     result: PigeAgentToolResult
   ) => PigeAgentToolResult | Promise<PigeAgentToolResult>;
+  readonly onError?: (caught: unknown) => void;
 }
 
 function toPiTool(
@@ -645,19 +665,24 @@ function toPiTool(
     parameters: tool.parameters as TSchema,
     executionMode: tool.execution === "parallel_read_only" ? "parallel" : "sequential",
     execute: async (toolCallId, args, signal) => {
-      const effectiveSignal = signal ?? new AbortController().signal;
-      const context = createPigeAgentToolCallContext(toolCallId, effectiveSignal);
-      if (!context) throw invalidToolCallError();
-      assertToolInputWithinLimit(args, tool.limits.maxInputBytes);
-      const result = await tool.execute(args, effectiveSignal, context);
-      assertPigeAgentToolResult(result, tool.limits.maxOutputBytes);
-      const presentedResult = hooks ? await hooks.afterExecute(tool, args, result) : result;
-      assertPigeAgentToolResult(presentedResult, tool.limits.maxOutputBytes);
-      return {
-        content: [{ type: "text", text: presentedResult.modelText }],
-        details: presentedResult.details,
-        ...(presentedResult.terminate === undefined ? {} : { terminate: presentedResult.terminate })
-      };
+      try {
+        const effectiveSignal = signal ?? new AbortController().signal;
+        const context = createPigeAgentToolCallContext(toolCallId, effectiveSignal);
+        if (!context) throw invalidToolCallError();
+        assertToolInputWithinLimit(args, tool.limits.maxInputBytes);
+        const result = await tool.execute(args, effectiveSignal, context);
+        assertPigeAgentToolResult(result, tool.limits.maxOutputBytes);
+        const presentedResult = hooks ? await hooks.afterExecute(tool, args, result) : result;
+        assertPigeAgentToolResult(presentedResult, tool.limits.maxOutputBytes);
+        return {
+          content: [{ type: "text", text: presentedResult.modelText }],
+          details: presentedResult.details,
+          ...(presentedResult.terminate === undefined ? {} : { terminate: presentedResult.terminate })
+        };
+      } catch (caught) {
+        hooks?.onError?.(caught);
+        throw caught;
+      }
     }
   };
 }

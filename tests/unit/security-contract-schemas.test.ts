@@ -8,8 +8,15 @@ import {
   ModelEgressPendingRequestSchema,
   ModelEgressResolveRequestSchema,
   ModelEgressResolveResultSchema,
+  PermissionActionBindingSchema,
+  PermissionActionLifecycleRecordSchema,
   PermissionDecisionRecordSchema,
+  PermissionPendingRequestQuerySchema,
+  PermissionPendingRequestSchema,
   PermissionRequestSchema,
+  PermissionResolveRequestSchema,
+  PermissionResolveResultSchema,
+  PigeErrorSummarySchema,
   ProviderProfileSchema
 } from "@pige/schemas";
 
@@ -95,6 +102,221 @@ describe("security-sensitive shared contracts", () => {
       decision: "deny",
       scope: "once"
     })).toThrow("denial must use the never");
+  });
+
+  it("binds current permission actions to an exact versioned actor and hashed input identity", () => {
+    const binding = {
+      vaultId: "vault_20260710_abcdef12",
+      jobId: "job_20260710_abcdef12",
+      actorType: "skill" as const,
+      actorId: "skill_example",
+      actorVersion: "1.2.3",
+      actorDigest: policyHash,
+      actionId: "fetch_release_notes",
+      actionVersion: "1",
+      actionInputHash: policyHash,
+      capability: "external_network" as const,
+      dataBoundary: "network" as const,
+      resourceScope: "current_domain" as const,
+      resourceIdentityHash: policyHash,
+      policyContextId: "policy_context_example",
+      policyHash,
+      runtimeKind: "desktop_local" as const,
+      clientCapabilityTier: "desktop_full" as const,
+      bindingHash: policyHash
+    };
+
+    expect(PermissionActionBindingSchema.parse(binding).actorVersion).toBe("1.2.3");
+    expect(() => PermissionActionBindingSchema.parse({
+      ...binding,
+      actorVersion: undefined
+    })).toThrow();
+    expect(() => PermissionActionBindingSchema.parse({
+      ...binding,
+      actorDigest: "sha256:not-a-digest"
+    })).toThrow();
+    expect(() => PermissionActionBindingSchema.parse({
+      ...binding,
+      actorId: "a".repeat(129)
+    })).toThrow();
+    expect(() => PermissionActionBindingSchema.parse({
+      ...binding,
+      actionVersion: "v".repeat(33)
+    })).toThrow();
+    expect(() => PermissionActionBindingSchema.parse({
+      ...binding,
+      policyContextId: "policy context with spaces"
+    })).toThrow();
+    expect(() => PermissionActionBindingSchema.parse({
+      ...binding,
+      command: "curl https://private.example"
+    })).toThrow();
+  });
+
+  it("keeps current-action lifecycle records body-free and state exact", () => {
+    const binding = PermissionActionBindingSchema.parse({
+      vaultId: "vault_20260710_abcdef12",
+      jobId: "job_20260710_abcdef12",
+      actorType: "skill",
+      actorId: "skill_example",
+      actorVersion: "1.2.3",
+      actorDigest: policyHash,
+      actionId: "fetch_release_notes",
+      actionVersion: "1",
+      actionInputHash: policyHash,
+      capability: "external_network",
+      dataBoundary: "network",
+      resourceScope: "current_domain",
+      resourceIdentityHash: policyHash,
+      policyContextId: "policy_context_example",
+      policyHash,
+      runtimeKind: "desktop_local",
+      clientCapabilityTier: "desktop_full",
+      bindingHash: policyHash
+    });
+    const pending = {
+      schemaVersion: 1 as const,
+      id: "permreq_20260710_abcdef12",
+      authorizationLayer: "permission_broker" as const,
+      state: "pending" as const,
+      binding,
+      actorDisplayName: "Release Notes Skill",
+      actionLabelKey: "permissions.action.fetch_release_notes",
+      resourceKind: "network" as const,
+      resourceCount: 1,
+      reasonCode: "permission.external_network_required",
+      createdAt: timestamp,
+      updatedAt: timestamp
+    };
+    const approved = {
+      ...pending,
+      state: "approved" as const,
+      decision: "allow_once" as const,
+      decisionId: "permdec_20260710_abcdef12",
+      decidedAt: timestamp
+    };
+    const consumed = {
+      ...approved,
+      state: "consumed" as const,
+      consumedAt: timestamp,
+      completionMarkerHash: policyHash,
+      completedAt: timestamp
+    };
+
+    expect(PermissionActionLifecycleRecordSchema.parse(pending).state).toBe("pending");
+    expect(PermissionActionLifecycleRecordSchema.parse(approved).decision).toBe("allow_once");
+    expect(PermissionActionLifecycleRecordSchema.parse(consumed).completionMarkerHash).toBe(policyHash);
+    expect(PermissionActionLifecycleRecordSchema.parse({
+      ...pending,
+      state: "denied",
+      decision: "deny",
+      decisionId: "permdec_20260710_abcdef13",
+      decidedAt: timestamp
+    }).state).toBe("denied");
+    expect(PermissionActionLifecycleRecordSchema.parse({
+      ...pending,
+      state: "cancelled",
+      cancelledAt: timestamp
+    }).state).toBe("cancelled");
+
+    expect(() => PermissionActionLifecycleRecordSchema.parse({
+      ...pending,
+      decision: "allow_once",
+      decisionId: "permdec_20260710_abcdef12"
+    })).toThrow("pending permission action");
+    expect(() => PermissionActionLifecycleRecordSchema.parse({
+      ...approved,
+      decision: "deny"
+    })).toThrow("approved permission action");
+    expect(() => PermissionActionLifecycleRecordSchema.parse({
+      ...consumed,
+      completedAt: undefined
+    })).toThrow("recorded together");
+    expect(() => PermissionActionLifecycleRecordSchema.parse({
+      ...approved,
+      completionMarkerHash: policyHash,
+      completedAt: timestamp
+    })).toThrow("Only a consumed permission action");
+    expect(() => PermissionActionLifecycleRecordSchema.parse({
+      ...pending,
+      resourceKind: "path"
+    })).toThrow();
+    expect(() => PermissionActionLifecycleRecordSchema.parse({
+      ...pending,
+      reasonCode: "r".repeat(121)
+    })).toThrow();
+
+    for (const unsafeField of ["params", "path", "url", "body", "command", "credential"] as const) {
+      expect(() => PermissionActionLifecycleRecordSchema.parse({
+        ...pending,
+        [unsafeField]: "private action material"
+      })).toThrow();
+    }
+  });
+
+  it("exposes only safe Permission Broker pending and resolve IPC fields", () => {
+    const pending = {
+      requestId: "permreq_20260710_abcdef12",
+      jobId: "job_20260710_abcdef12",
+      actorType: "skill" as const,
+      actorDisplayName: "Release Notes Skill",
+      actorVersion: "1.2.3",
+      capability: "external_network" as const,
+      dataBoundary: "network" as const,
+      actionLabelKey: "permissions.action.fetch_release_notes",
+      resourceScope: "current_domain" as const,
+      resourceKind: "network" as const,
+      resourceCount: 1,
+      reasonCode: "permission.external_network_required",
+      createdAt: timestamp
+    };
+
+    expect(PermissionPendingRequestQuerySchema.parse({ requestId: pending.requestId })).toEqual({
+      requestId: pending.requestId
+    });
+    expect(PermissionPendingRequestSchema.parse(pending)).toEqual(pending);
+    expect(PermissionResolveRequestSchema.parse({
+      requestId: pending.requestId,
+      jobId: pending.jobId,
+      decision: "allow_once"
+    }).decision).toBe("allow_once");
+    expect(PermissionResolveResultSchema.parse({
+      status: "approved",
+      requestId: pending.requestId,
+      jobId: pending.jobId
+    }).status).toBe("approved");
+    expect(PigeErrorSummarySchema.parse({
+      code: "permission.user_denied",
+      domain: "permission",
+      messageKey: "errors.permission.user_denied",
+      retryable: false,
+      severity: "warning",
+      userAction: "none",
+      permissionRequestId: pending.requestId
+    }).permissionRequestId).toBe(pending.requestId);
+
+    expect(() => PermissionPendingRequestQuerySchema.parse({
+      requestId: pending.requestId,
+      jobId: pending.jobId
+    })).toThrow();
+    expect(() => PermissionResolveRequestSchema.parse({
+      requestId: pending.requestId,
+      jobId: pending.jobId,
+      decision: "allow_scoped"
+    })).toThrow();
+    expect(() => PermissionResolveResultSchema.parse({
+      status: "approved",
+      requestId: pending.requestId,
+      jobId: pending.jobId,
+      decisionId: "permdec_20260710_abcdef12"
+    })).toThrow();
+
+    for (const unsafeField of ["params", "path", "url", "body", "command", "credential"] as const) {
+      expect(() => PermissionPendingRequestSchema.parse({
+        ...pending,
+        [unsafeField]: "private action material"
+      })).toThrow();
+    }
   });
 
   it("enforces fail-safe model-egress outcomes from boundary, policy, and content class", () => {

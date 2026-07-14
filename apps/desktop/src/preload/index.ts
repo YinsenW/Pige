@@ -38,6 +38,10 @@ import type {
   ModelEgressPendingRequestQuery,
   ModelEgressResolveRequest,
   ModelEgressResolveResult,
+  PermissionPendingRequest,
+  PermissionPendingRequestQuery,
+  PermissionResolveRequest,
+  PermissionResolveResult,
   LocalDatabaseResetResult,
   ModelProviderSettingsSummary,
   ProviderConnectResult,
@@ -200,6 +204,12 @@ const api: PigeDesktopApi = {
       ipcRenderer.invoke("modelEgress.pending", request) as Promise<ModelEgressPendingRequest | undefined>,
     resolve: async (request: ModelEgressResolveRequest): Promise<ModelEgressResolveResult> =>
       ipcRenderer.invoke("modelEgress.resolve", request) as Promise<ModelEgressResolveResult>
+  },
+  permissions: {
+    pending: async (request: PermissionPendingRequestQuery): Promise<PermissionPendingRequest | undefined> =>
+      ipcRenderer.invoke("permissions.pending", request) as Promise<PermissionPendingRequest | undefined>,
+    resolve: async (request: PermissionResolveRequest): Promise<PermissionResolveResult> =>
+      ipcRenderer.invoke("permissions.resolve", request) as Promise<PermissionResolveResult>
   },
   activity: {
     list: async (request?: KnowledgeActivityListRequest): Promise<KnowledgeActivityListResult> =>

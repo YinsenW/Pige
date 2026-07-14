@@ -1134,6 +1134,76 @@ textarea {
   white-space: nowrap;
 }
 
+.permission-prompt {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 5px 12px;
+  border-top: 1px solid var(--border-light);
+  padding-top: 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.permission-prompt h2 {
+  min-width: 0;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.permission-status {
+  min-width: 0;
+  grid-column: 1;
+  overflow-wrap: anywhere;
+}
+
+.permission-summary {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 3px 8px;
+}
+
+.permission-summary > strong,
+.permission-summary > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.permission-summary > strong {
+  color: var(--text-primary);
+}
+
+.permission-summary .permission-category {
+  color: var(--text-tertiary);
+}
+
+.permission-summary > .error {
+  flex-basis: 100%;
+}
+
+.permission-actions {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 7px;
+}
+
+.permission-actions button {
+  min-height: 28px;
+  white-space: nowrap;
+}
+
 .model-egress-prompt {
   min-width: 0;
   display: grid;
@@ -1172,6 +1242,15 @@ textarea {
 }
 
 @media (max-width: 560px) {
+  .permission-prompt {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .permission-actions {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
   .model-egress-prompt {
     grid-template-columns: minmax(0, 1fr);
   }

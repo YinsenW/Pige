@@ -216,7 +216,9 @@ type PermissionPolicyContext = {
 
 Rules:
 
-- Permission Broker covers extensions/new scopes; core tools use service enforcement.
+- Standing authority covers active-vault recoverable knowledge Markdown and exact
+  selected-source admission. Any Agent/Skill/package/local-tool action outside that scope
+  uses Permission Broker; a core tool name is not authority.
 - Prompt text may tell the Agent that sensitive actions require permission, but tool calls still check Permission Broker.
 - YOLO may suppress prompts only when explicitly enabled by the user and still logs auto-allowed actions.
 - Do not expose raw permission-store details to the model.

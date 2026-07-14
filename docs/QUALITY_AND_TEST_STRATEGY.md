@@ -386,8 +386,16 @@ Tests must verify:
 
 Tests must verify:
 
-- External/new sensitive capability actions create Permission Broker requests.
-- Only those jobs enter `waiting_permission`; Pige-owned core knowledge tools do not.
+- Current-action records bind exact vault, Job, actor/action version and digest,
+  capability, resource identity/scope, policy/runtime and binding hash without bodies.
+- Deny executes nothing; Allow once resumes the same Job, revalidates and consumes once.
+  Pending/approved/denied restart safely; consumed-without-completion never replays.
+- Pending UI exposes one localized safe summary/status owner, disables while resolving,
+  rereads durable truth after IPC uncertainty, and fails closed for stale/unreadable state.
+- Built-in tools do not prompt. The production external registry stays empty until a
+  reviewed caller exists; an injected read-only adapter proves only the Broker core.
+- Symlink/root/parent/successor races, fsync errors, cancellation and marker disagreement
+  fail closed without deleting a successor or creating Retry authority.
 - Grant-matching fixtures distinguish a non-reusable one-action decision from a
   revocable saved grant bound to actor/version/capability/resource scope.
 - Deny blocks the action and leaves the app stable.
@@ -396,6 +404,9 @@ Tests must verify:
 - Destructive actions do not default to Allow.
 - Default permission modes are enforced: Ask Every Time, Remember Scoped Grants, and YOLO Full Access.
 - YOLO Full Access is off by default, requires explicit opt-in, remains visibly indicated, can be revoked immediately, and logs every covered auto-allowed action.
+
+The final two grant/default bullets are future Phase 8 acceptance; the current-action
+foundation accepts only Deny/Allow once and never adopts saved-grant/system/YOLO authority.
 
 ## 8. Parser And OCR Gates
 

@@ -214,7 +214,8 @@ Rules:
 - `queued` means no execution is active. A fresh Job has only its durable record; a
   retried Job may retain verified outputs and a true action-safety guard.
 - `running` means a worker, model call, tool, or write step is active.
-- `waiting_permission` pauses external/new capabilities, never normal Pige-owned tools.
+- `waiting_permission` pauses one exact brokered action; built-in Pige tools remain under
+  their owning-service authority and do not prompt merely because they are core tools.
 - `waiting_model_egress` pauses one exact provider invocation for a stricter
   model-egress decision; it is not a Permission Broker wait or reusable grant.
 - `waiting_dependency` pauses execution until a missing model provider, local tool, local model, runtime capability, vault binding, or external source path is configured or repaired.
@@ -483,22 +484,30 @@ UI copy should say "Stop" or "Cancel processing" for ongoing work and avoid impl
 
 ## 10. Permission Pause
 
-External/new capabilities use Permission Broker; bounded core tools use service enforcement.
+The current-action Broker pauses one exact registered external-capability action. It is a
+foundation for broader Agent/Skill/package authority, not a saved grant or YOLO path.
 
 When permission is required:
 
 1. Job writes a checkpoint.
 2. Job `state` becomes `waiting_permission`.
-3. Permission request records actor, capability, resource scope, duration, reason, data boundary, and job ID.
-4. UI shows a compact permission prompt unless covered by an explicit saved grant or YOLO Full Access.
-5. Decision is written to permission records and conversation/job timeline.
-6. Job resumes, fails, or stages a proposal depending on the decision.
+3. A body-free request binds vault, Job, actor/action versions and digests, capability,
+   canonical resource identity/scope, policy/runtime context, and exact binding hash.
+4. UI shows one safe Deny/Allow once prompt and suppresses the matching Job row.
+5. Decision is durably written; allow resumes the same Job through claim/CAS and is
+   consumed once only after revalidation. Deny executes nothing and terminalizes safely.
+6. Completion writes an exact marker. Restart adopts pending/approved/denied truth;
+   consumed authority without matching completion fails final and never replays an effect.
 
 Rules:
 
 - A permission prompt must not hold important state only in renderer memory.
 - Denial leaves source preservation and prior safe outputs intact.
-- YOLO suppresses prompts only for covered actions and still logs decisions.
+- Cancellation invalidates unresolved authority. Post-consumption cancellation or
+  persistence ambiguity cannot mint a successor request or make the action retryable.
+- Saved-grant/system/YOLO authority cannot satisfy this current-action-only layer.
+- The production external adapter registry is empty in this slice; assembled evidence
+  injects one read-only/idempotent adapter and does not claim a shipped Skill/package/tool.
 
 ### 10.1 Current-Action Model Egress Pause
 

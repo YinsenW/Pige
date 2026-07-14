@@ -18,6 +18,9 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: alias("./src/main/index.ts"),
+          "services/permissioned-external-capability-service": alias(
+            "./src/main/services/permissioned-external-capability-service.ts"
+          ),
           "pi-agent-runtime-smoke": alias("./src/main/smokes/pi-agent-runtime-smoke.ts"),
           "unified-agent-roundtrip-smoke": alias("./src/main/smokes/unified-agent-roundtrip-smoke.ts"),
           [DATASET_INGEST_WORKER_ENTRY_NAME]: alias("./src/main/workers/dataset-ingest-worker.ts"),

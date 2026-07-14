@@ -22,6 +22,8 @@ import type {
   LibraryRelatedRequest,
   ModelEgressPendingRequestQuery,
   ModelEgressResolveRequest,
+  PermissionPendingRequestQuery,
+  PermissionResolveRequest,
   NoteGetRequest,
   NoteRenderRequest,
   ProposalDecisionRequest,
@@ -55,6 +57,10 @@ import {
   ModelEgressPendingRequestSchema,
   ModelEgressResolveRequestSchema,
   ModelEgressResolveResultSchema,
+  PermissionPendingRequestQuerySchema,
+  PermissionPendingRequestSchema,
+  PermissionResolveRequestSchema,
+  PermissionResolveResultSchema,
   type Locale,
   UpdateModelRequestSchema,
   SetDefaultModelRequestSchema
@@ -98,6 +104,11 @@ import { listMarkdownTagCatalog } from "./services/markdown-page-index";
 import { LocalSettingsStore } from "./services/local-settings";
 import { ModelProviderRegistry } from "./services/model-provider-registry";
 import { ModelEgressApprovalService } from "./services/model-egress-approval-service";
+import { PermissionBrokerService } from "./services/permission-broker-service";
+import {
+  createPermissionedExternalCapabilityRegistry,
+  PermissionedExternalCapabilityRegistry
+} from "./services/permissioned-external-capability-service";
 import { NotesService } from "./services/notes-service";
 import { OcrService } from "./services/ocr-service";
 import { ProposalService } from "./services/proposal-service";
@@ -118,6 +129,8 @@ let diagnosticsService: DiagnosticsService | undefined;
 let localDatabaseService: LocalDatabaseService | undefined;
 let modelProviderRegistry: ModelProviderRegistry | undefined;
 let modelEgressApprovalService: ModelEgressApprovalService | undefined;
+let permissionBrokerService: PermissionBrokerService | undefined;
+let permissionedExternalCapabilityRegistry: PermissionedExternalCapabilityRegistry | undefined;
 let windowModeService: WindowModeService | undefined;
 let backupRestoreService: BackupRestoreService | undefined;
 let restoreCoordinatorService: RestoreCoordinatorService | undefined;
@@ -358,6 +371,16 @@ const getModelEgressApprovalService = (): ModelEgressApprovalService => {
   return modelEgressApprovalService;
 };
 
+const getPermissionBrokerService = (): PermissionBrokerService => {
+  if (!permissionBrokerService) {
+    permissionBrokerService = new PermissionBrokerService({
+      rootPath: app.getPath("userData"),
+      assertWriterLease: (vaultPath) => getVaultService().assertWriterLease(vaultPath)
+    });
+  }
+  return permissionBrokerService;
+};
+
 const getJobsService = (): JobsService => {
   if (!jobsService) {
     jobsService = new JobsService(
@@ -367,10 +390,21 @@ const getJobsService = (): JobsService => {
       getDocumentParserService(),
       getOcrService(),
       getDatasetService(),
-      getModelEgressApprovalService()
+      getModelEgressApprovalService(),
+      getPermissionBrokerService()
     );
   }
   return jobsService;
+};
+
+const getPermissionedExternalCapabilityRegistry = (): PermissionedExternalCapabilityRegistry => {
+  if (!permissionedExternalCapabilityRegistry) {
+    permissionedExternalCapabilityRegistry = createPermissionedExternalCapabilityRegistry(
+      getPermissionBrokerService(),
+      getJobsService()
+    );
+  }
+  return permissionedExternalCapabilityRegistry;
 };
 
 const getDocumentParserService = (): DocumentParserService => {
@@ -473,7 +507,8 @@ const getHomeAgentService = (): HomeAgentService => {
       undefined,
       getHomeAgentUrlService(),
       getDatasetQueryService(),
-      getModelEgressApprovalService()
+      getModelEgressApprovalService(),
+      getPermissionedExternalCapabilityRegistry()
     );
   }
   return homeAgentService;
@@ -716,6 +751,14 @@ const resumeBackgroundJobs = (): void => {
         message: sourceHandoffs.failed > 0
           ? "A preserved Agent source handoff could not be reconciled safely."
           : "Preserved Agent source handoffs were reconciled after startup."
+      });
+    }
+    const permissionRecovery = getJobsService().reconcilePermissionActions();
+    if (permissionRecovery.reconciled > 0) {
+      getDiagnosticsService().recordEvent({
+        level: "info",
+        code: "permission.action_reconciled",
+        message: `Reconciled ${permissionRecovery.reconciled} body-free current-action permission decision(s).`
       });
     }
     const recovery = getJobsService().recoverInterruptedJobs();
@@ -962,6 +1005,35 @@ ipcMain.handle("modelEgress.resolve", (_event, request: ModelEgressResolveReques
   const projected = ModelEgressResolveResultSchema.safeParse(result);
   if (!projected.success) {
     throw new PigeDomainError("model_egress.approval_store_invalid", "The model egress decision result is unavailable.");
+  }
+  return projected.data;
+});
+ipcMain.handle("permissions.pending", (_event, request: PermissionPendingRequestQuery) => {
+  const parsed = PermissionPendingRequestQuerySchema.safeParse(request);
+  if (!parsed.success) {
+    throw new PigeDomainError("permission.request_invalid", "The permission request query is invalid.");
+  }
+  const pending = getJobsService().pendingPermission(parsed.data.requestId);
+  if (pending === undefined) return undefined;
+  const projected = PermissionPendingRequestSchema.safeParse(pending);
+  if (!projected.success) {
+    throw new PigeDomainError("permission.store_invalid", "The pending permission state is unavailable.");
+  }
+  return projected.data;
+});
+ipcMain.handle("permissions.resolve", (_event, request: PermissionResolveRequest) => {
+  const parsed = PermissionResolveRequestSchema.safeParse(request);
+  if (!parsed.success) {
+    throw new PigeDomainError("permission.request_invalid", "The permission decision is invalid.");
+  }
+  const result = getJobsService().resolvePermission(parsed.data);
+  if (result.status === "approved") {
+    scheduleAgentIngestProcessing();
+    scheduleAgentTurnProcessing();
+  }
+  const projected = PermissionResolveResultSchema.safeParse(result);
+  if (!projected.success) {
+    throw new PigeDomainError("permission.store_invalid", "The permission decision result is unavailable.");
   }
   return projected.data;
 });
@@ -1332,7 +1404,8 @@ app.whenReady().then(async () => {
     getDocumentParserService(),
     getOcrService(),
     getDatasetService(),
-    getModelEgressApprovalService()
+    getModelEgressApprovalService(),
+    getPermissionBrokerService()
   );
   diagnosticsService = new DiagnosticsService(app.getPath("userData"));
   const restoreRecovery = await getRestoreCoordinatorService().recoverInterrupted();

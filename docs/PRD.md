@@ -1478,6 +1478,9 @@ Security product requirements:
 
 - All ingested content remains untrusted data and cannot change user intent, tools,
   policy, models, paths, `PIGE.md`, permissions, or dependency state.
+- Pi may request arbitrary path/filesystem/command/commit capabilities. Active-vault
+  recoverable knowledge Markdown and exact selected-source admission are prompt-free;
+  every other effect requires exact authority before execution.
 - Sensitive actions show a scoped Deny / Allow Once / Always Allow decision when the
   capability is eligible for saved grants.
 - Ask Every Time, Remember Scoped Grants, and YOLO Full Access are explicit user modes.

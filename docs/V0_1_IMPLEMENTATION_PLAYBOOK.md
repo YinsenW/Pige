@@ -599,7 +599,7 @@ Build:
 - [B8.05 -> E8.01] Skill Registry Service.
 - [B8.06 -> E8.01] Pure Skill staging/install from URL, Markdown, and ZIP plus explicit chat-initiated staging, enable, disable, uninstall, export, and source-aware update.
 - [B8.07 -> E8.01] External/Web Skill staging with capability disclosure.
-- [B8.08 -> E8.02] Runtime permission prompts for sensitive Skill and package capabilities.
+- [B8.08 -> E8.02] Runtime permission prompts for non-default Agent, Skill, package, and local-tool capabilities.
 - [B8.09 -> E8.04] Curated Pi package catalog and manager with reviewed recommendations and explicit search/inspection.
 - [B8.10 -> E8.04] Pi package install, enable/disable, update, uninstall, version pinning, rollback, rollback-safe records, and trust/capability/data-boundary disclosure.
 
@@ -612,9 +612,17 @@ Deferred from this phase:
 Exit criteria:
 
 - [E8.01] User can explicitly initiate Skill staging from Settings or chat, then inspect, install, enable, disable, update, uninstall, and export each supported Skill class with ZIP/path safety and declared capabilities.
-- [E8.02] External Skill/package sensitive actions pause in `waiting_permission`; Pige-owned core knowledge tools do not. Deny/allow-once stay redacted and restart-safe.
+- [E8.02] Non-default Agent/Skill/package/local-tool actions pause in `waiting_permission`;
+  standing-authority knowledge Markdown and exact selected-source admission do not.
+  Deny/allow-once stay redacted, one-use, drift-safe, and restart-safe.
 - [E8.03] External-capability grants and YOLO honor scope, provenance, visibility, revocation, and Operations; no source/model/package input can enable them or expand core authority.
 - [E8.04] Curated Pi packages can be searched, inspected, explicitly installed, enabled/disabled, updated, version-pinned, rolled back, and uninstalled; ordinary Agent jobs never install them implicitly.
+
+Current evidence implements the body-free current-action Broker, safe Deny/Allow once
+Home surface, one-use Job claim/CAS and restart reconciliation with one injected
+read-only adapter. Phase 8 remains planned because the production external registry is
+empty and real Skill/package/local-tool callers, grants, YOLO, capacity and signed
+platform proof are not delivered.
 
 ## 14. Phase 9: Backup, Restore, Knowledge Health, Migration, And Release Hardening
 

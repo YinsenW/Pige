@@ -22,7 +22,7 @@ This document defines:
 2. Agent autonomy grows user knowledge through recoverable, inspectable operations.
 3. Source content is untrusted data.
 4. Skills and packages are untrusted until installed, and still permission-scoped after install.
-5. New authority, irreversible effects, and narrow sensitive boundaries require authorization.
+5. Capability availability is not authority. New scope, irreversible effects, and narrow sensitive boundaries require authorization.
 6. Secrets must not leak into Markdown, logs, prompts, diagnostics, or backups.
 7. Cloud model calls are allowed for ordinary BYOK processing, but must be visible and controllable.
 8. Recovery beats silent failure.
@@ -242,6 +242,8 @@ Mitigations:
 
 Sensitive capabilities:
 
+- Any Pi Agent filesystem/path/commit action outside standing active-vault knowledge
+  Markdown authority or the exact source selected by the user for the current Job.
 - Read entire vault.
 - Write vault files.
 - Delete or move files.
@@ -258,7 +260,7 @@ Shell policy:
 
 - Shell execution is denied by default.
 - Pige-owned bundled tool commands may run only through the Local Tool Service with fixed argv construction, path validation, timeout, and output limits.
-- Skill/package/user-requested shell commands require declared capability, human permission unless covered by explicit default mode, command preview, working-directory scope, and operation logging.
+- Agent/Skill/package/user-requested shell commands require declared capability, human permission unless covered by explicit default mode, command preview, working-directory scope, and operation logging.
 - Source content, model output, or package metadata cannot grant shell access.
 
 Authorization dialog requirements:
@@ -275,8 +277,35 @@ Authorization dialog requirements:
 
 Acceptance:
 
-- A Skill requesting shell, network, brokered credential use, delete, or settings permissions cannot proceed without Permission Broker authorization. Actions listed below as always-confirmed still require the separate current-action confirmation even when a broad default permission mode is enabled.
+- An Agent, Skill, or package requesting non-default shell, filesystem, network,
+  brokered credential use, delete, commit, or settings authority cannot proceed without
+  Permission Broker authorization. Always-confirmed actions retain their stronger gate.
 - Denying a permission leaves the app stable and records the denial in operation history.
+
+### 6.6.1 Pi Capability And Filesystem Authority
+
+Pi may be offered arbitrary path, filesystem, command, and commit capabilities, but the
+catalog is not blanket authority. The governing matrix is:
+
+| Requested action | Default authority | Gate |
+| --- | --- | --- |
+| Schema-valid recoverable knowledge Markdown inside the active vault | Standing Pige authority; no prompt | Confined writer, schema/evidence/base hash, Operation/Undo |
+| Read/preserve the exact drop/file-picker source for this Job | Current user gesture; no duplicate prompt | Source/path validation |
+| Other path/file/folder/repository/command/commit action | Available, not pre-authorized | Exact Permission Broker decision or future eligible explicit grant/default |
+| Permanent deletion, source-original overwrite, protected policy/settings, other always-confirmed effect | Never covered by ordinary standing/grant authority | Strong current-action confirmation |
+| Raw secret bytes | Not grantable | Block; reviewed adapters may use secret refs only |
+
+Standing Markdown authority is defined by managed root and semantic owner, not `.md`
+suffix; external Markdown and user-owned originals remain outside it. Main executes only
+the bound approved action and returns a bounded result to the same Job. Source/model/tool
+text cannot approve itself.
+
+The implemented current-action foundation binds exact vault, Job, actor/action identity,
+resource, policy/runtime and request digests; stores only body-free machine-local state;
+supports Deny/Allow once; and reconciles one-use consumption/restart fail closed. Its
+production external adapter registry is empty. An injected same-process read-only adapter
+proves the Broker core but not a shipped arbitrary-path, Skill, package or local-tool
+caller; saved grants, Remember, YOLO and broader actors remain planned.
 
 ### 6.7 Arbitrary Shell Execution
 
@@ -294,7 +323,7 @@ Mitigations:
 
 Acceptance:
 
-- The user sees a permission dialog before external Skill/package shell execution.
+- The user sees a permission dialog before non-default Agent/Skill/package shell execution.
 
 ### 6.8 Destructive Writes
 
@@ -304,7 +333,7 @@ Threat:
 
 Mitigations:
 
-- Same-vault validated recoverable writes run autonomously with Operations.
+- Active-vault validated recoverable knowledge-Markdown writes run autonomously with Operations.
 - Confirm permanent/trash-bypass/source-original loss and non-recoverable bulk,
   schema, restore, or migration effects.
 - Atomic writes.
@@ -375,8 +404,9 @@ External/extension permission modes:
 
 Authorization and confirmation are separate gates:
 
-- Pige core tools use service enforcement and no Permission prompt for recoverable work.
-- Permission Broker governs extensions and new shell/network/filesystem/credential/settings scopes.
+- Active-vault knowledge-Markdown tools use service enforcement without a prompt for
+  exact recoverable writes. Other Agent/extension shell/network/filesystem/commit/
+  credential/settings scopes use Permission Broker; tool ownership cannot bypass it.
 - Intervene for irreversible loss, authority/security escalation, destination drift,
   unresolved conflict, or explicit stricter user policy.
 - Model Egress Decision normally enforces silently; exact connected calls proceed while
@@ -389,6 +419,9 @@ Authorization and confirmation are separate gates:
   authorization. Denial sends nothing and preserves the source/turn; cancellation
   invalidates unresolved authority. Unknown store state fails closed.
 - Every applicable gate must pass; one gate never grants another.
+- Allow once is exact to vault, Job, actor/action versions and digests, capability,
+  canonical resource, policy/runtime and binding hash. Drift invalidates it; Job claim/CAS
+  consumes it once, and ambiguous consumed/effect state fails closed before another effect.
 
 Useful "only this" scopes:
 
@@ -465,7 +498,8 @@ Rules:
 - Phase 3 basic Agent ingest sends only bounded, redacted managed-source previews to the configured provider, wraps the source as untrusted data, and persists only validated Markdown/operation summaries rather than raw prompts or raw provider responses.
 - Private/large confirmation is an optional stricter user policy, not the default.
 - Model call logs store metadata and summaries, not full prompts/responses by default.
-- Pige-owned Pi tools use service enforcement; external extensions also use Permission Broker.
+- Pige-owned Pi tools use service enforcement and Broker mediation when their exact
+  action is outside standing/gesture authority; extensions do the same.
 - Local-only processing mode can be added later.
 
 ## 10. Diagnostics And Support
@@ -495,7 +529,9 @@ Before v0.1 public alpha:
 - Prompt injection fixtures cannot change tools/settings or reveal secrets.
 - SSRF/private-network URL tests are blocked.
 - ZIP path traversal is blocked.
-- External Skill permission prompts work for shell, network, write, delete, model, and brokered-credential capabilities; raw-secret access is rejected rather than prompted.
+- Agent/external Skill permission prompts work for non-default shell, filesystem, commit,
+  network, write, delete, model, and brokered-credential capabilities; raw-secret access
+  is rejected rather than prompted.
 - Core Pi tools cannot bypass validation; extensions cannot bypass Broker or access raw files/secrets.
 - Permission prompts support Deny, Allow Once, and Always Allow.
 - Default permission modes are enforced consistently.

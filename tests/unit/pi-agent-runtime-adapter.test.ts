@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { PigeDomainError } from "@pige/domain";
 import {
   MAX_PIGE_TOOL_CALL_ID_UTF8_BYTES,
   PiAgentRuntimeAdapter,
@@ -95,6 +96,38 @@ describe("Pi Agent runtime adapter", () => {
     ]);
     expect(result.events[0]?.type).toBe("agent_start");
     expect(result.events.at(-1)?.type).toBe("agent_end");
+  });
+
+  it("propagates Host permission control flow instead of letting Pi continue the model loop", async () => {
+    let modelTurns = 0;
+    const adapter = new PiAgentRuntimeAdapter({
+      fauxResponses: [
+        { kind: "tool_call", toolName: "pige_external_action", args: {} },
+        { kind: "text", text: "This later provider turn must never run." }
+      ]
+    });
+    const tool: PigeAgentToolDefinition = {
+      ...BASE_TOOL_DESCRIPTOR,
+      name: "pige_external_action",
+      label: "External action",
+      description: "Exercise one permission-gated external action.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+      authorize: () => true,
+      execute: async () => {
+        throw new PigeDomainError(
+          "permission.confirmation_required",
+          "The exact external action requires permission."
+        );
+      }
+    };
+
+    await expect(adapter.run({
+      ...makeRequest([tool]),
+      beforeModelTurn: () => { modelTurns += 1; }
+    })).rejects.toMatchObject({ code: "permission.confirmation_required" });
+
+    // One explicit preflight plus Pi's first-turn preparation ran; no later provider turn followed the tool error.
+    expect(modelTurns).toBe(2);
   });
 
   it("does not exhaust the structural event budget on bounded high-frequency provider deltas", async () => {

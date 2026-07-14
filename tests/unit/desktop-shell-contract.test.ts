@@ -306,6 +306,45 @@ describe("desktop shell build contract", () => {
     expect(resolveHandler).not.toContain("permissionDecisionId");
   });
 
+  it("exposes current-action Permission Broker decisions through strict body-free main and preload boundaries", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
+    const pendingHandler = mainSource.slice(
+      mainSource.indexOf('ipcMain.handle("permissions.pending"'),
+      mainSource.indexOf('ipcMain.handle("permissions.resolve"')
+    );
+    const resolveHandler = mainSource.slice(
+      mainSource.indexOf('ipcMain.handle("permissions.resolve"'),
+      mainSource.indexOf('ipcMain.handle("activity.list"')
+    );
+
+    expect(contractsSource).toContain("readonly permissions:");
+    expect(pendingHandler).toContain("PermissionPendingRequestQuerySchema.safeParse(request)");
+    expect(pendingHandler).toContain("getJobsService().pendingPermission(parsed.data.requestId)");
+    expect(pendingHandler).toContain("PermissionPendingRequestSchema.safeParse(pending)");
+    expect(resolveHandler).toContain("PermissionResolveRequestSchema.safeParse(request)");
+    expect(resolveHandler).toContain("getJobsService().resolvePermission(parsed.data)");
+    expect(resolveHandler).toContain("PermissionResolveResultSchema.safeParse(result)");
+    expect(resolveHandler).toContain("scheduleAgentIngestProcessing()");
+    expect(resolveHandler).toContain("scheduleAgentTurnProcessing()");
+    expect(preloadSource).toContain('ipcRenderer.invoke("permissions.pending", request)');
+    expect(preloadSource).toContain('ipcRenderer.invoke("permissions.resolve", request)');
+    expect(rendererSource).toContain('window.pige.permissions.resolve({');
+    expect(rendererSource).toContain('decidePermission("allow_once")');
+    expect(rendererSource).toContain('decidePermission("deny")');
+    for (const unsafeField of ["actionInputHash", "resourceIdentityHash", "policyHash", "bindingHash", "actorDigest"]) {
+      expect(pendingHandler).not.toContain(unsafeField);
+      expect(resolveHandler).not.toContain(unsafeField);
+      expect(preloadSource.slice(preloadSource.indexOf("permissions: {"), preloadSource.indexOf("activity: {")))
+        .not.toContain(unsafeField);
+    }
+    expect(mainSource).toContain("createPermissionedExternalCapabilityRegistry(");
+    expect(mainSource.indexOf("reconcilePermissionActions()"))
+      .toBeLessThan(mainSource.indexOf("recoverInterruptedJobs()"));
+  });
+
   it("routes proposal decisions through durable Job apply and startup recovery", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const approveHandler = mainSource.slice(
@@ -496,9 +535,15 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain("new DatasetQueryService()");
     expect(mainSource).toContain("getDatasetQueryService()");
     expect(mainSource).toContain('getDatasetService().canMaterialize("csv_file")');
-    expect(mainSource).toContain("getDatasetService(),\n      getModelEgressApprovalService()\n    );");
+    expect(mainSource).toContain(
+      "getDatasetService(),\n      getModelEgressApprovalService(),\n      getPermissionBrokerService()\n    );"
+    );
     expect(buildSource).toContain("DATASET_QUERY_WORKER_ENTRY_NAME");
     expect(buildSource).toContain('alias("./src/main/workers/dataset-query-worker.ts")');
+    expect(buildSource).toContain('"services/permissioned-external-capability-service": alias(');
+    expect(buildSource).toContain(
+      '"./src/main/services/permissioned-external-capability-service.ts"'
+    );
     expect(queryServiceSource).not.toContain("node:sqlite");
     expect(queryServiceSource).not.toContain('from "./dataset-query-core"');
     expect(queryWorkerSource).toContain('from "../services/dataset-query-core"');

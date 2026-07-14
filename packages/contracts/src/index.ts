@@ -17,6 +17,10 @@ import type {
   ModelEgressContentClass,
   ModelEgressReasonCode,
   PigeErrorSummary,
+  PermissionPendingRequest,
+  PermissionPendingRequestQuery,
+  PermissionResolveRequest,
+  PermissionResolveResult,
   ProposalState,
   ProposalTrustLevel,
   ProviderAuthRequirement,
@@ -38,7 +42,14 @@ export type {
   PigeErrorDomain,
   PigeErrorSeverity,
   PigeErrorSummary,
-  PigeWarning
+  PigeWarning,
+  PermissionActionBinding,
+  PermissionActionLifecycleRecord,
+  PermissionActionLifecycleState,
+  PermissionPendingRequest,
+  PermissionPendingRequestQuery,
+  PermissionResolveRequest,
+  PermissionResolveResult
 } from "@pige/schemas";
 
 export interface AppHealth {
@@ -429,6 +440,7 @@ export interface JobSummary {
   readonly sourceId?: string;
   readonly captureId?: string;
   readonly conversationEventId?: string;
+  readonly permissionRequestId?: string;
   readonly modelEgressApprovalRequestId?: string;
   readonly sourceDisplayName?: string;
   readonly sourceKind?: SourceKind;
@@ -1126,6 +1138,12 @@ export interface PigeDesktopApi {
       request: ModelEgressPendingRequestQuery
     ) => Promise<ModelEgressPendingRequest | undefined>;
     readonly resolve: (request: ModelEgressResolveRequest) => Promise<ModelEgressResolveResult>;
+  };
+  readonly permissions: {
+    readonly pending: (
+      request: PermissionPendingRequestQuery
+    ) => Promise<PermissionPendingRequest | undefined>;
+    readonly resolve: (request: PermissionResolveRequest) => Promise<PermissionResolveResult>;
   };
   readonly activity: {
     readonly list: (request?: KnowledgeActivityListRequest) => Promise<KnowledgeActivityListResult>;

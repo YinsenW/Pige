@@ -62,6 +62,8 @@ import {
   ModelEgressConfirmationRequiredError,
   type ModelEgressApprovalBinding
 } from "./model-egress-approval-service";
+import { PermissionConfirmationRequiredError } from "./permission-broker-service";
+import { PermissionedExternalCapabilityRegistry } from "./permissioned-external-capability-service";
 import type { ModelProviderRuntimeConfig } from "./model-provider-registry";
 import {
   assertApprovedModelProviderBinding,
@@ -268,6 +270,7 @@ export class HomeAgentService {
   readonly #urls: HomeAgentUrlPort | undefined;
   readonly #datasets: HomeAgentDatasetQueryPort | undefined;
   readonly #modelEgressApprovals: ModelEgressApprovalService | undefined;
+  readonly #externalCapabilities: PermissionedExternalCapabilityRegistry | undefined;
 
   constructor(
     vaults: HomeAgentVaultPort,
@@ -279,7 +282,8 @@ export class HomeAgentService {
     conversations: AgentTurnConversationStore = new AgentTurnConversationStore(),
     urls?: HomeAgentUrlPort,
     datasets?: HomeAgentDatasetQueryPort,
-    modelEgressApprovals?: ModelEgressApprovalService
+    modelEgressApprovals?: ModelEgressApprovalService,
+    externalCapabilities?: PermissionedExternalCapabilityRegistry
   ) {
     this.#vaults = vaults;
     this.#models = models;
@@ -291,6 +295,7 @@ export class HomeAgentService {
     this.#urls = urls;
     this.#datasets = datasets;
     this.#modelEgressApprovals = modelEgressApprovals;
+    this.#externalCapabilities = externalCapabilities;
   }
 
   async ask(request: HomeAgentAskRequest): Promise<HomeAgentAskResult> {
@@ -743,11 +748,19 @@ export class HomeAgentService {
       if (session) {
         const cancellationHandled = caught instanceof PigeDomainError &&
           caught.code === "agent_runtime.turn_cancelled";
-        if (cancellationHandled) {
-          session.current = this.#jobs.readAgentTurnJob(session.current.id) ?? session.current;
-        }
+        const refreshed = this.#jobs.readAgentTurnJob(session.current.id);
+        if (refreshed) session.current = refreshed;
+        const permissionHandled = failure.error.permissionRequestId !== undefined &&
+          session.current.state === "waiting_permission" &&
+          session.current.error?.permissionRequestId === failure.error.permissionRequestId;
+        const uncertainCompletionHandled = caught instanceof PigeDomainError &&
+          caught.code === "permission.completion_uncertain" &&
+          session.current.state === "failed_final" &&
+          session.current.error?.code === "permission.completion_uncertain";
         try {
-          if (!cancellationHandled) this.#failJob(session, failure);
+          if (!cancellationHandled && !permissionHandled && !uncertainCompletionHandled) {
+            this.#failJob(session, failure);
+          }
         } catch {
           // A retained running record is recovered as failed_retryable on restart.
         }
@@ -1015,11 +1028,19 @@ export class HomeAgentService {
         const failure = toHomeAgentFailure(caught);
         const cancellationHandled = caught instanceof PigeDomainError &&
           caught.code === "agent_runtime.turn_cancelled";
-        if (cancellationHandled) {
-          session.current = this.#jobs.readAgentTurnJob(session.current.id) ?? session.current;
-        }
+        const refreshed = this.#jobs.readAgentTurnJob(session.current.id);
+        if (refreshed) session.current = refreshed;
+        const permissionHandled = failure.error.permissionRequestId !== undefined &&
+          session.current.state === "waiting_permission" &&
+          session.current.error?.permissionRequestId === failure.error.permissionRequestId;
+        const uncertainCompletionHandled = caught instanceof PigeDomainError &&
+          caught.code === "permission.completion_uncertain" &&
+          session.current.state === "failed_final" &&
+          session.current.error?.code === "permission.completion_uncertain";
         try {
-          if (!cancellationHandled) this.#failJob(session, failure);
+          if (!cancellationHandled && !permissionHandled && !uncertainCompletionHandled) {
+            this.#failJob(session, failure);
+          }
         } catch {
           // Startup recovery will retry a retained running Agent turn.
         }
@@ -1137,12 +1158,32 @@ export class HomeAgentService {
       if (this.#vaults.current()?.vaultId !== activeVault.vaultId || this.#vaults.activeVaultPath() !== vaultPath) {
         throw new PigeDomainError("vault.binding_changed", "The active vault changed during the Home Agent turn.");
       }
+      const currentDefaultModel = this.#models.getDefaultModel();
+      const currentDefaultProvider = this.#models.getDefaultProvider();
       assertApprovedModelProviderBinding(
-        this.#models.getDefaultModel(),
-        this.#models.getDefaultProvider(),
+        currentDefaultModel,
+        currentDefaultProvider,
         approvedBinding,
         "The default provider or model changed during the Home Agent turn."
       );
+      if (!currentDefaultModel || !currentDefaultProvider) {
+        throw new PigeDomainError("model_provider.binding_changed", "The default runtime binding became unavailable.");
+      }
+      const currentPolicy = buildAgentRuntimePolicyContext(vaultPath, {
+        jobId,
+        defaultModel: currentDefaultModel,
+        defaultProvider: currentDefaultProvider,
+        ...(this.#capabilities?.snapshot() ?? {})
+      });
+      if (
+        currentPolicy.policyContextId !== policy.policyContextId ||
+        currentPolicy.policyHash !== policy.policyHash
+      ) {
+        throw new PigeDomainError(
+          "permission.binding_changed",
+          "The Agent runtime policy changed before the exact external action completed."
+        );
+      }
     };
 
     const consumedModelEgressApprovalRequestIds = new Set<string>();
@@ -1374,6 +1415,27 @@ export class HomeAgentService {
         throw caught;
       }
     };
+    const registeredExternalTools = this.#externalCapabilities?.toolsForTurn({
+      vaultPath,
+      vaultId: activeVault.vaultId,
+      jobId,
+      policyContextId: policy.policyContextId,
+      policyHash: policy.policyHash,
+      runtimeKind: "desktop_local",
+      clientCapabilityTier: "desktop_full",
+      assertCurrent: assertCurrentBindingAndVault
+    }) ?? [];
+    const externalTools = registeredExternalTools.map((tool): PigeAgentToolDefinition => ({
+      ...tool,
+      execute: async (args, toolSignal, context) => {
+        try {
+          return await tool.execute(args, toolSignal, context);
+        } finally {
+          session.current = this.#jobs.readAgentTurnJob(jobId) ?? session.current;
+        }
+      }
+    }));
+    const externalToolNames = new Set(externalTools.map((tool) => tool.name));
     const tools: readonly PigeAgentToolDefinition[] = [
       ...(this.#urls && urlCandidates.length > 0 ? [createFetchUrlTool({
         candidateCount: urlCandidates.length,
@@ -1545,6 +1607,7 @@ export class HomeAgentService {
           return result;
         }
       }),
+      ...externalTools,
       createFinishHomeTurnTool({
         authorize: () => {
           assertCurrentBindingAndVault();
@@ -1605,6 +1668,7 @@ export class HomeAgentService {
         this.#modelEgressApprovals?.markReconciled(vaultPath, requestId);
       }
     }
+    session.current = this.#jobs.readAgentTurnJob(jobId) ?? session.current;
     assertCurrentBindingAndVault();
 
     if (runtimeResult.invokedTools.some(
@@ -1613,7 +1677,8 @@ export class HomeAgentService {
         toolName !== HOME_INSPECT_URL_TOOL_NAME &&
         toolName !== HOME_QUERY_DATASET_TOOL_NAME &&
         toolName !== HOME_SEARCH_TOOL_NAME &&
-        toolName !== HOME_FINISH_TOOL_NAME
+        toolName !== HOME_FINISH_TOOL_NAME &&
+        !externalToolNames.has(toolName)
     )) {
       throw new PigeDomainError("agent_runtime.tool_not_registered", "The Home Agent invoked an unavailable tool.");
     }
@@ -1780,6 +1845,17 @@ export class HomeAgentService {
   ): void {
     const now = new Date().toISOString();
     const { waitingDependency: _waitingDependency, finishedAt: _finishedAt, ...current } = session.current;
+    if (failure.error.permissionRequestId) {
+      const durable = this.#jobs.readAgentTurnJob(session.current.id);
+      if (
+        durable?.state !== "waiting_permission" ||
+        durable.error?.permissionRequestId !== failure.error.permissionRequestId
+      ) {
+        throw new PigeDomainError("permission.request_stale", "The pending permission no longer matches this Agent turn.");
+      }
+      session.current = durable;
+      return;
+    }
     if (failure.error.modelEgressApprovalRequestId) {
       session.current = this.#jobs.writeAgentTurnJob(session.current, JobRecordSchema.parse({
         ...current,
@@ -2977,6 +3053,50 @@ function toHomeAgentFailure(caught: unknown): {
           false,
           "none",
           "info"
+        )
+      };
+    }
+    if (caught.code === "permission.confirmation_required") {
+      const requestId = caught instanceof PermissionConfirmationRequiredError
+        ? caught.requestId
+        : undefined;
+      return {
+        state: "waiting",
+        error: PigeErrorSummarySchema.parse({
+          ...createErrorSummary(
+            "permission.confirmation_required",
+            "errors.permission.confirmation_required",
+            false,
+            "grant_permission",
+            "warning"
+          ),
+          ...(requestId ? { permissionRequestId: requestId } : {})
+        })
+      };
+    }
+    if (caught.code === "permission.denied") {
+      return {
+        state: "failed",
+        error: createErrorSummary(
+          "permission.denied",
+          "errors.permission.denied",
+          false,
+          "none",
+          "info"
+        )
+      };
+    }
+    if (caught.code === "permission.completion_uncertain" || caught.code === "permission.binding_changed") {
+      return {
+        state: "failed",
+        error: createErrorSummary(
+          caught.code,
+          caught.code === "permission.completion_uncertain"
+            ? "errors.permission.completion_uncertain"
+            : "errors.permission.binding_changed",
+          false,
+          "none",
+          "error"
         )
       };
     }
