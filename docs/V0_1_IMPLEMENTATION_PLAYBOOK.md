@@ -252,7 +252,8 @@ agent_ingest/agent_turn/index cancellation, exact Home retry/restart, index prog
 verified note races, a fenced per-vault writer lease, and exact-record Job claim/CAS
 across the adopted capture, Agent, Dataset, retry/cancel, proposal/publication, and
 startup-recovery paths. Exact evidence includes independent Job keys, failed-sentinel
-recovery, and heartbeat/successor-safe normal, stale, and process-exit cleanup. Other
+recovery, random-generation/content identity under same-name inode reuse, and
+heartbeat/successor-safe normal, stale, and process-exit cleanup. Other
 Job classes, user-visible conflict repair, guard-to-domain/cross-file atomicity, the
 final filesystem-syscall TOCTOU interval, and Windows packaged proof remain open.
 

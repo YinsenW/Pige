@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-14T03:00:00Z",
+  "reviewedAt": "2026-07-14T08:30:00Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,12 +30,12 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "b9767ff5fa7a239ee4c7278629b51b18bc38067090aa37bcbf4baa4815778b7b"
+    "reviewedSha256": "7f34da798894bd9c7e77ff1018cc6a0ad43ae5320df1c0adaa4a3c9057e88738"
   },
   "reviewers": [
     {
       "reviewerId": "production-ready-a-final-adversarial-review",
-      "task": "019f44e0-b6a1-7bb0-a1ca-5fb43b2725c2 Production Ready A replacement CLEAR",
+      "task": "019f44e0-b6a1-7bb0-a1ca-5fb43b2725c2 Production Ready A Linux sentinel replacement CLEAR",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -43,7 +43,7 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "An independent adversarial reviewer reproduced the former claim-independence, cleanup-successor, partial-sentinel, heartbeat-refresh and ancestor-swap races against replacement bytes and returned CLEAR without editing files. Product Planning separately matched both exact patch framings."
+      "independence": "An independent adversarial reviewer reproduced the Linux same-name inode-reuse failure, then verified random-generation/content identity and named-path descriptor metadata against replacement bytes and returned CLEAR without editing files. Product Planning independently matched the exact two-path repair hash."
     }
   ],
   "dimensions": [
@@ -59,14 +59,14 @@
       "score": 9.8,
       "reviewerId": "production-ready-a-final-adversarial-review",
       "blockerCount": 0,
-      "summary": "Data, Job, Sync, Technical Architecture and Playbook owners agree that `.pige/runtime/` is transient, durable Job bytes remain authoritative, and every mutation requires the active fenced lease, independent claim and exact prior-byte revision."
+      "summary": "Data, Job, Sync, Technical Architecture and Playbook owners agree that `.pige/runtime/` is transient, durable Job bytes remain authoritative, and lease identity includes random generation/content plus bounded no-follow metadata rather than inode alone."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
       "reviewerId": "production-ready-a-final-adversarial-review",
       "blockerCount": 0,
-      "summary": "Six exact selectors bind real-process lease recovery, successor and heartbeat fencing, one exact CAS winner, partial-sentinel recovery and independent Job keys only to existing partial PIGE-VAULT-006/PIGE-JOB-002 and E1.21/E2.10 rows."
+      "summary": "Seven exact selectors bind real-process lease recovery, successor/heartbeat/generation fencing, one exact CAS winner, partial-sentinel recovery and independent Job keys only to existing partial PIGE-VAULT-006/PIGE-JOB-002 and E1.21/E2.10 rows."
     },
     {
       "id": "ongoing_development_support",
@@ -90,14 +90,14 @@
       "evidence": "The exact fenced vault-writer and Job claim/CAS candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all five documentation-quality dimensions."
     },
     {
-      "command": "npm run verify:contracts && npx vitest run tests/unit/vault-writer-lease.test.ts tests/unit/job-record-store.test.ts",
+      "command": "npm run verify:contracts && npx vitest run tests/unit/vault-writer-lease.test.ts",
       "status": "passed",
-      "evidence": "CON-001 through CON-004 and negative fixtures pass; the independently rerun 2-file / 33-test blocker matrix proves independent Job keys, partial-sentinel recovery, current-heartbeat fencing and successor-safe cleanup."
+      "evidence": "CON-001 through CON-004 and negative fixtures pass; the independently rerun 1-file / 16-test lease matrix proves generation/content identity, in-place generation drift rejection, current-heartbeat fencing and successor-safe cleanup."
     },
     {
       "command": "npm run verify:traceability",
       "status": "passed",
-      "evidence": "Semantic lock schema v3 contains 1,168 claims; six exact evidence additions and four acceptance projections change only existing partial rows, while every Requirement, Exit and phase state remains unchanged."
+      "evidence": "Semantic lock schema v3 contains 1,169 claims; one incremental generation-fence selector joins the six existing exact A-slice selectors and only existing partial rows change, while every Requirement, Exit and phase state remains unchanged."
     },
     {
       "command": "npm run verify:documentation-leanness",
@@ -112,7 +112,7 @@
     "action": "Active-phase follow-up",
     "status": "acknowledged",
     "compatibility": "The candidate preserves durable Job and vault schemas, Job/Operation/domain recovery truth and public behavior. It adds temporary per-vault/per-Job coordination plus exact-record CAS, with the complete runtime dependency graph pinned and attributed.",
-    "acknowledgement": "Development froze one exact 23-file candidate after cross-process, full, assembled Electron and packaged evidence. Independent adversarial review returned CLEAR; Product Planning matched both patch framings and synchronized only affected Owners, dependency/legal facts and existing partial acceptance rows before one semantic and snapshot bind."
+    "acknowledgement": "Development froze the exact two-path Linux successor-sentinel repair over the held 23-file A candidate after full, assembled Electron and packaged evidence. Independent adversarial review returned CLEAR; Product Planning synchronized only stale identity wording, one selector and the semantic/current snapshot bind."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [

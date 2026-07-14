@@ -43,6 +43,13 @@ describe("vault writer lease", () => {
       schemaVersion: 1,
       token: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/)
     });
+    const sentinelName = fs.readdirSync(lockPath)[0];
+    if (!sentinelName) throw new Error("Expected the active lease sentinel.");
+    expect(JSON.parse(fs.readFileSync(path.join(lockPath, sentinelName), "utf8"))).toEqual({
+      schemaVersion: 1,
+      ownerToken: sentinelName.slice(".pige-owner-".length),
+      generation: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/)
+    });
     lease.assertHeld();
 
     lease.release();
@@ -153,7 +160,10 @@ describe("vault writer lease", () => {
           injected = true;
           fs.renameSync(lockPath, displacedLockPath);
           fs.mkdirSync(lockPath, { mode: 0o700 });
-          fs.writeFileSync(path.join(lockPath, `.pige-owner-${successorToken}`), "pige-lock-v1\n", {
+          fs.writeFileSync(path.join(lockPath, `.pige-owner-${successorToken}`), lockSentinelBytes(
+            successorToken,
+            "C".repeat(43)
+          ), {
             encoding: "utf8",
             mode: 0o600
           });
@@ -239,7 +249,8 @@ describe("vault writer lease", () => {
     const sentinelName = fs.readdirSync(lockPath)[0];
     if (!sentinelName) throw new Error("Expected the active lease sentinel.");
     const sentinelPath = path.join(lockPath, sentinelName);
-    const originalSentinel = fs.lstatSync(sentinelPath);
+    const originalSentinelBytes = fs.readFileSync(sentinelPath, "utf8");
+    const ownerToken = sentinelName.slice(".pige-owner-".length);
     const staleAt = new Date(Date.now() - TEST_TIMING.staleMs - 1_000);
     fs.utimesSync(lockPath, staleAt, staleAt);
     let successorInstalled = false;
@@ -250,7 +261,7 @@ describe("vault writer lease", () => {
         beforeObservedStaleCommit: () => {
           successorInstalled = true;
           fs.unlinkSync(sentinelPath);
-          fs.writeFileSync(sentinelPath, "pige-lock-v1\n", {
+          fs.writeFileSync(sentinelPath, lockSentinelBytes(ownerToken, "D".repeat(43)), {
             encoding: "utf8",
             flag: "wx",
             mode: 0o600
@@ -261,11 +272,55 @@ describe("vault writer lease", () => {
     })).toThrowError(expect.objectContaining({ code: "vault.writer_lease_invalid" }));
 
     expect(successorInstalled).toBe(true);
-    expect(fs.lstatSync(sentinelPath).ino).not.toBe(originalSentinel.ino);
+    expect(fs.readFileSync(sentinelPath, "utf8")).not.toBe(originalSentinelBytes);
     expect(fs.readFileSync(ownerPath, "utf8")).toBe(originalOwner);
     expect(() => lease.assertHeld()).toThrowError(expect.objectContaining({
       code: "vault.writer_lease_lost"
     }));
+  });
+
+  it("rejects an in-place sentinel generation change even when file identity is unchanged", () => {
+    const { vaultPath } = makeVault();
+    const lease = VaultWriterLease.acquireSync(vaultPath);
+    const lockPath = path.join(lease.runtimePath, VAULT_WRITER_LOCK_DIRECTORY_NAME);
+    const sentinelName = fs.readdirSync(lockPath)[0];
+    if (!sentinelName) throw new Error("Expected the active lease sentinel.");
+    const sentinelPath = path.join(lockPath, sentinelName);
+    const originalIdentity = fs.lstatSync(sentinelPath);
+    const ownerToken = sentinelName.slice(".pige-owner-".length);
+
+    fs.writeFileSync(sentinelPath, lockSentinelBytes(ownerToken, "E".repeat(43)), {
+      encoding: "utf8",
+      flag: "r+"
+    });
+
+    const changedIdentity = fs.lstatSync(sentinelPath);
+    expect({ dev: changedIdentity.dev, ino: changedIdentity.ino }).toEqual({
+      dev: originalIdentity.dev,
+      ino: originalIdentity.ino
+    });
+    expect(() => lease.assertHeld()).toThrowError(expect.objectContaining({
+      code: "vault.writer_lease_lost"
+    }));
+  });
+
+  it("recovers a stale lock with a bounded malformed sentinel without weakening its identity fence", () => {
+    const { vaultPath } = makeVault();
+    const runtimePath = path.join(vaultPath, ".pige", "runtime");
+    const lockPath = path.join(runtimePath, VAULT_WRITER_LOCK_DIRECTORY_NAME);
+    const token = "F".repeat(43);
+    fs.mkdirSync(lockPath, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(path.join(lockPath, `.pige-owner-${token}`), "partial-sentinel", {
+      encoding: "utf8",
+      mode: 0o600
+    });
+    const staleAt = new Date(Date.now() - TEST_TIMING.staleMs - 1_000);
+    fs.utimesSync(lockPath, staleAt, staleAt);
+
+    const recovered = VaultWriterLease.acquireSync(vaultPath, { timing: TEST_TIMING });
+    recovered.assertHeld();
+    recovered.releaseSync();
+    expect(fs.existsSync(lockPath)).toBe(false);
   });
 
   it("marks a proper-lockfile heartbeat compromise invalid and fails closed", async () => {
@@ -318,6 +373,10 @@ function makeVault(): { root: string; vaultPath: string } {
   const vaultPath = path.join(root, "Pige Vault");
   fs.mkdirSync(path.join(vaultPath, ".pige"), { recursive: true });
   return { root, vaultPath };
+}
+
+function lockSentinelBytes(ownerToken: string, generation: string): string {
+  return `${JSON.stringify({ schemaVersion: 1, ownerToken, generation })}\n`;
 }
 
 function spawnLeaseHolder(root: string, vaultPath: string): ChildProcessWithoutNullStreams {

@@ -253,11 +253,15 @@ shared Job store additionally requires the active per-vault writer lease, an eph
 per-Job claim, and the exact prior record revision `{ sha256, size, dev, ino }`; it
 rereads and revalidates these immediately before replace and verifies committed bytes.
 Claim/revision contention preserves the winner and cannot rewrite the loser as failed.
-Each Job has a distinct upstream lock key. Owner-sentinel initialization either cleans
-its exact opened inode on failure or leaves a uniquely named malformed sentinel that
-only stale, directory/mtime/entry-inode-revalidated cleanup may recover; unknown,
-multiple, symlinked, freshened, or successor identities fail closed. Normal, stale, and
-process-exit cleanup all use the same successor-safe ownership fence.
+Each Job has a distinct upstream lock key. A private sentinel record binds the opaque
+owner token to an independent random 256-bit generation. Exact identity includes its
+name, device/inode, bounded byte length and SHA-256; active, stale and release checks use
+bounded no-follow descriptor readback plus named-path mode/size/mtime/ctime comparison.
+Initialization either cleans its exact opened identity on failure or leaves a bounded
+malformed sentinel that only stale, directory/freshness/entry-identity-revalidated
+cleanup may recover; unknown, multiple, symlinked, freshened, content-changed or
+successor identities fail closed. Normal, stale, and process-exit cleanup all use the
+same successor-safe ownership fence.
 This proves fenced single-writer ordering for the adopted capture, Agent, Dataset,
 retry/cancel, proposal/publication, and startup-recovery paths. Other Job classes,
 cross-file atomicity, user-visible conflict resolution, and parent-swap-resistant
@@ -638,8 +642,9 @@ Startup recovery flow:
 1. Load active vault manifest and app-local active vault path.
 2. Acquire the fenced per-vault writer lease under `.pige/runtime/` or fail closed when
    another owner is active; stale recovery must revalidate canonical vault/root and lock
-   directory identity, current mtime/freshness, and the unique sentinel name/inode twice
-   around the cleanup commit boundary before mutable services start.
+   directory identity, current mtime/freshness, and the sentinel generation, bounded
+   content hash and named-path metadata twice around the cleanup commit boundary before
+   mutable services start. Same-name inode reuse is not accepted as identity.
 3. Scan `.pige/jobs/`, `.pige/proposals/`, `.pige/operations/`, `.pige/source-records/`, conversations, and `log.md`.
 4. Rebuild SQLite job/proposal/operation indexes if missing or dirty.
 5. Detect jobs in `running`, `cancel_requested`, `waiting_dependency`, `waiting_permission`, or partial stage states.

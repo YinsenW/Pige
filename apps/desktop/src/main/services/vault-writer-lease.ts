@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
@@ -33,6 +33,8 @@ interface FileIdentity {
 
 interface LockSentinelIdentity extends FileIdentity {
   readonly name: string;
+  readonly byteLength: number;
+  readonly contentSha256: string;
 }
 
 interface LeaseState {
@@ -44,7 +46,14 @@ interface OwnerRecord {
   readonly token: string;
 }
 
+interface LockSentinelRecord {
+  readonly schemaVersion: 1;
+  readonly ownerToken: string;
+  readonly generation: string;
+}
+
 const OWNER_RECORD_MAX_BYTES = 256;
+const LOCK_SENTINEL_RECORD_MAX_BYTES = 256;
 const OWNER_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const LOCK_SENTINEL_PREFIX = ".pige-owner-";
 
@@ -266,7 +275,7 @@ function createFencedLockFs(
 
     try {
       ownedIdentity = captureExpectedDirectory(resolvedLockPath).identity;
-      ownedSentinelIdentity = writeLockSentinel(sentinelPath, sentinelName);
+      ownedSentinelIdentity = writeLockSentinel(sentinelPath, sentinelName, ownerToken);
       observedIdentity = ownedIdentity;
       observedSentinelIdentity = ownedSentinelIdentity;
       return result;
@@ -375,7 +384,17 @@ function sameResolvedPath(candidate: fs.PathLike, expected: string): boolean {
   return typeof candidate === "string" && path.resolve(candidate) === expected;
 }
 
-function writeLockSentinel(sentinelPath: string, sentinelName: string): LockSentinelIdentity {
+function writeLockSentinel(
+  sentinelPath: string,
+  sentinelName: string,
+  ownerToken: string
+): LockSentinelIdentity {
+  const bytes = Buffer.from(`${JSON.stringify({
+    schemaVersion: 1,
+    ownerToken,
+    generation: randomBytes(32).toString("base64url")
+  } satisfies LockSentinelRecord)}\n`, "utf8");
+  if (bytes.length <= 0 || bytes.length > LOCK_SENTINEL_RECORD_MAX_BYTES) throw writerLeaseInvalid();
   let descriptor: number | undefined;
   try {
     descriptor = fs.openSync(
@@ -383,15 +402,22 @@ function writeLockSentinel(sentinelPath: string, sentinelName: string): LockSent
       fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY | noFollowFlag(),
       0o600
     );
-    fs.writeFileSync(descriptor, "pige-lock-v1\n", "utf8");
+    fs.writeFileSync(descriptor, bytes);
     fs.fsyncSync(descriptor);
     if (process.platform !== "win32") fs.fchmodSync(descriptor, 0o600);
     const stat = fs.fstatSync(descriptor);
-    if (!stat.isFile() || stat.nlink !== 1) throw writerLeaseInvalid();
+    if (!stat.isFile() || stat.nlink !== 1 || stat.size !== bytes.length) throw writerLeaseInvalid();
     fs.closeSync(descriptor);
     descriptor = undefined;
     flushDirectoryWhereSupported(path.dirname(sentinelPath));
-    return { name: sentinelName, dev: stat.dev, ino: stat.ino };
+    const identity = captureExactLockSentinel(path.dirname(sentinelPath), sentinelName);
+    if (
+      identity.byteLength !== bytes.length ||
+      identity.contentSha256 !== sha256(bytes)
+    ) {
+      throw writerLeaseInvalid();
+    }
+    return identity;
   } catch {
     throw writerLeaseInvalid();
   } finally {
@@ -429,21 +455,67 @@ function captureExactLockSentinel(
 ): LockSentinelIdentity {
   if (readSingleLockSentinelName(lockDirectoryPath) !== expectedName) throw fencedRemovalError();
   const sentinelPath = path.join(lockDirectoryPath, expectedName);
-  let stat: fs.Stats;
+  let descriptor: number | undefined;
   try {
-    stat = fs.lstatSync(sentinelPath);
+    descriptor = fs.openSync(sentinelPath, fs.constants.O_RDONLY | noFollowFlag());
+    const before = fs.fstatSync(descriptor);
+    if (
+      !before.isFile() ||
+      before.isSymbolicLink() ||
+      before.nlink !== 1 ||
+      before.size < 0 ||
+      before.size > LOCK_SENTINEL_RECORD_MAX_BYTES ||
+      (process.platform !== "win32" && (before.mode & 0o777) !== 0o600)
+    ) {
+      throw fencedRemovalError();
+    }
+
+    const bytes = Buffer.alloc(before.size);
+    let offset = 0;
+    while (offset < bytes.length) {
+      const count = fs.readSync(descriptor, bytes, offset, bytes.length - offset, offset);
+      if (count === 0) throw fencedRemovalError();
+      offset += count;
+    }
+
+    const named = fs.lstatSync(sentinelPath);
+    const after = fs.fstatSync(descriptor);
+    if (
+      !named.isFile() ||
+      named.isSymbolicLink() ||
+      named.nlink !== 1 ||
+      (process.platform !== "win32" && (named.mode & 0o777) !== 0o600) ||
+      !sameIdentity(identityOf(before), identityOf(after)) ||
+      !sameIdentity(identityOf(after), identityOf(named)) ||
+      before.size !== after.size ||
+      before.mtimeMs !== after.mtimeMs ||
+      before.ctimeMs !== after.ctimeMs ||
+      after.size !== named.size ||
+      after.mtimeMs !== named.mtimeMs ||
+      after.ctimeMs !== named.ctimeMs ||
+      readSingleLockSentinelName(lockDirectoryPath) !== expectedName
+    ) {
+      throw fencedRemovalError();
+    }
+
+    return {
+      name: expectedName,
+      dev: after.dev,
+      ino: after.ino,
+      byteLength: bytes.length,
+      contentSha256: sha256(bytes)
+    };
   } catch {
     throw fencedRemovalError();
+  } finally {
+    if (descriptor !== undefined) {
+      try {
+        fs.closeSync(descriptor);
+      } catch {
+        // Preserve the authoritative sentinel result.
+      }
+    }
   }
-  if (
-    !stat.isFile() ||
-    stat.isSymbolicLink() ||
-    stat.nlink !== 1 ||
-    (process.platform !== "win32" && (stat.mode & 0o777) !== 0o600)
-  ) {
-    throw fencedRemovalError();
-  }
-  return { name: expectedName, dev: stat.dev, ino: stat.ino };
 }
 
 function assertExactLockSentinel(
@@ -624,7 +696,16 @@ function sameLockSentinelIdentity(
   left: LockSentinelIdentity,
   right: LockSentinelIdentity
 ): boolean {
-  return left.name === right.name && sameIdentity(left, right);
+  return (
+    left.name === right.name &&
+    left.byteLength === right.byteLength &&
+    left.contentSha256 === right.contentSha256 &&
+    sameIdentity(left, right)
+  );
+}
+
+function sha256(bytes: Buffer): string {
+  return createHash("sha256").update(bytes).digest("hex");
 }
 
 function writeOwnerRecordAtomic(

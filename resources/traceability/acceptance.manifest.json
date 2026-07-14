@@ -760,7 +760,7 @@
     },
     "PIGE-VAULT-006": {
       "status": "partial",
-      "evidence": ["EV-MARKDOWN-ATOMIC", "EV-DB-EXTERNAL-EDIT", "EV-SOURCE-PAGE-CONFLICT-PRESERVATION", "EV-SOURCE-PAGE-SOURCE-REVISION", "EV-GENERATED-NOTE-FINAL-FENCE", "EV-GENERATED-NOTE-CONFLICT-PRESERVATION", "EV-VAULT-WRITER-LEASE", "EV-VAULT-LEASE-FENCE", "EV-VAULT-STALE-REFRESH"],
+      "evidence": ["EV-MARKDOWN-ATOMIC", "EV-DB-EXTERNAL-EDIT", "EV-SOURCE-PAGE-CONFLICT-PRESERVATION", "EV-SOURCE-PAGE-SOURCE-REVISION", "EV-GENERATED-NOTE-FINAL-FENCE", "EV-GENERATED-NOTE-CONFLICT-PRESERVATION", "EV-VAULT-WRITER-LEASE", "EV-VAULT-LEASE-FENCE", "EV-VAULT-STALE-REFRESH", "EV-VAULT-SENTINEL-GENERATION"],
       "open": {
         "id": "OPEN-REQ-PIGE-VAULT-006",
         "description": "The adopted vault/Job paths have a fenced successor-safe single-writer foundation; user-visible conflict resolution, cross-file/domain commit fences, the final filesystem-syscall TOCTOU interval, Windows proof, and broader destination binding remain open.",
@@ -2222,7 +2222,7 @@
     },
     "E1.21": {
       "status": "partial",
-      "evidence": ["EV-MARKDOWN-ATOMIC", "EV-DB-EXTERNAL-EDIT", "EV-SOURCE-PAGE-CONFLICT-PRESERVATION", "EV-SOURCE-PAGE-SOURCE-REVISION", "EV-GENERATED-NOTE-FINAL-FENCE", "EV-GENERATED-NOTE-CONFLICT-PRESERVATION", "EV-VAULT-WRITER-LEASE", "EV-VAULT-LEASE-FENCE", "EV-VAULT-STALE-REFRESH"],
+      "evidence": ["EV-MARKDOWN-ATOMIC", "EV-DB-EXTERNAL-EDIT", "EV-SOURCE-PAGE-CONFLICT-PRESERVATION", "EV-SOURCE-PAGE-SOURCE-REVISION", "EV-GENERATED-NOTE-FINAL-FENCE", "EV-GENERATED-NOTE-CONFLICT-PRESERVATION", "EV-VAULT-WRITER-LEASE", "EV-VAULT-LEASE-FENCE", "EV-VAULT-STALE-REFRESH", "EV-VAULT-SENTINEL-GENERATION"],
       "open": {
         "id": "OPEN-EXIT-E1.21",
         "description": "The adopted vault/Job paths have a fenced successor-safe single-writer foundation; user-visible conflict resolution, cross-file/domain commit fences, the final filesystem-syscall TOCTOU interval, Windows proof, and broader destination binding remain open.",
@@ -2935,6 +2935,7 @@
     "EV-VAULT-WRITER-LEASE": { "kind": "test", "path": "tests/unit/vault-writer-lease.test.ts", "selector": "allows exactly one real process and recovers the stale lock after SIGKILL" },
     "EV-VAULT-LEASE-FENCE": { "kind": "test", "path": "tests/unit/vault-writer-lease.test.ts", "selector": "does not remove a same-name successor sentinel installed at stale-cleanup commit" },
     "EV-VAULT-STALE-REFRESH": { "kind": "test", "path": "tests/unit/vault-writer-lease.test.ts", "selector": "does not remove a lock whose heartbeat becomes fresh at stale-cleanup commit" },
+    "EV-VAULT-SENTINEL-GENERATION": { "kind": "test", "path": "tests/unit/vault-writer-lease.test.ts", "selector": "rejects an in-place sentinel generation change even when file identity is unchanged" },
     "EV-VAULT-RESET": { "kind": "test", "path": "tests/unit/vault-layout.test.ts", "selector": "resets only rebuildable database and index roots" },
     "EV-SCHEMAS": { "kind": "implementation", "path": "packages/schemas/src/index.ts", "selector": "export const PageIdSchema" },
     "EV-STABLE-ID": { "kind": "test", "path": "tests/unit/domain.test.ts", "selector": "creates sync-ready local vault IDs" },
