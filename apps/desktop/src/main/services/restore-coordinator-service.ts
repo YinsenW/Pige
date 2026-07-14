@@ -8,6 +8,7 @@ import type {
 } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 import {
+  BackupIdSchema,
   JobIdSchema,
   JobRecordSchema,
   type JobCheckpoint,
@@ -16,7 +17,10 @@ import {
 } from "@pige/schemas";
 import {
   BackupRestoreService,
+  captureBackupDestinationFence,
   createRestoreDestinationIdentity,
+  type BackupCreateCheckpointEvent,
+  type BackupCreateOptions,
   type RestoreCoreCheckpointEvent,
   type RestoreCoreApplyResult,
   type RestoreCorePreviewResult,
@@ -47,10 +51,6 @@ export interface RestoreApplyCommand {
   readonly preview: ApplyingRestorePreview;
   readonly destinationPath: string;
   readonly replaceConfirmed: boolean;
-}
-
-interface BackupCreateOptions {
-  readonly excludeJobId?: string;
 }
 
 interface BackupServiceWithInternalOptions {
@@ -433,35 +433,57 @@ export class RestoreCoordinatorService {
     }
 
     let inspected: RestoreCorePreviewResult;
-    if (!isCompletedJob(backupSnapshot.job)) {
-      backupSnapshot = startRollbackBackupJob(backupStore, backupSnapshot);
-      if (!fs.existsSync(backupPath)) {
+    try {
+      const rollbackIdentity = rollbackBackupIdentity(backupSnapshot.job);
+      if (!isCompletedJob(backupSnapshot.job)) {
+        backupSnapshot = startRollbackBackupJob(backupStore, backupSnapshot);
         await this.#backup.createBackup(vaultPath, backupPath, this.#appVersion, {
-          excludeJobId: backupJobId
+          excludeJobId: backupJobId,
+          backupId: rollbackIdentity.backupId,
+          createdAt: rollbackIdentity.createdAt,
+          stagingOwnerKey: backupJobId,
+          expectedDestinationFence: captureBackupDestinationFence(backupPath),
+          ...rollbackBackupCheckpointDigests(backupSnapshot.job),
+          onPhase: async (event) => {
+            backupSnapshot = recordRollbackBackupCheckpoint(backupStore, backupSnapshot, event);
+          }
         });
       }
-    }
-    inspected = await this.#backup.inspectRestoreArchive(backupPath);
-    if (inspected.sourceVaultId !== vault.vaultId) {
-      throw new PigeDomainError("backup.validation_failed", "Rollback backup vault identity changed.");
-    }
-    const operation = this.#jobs.writeBackupCreatedOperation({
-      job: backupSnapshot.job,
-      vaultPath,
-      vaultId: vault.vaultId,
-      backupId: inspected.backupId,
-      archiveDigest: inspected.archiveDigest as `sha256:${string}`,
-      assertVaultWriterLease: () => transition.assertHeld()
-    });
-    if (!isCompletedJob(backupSnapshot.job)) {
-      backupSnapshot = completeRollbackBackupJob(
-        backupStore,
-        backupSnapshot,
-        inspected,
-        operation.id
-      );
-    } else {
-      assertCompletedRollbackBackupJob(backupSnapshot.job, inspected, operation.id);
+      inspected = await this.#backup.inspectRestoreArchive(backupPath);
+      if (
+        inspected.sourceVaultId !== vault.vaultId ||
+        inspected.backupId !== rollbackIdentity.backupId ||
+        inspected.manifest.createdAt !== rollbackIdentity.createdAt ||
+        inspected.manifest.appVersion !== this.#appVersion
+      ) {
+        throw new PigeDomainError("backup.validation_failed", "Rollback backup durable identity changed.");
+      }
+      assertRollbackBackupCheckpoints(backupSnapshot.job, inspected);
+      const operation = this.#jobs.writeBackupCreatedOperation({
+        job: backupSnapshot.job,
+        vaultPath,
+        vaultId: vault.vaultId,
+        backupId: inspected.backupId,
+        archiveDigest: inspected.archiveDigest as `sha256:${string}`,
+        assertVaultWriterLease: () => transition.assertHeld()
+      });
+      if (!isCompletedJob(backupSnapshot.job)) {
+        backupSnapshot = completeRollbackBackupJob(
+          backupStore,
+          backupSnapshot,
+          inspected,
+          operation.id
+        );
+      } else {
+        assertCompletedRollbackBackupJob(backupSnapshot.job, inspected, operation.id);
+      }
+    } catch (caught) {
+      try {
+        backupSnapshot = markRollbackBackupFailed(backupStore, backupSnapshot, caught);
+      } catch {
+        // The original rollback failure remains authoritative if its child-state CAS loses.
+      }
+      throw caught;
     }
     const linked = this.#jobs.linkChildJob(restoreSnapshot, backupSnapshot.job.id);
     return linked;
@@ -539,6 +561,18 @@ function createRollbackBackupJobId(restoreJobId: string): string {
     .update("pige:restore-rollback-backup-job:v1\0", "utf8")
     .update(restoreJobId, "utf8")
     .digest("hex")}`);
+}
+
+function rollbackBackupIdentity(job: JobRecord): { readonly backupId: string; readonly createdAt: string } {
+  const dateKey = job.createdAt.slice(0, 10).replaceAll("-", "");
+  const digest = createHash("sha256")
+    .update("pige:restore-rollback-backup:v1\0", "utf8")
+    .update(job.id, "utf8")
+    .digest("hex");
+  return {
+    backupId: BackupIdSchema.parse(`backup_${dateKey}_${digest}`),
+    createdAt: job.createdAt
+  };
 }
 
 function jobPath(vaultPath: string, jobId: string): string {
@@ -623,8 +657,12 @@ function createOrReadRollbackBackupJob(
 
 function startRollbackBackupJob(store: JobRecordStore, snapshot: JobRecordSnapshot): JobRecordSnapshot {
   if (isCompletedJob(snapshot.job)) return snapshot;
+  if (snapshot.job.state === "failed_final" || snapshot.job.state === "cancelled") {
+    throw new PigeDomainError("backup.job_conflict", "Rollback backup cannot restart from a terminal state.");
+  }
+  const { error: _error, finishedAt: _finishedAt, ...rest } = snapshot.job;
   return store.compareAndSwap(snapshot, JobRecordSchema.parse({
-    ...snapshot.job,
+    ...rest,
     state: "running",
     stage: "backing_up",
     startedAt: snapshot.job.startedAt ?? new Date().toISOString(),
@@ -638,12 +676,144 @@ function startRollbackBackupJob(store: JobRecordStore, snapshot: JobRecordSnapsh
   }));
 }
 
+function assertRollbackBackupCheckpoints(job: JobRecord, inspected: RestoreCorePreviewResult): void {
+  const checkpoints = job.checkpoints ?? [];
+  const byId = new Map(checkpoints.map((checkpoint) => [checkpoint.id, checkpoint]));
+  const manifestChecksum = byId.get("manifest_emitted")?.checksumAfter;
+  const hashesChecksum = byId.get("hashes_computed")?.checksumAfter;
+  const stagedDigest = byId.get("archive_staged")?.checksumAfter;
+  const validatedDigest = byId.get("archive_validated")?.checksumAfter;
+  const finalizedDigest = byId.get("archive_finalized")?.checksumAfter;
+  if (
+    checkpoints.length !== BACKUP_CHECKPOINT_IDS.length ||
+    checkpoints.some((checkpoint) => checkpoint.state !== "done") ||
+    !manifestChecksum ||
+    manifestChecksum !== hashesChecksum ||
+    stagedDigest !== inspected.archiveDigest ||
+    validatedDigest !== inspected.archiveDigest ||
+    finalizedDigest !== inspected.archiveDigest
+  ) {
+    throw new PigeDomainError("backup.checkpoint_conflict", "Rollback backup checkpoints are incomplete or changed.");
+  }
+}
+
+function markRollbackBackupFailed(
+  store: JobRecordStore,
+  initialSnapshot: JobRecordSnapshot,
+  caught: unknown
+): JobRecordSnapshot {
+  const snapshot = store.read(initialSnapshot.path);
+  if (isCompletedJob(snapshot.job) || snapshot.job.state === "failed_final" || snapshot.job.state === "cancelled") {
+    return snapshot;
+  }
+  const retryable = isRetryableRestoreFailure(caught);
+  const code = caught instanceof PigeDomainError && caught.code.startsWith("backup.")
+    ? caught.code
+    : "backup.execution_failed";
+  const now = new Date().toISOString();
+  return store.compareAndSwap(snapshot, JobRecordSchema.parse({
+    ...snapshot.job,
+    state: retryable ? "failed_retryable" : "failed_final",
+    updatedAt: now,
+    finishedAt: now,
+    error: {
+      code,
+      domain: "backup",
+      messageKey: `errors.${code}`,
+      retryable,
+      severity: "error",
+      userAction: retryable ? "retry" : "none"
+    },
+    retry: {
+      retryCount: snapshot.job.retry?.retryCount ?? 0,
+      maxAutomaticRetries: 0,
+      requiresUserAction: retryable,
+      lastRetryReason: code
+    },
+    message: retryable
+      ? "Rollback backup stopped safely and may be retried with the same identity."
+      : "Rollback backup stopped because its durable identity or archive conflicted."
+  }));
+}
+
+function rollbackBackupCheckpointDigests(job: JobRecord): Pick<
+  BackupCreateOptions,
+  "expectedManifestChecksum" | "expectedArchiveDigest"
+> {
+  const manifestChecksum = job.checkpoints?.find((checkpoint) =>
+    checkpoint.id === "hashes_computed" || checkpoint.id === "manifest_emitted"
+  )?.checksumAfter;
+  const archiveDigest = job.checkpoints?.find((checkpoint) =>
+    checkpoint.id === "archive_finalized" || checkpoint.id === "archive_staged"
+  )?.checksumAfter;
+  return {
+    ...(manifestChecksum ? { expectedManifestChecksum: manifestChecksum as `sha256:${string}` } : {}),
+    ...(archiveDigest ? { expectedArchiveDigest: archiveDigest as `sha256:${string}` } : {})
+  };
+}
+
+function recordRollbackBackupCheckpoint(
+  store: JobRecordStore,
+  initialSnapshot: JobRecordSnapshot,
+  event: BackupCreateCheckpointEvent
+): JobRecordSnapshot {
+  const phaseMap: Record<BackupCreateCheckpointEvent["phase"], readonly string[]> = {
+    preflight: ["preflight"],
+    manifest_written: ["manifest_emitted"],
+    files_hashed: ["hashes_computed"],
+    archive_staged: ["archive_staged", "archive_validated"],
+    archive_finalized: ["archive_finalized"]
+  };
+  const snapshot = store.read(initialSnapshot.path);
+  const identity = rollbackBackupIdentity(snapshot.job);
+  if (
+    event.backupId !== identity.backupId ||
+    event.createdAt !== identity.createdAt ||
+    event.stagingOwnerKey !== snapshot.job.id
+  ) {
+    throw new PigeDomainError("backup.checkpoint_conflict", "Rollback backup checkpoint identity changed.");
+  }
+  const targetIds = new Set(phaseMap[event.phase]);
+  const checksum = event.archiveDigest ?? event.manifestChecksum;
+  const now = new Date().toISOString();
+  const checkpoints = (snapshot.job.checkpoints ?? []).map((checkpoint) => {
+    if (!targetIds.has(checkpoint.id)) return checkpoint;
+    if (
+      checkpoint.state === "done" &&
+      checksum !== undefined &&
+      checkpoint.checksumAfter !== checksum
+    ) {
+      throw new PigeDomainError("backup.checkpoint_conflict", "Rollback backup checkpoint digest changed.");
+    }
+    return {
+      ...checkpoint,
+      state: "done" as const,
+      startedAt: checkpoint.startedAt ?? now,
+      finishedAt: checkpoint.finishedAt ?? now,
+      ...(checksum ? { checksumAfter: checksum } : {})
+    };
+  });
+  return store.compareAndSwap(snapshot, JobRecordSchema.parse({
+    ...snapshot.job,
+    state: "running",
+    updatedAt: now,
+    checkpoints,
+    progress: {
+      completedUnits: checkpoints.filter((checkpoint) => checkpoint.state === "done").length,
+      totalUnits: BACKUP_CHECKPOINT_IDS.length,
+      unit: "checkpoint"
+    },
+    message: `Rollback backup checkpoint ${event.phase} completed.`
+  }));
+}
+
 function completeRollbackBackupJob(
   store: JobRecordStore,
   snapshot: JobRecordSnapshot,
   inspected: RestoreCorePreviewResult,
   operationId: string
 ): JobRecordSnapshot {
+  assertRollbackBackupCheckpoints(snapshot.job, inspected);
   const now = new Date().toISOString();
   const backupRef: JobRef = {
     kind: "backup",
@@ -662,9 +832,6 @@ function completeRollbackBackupJob(
     operationIds: [operationId],
     checkpoints: (snapshot.job.checkpoints ?? []).map((checkpoint) => ({
       ...checkpoint,
-      state: "done",
-      startedAt: checkpoint.startedAt ?? snapshot.job.startedAt ?? now,
-      finishedAt: now,
       outputRefs: checkpoint.id === "archive_finalized" ? [backupRef] : checkpoint.outputRefs
     })),
     progress: {
@@ -815,8 +982,13 @@ function isErrno(caught: unknown, code: string): boolean {
 function isRetryableRestoreFailure(caught: unknown): boolean {
   if (!(caught instanceof PigeDomainError)) return true;
   return !new Set([
+    "backup.checkpoint_conflict",
+    "backup.destination_changed",
+    "backup.destination_exists",
     "backup.job_conflict",
+    "backup.result_conflict",
     "backup.rollback_missing",
+    "backup.staging_conflict",
     "backup.validation_failed",
     "restore.backup_changed",
     "restore.backup_invalid",

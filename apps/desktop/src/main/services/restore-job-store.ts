@@ -401,12 +401,7 @@ export class RestoreJobStore {
 
   writeBackupCreatedOperation(input: BackupOperationInput): OperationRecord {
     this.#assertHeld();
-    input.assertVaultWriterLease();
-    return this.#writeOperation(
-      input.vaultPath,
-      createBackupCreatedOperation(input),
-      input.assertVaultWriterLease
-    );
+    return writeBackupCreatedOperation(input);
   }
 
   #writeOperation(
@@ -544,6 +539,25 @@ export class RestoreJobStore {
     }
     this.#lease.assertHeld();
   }
+}
+
+export function writeBackupCreatedOperation(input: BackupOperationInput): OperationRecord {
+  input.assertVaultWriterLease();
+  const operation = createBackupCreatedOperation(input);
+  const operationPath = operationFilePath(input.vaultPath, operation.id);
+  const existing = readOperationIfPresent(operationPath, input.assertVaultWriterLease);
+  if (existing) {
+    if (canonicalJson(existing) !== canonicalJson(operation)) {
+      throw new PigeDomainError("backup.operation_conflict", "The Backup Operation conflicts with durable state.");
+    }
+    return existing;
+  }
+  writeOperationNoReplace(operationPath, operation, input.assertVaultWriterLease);
+  const committed = readOperationIfPresent(operationPath, input.assertVaultWriterLease);
+  if (!committed || canonicalJson(committed) !== canonicalJson(operation)) {
+    throw new PigeDomainError("backup.operation_conflict", "The Backup Operation failed exact readback.");
+  }
+  return committed;
 }
 
 export function createRestoreJobIdentity(input: RestoreJobIdentityInput): RestoreJobIdentity {
@@ -793,7 +807,7 @@ function createBackupCreatedOperation(input: BackupOperationInput): OperationRec
     schemaVersion: 1,
     jobId: input.job.id,
     createdAt: input.job.createdAt,
-    actor: {
+    actor: input.job.actor ?? {
       kind: "system",
       runtimeKind: "desktop_local",
       clientCapabilityTier: "desktop_full"
@@ -805,9 +819,9 @@ function createBackupCreatedOperation(input: BackupOperationInput): OperationRec
       { kind: "job", id: input.job.id },
       { kind: "vault", id: input.vaultId }
     ],
-    summary: "A validated rollback backup was created before replacing the active vault binding.",
+    summary: "A validated backup archive was created for the active vault.",
     reversible: "best_effort",
-    rollbackHint: "Remove the rollback archive through the operating system after restore retention ends.",
+    rollbackHint: "Remove the backup archive through the operating system when it is no longer needed.",
     warnings: []
   });
 }

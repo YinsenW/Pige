@@ -158,6 +158,7 @@ This table is the v0.1 baseline. Implementation can split storage files differen
 | In-vault managed-copy root (`inVaultSourceAssetRoot` compatibility field) | Vault & Note Storage | `vault_portable` | Source Storage Service | `.pige/config.json` relative path | Yes | `os_permission` | New managed sources; existing sources unchanged |
 | External managed-copy root binding | Vault & Note Storage | `machine_vault_binding` | Source Storage Service | OS app data keyed by `vault_id` and `rootId` | Binding no; backup manifest lists dependency and managed copies are included by default when reachable | `permission_and_confirmation` | Requires path validation; existing sources retain prior root ID |
 | Backup include/exclude defaults | Vault & Note Storage/Backup flow | mixed | Backup Service | `.pige/config.json` for vault defaults, OS app data for machine choices | Vault defaults yes | `none` | Next backup |
+| User Backup status/actions | Vault & Note Storage | `derived_status` + vault Job | Backup Coordinator, Jobs Service | `.pige/jobs/`; latest completed user Backup derives `lastBackupAt` | Backup Job no; archive/Operation yes | `none` | Durable create; eligible Cancel/Retry; restart adopts |
 | Trash/archive policy | Vault & Note Storage | `vault_portable` | Vault Runtime Service | `.pige/config.json` | Yes | `explicit_confirmation` | Immediate for future deletes |
 | Index rebuild requested | Index & Maintenance | `runtime_transient` job | Local Database Service | job record | Job backup policy | `none` | Starts a rebuildable `index_rebuild` job; unlike Reset Local Database, this does not delete derived state first |
 | Index/chunk health status | Index & Maintenance | `derived_status` | Local Database Service | SQLite/app data | No | `none` | Recomputed |
@@ -316,22 +317,20 @@ Default vault backup excludes:
 - Local model/tool/package files.
 - Active vault path and recent vault list.
 - Raw external root bindings and externally referenced originals. Reachable Pige-managed copies are included by default even when their managed-copy root is external; incomplete omission requires an explicit backup decision.
+- User/rollback Backup Job records containing machine-local destination references.
 
 Restore rules:
 
-- Restore preview must show vault name, app/schema versions, note/source counts, backup
-  date, and localized typed warning/dependency counts without raw paths or entry names.
+- Preview shows vault/app/schema, note/source counts, date and localized typed
+  warning/dependency counts without raw path/entry detail.
 - Restoring a vault into a new folder creates a new machine-local active vault binding.
 - Restored vault config must not assume old absolute paths are still valid.
-- External managed-copy root bindings must be reconnected or restored into an in-vault managed-copy root; unresolved root IDs remain visible dependencies.
+- External roots reconnect or restore in-vault; unresolved root IDs stay visible.
 - Provider profiles and secrets can be imported only through an explicit, redacted settings import/export flow.
-- `replace_existing` restore preserves the vault ID, requires explicit irreversible-flow
-  confirmation and a verified rollback backup, publishes a fresh destination, then
-  atomically CAS-replaces its machine-local active path binding. The old physical folder
-  remains intact but unregistered; the old and new paths cannot both remain registered.
-- `clone_as_new` restore mints a vault ID and a separate machine binding. It never copies permission grants, YOLO state, provider secrets, or external absolute paths from the source vault.
-- Restore coordinator Jobs and claims are machine-local OS app-data state, excluded from
-  vault backup, and never relocated into staging or the restored vault.
+- `replace_existing` preserves vault ID, confirms irreversibility, verifies rollback,
+  publishes fresh, then CAS-swaps the active binding; old folder remains unregistered.
+- `clone_as_new` mints vault/binding and omits grants, YOLO, secrets and external paths.
+- Restore Jobs/claims remain backup-excluded OS app-data, never staging/restored-vault state.
 
 Settings export:
 

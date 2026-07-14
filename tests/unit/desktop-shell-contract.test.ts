@@ -200,6 +200,28 @@ describe("desktop shell build contract", () => {
     expect(restoreApplyHandler).not.toContain("restoredVaultPath");
   });
 
+  it("routes user backup creation and recovery through the durable Backup coordinator", () => {
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const createHandler = mainSource.slice(
+      mainSource.indexOf('ipcMain.handle("backup.create"'),
+      mainSource.indexOf('ipcMain.handle("restore.preview"')
+    );
+    const cancelHandler = mainSource.slice(
+      mainSource.indexOf('ipcMain.handle("jobs.cancel"'),
+      mainSource.indexOf('ipcMain.handle("jobs.retry"')
+    );
+
+    expect(mainSource).toContain("new BackupCoordinatorService({");
+    expect(createHandler).toContain("getBackupCoordinatorService().create(selection.filePath)");
+    expect(createHandler).not.toContain("getBackupRestoreService().createBackup(");
+    expect(mainSource).toContain('job.backupKind === "user_backup"');
+    expect(mainSource).toContain("lastBackupAt: lastBackup.updatedAt");
+    expect(cancelHandler).toContain("getBackupCoordinatorService().cancel(request)");
+    expect(mainSource).toContain("getBackupCoordinatorService().recoverInterrupted()");
+    expect(mainSource.indexOf("getBackupCoordinatorService().recoverInterrupted()"))
+      .toBeLessThan(mainSource.indexOf("recoverInterruptedJobs()"));
+  });
+
   it("wires Home questions through Pi with visible typed outcomes and no raw provider error surface", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");

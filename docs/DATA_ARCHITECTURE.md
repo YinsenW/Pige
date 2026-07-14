@@ -636,7 +636,7 @@ Default backup includes:
 - `.pige/config.json`.
 - `.pige/manifest.json`.
 - `.pige/conversations/`.
-- `.pige/jobs/`.
+- `.pige/jobs/`, except Backup Jobs with machine-specific destination references.
 - `.pige/proposals/`.
 - `.pige/operations/`.
 - `.pige/memory/`.
@@ -668,24 +668,23 @@ Settings export/import behavior is governed by `docs/SETTINGS_AND_PREFERENCES.md
 
 The default should include Agent memory because it is part of the user's Pige experience.
 
-Current backup evidence and open delivery work live in the Playbook and acceptance
-manifest. Format-v1 archives remain readable legacy input, but cannot invent unknown
-domain compatibility; the inclusion/exclusion and execution rules here remain normative.
-
-When a readable format-v1 manifest has no `backupId`, preview derives lineage only as
-`backup_<YYYYMMDD>_<hex>`, where `hex` is SHA-256 over
-`pige:legacy-backup-lineage:v1\0`, the canonical `sha256:<hex>` archive digest, `\0`, and
-the exact manifest `createdAt`. The record marks that identity as `derived_legacy`; it is
-used only for lineage and idempotency and never claims that the legacy archive carried it.
-New backups always write a real `backupId` before archive publication.
+Playbook/acceptance own current evidence and open work. Readable format-v1 remains legacy
+input but cannot invent domain compatibility. If `backupId` is absent, preview derives
+lineage `backup_<YYYYMMDD>_<hex>` from SHA-256 of
+`pige:legacy-backup-lineage:v1\0` + canonical archive digest + `\0` + exact `createdAt`;
+`derived_legacy` is lineage/idempotency only. New backups write a real ID before publish.
 
 Backup execution contract:
 
-- Create a durable `backup` job before scan/compression begins.
-- Checkpoint at least `preflight`, `manifest_written`, `files_hashed`, `archive_staged`, and `archive_finalized`.
-- Write to a staging archive, validate the staged manifest/file hashes, then atomically finalize the user-selected archive.
-- Cancellation removes only verified incomplete staging output; retry never overwrites a valid prior backup silently.
-- Successful finalization writes `backup_created` with the backup ID, manifest checksum, included/excluded classes, structured external-dependency result, and policy-audit reference.
+- Before preflight create one durable `backup` Job binding stable Job, Backup, vault,
+  policy, destination and claim identity.
+- Exact checkpoints are `preflight`, `manifest_written`, `files_hashed`,
+  `archive_staged`, `archive_finalized`. Retry/restart adopts matching bytes and reuses
+  Job/Backup/Operation; conflict/corruption terminalizes and cancellation removes only
+  owned incomplete staging.
+- Validate manifest/files before no-replace publish, then link one `backup_created`.
+  Schema v1 binds Job/vault/Backup/archive digest; manifest remains authority for
+  include/exclude, schema ranges, external dependencies and policy until migration.
 
 ## 12. Restore Policy
 

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-14T13:35:00Z",
+  "reviewedAt": "2026-07-14T17:06:33Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -31,12 +31,12 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "79b5e7c5f90451efd159a85ff0ff20ee70378697cdf00670456baffe82d2104a"
+    "reviewedSha256": "86ad0ce8a73fafd5f6b2211a4eb2eacdcb18958936c5b2205eefddd8c8af3fd8"
   },
   "reviewers": [
     {
-      "reviewerId": "macos-unsigned-distribution-pm-review",
-      "task": "macOS unsigned-by-Developer-ID distribution integrity review",
+      "reviewerId": "durable-user-backup-ui-design-review",
+      "task": "Durable user Backup recovery and Settings ownership exact-hash review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -44,84 +44,83 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Project Management and replacement reviewers independently checked the exact nine-path Development candidate, broken baseline reproduction, local official-ZIP evidence, online same-runner and fresh-runner macOS results, unchanged Windows result, dependency adoption, residual trust boundary and status preservation. They returned CLEAR and made no candidate edits."
+      "independence": "UI Design independently reviewed the exact c4fca11d Development candidate read-only, including restarted Backup ownership, fixed localized state/action rules, raw-detail exclusion, rollback-child suppression, current last-backup truth and unchanged Restore surfaces. It returned ACCEPTED/CLEAR and requested no prototype or candidate edit."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "macos-unsigned-distribution-pm-review",
+      "reviewerId": "durable-user-backup-ui-design-review",
       "blockerCount": 0,
-      "summary": "Existing Release Engineering, Quality, Technical Architecture and Playbook sections own the internal distribution seal, official artifact, fresh-runner evidence and still-open trusted-release lifecycle; no new document or product surface is added."
+      "summary": "Existing Data, Job, API, Settings, UI, Quality and Playbook sections locate the durable Backup lifecycle and one Settings owner without a new document, page or prototype."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "macos-unsigned-distribution-pm-review",
+      "reviewerId": "durable-user-backup-ui-design-review",
       "blockerCount": 0,
-      "summary": "Owners consistently distinguish a complete ad-hoc integrity seal with identity '-' and no Team ID from Developer ID trust, notarization, staple, hardened runtime, entitlements, or a public release claim."
+      "summary": "Owners agree on pre-scan durable Job creation, five exact checkpoints, identity-bound adoption, no-replace archive publication, schema-v1 Operation limits, manifest authority, rollback-child reuse and body-free Settings summaries."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "macos-unsigned-distribution-pm-review",
+      "reviewerId": "durable-user-backup-ui-design-review",
       "blockerCount": 0,
-      "summary": "Semantic lock v3 retains 1,184 claims and changes only the existing planned PIGE-REL-001, PIGE-REL-005 and E9.08 projections; every Requirement, Exit and phase status remains unchanged."
+      "summary": "Five exact selectors update only existing partial Backup, Job, API, Settings, I18N and Exit projections; semantic lock v3 has 1,189 claims and every Requirement, Exit and phase status remains unchanged."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.7,
-      "reviewerId": "macos-unsigned-distribution-pm-review",
+      "reviewerId": "durable-user-backup-ui-design-review",
       "blockerCount": 0,
-      "summary": "Development gets one executable internal-distribution contract: builder-owned final sealing, zero post-seal Bundle writes, official ZIP equality, credential stripping, strict codesign/Gatekeeper/quarantine checks, and an independent downloaded-artifact runtime smoke."
+      "summary": "Development gets one executable Backup contract covering coordinator composition, exact checkpoint/restart/cancel/retry/CAS behavior, truthful manifest ranges, safe Job summaries, restarted Settings ownership and rollback recovery."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "macos-unsigned-distribution-pm-review",
+      "reviewerId": "durable-user-backup-ui-design-review",
       "blockerCount": 0,
-      "summary": "No Markdown file or durable decision is added; semantic-neutral owner compression keeps all five leanness gates green without raising the 56-file, 1,213,000-byte or 250,000-byte trace budgets."
+      "summary": "No Markdown file or decision is added; owner and JSON compression keeps all five leanness gates green without raising the 56-file, 1,213,000-byte or 250,000-byte trace budgets."
     }
   ],
   "verification": [
     {
       "command": "npm run verify",
       "status": "passed",
-      "evidence": "The exact nine-path Development plus eight-path governed candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all five documentation-quality dimensions."
+      "evidence": "The exact twenty-path Development plus ten-path governed candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all five documentation-quality dimensions."
     },
     {
-      "command": "GitHub Packageability run 29336168443",
+      "command": "Exact candidate test, package and downloaded-distribution evidence",
       "status": "passed",
-      "evidence": "macOS build job 87095828643, independent downloaded-distribution job 87096511438 and unchanged Windows x64 job 87095828819 pass. The fresh runner consumes the exact official ZIP/report and proves strict ad-hoc integrity, expected-untrusted Gatekeeper/quarantine behavior and real packaged runtime without staging access."
+      "evidence": "Focused 4/95 and 6/161, full 103/1,162, typecheck/build, unified Agent and worker smokes pass. The 160,600,780-byte macOS ZIP passes ordinary and independent downloaded-distribution smoke with strict ad-hoc integrity and zero post-seal writes."
     },
     {
       "command": "npm run verify:dependencies && npm run verify:traceability && npm run verify:contracts",
       "status": "passed",
-      "evidence": "The candidate has 57 dependency records with zero waivers, including pinned actions/download-artifact v7.0.0; CON-001 through CON-004 and semantic lock v3/1,184 pass with no status drift."
+      "evidence": "The candidate retains 57 dependency records with zero waivers; CON-001 through CON-004 and semantic lock v3/1,189 pass with no Requirement, Exit or phase status drift."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 pass with 56 Markdown files, 3,466 of 3,700 entry words, 4,577 trace lines, 249,845 of 250,000 trace bytes and 1,212,864 of 1,213,000 governed Markdown bytes."
+      "evidence": "LEN-001 through LEN-005 pass with 56 Markdown files, 3,466 entry words, 4,422 trace lines, 249,489 trace bytes and 1,212,507 governed Markdown bytes."
     }
   ],
   "coordination": {
-    "taskId": "macos-unsigned-distribution-20260714",
-    "taskTitle": "macOS unsigned distribution integrity",
+    "taskId": "durable-user-backup-20260715",
+    "taskTitle": "Durable user Backup recovery and Settings ownership",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "This candidate repairs the broken inherited macOS linker signature for internal arm64 packageability with a complete ad-hoc integrity seal and fresh downloaded-ZIP verification. It preserves Windows behavior and does not claim Developer ID trust, notarization, signed public distribution, DMG, macOS x64, installed lifecycle or E9.08 completion.",
-    "acknowledgement": "Development froze exact nine-path bytes after local and online same-runner/fresh-runner evidence. Product Planning synchronized seven pre-recipe existing owner/control paths and this current-only recipe without changing Development files. Independent replacement reviews returned CLEAR."
+    "compatibility": "This candidate makes user Backup Job-first and restart-safe while preserving schema v1, Restore identities, provider/permission behavior and all statuses. It adds no page, dependency, migration or platform-support claim.",
+    "acknowledgement": "Development froze exact twenty-path bytes and executable evidence. UI Design returned exact-hash ACCEPTED/CLEAR. Product Planning synchronized seven existing owners, acceptance, semantic lock and this current-only recipe without changing Development files."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "The ad-hoc seal supplies integrity and Apple Silicon loadability, not a trusted publisher identity; Gatekeeper remains expected to classify the internal artifact as untrusted.",
-    "Users may still encounter an untrusted warning and require the OS-native right-click or System Settings flow; no bypass command is shipped.",
-    "Developer ID signing, notarization, staple, hardened runtime, entitlements, DMG, macOS x64 and signed installed-platform proof remain open.",
-    "Ad-hoc signature bytes may vary between builds, so ZIP hashes are per-build evidence rather than the stable release identity.",
-    "The fresh-runner artifact and reports expire under CI retention; governance binds the reproducible workflow, pinned action and body-free verification contract.",
-    "Windows behavior is unchanged; broader Windows/macOS version and hardware matrices remain open."
+    "Schema-v1 backup_created binds Job, vault, Backup and archive digest; richer inclusion, dependency and policy facts remain manifest-owned until a versioned Operation migration.",
+    "External managed source roots remain unsupported and fail closed; explicit incomplete/external transport controls remain open.",
+    "Final-syscall TOCTOU, general cross-file transactionality and old-source cleanup remain open.",
+    "Windows packageability must be rerun online for the main/renderer/contracts delta; no new Windows claim is made.",
+    "Broader installed/signed platform recovery and Public Alpha backup/restore scenario evidence remain open."
   ]
 }

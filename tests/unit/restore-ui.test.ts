@@ -3,6 +3,8 @@ import { act } from "react";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it } from "vitest";
 import type {
+  JobSummary,
+  JobsListRequest,
   OnboardingStatus,
   RestoreApplyRequest,
   RestoreApplyResult,
@@ -173,12 +175,89 @@ describe("Restore identity UI", () => {
     await act(async () => root.unmount());
     dom.window.close();
   });
+
+  it("owns restarted Backup status in Vault settings with safe retry and current last-backup truth", async () => {
+    const dom = createDom();
+    const harness = createHarness(readyOnboarding(), bothModesPreview());
+    harness.jobs = [backupJob("failed_retryable", "retry")];
+    const { container, root } = await mountApp(dom, makePigeApi(harness, true));
+
+    await click(dom, button(container, "Vault & Note Storage"));
+    await waitFor(dom, () => container.textContent?.includes("The backup stopped safely") ?? false);
+
+    expect(container.textContent).not.toContain("RAW_BACKUP_SENTINEL");
+    expect(container.textContent).not.toContain("/private/");
+    expect(button(container, "Retry").disabled).toBe(false);
+
+    await click(dom, button(container, "Retry"));
+    await waitFor(dom, () => container.textContent?.includes("2026-07-14T09:30:00.000Z") ?? false);
+
+    expect(harness.retryJobIds).toEqual(["job_20260714_backupui1"]);
+    expect(container.textContent).not.toContain("The backup stopped safely");
+    expect(container.querySelectorAll(".backup-job-status")).toHaveLength(0);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("offers cancel only for active user Backups and no retry for terminal choose-path failures", async () => {
+    const runningDom = createDom();
+    const runningHarness = createHarness(readyOnboarding(), bothModesPreview());
+    runningHarness.jobs = [backupJob("running")];
+    const runningApp = await mountApp(runningDom, makePigeApi(runningHarness, true));
+
+    await click(runningDom, button(runningApp.container, "Vault & Note Storage"));
+    await waitFor(runningDom, () => runningApp.container.textContent?.includes("Creating and validating") ?? false);
+    expect(runningApp.container.textContent).not.toContain("RAW_BACKUP_SENTINEL");
+    await click(runningDom, button(runningApp.container, "Cancel"));
+    expect(runningHarness.cancelJobIds).toEqual(["job_20260714_backupui1"]);
+    await waitFor(runningDom, () => runningApp.container.querySelector(".backup-job-status") === null);
+    await act(async () => runningApp.root.unmount());
+    runningDom.window.close();
+
+    const failedDom = createDom();
+    const failedHarness = createHarness(readyOnboarding(), bothModesPreview());
+    failedHarness.jobs = [backupJob("failed_final")];
+    const failedApp = await mountApp(failedDom, makePigeApi(failedHarness, true));
+
+    await click(failedDom, button(failedApp.container, "Vault & Note Storage"));
+    await waitFor(failedDom, () => failedApp.container.textContent?.includes("could not continue safely") ?? false);
+    expect(failedApp.container.textContent).not.toContain("RAW_BACKUP_SENTINEL");
+    expect(Array.from(failedApp.container.querySelectorAll("button")).some((item) => item.textContent === "Retry"))
+      .toBe(false);
+    expect(button(failedApp.container, "Create Backup").disabled).toBe(false);
+    await act(async () => failedApp.root.unmount());
+    failedDom.window.close();
+  });
+
+  it("continues polling a recovered active Backup without ephemeral renderer busy state", async () => {
+    const dom = createDom();
+    const harness = createHarness(readyOnboarding(), bothModesPreview());
+    harness.jobs = [backupJob("running")];
+    const { container, root } = await mountApp(dom, makePigeApi(harness, true));
+
+    await click(dom, button(container, "Vault & Note Storage"));
+    await waitFor(dom, () => container.textContent?.includes("Creating and validating") ?? false);
+    harness.jobs = [];
+    await act(async () => {
+      await new Promise<void>((resolve) => dom.window.setTimeout(resolve, 1_300));
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.querySelector(".backup-job-status") === null);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
 });
 
 interface RestoreHarness {
   onboarding: OnboardingStatus;
   readonly preview: RestorePreviewResult;
   readonly applyRequests: RestoreApplyRequest[];
+  jobs: JobSummary[];
+  readonly retryJobIds: string[];
+  readonly cancelJobIds: string[];
+  lastBackupAt?: string;
   applyRestore: (request: RestoreApplyRequest) => Promise<RestoreApplyResult>;
 }
 
@@ -187,6 +266,9 @@ function createHarness(onboarding: OnboardingStatus, preview: RestorePreviewResu
     onboarding,
     preview,
     applyRequests: [],
+    jobs: [],
+    retryJobIds: [],
+    cancelJobIds: [],
     applyRestore: async (request) => {
       harness.applyRequests.push(request);
       return { status: "canceled" };
@@ -246,6 +328,7 @@ function makePigeApi(harness: RestoreHarness, sidebarOpen = false): object {
         phase: "available",
         createAvailable: Boolean(harness.onboarding.activeVault),
         restoreAvailable: true,
+        ...(harness.lastBackupAt ? { lastBackupAt: harness.lastBackupAt } : {}),
         messageKey: harness.onboarding.activeVault ? "backup.statusReady" : "backup.statusNoVault",
         defaultIncludes: {
           markdownKnowledge: true,
@@ -271,13 +354,34 @@ function makePigeApi(harness: RestoreHarness, sidebarOpen = false): object {
       pending: async () => undefined
     },
     jobs: {
-      list: async () => ({
+      list: async (request: JobsListRequest = {}) => {
+        const stateFilter = new Set(request.states ?? []);
+        const classFilter = new Set(request.classes ?? []);
+        const jobs = harness.jobs
+          .filter((job) => stateFilter.size === 0 || stateFilter.has(job.state))
+          .filter((job) => classFilter.size === 0 || classFilter.has(job.class));
+        return {
         scannedAt: "2026-07-14T08:00:00.000Z",
         activeVaultId: harness.onboarding.activeVault?.vaultId ?? "vault_restore_ui",
-        total: 0,
+        total: jobs.length,
         invalidJobCount: 0,
-        jobs: []
-      })
+        jobs
+        };
+      },
+      retry: async ({ jobId }: { readonly jobId: string }) => {
+        harness.retryJobIds.push(jobId);
+        const job = harness.jobs.find((candidate) => candidate.id === jobId);
+        if (!job) return { status: "not_found" } as const;
+        const completed = { ...job, state: "completed", updatedAt: "2026-07-14T09:30:00.000Z" } as const;
+        harness.jobs = [];
+        harness.lastBackupAt = completed.updatedAt;
+        return { status: "requeued", job: completed } as const;
+      },
+      cancel: async ({ jobId }: { readonly jobId: string }) => {
+        harness.cancelJobIds.push(jobId);
+        harness.jobs = [];
+        return { status: "cancelled" } as const;
+      }
     },
     proposals: {
       list: async () => ({
@@ -328,6 +432,34 @@ function vaultSummary(): VaultSummary {
     defaultSourceStorageStrategy: "copy_to_source_library",
     schemaVersion: 1,
     counts: { notes: 2, sources: 1, managedSourceCopies: 1, referencedOriginals: 0 }
+  };
+}
+
+function backupJob(
+  state: "failed_retryable" | "failed_final" | "running",
+  userAction: "retry" | "choose_path" = "choose_path"
+): JobSummary {
+  return {
+    id: "job_20260714_backupui1",
+    class: "backup",
+    state,
+    stage: "backing_up",
+    backupKind: "user_backup",
+    ...(state.startsWith("failed") ? {
+      error: {
+        code: state === "failed_retryable" ? "backup.execution_failed" : "backup.destination_changed",
+        domain: "backup",
+        messageKey: state === "failed_retryable"
+          ? "errors.backup.execution_failed"
+          : "errors.backup.destination_changed",
+        retryable: state === "failed_retryable",
+        severity: "error",
+        userAction
+      }
+    } : {}),
+    message: "RAW_BACKUP_SENTINEL /private/hidden-backup.zip",
+    createdAt: "2026-07-14T09:00:00.000Z",
+    updatedAt: "2026-07-14T09:05:00.000Z"
   };
 }
 

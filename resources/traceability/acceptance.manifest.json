@@ -839,75 +839,13 @@
         "targetExits": ["E3.04", "E3.05", "E3.07"]
       }
     },
-    "PIGE-JOB-001":{"status":"partial","evidence":["EV-JOB-RECOVERY","EV-HOME-AGENT","EV-PI-PDF-PARSE-TOOL","EV-PI-PDF-OCR-TOOL","EV-PI-OFFICE-PARSE-OCR-TOOL","EV-PI-IMAGE-OCR-TOOL","EV-PARSE-FOLLOWUP-DURABILITY","EV-OCR-FOLLOWUP-DURABILITY","EV-PI-DATASET-INGEST","EV-DATASET-CONTINUATION","EV-DATASET-CONTINUATION-RESTART","EV-RESTORE-JOB-RECOVERY"],"open":{"id":"OPEN-REQ-PIGE-JOB-001","description":"Home model work is Job-first; remaining parser, permission, backup, and migration paths need assertions.","targetBuilds":["B2.08"],"targetExits":["E2.01"]}},
-    "PIGE-JOB-002":{"status":"partial","evidence":["EV-JOB-DRAIN","EV-JOB-RECOVERY","EV-HOME-JOB-RECOVERY","EV-HOME-AGENT","EV-HOME-FOLLOWUP","EV-PI-PDF-PARSE-TOOL","EV-PI-PDF-OCR-TOOL","EV-PI-OFFICE-PARSE-OCR-TOOL","EV-PI-IMAGE-OCR-TOOL","EV-PI-INGEST-PROPOSAL","EV-PROPOSAL-REVIEW-LIFECYCLE","EV-ACTIVITY-UNDO","EV-CREATE-RECOVERY","EV-UPDATE-RECOVERY","EV-JOB-CANCEL","EV-JOB-DURABLE-CANCEL","EV-CAPTURE-PUBLICATION-GUARD","EV-AGENT-PUBLICATION-CANCEL","EV-PDF-OCR-SOURCE-REVISION","EV-PDF-RENDER-GENERATION","EV-INDEX-REBUILD-WORKER","EV-PI-DATASET-INGEST","EV-DATASET-SERVICE","EV-DATASET-WORKER-SMOKE","EV-DATASET-CONTINUATION","EV-DATASET-CONTINUATION-RESTART","EV-JOB-RECORD-CAS","EV-JOB-CLAIM-RECOVERY","EV-JOB-CLAIM-INDEPENDENCE","EV-MODEL-EGRESS-APPROVAL-STORE","EV-MODEL-EGRESS-JOB-RECOVERY","EV-RESTORE-JOB-RECOVERY","EV-RESTORE-STARTUP-ADOPTION"],"open":{"id":"OPEN-REQ-PIGE-JOB-002","description":"Exact-record claim/CAS, current-action model-egress recovery, and machine-local Restore checkpoint/startup adoption cover the adopted paths; other Job classes, in-flight Pi transcript continuation, general cross-file/domain atomicity, final filesystem-syscall TOCTOU, Windows multi-process proof, and broader checkpoints remain.","targetBuilds":["B2.08","B2.11"],"targetExits":["E2.01","E2.10"]}},
-    "PIGE-JOB-003": {
-      "status": "partial",
-      "evidence": ["EV-PROPOSAL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-PROPOSAL-UI"],
-      "open": {
-        "id": "OPEN-REQ-PIGE-JOB-003",
-        "description": "Current review is transitional; autonomous eligibility, generic exceptions, and cross-process work remain.",
-        "targetBuilds": [
-          "B7.01",
-          "B7.02",
-          "B7.03",
-          "B7.04"
-        ],
-        "targetExits": [
-          "E7.01"
-        ]
-      }
-    },
-    "PIGE-JOB-004": {
-      "status": "partial",
-      "evidence": ["EV-JOB-WAIT", "EV-SOURCE-WAIT-STATUS", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-WAITING-AGENT-REQUEUE", "EV-OCR-NATIVE-FALLBACK", "EV-PI-DATASET-INGEST", "EV-DATASET-CONTINUATION"],
-      "open": {
-        "id": "OPEN-REQ-PIGE-JOB-004",
-        "description": "Preserved-source model wait now has one truthful repair path; tool, path, and runtime dependency classes remain open.",
-        "targetBuilds": [
-          "B2.13"
-        ],
-        "targetExits": [
-          "E2.11"
-        ]
-      }
-    },
-    "PIGE-JOB-005": {
-      "status": "partial",
-      "evidence": ["EV-AGENT-INGEST", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY", "EV-PI-INGEST-UPDATE", "EV-UPDATE-RECOVERY"],
-      "open": {
-        "id": "OPEN-REQ-PIGE-JOB-005",
-        "description": "Legacy hashless create recovery and Agent writes beyond exact create/additive update remain.",
-        "targetBuilds": ["B7.04"],
-        "targetExits": ["E7.01"]
-      }
-    },
-    "PIGE-JOB-006": {
-      "status": "partial",
-      "evidence": ["EV-CAPTURE", "EV-HOME-AGENT", "EV-HOME-FOLLOWUP", "EV-DATASET-QUERY-DURABILITY", "EV-DATASET-QUERY-INTEGRITY", "EV-DATASET-TIMELINE-RESTORE"],
-      "open": {
-        "id": "OPEN-REQ-PIGE-JOB-006",
-        "description": "Dataset result restart and checksum rejection work; compaction, cross-process kill/reopen, and packaged history proof remain.",
-        "targetBuilds": [
-          "B7.08",
-          "B7.09"
-        ],
-        "targetExits": [
-          "E7.03",
-          "E7.04"
-        ]
-      }
-    },
-    "PIGE-JOB-007": {
-      "status": "partial",
-      "evidence": ["EV-JOB-STATUS", "EV-JOB-WAIT", "EV-JOB-CANCEL", "EV-HOME-UI", "EV-HOME-FOLLOWUP", "EV-SOURCE-WAIT-STATUS", "EV-SOURCE-WAIT-RACE", "EV-ACTIVITY-UNDO", "EV-MODEL-EGRESS-HOME-UI"],
-      "open": {
-        "id": "OPEN-REQ-PIGE-JOB-007",
-        "description": "Preserved-source model wait and exact model-egress confirmation each have one status owner/action; broader Activity, progress, non-Agent cancel, and Permission Broker UI remain.",
-        "targetBuilds": ["B2.10", "B2.12"],
-        "targetExits": ["E2.09"]
-      }
-    },
+    "PIGE-JOB-001":{"status":"partial","evidence":["EV-JOB-RECOVERY","EV-HOME-AGENT","EV-PI-PDF-PARSE-TOOL","EV-PI-PDF-OCR-TOOL","EV-PI-OFFICE-PARSE-OCR-TOOL","EV-PI-IMAGE-OCR-TOOL","EV-PARSE-FOLLOWUP-DURABILITY","EV-OCR-FOLLOWUP-DURABILITY","EV-PI-DATASET-INGEST","EV-DATASET-CONTINUATION","EV-DATASET-CONTINUATION-RESTART","EV-BACKUP-JOB-LIFECYCLE","EV-RESTORE-JOB-RECOVERY"],"open":{"id":"OPEN-REQ-PIGE-JOB-001","description":"Home, Dataset, Backup and Restore are Job-first; remaining parser, permission and migration paths need assertions.","targetBuilds":["B2.08"],"targetExits":["E2.01"]}},
+    "PIGE-JOB-002":{"status":"partial","evidence":["EV-JOB-DRAIN","EV-JOB-RECOVERY","EV-HOME-JOB-RECOVERY","EV-HOME-AGENT","EV-HOME-FOLLOWUP","EV-PI-PDF-PARSE-TOOL","EV-PI-PDF-OCR-TOOL","EV-PI-OFFICE-PARSE-OCR-TOOL","EV-PI-IMAGE-OCR-TOOL","EV-PI-INGEST-PROPOSAL","EV-PROPOSAL-REVIEW-LIFECYCLE","EV-ACTIVITY-UNDO","EV-CREATE-RECOVERY","EV-UPDATE-RECOVERY","EV-JOB-CANCEL","EV-JOB-DURABLE-CANCEL","EV-CAPTURE-PUBLICATION-GUARD","EV-AGENT-PUBLICATION-CANCEL","EV-PDF-OCR-SOURCE-REVISION","EV-PDF-RENDER-GENERATION","EV-INDEX-REBUILD-WORKER","EV-PI-DATASET-INGEST","EV-DATASET-SERVICE","EV-DATASET-WORKER-SMOKE","EV-DATASET-CONTINUATION","EV-DATASET-CONTINUATION-RESTART","EV-JOB-RECORD-CAS","EV-JOB-CLAIM-RECOVERY","EV-JOB-CLAIM-INDEPENDENCE","EV-MODEL-EGRESS-APPROVAL-STORE","EV-MODEL-EGRESS-JOB-RECOVERY","EV-BACKUP-JOB-LIFECYCLE","EV-RESTORE-ROLLBACK-RECOVERY","EV-RESTORE-JOB-RECOVERY","EV-RESTORE-STARTUP-ADOPTION"],"open":{"id":"OPEN-REQ-PIGE-JOB-002","description":"Adopted paths include fenced CAS plus egress, Backup and Restore recovery; other classes, Pi transcript continuation, general atomicity, final-syscall TOCTOU and Windows multi-process proof remain.","targetBuilds":["B2.08","B2.11"],"targetExits":["E2.01","E2.10"]}},
+    "PIGE-JOB-003":{"status":"partial","evidence":["EV-PROPOSAL","EV-PI-INGEST-PROPOSAL","EV-PROPOSAL-REVIEW-LIFECYCLE","EV-PROPOSAL-UI"],"open":{"id":"OPEN-REQ-PIGE-JOB-003","description":"Current review is transitional; autonomous eligibility, generic exceptions, and cross-process work remain.","targetBuilds":["B7.01","B7.02","B7.03","B7.04"],"targetExits":["E7.01"]}},
+    "PIGE-JOB-004":{"status":"partial","evidence":["EV-JOB-WAIT","EV-SOURCE-WAIT-STATUS","EV-PI-PDF-PARSE-TOOL","EV-PI-PDF-OCR-TOOL","EV-PI-OFFICE-PARSE-OCR-TOOL","EV-PI-IMAGE-OCR-TOOL","EV-WAITING-AGENT-REQUEUE","EV-OCR-NATIVE-FALLBACK","EV-PI-DATASET-INGEST","EV-DATASET-CONTINUATION"],"open":{"id":"OPEN-REQ-PIGE-JOB-004","description":"Preserved-source model wait now has one truthful repair path; tool, path, and runtime dependency classes remain open.","targetBuilds":["B2.13"],"targetExits":["E2.11"]}},
+    "PIGE-JOB-005":{"status":"partial","evidence":["EV-AGENT-INGEST","EV-PROPOSAL-REVIEW-LIFECYCLE","EV-ACTIVITY-UNDO","EV-CREATE-RECOVERY","EV-PI-INGEST-UPDATE","EV-UPDATE-RECOVERY"],"open":{"id":"OPEN-REQ-PIGE-JOB-005","description":"Legacy hashless create recovery and Agent writes beyond exact create/additive update remain.","targetBuilds":["B7.04"],"targetExits":["E7.01"]}},
+    "PIGE-JOB-006":{"status":"partial","evidence":["EV-CAPTURE","EV-HOME-AGENT","EV-HOME-FOLLOWUP","EV-DATASET-QUERY-DURABILITY","EV-DATASET-QUERY-INTEGRITY","EV-DATASET-TIMELINE-RESTORE"],"open":{"id":"OPEN-REQ-PIGE-JOB-006","description":"Dataset result restart and checksum rejection work; compaction, cross-process kill/reopen, and packaged history proof remain.","targetBuilds":["B7.08","B7.09"],"targetExits":["E7.03","E7.04"]}},
+    "PIGE-JOB-007":{"status":"partial","evidence":["EV-JOB-STATUS","EV-JOB-WAIT","EV-JOB-CANCEL","EV-HOME-UI","EV-HOME-FOLLOWUP","EV-SOURCE-WAIT-STATUS","EV-SOURCE-WAIT-RACE","EV-ACTIVITY-UNDO","EV-MODEL-EGRESS-HOME-UI"],"open":{"id":"OPEN-REQ-PIGE-JOB-007","description":"Preserved-source model wait and exact model-egress confirmation each have one status owner/action; broader Activity, progress, non-Agent cancel, and Permission Broker UI remain.","targetBuilds":["B2.10","B2.12"],"targetExits":["E2.09"]}},
     "PIGE-JOB-008": {
       "status": "verified",
       "evidence": [
@@ -920,25 +858,7 @@
         "EV-BOUNDARY"
       ]
     },
-    "PIGE-API-002": {
-      "status": "partial",
-      "evidence": [
-        "EV-ERROR",
-        "EV-PI-TERMINAL-MISSING",
-        "EV-MODEL-EGRESS-IPC",
-        "EV-MODEL-EGRESS-SCHEMA"
-      ],
-      "open": {
-        "id": "OPEN-REQ-PIGE-API-002",
-        "description": "Model-egress wait/action/request IPC uses the shared strict vocabulary; complete service, diagnostics, and UI adoption remains open.",
-        "targetBuilds": [
-          "B1.20"
-        ],
-        "targetExits": [
-          "E1.16"
-        ]
-      }
-    },
+    "PIGE-API-002":{"status":"partial","evidence":["EV-ERROR","EV-PI-TERMINAL-MISSING","EV-MODEL-EGRESS-IPC","EV-MODEL-EGRESS-SCHEMA","EV-BACKUP-SAFE-JOB-SUMMARY"],"open":{"id":"OPEN-REQ-PIGE-API-002","description":"Model-egress and Backup summaries use strict typed errors; complete service, diagnostics and UI adoption remains.","targetBuilds":["B1.20"],"targetExits":["E1.16"]}},
     "PIGE-DB-001": {
       "status": "verified",
       "evidence": ["EV-DB-REBUILD", "EV-DB-EXTERNAL-EDIT", "EV-INDEX-REBUILD-WORKER"]
@@ -1105,7 +1025,7 @@
       "status": "planned",
       "plannedTarget": "Every submission enters one Pi-owned Job with source preservation as its first checkpoint; Pi owns iterative tools, Pi-authored Markdown and validation repair, with safe drafts, no presentation-only provider call, distinct hard-block outcomes, and signed packaged macOS/Windows BYOK proof."
     },
-    "PIGE-SETTINGS-001":{"status":"partial","evidence":["EV-SETTINGS","EV-LOCAL-SETTINGS","EV-FIRST-HOME-PREFERENCE","EV-RESTORE-BINDING-CAS"],"open":{"id":"OPEN-REQ-PIGE-SETTINGS-001","description":"The full release-visible settings census and restore behavior for every scope remain open.","targetBuilds":["B1.10","B1.11"],"targetExits":["E1.05"]}},
+    "PIGE-SETTINGS-001":{"status":"partial","evidence":["EV-SETTINGS","EV-LOCAL-SETTINGS","EV-FIRST-HOME-PREFERENCE","EV-BACKUP-SETTINGS-UI","EV-RESTORE-BINDING-CAS"],"open":{"id":"OPEN-REQ-PIGE-SETTINGS-001","description":"User Backup ownership is covered; the full release-visible settings census and restore behavior remain open.","targetBuilds":["B1.10","B1.11"],"targetExits":["E1.05"]}},
     "PIGE-SETTINGS-002":{"status":"partial","evidence":["EV-SETTINGS","EV-LOCAL-SETTINGS","EV-FIRST-HOME-PREFERENCE","EV-RESTORE-BINDING-CAS"],"open":{"id":"OPEN-REQ-PIGE-SETTINGS-002","description":"The full release-visible settings census and restore behavior for every scope remain open.","targetBuilds":["B1.10","B1.11"],"targetExits":["E1.05"]}},
     "PIGE-SETTINGS-003": {
       "status": "partial",
@@ -1343,32 +1263,10 @@
       "status": "planned",
       "plannedTarget": "Remember, provenance, inspect, disable, delete, export, backup, and secret-scan integration tests."
     },
-    "PIGE-BACKUP-001": {
-      "status": "partial",
-      "evidence": ["EV-BACKUP", "EV-BACKUP-DURABLE-COVERAGE"],
-      "open": {
-        "id": "OPEN-REQ-PIGE-BACKUP-001",
-        "description": "Current registered in-vault durable roots and root files are covered; backupId/domainSchemaVersions, external managed copies, include controls, and complete memory/conversation fixtures remain open.",
-        "targetBuilds": ["B9.02"],
-        "targetExits": ["E9.01"]
-      }
-    },
-    "PIGE-BACKUP-002": {
-      "status": "partial",
-      "evidence": ["EV-BACKUP"],
-      "open": {
-        "id": "OPEN-REQ-PIGE-BACKUP-002",
-        "description": "Release backup scans for every secret, model, tool, database, index, and cache class remain open.",
-        "targetBuilds": ["B9.02"],
-        "targetExits": ["E9.01"]
-      }
-    },
-    "PIGE-BACKUP-003": {
-      "status": "partial",
-      "evidence": ["EV-BACKUP", "EV-BACKUP-ATOMIC-FINALIZATION"],
-      "open": { "id": "OPEN-REQ-PIGE-BACKUP-003", "description": "Durable backup Job/checkpoint resume and external-dependency completeness remain open.", "targetBuilds": ["B9.01", "B9.02"], "targetExits": ["E9.01"] }
-    },
-    "PIGE-BACKUP-004":{"status":"partial","evidence":["EV-BACKUP","EV-RESTORE-CONFLICT","EV-RESTORE-PREVIEW-FENCE","EV-RESTORE-PUBLICATION","EV-RESTORE-LEGACY-LINEAGE","EV-RESTORE-IDENTITY-RECOVERY","EV-RESTORE-REPLACE-ROLLBACK","EV-RESTORE-JOB-RECOVERY","EV-RESTORE-DURABLE-OPERATION","EV-RESTORE-STARTUP-ADOPTION","EV-RESTORE-SAFE-UI"],"open":{"id":"OPEN-REQ-PIGE-BACKUP-004","description":"Explicit identity modes, machine-local Restore Job/restart adoption, linked Operation, safe preview and binding CAS are covered; versioned dependency/domain migrations, general cross-file transactions, final syscall TOCTOU, old-source cleanup, and signed installed macOS/Windows restore matrices remain.","targetBuilds":["B9.03","B9.04","B9.05","B9.06"],"targetExits":["E9.02"]}},
+    "PIGE-BACKUP-001":{"status":"partial","evidence":["EV-BACKUP","EV-BACKUP-DURABLE-COVERAGE","EV-BACKUP-MANIFEST-TRUTH"],"open":{"id":"OPEN-REQ-PIGE-BACKUP-001","description":"Registered roots and truthful schema ranges are covered; external managed roots, include controls and complete memory/conversation fixtures remain.","targetBuilds":["B9.02"],"targetExits":["E9.01"]}},
+    "PIGE-BACKUP-002":{"status":"partial","evidence":["EV-BACKUP"],"open":{"id":"OPEN-REQ-PIGE-BACKUP-002","description":"Release backup scans for every secret, model, tool, database, index, and cache class remain open.","targetBuilds":["B9.02"],"targetExits":["E9.01"]}},
+    "PIGE-BACKUP-003":{"status":"partial","evidence":["EV-BACKUP","EV-BACKUP-ATOMIC-FINALIZATION","EV-BACKUP-JOB-LIFECYCLE","EV-BACKUP-MANIFEST-TRUTH"],"open":{"id":"OPEN-REQ-PIGE-BACKUP-003","description":"The prior boundary ‘Durable backup Job/checkpoint resume and external-dependency completeness remain open.’ is narrowed: checkpoints/adoption are covered; external managed-root controls and richer Operation facts remain.","targetBuilds":["B9.01","B9.02"],"targetExits":["E9.01"]}},
+    "PIGE-BACKUP-004":{"status":"partial","evidence":["EV-BACKUP","EV-RESTORE-CONFLICT","EV-RESTORE-PREVIEW-FENCE","EV-RESTORE-PUBLICATION","EV-RESTORE-LEGACY-LINEAGE","EV-RESTORE-IDENTITY-RECOVERY","EV-RESTORE-REPLACE-ROLLBACK","EV-RESTORE-ROLLBACK-RECOVERY","EV-RESTORE-JOB-RECOVERY","EV-RESTORE-DURABLE-OPERATION","EV-RESTORE-STARTUP-ADOPTION","EV-RESTORE-SAFE-UI"],"open":{"id":"OPEN-REQ-PIGE-BACKUP-004","description":"Identity, rollback recovery, machine Job, Operation, safe preview and binding CAS are covered; migrations, transactions, final-syscall TOCTOU, cleanup and signed restore matrices remain.","targetBuilds":["B9.03","B9.04","B9.05","B9.06"],"targetExits":["E9.02"]}},
     "PIGE-REL-001": {
       "status": "planned",
       "plannedTarget": "macOS arm64 has a no-Team-ID ad-hoc seal and fresh-runner ZIP verification; Windows x64 remains green. Developer ID/notarization, platform breadth, and updates remain open."
@@ -1393,7 +1291,7 @@
       "status": "planned",
       "plannedTarget": "Preflights prove attribution/SBOM and truthful signing state; macOS reports ad-hoc/no Team ID separately. Release notes and trusted-signing reports remain open."
     },
-    "PIGE-I18N-001":{"status":"partial","evidence":["EV-I18N","EV-RESTORE-SAFE-UI"],"open":{"id":"OPEN-REQ-PIGE-I18N-001","description":"Restore preview/native safety copy has six-locale coverage; the remaining release-critical workflow smoke and narrow-layout matrix remain open.","targetBuilds":["B9.10"],"targetExits":["E9.06"]}},
+    "PIGE-I18N-001":{"status":"partial","evidence":["EV-I18N","EV-BACKUP-SETTINGS-UI","EV-RESTORE-SAFE-UI"],"open":{"id":"OPEN-REQ-PIGE-I18N-001","description":"Backup Settings and Restore safety copy have six-locale coverage; remaining workflow smoke/narrow layout stays open.","targetBuilds":["B9.10"],"targetExits":["E9.06"]}},
     "PIGE-I18N-002": {
       "status": "partial",
       "evidence": [
@@ -1857,41 +1755,8 @@
         ]
       }
     },
-    "E1.04": {
-      "status": "partial",
-      "evidence": [
-        "EV-VAULT-POLICY"
-      ],
-      "open": {
-        "id": "OPEN-EXIT-E1.04",
-        "description": "Full executable acceptance remains open for Exit E1.04: User can find and reveal note/source storage, switch or create vaults, and reach backup/restore without entering diagnostics or maintenance surfaces.",
-        "targetBuilds": [
-          "B1.04"
-        ],
-        "targetExits": [
-          "E1.04"
-        ]
-      }
-    },
-    "E1.05": {
-      "status": "partial",
-      "evidence": [
-        "EV-SETTINGS",
-        "EV-LOCAL-SETTINGS",
-        "EV-FIRST-HOME-PREFERENCE"
-      ],
-      "open": {
-        "id": "OPEN-EXIT-E1.05",
-        "description": "Full executable acceptance remains open for Exit E1.05: Every exposed setting is registered; machine-local values and secrets are absent from the vault manifest and default backup inputs.",
-        "targetBuilds": [
-          "B1.10",
-          "B1.11"
-        ],
-        "targetExits": [
-          "E1.05"
-        ]
-      }
-    },
+    "E1.04":{"status":"partial","evidence":["EV-VAULT-POLICY","EV-BACKUP-SETTINGS-UI"],"open":{"id":"OPEN-EXIT-E1.04","description":"Backup/restore entry and user Backup status are covered; full storage reveal/switch/create acceptance remains.","targetBuilds":["B1.04"],"targetExits":["E1.04"]}},
+    "E1.05":{"status":"partial","evidence":["EV-SETTINGS","EV-LOCAL-SETTINGS","EV-FIRST-HOME-PREFERENCE","EV-BACKUP-SETTINGS-UI"],"open":{"id":"OPEN-EXIT-E1.05","description":"User Backup ownership is registered; the complete settings census and backup-input exclusion matrix remain.","targetBuilds":["B1.10","B1.11"],"targetExits":["E1.05"]}},
     "E1.06": {
       "status": "partial",
       "evidence": [
@@ -2047,24 +1912,7 @@
         ]
       }
     },
-    "E1.16": {
-      "status": "partial",
-      "evidence": [
-        "EV-ERROR",
-        "EV-MODEL-EGRESS-IPC",
-        "EV-MODEL-EGRESS-SCHEMA"
-      ],
-      "open": {
-        "id": "OPEN-EXIT-E1.16",
-        "description": "Model-egress wait/action/request IPC uses the shared strict vocabulary; broader API errors, durable Job warnings/errors, diagnostics, UI actions, private-detail rejection, and release-locale coverage remain open.",
-        "targetBuilds": [
-          "B1.20"
-        ],
-        "targetExits": [
-          "E1.16"
-        ]
-      }
-    },
+    "E1.16":{"status":"partial","evidence":["EV-ERROR","EV-MODEL-EGRESS-IPC","EV-MODEL-EGRESS-SCHEMA","EV-BACKUP-SAFE-JOB-SUMMARY"],"open":{"id":"OPEN-EXIT-E1.16","description":"Model-egress and Backup summaries use strict errors; broader Job/diagnostic/UI/private-detail/locale coverage remains.","targetBuilds":["B1.20"],"targetExits":["E1.16"]}},
     "E1.17": {
       "status": "partial",
       "evidence": [
@@ -2140,7 +1988,7 @@
         "EV-DURABLE-VOCAB"
       ]
     },
-    "E2.01":{"status":"partial","evidence":["EV-JOB-RECOVERY","EV-HOME-JOB-RECOVERY","EV-HOME-AGENT","EV-CAPTURE-PUBLICATION-GUARD","EV-PARSE-FOLLOWUP-DURABILITY","EV-OCR-FOLLOWUP-DURABILITY","EV-DATASET-CONTINUATION","EV-DATASET-CONTINUATION-RESTART","EV-RESTORE-JOB-RECOVERY","EV-RESTORE-STARTUP-ADOPTION"],"open":{"id":"OPEN-EXIT-E2.01","description":"Kill/reopen and resumable drainer proof across Job classes remain open.","targetBuilds":["B2.08"],"targetExits":["E2.01"]}},
+    "E2.01":{"status":"partial","evidence":["EV-JOB-RECOVERY","EV-HOME-JOB-RECOVERY","EV-HOME-AGENT","EV-CAPTURE-PUBLICATION-GUARD","EV-PARSE-FOLLOWUP-DURABILITY","EV-OCR-FOLLOWUP-DURABILITY","EV-DATASET-CONTINUATION","EV-DATASET-CONTINUATION-RESTART","EV-BACKUP-JOB-LIFECYCLE","EV-RESTORE-JOB-RECOVERY","EV-RESTORE-STARTUP-ADOPTION"],"open":{"id":"OPEN-EXIT-E2.01","description":"Kill/reopen and resumable drainer proof across remaining Job classes stays open.","targetBuilds":["B2.08"],"targetExits":["E2.01"]}},
     "E2.02": {
       "status": "verified",
       "evidence": [
@@ -2244,7 +2092,7 @@
         "targetExits": ["E2.09"]
       }
     },
-    "E2.10":{"status":"partial","evidence":["EV-JOB-RECOVERY","EV-HOME-AGENT","EV-HOME-FOLLOWUP","EV-PI-PDF-PARSE-TOOL","EV-PI-PDF-OCR-TOOL","EV-PI-OFFICE-PARSE-OCR-TOOL","EV-PI-IMAGE-OCR-TOOL","EV-PI-INGEST-PROPOSAL","EV-PROPOSAL-REVIEW-LIFECYCLE","EV-CREATE-RECOVERY","EV-UPDATE-RECOVERY","EV-JOB-CANCEL","EV-JOB-DURABLE-CANCEL","EV-CAPTURE-PUBLICATION-GUARD","EV-AGENT-PUBLICATION-CANCEL","EV-PDF-OCR-SOURCE-REVISION","EV-PDF-RENDER-GENERATION","EV-INDEX-REBUILD-WORKER","EV-JOB-RECORD-CAS","EV-JOB-CLAIM-RECOVERY","EV-JOB-CLAIM-INDEPENDENCE","EV-MODEL-EGRESS-APPROVAL-STORE","EV-MODEL-EGRESS-JOB-RECOVERY","EV-RESTORE-JOB-RECOVERY","EV-RESTORE-STARTUP-ADOPTION"],"open":{"id":"OPEN-EXIT-E2.10","description":"Exact-record claim/CAS, current-action model-egress recovery, and machine-local Restore checkpoint/startup adoption cover the adopted paths; other Job classes, in-flight Pi transcript continuation, general cross-file/domain atomicity, final filesystem-syscall TOCTOU, Windows multi-process proof, and broader checkpoints remain.","targetBuilds":["B2.11"],"targetExits":["E2.10"]}},
+    "E2.10":{"status":"partial","evidence":["EV-JOB-RECOVERY","EV-HOME-AGENT","EV-HOME-FOLLOWUP","EV-PI-PDF-PARSE-TOOL","EV-PI-PDF-OCR-TOOL","EV-PI-OFFICE-PARSE-OCR-TOOL","EV-PI-IMAGE-OCR-TOOL","EV-PI-INGEST-PROPOSAL","EV-PROPOSAL-REVIEW-LIFECYCLE","EV-CREATE-RECOVERY","EV-UPDATE-RECOVERY","EV-JOB-CANCEL","EV-JOB-DURABLE-CANCEL","EV-CAPTURE-PUBLICATION-GUARD","EV-AGENT-PUBLICATION-CANCEL","EV-PDF-OCR-SOURCE-REVISION","EV-PDF-RENDER-GENERATION","EV-INDEX-REBUILD-WORKER","EV-JOB-RECORD-CAS","EV-JOB-CLAIM-RECOVERY","EV-JOB-CLAIM-INDEPENDENCE","EV-MODEL-EGRESS-APPROVAL-STORE","EV-MODEL-EGRESS-JOB-RECOVERY","EV-BACKUP-JOB-LIFECYCLE","EV-RESTORE-ROLLBACK-RECOVERY","EV-RESTORE-JOB-RECOVERY","EV-RESTORE-STARTUP-ADOPTION"],"open":{"id":"OPEN-EXIT-E2.10","description":"Adopted paths cover fenced CAS plus egress, Backup and Restore recovery; remaining classes, Pi transcript, general atomicity, final-syscall TOCTOU and Windows multi-process proof stay open.","targetBuilds":["B2.11"],"targetExits":["E2.10"]}},
     "E2.11": {
       "status": "partial",
       "evidence": ["EV-JOB-WAIT", "EV-SOURCE-WAIT-STATUS", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-WAITING-AGENT-REQUEUE", "EV-OCR-NATIVE-FALLBACK", "EV-DATASET-CONTINUATION"],
@@ -2655,25 +2503,12 @@
       "status": "planned",
       "plannedTarget": "Curated Pi package lifecycle, pin, rollback, disclosure, and no-hidden-install report."
     },
-    "E9.01": {
-      "status": "partial",
-      "evidence": ["EV-BACKUP", "EV-BACKUP-DURABLE-COVERAGE", "EV-BACKUP-ATOMIC-FINALIZATION"],
-      "open": {
-        "id": "OPEN-EXIT-E9.01",
-        "description": "backupId/domain versions, release scans, external transport/controls, durable Jobs, non-hardlink publication, restore identity, pathname CAS/pre-link cleanup, and dependencies remain open.",
-        "targetBuilds": ["B9.01", "B9.02"],
-        "targetExits": ["E9.01"]
-      }
-    },
-    "E9.02":{"status":"partial","evidence":["EV-BACKUP","EV-RESTORE-CONFLICT","EV-RESTORE-PREVIEW-FENCE","EV-RESTORE-PUBLICATION","EV-RESTORE-LEGACY-LINEAGE","EV-RESTORE-IDENTITY-RECOVERY","EV-RESTORE-REPLACE-ROLLBACK","EV-RESTORE-JOB-RECOVERY","EV-RESTORE-DURABLE-OPERATION","EV-RESTORE-STARTUP-ADOPTION","EV-RESTORE-SAFE-UI"],"open":{"id":"OPEN-EXIT-E9.02","description":"Explicit identity modes, machine-local Restore Job/restart adoption, linked Operation, safe preview and binding CAS are covered; versioned dependency/domain migrations, general cross-file transactions, final syscall TOCTOU, old-source cleanup, and signed installed macOS/Windows restore matrices remain.","targetBuilds":["B9.03","B9.04","B9.05","B9.06"],"targetExits":["E9.02"]}},
+    "E9.01":{"status":"partial","evidence":["EV-BACKUP","EV-BACKUP-DURABLE-COVERAGE","EV-BACKUP-ATOMIC-FINALIZATION","EV-BACKUP-JOB-LIFECYCLE","EV-BACKUP-MANIFEST-TRUTH"],"open":{"id":"OPEN-EXIT-E9.01","description":"Durable Backup/checkpoints/schema ranges are covered; external managed roots, richer Operation facts, release scans, atomicity and platform recovery remain.","targetBuilds":["B9.01","B9.02"],"targetExits":["E9.01"]}},
+    "E9.02":{"status":"partial","evidence":["EV-BACKUP","EV-RESTORE-CONFLICT","EV-RESTORE-PREVIEW-FENCE","EV-RESTORE-PUBLICATION","EV-RESTORE-LEGACY-LINEAGE","EV-RESTORE-IDENTITY-RECOVERY","EV-RESTORE-REPLACE-ROLLBACK","EV-RESTORE-ROLLBACK-RECOVERY","EV-RESTORE-JOB-RECOVERY","EV-RESTORE-DURABLE-OPERATION","EV-RESTORE-STARTUP-ADOPTION","EV-RESTORE-SAFE-UI"],"open":{"id":"OPEN-EXIT-E9.02","description":"Identity, rollback recovery, machine Job, Operation, safe preview and binding CAS are covered; migrations, transactions, final-syscall TOCTOU, cleanup and signed restore matrices remain.","targetBuilds":["B9.03","B9.04","B9.05","B9.06"],"targetExits":["E9.02"]}},
     "E9.03": { "status": "planned", "plannedTarget": "Versioned durable-data migration rollback/repair report." },
-    "E9.04": {
-      "status": "partial",
-      "evidence": ["EV-BACKUP", "EV-ACTIVITY-UNDO"],
-      "open": { "id": "OPEN-EXIT-E9.04", "description": "Other classes and destructive lifecycle tests remain.", "targetBuilds": ["B9.08"], "targetExits": ["E9.04"] }
-    },
+    "E9.04":{"status":"partial","evidence":["EV-BACKUP","EV-ACTIVITY-UNDO"],"open":{"id":"OPEN-EXIT-E9.04","description":"Other classes and destructive lifecycle tests remain.","targetBuilds":["B9.08"],"targetExits":["E9.04"]}},
     "E9.05": { "status": "planned", "plannedTarget": "Deterministic Knowledge Health with eligible Operation/Undo repair and exact-exception routing." },
-    "E9.06":{"status":"partial","evidence":["EV-I18N","EV-RESTORE-SAFE-UI"],"open":{"id":"OPEN-EXIT-E9.06","description":"Restore preview/native safety copy has six-locale coverage; the remaining release-critical workflow smoke and narrow-layout matrix remain open.","targetBuilds":["B9.10"],"targetExits":["E9.06"]}},
+    "E9.06":{"status":"partial","evidence":["EV-I18N","EV-BACKUP-SETTINGS-UI","EV-RESTORE-SAFE-UI"],"open":{"id":"OPEN-EXIT-E9.06","description":"Backup Settings and Restore safety copy have six locales; remaining workflow smoke/narrow layout stays open.","targetBuilds":["B9.10"],"targetExits":["E9.06"]}},
     "E9.07": { "status": "planned", "plannedTarget": "Keyboard, focus, accessible-name, contrast, reduced-motion, and narrow-layout report." },
     "E9.08": { "status": "planned", "plannedTarget": "Ad-hoc macOS plus fresh-ZIP and Windows x64 preflights remain below exit: trusted signing, platform/update, scale/recovery, notes, and attribution are open." },
     "E9.09": { "status": "planned", "plannedTarget": "Alpha-to-alpha update and active-risky-job safeguard report." },
@@ -3077,12 +2912,17 @@
     "EV-BACKUP": { "kind": "test", "path": "tests/unit/backup-service.test.ts", "selector": "creates a zip backup with durable vault files and restores it into a new vault without rebuildable cache files" },
     "EV-BACKUP-ATOMIC-FINALIZATION": { "kind": "test", "path": "tests/unit/backup-service.test.ts", "selector": "publishes a validated adjacent staging archive and leaves no staging residue" },
     "EV-BACKUP-DURABLE-COVERAGE": { "kind": "test", "path": "tests/unit/backup-service.test.ts", "selector": "body-free path-safe manifest aligned with ZIP entries" },
+    "EV-BACKUP-JOB-LIFECYCLE":{"kind":"test","path":"tests/unit/backup-coordinator-service.test.ts","selector":"BackupCoordinatorService"},
+    "EV-BACKUP-MANIFEST-TRUTH":{"kind":"test","path":"tests/unit/backup-service.test.ts","selector":"derives truthful min/max durable-domain schema versions and rejects malformed records"},
+    "EV-BACKUP-SAFE-JOB-SUMMARY":{"kind":"test","path":"tests/unit/jobs-service.test.ts","selector":"projects user and rollback Backup ownership with only typed safe errors"},
+    "EV-BACKUP-SETTINGS-UI":{"kind":"test","path":"tests/unit/restore-ui.test.ts","selector":"owns restarted Backup status in Vault settings with safe retry and current last-backup truth"},
     "EV-RESTORE-CONFLICT": { "kind": "test", "path": "tests/unit/backup-service.test.ts", "selector": "flags checksum mismatches during restore preview and blocks restore apply" },
     "EV-RESTORE-PREVIEW-FENCE": { "kind": "test", "path": "tests/unit/desktop-shell-contract.test.ts", "selector": "binds restore apply to the exact preview token across renderer, preload, and main" },
     "EV-RESTORE-PUBLICATION": { "kind": "test", "path": "tests/unit/backup-service.test.ts", "selector": "reserves the final destination without replacement and commits the vault manifest last" },
     "EV-RESTORE-LEGACY-LINEAGE":{"kind":"test","path":"tests/unit/backup-service.test.ts","selector":"derives one exact legacy lineage ID from archive bytes and createdAt"},
     "EV-RESTORE-IDENTITY-RECOVERY":{"kind":"test","path":"tests/unit/restore-coordinator-service.test.ts","selector":"clones once, switches the machine binding, writes one Operation, and adopts an exact retry"},
     "EV-RESTORE-REPLACE-ROLLBACK":{"kind":"test","path":"tests/unit/restore-coordinator-service.test.ts","selector":"creates and validates a true rollback Backup Job before replacing the active binding"},
+    "EV-RESTORE-ROLLBACK-RECOVERY":{"kind":"test","path":"tests/unit/restore-coordinator-service.test.ts","selector":"recovers the same rollback Backup stage when persistence stops before archive-staged checkpoint"},
     "EV-RESTORE-JOB-RECOVERY":{"kind":"test","path":"tests/unit/restore-job-store.test.ts","selector":"advances exact checkpoints monotonically and recovers the same running Job"},
     "EV-RESTORE-DURABLE-OPERATION":{"kind":"test","path":"tests/unit/restore-job-store.test.ts","selector":"writes one exact restore_applied Operation and completes only after all checkpoints"},
     "EV-RESTORE-STARTUP-ADOPTION":{"kind":"test","path":"tests/unit/restore-coordinator-service.test.ts","selector":"adopts a clean core commit after restart before the machine binding swap"},

@@ -782,7 +782,8 @@ Reader:
 Settings:
 
 - Index & Maintenance shows rebuild/repair jobs.
-- Vault & Note Storage can show last backup and restore state.
+- Vault & Note Storage alone owns restarted user Backup state, valid Cancel/Retry and
+  typed redacted failure; rollback children stay hidden.
 - Diagnostics can export redacted job/operation summaries.
 
 Rules:
@@ -811,19 +812,23 @@ Restore rules:
 
 Durable execution gates:
 
-- Backup creates a durable `backup` job before preflight and checkpoints `preflight`, manifest emission, hashing, staged archive creation, staged validation, and atomic finalization.
+- Backup creates a durable `backup` job before preflight; stable Job/Backup/destination
+  identity owns `preflight`, `manifest_written`, `files_hashed`, `archive_staged`,
+  `archive_finalized`.
 - Restore apply creates a durable machine-local `restore` Job before extraction and
   checkpoints `manifest_validated`, `destination_reserved`, `archive_extracted`,
   `durable_domains_migrated`, `external_dependencies_reconciled`,
   `vault_identity_finalized`, `destination_committed`, and `indexes_rebuilt`.
-- Staging paths are job-local temporary references, not durable output truth. A restart reconciles them using checkpoint hashes; cancellation removes only proven incomplete staging data.
+- Staging is temporary; restart adopts exact checkpoint-bound bytes and cancellation
+  removes only owned incomplete data.
 - A successful backup Job links `backup_created`. A successful machine-local Restore Job
   and the restored vault's `restore_applied` Operation link each other by stable IDs.
   Failure/cancellation never registers staging as a vault or overwrites a valid
   archive/vault silently.
 - `replace_existing` uses a verified rollback Backup Job/Operation, a fresh destination,
   and an exact machine-binding CAS; it retains the old physical folder unregistered.
-  `clone_as_new` mints a new vault identity and records lineage.
+  Its stable child resumes checkpoint digests, never a ZIP alone. `clone_as_new` mints
+  identity and lineage.
 
 Legacy format-v1 stays readable per `docs/SYNC_CONFLICT_AND_MIGRATION.md`. Current
 backup/restore checkpoint delivery and residual transport/restart/platform work live in

@@ -61,7 +61,7 @@ Integration tests:
 - Job retry/recovery, monotonic progress, cooperative cancellation, durable-output races, and worker termination.
 - Conversation history reference storage.
 - Agent memory creation/deletion.
-- Backup and restore into a new folder.
+- Backup Job checkpoints/restart/cancel/Operation linkage and fresh-folder restore.
 
 Renderer/component tests:
 
@@ -84,7 +84,7 @@ Smoke/end-to-end tests:
 - Capture text, URL, PDF, image fixture.
 - BYOK provider connection mock.
 - Home knowledge retrieval over generated fixtures.
-- Backup/restore.
+- Restarted user Backup status/actions and fresh-folder restore.
 - Update check in alpha channel.
 - Public Alpha usability scenario with at least 25 mixed sources, recovery events, backup, restore, and continued retrieval.
 
@@ -512,7 +512,7 @@ Required gates:
 - Heavy workers release memory after completion.
 - Safe Home draft propagation meets the p95 overhead target without typing/timeline
   regression, unbounded event growth, or draft replay after restart.
-- Backup and restore show progress and can be cancelled safely where feasible.
+- Backup/restore show restart-safe progress and only valid Cancel/Retry actions.
 
 ## 12. Documentation Control Gates
 

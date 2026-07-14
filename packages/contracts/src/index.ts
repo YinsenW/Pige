@@ -444,6 +444,8 @@ export interface JobSummary {
   readonly modelEgressApprovalRequestId?: string;
   readonly sourceDisplayName?: string;
   readonly sourceKind?: SourceKind;
+  readonly backupKind?: "user_backup" | "restore_rollback";
+  readonly error?: PigeErrorSummary;
   readonly message: string;
   readonly createdAt: string;
   readonly updatedAt: string;

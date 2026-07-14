@@ -155,6 +155,131 @@ describe("RestoreCoordinatorService", () => {
     }
   });
 
+  it("recovers the same rollback Backup stage when persistence stops before archive-staged checkpoint", async () => {
+    const fixture = await makeFixture("replace_existing");
+    const originalCreateBackup = fixture.backup.createBackup.bind(fixture.backup);
+    let interrupt = true;
+    vi.spyOn(fixture.backup, "createBackup").mockImplementation(
+      (vaultPath, destinationPath, appVersion, options = {}) => originalCreateBackup(
+        vaultPath,
+        destinationPath,
+        appVersion,
+        {
+          ...options,
+          onPhase: async (event) => {
+            if (interrupt && event.phase === "archive_staged") {
+              interrupt = false;
+              throw new Error("Synthetic rollback stop before checkpoint persistence.");
+            }
+            await options.onPhase?.(event);
+          }
+        }
+      )
+    );
+    const coordinator = trackCoordinator(new RestoreCoordinatorService({
+      ...coordinatorOptions(fixture),
+      pauseMutableWork: async () => () => undefined,
+      rebuildIndexes: async () => rebuildResult()
+    }));
+    const command = {
+      preview: fixture.applying,
+      destinationPath: fixture.destinationPath,
+      replaceConfirmed: true
+    };
+
+    await expect(coordinator.apply(command)).rejects.toThrow("Synthetic rollback stop");
+    const rollbackRoot = path.join(fixture.userDataPath, "restore-coordinator", "rollback");
+    const stagedPath = fs.readdirSync(rollbackRoot)
+      .map((entry) => path.join(rollbackRoot, entry))
+      .find((entry) => entry.endsWith(".tmp"));
+    expect(stagedPath).toBeDefined();
+    const stagedBytes = fs.readFileSync(stagedPath!);
+    fs.writeFileSync(path.join(fixture.sourceVaultPath, "wiki", "after-stop.md"), "# Newer state\n", "utf8");
+
+    const result = await coordinator.apply(command);
+    const rollbackArchive = path.join(rollbackRoot, `${result.jobId}.pige-backup.zip`);
+
+    expect(result.status).toBe("restored");
+    expect(fs.readFileSync(rollbackArchive)).toEqual(stagedBytes);
+    expect(fs.readdirSync(rollbackRoot).filter((entry) => entry.endsWith(".tmp"))).toEqual([]);
+    const backupJobs = readRecords(path.join(fixture.sourceVaultPath, ".pige", "jobs"))
+      .filter((record) => record.class === "backup");
+    expect(backupJobs).toHaveLength(1);
+    expect(backupJobs[0]).toMatchObject({
+      state: "completed",
+      checkpoints: expect.arrayContaining([
+        expect.objectContaining({ id: "manifest_emitted", state: "done", checksumAfter: expect.stringMatching(/^sha256:/u) }),
+        expect.objectContaining({ id: "archive_staged", state: "done", checksumAfter: expect.stringMatching(/^sha256:/u) })
+      ])
+    });
+  }, 15_000);
+
+  it("rejects replacement of a finalized rollback archive before its final checkpoint commit", async () => {
+    const fixture = await makeFixture("replace_existing");
+    const originalCreateBackup = fixture.backup.createBackup.bind(fixture.backup);
+    let interrupt = true;
+    vi.spyOn(fixture.backup, "createBackup").mockImplementation(
+      (vaultPath, destinationPath, appVersion, options = {}) => originalCreateBackup(
+        vaultPath,
+        destinationPath,
+        appVersion,
+        {
+          ...options,
+          onPhase: async (event) => {
+            if (interrupt && event.phase === "archive_finalized") {
+              interrupt = false;
+              throw new Error("Synthetic rollback stop before final checkpoint persistence.");
+            }
+            await options.onPhase?.(event);
+          }
+        }
+      )
+    );
+    const coordinator = trackCoordinator(new RestoreCoordinatorService({
+      ...coordinatorOptions(fixture),
+      pauseMutableWork: async () => () => undefined,
+      rebuildIndexes: async () => rebuildResult()
+    }));
+    const command = {
+      preview: fixture.applying,
+      destinationPath: fixture.destinationPath,
+      replaceConfirmed: true
+    };
+
+    await expect(coordinator.apply(command)).rejects.toThrow("Synthetic rollback stop");
+    const restoreJob = readRecords(path.join(
+      fixture.userDataPath,
+      "restore-coordinator",
+      ".pige",
+      "jobs"
+    ))[0]!;
+    const rollbackArchive = path.join(
+      fixture.userDataPath,
+      "restore-coordinator",
+      "rollback",
+      `${restoreJob.id}.pige-backup.zip`
+    );
+    const conflictingArchive = path.join(fixture.root, "conflicting-rollback.pige-backup.zip");
+    await originalCreateBackup(fixture.sourceVaultPath, conflictingArchive, "0.1.0-test", {
+      backupId: "backup_20260714_conflictingrollback01",
+      createdAt: "2026-07-14T09:00:00.000Z",
+      stagingOwnerKey: "conflicting-rollback"
+    });
+    fs.copyFileSync(conflictingArchive, rollbackArchive);
+
+    await expect(coordinator.apply(command)).rejects.toMatchObject({ code: "backup.destination_exists" });
+    const childJobs = readRecords(path.join(fixture.sourceVaultPath, ".pige", "jobs"))
+      .filter((record) => record.class === "backup");
+    expect(childJobs).toHaveLength(1);
+    expect(childJobs[0]).toMatchObject({
+      state: "failed_final",
+      error: { code: "backup.destination_exists", retryable: false }
+    });
+    expect(readMachineRestoreJob(fixture.userDataPath, restoreJob.id)).toMatchObject({ state: "failed_final" });
+    expect(readRecords(path.join(fixture.sourceVaultPath, ".pige", "operations")))
+      .not.toContainEqual(expect.objectContaining({ jobId: childJobs[0]?.id }));
+  }, 15_000);
+
   it("reuses the same Job after binding commit when index rebuild needs an explicit retry", async () => {
     const fixture = await makeFixture("clone_as_new");
     const applySpy = vi.spyOn(fixture.backup, "applyRestore");
@@ -275,7 +400,7 @@ describe("RestoreCoordinatorService", () => {
       id: snapshot.job.id,
       state: "completed"
     });
-  });
+  }, 15_000);
 
   it("adopts a committed destination after the machine binding swaps, without a second core apply", async () => {
     const fixture = await makeFixture("clone_as_new");
