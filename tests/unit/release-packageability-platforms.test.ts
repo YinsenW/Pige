@@ -8,6 +8,7 @@ import {
   packageabilityPaths,
   resolvePackageabilityPlatform
 } from "../../scripts/release/packageability-platforms.mjs";
+import { isUnsupportedDirectoryFsync } from "../../apps/desktop/src/main/services/local-settings";
 
 const root = process.cwd();
 
@@ -66,6 +67,20 @@ describe("release packageability platforms", () => {
     expect(canonicalizeAsarEntryPath("\\out\\main\\index.js")).toBe("/out/main/index.js");
     expect(canonicalizeAsarEntryPath("out\\main\\index.js")).toBe("/out/main/index.js");
     expect(() => canonicalizeAsarEntryPath("")).toThrow(/Invalid packaged ASAR entry path/u);
+  });
+
+  it("treats Windows directory fsync limitations as unsupported without hiding permission failures elsewhere", () => {
+    for (const code of ["EPERM", "EBADF"]) {
+      const error = Object.assign(new Error("bounded Windows directory fsync failure"), { code });
+      expect(isUnsupportedDirectoryFsync(error, "win32")).toBe(true);
+      expect(isUnsupportedDirectoryFsync(error, "darwin")).toBe(false);
+    }
+    for (const code of ["EINVAL", "EISDIR", "ENOSYS", "ENOTSUP", "EOPNOTSUPP"]) {
+      expect(isUnsupportedDirectoryFsync(Object.assign(new Error("unsupported directory fsync"), { code }), "linux"))
+        .toBe(true);
+    }
+    expect(isUnsupportedDirectoryFsync(Object.assign(new Error("missing directory"), { code: "ENOENT" }), "win32"))
+      .toBe(false);
   });
 
   it("keeps the release scripts, builder config, and CI matrix aligned", () => {
