@@ -588,16 +588,13 @@ Scaffold and CI checks must verify:
 
 ## 13. Release Gates
 
-The current unsigned macOS arm64 and Windows x64 packageability preflights must fail
-unless they prove packaged app identity, the exact ASAR/runtime resources, an actual
-packaged BrowserWindow with renderer root, contextBridge preload, health IPC and required
-toolchain readiness, embedded Pi and cited Home loops, parser/index workers,
-deterministic license attribution and CycloneDX SBOM, explicit signing state, a bounded
-body-free report, and the 330,000,000-byte ceiling. macOS additionally proves the
-packaged Vision worker. The workflows upload only the reviewed ZIP/blockmap or NSIS setup
-and redacted report. These focused gates do not replace supported-version breadth,
-signing/notarization, installed upgrade/uninstall, update, native Windows OCR, memory,
-scale, recovery, or Public Alpha evidence.
+The macOS arm64 and Windows x64 packageability preflights fail unless packaged identity,
+ASAR/resources, renderer/preload/health/toolchain, Pi/Home, workers, attribution/SBOM,
+signing state, body-free report, and size pass. macOS also proves Vision and Release
+Engineering section 8: sealed staging equals the official ZIP, then a fresh runner
+repeats integrity, expected-untrusted Gatekeeper/quarantine and runtime checks. These
+gates do not replace platform breadth, trusted signing, installed/update, Windows OCR,
+scale/recovery, or Public Alpha evidence.
 
 Before alpha release:
 

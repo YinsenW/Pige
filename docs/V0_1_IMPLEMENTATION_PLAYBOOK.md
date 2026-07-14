@@ -672,9 +672,10 @@ Current packageability foundation: unsigned macOS 26 arm64 and Windows x64 GitHu
 produce ASAR-backed Pige artifacts under the hard size ceiling and run packaged identity,
 actual BrowserWindow renderer/preload/health IPC, Pi/Home, parser/index, attribution,
 SBOM, redaction, and platform-resource checks; macOS additionally proves packaged Vision.
-It does not complete B9.12, B9.14, B9.15, or E9.08; supported-version breadth,
-signing/notarization, installed upgrade/uninstall and update, Windows native OCR,
-memory/scale/recovery, release-note, and missing bundled-tool evidence remains open.
+macOS now applies the Release Engineering section 8 ad-hoc seal before its official ZIP
+and rechecks the download on a fresh runner; no Developer ID/trust is claimed.
+B9.12/B9.14/B9.15/E9.08 remain open for platform breadth, trusted signing,
+installed/update, Windows OCR, scale/recovery, release notes and missing tools.
 
 Current restore foundation covers bounded B9.03/B9.04/B9.05/B9.06 portions: preview is
 archive/sender/mode-bound; clone and replace publish only to owned fresh destinations;
