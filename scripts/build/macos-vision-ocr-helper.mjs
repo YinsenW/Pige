@@ -72,6 +72,19 @@ if (build.status !== 0) {
 }
 fs.chmodSync(temporaryBinary, 0o755);
 fs.renameSync(temporaryBinary, binaryPath);
+const signing = run("/usr/bin/codesign", [
+  "--force",
+  "--sign",
+  "-",
+  "--identifier",
+  "com.yinsenw.pige.vision-ocr",
+  "--timestamp=none",
+  binaryPath
+]);
+if (signing.status !== 0) {
+  process.stderr.write(signing.stderr);
+  process.exit(signing.status ?? 1);
+}
 const stat = fs.statSync(binaryPath);
 writeJsonAtomic(manifestPath, {
   schemaVersion: 1,
@@ -89,7 +102,7 @@ writeJsonAtomic(manifestPath, {
   binarySize: stat.size,
   swiftVersion,
   builtAt: new Date().toISOString(),
-  signing: "ad-hoc-or-linker-signed build output; release pipeline must apply a Developer ID signature to the nested helper"
+  signing: "stable-identifier ad-hoc build output preserved by the internal packageability Bundle seal; only public distribution requires a Developer ID signature and notarization"
 });
 console.log(`Built macOS Vision OCR helper: ${path.relative(root, binaryPath)}`);
 

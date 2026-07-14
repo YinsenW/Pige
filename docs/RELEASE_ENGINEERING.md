@@ -189,11 +189,16 @@ Rules:
 
 macOS:
 
-- Developer ID signing required for public distribution.
-- Notarization required before release.
-- Hardened runtime enabled.
-- Entitlements kept minimal.
-- Every nested native OCR helper is signed with the release identity before the enclosing app is signed; helper checksum verification complements but does not replace code signing/notarization.
+- Public distribution requires Developer ID, notarization, hardened runtime, minimal
+  entitlements, and release-identity signing of nested native helpers before the app.
+  Helper checksums complement rather than replace signing/notarization.
+- Internal no-Developer-ID artifacts use identity `-` and a builder-owned inside-out
+  ad-hoc seal after all Bundle writes; incomplete inherited signatures fail. The official
+  ZIP follows the outer seal with no intervening mutation.
+- Ad-hoc proves integrity/loadability only, not Team ID, Developer ID, trust,
+  notarization, staple, hardened runtime, or entitlements. Runners remove signing
+  authority and verify strict `codesign`, expected-untrusted `spctl`, quarantine, and
+  packaged runtime without publishing bypass commands.
 
 Windows:
 
@@ -395,21 +400,15 @@ Release evidence layout:
 
 Current packageability foundation, last reconciled 2026-07-14:
 
-- Separate macOS 26 arm64 and Windows x64 jobs install from the lockfile, audit runtime
-  dependencies, produce unsigned ASAR-backed artifacts, run packaged smoke, and upload
-  the macOS ZIP/blockmap or Windows NSIS setup together with a body-free report.
-- Both packaged smokes verify `Pige` identity, the exact ASAR/runtime resources, an
-  actual packaged `BrowserWindow` loading `index.html`, renderer `#root`, contextBridge
-  preload, `pige:getHealth` IPC, required toolchain modules, embedded Pi and cited Home
-  turns, parser/index workers, runtime attribution, CycloneDX 1.6 SBOM, license
-  resources, the 330,000,000-byte ceiling, and explicit unsigned state. macOS additionally
-  proves the packaged Vision helper.
-- Platform-specific ASAR entry forms are canonicalized before the unchanged exact-entry
-  check. Packaged failure evidence is confined to reviewed stage codes, booleans and
-  known tool IDs; reports contain no private paths, environment, renderer content,
-  credentials, raw errors, prompts or responses.
-- Build-only builder/ASAR tooling remains excluded from the runtime SBOM. Git, Bun and
-  `uv` remain explicit missing tool IDs rather than being reported ready.
+- macOS 26 arm64 and Windows x64 jobs build from the lockfile, audit, smoke, and upload
+  the official ZIP/blockmap or NSIS plus a body-free report.
+- Smokes fail closed on identity, canonical ASAR/resources, BrowserWindow renderer,
+  preload/health/toolchain, Pi/Home, workers, attribution/SBOM/license, size, signing
+  state, or redaction; macOS also proves Vision.
+- macOS applies section 8, compares staging/ZIP manifests, then has a fresh runner repeat
+  integrity/quarantine/runtime checks without staging. Variable ad-hoc bytes make ZIP
+  hashes build evidence, not release IDs.
+- Build-only tools stay outside the runtime SBOM; Git, Bun and `uv` remain missing IDs.
 
 This is packageability preflight, not Public Alpha release acceptance. macOS x64,
 Windows 10/11 breadth, Windows native OCR, signed nested helpers, hardened runtime,

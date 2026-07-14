@@ -1371,7 +1371,7 @@
     "PIGE-BACKUP-004":{"status":"partial","evidence":["EV-BACKUP","EV-RESTORE-CONFLICT","EV-RESTORE-PREVIEW-FENCE","EV-RESTORE-PUBLICATION","EV-RESTORE-LEGACY-LINEAGE","EV-RESTORE-IDENTITY-RECOVERY","EV-RESTORE-REPLACE-ROLLBACK","EV-RESTORE-JOB-RECOVERY","EV-RESTORE-DURABLE-OPERATION","EV-RESTORE-STARTUP-ADOPTION","EV-RESTORE-SAFE-UI"],"open":{"id":"OPEN-REQ-PIGE-BACKUP-004","description":"Explicit identity modes, machine-local Restore Job/restart adoption, linked Operation, safe preview and binding CAS are covered; versioned dependency/domain migrations, general cross-file transactions, final syscall TOCTOU, old-source cleanup, and signed installed macOS/Windows restore matrices remain.","targetBuilds":["B9.03","B9.04","B9.05","B9.06"],"targetExits":["E9.02"]}},
     "PIGE-REL-001": {
       "status": "planned",
-      "plannedTarget": "Unsigned macOS arm64 and Windows x64 packageability now proves GitHub-built artifacts and packaged runtime; signed supported-version artifacts and alpha-to-alpha update remain required."
+      "plannedTarget": "macOS arm64 has a no-Team-ID ad-hoc seal and fresh-runner ZIP verification; Windows x64 remains green. Developer ID/notarization, platform breadth, and updates remain open."
     },
     "PIGE-REL-002": {
       "status": "verified",
@@ -1391,7 +1391,7 @@
     },
     "PIGE-REL-005": {
       "status": "planned",
-      "plannedTarget": "Both preflights prove attribution, CycloneDX SBOM, bounded reports, and unsigned state; release notes and signing/notarization reports remain required."
+      "plannedTarget": "Preflights prove attribution/SBOM and truthful signing state; macOS reports ad-hoc/no Team ID separately. Release notes and trusted-signing reports remain open."
     },
     "PIGE-I18N-001":{"status":"partial","evidence":["EV-I18N","EV-RESTORE-SAFE-UI"],"open":{"id":"OPEN-REQ-PIGE-I18N-001","description":"Restore preview/native safety copy has six-locale coverage; the remaining release-critical workflow smoke and narrow-layout matrix remain open.","targetBuilds":["B9.10"],"targetExits":["E9.06"]}},
     "PIGE-I18N-002": {
@@ -2675,7 +2675,7 @@
     "E9.05": { "status": "planned", "plannedTarget": "Deterministic Knowledge Health with eligible Operation/Undo repair and exact-exception routing." },
     "E9.06":{"status":"partial","evidence":["EV-I18N","EV-RESTORE-SAFE-UI"],"open":{"id":"OPEN-EXIT-E9.06","description":"Restore preview/native safety copy has six-locale coverage; the remaining release-critical workflow smoke and narrow-layout matrix remain open.","targetBuilds":["B9.10"],"targetExits":["E9.06"]}},
     "E9.07": { "status": "planned", "plannedTarget": "Keyboard, focus, accessible-name, contrast, reduced-motion, and narrow-layout report." },
-    "E9.08": { "status": "planned", "plannedTarget": "Unsigned macOS arm64 and Windows x64 packageability remains below exit: version breadth, signing/notarization, installed update lifecycle, scale/memory/recovery, release notes, and final attribution remain open." },
+    "E9.08": { "status": "planned", "plannedTarget": "Ad-hoc macOS plus fresh-ZIP and Windows x64 preflights remain below exit: trusted signing, platform/update, scale/recovery, notes, and attribution are open." },
     "E9.09": { "status": "planned", "plannedTarget": "Alpha-to-alpha update and active-risky-job safeguard report." },
     "E9.10": { "status": "planned", "plannedTarget": "25-source Public Alpha scenario generated report." },
     "E9.11": {
