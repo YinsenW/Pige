@@ -200,7 +200,8 @@ describe("diagnostics export core", () => {
       return openSync(candidate, flags, mode);
     });
 
-    expect(() => prepareDiagnosticsExportFile(outputPath)).toThrow("synthetic temporary open failure");
+    expect(() => prepareDiagnosticsExportFile(outputPath, undefined, "darwin"))
+      .toThrow("synthetic temporary open failure");
     expect(destinationDescriptor).toBeTypeOf("number");
     expect(() => fs.fstatSync(Number(destinationDescriptor))).toThrow(
       expect.objectContaining({ code: "EBADF" })
@@ -212,8 +213,10 @@ describe("diagnostics export core", () => {
     const root = makeRoot();
     const outputPath = path.join(root, "support.json");
     fs.writeFileSync(outputPath, "original", "utf8");
-    const prepared = prepareDiagnosticsExportFile(outputPath);
-    const descriptor = prepared.initialDestinationDescriptor;
+    const prepared = prepareDiagnosticsExportFile(outputPath, undefined, "darwin");
+    const descriptor = prepared.destinationBinding.kind === "held_descriptor"
+      ? prepared.destinationBinding.descriptor
+      : undefined;
     expect(descriptor).toBeTypeOf("number");
 
     releasePreparedDiagnosticsExportFile(prepared);
@@ -226,8 +229,10 @@ describe("diagnostics export core", () => {
     const root = makeRoot();
     const outputPath = path.join(root, "support.json");
     fs.writeFileSync(outputPath, "original", "utf8");
-    const prepared = prepareDiagnosticsExportFile(outputPath);
-    const descriptor = prepared.initialDestinationDescriptor;
+    const prepared = prepareDiagnosticsExportFile(outputPath, undefined, "darwin");
+    const descriptor = prepared.destinationBinding.kind === "held_descriptor"
+      ? prepared.destinationBinding.descriptor
+      : undefined;
     expect(descriptor).toBeTypeOf("number");
     fs.rmSync(outputPath);
     fs.writeFileSync(outputPath, "successor", "utf8");
@@ -241,5 +246,87 @@ describe("diagnostics export core", () => {
     }
 
     expect(() => fs.fstatSync(Number(descriptor))).toThrow(expect.objectContaining({ code: "EBADF" }));
+  });
+
+  it("uses a bounded digest binding for Windows replacement without holding a descriptor", () => {
+    const root = makeRoot();
+    const outputPath = path.join(root, "support.json");
+    fs.writeFileSync(outputPath, "original", "utf8");
+    const prepared = prepareDiagnosticsExportFile(
+      outputPath,
+      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "win32"
+    );
+
+    expect(prepared.destinationBinding).toMatchObject({
+      kind: "content_digest",
+      size: Buffer.byteLength("original")
+    });
+    try {
+      expect(commitPreparedDiagnosticsExportFile(prepared, safeBundle()))
+        .toBe(Buffer.byteLength(safeBundle()));
+    } finally {
+      releasePreparedDiagnosticsExportFile(prepared);
+    }
+    expect(fs.readFileSync(outputPath, "utf8")).toBe(safeBundle());
+  });
+
+  it("rejects changed bytes through the Windows digest binding and closes every descriptor", () => {
+    const root = makeRoot();
+    const outputPath = path.join(root, "support.json");
+    fs.writeFileSync(outputPath, "original", "utf8");
+    const prepared = prepareDiagnosticsExportFile(
+      outputPath,
+      "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      "win32"
+    );
+    fs.rmSync(outputPath);
+    fs.writeFileSync(outputPath, "successor", "utf8");
+
+    try {
+      expect(() => commitPreparedDiagnosticsExportFile(prepared, safeBundle()))
+        .toThrow(DiagnosticsExportBlockedError);
+    } finally {
+      releasePreparedDiagnosticsExportFile(prepared);
+    }
+
+    expect(fs.readFileSync(outputPath, "utf8")).toBe("successor");
+    expect(fs.readdirSync(root)).toEqual(["support.json"]);
+  });
+
+  it("accepts an exact-content Windows successor as the unchanged destination", () => {
+    const root = makeRoot();
+    const outputPath = path.join(root, "support.json");
+    fs.writeFileSync(outputPath, "original", "utf8");
+    const prepared = prepareDiagnosticsExportFile(
+      outputPath,
+      "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      "win32"
+    );
+    fs.rmSync(outputPath);
+    fs.writeFileSync(outputPath, "original", "utf8");
+
+    try {
+      expect(commitPreparedDiagnosticsExportFile(prepared, safeBundle()))
+        .toBe(Buffer.byteLength(safeBundle()));
+    } finally {
+      releasePreparedDiagnosticsExportFile(prepared);
+    }
+
+    expect(fs.readFileSync(outputPath, "utf8")).toBe(safeBundle());
+    expect(fs.readdirSync(root)).toEqual(["support.json"]);
+  });
+
+  it("rejects oversized existing destinations through the Windows digest binding", () => {
+    const root = makeRoot();
+    const outputPath = path.join(root, "support.json");
+    fs.writeFileSync(outputPath, Buffer.alloc(2 * 1024 * 1024 + 1));
+
+    expect(() => prepareDiagnosticsExportFile(
+      outputPath,
+      "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      "win32"
+    )).toThrow(DiagnosticsExportBlockedError);
+    expect(fs.readdirSync(root)).toEqual(["support.json"]);
   });
 });

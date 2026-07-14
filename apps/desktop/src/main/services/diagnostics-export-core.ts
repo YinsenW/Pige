@@ -1,11 +1,29 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { containsRestrictedModelContent } from "./model-egress-content";
 import { DIAGNOSTICS_EXPORT_MAX_BYTES } from "./diagnostics-export-types";
 
 export class DiagnosticsExportBlockedError extends Error {}
+
+export type DiagnosticsExportDestinationBinding =
+  | { readonly kind: "absent" }
+  | {
+      readonly kind: "held_descriptor";
+      readonly descriptor: number;
+      readonly device: number;
+      readonly inode: number;
+    }
+  | {
+      readonly kind: "content_digest";
+      readonly device: number;
+      readonly inode: number;
+      readonly size: number;
+      readonly modifiedAtMs: number;
+      readonly changedAtMs: number;
+      readonly sha256: string;
+    };
 
 export interface PreparedDiagnosticsExportFile {
   readonly outputPath: string;
@@ -13,9 +31,7 @@ export interface PreparedDiagnosticsExportFile {
   readonly parentRealPath: string;
   readonly parentDevice: number;
   readonly parentInode: number;
-  readonly initialDestinationDescriptor?: number;
-  readonly initialDestinationDevice?: number;
-  readonly initialDestinationInode?: number;
+  readonly destinationBinding: DiagnosticsExportDestinationBinding;
   readonly temporaryPath: string;
   readonly temporaryDescriptor: number;
   readonly temporaryDevice: number;
@@ -178,7 +194,8 @@ export function assertSafeDiagnosticExportText(content: string): void {
 
 export function prepareDiagnosticsExportFile(
   outputPath: string,
-  generation = randomUUID()
+  generation = randomUUID(),
+  platform: NodeJS.Platform = process.platform
 ): PreparedDiagnosticsExportFile {
   if (
     !path.isAbsolute(outputPath) ||
@@ -205,27 +222,13 @@ export function prepareDiagnosticsExportFile(
   }
 
   const temporaryPath = path.join(parentRealPath, `.pige-support-${generation}.tmp`);
-  let initialDestinationDescriptor: number | undefined;
+  let destinationBinding: DiagnosticsExportDestinationBinding = { kind: "absent" };
   let temporaryDescriptor: number | undefined;
   try {
     if (initialDestinationIdentity) {
-      initialDestinationDescriptor = fs.openSync(
-        destination,
-        fs.constants.O_RDONLY |
-          (fs.constants.O_NONBLOCK ?? 0) |
-          (fs.constants.O_NOFOLLOW ?? 0)
-      );
-      const openedDestinationIdentity = fs.fstatSync(initialDestinationDescriptor);
-      const namedDestinationIdentity = fs.lstatSync(destination);
-      if (
-        !openedDestinationIdentity.isFile() ||
-        !namedDestinationIdentity.isFile() ||
-        namedDestinationIdentity.isSymbolicLink() ||
-        !sameIdentity(initialDestinationIdentity, openedDestinationIdentity) ||
-        !sameIdentity(openedDestinationIdentity, namedDestinationIdentity)
-      ) {
-        throw new DiagnosticsExportBlockedError("Support bundle destination changed during preparation.");
-      }
+      destinationBinding = platform === "win32"
+        ? captureDigestDestinationBinding(destination, initialDestinationIdentity)
+        : captureHeldDestinationBinding(destination, initialDestinationIdentity);
     }
 
     temporaryDescriptor = fs.openSync(temporaryPath, "wx", 0o600);
@@ -239,13 +242,7 @@ export function prepareDiagnosticsExportFile(
       parentRealPath,
       parentDevice: parentIdentity.dev,
       parentInode: parentIdentity.ino,
-      ...(initialDestinationDescriptor !== undefined && initialDestinationIdentity
-        ? {
-            initialDestinationDescriptor,
-            initialDestinationDevice: initialDestinationIdentity.dev,
-            initialDestinationInode: initialDestinationIdentity.ino
-          }
-        : {}),
+      destinationBinding,
       temporaryPath,
       temporaryDescriptor,
       temporaryDevice: temporaryIdentity.dev,
@@ -256,7 +253,7 @@ export function prepareDiagnosticsExportFile(
       try {
         if (temporaryDescriptor !== undefined) fs.closeSync(temporaryDescriptor);
       } finally {
-        if (initialDestinationDescriptor !== undefined) fs.closeSync(initialDestinationDescriptor);
+        if (destinationBinding.kind === "held_descriptor") fs.closeSync(destinationBinding.descriptor);
       }
     } finally {
       fs.rmSync(temporaryPath, { force: true });
@@ -338,8 +335,8 @@ export function releasePreparedDiagnosticsExportFile(prepared: PreparedDiagnosti
     try {
       fs.closeSync(prepared.temporaryDescriptor);
     } finally {
-      if (prepared.initialDestinationDescriptor !== undefined) {
-        fs.closeSync(prepared.initialDestinationDescriptor);
+      if (prepared.destinationBinding.kind === "held_descriptor") {
+        fs.closeSync(prepared.destinationBinding.descriptor);
       }
     }
   }
@@ -433,21 +430,106 @@ function matchesPreparedDestination(
   prepared: PreparedDiagnosticsExportFile,
   current: fs.Stats | undefined
 ): boolean {
-  if (
-    prepared.initialDestinationDescriptor === undefined ||
-    prepared.initialDestinationDevice === undefined ||
-    prepared.initialDestinationInode === undefined
-  ) {
-    return current === undefined;
+  if (prepared.destinationBinding.kind === "absent") return current === undefined;
+  if (!current?.isFile() || current.isSymbolicLink()) return false;
+  if (prepared.destinationBinding.kind === "content_digest") {
+    try {
+      const currentBinding = captureDigestDestinationBinding(prepared.destination, current);
+      return currentBinding.size === prepared.destinationBinding.size &&
+        currentBinding.sha256 === prepared.destinationBinding.sha256;
+    } catch {
+      return false;
+    }
   }
   try {
-    const held = fs.fstatSync(prepared.initialDestinationDescriptor);
-    return current !== undefined && held.isFile() && current.isFile() && !current.isSymbolicLink() &&
-      held.dev === prepared.initialDestinationDevice && held.ino === prepared.initialDestinationInode &&
+    const held = fs.fstatSync(prepared.destinationBinding.descriptor);
+    return held.isFile() &&
+      held.dev === prepared.destinationBinding.device &&
+      held.ino === prepared.destinationBinding.inode &&
       sameIdentity(held, current);
   } catch {
     return false;
   }
+}
+
+function captureHeldDestinationBinding(
+  destination: string,
+  initialIdentity: fs.Stats
+): DiagnosticsExportDestinationBinding {
+  const descriptor = openDestinationForRead(destination);
+  try {
+    const opened = fs.fstatSync(descriptor);
+    const named = fs.lstatSync(destination);
+    if (!isStableNamedFile(initialIdentity, opened, named)) {
+      throw new DiagnosticsExportBlockedError("Support bundle destination changed during preparation.");
+    }
+    return { kind: "held_descriptor", descriptor, device: opened.dev, inode: opened.ino };
+  } catch (caught) {
+    fs.closeSync(descriptor);
+    throw caught;
+  }
+}
+
+function captureDigestDestinationBinding(
+  destination: string,
+  initialIdentity: fs.Stats
+): Extract<DiagnosticsExportDestinationBinding, { readonly kind: "content_digest" }> {
+  if (initialIdentity.size < 0 || initialIdentity.size > DIAGNOSTICS_EXPORT_MAX_BYTES) {
+    throw new DiagnosticsExportBlockedError("Support bundle destination is outside the replacement bound.");
+  }
+  const descriptor = openDestinationForRead(destination);
+  try {
+    const before = fs.fstatSync(descriptor);
+    const namedBefore = fs.lstatSync(destination);
+    if (!isStableNamedFile(initialIdentity, before, namedBefore) || before.size > DIAGNOSTICS_EXPORT_MAX_BYTES) {
+      throw new DiagnosticsExportBlockedError("Support bundle destination changed during preparation.");
+    }
+    const bytes = Buffer.alloc(before.size);
+    let offset = 0;
+    while (offset < bytes.length) {
+      const read = fs.readSync(descriptor, bytes, offset, bytes.length - offset, offset);
+      if (read <= 0) {
+        throw new DiagnosticsExportBlockedError("Support bundle destination could not be read exactly.");
+      }
+      offset += read;
+    }
+    const after = fs.fstatSync(descriptor);
+    const namedAfter = fs.lstatSync(destination);
+    if (!sameStableGeneration(before, after) || !isStableNamedFile(after, after, namedAfter)) {
+      throw new DiagnosticsExportBlockedError("Support bundle destination changed during readback.");
+    }
+    return {
+      kind: "content_digest",
+      device: after.dev,
+      inode: after.ino,
+      size: after.size,
+      modifiedAtMs: after.mtimeMs,
+      changedAtMs: after.ctimeMs,
+      sha256: createHash("sha256").update(bytes).digest("hex")
+    };
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+function openDestinationForRead(destination: string): number {
+  return fs.openSync(
+    destination,
+    fs.constants.O_RDONLY |
+      (fs.constants.O_NONBLOCK ?? 0) |
+      (fs.constants.O_NOFOLLOW ?? 0)
+  );
+}
+
+function isStableNamedFile(initial: fs.Stats, opened: fs.Stats, named: fs.Stats): boolean {
+  return opened.isFile() && named.isFile() && !named.isSymbolicLink() &&
+    sameIdentity(initial, opened) && sameIdentity(opened, named) &&
+    sameStableGeneration(initial, opened);
+}
+
+function sameStableGeneration(left: fs.Stats, right: fs.Stats): boolean {
+  return sameIdentity(left, right) && left.size === right.size &&
+    left.mtimeMs === right.mtimeMs && left.ctimeMs === right.ctimeMs;
 }
 
 function escapeRegExp(value: string): string {

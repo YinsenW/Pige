@@ -14,9 +14,23 @@ export interface DiagnosticsExportWorkerRequest {
     readonly parentRealPath: string;
     readonly parentDevice: number;
     readonly parentInode: number;
-    readonly initialDestinationDescriptor?: number;
-    readonly initialDestinationDevice?: number;
-    readonly initialDestinationInode?: number;
+    readonly destinationBinding:
+      | { readonly kind: "absent" }
+      | {
+          readonly kind: "held_descriptor";
+          readonly descriptor: number;
+          readonly device: number;
+          readonly inode: number;
+        }
+      | {
+          readonly kind: "content_digest";
+          readonly device: number;
+          readonly inode: number;
+          readonly size: number;
+          readonly modifiedAtMs: number;
+          readonly changedAtMs: number;
+          readonly sha256: string;
+        };
     readonly temporaryPath: string;
     readonly temporaryDescriptor: number;
     readonly temporaryDevice: number;

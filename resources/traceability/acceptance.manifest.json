@@ -2403,7 +2403,7 @@
     "EV-SETTING-GUARD": { "kind": "test", "path": "tests/unit/setting-action-guard.test.ts", "selector": "fails closed for a Permission Broker requirement until a broker decision exists" },
     "EV-POLICY": { "kind": "test", "path": "tests/unit/agent-policy-context.test.ts", "selector": "builds a non-secret policy context from vault config" },
     "EV-DIAGNOSTICS": { "kind": "test", "path": "tests/unit/diagnostics-service.test.ts", "selector": "exports only bounded redacted local support bundle content" },
-    "EV-DIAG-EXPORT-CORE": { "kind": "test", "path": "tests/unit/diagnostics-export-core.test.ts", "selector": "atomically writes a bounded safe bundle with private file permissions" },
+    "EV-DIAG-EXPORT-CORE": { "kind": "test", "path": "tests/unit/diagnostics-export-core.test.ts", "selector": "diagnostics export core" },
     "EV-DIAG-EXPORT-WORKER": { "kind": "test", "path": "tests/unit/diagnostics-export-worker-service.test.ts", "selector": "terminates and fails closed on cancellation" },
     "EV-DIAG-EXPORT-CANCEL-IPC": { "kind": "test", "path": "tests/unit/desktop-shell-contract.test.ts", "selector": "binds support-bundle cancellation to one active renderer request" },
     "EV-DIAG-EXPORT-CANCEL-UI": { "kind": "test", "path": "tests/unit/restore-ui.test.ts", "selector": "offers one reachable cancel action while a support bundle export is in flight" },

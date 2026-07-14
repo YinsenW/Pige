@@ -191,9 +191,10 @@ paths, or Provider metadata require preview review.
 UX shows categories, estimated size, privacy warning, preview, cancel, and a trusted local
 destination; it never uploads. Current B1.14 evidence binds the preview and one
 `exportRequestId` to its sender, then writes at most 2 MiB in a worker limited to 64 MiB
-old-generation and 30 seconds. Main holds private temp and existing-destination
-descriptors through completion, binds lstat/fstat, and rechecks the held fd, recorded identity
-and named path before rename; successors fail closed and every path closes both descriptors.
+old-generation and 30 seconds. Main holds the temp descriptor. Existing output binds a
+POSIX held descriptor or closed Windows 2 MiB-bounded stable size+SHA-256 readback;
+recheck precedes rename. Changed bytes fail; equal Windows content may replace; owned
+fds close.
 Unsafe bodies, symlink/root drift, redaction failure, cancel, sender loss, or timeout fail
 closed; post-publication cancel adopts the exact output. Export is process-local,
 not a durable Job. Final check-to-rename/release-to-unlink syscall windows, optional content,

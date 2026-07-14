@@ -73,17 +73,9 @@ function isPreparedExport(value: unknown, outputPath: string): value is Prepared
   if (!isRecord(value)) return false;
   const allowed = [
     "outputPath", "destination", "parentRealPath", "parentDevice", "parentInode",
-    "temporaryPath", "temporaryDescriptor", "temporaryDevice", "temporaryInode"
+    "destinationBinding", "temporaryPath", "temporaryDescriptor", "temporaryDevice", "temporaryInode"
   ];
-  const allowedWithDestination = [
-    ...allowed,
-    "initialDestinationDescriptor",
-    "initialDestinationDevice",
-    "initialDestinationInode"
-  ];
-  if (!hasExactKeys(value, value.initialDestinationDevice === undefined ? allowed : allowedWithDestination)) {
-    return false;
-  }
+  if (!hasExactKeys(value, allowed) || !isDestinationBinding(value.destinationBinding)) return false;
   return value.outputPath === outputPath &&
     typeof value.destination === "string" && path.isAbsolute(value.destination) &&
     typeof value.parentRealPath === "string" && path.isAbsolute(value.parentRealPath) &&
@@ -91,15 +83,35 @@ function isPreparedExport(value: unknown, outputPath: string): value is Prepared
     value.temporaryPath.startsWith(`${value.parentRealPath}${path.sep}`) &&
     isNonNegativeSafeInteger(value.parentDevice) && isNonNegativeSafeInteger(value.parentInode) &&
     isNonNegativeSafeInteger(value.temporaryDescriptor) &&
-    isNonNegativeSafeInteger(value.temporaryDevice) && isNonNegativeSafeInteger(value.temporaryInode) &&
-    (value.initialDestinationDevice === undefined ||
-      (isNonNegativeSafeInteger(value.initialDestinationDescriptor) &&
-        isNonNegativeSafeInteger(value.initialDestinationDevice) &&
-        isNonNegativeSafeInteger(value.initialDestinationInode)));
+    isNonNegativeSafeInteger(value.temporaryDevice) && isNonNegativeSafeInteger(value.temporaryInode);
+}
+
+function isDestinationBinding(value: unknown): boolean {
+  if (!isRecord(value) || typeof value.kind !== "string") return false;
+  if (value.kind === "absent") return hasExactKeys(value, ["kind"]);
+  if (value.kind === "held_descriptor") {
+    return hasExactKeys(value, ["kind", "descriptor", "device", "inode"]) &&
+      isNonNegativeSafeInteger(value.descriptor) &&
+      isNonNegativeSafeInteger(value.device) &&
+      isNonNegativeSafeInteger(value.inode);
+  }
+  return value.kind === "content_digest" &&
+    hasExactKeys(value, [
+      "kind", "device", "inode", "size", "modifiedAtMs", "changedAtMs", "sha256"
+    ]) &&
+    isNonNegativeSafeInteger(value.device) &&
+    isNonNegativeSafeInteger(value.inode) &&
+    isNonNegativeSafeInteger(value.size) && value.size <= DIAGNOSTICS_EXPORT_MAX_BYTES &&
+    isNonNegativeFinite(value.modifiedAtMs) && isNonNegativeFinite(value.changedAtMs) &&
+    typeof value.sha256 === "string" && /^[a-f0-9]{64}$/u.test(value.sha256);
 }
 
 function isNonNegativeSafeInteger(value: unknown): value is number {
   return Number.isSafeInteger(value) && Number(value) >= 0;
+}
+
+function isNonNegativeFinite(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

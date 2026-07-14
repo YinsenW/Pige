@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 
@@ -61,26 +62,22 @@ try {
     successorPath,
     "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
   );
-  const successorInstalled = installSuccessorOrVerifyWindowsHandleFence(
-    successorPath,
-    successorPrepared
-  );
-  if (successorInstalled) {
-    smokeStage = "successor_worker_response";
-    const successor = await runWorker({
-      protocolVersion: 1,
-      requestId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
-      outputPath: successorPath,
-      content,
-      prepared: successorPrepared.request
-    }, successorPrepared);
-    if (
-      successor.kind !== "failure" ||
-      successor.code !== "diagnostics.export_blocked" ||
-      fs.readFileSync(successorPath, "utf8") !== "successor"
-    ) {
-      throw new Error("Built diagnostics export worker did not reject a successor destination.");
-    }
+  fs.rmSync(successorPath);
+  fs.writeFileSync(successorPath, "successor", { encoding: "utf8", mode: 0o600 });
+  smokeStage = "successor_worker_response";
+  const successor = await runWorker({
+    protocolVersion: 1,
+    requestId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    outputPath: successorPath,
+    content,
+    prepared: successorPrepared.request
+  }, successorPrepared);
+  if (
+    successor.kind !== "failure" ||
+    successor.code !== "diagnostics.export_blocked" ||
+    fs.readFileSync(successorPath, "utf8") !== "successor"
+  ) {
+    throw new Error("Built diagnostics export worker did not reject a successor destination.");
   }
 
   smokeStage = "unsafe_content";
@@ -112,45 +109,6 @@ try {
     console.error("PIGE_DIAGNOSTICS_EXPORT_WORKER_SMOKE_FAILURE=cleanup");
     process.exitCode = 1;
   }
-}
-
-function installSuccessorOrVerifyWindowsHandleFence(successorPath, prepared) {
-  try {
-    fs.rmSync(successorPath);
-    fs.writeFileSync(successorPath, "successor", { encoding: "utf8", mode: 0o600 });
-    return true;
-  } catch (error) {
-    if (process.platform !== "win32" || !isExpectedWindowsHandleFenceError(error)) throw error;
-    smokeStage = "successor_descriptor_validation";
-    try {
-      const descriptor = prepared.initialDestinationDescriptor;
-      if (descriptor === undefined) throw new Error("Successor smoke lost its held destination descriptor.");
-      const opened = fs.fstatSync(descriptor);
-      const buffer = Buffer.alloc(Buffer.byteLength("original"));
-      const bytesRead = fs.readSync(descriptor, buffer, 0, buffer.length, 0);
-      if (!opened.isFile() || bytesRead !== buffer.length || buffer.toString("utf8") !== "original") {
-        throw new Error("Windows held destination descriptor did not retain the original object.");
-      }
-      const named = readIdentity(successorPath);
-      if (named && (
-        !named.isFile() ||
-        named.isSymbolicLink() ||
-        named.dev !== opened.dev ||
-        named.ino !== opened.ino ||
-        fs.readFileSync(successorPath, "utf8") !== "original"
-      )) {
-        throw new Error("Windows held destination pathname changed unexpectedly.");
-      }
-    } finally {
-      releaseOutput(prepared);
-    }
-    return false;
-  }
-}
-
-function isExpectedWindowsHandleFenceError(error) {
-  return error !== null && typeof error === "object" &&
-    new Set(["EACCES", "EBUSY", "EPERM"]).has(error.code);
 }
 
 function runWorker(request, prepared) {
@@ -195,40 +153,23 @@ function prepareOutput(outputPath, generation) {
   const parent = fs.statSync(parentRealPath);
   const destination = path.join(parentRealPath, path.basename(outputPath));
   const initialDestination = readIdentity(destination);
-  let initialDestinationDescriptor;
+  let destinationBinding = { kind: "absent" };
   if (initialDestination) {
-    initialDestinationDescriptor = fs.openSync(
-      destination,
-      fs.constants.O_RDONLY |
-        (fs.constants.O_NONBLOCK ?? 0) |
-        (fs.constants.O_NOFOLLOW ?? 0)
-    );
-    const opened = fs.fstatSync(initialDestinationDescriptor);
-    const named = fs.lstatSync(destination);
-    if (
-      !opened.isFile() ||
-      !named.isFile() ||
-      named.isSymbolicLink() ||
-      opened.dev !== initialDestination.dev ||
-      opened.ino !== initialDestination.ino ||
-      opened.dev !== named.dev ||
-      opened.ino !== named.ino
-    ) {
-      fs.closeSync(initialDestinationDescriptor);
-      throw new Error("Built diagnostics export worker smoke destination binding failed.");
-    }
+    destinationBinding = process.platform === "win32"
+      ? captureDigestBinding(destination, initialDestination)
+      : captureDescriptorBinding(destination, initialDestination);
   }
   const temporaryPath = path.join(parentRealPath, `.pige-support-${generation}.tmp`);
   let temporaryDescriptor;
   try {
     temporaryDescriptor = fs.openSync(temporaryPath, "wx", 0o600);
   } catch (error) {
-    if (initialDestinationDescriptor !== undefined) fs.closeSync(initialDestinationDescriptor);
+    if (destinationBinding.kind === "held_descriptor") fs.closeSync(destinationBinding.descriptor);
     throw error;
   }
   const temporary = fs.fstatSync(temporaryDescriptor);
   return {
-    initialDestinationDescriptor,
+    destinationBinding,
     temporaryDescriptor,
     temporaryPath,
     request: {
@@ -237,19 +178,78 @@ function prepareOutput(outputPath, generation) {
       parentRealPath,
       parentDevice: parent.dev,
       parentInode: parent.ino,
-      ...(initialDestinationDescriptor !== undefined && initialDestination
-        ? {
-            initialDestinationDescriptor,
-            initialDestinationDevice: initialDestination.dev,
-            initialDestinationInode: initialDestination.ino
-          }
-        : {}),
+      destinationBinding,
       temporaryPath,
       temporaryDescriptor,
       temporaryDevice: temporary.dev,
       temporaryInode: temporary.ino
     }
   };
+}
+
+function captureDescriptorBinding(destination, initial) {
+  const descriptor = openDestination(destination);
+  try {
+    const opened = fs.fstatSync(descriptor);
+    const named = fs.lstatSync(destination);
+    assertStableNamedFile(initial, opened, named);
+    return { kind: "held_descriptor", descriptor, device: opened.dev, inode: opened.ino };
+  } catch (error) {
+    fs.closeSync(descriptor);
+    throw error;
+  }
+}
+
+function captureDigestBinding(destination, initial) {
+  if (initial.size > 2 * 1024 * 1024) {
+    throw new Error("Built diagnostics export worker smoke destination exceeds its bound.");
+  }
+  const descriptor = openDestination(destination);
+  try {
+    const before = fs.fstatSync(descriptor);
+    const namedBefore = fs.lstatSync(destination);
+    assertStableNamedFile(initial, before, namedBefore);
+    const bytes = Buffer.alloc(before.size);
+    let offset = 0;
+    while (offset < bytes.length) {
+      const read = fs.readSync(descriptor, bytes, offset, bytes.length - offset, offset);
+      if (read <= 0) throw new Error("Built diagnostics export worker smoke readback did not advance.");
+      offset += read;
+    }
+    const after = fs.fstatSync(descriptor);
+    const namedAfter = fs.lstatSync(destination);
+    assertStableNamedFile(before, after, namedAfter);
+    return {
+      kind: "content_digest",
+      device: after.dev,
+      inode: after.ino,
+      size: after.size,
+      modifiedAtMs: after.mtimeMs,
+      changedAtMs: after.ctimeMs,
+      sha256: createHash("sha256").update(bytes).digest("hex")
+    };
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+function openDestination(destination) {
+  return fs.openSync(
+    destination,
+    fs.constants.O_RDONLY |
+      (fs.constants.O_NONBLOCK ?? 0) |
+      (fs.constants.O_NOFOLLOW ?? 0)
+  );
+}
+
+function assertStableNamedFile(initial, opened, named) {
+  if (!opened.isFile() || !named.isFile() || named.isSymbolicLink() ||
+    initial.dev !== opened.dev || initial.ino !== opened.ino ||
+    opened.dev !== named.dev || opened.ino !== named.ino ||
+    initial.size !== opened.size || initial.mtimeMs !== opened.mtimeMs ||
+    initial.ctimeMs !== opened.ctimeMs) {
+    throw new Error("Built diagnostics export worker smoke destination binding failed.");
+  }
 }
 
 function readIdentity(filePath) {
@@ -268,8 +268,8 @@ function releaseOutput(prepared) {
     try {
       fs.closeSync(prepared.temporaryDescriptor);
     } finally {
-      if (prepared.initialDestinationDescriptor !== undefined) {
-        fs.closeSync(prepared.initialDestinationDescriptor);
+      if (prepared.destinationBinding.kind === "held_descriptor") {
+        fs.closeSync(prepared.destinationBinding.descriptor);
       }
     }
   }
