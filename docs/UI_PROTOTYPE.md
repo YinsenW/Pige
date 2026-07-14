@@ -1457,6 +1457,28 @@ another product's source, assets, trademarks, illustrations, or exact screen com
 this owner contract into renderer tokens, structural declarations, and the governed
 visual-capture matrix. The manifest must not invent behavior absent from this document.
 
+### Brand and application icon
+
+- The approved Pige application mark is the white pigeon cutout over a deep teal
+  circle on a pure-white canvas. `resources/brand/pige-icon/master/pige-icon-1024.png`
+  is the raster color and composition source of truth.
+- Keep the mark quiet, singular, and recognizable. Do not add a letter, wordmark,
+  badge, second metaphor, decorative container, tinted background, or artificial
+  shadow. Do not recolor the approved artwork without a new UI Design review.
+- Platform exports must preserve the full pigeon silhouette and current optical
+  padding. The operating system, not the source artwork, owns final masks and corner
+  treatment.
+- macOS and iOS use an opaque square source and must not be pre-rounded. Windows must
+  ship native small-size frames rather than relying only on a scaled 1024px image.
+  Android uses adaptive foreground/background layers plus a monochrome layer, with the
+  visible mark inside the centered `66/108` safe zone.
+- At 16 to 32px, the eye, beak, teal circle, and white pigeon silhouette are the
+  recognition-critical features. If a future vector redraw is required, simplify
+  translucent tail detail before changing these four features.
+- Platform export inventory and acceptance checks are maintained in
+  `resources/brand/pige-icon/README.md`. Build configuration and store integration are
+  Development/release responsibilities and must be verified in packaged output.
+
 ### Foundation
 
 - Use a `4px` base spacing unit. Normal component spacing should use `4`, `8`, `12`,
