@@ -989,7 +989,7 @@
     },
     "PIGE-SEC-002": {
       "status": "planned",
-      "plannedTarget": "Current-action Broker foundation is implemented; real production Agent/Skill/package/local-tool callers, capacity, broader scope and signed-platform proof remain."
+      "plannedTarget": "Current-action Broker foundation is implemented; real production Agent/Skill/package/local-tool callers, focused modal convergence, capacity, broader scope and signed-platform proof remain."
     },
     "PIGE-SEC-003": {
       "status": "planned",
@@ -1062,7 +1062,7 @@
       "evidence": ["EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-BOUNDARY", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-RETRIEVAL", "EV-PI-INGEST-UPDATE", "EV-UPDATE-RECOVERY", "EV-PI-INGEST-PROPOSAL", "EV-PI-URL-INGRESS", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE", "EV-PI-STREAM-STRUCTURAL-BUDGET", "EV-PI-TERMINAL-RECOVERY", "EV-PI-TERMINAL-MISSING", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY", "EV-PI-DATASET-INGEST", "EV-DATASET-CONTINUATION", "EV-PI-DATASET-QUERY", "EV-DATASET-QUERY-CORE", "EV-DATASET-QUERY-WORKER-SMOKE", "EV-BUNDLED-WORKER-AVAILABILITY", "EV-ASSEMBLED-RUNTIME-COMPOSITION"],
       "open": {
         "id": "OPEN-REQ-PIGE-PI-001",
-        "description": "Hash-bound create/update recovery, one bounded source-terminal correction, and one Dataset-query route work; broader eligibility, query composition, Broker, and packaged BYOK remain.",
+        "description": "Hash-bound create/update recovery, Home same-Job typed terminal repair, and one Dataset-query route work. Legacy agent_ingest repair, durable mid-repair checkpoint/restart, broader eligibility/query composition, real production Broker callers, and signed packaged BYOK remain open.",
         "targetBuilds": ["B3.06", "B3.13"],
         "targetExits": ["E3.04", "E3.08"]
       }
@@ -1086,7 +1086,7 @@
     },
     "PIGE-PI-003": {
       "status": "planned",
-      "plannedTarget": "Injected adapter proves exact Broker gating; production arbitrary-path/Skill/package/local-tool adapters and full bypass matrix remain."
+      "plannedTarget": "Injected adapter proves exact Broker gating; production arbitrary-path/Skill/package/local-tool adapters, focused modal convergence and the full bypass matrix remain."
     },
     "PIGE-PI-004": {
       "status": "partial",
@@ -1103,7 +1103,7 @@
     },
     "PIGE-PI-005": {
       "status": "planned",
-      "plannedTarget": "Signed packaged macOS/Windows BYOK proof for direct, retrieved, file, URL, follow-up, and safe draft-replacement turns."
+      "plannedTarget": "Every submission enters one Pi-owned Job with source preservation as its first checkpoint; Pi owns iterative tools, Pi-authored Markdown and validation repair, with safe drafts, no presentation-only provider call, distinct hard-block outcomes, and signed packaged macOS/Windows BYOK proof."
     },
     "PIGE-SETTINGS-001":{"status":"partial","evidence":["EV-SETTINGS","EV-LOCAL-SETTINGS","EV-FIRST-HOME-PREFERENCE","EV-RESTORE-BINDING-CAS"],"open":{"id":"OPEN-REQ-PIGE-SETTINGS-001","description":"The full release-visible settings census and restore behavior for every scope remain open.","targetBuilds":["B1.10","B1.11"],"targetExits":["E1.05"]}},
     "PIGE-SETTINGS-002":{"status":"partial","evidence":["EV-SETTINGS","EV-LOCAL-SETTINGS","EV-FIRST-HOME-PREFERENCE","EV-RESTORE-BINDING-CAS"],"open":{"id":"OPEN-REQ-PIGE-SETTINGS-002","description":"The full release-visible settings census and restore behavior for every scope remain open.","targetBuilds":["B1.10","B1.11"],"targetExits":["E1.05"]}},
@@ -1266,7 +1266,7 @@
       ],
       "open": {
         "id": "OPEN-REQ-PIGE-EVAL-002",
-        "description": "Uncertainty replan/preservation and true-exception fixtures remain open.",
+        "description": "Home same-Job citation/schema repair and typed non-progress incompatibility work. Legacy agent_ingest repair, durable mid-repair recovery, broader uncertainty preservation/abstention, and true-exception fixtures remain open.",
         "targetBuilds": [
           "B3.07",
           "B3.11"
@@ -2329,7 +2329,7 @@
       ],
       "open": {
         "id": "OPEN-EXIT-E3.05",
-        "description": "Invalid/hostile rejection, uncertainty handling, and true-exception routing remain open.",
+        "description": "Home rejects unsafe output and repairs recoverable citation/schema/tool failures in the same Job. Legacy ingest repair, durable mid-repair recovery, broader uncertainty/abstention, and true-exception routing remain open.",
         "targetBuilds": [
           "B3.07"
         ],
@@ -2367,14 +2367,14 @@
       "evidence": ["EV-BOUNDARY", "EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-RETRIEVAL", "EV-PI-INGEST-UPDATE", "EV-UPDATE-RECOVERY", "EV-PI-INGEST-PROPOSAL", "EV-PI-URL-INGRESS", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE", "EV-PI-STREAM-STRUCTURAL-BUDGET", "EV-PI-TERMINAL-RECOVERY", "EV-PI-TERMINAL-MISSING", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY"],
       "open": {
         "id": "OPEN-EXIT-E3.08",
-        "description": "Hash-bound exact create/additive-update recovery/Undo and one bounded source-terminal correction work; broader eligibility, routes, Broker, and packaged BYOK remain.",
+        "description": "Hash-bound exact create/additive-update recovery/Undo and Home iterative typed terminal repair work. Legacy ingest repair, durable mid-repair recovery, broader eligibility/routes, real production Broker callers, and signed packaged BYOK remain open.",
         "targetBuilds": ["B3.13"],
         "targetExits": ["E3.08"]
       }
     },
     "E3.09": {
       "status": "planned",
-      "plannedTarget": "Signed packaged macOS/Windows BYOK proof for direct, retrieved, file, URL, follow-up, and safe draft-replacement turns."
+      "plannedTarget": "One durable Home Job autonomously repairs rejected candidates/tool inputs, streams Pi-owned provisional answers without a reproduction-only provider turn, returns distinct hard blocks, and passes signed packaged macOS/Windows BYOK proof."
     },
     "E4.01": {
       "status": "partial",
@@ -2509,7 +2509,7 @@
       "evidence": ["EV-RETRIEVAL", "EV-HOME-AGENT", "EV-HOME-UI", "EV-HOME-DRAFT-ADAPTER", "EV-HOME-DRAFT-FAIL-CLOSED", "EV-HOME-DRAFT-PUBLISHER", "EV-HOME-DRAFT-UI", "EV-HOME-ENTER", "EV-PI-ELECTRON-SMOKE", "EV-PI-DATASET-QUERY", "EV-DATASET-QUERY-UI", "EV-DATASET-TIMELINE-RESTORE"],
       "open": {
         "id": "OPEN-EXIT-E6.01",
-        "description": "Ranked retrieval, safe draft replacement, and one bounded Dataset table work; 10k, mixed-source/query breadth, and signed installed macOS/Windows UI remain open.",
+        "description": "Ranked retrieval, safe draft replacement, Home same-Job validation repair, and one bounded Dataset table work. Durable mid-repair recovery, 10k, mixed-source/query breadth, and signed installed macOS/Windows UI remain open.",
         "targetBuilds": [
           "B6.01",
           "B6.02"
@@ -2645,7 +2645,7 @@
     },
     "E8.02": {
       "status": "planned",
-      "plannedTarget": "Current-action Deny/Allow once core is proven; exit still needs real production caller, capacity and signed platform report."
+      "plannedTarget": "Current-action Deny/Allow once core is proven; exit still needs a real production caller, focused permission modal, capacity and signed platform report."
     },
     "E8.03": {
       "status": "planned",
@@ -2984,7 +2984,7 @@
     "EV-RETRIEVAL": { "kind": "test", "path": "tests/unit/retrieval-service.test.ts", "selector": "answers from bounded local evidence with citations and ranked pages" },
     "EV-HOME-AGENT": { "kind": "test", "path": "tests/unit/home-agent-service.test.ts", "selector": "Home Pi Agent service" },
     "EV-HOME-DRAFT-ADAPTER": { "kind": "test", "path": "tests/unit/pi-agent-runtime-adapter.test.ts", "selector": "emits only parsed safe answer snapshots from the exact terminal Home tool" },
-    "EV-HOME-DRAFT-FAIL-CLOSED": { "kind": "test", "path": "tests/unit/pi-agent-runtime-adapter.test.ts", "selector": "fails closed when the authorized presentation text differs from the validated terminal answer" },
+    "EV-HOME-DRAFT-FAIL-CLOSED": { "kind": "test", "path": "tests/unit/pi-agent-runtime-adapter.test.ts", "selector": "does not expose generic Pi text as a Home draft" },
     "EV-HOME-DRAFT-PUBLISHER": { "kind": "test", "path": "tests/unit/agent-turn-draft-publisher.test.ts", "selector": "Agent turn draft publisher" },
     "EV-HOME-DRAFT-UI": { "kind": "test", "path": "tests/unit/home-agent-conversation-ui.test.ts", "selector": "replaces one escaped provisional answer and ignores stale or wrong-turn drafts before the final" },
     "EV-HOME-ENTER": { "kind": "test", "path": "tests/unit/home-agent-conversation-ui.test.ts", "selector": "sends a non-empty Home turn on Enter and blocks an empty Enter" },

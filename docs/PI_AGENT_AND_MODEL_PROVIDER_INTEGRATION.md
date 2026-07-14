@@ -53,10 +53,12 @@ parallel when a reviewed public Pi surface covers them.
 Pige owns UI; profiles/secrets; evidence, prompts, citations and validation; egress,
 permissions and tools; and all durable product records.
 
-Every semantic Home or note submission uses the same embedded Pi entry. Source-bearing
-turns begin after Host preservation; pure questions enter directly. Pi may answer
-without tools or select and replan scoped tools. Pige owns evidence integrity, policy,
-permissions, egress, provenance, validation, and commits—not the semantic route.
+Every Home or note submission immediately creates one durable Pi-owned Agent Job through
+the same embedded entry. Source preservation is the first checkpoint of a source-bearing
+Job, not a Host semantic pipeline; pure questions enter Pi directly. Pi may answer
+without tools or select, repeat, and replan scoped tools. Pige owns evidence integrity,
+policy, permissions, egress, provenance, validation, and commits—not the semantic route
+or the number of corrective model turns needed to reach a valid result.
 
 “Complete Pi integration” means the relevant generic `pi-agent-core` and `pi-ai`
 SDK surfaces. It does not mean packaging Pi's coding-agent product, TUI, CLI/RPC,
@@ -287,9 +289,22 @@ Rules:
 - Pi tool output is treated as untrusted tool output and sanitized before display, logging, or model reuse.
 - A tool implements one bounded deterministic capability. It cannot call a model,
   another tool, or hide a composite semantic workflow.
+- The registered Pige core catalog is capability- and authority-scoped, not selected by a
+  Host intent classifier. Pi may revisit read-only/idempotent tools and may retry a
+  rejected side-effecting call with corrected typed input; deterministic effect identity,
+  sequential execution, revalidation, and idempotency prevent duplicate writes.
+- Tool-specific byte/time/resource bounds protect the Host. They must not encode a fixed
+  semantic route such as exactly one correction, one retrieval, or one query when Pi can
+  make useful progress safely.
 - Final assistant text never causes a durable knowledge write. A write occurs only from
-  a validated registered tool call, except deterministic source preservation and
-  mechanical projections owned by the same validated commit.
+  a validated registered tool call in which Pi authors the intended Markdown. The Host
+  may add/validate stable IDs, timestamps, provenance and commit metadata, but cannot
+  replace Pi with a hidden content/organization workflow. Deterministic source
+  preservation and mechanical projections remain Host-owned parts of the same Job.
+- A relevant filesystem/commit tool is not hidden merely because its exact scope is not
+  pre-authorized. Pi may request it; the tool returns a durable permission pause and
+  resumes after allow, or a typed denial so Pi can replan. Only capability absence or a
+  hard security prohibition removes the action entirely.
 
 The Pige Tool Registry is Pi's only product-capability surface. Each entry declares
 stable ID/version/description/capability; strict input/output schemas and trust; effect,
@@ -318,6 +333,12 @@ body-free audit classification and stops before another model turn. Dataset edit
 derived views, joins, multi-Dataset composition, and other structured tools remain later
 registry work.
 
+That one-query sequence is current foundation evidence, not the permanent Agent
+contract. The target registry permits Pi to refine or repeat bounded read-only Dataset
+queries under the same exact Dataset/revision/privacy binding when prior typed results do
+not yet support a valid answer; joins, arbitrary SQL, paths, handles, and writes remain
+outside this tool.
+
 The model sees only bounded descriptors. Calls bind run/call, catalog/policy/source,
 tool-version, and input hashes; results carry typed refs, warnings, and provenance while
 large bodies remain Artifacts. Host validation precedes every result or effect.
@@ -338,12 +359,38 @@ Registration controls what Pi may call, not what it must call. A general answer 
 zero tools and no local citations. Empty retrieval returns a typed result for replanning;
 only explicit vault/source-only grounding turns missing evidence into insufficiency.
 
-After a preserved-source inspection, stopping as ordinary prose without attempting any
-registered terminal knowledge action may receive one bounded correction turn naming only
-the currently registered terminal actions. A second prose stop fails with
-`agent_runtime.knowledge_action_missing`. Once the model attempts a terminal action,
-including an invalid or denied one, Pige does not silently substitute or retry another;
-the typed tool/error path remains authoritative.
+### 11.1 Autonomous Completion And Repair
+
+One user submission owns one durable Pige Agent Job and may contain multiple upstream Pi
+model turns and tool calls. The completion target is one accepted result, not one attempt
+at a terminal tool.
+
+- A terminal action such as `pige_finish_home_turn` or a knowledge-publication tool is a
+  repeatable validation boundary. Only an accepted call terminates the semantic loop or
+  publishes an effect. Rejected arguments, grounding, citations, evidence refs, stale
+  bindings, or recoverable tool results return bounded typed repair feedback to Pi.
+- Repair feedback contains stable categories, safe field pointers/counts, opaque allowed
+  refs, and fixed Host-authored hints only. It contains no source body, prompt, raw model
+  output, path, credential, endpoint, policy secret, or private diagnostic detail.
+- Pi may correct the call, retrieve or inspect more evidence, choose another registered
+  tool, narrow the claim, or return a grounded abstention. Pige does not replace that
+  decision with a fixed prompt loop, a Host-selected fallback, or an arbitrary one-repair
+  limit.
+- Denied authority, restricted egress, cancellation, unavailable required runtime, and
+  irreconcilable conflict or evidence drift remain hard Host boundaries. Pi may choose a
+  different already-authorized route, but it cannot reinterpret or override the denial.
+- Progress-aware resource controls cap wall time, model/tool work, bytes, and repeated
+  identical failure fingerprints. Reaching an internal slice limit checkpoints and
+  autonomously resumes/replans the same Job when safe; persistent non-progress must become
+  a truthful abstention or typed provider/capability incompatibility, not the generic
+  first-attempt `model_provider.output_invalid` retry surface.
+- No intermediate repair attempt creates a durable assistant event, Job result, proposal,
+  or Operation. Accepted effects keep their deterministic identity, so repair/restart
+  cannot duplicate a write.
+
+This is upstream Pi continuation, not a Pige-authored parallel Agent loop. Pige supplies
+typed feedback and durable Job/checkpoint ownership through the sole adapter; Pi retains
+tool selection, replanning, follow-up, and completion control.
 
 ## 12. Sessions, Memory, And Durable State
 
@@ -363,20 +410,17 @@ Home follow-up creates fresh isolated Pi from at most 16 checked prior user/assi
 messages/64 KiB; history cannot become the current result. Pige events/Jobs, not Pi
 sessions, are authoritative. Compaction/indexing and steer queues remain open.
 
-Home draft streaming is a Host-owned presentation boundary, not raw Pi/provider output.
-The preferred path accepts only already-parsed, bounded `answer` snapshots from the exact
-`pige_finish_home_turn` call after control/restricted-content filtering. When a provider
-does not expose useful incremental tool arguments, successful execution of that exact
-terminal tool may open one presentation-only Pi turn: further tools are blocked, and only
-assistant-text prefixes of the already validated answer are accepted until the text
-matches it exactly. Any alteration, incomplete reproduction, or unusable long-answer
-stream fails closed instead of silently becoming completion-only output.
+Home draft streaming is a Pi-owned answer presentation boundary, not raw provider output.
+Pige accepts bounded `answer` replacement snapshots from reviewed Pi/parsed terminal-answer
+events after control/restricted-content filtering. A rejected candidate may shrink or
+replace the draft while Pi repairs it. Draft validity never determines Job success.
+Pige must not make a second provider call solely to force the model to reproduce an answer
+it already generated for UI streaming.
 
 Both paths emit sender/turn/Job-bound, monotonically sequenced `draft_replace` snapshots.
-Pige never emits pre-authorization assistant prose, thinking, raw JSON/tool arguments,
-provider events, model refs, grounding, or citations. Replacement snapshots may shrink
-or revise prior text. The presentation fallback may make one additional provider turn;
-it grants no new tool, data, or destination authority.
+Pige never emits thinking, raw JSON/tool arguments, provider events, model refs, grounding,
+or citations. Replacement snapshots may shrink or revise prior text and grant no tool,
+data, destination, or durable-write authority.
 
 Pi event retention and provider-stream safety are separate bounds. Every raw update is
 still inspected by the safe draft controller and counts toward an independent hard cap;
@@ -385,10 +429,11 @@ history so token cadence cannot exhaust the smaller tool/lifecycle event budget.
 
 The draft is escaped, non-durable, and non-authoritative. Full output schema, evidence,
 source revision, grounding, and citations still validate before the assistant event and
-Job result commit. That durable final replaces the draft; failure/cancellation removes or
-marks it, cancellation ends the stream, and restart restores only durable conversation
-state. Ambient Pi `text_delta` is never a Home answer; text deltas are eligible only in
-the exact post-validation presentation phase and must reproduce the authorized answer.
+Job result commit. Repair replaces the provisional draft in place; the accepted durable
+final replaces it exactly once. Cancellation or a true external block clears/marks it,
+and restart restores only durable conversation state. Ambient provider payloads and Pi
+thinking are never Home answer events; the sole adapter must identify a reviewed Pi-owned
+answer channel rather than infer one from arbitrary text.
 
 Agent memory:
 

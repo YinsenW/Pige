@@ -132,7 +132,8 @@ Rules:
 - Model/provider behavior must follow `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`; do not add Advanced/Fast model settings unless runtime routing support is real and tested.
 - Local embeddings, OCR, speech, parsers, and bundled tool health belong to Local Capabilities.
 - Non-default Agent/extension permission mode, cloud-send policy, API key storage mode,
-  and YOLO belong to Permissions & Privacy; standing knowledge autonomy is not YOLO.
+  and YOLO belong to Permissions & Privacy; standing active-vault knowledge-Markdown
+  autonomy is not YOLO.
 - Vault & Note Storage is the place to see where local notes and source assets live.
 - Trash/archive policy follows `docs/DATA_ARCHITECTURE.md`; no setting lets any actor permanently delete durable knowledge/source evidence automatically.
 

@@ -319,7 +319,14 @@ RUNTIME POLICY CONTEXT
 - Cloud model use: send bounded selected context to the connected provider without routine prompts; show status and enforce higher-risk or stricter-policy gates.
 - Writes: recoverable knowledge auto-applies with Activity/Undo; exceptions propose.
 - Retrieval: use selected snippets only; do not imply whole-vault search unless retrieval covered it.
+- Completion: treat typed validation/tool feedback as work to repair; continue until a
+  valid result, grounded abstention, or true external block rather than stopping after the
+  first rejected candidate.
 ```
+
+Completion behavior is not a user-facing autonomy slider. Host services own progress,
+cost, byte, time, and non-progress limits; the typed context tells Pi the outcome contract
+without granting permission, egress, filesystem, tool, or destination authority.
 
 Rules:
 

@@ -431,6 +431,31 @@ Examples:
 
 Retry can be automatic only for safe, bounded failures.
 
+### 8.1 Agent-Internal Completion Recovery Is Not A Job Retry
+
+A durable `agent_turn` or `agent_ingest` Job may contain multiple upstream Pi model turns
+and registered tool calls before it has an accepted result. Recoverable schema, citation,
+grounding, evidence, terminal-action, or tool-input rejection returns bounded typed repair
+feedback to Pi and leaves the Job `running`; it is not written as `failed_retryable` and
+does not require `jobs.retry`.
+
+- Pi may gather more evidence, revisit a read-only/idempotent tool, correct a tool call,
+  narrow its claim, or return a grounded abstention.
+- Progress is measured by changed failure fingerprint, changed plan/tool input, newly
+  validated evidence, or an accepted effect/result. Repeating an identical rejected call
+  is not progress.
+- Service-owned wall-time, model/tool-work, byte, and non-progress bounds prevent runaway
+  cost or loops without prescribing a fixed semantic route or one-correction limit.
+- Reaching one internal execution slice checkpoints a body-free PlanSummary/failure
+  fingerprint and autonomously resumes or replans the same Job when doing so cannot repeat
+  an uncommitted destructive effect. It does not ask the user to resubmit the prompt.
+- A persistent provider/tool-protocol incompatibility, unavailable capability, authority
+  denial, cancellation, or irreconcilable conflict transitions to its distinct typed
+  blocked/failed state. Recoverable validation alone never owns a user-visible failure.
+- No intermediate candidate becomes a conversation event, Job output, proposal, or
+  Operation. Deterministic call/effect identity and existing claim/CAS rules still guard
+  every accepted durable effect.
+
 Automatic retry allowed:
 
 - Transient parser worker crash before durable write.
@@ -446,7 +471,9 @@ User-triggered retry required:
 - External file moved or missing.
 - Conflict with externally edited Markdown.
 - Risky proposal rejected or expired.
-- Any step that may repeat a destructive or paid action.
+- Any step that may repeat a destructive effect or an unbounded/unknown paid action.
+  Bounded corrective model turns inside the same exact connected-BYOK Agent Job are
+  Agent-internal completion work, not a user-triggered retry.
 
 Retry record:
 

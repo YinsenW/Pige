@@ -2645,8 +2645,9 @@ Local-first owns data, not friction; prompt-first UX makes users supervise deleg
 Consequences:
 
 - Pi decides semantics; Host validates provenance, policy, concurrency, recovery, and commit.
-- Core tools need no Permission prompt; extensions/new authority stay brokered and exact
-  BYOK destinations retain standing egress authority.
+- Standing-authority active-vault knowledge Markdown needs no Permission prompt; Pi core,
+  extension, package, or local-tool actions outside that scope stay brokered. Exact BYOK
+  destinations retain their separate standing egress authority.
 - Exact create, cited append, bounded tags, and one directed link have Activity/Undo; proposals stay transitional, other mutations open.
 - Home uses quiet Activity/details/Undo, not routine confirmation cards.
 
@@ -2660,8 +2661,9 @@ References:
 
 ### D-20260713-Safe-Home-Draft-Replacement
 
-Status: Accepted
+Status: Superseded
 Date: 2026-07-13
+Superseded by: D-20260714-Pi-Autonomous-Completion
 
 Decision:
 
@@ -2698,6 +2700,67 @@ References:
 - `docs/API_AND_IPC_DESIGN.md`
 - `docs/UI_PROTOTYPE.md`
 - `docs/PERFORMANCE_AND_RELIABILITY.md`
+- `docs/QUALITY_AND_TEST_STRATEGY.md`
+
+### D-20260714-Pi-Autonomous-Completion
+
+Status: Accepted
+Date: 2026-07-14
+Supersedes: D-20260713-Safe-Home-Draft-Replacement
+
+Decision:
+
+One user submission owns one durable Pi Agent Job and an outcome, not one model-output or
+terminal-tool attempt. Recoverable schema, citation, grounding, evidence, and tool-input
+rejection returns bounded typed feedback to upstream Pi. Pi remains free to correct,
+retrieve, inspect, revisit authorized tools, narrow, or abstain until one result is
+accepted. Host services enforce authority, security, egress, evidence truth, resource
+bounds, idempotent effects, and durable commit; they do not impose a one-correction
+semantic script or surface the first rejected candidate as a user retry.
+
+Home drafts come from a reviewed Pi-owned answer channel and remain temporary. Pige does
+not make a second provider call solely to force exact answer reproduction for streaming.
+Only an accepted final becomes durable; cancellation or a real external boundary may stop
+the Job.
+
+Rationale:
+
+Pi Agent already owns tool selection, continuation, and replanning. Treating validation as
+a terminal exception turns it into a fragile one-shot structured-output API and makes the
+user supervise model compliance. Typed feedback preserves Host truth and safety while
+letting stronger present and future models improve completion without redesigning the
+interaction.
+
+Consequences:
+
+- Pige is the local product shell and capability/commit layer around Pi. Submission
+  creates one Agent Job immediately; source preservation is its first checkpoint, not a
+  separate semantic pipeline. Pi authors Markdown through scoped write tools, while the
+  Host only validates authority/schema/conflict and performs atomic commit/recovery.
+- Terminal tools are repeatable validation boundaries; rejected calls cannot write and
+  accepted calls alone terminate/publish.
+- The relevant Pige core tool catalog follows capability and authority, not Host intent.
+  Read-only/idempotent tools may be revisited; side effects remain sequential,
+  deterministic, revalidated, and idempotent.
+- Progress-aware wall-time/work/byte/non-progress limits protect cost and reliability but
+  do not encode an arbitrary semantic route. Internal correction remains `running` and
+  creates no durable assistant result, proposal, Job output, or Operation.
+- Denied authority, restricted egress, cancellation, unavailable required capability,
+  and irreconcilable conflict/drift remain hard boundaries. They cannot be converted into
+  repair permission.
+- Persistent provider/tool-protocol incompatibility uses a distinct typed repair/change-
+  model outcome; the generic first-attempt output-invalid retry is not normal UX.
+- Thinking, raw provider events, prompts, tool JSON, secrets, paths, and source bodies do
+  not enter drafts or repair feedback.
+
+References:
+
+- `docs/VISION.md`
+- `docs/PRD.md`
+- `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`
+- `docs/PROMPT_DESIGN.md`
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
 - `docs/QUALITY_AND_TEST_STRATEGY.md`
 
 ## 4. Deferred Decisions

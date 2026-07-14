@@ -127,10 +127,17 @@ If the answer is uncertain, use `docs/DATA_ARCHITECTURE.md` and `docs/DOMAIN_MOD
 
 ## 8. Permission Decision Checklist
 
+Do not route schema-valid recoverable knowledge-Markdown create/update/link/organize work
+inside the active Pige vault through a routine prompt; that is standing Agent authority.
+The exact source selected by drop/file picker likewise has current-action read/preserve
+authority. Tool ownership alone grants nothing beyond those defaults.
+
 Route through Permission Broker when an action does any of these:
 
 - Reads or writes vault data outside the current job scope.
-- Deletes, archives, merges, renames, or rewrites durable vault data.
+- Requests any arbitrary path/filesystem/command/commit effect outside standing authority.
+- Permanently deletes, bypasses trash/recovery, overwrites a user-owned original, or
+  changes protected policy/settings; apply the stronger confirmation layer where owned.
 - Reads external filesystem paths.
 - Uses external network access beyond ordinary user-initiated URL capture.
 - Runs shell commands, package-backed tools, or external/Web Skill code.

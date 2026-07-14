@@ -64,9 +64,12 @@ Rules:
 
 ## 5. Workflow Prompts
 
-Every semantic submission begins as one Pi turn after any required evidence
-preservation. Prompts do not predeclare capture/query mode or require retrieval; Pi may
+Every submission creates one Pi-owned Agent Job immediately. Source-bearing jobs first
+complete their durable evidence-preservation checkpoint, then expose that ref to Pi in
+the same job. Prompts do not predeclare capture/query mode or require retrieval; Pi may
 answer directly, inspect preserved evidence, retrieve, or call another allowed tool.
+Pi owns the semantic workflow and the Markdown it asks a knowledge-write tool to commit;
+Host code does not rewrite the content into a different note or select a hidden next step.
 
 ### 5.1 Ingest
 
@@ -87,7 +90,9 @@ Required context:
 Required output:
 
 - Tool calls and ephemeral bounded plan summaries; restart replans them.
-- Schema-valid knowledge-change arguments with citations and no arbitrary path.
+- Schema-valid knowledge-change arguments with citations. The standing-authority
+  Markdown tool stays inside managed vault roots; a separate arbitrary-path action is a
+  brokered tool request, not an unvalidated field smuggled into that payload.
 - A final summary from verified results; final text cannot write durable knowledge.
 
 Embedded Pi terminal knowledge-tool input:
@@ -127,16 +132,19 @@ Rules:
 - Parser coverage, truncation, OCR-pending state, and bounded parser warnings are trusted source-quality metadata outside the untrusted body. Before egress, Pige bounds and redacts every dynamic metadata string, freezes the typed prompt context, and includes only a non-secret policy summary. The prompt tells the model not to imply complete-document coverage when these fields are limited.
 - Validated OCR handoff adds engine, normalized confidence, bounded warning codes, OCR Artifact IDs, and bounded `ocr:block:N` or `page:N/ocr:block:M` locators as trusted evidence metadata. Recognized text remains inside fragment-level evidence delimiters.
 - Obvious secret-like strings are redacted before cloud model calls.
-- Malformed or schema-invalid tool arguments fail before the handler and cannot write partial wiki pages.
+- Malformed or schema-invalid tool arguments cannot reach a write. When the failure is
+  safely repairable, the Host returns bounded typed validation feedback to Pi so it can
+  correct or choose another registered action inside the same Agent Job.
 - The ingest output schema is strict. Model-authored settings, Provider changes, permission grants, tool requests, `PIGE.md` replacement, output paths, proposal trust, refs, or operation shape are rejected before any terminal effect.
 - The publication handler writes the validated note, Operation, and index. After its
   typed result, Jobs Service appends log and completes the Job; recovery is idempotent,
   not cross-file atomic. Raw prompts or provider responses are not persisted by default.
-- After source inspection, a turn that stops as prose without attempting a registered
-  terminal knowledge action may receive one bounded correction naming only the current
-  registered terminal actions. A second prose stop fails with stable typed error; an
-  invalid or denied terminal attempt is never silently replaced by another action.
-  Runtime/tool validation, not this correction prompt, remains the authority.
+- A terminal omission, malformed action, unknown evidence ref, or other recoverable
+  validation rejection returns a fixed Host-authored repair category to the upstream Pi
+  loop. Pi decides whether to retry the call, gather more evidence, choose another tool,
+  narrow the claim, or abstain. Prompts must not impose a one-correction script or treat
+  the first invalid call as completion. A denied authority/safety boundary remains
+  authoritative and is never rewritten as repair permission.
 - If `confidence` is `"low"` or warnings exist, apply only conservative supported content,
   mark a non-blocking quality warning, or abstain; confidence alone cannot demand approval.
 - Service-side quality guards add a warning and cap model-reported `high` confidence at `medium` when document extraction was range-limited or visible content still needs OCR. Prompt compliance alone is not the enforcement layer.
@@ -151,8 +159,16 @@ Rules:
   rendered service-side; model-authored locator tokens are never trusted.
 - Eligible reversible knowledge auto-commits; exceptions stage. Current tools cover exact
   create, cited append, bounded high-confidence tags, and one directed link
-  after inspect/retrieval. Pi gets opaque targets and candidates/claims/reason, never
-  path/base/Markdown/relation/Operation authority. Broader organization remains open.
+  after inspect/retrieval. Their fragment-style candidates/claims/reason inputs and
+  Host-rendered Markdown are transitional implementation evidence, not the target
+  authorship contract. The target scoped write tool lets Pi author the complete intended
+  bounded Markdown/change payload and relationship choice. Pi may separately request
+  arbitrary path/filesystem/commit actions through registered brokered tools, but cannot
+  smuggle path, base-version, Operation, permission, or commit authority into the default
+  Markdown payload. Host code may add or validate only protected IDs/timestamps/
+  provenance/base hashes and mechanical projections; it must not summarize, reorganize,
+  select another relationship, or build replacement knowledge content. Broader
+  organization remains open.
 
 ### 5.2 Home Query
 
@@ -182,12 +198,19 @@ Current Home/Pi evidence lives in acceptance. Direct answers, optional bounded r
 strict Host-resolved citations, untrusted evidence, per-turn revalidation, typed waiting,
 and vault-only insufficiency remain the prompt/runtime contract.
 
-The model completes Home through `pige_finish_home_turn`, not ordinary prose. If the Host
-returns an explicit presentation-only authorization after validating that terminal tool,
-the next Pi turn must reproduce exactly the previously submitted `answer` as assistant
-text, with no prefix, suffix, citation, or further tool call. Runtime enforcement blocks
-other tools and rejects any non-prefix, incomplete, restricted, or changed reproduction;
-the prompt is not the security boundary.
+The model completes Home through an accepted `pige_finish_home_turn`, not by escaping the
+typed boundary with ordinary prose. A rejected finish call returns bounded repair feedback
+and leaves Pi in control of the same Job; Pi may correct citations/grounding/schema,
+retrieve or inspect more evidence, or truthfully abstain. There is no prompt-authored
+one-retry limit. The Host terminates only after one finish call passes the complete current
+binding/evidence contract or a true external boundary stops the Job.
+
+Safe `answer` replacement snapshots may update while Pi works, including after validation
+feedback. They are presentation-only and never grant authority. Pige does not request a
+second provider turn merely to reproduce the final answer for streaming; the adapter uses
+a reviewed Pi-owned answer channel, filters control/restricted content, and lets the
+accepted durable result replace the draft. Runtime enforcement, not prompt wording,
+remains the security boundary.
 
 ### 5.3 Note Agent
 

@@ -210,8 +210,8 @@ Default user model:
 Default product loop:
 
 ```text
-submit one Home turn
--> preserve source-bearing evidence
+submit one Home turn and create one Agent Job
+-> preserve source-bearing evidence as that Job's first checkpoint
 -> Pi interprets intent and chooses bounded tools
 -> answer, clarify, or show durable/paused/review outcomes
 ```
@@ -1037,23 +1037,32 @@ conflicts remain exceptional.
 
 ## 11. Agent Workflows
 
+One user submission owns one durable Agent Job, not one fragile model-output attempt. Pi
+may use multiple internal model turns and registered tool calls while it is making
+progress. Recoverable schema, citation, grounding, evidence, or tool-input rejection is
+returned to Pi as bounded typed feedback so it can correct, retrieve, inspect, or choose
+another authorized tool without asking the user to retry. The Job completes with a valid
+answer/result, a grounded abstention, or an explicit external blocked outcome. Only user
+cancellation, unavailable model/capability, security or authority denial, irreconcilable
+conflict/drift, or another true external boundary terminates autonomous completion.
+
 ### 11.1 Ingest
 
 The ingest workflow happens when a new source enters Pige.
 
 Required invariants and outcomes:
 
-1. Pige validates the capture envelope, creates a Source Record, and preserves a managed
-   copy or verified original reference before expensive work.
-2. After preservation, Pi Agent is the sole semantic orchestrator. It receives bounded
-   source metadata and available-tool contracts, then chooses inspection, extraction,
-   OCR, retrieval, organization, analysis, and knowledge-write calls from their results.
+1. Submission creates one Pi Job; capture validation, Source Record, and managed-copy or
+   verified-reference preservation are its first evidence-safety checkpoint, not another
+   semantic pipeline.
+2. Pi receives the durable ref, bounded metadata, and tools, then alone chooses
+   inspection, extraction, OCR, retrieval, organization, analysis, and knowledge writes.
 3. Parser, OCR, retrieval, and write services execute only an Agent-selected scoped tool
-   call or resume that same authorized call. They enforce deterministic limits, policy,
-   validation, provenance, and commit fences, and can refuse unsafe work.
-4. The result is source-backed, schema-valid Markdown plus citations, index/log
-   projections, an operation summary, and visible created/updated/skipped/failed or
-   needs-attention status.
+   and enforce limits, policy, provenance, validation, and commit fences. The writer adds
+   protected metadata to Pi-authored Markdown; it never rewrites content or chooses a
+   step. Repairable rejection returns to Pi; unsafe/unauthorized work blocks.
+4. Output is source-backed schema-valid Markdown, citations, mechanical projections,
+   Operation summary, and visible created/updated/skipped/failed/needs-attention status.
 5. Eligible changes apply autonomously with Operations; exceptions use section 11.5. If the Agent, model, or required tool is
    unavailable, the preserved source remains visible and resumable; no hidden semantic
    pipeline substitutes for the Agent.
@@ -1064,9 +1073,10 @@ Example result:
 
 ### 11.2 Home Query
 
-Every Home submission is one Pi turn. Pi may answer directly, retrieve local knowledge,
-use another allowed tool, or ask for clarification. Source-bearing payloads are
-preserved first; Host services do not select the semantic branch.
+Every Home submission is one durable Pi-owned Agent Job. Pi may answer directly, retrieve
+local knowledge, call and revisit authorized tools, repair a rejected answer, or ask for
+clarification. Source-bearing payloads are preserved first; Host services do not select
+the semantic branch or turn the first invalid attempt into a user retry.
 
 Required outcomes:
 
@@ -1079,7 +1089,13 @@ Required outcomes:
    exceptional boundary uses a proposal.
 5. Home does not wait behind a spinner when safe answer text is available. It renders a
    bounded non-durable replacement draft, then atomically replaces it with the validated
-   final answer or clears it on failure/cancellation; restart restores durable state only.
+   final answer or clears it on cancellation or a true external block; restart restores
+   durable state only. Draft incompleteness or a rejected candidate answer does not fail
+   the Job: Pi revises the same provisional surface until the accepted result replaces it.
+6. Recoverable model-output validation is internal Agent progress. Home does not show
+   “output invalid, retry” while Pi can correct it. If the selected provider cannot support
+   the required Agent/tool protocol after autonomous recovery, Pige reports a typed model
+   compatibility action instead of asking the user to resubmit the same prompt.
 
 Without a model, source-bearing inputs remain safe and wait for setup/resume. Any
 deterministic local search fallback is explicit and never presented as Agent synthesis.
@@ -1149,7 +1165,10 @@ rollback recovery pass—including create, update, link, rename, merge, contradi
 hierarchy, and metadata. Otherwise replan, preserve, warn, or abstain. Only irreversible
 loss, authority/security escalation, destination drift, unresolved conflict, or a stricter
 user mode pauses. Activity/provenance/Undo is normal; proposals are exceptions. Raw
-secrets stay unavailable and extensions/new capabilities remain brokered.
+secrets stay unavailable. Pi may request any registered filesystem/path/commit
+capability, but only active-vault recoverable knowledge Markdown and exact drop/picker
+source admission are prompt-free; other scopes stay brokered, and stronger destructive,
+policy, source-original, and secret gates remain.
 
 Executable lifecycle, exceptional classes, permission modes, and policy are owned by
 `docs/JOB_OPERATION_AND_RECOVERY.md`, `docs/SECURITY_THREAT_MODEL.md`,
