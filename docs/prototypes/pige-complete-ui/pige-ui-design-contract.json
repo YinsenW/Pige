@@ -2,6 +2,9 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Pige complete UI design and visual-regression contract",
   "status": "UI Design handoff; not production implementation evidence",
+  "element_map": "./pige-ui-element-map.json",
+  "coverage_matrix": "./pige-ui-coverage-matrix.json",
+  "visual_review_ledger": "./pige-ui-visual-review-ledger.json",
   "reference": {
     "product_bundle": "ChatGPT-branded Codex desktop client",
     "package_name": "openai-codex-electron",
@@ -28,6 +31,7 @@
       "hover": "#f3f3f3",
       "hairline": "#ededed",
       "secondary_text": "#5d5d5d",
+      "tertiary_text": "#707472",
       "strong_secondary_text": "#4f4f4f",
       "primary_text": "#1a1c1f",
       "focus": "#339cff",
@@ -88,18 +92,23 @@
   ],
   "review": {
     "base_url": "http://127.0.0.1:4174/docs/prototypes/pige-complete-ui/",
+    "viewport_harness": "./visual-review-harness.html?width=680&height=680&route=%3Fscreen%3Dhome",
     "serve_from": "repository root",
     "viewports": {
       "compact": { "width": 1144, "height": 874 },
       "three_pane": { "width": 1536, "height": 1024 },
       "settings": { "width": 1536, "height": 960 },
-      "narrow_breakpoint_max_width": 760
+      "narrow_breakpoint_max_width": 679
     }
   },
   "screens": [
     { "id": "H01", "route": "?screen=home", "name": "Compact Home empty", "status": "verified" },
     { "id": "H02", "route": "?screen=activity", "name": "Recent work and Undo", "status": "verified" },
     { "id": "H03", "route": "?screen=home-drag", "name": "Whole-window multi-file drag", "status": "verified" },
+    { "id": "H03A", "route": "?screen=home-files-attached", "name": "Editable multi-file attachment draft", "status": "verified" },
+    { "id": "H03D", "route": "?screen=home-file-duplicate", "name": "Duplicate file remains a single attachment", "status": "verified" },
+    { "id": "H03X", "route": "?screen=home-file-unsupported", "name": "Unsupported file is rejected without losing the draft", "status": "verified" },
+    { "id": "H03U", "route": "?screen=home-url-draft", "name": "Editable URL-detected draft", "status": "verified" },
     { "id": "H04", "route": "?screen=home-conversation", "name": "Ordinary conversation without fabricated citations", "status": "verified" },
     { "id": "H04S", "route": "?screen=home-streaming", "name": "One safe provisional answer bubble", "status": "verified" },
     { "id": "H05", "route": "?screen=home-retrieval", "name": "Grounded retrieval with final-only citations", "status": "verified" },
@@ -111,14 +120,23 @@
     { "id": "H07E", "route": "?screen=home-model-egress", "name": "Sensitive model-egress confirmation", "status": "verified" },
     { "id": "H08", "route": "?screen=home-error", "name": "Body-free retryable failure", "status": "verified" },
     { "id": "H09", "route": "?screen=home-voice", "name": "Editable voice transcript", "status": "verified" },
+    { "id": "H09U", "route": "?screen=home-voice-unsupported", "name": "Non-blocking voice unsupported state", "status": "verified" },
+    { "id": "H09E", "route": "?screen=home-voice-error", "name": "Body-free microphone permission failure", "status": "verified" },
     { "id": "N01", "route": "?screen=expanded", "name": "Expanded Home and Library tree", "status": "verified" },
     { "id": "N02", "route": "?screen=knowledge", "name": "Semantic Knowledge Tree", "status": "verified" },
+    { "id": "N02E", "route": "?screen=knowledge-empty", "name": "Knowledge Tree empty state", "status": "verified" },
+    { "id": "N02L", "route": "?screen=knowledge-loading", "name": "Knowledge Tree rebuilding state", "status": "verified" },
+    { "id": "N02D", "route": "?screen=knowledge-degraded", "name": "Knowledge Tree body-free degraded state", "status": "verified" },
     { "id": "N03", "route": "?screen=search", "name": "Notes, sources, topics, and tags search", "status": "verified" },
+    { "id": "N04", "route": "?screen=library", "name": "Library Notes, Sources, Topics, and Tags", "status": "verified" },
+    { "id": "N04L", "route": "?screen=library-loading", "name": "Library loading state", "status": "verified" },
+    { "id": "N04E", "route": "?screen=library-unavailable", "name": "Library body-free unavailable state", "status": "verified" },
     { "id": "R01", "route": "?screen=note", "name": "Three-pane Markdown reader and note Agent", "status": "verified" },
     { "id": "R02", "route": "?screen=selection", "name": "Compact selection actions", "status": "verified" },
     { "id": "R03", "route": "?screen=proposal", "name": "Staged unified diff proposal", "status": "verified" },
     { "id": "R04", "route": "?screen=dataset", "name": "Persistent Dataset table and source citation", "status": "verified" },
     { "id": "F01", "route": "?screen=first-run-vault", "name": "First run local vault", "status": "verified" },
+    { "id": "F01R", "route": "?screen=first-run-restore", "name": "First run restore preview and identity mode", "status": "verified" },
     { "id": "F02", "route": "?screen=first-run-model", "name": "First run model or capture-only", "status": "verified" }
   ],
   "settings": [
@@ -149,11 +167,19 @@
     "Single ownership of status and action surfaces"
   ],
   "browser_regression": {
-    "main_routes_checked": 23,
+    "main_routes_checked": 36,
     "settings_routes_checked": 15,
-    "interaction_flows_checked": 12,
+    "interaction_flows_checked": 29,
+    "responsive_render_checks": 232,
+    "prototype_baseline_screenshots": 6,
+    "accessible_name_routes_checked": 51,
+    "horizontal_overflow_failures": 0,
+    "visible_control_clipping_failures": 0,
     "failed_routes": [],
     "console_errors": [],
-    "known_visual_discrepancies": []
+    "known_visual_discrepancies": [
+      "Raster overlay and image-difference thresholds are not yet locked for the six canonical surfaces.",
+      "Full Tab-order, narrow-drawer focus containment, screen-reader, and six-locale text-expansion review remains open."
+    ]
   }
 }

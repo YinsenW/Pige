@@ -1,23 +1,34 @@
 # Pige Key Screens Prototype
 
-Status: Product interaction prototype for review; not final UI effect mockup
+Status: Prototype index; key-screen board is exploratory and complete UI is the current high-fidelity UI Design handoff
 Baseline date: 2026-07-09
-Last reviewed: 2026-07-10
+Last reviewed: 2026-07-15
 Review trigger: Any UI interaction-contract change, prototype asset change, or quarterly documentation inventory.
 Authority: Prototype artifact index. Do not load by default unless UI review or interaction validation is in scope. Normative UI behavior must live in `docs/UI_PROTOTYPE.md` or accepted decisions.
 
-This folder contains static UI prototypes for validating Pige's core interaction model before implementation.
+This folder contains two deliberately separate prototype layers:
+
+- `pige-key-screens.html` is the compact interaction board used to validate product flow and information architecture.
+- `pige-complete-ui/index.html` is the high-fidelity, interactive UI Design handoff used for semantic control mapping, state coverage, responsive checks, and clean-room visual regression.
 
 Prototype boundary:
 
 - These screens define product flow, layout priority, information architecture, and interaction intent.
-- They are not high-fidelity visual design targets and should not be implemented pixel-for-pixel.
-- A separate high-fidelity UI pass is required before production implementation, with visual craft benchmarked against calm, precise desktop products such as ChatGPT and Codex.
+- The key-screen board is not a high-fidelity visual target and should not be implemented pixel-for-pixel.
+- The complete UI folder is a mechanically reusable design handoff, not proof that production behavior exists. Development still owns renderer integration, typed services, native boundaries, and assembled-app evidence.
+- Visual benchmarking uses only observable geometry, spacing, gray hierarchy, typography, icon geometry, motion, and state behavior. It does not copy third-party code, fonts, brand assets, or private implementation.
 
 Open:
 
 - `pige-key-screens.html`: full prototype board.
 - `pige-key-screens-board.png`: full board screenshot.
+- `pige-complete-ui/index.html`: 51-route interactive high-fidelity prototype.
+- `pige-complete-ui/pige-ui-design-contract.json`: tokens, fixed rail geometry, interaction rules, and browser regression facts.
+- `pige-complete-ui/pige-ui-element-map.json`: semantic/function mapping for all 191 controls.
+- `pige-complete-ui/pige-ui-coverage-matrix.json`: requirement-to-prototype-to-production coverage and remaining gaps.
+- `pige-complete-ui/pige-ui-visual-review-ledger.json`: clean-room reference boundary, measured evidence, accessibility checks, and open pixel-difference work.
+- `pige-complete-ui/visual-review-harness.html`: explicit-width visual review harness.
+- `pige-complete-ui/baselines/`: six Pige-only browser baselines; external reference screenshots are intentionally not committed.
 
 Individual screens:
 

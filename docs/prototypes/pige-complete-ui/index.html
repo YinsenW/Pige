@@ -59,6 +59,12 @@
       outline-offset: 2px;
     }
 
+    .using-pointer button:focus-visible,
+    .using-pointer textarea:focus-visible,
+    .using-pointer input:focus-visible,
+    .using-pointer select:focus-visible,
+    .using-pointer a:focus-visible { outline: none; box-shadow: none; }
+
     .app-window {
       --home-pane-width: 400px;
       --sidebar-pane-width: 280px;
@@ -910,11 +916,11 @@
       .bottom-stack { margin-bottom: 14px; }
     }
 
-    @media (max-width: 1180px) and (min-width: 761px) {
-      body { padding: 16px; }
+    @media (max-width: 1180px) and (min-width: 680px) {
+      body { padding: 0; }
     }
 
-    @media (max-width: 760px) {
+    @media (max-width: 679px) {
       body { padding: 0; background: var(--canvas); overflow: auto; }
       .app-window {
         width: 100vw;
@@ -969,7 +975,7 @@
       --surface-active: color-mix(in oklab, #1a1c1f 9%, transparent);
       --text-primary: #1a1c1f;
       --text-secondary: color-mix(in oklab, #1a1c1f 70%, transparent);
-      --text-tertiary: color-mix(in oklab, #1a1c1f 50%, transparent);
+      --text-tertiary: #707472;
       --border-subtle: color-mix(in oklab, #1a1c1f 8%, transparent);
       --border-strong: color-mix(in oklab, #1a1c1f 12%, transparent);
       --border-light: color-mix(in oklab, #1a1c1f 5%, transparent);
@@ -1323,9 +1329,9 @@
       .bottom-stack { margin-bottom: 12px; }
     }
 
-    @media (max-width: 760px) {
+    @media (max-width: 679px) {
       body { padding: 0; background: var(--canvas); }
-      .app-window { min-height: 680px; border-radius: 0; }
+      .app-window { min-height: min(680px, 100vh); border-radius: 0; }
       .titlebar { padding: 0 10px; }
       .hero { padding: 20px 14px; }
       .brand-mark { width: 48px; height: 48px; }
@@ -1358,14 +1364,14 @@
       transition: opacity 150ms var(--ease-basic), transform 300ms var(--ease-enter), visibility 0s linear 300ms;
     }
 
-    .app-window[data-screen="knowledge"] .home,
+    .app-window[data-screen^="knowledge"] .home,
     .app-window[data-screen="search"] .home,
     .app-window[data-screen^="first-run"] .home { opacity: 0; visibility: hidden; pointer-events: none; }
-    .app-window[data-screen="knowledge"] { width: calc(var(--sidebar-pane-width) + 760px); }
-    .app-window[data-screen="knowledge"] .main-layout { grid-template-columns: var(--sidebar-pane-width) 760px 0; }
+    .app-window[data-screen^="knowledge"] { width: calc(var(--sidebar-pane-width) + 760px); }
+    .app-window[data-screen^="knowledge"] .main-layout { grid-template-columns: var(--sidebar-pane-width) 760px 0; }
     .app-window[data-screen="search"] { width: calc(var(--sidebar-pane-width) + 760px); }
     .app-window[data-screen="search"] .main-layout { grid-template-columns: var(--sidebar-pane-width) 760px 0; }
-    .app-window[data-screen="knowledge"] .knowledge-view,
+    .app-window[data-screen^="knowledge"] .knowledge-view,
     .app-window[data-screen="search"] .library-search-view,
     .app-window[data-screen^="first-run"] .first-run-view {
       opacity: 1;
@@ -1590,9 +1596,9 @@
     .dataset-summary { margin: 0 0 18px; color: var(--text-secondary); font-size: 12px; }
     .dataset-citation { display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; padding: 5px 8px; border: .5px solid var(--border-subtle); border-radius: 8px; color: var(--text-secondary); font-size: 10px; }
 
-    @media (max-width: 760px) {
-      .app-window[data-screen="knowledge"] { width: 100vw; }
-      .app-window[data-screen="knowledge"] .main-layout { grid-template-columns: minmax(0, 1fr); }
+    @media (max-width: 679px) {
+      .app-window[data-screen^="knowledge"] { width: 100vw; }
+      .app-window[data-screen^="knowledge"] .main-layout { grid-template-columns: minmax(0, 1fr); }
       .app-window[data-screen="search"] { width: 100vw; }
       .app-window[data-screen="search"] .main-layout { grid-template-columns: minmax(0, 1fr); }
       .knowledge-content { padding: 20px 14px 30px; }
@@ -1603,7 +1609,7 @@
     }
 
     /* Compact Home: the conversation column stays 400px while side panels add width. */
-    @media (min-width: 761px) {
+    @media (min-width: 680px) {
       .hero { align-items: flex-start; padding: clamp(110px, 15vh, 190px) 14px 20px; }
       .hero-content { width: 100%; transform: translateY(-1vh); }
       .brand-mark { width: 44px; height: 44px; margin-bottom: 14px; }
@@ -1668,14 +1674,14 @@
       --settings-active: rgba(0,0,0,.075);
       --settings-text: #1a1c1f;
       --settings-secondary: rgba(26,28,31,.7);
-      --settings-tertiary: rgba(26,28,31,.5);
+      --settings-tertiary: #707472;
       --settings-border: rgba(26,28,31,.1);
       --settings-danger: #c83d3d;
       position: relative;
       display: none;
-      width: min(1980px, calc(100vw - 48px));
-      height: min(1020px, calc(100vh - 48px));
-      min-height: min(680px, 100vh);
+      width: min(1180px, calc(100vw - 48px));
+      height: min(820px, calc(100vh - 48px));
+      min-height: min(680px, calc(100vh - 48px));
       grid-template-columns: 280px minmax(0, 1fr);
       overflow: hidden;
       border-radius: var(--radius-window);
@@ -1946,6 +1952,7 @@
     .settings-toast.visible { opacity: 1; transform: translate(-50%, 0); }
 
     @media (max-width: 900px) {
+      body.settings-active { padding: 0; }
       .settings-window { width: 100vw; height: 100vh; min-height: min(680px, 100vh); grid-template-columns: 210px minmax(0,1fr); border-radius: 0; }
       .settings-panel { width: min(680px, calc(100% - 32px)); padding-top: 40px; }
       .settings-summary-grid { grid-template-columns: repeat(2, 1fr); }
@@ -1962,6 +1969,170 @@
       .theme-preview { height: 84px; }
       .settings-row { align-items: flex-start; flex-direction: column; gap: 9px; }
       .settings-row-control { width: 100%; justify-content: flex-end; }
+    }
+
+    @media (max-width: 520px) {
+      .settings-window { grid-template-columns: 148px minmax(0,1fr); }
+      .reader-toolbar > span { display: none; }
+      .reader-toolbar > strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .reader-toolbar-actions .prototype-action:not([aria-label="更多笔记操作"]) { display: none; }
+      .markdown-reader { padding-inline: 16px; }
+      .markdown-body { padding-top: 24px; }
+      .selection-toolbar { right: 16px; left: 16px; flex-wrap: wrap; transform: translateY(276px); }
+      .selection-toolbar button { flex: 1 1 calc(50% - 2px); white-space: normal; }
+    }
+
+    /* v4 · functional-completeness corrections from the requirement/element audit. */
+    .app-window.note-mode:not(.sidebar-expanded):not(.agent-expanded) { width: var(--reader-pane-width); }
+    .app-window.note-mode.sidebar-expanded:not(.agent-expanded) { width: calc(var(--sidebar-pane-width) + var(--reader-pane-width)); }
+    .app-window.note-mode.agent-expanded:not(.sidebar-expanded) { width: calc(var(--reader-pane-width) + var(--agent-pane-width)); }
+    .main-layout.note-open:not(.sidebar-open):not(.agent-open) { grid-template-columns: 0 var(--reader-pane-width) 0; }
+    .main-layout.note-open.sidebar-open:not(.agent-open) { grid-template-columns: var(--sidebar-pane-width) var(--reader-pane-width) 0; }
+    .main-layout.note-open.agent-open:not(.sidebar-open) { grid-template-columns: 0 var(--reader-pane-width) var(--agent-pane-width); }
+    .main-layout.note-open.sidebar-open.agent-open { grid-template-columns: var(--sidebar-pane-width) var(--reader-pane-width) var(--agent-pane-width); }
+    .app-window.note-mode:not(.sidebar-expanded) .titlebar { background: rgba(255,255,255,.92); }
+    .note-open:not(.agent-open) .note-agent { opacity: 0; transform: translateX(12px); visibility: hidden; pointer-events: none; }
+    .reader-pane-toggle[aria-expanded="true"] { background: var(--surface-hover); color: var(--text-primary); }
+    .attachment-list { display: flex; min-width: 0; flex-wrap: wrap; gap: 5px; }
+    .attachment-chip { max-width: 100%; }
+    .attachment-chip span { max-width: 260px; }
+    .composer-detected-state { display: none; width: fit-content; margin: 0 14px 2px; padding: 4px 7px; border-radius: 7px; background: var(--surface-hover); color: var(--text-secondary); font-size: 10px; }
+    .app-window[data-screen="home-url-draft"] .composer-detected-state.url,
+    .app-window[data-screen="home-files-attached"] .composer-detected-state.files { display: inline-flex; }
+    .composer-ingress-warning { display: none; margin: 0 14px 7px; padding: 8px 10px; border-radius: 10px; background: var(--surface-hover); color: var(--text-secondary); font-size: 10px; line-height: 1.45; }
+    .composer-ingress-warning strong { display: block; margin-bottom: 2px; color: var(--text-primary); font-weight: 500; }
+    .app-window[data-screen="home-file-duplicate"] .composer-ingress-warning.duplicate,
+    .app-window[data-screen="home-file-unsupported"] .composer-ingress-warning.unsupported { display: block; }
+    .voice-unsupported-card,
+    .voice-error-card { display: none; }
+    .app-window[data-screen="home-voice-unsupported"] .home-demo,
+    .app-window[data-screen="home-voice-error"] .home-demo { display: block; }
+    .app-window[data-screen="home-voice-unsupported"] .source-picker,
+    .app-window[data-screen="home-voice-unsupported"] .home-demo-question,
+    .app-window[data-screen="home-voice-unsupported"] .home-demo-card,
+    .app-window[data-screen="home-voice-unsupported"] .decision-card,
+    .app-window[data-screen="home-voice-unsupported"] .model-missing-card { display: none; }
+    .app-window[data-screen="home-voice-unsupported"] .voice-unsupported-card { display: block; }
+    .app-window[data-screen="home-voice-error"] .home-demo-question,
+    .app-window[data-screen="home-voice-error"] .home-demo-card,
+    .app-window[data-screen="home-voice-error"] .decision-card,
+    .app-window[data-screen="home-voice-error"] .model-missing-card { display: none; }
+    .app-window[data-screen="home-voice-error"] .voice-error-card { display: block; }
+    .app-window[data-screen="home-voice-unsupported"] .hero { align-items: flex-start; padding-top: 28px; }
+    .app-window[data-screen="home-voice-unsupported"] .hero-content { transform: none; }
+    .app-window[data-screen="home-voice-unsupported"] .brand-mark,
+    .app-window[data-screen="home-voice-unsupported"] .hero-content > h1,
+    .app-window[data-screen="home-voice-unsupported"] .hero-subtitle { display: none; }
+    .app-window[data-screen="home-voice-error"] .hero { align-items: flex-start; padding-top: 28px; }
+    .app-window[data-screen="home-voice-error"] .hero-content { transform: none; }
+    .app-window[data-screen="home-voice-error"] .brand-mark,
+    .app-window[data-screen="home-voice-error"] .hero-content > h1,
+    .app-window[data-screen="home-voice-error"] .hero-subtitle { display: none; }
+    .first-run-step.restore { display: none; }
+    .app-window[data-screen="first-run-restore"] .first-run-step.vault,
+    .app-window[data-screen="first-run-restore"] .first-run-step.model { display: none; }
+    .app-window[data-screen="first-run-restore"] .first-run-step.restore { display: block; }
+    .restore-preview-summary { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 16px 0; padding: 12px; border: .5px solid var(--border-subtle); border-radius: 12px; background: var(--surface-subtle); font-size: 11px; }
+    .restore-preview-summary dt { color: var(--text-tertiary); }
+    .restore-preview-summary dd { margin: 0; color: var(--text-primary); }
+    .restore-mode-list { display: grid; gap: 7px; margin: 14px 0; padding: 0; border: 0; }
+    .restore-mode-list label { display: flex; gap: 9px; align-items: flex-start; padding: 10px; border: .5px solid var(--border-subtle); border-radius: 10px; cursor: pointer; }
+    .restore-mode-copy { display: grid; gap: 2px; }
+    .restore-mode-copy strong { font-size: 11px; font-weight: 500; }
+    .restore-mode-copy span { color: var(--text-tertiary); font-size: 10px; line-height: 1.45; }
+    .restore-warning-copy { margin: 10px 0 0; color: var(--text-secondary); font-size: 10px; line-height: 1.5; }
+    .sidebar-label { display: flex; align-items: center; justify-content: space-between; }
+    .sidebar-library-open { padding: 2px 5px; border: 0; border-radius: 6px; background: transparent; color: var(--text-tertiary); font-size: 10px; cursor: pointer; }
+    .sidebar-library-open:hover { background: var(--surface-hover); color: var(--text-secondary); }
+    .app-window[data-screen^="library"] .home { opacity: 0; visibility: hidden; pointer-events: none; }
+    .app-window[data-screen^="library"] { width: calc(var(--sidebar-pane-width) + 760px); }
+    .app-window[data-screen^="library"] .main-layout { grid-template-columns: var(--sidebar-pane-width) 760px 0; }
+    .app-window[data-screen^="library"] .library-search-view { opacity: 1; transform: translateY(0); visibility: visible; pointer-events: auto; transition: opacity 150ms var(--ease-basic), transform 300ms var(--ease-enter), visibility 0s; }
+    .library-tabs { display: flex; gap: 3px; margin: 14px 0 4px; padding-bottom: 10px; border-bottom: .5px solid var(--border-light); }
+    .library-tab { min-height: 28px; padding: 4px 9px; border: 0; border-radius: 8px; background: transparent; color: var(--text-secondary); font-size: 11px; cursor: pointer; }
+    .library-tab:hover { background: var(--surface-hover); }
+    .library-tab.active { background: var(--surface-active); color: var(--text-primary); font-weight: 500; }
+    .library-state,
+    .knowledge-state { display: none; place-items: center; min-height: 360px; text-align: center; }
+    .state-copy { width: min(360px, 100%); padding: 24px; }
+    .state-copy h2 { margin: 0 0 6px; font-size: 15px; font-weight: 600; }
+    .state-copy p { margin: 0; color: var(--text-secondary); font-size: 11px; line-height: 1.55; }
+    .state-copy .quiet-button,
+    .state-copy .primary-button { margin-top: 14px; }
+    .state-spinner { width: 18px; height: 18px; margin: 0 auto 12px; border: 2px solid var(--border-subtle); border-top-color: var(--text-secondary); border-radius: 50%; animation: state-spin 900ms linear infinite; }
+    @keyframes state-spin { to { transform: rotate(360deg); } }
+    .app-window[data-screen="library-loading"] .library-search-field,
+    .app-window[data-screen="library-loading"] .library-tabs,
+    .app-window[data-screen="library-loading"] .search-group,
+    .app-window[data-screen="library-loading"] .search-empty,
+    .app-window[data-screen="library-unavailable"] .library-search-field,
+    .app-window[data-screen="library-unavailable"] .library-tabs,
+    .app-window[data-screen="library-unavailable"] .search-group,
+    .app-window[data-screen="library-unavailable"] .search-empty { display: none !important; }
+    .app-window[data-screen="library-loading"] .library-state.loading,
+    .app-window[data-screen="library-unavailable"] .library-state.unavailable { display: grid; }
+    .app-window[data-screen="knowledge-empty"] .knowledge-grid,
+    .app-window[data-screen="knowledge-loading"] .knowledge-grid,
+    .app-window[data-screen="knowledge-degraded"] .knowledge-grid { display: none; }
+    .app-window[data-screen="knowledge-empty"] .knowledge-state.empty,
+    .app-window[data-screen="knowledge-loading"] .knowledge-state.loading,
+    .app-window[data-screen="knowledge-degraded"] .knowledge-state.degraded { display: grid; }
+    .knowledge-row-action { width: 100%; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+    .reader-sources { margin: 24px 0 8px; padding-top: 16px; border-top: .5px solid var(--border-subtle); }
+    .reader-sources h2 { margin-top: 0; }
+    .reader-source-list { display: grid; gap: 6px; }
+    .reader-source { display: grid; grid-template-columns: 28px minmax(0,1fr) auto; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 7px 9px; border: .5px solid var(--border-subtle); border-radius: 10px; background: var(--surface); color: var(--text-primary); text-align: left; cursor: pointer; }
+    .reader-source:hover { background: var(--surface-hover); }
+    .reader-source-icon { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 7px; background: var(--surface-hover); color: var(--text-secondary); font-size: 9px; font-weight: 600; }
+    .reader-source-copy { display: grid; min-width: 0; gap: 1px; }
+    .reader-source-copy strong { overflow: hidden; font-size: 11px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+    .reader-source-copy span,
+    .reader-source small { color: var(--text-tertiary); font-size: 9px; }
+
+    @media (max-width: 679px) {
+      .app-window.note-mode,
+      .app-window.note-mode.sidebar-expanded,
+      .app-window.note-mode.agent-expanded,
+      .app-window.note-mode.sidebar-expanded.agent-expanded { width: 100vw !important; }
+      .main-layout.note-open,
+      .main-layout.note-open.sidebar-open,
+      .main-layout.note-open.agent-open,
+      .main-layout.note-open.sidebar-open.agent-open { grid-template-columns: minmax(0, 1fr) !important; }
+      .note-agent { display: block; position: absolute; z-index: 25; inset: 0 0 0 auto; width: min(100vw, var(--agent-pane-width)); box-shadow: -14px 0 32px rgba(0,0,0,.12); }
+      .note-agent-inner { width: min(100vw, var(--agent-pane-width)); }
+      .note-open:not(.agent-open) .note-agent { transform: translateX(100%); }
+      .app-window[data-screen^="library"] { width: 100vw; }
+      .app-window[data-screen^="library"] .main-layout { grid-template-columns: minmax(0, 1fr); }
+    }
+
+    @media (min-width: 680px) and (max-width: 1439px) {
+      .app-window.note-mode,
+      .app-window.note-mode.sidebar-expanded { width: var(--reader-pane-width); }
+      .app-window.note-mode.agent-expanded,
+      .app-window.note-mode.sidebar-expanded.agent-expanded { width: calc(var(--reader-pane-width) + var(--agent-pane-width)); }
+      .main-layout.note-open,
+      .main-layout.note-open.sidebar-open { grid-template-columns: 0 var(--reader-pane-width) 0; }
+      .main-layout.note-open.agent-open,
+      .main-layout.note-open.sidebar-open.agent-open { grid-template-columns: 0 var(--reader-pane-width) var(--agent-pane-width); }
+      .note-open .sidebar {
+        position: absolute;
+        z-index: 28;
+        inset: 0 auto 0 0;
+        width: var(--sidebar-pane-width);
+        box-shadow: 14px 0 32px rgba(0,0,0,.12);
+      }
+      .note-open:not(.sidebar-open) .sidebar {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+        transform: translateX(-100%);
+      }
+      .note-open.sidebar-open .sidebar {
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+        transform: translateX(0);
+      }
     }
   </style>
 </head>
@@ -2003,7 +2174,7 @@
               知识树
             </button>
           </nav>
-          <div class="sidebar-label">笔记库</div>
+          <div class="sidebar-label"><span>笔记库</span><button class="sidebar-library-open" id="openLibrary" type="button">浏览全部</button></div>
           <div class="notebook-group" data-notebook="pico8">
             <button class="notebook-title" type="button" aria-expanded="true" aria-controls="notebook-pico8-pages"><span class="notebook-chevron" aria-hidden="true">⌄</span><span>Pico8</span></button>
             <div class="notebook-pages" id="notebook-pico8-pages">
@@ -2107,6 +2278,18 @@
                   <p style="margin:0;color:var(--text-secondary);font-size:11px">停止后文字仍可编辑，不会自动发送。</p>
                   <div class="decision-actions"><button class="quiet-button" type="button" data-voice-action="stop">停止录音</button><button class="primary-button" type="button" data-voice-action="complete">完成</button></div>
                 </section>
+                <section class="home-demo-card voice-unsupported-card" aria-label="语音输入不可用">
+                  <span class="decision-eyebrow">当前设备不可用</span>
+                  <h2 style="margin:5px 0;font-size:13px">暂时无法使用语音输入</h2>
+                  <p style="margin:0;color:var(--text-secondary);font-size:11px;line-height:1.55">你仍可以键入、粘贴或添加文件。Pige 不会下载组件，也不会阻止当前输入。</p>
+                  <div class="decision-actions"><button class="quiet-button" type="button" data-voice-dismiss>继续键入</button></div>
+                </section>
+                <section class="home-demo-card voice-error-card" aria-label="麦克风权限未开启">
+                  <span class="decision-eyebrow">需要麦克风权限</span>
+                  <h2 style="margin:5px 0;font-size:13px">无法开始语音输入</h2>
+                  <p style="margin:0;color:var(--text-secondary);font-size:11px;line-height:1.55">Pige 没有录制任何内容。你可以继续键入，或在系统设置中允许麦克风访问后再试。</p>
+                  <div class="decision-actions"><button class="quiet-button" type="button" data-voice-dismiss>继续键入</button><button class="primary-button prototype-action" type="button" aria-label="打开麦克风系统设置">打开系统设置</button></div>
+                </section>
                 <section class="home-demo-card error-card" aria-label="处理失败">
                   <span class="decision-eyebrow">来源已保留</span>
                   <h2 style="margin:5px 0;font-size:13px">暂时无法完成处理</h2>
@@ -2163,8 +2346,12 @@
 
             <section class="composer" aria-label="知识输入">
               <div class="attachment-strip" id="attachmentStrip">
-                <div class="attachment-chip"><span id="attachmentName">示例文件</span><button class="chip-remove" id="removeAttachment" type="button" aria-label="移除附件">×</button></div>
+                <div class="attachment-list" id="attachmentList"></div>
               </div>
+              <span class="composer-detected-state url">已识别网址；发送前仍可编辑</span>
+              <span class="composer-detected-state files">2 个文件将作为一次输入发送；未选择处理模式</span>
+              <div class="composer-ingress-warning duplicate" role="status"><strong>这个文件已经在当前输入中</strong>没有重复添加“产品需求文档.pdf”；现有附件和文字都保持不变。</div>
+              <div class="composer-ingress-warning unsupported" role="status"><strong>暂时不支持这个文件</strong>未添加“设计源文件.psd”。你仍可以发送其他文字和附件。</div>
               <textarea id="composerInput" rows="3" aria-label="向 Pige 发送消息" placeholder="向 Pige 发送消息，或添加文件…"></textarea>
               <div class="composer-toolbar">
                 <button class="attach-button" id="attachButton" type="button" aria-label="添加文件" title="添加文件">
@@ -2203,22 +2390,31 @@
                 <button class="tree-node d" type="button" data-knowledge-title="知识检索" data-knowledge-detail="21 条证据连接全文检索、语义检索、引用与上下文组装。"><strong>知识检索</strong><span>21 条证据</span></button>
               </section>
               <aside class="knowledge-side">
-                <section class="knowledge-card"><h2 id="knowledgeSelectionTitle">个人知识</h2><p id="knowledgeSelectionDetail">4 个主要领域共同构成当前知识树。选择任一分支可查看其证据边界。</p><div class="knowledge-list"><div class="knowledge-row"><span class="knowledge-dot"></span><span>本地优先</span><small>+4</small></div><div class="knowledge-row"><span class="knowledge-dot"></span><span>安全恢复</span><small>+3</small></div></div></section>
-                <section class="knowledge-card"><h2>需要确认</h2><p>合并或移动既有主题会影响多篇笔记，因此不会自动应用。</p><div class="knowledge-list"><div class="knowledge-row"><span class="knowledge-dot" style="background:#c98a22"></span><span>合并两个相近主题</span><small>查看</small></div></div></section>
+                <section class="knowledge-card"><h2 id="knowledgeSelectionTitle">个人知识</h2><p id="knowledgeSelectionDetail">4 个主要领域共同构成当前知识树。选择任一分支可查看其证据边界。</p><div class="knowledge-list"><button class="knowledge-row knowledge-row-action" type="button" data-knowledge-action="evidence"><span class="knowledge-dot"></span><span>本地优先</span><small>+4</small></button><button class="knowledge-row knowledge-row-action" type="button" data-knowledge-action="backlinks"><span class="knowledge-dot"></span><span>安全恢复</span><small>+3</small></button></div></section>
+                <section class="knowledge-card"><h2>需要确认</h2><p>合并或移动既有主题会影响多篇笔记，因此不会自动应用。</p><div class="knowledge-list"><button class="knowledge-row knowledge-row-action" type="button" data-knowledge-action="suggestion"><span class="knowledge-dot" style="background:#c98a22"></span><span>合并两个相近主题</span><small>查看</small></button></div></section>
                 <section class="knowledge-card"><h2>证据边界</h2><p>树形视图来自 Markdown、引用和已确认关系；数据库图索引可以随时重建。</p></section>
               </aside>
             </div>
+            <section class="knowledge-state empty" role="status"><div class="state-copy"><h2>知识树还没有内容</h2><p>添加笔记或来源后，Pi 可以提出关系建议；Pige 不会为了填满界面而编造节点。</p><button class="primary-button" type="button" data-knowledge-action="add-source">添加来源</button></div></section>
+            <section class="knowledge-state loading" role="status" aria-busy="true"><div class="state-copy"><div class="state-spinner" aria-hidden="true"></div><h2>正在重建知识树</h2><p>笔记和来源保持可用；这里会在本地索引准备好后自动更新。</p></div></section>
+            <section class="knowledge-state degraded" role="status"><div class="state-copy"><h2>暂时无法显示知识树</h2><p>原始 Markdown 和来源仍然保留。你可以重试本地索引，不需要重新导入内容。</p><button class="primary-button" type="button" data-knowledge-action="retry">重试</button></div></section>
           </div>
         </section>
 
-        <section class="library-search-view" id="librarySearchView" aria-label="搜索知识库">
-          <header class="view-toolbar"><span>搜索知识库</span><span class="toolbar-meta">笔记、来源、主题与标签</span></header>
+        <section class="library-search-view" id="librarySearchView" aria-label="笔记库">
+          <header class="view-toolbar"><span>笔记库</span><span class="toolbar-meta">笔记、来源、主题与标签</span></header>
           <div class="library-search-content">
             <label class="library-search-field"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><input id="librarySearchInput" type="search" value="本地优先" aria-label="搜索知识库" /></label>
-            <section class="search-group"><h2>笔记</h2><button class="search-result" type="button" data-search-text="产品定位 本地优先 通用知识 Agent" data-note-title="产品定位" data-note-group="Pige"><span class="search-result-icon">MD</span><span class="search-result-copy"><strong>产品定位</strong><span>“Pige 是一个本地优先的通用知识 Agent…”</span></span><small>92%</small></button><button class="search-result" type="button" data-search-text="数据架构 Markdown 可携带 知识真相层" data-note-title="数据架构" data-note-group="Codex"><span class="search-result-icon">MD</span><span class="search-result-copy"><strong>数据架构</strong><span>Markdown 是可携带的知识真相层</span></span><small>86%</small></button></section>
-            <section class="search-group"><h2>来源</h2><button class="search-result" type="button" data-search-text="Local-first software 产品研究 PDF 本地优先" data-search-action="source"><span class="search-result-icon">PDF</span><span class="search-result-copy"><strong>Local-first software</strong><span>产品研究.pdf · 第 4 页</span></span><small>1 个引用</small></button></section>
-            <section class="search-group"><h2>主题与标签</h2><button class="search-result" type="button" data-search-text="本地优先 主题 证据 反向链接" data-search-action="topic"><span class="search-result-icon">#</span><span class="search-result-copy"><strong>本地优先</strong><span>主题 · 28 条证据 · 12 个反向链接</span></span><small>打开</small></button></section>
+            <div class="library-tabs" role="tablist" aria-label="笔记库内容"><button class="library-tab active" id="libraryTabAll" type="button" role="tab" aria-selected="true" aria-controls="librarySearchResults" data-library-tab="all">全部</button><button class="library-tab" id="libraryTabNotes" type="button" role="tab" aria-selected="false" aria-controls="librarySearchResults" data-library-tab="notes">笔记</button><button class="library-tab" id="libraryTabSources" type="button" role="tab" aria-selected="false" aria-controls="librarySearchResults" data-library-tab="sources">来源</button><button class="library-tab" id="libraryTabTopics" type="button" role="tab" aria-selected="false" aria-controls="librarySearchResults" data-library-tab="topics">主题</button><button class="library-tab" id="libraryTabTags" type="button" role="tab" aria-selected="false" aria-controls="librarySearchResults" data-library-tab="tags">标签</button></div>
+            <div id="librarySearchResults" role="tabpanel" aria-labelledby="libraryTabAll">
+            <section class="search-group" data-library-family="notes"><h2>笔记</h2><button class="search-result" type="button" data-search-text="产品定位 本地优先 通用知识 Agent" data-note-title="产品定位" data-note-group="Pige"><span class="search-result-icon">MD</span><span class="search-result-copy"><strong>产品定位</strong><span>“Pige 是一个本地优先的通用知识 Agent…”</span></span><small>92%</small></button><button class="search-result" type="button" data-search-text="数据架构 Markdown 可携带 知识真相层" data-note-title="数据架构" data-note-group="Codex"><span class="search-result-icon">MD</span><span class="search-result-copy"><strong>数据架构</strong><span>Markdown 是可携带的知识真相层</span></span><small>86%</small></button></section>
+            <section class="search-group" data-library-family="sources"><h2>来源</h2><button class="search-result" type="button" data-search-text="Local-first software 产品研究 PDF 本地优先" data-search-action="source"><span class="search-result-icon">PDF</span><span class="search-result-copy"><strong>Local-first software</strong><span>产品研究.pdf · 第 4 页</span></span><small>1 个引用</small></button></section>
+            <section class="search-group" data-library-family="topics"><h2>主题</h2><button class="search-result" type="button" data-search-text="本地优先 主题 证据 反向链接" data-search-action="topic"><span class="search-result-icon">#</span><span class="search-result-copy"><strong>本地优先</strong><span>主题 · 28 条证据 · 12 个反向链接</span></span><small>打开</small></button></section>
+            <section class="search-group" data-library-family="tags"><h2>标签</h2><button class="search-result" type="button" data-search-text="agent 标签 12 篇笔记" data-search-action="tag"><span class="search-result-icon">#</span><span class="search-result-copy"><strong>agent</strong><span>标签 · 12 篇笔记</span></span><small>查看</small></button></section>
             <p class="search-empty" id="librarySearchEmpty" role="status">没有找到匹配的笔记、来源或主题</p>
+            <section class="library-state loading" role="status" aria-busy="true"><div class="state-copy"><div class="state-spinner" aria-hidden="true"></div><h2>正在载入笔记库</h2><p>笔记与来源保存在本地；列表准备好后会自动显示。</p></div></section>
+            <section class="library-state unavailable" role="status"><div class="state-copy"><h2>暂时无法读取笔记库</h2><p>本地知识没有被删除。你可以重试当前读取，不需要重新选择仓库。</p><button class="primary-button" type="button" data-library-retry>重试</button></div></section>
+            </div>
           </div>
         </section>
 
@@ -2230,6 +2426,7 @@
               <p>Pige 把笔记和可恢复的知识保存在你选择的文件夹里。你可以稍后在设置中看到并更改它。</p>
               <button class="first-run-choice" type="button" data-vault-choice="create" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v10H3z"/></svg><span class="first-run-choice-copy"><strong>创建新的 Pige 仓库</strong><span>选择父文件夹，并创建一个新的本地知识库</span></span></button>
               <button class="first-run-choice" type="button" data-vault-choice="open" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v10H3z"/><path d="M12 12v4M10 14h4"/></svg><span class="first-run-choice-copy"><strong>打开已有仓库</strong><span>选择一个已有的 Pige 仓库文件夹</span></span></button>
+              <button class="first-run-choice" type="button" data-next-screen="first-run-restore"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4z"/><path d="M8 9h8M12 9v6M9 12l3 3 3-3"/></svg><span class="first-run-choice-copy"><strong>恢复 Pige 备份</strong><span>先预览版本、数量、警告和身份模式，再选择目标文件夹</span></span></button>
               <div class="first-run-actions"><button class="quiet-button" type="button" data-first-run-later>稍后设置</button><button class="primary-button" id="firstRunContinue" type="button" data-next-screen="first-run-model" disabled>继续</button></div>
             </div>
             <div class="first-run-step model">
@@ -2238,6 +2435,14 @@
               <button class="first-run-choice" type="button" data-open-settings="models"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M8 12h8M12 8v8"/></svg><span class="first-run-choice-copy"><strong>连接模型服务</strong><span>选择一个预设服务，只填写必要凭据</span></span></button>
               <div class="first-run-actions"><button class="quiet-button" type="button" data-next-screen="home-model-missing">暂时跳过，仅保存来源</button><button class="primary-button" type="button" data-open-settings="models">连接模型</button></div>
             </div>
+            <div class="first-run-step restore">
+              <h1>预览恢复内容</h1>
+              <p>恢复前只显示清单元数据和分类警告，不显示归档条目、原始路径或正文。</p>
+              <dl class="restore-preview-summary"><dt>Pige 版本</dt><dd>0.1.0-alpha</dd><dt>仓库结构</dt><dd>版本 1</dd><dt>内容</dt><dd>128 篇笔记 · 42 个来源 · 18 段对话</dd><dt>警告</dt><dd>已排除可重建目录 4</dd></dl>
+              <fieldset class="restore-mode-list"><legend class="visually-hidden">恢复模式</legend><label><input type="radio" name="first-run-restore-mode" value="clone" aria-label="恢复为新的仓库" checked><span class="restore-mode-copy"><strong>恢复为新的仓库</strong><span>推荐。创建新的仓库身份，原仓库保持不变。</span></span></label><label><input type="radio" name="first-run-restore-mode" value="replace" aria-label="替换当前逻辑仓库"><span class="restore-mode-copy"><strong>替换当前逻辑仓库</strong><span>应用前还会显示由主进程拥有的不可撤销确认。</span></span></label></fieldset>
+              <p class="restore-warning-copy">Pige 会先选择新的目标文件夹；不会把原始目标路径带回 renderer。</p>
+              <div class="first-run-actions"><button class="quiet-button" type="button" data-next-screen="first-run-vault">取消</button><button class="primary-button" type="button" data-restore-apply>选择目标并恢复</button></div>
+            </div>
           </div>
         </section>
 
@@ -2245,6 +2450,9 @@
           <header class="reader-toolbar">
             <span>笔记库</span><span>›</span><span id="readerGroup">Pige</span><span>›</span><span id="readerNoteParent">产品规划</span><span>›</span><strong id="readerNoteFile">产品定位.md</strong>
             <div class="reader-toolbar-actions">
+              <button class="icon-button reader-pane-toggle" id="toggleNoteAgent" type="button" aria-label="隐藏笔记对话" aria-expanded="true" title="隐藏笔记对话">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg>
+              </button>
               <button class="icon-button prototype-action" type="button" aria-label="编辑笔记" title="编辑笔记">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>
               </button>
@@ -2253,6 +2461,9 @@
               </button>
               <button class="icon-button prototype-action" type="button" aria-label="更多笔记操作" title="更多笔记操作">
                 <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+              </button>
+              <button class="icon-button" id="closeProductNote" type="button" aria-label="关闭笔记" title="关闭笔记">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
               </button>
             </div>
           </header>
@@ -2288,6 +2499,13 @@
                 <tr><td>安全本地</td><td>所有数据保存在本地，隐私可控</td></tr>
               </tbody>
             </table>
+            <section class="reader-sources" aria-label="笔记来源">
+              <h2>来源</h2>
+              <div class="reader-source-list">
+                <button class="reader-source" type="button" data-reader-source-action="preview"><span class="reader-source-icon">PDF</span><span class="reader-source-copy"><strong>产品研究</strong><span>产品研究.pdf · 第 4 页 · 已保存引用</span></span><small>预览</small></button>
+                <button class="reader-source" type="button" data-reader-source-action="citation"><span class="reader-source-icon">MD</span><span class="reader-source-copy"><strong>数据架构</strong><span>笔记 · 引用 2 · 本地知识</span></span><small>打开</small></button>
+              </div>
+            </section>
             <section class="dataset-preview" aria-label="Dataset 结果">
               <h1>市场调研资料</h1>
               <p class="dataset-summary">Pige 已将来源中的结构化数据整理为 3 行 Dataset。表格与引用会随笔记一同恢复。</p>
@@ -2305,7 +2523,7 @@
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/></svg>
             <span id="noteAgentTitle">产品定位.md</span>
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6" transform="rotate(90 12 12)"/></svg>
-            <button class="icon-button" id="closeProductNote" type="button" aria-label="关闭笔记" title="关闭笔记">
+            <button class="icon-button" id="closeNoteAgent" type="button" aria-label="隐藏笔记对话" title="隐藏笔记对话">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
             </button>
           </header>
@@ -2365,7 +2583,7 @@
       </aside>
     </div>
     <div class="full-drop-overlay" id="fullDropOverlay" aria-hidden="true"><div class="drop-overlay-copy"><strong>放入 Pige</strong><span>释放以保存 3 个来源</span></div></div>
-    <input class="file-input" id="fileInput" type="file" multiple />
+    <input class="file-input" id="fileInput" type="file" multiple aria-label="选择要添加的文件" />
   </div>
 
   <section class="settings-window" id="settingsWindow" data-theme="light" aria-label="Pige 设置" hidden>
@@ -2646,11 +2864,17 @@
   </section>
 
   <script>
+    document.addEventListener('pointerdown', () => document.body.classList.add('using-pointer'), true);
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Tab' || event.key.startsWith('Arrow')) document.body.classList.remove('using-pointer');
+    }, true);
+
     const appWindow = document.querySelector('#appWindow');
     const mainLayout = document.querySelector('#mainLayout');
     const sidebarToggle = document.querySelector('#sidebarToggle');
     const pinButton = document.querySelector('#pinButton');
     const sidebarSearch = document.querySelector('#sidebarSearch');
+    const openLibrary = document.querySelector('#openLibrary');
     const taskPanel = document.querySelector('#taskPanel');
     const taskToggle = document.querySelector('#taskToggle');
     const composerInput = document.querySelector('#composerInput');
@@ -2658,8 +2882,7 @@
     const attachButton = document.querySelector('#attachButton');
     const fileInput = document.querySelector('#fileInput');
     const attachmentStrip = document.querySelector('#attachmentStrip');
-    const attachmentName = document.querySelector('#attachmentName');
-    const removeAttachment = document.querySelector('#removeAttachment');
+    const attachmentList = document.querySelector('#attachmentList');
     const sourcePicker = document.querySelector('#sourcePicker');
     const dropSurface = document.querySelector('#dropSurface');
     const toast = document.querySelector('#toast');
@@ -2667,6 +2890,8 @@
     const messagePreview = document.querySelector('#messagePreview');
     const openProductNote = document.querySelector('#openProductNote');
     const closeProductNote = document.querySelector('#closeProductNote');
+    const toggleNoteAgent = document.querySelector('#toggleNoteAgent');
+    const closeNoteAgent = document.querySelector('#closeNoteAgent');
     const readerGroup = document.querySelector('#readerGroup');
     const readerNoteParent = document.querySelector('#readerNoteParent');
     const readerNoteFile = document.querySelector('#readerNoteFile');
@@ -2694,6 +2919,8 @@
     let composerCompositionEndedAt = 0;
     let noteComposerComposing = false;
     let noteComposerCompositionEndedAt = 0;
+    let attachedFiles = [];
+    let activeLibraryFamily = 'all';
 
     function showToast(message) {
       toast.textContent = message;
@@ -2707,6 +2934,48 @@
       settingsToast.classList.add('visible');
       window.clearTimeout(settingsToastTimer);
       settingsToastTimer = window.setTimeout(() => settingsToast.classList.remove('visible'), 1800);
+    }
+
+    function runSettingsPrototypeAction(button) {
+      const label = button.dataset.actionLabel || button.textContent.trim();
+      const requiresSecondConfirmation = /删除|启用 YOLO|重置本地数据库|清除本地诊断/.test(label);
+      if (requiresSecondConfirmation && button.dataset.confirming !== 'true') {
+        button.dataset.confirming = 'true';
+        button.dataset.originalLabel = button.textContent.trim();
+        button.textContent = `确认${button.textContent.trim().replace(/…$/, '')}`;
+        showSettingsToast(`${label}需要再次确认；尚未更改任何内容`);
+        return;
+      }
+
+      delete button.dataset.confirming;
+      const original = button.dataset.originalLabel || button.textContent.trim();
+      const isInstall = /安装/.test(label);
+      const isConnect = /连接/.test(label);
+      const isRefresh = /刷新|重试/.test(label);
+      const isCheck = /检查|诊断/.test(label);
+      const isPreview = /预览/.test(label);
+      const isCreate = /创建备份/.test(label);
+      const hasProgress = isInstall || isConnect || isRefresh || isCheck || isPreview || isCreate;
+
+      if (!hasProgress) {
+        button.dataset.state = 'resolved';
+        button.textContent = requiresSecondConfirmation ? '已确认' : original;
+        if (requiresSecondConfirmation) button.disabled = true;
+        showSettingsToast(`${label}已完成（原型状态）`);
+        return;
+      }
+
+      button.disabled = true;
+      button.setAttribute('aria-busy', 'true');
+      button.textContent = isInstall ? '正在安装…' : isConnect ? '正在检查…' : isPreview ? '正在准备…' : isCreate ? '正在创建…' : '正在检查…';
+      showSettingsToast(`${label}正在进行；不会显示原始日志、路径或凭据`);
+      window.setTimeout(() => {
+        button.removeAttribute('aria-busy');
+        button.dataset.state = 'completed';
+        button.textContent = isInstall ? '已安装' : isConnect ? '已连接' : isCreate ? '已创建' : '已完成';
+        if (!isInstall && !isConnect) button.disabled = false;
+        showSettingsToast(`${label}已完成（原型状态）`);
+      }, 520);
     }
 
     function resetSettingsSearch() {
@@ -2776,15 +3045,32 @@
     function filterLibraryResults() {
       const query = librarySearchInput.value.trim().toLocaleLowerCase('zh-CN');
       let visible = 0;
-      document.querySelectorAll('.search-result').forEach(result => {
-        const matches = !query || result.dataset.searchText.toLocaleLowerCase('zh-CN').includes(query);
-        result.hidden = !matches;
-        if (matches) visible += 1;
-      });
       document.querySelectorAll('.search-group').forEach(group => {
-        group.hidden = !Array.from(group.querySelectorAll('.search-result')).some(result => !result.hidden);
+        const familyMatches = activeLibraryFamily === 'all' || group.dataset.libraryFamily === activeLibraryFamily;
+        let groupVisible = false;
+        group.querySelectorAll('.search-result').forEach(result => {
+          const queryMatches = !query || result.dataset.searchText.toLocaleLowerCase('zh-CN').includes(query);
+          const matches = familyMatches && queryMatches;
+          result.hidden = !matches;
+          if (matches) {
+            visible += 1;
+            groupVisible = true;
+          }
+        });
+        group.hidden = !groupVisible;
       });
       librarySearchEmpty.classList.toggle('visible', visible === 0);
+    }
+
+    function setLibraryFamily(family) {
+      activeLibraryFamily = family || 'all';
+      document.querySelectorAll('[data-library-tab]').forEach(tab => {
+        const selected = tab.dataset.libraryTab === activeLibraryFamily;
+        tab.classList.toggle('active', selected);
+        tab.setAttribute('aria-selected', String(selected));
+        if (selected) document.querySelector('#librarySearchResults').setAttribute('aria-labelledby', tab.id);
+      });
+      filterLibraryResults();
     }
 
     function updateSendState() {
@@ -2793,10 +3079,33 @@
       composerInput.style.height = `${Math.min(composerInput.scrollHeight, 160)}px`;
     }
 
-    function showAttachment(name) {
-      attachmentName.textContent = name;
-      attachmentStrip.classList.add('visible');
+    function renderAttachments() {
+      attachmentList.replaceChildren(...attachedFiles.map((name, index) => {
+        const chip = document.createElement('div');
+        chip.className = 'attachment-chip';
+        const label = document.createElement('span');
+        label.textContent = name;
+        const remove = document.createElement('button');
+        remove.className = 'chip-remove';
+        remove.type = 'button';
+        remove.setAttribute('aria-label', `移除附件 ${name}`);
+        remove.textContent = '×';
+        remove.addEventListener('click', () => {
+          attachedFiles = attachedFiles.filter((_, fileIndex) => fileIndex !== index);
+          if (appWindow.dataset.screen === 'home-file-duplicate' || appWindow.dataset.screen === 'home-file-unsupported') appWindow.dataset.screen = 'home';
+          renderAttachments();
+          composerInput.focus();
+        });
+        chip.append(label, remove);
+        return chip;
+      }));
+      attachmentStrip.classList.toggle('visible', attachedFiles.length > 0);
       updateSendState();
+    }
+
+    function showAttachments(names) {
+      attachedFiles = Array.from(new Set(names.filter(Boolean)));
+      renderAttachments();
     }
 
     function setSidebar(open) {
@@ -2807,21 +3116,48 @@
       sidebarToggle.title = open ? '关闭侧边栏' : '打开侧边栏';
     }
 
+    function setNoteAgent(open, options = {}) {
+      const nextOpen = Boolean(open && mainLayout.classList.contains('note-open'));
+      mainLayout.classList.toggle('agent-open', nextOpen);
+      appWindow.classList.toggle('agent-expanded', nextOpen);
+      toggleNoteAgent.setAttribute('aria-expanded', String(nextOpen));
+      toggleNoteAgent.setAttribute('aria-label', nextOpen ? '隐藏笔记对话' : '显示笔记对话');
+      toggleNoteAgent.title = nextOpen ? '隐藏笔记对话' : '显示笔记对话';
+      if (options.restoreFocus !== false) {
+        if (nextOpen) window.setTimeout(() => noteComposerInput.focus({ preventScroll: true }), 300);
+        else window.setTimeout(() => toggleNoteAgent.focus({ preventScroll: true }), 180);
+      }
+    }
+
     function setScreen(screen, options = {}) {
       const normalized = screen || 'home';
       appWindow.dataset.screen = normalized;
 
-      if (normalized === 'knowledge') {
+      if (normalized === 'home-url-draft') {
+        composerInput.value = 'https://localfirstweb.dev/article';
+        showAttachments([]);
+        updateSendState();
+      } else if (normalized === 'home-files-attached') {
+        composerInput.value = '';
+        showAttachments(['产品需求文档.pdf', '市场调研资料.csv']);
+      } else if (normalized === 'home-file-duplicate' || normalized === 'home-file-unsupported') {
+        composerInput.value = '';
+        showAttachments(['产品需求文档.pdf']);
+      }
+
+      if (normalized.startsWith('knowledge')) {
         setNoteOpen(false);
-        setSidebar(true);
+        setSidebar(!window.matchMedia('(max-width: 679px)').matches);
         document.querySelectorAll('.nav-item').forEach(entry => entry.classList.toggle('active', entry.dataset.view === 'knowledge'));
         return;
       }
 
-      if (normalized === 'search') {
+      if (normalized === 'search' || normalized.startsWith('library')) {
         setNoteOpen(false);
-        setSidebar(true);
+        setSidebar(!window.matchMedia('(max-width: 679px)').matches);
         document.querySelectorAll('.nav-item').forEach(entry => entry.classList.remove('active'));
+        if (normalized.startsWith('library') && !options.keepQuery) librarySearchInput.value = '';
+        setLibraryFamily(options.libraryFamily || 'all');
         return;
       }
 
@@ -2845,10 +3181,13 @@
       mainLayout.classList.toggle('note-open', open);
       appWindow.classList.toggle('note-mode', open);
       if (open) {
-        setSidebar(!window.matchMedia('(max-width: 760px)').matches);
+        const narrow = window.matchMedia('(max-width: 679px)').matches;
+        const compactWorkspace = window.matchMedia('(max-width: 1439px)').matches;
+        setSidebar(!compactWorkspace);
+        setNoteAgent(!narrow, { restoreFocus: false });
         document.querySelectorAll('.nav-item').forEach(entry => entry.classList.remove('active'));
-        window.setTimeout(() => noteComposerInput.focus({ preventScroll: true }), 420);
       } else {
+        setNoteAgent(false, { restoreFocus: false });
         document.querySelectorAll('.sidebar-note').forEach(note => note.classList.remove('active'));
         document.querySelector('[data-view="home"]').classList.add('active');
       }
@@ -2856,9 +3195,11 @@
 
     sidebarToggle.addEventListener('click', () => {
       const open = !mainLayout.classList.contains('sidebar-open');
-      if (!open && mainLayout.classList.contains('note-open')) setNoteOpen(false);
       setSidebar(open);
     });
+
+    toggleNoteAgent.addEventListener('click', () => setNoteAgent(!mainLayout.classList.contains('agent-open')));
+    closeNoteAgent.addEventListener('click', () => setNoteAgent(false));
 
     pinButton.addEventListener('click', () => {
       const pinned = pinButton.getAttribute('aria-pressed') !== 'true';
@@ -2867,6 +3208,7 @@
     });
 
     sidebarSearch.addEventListener('click', () => setScreen('search'));
+    openLibrary.addEventListener('click', () => setScreen('library'));
 
     taskToggle.addEventListener('click', () => {
       const collapsed = taskPanel.classList.toggle('collapsed');
@@ -2890,14 +3232,8 @@
     attachButton.addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', () => {
       const files = Array.from(fileInput.files || []);
-      if (files.length) showAttachment(files.length === 1 ? files[0].name : `${files.length} 个文件`);
+      if (files.length) showAttachments(files.map(file => file.name));
       fileInput.value = '';
-    });
-
-    removeAttachment.addEventListener('click', () => {
-      attachmentStrip.classList.remove('visible');
-      updateSendState();
-      composerInput.focus();
     });
 
     document.querySelectorAll('.source-type').forEach(button => {
@@ -2907,7 +3243,7 @@
           fileInput.click();
           return;
         }
-        showAttachment(`${type} 文件（原型）`);
+        showAttachments([`${type} 文件（原型）`]);
         showToast(`已选择 ${type} 文件入口`);
       });
     });
@@ -2928,15 +3264,16 @@
 
     dropSurface.addEventListener('drop', event => {
       const files = Array.from(event.dataTransfer.files || []);
-      if (files.length) showAttachment(files.length === 1 ? files[0].name : `${files.length} 个文件`);
+      if (files.length) showAttachments(files.map(file => file.name));
     });
 
     sendButton.addEventListener('click', () => {
       const text = composerInput.value.trim();
-      messagePreview.textContent = text || `已添加 ${attachmentName.textContent}`;
+      messagePreview.textContent = text || `已添加 ${attachedFiles.length} 个文件`;
       conversationPreview.classList.add('visible');
       composerInput.value = '';
-      attachmentStrip.classList.remove('visible');
+      attachedFiles = [];
+      renderAttachments();
       updateSendState();
       showToast('已进入 Pige 处理队列（原型状态）');
       taskPanel.classList.remove('collapsed');
@@ -3028,6 +3365,27 @@
     });
 
     librarySearchInput.addEventListener('input', filterLibraryResults);
+    document.querySelectorAll('[data-library-tab]').forEach(tab => {
+      tab.addEventListener('click', () => setLibraryFamily(tab.dataset.libraryTab));
+    });
+    document.querySelector('.library-tabs').addEventListener('keydown', event => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      const tabs = Array.from(document.querySelectorAll('[data-library-tab]'));
+      const current = Math.max(0, tabs.indexOf(document.activeElement));
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (current + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+      event.preventDefault();
+      tabs[next].focus();
+      tabs[next].click();
+    });
+
+    document.querySelector('.selection-toolbar').addEventListener('keydown', event => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      const actions = Array.from(event.currentTarget.querySelectorAll('button'));
+      const current = Math.max(0, actions.indexOf(document.activeElement));
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? actions.length - 1 : (current + (event.key === 'ArrowRight' ? 1 : -1) + actions.length) % actions.length;
+      event.preventDefault();
+      actions[next].focus();
+    });
     document.querySelectorAll('.search-result').forEach(result => {
       result.addEventListener('click', () => {
         if (result.dataset.noteTitle) {
@@ -3038,6 +3396,11 @@
           setScreen('knowledge');
           const topic = document.querySelector('[data-knowledge-title="本地优先"]');
           if (topic) topic.click();
+          return;
+        }
+        if (result.dataset.searchAction === 'tag') {
+          librarySearchInput.value = result.querySelector('strong').textContent;
+          setScreen('library', { keepQuery: true, libraryFamily: 'notes' });
           return;
         }
         showToast('已打开来源预览（原型状态）');
@@ -3057,6 +3420,17 @@
     });
 
     document.querySelector('[data-first-run-later]').addEventListener('click', () => setScreen('first-run-model'));
+
+    document.querySelector('[data-restore-apply]').addEventListener('click', event => {
+      const button = event.currentTarget;
+      const mode = document.querySelector('input[name="first-run-restore-mode"]:checked')?.value || 'clone';
+      button.disabled = true;
+      button.textContent = '正在准备恢复…';
+      window.setTimeout(() => {
+        showToast(mode === 'replace' ? '已确认替换模式；下一步由系统选择目标并再次确认' : '已确认恢复为新仓库；下一步由系统选择目标');
+        setScreen('first-run-model');
+      }, 480);
+    });
 
     document.querySelectorAll('[data-decision-action]').forEach(button => {
       button.addEventListener('click', () => {
@@ -3087,6 +3461,43 @@
         card.querySelector('.voice-wave').remove();
         card.querySelector('p').textContent = '文字已保留，可完成后继续编辑；不会自动发送。';
         card.querySelector('[data-voice-action="complete"]').disabled = false;
+      });
+    });
+
+    document.querySelectorAll('[data-voice-dismiss]').forEach(button => {
+      button.addEventListener('click', () => {
+        setScreen('home', { sidebar: false });
+        window.setTimeout(() => composerInput.focus({ preventScroll: true }), 180);
+      });
+    });
+
+    document.querySelectorAll('[data-knowledge-action]').forEach(button => {
+      button.addEventListener('click', () => {
+        const action = button.dataset.knowledgeAction;
+        if (action === 'add-source') {
+          setScreen('home', { sidebar: false });
+          window.setTimeout(() => attachButton.focus({ preventScroll: true }), 180);
+          return;
+        }
+        if (action === 'retry') {
+          button.disabled = true;
+          button.textContent = '正在重试…';
+          window.setTimeout(() => setScreen('knowledge'), 480);
+          return;
+        }
+        showToast(action === 'suggestion' ? '已打开关系建议（原型状态）' : action === 'backlinks' ? '已打开反向链接（原型状态）' : '已打开证据列表（原型状态）');
+      });
+    });
+
+    document.querySelector('[data-library-retry]').addEventListener('click', event => {
+      event.currentTarget.disabled = true;
+      event.currentTarget.textContent = '正在重试…';
+      window.setTimeout(() => setScreen('library'), 480);
+    });
+
+    document.querySelectorAll('[data-reader-source-action]').forEach(button => {
+      button.addEventListener('click', () => {
+        showToast(button.dataset.readerSourceAction === 'citation' ? '已打开引用笔记（原型状态）' : '已打开保存的来源预览（原型状态）');
       });
     });
 
@@ -3208,7 +3619,7 @@
 
     document.querySelectorAll('.settings-action').forEach(button => {
       button.addEventListener('click', () => {
-        showSettingsToast(`${button.dataset.actionLabel || button.textContent.trim()}（原型状态）`);
+        runSettingsPrototypeAction(button);
       });
     });
 
@@ -3224,13 +3635,14 @@
       });
     });
 
-    if (window.matchMedia('(max-width: 760px)').matches) {
+    if (window.matchMedia('(max-width: 679px)').matches) {
       taskPanel.classList.add('collapsed');
       taskToggle.setAttribute('aria-expanded', 'false');
     }
 
     document.addEventListener('keydown', event => {
       if (event.key === 'Escape' && document.body.classList.contains('settings-active')) closeSettingsWindow();
+      else if (event.key === 'Escape' && mainLayout.classList.contains('note-open') && mainLayout.classList.contains('sidebar-open') && window.matchMedia('(max-width: 1439px)').matches) setSidebar(false);
     });
 
     const initialParams = new URLSearchParams(location.search);
@@ -3241,7 +3653,17 @@
       settingsWindow.dataset.state = initialParams.get('state') || '';
       openSettingsWindow(initialParams.get('panel') || 'general');
     } else {
-      setScreen(initialScreen, { sidebar: initialParams.get('sidebar') === '1' || initialScreen === 'expanded' });
+      setScreen(initialScreen, {
+        sidebar: initialParams.get('sidebar') === '1' || initialScreen === 'expanded',
+        libraryFamily: initialParams.get('tab') || 'all'
+      });
+    }
+    if (initialParams.get('review') === 'long-copy') {
+      const suffix = ' · 较长的本地化说明示例';
+      document.querySelectorAll('button, .settings-row-copy span, .toolbar-meta, .hero-subtitle, .search-result-copy span').forEach(element => {
+        const text = element.textContent.trim();
+        if (text.length > 1 && !text.includes('较长的本地化')) element.append(document.createTextNode(suffix));
+      });
     }
   </script>
 </body>

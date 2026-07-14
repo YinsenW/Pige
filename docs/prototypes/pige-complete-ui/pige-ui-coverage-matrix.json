@@ -1,0 +1,430 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Pige UI requirement, prototype, and production coverage matrix",
+  "status": "Active UI Design audit; gaps are intentionally explicit and are not release-status claims",
+  "audited_against": {
+    "product_contract": "docs/UI_PROTOTYPE.md",
+    "production_baseline": "origin/main@129c3c0371a9f20ce20c670075e79e0c9013850f",
+    "prototype": "docs/prototypes/pige-complete-ui/index.html",
+    "visual_reference": "ChatGPT-branded Codex desktop client 26.707.72221 clean-room observable behavior"
+  },
+  "status_definitions": {
+    "covered": "The required surface and deterministic state transition exist in this artifact.",
+    "partial": "A useful foundation exists, but at least one required state, action, responsive mode, or accessibility behavior is absent.",
+    "missing": "The required user-visible surface or action is not present.",
+    "implemented": "The production renderer contains the user-visible flow on the audited baseline; this is not a release-status promotion.",
+    "not_applicable": "The requirement belongs to another artifact or service and has no user-visible control on this surface."
+  },
+  "rules": [
+    "Prototype coverage and production implementation are reported separately.",
+    "A static card, toast, or route is never counted as a completed production action.",
+    "Every partial or missing item must name the smallest user-visible completion boundary.",
+    "Pixel fidelity is accepted only after canonical-size and narrow-size screenshot comparison, not by route availability alone.",
+    "Production status is a read-only UI audit of the named baseline and does not replace Development tests or governed acceptance evidence."
+  ],
+  "requirements": [
+    {
+      "id": "SHELL-01",
+      "requirement": "Compact Home, expanded workspace, and three-pane reading use stable pane widths and preserve the active task.",
+      "source": "UI_PROTOTYPE 2.1, 16.2",
+      "prototype": "covered",
+      "production": "partial",
+      "prototype_evidence": ["?screen=home", "?screen=expanded", "?screen=note"],
+      "production_evidence": ["App.tsx View and WindowLayoutMode"],
+      "gap": "Production still exposes implementation-oriented C/W/F controls and does not yet provide the complete stable three-pane shell.",
+      "priority": "P1"
+    },
+    {
+      "id": "SHELL-02",
+      "requirement": "Sidebar toggle, pin, navigation, and Settings entry use accurate semantics with no decorative history controls.",
+      "source": "UI_PROTOTYPE 3, 16.2, 17",
+      "prototype": "covered",
+      "production": "partial",
+      "prototype_evidence": ["shell.sidebar_toggle", "shell.pin", "shell.primary_navigation", "shell.settings_entry"],
+      "production_evidence": ["App.tsx topbar and sidebar"],
+      "gap": "Production topbar still uses text placeholders for pane and window controls and keeps Settings inside the primary renderer view.",
+      "priority": "P1"
+    },
+    {
+      "id": "ONBOARD-01",
+      "requirement": "First run can create, open, or restore a local vault with clear local-first copy.",
+      "source": "UI_PROTOTYPE 14; ONBOARDING_AND_FIRST_RUN",
+      "prototype": "covered",
+      "production": "implemented",
+      "prototype_evidence": ["?screen=first-run-vault", "onboarding.vault_choice"],
+      "production_evidence": ["FirstRunPanel", "useRestoreFlow"],
+      "gap": "Visual-review the new restore preview at canonical and narrow sizes; production remains the authority for native destination and irreversible confirmation copy.",
+      "priority": "P1"
+    },
+    {
+      "id": "ONBOARD-02",
+      "requirement": "Model connection is optional; skipping enters capture-only and can resume preserved work later.",
+      "source": "UI_PROTOTYPE 14, 15.3; ONBOARDING_AND_FIRST_RUN",
+      "prototype": "covered",
+      "production": "partial",
+      "prototype_evidence": ["?screen=first-run-model", "onboarding.model_choice", "?screen=home-model-missing"],
+      "production_evidence": ["HomeComposer captureOnly", "ModelSettingsPanel"],
+      "gap": "The audited baseline has the foundation, while final single-owner missing-model convergence remains in a separate Development candidate.",
+      "priority": "P1"
+    },
+    {
+      "id": "HOME-01",
+      "requirement": "One composer accepts ordinary conversation, questions, text, URLs, and files without user-selected intent modes.",
+      "source": "UI_PROTOTYPE 4.1, 5, 7",
+      "prototype": "covered",
+      "production": "implemented",
+      "prototype_evidence": ["?screen=home", "home.composer", "home.attach", "home.send"],
+      "production_evidence": ["HomeComposer unified Agent turn"],
+      "gap": "Keep the product path Pi-owned; do not reintroduce renderer question or source routing heuristics.",
+      "priority": "P0"
+    },
+    {
+      "id": "HOME-02",
+      "requirement": "Enter sends, Shift+Enter inserts a newline, IME composition and its end race never send, and duplicate submissions are blocked.",
+      "source": "UI_PROTOTYPE 16.2, 17",
+      "prototype": "covered",
+      "production": "implemented",
+      "prototype_evidence": ["home.composer", "home.send"],
+      "production_evidence": ["handleComposerKeyDown", "composition guards"],
+      "gap": "Retain regression coverage for keyboard, button, attachment, whitespace, repeat, and in-flight paths.",
+      "priority": "P0"
+    },
+    {
+      "id": "HOME-03",
+      "requirement": "Picker and whole-window drop preserve one or more files through one Home-owned ingress with visible attachment state.",
+      "source": "UI_PROTOTYPE 4.2, 5.3, 18",
+      "prototype": "covered",
+      "production": "implemented",
+      "prototype_evidence": ["?screen=home-drag", "?screen=home-files-attached", "?screen=home-file-duplicate", "?screen=home-file-unsupported", "home.drop_surface", "home.attach", "home.attachment_group"],
+      "production_evidence": ["submitHomeFiles", "file picker and drop handling"],
+      "gap": "No current prototype or production ownership gap; retain picker/drop race, duplicate, unsupported, removal, and multi-file regression coverage.",
+      "priority": "P1"
+    },
+    {
+      "id": "HOME-04",
+      "requirement": "URL and file appearance do not select a workflow; detected source state remains editable before submit.",
+      "source": "UI_PROTOTYPE 5.2, 5.3; unified ingress contract",
+      "prototype": "covered",
+      "production": "implemented",
+      "prototype_evidence": ["?screen=home-url-draft", "?screen=home-files-attached", "?screen=home-url", "?screen=home-file"],
+      "production_evidence": ["typed_url and file Agent turn"],
+      "gap": "Canonical and narrow visual review remains for the new pre-submit URL and attachment routes.",
+      "priority": "P1"
+    },
+    {
+      "id": "HOME-05",
+      "requirement": "Supported macOS voice input has listening, stop, editable transcript, error, and unsupported states without auto-send.",
+      "source": "UI_PROTOTYPE 5.1.1, 18, 19",
+      "prototype": "covered",
+      "production": "missing",
+      "prototype_evidence": ["?screen=home-voice", "?screen=home-voice-unsupported", "?screen=home-voice-error", "home.voice"],
+      "production_evidence": [],
+      "gap": "Prototype covers supported, unsupported, and typed microphone-permission failure states. Development still needs the Speech Service bridge and real platform behavior.",
+      "priority": "P1"
+    },
+    {
+      "id": "HOME-06",
+      "requirement": "One safe provisional answer bubble receives monotonic replacements and is authoritatively replaced or cleared.",
+      "source": "UI_PROTOTYPE 6.1, 7, 17",
+      "prototype": "covered",
+      "production": "implemented",
+      "prototype_evidence": ["?screen=home-streaming", "home.safe_draft"],
+      "production_evidence": ["provisional conversation message", "safe replacement stream"],
+      "gap": "Maintain final-only citations and clearing on cancel, error, vault change, and older conversation load.",
+      "priority": "P0"
+    },
+    {
+      "id": "HOME-07",
+      "requirement": "Ordinary answers work without vault evidence; optional retrieval shows grounded synthesis and final-only stable citations; explicit vault-only can report insufficient evidence.",
+      "source": "UI_PROTOTYPE 7",
+      "prototype": "covered",
+      "production": "implemented",
+      "prototype_evidence": ["?screen=home-conversation", "?screen=home-retrieval", "?screen=home-vault-only", "home.citation_row"],
+      "production_evidence": ["Home conversation timeline", "RetrievalResults", "citation open"],
+      "gap": "Do not fabricate retrieval, citations, or insufficient-evidence semantics when Pi did not request vault-only behavior.",
+      "priority": "P0"
+    },
+    {
+      "id": "HOME-08",
+      "requirement": "Recent work is secondary, compact, durable-change oriented, and owns cancel, retry, open, and Undo actions without duplicate status surfaces.",
+      "source": "UI_PROTOTYPE 4.3, 6, 6.1",
+      "prototype": "covered",
+      "production": "implemented",
+      "prototype_evidence": ["?screen=activity", "home.activity_disclosure", "home.activity_open", "home.activity_undo"],
+      "production_evidence": ["recentActivities", "undoActivity", "visibleRecentJobs"],
+      "gap": "Keep conversation-owned model waits and active confirmation Jobs out of duplicate Recent Work pills.",
+      "priority": "P0"
+    },
+    {
+      "id": "HOME-09",
+      "requirement": "Current-action Permission Broker and model-egress confirmations are compact, body-free, one-use, fail-closed, accessible, and sole status owners.",
+      "source": "UI_PROTOTYPE 6.1, 13 Permissions",
+      "prototype": "covered",
+      "production": "implemented",
+      "prototype_evidence": ["?screen=home-confirm", "?screen=home-model-egress", "home.permission_decision", "home.model_egress_decision"],
+      "production_evidence": ["permissionPrompt", "modelEgressPrompt", "matching Job suppression"],
+      "gap": "No saved grant, Remember, raw body, path, endpoint, model ID, command, or provider detail may leak into these cards.",
+      "priority": "P0"
+    },
+    {
+      "id": "HOME-10",
+      "requirement": "Missing-model and retryable failure states expose exactly one localized status owner and one relevant action.",
+      "source": "UI_PROTOTYPE 6.1, 15.3",
+      "prototype": "covered",
+      "production": "partial",
+      "prototype_evidence": ["?screen=home-model-missing", "?screen=home-error", "home.missing_model", "home.retry"],
+      "production_evidence": ["Home error and Job surfaces"],
+      "gap": "Final race-safe ownership and Models-local recovery are pending in the frozen replacement Development candidate.",
+      "priority": "P0"
+    },
+    {
+      "id": "LIBRARY-01",
+      "requirement": "Expanded sidebar exposes an Agent-maintained Library tree with at least three visible levels and keyboard disclosure.",
+      "source": "UI_PROTOTYPE 3, 4.4, 18",
+      "prototype": "covered",
+      "production": "missing",
+      "prototype_evidence": ["?screen=expanded", "library.group_disclosure", "library.note_row"],
+      "production_evidence": [],
+      "gap": "Development needs stable group identities, expansion persistence, active row, focus management, and note open by page ID.",
+      "priority": "P1"
+    },
+    {
+      "id": "LIBRARY-02",
+      "requirement": "Library provides Notes, Sources, Topics, and Tags without adding duplicate top-level navigation.",
+      "source": "UI_PROTOTYPE 9, 10, 18",
+      "prototype": "covered",
+      "production": "missing",
+      "prototype_evidence": ["?screen=library", "?screen=library&tab=notes", "?screen=library&tab=sources", "?screen=library&tab=topics", "?screen=library&tab=tags", "?screen=library-loading", "?screen=library-unavailable", "library.family_tabs", "library.availability"],
+      "production_evidence": ["LibraryPanel flat page list"],
+      "gap": "Prototype provides four quiet families plus loading and body-free unavailable truth. Development still needs the complete typed Library family service and these states.",
+      "priority": "P1"
+    },
+    {
+      "id": "LIBRARY-03",
+      "requirement": "One local search covers notes, sources, topics, and tags with explicit no-result state.",
+      "source": "UI_PROTOTYPE 9, 10",
+      "prototype": "covered",
+      "production": "missing",
+      "prototype_evidence": ["?screen=search", "?screen=library", "library.search", "library.search_result"],
+      "production_evidence": [],
+      "gap": "Development needs typed search result families and keyboard/focus behavior; HTML needs loading and unavailable states in addition to live filtering.",
+      "priority": "P1"
+    },
+    {
+      "id": "KNOWLEDGE-01",
+      "requirement": "Knowledge Tree is a separate semantic hierarchy with selectable nodes, evidence counts, backlinks, and suggested-link confidence where useful.",
+      "source": "UI_PROTOTYPE 11, 18",
+      "prototype": "covered",
+      "production": "partial",
+      "prototype_evidence": ["?screen=knowledge", "?screen=knowledge-empty", "?screen=knowledge-loading", "?screen=knowledge-degraded", "knowledge.node", "knowledge.secondary_action", "knowledge.availability"],
+      "production_evidence": ["KnowledgeTreePanel", "KnowledgeTreeNodeView"],
+      "gap": "Prototype includes bounded evidence/backlink/suggestion actions and empty/loading/degraded truth. Production still needs the governed typed actions and remaining Knowledge Tree breadth.",
+      "priority": "P1"
+    },
+    {
+      "id": "READER-01",
+      "requirement": "Notes open as a calm rendered Markdown surface with compact metadata, stable overflow, readable measure, and sanitized content.",
+      "source": "UI_PROTOTYPE 8, 8.1, 19",
+      "prototype": "covered",
+      "production": "implemented",
+      "prototype_evidence": ["?screen=note", "?screen=dataset"],
+      "production_evidence": ["NoteReader", "sanitized Markdown HTML", "NoteRelatedPanel"],
+      "gap": "Continue visual regression for headings, lists, blockquotes, tables, code, images, wiki links, and citations at narrow and wide sizes.",
+      "priority": "P0"
+    },
+    {
+      "id": "READER-02",
+      "requirement": "Reader exposes related pages, backlinks, source references, and source-versus-Agent interpretation without raw filesystem paths.",
+      "source": "UI_PROTOTYPE 8",
+      "prototype": "covered",
+      "production": "partial",
+      "prototype_evidence": ["?screen=note", "reader.source_reference"],
+      "production_evidence": ["NoteRelatedPanel outgoing and backlinks"],
+      "gap": "Prototype presents stable source/citation actions without raw paths. Development must bind them to stable source/page IDs and typed unavailable truth.",
+      "priority": "P1"
+    },
+    {
+      "id": "READER-03",
+      "requirement": "Left Library rail and right Agent/context rail can be hidden independently while the reading measure remains stable.",
+      "source": "UI_PROTOTYPE 2.1, 8",
+      "prototype": "covered",
+      "production": "missing",
+      "prototype_evidence": ["?screen=note", "shell.sidebar_toggle", "reader.agent_toggle"],
+      "production_evidence": [],
+      "gap": "The HTML now has independent pane toggles, an intermediate-width Library drawer, and a narrow Agent drawer; persisted pane state remains a Development implementation concern.",
+      "priority": "P1"
+    },
+    {
+      "id": "READER-04",
+      "requirement": "Wide notes expose a contextual Note Agent that can answer, suggest links, and stage edits without auto-writing.",
+      "source": "UI_PROTOTYPE 8.2, 18, 19",
+      "prototype": "covered",
+      "production": "missing",
+      "prototype_evidence": ["?screen=note", "?screen=proposal", "reader.note_agent", "reader.proposal"],
+      "production_evidence": [],
+      "gap": "Development needs the current-note typed context bridge, read-only answer state, proposal lifecycle, cancellation, error, and narrow drawer.",
+      "priority": "P1"
+    },
+    {
+      "id": "READER-05",
+      "requirement": "Text selection exposes compact local and Agent actions without obscuring content; mutating actions preserve original text until confirmation.",
+      "source": "UI_PROTOTYPE 8.3, 18, 19",
+      "prototype": "covered",
+      "production": "missing",
+      "prototype_evidence": ["?screen=selection", "reader.selection_actions"],
+      "production_evidence": [],
+      "gap": "Development needs native selection anchoring, keyboard dismissal, copy/quote local actions, Agent handoff, and mutation proposal boundaries.",
+      "priority": "P1"
+    },
+    {
+      "id": "DATASET-01",
+      "requirement": "Dataset results persist as a readable table with stable source citation and survive reopen.",
+      "source": "PRD Dataset acceptance; UI_PROTOTYPE reader contract",
+      "prototype": "covered",
+      "production": "implemented",
+      "prototype_evidence": ["?screen=dataset"],
+      "production_evidence": ["DatasetAnswerView", "dataset citations"],
+      "gap": "Keep horizontal overflow, narrow layout, citation opening, and empty/error states in visual regression.",
+      "priority": "P0"
+    },
+    {
+      "id": "SETTINGS-01",
+      "requirement": "Settings opens through one independent, stable-size surface and returning does not resize or lose the main workspace.",
+      "source": "UI_PROTOTYPE 13, 16.2",
+      "prototype": "covered",
+      "production": "missing",
+      "prototype_evidence": ["?panel=general#settings", "shell.settings_entry"],
+      "production_evidence": ["Settings currently rendered as main View"],
+      "gap": "Development needs a dedicated Settings BrowserWindow with route restore, close/return focus, stable dimensions, and shared typed settings state.",
+      "priority": "P1"
+    },
+    {
+      "id": "SETTINGS-02",
+      "requirement": "General, appearance, app language, and knowledge language are grouped simply and apply with explicit scope.",
+      "source": "UI_PROTOTYPE 13, 13 Appearance",
+      "prototype": "covered",
+      "production": "partial",
+      "prototype_evidence": ["?panel=general#settings", "?panel=appearance#settings", "settings.theme", "settings.switch"],
+      "production_evidence": ["locale selector", "appearance settings IPC"],
+      "gap": "Production needs the grouped Settings pages, theme behavior, storage/apply semantics, and six-locale copy inside the Settings surface.",
+      "priority": "P1"
+    },
+    {
+      "id": "SETTINGS-03",
+      "requirement": "Vault, note storage, backup/restore, and index maintenance expose safe locations and repair actions with no destructive ambiguity.",
+      "source": "UI_PROTOTYPE 13 Vault, 13 Backup, SETTINGS_AND_PREFERENCES",
+      "prototype": "covered",
+      "production": "partial",
+      "prototype_evidence": ["?panel=vault#settings", "?panel=restore#settings", "?panel=maintenance#settings"],
+      "production_evidence": ["VaultSettingsPanel", "useRestoreFlow", "backup Job status"],
+      "gap": "Move the implemented foundation into the grouped Settings surface and complete index-maintenance separation and body-free repair errors.",
+      "priority": "P1"
+    },
+    {
+      "id": "SETTINGS-04",
+      "requirement": "Models shows provider-grouped enabled models and one Global Default; presets ask only required credentials; custom protocol and endpoint stay progressively disclosed.",
+      "source": "UI_PROTOTYPE 13 Models; PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION",
+      "prototype": "covered",
+      "production": "partial",
+      "prototype_evidence": ["?panel=models#settings", "?panel=provider#settings", "?panel=provider-custom#settings", "settings.provider_connect", "settings.model_inventory"],
+      "production_evidence": ["ModelSettingsPanel", "provider summary and discovery"],
+      "gap": "Complete preset/custom separation, provider-level bootstrap probe, discovery retry/custom fallback, model enable state, grouped Global Default, and scoped body-free errors.",
+      "priority": "P0"
+    },
+    {
+      "id": "SETTINGS-05",
+      "requirement": "Local Capabilities owns local RAG, OCR, speech, parsers, and bundled toolchain health with progressive repair actions.",
+      "source": "UI_PROTOTYPE 13 Local Capabilities, 18",
+      "prototype": "covered",
+      "production": "missing",
+      "prototype_evidence": ["?panel=capabilities#settings", "settings.local_capability"],
+      "production_evidence": [],
+      "gap": "Development needs typed capability status, optional download consent, install progress, diagnostics, retry/remove, and no hidden ordinary-flow downloads.",
+      "priority": "P1"
+    },
+    {
+      "id": "SETTINGS-06",
+      "requirement": "Agent and Memory makes local memory inspectable, reversible, scoped, and separable from PIGE.md policy.",
+      "source": "UI_PROTOTYPE 13 Agent And Memory",
+      "prototype": "covered",
+      "production": "missing",
+      "prototype_evidence": ["?panel=memory#settings", "settings.memory_action"],
+      "production_evidence": [],
+      "gap": "Development needs typed list, provenance, disable/delete/export, confirmation, and backup-scope behavior.",
+      "priority": "P1"
+    },
+    {
+      "id": "SETTINGS-07",
+      "requirement": "Permissions and Privacy exposes the default cloud-send posture, stricter progressive choices, sensitive/restricted behavior, saved grants, and explicit YOLO controls.",
+      "source": "UI_PROTOTYPE 13 Permissions; SECURITY_THREAT_MODEL; PRIVACY",
+      "prototype": "covered",
+      "production": "partial",
+      "prototype_evidence": ["?panel=privacy#settings", "settings.privacy_action"],
+      "production_evidence": ["Current-action Permission Broker and model egress only"],
+      "gap": "Development needs settings storage/effect wiring, saved-grant management, revocation, YOLO confirmation/indicator, and privacy-copy enforcement.",
+      "priority": "P1"
+    },
+    {
+      "id": "SETTINGS-08",
+      "requirement": "Skills and Pi Packages show reviewed capability, source, version, permission scope, install/enable/remove state, and advanced catalog only by disclosure.",
+      "source": "UI_PROTOTYPE 13 Skills, 13 Pi Packages, 18",
+      "prototype": "covered",
+      "production": "missing",
+      "prototype_evidence": ["?panel=skills#settings", "?panel=packages#settings", "settings.extension_action"],
+      "production_evidence": [],
+      "gap": "Development needs signed/verified package metadata, Permission Broker mediation, progress, retry, disable/remove, and body-free failures.",
+      "priority": "P1"
+    },
+    {
+      "id": "SETTINGS-09",
+      "requirement": "Updates and diagnostics expose update state, local-only redacted support preview/export, and safe diagnostic clearing.",
+      "source": "UI_PROTOTYPE 13 System; DIAGNOSTICS_AND_OBSERVABILITY",
+      "prototype": "covered",
+      "production": "partial",
+      "prototype_evidence": ["?panel=system#settings", "settings.system_action"],
+      "production_evidence": ["diagnostics and support bundle foundation in VaultSettingsPanel"],
+      "gap": "Move diagnostics into System Settings, add update state, preview categories, explicit export, clearing confirmation, and error recovery.",
+      "priority": "P1"
+    },
+    {
+      "id": "A11Y-01",
+      "requirement": "All primary flows are keyboard reachable, labeled, contrast-safe, announced, focus-restored, and reduced-motion compatible in six locales.",
+      "source": "UI_PROTOTYPE 16.1, 16.2, 18, 19",
+      "prototype": "partial",
+      "production": "partial",
+      "prototype_evidence": ["pige-ui-element-map.json", "pige-ui-visual-review-ledger.json structural scan of 191 controls", "Library and selection arrow-key navigation", "Note Agent and sidebar focus-return checks", "prefers-reduced-motion CSS"],
+      "production_evidence": ["six locale catalogs", "focused permission/restore semantics"],
+      "gap": "Names, structural ARIA, contrast, reduced motion, composite arrow-key behavior, and tested focus return pass. Full Tab order, narrow-drawer focus containment, screen-reader announcements, six-locale copy, and assembled platform text rendering remain open.",
+      "priority": "P0"
+    },
+    {
+      "id": "RESPONSIVE-01",
+      "requirement": "Compact, expanded, three-pane, Settings, and narrow states never clip, squeeze fixed rails, or obscure the composer.",
+      "source": "UI_PROTOTYPE 2.1, 16.2, 19",
+      "prototype": "covered",
+      "production": "partial",
+      "prototype_evidence": ["visual-review-harness.html", "232 browser-rendered canonical/narrow/long-copy/boundary checks", "six Pige-only baseline screenshots", "pige-ui-visual-review-ledger.json"],
+      "production_evidence": ["responsive CSS foundations"],
+      "gap": "Prototype has zero horizontal overflow or visible-control clipping across all routes at 400, 760, and 1536 px plus 400 px long-copy stress; targeted 679/680 checks lock the overlay-to-fixed-rail boundary. Production must repeat the governed matrix on assembled macOS and Windows builds.",
+      "priority": "P0"
+    },
+    {
+      "id": "VISUAL-01",
+      "requirement": "Pige matches the observable ChatGPT/Codex desktop visual grammar for geometry, type, gray hierarchy, icon weight, motion, and control density while retaining Pige identity.",
+      "source": "UI_PROTOTYPE 16.2-16.4",
+      "prototype": "partial",
+      "production": "partial",
+      "prototype_evidence": ["pige-ui-design-contract.json tokens"],
+      "production_evidence": ["no complete cross-screen visual baseline"],
+      "gap": "Establish canonical screenshots, overlay/difference review, tolerance ledger, and repeated correction passes; route availability alone is not pixel fidelity.",
+      "priority": "P0"
+    }
+  ],
+  "summary": {
+    "total": 36,
+    "prototype": { "covered": 34, "partial": 2, "missing": 0 },
+    "production": { "implemented": 11, "partial": 14, "missing": 11 },
+    "known_p0_gaps": ["HOME-10", "SETTINGS-04", "A11Y-01", "VISUAL-01"],
+    "known_p1_gaps": ["SHELL-01", "SHELL-02", "ONBOARD-02", "HOME-05", "LIBRARY-01", "LIBRARY-02", "LIBRARY-03", "KNOWLEDGE-01", "READER-02", "READER-03", "READER-04", "READER-05", "SETTINGS-01", "SETTINGS-02", "SETTINGS-03", "SETTINGS-05", "SETTINGS-06", "SETTINGS-07", "SETTINGS-08", "SETTINGS-09"]
+  }
+}

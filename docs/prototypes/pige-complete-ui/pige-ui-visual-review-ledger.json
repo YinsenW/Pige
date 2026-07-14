@@ -1,0 +1,233 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Pige clean-room visual comparison and correction ledger",
+  "status": "active UI Design review; not production fidelity evidence",
+  "reference_boundary": {
+    "reference": "Observable ChatGPT-branded Codex desktop client behavior and user-provided screenshots",
+    "allowed": [
+      "Measured pane geometry, spacing, typography scale, grayscale, radii, icon geometry, motion, focus behavior, and state hierarchy",
+      "Independent Pige HTML, CSS, SVG geometry, copy, product behavior, and brand assets"
+    ],
+    "prohibited": [
+      "Third-party JavaScript, CSS, component source, private bundle code, brand artwork, fonts, or proprietary icons",
+      "Claims that route availability, manual inspection, or a prototype screenshot proves production implementation"
+    ]
+  },
+  "target": {
+    "geometry_tolerance_px": 1,
+    "type_baseline_tolerance_px": 1,
+    "color_delta_e_2000_max": 1.5,
+    "canonical_screenshot_mismatch_ratio_max": 0.005,
+    "motion_duration_tolerance_ms": 16,
+    "rules": [
+      "Compare only equivalent content, locale, state, viewport, and scale factor.",
+      "Mask native traffic lights, antialiasing-only glyph edges, and dynamic timestamps before image difference.",
+      "A surface is locked only after geometry, color, typography, icon, state, keyboard, reduced-motion, and narrow-window checks pass.",
+      "Any remaining P0 or P1 discrepancy keeps the overall visual target open."
+    ]
+  },
+  "reference_metrics": {
+    "surface": "#ffffff",
+    "sidebar": "#f9f9f9",
+    "hover": "#f3f3f3",
+    "hairline": "#ededed",
+    "primary_text": "#1a1c1f",
+    "secondary_text": "#5d5d5d",
+    "pige_tertiary_text": "#707472",
+    "focus": "#339cff",
+    "titlebar_height_px": 46,
+    "navigation_row_height_px": 30,
+    "pane_toolbar_height_px": 40,
+    "settings_row_height_px": 64,
+    "compact_home_width_px": 400,
+    "sidebar_width_px": 280,
+    "reader_width_px": 680,
+    "note_agent_width_px": 432,
+    "composer_radius_px": 22,
+    "default_motion_ms": 150,
+    "relaxed_motion_ms": 300
+  },
+  "accessibility_evidence": {
+    "routes_with_accessible_name_scan": 51,
+    "interactive_elements_with_structural_scan": 191,
+    "unnamed_visible_controls": 0,
+    "duplicate_ids": 0,
+    "positive_tabindex": 0,
+    "images_missing_alt": 0,
+    "switches_missing_aria_checked": 0,
+    "tabs_missing_selected_or_controls": 0,
+    "tabpanels_missing_label": 0,
+    "light_primary_text_contrast": 17.08,
+    "light_secondary_text_contrast": 6.58,
+    "light_tertiary_text_contrast": 4.74,
+    "pointer_focus": "persistent blue outlines suppressed",
+    "keyboard_focus": "focus-visible retained",
+    "keyboard_patterns_verified": [
+      "Library tabs: ArrowLeft, ArrowRight, Home, End update focus, selection, controls, and panel label",
+      "Selection toolbar: ArrowLeft, ArrowRight, Home, End move focus without triggering an action",
+      "Intermediate Library drawer: Escape closes the drawer and restores focus to the sidebar toggle"
+    ],
+    "focus_return_verified": [
+      "Closing Note Agent returns focus to the reader toolbar toggle",
+      "Opening Note Agent moves focus to the note composer after the panel transition"
+    ],
+    "remaining": [
+      "Complete real Tab-order walkthrough across every route and focus-containment review for the narrow Note Agent drawer.",
+      "Complete screen-reader announcement, six-locale expansion, and platform text-rendering review."
+    ]
+  },
+  "measured_browser_evidence": {
+    "viewport": { "width": 1280, "height": 720, "device_scale_factor": 2 },
+    "compact_home": { "width_px": 400, "height_px": 688, "titlebar_px": 46, "composer_radius_px": 22, "heading": "24px / 30px / 500" },
+    "expanded_home": { "width_px": 680, "height_px": 688, "sidebar_px": 280, "home_px": 400 },
+    "intermediate_reader": { "window_px": 1112, "reader_px": 680, "note_agent_px": 432, "library_drawer_px": 280, "drawer_does_not_resize_window": true },
+    "settings": { "width_px": 1180, "height_px": 672, "sidebar_px": 280, "body_scroll_matches_viewport": true },
+    "note": "At taller viewports Settings reaches its 820 px cap; at 720 px it retains a 24 px safe inset without overflow. Wide three-pane review remains bound to the 1536 x 1024 target viewport."
+  },
+  "prototype_baseline_assets": [
+    "./baselines/home-compact-1280x720.png",
+    "./baselines/home-expanded-1280x720.png",
+    "./baselines/reader-intermediate-1280x720.png",
+    "./baselines/settings-general-1280x720.png",
+    "./baselines/first-run-1280x720.png",
+    "./baselines/reader-narrow-1280x720.png"
+  ],
+  "prototype_baseline_sha256": {
+    "first-run-1280x720.png": "8115f4e79284d44b46a8d415479054dfdb7bb77cc5b2f2cdcba49c92e6184fad",
+    "home-compact-1280x720.png": "ec72a9a96cb80b4577a24e91b0909b5c8e1fcab2c8a4f8bf797d482b8dc6286f",
+    "home-expanded-1280x720.png": "b35b09fe1d39fe5e3e181d6fd5ca552965f92a207201325043c5eefb91386405",
+    "reader-intermediate-1280x720.png": "c3c95d1b4566e202c960c985dd9c7f725ba84af5c49986309a8d8784a7732ba4",
+    "reader-narrow-1280x720.png": "d670cc370ec2e54c70325d7a3232e0d0088ee311068411cc71ae352719389a46",
+    "settings-general-1280x720.png": "9d217707e44cfa8cbe3e8e4a32c34d851a8052b34df11be5e0ae26c314ce8449"
+  },
+  "canonical_surfaces": [
+    {
+      "id": "VR-HOME-COMPACT",
+      "route": "?screen=home",
+      "viewport": { "width": 1144, "height": 874 },
+      "prototype_geometry": { "window_width_px": 400, "titlebar_height_px": 46, "composer_radius_px": 22 },
+      "checks": {
+        "manual_visual": "passed",
+        "semantic_and_keyboard": "passed",
+        "raster_overlay": "pending",
+        "narrow_window": "passed"
+      },
+      "remaining": [
+        "Capture equivalent reference and prototype states at the same device scale, then bind the masked difference result.",
+        "Bind the final pixel overlay after production fonts and platform chrome are fixed."
+      ]
+    },
+    {
+      "id": "VR-HOME-EXPANDED",
+      "route": "?screen=expanded",
+      "viewport": { "width": 1144, "height": 874 },
+      "prototype_geometry": { "sidebar_width_px": 280, "home_width_px": 400, "total_content_width_px": 680 },
+      "checks": {
+        "manual_visual": "passed",
+        "sidebar_disclosure": "passed",
+        "titlebar_sidebar_surface_continuity": "passed",
+        "raster_overlay": "pending",
+        "narrow_drawer": "passed"
+      },
+      "remaining": [
+        "Lock sidebar row rhythm, icon optical weight, and titlebar seam with an overlay.",
+        "Intermediate-width drawer Escape and focus return pass; verify focus containment below 680 px."
+      ]
+    },
+    {
+      "id": "VR-READER-THREE-PANE",
+      "route": "?screen=note",
+      "viewport": { "width": 1536, "height": 1024 },
+      "prototype_geometry": { "sidebar_width_px": 280, "reader_width_px": 680, "note_agent_width_px": 432, "total_content_width_px": 1392 },
+      "checks": {
+        "manual_visual": "passed",
+        "independent_left_and_right_rails": "passed",
+        "intermediate_width_library_drawer_at_1280x720": "passed",
+        "markdown_and_agent_state": "passed",
+        "raster_overlay": "pending",
+        "narrow_drawer": "pending"
+      },
+      "remaining": [
+        "Lock Markdown line wrapping, heading baselines, table density, and note-agent composer alignment by overlay.",
+        "The Library rail and Note Agent now degrade to independently controlled drawers without clipping the reader."
+      ]
+    },
+    {
+      "id": "VR-LIBRARY",
+      "route": "?screen=library",
+      "viewport": { "width": 1144, "height": 874 },
+      "prototype_geometry": { "sidebar_width_px": 280, "content_width_px": 760 },
+      "checks": {
+        "manual_visual": "passed",
+        "family_tabs_and_search": "passed",
+        "loading_state": "passed",
+        "typed_unavailable_state": "passed",
+        "raster_overlay": "pending"
+      },
+      "remaining": [
+        "Lock family tabs, result rows, empty state, and search field by overlay."
+      ]
+    },
+    {
+      "id": "VR-KNOWLEDGE",
+      "route": "?screen=knowledge",
+      "viewport": { "width": 1144, "height": 874 },
+      "prototype_geometry": { "sidebar_width_px": 280, "content_width_px": 760 },
+      "checks": {
+        "manual_visual": "passed",
+        "node_selection": "passed",
+        "empty_loading_degraded_states": "passed",
+        "raster_overlay": "pending"
+      },
+      "remaining": [
+        "Lock hierarchy indentation, evidence density, and detail surface by overlay."
+      ]
+    },
+    {
+      "id": "VR-SETTINGS",
+      "route": "?panel=general#settings",
+      "viewport": { "width": 1536, "height": 960 },
+      "prototype_geometry": { "window_width_px": 1180, "window_height_px": 820, "sidebar_width_px": 280 },
+      "checks": {
+        "manual_visual": "passed",
+        "route_size_stability": "passed",
+        "pointer_and_keyboard_focus": "passed",
+        "raster_overlay": "pending",
+        "small_viewport": "passed"
+      },
+      "remaining": [
+        "Lock sidebar gray, row height, separators, control alignment, and content measure by overlay.",
+        "Verify scroll ownership and non-clipped actions at the minimum supported viewport."
+      ]
+    }
+  ],
+  "overall": {
+    "canonical_surfaces": 6,
+    "manual_visual_passed": 6,
+    "raster_overlay_locked": 0,
+    "narrow_or_small_viewport_locked": 6,
+    "open_p0": ["Raster overlay/difference evidence", "Complete real keyboard focus-order and screen-reader announcement evidence"],
+    "open_p1": ["Complete keyboard/screen-reader and six-locale text-expansion audit across every route"],
+    "decision": "The prototype is broad and interactive, but the pixel-fidelity objective remains open."
+  },
+  "responsive_evidence": {
+    "main_routes_at_400_and_760_px": 72,
+    "settings_routes_at_400_and_760_px": 30,
+    "all_routes_at_1536_px": 51,
+    "all_routes_with_400_px_long_copy_stress": 51,
+    "additional_679_px_routes_checked": 26,
+    "explicit_679_to_680_sidebar_boundary_checks": 2,
+    "total_render_checks": 232,
+    "horizontal_overflow_failures": 0,
+    "visible_control_clipping_failures": 0,
+    "fixed_during_review": [
+      "Three-pane content clipped below its combined fixed rail width.",
+      "Narrow reader collapsed into a zero-width grid column.",
+      "Settings exceeded a short viewport by eight pixels.",
+      "Reader initialization stole focus and showed an unsolicited blue focus ring.",
+      "Narrow reader breadcrumb and secondary toolbar actions crowded the title row.",
+      "Long localized selection actions escaped the 400 px viewport.",
+      "The 760 px narrow breakpoint misclassified the exact 680 px expanded Home as an overlay; the corrected 679 px boundary preserves 280 + 400 px side-by-side geometry at 680 px."
+    ]
+  }
+}
