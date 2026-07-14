@@ -505,7 +505,7 @@ describe("cooperative durable job cancellation", { timeout: 15_000 }, () => {
     expect(snapshotFiles(path.join(fixture.vaultPath, "artifacts"))).toEqual(artifactsBeforeReuse);
   });
 
-  it.each(["queued", "waiting_dependency", "waiting_permission", "failed_retryable"] as const)(
+  it.each(["queued", "waiting_dependency", "waiting_permission", "waiting_model_egress", "failed_retryable"] as const)(
     "refuses direct cancellation after a durable-write boundary in %s",
     (state) => {
       const fixture = makeFixture();

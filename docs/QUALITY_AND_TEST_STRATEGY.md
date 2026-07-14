@@ -280,6 +280,11 @@ Tests must verify:
 - Pige-owned Pi tools cannot bypass service validation; external extensions cannot bypass Permission Broker.
 - Pige does not mutate the user's global `~/.pi/agent/models.json` during normal provider setup.
 - Cloud-send indicators appear when content is sent to a cloud-hosted provider.
+- Current-action model-egress tests keep ordinary allowed calls prompt-free, block
+  restricted/local-only cases, and prove exact body-free request binding, one-use CAS,
+  pre-credential revalidation, allow/deny/cancel, conservative restart reconciliation,
+  and no saved-grant/YOLO substitution. Home exposes one localized decision surface and
+  suppresses its matching Recent Work row until resolution.
 
 ## 6.2 Agent Runtime Policy Context Gates
 

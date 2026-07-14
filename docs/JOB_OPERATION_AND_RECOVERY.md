@@ -170,6 +170,7 @@ queued
 running
 waiting_dependency
 waiting_permission
+waiting_model_egress
 awaiting_review
 cancel_requested
 completed
@@ -208,6 +209,8 @@ Rules:
   retried Job may retain verified outputs and a true action-safety guard.
 - `running` means a worker, model call, tool, or write step is active.
 - `waiting_permission` pauses external/new capabilities, never normal Pige-owned tools.
+- `waiting_model_egress` pauses one exact provider invocation for a stricter
+  model-egress decision; it is not a Permission Broker wait or reusable grant.
 - `waiting_dependency` pauses execution until a missing model provider, local tool, local model, runtime capability, vault binding, or external source path is configured or repaired.
 - `awaiting_review` holds an irreversible/security/destination/conflict or stricter-policy
   proposal only.
@@ -221,6 +224,8 @@ Invalid shortcuts:
 
 - Do not move from `queued` directly to `completed` unless the job is a no-op with an operation summary.
 - Do not move from `waiting_permission` to `running` without recording the permission decision.
+- Do not move from `waiting_model_egress` to `running` without a durable one-use
+  model-egress decision, exact Job CAS, and current binding revalidation.
 - Do not move from `waiting_dependency` to `running` without recording the dependency repair/configuration event or requeue reason.
 - Do not move from `awaiting_review` to `completed` without an approved proposal or explicit rejection result.
 - Direct transition to `cancelled` requires `durableWritesApplied !== true`; active
@@ -489,6 +494,26 @@ Rules:
 - Denial leaves source preservation and prior safe outputs intact.
 - YOLO suppresses prompts only for covered actions and still logs decisions.
 
+### 10.1 Current-Action Model Egress Pause
+
+When the typed egress decision returns `confirm`:
+
+1. Persist one body-free machine-local request bound to the exact vault, Job,
+   Provider/Model identity, policy, payload/evidence hashes, and content classes.
+2. Bind its ID into the `model_egress_decision` Operation and set the Job to
+   `waiting_model_egress` with `confirm_model_egress`.
+3. Home shows one Allow once/Don't send surface; the matching Job row does not present a
+   second status or action.
+4. Approval resumes the same Job only after durable Job CAS, consumes the request before
+   credential resolution/provider invocation, and revalidates every bound fact.
+5. Denial preserves the source/turn and ends the Job nonretryably with no provider call;
+   cancellation invalidates an unresolved request.
+
+Approved restart recovery is conservative: earlier read-only/model steps may replay,
+deterministic tool effects remain idempotent, and a consumed-but-unreconciled request
+requires a fresh decision. Durable no-duplicate continuation of an in-flight Pi
+model/tool transcript remains open. Saved grants and YOLO cannot satisfy this layer.
+
 ## 11. Confirmation Proposal Lifecycle
 
 Validated same-vault work commits with an Operation when evidence-bound, checksum-current,
@@ -647,7 +672,8 @@ Startup recovery flow:
    mutable services start. Same-name inode reuse is not accepted as identity.
 3. Scan `.pige/jobs/`, `.pige/proposals/`, `.pige/operations/`, `.pige/source-records/`, conversations, and `log.md`.
 4. Rebuild SQLite job/proposal/operation indexes if missing or dirty.
-5. Detect jobs in `running`, `cancel_requested`, `waiting_dependency`, `waiting_permission`, or partial stage states.
+5. Detect jobs in `running`, `cancel_requested`, `waiting_dependency`,
+   `waiting_permission`, `waiting_model_egress`, or partial stage states.
 6. Reconcile checkpoint output refs with actual files and hashes.
 7. Mark safe jobs resumable, retryable, or completed with warnings.
 8. Mark uncertain jobs `failed_retryable` with a recovery explanation or create a repair proposal.
@@ -676,6 +702,7 @@ Recovery decisions:
 | Dataset revision or schema changed after query/write plan | Reject stale evidence or preserve a new revision; never replay against a different base. |
 | Dataset payload exists but manifest/revision/Operation is incomplete | Adopt only when every planned ID/hash matches; otherwise quarantine/preserve and fail closed. |
 | Permission prompt was open | Recreate pending permission UI or fail clearly if context expired. |
+| Model-egress prompt was open | Reconcile the exact machine-local request with the bound Job; approved may requeue conservatively, denied terminalizes, consumed needs a fresh decision, and unreadable or drifted state fails closed. |
 
 ## 14. Compaction And Retention
 
@@ -683,7 +710,7 @@ Successful job details can grow quickly. Pige should retain trust while controll
 
 Default v0.1 policy:
 
-- Unresolved, failed, waiting-dependency, waiting-permission, and awaiting-review jobs are retained until resolved or explicitly cleared.
+- Unresolved, failed, waiting-dependency, waiting-permission, waiting-model-egress, and awaiting-review jobs are retained until resolved or explicitly cleared.
 - Successful jobs remain detailed for 90 days.
 - After 90 days, successful job records may compact to references, summaries, timings, warnings, and operation IDs.
 - Conversation events, operation records, source records, proposals, `log.md`, and generated Markdown are not removed by job compaction.
@@ -701,7 +728,7 @@ Compacted job record keeps:
 
 Home:
 
-- Shows active, failed, waiting-dependency, waiting-permission, and awaiting-review jobs as compact status rows/cards.
+- Shows active, failed, waiting-dependency, waiting-permission, waiting-model-egress, and awaiting-review jobs as compact status rows/cards; one active model-egress card suppresses its matching duplicate Job row.
 - Does not expose "Inbox" or "Review" as mandatory top-level concepts.
 - Shows compact Activity/Undo; users retry, cancel, inspect, or resolve exceptions.
 
@@ -720,7 +747,7 @@ Rules:
 
 - Completed jobs should say what changed in the vault.
 - Failed jobs should say what was preserved and what can be retried.
-- Permission and proposal states should survive window close and app restart.
+- Permission, current-action model-egress, and proposal states should survive window close and app restart.
 
 ## 16. Backup, Restore, And Migration
 

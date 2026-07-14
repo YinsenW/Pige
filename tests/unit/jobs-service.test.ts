@@ -17,6 +17,7 @@ import {
   LocalDatabaseService,
   NodeSqliteDriver
 } from "../../apps/desktop/src/main/services/local-database-service";
+import { ModelEgressApprovalService } from "../../apps/desktop/src/main/services/model-egress-approval-service";
 import type { OfficeMediaMaterializerPort } from "../../apps/desktop/src/main/services/office-media-materializer-service";
 import { extractOfficeText } from "../../apps/desktop/src/main/services/office-parser-core";
 import { OfficeParserService } from "../../apps/desktop/src/main/services/office-parser-service";
@@ -118,7 +119,8 @@ function makeServices(
   database?: LocalDatabaseService,
   sourceFetch?: SourceFetchPort,
   documentParser?: DocumentParserPort,
-  ocr?: OcrPort
+  ocr?: OcrPort,
+  modelEgressApprovals?: ModelEgressApprovalService
 ): { capture: CaptureService; jobs: JobsService } {
   const vaultPort = {
     current: () => vault,
@@ -126,7 +128,7 @@ function makeServices(
   };
   return {
     capture: new CaptureService(vaultPort, sourceFetch),
-    jobs: new JobsService(vaultPort, agentIngest, database, documentParser, ocr)
+    jobs: new JobsService(vaultPort, agentIngest, database, documentParser, ocr, undefined, modelEgressApprovals)
   };
 }
 
@@ -2160,6 +2162,9 @@ describe("jobs service", () => {
 
   it("keeps permission and provider failures clean-cancellable before Agent publication", async () => {
     const permissionFixture = makeVault();
+    const machineRoot = path.join(path.dirname(permissionFixture.vaultPath), "model-egress-machine");
+    fs.mkdirSync(machineRoot);
+    const approvals = new ModelEgressApprovalService({ rootPath: machineRoot, unsafeAllowUnfenced: true });
     const confirmConfig: ModelProviderRuntimeConfig = {
       ...runtimeConfig,
       provider: {
@@ -2168,12 +2173,26 @@ describe("jobs service", () => {
         boundaryVerification: "unknown"
       }
     };
+    const permissionRuntime = new StaticModelClient(standardAgentOutput("Permission-gated note"));
+    const permissionAgent = new AgentIngestService(
+      makeModelPort(() => confirmConfig),
+      permissionRuntime,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      approvals
+    );
     const permissionServices = makeServices(
       permissionFixture.vaultPath,
       permissionFixture.vault,
-      new AgentIngestService(makeModelPort(() => confirmConfig), new StaticModelClient(standardAgentOutput(
-        "Permission-gated note"
-      )))
+      permissionAgent,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      approvals
     );
     const permissionCapture = permissionServices.capture.submitText({
       text: "Unknown provider boundaries require explicit confirmation.",
@@ -2186,14 +2205,30 @@ describe("jobs service", () => {
       classes: ["agent_ingest"],
       states: ["queued"]
     }).jobs[0]);
-    expect(await permissionServices.jobs.processQueuedAgentIngest({ jobIds: [permissionJob.id] }))
-      .toEqual({ processed: 1, completed: 0, failed: 1 });
-    const waiting = requireValue(permissionServices.jobs.list({
+    const processing = permissionServices.jobs.processQueuedAgentIngest({ jobIds: [permissionJob.id] });
+    const waiting = await waitForValue(() => permissionServices.jobs.list({
       classes: ["agent_ingest"],
-      states: ["waiting_permission"]
+      states: ["waiting_model_egress"]
     }).jobs[0]);
+    expect(permissionServices.jobs.list({ states: ["waiting_permission"] }).jobs).toEqual([]);
     expect(readJobCancellation(permissionFixture.vaultPath, waiting.id)).toBeUndefined();
+    const requestId = requireValue(waiting.modelEgressApprovalRequestId);
     expect(permissionServices.jobs.cancel({ jobId: waiting.id }).status).toBe("cancelled");
+    await expect(processing).resolves.toEqual({ processed: 1, completed: 0, failed: 1 });
+    expect(approvals.read(permissionFixture.vaultPath, requestId).state).toBe("invalidated");
+    expect(readJobRecord(permissionFixture.vaultPath, waiting.id).state).toBe("cancelled");
+    expect(permissionRuntime.requests).toEqual([]);
+    const restartedPermissionJobs = makeServices(
+      permissionFixture.vaultPath,
+      permissionFixture.vault,
+      permissionAgent,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      approvals
+    ).jobs;
+    expect(restartedPermissionJobs.list({ states: ["cancelled"] }).jobs[0]?.state).toBe("cancelled");
 
     const providerFixture = makeVault();
     const providerServices = makeServices(
@@ -2553,6 +2588,15 @@ function makeInlineWorkerDatabase(): LocalDatabaseService {
 function requireValue<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("Expected value to exist.");
   return value;
+}
+
+async function waitForValue<T>(read: () => T | undefined): Promise<T> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const value = read();
+    if (value !== undefined) return value;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error("Timed out waiting for value.");
 }
 
 function seedExplicitPdfParseJob(vaultPath: string, sourceId: string): JobRecord {

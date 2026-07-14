@@ -95,6 +95,7 @@ type PigeErrorAction =
   | "repair_tool"
   | "download_model"
   | "configure_model"
+  | "confirm_model_egress"
   | "grant_permission"
   | "review_proposal"
   | "rebuild_index"
@@ -112,6 +113,7 @@ type PigeError = {
   userAction: PigeErrorAction;
   jobId?: string;
   permissionRequestId?: string;
+  modelEgressApprovalRequestId?: string;
   diagnosticErrorId?: string;
   redactedDetails?: Record<string, string | number | boolean>;
 };
@@ -632,6 +634,31 @@ Rules:
   result and may resume the Job through the existing recovery contract.
 
 ### 6.7 Permissions
+
+#### 6.7.1 Current-Action Model Egress
+
+Commands:
+
+- `modelEgress.resolve`
+
+Queries:
+
+- `modelEgress.pending`
+
+`modelEgress.pending({ requestId })` returns only the exact pending request's Job,
+Provider/Model profile IDs, reason, bounded content classes, and request time. It never
+returns the endpoint, prompt, selected evidence, response, credential, citation body, or
+Permission Broker record. `modelEgress.resolve({ requestId, jobId, decision })` accepts
+only `allow_once` or `deny`, commits the machine-local decision, then reconciles the
+exact `waiting_model_egress` Job. Renderer uncertainty is resolved by re-reading
+`modelEgress.pending`; unreadable or changed identity fails closed.
+
+This namespace authorizes only the bound current provider invocation. It cannot create
+or consume a saved Permission Broker grant, and YOLO cannot satisfy it. The active Home
+confirmation owns the single status/action surface; its matching Job is omitted from
+Recent Work until resolution, then ordinary Job status ownership returns.
+
+#### 6.7.2 Permission Broker
 
 Commands:
 

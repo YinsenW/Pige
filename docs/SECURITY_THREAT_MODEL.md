@@ -381,6 +381,13 @@ Authorization and confirmation are separate gates:
   unresolved conflict, or explicit stricter user policy.
 - Model Egress Decision normally enforces silently; exact connected calls proceed while
   sensitive/blocked/stricter outcomes gate. A `confirm` or `block` result is not weakened by YOLO.
+- A model-egress confirmation is a distinct body-free current-action record, not a
+  `permission_broker` record or saved grant. It authorizes only the exact bound vault,
+  Job, Profile, canonical endpoint, model, policy, payload/evidence digests, and content
+  classes; approval is one-use and consumed before credentials/provider invocation.
+- Endpoint, model, policy, payload, evidence, privacy, or Job drift invalidates that
+  authorization. Denial sends nothing and preserves the source/turn; cancellation
+  invalidates unresolved authority. Unknown store state fails closed.
 - Every applicable gate must pass; one gate never grants another.
 
 Useful "only this" scopes:

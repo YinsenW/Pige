@@ -20,6 +20,8 @@ import type {
   KnowledgeActivityUndoRequest,
   LibraryListRequest,
   LibraryRelatedRequest,
+  ModelEgressPendingRequestQuery,
+  ModelEgressResolveRequest,
   NoteGetRequest,
   NoteRenderRequest,
   ProposalDecisionRequest,
@@ -49,6 +51,10 @@ import {
   AddPresetProviderRequestSchema,
   AddManualModelRequestSchema,
   RefreshProviderModelsRequestSchema,
+  ModelEgressPendingRequestQuerySchema,
+  ModelEgressPendingRequestSchema,
+  ModelEgressResolveRequestSchema,
+  ModelEgressResolveResultSchema,
   UpdateModelRequestSchema,
   SetDefaultModelRequestSchema
 } from "@pige/schemas";
@@ -90,6 +96,7 @@ import { LocalDatabaseService } from "./services/local-database-service";
 import { listMarkdownTagCatalog } from "./services/markdown-page-index";
 import { LocalSettingsStore } from "./services/local-settings";
 import { ModelProviderRegistry } from "./services/model-provider-registry";
+import { ModelEgressApprovalService } from "./services/model-egress-approval-service";
 import { NotesService } from "./services/notes-service";
 import { OcrService } from "./services/ocr-service";
 import { ProposalService } from "./services/proposal-service";
@@ -108,6 +115,7 @@ let localSettingsStore: LocalSettingsStore | undefined;
 let diagnosticsService: DiagnosticsService | undefined;
 let localDatabaseService: LocalDatabaseService | undefined;
 let modelProviderRegistry: ModelProviderRegistry | undefined;
+let modelEgressApprovalService: ModelEgressApprovalService | undefined;
 let windowModeService: WindowModeService | undefined;
 let backupRestoreService: BackupRestoreService | undefined;
 let agentRuntimeService: AgentRuntimeService | undefined;
@@ -264,6 +272,16 @@ const getCaptureService = (): CaptureService => {
   return captureService;
 };
 
+const getModelEgressApprovalService = (): ModelEgressApprovalService => {
+  if (!modelEgressApprovalService) {
+    modelEgressApprovalService = new ModelEgressApprovalService({
+      rootPath: app.getPath("userData"),
+      assertWriterLease: (vaultPath) => getVaultService().assertWriterLease(vaultPath)
+    });
+  }
+  return modelEgressApprovalService;
+};
+
 const getJobsService = (): JobsService => {
   if (!jobsService) {
     jobsService = new JobsService(
@@ -272,7 +290,8 @@ const getJobsService = (): JobsService => {
       getLocalDatabaseService(),
       getDocumentParserService(),
       getOcrService(),
-      getDatasetService()
+      getDatasetService(),
+      getModelEgressApprovalService()
     );
   }
   return jobsService;
@@ -302,7 +321,7 @@ const getAgentIngestService = (): AgentIngestService => {
   if (!agentIngestService) {
     agentIngestService = new AgentIngestService(getModelProviderRegistry(), undefined, {
       snapshot: getAgentCapabilitySnapshot
-    }, undefined, undefined, createAgentIngestRetrievalPort(), createAgentIngestProposalPort());
+    }, undefined, undefined, createAgentIngestRetrievalPort(), createAgentIngestProposalPort(), getModelEgressApprovalService());
   }
   return agentIngestService;
 };
@@ -377,7 +396,8 @@ const getHomeAgentService = (): HomeAgentService => {
       { snapshot: getAgentCapabilitySnapshot },
       undefined,
       getHomeAgentUrlService(),
-      getDatasetQueryService()
+      getDatasetQueryService(),
+      getModelEgressApprovalService()
     );
   }
   return homeAgentService;
@@ -608,6 +628,14 @@ const resumeBackgroundJobs = (): void => {
         message: `Recovered ${recovery.requeued} idempotent job(s); ${recovery.failedRetryable} job(s) require explicit retry.`
       });
     }
+    const modelEgressRecovery = getJobsService().reconcileModelEgressApprovals();
+    if (modelEgressRecovery.reconciled > 0) {
+      getDiagnosticsService().recordEvent({
+        level: "info",
+        code: "model_egress.approval_reconciled",
+        message: `Reconciled ${modelEgressRecovery.reconciled} body-free model egress decision(s).`
+      });
+    }
     getJobsService().requeueWaitingParses();
     getJobsService().requeueWaitingOcr();
     getJobsService().requeueWaitingAgentIngest();
@@ -809,6 +837,35 @@ ipcMain.handle("jobs.retry", async (_event, request: JobActionRequest) => {
     scheduleIndexRebuildProcessing();
   }
   return result;
+});
+ipcMain.handle("modelEgress.pending", (_event, request: ModelEgressPendingRequestQuery) => {
+  const parsed = ModelEgressPendingRequestQuerySchema.safeParse(request);
+  if (!parsed.success) {
+    throw new PigeDomainError("model_egress.approval_invalid", "The model egress request query is invalid.");
+  }
+  const pending = getJobsService().pendingModelEgress(parsed.data.requestId);
+  if (pending === undefined) return undefined;
+  const projected = ModelEgressPendingRequestSchema.safeParse(pending);
+  if (!projected.success) {
+    throw new PigeDomainError("model_egress.approval_store_invalid", "The model egress approval state is unavailable.");
+  }
+  return projected.data;
+});
+ipcMain.handle("modelEgress.resolve", (_event, request: ModelEgressResolveRequest) => {
+  const parsed = ModelEgressResolveRequestSchema.safeParse(request);
+  if (!parsed.success) {
+    throw new PigeDomainError("model_egress.approval_invalid", "The model egress resolution is invalid.");
+  }
+  const result = getJobsService().resolveModelEgress(parsed.data);
+  if (result.status === "approved") {
+    scheduleAgentIngestProcessing();
+    scheduleAgentTurnProcessing();
+  }
+  const projected = ModelEgressResolveResultSchema.safeParse(result);
+  if (!projected.success) {
+    throw new PigeDomainError("model_egress.approval_store_invalid", "The model egress decision result is unavailable.");
+  }
+  return projected.data;
 });
 ipcMain.handle("activity.list", (_event, request?: KnowledgeActivityListRequest) =>
   getKnowledgeActivityService().list(request)
@@ -1121,7 +1178,7 @@ app.whenReady().then(async () => {
   knowledgeActivityService = new KnowledgeActivityService(getVaultService());
   agentIngestService = new AgentIngestService(getModelProviderRegistry(), undefined, {
     snapshot: getAgentCapabilitySnapshot
-  }, undefined, undefined, createAgentIngestRetrievalPort(), createAgentIngestProposalPort());
+  }, undefined, undefined, createAgentIngestRetrievalPort(), createAgentIngestProposalPort(), getModelEgressApprovalService());
   documentParserService = new DocumentParserService();
   datasetService = new DatasetService(new DatasetIngestWorkerService());
   ocrService = new OcrService();
@@ -1133,7 +1190,8 @@ app.whenReady().then(async () => {
     getLocalDatabaseService(),
     getDocumentParserService(),
     getOcrService(),
-    getDatasetService()
+    getDatasetService(),
+    getModelEgressApprovalService()
   );
   initializeActiveDatabase();
   diagnosticsService = new DiagnosticsService(app.getPath("userData"));

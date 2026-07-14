@@ -33,6 +33,10 @@ import type {
   LibraryRelatedResult,
   LocalDatabaseRebuildResult,
   LocalDatabaseStatus,
+  ModelEgressPendingRequest,
+  ModelEgressPendingRequestQuery,
+  ModelEgressResolveRequest,
+  ModelEgressResolveResult,
   LocalDatabaseResetResult,
   ModelProviderSettingsSummary,
   ProviderConnectResult,
@@ -113,6 +117,12 @@ const api: PigeDesktopApi = {
       ipcRenderer.invoke("jobs.cancel", request) as Promise<JobActionResult>,
     retry: async (request: JobActionRequest): Promise<JobActionResult> =>
       ipcRenderer.invoke("jobs.retry", request) as Promise<JobActionResult>
+  },
+  modelEgress: {
+    pending: async (request: ModelEgressPendingRequestQuery): Promise<ModelEgressPendingRequest | undefined> =>
+      ipcRenderer.invoke("modelEgress.pending", request) as Promise<ModelEgressPendingRequest | undefined>,
+    resolve: async (request: ModelEgressResolveRequest): Promise<ModelEgressResolveResult> =>
+      ipcRenderer.invoke("modelEgress.resolve", request) as Promise<ModelEgressResolveResult>
   },
   activity: {
     list: async (request?: KnowledgeActivityListRequest): Promise<KnowledgeActivityListResult> =>

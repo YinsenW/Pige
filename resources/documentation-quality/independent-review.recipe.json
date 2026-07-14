@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-14T08:30:00Z",
+  "reviewedAt": "2026-07-14T03:19:02Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,12 +30,12 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "7f34da798894bd9c7e77ff1018cc6a0ad43ae5320df1c0adaa4a3c9057e88738"
+    "reviewedSha256": "17043d3813ffdd070e9b33e9d44e68823939153608c365fc374eeee9a24bbe62"
   },
   "reviewers": [
     {
-      "reviewerId": "production-ready-a-final-adversarial-review",
-      "task": "019f44e0-b6a1-7bb0-a1ca-5fb43b2725c2 Production Ready A Linux sentinel replacement CLEAR",
+      "reviewerId": "production-ready-c-current-action-review",
+      "task": "019f44e0-b6a1-7bb0-a1ca-5fb43b2725c2 Production Ready C current-action model-egress confirmation CLEAR",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -43,82 +43,82 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "An independent adversarial reviewer reproduced the Linux same-name inode-reuse failure, then verified random-generation/content identity and named-path descriptor metadata against replacement bytes and returned CLEAR without editing files. Product Planning independently matched the exact two-path repair hash."
+      "independence": "UI Design independently verified the exact c22c742c replacement patch, reproduced closure of the sole duplicate-status/accessibility blocker, and returned ACCEPTED/CLEAR without editing files. Development did not edit governance; Product Planning independently matched executable schema, service, Job-recovery and selector facts before this current-only projection."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
-      "score": 9.7,
-      "reviewerId": "production-ready-a-final-adversarial-review",
+      "score": 9.8,
+      "reviewerId": "production-ready-c-current-action-review",
       "blockerCount": 0,
-      "summary": "The existing vault and Job lifecycle gains one internal coordination root and shared store without a new user route, setting, mode, durable schema or recovery truth."
+      "summary": "One compact Home exception card resolves an exact provider invocation without adding a mode, settings route, reusable grant surface or competing Recent Work status."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "production-ready-a-final-adversarial-review",
+      "reviewerId": "production-ready-c-current-action-review",
       "blockerCount": 0,
-      "summary": "Data, Job, Sync, Technical Architecture and Playbook owners agree that `.pige/runtime/` is transient, durable Job bytes remain authoritative, and lease identity includes random generation/content plus bounded no-follow metadata rather than inode alone."
+      "summary": "Runtime Policy, API, Data, Job, Security, Quality and Playbook owners agree on a distinct backup-excluded `model_egress` layer, exact one-use binding, pre-credential revalidation and conservative restart replay."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "production-ready-a-final-adversarial-review",
+      "reviewerId": "production-ready-c-current-action-review",
       "blockerCount": 0,
-      "summary": "Seven exact selectors bind real-process lease recovery, successor/heartbeat/generation fencing, one exact CAS winner, partial-sentinel recovery and independent Job keys only to existing partial PIGE-VAULT-006/PIGE-JOB-002 and E1.21/E2.10 rows."
+      "summary": "Seven exact selectors bind strict schemas, private storage, Job recovery, Home and ingest authorization, typed IPC and single-owner UI only to existing partial API, Job, security and E1.16/E2.09/E2.10/E3.03 rows."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "production-ready-a-final-adversarial-review",
+      "reviewerId": "production-ready-c-current-action-review",
       "blockerCount": 0,
-      "summary": "Development gets one shared Job mutation boundary and deterministic lease/claim failure behavior while preserving durable schemas, idempotency, cancellation, recovery authority and existing public behavior."
+      "summary": "Development gets one exact request lifecycle and typed main/preload boundary while preserving ordinary prompt-free calls, Permission Broker isolation, Job CAS, cancellation and fail-closed drift behavior."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "production-ready-a-final-adversarial-review",
+      "reviewerId": "production-ready-c-current-action-review",
       "blockerCount": 0,
-      "summary": "Existing Owner, quality, Playbook, legal/dependency and acceptance surfaces absorb the exact adoption; no PRD, Decision, new document, prototype, setting, public API, durable schema or status changes."
+      "summary": "Existing Owner, quality, Playbook and acceptance surfaces absorb the exact adoption; no PRD, Decision, new document, prototype, setting, dependency, Permission Broker breadth or status change."
     }
   ],
   "verification": [
     {
       "command": "npm run verify",
       "status": "passed",
-      "evidence": "The exact fenced vault-writer and Job claim/CAS candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all five documentation-quality dimensions."
+      "evidence": "The exact current-action model-egress candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all five documentation-quality dimensions."
     },
     {
-      "command": "npm run verify:contracts && npx vitest run tests/unit/vault-writer-lease.test.ts",
+      "command": "npm run verify:contracts && npx vitest run tests/unit/model-egress-approval-service.test.ts tests/unit/model-egress-job-recovery.test.ts tests/unit/home-agent-conversation-ui.test.ts tests/unit/home-agent-service.test.ts tests/unit/agent-ingest-service.test.ts tests/unit/desktop-shell-contract.test.ts tests/unit/security-contract-schemas.test.ts",
       "status": "passed",
-      "evidence": "CON-001 through CON-004 and negative fixtures pass; the independently rerun 1-file / 16-test lease matrix proves generation/content identity, in-place generation drift rejection, current-heartbeat fencing and successor-safe cleanup."
+      "evidence": "CON-001 through CON-004 and negative fixtures pass; the independently rerun 7-file / 147-test matrix proves strict body-free records, one-use CAS, restart/deny/cancel, Home/ingest pre-credential enforcement, typed IPC and one status owner."
     },
     {
       "command": "npm run verify:traceability",
       "status": "passed",
-      "evidence": "Semantic lock schema v3 contains 1,169 claims; one incremental generation-fence selector joins the six existing exact A-slice selectors and only existing partial rows change, while every Requirement, Exit and phase state remains unchanged."
+      "evidence": "Semantic lock schema v3 contains 1,176 claims; seven current-action model-egress selectors change only existing partial API, Job, security and Exit projections, while every Requirement, Exit and phase state remains unchanged."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 pass after the bounded Owner/dependency/evidence projection, without PRD or Decision churn, a new governed document, prototype refresh or unrelated contract expansion."
+      "evidence": "LEN-001 through LEN-005 pass after the bounded Owner/API/Job/security/evidence projection, without PRD or Decision churn, a new governed document, prototype refresh, dependency change or unrelated permission expansion."
     }
   ],
   "coordination": {
-    "taskId": "production-ready-a-vault-job-cas-20260714",
-    "taskTitle": "Per-vault writer lease and exact-record Job claim/CAS",
+    "taskId": "production-ready-c-model-egress-confirmation-20260714",
+    "taskTitle": "Current-action model-egress confirmation",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The candidate preserves durable Job and vault schemas, Job/Operation/domain recovery truth and public behavior. It adds temporary per-vault/per-Job coordination plus exact-record CAS, with the complete runtime dependency graph pinned and attributed.",
-    "acknowledgement": "Development froze the exact two-path Linux successor-sentinel repair over the held 23-file A candidate after full, assembled Electron and packaged evidence. Independent adversarial review returned CLEAR; Product Planning synchronized only stale identity wording, one selector and the semantic/current snapshot bind."
+    "compatibility": "The candidate adds one distinct machine-local model-egress request layer and typed API while preserving Permission Broker ownership, ordinary connected-provider flow, durable Job/Operation truth, source/turn bytes, dependencies and public settings.",
+    "acknowledgement": "Development froze the exact 27-path c22c742c replacement after full, assembled Electron and packaged evidence. UI Design returned ACCEPTED/CLEAR after the sole duplicate-status repair; Product Planning synchronized only affected Owner/API/Job/security, quality, acceptance and current semantic/recipe surfaces."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "The final lstat-to-unlink/rmdir syscall interval remains a filesystem primitive TOCTOU limit after the exact identity and freshness revalidation boundary.",
-    "Other Job classes and cross-file/domain transactions do not inherit atomicity merely from exact-record Job CAS.",
-    "The fixed 30-second stale and 10-second update policy must be revalidated before any proper-lockfile update or platform-specific timing change.",
-    "Package proof remains local macOS arm64; Windows multi-process, signed and notarized macOS, and broader installed-platform matrices remain open."
+    "After restart, earlier read-only/model steps may replay; durable no-duplicate continuation of an in-flight Pi model/tool transcript remains open.",
+    "Persisted stricter cloud-send policy settings/UI and reusable user policy breadth remain open; this slice adds no saved grant.",
+    "The approval store is bounded per vault and fails closed when unreconciled records exhaust capacity; broader retention management remains open.",
+    "Live timing evidence remains the assembled Responses-compatible path and package proof remains local macOS arm64; other providers, Windows, signed and notarized macOS remain open."
   ]
 }

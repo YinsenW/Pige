@@ -14,6 +14,8 @@ import type {
   MarkdownPageStatus,
   MarkdownPageType,
   ModelListStrategy,
+  ModelEgressContentClass,
+  ModelEgressReasonCode,
   PigeErrorSummary,
   ProposalState,
   ProposalTrustLevel,
@@ -427,6 +429,7 @@ export interface JobSummary {
   readonly sourceId?: string;
   readonly captureId?: string;
   readonly conversationEventId?: string;
+  readonly modelEgressApprovalRequestId?: string;
   readonly sourceDisplayName?: string;
   readonly sourceKind?: SourceKind;
   readonly message: string;
@@ -796,6 +799,32 @@ export interface HomeAgentAskRequest extends RetrievalAskRequest {}
 
 export type HomeAgentModelUsage = "none" | "local" | "cloud";
 
+export interface ModelEgressPendingRequest {
+  readonly requestId: string;
+  readonly jobId: string;
+  readonly providerProfileId: string;
+  readonly modelProfileId: string;
+  readonly reasonCode: ModelEgressReasonCode;
+  readonly contentClasses: readonly ModelEgressContentClass[];
+  readonly requestedAt: string;
+}
+
+export interface ModelEgressPendingRequestQuery {
+  readonly requestId: string;
+}
+
+export interface ModelEgressResolveRequest {
+  readonly requestId: string;
+  readonly jobId: string;
+  readonly decision: "allow_once" | "deny";
+}
+
+export interface ModelEgressResolveResult {
+  readonly status: "approved" | "denied";
+  readonly requestId: string;
+  readonly jobId: string;
+}
+
 export type HomeAgentAskResult =
   | {
       readonly requestId: string;
@@ -1071,6 +1100,12 @@ export interface PigeDesktopApi {
     readonly list: (request?: JobsListRequest) => Promise<JobsListResult>;
     readonly cancel: (request: JobActionRequest) => Promise<JobActionResult>;
     readonly retry: (request: JobActionRequest) => Promise<JobActionResult>;
+  };
+  readonly modelEgress: {
+    readonly pending: (
+      request: ModelEgressPendingRequestQuery
+    ) => Promise<ModelEgressPendingRequest | undefined>;
+    readonly resolve: (request: ModelEgressResolveRequest) => Promise<ModelEgressResolveResult>;
   };
   readonly activity: {
     readonly list: (request?: KnowledgeActivityListRequest) => Promise<KnowledgeActivityListResult>;

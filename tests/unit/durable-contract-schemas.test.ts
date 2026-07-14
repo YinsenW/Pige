@@ -222,6 +222,7 @@ describe("durable contract schemas", () => {
   it("keeps job class, state, and record fields on the shared executable contract", () => {
     expect(JobClassSchema.parse("capture_batch")).toBe("capture_batch");
     expect(JobStateSchema.parse("waiting_dependency")).toBe("waiting_dependency");
+    expect(JobStateSchema.parse("waiting_model_egress")).toBe("waiting_model_egress");
 
     const record = JobRecordSchema.parse({
       id: "job_20260710_abcdef12",

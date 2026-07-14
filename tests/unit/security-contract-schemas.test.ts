@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   AddManualProviderRequestSchema,
   AddPresetProviderRequestSchema,
+  ModelEgressApprovalRequestRecordSchema,
   ModelEgressDecisionSchema,
+  ModelEgressPendingRequestQuerySchema,
+  ModelEgressPendingRequestSchema,
+  ModelEgressResolveRequestSchema,
+  ModelEgressResolveResultSchema,
   PermissionDecisionRecordSchema,
   PermissionRequestSchema,
   ProviderProfileSchema
@@ -164,6 +169,86 @@ describe("security-sensitive shared contracts", () => {
       contentClasses: ["ordinary"],
       payloadCharacters: 1001
     })).toThrow("must be classified as large");
+  });
+
+  it("keeps one-use model-egress approvals strict, body-free, and distinct from Permission Broker grants", () => {
+    const pending = {
+      schemaVersion: 1 as const,
+      id: "egressreq_20260710_abcdef1234567890",
+      authorizationLayer: "model_egress" as const,
+      state: "pending" as const,
+      jobId: "job_20260710_abcdef12",
+      vaultId: "vault_20260710_abcdef12",
+      providerProfileId: "provider_example",
+      modelProfileId: "model_example",
+      providerIdentityHash: policyHash,
+      modelIdentityHash: policyHash,
+      policyHash,
+      payloadHash: policyHash,
+      evidenceSummaryHash: policyHash,
+      baseDecisionHash: policyHash,
+      decisionHash: policyHash,
+      operationId: "op_20260710_abcdef12",
+      reasonCode: "sensitive_confirmation" as const,
+      contentClasses: ["sensitive"] as const,
+      payloadCharacters: 100,
+      estimatedPayloadTokens: 25,
+      normalPayloadCharacterLimit: 1_000,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    };
+
+    expect(ModelEgressApprovalRequestRecordSchema.parse(pending).authorizationLayer).toBe("model_egress");
+    expect(() => ModelEgressApprovalRequestRecordSchema.parse({
+      ...pending,
+      permissionDecisionId: "permdec_20260710_abcdef12"
+    })).toThrow();
+    expect(() => ModelEgressApprovalRequestRecordSchema.parse({
+      ...pending,
+      prompt: "private body"
+    })).toThrow();
+    expect(() => ModelEgressApprovalRequestRecordSchema.parse({
+      ...pending,
+      state: "approved",
+      decision: "allow_once",
+      decidedAt: timestamp,
+      consumedAt: timestamp
+    })).toThrow("An approved model egress request must contain one unconsumed allow-once decision.");
+
+    expect(ModelEgressPendingRequestQuerySchema.parse({ requestId: pending.id })).toEqual({
+      requestId: pending.id
+    });
+    expect(() => ModelEgressPendingRequestQuerySchema.parse({
+      requestId: pending.id,
+      prompt: "private body"
+    })).toThrow();
+    expect(ModelEgressResolveRequestSchema.parse({
+      requestId: pending.id,
+      jobId: pending.jobId,
+      decision: "allow_once"
+    })).toMatchObject({ decision: "allow_once" });
+    expect(() => ModelEgressResolveRequestSchema.parse({
+      requestId: pending.id,
+      jobId: pending.jobId,
+      decision: "allow_once",
+      permissionDecisionId: "permdec_20260710_abcdef12"
+    })).toThrow();
+    expect(() => ModelEgressPendingRequestSchema.parse({
+      requestId: pending.id,
+      jobId: pending.jobId,
+      providerProfileId: pending.providerProfileId,
+      modelProfileId: pending.modelProfileId,
+      reasonCode: pending.reasonCode,
+      contentClasses: pending.contentClasses,
+      requestedAt: pending.createdAt,
+      secretRef: "provider_secret_private"
+    })).toThrow();
+    expect(() => ModelEgressResolveResultSchema.parse({
+      status: "approved",
+      requestId: pending.id,
+      jobId: pending.jobId,
+      endpoint: "https://private.example"
+    })).toThrow();
   });
 
   it("strips arbitrary provider headers from persisted provider metadata", () => {

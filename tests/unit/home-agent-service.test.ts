@@ -28,6 +28,7 @@ import type {
   DatasetQueryToolRequest
 } from "../../apps/desktop/src/main/services/dataset-query-types";
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
+import { ModelEgressApprovalService } from "../../apps/desktop/src/main/services/model-egress-approval-service";
 import { readMarkdownPageByRelativePath } from "../../apps/desktop/src/main/services/markdown-page-index";
 import {
   PiAgentRuntimeAdapter,
@@ -930,6 +931,101 @@ describe("Home Pi Agent service", () => {
         contentClasses: ["sensitive"],
         outcome: "confirm",
         reasonCode: "sensitive_confirmation"
+      }
+    });
+  });
+
+  it("resumes the same sensitive Home turn after one exact approval and consumes it before the next model call", async () => {
+    const fixture = makeFixture();
+    const sourceId = "src_20260711_sensitive2";
+    writeSourceRecord(fixture.vaultPath, sourceId, { sensitive: true });
+    writeKnowledgePage(fixture.vaultPath, [sourceId]);
+    const result = makeSearchResult(fixture.vault.vaultId, { sourceIds: [sourceId] });
+    const machineRoot = path.join(path.dirname(fixture.vaultPath), "machine-egress");
+    fs.mkdirSync(machineRoot);
+    const approvals = new ModelEgressApprovalService({ rootPath: machineRoot, unsafeAllowUnfenced: true });
+    const jobs = new JobsService(fixture.vaults, undefined, undefined, undefined, undefined, undefined, approvals);
+    let runtimeConfigReads = 0;
+    let runtimeCalls = 0;
+    const completedAdapter = new PiAgentRuntimeAdapter({
+      fauxResponses: [
+        { kind: "tool_call", toolName: "pige_search_knowledge", args: {} },
+        finishHome({
+          answer: "The launch date is July 18. [1]",
+          citationRefs: ["citation_1"],
+          grounding: "local_knowledge"
+        })
+      ]
+    });
+    const service = new HomeAgentService(
+      fixture.vaults,
+      makeModels(() => { runtimeConfigReads += 1; }),
+      makeRetrievalPort(fixture.vault.vaultId, { result }),
+      jobs,
+      {
+        run: async (runtimeRequest) => {
+          runtimeCalls += 1;
+          return completedAdapter.run(runtimeRequest);
+        }
+      },
+      undefined,
+      new AgentTurnConversationStore(),
+      undefined,
+      undefined,
+      approvals
+    );
+    const request = {
+      schemaVersion: 1 as const,
+      text: result.query,
+      inputKind: "typed_text" as const,
+      objective: "auto" as const,
+      locale: "en" as const,
+      clientTurnId: "turn_20260714_sensitive001"
+    };
+
+    const outcomePromise = service.submitTurn(request);
+    const waitingJob = await waitForValue(() => jobs.list({ states: ["waiting_model_egress"] }).jobs[0]);
+    const requestId = waitingJob.modelEgressApprovalRequestId;
+    expect(requestId).toMatch(/^egressreq_/u);
+    expect(runtimeConfigReads).toBe(1);
+    expect(runtimeCalls).toBe(1);
+    expect(jobs.readAgentTurnJob(waitingJob.id)?.state).toBe("waiting_model_egress");
+    expect(jobs.pendingModelEgress(requestId ?? "")).toMatchObject({
+      requestId,
+      jobId: waitingJob.id,
+      reasonCode: "sensitive_confirmation",
+      contentClasses: ["sensitive"]
+    });
+
+    const decision = jobs.resolveModelEgress({
+      requestId: requestId ?? "",
+      jobId: waitingJob.id,
+      decision: "allow_once"
+    });
+    expect(decision.status).toBe("approved");
+    expect(jobs.readAgentTurnJob(waitingJob.id)?.state).toBe("running");
+
+    const completed = await outcomePromise;
+    expect(completed).toMatchObject({ state: "completed", modelUsage: "cloud" });
+    expect(jobs.readAgentTurnJob(waitingJob.id)?.state).toBe("completed");
+    expect(service.conversation().messages.at(-1)).toMatchObject({
+      role: "assistant",
+      text: "The launch date is July 18. [1]"
+    });
+    expect(runtimeConfigReads).toBe(1);
+    expect(runtimeCalls).toBe(1);
+    expect(approvals.read(fixture.vaultPath, requestId ?? "").state).toBe("consumed");
+    const operations = readRecords<OperationRecord>(path.join(fixture.vaultPath, ".pige", "operations"));
+    const confirmationAudit = operations.find((operation) =>
+      operation.modelEgressAudit?.modelEgressApprovalRequestId === requestId
+    );
+    expect(confirmationAudit).toMatchObject({
+      kind: "model_egress_decision",
+      permissionDecisionIds: [],
+      modelEgressAudit: {
+        outcome: "confirm",
+        reasonCode: "sensitive_confirmation",
+        modelEgressApprovalRequestId: requestId
       }
     });
   });
@@ -2056,4 +2152,14 @@ function readRecords<T>(root: string): T[] {
     }
   }
   return records.sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+}
+
+async function waitForValue<T>(read: () => T | undefined): Promise<T> {
+  const deadline = Date.now() + 2_000;
+  while (Date.now() < deadline) {
+    const value = read();
+    if (value !== undefined) return value;
+    await new Promise<void>((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error("Timed out waiting for the test state.");
 }

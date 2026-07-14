@@ -164,6 +164,8 @@ Examples:
 - Machine-local job records for tool/model install, update checks, repair jobs, and app-level maintenance.
 - Machine-local package install records.
 - Machine-local provider profile metadata.
+- Body-free current-action model-egress approval records, scoped by vault and excluded
+  from Permission Broker grants.
 - Machine-local diagnostics, error summaries, local metrics, crash recovery summaries, and support bundle export metadata.
 - Global user/device memory if introduced later.
 - App update state.

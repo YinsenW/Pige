@@ -299,8 +299,12 @@ multi-source recovery, and signed packaged macOS/Windows BYOK remain open; E3.09
 incomplete.
 
 B3.05 has the default, exact-destination disclosure, Home private allow/sensitive wait,
-matrix/profile-switch tests, and per-turn audits/drift rejection. Persisted stricter
-policy, confirmation resume, and remaining provider adoption keep E3.03 incomplete.
+matrix/profile-switch tests, per-turn audits/drift rejection, and one current-action
+model-egress request shared by Home and Agent ingest. Exact one-use allow/deny, Job CAS,
+restart reconciliation, binding revalidation, redacted Home status ownership, and
+backup-excluded storage are proven. Persisted stricter-policy settings/UI, durable
+no-duplicate continuation of an in-flight Pi transcript, remaining provider adoption,
+and signed cross-platform proof keep E3.03 incomplete.
 
 Deferred from this phase:
 
