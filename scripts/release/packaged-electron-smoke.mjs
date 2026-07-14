@@ -7,6 +7,7 @@ import path from "node:path";
 import { extractAll, listPackage } from "@electron/asar";
 import {
   assertPackageabilityHost,
+  canonicalizeAsarEntryPath,
   findDistributableNames,
   packageabilityPaths,
   resolvePackageabilityPlatform
@@ -63,7 +64,7 @@ for (const requiredPath of [
   if (!fs.statSync(requiredPath).isFile()) throw new Error(`Missing packaged file: ${path.basename(requiredPath)}`);
 }
 
-const entries = new Set(listPackage(asarPath));
+const entries = new Set(listPackage(asarPath).map(canonicalizeAsarEntryPath));
 for (const entry of requiredEntries) {
   if (!entries.has(entry)) throw new Error(`Missing packaged ASAR entry: ${entry}`);
 }

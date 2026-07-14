@@ -76,3 +76,10 @@ export function packageabilityPaths(root, definition, buildId) {
 export function findDistributableNames(fileNames, definition) {
   return fileNames.filter((fileName) => definition.distributablePattern.test(fileName));
 }
+
+export function canonicalizeAsarEntryPath(entry) {
+  if (typeof entry !== "string" || entry.length === 0 || entry.length > 4_096 || entry.includes("\0")) {
+    throw new Error("Invalid packaged ASAR entry path.");
+  }
+  return `/${entry.replaceAll("\\", "/").replace(/^\/+/u, "")}`;
+}

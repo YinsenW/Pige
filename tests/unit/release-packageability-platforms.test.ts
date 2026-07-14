@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   assertPackageabilityHost,
+  canonicalizeAsarEntryPath,
   findDistributableNames,
   packageabilityPaths,
   resolvePackageabilityPlatform
@@ -55,6 +56,14 @@ describe("release packageability platforms", () => {
   it("rejects unsupported platform and architecture combinations", () => {
     expect(() => resolvePackageabilityPlatform("windows", "arm64")).toThrow(/Unsupported packageability target/u);
     expect(() => resolvePackageabilityPlatform("linux", "x64")).toThrow(/Unsupported packageability target/u);
+  });
+
+  it("canonicalizes platform-specific ASAR entry separators before exact matching", () => {
+    expect(canonicalizeAsarEntryPath("/out/main/index.js")).toBe("/out/main/index.js");
+    expect(canonicalizeAsarEntryPath("out/main/index.js")).toBe("/out/main/index.js");
+    expect(canonicalizeAsarEntryPath("\\out\\main\\index.js")).toBe("/out/main/index.js");
+    expect(canonicalizeAsarEntryPath("out\\main\\index.js")).toBe("/out/main/index.js");
+    expect(() => canonicalizeAsarEntryPath("")).toThrow(/Invalid packaged ASAR entry path/u);
   });
 
   it("keeps the release scripts, builder config, and CI matrix aligned", () => {
