@@ -246,7 +246,37 @@ let agentIngestDrainer: CoalescedBatchDrainer<ProcessQueuedCapturesResult> | und
 let agentTurnDrainer: CoalescedBatchDrainer<Awaited<ReturnType<HomeAgentService["resumeWaitingTurns"]>>> | undefined;
 let indexRebuildDrainer: CoalescedBatchDrainer<ProcessQueuedIndexRebuildResult> | undefined;
 
-const createMainWindow = (): BrowserWindow => {
+type PackagedRuntimeSmokeStage =
+  | "runtime_import"
+  | "pi_runtime"
+  | "home_runtime"
+  | "renderer_window"
+  | "renderer_load"
+  | "renderer_probe"
+  | "report_write";
+
+interface PackagedRuntimeSmokeFailure {
+  readonly stage: PackagedRuntimeSmokeStage;
+  readonly checks?: {
+    readonly titleReady: boolean;
+    readonly rootReady: boolean;
+    readonly preloadReady: boolean;
+    readonly healthReady: boolean;
+    readonly requiredRuntimeModulesReady: boolean;
+    readonly missingRequiredRuntimeModuleIds: readonly string[];
+  };
+}
+
+class PackagedRuntimeSmokeError extends Error {
+  readonly failure: PackagedRuntimeSmokeFailure;
+
+  constructor(failure: PackagedRuntimeSmokeFailure) {
+    super(`Packaged runtime smoke failed at ${failure.stage}.`);
+    this.failure = failure;
+  }
+}
+
+const createMainWindow = (loadRenderer = true): BrowserWindow => {
   const browserWindow = new BrowserWindow({
     width: 420,
     height: 760,
@@ -267,6 +297,8 @@ const createMainWindow = (): BrowserWindow => {
 
   getWindowModeService().applyStoredState(browserWindow);
 
+  if (!loadRenderer) return browserWindow;
+
   if (!app.isPackaged && process.env.ELECTRON_RENDERER_URL) {
     void browserWindow.loadURL(process.env.ELECTRON_RENDERER_URL);
     return browserWindow;
@@ -286,27 +318,13 @@ async function runPackagedRendererSmoke(browserWindow: BrowserWindow): Promise<{
     readonly missingBundledToolIds: readonly string[];
   };
 }> {
-  await waitForPackagedRendererLoad(browserWindow);
-  const value = await browserWindow.webContents.executeJavaScript(`
-    (async () => {
-      const toolchain = await window.pige?.system?.toolchainHealth?.();
-      const requiredRuntimeModuleIds = [
-        "pdf-parser", "pdf-parser-runtime", "office-docx-parser", "office-openxml-parser",
-        "office-archive-runtime", "web-readability-parser", "web-dom-runtime", "web-fetch-runtime"
-      ];
-      const statuses = new Map((toolchain?.tools ?? []).map((tool) => [tool.id, tool.status]));
-      return {
-        title: document.title,
-        rootReady: Boolean(document.querySelector("#root")),
-        preloadReady: typeof window.pige?.getHealth === "function",
-        health: await window.pige?.getHealth?.(),
-        toolchain: {
-          requiredRuntimeModulesReady: requiredRuntimeModuleIds.every((id) => statuses.get(id) === "ready"),
-          missingBundledToolIds: ["git", "bun", "uv"].filter((id) => statuses.get(id) === "missing")
-        }
-      };
-    })()
-  `) as {
+  try {
+    await browserWindow.loadFile(join(__dirname, "../renderer/index.html"));
+  } catch {
+    throw new PackagedRuntimeSmokeError({ stage: "renderer_load" });
+  }
+
+  let value: {
     readonly title?: unknown;
     readonly rootReady?: unknown;
     readonly preloadReady?: unknown;
@@ -314,8 +332,37 @@ async function runPackagedRendererSmoke(browserWindow: BrowserWindow): Promise<{
     readonly toolchain?: {
       readonly requiredRuntimeModulesReady?: unknown;
       readonly missingBundledToolIds?: unknown;
+      readonly missingRequiredRuntimeModuleIds?: unknown;
     };
   };
+  try {
+    value = await browserWindow.webContents.executeJavaScript(`
+      (async () => {
+        const toolchain = await window.pige?.system?.toolchainHealth?.();
+        const requiredRuntimeModuleIds = [
+          "pdf-parser", "pdf-parser-runtime", "office-docx-parser", "office-openxml-parser",
+          "office-archive-runtime", "web-readability-parser", "web-dom-runtime", "web-fetch-runtime"
+        ];
+        const statuses = new Map((toolchain?.tools ?? []).map((tool) => [tool.id, tool.status]));
+        return {
+          title: document.title,
+          rootReady: Boolean(document.querySelector("#root")),
+          preloadReady: typeof window.pige?.getHealth === "function",
+          health: await window.pige?.getHealth?.(),
+          toolchain: {
+            requiredRuntimeModulesReady: requiredRuntimeModuleIds.every((id) => statuses.get(id) === "ready"),
+            missingRequiredRuntimeModuleIds: requiredRuntimeModuleIds.filter((id) => statuses.get(id) !== "ready"),
+            missingBundledToolIds: ["git", "bun", "uv"].filter((id) => statuses.get(id) === "missing")
+          }
+        };
+      })()
+    `) as typeof value;
+  } catch {
+    throw new PackagedRuntimeSmokeError({ stage: "renderer_probe" });
+  }
+  const missingRequiredRuntimeModuleIds = Array.isArray(value.toolchain?.missingRequiredRuntimeModuleIds)
+    ? value.toolchain.missingRequiredRuntimeModuleIds.filter((id): id is string => typeof id === "string")
+    : [];
   if (
     value.title !== "Pige" ||
     value.rootReady !== true ||
@@ -325,7 +372,17 @@ async function runPackagedRendererSmoke(browserWindow: BrowserWindow): Promise<{
     !Array.isArray(value.toolchain.missingBundledToolIds) ||
     !value.toolchain.missingBundledToolIds.every((id) => typeof id === "string")
   ) {
-    throw new Error("Packaged renderer or preload IPC did not reach its bounded ready state.");
+    throw new PackagedRuntimeSmokeError({
+      stage: "renderer_probe",
+      checks: {
+        titleReady: value.title === "Pige",
+        rootReady: value.rootReady === true,
+        preloadReady: value.preloadReady === true,
+        healthReady: value.health?.status === "ok",
+        requiredRuntimeModulesReady: value.toolchain?.requiredRuntimeModulesReady === true,
+        missingRequiredRuntimeModuleIds
+      }
+    });
   }
   return {
     title: "Pige",
@@ -337,31 +394,6 @@ async function runPackagedRendererSmoke(browserWindow: BrowserWindow): Promise<{
       missingBundledToolIds: value.toolchain.missingBundledToolIds
     }
   };
-}
-
-function waitForPackagedRendererLoad(browserWindow: BrowserWindow): Promise<void> {
-  const webContents = browserWindow.webContents;
-  const timeoutMs = process.platform === "win32" ? 60_000 : 30_000;
-  return new Promise((resolveLoad, rejectLoad) => {
-    let settled = false;
-    const finish = (error?: Error): void => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      webContents.removeListener("did-finish-load", onLoaded);
-      webContents.removeListener("did-fail-load", onFailed);
-      if (error) rejectLoad(error);
-      else resolveLoad();
-    };
-    const onLoaded = (): void => finish();
-    const onFailed = (): void => finish(new Error("Packaged renderer failed to load."));
-    const timeout = setTimeout(
-      () => finish(new Error("Packaged renderer load timed out.")),
-      timeoutMs
-    );
-    webContents.once("did-finish-load", onLoaded);
-    webContents.once("did-fail-load", onFailed);
-  });
 }
 
 const getLocalSettingsStore = (): LocalSettingsStore => {
@@ -1437,25 +1469,54 @@ app.whenReady().then(async () => {
   const packagedRuntimeSmokeReportPath = resolvePackagedRuntimeSmokeReportPath();
   if (packagedRuntimeSmokeReportPath) {
     let smokeWindow: BrowserWindow | undefined;
+    let smokeStage: PackagedRuntimeSmokeStage = "runtime_import";
     try {
       const smoke = await import(pathToFileURL(join(__dirname, "pi-agent-runtime-smoke.js")).href);
+      smokeStage = "pi_runtime";
       const pi = await smoke.runPiAgentRuntimeSmoke();
+      smokeStage = "home_runtime";
       const home = await smoke.runHomeAgentRuntimeSmoke();
-      smokeWindow = createMainWindow();
+      smokeStage = "renderer_window";
+      smokeWindow = createMainWindow(false);
+      smokeStage = "renderer_load";
       const renderer = await runPackagedRendererSmoke(smokeWindow);
       const runtimeIdentity = {
         appName: app.getName(),
         appVersion: app.getVersion(),
         isPackaged: app.isPackaged
       };
-      writeFileSync(packagedRuntimeSmokeReportPath, `${JSON.stringify({ runtimeIdentity, pi, home, renderer })}\n`, {
+      smokeStage = "report_write";
+      writeFileSync(packagedRuntimeSmokeReportPath, `${JSON.stringify({
+        schemaVersion: 1,
+        status: "passed",
+        runtimeIdentity,
+        pi,
+        home,
+        renderer
+      })}\n`, {
         encoding: "utf8",
         mode: 0o600,
         flag: "wx"
       });
       smokeWindow.destroy();
       app.exit(0);
-    } catch {
+    } catch (caught) {
+      const failure = caught instanceof PackagedRuntimeSmokeError
+        ? caught.failure
+        : { stage: smokeStage };
+      try {
+        writeFileSync(packagedRuntimeSmokeReportPath, `${JSON.stringify({
+          schemaVersion: 1,
+          status: "failed",
+          failure
+        })}\n`, {
+          encoding: "utf8",
+          mode: 0o600,
+          flag: "wx"
+        });
+      } catch {
+        // A report write failure must preserve the original fail-closed exit.
+      }
       smokeWindow?.destroy();
       app.exit(1);
     }

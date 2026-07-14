@@ -85,10 +85,14 @@ describe("release packageability platforms", () => {
     expect(builderRunner).not.toContain("electron-builder.cmd");
     expect(packagedSmoke).toContain("runtimeIdentity?.isPackaged !== true");
     expect(packagedSmoke).toContain("renderer?.preloadReady !== true");
+    expect(packagedSmoke).toContain('report?.status !== "passed"');
+    expect(packagedSmoke).toContain('"renderer_load", "renderer_probe", "report_write"');
     expect(packagedSmoke).not.toContain("powershell.exe");
     expect(packagedSmoke).not.toContain("remote-debugging-port");
     expect(desktopMain).toContain("runPackagedRendererSmoke");
-    expect(desktopMain).toContain('webContents.once("did-finish-load"');
+    expect(desktopMain).toContain('await browserWindow.loadFile(join(__dirname, "../renderer/index.html"))');
+    expect(desktopMain).toContain('status: "failed"');
+    expect(desktopMain).toContain('stage: "renderer_probe"');
     expect(desktopMain).toContain('typeof window.pige?.getHealth === "function"');
     expect(builderConfig).toContain("win:\n");
     expect(builderConfig).toContain("- nsis");

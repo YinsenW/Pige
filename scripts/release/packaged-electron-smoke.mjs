@@ -154,11 +154,17 @@ function runPackagedPiSmoke({ executablePath, tempRoot, target }) {
     timeout: target.packagedRuntimeSmokeTimeoutMs,
     maxBuffer: 1024 * 1024
   });
-  if (result.status !== 0 || !fs.existsSync(reportPath)) {
-    throw new Error(`Packaged Pi smoke failed with status ${String(result.status)}.`);
+  const report = readPackagedRuntimeSmokeReport(reportPath);
+  if (result.status !== 0 || report?.status !== "passed") {
+    const stage = isPackagedRuntimeSmokeFailure(report?.failure) ? report.failure.stage : "report_unavailable";
+    const checks = isPackagedRuntimeSmokeFailure(report?.failure) ? report.failure.checks : undefined;
+    throw new Error(
+      `Packaged Pi smoke failed with status ${String(result.status)} at ${stage}` +
+      `${checks ? ` (${JSON.stringify(checks)})` : ""}.`
+    );
   }
-  const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
   if (
+    report.schemaVersion !== 1 ||
     report.runtimeIdentity?.appName !== "Pige" ||
     report.runtimeIdentity?.appVersion !== "0.0.0" ||
     report.runtimeIdentity?.isPackaged !== true ||
@@ -190,6 +196,32 @@ function runPackagedPiSmoke({ executablePath, tempRoot, target }) {
     },
     renderer: report.renderer
   };
+}
+
+function readPackagedRuntimeSmokeReport(reportPath) {
+  if (!fs.existsSync(reportPath)) return undefined;
+  try {
+    const report = JSON.parse(fs.readFileSync(reportPath, "utf8"));
+    return report && typeof report === "object" ? report : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isPackagedRuntimeSmokeFailure(failure) {
+  const allowedStages = new Set([
+    "runtime_import", "pi_runtime", "home_runtime", "renderer_window",
+    "renderer_load", "renderer_probe", "report_write"
+  ]);
+  if (!failure || typeof failure !== "object" || !allowedStages.has(failure.stage)) return false;
+  if (failure.checks === undefined) return true;
+  const checks = failure.checks;
+  const booleanKeys = [
+    "titleReady", "rootReady", "preloadReady", "healthReady", "requiredRuntimeModulesReady"
+  ];
+  return booleanKeys.every((key) => typeof checks[key] === "boolean") &&
+    Array.isArray(checks.missingRequiredRuntimeModuleIds) &&
+    checks.missingRequiredRuntimeModuleIds.every((id) => typeof id === "string" && id.length <= 80);
 }
 
 function runNodeSmoke(scriptPath, extraEnvironment) {
