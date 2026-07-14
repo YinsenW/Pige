@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
-import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { extractAll, listPackage } from "@electron/asar";
@@ -78,11 +77,11 @@ try {
   const unpackedRoot = `${asarPath}.unpacked`;
   if (fs.existsSync(unpackedRoot)) fs.cpSync(unpackedRoot, extractedRoot, { recursive: true, force: true });
 
-  const piResult = runPackagedPiSmoke({ executablePath, tempRoot });
+  const packagedRuntimeResult = runPackagedPiSmoke({ executablePath, tempRoot, target });
   const applicationIdentity = readApplicationIdentity({
     target,
     appPath,
-    runtimeIdentity: piResult.runtimeIdentity
+    runtimeIdentity: packagedRuntimeResult.runtimeIdentity
   });
   runNodeSmoke("scripts/verify/parser-worker-smoke.mjs", {
     PIGE_BUILT_APP_ROOT: extractedRoot
@@ -96,8 +95,7 @@ try {
       PIGE_SMOKE_ARTIFACT_ROOT: path.join(tempRoot, "ocr-artifacts")
     });
   }
-  const rendererResult = await runRendererPreloadSmoke({ executablePath, tempRoot });
-  const { toolchainManifest, ...mainPreloadRenderer } = rendererResult;
+  const { toolchainManifest, ...mainPreloadRenderer } = packagedRuntimeResult.renderer;
 
   const report = {
     schemaVersion: 1,
@@ -117,7 +115,7 @@ try {
     requiredAsarEntries: requiredEntries,
     checks: {
       mainPreloadRenderer,
-      embeddedPi: piResult,
+      embeddedPi: packagedRuntimeResult.pi,
       parserWorkers: true,
       indexWorker: true,
       platformNativeOcr: target.platform === "macos",
@@ -143,7 +141,7 @@ try {
   fs.rmSync(tempRoot, { recursive: true, force: true });
 }
 
-function runPackagedPiSmoke({ executablePath, tempRoot }) {
+function runPackagedPiSmoke({ executablePath, tempRoot, target }) {
   const reportPath = path.join(tempRoot, "pi-smoke.json");
   const result = spawnSync(executablePath, [
     `--pige-packaged-runtime-smoke-report=${reportPath}`,
@@ -153,7 +151,7 @@ function runPackagedPiSmoke({ executablePath, tempRoot }) {
     cwd: tempRoot,
     env: safeEnvironment(),
     encoding: "utf8",
-    timeout: 60_000,
+    timeout: target.packagedRuntimeSmokeTimeoutMs,
     maxBuffer: 1024 * 1024
   });
   if (result.status !== 0 || !fs.existsSync(reportPath)) {
@@ -170,17 +168,27 @@ function runPackagedPiSmoke({ executablePath, tempRoot }) {
     JSON.stringify(report.pi?.invokedTools) !== JSON.stringify(["pige_inspect_source", "pige_create_knowledge_note"]) ||
     report.home?.state !== "completed" ||
     report.home?.answerMode !== "model_grounded" ||
-    report.home?.citationCount !== 1
+    report.home?.citationCount !== 1 ||
+    report.renderer?.title !== "Pige" ||
+    report.renderer?.rootReady !== true ||
+    report.renderer?.preloadReady !== true ||
+    report.renderer?.healthReady !== true ||
+    report.renderer?.toolchainManifest?.requiredRuntimeModulesReady !== true ||
+    !Array.isArray(report.renderer?.toolchainManifest?.missingBundledToolIds) ||
+    !report.renderer.toolchainManifest.missingBundledToolIds.every((id) => typeof id === "string")
   ) {
     throw new Error("Packaged Pi smoke returned an invalid bounded result.");
   }
   return {
     runtimeIdentity: report.runtimeIdentity,
-    adapterMode: report.pi.adapterMode,
-    modelId: report.pi.modelId,
-    invokedTools: report.pi.invokedTools,
-    homeAnswerMode: report.home.answerMode,
-    homeCitationCount: report.home.citationCount
+    pi: {
+      adapterMode: report.pi.adapterMode,
+      modelId: report.pi.modelId,
+      invokedTools: report.pi.invokedTools,
+      homeAnswerMode: report.home.answerMode,
+      homeCitationCount: report.home.citationCount
+    },
+    renderer: report.renderer
   };
 }
 
@@ -226,170 +234,6 @@ function readPlistValue(plistPath, key) {
   });
   if (result.status !== 0) throw new Error(`Unable to read packaged Info.plist key ${key}.`);
   return result.stdout.trim();
-}
-
-async function runRendererPreloadSmoke({ executablePath, tempRoot }) {
-  const port = await reservePort();
-  const child = spawn(executablePath, [
-    `--user-data-dir=${path.join(tempRoot, "user-data")}`,
-    `--remote-debugging-port=${port}`,
-    "--disable-gpu"
-  ], {
-    cwd: tempRoot,
-    env: safeEnvironment(),
-    stdio: "ignore"
-  });
-  try {
-    const target = await waitForRendererTarget(port, child);
-    const value = await waitForRendererState(target.webSocketDebuggerUrl);
-    if (
-      value?.title !== "Pige" ||
-      value?.rootReady !== true ||
-      value?.preloadReady !== true ||
-      !value?.health ||
-      typeof value.health !== "object" ||
-      value?.toolchain?.requiredRuntimeModulesReady !== true
-    ) {
-      const safeState = {
-        title: typeof value?.title === "string" ? value.title : null,
-        rootReady: value?.rootReady === true,
-        preloadReady: value?.preloadReady === true,
-        healthType: value?.health === null ? "null" : typeof value?.health,
-        healthStatus: value?.health?.status === "ok" ? "ok" : "not_ok",
-        requiredRuntimeModulesReady: value?.toolchain?.requiredRuntimeModulesReady === true,
-        runtimeModuleStatuses: value?.toolchain?.runtimeModuleStatuses ?? null
-      };
-      throw new Error(`Packaged renderer or preload IPC did not reach its bounded ready state: ${JSON.stringify(safeState)}`);
-    }
-    return {
-      title: value.title,
-      rootReady: true,
-      preloadReady: true,
-      healthReady: true,
-      toolchainManifest: {
-        requiredRuntimeModulesReady: true,
-        missingBundledToolIds: value.toolchain.missingBundledToolIds
-      }
-    };
-  } finally {
-    child.kill("SIGTERM");
-    await waitForExit(child, 5_000);
-    if (child.exitCode === null) child.kill("SIGKILL");
-  }
-}
-
-async function waitForRendererState(webSocketUrl) {
-  const expression = `
-      (async () => {
-        const toolchain = await window.pige?.system?.toolchainHealth?.();
-        const requiredRuntimeModuleIds = [
-          "pdf-parser", "pdf-parser-runtime", "office-docx-parser", "office-openxml-parser",
-          "office-archive-runtime", "web-readability-parser", "web-dom-runtime", "web-fetch-runtime"
-        ];
-        const statuses = new Map((toolchain?.tools ?? []).map((tool) => [tool.id, tool.status]));
-        return {
-          title: document.title,
-          rootReady: Boolean(document.querySelector("#root")),
-          preloadReady: typeof window.pige?.getHealth === "function",
-          health: await window.pige?.getHealth?.(),
-          toolchain: {
-            requiredRuntimeModulesReady: requiredRuntimeModuleIds.every((id) => statuses.get(id) === "ready"),
-            runtimeModuleStatuses: Object.fromEntries(requiredRuntimeModuleIds.map((id) => [id, statuses.get(id) ?? "absent"])),
-            missingBundledToolIds: ["git", "bun", "uv"].filter((id) => statuses.get(id) === "missing")
-          }
-        };
-      })()
-  `;
-  const deadline = Date.now() + 15_000;
-  let value;
-  while (Date.now() < deadline) {
-    value = await evaluateTarget(webSocketUrl, expression);
-    if (
-      value?.title === "Pige" &&
-      value?.rootReady === true &&
-      value?.preloadReady === true &&
-      value?.health?.status === "ok" &&
-      value?.toolchain?.requiredRuntimeModulesReady === true
-    ) {
-      return value;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  return value;
-}
-
-async function waitForRendererTarget(port, child) {
-  const deadline = Date.now() + 30_000;
-  while (Date.now() < deadline) {
-    if (child.exitCode !== null) throw new Error("Packaged app exited before its renderer became available.");
-    try {
-      const response = await fetch(`http://127.0.0.1:${port}/json/list`);
-      if (response.ok) {
-        const targets = await response.json();
-        const target = targets.find((candidate) => candidate.type === "page" && candidate.webSocketDebuggerUrl);
-        if (target) return target;
-      }
-    } catch {
-      // The local DevTools endpoint is not ready yet.
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  throw new Error("Timed out waiting for the packaged renderer target.");
-}
-
-function evaluateTarget(webSocketUrl, expression) {
-  return new Promise((resolve, reject) => {
-    const socket = new WebSocket(webSocketUrl);
-    const timeout = setTimeout(() => {
-      socket.close();
-      reject(new Error("Packaged renderer evaluation timed out."));
-    }, 15_000);
-    socket.addEventListener("open", () => {
-      socket.send(JSON.stringify({
-        id: 1,
-        method: "Runtime.evaluate",
-        params: { expression, awaitPromise: true, returnByValue: true }
-      }));
-    });
-    socket.addEventListener("message", (event) => {
-      const message = JSON.parse(String(event.data));
-      if (message.id !== 1) return;
-      clearTimeout(timeout);
-      socket.close();
-      if (message.error || message.result?.exceptionDetails) {
-        reject(new Error("Packaged renderer evaluation failed."));
-        return;
-      }
-      resolve(message.result?.result?.value);
-    });
-    socket.addEventListener("error", () => {
-      clearTimeout(timeout);
-      reject(new Error("Packaged renderer DevTools connection failed."));
-    });
-  });
-}
-
-function reservePort() {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      const port = typeof address === "object" && address ? address.port : undefined;
-      server.close((error) => error ? reject(error) : resolve(port));
-    });
-  });
-}
-
-function waitForExit(child, timeoutMs) {
-  if (child.exitCode !== null) return Promise.resolve();
-  return new Promise((resolve) => {
-    const timeout = setTimeout(resolve, timeoutMs);
-    child.once("exit", () => {
-      clearTimeout(timeout);
-      resolve();
-    });
-  });
 }
 
 function safeEnvironment(extra = {}) {

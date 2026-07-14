@@ -246,7 +246,7 @@ let agentIngestDrainer: CoalescedBatchDrainer<ProcessQueuedCapturesResult> | und
 let agentTurnDrainer: CoalescedBatchDrainer<Awaited<ReturnType<HomeAgentService["resumeWaitingTurns"]>>> | undefined;
 let indexRebuildDrainer: CoalescedBatchDrainer<ProcessQueuedIndexRebuildResult> | undefined;
 
-const createMainWindow = (): void => {
+const createMainWindow = (): BrowserWindow => {
   const browserWindow = new BrowserWindow({
     width: 420,
     height: 760,
@@ -269,11 +269,100 @@ const createMainWindow = (): void => {
 
   if (!app.isPackaged && process.env.ELECTRON_RENDERER_URL) {
     void browserWindow.loadURL(process.env.ELECTRON_RENDERER_URL);
-    return;
+    return browserWindow;
   }
 
   void browserWindow.loadFile(join(__dirname, "../renderer/index.html"));
+  return browserWindow;
 };
+
+async function runPackagedRendererSmoke(browserWindow: BrowserWindow): Promise<{
+  readonly title: "Pige";
+  readonly rootReady: true;
+  readonly preloadReady: true;
+  readonly healthReady: true;
+  readonly toolchainManifest: {
+    readonly requiredRuntimeModulesReady: true;
+    readonly missingBundledToolIds: readonly string[];
+  };
+}> {
+  await waitForPackagedRendererLoad(browserWindow);
+  const value = await browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      const toolchain = await window.pige?.system?.toolchainHealth?.();
+      const requiredRuntimeModuleIds = [
+        "pdf-parser", "pdf-parser-runtime", "office-docx-parser", "office-openxml-parser",
+        "office-archive-runtime", "web-readability-parser", "web-dom-runtime", "web-fetch-runtime"
+      ];
+      const statuses = new Map((toolchain?.tools ?? []).map((tool) => [tool.id, tool.status]));
+      return {
+        title: document.title,
+        rootReady: Boolean(document.querySelector("#root")),
+        preloadReady: typeof window.pige?.getHealth === "function",
+        health: await window.pige?.getHealth?.(),
+        toolchain: {
+          requiredRuntimeModulesReady: requiredRuntimeModuleIds.every((id) => statuses.get(id) === "ready"),
+          missingBundledToolIds: ["git", "bun", "uv"].filter((id) => statuses.get(id) === "missing")
+        }
+      };
+    })()
+  `) as {
+    readonly title?: unknown;
+    readonly rootReady?: unknown;
+    readonly preloadReady?: unknown;
+    readonly health?: { readonly status?: unknown };
+    readonly toolchain?: {
+      readonly requiredRuntimeModulesReady?: unknown;
+      readonly missingBundledToolIds?: unknown;
+    };
+  };
+  if (
+    value.title !== "Pige" ||
+    value.rootReady !== true ||
+    value.preloadReady !== true ||
+    value.health?.status !== "ok" ||
+    value.toolchain?.requiredRuntimeModulesReady !== true ||
+    !Array.isArray(value.toolchain.missingBundledToolIds) ||
+    !value.toolchain.missingBundledToolIds.every((id) => typeof id === "string")
+  ) {
+    throw new Error("Packaged renderer or preload IPC did not reach its bounded ready state.");
+  }
+  return {
+    title: "Pige",
+    rootReady: true,
+    preloadReady: true,
+    healthReady: true,
+    toolchainManifest: {
+      requiredRuntimeModulesReady: true,
+      missingBundledToolIds: value.toolchain.missingBundledToolIds
+    }
+  };
+}
+
+function waitForPackagedRendererLoad(browserWindow: BrowserWindow): Promise<void> {
+  const webContents = browserWindow.webContents;
+  const timeoutMs = process.platform === "win32" ? 60_000 : 30_000;
+  return new Promise((resolveLoad, rejectLoad) => {
+    let settled = false;
+    const finish = (error?: Error): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      webContents.removeListener("did-finish-load", onLoaded);
+      webContents.removeListener("did-fail-load", onFailed);
+      if (error) rejectLoad(error);
+      else resolveLoad();
+    };
+    const onLoaded = (): void => finish();
+    const onFailed = (): void => finish(new Error("Packaged renderer failed to load."));
+    const timeout = setTimeout(
+      () => finish(new Error("Packaged renderer load timed out.")),
+      timeoutMs
+    );
+    webContents.once("did-finish-load", onLoaded);
+    webContents.once("did-fail-load", onFailed);
+  });
+}
 
 const getLocalSettingsStore = (): LocalSettingsStore => {
   if (!localSettingsStore) {
@@ -1347,22 +1436,27 @@ ipcMain.handle("system.toolchainHealth", () => getToolchainService().health());
 app.whenReady().then(async () => {
   const packagedRuntimeSmokeReportPath = resolvePackagedRuntimeSmokeReportPath();
   if (packagedRuntimeSmokeReportPath) {
+    let smokeWindow: BrowserWindow | undefined;
     try {
       const smoke = await import(pathToFileURL(join(__dirname, "pi-agent-runtime-smoke.js")).href);
       const pi = await smoke.runPiAgentRuntimeSmoke();
       const home = await smoke.runHomeAgentRuntimeSmoke();
+      smokeWindow = createMainWindow();
+      const renderer = await runPackagedRendererSmoke(smokeWindow);
       const runtimeIdentity = {
         appName: app.getName(),
         appVersion: app.getVersion(),
         isPackaged: app.isPackaged
       };
-      writeFileSync(packagedRuntimeSmokeReportPath, `${JSON.stringify({ runtimeIdentity, pi, home })}\n`, {
+      writeFileSync(packagedRuntimeSmokeReportPath, `${JSON.stringify({ runtimeIdentity, pi, home, renderer })}\n`, {
         encoding: "utf8",
         mode: 0o600,
         flag: "wx"
       });
+      smokeWindow.destroy();
       app.exit(0);
     } catch {
+      smokeWindow?.destroy();
       app.exit(1);
     }
     return;

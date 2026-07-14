@@ -19,7 +19,8 @@ describe("release packageability platforms", () => {
       arch: "arm64",
       hostPlatform: "darwin",
       outputDirectory: "macos-arm64",
-      packageKind: "unsigned_zip_preflight"
+      packageKind: "unsigned_zip_preflight",
+      packagedRuntimeSmokeTimeoutMs: 60_000
     });
     expect(target.requiredSbomComponents).toEqual(["pige-vision-ocr"]);
     expect(findDistributableNames(["Pige-0.0.0-arm64.zip", "latest-mac.yml"], target)).toEqual([
@@ -37,7 +38,8 @@ describe("release packageability platforms", () => {
       outputDirectory: "windows-x64",
       appRelativePath: "win-unpacked",
       executableRelativePath: "Pige.exe",
-      packageKind: "unsigned_nsis_preflight"
+      packageKind: "unsigned_nsis_preflight",
+      packagedRuntimeSmokeTimeoutMs: 120_000
     });
     expect(target.requiredResourceFiles).toEqual([]);
     expect(target.requiredSbomComponents).toEqual([]);
@@ -72,6 +74,7 @@ describe("release packageability platforms", () => {
     const builderConfig = fs.readFileSync(path.join(root, "apps/desktop/electron-builder.yml"), "utf8");
     const builderRunner = fs.readFileSync(path.join(root, "scripts/release/run-electron-builder.mjs"), "utf8");
     const packagedSmoke = fs.readFileSync(path.join(root, "scripts/release/packaged-electron-smoke.mjs"), "utf8");
+    const desktopMain = fs.readFileSync(path.join(root, "apps/desktop/src/main/index.ts"), "utf8");
     const workflow = fs.readFileSync(path.join(root, ".github/workflows/packageability.yml"), "utf8");
 
     expect(rootPackage.scripts["package:dir:win:x64"]).toContain("prepare:package:win:x64");
@@ -81,7 +84,12 @@ describe("release packageability platforms", () => {
     expect(builderRunner).toContain("spawnSync(process.execPath");
     expect(builderRunner).not.toContain("electron-builder.cmd");
     expect(packagedSmoke).toContain("runtimeIdentity?.isPackaged !== true");
+    expect(packagedSmoke).toContain("renderer?.preloadReady !== true");
     expect(packagedSmoke).not.toContain("powershell.exe");
+    expect(packagedSmoke).not.toContain("remote-debugging-port");
+    expect(desktopMain).toContain("runPackagedRendererSmoke");
+    expect(desktopMain).toContain('webContents.once("did-finish-load"');
+    expect(desktopMain).toContain('typeof window.pige?.getHealth === "function"');
     expect(builderConfig).toContain("win:\n");
     expect(builderConfig).toContain("- nsis");
     expect(builderConfig).toContain("perMachine: false");

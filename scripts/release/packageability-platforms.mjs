@@ -13,6 +13,7 @@ const definitions = {
     distributablePattern: /^Pige-0\.0\.0-arm64\.zip$/u,
     packageKind: "unsigned_zip_preflight",
     builderPlatformFlag: "--mac",
+    packagedRuntimeSmokeTimeoutMs: 60_000,
     requiredResourceFiles: [
       "native/macos/arm64/pige-vision-ocr",
       "native/macos/arm64/pige-vision-ocr.manifest.json"
@@ -32,6 +33,7 @@ const definitions = {
     distributablePattern: /^Pige-0\.0\.0-x64-setup\.exe$/u,
     packageKind: "unsigned_nsis_preflight",
     builderPlatformFlag: "--win",
+    packagedRuntimeSmokeTimeoutMs: 120_000,
     requiredResourceFiles: [],
     requiredSbomComponents: []
   }
