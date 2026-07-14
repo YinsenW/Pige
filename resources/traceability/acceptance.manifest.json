@@ -1351,92 +1351,11 @@
         "EV-PHASE-PREFLIGHT"
       ]
     },
-    "PIGE-DIAG-001": {
-      "status": "partial",
-      "evidence": [
-        "EV-DIAGNOSTICS",
-        "EV-NO-TELEMETRY",
-        "EV-PRIVACY-POLICY"
-      ],
-      "open": {
-        "id": "OPEN-REQ-PIGE-DIAG-001",
-        "description": "Static no-telemetry/no-auto-upload enforcement is executable; crash-hook review and future unknown SDKs, computed endpoints, indirect transports, and generated configuration remain open.",
-        "targetBuilds": [
-          "B1.23"
-        ],
-        "targetExits": [
-          "E1.19"
-        ]
-      }
-    },
-    "PIGE-DIAG-002": {
-      "status": "partial",
-      "evidence": [
-        "EV-DIAGNOSTICS"
-      ],
-      "open": {
-        "id": "OPEN-REQ-PIGE-DIAG-002",
-        "description": "Cancellation and selected-output-path integration acceptance remain open.",
-        "targetBuilds": [
-          "B1.14"
-        ],
-        "targetExits": [
-          "E1.07"
-        ]
-      }
-    },
-    "PIGE-DIAG-003": {
-      "status": "partial",
-      "evidence": [
-        "EV-DIAGNOSTICS",
-        "EV-DIAG-ROTATION", "EV-DIAG-RETENTION", "EV-DIAG-PERSISTENCE-SAFETY"
-      ],
-      "open": {
-        "id": "OPEN-REQ-PIGE-DIAG-003",
-        "description": "Broader diagnostic stores, crash-recovery correlation, and user-clear semantics remain open.",
-        "targetBuilds": [
-          "B1.23"
-        ],
-        "targetExits": [
-          "E1.19"
-        ]
-      }
-    },
-    "PIGE-SUPPORT-001": {
-      "status": "partial",
-      "evidence": [
-        "EV-SUPPORT-POLICY"
-      ],
-      "open": {
-        "id": "OPEN-REQ-PIGE-SUPPORT-001",
-        "description": "Release-time public issue/support template review and maintainer workflow acceptance remain open.",
-        "targetBuilds": [
-          "B9.17"
-        ],
-        "targetExits": [
-          "E9.11"
-        ]
-      }
-    },
-    "PIGE-GOV-001": {
-      "status": "partial",
-      "evidence": [
-        "EV-PUBLIC-WORKFLOW",
-        "EV-PUBLIC-CONDUCT",
-        "EV-PUBLIC-BUG",
-        "EV-PUBLIC-SECURITY"
-      ],
-      "open": {
-        "id": "OPEN-REQ-PIGE-GOV-001",
-        "description": "Automated schema validation for every public issue template and live private-reporting availability remain open.",
-        "targetBuilds": [
-          "B0.15"
-        ],
-        "targetExits": [
-          "E0.12"
-        ]
-      }
-    },
+    "PIGE-DIAG-001":{"status":"partial","evidence":["EV-DIAGNOSTICS","EV-NO-TELEMETRY","EV-PRIVACY-POLICY"],"open":{"id":"OPEN-REQ-PIGE-DIAG-001","description":"Static no-telemetry/no-auto-upload enforcement is executable; crash-hook review and future unknown SDKs, computed endpoints, indirect transports, and generated configuration remain open.","targetBuilds":["B1.23"],"targetExits":["E1.19"]}},
+    "PIGE-DIAG-002":{"status":"partial","evidence":["EV-DIAGNOSTICS","EV-DIAG-EXPORT-CORE","EV-DIAG-EXPORT-WORKER","EV-DIAG-EXPORT-CANCEL-IPC","EV-DIAG-EXPORT-CANCEL-UI","EV-DIAG-EXPORT-WORKER-SMOKE"],"open":{"id":"OPEN-REQ-PIGE-DIAG-002","description":"Bounded preview/export/cancel and selected local destination are executable; optional reviewed content, progress/restart semantics, and broader platform/path evidence remain open.","targetBuilds":["B1.14"],"targetExits":["E1.07"]}},
+    "PIGE-DIAG-003":{"status":"partial","evidence":["EV-DIAGNOSTICS","EV-DIAG-ROTATION","EV-DIAG-RETENTION","EV-DIAG-PERSISTENCE-SAFETY"],"open":{"id":"OPEN-REQ-PIGE-DIAG-003","description":"Broader diagnostic stores, crash-recovery correlation, and user-clear semantics remain open.","targetBuilds":["B1.23"],"targetExits":["E1.19"]}},
+    "PIGE-SUPPORT-001":{"status":"partial","evidence":["EV-SUPPORT-POLICY"],"open":{"id":"OPEN-REQ-PIGE-SUPPORT-001","description":"Release-time public issue/support template review and maintainer workflow acceptance remain open.","targetBuilds":["B9.17"],"targetExits":["E9.11"]}},
+    "PIGE-GOV-001":{"status":"partial","evidence":["EV-PUBLIC-WORKFLOW","EV-PUBLIC-CONDUCT","EV-PUBLIC-BUG","EV-PUBLIC-SECURITY"],"open":{"id":"OPEN-REQ-PIGE-GOV-001","description":"Automated schema validation for every public issue template and live private-reporting availability remain open.","targetBuilds":["B0.15"],"targetExits":["E0.12"]}},
     "PIGE-GOV-002": {
       "status": "verified",
       "evidence": [
@@ -1446,37 +1365,11 @@
         "EV-DOCMAP"
       ]
     },
-    "PIGE-DOC-001": {
-      "status": "verified",
-      "evidence": [
-        "EV-DOCMAP"
-      ]
-    },
-    "PIGE-DOC-002": {
-      "status": "verified",
-      "evidence": [
-        "EV-DOCMAP"
-      ]
-    },
-    "PIGE-DOC-003": {
-      "status": "verified",
-      "evidence": [
-        "EV-TRACE"
-      ]
-    },
-    "PIGE-DOC-004": {
-      "status": "verified",
-      "evidence": [
-        "EV-PHASE-PREFLIGHT"
-      ]
-    },
-    "PIGE-DOC-005": {
-      "status": "verified",
-      "evidence": [
-        "EV-DOCQUALITY",
-        "EV-DOCQUALITY-INDEPENDENT"
-      ]
-    },
+    "PIGE-DOC-001":{"status":"verified","evidence":["EV-DOCMAP"]},
+    "PIGE-DOC-002":{"status":"verified","evidence":["EV-DOCMAP"]},
+    "PIGE-DOC-003":{"status":"verified","evidence":["EV-TRACE"]},
+    "PIGE-DOC-004":{"status":"verified","evidence":["EV-PHASE-PREFLIGHT"]},
+    "PIGE-DOC-005":{"status":"verified","evidence":["EV-DOCQUALITY","EV-DOCQUALITY-INDEPENDENT"]},
     "PIGE-UI-001": {
       "status": "partial",
       "evidence": ["EV-RENDERER", "EV-READER-RESOURCE-SAFETY", "EV-RENDERER-NAVIGATION-GUARD"],
@@ -1718,22 +1611,7 @@
         ]
       }
     },
-    "E1.07": {
-      "status": "partial",
-      "evidence": [
-        "EV-DIAGNOSTICS"
-      ],
-      "open": {
-        "id": "OPEN-EXIT-E1.07",
-        "description": "Full executable acceptance remains open for Exit E1.07: Diagnostics export is redacted, previewed, cancelable, local-only, bounded, and free of raw secrets or source/note bodies by default.",
-        "targetBuilds": [
-          "B1.14"
-        ],
-        "targetExits": [
-          "E1.07"
-        ]
-      }
-    },
+    "E1.07":{"status":"partial","evidence":["EV-DIAGNOSTICS","EV-DIAG-EXPORT-CORE","EV-DIAG-EXPORT-WORKER","EV-DIAG-EXPORT-CANCEL-IPC","EV-DIAG-EXPORT-CANCEL-UI","EV-DIAG-EXPORT-WORKER-SMOKE"],"open":{"id":"OPEN-EXIT-E1.07","description":"Bounded redacted local preview/export/cancel is executable; optional reviewed content, progress/restart semantics, and broader platform/path proof remain open.","targetBuilds":["B1.14"],"targetExits":["E1.07"]}},
     "E1.08": {
       "status": "partial",
       "evidence": [
@@ -1860,57 +1738,9 @@
         ]
       }
     },
-    "E1.18": {
-      "status": "partial",
-      "evidence": [
-        "EV-RUNTIME",
-        "EV-RUNTIME-CONTRACT",
-        "EV-OCR-ADAPTER"
-      ],
-      "open": {
-        "id": "OPEN-EXIT-E1.18",
-        "description": "Tool, parser, OCR, and RAG adapter parity and degraded-state tests remain open.",
-        "targetBuilds": [
-          "B1.22"
-        ],
-        "targetExits": [
-          "E1.18"
-        ]
-      }
-    },
-    "E1.19": {
-      "status": "partial",
-      "evidence": [
-        "EV-DIAGNOSTICS",
-        "EV-DIAG-ROTATION", "EV-DIAG-RETENTION", "EV-DIAG-PERSISTENCE-SAFETY", "EV-NO-TELEMETRY"
-      ],
-      "open": {
-        "id": "OPEN-EXIT-E1.19",
-        "description": "Crash-hook review, broader-store coverage, recovery correlation, user-clear semantics, export cancellation, and selected-path UX remain open.",
-        "targetBuilds": [
-          "B1.23"
-        ],
-        "targetExits": [
-          "E1.19"
-        ]
-      }
-    },
-    "E1.20": {
-      "status": "partial",
-      "evidence": [
-        "EV-SETTING-GUARD"
-      ],
-      "open": {
-        "id": "OPEN-EXIT-E1.20",
-        "description": "Complete sensitive-setting owner and persisted Permission Broker adoption remains open.",
-        "targetBuilds": [
-          "B1.24"
-        ],
-        "targetExits": [
-          "E1.20"
-        ]
-      }
-    },
+    "E1.18":{"status":"partial","evidence":["EV-RUNTIME","EV-RUNTIME-CONTRACT","EV-OCR-ADAPTER"],"open":{"id":"OPEN-EXIT-E1.18","description":"Tool, parser, OCR, and RAG adapter parity and degraded-state tests remain open.","targetBuilds":["B1.22"],"targetExits":["E1.18"]}},
+    "E1.19":{"status":"partial","evidence":["EV-DIAGNOSTICS","EV-DIAG-ROTATION","EV-DIAG-RETENTION","EV-DIAG-PERSISTENCE-SAFETY","EV-NO-TELEMETRY"],"open":{"id":"OPEN-EXIT-E1.19","description":"Crash-hook review, broader-store coverage, recovery correlation, and user-clear semantics remain open.","targetBuilds":["B1.23"],"targetExits":["E1.19"]}},
+    "E1.20":{"status":"partial","evidence":["EV-SETTING-GUARD"],"open":{"id":"OPEN-EXIT-E1.20","description":"Complete sensitive-setting owner and persisted Permission Broker adoption remains open.","targetBuilds":["B1.24"],"targetExits":["E1.20"]}},
     "E1.21":{"status":"partial","evidence":["EV-MARKDOWN-ATOMIC","EV-DB-EXTERNAL-EDIT","EV-SOURCE-PAGE-CONFLICT-PRESERVATION","EV-SOURCE-PAGE-SOURCE-REVISION","EV-GENERATED-NOTE-FINAL-FENCE","EV-GENERATED-NOTE-CONFLICT-PRESERVATION","EV-VAULT-WRITER-LEASE","EV-VAULT-LEASE-FENCE","EV-VAULT-STALE-REFRESH","EV-VAULT-SENTINEL-GENERATION","EV-RESTORE-BINDING-CAS"],"open":{"id":"OPEN-EXIT-E1.21","description":"The adopted vault/Job paths and Restore binding swap have fenced successor-safe single-writer/CAS coverage; user-visible conflict resolution, general cross-file/domain commit fences, the final filesystem-syscall TOCTOU interval, Windows proof, and broader destination binding remain open.","targetBuilds":["B1.25"],"targetExits":["E1.21"]}},
     "E1.22": {
       "status": "verified",
@@ -2573,6 +2403,11 @@
     "EV-SETTING-GUARD": { "kind": "test", "path": "tests/unit/setting-action-guard.test.ts", "selector": "fails closed for a Permission Broker requirement until a broker decision exists" },
     "EV-POLICY": { "kind": "test", "path": "tests/unit/agent-policy-context.test.ts", "selector": "builds a non-secret policy context from vault config" },
     "EV-DIAGNOSTICS": { "kind": "test", "path": "tests/unit/diagnostics-service.test.ts", "selector": "exports only bounded redacted local support bundle content" },
+    "EV-DIAG-EXPORT-CORE": { "kind": "test", "path": "tests/unit/diagnostics-export-core.test.ts", "selector": "atomically writes a bounded safe bundle with private file permissions" },
+    "EV-DIAG-EXPORT-WORKER": { "kind": "test", "path": "tests/unit/diagnostics-export-worker-service.test.ts", "selector": "terminates and fails closed on cancellation" },
+    "EV-DIAG-EXPORT-CANCEL-IPC": { "kind": "test", "path": "tests/unit/desktop-shell-contract.test.ts", "selector": "binds support-bundle cancellation to one active renderer request" },
+    "EV-DIAG-EXPORT-CANCEL-UI": { "kind": "test", "path": "tests/unit/restore-ui.test.ts", "selector": "offers one reachable cancel action while a support bundle export is in flight" },
+    "EV-DIAG-EXPORT-WORKER-SMOKE": { "kind": "verifier", "path": "scripts/verify/diagnostics-export-worker-smoke.mjs", "selector": "Built diagnostics export worker published one exact local bundle and blocked one unsafe bundle." },
     "EV-NO-TELEMETRY": { "kind": "verifier", "path": "scripts/verify/no-telemetry.mjs", "selector": "No-telemetry policy OK" },
     "EV-DIAG-PERSISTENCE-SAFETY": { "kind": "test", "path": "tests/unit/diagnostics-service.test.ts", "selector": "replaces opaque top-level diagnostic messages while preserving safe evidence" },
     "EV-DIAG-RETENTION": { "kind": "test", "path": "tests/unit/diagnostics-service.test.ts", "selector": "retains non-error events for 14 days and error events for 30 days at exact boundaries" },

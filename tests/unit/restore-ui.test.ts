@@ -200,6 +200,89 @@ describe("Restore identity UI", () => {
     dom.window.close();
   });
 
+  it("offers one reachable cancel action while a support bundle export is in flight", async () => {
+    const dom = createDom();
+    const harness = createHarness(readyOnboarding(), cloneOnlyPreview());
+    let rejectExport: ((reason: Error) => void) | undefined;
+    let exportRequest: { readonly previewId: string; readonly exportRequestId: string } | undefined;
+    const cancelRequests: Array<{ readonly exportRequestId: string }> = [];
+    const api = makePigeApi(harness, true) as Record<string, unknown>;
+    api.diagnostics = {
+      health: async () => null,
+      previewSupportBundle: async () => supportBundlePreview(),
+      exportSupportBundle: (request: typeof exportRequest) => {
+        exportRequest = request;
+        return new Promise((_resolve, reject) => { rejectExport = reject; });
+      },
+      cancelSupportBundleExport: async (request: { readonly exportRequestId: string }) => {
+        cancelRequests.push(request);
+        return { status: "cancel_requested" } as const;
+      }
+    };
+    const { container, root } = await mountApp(dom, api);
+
+    await click(dom, button(container, "Vault & Note Storage"));
+    await click(dom, button(container, "Preview Support Bundle"));
+    await waitFor(dom, () => container.textContent?.includes("Preview ready") ?? false);
+    await click(dom, button(container, "Export Support Bundle"));
+    await waitFor(dom, () => button(container, "Cancel Export") !== undefined);
+    expect(Array.from(container.querySelectorAll("button"))
+      .filter((candidate) => candidate.textContent === "Cancel Export")).toHaveLength(1);
+    expect(exportRequest?.previewId).toBe("support_20260715000000");
+    expect(exportRequest?.exportRequestId).toMatch(/^[a-f0-9-]{16,64}$/u);
+
+    await click(dom, button(container, "Cancel Export"));
+    expect(cancelRequests).toEqual([{ exportRequestId: exportRequest?.exportRequestId }]);
+    await act(async () => {
+      rejectExport?.(new Error("RAW_CANCEL_FAILURE /private/diagnostics"));
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.textContent?.includes("Export Support Bundle") ?? false);
+    expect(container.textContent).not.toContain("RAW_CANCEL_FAILURE");
+    expect(container.textContent).not.toContain("/private/diagnostics");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("cancels an in-flight support export when navigation unmounts its owning panel", async () => {
+    const dom = createDom();
+    const harness = createHarness(readyOnboarding(), cloneOnlyPreview());
+    let rejectExport: ((reason: Error) => void) | undefined;
+    let exportRequestId: string | undefined;
+    const cancelRequests: string[] = [];
+    const api = makePigeApi(harness, true) as Record<string, unknown>;
+    api.diagnostics = {
+      health: async () => null,
+      previewSupportBundle: async () => supportBundlePreview(),
+      exportSupportBundle: (request: { readonly exportRequestId: string }) => {
+        exportRequestId = request.exportRequestId;
+        return new Promise((_resolve, reject) => { rejectExport = reject; });
+      },
+      cancelSupportBundleExport: async (request: { readonly exportRequestId: string }) => {
+        cancelRequests.push(request.exportRequestId);
+        return { status: "cancel_requested" } as const;
+      }
+    };
+    const { container, root } = await mountApp(dom, api);
+
+    await click(dom, button(container, "Vault & Note Storage"));
+    await click(dom, button(container, "Preview Support Bundle"));
+    await waitFor(dom, () => container.textContent?.includes("Preview ready") ?? false);
+    await click(dom, button(container, "Export Support Bundle"));
+    await waitFor(dom, () => container.textContent?.includes("Cancel Export") ?? false);
+    await click(dom, button(container, "Home"));
+    await waitFor(dom, () => cancelRequests.length === 1);
+    expect(cancelRequests).toEqual([exportRequestId]);
+
+    await act(async () => {
+      rejectExport?.(new Error("synthetic cancellation"));
+      await settle(dom);
+    });
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("offers cancel only for active user Backups and no retry for terminal choose-path failures", async () => {
     const runningDom = createDom();
     const runningHarness = createHarness(readyOnboarding(), bothModesPreview());
@@ -317,6 +400,17 @@ function makePigeApi(harness: RestoreHarness, sidebarOpen = false): object {
     system: {
       toolchainHealth: async () => null
     },
+    maintenance: {
+      localDatabaseStatus: async () => null,
+      rebuildLocalDatabase: async () => ({ status: "queued" }),
+      resetLocalDatabase: async () => ({ resetAt: "2026-07-15T00:00:00.000Z", removedRoots: [], recreatedRoots: [] })
+    },
+    diagnostics: {
+      health: async () => null,
+      previewSupportBundle: async () => supportBundlePreview(),
+      exportSupportBundle: async () => ({ status: "canceled" }),
+      cancelSupportBundleExport: async () => ({ status: "not_found" })
+    },
     vault: {
       onboardingStatus: async () => harness.onboarding,
       recent: async () => [],
@@ -401,6 +495,18 @@ function makePigeApi(harness: RestoreHarness, sidebarOpen = false): object {
         activities: []
       })
     }
+  };
+}
+
+function supportBundlePreview() {
+  return {
+    previewId: "support_20260715000000",
+    generatedAt: "2026-07-15T00:00:00.000Z",
+    localOnly: true as const,
+    estimatedBytes: 1024,
+    includedCategories: [],
+    excludedCategories: [],
+    privacyWarnings: []
   };
 }
 

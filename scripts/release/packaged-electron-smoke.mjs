@@ -43,6 +43,7 @@ if (distributableBytes > 330_000_000) {
 const requiredEntries = [
   "/out/main/index.js",
   "/out/main/pi-agent-runtime-smoke.js",
+  "/out/main/workers/diagnostics-export-worker.js",
   "/out/main/workers/local-database-rebuild-worker.js",
   "/out/main/workers/office-parser-worker.js",
   "/out/main/workers/pdf-page-renderer-worker.js",
@@ -122,6 +123,9 @@ try {
     PIGE_BUILT_APP_ROOT: extractedRoot
   });
   runNodeSmoke("scripts/verify/local-database-rebuild-worker-smoke.mjs", {
+    PIGE_BUILT_APP_ROOT: extractedRoot
+  });
+  runNodeSmoke("scripts/verify/diagnostics-export-worker-smoke.mjs", {
     PIGE_BUILT_APP_ROOT: extractedRoot
   });
   if (target.nativeSmokeScript) {

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-15T12:00:00Z",
+  "reviewedAt": "2026-07-14T21:44:52Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -31,12 +31,12 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "d30de4f8ee982fdd984d5dccab40ce753e98ad1c7559f46630682eb61738ab87"
+    "reviewedSha256": "d75e186d9ea8a0da24276f508387adab453ef41c9e3dbb511d5a025d3c3a8009"
   },
   "reviewers": [
     {
-      "reviewerId": "home-model-status-owner-ui-design-review",
-      "task": "Post-Backup Home and Models status ownership exact-hash review",
+      "reviewerId": "diagnostics-support-bundle-independent-review",
+      "task": "Diagnostics support-bundle worker and cancellation exact-candidate review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -44,81 +44,81 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "UI Design independently reproduced exact e4044cb2 patch and efc86cef content hashes, eleven-path/index/diff identity, six-locale and compact/expanded behavior, accessibility, and Backup/Restore non-regression. It returned ACCEPTED/CLEAR without edits."
+      "independence": "The independent reviewer examined the frozen diagnostics worker, cancellation, confinement, redaction and exact-output evidence and returned CLEAR before Product Planning bound the current-only governance surfaces."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "home-model-status-owner-ui-design-review",
+      "reviewerId": "diagnostics-support-bundle-independent-review",
       "blockerCount": 0,
-      "summary": "Existing Home, onboarding, Models and Pi owner sections locate one status/error owner without a new page, prototype, schema or setting."
+      "summary": "Existing Diagnostics, API, Quality and B1.14 acceptance owners locate preview, export, cancellation and residual boundaries without a new document or product surface."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "home-model-status-owner-ui-design-review",
+      "reviewerId": "diagnostics-support-bundle-independent-review",
       "blockerCount": 0,
-      "summary": "Owners agree on no-source conversation ownership, source-row retention, filter-before-cap, durable Home reread, sequenced Models refresh, body-free errors and no Vault leakage."
+      "summary": "Owners agree on a sender-bound request, 2 MiB exact output, 64 MiB/30-second worker, main-held temporary identity, safe cancellation races and local-only redacted data."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "home-model-status-owner-ui-design-review",
+      "reviewerId": "diagnostics-support-bundle-independent-review",
       "blockerCount": 0,
-      "summary": "Three exact selectors update only PIGE-UI-003, PIGE-PI-004 and existing partial E1.02/E1.13/E3.01 projections; semantic lock v3 has 1,192 claims and all statuses remain unchanged."
+      "summary": "Five exact selectors update only existing partial PIGE-DIAG-002 and E1.07 projections; semantic lock v3 has 1,197 claims and every Requirement, Exit and phase status remains unchanged."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.7,
-      "reviewerId": "home-model-status-owner-ui-design-review",
+      "reviewerId": "diagnostics-support-bundle-independent-review",
       "blockerCount": 0,
-      "summary": "Development gets one executable contract for missing-model ownership, filtered Recent Work, returning-Home truth, Models-local recovery and stale-result suppression."
+      "summary": "Development gets one executable contract for bounded worker publication, private descriptor and destination fencing, unsafe-content rejection and renderer-owned cancellation."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "home-model-status-owner-ui-design-review",
+      "reviewerId": "diagnostics-support-bundle-independent-review",
       "blockerCount": 0,
-      "summary": "No Markdown file or decision is added; replacement wording and JSON compression keep all leanness gates green without raising any budget."
+      "summary": "No Markdown file or decision is added; owner replacement text and semantic-neutral manifest compression keep every leanness budget unchanged and green."
     }
   ],
   "verification": [
     {
       "command": "npm run verify",
       "status": "passed",
-      "evidence": "The exact eleven-path Development plus six-path governed candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all quality dimensions."
+      "evidence": "The exact 24-path Development plus governed candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all quality dimensions."
     },
     {
       "command": "Exact candidate test, package and distribution evidence",
       "status": "passed",
-      "evidence": "Focused 6/111, full 104/1,191, typecheck/build and unified Agent pass. The 160,602,371-byte macOS ZIP passes packaged and independent distribution smoke with strict ad-hoc integrity."
+      "evidence": "Focused 5/66, full 106/1,216, typecheck/build and macOS package/distribution smokes pass. The exact distributable and 1,226-entry manifest preserve packaged renderer, preload, Pi, workers and strict ad-hoc integrity."
     },
     {
       "command": "npm run verify:dependencies && npm run verify:traceability && npm run verify:contracts",
       "status": "passed",
-      "evidence": "The candidate retains 57 dependency records with zero waivers; CON-001 through CON-004 and semantic lock v3/1,192 pass with no Requirement, Exit or phase status drift."
+      "evidence": "The candidate retains 57 dependency records with zero waivers; CON-001 through CON-004 and semantic lock v3/1,197 pass with no Requirement, Exit or phase status drift."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 pass with 56 Markdown files, 3,466 entry words, 4,340 trace lines, 249,414 trace bytes and 1,212,942 governed Markdown bytes."
+      "evidence": "LEN-001 through LEN-005 pass with 56 Markdown files, 3,466 entry words, 4,183 trace lines, 249,924 trace bytes and 1,212,959 governed Markdown bytes."
     }
   ],
   "coordination": {
-    "taskId": "home-model-status-owner-20260715",
-    "taskTitle": "Post-Backup Home and Models status ownership",
+    "taskId": "diagnostics-support-bundle-worker-20260715",
+    "taskTitle": "Diagnostics support-bundle worker and cancellation",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "This candidate gives Home and Models one truthful status/error owner while preserving Backup/Restore, provider protocol, IPC, durable data, dependencies and all statuses.",
-    "acknowledgement": "Development froze exact eleven-path bytes and evidence. UI Design returned exact-hash ACCEPTED/CLEAR. Product Planning synchronized three existing owners, acceptance, semantic lock and this current-only recipe without changing Development files."
+    "compatibility": "This candidate moves local support-bundle publication into a bounded cancelable worker while preserving redaction, local-only export, durable vault truth, dependencies and all statuses.",
+    "acknowledgement": "Development froze exact 24-path bytes and evidence; the independent reviewer returned CLEAR. Product Planning synchronized existing owners, acceptance, semantic lock and this current-only recipe without changing Development files."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Broader Provider catalog, tray, general polish and remaining Production Ready flows stay open.",
-    "Signed installed-platform and wider manual locale/accessibility matrices remain open.",
-    "Backup/Restore, provider protocol, public IPC, durable data, permissions and dependencies are unchanged."
+    "Optional reviewed bundle content, progress and restart-resumable export semantics remain open.",
+    "Broader platform/path, signed installed-platform and manual cancellation matrices remain open.",
+    "The export is process-local rather than a durable Job; vault data, Backup/Restore, providers, permissions and dependencies are unchanged."
   ]
 }

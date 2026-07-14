@@ -3129,12 +3129,22 @@ interface VaultSettingsPanelProps {
 function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
   const [backupNotice, setBackupNotice] = useState<string | null>(null);
   const [backupBusy, setBackupBusy] = useState(false);
+  const [supportBundleExportRequestId, setSupportBundleExportRequestId] = useState<string | null>(null);
+  const supportBundleExportRequestRef = useRef<string | null>(null);
+  const supportBundleCancelRequestRef = useRef<string | null>(null);
   const activeBackupJob = props.backupJobs[0];
   const restore = useRestoreFlow(async () => {
     setBackupNotice(props.t("backup.restored"));
     await props.onRefresh();
     await props.onRefreshDiagnostics();
   }, () => props.onError(null));
+
+  useEffect(() => () => {
+    const exportRequestId = supportBundleExportRequestRef.current;
+    if (!exportRequestId) return;
+    supportBundleCancelRequestRef.current = exportRequestId;
+    void window.pige.diagnostics.cancelSupportBundleExport({ exportRequestId }).catch(() => undefined);
+  }, []);
 
   const runBackupAction = async (action: () => Promise<void>): Promise<void> => {
     props.onError(null);
@@ -3225,18 +3235,44 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
   };
 
   const exportSupportBundle = async (): Promise<void> => {
-    if (!props.supportBundlePreview) return;
+    if (!props.supportBundlePreview || supportBundleExportRequestRef.current) return;
+    const exportRequestId = crypto.randomUUID();
+    supportBundleExportRequestRef.current = exportRequestId;
+    setSupportBundleExportRequestId(exportRequestId);
     props.onError(null);
     try {
       const result = await window.pige.diagnostics.exportSupportBundle({
-        previewId: props.supportBundlePreview.previewId
+        previewId: props.supportBundlePreview.previewId,
+        exportRequestId
       });
       if (result.status === "exported") {
         props.onSupportBundlePreviewChange(null);
         await props.onRefreshDiagnostics();
       }
-    } catch (caught) {
-      props.onError(caught instanceof Error ? caught.message : "Something went wrong.");
+    } catch {
+      if (supportBundleCancelRequestRef.current !== exportRequestId) {
+        props.onError(props.t("support.exportFailed"));
+      }
+    } finally {
+      if (supportBundleExportRequestRef.current === exportRequestId) {
+        supportBundleExportRequestRef.current = null;
+        setSupportBundleExportRequestId(null);
+      }
+      if (supportBundleCancelRequestRef.current === exportRequestId) {
+        supportBundleCancelRequestRef.current = null;
+      }
+    }
+  };
+
+  const cancelSupportBundleExport = async (): Promise<void> => {
+    const exportRequestId = supportBundleExportRequestRef.current;
+    if (!exportRequestId || supportBundleCancelRequestRef.current === exportRequestId) return;
+    supportBundleCancelRequestRef.current = exportRequestId;
+    try {
+      await window.pige.diagnostics.cancelSupportBundleExport({ exportRequestId });
+    } catch {
+      supportBundleCancelRequestRef.current = null;
+      props.onError(props.t("support.exportFailed"));
     }
   };
 
@@ -3364,7 +3400,7 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
         ) : null}
       </section>
 
-      <section className="settings-group">
+      <section className="settings-group" aria-busy={supportBundleExportRequestId ? "true" : undefined}>
         <h2>{props.t("maintenance.title")}</h2>
         <p className="muted">
           {props.t("maintenance.resetCopy")}
@@ -3379,17 +3415,28 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
           <button type="button" className="secondary" onClick={() => void props.onRefreshDiagnostics()}>
             {props.t("maintenance.checkDiagnostics")}
           </button>
-          <button type="button" className="secondary" onClick={() => void previewSupportBundle()}>
-            {props.t("maintenance.previewSupport")}
-          </button>
           <button
             type="button"
             className="secondary"
-            disabled={!props.supportBundlePreview}
-            onClick={() => void exportSupportBundle()}
+            disabled={Boolean(supportBundleExportRequestId)}
+            onClick={() => void previewSupportBundle()}
           >
-            {props.t("maintenance.exportSupport")}
+            {props.t("maintenance.previewSupport")}
           </button>
+          {supportBundleExportRequestId ? (
+            <button type="button" className="secondary" onClick={() => void cancelSupportBundleExport()}>
+              {props.t("maintenance.cancelSupportExport")}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="secondary"
+              disabled={!props.supportBundlePreview}
+              onClick={() => void exportSupportBundle()}
+            >
+              {props.t("maintenance.exportSupport")}
+            </button>
+          )}
         </div>
         {props.diagnosticsHealth ? (
           <p className="muted">

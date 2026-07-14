@@ -12,6 +12,8 @@ import type {
   AppHealth,
   BackupCreateResult,
   CreateVaultRequest,
+  CancelSupportBundleExportRequest,
+  CancelSupportBundleExportResult,
   ExportSupportBundleRequest,
   HomeAgentAskRequest,
   JobActionRequest,
@@ -156,6 +158,10 @@ let datasetQueryService: DatasetQueryService | undefined;
 let datasetService: DatasetService | undefined;
 let ocrService: OcrService | undefined;
 let latestSupportBundlePreview: SupportBundlePreview | undefined;
+const activeSupportBundleExports = new Map<string, {
+  readonly senderId: number;
+  readonly controller: AbortController;
+}>();
 const restorePreviewRegistry = new RestorePreviewRegistry();
 const restorePreviewTrackedSenders = new Set<number>();
 const PACKAGED_RUNTIME_SMOKE_ARGUMENT = "--pige-packaged-runtime-smoke-report=";
@@ -1294,7 +1300,11 @@ ipcMain.handle("diagnostics.previewSupportBundle", () => {
   return latestSupportBundlePreview;
 });
 ipcMain.handle("diagnostics.exportSupportBundle", async (event, request: ExportSupportBundleRequest) => {
-  if (!latestSupportBundlePreview || latestSupportBundlePreview.previewId !== request.previewId) {
+  if (!request || !isDiagnosticsExportRequestId(request.exportRequestId)) {
+    throw new Error("Support bundle export request is invalid.");
+  }
+  const preview = latestSupportBundlePreview;
+  if (!preview || preview.previewId !== request.previewId) {
     throw new Error("Create a current support bundle preview before exporting.");
   }
   const parentWindow = BrowserWindow.fromWebContents(event.sender);
@@ -1307,8 +1317,43 @@ ipcMain.handle("diagnostics.exportSupportBundle", async (event, request: ExportS
   if (selection.canceled || !selection.filePath) {
     return { status: "canceled" };
   }
-  return getDiagnosticsService().exportSupportBundle(selection.filePath, latestSupportBundlePreview);
+  if (activeSupportBundleExports.has(request.exportRequestId) ||
+    [...activeSupportBundleExports.values()].some((active) => active.senderId === event.sender.id)) {
+    throw new Error("Support bundle export request is already active.");
+  }
+  const controller = new AbortController();
+  const abortOnSenderDestroyed = (): void => controller.abort();
+  event.sender.once("destroyed", abortOnSenderDestroyed);
+  activeSupportBundleExports.set(request.exportRequestId, {
+    senderId: event.sender.id,
+    controller
+  });
+  try {
+    return await getDiagnosticsService().exportSupportBundle(
+      selection.filePath,
+      preview,
+      { signal: controller.signal }
+    );
+  } finally {
+    event.sender.removeListener("destroyed", abortOnSenderDestroyed);
+    const active = activeSupportBundleExports.get(request.exportRequestId);
+    if (active?.controller === controller) activeSupportBundleExports.delete(request.exportRequestId);
+  }
 });
+ipcMain.handle(
+  "diagnostics.cancelSupportBundleExport",
+  (event, request: CancelSupportBundleExportRequest): CancelSupportBundleExportResult => {
+    if (!request || !isDiagnosticsExportRequestId(request.exportRequestId)) return { status: "not_found" };
+    const active = activeSupportBundleExports.get(request.exportRequestId);
+    if (!active || active.senderId !== event.sender.id) return { status: "not_found" };
+    active.controller.abort();
+    return { status: "cancel_requested" };
+  }
+);
+
+function isDiagnosticsExportRequestId(value: unknown): value is string {
+  return typeof value === "string" && /^[a-f0-9-]{16,64}$/u.test(value);
+}
 ipcMain.handle("models.summary", () => getModelProviderRegistry().summary());
 ipcMain.handle("models.addPresetProvider", async (event, request: AddPresetProviderRequest) => {
   const parsedRequest = AddPresetProviderRequestSchema.parse(request);
