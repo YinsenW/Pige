@@ -392,9 +392,9 @@
       "source": "UI_PROTOTYPE 16.1, 16.2, 18, 19",
       "prototype": "partial",
       "production": "partial",
-      "prototype_evidence": ["pige-ui-element-map.json", "pige-ui-visual-review-ledger.json structural scan of 191 controls", "Library and selection arrow-key navigation", "Note Agent and sidebar focus-return checks", "prefers-reduced-motion CSS"],
+      "prototype_evidence": ["pige-ui-element-map.json", "pige-ui-visual-review-ledger.json structural scan of 191 controls", "52-route real Tab-order walkthrough covering 644 focus stops", "400 and 760 px Note Agent focus containment and focus return", "Library and selection arrow-key navigation", "prefers-reduced-motion CSS"],
       "production_evidence": ["six locale catalogs", "focused permission/restore semantics"],
-      "gap": "Names, structural ARIA, contrast, reduced motion, composite arrow-key behavior, and tested focus return pass. Full Tab order, narrow-drawer focus containment, screen-reader announcements, six-locale copy, and assembled platform text rendering remain open.",
+      "gap": "Names, structural ARIA, contrast, reduced motion, composite arrow-key behavior, full Tab order, compact-drawer containment, and tested focus return pass. Screen-reader announcements, six-locale copy, and assembled platform text rendering remain open.",
       "priority": "P0"
     },
     {

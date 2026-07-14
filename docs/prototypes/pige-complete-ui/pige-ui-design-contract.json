@@ -176,13 +176,18 @@
     "responsive_render_checks": 232,
     "prototype_baseline_screenshots": 7,
     "accessible_name_routes_checked": 52,
+    "tab_order_routes_checked": 52,
+    "tab_order_focus_stops_checked": 644,
+    "tab_order_failures": 0,
+    "narrow_note_agent_focus_containment_viewports_px": [400, 760],
+    "settings_focus_containment_viewports_px": [400, 1280],
     "horizontal_overflow_failures": 0,
     "visible_control_clipping_failures": 0,
     "failed_routes": [],
     "console_errors": [],
     "known_visual_discrepancies": [
       "Automated raster overlay remains open beyond the measured shared primitives and seven Pige-only canonical baselines.",
-      "Full Tab-order, narrow-drawer focus containment, screen-reader, and six-locale text-expansion review remains open."
+      "Screen-reader announcement, six-locale text expansion, and assembled platform text-rendering review remain open."
     ]
   }
 }

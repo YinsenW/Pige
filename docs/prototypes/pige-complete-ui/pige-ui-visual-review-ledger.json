@@ -52,6 +52,9 @@
   "accessibility_evidence": {
     "routes_with_accessible_name_scan": 52,
     "interactive_elements_with_structural_scan": 191,
+    "routes_with_real_tab_order_walkthrough": 52,
+    "real_tab_focus_stops_checked": 644,
+    "real_tab_order_failures": 0,
     "unnamed_visible_controls": 0,
     "duplicate_ids": 0,
     "positive_tabindex": 0,
@@ -67,14 +70,16 @@
     "keyboard_patterns_verified": [
       "Library tabs: ArrowLeft, ArrowRight, Home, End update focus, selection, controls, and panel label",
       "Selection toolbar: ArrowLeft, ArrowRight, Home, End move focus without triggering an action",
-      "Intermediate Library drawer: Escape closes the drawer and restores focus to the sidebar toggle"
+      "Intermediate Library drawer: Escape closes the drawer and restores focus to the sidebar toggle",
+      "Independent Settings surface: Tab and Shift+Tab remain inside the surface and wrap at both ends",
+      "Compact Note Agent at 400 and 760 px: Tab and Shift+Tab remain inside the open drawer"
     ],
     "focus_return_verified": [
       "Closing Note Agent returns focus to the reader toolbar toggle",
-      "Opening Note Agent moves focus to the note composer after the panel transition"
+      "Opening Note Agent moves focus to the note composer after the panel transition",
+      "Escape closes the compact Note Agent and returns focus to the reader toolbar toggle"
     ],
     "remaining": [
-      "Complete real Tab-order walkthrough across every route and focus-containment review for the narrow Note Agent drawer.",
       "Complete screen-reader announcement, six-locale expansion, and platform text-rendering review."
     ]
   },
@@ -145,7 +150,7 @@
       },
       "remaining": [
         "Lock sidebar row rhythm, icon optical weight, and titlebar seam with an overlay.",
-        "Intermediate-width drawer Escape and focus return pass; verify focus containment below 680 px."
+        "Keep the verified 400 and 760 px drawer focus containment in regression."
       ]
     },
     {
@@ -221,8 +226,8 @@
     "manual_visual_passed": 6,
     "raster_overlay_locked": 0,
     "narrow_or_small_viewport_locked": 6,
-    "open_p0": ["Raster overlay/difference evidence", "Complete real keyboard focus-order and screen-reader announcement evidence"],
-    "open_p1": ["Complete keyboard/screen-reader and six-locale text-expansion audit across every route"],
+    "open_p0": ["Raster overlay/difference evidence", "Complete screen-reader announcement evidence"],
+    "open_p1": ["Complete screen-reader, six-locale text-expansion, and assembled platform rendering audit"],
     "decision": "The prototype is broad and interactive, but the pixel-fidelity objective remains open."
   },
   "responsive_evidence": {

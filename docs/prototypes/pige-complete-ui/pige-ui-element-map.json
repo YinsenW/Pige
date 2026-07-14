@@ -576,7 +576,7 @@
       "role": "button",
       "intent": "Reveal or hide current-note Agent context independently from the Library rail.",
       "states": ["collapsed", "expanded", "narrow-drawer", "focus-visible"],
-      "prototype_action": "Changes only the right rail, preserves reader measure, and restores focus to the toolbar when closed.",
+      "prototype_action": "Changes only the right rail, preserves reader measure, traps Tab and Shift+Tab inside compact drawers, moves focus to the composer when opened, and restores focus to the toolbar when closed or dismissed with Escape.",
       "production_bridge": "Renderer pane state keyed to the reading workspace",
       "owner": "Renderer + Window Service"
     }

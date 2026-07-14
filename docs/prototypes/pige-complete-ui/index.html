@@ -3640,8 +3640,59 @@
       taskToggle.setAttribute('aria-expanded', 'false');
     }
 
+    function getTabStops(container) {
+      const candidates = Array.from(container.querySelectorAll('button, input, select, textarea, a[href], [tabindex]'));
+      const visible = element => {
+        const style = window.getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return style.display !== 'none'
+          && style.visibility !== 'hidden'
+          && style.pointerEvents !== 'none'
+          && !element.closest('[hidden]')
+          && rect.width > 0
+          && rect.height > 0;
+      };
+      const enabled = candidates.filter(element => {
+        if (!visible(element) || element.disabled || element.getAttribute('aria-disabled') === 'true') return false;
+        const tabIndex = element.getAttribute('tabindex');
+        return tabIndex === null || Number(tabIndex) >= 0;
+      });
+      return enabled.filter(element => {
+        if (!(element instanceof HTMLInputElement) || element.type !== 'radio' || !element.name) return true;
+        const group = enabled.filter(candidate => candidate instanceof HTMLInputElement
+          && candidate.type === 'radio'
+          && candidate.name === element.name
+          && candidate.form === element.form);
+        return element === (group.find(candidate => candidate.checked) || group[0]);
+      });
+    }
+
     document.addEventListener('keydown', event => {
-      if (event.key === 'Escape' && document.body.classList.contains('settings-active')) closeSettingsWindow();
+      const settingsActive = document.body.classList.contains('settings-active');
+      const compactNoteAgentOpen = mainLayout.classList.contains('note-open')
+        && mainLayout.classList.contains('agent-open')
+        && window.matchMedia('(max-width: 1439px)').matches;
+
+      if (event.key === 'Tab' && (settingsActive || compactNoteAgentOpen)) {
+        const focusRoot = settingsActive ? settingsWindow : document.querySelector('.note-agent');
+        const tabStops = getTabStops(focusRoot);
+        const first = tabStops[0];
+        const last = tabStops[tabStops.length - 1];
+        const activeInside = focusRoot.contains(document.activeElement);
+        if (!activeInside && first) {
+          event.preventDefault();
+          (event.shiftKey ? last : first).focus({ preventScroll: true });
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus({ preventScroll: true });
+        } else if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus({ preventScroll: true });
+        }
+      }
+
+      if (event.key === 'Escape' && settingsActive) closeSettingsWindow();
+      else if (event.key === 'Escape' && compactNoteAgentOpen) setNoteAgent(false);
       else if (event.key === 'Escape' && mainLayout.classList.contains('note-open') && mainLayout.classList.contains('sidebar-open') && window.matchMedia('(max-width: 1439px)').matches) setSidebar(false);
     });
 
