@@ -11,6 +11,13 @@ import {
   packageabilityPaths,
   resolvePackageabilityPlatform
 } from "./packageability-platforms.mjs";
+import {
+  bundleManifestDigest,
+  classifyMacGatekeeperAssessment,
+  collectBundleManifest,
+  compareBundleManifests,
+  parseMacCodeSignatureDescription
+} from "./packageability-security.mjs";
 
 const root = process.cwd();
 const options = parseOptions(process.argv.slice(2));
@@ -48,39 +55,67 @@ const requiredEntries = [
   "/package.json"
 ];
 
-for (const requiredPath of [
-  executablePath,
-  asarPath,
-  path.join(resourcesPath, "LICENSE"),
-  path.join(resourcesPath, "NOTICE"),
-  path.join(resourcesPath, "licenses/pi-MIT.txt"),
-  path.join(resourcesPath, "toolchain-manifest/toolchain.manifest.json"),
-  path.join(resourcesPath, "release/package-resource-manifest.json"),
-  path.join(resourcesPath, "release/legal/third-party-attribution.json"),
-  path.join(resourcesPath, "release/sbom/pige.cdx.json"),
-  ...target.requiredResourceFiles.map((relativePath) => path.join(resourcesPath, relativePath))
-]) {
-  if (!fs.statSync(requiredPath).isFile()) throw new Error(`Missing packaged file: ${path.basename(requiredPath)}`);
-}
-
-const entries = new Set(listPackage(asarPath).map(canonicalizeAsarEntryPath));
-for (const entry of requiredEntries) {
-  if (!entries.has(entry)) throw new Error(`Missing packaged ASAR entry: ${entry}`);
-}
-
-const packageResources = verifyPackageResources(path.join(resourcesPath, "release"), target);
-
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "pige-packaged-smoke-"));
 try {
+  const distributedApplication = target.platform === "macos"
+    ? extractMacDistribution(distributablePath, tempRoot, target)
+    : { appPath, executablePath, resourcesPath, asarPath };
+  const stagingManifest = target.platform === "macos" && !options.distributionOnly
+    ? collectBundleManifest(appPath)
+    : null;
+  const distributedManifest = target.platform === "macos"
+    ? collectBundleManifest(distributedApplication.appPath)
+    : null;
+  if (target.platform === "macos") {
+    if (!distributedManifest) throw new Error("Distributed macOS application manifest is unavailable.");
+    if (options.distributionOnly) {
+      verifyIndependentDistributionBinding({
+        expectedReportPath: process.env.PIGE_EXPECTED_PACKAGEABILITY_REPORT,
+        target,
+        distributablePath,
+        distributedManifest
+      });
+    } else if (!stagingManifest || !compareBundleManifests(stagingManifest, distributedManifest)) {
+      throw new Error("Distributed macOS application does not match the electron-builder staging Bundle.");
+    }
+  }
+  verifyPackagedFiles(distributedApplication, target, requiredEntries);
+  const packageResources = verifyPackageResources(
+    path.join(distributedApplication.resourcesPath, "release"),
+    target
+  );
   const extractedRoot = path.join(tempRoot, "app");
-  extractAll(asarPath, extractedRoot);
-  const unpackedRoot = `${asarPath}.unpacked`;
+  extractAll(distributedApplication.asarPath, extractedRoot);
+  const unpackedRoot = `${distributedApplication.asarPath}.unpacked`;
   if (fs.existsSync(unpackedRoot)) fs.cpSync(unpackedRoot, extractedRoot, { recursive: true, force: true });
 
-  const packagedRuntimeResult = runPackagedPiSmoke({ executablePath, tempRoot, target });
+  const macSigning = target.platform === "macos"
+    ? verifyMacDistributionSignature(distributedApplication.appPath)
+    : null;
+  const beforeRuntimeManifest = target.platform === "macos"
+    ? collectBundleManifest(distributedApplication.appPath)
+    : null;
+  const packagedRuntimeResult = runPackagedPiSmoke({
+    executablePath: distributedApplication.executablePath,
+    tempRoot,
+    target
+  });
+  const afterRuntimeManifest = target.platform === "macos"
+    ? collectBundleManifest(distributedApplication.appPath)
+    : null;
+  if (
+    target.platform === "macos" &&
+    (!beforeRuntimeManifest || !afterRuntimeManifest ||
+      !compareBundleManifests(beforeRuntimeManifest, afterRuntimeManifest))
+  ) {
+    throw new Error("Packaged runtime smoke modified the distributed macOS application Bundle.");
+  }
+  const quarantineIntegrity = target.platform === "macos"
+    ? verifyQuarantineSignatureIntegrity(distributedApplication.appPath, tempRoot, distributedManifest)
+    : null;
   const applicationIdentity = readApplicationIdentity({
     target,
-    appPath,
+    appPath: distributedApplication.appPath,
     runtimeIdentity: packagedRuntimeResult.runtimeIdentity
   });
   runNodeSmoke("scripts/verify/parser-worker-smoke.mjs", {
@@ -91,7 +126,7 @@ try {
   });
   if (target.nativeSmokeScript) {
     runNodeSmoke(target.nativeSmokeScript, {
-      PIGE_PACKAGED_RESOURCES_PATH: resourcesPath,
+      PIGE_PACKAGED_RESOURCES_PATH: distributedApplication.resourcesPath,
       PIGE_SMOKE_ARTIFACT_ROOT: path.join(tempRoot, "ocr-artifacts")
     });
   }
@@ -104,14 +139,16 @@ try {
     arch: target.arch,
     packageKind: target.packageKind,
     applicationIdentity,
-    appRelativePath: path.relative(root, appPath).replaceAll(path.sep, "/"),
+    appRelativePath: options.distributionOnly
+      ? "Pige.app"
+      : path.relative(root, appPath).replaceAll(path.sep, "/"),
     distributableRelativePath: path.relative(root, distributablePath).replaceAll(path.sep, "/"),
     distributableBytes,
     distributableSha256: checksumFile(distributablePath),
     distributableCeilingBytes: 330_000_000,
-    appBytes: directorySize(appPath),
-    asarBytes: fs.statSync(asarPath).size,
-    asarSha256: checksumFile(asarPath),
+    appBytes: directorySize(distributedApplication.appPath),
+    asarBytes: fs.statSync(distributedApplication.asarPath).size,
+    asarSha256: checksumFile(distributedApplication.asarPath),
     requiredAsarEntries: requiredEntries,
     checks: {
       mainPreloadRenderer,
@@ -124,7 +161,26 @@ try {
       toolchainManifest
     },
     signing: target.platform === "macos"
-      ? { status: "unsigned", notarized: false }
+      ? {
+          status: "ad_hoc",
+          sealStrategy: "electron_builder_final_sign_inside_out",
+          trustedIdentity: false,
+          notarized: false,
+          strictDeepVerification: macSigning.strictDeepVerification,
+          gatekeeperExpectedUntrustedRejection: macSigning.gatekeeperExpectedUntrustedRejection,
+          noTeamIdentifier: macSigning.noTeamIdentifier,
+          noDeveloperId: macSigning.noDeveloperId,
+          noEntitlements: macSigning.noEntitlements,
+          nestedHelperAdHoc: macSigning.nestedHelperAdHoc,
+          hardenedRuntime: false,
+          distributionManifestMatch: true,
+          distributionEntryCount: distributedManifest.length,
+          distributionManifestSha256: bundleManifestDigest(distributedManifest),
+          runtimeBundleUnchanged: true,
+          postSealBundleWrites: 0,
+          quarantineSignatureIntegrity: quarantineIntegrity.signatureIntegrity,
+          quarantineGatekeeperExpectedUntrustedRejection: quarantineIntegrity.gatekeeperExpectedUntrustedRejection
+        }
       : { status: "unsigned", codeSigned: false }
   };
   fs.mkdirSync(path.dirname(reportPath), { recursive: true });
@@ -139,6 +195,206 @@ try {
   );
 } finally {
   fs.rmSync(tempRoot, { recursive: true, force: true });
+}
+
+function verifyIndependentDistributionBinding({
+  expectedReportPath,
+  target,
+  distributablePath,
+  distributedManifest
+}) {
+  if (!expectedReportPath || !fs.existsSync(expectedReportPath)) {
+    throw new Error("Independent macOS distribution verification requires the build report.");
+  }
+  const expectedReport = JSON.parse(fs.readFileSync(expectedReportPath, "utf8"));
+  const expectedSigning = expectedReport?.signing;
+  if (
+    expectedReport?.schemaVersion !== 1 ||
+    expectedReport?.platform !== target.platform ||
+    expectedReport?.arch !== target.arch ||
+    expectedReport?.packageKind !== target.packageKind ||
+    expectedReport?.distributableSha256 !== checksumFile(distributablePath) ||
+    expectedSigning?.status !== "ad_hoc" ||
+    expectedSigning?.sealStrategy !== "electron_builder_final_sign_inside_out" ||
+    expectedSigning?.strictDeepVerification !== true ||
+    expectedSigning?.gatekeeperExpectedUntrustedRejection !== true ||
+    expectedSigning?.noTeamIdentifier !== true ||
+    expectedSigning?.noDeveloperId !== true ||
+    expectedSigning?.noEntitlements !== true ||
+    expectedSigning?.nestedHelperAdHoc !== true ||
+    expectedSigning?.hardenedRuntime !== false ||
+    expectedSigning?.postSealBundleWrites !== 0 ||
+    expectedSigning?.distributionManifestMatch !== true ||
+    expectedSigning?.distributionEntryCount !== distributedManifest.length ||
+    expectedSigning?.distributionManifestSha256 !== bundleManifestDigest(distributedManifest)
+  ) {
+    throw new Error("Independent macOS distribution does not match its body-free build evidence.");
+  }
+}
+
+function extractMacDistribution(distributablePath, tempRoot, target) {
+  const distributionRoot = path.join(tempRoot, "distributed");
+  fs.mkdirSync(distributionRoot, { recursive: true });
+  runMacCommand("/usr/bin/ditto", ["-x", "-k", distributablePath, distributionRoot], "distribution_extract");
+  const distributedAppPath = path.join(distributionRoot, "Pige.app");
+  if (!fs.statSync(distributedAppPath).isDirectory()) {
+    throw new Error("Electron-builder ZIP does not contain the expected application Bundle.");
+  }
+  const distributedResourcesPath = path.join(distributedAppPath, target.resourcesRelativePath);
+  return {
+    appPath: distributedAppPath,
+    executablePath: path.join(distributedAppPath, target.executableRelativePath),
+    resourcesPath: distributedResourcesPath,
+    asarPath: path.join(distributedResourcesPath, "app.asar")
+  };
+}
+
+function verifyPackagedFiles(application, target, requiredEntries) {
+  for (const requiredPath of [
+    application.executablePath,
+    application.asarPath,
+    path.join(application.resourcesPath, "LICENSE"),
+    path.join(application.resourcesPath, "NOTICE"),
+    path.join(application.resourcesPath, "licenses/pi-MIT.txt"),
+    path.join(application.resourcesPath, "toolchain-manifest/toolchain.manifest.json"),
+    path.join(application.resourcesPath, "release/package-resource-manifest.json"),
+    path.join(application.resourcesPath, "release/legal/third-party-attribution.json"),
+    path.join(application.resourcesPath, "release/sbom/pige.cdx.json"),
+    ...target.requiredResourceFiles.map((relativePath) => path.join(application.resourcesPath, relativePath))
+  ]) {
+    if (!fs.statSync(requiredPath).isFile()) throw new Error(`Missing packaged file: ${path.basename(requiredPath)}`);
+  }
+  const entries = new Set(listPackage(application.asarPath).map(canonicalizeAsarEntryPath));
+  for (const entry of requiredEntries) {
+    if (!entries.has(entry)) throw new Error(`Missing packaged ASAR entry: ${entry}`);
+  }
+}
+
+function verifyMacDistributionSignature(distributedAppPath) {
+  runMacCommand(
+    "/usr/bin/codesign",
+    ["--verify", "--deep", "--strict", "--verbose=2", distributedAppPath],
+    "codesign_verify"
+  );
+  const description = runMacCommand(
+    "/usr/bin/codesign",
+    ["--display", "--verbose=4", distributedAppPath],
+    "codesign_describe"
+  );
+  const signature = parseMacCodeSignatureDescription(description);
+  if (!signature.adHoc || signature.teamIdentifierPresent || signature.developerIdPresent || signature.hardenedRuntime) {
+    throw new Error("Distributed macOS application does not have the required bounded ad-hoc identity.");
+  }
+  if (hasCodeSignEntitlements(distributedAppPath)) {
+    throw new Error("Distributed macOS application unexpectedly contains signing entitlements.");
+  }
+  const nestedHelperPath = path.join(
+    distributedAppPath,
+    "Contents/Resources/native/macos/arm64/pige-vision-ocr"
+  );
+  runMacCommand(
+    "/usr/bin/codesign",
+    ["--verify", "--strict", "--verbose=2", nestedHelperPath],
+    "nested_helper_codesign_verify"
+  );
+  const nestedHelperSignature = parseMacCodeSignatureDescription(runMacCommand(
+    "/usr/bin/codesign",
+    ["--display", "--verbose=4", nestedHelperPath],
+    "nested_helper_codesign_describe"
+  ));
+  if (
+    !nestedHelperSignature.adHoc ||
+    nestedHelperSignature.teamIdentifierPresent ||
+    nestedHelperSignature.developerIdPresent ||
+    nestedHelperSignature.hardenedRuntime
+  ) {
+    throw new Error("Packaged macOS Vision helper does not share the bounded ad-hoc distribution identity.");
+  }
+  if (hasCodeSignEntitlements(nestedHelperPath)) {
+    throw new Error("Packaged macOS Vision helper unexpectedly contains signing entitlements.");
+  }
+  const assessment = spawnSync(
+    "/usr/sbin/spctl",
+    ["--assess", "--type", "execute", "--verbose=4", distributedAppPath],
+    macCommandOptions()
+  );
+  const classification = classifyMacGatekeeperAssessment(
+    assessment,
+    `${assessment.stdout ?? ""}\n${assessment.stderr ?? ""}`
+  );
+  if (!classification.expectedUntrustedRejection) {
+    throw new Error("Gatekeeper did not report the expected untrusted ad-hoc distribution class.");
+  }
+  return {
+    strictDeepVerification: true,
+    gatekeeperExpectedUntrustedRejection: true,
+    noTeamIdentifier: true,
+    noDeveloperId: true,
+    noEntitlements: true,
+    nestedHelperAdHoc: true
+  };
+}
+
+function hasCodeSignEntitlements(codePath) {
+  const result = spawnSync(
+    "/usr/bin/codesign",
+    ["--display", "--entitlements", ":-", codePath],
+    macCommandOptions()
+  );
+  if (result.error || result.status !== 0) {
+    throw new Error("Unable to inspect macOS signing entitlements.");
+  }
+  return /<key>|<dict>/u.test(`${result.stdout ?? ""}\n${result.stderr ?? ""}`);
+}
+
+function verifyQuarantineSignatureIntegrity(distributedAppPath, tempRoot, distributedManifest) {
+  const quarantineRoot = path.join(tempRoot, "quarantine");
+  const quarantineAppPath = path.join(quarantineRoot, "Pige.app");
+  fs.mkdirSync(quarantineRoot, { recursive: true });
+  runMacCommand("/usr/bin/ditto", [distributedAppPath, quarantineAppPath], "quarantine_copy");
+  if (!compareBundleManifests(distributedManifest, collectBundleManifest(quarantineAppPath))) {
+    throw new Error("Quarantine audit copy does not match the distributed application Bundle.");
+  }
+  runMacCommand(
+    "/usr/bin/xattr",
+    ["-w", "com.apple.quarantine", "0081;00000000;PigePackageability;", quarantineAppPath],
+    "quarantine_apply"
+  );
+  runMacCommand(
+    "/usr/bin/codesign",
+    ["--verify", "--deep", "--strict", "--verbose=2", quarantineAppPath],
+    "quarantine_codesign_verify"
+  );
+  const assessment = spawnSync(
+    "/usr/sbin/spctl",
+    ["--assess", "--type", "execute", "--verbose=4", quarantineAppPath],
+    macCommandOptions()
+  );
+  const classification = classifyMacGatekeeperAssessment(
+    assessment,
+    `${assessment.stdout ?? ""}\n${assessment.stderr ?? ""}`
+  );
+  if (!classification.expectedUntrustedRejection) {
+    throw new Error("Quarantined macOS application did not retain the expected untrusted ad-hoc class.");
+  }
+  return { signatureIntegrity: true, gatekeeperExpectedUntrustedRejection: true };
+}
+
+function runMacCommand(command, args, stage) {
+  const result = spawnSync(command, args, macCommandOptions());
+  if (result.error || result.status !== 0) {
+    throw new Error(`macOS packageability audit failed at ${stage}.`);
+  }
+  return `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
+}
+
+function macCommandOptions() {
+  return {
+    env: safeEnvironment({ LANG: "C", LC_ALL: "C" }),
+    encoding: "utf8",
+    timeout: 60_000,
+    maxBuffer: 1024 * 1024
+  };
 }
 
 function runPackagedPiSmoke({ executablePath, tempRoot, target }) {
@@ -335,7 +591,11 @@ function parseOptions(args) {
     const [key, value] = argument.replace(/^--/u, "").split("=", 2);
     return [key, value];
   }));
-  return { platform: options.platform, arch: options.arch };
+  return {
+    platform: options.platform,
+    arch: options.arch,
+    distributionOnly: options["distribution-only"] === "true"
+  };
 }
 
 function resolveBuildId(value) {

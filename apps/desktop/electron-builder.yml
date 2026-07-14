@@ -1,5 +1,6 @@
 appId: com.yinsenw.pige
 productName: Pige
+forceCodeSigning: false
 asar: true
 asarUnpack:
   - "**/*.node"
@@ -30,7 +31,14 @@ mac:
   target:
     - dir
     - zip
-  identity: null
+  identity: "-"
+  sign: ../../scripts/release/sign-macos-ad-hoc.mjs
+  hardenedRuntime: false
+  notarize: false
+  entitlements: null
+  entitlementsInherit: null
+  preAutoEntitlements: false
+  strictVerify: true
 win:
   icon: ../../resources/brand/pige-icon/windows/Pige.ico
   artifactName: Pige-${version}-${arch}-setup.${ext}

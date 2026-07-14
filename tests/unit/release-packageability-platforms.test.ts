@@ -8,6 +8,13 @@ import {
   packageabilityPaths,
   resolvePackageabilityPlatform
 } from "../../scripts/release/packageability-platforms.mjs";
+import {
+  classifyMacGatekeeperAssessment,
+  collectBundleManifest,
+  compareBundleManifests,
+  parseMacCodeSignatureDescription,
+  sanitizeElectronBuilderEnvironment
+} from "../../scripts/release/packageability-security.mjs";
 import { isUnsupportedDirectoryFsync } from "../../apps/desktop/src/main/services/local-settings";
 
 const root = process.cwd();
@@ -90,16 +97,68 @@ describe("release packageability platforms", () => {
     const builderConfig = fs.readFileSync(path.join(root, "apps/desktop/electron-builder.yml"), "utf8");
     const builderRunner = fs.readFileSync(path.join(root, "scripts/release/run-electron-builder.mjs"), "utf8");
     const packagedSmoke = fs.readFileSync(path.join(root, "scripts/release/packaged-electron-smoke.mjs"), "utf8");
+    const macosHelperBuild = fs.readFileSync(path.join(root, "scripts/build/macos-vision-ocr-helper.mjs"), "utf8");
+    const macosAdHocSigner = fs.readFileSync(path.join(root, "scripts/release/sign-macos-ad-hoc.mjs"), "utf8");
+    const installedMacPackager = fs.readFileSync(
+      path.join(root, "node_modules/app-builder-lib/out/macPackager.js"),
+      "utf8"
+    );
+    const installedPlatformPackager = fs.readFileSync(
+      path.join(root, "node_modules/app-builder-lib/out/platformPackager.js"),
+      "utf8"
+    );
     const desktopMain = fs.readFileSync(path.join(root, "apps/desktop/src/main/index.ts"), "utf8");
     const workflow = fs.readFileSync(path.join(root, ".github/workflows/packageability.yml"), "utf8");
 
     expect(rootPackage.scripts["package:dir:win:x64"]).toContain("prepare:package:win:x64");
+    expect(rootPackage.scripts["smoke:distributed:mac:arm64"]).toContain("--distribution-only=true");
     expect(rootPackage.scripts["smoke:packaged:win:x64"]).toContain("--platform=win --arch=x64");
     expect(desktopPackage.scripts["package:dir:win:x64"]).toContain("--platform=windows --arch=x64");
     expect(builderRunner).toContain("require.resolve(\"electron-builder/out/cli/cli.js\")");
     expect(builderRunner).toContain("spawnSync(process.execPath");
     expect(builderRunner).not.toContain("electron-builder.cmd");
+    expect(builderRunner).toContain("sanitizeElectronBuilderEnvironment(process.env)");
+    expect(builderConfig).toContain("forceCodeSigning: false");
+    expect(builderConfig).toContain('identity: "-"');
+    expect(builderConfig).toContain("sign: ../../scripts/release/sign-macos-ad-hoc.mjs");
+    expect(builderConfig).toContain("hardenedRuntime: false");
+    expect(builderConfig).toContain("notarize: false");
+    expect(builderConfig).toContain("entitlements: null");
+    expect(builderConfig).toContain("entitlementsInherit: null");
+    expect(builderConfig).toContain("preAutoEntitlements: false");
     expect(packagedSmoke).toContain("runtimeIdentity?.isPackaged !== true");
+    expect(packagedSmoke).toContain('["-x", "-k", distributablePath, distributionRoot]');
+    expect(packagedSmoke).toContain('["--verify", "--deep", "--strict", "--verbose=2"');
+    expect(packagedSmoke).toContain('"com.apple.quarantine"');
+    expect(packagedSmoke).toContain("nested_helper_codesign_verify");
+    expect(packagedSmoke).toContain("quarantineGatekeeperExpectedUntrustedRejection");
+    expect(macosHelperBuild).toContain("stable-identifier ad-hoc build output");
+    expect(macosHelperBuild).toContain("only public distribution requires a Developer ID signature and notarization");
+    expect(macosHelperBuild).not.toContain("release pipeline must apply a Developer ID signature");
+    expect(macosHelperBuild).toContain('"com.yinsenw.pige.vision-ocr"');
+    expect(macosAdHocSigner).toContain("const helperContent = fs.readFileSync(helperPath)");
+    expect(macosAdHocSigner).toContain("fs.writeFileSync(helperPath, helperContent");
+    expect(macosAdHocSigner).toContain('["--force", "--deep", "--sign", "-", "--timestamp=none", options.app]');
+    expect(macosAdHocSigner).toContain('["--force", "--sign", "-", "--timestamp=none", options.app]');
+    expect(macosAdHocSigner).not.toMatch(/(?:Developer ID|notary|staple|entitlements)/u);
+    const deepSeal = macosAdHocSigner.indexOf('["--force", "--deep", "--sign", "-", "--timestamp=none", options.app]');
+    const restoreHelper = macosAdHocSigner.indexOf("fs.writeFileSync(helperPath, helperContent");
+    const finalOuterSeal = macosAdHocSigner.indexOf('["--force", "--sign", "-", "--timestamp=none", options.app]');
+    const finalDeepVerify = macosAdHocSigner.lastIndexOf('["--verify", "--deep", "--strict", "--verbose=2", options.app]');
+    expect(deepSeal).toBeGreaterThan(-1);
+    expect(restoreHelper).toBeGreaterThan(deepSeal);
+    expect(finalOuterSeal).toBeGreaterThan(restoreHelper);
+    expect(finalDeepVerify).toBeGreaterThan(finalOuterSeal);
+    expect(macosAdHocSigner.slice(finalOuterSeal, finalDeepVerify)).not.toContain("writeFileSync");
+    expect(installedMacPackager).toContain("customSign ? Promise.resolve(customSign(opts, this))");
+    const packMacTargets = installedMacPackager.slice(
+      installedMacPackager.indexOf("async packMacTargets"),
+      installedMacPackager.indexOf("async signMas")
+    );
+    expect(packMacTargets.indexOf("await this.doPack")).toBeLessThan(
+      packMacTargets.indexOf("this.packageInDistributableFormat(appPath, arch, targets, taskManager)")
+    );
+    expect(installedPlatformPackager).toContain("const didSign = await this.signApp(packContext, isAsar)");
     expect(packagedSmoke).toContain("renderer?.preloadReady !== true");
     expect(packagedSmoke).toContain('report?.status !== "passed"');
     expect(packagedSmoke).toContain('"renderer_load", "renderer_probe", "report_write"');
@@ -117,6 +176,108 @@ describe("release packageability platforms", () => {
     expect(workflow).toContain("windows-x64:");
     expect(workflow).toContain("runs-on: windows-2025");
     expect(workflow).toContain("npm run smoke:packaged:win:x64");
+    expect(workflow).toContain("macos-arm64-distribution:");
+    expect(workflow).toContain("needs: macos-arm64");
+    expect(workflow).toContain("actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131");
+    expect(workflow).toContain("npm run smoke:distributed:mac:arm64");
+    expect(workflow).toContain("PIGE_EXPECTED_PACKAGEABILITY_REPORT:");
+    expect(workflow).not.toMatch(/(?:notary|notarize|staple|APPLE_|CSC_)/u);
+  });
+
+  it("removes signing and notarization authority from the electron-builder environment", () => {
+    const environment = sanitizeElectronBuilderEnvironment({
+      PATH: "/usr/bin",
+      HOME: "/tmp/home",
+      CSC_LINK: "secret-certificate",
+      CSC_KEY_PASSWORD: "secret-password",
+      CSC_FOR_PULL_REQUEST: "false",
+      CSC_IDENTITY_AUTO_DISCOVERY: "true",
+      WIN_CSC_LINK: "secret-windows-certificate",
+      APPLE_ID: "private-account",
+      APPLE_APP_SPECIFIC_PASSWORD: "private-password",
+      APPLE_API_KEY: "private-key"
+    });
+    expect(environment).toEqual({
+      PATH: "/usr/bin",
+      HOME: "/tmp/home",
+      CSC_IDENTITY_AUTO_DISCOVERY: "false",
+      CSC_FOR_PULL_REQUEST: "true"
+    });
+  });
+
+  it("compares exact bounded Bundle manifests including modes, checksums, and symlinks", () => {
+    const tempRoot = fs.mkdtempSync(path.join(root, "artifacts", "packageability-manifest-test-"));
+    try {
+      const first = path.join(tempRoot, "first");
+      const second = path.join(tempRoot, "second");
+      fs.mkdirSync(path.join(first, "Contents"), { recursive: true });
+      fs.writeFileSync(path.join(first, "Contents", "payload"), "bounded\n", { mode: 0o640 });
+      fs.symlinkSync("payload", path.join(first, "Contents", "current"));
+      fs.cpSync(first, second, { recursive: true, verbatimSymlinks: true });
+      const expected = collectBundleManifest(first);
+      expect(compareBundleManifests(expected, collectBundleManifest(second))).toBe(true);
+      fs.chmodSync(path.join(second, "Contents", "payload"), 0o600);
+      expect(compareBundleManifests(expected, collectBundleManifest(second))).toBe(false);
+    } finally {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("accepts only ad-hoc non-runtime signatures and expected untrusted Gatekeeper rejection", () => {
+    expect(parseMacCodeSignatureDescription([
+      "Executable=/tmp/Pige",
+      "Identifier=com.yinsenw.pige",
+      "CodeDirectory v=20400 size=100 flags=0x2(adhoc) hashes=1+0 location=embedded",
+      "Signature=adhoc",
+      "TeamIdentifier=not set"
+    ].join("\n"))).toEqual({
+      adHoc: true,
+      teamIdentifierPresent: false,
+      developerIdPresent: false,
+      hardenedRuntime: false
+    });
+    expect(parseMacCodeSignatureDescription([
+      "CodeDirectory v=20500 flags=0x10000(runtime)",
+      "Signature=size=100",
+      "Authority=Developer ID Application: Example",
+      "TeamIdentifier=EXAMPLETEAM"
+    ].join("\n"))).toMatchObject({
+      adHoc: false,
+      teamIdentifierPresent: true,
+      developerIdPresent: true,
+      hardenedRuntime: true
+    });
+    const rejectedAssessment = { status: 3, signal: null, error: undefined };
+    expect(classifyMacGatekeeperAssessment(rejectedAssessment, "Pige.app: rejected\nsource=no usable signature")).toEqual({
+      expectedUntrustedRejection: true,
+      invalidDiagnostic: false
+    });
+    expect(classifyMacGatekeeperAssessment(rejectedAssessment, "Pige.app: rejected")).toEqual({
+      expectedUntrustedRejection: true,
+      invalidDiagnostic: false
+    });
+    expect(classifyMacGatekeeperAssessment(
+      rejectedAssessment,
+      "Pige.app: rejected\ncode has no resources but signature indicates they must be present"
+    )).toEqual({
+      expectedUntrustedRejection: false,
+      invalidDiagnostic: true
+    });
+    expect(classifyMacGatekeeperAssessment(
+      { status: 0, signal: null, error: undefined },
+      "Pige.app: accepted"
+    ).expectedUntrustedRejection).toBe(false);
+    for (const incompleteAssessment of [
+      { status: null, signal: null, error: undefined },
+      { status: null, signal: null, error: new Error("launch failed") },
+      { status: null, signal: null, error: Object.assign(new Error("timed out"), { code: "ETIMEDOUT" }) },
+      { status: null, signal: "SIGTERM", error: undefined }
+    ]) {
+      expect(classifyMacGatekeeperAssessment(
+        incompleteAssessment,
+        "Pige.app: rejected"
+      ).expectedUntrustedRejection).toBe(false);
+    }
   });
 
   it("wires the approved Pige icon exports into macOS and Windows packages", () => {
