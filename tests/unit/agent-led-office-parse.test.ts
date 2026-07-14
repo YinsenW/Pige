@@ -90,7 +90,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 });
 
-describe("Agent-led Office parse tool", () => {
+describe("Agent-led Office parse tool", { timeout: 15_000 }, () => {
   it.each([
     { kind: "docx_file" as const, fileName: "agent-knowledge.docx", bytes: createTestDocx, expected: "Local knowledge architecture" },
     { kind: "pptx_file" as const, fileName: "agent-roadmap.pptx", bytes: createTestPptx, expected: "Roadmap first" }

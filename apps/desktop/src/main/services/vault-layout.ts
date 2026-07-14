@@ -36,6 +36,8 @@ export const PIGE_DURABLE_ROOTS = [
 
 export const PIGE_REBUILDABLE_ROOTS = [".pige/db", ".pige/indexes", ".pige/cache"] as const;
 
+export const PIGE_TRANSIENT_RUNTIME_ROOTS = [".pige/runtime"] as const;
+
 export interface VaultPathSafetyOptions {
   readonly appDataPath: string;
   readonly tempPath: string;
@@ -93,7 +95,11 @@ export function createVaultOnDisk(options: CreateVaultOnDiskOptions): VaultSumma
   assertCreatableVaultDirectory(vaultPath);
 
   fs.mkdirSync(vaultPath, { recursive: true });
-  for (const relative of [...PIGE_DURABLE_ROOTS, ...PIGE_REBUILDABLE_ROOTS]) {
+  for (const relative of [
+    ...PIGE_DURABLE_ROOTS,
+    ...PIGE_REBUILDABLE_ROOTS,
+    ...PIGE_TRANSIENT_RUNTIME_ROOTS
+  ]) {
     fs.mkdirSync(path.join(vaultPath, relative), { recursive: true });
   }
 

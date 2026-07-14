@@ -165,7 +165,7 @@ export interface HomeAgentJobPort {
   ): Promise<T>;
   attachAgentTurnSource(jobId: string, sourceId: string): JobRecord;
   failAgentTurnSourcePreservation(jobId: string): JobRecord | undefined;
-  writeAgentTurnJob(job: JobRecord): JobRecord;
+  writeAgentTurnJob(expected: JobRecord, job: JobRecord): JobRecord;
   readAgentTurnJob(jobId: string): JobRecord | undefined;
   processAgentTurnSource(jobId: string): Promise<JobRecord>;
   requeueWaitingTextAgentTurns(): { readonly requeued: number };
@@ -548,7 +548,7 @@ export class HomeAgentService {
             grounding: "source",
             citations: []
           };
-          session.current = this.#jobs.writeAgentTurnJob(JobRecordSchema.parse({
+          session.current = this.#jobs.writeAgentTurnJob(sourceJob, JobRecordSchema.parse({
             ...sourceJob,
             outputRefs: Array.from(new Map([
               ...(sourceJob.outputRefs ?? []).map((ref) => [`${ref.kind}:${ref.id}:${ref.role ?? ""}`, ref] as const),
@@ -681,6 +681,7 @@ export class HomeAgentService {
             datasetCatalogScope
           );
           jobExecution.markDurableCheckpoint("agent_turn_assistant_event_publication_started");
+          activeSession.current = this.#jobs.readAgentTurnJob(activeSession.current.id) ?? activeSession.current;
           const assistantEvent = this.#conversations.appendAssistantTurn(
             vaultPath,
             activeTurn,
@@ -904,7 +905,7 @@ export class HomeAgentService {
             finishedAt: _priorFinishedAt,
             ...current
           } = job;
-          session.current = this.#jobs.writeAgentTurnJob(JobRecordSchema.parse({
+          session.current = this.#jobs.writeAgentTurnJob(job, JobRecordSchema.parse({
             ...current,
             state: "completed",
             updatedAt: finishedAt,
@@ -962,6 +963,7 @@ export class HomeAgentService {
             datasetContinuation ? readDatasetQueryContinuationScope(job) : undefined
           );
           jobExecution.markDurableCheckpoint("agent_turn_assistant_event_publication_started");
+          session.current = this.#jobs.readAgentTurnJob(session.current.id) ?? session.current;
           const assistantEvent = this.#conversations.appendAssistantTurn(
             vaultPath,
             preserved,
@@ -1040,7 +1042,7 @@ export class HomeAgentService {
       decisionHash: createModelEgressDecisionHash(decision),
       decision
     });
-    session.current = this.#jobs.writeAgentTurnJob(JobRecordSchema.parse({
+    session.current = this.#jobs.writeAgentTurnJob(session.current, JobRecordSchema.parse({
       ...session.current,
       policyContextId: policy.policyContextId,
       policyHash: policy.policyHash,
@@ -1080,7 +1082,7 @@ export class HomeAgentService {
       defaultProvider,
       ...(this.#capabilities?.snapshot() ?? {})
     });
-    session.current = this.#jobs.writeAgentTurnJob(JobRecordSchema.parse({
+    session.current = this.#jobs.writeAgentTurnJob(session.current, JobRecordSchema.parse({
       ...session.current,
       state: "running",
       stage: "planning",
@@ -1205,7 +1207,7 @@ export class HomeAgentService {
         ...(session.current.privacy?.permissionDecisionIds ?? []),
         ...(decision.permissionDecisionId ? [decision.permissionDecisionId] : [])
       ]));
-      session.current = this.#jobs.writeAgentTurnJob(JobRecordSchema.parse({
+      session.current = this.#jobs.writeAgentTurnJob(session.current, JobRecordSchema.parse({
         ...session.current,
         operationIds: Array.from(new Set([...(session.current.operationIds ?? []), operation.id])),
         updatedAt: new Date().toISOString(),
@@ -1638,7 +1640,7 @@ export class HomeAgentService {
   ): void {
     const finishedAt = new Date().toISOString();
     const { error: _error, waitingDependency: _waitingDependency, ...current } = session.current;
-    session.current = this.#jobs.writeAgentTurnJob(JobRecordSchema.parse({
+    session.current = this.#jobs.writeAgentTurnJob(session.current, JobRecordSchema.parse({
       ...current,
       state: "completed",
       stage: "planning",
@@ -1672,7 +1674,7 @@ export class HomeAgentService {
       failure.error.code === "model_provider.default_model_missing" ||
       failure.error.code === "model_provider.binding_unusable"
     ) {
-      session.current = this.#jobs.writeAgentTurnJob(JobRecordSchema.parse({
+      session.current = this.#jobs.writeAgentTurnJob(session.current, JobRecordSchema.parse({
         ...current,
         state: "waiting_dependency",
         stage: "waiting_for_model",
@@ -1690,7 +1692,7 @@ export class HomeAgentService {
     }
 
     const retryable = failure.error.retryable || failure.state === "waiting";
-    session.current = this.#jobs.writeAgentTurnJob(JobRecordSchema.parse({
+    session.current = this.#jobs.writeAgentTurnJob(session.current, JobRecordSchema.parse({
       ...current,
       state: retryable ? "failed_retryable" : "failed_final",
       updatedAt: now,

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-13T15:00:21Z",
+  "reviewedAt": "2026-07-14T08:30:00Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,12 +30,12 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "eba2521321d6f05fa50fbc12de9a537b4477cc1bd7799e01f6fbac2ba05eb839"
+    "reviewedSha256": "7f34da798894bd9c7e77ff1018cc6a0ad43ae5320df1c0adaa4a3c9057e88738"
   },
   "reviewers": [
     {
-      "reviewerId": "agent-ingress-continuity-ui-design-final-review",
-      "task": "019f4bc2-4fa4-7921-9c7c-3e0dd11f9d94 final read-only UI Design Sync",
+      "reviewerId": "production-ready-a-final-adversarial-review",
+      "task": "019f44e0-b6a1-7bb0-a1ca-5fb43b2725c2 Production Ready A Linux sentinel replacement CLEAR",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -43,82 +43,82 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "UI Design independently reviewed the exact frozen Development candidate and made no edits. It accepted first-pass CSV/TXT/Markdown completion, visible Dataset result/citation, restart restoration and historical-only prior failures; it classified the brief action-free waiting_dependency label as later non-blocking copy polish."
+      "independence": "An independent adversarial reviewer reproduced the Linux same-name inode-reuse failure, then verified random-generation/content identity and named-path descriptor metadata against replacement bytes and returned CLEAR without editing files. Product Planning independently matched the exact two-path repair hash."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.7,
-      "reviewerId": "agent-ingress-continuity-ui-design-final-review",
+      "reviewerId": "production-ready-a-final-adversarial-review",
       "blockerCount": 0,
-      "summary": "The existing Home, source Job and Dataset result surfaces retain one lifecycle: first-pass CSV/TXT/Markdown turns converge to durable results without a new route, mode, page or repair action."
+      "summary": "The existing vault and Job lifecycle gains one internal coordination root and shared store without a new user route, setting, mode, durable schema or recovery truth."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "agent-ingress-continuity-ui-design-final-review",
+      "reviewerId": "production-ready-a-final-adversarial-review",
       "blockerCount": 0,
-      "summary": "Pi, API, Prompt, Job, Context, quality and Playbook owners agree on separate raw/structural event bounds, one registered-terminal correction, exact source-bound Dataset continuation and Pige-owned Provider authority."
+      "summary": "Data, Job, Sync, Technical Architecture and Playbook owners agree that `.pige/runtime/` is transient, durable Job bytes remain authoritative, and lease identity includes random generation/content plus bounded no-follow metadata rather than inode alone."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "agent-ingress-continuity-ui-design-final-review",
+      "reviewerId": "production-ready-a-final-adversarial-review",
       "blockerCount": 0,
-      "summary": "Three new exact selectors bind structural streaming pressure and terminal correction/failure; existing Provider and Dataset suites cover metadata and exact continuation scope. Only existing partial acceptance rows change."
+      "summary": "Seven exact selectors bind real-process lease recovery, successor/heartbeat/generation fencing, one exact CAS winner, partial-sentinel recovery and independent Job keys only to existing partial PIGE-VAULT-006/PIGE-JOB-002 and E1.21/E2.10 rows."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "agent-ingress-continuity-ui-design-final-review",
+      "reviewerId": "production-ready-a-final-adversarial-review",
       "blockerCount": 0,
-      "summary": "The bounded repair gives Development one deterministic first-pass source path while preserving Pi orchestration, final schema/citation authority, durable source identity, redacted failures and existing residual boundaries."
+      "summary": "Development gets one shared Job mutation boundary and deterministic lease/claim failure behavior while preserving durable schemas, idempotency, cancellation, recovery authority and existing public behavior."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "agent-ingress-continuity-ui-design-final-review",
+      "reviewerId": "production-ready-a-final-adversarial-review",
       "blockerCount": 0,
-      "summary": "Seven existing Owner/quality/Playbook files plus acceptance absorb the repair; no PRD, Decision, document, prototype, dependency, schema, setting, UI workflow or status is introduced."
+      "summary": "Existing Owner, quality, Playbook, legal/dependency and acceptance surfaces absorb the exact adoption; no PRD, Decision, new document, prototype, setting, public API, durable schema or status changes."
     }
   ],
   "verification": [
     {
       "command": "npm run verify",
       "status": "passed",
-      "evidence": "The exact first-pass source-ingress continuity candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all five documentation-quality dimensions."
+      "evidence": "The exact fenced vault-writer and Job claim/CAS candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all five documentation-quality dimensions."
     },
     {
-      "command": "npm run verify:contracts && npm test -- tests/unit/pi-agent-runtime-adapter.test.ts tests/unit/pi-agent-provider-binding.test.ts tests/unit/unified-agent-ingress.test.ts tests/unit/dataset-query-service.test.ts",
+      "command": "npm run verify:contracts && npx vitest run tests/unit/vault-writer-lease.test.ts",
       "status": "passed",
-      "evidence": "CON-001 through CON-004 and negative fixtures pass; 4 files / 54 tests prove structural stream pressure, exact DeepSeek metadata binding, bounded terminal correction/failure and current-source Dataset scope."
+      "evidence": "CON-001 through CON-004 and negative fixtures pass; the independently rerun 1-file / 16-test lease matrix proves generation/content identity, in-place generation drift rejection, current-heartbeat fencing and successor-safe cleanup."
     },
     {
       "command": "npm run verify:traceability",
       "status": "passed",
-      "evidence": "Semantic lock schema v3 contains 1,162 claims; three exact evidence additions and three acceptance projections change only existing partial rows, while every Requirement, Exit and phase state remains unchanged."
+      "evidence": "Semantic lock schema v3 contains 1,169 claims; one incremental generation-fence selector joins the six existing exact A-slice selectors and only existing partial rows change, while every Requirement, Exit and phase state remains unchanged."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 pass after the bounded Owner and evidence projection, without PRD or Decision churn, a new governed document, prototype refresh or unrelated contract expansion."
+      "evidence": "LEN-001 through LEN-005 pass after the bounded Owner/dependency/evidence projection, without PRD or Decision churn, a new governed document, prototype refresh or unrelated contract expansion."
     }
   ],
   "coordination": {
-    "taskId": "agent-ingress-first-pass-continuity-20260713",
-    "taskTitle": "First-pass CSV, TXT and Markdown ingress continuity repair",
+    "taskId": "production-ready-a-vault-job-cas-20260714",
+    "taskTitle": "Per-vault writer lease and exact-record Job claim/CAS",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The candidate preserves one Pi-owned ingress, terminal schemas, source/Dataset identity and durable final authority. It repairs stream-event accounting, exact reviewed DeepSeek metadata, one source-terminal correction, scoped Dataset continuation and redacted retryable summaries without a dependency, durable schema, public IPC, UI or phase change.",
-    "acknowledgement": "Development froze one exact 10-file candidate after assembled Electron and packaged evidence. UI Design accepted the exact candidate; Product Planning synchronized only affected Owners and existing partial acceptance rows before one semantic and snapshot bind."
+    "compatibility": "The candidate preserves durable Job and vault schemas, Job/Operation/domain recovery truth and public behavior. It adds temporary per-vault/per-Job coordination plus exact-record CAS, with the complete runtime dependency graph pinned and attributed.",
+    "acknowledgement": "Development froze the exact two-path Linux successor-sentinel repair over the held 23-file A candidate after full, assembled Electron and packaged evidence. Independent adversarial review returned CLEAR; Product Planning synchronized only stale identity wording, one selector and the semantic/current snapshot bind."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "During active Markdown advancement the generic waiting_dependency row may briefly say Waiting for a local capability; it has no action and converges, but later status-copy/state-owner polish remains.",
-    "Historical failed Jobs remain visible by design and are not rewritten or deleted by this repair.",
-    "The exact reviewed DeepSeek preset/model overlay is bounded to matching public Pi 0.80.6 metadata; unknown and Custom models retain the conservative fallback.",
-    "Package proof remains unsigned local macOS arm64; Windows, signed and notarized macOS, and broader live-provider/platform matrices remain open."
+    "The final lstat-to-unlink/rmdir syscall interval remains a filesystem primitive TOCTOU limit after the exact identity and freshness revalidation boundary.",
+    "Other Job classes and cross-file/domain transactions do not inherit atomicity merely from exact-record Job CAS.",
+    "The fixed 30-second stale and 10-second update policy must be revalidated before any proper-lockfile update or platform-specific timing change.",
+    "Package proof remains local macOS arm64; Windows multi-process, signed and notarized macOS, and broader installed-platform matrices remain open."
   ]
 }

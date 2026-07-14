@@ -12,6 +12,7 @@ import { BackupRestoreService } from "../../apps/desktop/src/main/services/backu
 import {
   PIGE_DURABLE_ROOTS,
   PIGE_REBUILDABLE_ROOTS,
+  PIGE_TRANSIENT_RUNTIME_ROOTS,
   createVaultOnDisk,
   isPigeVault,
   loadVaultSummary
@@ -131,6 +132,7 @@ describe("backup restore service", () => {
     expect(fs.existsSync(path.join(restored.restoredVaultPath!, ".pige/db"))).toBe(true);
     expect(fs.existsSync(path.join(restored.restoredVaultPath!, ".pige/indexes"))).toBe(true);
     expect(fs.existsSync(path.join(restored.restoredVaultPath!, ".pige/cache"))).toBe(true);
+    expect(fs.existsSync(path.join(restored.restoredVaultPath!, ".pige/runtime"))).toBe(true);
     expect(fs.existsSync(path.join(restored.restoredVaultPath!, ".pige/db/vault.sqlite"))).toBe(false);
     expect(fs.existsSync(path.join(restored.restoredVaultPath!, ".pige/cache/tmp.bin"))).toBe(false);
     expect(fs.existsSync(path.join(restored.restoredVaultPath!, ".pige/indexes/index.bin"))).toBe(false);
@@ -395,7 +397,10 @@ describe("backup restore service", () => {
       rebuildableDatabaseCache: false,
       secrets: false
     });
-    expect(archive.manifest.excludedRoots).toEqual([...PIGE_REBUILDABLE_ROOTS]);
+    expect(archive.manifest.excludedRoots).toEqual([
+      ...PIGE_REBUILDABLE_ROOTS,
+      ...PIGE_TRANSIENT_RUNTIME_ROOTS
+    ]);
     expect(archive.manifest.externalDependencies).toEqual([]);
 
     for (const rootName of PIGE_DURABLE_ROOTS) {
@@ -982,6 +987,7 @@ function writeExcludedVaultFixtures(vaultPath: string): readonly FixtureFile[] {
     { path: ".pige/db/vault.sqlite", canary: "excluded-rebuildable-db-canary" },
     { path: ".pige/indexes/index.bin", canary: "excluded-rebuildable-index-canary" },
     { path: ".pige/cache/tmp.bin", canary: "excluded-rebuildable-cache-canary" },
+    { path: ".pige/runtime/vault-writer-owner.json", canary: "excluded-runtime-owner-canary" },
     { path: ".pige/models/private-model.bin", canary: "excluded-vault-model-canary" },
     { path: ".pige/tools/private-tool.bin", canary: "excluded-vault-tool-canary" },
     { path: ".pige/diagnostics/private.log", canary: "excluded-vault-diagnostics-canary" },

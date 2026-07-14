@@ -404,6 +404,9 @@ Required boundary:
 
 - Sync adapters operate on durable object IDs, operation records, source records, manifests, and file hashes.
 - Sync adapters do not treat SQLite as authoritative.
+- Sync adapters ignore `.pige/runtime/`; writer leases and Job claims are process/vault
+  coordination only and must be recreated locally rather than backed up, restored,
+  migrated, trashed, or synchronized.
 - Sync adapters must not require changing Markdown page identity.
 - Sync adapters must preserve user-editable Markdown.
 - Sync adapters must route conflicts into the same proposal model.

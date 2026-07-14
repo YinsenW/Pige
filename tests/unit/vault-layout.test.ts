@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  PIGE_TRANSIENT_RUNTIME_ROOTS,
   createVaultOnDisk,
   loadVaultSummary,
   readVaultConfig,
@@ -50,6 +51,7 @@ describe("vault layout", () => {
     expect(manifest.durable_roots).toContain("datasets");
     expect(fs.existsSync(path.join(vaultPath, "datasets"))).toBe(true);
     expect(manifest.rebuildable_roots).toContain(".pige/db");
+    expect(fs.existsSync(path.join(vaultPath, PIGE_TRANSIENT_RUNTIME_ROOTS[0]))).toBe(true);
     expect(manifestText).not.toContain(root);
   });
 
@@ -85,6 +87,7 @@ describe("vault layout", () => {
     fs.writeFileSync(path.join(vaultPath, "wiki/note.md"), "# durable note", "utf8");
     fs.writeFileSync(path.join(vaultPath, ".pige/source-records/src.json"), "{}", "utf8");
     fs.writeFileSync(path.join(vaultPath, ".pige/db/vault.sqlite"), "cache", "utf8");
+    fs.writeFileSync(path.join(vaultPath, ".pige/runtime/lease-owner.json"), "runtime", "utf8");
 
     const result = resetRebuildableVaultStorage(vaultPath);
 
@@ -94,5 +97,6 @@ describe("vault layout", () => {
     expect(fs.existsSync(path.join(vaultPath, ".pige/source-records/src.json"))).toBe(true);
     expect(fs.existsSync(path.join(vaultPath, ".pige/db"))).toBe(true);
     expect(fs.existsSync(path.join(vaultPath, ".pige/db/vault.sqlite"))).toBe(false);
+    expect(fs.readFileSync(path.join(vaultPath, ".pige/runtime/lease-owner.json"), "utf8")).toBe("runtime");
   });
 });

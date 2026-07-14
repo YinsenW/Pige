@@ -599,6 +599,14 @@ Supply-chain test gates:
 - License notice tests must use the manifest as input so missing notices block release.
 - Expired waivers block release, and waivers cannot cover unknown executable provenance, unclear licensing, hidden task-time downloads, secret exposure, or renderer trust-boundary bypass.
 
+Vault/Job concurrency gates include real competing processes and stale-owner recovery,
+lease loss/replacement and symlink/root swaps, exact prior-byte/inode revision mismatch,
+cancellation-versus-commit, child-before-parent linkage, and retry idempotency. Tests
+must prove independent Job keys, partial-sentinel recovery, heartbeat refresh at stale
+cleanup, random-generation/content identity under same-name inode reuse, successor-safe
+normal/stale/process-exit cleanup, and that the winning durable record remains unchanged
+when a competing claim loses.
+
 ## 14. Test Naming Convention
 
 Recommended test names:

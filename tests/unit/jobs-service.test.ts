@@ -250,7 +250,7 @@ describe("jobs service", () => {
     const vaults = { current: () => vault, activeVaultPath: () => vaultPath };
     const jobs = new JobsService(vaults);
     const created = jobs.createRetrievalQueryJob({ queryHash: `sha256:${"a".repeat(64)}` });
-    jobs.writeRetrievalQueryJob(JobRecordSchema.parse({
+    jobs.writeRetrievalQueryJob(created, JobRecordSchema.parse({
       ...created,
       state: "running",
       stage: "retrieving",
@@ -267,6 +267,31 @@ describe("jobs service", () => {
       status: "not_allowed",
       job: { id: created.id, state: "failed_retryable" }
     });
+  });
+
+  it("rejects a stale whole-record Agent turn write instead of erasing a committed reference", () => {
+    const { vaultPath, vault } = makeVault();
+    const vaults = { current: () => vault, activeVaultPath: () => vaultPath };
+    const jobs = new JobsService(vaults);
+    const created = jobs.createAgentTurnJob({
+      conversationEventId: "evt_20260714_staleturn1",
+      conversationLocator: ".pige/conversations/2026/07/conv_20260714.jsonl",
+      inputHash: `sha256:${"b".repeat(64)}`
+    });
+    const committed = jobs.writeAgentTurnJob(created, JobRecordSchema.parse({
+      ...created,
+      operationIds: ["op_20260714_staleturn1"],
+      message: "A concurrent durable reference was committed."
+    }));
+
+    expect(() => jobs.writeAgentTurnJob(created, JobRecordSchema.parse({
+      ...created,
+      state: "running",
+      stage: "planning",
+      message: "A stale session attempted to replace the current record."
+    }))).toThrowError(expect.objectContaining({ code: "job.revision_conflict" }));
+    expect(jobs.readAgentTurnJob(created.id)).toEqual(committed);
+    expect(jobs.readAgentTurnJob(created.id)?.operationIds).toEqual(["op_20260714_staleturn1"]);
   });
 
   it("processes queued text captures into source pages and log entries", () => {
@@ -531,7 +556,7 @@ describe("jobs service", () => {
 
     try {
       expect(() => jobs.processQueuedCaptures({ jobIds: [captured.jobId] }))
-        .toThrow("Synthetic crash before parent terminalization.");
+        .toThrow(expect.objectContaining({ code: "job.write_failed" }));
     } finally {
       renameSpy.mockRestore();
     }
@@ -550,6 +575,55 @@ describe("jobs service", () => {
     expect(completedParent.state).toBe("completed");
     expect(completedParent.childJobIds).toEqual([childId]);
     expect(listJobRecords(vaultPath).filter((job) => job.id === childId)).toHaveLength(1);
+  });
+
+  it("rejects a byte-identical queued Job replacement before execution and retries without duplicate effects", () => {
+    const { vaultPath, vault } = makeVault();
+    const { capture, jobs } = makeServices(vaultPath, vault);
+    const captured = capture.submitText({
+      text: "Exact Job revisions fence stale queue selections before durable effects.",
+      inputKind: "typed_text",
+      userIntent: "capture",
+      locale: "en"
+    });
+    const sourceId = captured.sourceId;
+    const jobPath = findFile(path.join(vaultPath, ".pige/jobs"), `${captured.jobId}.json`);
+    const sourceRecordPath = findFile(path.join(vaultPath, ".pige/source-records"), `${sourceId}.json`);
+    const originalLstat = fs.lstatSync.bind(fs);
+    let replaced = false;
+    const lstatSpy = vi.spyOn(fs, "lstatSync").mockImplementation(((candidate: fs.PathLike, options?: unknown) => {
+      if (!replaced && path.resolve(String(candidate)) === path.resolve(sourceRecordPath)) {
+        replaced = true;
+        const replacementPath = `${jobPath}.replacement`;
+        fs.writeFileSync(replacementPath, fs.readFileSync(jobPath), { mode: 0o600 });
+        fs.renameSync(replacementPath, jobPath);
+      }
+      return options === undefined
+        ? originalLstat(candidate)
+        : originalLstat(candidate, options as never);
+    }) as typeof fs.lstatSync);
+
+    try {
+      expect(jobs.processQueuedCaptures({ jobIds: [captured.jobId] })).toEqual({
+        processed: 1,
+        completed: 0,
+        failed: 1
+      });
+    } finally {
+      lstatSpy.mockRestore();
+    }
+
+    expect(replaced).toBe(true);
+    expect(readJobRecord(vaultPath, captured.jobId).state).toBe("queued");
+    expect(listJobRecords(vaultPath).filter((job) => job.parentJobId === captured.jobId)).toHaveLength(0);
+    expect(jobs.processQueuedCaptures({ jobIds: [captured.jobId] })).toEqual({
+      processed: 1,
+      completed: 1,
+      failed: 0
+    });
+    const completed = readJobRecord(vaultPath, captured.jobId);
+    expect(completed.state).toBe("completed");
+    expect(new Set(completed.childJobIds ?? []).size).toBe(completed.childJobIds?.length ?? 0);
   });
 
   it("parses preserved PDFs into durable text artifacts before Agent ingest", async () => {

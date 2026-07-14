@@ -18,25 +18,67 @@ import {
   resetRebuildableVaultStorage,
   updateVaultSourceStorageStrategy
 } from "./vault-layout";
+import {
+  acquireVaultWriterLease
+} from "./vault-writer-lease";
+
+export interface VaultWriterLeasePort {
+  readonly vaultPath: string;
+  assertHeld(): void;
+  release(): void;
+}
+
+export type VaultWriterLeaseFactory = (vaultPath: string) => VaultWriterLeasePort;
 
 export class VaultService {
   readonly #settings: LocalSettingsStore;
   readonly #hasDefaultModel: () => boolean;
+  readonly #acquireWriterLease: VaultWriterLeaseFactory;
   #activeVaultPath: string | undefined;
   #activeVault: VaultSummary | undefined;
+  #activeWriterLease: VaultWriterLeasePort | undefined;
 
-  constructor(settings: LocalSettingsStore, hasDefaultModel: () => boolean = () => false) {
+  constructor(
+    settings: LocalSettingsStore,
+    hasDefaultModel: () => boolean = () => false,
+    acquireWriterLease: VaultWriterLeaseFactory = acquireVaultWriterLease
+  ) {
     this.#settings = settings;
     this.#hasDefaultModel = hasDefaultModel;
+    this.#acquireWriterLease = acquireWriterLease;
     this.#restoreActiveVaultFromSettings();
   }
 
   current(): VaultSummary | undefined {
+    if (this.#activeVault) this.#assertActiveWriterLease();
     return this.#activeVault;
   }
 
   activeVaultPath(): string | undefined {
+    if (this.#activeVaultPath) this.#assertActiveWriterLease();
     return this.#activeVaultPath;
+  }
+
+  assertWriterLease(vaultPath: string): void {
+    if (
+      !this.#activeVaultPath ||
+      path.resolve(vaultPath) !== this.#activeVaultPath
+    ) {
+      throw new PigeDomainError("vault.binding_changed", "The active vault binding changed.");
+    }
+    this.#assertActiveWriterLease();
+  }
+
+  close(): void {
+    const lease = this.#activeWriterLease;
+    this.#activeWriterLease = undefined;
+    this.#activeVaultPath = undefined;
+    this.#activeVault = undefined;
+    try {
+      lease?.release();
+    } catch {
+      // A lost lease is no longer ours to remove; local write authority is already revoked.
+    }
   }
 
   recent(): RecentVaultSummary[] {
@@ -140,7 +182,9 @@ export class VaultService {
   updateSourceStoragePolicy(request: UpdateSourceStoragePolicyRequest): VaultSummary {
     const activeVaultPath = this.#requireActiveVaultPath();
     const vault = updateVaultSourceStorageStrategy(activeVaultPath, request.defaultStrategy);
-    this.#setActiveVault(activeVaultPath, vault);
+    this.#assertActiveWriterLease();
+    this.#activeVault = vault;
+    this.#settings.setActiveVault(activeVaultPath, vault);
     return vault;
   }
 
@@ -162,21 +206,64 @@ export class VaultService {
         return;
       }
       this.#setActiveVault(activeVaultPath, loadVaultSummary(activeVaultPath));
-    } catch {
+    } catch (caught) {
+      if (
+        caught instanceof PigeDomainError &&
+        new Set(["vault.writer_locked", "vault.writer_lease_invalid", "vault.writer_lease_lost"])
+          .has(caught.code)
+      ) {
+        return;
+      }
       this.#settings.clearActiveVault();
     }
   }
 
   #setActiveVault(vaultPath: string, vault: VaultSummary): void {
-    this.#activeVaultPath = vaultPath;
+    const requestedPath = path.resolve(vaultPath);
+    if (this.#activeWriterLease?.vaultPath === requestedPath) {
+      this.#activeWriterLease.assertHeld();
+      this.#activeVaultPath = requestedPath;
+      this.#activeVault = vault;
+      this.#settings.setActiveVault(requestedPath, vault);
+      return;
+    }
+
+    const nextLease = this.#acquireWriterLease(requestedPath);
+    const nextPath = nextLease.vaultPath;
+    let settingsCommitted = false;
+    try {
+      nextLease.assertHeld();
+      this.#settings.setActiveVault(nextPath, vault);
+      settingsCommitted = true;
+    } finally {
+      if (!settingsCommitted) nextLease.release();
+    }
+
+    const previousLease = this.#activeWriterLease;
+    this.#activeWriterLease = nextLease;
+    this.#activeVaultPath = nextPath;
     this.#activeVault = vault;
-    this.#settings.setActiveVault(vaultPath, vault);
+    if (previousLease) {
+      try {
+        previousLease.release();
+      } catch {
+        // The previous vault is no longer writable through this service.
+      }
+    }
+  }
+
+  #assertActiveWriterLease(): void {
+    if (!this.#activeWriterLease) {
+      throw new PigeDomainError("vault.writer_lease_lost", "The active vault writer lease is unavailable.");
+    }
+    this.#activeWriterLease.assertHeld();
   }
 
   #requireActiveVault(): VaultSummary {
     if (!this.#activeVault) {
       throw new PigeDomainError("vault_missing", "No active Pige vault is selected.");
     }
+    this.#assertActiveWriterLease();
     return this.#activeVault;
   }
 
@@ -184,6 +271,7 @@ export class VaultService {
     if (!this.#activeVaultPath) {
       throw new PigeDomainError("vault_missing", "No active Pige vault is selected.");
     }
+    this.#assertActiveWriterLease();
     return this.#activeVaultPath;
   }
 }

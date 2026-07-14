@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import type {
   JobActionRequest,
   JobActionResult,
@@ -54,10 +55,17 @@ import {
 } from "./job-execution-control";
 import { ProposalService } from "./proposal-service";
 import { AgentTurnConversationStore, type PreservedAgentTurn } from "./agent-turn-conversation-store";
+import {
+  JobRecordStore,
+  type JobRecordSnapshot
+} from "./job-record-store";
+
+type JobRecordFile = JobRecordSnapshot;
 
 export interface JobsVaultPort {
   current(): VaultSummary | undefined;
   activeVaultPath(): string | undefined;
+  assertWriterLease?(vaultPath: string): void;
 }
 
 export interface ProcessQueuedCapturesRequest {
@@ -195,6 +203,7 @@ export class JobsService {
   readonly #documentParser: DocumentParserPort | undefined;
   readonly #ocr: OcrPort | undefined;
   readonly #datasets: DatasetMaterializerPort | undefined;
+  readonly #jobRecordStores = new Map<string, JobRecordStore>();
   readonly #activeExecutions = new Map<string, AbortController>();
   #indexRebuildTail: Promise<void> = Promise.resolve();
 
@@ -343,10 +352,11 @@ export class JobsService {
 
   cancel(request: JobActionRequest): JobActionResult {
     const vaultPath = this.#requireActiveVaultPath();
-    const jobFile = readJobRecordFile(vaultPath, request.jobId);
-    if (!jobFile) {
+    const snapshot = this.#readJobSnapshot(vaultPath, request.jobId);
+    if (!snapshot) {
       return { status: "not_found", reason: "Job record was not found." };
     }
+    const jobFile = { path: snapshot.path, job: snapshot.job };
 
     if (jobFile.job.state === "cancel_requested") {
       return {
@@ -376,11 +386,11 @@ export class JobsService {
         },
         message: "Cancellation requested; waiting for a safe local checkpoint."
       });
-      writeJsonAtomic(jobFile.path, updatedJob);
+      const committed = this.#replaceJob(snapshot, updatedJob).job;
       controller.abort();
       return {
         status: "cancel_requested",
-        job: toJobSummary(vaultPath, updatedJob)
+        job: toJobSummary(vaultPath, committed)
       };
     }
 
@@ -418,19 +428,20 @@ export class JobsService {
       },
       message: "Job cancelled. Preserved source data remains in the vault."
     });
-    writeJsonAtomic(jobFile.path, updatedJob);
+    const committed = this.#replaceJob(snapshot, updatedJob).job;
     return {
       status: "cancelled",
-      job: toJobSummary(vaultPath, updatedJob)
+      job: toJobSummary(vaultPath, committed)
     };
   }
 
   retry(request: JobActionRequest): JobActionResult {
     const vaultPath = this.#requireActiveVaultPath();
-    const jobFile = readJobRecordFile(vaultPath, request.jobId);
-    if (!jobFile) {
+    const snapshot = this.#readJobSnapshot(vaultPath, request.jobId);
+    if (!snapshot) {
       return { status: "not_found", reason: "Job record was not found." };
     }
+    const jobFile = { path: snapshot.path, job: snapshot.job };
 
     if (!RETRYABLE_STATES.has(jobFile.job.state)) {
       return {
@@ -466,10 +477,10 @@ export class JobsService {
       ...(preserveDurableWrites ? { cancellation: { durableWritesApplied: true } } : {}),
       message: "Job requeued for later processing."
     });
-    writeJsonAtomic(jobFile.path, updatedJob);
+    const committed = this.#replaceJob(snapshot, updatedJob).job;
     return {
       status: "requeued",
-      job: toJobSummary(vaultPath, updatedJob)
+      job: toJobSummary(vaultPath, committed)
     };
   }
 
@@ -518,15 +529,14 @@ export class JobsService {
       },
       message: "Home Agent question accepted."
     });
-    writeJsonAtomic(createJobRecordPath(vaultPath, job.id), job);
-    return job;
+    return this.#createJob(createJobRecordPath(vaultPath, job.id), job);
   }
 
   createAgentTurnJob(request: CreateAgentTurnJobRequest): JobRecord {
     const activeVault = this.#vaults.current();
     const vaultPath = this.#requireActiveVaultPath();
     const timestamp = new Date().toISOString();
-    const matchingJobs = readJobRecordFiles(path.join(vaultPath, ".pige", "jobs"))
+    const matchingJobs = readJobRecordFiles(this.#jobRecordStore(vaultPath), path.join(vaultPath, ".pige", "jobs"))
       .filter(({ job }) => job.class === "agent_turn" && job.conversationEventId === request.conversationEventId);
     if (matchingJobs.length > 1) {
       throw new PigeDomainError("agent_runtime.turn_conflict", "Multiple Agent Jobs claim one preserved turn.");
@@ -617,13 +627,19 @@ export class JobsService {
         ? "Agent turn accepted; waiting for its source preservation binding."
         : "Agent turn accepted and preserved."
     });
-    writeJsonAtomic(createJobRecordPath(vaultPath, job.id), job);
-    return job;
+    try {
+      return this.#createJob(createJobRecordPath(vaultPath, job.id), job);
+    } catch (caught) {
+      if (caught instanceof PigeDomainError && caught.code === "job.revision_conflict") {
+        return this.createAgentTurnJob(request);
+      }
+      throw caught;
+    }
   }
 
   findAgentTurnJobByConversationEvent(conversationEventId: string): JobRecord | undefined {
     const vaultPath = this.#requireActiveVaultPath();
-    const matches = readJobRecordFiles(path.join(vaultPath, ".pige", "jobs"))
+    const matches = readJobRecordFiles(this.#jobRecordStore(vaultPath), path.join(vaultPath, ".pige", "jobs"))
       .map(({ job }) => job)
       .filter((job) => job.class === "agent_turn" && job.conversationEventId === conversationEventId);
     if (matches.length > 1) {
@@ -637,7 +653,8 @@ export class JobsService {
     execute: (execution: TextAgentTurnExecution) => Promise<T>
   ): Promise<T> {
     const vaultPath = this.#requireActiveVaultPath();
-    const jobFile = readJobRecordFile(vaultPath, jobId);
+    const initialSnapshot = this.#readJobSnapshot(vaultPath, jobId);
+    const jobFile = initialSnapshot;
     if (
       !jobFile ||
       !isQueuedHomeAgentTurn(jobFile.job)
@@ -645,8 +662,7 @@ export class JobsService {
       throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The text Agent turn is not ready for execution.");
     }
     const execution = this.#beginCooperativeExecution(
-      jobFile.path,
-      jobFile.job,
+      jobFile,
       "planning",
       "Pi Agent is interpreting the preserved Home turn."
     );
@@ -655,7 +671,7 @@ export class JobsService {
         job: execution.job,
         signal: execution.control.signal,
         markDurableCheckpoint: (checkpointId) => {
-          const current = readJobRecordAtPath(jobFile.path);
+          const current = this.#readJobSnapshot(vaultPath, jobId)?.job;
           if (current?.cancellation?.durableWritesApplied === true) return;
           execution.control.markDurableCheckpoint(checkpointId);
         }
@@ -663,7 +679,7 @@ export class JobsService {
     } catch (caught) {
       const cancellation = resolveCancellation(execution.control, caught);
       if (cancellation) {
-        markJobCancellationOutcome(jobFile.path, execution.job, cancellation);
+        this.#markJobCancellationOutcome(jobFile.path, execution.job, cancellation);
         throw new PigeDomainError("agent_runtime.turn_cancelled", "The Agent turn was cancelled at a safe checkpoint.");
       }
       throw caught;
@@ -674,7 +690,8 @@ export class JobsService {
 
   attachAgentTurnSource(jobId: string, sourceId: string): JobRecord {
     const vaultPath = this.#requireActiveVaultPath();
-    const jobFile = readJobRecordFile(vaultPath, jobId);
+    const snapshot = this.#readJobSnapshot(vaultPath, jobId);
+    const jobFile = snapshot ? { path: snapshot.path, job: snapshot.job } : undefined;
     const sourceRecordFile = readSourceRecordFile(vaultPath, sourceId);
     if (
       !jobFile ||
@@ -711,13 +728,13 @@ export class JobsService {
       updatedAt: new Date().toISOString(),
       message: "Agent turn source preservation completed; semantic processing is queued."
     });
-    writeJsonAtomic(jobFile.path, linked);
-    return linked;
+    return this.#replaceJob(snapshot!, linked).job;
   }
 
   failAgentTurnSourcePreservation(jobId: string): JobRecord | undefined {
     const vaultPath = this.#requireActiveVaultPath();
-    const jobFile = readJobRecordFile(vaultPath, jobId);
+    const snapshot = this.#readJobSnapshot(vaultPath, jobId);
+    const jobFile = snapshot ? { path: snapshot.path, job: snapshot.job } : undefined;
     if (
       !jobFile ||
       jobFile.job.class !== "agent_turn" ||
@@ -732,8 +749,7 @@ export class JobsService {
       updatedAt: new Date().toISOString(),
       message: "The attachment could not be preserved safely; the Agent turn remains available for an explicit retry."
     });
-    writeJsonAtomic(jobFile.path, failed);
-    return failed;
+    return this.#replaceJob(snapshot!, failed).job;
   }
 
   reconcilePendingAgentTurnSources(): ReconcilePendingAgentTurnSourcesResult {
@@ -741,7 +757,7 @@ export class JobsService {
     let linked = 0;
     let waiting = 0;
     let failed = 0;
-    for (const jobFile of readJobRecordFiles(path.join(vaultPath, ".pige", "jobs"))) {
+    for (const jobFile of readJobRecordFiles(this.#jobRecordStore(vaultPath), path.join(vaultPath, ".pige", "jobs"))) {
       if (
         jobFile.job.class !== "agent_turn" ||
         jobFile.job.state !== "waiting_dependency" ||
@@ -756,7 +772,7 @@ export class JobsService {
         continue;
       }
       if (sourceRecordFile.sourceRecord.metadata.agentTurnJobId !== jobFile.job.id) {
-        markJobFailedFinal(
+        this.#markJobFailedFinal(
           jobFile.path,
           jobFile.job,
           "The preserved source binding conflicts with its Agent turn; automatic processing was stopped."
@@ -775,7 +791,7 @@ export class JobsService {
     let linked = 0;
     let waiting = 0;
     let failed = 0;
-    for (const jobFile of readJobRecordFiles(path.join(vaultPath, ".pige", "jobs"))) {
+    for (const jobFile of readJobRecordFiles(this.#jobRecordStore(vaultPath), path.join(vaultPath, ".pige", "jobs"))) {
       const toolInput = jobFile.job.inputRefs?.find((ref) => ref.role === AGENT_TOOL_INPUT_ROLE);
       const hasCompleteLink = [
         AGENT_TURN_URL_SOURCE_ROLE,
@@ -804,7 +820,7 @@ export class JobsService {
         linked += 1;
       } catch (caught) {
         if (!(caught instanceof PigeDomainError)) throw caught;
-        markJobFailedFinal(
+        this.#markJobFailedFinal(
           jobFile.path,
           jobFile.job,
           "The durable Agent-selected URL source could not be reconciled safely after restart."
@@ -820,7 +836,8 @@ export class JobsService {
     request: ReserveAgentTurnUrlSourceRequest
   ): { readonly job: JobRecord; readonly sourceId: string } {
     const vaultPath = this.#requireActiveVaultPath();
-    const jobFile = readJobRecordFile(vaultPath, jobId);
+    const snapshot = this.#readJobSnapshot(vaultPath, jobId);
+    const jobFile = snapshot ? { path: snapshot.path, job: snapshot.job } : undefined;
     if (
       !jobFile ||
       jobFile.job.class !== "agent_turn" ||
@@ -885,8 +902,7 @@ export class JobsService {
       updatedAt: new Date().toISOString(),
       message: "Pi selected the host-bound URL fetch tool; the submitted URL action is durably reserved."
     });
-    writeJsonAtomic(jobFile.path, reserved);
-    return { job: reserved, sourceId };
+    return { job: this.#replaceJob(snapshot!, reserved).job, sourceId };
   }
 
   markAgentTurnUrlSourcePublicationStarted(
@@ -895,7 +911,8 @@ export class JobsService {
     inputHash: string
   ): JobRecord {
     const vaultPath = this.#requireActiveVaultPath();
-    const jobFile = readJobRecordFile(vaultPath, jobId);
+    const snapshot = this.#readJobSnapshot(vaultPath, jobId);
+    const jobFile = snapshot ? { path: snapshot.path, job: snapshot.job } : undefined;
     const toolInput = jobFile?.job.inputRefs?.find((ref) => ref.role === AGENT_TOOL_INPUT_ROLE);
     if (
       !jobFile ||
@@ -922,13 +939,13 @@ export class JobsService {
       updatedAt: new Date().toISOString(),
       message: "The Agent-selected URL source passed confinement checks; durable preservation is beginning."
     });
-    writeJsonAtomic(jobFile.path, guarded);
-    return guarded;
+    return this.#replaceJob(snapshot!, guarded).job;
   }
 
   linkAgentTurnUrlSource(jobId: string, sourceId: string): AgentTurnUrlSourceLink {
     const vaultPath = this.#requireActiveVaultPath();
-    const jobFile = readJobRecordFile(vaultPath, jobId);
+    const snapshot = this.#readJobSnapshot(vaultPath, jobId);
+    const jobFile = snapshot ? { path: snapshot.path, job: snapshot.job } : undefined;
     const sourceRecordFile = readSourceRecordFile(vaultPath, sourceId);
     if (
       !jobFile ||
@@ -1022,13 +1039,14 @@ export class JobsService {
       updatedAt: new Date().toISOString(),
       message: "Agent-selected URL evidence was fetched, preserved, and projected without a Host-selected semantic continuation."
     });
-    writeJsonAtomic(jobFile.path, linked);
-    return { job: linked, sourceId, pageId: page.pageId, pagePath: page.pagePath, title: page.title };
+    const committed = this.#replaceJob(snapshot!, linked).job;
+    return { job: committed, sourceId, pageId: page.pageId, pagePath: page.pagePath, title: page.title };
   }
 
   readAgentTurnUrlSourceLink(jobId: string, sourceId: string): AgentTurnUrlSourceLink {
     const vaultPath = this.#requireActiveVaultPath();
-    const jobFile = readJobRecordFile(vaultPath, jobId);
+    const snapshot = this.#readJobSnapshot(vaultPath, jobId);
+    const jobFile = snapshot ? { path: snapshot.path, job: snapshot.job } : undefined;
     const sourceRecord = readSourceRecord(vaultPath, sourceId);
     const sourceRef = jobFile?.job.outputRefs?.find(
       (ref) => ref.kind === "source" && ref.id === sourceId && ref.role === AGENT_TURN_URL_SOURCE_ROLE
@@ -1064,10 +1082,11 @@ export class JobsService {
     return { job: jobFile.job, sourceId, pageId, pagePath, title };
   }
 
-  writeRetrievalQueryJob(job: JobRecord): JobRecord {
+  writeRetrievalQueryJob(expected: JobRecord, job: JobRecord): JobRecord {
     const activeVault = this.#vaults.current();
     const vaultPath = this.#requireActiveVaultPath();
-    const existing = readJobRecordFile(vaultPath, job.id);
+    const snapshot = this.#readJobSnapshot(vaultPath, job.id);
+    const existing = snapshot ? { path: snapshot.path, job: snapshot.job } : undefined;
     if (
       !activeVault ||
       !existing ||
@@ -1079,15 +1098,21 @@ export class JobsService {
     ) {
       throw new PigeDomainError("rag.job_binding_invalid", "The Home Agent Job binding is invalid.");
     }
+    if (!isDeepStrictEqual(existing.job, JobRecordSchema.parse(expected))) {
+      throw new PigeDomainError(
+        "job.revision_conflict",
+        "The retrieval Job changed before the requested mutation could be committed."
+      );
+    }
     const validated = JobRecordSchema.parse(job);
-    writeJsonAtomic(existing.path, validated);
-    return validated;
+    return this.#replaceJob(snapshot!, validated).job;
   }
 
-  writeAgentTurnJob(job: JobRecord): JobRecord {
+  writeAgentTurnJob(expected: JobRecord, job: JobRecord): JobRecord {
     const activeVault = this.#vaults.current();
     const vaultPath = this.#requireActiveVaultPath();
-    const existing = readJobRecordFile(vaultPath, job.id);
+    const snapshot = this.#readJobSnapshot(vaultPath, job.id);
+    const existing = snapshot ? { path: snapshot.path, job: snapshot.job } : undefined;
     if (
       !activeVault ||
       !existing ||
@@ -1103,6 +1128,12 @@ export class JobsService {
     if (existing.job.state === "cancel_requested" && job.state !== "cancel_requested") {
       throw new PigeDomainError("agent_runtime.turn_cancelled", "The Agent turn has a pending cancellation request.");
     }
+    if (!isDeepStrictEqual(existing.job, JobRecordSchema.parse(expected))) {
+      throw new PigeDomainError(
+        "job.revision_conflict",
+        "The Agent turn changed before the requested mutation could be committed."
+      );
+    }
     const preserveDurableGuard = existing.job.cancellation?.durableWritesApplied === true;
     const validated = JobRecordSchema.parse({
       ...job,
@@ -1114,14 +1145,13 @@ export class JobsService {
         }
       } : {})
     });
-    writeJsonAtomic(existing.path, validated);
-    return validated;
+    return this.#replaceJob(snapshot!, validated).job;
   }
 
   readAgentTurnJob(jobId: string): JobRecord | undefined {
     const vaultPath = this.#requireActiveVaultPath();
-    const jobFile = readJobRecordFile(vaultPath, jobId);
-    return jobFile?.job.class === "agent_turn" ? jobFile.job : undefined;
+    const snapshot = this.#readJobSnapshot(vaultPath, jobId);
+    return snapshot?.job.class === "agent_turn" ? snapshot.job : undefined;
   }
 
   async processAgentTurnSource(jobId: string): Promise<JobRecord> {
@@ -1142,7 +1172,7 @@ export class JobsService {
   requeueWaitingTextAgentTurns(): { readonly requeued: number } {
     const vaultPath = this.#requireActiveVaultPath();
     let requeued = 0;
-    for (const jobFile of readJobRecordFiles(path.join(vaultPath, ".pige", "jobs"))) {
+    for (const jobFile of readJobRecordFiles(this.#jobRecordStore(vaultPath), path.join(vaultPath, ".pige", "jobs"))) {
       if (
         jobFile.job.class !== "agent_turn" ||
         jobFile.job.state !== "waiting_dependency" ||
@@ -1158,7 +1188,7 @@ export class JobsService {
         waitingDependency: _waitingDependency,
         ...current
       } = jobFile.job;
-      writeJsonAtomic(jobFile.path, JobRecordSchema.parse({
+      this.#replaceExpectedJob(jobFile, JobRecordSchema.parse({
         ...current,
         state: "queued",
         ...(jobFile.job.sourceId === undefined ? {} : { stage: "planning" as const }),
@@ -1172,7 +1202,7 @@ export class JobsService {
 
   listQueuedTextAgentTurns(limit = 20): readonly JobRecord[] {
     const vaultPath = this.#requireActiveVaultPath();
-    return readJobRecordFiles(path.join(vaultPath, ".pige", "jobs"))
+    return readJobRecordFiles(this.#jobRecordStore(vaultPath), path.join(vaultPath, ".pige", "jobs"))
       .map((jobFile) => jobFile.job)
       .filter(isQueuedHomeAgentTurn)
       .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
@@ -1183,7 +1213,7 @@ export class JobsService {
     const vaultPath = this.#requireActiveVaultPath();
     let requeued = 0;
     let failedRetryable = 0;
-    for (const jobFile of readJobRecordFiles(path.join(vaultPath, ".pige", "jobs"))) {
+    for (const jobFile of readJobRecordFiles(this.#jobRecordStore(vaultPath), path.join(vaultPath, ".pige", "jobs"))) {
       if (jobFile.job.state !== "running" && jobFile.job.state !== "cancel_requested") continue;
       const canResumeIdempotently = jobFile.job.state === "running" &&
         (jobFile.job.class === "capture" ||
@@ -1197,7 +1227,7 @@ export class JobsService {
       const message = canResumeIdempotently
         ? "Pige restarted during this idempotent local job; validated outputs will be reused and processing has been requeued."
         : "Pige restarted before this job reached a safe completion point. Preserved inputs remain available for an explicit retry.";
-      writeJsonAtomic(jobFile.path, JobRecordSchema.parse({
+      this.#replaceExpectedJob(jobFile, JobRecordSchema.parse({
         ...jobFile.job,
         state,
         updatedAt: new Date().toISOString(),
@@ -1211,23 +1241,24 @@ export class JobsService {
 
   requeueWaitingAgentIngest(): RequeueWaitingAgentIngestResult {
     const vaultPath = this.#requireActiveVaultPath();
+    const store = this.#jobRecordStore(vaultPath);
     if (!canRunAgentIngest(this.#agentIngest)) {
       return { requeued: 0 };
     }
 
     let requeued = 0;
-    for (const jobFile of readJobRecordFiles(path.join(vaultPath, ".pige", "jobs"))) {
+    for (const jobFile of readJobRecordFiles(store, path.join(vaultPath, ".pige", "jobs"))) {
       if (!isAgentKnowledgeTurn(jobFile.job) || jobFile.job.state !== "waiting_dependency") continue;
       if (hasDatasetQueryContinuationRefs(jobFile.job)) continue;
       const sourceRecord = jobFile.job.sourceId ? readSourceRecord(vaultPath, jobFile.job.sourceId) : undefined;
       const agentSelectedOcr = Boolean(sourceRecord && supportsAgentSelectedOcr(sourceRecord.kind));
       const waitingAgentOcr = agentSelectedOcr &&
-        hasWaitingAgentOcrChild(vaultPath, jobFile.job);
+        hasWaitingAgentOcrChild(store, vaultPath, jobFile.job);
       const completedEmptyAgentOcr = Boolean(
         sourceRecord &&
         sourceRecord.metadata.agentTextReady !== true &&
         sourceRecord.metadata.ocrStatus === "completed_empty" &&
-        hasCompletedEmptyAgentOcrChild(vaultPath, jobFile.job, sourceRecord)
+        hasCompletedEmptyAgentOcrChild(store, vaultPath, jobFile.job, sourceRecord)
       );
       if (completedEmptyAgentOcr) continue;
       const agentOcrRequiredBeforePublication = agentSelectedOcr &&
@@ -1241,16 +1272,16 @@ export class JobsService {
       if (
         sourceRecord &&
         supportsAgentSelectedParser(sourceRecord.kind) &&
-        hasWaitingAgentParseChild(vaultPath, jobFile.job) &&
+        hasWaitingAgentParseChild(store, vaultPath, jobFile.job) &&
         !this.#documentParser?.canParse(sourceRecord.kind)
       ) continue;
       if (
         sourceRecord &&
         supportsAgentSelectedDataset(sourceRecord.kind) &&
-        hasWaitingAgentDatasetChild(vaultPath, jobFile.job) &&
+        hasWaitingAgentDatasetChild(store, vaultPath, jobFile.job) &&
         !this.#datasets?.canMaterialize(sourceRecord.kind)
       ) continue;
-      writeJsonAtomic(jobFile.path, JobRecordSchema.parse({
+      this.#replaceExpectedJob(jobFile, JobRecordSchema.parse({
         ...jobFile.job,
         state: "queued",
         updatedAt: new Date().toISOString(),
@@ -1268,12 +1299,12 @@ export class JobsService {
     if (!parser) return { requeued: 0 };
 
     let requeued = 0;
-    for (const jobFile of readJobRecordFiles(path.join(vaultPath, ".pige", "jobs"))) {
+    for (const jobFile of readJobRecordFiles(this.#jobRecordStore(vaultPath), path.join(vaultPath, ".pige", "jobs"))) {
       if (jobFile.job.class !== "parse" || jobFile.job.state !== "waiting_dependency" || !jobFile.job.sourceId) continue;
       if (isAgentSelectedParseJob(jobFile.job)) continue;
       const sourceRecord = readSourceRecord(vaultPath, jobFile.job.sourceId);
       if (!sourceRecord || !parser.canParse(sourceRecord.kind)) continue;
-      writeJsonAtomic(jobFile.path, JobRecordSchema.parse({
+      this.#replaceExpectedJob(jobFile, JobRecordSchema.parse({
         ...jobFile.job,
         state: "queued",
         updatedAt: new Date().toISOString(),
@@ -1290,12 +1321,12 @@ export class JobsService {
     if (!ocr) return { requeued: 0 };
 
     let requeued = 0;
-    for (const jobFile of readJobRecordFiles(path.join(vaultPath, ".pige", "jobs"))) {
+    for (const jobFile of readJobRecordFiles(this.#jobRecordStore(vaultPath), path.join(vaultPath, ".pige", "jobs"))) {
       if (jobFile.job.class !== "ocr" || jobFile.job.state !== "waiting_dependency" || !jobFile.job.sourceId) continue;
       if (isAgentSelectedOcrJob(jobFile.job)) continue;
       const sourceRecord = readSourceRecord(vaultPath, jobFile.job.sourceId);
       if (!sourceRecord || !inspectOcrSource(ocr, sourceRecord).ready) continue;
-      writeJsonAtomic(jobFile.path, JobRecordSchema.parse({
+      this.#replaceExpectedJob(jobFile, JobRecordSchema.parse({
         ...jobFile.job,
         state: "queued",
         updatedAt: new Date().toISOString(),
@@ -1308,7 +1339,7 @@ export class JobsService {
 
   async requestIndexRebuild(): Promise<LocalDatabaseRebuildResult> {
     const vaultPath = this.#requireActiveVaultPath();
-    const job = createIndexRebuildJob(vaultPath);
+    const job = createIndexRebuildJob(this.#jobRecordStore(vaultPath), vaultPath);
     const result = await this.processQueuedIndexRebuild({ jobIds: [job.id] });
     if (!result.lastRebuild) {
       throw new PigeDomainError("index_rebuild_failed", "Index rebuild failed. The job remains retryable.");
@@ -1318,7 +1349,7 @@ export class JobsService {
 
   processQueuedCaptures(request: ProcessQueuedCapturesRequest = {}): ProcessQueuedCapturesResult {
     const vaultPath = this.#requireActiveVaultPath();
-    const jobFiles = findQueuedCaptureJobFiles(vaultPath, request);
+    const jobFiles = findQueuedCaptureJobFiles(this.#jobRecordStore(vaultPath), vaultPath, request);
     let completed = 0;
     let failed = 0;
 
@@ -1327,14 +1358,13 @@ export class JobsService {
       try {
         const sourceRecordFile = jobFile.job.sourceId ? readSourceRecordFile(vaultPath, jobFile.job.sourceId) : undefined;
         if (!sourceRecordFile) {
-          markJobFailedRetryable(jobFile.path, jobFile.job, "Source record is missing. Preserved job remains retryable.");
+          this.#markJobFailedRetryable(jobFile.path, jobFile.job, "Source record is missing. Preserved job remains retryable.");
           failed += 1;
           continue;
         }
 
         const captureExecution = this.#beginNonCooperativeExecution(
-          jobFile.path,
-          jobFile.job,
+          jobFile,
           "capturing_source",
           "Publishing the preserved source into the local knowledge vault."
         );
@@ -1356,6 +1386,7 @@ export class JobsService {
           supportsAgentSelectedOcr(sourceRecordFile.sourceRecord.kind)
         ) {
           ensureAgentIngestJob(
+            this.#jobRecordStore(vaultPath),
             vaultPath,
             captureExecution.job,
             sourceRecordFile.sourceRecord.id,
@@ -1364,6 +1395,7 @@ export class JobsService {
           );
         } else {
           ensureAgentIngestJob(
+            this.#jobRecordStore(vaultPath),
             vaultPath,
             captureExecution.job,
             sourceRecordFile.sourceRecord.id,
@@ -1384,11 +1416,15 @@ export class JobsService {
         appendLog(vaultPath, `${new Date().toISOString()} Created source page [${page.title}](${page.pagePath}) for source \`${jobFile.job.sourceId}\`.`);
         completed += 1;
       } catch (caught) {
+        if (isJobMutationContention(caught)) {
+          failed += 1;
+          continue;
+        }
         const cancellation = execution ? resolveCancellation(execution.control, caught) : undefined;
         if (cancellation) {
-          markJobCancellationOutcome(jobFile.path, execution?.job ?? jobFile.job, cancellation);
+          this.#markJobCancellationOutcome(jobFile.path, execution?.job ?? jobFile.job, cancellation);
         } else {
-          markJobFailedRetryable(
+          this.#markJobFailedRetryable(
             jobFile.path,
             execution?.job ?? jobFile.job,
             "Source page creation failed. Preserved source remains retryable.",
@@ -1408,7 +1444,7 @@ export class JobsService {
 
   async processQueuedParses(request: ProcessQueuedParsesRequest = {}): Promise<ProcessQueuedParsesResult> {
     const vaultPath = this.#requireActiveVaultPath();
-    const jobFiles = findQueuedParseJobFiles(vaultPath, request);
+    const jobFiles = findQueuedParseJobFiles(this.#jobRecordStore(vaultPath), vaultPath, request);
     const agentReadySourceIds: string[] = [];
     const ocrWaitingSourceIds: string[] = [];
     let completed = 0;
@@ -1417,26 +1453,26 @@ export class JobsService {
     for (const jobFile of jobFiles) {
       const sourceRecordFile = jobFile.job.sourceId ? readSourceRecordFile(vaultPath, jobFile.job.sourceId) : undefined;
       if (!sourceRecordFile) {
-        markJobFailedRetryable(jobFile.path, jobFile.job, "Source record is missing. Preserved parse job remains retryable.");
+        this.#markJobFailedRetryable(jobFile.path, jobFile.job, "Source record is missing. Preserved parse job remains retryable.");
         failed += 1;
         continue;
       }
       const parser = this.#documentParser;
       if (!parser || !parser.canParse(sourceRecordFile.sourceRecord.kind)) {
-        markJobWaitingDependency(jobFile.path, jobFile.job, "Waiting for a bundled local parser that supports this document type.");
+        this.#markJobWaitingDependency(jobFile.path, jobFile.job, "Waiting for a bundled local parser that supports this document type.");
         failed += 1;
         continue;
       }
 
       const execution = this.#beginCooperativeExecution(
-        jobFile.path,
-        jobFile.job,
+        jobFile,
         "parsing",
         "Extracting document text in the local parser worker."
       );
       const runningJob = execution.job;
       const agentSelected = isAgentSelectedParseJob(runningJob);
       const detachParentAbort = bridgeParentAbortToChild(
+        this.#jobRecordStore(vaultPath),
         jobFile.path,
         execution.controller,
         request.abortSignal
@@ -1456,6 +1492,7 @@ export class JobsService {
         if (!agentSelected && result.needsOcr) {
           ocrCapability = inspectOcrSource(this.#ocr, refreshedSource);
           ensureOcrWaitingJob(
+            this.#jobRecordStore(vaultPath),
             vaultPath,
             runningJob,
             refreshedSource,
@@ -1470,6 +1507,7 @@ export class JobsService {
           (!result.needsOcr || ocrCapability?.ready !== true)
         ) {
           ensureAgentIngestJob(
+            this.#jobRecordStore(vaultPath),
             vaultPath,
             runningJob,
             refreshedSource.id,
@@ -1495,15 +1533,17 @@ export class JobsService {
       } catch (caught) {
         const cancellation = resolveCancellation(execution.control, caught);
         if (cancellation) {
-          markJobCancellationOutcome(jobFile.path, runningJob, cancellation);
+          this.#markJobCancellationOutcome(jobFile.path, runningJob, cancellation);
+        } else if (isJobMutationContention(caught)) {
+          // Another exact Job revision won; do not overwrite its authoritative state.
         } else {
           const failure = parseFailure(caught, sourceRecordFile.sourceRecord.kind);
           if (failure.waiting) {
-            markJobWaitingDependency(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
+            this.#markJobWaitingDependency(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
           } else if (failure.final) {
-            markJobFailedFinal(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
+            this.#markJobFailedFinal(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
           } else {
-            markJobFailedRetryable(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
+            this.#markJobFailedRetryable(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
           }
         }
         failed += 1;
@@ -1526,7 +1566,7 @@ export class JobsService {
     request: ProcessQueuedDatasetImportsRequest = {}
   ): Promise<ProcessQueuedDatasetImportsResult> {
     const vaultPath = this.#requireActiveVaultPath();
-    const jobFiles = findQueuedDatasetImportJobFiles(vaultPath, request);
+    const jobFiles = findQueuedDatasetImportJobFiles(this.#jobRecordStore(vaultPath), vaultPath, request);
     let completed = 0;
     let failed = 0;
 
@@ -1535,7 +1575,7 @@ export class JobsService {
         ? readSourceRecordFile(vaultPath, jobFile.job.sourceId)
         : undefined;
       if (!sourceRecordFile) {
-        markJobFailedRetryable(
+        this.#markJobFailedRetryable(
           jobFile.path,
           jobFile.job,
           "Source record is missing. Preserved Dataset import remains retryable."
@@ -1545,7 +1585,7 @@ export class JobsService {
       }
       const datasets = this.#datasets;
       if (!datasets || !datasets.canMaterialize(sourceRecordFile.sourceRecord.kind)) {
-        markJobWaitingDependency(
+        this.#markJobWaitingDependency(
           jobFile.path,
           jobFile.job,
           "Waiting for the bundled local Dataset materialization capability."
@@ -1555,13 +1595,13 @@ export class JobsService {
       }
 
       const execution = this.#beginCooperativeExecution(
-        jobFile.path,
-        jobFile.job,
+        jobFile,
         "importing",
         "Materializing a bounded local Dataset Bundle from preserved structured evidence."
       );
       const runningJob = execution.job;
       const detachParentAbort = bridgeParentAbortToChild(
+        this.#jobRecordStore(vaultPath),
         jobFile.path,
         execution.controller,
         request.abortSignal
@@ -1575,8 +1615,7 @@ export class JobsService {
           runningJob,
           execution.control
         );
-        const current = readJobRecordAtPath(jobFile.path) ?? runningJob;
-        writeJsonAtomic(jobFile.path, JobRecordSchema.parse({
+        this.#mutateJob(jobFile.path, (current) => JobRecordSchema.parse({
           ...current,
           outputRefs: Array.from(new Map([
             ...(current.outputRefs ?? []).map((ref) => [`${ref.kind}:${ref.id}:${ref.role ?? ""}`, ref] as const),
@@ -1614,15 +1653,17 @@ export class JobsService {
       } catch (caught) {
         const cancellation = resolveCancellation(execution.control, caught);
         if (cancellation) {
-          markJobCancellationOutcome(jobFile.path, runningJob, cancellation);
+          this.#markJobCancellationOutcome(jobFile.path, runningJob, cancellation);
+        } else if (isJobMutationContention(caught)) {
+          // Another exact Job revision won; do not overwrite its authoritative state.
         } else {
           const failure = datasetImportFailure(caught);
           if (failure.waiting) {
-            markJobWaitingDependency(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
+            this.#markJobWaitingDependency(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
           } else if (failure.final) {
-            markJobFailedFinal(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
+            this.#markJobFailedFinal(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
           } else {
-            markJobFailedRetryable(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
+            this.#markJobFailedRetryable(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
           }
         }
         failed += 1;
@@ -1637,7 +1678,7 @@ export class JobsService {
 
   async processQueuedOcr(request: ProcessQueuedOcrRequest = {}): Promise<ProcessQueuedOcrResult> {
     const vaultPath = this.#requireActiveVaultPath();
-    const jobFiles = findQueuedOcrJobFiles(vaultPath, request);
+    const jobFiles = findQueuedOcrJobFiles(this.#jobRecordStore(vaultPath), vaultPath, request);
     const agentReadySourceIds: string[] = [];
     let completed = 0;
     let failed = 0;
@@ -1645,7 +1686,7 @@ export class JobsService {
     for (const jobFile of jobFiles) {
       const sourceRecordFile = jobFile.job.sourceId ? readSourceRecordFile(vaultPath, jobFile.job.sourceId) : undefined;
       if (!sourceRecordFile) {
-        markJobFailedRetryable(jobFile.path, jobFile.job, "Source record is missing. Preserved OCR job remains retryable.");
+        this.#markJobFailedRetryable(jobFile.path, jobFile.job, "Source record is missing. Preserved OCR job remains retryable.");
         failed += 1;
         continue;
       }
@@ -1655,6 +1696,7 @@ export class JobsService {
       if (!ocr || !capability.ready) {
         if (!agentSelected && sourceRecordFile.sourceRecord.metadata.agentTextReady === true) {
           ensureAgentIngestJob(
+            this.#jobRecordStore(vaultPath),
             vaultPath,
             jobFile.job,
             sourceRecordFile.sourceRecord.id,
@@ -1663,14 +1705,13 @@ export class JobsService {
           );
           agentReadySourceIds.push(sourceRecordFile.sourceRecord.id);
         }
-        markJobWaitingDependency(jobFile.path, jobFile.job, capability.message);
+        this.#markJobWaitingDependency(jobFile.path, jobFile.job, capability.message);
         failed += 1;
         continue;
       }
 
       const execution = this.#beginCooperativeExecution(
-        jobFile.path,
-        jobFile.job,
+        jobFile,
         "ocr",
         sourceRecordFile.sourceRecord.kind === "pdf_file"
           ? "Rendering verified PDF page targets and recognizing them with local OCR."
@@ -1680,6 +1721,7 @@ export class JobsService {
       );
       const runningJob = execution.job;
       const detachParentAbort = bridgeParentAbortToChild(
+        this.#jobRecordStore(vaultPath),
         jobFile.path,
         execution.controller,
         request.abortSignal
@@ -1695,6 +1737,7 @@ export class JobsService {
         );
         if (!agentSelected && result.agentTextReady) {
           ensureAgentIngestJob(
+            this.#jobRecordStore(vaultPath),
             vaultPath,
             runningJob,
             sourceRecordFile.sourceRecord.id,
@@ -1724,7 +1767,9 @@ export class JobsService {
       } catch (caught) {
         const cancellation = resolveCancellation(execution.control, caught);
         if (cancellation) {
-          markJobCancellationOutcome(jobFile.path, runningJob, cancellation);
+          this.#markJobCancellationOutcome(jobFile.path, runningJob, cancellation);
+        } else if (isJobMutationContention(caught)) {
+          // Another exact Job revision won; do not overwrite its authoritative state.
         } else {
           const failure = ocrFailure(caught, sourceRecordFile.sourceRecord.kind);
           if (failure.waiting) {
@@ -1734,6 +1779,7 @@ export class JobsService {
               isOcrCapabilityUnavailableError(caught)
             ) {
               ensureAgentIngestJob(
+                this.#jobRecordStore(vaultPath),
                 vaultPath,
                 runningJob,
                 sourceRecordFile.sourceRecord.id,
@@ -1744,11 +1790,11 @@ export class JobsService {
                 agentReadySourceIds.push(sourceRecordFile.sourceRecord.id);
               }
             }
-            markJobWaitingDependency(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
+            this.#markJobWaitingDependency(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
           } else if (failure.final) {
-            markJobFailedFinal(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
+            this.#markJobFailedFinal(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
           } else {
-            markJobFailedRetryable(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
+            this.#markJobFailedRetryable(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
           }
         }
         failed += 1;
@@ -1763,7 +1809,7 @@ export class JobsService {
 
   async processQueuedAgentIngest(request: ProcessQueuedAgentIngestRequest = {}): Promise<ProcessQueuedAgentIngestResult> {
     const vaultPath = this.#requireActiveVaultPath();
-    const jobFiles = findQueuedAgentIngestJobFiles(vaultPath, request);
+    const jobFiles = findQueuedAgentIngestJobFiles(this.#jobRecordStore(vaultPath), vaultPath, request);
     let completed = 0;
     let failed = 0;
 
@@ -1780,7 +1826,7 @@ export class JobsService {
           );
           if (existingAssistant) {
             const finishedAt = new Date().toISOString();
-            writeJsonAtomic(jobFile.path, JobRecordSchema.parse({
+            this.#replaceExpectedJob(jobFile, JobRecordSchema.parse({
               ...jobFile.job,
               state: "completed",
               updatedAt: finishedAt,
@@ -1800,7 +1846,7 @@ export class JobsService {
             continue;
           }
         } catch {
-          markJobFailedRetryable(
+          this.#markJobFailedRetryable(
             jobFile.path,
             jobFile.job,
             "The preserved Agent turn binding is unavailable. The source remains preserved."
@@ -1810,14 +1856,14 @@ export class JobsService {
         }
       }
       if (!agentIngest) {
-        markJobWaitingDependency(jobFile.path, jobFile.job, "Waiting for a tested default model before Agent ingest.");
+        this.#markJobWaitingDependency(jobFile.path, jobFile.job, "Waiting for a tested default model before Agent ingest.");
         failed += 1;
         continue;
       }
 
       const sourceRecordFile = jobFile.job.sourceId ? readSourceRecordFile(vaultPath, jobFile.job.sourceId) : undefined;
       if (!sourceRecordFile) {
-        markJobFailedRetryable(jobFile.path, jobFile.job, "Source record is missing. Agent ingest remains retryable.");
+        this.#markJobFailedRetryable(jobFile.path, jobFile.job, "Source record is missing. Agent ingest remains retryable.");
         failed += 1;
         continue;
       }
@@ -1825,7 +1871,7 @@ export class JobsService {
         !supportsAgentSelectedOcr(sourceRecordFile.sourceRecord.kind) &&
         shouldWaitForRunnableOcr(this.#ocr, sourceRecordFile.sourceRecord)
       ) {
-        markJobWaitingDependency(
+        this.#markJobWaitingDependency(
           jobFile.path,
           jobFile.job,
           createAgentOcrWaitMessage(sourceRecordFile.sourceRecord)
@@ -1834,8 +1880,7 @@ export class JobsService {
         continue;
       }
       const execution = this.#beginCooperativeExecution(
-        jobFile.path,
-        jobFile.job,
+        jobFile,
         "waiting_for_model",
         "Agent ingest is preparing grounded evidence for the configured model."
       );
@@ -1844,24 +1889,20 @@ export class JobsService {
       try {
         const result = await agentIngest.ingestSource(vaultPath, sourceRecordFile.sourceRecord, runningJob, {
           onPolicyResolved: (snapshot) => {
-            const current = readJobRecordAtPath(jobFile.path) ?? activeJob;
-            activeJob = JobRecordSchema.parse({
+            activeJob = this.#mutateJob(jobFile.path, (current) => JobRecordSchema.parse({
               ...current,
               policyContextId: snapshot.policyContextId,
               policyHash: snapshot.policyHash,
               updatedAt: new Date().toISOString(),
               message: "Agent ingest policy and model-egress gates resolved before provider access."
-            });
-            writeJsonAtomic(jobFile.path, activeJob);
+            }));
           },
           onEgressRecorded: (operationId) => {
-            const current = readJobRecordAtPath(jobFile.path) ?? activeJob;
-            activeJob = JobRecordSchema.parse({
+            activeJob = this.#mutateJob(jobFile.path, (current) => JobRecordSchema.parse({
               ...current,
               operationIds: Array.from(new Set([...(current.operationIds ?? []), operationId])),
               updatedAt: new Date().toISOString()
-            });
-            writeJsonAtomic(jobFile.path, activeJob);
+            }));
           },
           assertSourceCurrent: (expectedSource) => {
             const currentSource = readSourceRecord(vaultPath, sourceRecordFile.sourceRecord.id);
@@ -1902,6 +1943,7 @@ export class JobsService {
           onPublicationStart: (checkpointId, publicationBinding) => {
             if (publicationBinding) {
               recordAgentNotePublicationCheckpoint(
+                this.#jobRecordStore(vaultPath),
                 vaultPath,
                 jobFile.path,
                 checkpointId,
@@ -1912,6 +1954,7 @@ export class JobsService {
           },
           onProposalStaged: (proposalResult) => {
             markAgentProposalAwaitingReview(
+              this.#jobRecordStore(vaultPath),
               jobFile.path,
               runningJob,
               proposalResult.proposalId,
@@ -1947,8 +1990,7 @@ export class JobsService {
             runningJob.id,
             result.answer
           );
-          const current = readJobRecordAtPath(jobFile.path) ?? activeJob;
-          activeJob = JobRecordSchema.parse({
+          activeJob = this.#mutateJob(jobFile.path, (current) => JobRecordSchema.parse({
             ...current,
             outputRefs: Array.from(new Map([
               ...(current.outputRefs ?? []).map((ref) => [`${ref.kind}:${ref.id}:${ref.role ?? ""}`, ref] as const),
@@ -1960,8 +2002,7 @@ export class JobsService {
               }]
             ]).values()),
             updatedAt: new Date().toISOString()
-          });
-          writeJsonAtomic(jobFile.path, activeJob);
+          }));
           const completedJob = this.#completeCooperativeExecution(
             jobFile.path,
             runningJob,
@@ -1976,8 +2017,7 @@ export class JobsService {
           continue;
         }
         if (result.outcome === "dataset_materialized") {
-          const current = readJobRecordAtPath(jobFile.path) ?? activeJob;
-          activeJob = JobRecordSchema.parse({
+          activeJob = this.#mutateJob(jobFile.path, (current) => JobRecordSchema.parse({
             ...current,
             outputRefs: Array.from(new Map([
               ...(current.outputRefs ?? []).map((ref) => [`${ref.kind}:${ref.id}:${ref.role ?? ""}`, ref] as const),
@@ -1994,10 +2034,9 @@ export class JobsService {
             ]).values()),
             operationIds: Array.from(new Set([...(current.operationIds ?? []), ...result.operationIds])),
             updatedAt: new Date().toISOString()
-          });
-          writeJsonAtomic(jobFile.path, activeJob);
+          }));
           if (preservedAgentTurn) {
-            const latest = readJobRecordAtPath(jobFile.path) ?? activeJob;
+            const latest = activeJob;
             if (latest.state === "cancel_requested") {
               const completedJob = this.#completeCooperativeExecution(
                 jobFile.path,
@@ -2018,8 +2057,11 @@ export class JobsService {
               finishedAt: _finishedAt,
               ...continuation
             } = latest;
-            writeJsonAtomic(jobFile.path, JobRecordSchema.parse({
-              ...withDurableWriteState(continuation, execution.control.durableWriteState()),
+            activeJob = this.#mutateJob(jobFile.path, (current) => JobRecordSchema.parse({
+              ...withDurableWriteState(
+                current.id === continuation.id ? current : continuation,
+                execution.control.durableWriteState()
+              ),
               state: "queued",
               stage: "planning",
               updatedAt: new Date().toISOString(),
@@ -2043,6 +2085,7 @@ export class JobsService {
         }
         if (result.outcome === "confirmation_needed") {
           markAgentProposalAwaitingReview(
+            this.#jobRecordStore(vaultPath),
             jobFile.path,
             runningJob,
             result.proposalId,
@@ -2054,7 +2097,7 @@ export class JobsService {
           completed += 1;
           continue;
         }
-        completeAgentNotePublicationCheckpoint(jobFile.path, result);
+        completeAgentNotePublicationCheckpoint(this.#jobRecordStore(vaultPath), jobFile.path, result);
         if (preservedAgentTurn) {
           const conversations = new AgentTurnConversationStore();
           const assistantEvent = conversations.findAssistantTurn(
@@ -2069,8 +2112,7 @@ export class JobsService {
               ? "Pi Agent completed the selected knowledge action, and the saved note needs review."
               : "Pi Agent completed the selected knowledge action and saved the result to the knowledge base."
           );
-          const current = readJobRecordAtPath(jobFile.path) ?? activeJob;
-          activeJob = JobRecordSchema.parse({
+          activeJob = this.#mutateJob(jobFile.path, (current) => JobRecordSchema.parse({
             ...current,
             outputRefs: Array.from(new Map([
               ...(current.outputRefs ?? []).map((ref) => [`${ref.kind}:${ref.id}:${ref.role ?? ""}`, ref] as const),
@@ -2082,8 +2124,7 @@ export class JobsService {
               }]
             ]).values()),
             updatedAt: new Date().toISOString()
-          });
-          writeJsonAtomic(jobFile.path, activeJob);
+          }));
         }
         const completedJob = this.#completeCooperativeExecution(
           jobFile.path,
@@ -2111,7 +2152,7 @@ export class JobsService {
           completed += 1;
         }
       } catch (caught) {
-        const durableProposalParent = readJobRecordAtPath(jobFile.path);
+        const durableProposalParent = this.#readJobSnapshot(vaultPath, runningJob.id)?.job;
         if (
           durableProposalParent?.state === "awaiting_review" &&
           (durableProposalParent.proposalIds?.length ?? 0) > 0
@@ -2122,44 +2163,45 @@ export class JobsService {
         const cancellation = resolveCancellation(execution.control, caught);
         const durableState = execution.control.durableWriteState();
         if (cancellation) {
-          markJobCancellationOutcome(jobFile.path, runningJob, cancellation);
+          this.#markJobCancellationOutcome(jobFile.path, runningJob, cancellation);
+        } else if (isJobMutationContention(caught)) {
+          // Another exact Job revision won; do not overwrite its authoritative state.
         } else if (caught instanceof PigeDomainError && caught.code === "model_provider.default_model_missing") {
-          markJobWaitingDependency(jobFile.path, runningJob, "Waiting for a tested default model before Agent ingest.", durableState);
+          this.#markJobWaitingDependency(jobFile.path, runningJob, "Waiting for a tested default model before Agent ingest.", durableState);
         } else if (caught instanceof PigeDomainError && caught.code === "agent_runtime.tool_dependency_waiting") {
-          markJobWaitingDependency(
+          this.#markJobWaitingDependency(
             jobFile.path,
             runningJob,
             "Agent-selected source processing is waiting for a registered local capability.",
             durableState
           );
         } else if (caught instanceof PigeDomainError && caught.code === "source.external_unavailable") {
-          markJobWaitingDependency(jobFile.path, runningJob, "Waiting for the referenced original source to be reconnected before Agent ingest can continue.", durableState);
+          this.#markJobWaitingDependency(jobFile.path, runningJob, "Waiting for the referenced original source to be reconnected before Agent ingest can continue.", durableState);
         } else if (caught instanceof PigeDomainError && /^source\.(?:checksum_mismatch|managed_unavailable|path_outside_vault|reference_invalid)$/u.test(caught.code)) {
-          markJobFailedFinal(jobFile.path, runningJob, "The source cannot be verified safely. Re-import it to create a new source version before Agent ingest.", durableState);
+          this.#markJobFailedFinal(jobFile.path, runningJob, "The source cannot be verified safely. Re-import it to create a new source version before Agent ingest.", durableState);
         } else if (caught instanceof PigeDomainError && caught.code === "model_egress.confirmation_required") {
-          markJobWaitingPermission(jobFile.path, runningJob, "Waiting for explicit approval before selected evidence is sent to the configured model service.", durableState);
+          this.#markJobWaitingPermission(jobFile.path, runningJob, "Waiting for explicit approval before selected evidence is sent to the configured model service.", durableState);
         } else if (caught instanceof PigeDomainError && caught.code === "model_egress.blocked") {
-          markJobFailedFinal(jobFile.path, runningJob, "Model egress is blocked by the current privacy policy; the preserved source remains local.", durableState);
+          this.#markJobFailedFinal(jobFile.path, runningJob, "Model egress is blocked by the current privacy policy; the preserved source remains local.", durableState);
         } else if (caught instanceof PigeDomainError && caught.code === "agent_ingest.source_changed") {
           const currentSource = readSourceRecord(vaultPath, sourceRecordFile.sourceRecord.id);
           if (currentSource && shouldWaitForRunnableOcr(this.#ocr, currentSource)) {
-            markJobWaitingDependency(
+            this.#markJobWaitingDependency(
               jobFile.path,
               runningJob,
               `Source evidence changed while Agent ingest was running; waiting for ${documentLabel(currentSource.kind)} OCR enrichment before retry.`,
               durableState
             );
           } else {
-            const currentJob = readJobRecordAtPath(jobFile.path) ?? runningJob;
-            writeJsonAtomic(jobFile.path, JobRecordSchema.parse({
-              ...withDurableWriteState(currentJob, durableState),
+            this.#mutateJob(jobFile.path, (currentJob) => JobRecordSchema.parse({
+              ...withDurableWriteState(currentJob.id === runningJob.id ? currentJob : runningJob, durableState),
               state: "queued",
               updatedAt: new Date().toISOString(),
               message: "Source evidence changed while Agent ingest was running; ingest requeued with the latest evidence."
             }));
           }
         } else {
-          markJobFailedRetryable(
+          this.#markJobFailedRetryable(
             jobFile.path,
             runningJob,
             "Agent ingest failed. Preserved source and source page remain retryable.",
@@ -2210,7 +2252,7 @@ export class JobsService {
         proposal
       };
     }
-    const jobFile = readProposalParentJobRecord(vaultPath, jobId);
+    const jobFile = readProposalParentJobRecord(this.#jobRecordStore(vaultPath), vaultPath, jobId);
     if (!jobFile) {
       throw new PigeDomainError("proposal.parent_job_missing", "The proposal parent Job was not found.");
     }
@@ -2230,7 +2272,7 @@ export class JobsService {
         {
           assertSourceCurrent: (expectedSource) => {
             assertActiveVault();
-            const currentJob = readProposalParentJobRecord(vaultPath, jobId);
+            const currentJob = readProposalParentJobRecord(this.#jobRecordStore(vaultPath), vaultPath, jobId);
             if (!currentJob) {
               throw new PigeDomainError("proposal.parent_job_missing", "The proposal parent Job disappeared.");
             }
@@ -2244,7 +2286,13 @@ export class JobsService {
             }
           },
           onPublicationStart: (checkpointId) => {
-            markProposalApplyStarted(vaultPath, jobFile.job, proposal.id, checkpointId);
+            markProposalApplyStarted(
+              this.#jobRecordStore(vaultPath),
+              vaultPath,
+              jobFile.job,
+              proposal.id,
+              checkpointId
+            );
           }
         }
       );
@@ -2259,7 +2307,9 @@ export class JobsService {
     } catch (caught) {
       if (!isProposalApplyConflict(caught)) throw caught;
       const conflicted = proposals.markConflicted(proposal.id);
-      if (conflicted.proposal) markProposalJobConflicted(vaultPath, jobFile.job, conflicted.proposal);
+      if (conflicted.proposal) {
+        markProposalJobConflicted(this.#jobRecordStore(vaultPath), vaultPath, jobFile.job, conflicted.proposal);
+      }
       return conflicted;
     }
   }
@@ -2270,7 +2320,7 @@ export class JobsService {
     if (!activeVault || !proposal.jobId) {
       throw new PigeDomainError("proposal.parent_job_missing", "The proposal parent Job was not found.");
     }
-    const jobFile = readProposalParentJobRecord(vaultPath, proposal.jobId);
+    const jobFile = readProposalParentJobRecord(this.#jobRecordStore(vaultPath), vaultPath, proposal.jobId);
     if (!jobFile) {
       throw new PigeDomainError("proposal.parent_job_missing", "The proposal parent Job was not found.");
     }
@@ -2286,7 +2336,7 @@ export class JobsService {
         "The conflicted proposal parent Job was not found."
       );
     }
-    const jobFile = readProposalParentJobRecord(vaultPath, proposal.jobId);
+    const jobFile = readProposalParentJobRecord(this.#jobRecordStore(vaultPath), vaultPath, proposal.jobId);
     if (!jobFile) {
       throw new PigeDomainError(
         "proposal.parent_job_missing",
@@ -2306,8 +2356,8 @@ export class JobsService {
         "The conflicted proposal parent Job is no longer awaiting reconciliation."
       );
     }
-    markProposalJobConflicted(vaultPath, jobFile.job, proposal);
-    const reconciled = readProposalParentJobRecord(vaultPath, proposal.jobId);
+    markProposalJobConflicted(this.#jobRecordStore(vaultPath), vaultPath, jobFile.job, proposal);
+    const reconciled = readProposalParentJobRecord(this.#jobRecordStore(vaultPath), vaultPath, proposal.jobId);
     if (
       !reconciled ||
       reconciled.job.state !== "failed_final" ||
@@ -2331,7 +2381,7 @@ export class JobsService {
     if (!vaultPath || !activeVault || !proposal.jobId) {
       throw new PigeDomainError("vault_missing", "No active Pige vault is available for proposal resolution.");
     }
-    const jobFile = readProposalParentJobRecord(vaultPath, proposal.jobId);
+    const jobFile = readProposalParentJobRecord(this.#jobRecordStore(vaultPath), vaultPath, proposal.jobId);
     if (!jobFile) {
       throw new PigeDomainError("proposal.parent_job_missing", "The proposal parent Job was not found.");
     }
@@ -2427,8 +2477,7 @@ export class JobsService {
       },
       message: proposalResolutionMessage(outcome, reviewRequired)
     });
-    writeJsonAtomic(jobFile.path, resolved);
-    return resolved;
+    return this.#replaceExpectedJob(jobFile, resolved);
   }
 
   async #runAgentSelectedParseTool(
@@ -2438,7 +2487,10 @@ export class JobsService {
     parentControl: JobExecutionControl
   ): Promise<AgentIngestParseToolExecution> {
     assertAgentParseToolRequest(parentJob, request);
-    const currentParent = readJobRecordFile(vaultPath, parentJob.id);
+    const currentParentSnapshot = this.#readJobSnapshot(vaultPath, parentJob.id);
+    const currentParent = currentParentSnapshot
+      ? { path: currentParentSnapshot.path, job: currentParentSnapshot.job }
+      : undefined;
     if (!currentParent) {
       throw new PigeDomainError("agent_runtime.tool_parent_missing", "The active Agent Job is unavailable.");
     }
@@ -2471,6 +2523,7 @@ export class JobsService {
     const parserReady = Boolean(this.#documentParser?.canParse(sourceFile.sourceRecord.kind));
     const dependencyCode = parserDependencyCode(sourceFile.sourceRecord.kind);
     let child = ensureAgentParseToolJob(
+      this.#jobRecordStore(vaultPath),
       vaultPath,
       currentParent.job,
       sourceFile.sourceRecord,
@@ -2501,7 +2554,7 @@ export class JobsService {
       if (retry.status !== "requeued" || !retry.job) {
         throw new PigeDomainError("parser.tool_retry_failed", "The durable PDF parse child could not be requeued.");
       }
-      child = readJobRecordFile(vaultPath, child.id)?.job ?? child;
+      child = this.#readJobSnapshot(vaultPath, child.id)?.job ?? child;
     }
     parentControl.markDurableCheckpoint("agent_parse_child_publication_started");
     await this.processQueuedParses({
@@ -2509,7 +2562,7 @@ export class JobsService {
       limit: 1,
       abortSignal: request.signal
     });
-    child = readJobRecordFile(vaultPath, child.id)?.job ?? child;
+    child = this.#readJobSnapshot(vaultPath, child.id)?.job ?? child;
 
     const refreshedSource = readSourceRecord(vaultPath, sourceFile.sourceRecord.id) ?? sourceFile.sourceRecord;
     if (child.state === "completed" || child.state === "completed_with_warnings") {
@@ -2540,7 +2593,10 @@ export class JobsService {
     parentControl: JobExecutionControl
   ): Promise<AgentIngestDatasetToolExecution> {
     assertAgentDatasetToolRequest(parentJob, request);
-    const currentParent = readJobRecordFile(vaultPath, parentJob.id);
+    const currentParentSnapshot = this.#readJobSnapshot(vaultPath, parentJob.id);
+    const currentParent = currentParentSnapshot
+      ? { path: currentParentSnapshot.path, job: currentParentSnapshot.job }
+      : undefined;
     if (!currentParent) {
       throw new PigeDomainError("agent_runtime.tool_parent_missing", "The active Agent Job is unavailable.");
     }
@@ -2575,6 +2631,7 @@ export class JobsService {
 
     const datasetReady = Boolean(this.#datasets?.canMaterialize(sourceFile.sourceRecord.kind));
     let child = ensureAgentDatasetToolJob(
+      this.#jobRecordStore(vaultPath),
       vaultPath,
       currentParent.job,
       sourceFile.sourceRecord,
@@ -2607,14 +2664,14 @@ export class JobsService {
       if (retry.status !== "requeued" || !retry.job) {
         throw new PigeDomainError("dataset.tool_retry_failed", "The durable Dataset child could not be requeued.");
       }
-      child = readJobRecordFile(vaultPath, child.id)?.job ?? child;
+      child = this.#readJobSnapshot(vaultPath, child.id)?.job ?? child;
     }
     await this.processQueuedDatasetImports({
       jobIds: [child.id],
       limit: 1,
       abortSignal: request.signal
     });
-    child = readJobRecordFile(vaultPath, child.id)?.job ?? child;
+    child = this.#readJobSnapshot(vaultPath, child.id)?.job ?? child;
     const refreshedSource = readSourceRecord(vaultPath, sourceFile.sourceRecord.id) ?? sourceFile.sourceRecord;
     if (child.state === "completed" || child.state === "completed_with_warnings") {
       markAgentDatasetOutputDurable(parentControl);
@@ -2647,7 +2704,10 @@ export class JobsService {
     parentControl: JobExecutionControl
   ): Promise<AgentIngestOcrToolExecution> {
     assertAgentOcrToolRequest(parentJob, request);
-    const currentParent = readJobRecordFile(vaultPath, parentJob.id);
+    const currentParentSnapshot = this.#readJobSnapshot(vaultPath, parentJob.id);
+    const currentParent = currentParentSnapshot
+      ? { path: currentParentSnapshot.path, job: currentParentSnapshot.job }
+      : undefined;
     if (!currentParent) {
       throw new PigeDomainError("agent_runtime.tool_parent_missing", "The active Agent Job is unavailable.");
     }
@@ -2680,6 +2740,7 @@ export class JobsService {
     const capability = inspectOcrSource(this.#ocr, sourceFile.sourceRecord);
     const dependencyCode = ocrDependencyCode(sourceFile.sourceRecord.kind);
     let child = ensureAgentOcrToolJob(
+      this.#jobRecordStore(vaultPath),
       vaultPath,
       currentParent.job,
       sourceFile.sourceRecord,
@@ -2715,7 +2776,7 @@ export class JobsService {
       if (retry.status !== "requeued" || !retry.job) {
         throw new PigeDomainError("ocr.tool_retry_failed", "The durable source OCR child could not be requeued.");
       }
-      child = readJobRecordFile(vaultPath, child.id)?.job ?? child;
+      child = this.#readJobSnapshot(vaultPath, child.id)?.job ?? child;
     }
     parentControl.markDurableCheckpoint("agent_ocr_child_publication_started");
     await this.processQueuedOcr({
@@ -2723,7 +2784,7 @@ export class JobsService {
       limit: 1,
       abortSignal: request.signal
     });
-    child = readJobRecordFile(vaultPath, child.id)?.job ?? child;
+    child = this.#readJobSnapshot(vaultPath, child.id)?.job ?? child;
 
     const refreshedSource = readSourceRecord(vaultPath, sourceFile.sourceRecord.id) ?? sourceFile.sourceRecord;
     if (child.state === "completed" || child.state === "completed_with_warnings") {
@@ -2761,7 +2822,7 @@ export class JobsService {
     request: ProcessQueuedIndexRebuildRequest
   ): Promise<ProcessQueuedIndexRebuildResult> {
     const vaultPath = this.#requireActiveVaultPath();
-    const jobFiles = findQueuedIndexRebuildJobFiles(vaultPath, request);
+    const jobFiles = findQueuedIndexRebuildJobFiles(this.#jobRecordStore(vaultPath), vaultPath, request);
     let completed = 0;
     let failed = 0;
     let lastRebuild: LocalDatabaseRebuildResult | undefined;
@@ -2769,14 +2830,13 @@ export class JobsService {
     for (const jobFile of jobFiles) {
       const database = this.#database;
       if (!database) {
-        markJobWaitingDependency(jobFile.path, jobFile.job, "Waiting for the Local Database Service before index rebuild.");
+        this.#markJobWaitingDependency(jobFile.path, jobFile.job, "Waiting for the Local Database Service before index rebuild.");
         failed += 1;
         continue;
       }
 
       const execution = this.#beginCooperativeExecution(
-        jobFile.path,
-        jobFile.job,
+        jobFile,
         "indexing",
         "Rebuilding local database index from Markdown in a local worker."
       );
@@ -2812,9 +2872,11 @@ export class JobsService {
       } catch (caught) {
         const cancellation = resolveCancellation(execution.control, caught);
         if (cancellation) {
-          markJobCancellationOutcome(jobFile.path, runningJob, cancellation);
+          this.#markJobCancellationOutcome(jobFile.path, runningJob, cancellation);
+        } else if (isJobMutationContention(caught)) {
+          // Another exact Job revision won; do not overwrite its authoritative state.
         } else {
-          markJobFailedRetryable(
+          this.#markJobFailedRetryable(
             jobFile.path,
             runningJob,
             "Index rebuild failed. Markdown knowledge and the previous committed index remain intact; the job is retryable.",
@@ -2840,7 +2902,125 @@ export class JobsService {
     if (!this.#vaults.current() || !vaultPath) {
       throw new PigeDomainError("vault_missing", "No active Pige vault is selected.");
     }
+    this.#assertWriterLease(vaultPath);
     return vaultPath;
+  }
+
+  #assertWriterLease(vaultPath: string): void {
+    this.#vaults.assertWriterLease?.(vaultPath);
+  }
+
+  #jobRecordStore(vaultPath: string): JobRecordStore {
+    const rootPath = path.join(vaultPath, ".pige", "jobs");
+    const existing = this.#jobRecordStores.get(rootPath);
+    if (existing) return existing;
+    const store = this.#vaults.assertWriterLease
+      ? new JobRecordStore({
+          rootPath,
+          assertWriterLease: () => this.#assertWriterLease(vaultPath)
+        })
+      : new JobRecordStore({ rootPath, unsafeAllowUnfenced: true });
+    this.#jobRecordStores.set(rootPath, store);
+    return store;
+  }
+
+  #readJobSnapshot(vaultPath: string, jobId: string): JobRecordSnapshot | undefined {
+    if (!/^job_\d{8}_[a-z0-9]{8,}$/.test(jobId)) return undefined;
+    try {
+      return this.#jobRecordStore(vaultPath).read(createJobRecordPath(vaultPath, jobId));
+    } catch (caught) {
+      if (caught instanceof PigeDomainError && caught.code === "job.record_not_found") return undefined;
+      throw caught;
+    }
+  }
+
+  #replaceJob(snapshot: JobRecordSnapshot, next: JobRecord): JobRecordSnapshot {
+    return this.#jobRecordStore(this.#requireActiveVaultPath()).compareAndSwap(snapshot, next);
+  }
+
+  #createJob(jobPath: string, job: JobRecord): JobRecord {
+    const vaultPath = this.#requireActiveVaultPath();
+    return this.#jobRecordStore(vaultPath).createIfAbsent(jobPath, job).job;
+  }
+
+  #mutateJob(
+    jobPath: string,
+    transform: (current: JobRecord) => JobRecord
+  ): JobRecord {
+    const vaultPath = this.#requireActiveVaultPath();
+    const store = this.#jobRecordStore(vaultPath);
+    const snapshot = store.read(jobPath);
+    return store.compareAndSwap(snapshot, transform(snapshot.job)).job;
+  }
+
+  #replaceExpectedJob(snapshot: JobRecordSnapshot, next: JobRecord): JobRecord {
+    return this.#replaceJob(snapshot, next).job;
+  }
+
+  #markJobCancellationOutcome(
+    filePath: string,
+    fallback: JobRecord,
+    cancellation: JobCancellationError
+  ): JobRecord {
+    return this.#mutateJob(filePath, (current) => createJobCancellationOutcome(current, fallback, cancellation));
+  }
+
+  #markJobFailedRetryable(
+    filePath: string,
+    fallback: JobRecord,
+    message: string,
+    durableState?: JobDurableWriteState,
+    error?: PigeErrorSummary
+  ): JobRecord {
+    return this.#mutateJob(filePath, (current) => JobRecordSchema.parse({
+      ...withDurableWriteState(current.id === fallback.id ? current : fallback, durableState),
+      state: "failed_retryable",
+      updatedAt: new Date().toISOString(),
+      message,
+      ...(error ? { error } : {})
+    }));
+  }
+
+  #markJobWaitingDependency(
+    filePath: string,
+    fallback: JobRecord,
+    message: string,
+    durableState?: JobDurableWriteState
+  ): JobRecord {
+    return this.#mutateJob(filePath, (current) => JobRecordSchema.parse({
+      ...withDurableWriteState(current.id === fallback.id ? current : fallback, durableState),
+      state: "waiting_dependency",
+      updatedAt: new Date().toISOString(),
+      message
+    }));
+  }
+
+  #markJobWaitingPermission(
+    filePath: string,
+    fallback: JobRecord,
+    message: string,
+    durableState?: JobDurableWriteState
+  ): JobRecord {
+    return this.#mutateJob(filePath, (current) => JobRecordSchema.parse({
+      ...withDurableWriteState(current.id === fallback.id ? current : fallback, durableState),
+      state: "waiting_permission",
+      updatedAt: new Date().toISOString(),
+      message
+    }));
+  }
+
+  #markJobFailedFinal(
+    filePath: string,
+    fallback: JobRecord,
+    message: string,
+    durableState?: JobDurableWriteState
+  ): JobRecord {
+    return this.#mutateJob(filePath, (current) => JobRecordSchema.parse({
+      ...withDurableWriteState(current.id === fallback.id ? current : fallback, durableState),
+      state: "failed_final",
+      updatedAt: new Date().toISOString(),
+      message
+    }));
   }
 
   #requireActiveVaultId(expectedVaultPath: string): string {
@@ -2852,31 +3032,29 @@ export class JobsService {
   }
 
   #beginCooperativeExecution(
-    jobPath: string,
-    job: JobRecord,
+    snapshot: JobRecordSnapshot,
     stage: JobStage,
     message: string
   ): { readonly job: JobRecord; readonly controller: AbortController; readonly control: JobExecutionControl } {
-    return this.#beginExecution(jobPath, job, stage, message, true);
+    return this.#beginExecution(snapshot, stage, message, true);
   }
 
   #beginNonCooperativeExecution(
-    jobPath: string,
-    job: JobRecord,
+    snapshot: JobRecordSnapshot,
     stage: JobStage,
     message: string
   ): { readonly job: JobRecord; readonly control: JobExecutionControl } {
-    const execution = this.#beginExecution(jobPath, job, stage, message, false);
+    const execution = this.#beginExecution(snapshot, stage, message, false);
     return { job: execution.job, control: execution.control };
   }
 
   #beginExecution(
-    jobPath: string,
-    job: JobRecord,
+    snapshot: JobRecordSnapshot,
     stage: JobStage,
     message: string,
     cooperative: boolean
   ): { readonly job: JobRecord; readonly controller: AbortController; readonly control: JobExecutionControl } {
+    const { path: jobPath, job } = snapshot;
     const controller = new AbortController();
     const startedAt = new Date().toISOString();
     const preserveDurableWrites = job.cancellation?.durableWritesApplied === true;
@@ -2898,18 +3076,24 @@ export class JobsService {
       message
     });
     if (cooperative) this.#activeExecutions.set(job.id, controller);
+    let committed: JobRecord;
     try {
-      writeJsonAtomic(jobPath, runningJob);
+      committed = this.#replaceExpectedJob(snapshot, runningJob);
     } catch (caught) {
       if (cooperative) this.#activeExecutions.delete(job.id);
       throw caught;
     }
     return {
-      job: runningJob,
+      job: committed,
       controller,
-      control: new FileBackedJobExecutionControl(jobPath, controller, {
+      control: new FileBackedJobExecutionControl(
+        this.#jobRecordStore(this.#requireActiveVaultPath()),
+        jobPath,
+        controller,
+        {
         durableWritesApplied: preserveDurableWrites
-      })
+        }
+      )
     };
   }
 
@@ -2922,43 +3106,43 @@ export class JobsService {
     durableState: JobDurableWriteState,
     operationIds: readonly string[] = []
   ): JobRecord {
-    const current = readJobRecordAtPath(jobPath) ?? fallback;
-    const cancellationArrived = current.state === "cancel_requested";
-    const durableWritesApplied = current.cancellation?.durableWritesApplied === true ||
-      durableState.durableWritesApplied;
-    const mergedOperationIds = Array.from(new Set([...(current.operationIds ?? []), ...operationIds]));
-    const progress = completedProgress(current.progress, defaultUnit);
-    const finishedAt = new Date().toISOString();
-    if (cancellationArrived && !durableWritesApplied) {
-      const cancelledJob = JobRecordSchema.parse({
-        ...current,
-        state: "cancelled",
+    return this.#mutateJob(jobPath, (current) => {
+      if (current.id !== fallback.id || !["running", "cancel_requested"].includes(current.state)) {
+        throw new PigeDomainError("job.revision_conflict", "The active Job cannot be completed from its current state.");
+      }
+      const cancellationArrived = current.state === "cancel_requested";
+      const durableWritesApplied = current.cancellation?.durableWritesApplied === true ||
+        durableState.durableWritesApplied;
+      const mergedOperationIds = Array.from(new Set([...(current.operationIds ?? []), ...operationIds]));
+      const progress = completedProgress(current.progress, defaultUnit);
+      const finishedAt = new Date().toISOString();
+      if (cancellationArrived && !durableWritesApplied) {
+        return JobRecordSchema.parse({
+          ...current,
+          state: "cancelled",
+          progress,
+          updatedAt: finishedAt,
+          finishedAt,
+          cancellation: {
+            ...current.cancellation,
+            durableWritesApplied: false
+          },
+          ...(mergedOperationIds.length > 0 ? { operationIds: mergedOperationIds } : {}),
+          message: "Job cancelled at a safe checkpoint. Preserved source data remains in the vault."
+        });
+      }
+      return JobRecordSchema.parse({
+        ...withDurableWriteState(current, durableState),
+        state: cancellationArrived ? "completed_with_warnings" : state,
         progress,
         updatedAt: finishedAt,
         finishedAt,
-        cancellation: {
-          ...current.cancellation,
-          durableWritesApplied: false
-        },
         ...(mergedOperationIds.length > 0 ? { operationIds: mergedOperationIds } : {}),
-        message: "Job cancelled at a safe checkpoint. Preserved source data remains in the vault."
+        message: cancellationArrived
+          ? "Durable output committed before cancellation could safely apply; the completed result was preserved."
+          : message
       });
-      writeJsonAtomic(jobPath, cancelledJob);
-      return cancelledJob;
-    }
-    const completedJob = JobRecordSchema.parse({
-      ...withDurableWriteState(current, durableState),
-      state: cancellationArrived ? "completed_with_warnings" : state,
-      progress,
-      updatedAt: finishedAt,
-      finishedAt,
-      ...(mergedOperationIds.length > 0 ? { operationIds: mergedOperationIds } : {}),
-      message: cancellationArrived
-        ? "Durable output committed before cancellation could safely apply; the completed result was preserved."
-        : message
     });
-    writeJsonAtomic(jobPath, completedJob);
-    return completedJob;
   }
 
   #finishCooperativeExecution(jobId: string, controller: AbortController): void {
@@ -2974,11 +3158,18 @@ function markAgentDatasetOutputDurable(control: JobExecutionControl): void {
 
 class FileBackedJobExecutionControl implements JobExecutionControl {
   readonly signal: AbortSignal;
+  readonly #store: JobRecordStore;
   readonly #jobPath: string;
   #durableWritesApplied: boolean;
   #durableCheckpointId: string | undefined;
 
-  constructor(jobPath: string, controller: AbortController, initialState: JobDurableWriteState) {
+  constructor(
+    store: JobRecordStore,
+    jobPath: string,
+    controller: AbortController,
+    initialState: JobDurableWriteState
+  ) {
+    this.#store = store;
     this.#jobPath = jobPath;
     this.signal = controller.signal;
     this.#durableWritesApplied = initialState.durableWritesApplied;
@@ -2986,7 +3177,7 @@ class FileBackedJobExecutionControl implements JobExecutionControl {
   }
 
   throwIfCancellationRequested(boundary: JobCancellationBoundary = {}): void {
-    const current = readJobRecordAtPath(this.#jobPath);
+    const current = this.#readCurrent();
     if (!this.signal.aborted && current?.state !== "cancel_requested") return;
     const safeCheckpointId = boundary.safeCheckpointId ??
       current?.cancellation?.safeCheckpointId ??
@@ -3001,12 +3192,13 @@ class FileBackedJobExecutionControl implements JobExecutionControl {
 
   reportProgress(progress: JobProgressUpdate, boundary: JobCancellationBoundary = {}): void {
     this.throwIfCancellationRequested(boundary);
-    const current = readJobRecordAtPath(this.#jobPath);
-    if (!current || current.state !== "running") {
+    const snapshot = this.#store.read(this.#jobPath);
+    const current = snapshot.job;
+    if (current.state !== "running") {
       throw new Error("Job progress can only be recorded for the active running job.");
     }
     const nextProgress = normalizeProgress(current.progress, progress);
-    writeJsonAtomic(this.#jobPath, JobRecordSchema.parse({
+    this.#store.compareAndSwap(snapshot, JobRecordSchema.parse({
       ...current,
       progress: nextProgress,
       updatedAt: new Date().toISOString()
@@ -3015,10 +3207,8 @@ class FileBackedJobExecutionControl implements JobExecutionControl {
 
   markDurableCheckpoint(checkpointId: string): void {
     if (!checkpointId) throw new Error("A durable checkpoint id is required.");
-    const current = readJobRecordAtPath(this.#jobPath);
-    if (!current) {
-      throw new Error("The active Job record is unavailable at the durable publication boundary.");
-    }
+    const snapshot = this.#store.read(this.#jobPath);
+    const current = snapshot.job;
     if (this.signal.aborted || current.state === "cancel_requested" || current.state === "cancelled") {
       const safeCheckpointId = current.cancellation?.safeCheckpointId ?? this.#durableCheckpointId;
       throw new JobCancellationError({
@@ -3038,7 +3228,7 @@ class FileBackedJobExecutionControl implements JobExecutionControl {
       },
       updatedAt: new Date().toISOString()
     });
-    writeJsonAtomic(this.#jobPath, guardedJob);
+    this.#store.compareAndSwap(snapshot, guardedJob);
     this.#durableWritesApplied = true;
     this.#durableCheckpointId = checkpointId;
     this.throwIfCancellationRequested({
@@ -3052,6 +3242,15 @@ class FileBackedJobExecutionControl implements JobExecutionControl {
       durableWritesApplied: this.#durableWritesApplied,
       ...(this.#durableCheckpointId ? { safeCheckpointId: this.#durableCheckpointId } : {})
     };
+  }
+
+  #readCurrent(): JobRecord | undefined {
+    try {
+      return this.#store.read(this.#jobPath).job;
+    } catch (caught) {
+      if (caught instanceof PigeDomainError && caught.code === "job.record_not_found") return undefined;
+      throw caught;
+    }
   }
 }
 
@@ -3118,33 +3317,33 @@ function resolveCancellation(
   return caught instanceof JobCancellationError ? caught : undefined;
 }
 
-function markJobCancellationOutcome(
-  filePath: string,
+function createJobCancellationOutcome(
+  current: JobRecord,
   fallback: JobRecord,
   cancellation: JobCancellationError
-): void {
-  const current = readJobRecordAtPath(filePath) ?? fallback;
+): JobRecord {
+  const authoritative = current.id === fallback.id ? current : fallback;
   const finishedAt = new Date().toISOString();
-  const durableWritesApplied = current.cancellation?.durableWritesApplied === true || cancellation.durableWritesApplied;
+  const durableWritesApplied = authoritative.cancellation?.durableWritesApplied === true || cancellation.durableWritesApplied;
   const safeCheckpointId = cancellation.safeCheckpointId ??
-    current.cancellation?.safeCheckpointId ??
+    authoritative.cancellation?.safeCheckpointId ??
     (durableWritesApplied ? undefined : "before_durable_write");
-  writeJsonAtomic(filePath, JobRecordSchema.parse({
-    ...current,
+  return JobRecordSchema.parse({
+    ...authoritative,
     state: durableWritesApplied ? "failed_retryable" : "cancelled",
     updatedAt: finishedAt,
     finishedAt,
     cancellation: {
-      ...current.cancellation,
-      requestedAt: current.cancellation?.requestedAt ?? finishedAt,
-      requestedBy: current.cancellation?.requestedBy ?? "system",
+      ...authoritative.cancellation,
+      requestedAt: authoritative.cancellation?.requestedAt ?? finishedAt,
+      requestedBy: authoritative.cancellation?.requestedBy ?? "system",
       ...(safeCheckpointId ? { safeCheckpointId } : {}),
       durableWritesApplied
     },
     message: durableWritesApplied
       ? "A retained action-safety guard prevents clean cancellation; the job remains retryable."
       : "Job cancelled at a safe checkpoint. Preserved source data remains in the vault."
-  }));
+  });
 }
 
 function canRunAgentIngest(agentIngest: AgentIngestService | undefined): boolean {
@@ -3153,6 +3352,14 @@ function canRunAgentIngest(agentIngest: AgentIngestService | undefined): boolean
   } catch {
     return false;
   }
+}
+
+function isJobMutationContention(value: unknown): boolean {
+  return value instanceof PigeDomainError && new Set([
+    "job.revision_conflict",
+    "job.claim_conflict",
+    "job.claim_lost"
+  ]).has(value.code);
 }
 
 function isAgentKnowledgeTurn(job: JobRecord): boolean {
@@ -3180,32 +3387,37 @@ function isQueuedHomeAgentTurn(job: JobRecord): boolean {
     (job.sourceId === undefined || isDatasetQueryContinuationTurn(job));
 }
 
-function findQueuedCaptureJobFiles(vaultPath: string, request: ProcessQueuedCapturesRequest): { path: string; job: JobRecord }[] {
+function findQueuedCaptureJobFiles(
+  store: JobRecordStore,
+  vaultPath: string,
+  request: ProcessQueuedCapturesRequest
+): JobRecordFile[] {
   const limit = clampLimit(request.limit);
   if (request.jobIds && request.jobIds.length > 0) {
     return request.jobIds
-      .map((jobId) => readJobRecordFile(vaultPath, jobId))
-      .filter((jobFile): jobFile is { path: string; job: JobRecord } => Boolean(jobFile))
+      .map((jobId) => readJobRecordFile(store, vaultPath, jobId))
+      .filter((jobFile): jobFile is JobRecordFile => Boolean(jobFile))
       .filter((jobFile) => jobFile.job.class === "capture" && jobFile.job.state === "queued")
       .slice(0, limit);
   }
 
-  return readJobRecordFiles(path.join(vaultPath, ".pige", "jobs"))
+  return readJobRecordFiles(store, path.join(vaultPath, ".pige", "jobs"))
     .filter((jobFile) => jobFile.job.class === "capture" && jobFile.job.state === "queued")
     .sort((left, right) => left.job.createdAt.localeCompare(right.job.createdAt))
     .slice(0, limit);
 }
 
 function findQueuedAgentIngestJobFiles(
+  store: JobRecordStore,
   vaultPath: string,
   request: ProcessQueuedAgentIngestRequest
-): { path: string; job: JobRecord }[] {
+): JobRecordFile[] {
   const limit = clampLimit(request.limit);
   const sourceIds = new Set(request.sourceIds ?? []);
   if (request.jobIds && request.jobIds.length > 0) {
     return request.jobIds
-      .map((jobId) => readJobRecordFile(vaultPath, jobId))
-      .filter((jobFile): jobFile is { path: string; job: JobRecord } => Boolean(jobFile))
+      .map((jobId) => readJobRecordFile(store, vaultPath, jobId))
+      .filter((jobFile): jobFile is JobRecordFile => Boolean(jobFile))
       .filter((jobFile) =>
         isAgentKnowledgeTurn(jobFile.job) &&
         jobFile.job.state === "queued" &&
@@ -3216,7 +3428,7 @@ function findQueuedAgentIngestJobFiles(
       .slice(0, limit);
   }
 
-  return readJobRecordFiles(path.join(vaultPath, ".pige", "jobs"))
+  return readJobRecordFiles(store, path.join(vaultPath, ".pige", "jobs"))
     .filter((jobFile) =>
       isAgentKnowledgeTurn(jobFile.job) &&
       jobFile.job.state === "queued" &&
@@ -3229,89 +3441,93 @@ function findQueuedAgentIngestJobFiles(
 }
 
 function findQueuedParseJobFiles(
+  store: JobRecordStore,
   vaultPath: string,
   request: ProcessQueuedParsesRequest
-): { path: string; job: JobRecord }[] {
+): JobRecordFile[] {
   const limit = clampLimit(request.limit);
   const sourceIds = new Set(request.sourceIds ?? []);
-  const matches = (jobFile: { path: string; job: JobRecord }): boolean =>
+  const matches = (jobFile: JobRecordFile): boolean =>
     jobFile.job.class === "parse" &&
     jobFile.job.state === "queued" &&
     (sourceIds.size === 0 || (jobFile.job.sourceId ? sourceIds.has(jobFile.job.sourceId) : false));
   if (request.jobIds && request.jobIds.length > 0) {
     return request.jobIds
-      .map((jobId) => readJobRecordFile(vaultPath, jobId))
-      .filter((jobFile): jobFile is { path: string; job: JobRecord } => Boolean(jobFile))
+      .map((jobId) => readJobRecordFile(store, vaultPath, jobId))
+      .filter((jobFile): jobFile is JobRecordFile => Boolean(jobFile))
       .filter(matches)
       .slice(0, limit);
   }
 
-  return readJobRecordFiles(path.join(vaultPath, ".pige", "jobs"))
+  return readJobRecordFiles(store, path.join(vaultPath, ".pige", "jobs"))
     .filter(matches)
     .sort((left, right) => left.job.createdAt.localeCompare(right.job.createdAt))
     .slice(0, limit);
 }
 
 function findQueuedDatasetImportJobFiles(
+  store: JobRecordStore,
   vaultPath: string,
   request: ProcessQueuedDatasetImportsRequest
-): { path: string; job: JobRecord }[] {
+): JobRecordFile[] {
   const limit = clampLimit(request.limit);
   const sourceIds = new Set(request.sourceIds ?? []);
-  const matches = (jobFile: { path: string; job: JobRecord }): boolean =>
+  const matches = (jobFile: JobRecordFile): boolean =>
     jobFile.job.class === "dataset_import" &&
     jobFile.job.state === "queued" &&
     (sourceIds.size === 0 || (jobFile.job.sourceId ? sourceIds.has(jobFile.job.sourceId) : false));
   if (request.jobIds && request.jobIds.length > 0) {
     return request.jobIds
-      .map((jobId) => readJobRecordFile(vaultPath, jobId))
-      .filter((jobFile): jobFile is { path: string; job: JobRecord } => Boolean(jobFile))
+      .map((jobId) => readJobRecordFile(store, vaultPath, jobId))
+      .filter((jobFile): jobFile is JobRecordFile => Boolean(jobFile))
       .filter(matches)
       .slice(0, limit);
   }
-  return readJobRecordFiles(path.join(vaultPath, ".pige", "jobs"))
+  return readJobRecordFiles(store, path.join(vaultPath, ".pige", "jobs"))
     .filter(matches)
     .sort((left, right) => left.job.createdAt.localeCompare(right.job.createdAt))
     .slice(0, limit);
 }
 
 function findQueuedOcrJobFiles(
+  store: JobRecordStore,
   vaultPath: string,
   request: ProcessQueuedOcrRequest
-): { path: string; job: JobRecord }[] {
+): JobRecordFile[] {
   const limit = clampLimit(request.limit);
   const sourceIds = new Set(request.sourceIds ?? []);
-  const matches = (jobFile: { path: string; job: JobRecord }): boolean =>
+  const matches = (jobFile: JobRecordFile): boolean =>
     jobFile.job.class === "ocr" &&
     jobFile.job.state === "queued" &&
     (sourceIds.size === 0 || (jobFile.job.sourceId ? sourceIds.has(jobFile.job.sourceId) : false));
   if (request.jobIds && request.jobIds.length > 0) {
     return request.jobIds
-      .map((jobId) => readJobRecordFile(vaultPath, jobId))
-      .filter((jobFile): jobFile is { path: string; job: JobRecord } => Boolean(jobFile))
+      .map((jobId) => readJobRecordFile(store, vaultPath, jobId))
+      .filter((jobFile): jobFile is JobRecordFile => Boolean(jobFile))
       .filter(matches)
       .slice(0, limit);
   }
-  return readJobRecordFiles(path.join(vaultPath, ".pige", "jobs"))
+  return readJobRecordFiles(store, path.join(vaultPath, ".pige", "jobs"))
     .filter(matches)
     .sort((left, right) => left.job.createdAt.localeCompare(right.job.createdAt))
     .slice(0, limit);
 }
 
 function findQueuedIndexRebuildJobFiles(
+  store: JobRecordStore,
   vaultPath: string,
   request: ProcessQueuedIndexRebuildRequest
-): { path: string; job: JobRecord }[] {
+): JobRecordFile[] {
   const limit = clampLimit(request.limit);
   if (request.jobIds && request.jobIds.length > 0) {
     return request.jobIds
-      .map((jobId) => readJobRecordFile(vaultPath, jobId))
-      .filter((jobFile): jobFile is { path: string; job: JobRecord } => Boolean(jobFile))
+      .map((jobId) => readJobRecordFile(store, vaultPath, jobId))
+      .filter((jobFile): jobFile is JobRecordFile => Boolean(jobFile))
       .filter((jobFile) => jobFile.job.class === "index_rebuild" && jobFile.job.state === "queued")
       .slice(0, limit);
   }
 
-  return readJobRecordFiles(path.join(vaultPath, ".pige", "jobs"))
+  return readJobRecordFiles(store, path.join(vaultPath, ".pige", "jobs"))
     .filter((jobFile) => jobFile.job.class === "index_rebuild" && jobFile.job.state === "queued")
     .sort((left, right) => left.job.createdAt.localeCompare(right.job.createdAt))
     .slice(0, limit);
@@ -3344,16 +3560,15 @@ function readJobRecords(root: string): { jobs: JobRecord[]; invalidJobCount: num
   return { jobs, invalidJobCount };
 }
 
-function readJobRecordFiles(root: string): { path: string; job: JobRecord }[] {
+function readJobRecordFiles(store: JobRecordStore, root: string): JobRecordFile[] {
   if (!fs.existsSync(root)) {
     return [];
   }
 
-  const jobs: { path: string; job: JobRecord }[] = [];
+  const jobs: JobRecordFile[] = [];
   for (const filePath of listJsonFiles(root)) {
     try {
-      const parsed = JobRecordSchema.safeParse(JSON.parse(fs.readFileSync(filePath, "utf8")));
-      if (parsed.success) jobs.push({ path: filePath, job: parsed.data });
+      jobs.push(store.read(filePath));
     } catch {
       // Invalid records are surfaced through list(); processing skips them.
     }
@@ -3361,36 +3576,33 @@ function readJobRecordFiles(root: string): { path: string; job: JobRecord }[] {
   return jobs;
 }
 
-function readJobRecordFile(vaultPath: string, jobId: string): { path: string; job: JobRecord } | undefined {
+function readJobRecordFile(
+  store: JobRecordStore,
+  vaultPath: string,
+  jobId: string
+): JobRecordFile | undefined {
   if (!/^job_\d{8}_[a-z0-9]{8,}$/.test(jobId)) return undefined;
   const jobPath = createJobRecordPath(vaultPath, jobId);
   if (!fs.existsSync(jobPath)) return undefined;
 
   try {
-    const parsed = JobRecordSchema.safeParse(JSON.parse(fs.readFileSync(jobPath, "utf8")));
-    return parsed.success ? { path: jobPath, job: parsed.data } : undefined;
+    return store.read(jobPath);
   } catch {
     return undefined;
   }
 }
 
 function readProposalParentJobRecord(
+  store: JobRecordStore,
   vaultPath: string,
   jobId: string
-): { path: string; job: JobRecord } | undefined {
+): JobRecordFile | undefined {
   if (!/^job_\d{8}_[a-z0-9]{8,}$/.test(jobId)) return undefined;
   const jobPath = createJobRecordPath(vaultPath, jobId);
-  const bytes = readConfinedDurableRecord(
-    vaultPath,
-    path.join(vaultPath, ".pige", "jobs"),
-    jobPath,
-    2 * 1024 * 1024,
-    "proposal.parent_job_changed"
-  );
-  if (bytes === undefined) return undefined;
   try {
-    return { path: jobPath, job: JobRecordSchema.parse(JSON.parse(bytes)) };
-  } catch {
+    return store.read(jobPath);
+  } catch (caught) {
+    if (caught instanceof PigeDomainError && caught.code === "job.record_not_found") return undefined;
     throw new PigeDomainError(
       "proposal.parent_job_changed",
       "The proposal parent Job record is invalid."
@@ -3424,15 +3636,6 @@ function createAgentTurnJobId(conversationEventId: string): string {
     .digest("hex")
     .slice(0, 12);
   return `job_${match[1]}_${suffix}`;
-}
-
-function readJobRecordAtPath(jobPath: string): JobRecord | undefined {
-  try {
-    const parsed = JobRecordSchema.safeParse(JSON.parse(fs.readFileSync(jobPath, "utf8")));
-    return parsed.success ? parsed.data : undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 function listJsonFiles(root: string): string[] {
@@ -3674,16 +3877,18 @@ function assertProposalParentJob(
 }
 
 function recordAgentNotePublicationCheckpoint(
+  store: JobRecordStore,
   vaultPath: string,
   jobPath: string,
   checkpointId: string,
   binding: AgentIngestPublicationBinding
 ): void {
   if (binding.mutationKind === "update_page") {
-    recordAgentPageUpdateCheckpoint(vaultPath, jobPath, checkpointId, binding);
+    recordAgentPageUpdateCheckpoint(store, vaultPath, jobPath, checkpointId, binding);
     return;
   }
-  const current = readJobRecordAtPath(jobPath);
+  const snapshot = store.read(jobPath);
+  const current = snapshot.job;
   if (
     !current ||
     current.state !== "running" ||
@@ -3765,7 +3970,7 @@ function recordAgentNotePublicationCheckpoint(
     checksumAfter: binding.contentHash,
     resumeHint: "Verify the exact generated-note bytes before adopting its create Operation."
   };
-  writeJsonAtomic(jobPath, JobRecordSchema.parse({
+  store.compareAndSwap(snapshot, JobRecordSchema.parse({
     ...current,
     checkpoints: [
       ...(current.checkpoints ?? []).filter((candidate) => candidate.id !== checkpointId),
@@ -3776,12 +3981,14 @@ function recordAgentNotePublicationCheckpoint(
 }
 
 function recordAgentPageUpdateCheckpoint(
+  store: JobRecordStore,
   vaultPath: string,
   jobPath: string,
   checkpointId: string,
   binding: Extract<AgentIngestPublicationBinding, { readonly mutationKind: "update_page" }>
 ): void {
-  const current = readJobRecordAtPath(jobPath);
+  const snapshot = store.read(jobPath);
+  const current = snapshot.job;
   if (
     checkpointId !== "agent_existing_note_update_started" ||
     !current ||
@@ -3923,7 +4130,7 @@ function recordAgentPageUpdateCheckpoint(
     checksumAfter: binding.contentHash,
     resumeHint: "Verify the exact target, before-image, staged result, and update Operation before adoption."
   };
-  writeJsonAtomic(jobPath, JobRecordSchema.parse({
+  store.compareAndSwap(snapshot, JobRecordSchema.parse({
     ...current,
     checkpoints: [
       ...(current.checkpoints ?? []).filter((candidate) => candidate.id !== checkpointId),
@@ -4018,10 +4225,12 @@ function matchesAgentNotePublicationCheckpoint(
 }
 
 function completeAgentNotePublicationCheckpoint(
+  store: JobRecordStore,
   jobPath: string,
   publication: AgentIngestPublishedResult
 ): void {
-  const current = readJobRecordAtPath(jobPath);
+  const snapshot = store.read(jobPath);
+  const current = snapshot.job;
   if (!current) {
     throw new PigeDomainError(
       "agent_ingest.page_conflict",
@@ -4063,7 +4272,7 @@ function completeAgentNotePublicationCheckpoint(
   }
   if (checkpoint.state === "done") return;
   const now = new Date().toISOString();
-  writeJsonAtomic(jobPath, JobRecordSchema.parse({
+  store.compareAndSwap(snapshot, JobRecordSchema.parse({
     ...current,
     checkpoints: [
       ...(current.checkpoints ?? []).filter((candidate) => candidate.id !== checkpoint.id),
@@ -4100,14 +4309,17 @@ function sameJobRefIgnoringChecksum(
 }
 
 function markProposalApplyStarted(
+  store: JobRecordStore,
   vaultPath: string,
   fallback: JobRecord,
   proposalId: string,
   checkpointId: string
 ): void {
-  const currentFile = readProposalParentJobRecord(vaultPath, fallback.id);
-  const current = currentFile?.job ?? fallback;
-  const jobPath = currentFile?.path ?? createJobRecordPath(vaultPath, fallback.id);
+  const currentFile = readProposalParentJobRecord(store, vaultPath, fallback.id);
+  if (!currentFile) {
+    throw new PigeDomainError("proposal.parent_job_changed", "The proposal parent Job is unavailable.");
+  }
+  const current = currentFile.job;
   if (["completed", "completed_with_warnings"].includes(current.state)) return;
   if (current.state !== "awaiting_review" || !current.proposalIds?.includes(proposalId)) {
     throw new PigeDomainError(
@@ -4128,7 +4340,7 @@ function markProposalApplyStarted(
       outputRefs: []
     }
   ];
-  writeJsonAtomic(jobPath, JobRecordSchema.parse({
+  store.compareAndSwap(currentFile, JobRecordSchema.parse({
     ...current,
     stage: "writing",
     updatedAt: new Date().toISOString(),
@@ -4138,13 +4350,16 @@ function markProposalApplyStarted(
 }
 
 function markProposalJobConflicted(
+  store: JobRecordStore,
   vaultPath: string,
   fallback: JobRecord,
   proposal: ConfirmationProposal
 ): void {
-  const currentFile = readProposalParentJobRecord(vaultPath, fallback.id);
-  const current = currentFile?.job ?? fallback;
-  const jobPath = currentFile?.path ?? createJobRecordPath(vaultPath, fallback.id);
+  const currentFile = readProposalParentJobRecord(store, vaultPath, fallback.id);
+  if (!currentFile) {
+    throw new PigeDomainError("proposal.parent_job_changed", "The proposal parent Job is unavailable.");
+  }
+  const current = currentFile.job;
   if (current.state !== "awaiting_review") return;
   const checkpointRecordId = `proposal_apply:${proposal.id}`;
   const checkpoints = [
@@ -4159,7 +4374,7 @@ function markProposalJobConflicted(
       outputRefs: []
     }
   ];
-  writeJsonAtomic(jobPath, JobRecordSchema.parse({
+  store.compareAndSwap(currentFile, JobRecordSchema.parse({
     ...current,
     state: "failed_final",
     stage: "planning",
@@ -4375,23 +4590,6 @@ function assertProposalLogPath(vaultPath: string, logPath: string): fs.Stats {
   return logStat;
 }
 
-function markJobFailedRetryable(
-  filePath: string,
-  job: JobRecord,
-  message: string,
-  durableState?: JobDurableWriteState,
-  error?: PigeErrorSummary
-): void {
-  const current = readJobRecordAtPath(filePath) ?? job;
-  writeJsonAtomic(filePath, JobRecordSchema.parse({
-    ...withDurableWriteState(current, durableState),
-    state: "failed_retryable",
-    updatedAt: new Date().toISOString(),
-    message,
-    ...(error ? { error } : {})
-  }));
-}
-
 function createAgentIngestRetryError(caught: unknown): PigeErrorSummary {
   if (caught instanceof PigeDomainError && caught.code === "model_provider.call_failed") {
     return {
@@ -4423,51 +4621,6 @@ function createAgentIngestRetryError(caught: unknown): PigeErrorSummary {
   };
 }
 
-function markJobWaitingDependency(
-  filePath: string,
-  job: JobRecord,
-  message: string,
-  durableState?: JobDurableWriteState
-): void {
-  const current = readJobRecordAtPath(filePath) ?? job;
-  writeJsonAtomic(filePath, JobRecordSchema.parse({
-    ...withDurableWriteState(current, durableState),
-    state: "waiting_dependency",
-    updatedAt: new Date().toISOString(),
-    message
-  }));
-}
-
-function markJobWaitingPermission(
-  filePath: string,
-  job: JobRecord,
-  message: string,
-  durableState?: JobDurableWriteState
-): void {
-  const current = readJobRecordAtPath(filePath) ?? job;
-  writeJsonAtomic(filePath, JobRecordSchema.parse({
-    ...withDurableWriteState(current, durableState),
-    state: "waiting_permission",
-    updatedAt: new Date().toISOString(),
-    message
-  }));
-}
-
-function markJobFailedFinal(
-  filePath: string,
-  job: JobRecord,
-  message: string,
-  durableState?: JobDurableWriteState
-): void {
-  const current = readJobRecordAtPath(filePath) ?? job;
-  writeJsonAtomic(filePath, JobRecordSchema.parse({
-    ...withDurableWriteState(current, durableState),
-    state: "failed_final",
-    updatedAt: new Date().toISOString(),
-    message
-  }));
-}
-
 function withDurableWriteState(job: JobRecord, state?: JobDurableWriteState): JobRecord {
   const durableWritesApplied = job.cancellation?.durableWritesApplied === true || state?.durableWritesApplied === true;
   if (!durableWritesApplied) return job;
@@ -4482,6 +4635,7 @@ function withDurableWriteState(job: JobRecord, state?: JobDurableWriteState): Jo
 }
 
 function markAgentProposalAwaitingReview(
+  store: JobRecordStore,
   jobPath: string,
   fallback: JobRecord,
   proposalId: string,
@@ -4490,7 +4644,17 @@ function markAgentProposalAwaitingReview(
   pageId: string,
   pagePath: string
 ): JobRecord {
-  const current = readJobRecordAtPath(jobPath) ?? fallback;
+  let snapshot: JobRecordSnapshot;
+  try {
+    snapshot = store.read(jobPath);
+  } catch (caught) {
+    if (!(caught instanceof PigeDomainError) || caught.code !== "job.record_not_found") throw caught;
+    throw new PigeDomainError(
+      "agent_runtime.proposal_binding_invalid",
+      "The active Agent parent is unavailable for durable proposal linkage."
+    );
+  }
+  const current = snapshot.job;
   const sourceId = current.sourceId;
   if (
     !sourceId ||
@@ -4578,8 +4742,7 @@ function markAgentProposalAwaitingReview(
     },
     message: "Agent ingest staged a grounded knowledge proposal for explicit review. No proposed Markdown was applied."
   });
-  writeJsonAtomic(jobPath, awaitingReview);
-  return awaitingReview;
+  return store.compareAndSwap(snapshot, awaitingReview).job;
 }
 
 function writeAgentTurnUrlSourceOperation(
@@ -4820,6 +4983,7 @@ function assertAgentOcrToolRequest(parentJob: JobRecord, request: AgentIngestOcr
 }
 
 function ensureAgentParseToolJob(
+  store: JobRecordStore,
   vaultPath: string,
   parentJob: JobRecord,
   sourceRecord: SourceRecord,
@@ -4864,7 +5028,7 @@ function ensureAgentParseToolJob(
       ? `Agent selected the bounded ${documentLabel(sourceRecord.kind)} parser tool; durable parse child queued.`
       : `Agent selected ${documentLabel(sourceRecord.kind)} parsing; waiting for the bundled parser capability.`
   });
-  return ensureRequiredChildJob(vaultPath, parentJob, requested, (existing) => {
+  return ensureRequiredChildJob(store, vaultPath, parentJob, requested, (existing) => {
     assertAgentToolChildBinding(existing, requested, request.compatibleCatalogHashes);
     return JobRecordSchema.parse({
       ...existing,
@@ -4874,6 +5038,7 @@ function ensureAgentParseToolJob(
 }
 
 function ensureAgentOcrToolJob(
+  store: JobRecordStore,
   vaultPath: string,
   parentJob: JobRecord,
   sourceRecord: SourceRecord,
@@ -4920,7 +5085,7 @@ function ensureAgentOcrToolJob(
         : `Agent selected bounded OCR for parser-verified ${documentLabel(sourceRecord.kind)} targets; durable OCR child queued.`
       : `Agent selected ${documentLabel(sourceRecord.kind)} OCR; waiting for the reviewed local OCR capability.`
   });
-  return ensureRequiredChildJob(vaultPath, parentJob, requested, (existing) => {
+  return ensureRequiredChildJob(store, vaultPath, parentJob, requested, (existing) => {
     assertAgentToolChildBinding(existing, requested, request.compatibleCatalogHashes);
     return JobRecordSchema.parse({
       ...existing,
@@ -4930,6 +5095,7 @@ function ensureAgentOcrToolJob(
 }
 
 function ensureAgentDatasetToolJob(
+  store: JobRecordStore,
   vaultPath: string,
   parentJob: JobRecord,
   sourceRecord: SourceRecord,
@@ -4974,7 +5140,7 @@ function ensureAgentDatasetToolJob(
       ? "Agent selected bounded Dataset materialization for the verified structured source; durable child queued."
       : "Agent selected Dataset materialization; waiting for the bundled local capability."
   });
-  return ensureRequiredChildJob(vaultPath, parentJob, requested, (existing) => {
+  return ensureRequiredChildJob(store, vaultPath, parentJob, requested, (existing) => {
     assertAgentToolChildBinding(existing, requested, request.compatibleCatalogHashes);
     return JobRecordSchema.parse({
       ...existing,
@@ -5140,34 +5306,35 @@ function isAgentSelectedDatasetJob(job: JobRecord): boolean {
     job.inputRefs?.some((ref) => ref.kind === "tool" && ref.role === AGENT_TOOL_INPUT_ROLE) === true;
 }
 
-function hasWaitingAgentParseChild(vaultPath: string, parent: JobRecord): boolean {
+function hasWaitingAgentParseChild(store: JobRecordStore, vaultPath: string, parent: JobRecord): boolean {
   return (parent.childJobIds ?? []).some((childId) => {
-    const child = readJobRecordFile(vaultPath, childId)?.job;
+    const child = readJobRecordFile(store, vaultPath, childId)?.job;
     return child?.state === "waiting_dependency" && isAgentSelectedParseJob(child);
   });
 }
 
-function hasWaitingAgentOcrChild(vaultPath: string, parent: JobRecord): boolean {
+function hasWaitingAgentOcrChild(store: JobRecordStore, vaultPath: string, parent: JobRecord): boolean {
   return (parent.childJobIds ?? []).some((childId) => {
-    const child = readJobRecordFile(vaultPath, childId)?.job;
+    const child = readJobRecordFile(store, vaultPath, childId)?.job;
     return child?.state === "waiting_dependency" && isAgentSelectedOcrJob(child);
   });
 }
 
-function hasWaitingAgentDatasetChild(vaultPath: string, parent: JobRecord): boolean {
+function hasWaitingAgentDatasetChild(store: JobRecordStore, vaultPath: string, parent: JobRecord): boolean {
   return (parent.childJobIds ?? []).some((childId) => {
-    const child = readJobRecordFile(vaultPath, childId)?.job;
+    const child = readJobRecordFile(store, vaultPath, childId)?.job;
     return child?.state === "waiting_dependency" && isAgentSelectedDatasetJob(child);
   });
 }
 
 function hasCompletedEmptyAgentOcrChild(
+  store: JobRecordStore,
   vaultPath: string,
   parent: JobRecord,
   sourceRecord: SourceRecord
 ): boolean {
   return (parent.childJobIds ?? []).some((childId) => {
-    const child = readJobRecordFile(vaultPath, childId)?.job;
+    const child = readJobRecordFile(store, vaultPath, childId)?.job;
     return child?.state === "completed_with_warnings" &&
       isAgentSelectedOcrJob(child) &&
       sourceRecord.metadata.ocrJobId === child.id;
@@ -5175,27 +5342,33 @@ function hasCompletedEmptyAgentOcrChild(
 }
 
 function bridgeParentAbortToChild(
+  store: JobRecordStore,
   jobPath: string,
   controller: AbortController,
   parentSignal: AbortSignal | undefined
 ): () => void {
   if (!parentSignal) return () => undefined;
   const abort = (): void => {
-    const current = readJobRecordAtPath(jobPath);
-    if (current?.state === "running") {
+    let snapshot: JobRecordSnapshot | undefined;
+    try {
+      snapshot = store.read(jobPath);
+    } catch (caught) {
+      if (!(caught instanceof PigeDomainError) || caught.code !== "job.record_not_found") throw caught;
+    }
+    if (snapshot?.job.state === "running") {
       const requestedAt = new Date().toISOString();
-      writeJsonAtomic(jobPath, JobRecordSchema.parse({
-        ...current,
+      store.compareAndSwap(snapshot, JobRecordSchema.parse({
+        ...snapshot.job,
         state: "cancel_requested",
         updatedAt: requestedAt,
         cancellation: {
-          ...current.cancellation,
+          ...snapshot.job.cancellation,
           requestedAt,
           requestedBy: "system"
         },
-        message: current.class === "ocr"
+        message: snapshot.job.class === "ocr"
           ? "Parent Agent cancellation requested; stopping the active OCR child."
-          : current.class === "dataset_import"
+          : snapshot.job.class === "dataset_import"
             ? "Parent Agent cancellation requested; stopping the active Dataset child."
             : "Parent Agent cancellation requested; stopping the active parser child."
       }));
@@ -5353,12 +5526,14 @@ function ocrNoReadableEvidenceCode(sourceKind: SourceKind): string {
 }
 
 function ensureOcrWaitingJob(
+  store: JobRecordStore,
   vaultPath: string,
   parseJob: JobRecord,
   sourceRecord: SourceRecord,
   capability: OcrSourceCapability
 ): void {
   ensureParserOrOcrFollowUpJob(
+    store,
     vaultPath,
     parseJob,
     sourceRecord,
@@ -5369,6 +5544,7 @@ function ensureOcrWaitingJob(
 }
 
 function ensureParserOrOcrFollowUpJob(
+  store: JobRecordStore,
   vaultPath: string,
   parentJob: JobRecord,
   sourceRecord: SourceRecord,
@@ -5378,7 +5554,7 @@ function ensureParserOrOcrFollowUpJob(
 ): void {
   const jobId = createParserOrOcrJobId(sourceRecord.id, jobClass);
   const now = new Date().toISOString();
-  ensureRequiredChildJob(vaultPath, parentJob, JobRecordSchema.parse({
+  ensureRequiredChildJob(store, vaultPath, parentJob, JobRecordSchema.parse({
     id: jobId,
     class: jobClass,
     state,
@@ -5585,6 +5761,7 @@ function documentLabel(sourceKind: SourceKind): string {
 }
 
 function ensureAgentIngestJob(
+  store: JobRecordStore,
   vaultPath: string,
   parentJob: JobRecord,
   sourceId: string,
@@ -5611,6 +5788,7 @@ function ensureAgentIngestJob(
     message: nextMessage
   });
   ensureRequiredChildJob(
+    store,
     vaultPath,
     parentJob,
     jobRecord,
@@ -5626,12 +5804,19 @@ function ensureAgentIngestJob(
 }
 
 function ensureRequiredChildJob(
+  store: JobRecordStore,
   vaultPath: string,
   parentJob: JobRecord,
   requestedChild: JobRecord,
   reconcileExisting: (existing: JobRecord) => JobRecord = (existing) => existing
 ): JobRecord {
-  const existing = readJobRecordFile(vaultPath, requestedChild.id);
+  const childPath = createJobRecordPath(vaultPath, requestedChild.id);
+  let existing: JobRecordSnapshot | undefined;
+  try {
+    existing = store.read(childPath);
+  } catch (caught) {
+    if (!(caught instanceof PigeDomainError) || caught.code !== "job.record_not_found") throw caught;
+  }
   let child: JobRecord;
   if (existing) {
     if (
@@ -5645,33 +5830,33 @@ function ensureRequiredChildJob(
       parentJobId: existing.job.parentJobId ?? parentJob.id
     });
     if (JSON.stringify(child) !== JSON.stringify(existing.job)) {
-      writeJsonAtomic(existing.path, child);
+      child = store.compareAndSwap(existing, child).job;
     }
   } else {
     child = JobRecordSchema.parse({
       ...requestedChild,
       parentJobId: parentJob.id
     });
-    const dateKey = /^job_(\d{8})_/.exec(child.id)?.[1] ?? new Date().toISOString().slice(0, 10).replaceAll("-", "");
-    const childPath = path.join(
-      vaultPath,
-      ".pige",
-      "jobs",
-      dateKey.slice(0, 4),
-      dateKey.slice(4, 6),
-      `${child.id}.json`
-    );
-    writeJsonAtomic(childPath, child);
+    try {
+      child = store.createIfAbsent(childPath, child).job;
+    } catch (caught) {
+      if (caught instanceof PigeDomainError && caught.code === "job.revision_conflict") {
+        return ensureRequiredChildJob(store, vaultPath, parentJob, requestedChild, reconcileExisting);
+      }
+      throw caught;
+    }
   }
 
-  const parentFile = readJobRecordFile(vaultPath, parentJob.id);
-  if (!parentFile) {
+  let parentSnapshot: JobRecordSnapshot;
+  try {
+    parentSnapshot = store.read(createJobRecordPath(vaultPath, parentJob.id));
+  } catch {
     throw new Error("The required child Job was persisted, but its parent Job is unavailable for linkage.");
   }
-  if (!(parentFile.job.childJobIds ?? []).includes(child.id)) {
-    writeJsonAtomic(parentFile.path, JobRecordSchema.parse({
-      ...parentFile.job,
-      childJobIds: Array.from(new Set([...(parentFile.job.childJobIds ?? []), child.id])),
+  if (!(parentSnapshot.job.childJobIds ?? []).includes(child.id)) {
+    store.compareAndSwap(parentSnapshot, JobRecordSchema.parse({
+      ...parentSnapshot.job,
+      childJobIds: Array.from(new Set([...(parentSnapshot.job.childJobIds ?? []), child.id])),
       updatedAt: new Date().toISOString()
     }));
   }
@@ -5695,7 +5880,7 @@ function createAgentIngestJobId(sourceId: string): string {
   return `job_${dateKey}_${suffix.slice(0, 10)}ag`;
 }
 
-function createIndexRebuildJob(vaultPath: string): JobRecord {
+function createIndexRebuildJob(store: JobRecordStore, vaultPath: string): JobRecord {
   const now = new Date();
   const timestamp = now.toISOString();
   const dateKey = timestamp.slice(0, 10).replaceAll("-", "");
@@ -5709,8 +5894,7 @@ function createIndexRebuildJob(vaultPath: string): JobRecord {
     message: "Index rebuild queued."
   });
   const jobPath = path.join(vaultPath, ".pige", "jobs", dateKey.slice(0, 4), dateKey.slice(4, 6), `${jobId}.json`);
-  writeJsonAtomic(jobPath, jobRecord);
-  return jobRecord;
+  return store.createIfAbsent(jobPath, jobRecord).job;
 }
 
 function isConfinedConversationLocator(locator: string): boolean {

@@ -24,6 +24,8 @@ Third-party software bundled by Pige includes:
 - Pi Agent Core and Pi AI (`@earendil-works/pi-agent-core`, `@earendil-works/pi-ai`),
   Copyright 2025 Mario Zechner, licensed under the MIT License.
   https://github.com/earendil-works/pi
+- proper-lockfile and retry, licensed under the MIT License, plus graceful-fs and
+  signal-exit, licensed under the ISC License. https://github.com/moxystudio/node-proper-lockfile
 
 Release packages must also preserve the complete license texts shipped with
 their corresponding dependency packages.

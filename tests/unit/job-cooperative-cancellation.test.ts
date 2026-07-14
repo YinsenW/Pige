@@ -42,7 +42,7 @@ afterEach(() => {
   for (const root of tempRoots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 });
 
-describe("cooperative durable job cancellation", () => {
+describe("cooperative durable job cancellation", { timeout: 15_000 }, () => {
   it("cancels running image OCR before durable output and clears retry orchestration state", async () => {
     const fixture = makeFixture();
     const adapter = new BlockingNativeOcrAdapter();

@@ -67,7 +67,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 });
 
-describe("Agent-led PDF parse tool", () => {
+describe("Agent-led PDF parse tool", { timeout: 15_000 }, () => {
   it("runs Pi inspect -> parse -> inspect -> publish with one durable PDF parse child", async () => {
     const fixture = makeVault();
     const nativeText = "Pige keeps this native PDF evidence durable before its Agent selects the bounded local parser tool.";

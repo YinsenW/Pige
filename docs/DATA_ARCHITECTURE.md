@@ -220,14 +220,16 @@ Examples:
 - Worker temp files.
 - Partial downloads.
 - In-progress OCR images.
-- Lock files.
+- Per-vault writer leases and per-Job claim files under `.pige/runtime/`.
 - Streaming model response buffers.
 - Uncommitted editor draft buffers.
 
 Rule:
 
-- Store in OS temp or app temp directories.
+- Store in OS/app temp directories or the explicitly transient `.pige/runtime/` root.
 - Do not rely on it for recovery.
+- Never treat `.pige/runtime/` as durable vault truth; backup, restore, sync, trash,
+  migration, and durable-data scans exclude it and recreate it empty when needed.
 - Promote important state to a durable job record before expensive work starts.
 
 ## 4. Vault Layout
@@ -259,6 +261,7 @@ Pige Vault/
     db/
     indexes/
     cache/
+    runtime/
 ```
 
 Rules:
@@ -269,7 +272,8 @@ Rules:
 - Original files referenced outside the vault are not moved, deleted, or rewritten by Pige.
 - `sources/` and `wiki/` are normal Markdown; Dataset Bundles use documented manifests
   and open SQLite/Parquet payloads with versioned change boundaries.
-- `.pige/db/`, `.pige/indexes/`, and `.pige/cache/` are rebuildable.
+- `.pige/db/`, `.pige/indexes/`, `.pige/cache/`, and `.pige/runtime/` are rebuildable;
+  runtime owns only temporary leases/claims and is never restored as ownership truth.
 - `.pige/source-records/`, `.pige/conversations/`, `.pige/jobs/`, `.pige/proposals/`, `.pige/operations/`, `.pige/memory/`, and `.pige/skills/` are durable vault data unless explicitly excluded by the user.
 
 Storage roots:
@@ -355,6 +359,7 @@ Source locator compatibility:
 | Internal SQLite database | `.pige/db/` | No | No | Yes | No |
 | FTS/vector indexes | `.pige/indexes/` | No | No | Yes | No |
 | Cache files | `.pige/cache/` | No | No | Yes | No |
+| Vault runtime lease/claim state | `.pige/runtime/` | No | No | Yes; recreate empty | No |
 | API keys | OS keychain/app secret store | Yes, machine-local | No | No | Future explicit export only |
 | Local model files | OS app data | No | No | Downloadable | No |
 | Tool binaries | App bundle/app data | No | No | Reinstallable | No |
@@ -639,6 +644,7 @@ Default backup excludes:
 - `.pige/db/`.
 - `.pige/indexes/`.
 - `.pige/cache/`.
+- `.pige/runtime/`.
 - API keys and tokens.
 - Local model files.
 - Bundled tool binaries.

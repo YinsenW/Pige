@@ -23,6 +23,7 @@ import { PIGE_APP_MIN_VERSION, PigeDomainError } from "@pige/domain";
 import {
   PIGE_DURABLE_ROOTS,
   PIGE_REBUILDABLE_ROOTS,
+  PIGE_TRANSIENT_RUNTIME_ROOTS,
   isPigeVault,
   normalizeVaultName,
   readVaultManifest
@@ -348,6 +349,9 @@ export class BackupRestoreService {
       for (const rebuildableRoot of PIGE_REBUILDABLE_ROOTS) {
         fs.mkdirSync(path.join(staging.path, rebuildableRoot), { recursive: true });
       }
+      for (const runtimeRoot of PIGE_TRANSIENT_RUNTIME_ROOTS) {
+        fs.mkdirSync(path.join(staging.path, runtimeRoot), { recursive: true });
+      }
       const snapshotAfterExtraction = snapshotRestoreArchive(archive);
       assertSameRestoreArchive(
         snapshotAfterValidation,
@@ -405,7 +409,7 @@ function createBackupManifest(vaultPath: string, appVersion: string): BackupMani
     memoryCount: countFiles(path.join(vaultPath, ".pige/memory")),
     includesSecrets: false,
     includes: DEFAULT_INCLUDES,
-    excludedRoots: [...PIGE_REBUILDABLE_ROOTS],
+    excludedRoots: [...PIGE_REBUILDABLE_ROOTS, ...PIGE_TRANSIENT_RUNTIME_ROOTS],
     externalDependencies: [],
     files
   };
@@ -1007,6 +1011,12 @@ function publishValidatedRestore(
     for (const rebuildableRoot of PIGE_REBUILDABLE_ROOTS) {
       ensureRestorePublicationDirectory(
         path.join(publication.destinationPath, rebuildableRoot),
+        publication
+      );
+    }
+    for (const runtimeRoot of PIGE_TRANSIENT_RUNTIME_ROOTS) {
+      ensureRestorePublicationDirectory(
+        path.join(publication.destinationPath, runtimeRoot),
         publication
       );
     }
