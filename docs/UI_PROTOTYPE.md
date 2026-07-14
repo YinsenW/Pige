@@ -1092,29 +1092,28 @@ Skill details should show:
 
 Skills should feel like small knowledge workflows, not apps. Pure Skills are Markdown instruction packs. External/Web Skills can declare sensitive capabilities, but the UI must show those capabilities before enabling and route runtime actions through the Permission Broker.
 
-Permission dialog:
+Focused permission dialog:
 
 ```txt
-Source Research wants to fetch a web page
+Pi Agent requests an external capability
 
-Capability
-External network
+Action
+Reviewed localized action
 
-Scope
-https://example.com/*
+Target
+Reviewed bounded resource summary
 
-Reason
-Read the article linked in the current capture.
-
-Data boundary
-Network
-
-Scope: Only this domain
-
-Deny        Allow Once        Always Allow
+Deny        Allow Once
 ```
 
-The dialog should feel close to ChatGPT/Codex permission prompts: compact, calm, clear, and not visually alarming. Destructive actions should use stronger confirmation copy and never default to Allow. If YOLO full access is enabled, eligible Permission Broker actions should not show this dialog; the timeline should instead show a subtle "Auto-allowed by YOLO" event with details available on inspection. Always-required change confirmations and stricter Model Egress Decisions still show their own focused confirmation.
+The current-action foundation renders one compact card/modal with reviewed localized
+actor, action and resource summaries, `Deny` focused by default, and `Allow once` only.
+It never renders raw reason, action input, path, command, hash, credential, record, or
+transport error. Disable both actions while resolving; durable reread restores a still-
+pending decision or converges committed truth, while unreadable/stale identity fails
+closed without actions. Suppress only the matching Job row while active, then restore
+ordinary Job ownership. Saved-grant/Always Allow/YOLO UI remains planned. Destructive
+actions use their stronger confirmation and never default to Allow.
 
 ### Local Capabilities Settings
 

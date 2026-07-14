@@ -989,7 +989,7 @@
     },
     "PIGE-SEC-002": {
       "status": "planned",
-      "plannedTarget": "Permission Broker deny, allow-once, waiting-permission, restart, and package-capability tests."
+      "plannedTarget": "Current-action Broker foundation is implemented; real production Agent/Skill/package/local-tool callers, capacity, broader scope and signed-platform proof remain."
     },
     "PIGE-SEC-003": {
       "status": "planned",
@@ -1086,7 +1086,7 @@
     },
     "PIGE-PI-003": {
       "status": "planned",
-      "plannedTarget": "Wrapped Pi tool and extension-bypass security tests."
+      "plannedTarget": "Injected adapter proves exact Broker gating; production arbitrary-path/Skill/package/local-tool adapters and full bypass matrix remain."
     },
     "PIGE-PI-004": {
       "status": "partial",
@@ -2645,7 +2645,7 @@
     },
     "E8.02": {
       "status": "planned",
-      "plannedTarget": "External Broker report proving core tools do not prompt."
+      "plannedTarget": "Current-action Deny/Allow once core is proven; exit still needs real production caller, capacity and signed platform report."
     },
     "E8.03": {
       "status": "planned",

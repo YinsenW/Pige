@@ -351,6 +351,219 @@ export const PermissionDecisionRecordSchema = z.object({
   }
 });
 
+const PermissionSha256HashSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/);
+const PermissionStableIdSchema = z.string()
+  .min(3)
+  .max(128)
+  .regex(/^[A-Za-z][A-Za-z0-9_.:-]+$/);
+const PermissionVersionSchema = z.string()
+  .min(1)
+  .max(32)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/);
+const PermissionPolicyContextIdSchema = z.string()
+  .min(3)
+  .max(160)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9_.:-]+$/);
+const PermissionActorDisplayNameSchema = z.string().trim().min(1).max(120);
+const PermissionActionLabelKeySchema = z.string()
+  .min(1)
+  .max(160)
+  .regex(/^[A-Za-z][A-Za-z0-9_.-]+$/);
+const PermissionResourceKindSchema = z.enum([
+  "file",
+  "folder",
+  "url",
+  "network",
+  "shell",
+  "credential",
+  "setting",
+  "package",
+  "other"
+]);
+const PermissionReasonCodeSchema = z.string()
+  .min(1)
+  .max(120)
+  .regex(/^[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)*$/);
+
+export const PermissionActionBindingSchema = z.object({
+  vaultId: VaultIdSchema,
+  jobId: JobIdSchema,
+  actorType: PermissionActorTypeSchema,
+  actorId: PermissionStableIdSchema,
+  actorVersion: PermissionVersionSchema,
+  actorDigest: PermissionSha256HashSchema,
+  actionId: PermissionStableIdSchema,
+  actionVersion: PermissionVersionSchema,
+  actionInputHash: PermissionSha256HashSchema,
+  capability: PermissionCapabilitySchema,
+  dataBoundary: PermissionDataBoundarySchema,
+  resourceScope: PermissionResourceScopeSchema,
+  resourceIdentityHash: PermissionSha256HashSchema,
+  policyContextId: PermissionPolicyContextIdSchema,
+  policyHash: PermissionSha256HashSchema,
+  runtimeKind: z.enum(["desktop_local", "remote_agent_backend"]),
+  clientCapabilityTier: z.enum(["desktop_full", "web_client", "mobile_lite"]),
+  bindingHash: PermissionSha256HashSchema
+}).strict();
+
+export const PermissionActionLifecycleStateSchema = z.enum([
+  "pending",
+  "approved",
+  "consumed",
+  "denied",
+  "cancelled"
+]);
+
+export const PermissionActionLifecycleRecordSchema = z.object({
+  schemaVersion: z.literal(1),
+  id: PermissionRequestIdSchema,
+  authorizationLayer: z.literal("permission_broker"),
+  state: PermissionActionLifecycleStateSchema,
+  binding: PermissionActionBindingSchema,
+  actorDisplayName: PermissionActorDisplayNameSchema,
+  actionLabelKey: PermissionActionLabelKeySchema,
+  resourceKind: PermissionResourceKindSchema,
+  resourceCount: z.number().int().positive().max(10_000),
+  reasonCode: PermissionReasonCodeSchema,
+  decision: z.enum(["allow_once", "deny"]).optional(),
+  decisionId: PermissionDecisionIdSchema.optional(),
+  completionMarkerHash: PermissionSha256HashSchema.optional(),
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
+  decidedAt: z.string().datetime({ offset: true }).optional(),
+  consumedAt: z.string().datetime({ offset: true }).optional(),
+  cancelledAt: z.string().datetime({ offset: true }).optional(),
+  completedAt: z.string().datetime({ offset: true }).optional()
+}).strict().superRefine((record, context) => {
+  if ((record.completionMarkerHash === undefined) !== (record.completedAt === undefined)) {
+    context.addIssue({
+      code: "custom",
+      path: ["completionMarkerHash"],
+      message: "A permission completion marker hash and completion timestamp must be recorded together."
+    });
+  }
+
+  if (record.state !== "consumed" && (
+    record.completionMarkerHash !== undefined || record.completedAt !== undefined
+  )) {
+    context.addIssue({
+      code: "custom",
+      path: ["completionMarkerHash"],
+      message: "Only a consumed permission action may contain completion fields."
+    });
+  }
+
+  if (record.state === "pending" && (
+    record.decision !== undefined ||
+    record.decisionId !== undefined ||
+    record.decidedAt !== undefined ||
+    record.consumedAt !== undefined ||
+    record.cancelledAt !== undefined ||
+    record.completionMarkerHash !== undefined ||
+    record.completedAt !== undefined
+  )) {
+    context.addIssue({
+      code: "custom",
+      path: ["state"],
+      message: "A pending permission action cannot contain decision, completion, or terminal fields."
+    });
+  }
+
+  if (record.state === "approved" && (
+    record.decision !== "allow_once" ||
+    record.decisionId === undefined ||
+    record.decidedAt === undefined ||
+    record.consumedAt !== undefined ||
+    record.cancelledAt !== undefined ||
+    record.completionMarkerHash !== undefined ||
+    record.completedAt !== undefined
+  )) {
+    context.addIssue({
+      code: "custom",
+      path: ["state"],
+      message: "An approved permission action must contain one unconsumed allow-once decision."
+    });
+  }
+
+  if (record.state === "consumed" && (
+    record.decision !== "allow_once" ||
+    record.decisionId === undefined ||
+    record.decidedAt === undefined ||
+    record.consumedAt === undefined ||
+    record.cancelledAt !== undefined
+  )) {
+    context.addIssue({
+      code: "custom",
+      path: ["state"],
+      message: "A consumed permission action must contain its allow-once decision and consumption timestamps."
+    });
+  }
+
+  if (record.state === "denied" && (
+    record.decision !== "deny" ||
+    record.decisionId === undefined ||
+    record.decidedAt === undefined ||
+    record.consumedAt !== undefined ||
+    record.cancelledAt !== undefined ||
+    record.completionMarkerHash !== undefined ||
+    record.completedAt !== undefined
+  )) {
+    context.addIssue({
+      code: "custom",
+      path: ["state"],
+      message: "A denied permission action must contain one denial decision."
+    });
+  }
+
+  if (record.state === "cancelled" && (
+    record.decision !== undefined ||
+    record.decisionId !== undefined ||
+    record.decidedAt !== undefined ||
+    record.consumedAt !== undefined ||
+    record.cancelledAt === undefined ||
+    record.completionMarkerHash !== undefined ||
+    record.completedAt !== undefined
+  )) {
+    context.addIssue({
+      code: "custom",
+      path: ["state"],
+      message: "A cancelled permission action must contain only its cancellation timestamp."
+    });
+  }
+});
+
+export const PermissionPendingRequestQuerySchema = z.object({
+  requestId: PermissionRequestIdSchema
+}).strict();
+
+export const PermissionPendingRequestSchema = z.object({
+  requestId: PermissionRequestIdSchema,
+  jobId: JobIdSchema,
+  actorType: PermissionActorTypeSchema,
+  actorDisplayName: PermissionActorDisplayNameSchema,
+  actorVersion: PermissionVersionSchema,
+  capability: PermissionCapabilitySchema,
+  dataBoundary: PermissionDataBoundarySchema,
+  actionLabelKey: PermissionActionLabelKeySchema,
+  resourceScope: PermissionResourceScopeSchema,
+  resourceKind: PermissionResourceKindSchema,
+  resourceCount: z.number().int().positive().max(10_000),
+  reasonCode: PermissionReasonCodeSchema,
+  createdAt: z.string().datetime({ offset: true })
+}).strict();
+
+export const PermissionResolveRequestSchema = z.object({
+  requestId: PermissionRequestIdSchema,
+  jobId: JobIdSchema,
+  decision: z.enum(["allow_once", "deny"])
+}).strict();
+
+export const PermissionResolveResultSchema = z.object({
+  status: z.enum(["approved", "denied"]),
+  requestId: PermissionRequestIdSchema,
+  jobId: JobIdSchema
+}).strict();
+
 export const ModelEgressContentClassSchema = z.enum([
   "ordinary",
   "private",
@@ -1334,6 +1547,7 @@ export const PigeWarningSchema = z.object({
 }).strict().superRefine(requireErrorDomainMatchesCode);
 
 export const PigeErrorSummarySchema = PigeErrorCoreSchema.extend({
+  permissionRequestId: PermissionRequestIdSchema.optional(),
   modelEgressApprovalRequestId: ModelEgressApprovalRequestIdSchema.optional(),
   diagnosticErrorId: z.string().min(1).max(120).optional()
 }).strict().superRefine(requireErrorDomainMatchesCode);
@@ -2064,10 +2278,20 @@ export type PigeErrorDomain = z.infer<typeof PigeErrorDomainSchema>;
 export type PigeErrorSeverity = z.infer<typeof PigeErrorSeveritySchema>;
 export type PigeErrorSummary = z.infer<typeof PigeErrorSummarySchema>;
 export type PigeWarning = z.infer<typeof PigeWarningSchema>;
+export type PermissionActionBinding = z.infer<typeof PermissionActionBindingSchema>;
+export type PermissionActionLifecycleRecord = z.infer<typeof PermissionActionLifecycleRecordSchema>;
+export type PermissionActionLifecycleState = z.infer<typeof PermissionActionLifecycleStateSchema>;
+export type PermissionActorType = z.infer<typeof PermissionActorTypeSchema>;
 export type PermissionCapability = z.infer<typeof PermissionCapabilitySchema>;
+export type PermissionDataBoundary = z.infer<typeof PermissionDataBoundarySchema>;
 export type PermissionDecisionRecord = z.infer<typeof PermissionDecisionRecordSchema>;
 export type PermissionDefaultMode = z.infer<typeof PermissionDefaultModeSchema>;
+export type PermissionPendingRequest = z.infer<typeof PermissionPendingRequestSchema>;
+export type PermissionPendingRequestQuery = z.infer<typeof PermissionPendingRequestQuerySchema>;
 export type PermissionRequest = z.infer<typeof PermissionRequestSchema>;
+export type PermissionResourceScope = z.infer<typeof PermissionResourceScopeSchema>;
+export type PermissionResolveRequest = z.infer<typeof PermissionResolveRequestSchema>;
+export type PermissionResolveResult = z.infer<typeof PermissionResolveResultSchema>;
 export type ProposalState = z.infer<typeof ProposalStateSchema>;
 export type ProposalTrustLevel = z.infer<typeof ProposalTrustLevelSchema>;
 export type ProviderKind = z.infer<typeof ProviderKindSchema>;

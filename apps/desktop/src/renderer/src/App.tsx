@@ -39,6 +39,7 @@ import type {
   NoteRenderResult,
   OnboardingStatus,
   PigeErrorSummary,
+  PermissionPendingRequest,
   ProviderConnectNeedsManualModel,
   ProposalDecisionResult,
   ProposalSummary,
@@ -91,6 +92,14 @@ type HomeModelEgressPromptState =
   | {
       readonly kind: "ready" | "resolving";
       readonly request: ModelEgressPendingRequest;
+      readonly errorMessageKey?: string;
+    }
+  | { readonly kind: "unknown"; readonly requestId: string };
+type HomePermissionPromptState =
+  | { readonly kind: "loading"; readonly requestId: string }
+  | {
+      readonly kind: "ready" | "resolving";
+      readonly request: PermissionPendingRequest;
       readonly errorMessageKey?: string;
     }
   | { readonly kind: "unknown"; readonly requestId: string };
@@ -180,6 +189,7 @@ export function App(): React.JSX.Element {
     };
     homeJobStateFilter.states.push("awaiting_review");
     homeJobStateFilter.states.push("cancel_requested");
+    homeJobStateFilter.states.push("waiting_permission");
     homeJobStateFilter.states.push("waiting_model_egress");
     const [nextJobs, nextProposals, nextActivities] = nextOnboarding.activeVault
       ? await Promise.all([
@@ -1605,6 +1615,8 @@ function HomeComposer(props: {
   const [agentDraft, setAgentDraft] = useState<AgentTurnDraftEvent | null>(null);
   const [agentRunState, setAgentRunState] = useState<HomeAgentUiState>("idle");
   const [agentError, setAgentError] = useState<PigeErrorSummary | null>(null);
+  const [permissionPrompt, setPermissionPrompt] = useState<HomePermissionPromptState | null>(null);
+  const [resolvedPermissionRequestId, setResolvedPermissionRequestId] = useState<string | null>(null);
   const [modelEgressPrompt, setModelEgressPrompt] = useState<HomeModelEgressPromptState | null>(null);
   const [resolvedModelEgressRequestId, setResolvedModelEgressRequestId] = useState<string | null>(null);
   const [agentModelUsage, setAgentModelUsage] = useState<HomeAgentModelUsage>("none");
@@ -1630,6 +1642,12 @@ function HomeComposer(props: {
   const draftRevisionRef = useRef(0);
   const noteOpenSequence = useRef(0);
   const proposalDecisionInFlight = useRef(false);
+  const permissionDecisionInFlight = useRef<string | null>(null);
+  const permissionReadSequence = useRef(0);
+  const currentPermissionRequestIdRef = useRef<string | undefined>(undefined);
+  const currentPermissionJobIdRef = useRef<string | undefined>(undefined);
+  const permissionDenyButtonRef = useRef<HTMLButtonElement | null>(null);
+  const permissionHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const modelEgressDecisionInFlight = useRef(false);
   const modelEgressReadSequence = useRef(0);
   const currentModelEgressRequestIdRef = useRef<string | undefined>(undefined);
@@ -1648,6 +1666,24 @@ function HomeComposer(props: {
     ? plannedModelUsage === "cloud" ? "home.cloudSend" : null
     : agentModelUsage === "cloud" ? "home.cloudCallAttempted" : null;
   const latestTurn = conversationTimeline?.latestTurn;
+  const latestPermissionJob = props.recentJobs.find((job) =>
+    job.state === "waiting_permission" &&
+    job.permissionRequestId !== undefined
+  );
+  const latestTurnPermissionRequestId = latestTurn?.state === "waiting_permission"
+    ? latestTurn.error?.permissionRequestId
+    : undefined;
+  const pendingPermissionRequestId = latestTurnPermissionRequestId ?? latestPermissionJob?.permissionRequestId;
+  const permissionRequestId = pendingPermissionRequestId === resolvedPermissionRequestId
+    ? undefined
+    : pendingPermissionRequestId;
+  const permissionRequestJobId = permissionRequestId
+    ? latestTurnPermissionRequestId === permissionRequestId
+      ? latestTurn?.jobId
+      : latestPermissionJob?.id
+    : undefined;
+  currentPermissionRequestIdRef.current = permissionRequestId;
+  currentPermissionJobIdRef.current = permissionRequestJobId;
   const latestModelEgressJob = props.recentJobs.find((job) =>
     job.state === "waiting_model_egress" &&
     job.modelEgressApprovalRequestId !== undefined
@@ -1660,7 +1696,8 @@ function HomeComposer(props: {
     : pendingModelEgressRequestId;
   currentModelEgressRequestIdRef.current = modelEgressRequestId;
   const visibleRecentJobs = props.recentJobs.filter((job) =>
-    !modelEgressRequestId || job.modelEgressApprovalRequestId !== modelEgressRequestId
+    (!permissionRequestId || job.permissionRequestId !== permissionRequestId) &&
+    (!modelEgressRequestId || job.modelEgressApprovalRequestId !== modelEgressRequestId)
   );
   const retryableLatestTurn = latestTurn && (
     latestTurn.state === "failed_retryable" ||
@@ -1755,6 +1792,8 @@ function HomeComposer(props: {
     setAgentAnswer(null);
     clearAgentDraft();
     setAgentError(null);
+    setPermissionPrompt(null);
+    setResolvedPermissionRequestId(null);
     setModelEgressPrompt(null);
     setResolvedModelEgressRequestId(null);
     setAgentModelUsage("none");
@@ -1765,6 +1804,47 @@ function HomeComposer(props: {
       conversationLoadSequence.current += 1;
     };
   }, [props.activeVault?.vaultId]);
+
+  useEffect(() => {
+    const sequence = permissionReadSequence.current + 1;
+    permissionReadSequence.current = sequence;
+    const vaultId = props.activeVault?.vaultId;
+    const requestId = permissionRequestId;
+    const jobId = permissionRequestJobId;
+    if (!requestId) {
+      setPermissionPrompt(null);
+      return;
+    }
+    if (!vaultId || !jobId) {
+      setPermissionPrompt({ kind: "unknown", requestId });
+      return;
+    }
+    const isCurrentRead = (): boolean =>
+      sequence === permissionReadSequence.current &&
+      activeVaultIdRef.current === vaultId &&
+      currentPermissionRequestIdRef.current === requestId &&
+      currentPermissionJobIdRef.current === jobId;
+    setPermissionPrompt({ kind: "loading", requestId });
+    void window.pige.permissions.pending({ requestId }).then((request) => {
+      if (!isCurrentRead()) return;
+      if (!request || request.requestId !== requestId || request.jobId !== jobId) {
+        setPermissionPrompt({ kind: "unknown", requestId });
+        return;
+      }
+      setPermissionPrompt({ kind: "ready", request });
+    }).catch(() => {
+      if (isCurrentRead()) setPermissionPrompt({ kind: "unknown", requestId });
+    });
+  }, [permissionRequestId, props.activeVault?.vaultId]);
+
+  useEffect(() => {
+    if (permissionPrompt?.kind !== "ready" && permissionPrompt?.kind !== "unknown") return;
+    const timer = window.setTimeout(() => {
+      if (permissionPrompt.kind === "ready") permissionDenyButtonRef.current?.focus();
+      else permissionHeadingRef.current?.focus();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [permissionPrompt]);
 
   useEffect(() => {
     const sequence = modelEgressReadSequence.current + 1;
@@ -1811,6 +1891,7 @@ function HomeComposer(props: {
     latestTurn?.jobId,
     latestTurn?.state,
     latestTurn?.error?.code,
+    latestTurn?.error?.permissionRequestId,
     latestTurn?.error?.modelEgressApprovalRequestId
   ]);
 
@@ -1990,6 +2071,78 @@ function HomeComposer(props: {
     const nextState = homeUiStateForJobState(nextTimeline?.latestTurn?.state);
     setAgentRunState(nextState ?? "failed");
     setAgentError(nextTimeline?.latestTurn?.error ?? null);
+  };
+
+  const decidePermission = async (decision: "allow_once" | "deny"): Promise<void> => {
+    if (
+      permissionPrompt?.kind !== "ready" ||
+      permissionPrompt.request.requestId !== permissionRequestId ||
+      permissionPrompt.request.jobId !== permissionRequestJobId
+    ) return;
+    const request = permissionPrompt.request;
+    const decisionVaultId = activeVaultIdRef.current;
+    if (!decisionVaultId) return;
+    const decisionKey = `${decisionVaultId}:${request.requestId}`;
+    if (permissionDecisionInFlight.current === decisionKey) return;
+    const isCurrentDecision = (): boolean =>
+      activeVaultIdRef.current === decisionVaultId &&
+      currentPermissionRequestIdRef.current === request.requestId &&
+      currentPermissionJobIdRef.current === request.jobId;
+    permissionDecisionInFlight.current = decisionKey;
+    setPermissionPrompt({ kind: "resolving", request });
+    try {
+      await window.pige.permissions.resolve({
+        requestId: request.requestId,
+        jobId: request.jobId,
+        decision
+      });
+      if (!isCurrentDecision()) return;
+      await props.onHomeStateChanged().catch(() => undefined);
+      const timeline = await refreshConversation();
+      if (!isCurrentDecision()) return;
+      const nextState = homeUiStateForJobState(timeline?.latestTurn?.state);
+      setResolvedPermissionRequestId(request.requestId);
+      setPermissionPrompt(null);
+      setAgentRunState(nextState ?? (decision === "deny" ? "failed" : "accepted"));
+      setAgentError(timeline?.latestTurn?.error ?? null);
+      if (decision === "allow_once") composerInputRef.current?.focus();
+    } catch {
+      if (!isCurrentDecision()) return;
+      try {
+        const current = await window.pige.permissions.pending({ requestId: request.requestId });
+        if (!isCurrentDecision()) return;
+        if (current) {
+          if (current.requestId === request.requestId && current.jobId === request.jobId) {
+            setPermissionPrompt({
+              kind: "ready",
+              request: current,
+              errorMessageKey: "home.permission.resolveFailed"
+            });
+          } else {
+            setPermissionPrompt({ kind: "unknown", requestId: request.requestId });
+          }
+          return;
+        }
+
+        setResolvedPermissionRequestId(request.requestId);
+        setPermissionPrompt(null);
+        await props.onHomeStateChanged().catch(() => undefined);
+        const timeline = await refreshConversation();
+        if (activeVaultIdRef.current !== decisionVaultId) return;
+        const nextState = homeUiStateForJobState(timeline?.latestTurn?.state);
+        setAgentRunState(nextState ?? (decision === "deny" ? "failed" : "accepted"));
+        setAgentError(timeline?.latestTurn?.error ?? null);
+        if (decision === "allow_once") composerInputRef.current?.focus();
+      } catch {
+        if (isCurrentDecision()) {
+          setPermissionPrompt({ kind: "unknown", requestId: request.requestId });
+        }
+      }
+    } finally {
+      if (permissionDecisionInFlight.current === decisionKey) {
+        permissionDecisionInFlight.current = null;
+      }
+    }
   };
 
   const decideModelEgress = async (decision: "allow_once" | "deny"): Promise<void> => {
@@ -2482,7 +2635,63 @@ function HomeComposer(props: {
             {agentRunState === "accepted" || agentRunState === "running" ? props.t("home.agentRunning") : props.t("home.send")}
           </button>
         </div>
-        {modelEgressRequestId ? (
+        {permissionRequestId ? (
+          <section
+            className="permission-prompt"
+            role="group"
+            aria-labelledby="home-permission-title"
+            aria-describedby="home-permission-status"
+            aria-busy={permissionPrompt?.kind === "loading" || permissionPrompt?.kind === "resolving"}
+          >
+            <h2 id="home-permission-title" ref={permissionHeadingRef} tabIndex={-1}>
+              {props.t("home.permission.title")}
+            </h2>
+            <div
+              id="home-permission-status"
+              className="permission-status"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              {permissionPrompt?.kind === "ready" || permissionPrompt?.kind === "resolving" ? (
+                <div className="permission-summary">
+                  <strong>{permissionPrompt.request.actorDisplayName}</strong>
+                  <span>{permissionActionMessage(permissionPrompt.request.actionLabelKey, props.t)}</span>
+                  <span className="permission-category">
+                    {props.t(permissionResourceMessageKey(permissionPrompt.request.resourceKind))}
+                  </span>
+                  {permissionPrompt.kind === "ready" && permissionPrompt.errorMessageKey ? (
+                    <span className="error">{props.t(permissionPrompt.errorMessageKey)}</span>
+                  ) : null}
+                </div>
+              ) : permissionPrompt?.kind === "unknown" ? (
+                props.t("home.permission.unknown")
+              ) : (
+                props.t("home.permission.loading")
+              )}
+            </div>
+            {permissionPrompt?.kind === "ready" || permissionPrompt?.kind === "resolving" ? (
+              <div className="permission-actions">
+                <button
+                  ref={permissionDenyButtonRef}
+                  type="button"
+                  className="ghost"
+                  disabled={permissionPrompt.kind === "resolving"}
+                  onClick={() => void decidePermission("deny")}
+                >
+                  {props.t("home.permission.deny")}
+                </button>
+                <button
+                  type="button"
+                  disabled={permissionPrompt.kind === "resolving"}
+                  onClick={() => void decidePermission("allow_once")}
+                >
+                  {props.t("home.permission.allowOnce")}
+                </button>
+              </div>
+            ) : null}
+          </section>
+        ) : modelEgressRequestId ? (
           <div className="model-egress-prompt" role="group" aria-labelledby="home-model-egress-title">
             <strong id="home-model-egress-title">{props.t("home.modelEgress.title")}</strong>
             <span>
@@ -2569,6 +2778,18 @@ function homeUiStateForJobState(state: JobState | undefined): HomeAgentUiState |
   if (state === "completed" || state === "completed_with_warnings" || state === "compacted") return "completed";
   if (state === "failed_retryable" || state === "failed_final" || state === "cancelled") return "failed";
   return undefined;
+}
+
+function permissionActionMessage(
+  actionLabelKey: PermissionPendingRequest["actionLabelKey"],
+  t: (key: string) => string
+): string {
+  const translated = t(actionLabelKey);
+  return translated === actionLabelKey ? t("permissions.action.generic") : translated;
+}
+
+function permissionResourceMessageKey(resourceKind: PermissionPendingRequest["resourceKind"]): string {
+  return `permissions.resource.${resourceKind}`;
 }
 
 function modelEgressReasonMessageKey(reasonCode: ModelEgressPendingRequest["reasonCode"]): string {

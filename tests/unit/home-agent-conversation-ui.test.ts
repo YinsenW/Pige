@@ -14,7 +14,10 @@ import type {
   KnowledgeActivitySummary,
   ModelEgressPendingRequest,
   ModelEgressResolveRequest,
-  OnboardingStatus
+  OnboardingStatus,
+  PermissionPendingRequest,
+  PermissionResolveRequest,
+  PermissionResolveResult
 } from "@pige/contracts";
 
 const globalKeys = [
@@ -282,6 +285,224 @@ describe("Home durable Agent conversation UI", () => {
 
     await act(async () => reopened.root.unmount());
     dom.window.close();
+  });
+
+  it("restores one safe Permission Broker card with sole status ownership and Deny focused by default", async () => {
+    const dom = createDom();
+    const harness = createHarness(permissionWaitingTimeline());
+    harness.jobs = [permissionWaitingJob()];
+    harness.permissionPending = {
+      ...permissionPendingRequest(),
+      rawCommand: "curl https://private.example/release-notes",
+      path: "/Users/private/notes.md",
+      body: "private source body",
+      credential: "secret-value"
+    } as PermissionPendingRequest;
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await waitFor(dom, () => buttons(container, "Allow once").length === 1);
+    const prompt = container.querySelector<HTMLElement>(".permission-prompt");
+    const promptButtons = Array.from(prompt?.querySelectorAll("button") ?? []);
+    expect(prompt?.getAttribute("role")).toBe("group");
+    expect(prompt?.getAttribute("aria-labelledby")).toBe("home-permission-title");
+    expect(prompt?.querySelector("h2")?.textContent).toBe("Permission needed");
+    expect(promptButtons.map((button) => button.textContent)).toEqual(["Deny", "Allow once"]);
+    expect(container.querySelectorAll('[role="status"]')).toHaveLength(1);
+    expect(prompt?.querySelector('[role="status"]')?.textContent).toContain("Release Notes Skill");
+    expect(prompt?.textContent).toContain("Fetch release notes");
+    expect(prompt?.textContent).toContain("Network access");
+    expect(container.querySelector(".job-pill")).toBeNull();
+    expect(container.querySelector('[aria-label="Needs attention"]')).toBeNull();
+    expect(container.textContent).not.toContain("errors.permission.confirmation_required");
+    expect(container.textContent).not.toContain("This external action needs your permission.");
+    expect(container.textContent).not.toContain("Always Allow");
+    expect(container.textContent).not.toContain("YOLO");
+    for (const unsafeCopy of [
+      "1.2.3-private-version",
+      "external_network",
+      "current_domain",
+      "permission.external_network_required",
+      "permreq_20260714_homepermission01",
+      "job_20260714_permission01",
+      "curl https://private.example/release-notes",
+      "/Users/private/notes.md",
+      "private source body",
+      "secret-value",
+      "Private command material"
+    ]) {
+      expect(prompt?.textContent).not.toContain(unsafeCopy);
+    }
+    await waitFor(dom, () => dom.window.document.activeElement === buttons(container, "Deny")[0]);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("discovers a live permission wait through the filtered refresh and restores ordinary Job state after Allow once", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.enforceJobFilters = true;
+    harness.submitTurn = (request) => {
+      harness.submitRequests.push(request);
+      harness.jobs = [permissionWaitingJob()];
+      harness.permissionPending = permissionPendingRequest();
+      return new Promise<AgentSubmitTurnResult>(() => undefined);
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await setTextareaValue(dom, container, "Check external release notes.");
+    await clickButton(dom, container, "Send");
+    await waitFor(dom, () => buttons(container, "Allow once").length === 1);
+
+    expect(harness.jobListRequests.some((request) =>
+      request.states?.includes("waiting_permission") === true
+    )).toBe(true);
+    expect(container.querySelector(".job-pill")).toBeNull();
+    await clickButton(dom, container, "Allow once");
+    await waitFor(dom, () => harness.permissionResolveRequests.length === 1);
+    expect(harness.permissionResolveRequests[0]).toEqual({
+      requestId: "permreq_20260714_homepermission01",
+      jobId: "job_20260714_permission01",
+      decision: "allow_once"
+    });
+    await waitFor(dom, () => container.querySelector(".permission-prompt") === null);
+    expect(container.querySelector('.job-pill [aria-label="Processing"]')).not.toBeNull();
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps both permission actions disabled while Deny resolves, then returns terminal Job ownership", async () => {
+    const dom = createDom();
+    const harness = createHarness(permissionWaitingTimeline());
+    harness.jobs = [permissionWaitingJob()];
+    harness.permissionPending = permissionPendingRequest();
+    const api = makePigeApi(harness) as {
+      permissions: {
+        resolve: (request: PermissionResolveRequest) => Promise<PermissionResolveResult>;
+      };
+    };
+    const durableResolve = api.permissions.resolve;
+    let releaseResolve: (() => void) | undefined;
+    const resolveGate = new Promise<void>((resolve) => { releaseResolve = resolve; });
+    api.permissions.resolve = async (request) => {
+      const result = await durableResolve(request);
+      await resolveGate;
+      return result;
+    };
+    const { container, root } = await mountHome(dom, api);
+
+    await waitFor(dom, () => buttons(container, "Deny").length === 1);
+    await clickButton(dom, container, "Deny");
+    await waitFor(dom, () => harness.permissionResolveRequests.length === 1);
+    expect(harness.permissionResolveRequests[0]).toEqual({
+      requestId: "permreq_20260714_homepermission01",
+      jobId: "job_20260714_permission01",
+      decision: "deny"
+    });
+    expect(buttons(container, "Deny")[0]?.disabled).toBe(true);
+    expect(buttons(container, "Allow once")[0]?.disabled).toBe(true);
+    expect(Array.from(container.querySelectorAll(".permission-actions button")).map((button) => button.textContent))
+      .toEqual(["Deny", "Allow once"]);
+
+    await act(async () => {
+      releaseResolve?.();
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.querySelector(".permission-prompt") === null);
+    expect(container.querySelector('.job-pill [aria-label="Needs attention"]')).not.toBeNull();
+    expect(container.textContent).toContain("This external action was denied. Your existing work remains saved.");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("re-reads durable permission truth after rejected resolution without exposing transport errors", async () => {
+    const retryDom = createDom();
+    const retryHarness = createHarness(permissionWaitingTimeline());
+    retryHarness.jobs = [permissionWaitingJob()];
+    retryHarness.permissionPending = permissionPendingRequest();
+    retryHarness.permissionResolveMode = "reject_pending";
+    const retryMount = await mountHome(retryDom, makePigeApi(retryHarness));
+
+    await waitFor(retryDom, () => buttons(retryMount.container, "Allow once").length === 1);
+    await clickButton(retryDom, retryMount.container, "Allow once");
+    await waitFor(retryDom, () => retryMount.container.textContent?.includes("The decision was not saved") === true);
+    expect(buttons(retryMount.container, "Deny")[0]?.disabled).toBe(false);
+    expect(buttons(retryMount.container, "Allow once")[0]?.disabled).toBe(false);
+    expect(retryMount.container.querySelector(".job-pill")).toBeNull();
+    expect(retryMount.container.textContent).not.toContain("synthetic");
+    await act(async () => retryMount.root.unmount());
+    retryDom.window.close();
+
+    const committedDom = createDom();
+    const committedHarness = createHarness(permissionWaitingTimeline());
+    committedHarness.jobs = [permissionWaitingJob()];
+    committedHarness.permissionPending = permissionPendingRequest();
+    committedHarness.permissionResolveMode = "post_commit_reject";
+    const committedMount = await mountHome(committedDom, makePigeApi(committedHarness));
+
+    await waitFor(committedDom, () => buttons(committedMount.container, "Deny").length === 1);
+    await clickButton(committedDom, committedMount.container, "Deny");
+    await waitFor(committedDom, () => committedMount.container.querySelector(".permission-prompt") === null);
+    expect(committedMount.container.querySelector('.job-pill [aria-label="Needs attention"]')).not.toBeNull();
+    expect(committedMount.container.textContent).not.toContain("synthetic");
+    await act(async () => committedMount.root.unmount());
+    committedDom.window.close();
+
+    const unknownDom = createDom();
+    const unknownHarness = createHarness(permissionWaitingTimeline());
+    unknownHarness.jobs = [permissionWaitingJob()];
+    unknownHarness.permissionPending = permissionPendingRequest();
+    unknownHarness.permissionResolveMode = "reject_unknown";
+    const unknownMount = await mountHome(unknownDom, makePigeApi(unknownHarness));
+
+    await waitFor(unknownDom, () => buttons(unknownMount.container, "Allow once").length === 1);
+    await clickButton(unknownDom, unknownMount.container, "Allow once");
+    await waitFor(unknownDom, () => unknownMount.container.textContent?.includes("could not verify the pending permission") === true);
+    expect(buttons(unknownMount.container, "Deny")).toHaveLength(0);
+    expect(buttons(unknownMount.container, "Allow once")).toHaveLength(0);
+    expect(unknownMount.container.querySelector(".job-pill")).toBeNull();
+    expect(unknownMount.container.textContent).not.toContain("synthetic");
+    const unknownReads = unknownHarness.permissionPendingReads;
+    await act(async () => settle(unknownDom));
+    expect(unknownHarness.permissionPendingReads).toBe(unknownReads);
+    await act(async () => unknownMount.root.unmount());
+    unknownDom.window.close();
+  });
+
+  it("fails closed for stale permission identity and ignores an old-vault resolution", async () => {
+    const staleDom = createDom();
+    const staleHarness = createHarness(permissionWaitingTimeline());
+    staleHarness.jobs = [permissionWaitingJob()];
+    staleHarness.permissionPending = permissionPendingRequest({
+      requestId: "permreq_20260714_stalerequest02"
+    });
+    const staleMount = await mountHome(staleDom, makePigeApi(staleHarness));
+
+    await waitFor(staleDom, () => staleMount.container.textContent?.includes("could not verify the pending permission") === true);
+    expect(buttons(staleMount.container, "Deny")).toHaveLength(0);
+    expect(buttons(staleMount.container, "Allow once")).toHaveLength(0);
+    expect(staleMount.container.querySelector(".job-pill")).toBeNull();
+    await act(async () => staleMount.root.unmount());
+    staleDom.window.close();
+
+    const vaultDom = createDom();
+    const vaultHarness = createHarness(permissionWaitingTimeline());
+    vaultHarness.jobs = [permissionWaitingJob()];
+    vaultHarness.permissionPending = permissionPendingRequest();
+    vaultHarness.permissionResolveMode = "success_switch_vault";
+    const vaultMount = await mountHome(vaultDom, makePigeApi(vaultHarness));
+
+    await waitFor(vaultDom, () => buttons(vaultMount.container, "Allow once").length === 1);
+    await clickButton(vaultDom, vaultMount.container, "Allow once");
+    await waitFor(vaultDom, () => vaultHarness.onboarding.activeVault?.vaultId === "vault_20260714_permissionsecond");
+    await act(async () => settle(vaultDom));
+    expect(vaultMount.container.querySelector(".permission-prompt")).toBeNull();
+    expect(vaultMount.container.textContent).not.toContain("Release Notes Skill");
+
+    await act(async () => vaultMount.root.unmount());
+    vaultDom.window.close();
   });
 
   it("restores one bounded model-egress prompt and resumes the exact live Job once", async () => {
@@ -1056,6 +1277,10 @@ interface ConversationHarness {
   modelEgressPendingReads: number;
   readonly modelEgressResolveRequests: ModelEgressResolveRequest[];
   modelEgressResolveMode: "success" | "reject_pending" | "reject_unknown" | "post_commit_reject" | "success_switch_vault";
+  permissionPending: PermissionPendingRequest | undefined;
+  permissionPendingReads: number;
+  readonly permissionResolveRequests: PermissionResolveRequest[];
+  permissionResolveMode: "success" | "reject_pending" | "reject_unknown" | "post_commit_reject" | "success_switch_vault";
   submitTurn: (request: AgentSubmitTurnRequest) => Promise<AgentSubmitTurnResult>;
   emitDraft: (event: AgentTurnDraftEvent) => void;
 }
@@ -1080,6 +1305,10 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     modelEgressPendingReads: 0,
     modelEgressResolveRequests: [],
     modelEgressResolveMode: "success",
+    permissionPending: undefined,
+    permissionPendingReads: 0,
+    permissionResolveRequests: [],
+    permissionResolveMode: "success",
     submitTurn: async (request) => {
       harness.submitRequests.push(request);
       return completedResult();
@@ -1214,6 +1443,70 @@ function makePigeApi(harness: ConversationHarness): object {
         }
         if (harness.modelEgressResolveMode === "post_commit_reject") {
           throw new Error("synthetic post-commit transport rejection");
+        }
+        return {
+          status: request.decision === "deny" ? "denied" : "approved",
+          requestId: request.requestId,
+          jobId: request.jobId
+        };
+      }
+    },
+    permissions: {
+      pending: async () => {
+        harness.permissionPendingReads += 1;
+        if (
+          harness.permissionResolveMode === "reject_unknown" &&
+          harness.permissionResolveRequests.length > 0
+        ) throw new Error("synthetic unreadable permission state");
+        return harness.permissionPending;
+      },
+      resolve: async (request: PermissionResolveRequest) => {
+        harness.permissionResolveRequests.push(request);
+        if (
+          harness.permissionResolveMode === "reject_pending" ||
+          harness.permissionResolveMode === "reject_unknown"
+        ) {
+          throw new Error("synthetic permission resolution failure");
+        }
+        harness.permissionPending = undefined;
+        harness.jobs = harness.jobs.map((job) => job.id === request.jobId
+          ? {
+              ...job,
+              state: request.decision === "deny" ? "failed_final" : "running",
+              permissionRequestId: request.decision === "deny" ? request.requestId : undefined,
+              updatedAt: "2026-07-14T09:00:01.000Z"
+            }
+          : job);
+        if (harness.timeline?.latestTurn?.jobId === request.jobId) {
+          harness.timeline = {
+            ...harness.timeline,
+            latestTurn: {
+              jobId: harness.timeline.latestTurn.jobId,
+              userEventId: harness.timeline.latestTurn.userEventId,
+              state: request.decision === "deny" ? "failed_final" : "running",
+              ...(request.decision === "deny"
+                ? {
+                    error: {
+                      code: "permission.denied",
+                      domain: "permission" as const,
+                      messageKey: "errors.permission.denied",
+                      retryable: false,
+                      severity: "info" as const,
+                      userAction: "none" as const
+                    }
+                  }
+                : {})
+            }
+          };
+        }
+        if (harness.permissionResolveMode === "success_switch_vault") {
+          harness.onboarding = {
+            ...readyOnboarding(),
+            activeVault: { ...homeVaultSummary(), vaultId: "vault_20260714_permissionsecond", name: "Second vault" }
+          };
+        }
+        if (harness.permissionResolveMode === "post_commit_reject") {
+          throw new Error("synthetic post-commit permission transport rejection");
         }
         return {
           status: request.decision === "deny" ? "denied" : "approved",
@@ -1538,6 +1831,68 @@ function sourceWaitingForModelJob(): JobSummary {
     message: "Source preserved; waiting for model.",
     createdAt: "2026-07-13T08:00:00.000Z",
     updatedAt: "2026-07-13T08:00:01.000Z"
+  };
+}
+
+function permissionWaitingJob(): JobSummary {
+  return {
+    id: "job_20260714_permission01",
+    class: "agent_turn",
+    state: "waiting_permission",
+    permissionRequestId: "permreq_20260714_homepermission01",
+    message: "Private command material must never become renderer copy.",
+    createdAt: "2026-07-14T09:00:00.000Z",
+    updatedAt: "2026-07-14T09:00:00.000Z"
+  };
+}
+
+function permissionWaitingTimeline(): AgentConversationTimeline {
+  return {
+    conversationId: "conv_20260714_permission01",
+    tailEventId: "evt_20260714_permissionuser01",
+    canFollowUp: false,
+    messages: [{
+      id: "evt_20260714_permissionuser01",
+      role: "user",
+      createdAt: "2026-07-14T09:00:00.000Z",
+      text: "Check the latest release notes.",
+      jobId: "job_20260714_permission01"
+    }],
+    latestTurn: {
+      jobId: "job_20260714_permission01",
+      userEventId: "evt_20260714_permissionuser01",
+      state: "waiting_permission",
+      error: {
+        code: "permission.confirmation_required",
+        domain: "permission",
+        messageKey: "errors.permission.confirmation_required",
+        retryable: false,
+        severity: "warning",
+        userAction: "grant_permission",
+        permissionRequestId: "permreq_20260714_homepermission01"
+      }
+    }
+  };
+}
+
+function permissionPendingRequest(
+  overrides: Partial<PermissionPendingRequest> = {}
+): PermissionPendingRequest {
+  return {
+    requestId: "permreq_20260714_homepermission01",
+    jobId: "job_20260714_permission01",
+    actorType: "skill",
+    actorDisplayName: "Release Notes Skill",
+    actorVersion: "1.2.3-private-version",
+    capability: "external_network",
+    dataBoundary: "network",
+    actionLabelKey: "permissions.action.fetch_release_notes",
+    resourceScope: "current_domain",
+    resourceKind: "network",
+    resourceCount: 1,
+    reasonCode: "permission.external_network_required",
+    createdAt: "2026-07-14T09:00:00.000Z",
+    ...overrides
   };
 }
 

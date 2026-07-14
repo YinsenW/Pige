@@ -663,13 +663,25 @@ Recent Work until resolution, then ordinary Job status ownership returns.
 Commands:
 
 - `permissions.resolve`
-- `permissions.revokeGrant`
-- `permissions.setDefaultMode`
 
 Queries:
 
 - `permissions.pending`
-- `permissions.grants`
+
+The current-action core accepts only `deny` or `allow_once`; saved grants, Remember and
+YOLO APIs remain planned. `permissions.pending({ requestId })` returns one bounded typed
+summary: request/Job IDs, reviewed actor display/type/version, capability/data boundary,
+action label, resource scope/kind/count, reason code and creation time. It never returns
+raw action input, paths, commands, hashes, credentials, bodies, store records, or model
+reasoning. The prompt solely owns its matching Job status/actions.
+
+The body-free lifecycle binds exact vault, Job, actor/version/digest, action/version/input
+hash, capability, resource identity/scope, policy/runtime context and binding hash.
+`permissions.resolve({ requestId, jobId, decision })` commits the exact decision; allow
+resumes the same Job and consumes authority once only after current binding revalidation,
+while deny executes nothing. IPC uncertainty rereads durable truth; unreadable, stale,
+consumed-without-completion, or conflicting state fails closed without Retry authority.
+Renderer receives no filesystem or capability handle.
 
 ### 6.8 Settings, Providers, Tools
 

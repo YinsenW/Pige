@@ -76,7 +76,8 @@ Rules:
 - Renderer never talks to Pi directly.
 - One main-process or worker-owned anti-corruption adapter is the only Pige module
   allowed to import Pi; Agent Orchestrator owns its lifecycle.
-- Pi runtime receives scoped Pige tools, not arbitrary filesystem/shell access.
+- Pi may request registered arbitrary-path/filesystem/shell/commit tools, but receives no
+  ambient Node, filesystem, shell, or credential handle; Pige authorizes each effect.
 - Every Agent receives an explicit receiver-safe wrapper around its isolated
   `Models.streamSimple`; Pige code never calls `/compat`, `providers/all`, global
   registries/config, or the default compat dispatcher.
@@ -272,16 +273,16 @@ Rules:
 
 - Disable or avoid Pi built-in tools unless Pige wraps them with scoped adapters.
 - Register Pige-owned tools only through Agent Orchestrator.
-- Pige-owned bounded tools use service authorization and eligible reversible knowledge
-  effects need no user Permission. External extensions/new authority use Permission Broker.
+- Pige-owned tools use service authorization. Active-vault recoverable knowledge Markdown
+  and exact selected-source admission are prompt-free; other effects use Permission Broker.
 - `beforeToolCall` freezes and authorizes scoped input; handlers revalidate canonical
   input and effect guards. Brokered tools reauthorize scope before effects.
 - Side-effecting tools run sequentially; parallel tools require an explicit
   read-only/idempotent contract plus ordering, cancellation, and audit tests.
-- External shell/filesystem/network/package/credential/settings/delete scopes require
-  declared capabilities and permission policy. Exact connected model calls use standing
-  BYOK authority. Raw key bytes are never a capability or exposed to extensions/tools.
-- Pi extensions or tools cannot directly read/write vault files.
+- Arbitrary path/filesystem/commit, external network/package/credential/settings/delete
+  capability may be registered for Pi, but availability is not authority. Main executes
+  only an exact standing, gesture-authorized or Broker-approved action; raw key bytes are
+  never a capability. Renderer and extensions receive no ambient file handle.
 - Pi extensions or tools cannot access raw API keys. A reviewed Pige adapter may request brokered credential use for a specific provider call; it receives the call result, never the credential bytes.
 - Pi tool output is treated as untrusted tool output and sanitized before display, logging, or model reuse.
 - A tool implements one bounded deterministic capability. It cannot call a model,
@@ -294,6 +295,11 @@ The Pige Tool Registry is Pi's only product-capability surface. Each entry decla
 stable ID/version/description/capability; strict input/output schemas and trust; effect,
 required capabilities, resource scope, permission, data boundary, execution order,
 idempotency, limits, owner service, and handler.
+
+The current Permission Broker foundation proves one injected read-only/idempotent
+external adapter, current-action Deny/Allow once, same-Job pause/resume and restart-safe
+one-use execution. The production external adapter registry remains empty; arbitrary-path
+tools, real Skill/package/local-tool callers, saved grants and YOLO remain Phase 8 work.
 
 The current structured-ingest foundation registers `pige_inspect_dataset@1` only for the
 preserved current CSV, XLSX, or SQLite source. Its input is `{}`: Pi receives no path,

@@ -30,6 +30,17 @@ const CONFIRM_ALLOW_ANSWER = "The synthetic one-use model send was approved and 
 const CONFIRM_LIVE_PROMPT = "Complete the synthetic same-process approval check for [redacted-secret].";
 const CONFIRM_LIVE_ANSWER = "The synthetic same-process model send was approved and completed.";
 const CONFIRM_DENY_PROMPT = "Complete the synthetic denial check for [redacted-secret].";
+const PERMISSION_TOOL_NAME = "synthetic_external_status";
+const PERMISSION_ALLOW_PROMPT = "Use the synthetic external status Skill once and report its fixed result.";
+const PERMISSION_ALLOW_ANSWER = "The synthetic permissioned external action completed exactly once.";
+const PERMISSION_DENY_PROMPT = "Use the synthetic external status Skill for the denial check.";
+const PERMISSION_CORE_PROMPT = "Complete the synthetic core-tool-only check without external actions.";
+const PERMISSION_CORE_ANSWER = "The core Pige Home tool completed without a Permission Broker prompt.";
+const PERMISSION_PRIVATE_MARKER = "SYNTHETIC_PERMISSION_INPUT_MUST_NOT_PERSIST";
+const PERMISSION_TOOL_RESULT = Object.freeze({
+  modelText: "Synthetic external status ready.",
+  details: Object.freeze({ status: "ok", receipt: "permission-smoke-v1" })
+});
 const CHILD_RESULT_PREFIX = "PIGE_ROUNDTRIP_RESULT ";
 const MAX_CHILD_MS = 90_000;
 
@@ -42,7 +53,7 @@ if (process.versions.electron) {
 }
 
 async function runOrchestrator() {
-  const rootPath = fs.mkdtempSync(path.join(os.tmpdir(), "pige-unified-roundtrip-"));
+  const rootPath = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "pige-unified-roundtrip-")));
   const userDataPath = path.join(rootPath, "user-data");
   const attachmentPath = path.join(rootPath, "unified-agent-source.txt");
   const markdownAttachmentPath = path.join(rootPath, "unified-agent-source.md");
@@ -92,6 +103,43 @@ async function runOrchestrator() {
       activityAttachmentPath,
       datasetAttachmentPath
     });
+    const permissionPending = await runChild("permission_pending", {
+      rootPath,
+      userDataPath,
+      baseUrl,
+      syntheticToken,
+      attachmentPath,
+      markdownAttachmentPath,
+      activityAttachmentPath,
+      datasetAttachmentPath
+    });
+    assert.equal(readPermissionExecutionCount(rootPath), 0);
+    const permissionResolved = await runChild("permission_resolve", {
+      rootPath,
+      userDataPath,
+      baseUrl,
+      syntheticToken,
+      attachmentPath,
+      markdownAttachmentPath,
+      activityAttachmentPath,
+      datasetAttachmentPath
+    });
+    assert.equal(readPermissionExecutionCount(rootPath), 1);
+    const permissionReopen = await runChild("permission_reopen", {
+      rootPath,
+      userDataPath,
+      baseUrl,
+      syntheticToken,
+      attachmentPath,
+      markdownAttachmentPath,
+      activityAttachmentPath,
+      datasetAttachmentPath,
+      permissionAllowJobId: permissionResolved.allowJobId,
+      permissionAllowRequestId: permissionResolved.allowRequestId,
+      permissionDenyJobId: permissionResolved.denyJobId,
+      permissionDenyRequestId: permissionResolved.denyRequestId
+    });
+    assert.equal(readPermissionExecutionCount(rootPath), 1);
 
     assert.equal(connect.bindingState, "ready");
     assert.equal(connect.sourceToolchainReady, true);
@@ -162,14 +210,48 @@ async function runOrchestrator() {
     assert.ok(liveApprovalRequest.receivedAt >= reopen.liveConfirmationAllowClickedAt);
     assert.ok(requests.every((request) => !request.body.includes(CONFIRM_DENY_PROMPT)));
 
+    assert.equal(permissionPending.confirmationVisible, true);
+    assert.equal(permissionPending.allowOnceVisible, true);
+    assert.equal(permissionPending.denyVisible, true);
+    assert.equal(permissionPending.dtoShapeSafe, true);
+    assert.equal(permissionPending.uiShapeSafe, true);
+    assert.equal(permissionPending.matchingJobHidden, true);
+    assert.match(permissionPending.requestId, /^permreq_\d{8}_[a-z0-9]{8,}$/u);
+    assert.match(permissionPending.jobId, /^job_\d{8}_[a-z0-9]{8,}$/u);
+    assert.equal(permissionResolved.recoveredRequestId, permissionPending.requestId);
+    assert.equal(permissionResolved.recoveredJobId, permissionPending.jobId);
+    assert.equal(permissionResolved.allowRequestId, permissionPending.requestId);
+    assert.equal(permissionResolved.allowJobId, permissionPending.jobId);
+    assert.equal(permissionResolved.allowAnswerVisible, true);
+    assert.equal(permissionResolved.allowJobState, "completed");
+    assert.equal(permissionResolved.allowPendingCleared, true);
+    assert.equal(permissionResolved.allowMatchingJobHidden, true);
+    assert.equal(permissionResolved.denyVisible, true);
+    assert.equal(permissionResolved.denyJobState, "failed_final");
+    assert.equal(permissionResolved.denyErrorCode, "permission.denied");
+    assert.equal(permissionResolved.denyPendingCleared, true);
+    assert.equal(permissionResolved.coreAnswerVisible, true);
+    assert.equal(permissionResolved.corePermissionPromptSeen, false);
+    assert.equal(permissionResolved.coreJobState, "completed");
+    assert.notEqual(permissionResolved.denyRequestId, permissionPending.requestId);
+    assert.notEqual(permissionResolved.denyJobId, permissionPending.jobId);
+    assert.equal(permissionReopen.allowJobState, "completed");
+    assert.equal(permissionReopen.denyJobState, "failed_final");
+    assert.equal(permissionReopen.pendingRequestsCleared, true);
+    assert.equal(permissionReopen.permissionPromptVisible, false);
+    assert.equal(permissionReopen.coreAnswerVisible, true);
+
     const vaultPath = path.join(rootPath, "vaults", "Roundtrip Vault");
     const restartedApprovalJob = readRoundtripRecord(vaultPath, "jobs", pending.jobId);
     const liveApprovalJob = readRoundtripRecord(vaultPath, "jobs", reopen.liveConfirmationJobId);
     const denialJob = readRoundtripRecord(vaultPath, "jobs", reopen.denialJobId);
+    const permissionDenialJob = readRoundtripRecord(vaultPath, "jobs", permissionResolved.denyJobId);
     assert.equal(restartedApprovalJob.state, "completed");
     assert.equal(liveApprovalJob.state, "completed");
     assert.equal(denialJob.state, "failed_final");
     assert.equal(denialJob.error?.code, "model_provider.egress_denied");
+    assert.equal(permissionDenialJob.state, "failed_final");
+    assert.equal(permissionDenialJob.error?.code, "permission.denied");
     const restartedApproval = readApprovalRecord(userDataPath, pending.requestId);
     const liveApproval = readApprovalRecord(userDataPath, reopen.liveConfirmationRequestId);
     const denialApproval = readApprovalRecord(userDataPath, reopen.denialRequestId);
@@ -179,6 +261,55 @@ async function runOrchestrator() {
     assert.equal(typeof liveApproval.reconciledAt, "string");
     assert.equal(denialApproval.state, "denied");
     assert.equal(typeof denialApproval.reconciledAt, "string");
+
+    const vaultManifest = JSON.parse(fs.readFileSync(path.join(vaultPath, ".pige", "manifest.json"), "utf8"));
+    const allowPermissionJob = readRoundtripRecord(vaultPath, "jobs", permissionResolved.allowJobId);
+    const denyPermissionJob = readRoundtripRecord(vaultPath, "jobs", permissionResolved.denyJobId);
+    assert.equal(allowPermissionJob.state, "completed");
+    assert.equal(denyPermissionJob.state, "failed_final");
+    assert.equal(denyPermissionJob.error?.code, "permission.denied");
+    const allowPermission = readPermissionBrokerRecord(
+      userDataPath,
+      vaultManifest.vault_id,
+      "requests",
+      permissionResolved.allowRequestId
+    );
+    const denyPermission = readPermissionBrokerRecord(
+      userDataPath,
+      vaultManifest.vault_id,
+      "requests",
+      permissionResolved.denyRequestId
+    );
+    const allowDecision = readPermissionBrokerRecord(
+      userDataPath,
+      vaultManifest.vault_id,
+      "decisions",
+      allowPermission.decisionId
+    );
+    const denyDecision = readPermissionBrokerRecord(
+      userDataPath,
+      vaultManifest.vault_id,
+      "decisions",
+      denyPermission.decisionId
+    );
+    assert.equal(allowPermission.state, "consumed");
+    assert.equal(allowPermission.decision, "allow_once");
+    assert.match(allowPermission.completionMarkerHash, /^sha256:[a-f0-9]{64}$/u);
+    assert.equal(typeof allowPermission.completedAt, "string");
+    assert.equal(allowDecision.decision, "allow_once");
+    assert.equal(allowDecision.scope, "once");
+    assert.equal(denyPermission.state, "denied");
+    assert.equal(denyPermission.decision, "deny");
+    assert.equal(denyPermission.completionMarkerHash, undefined);
+    assert.equal(denyDecision.decision, "deny");
+    assert.equal(denyDecision.scope, "never");
+    for (const record of [allowPermission, denyPermission, allowDecision, denyDecision]) {
+      assertPermissionRecordBodyFree(record, {
+        rootPath,
+        syntheticToken,
+        forbiddenMarker: PERMISSION_PRIVATE_MARKER
+      });
+    }
 
     assert.ok(requests.filter((request) => request.method === "GET" && request.path === "/v1/models").length >= 3);
     assert.ok(requests.filter((request) => request.method === "POST" && request.path === "/v1/responses").length >= 7);
@@ -192,7 +323,11 @@ async function runOrchestrator() {
     assert.ok(requests.some((request) => request.body.includes('"name":"pige_query_dataset"')));
     assert.ok(requests.some((request) => request.body.includes('"name":"pige_create_knowledge_note"')));
     assert.ok(requests.some((request) => request.body.includes('"name":"pige_respond_to_user"')));
+    assert.ok(requests.some((request) => request.body.includes(`"name":"${PERMISSION_TOOL_NAME}"`)));
     assert.ok(requests.some((request) => request.body.includes('"type":"function_call_output"')));
+    assert.ok(requests.some((request) => request.body.includes(PERMISSION_ALLOW_PROMPT)));
+    assert.ok(requests.some((request) => request.body.includes(PERMISSION_DENY_PROMPT)));
+    assert.ok(requests.some((request) => request.body.includes(PERMISSION_CORE_PROMPT)));
 
     const secretsPath = path.join(userDataPath, "secrets.json");
     const secrets = JSON.parse(fs.readFileSync(secretsPath, "utf8"));
@@ -208,6 +343,7 @@ async function runOrchestrator() {
     ));
     assert.equal(models.defaultModelProfileId, pending.modelProfileId);
     assert.equal(findPlaintext(rootPath, syntheticToken), undefined);
+    assert.equal(findPlaintext(rootPath, PERMISSION_PRIVATE_MARKER), undefined);
 
     console.log(
       `Electron unified Agent roundtrip OK: persisted ${connect.providerProfileId}/${connect.modelProfileId}, ` +
@@ -216,11 +352,18 @@ async function runOrchestrator() {
       `${connect.directDraftEventCount} authorized fallback replacements plus Enter submission, ` +
       `visible direct/cited Home, preserved-source, ` +
       `TXT/Markdown ingress, Dataset continuation, restart-adopted and live one-use model egress approvals, ` +
-      `durable denial without a provider request, zero retryable Jobs, and reversible Activity/Undo results.`
+      `durable denial without a provider request, a restart-recovered Permission Broker allow-once action ` +
+      `executed once with durable completion plus a zero-execution denial, core-tool isolation, zero retryable Jobs, ` +
+      `and reversible Activity/Undo results.`
     );
     console.log(
       "Electron model-egress confirmation loopback OK: restart and live approvals were consumed and reconciled, " +
       "the denial was reconciled without a provider request, and all exact Jobs reached their expected terminal states."
+    );
+    console.log(
+      "Electron Permission Broker loopback OK: the safe pending card survived restart, Allow once resumed the same Job " +
+      "and executed one synthetic adapter action, denial executed none, a further restart replayed nothing, core Pige " +
+      "tools showed no permission UI, and machine-local Broker records remained body-free."
     );
   } finally {
     await new Promise((resolve) => server.close(resolve));
@@ -241,6 +384,10 @@ async function runChild(phase, values) {
       PIGE_ROUNDTRIP_MARKDOWN_ATTACHMENT_PATH: values.markdownAttachmentPath,
       PIGE_ROUNDTRIP_ACTIVITY_ATTACHMENT_PATH: values.activityAttachmentPath,
       PIGE_ROUNDTRIP_DATASET_ATTACHMENT_PATH: values.datasetAttachmentPath,
+      PIGE_ROUNDTRIP_PERMISSION_ALLOW_JOB_ID: values.permissionAllowJobId ?? "none",
+      PIGE_ROUNDTRIP_PERMISSION_ALLOW_REQUEST_ID: values.permissionAllowRequestId ?? "none",
+      PIGE_ROUNDTRIP_PERMISSION_DENY_JOB_ID: values.permissionDenyJobId ?? "none",
+      PIGE_ROUNDTRIP_PERMISSION_DENY_REQUEST_ID: values.permissionDenyRequestId ?? "none",
       PIGE_ROUNDTRIP_STAGE_PATH: path.join(values.rootPath, `stage-${phase}.txt`)
     }),
     stdio: ["ignore", "pipe", "pipe"]
@@ -308,6 +455,150 @@ function readApprovalRecord(userDataPath, requestId) {
   );
 }
 
+function readPermissionBrokerRecord(userDataPath, vaultId, area, recordId) {
+  assert.match(vaultId, /^vault_\d{8}_[a-z0-9]{8,}$/u);
+  assert.ok(area === "requests" || area === "decisions");
+  return readUniqueJsonByName(
+    path.join(userDataPath, "permission-broker", vaultId, area),
+    `${recordId}.json`
+  );
+}
+
+function assertPermissionRecordBodyFree(record, input) {
+  const serialized = JSON.stringify(record);
+  assert.equal(serialized.includes(input.rootPath), false);
+  assert.equal(serialized.includes(input.syntheticToken), false);
+  assert.equal(serialized.includes(input.forbiddenMarker), false);
+  assert.equal(serialized.includes(PERMISSION_ALLOW_PROMPT), false);
+  assert.equal(serialized.includes(PERMISSION_DENY_PROMPT), false);
+  assert.equal(serialized.includes(PERMISSION_ALLOW_ANSWER), false);
+  assert.equal(serialized.includes(PERMISSION_CORE_ANSWER), false);
+  assert.equal(serialized.includes("Authorization"), false);
+}
+
+function permissionCounterPath(rootPath) {
+  return path.join(rootPath, "permission-adapter-counter.json");
+}
+
+function readPermissionExecutionCount(rootPath) {
+  const counterPath = permissionCounterPath(rootPath);
+  if (!fs.existsSync(counterPath)) return 0;
+  const record = JSON.parse(fs.readFileSync(counterPath, "utf8"));
+  assert.deepEqual(Object.keys(record).sort(), ["executeCount", "schemaVersion"]);
+  assert.equal(record.schemaVersion, 1);
+  assert.ok(Number.isSafeInteger(record.executeCount));
+  assert.ok(record.executeCount >= 0 && record.executeCount <= 8);
+  return record.executeCount;
+}
+
+function incrementPermissionExecutionCount(rootPath) {
+  const nextCount = readPermissionExecutionCount(rootPath) + 1;
+  if (nextCount > 8) throw new Error("Synthetic permission adapter execution count exceeded its bound.");
+  const counterPath = permissionCounterPath(rootPath);
+  const temporaryPath = `${counterPath}.tmp-${process.pid}`;
+  fs.writeFileSync(
+    temporaryPath,
+    `${JSON.stringify({ schemaVersion: 1, executeCount: nextCount })}\n`,
+    { encoding: "utf8", mode: 0o600, flag: "wx" }
+  );
+  fs.renameSync(temporaryPath, counterPath);
+}
+
+async function registerSyntheticPermissionAdapter(rootPath) {
+  const { registerPermissionedExternalCapabilityAdapter } = await import(
+    "../out/main/services/permissioned-external-capability-service.js"
+  );
+  registerPermissionedExternalCapabilityAdapter({
+    tool: {
+      name: PERMISSION_TOOL_NAME,
+      label: "Synthetic external status",
+      description: "Reads one fixed synthetic external status for the assembled Permission Broker smoke.",
+      parameters: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["read_status"] },
+          opaqueInput: { type: "string", enum: [PERMISSION_PRIVATE_MARKER] }
+        },
+        required: ["action", "opaqueInput"],
+        additionalProperties: false
+      },
+      outputSchema: {
+        type: "object",
+        properties: {
+          status: { type: "string", enum: ["ok"] },
+          receipt: { type: "string", enum: ["permission-smoke-v1"] }
+        },
+        required: ["status", "receipt"],
+        additionalProperties: false
+      },
+      effect: "read_only",
+      inputTrust: "model_generated",
+      outputTrust: "untrusted_source",
+      dataBoundary: {
+        resourceScope: "current_vault",
+        pathAuthority: "host_only",
+        sourceIdAuthority: "host_only",
+        modelAuthority: "none"
+      },
+      execution: "sequential",
+      idempotency: { mode: "idempotent", scope: "tool_call" },
+      limits: { maxInputBytes: 1_024, maxOutputBytes: 1_024, timeoutMs: 5_000 },
+      ownerService: "SyntheticPermissionSmokeService"
+    },
+    actor: {
+      type: "skill",
+      id: "skill.synthetic.permission-smoke",
+      displayName: "Synthetic Permission Skill",
+      version: "1.0.0",
+      digest: sha256Digest("pige.synthetic.permission_skill.v1")
+    },
+    action: {
+      id: "network.read-synthetic-status",
+      version: "1",
+      labelKey: "permissions.action.fetch_release_notes"
+    },
+    permission: {
+      capability: "external_network",
+      dataBoundary: "network",
+      resourceScope: "current_action",
+      resourceKind: "network",
+      reasonCode: "external.network"
+    },
+    normalizeInput(args) {
+      if (
+        !args ||
+        typeof args !== "object" ||
+        Array.isArray(args) ||
+        Object.keys(args).sort().join(",") !== "action,opaqueInput" ||
+        args.action !== "read_status" ||
+        args.opaqueInput !== PERMISSION_PRIVATE_MARKER
+      ) {
+        throw new Error("Synthetic permission adapter input is invalid.");
+      }
+      return { action: "read_status", opaqueInput: PERMISSION_PRIVATE_MARKER };
+    },
+    resourceIdentity() {
+      return { resource: "synthetic.permission.current_action" };
+    },
+    resourceCount() {
+      return 1;
+    },
+    async execute(_input, signal) {
+      if (signal.aborted) throw new Error("Synthetic permission adapter was cancelled.");
+      incrementPermissionExecutionCount(rootPath);
+      return PERMISSION_TOOL_RESULT;
+    },
+    async adoptCompleted(_completionMarkerHash, _input, signal) {
+      if (signal.aborted) throw new Error("Synthetic permission adapter adoption was cancelled.");
+      return PERMISSION_TOOL_RESULT;
+    }
+  });
+}
+
+function sha256Digest(value) {
+  return `sha256:${crypto.createHash("sha256").update(value, "utf8").digest("hex")}`;
+}
+
 function readUniqueJsonByName(rootPath, expectedName) {
   assert.equal(fs.existsSync(rootPath), true);
   const matches = [];
@@ -351,10 +642,12 @@ async function runElectronPhase() {
   markStage(stage);
 
   try {
+    markStage("permission_adapter_register");
+    await registerSyntheticPermissionAdapter(rootPath);
     if (phase === "connect") {
       const helper = await import("../out/main/unified-agent-roundtrip-smoke.js");
       helper.prepareUnifiedAgentRoundtripSmoke({ rootPath, userDataPath });
-    } else if (phase !== "pending" && phase !== "reopen") {
+    } else if (!["pending", "reopen", "permission_pending", "permission_resolve", "permission_reopen"].includes(phase)) {
       throw new Error("Unknown unified Agent roundtrip phase.");
     }
 
@@ -376,11 +669,25 @@ async function runElectronPhase() {
     markStage("renderer_load");
     await waitForRenderer(browserWindow);
     markStage(`renderer_${phase}`);
-    let result = phase === "connect"
-      ? await runConnectRenderer(browserWindow, { baseUrl, syntheticToken })
-      : phase === "pending"
-      ? await runPendingConfirmationRenderer(browserWindow, { syntheticToken })
-      : await runReopenRenderer(browserWindow);
+    let result;
+    if (phase === "connect") {
+      result = await runConnectRenderer(browserWindow, { baseUrl, syntheticToken });
+    } else if (phase === "pending") {
+      result = await runPendingConfirmationRenderer(browserWindow, { syntheticToken });
+    } else if (phase === "reopen") {
+      result = await runReopenRenderer(browserWindow);
+    } else if (phase === "permission_pending") {
+      result = await runPermissionPendingRenderer(browserWindow, { syntheticToken });
+    } else if (phase === "permission_resolve") {
+      result = await runPermissionResolveRenderer(browserWindow);
+    } else {
+      result = await runPermissionReopenRenderer(browserWindow, {
+        allowJobId: requireEnv("PIGE_ROUNDTRIP_PERMISSION_ALLOW_JOB_ID"),
+        allowRequestId: requireEnv("PIGE_ROUNDTRIP_PERMISSION_ALLOW_REQUEST_ID"),
+        denyJobId: requireEnv("PIGE_ROUNDTRIP_PERMISSION_DENY_JOB_ID"),
+        denyRequestId: requireEnv("PIGE_ROUNDTRIP_PERMISSION_DENY_REQUEST_ID")
+      });
+    }
     if (phase === "connect") {
       markStage("renderer_source");
       await prepareSourceRenderer(browserWindow, SOURCE_PROMPT);
@@ -992,6 +1299,329 @@ async function runReopenRenderer(browserWindow) {
   `, true);
 }
 
+async function runPermissionPendingRenderer(browserWindow, input) {
+  return browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      const waitFor = async (predicate, label, timeoutMs = 45000) => {
+        const startedAt = Date.now();
+        while (Date.now() - startedAt < timeoutMs) {
+          const value = await predicate();
+          if (value) return value;
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        throw new Error("Timed out waiting for " + label);
+      };
+      const clickNav = async (label) => {
+        let button = Array.from(document.querySelectorAll("button.nav-item"))
+          .find((item) => item.textContent?.trim() === label);
+        if (!button) {
+          const toggle = await waitFor(() => document.querySelector("button.icon-button"), "sidebar toggle");
+          toggle.click();
+          button = await waitFor(
+            () => Array.from(document.querySelectorAll("button.nav-item"))
+              .find((item) => item.textContent?.trim() === label),
+            "navigation " + label
+          );
+        }
+        button.click();
+      };
+      const setValue = (element, value) => {
+        const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), "value");
+        descriptor.set.call(element, value);
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+        element.dispatchEvent(new Event("change", { bubbles: true }));
+      };
+
+      await waitFor(() => window.pige, "preload bridge");
+      await clickNav("Home");
+      const composer = await waitFor(
+        () => document.querySelector('textarea[aria-label="Capture or ask"]'),
+        "Home composer"
+      );
+      setValue(composer, ${JSON.stringify(PERMISSION_ALLOW_PROMPT)});
+      const send = await waitFor(
+        () => document.querySelector('button[aria-label="Send"]:not(:disabled)'),
+        "Home permission send"
+      );
+      send.click();
+      const prompt = await waitFor(
+        () => document.querySelector('.permission-prompt[role="group"]'),
+        "Permission Broker prompt"
+      );
+      const job = await waitFor(async () => {
+        const value = await window.pige.jobs.list({ states: ["waiting_permission"], limit: 100 });
+        return value.jobs.find((candidate) => candidate.permissionRequestId) ?? undefined;
+      }, "waiting permission Job");
+      const request = await waitFor(
+        () => window.pige.permissions.pending({ requestId: job.permissionRequestId }),
+        "safe pending permission DTO"
+      );
+      if (!request || request.requestId !== job.permissionRequestId || request.jobId !== job.id) {
+        throw new Error("Pending permission DTO does not match the exact Job.");
+      }
+      const dtoKeys = Object.keys(request).sort().join(",");
+      const expectedDtoKeys = [
+        "actionLabelKey",
+        "actorDisplayName",
+        "actorType",
+        "actorVersion",
+        "capability",
+        "createdAt",
+        "dataBoundary",
+        "jobId",
+        "reasonCode",
+        "requestId",
+        "resourceCount",
+        "resourceKind",
+        "resourceScope"
+      ].sort().join(",");
+      const promptText = prompt.textContent ?? "";
+      const buttons = Array.from(prompt.querySelectorAll("button"));
+      const matchingJobHidden = !Array.from(document.querySelectorAll(".job-pill"))
+        .some((pill) => pill.textContent?.includes(job.id));
+      return {
+        confirmationVisible: true,
+        allowOnceVisible: buttons.some((button) => button.textContent?.trim() === "Allow once"),
+        denyVisible: buttons.some((button) => button.textContent?.trim() === "Deny"),
+        requestId: request.requestId,
+        jobId: request.jobId,
+        dtoShapeSafe: dtoKeys === expectedDtoKeys &&
+          request.actorType === "skill" &&
+          request.capability === "external_network" &&
+          request.dataBoundary === "network" &&
+          request.resourceScope === "current_action" &&
+          request.resourceCount === 1,
+        uiShapeSafe: promptText.includes("Synthetic Permission Skill") &&
+          !promptText.includes(${JSON.stringify(PERMISSION_PRIVATE_MARKER)}) &&
+          !promptText.includes(${JSON.stringify(input.syntheticToken)}) &&
+          !promptText.includes("sha256:") &&
+          !promptText.includes("Authorization"),
+        matchingJobHidden
+      };
+    })()
+  `, true);
+}
+
+async function runPermissionResolveRenderer(browserWindow) {
+  return browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      const mark = (stage) => {
+        globalThis.__pigeRoundtripStage = stage;
+        console.info("PIGE_ROUNDTRIP_STAGE " + stage);
+      };
+      const waitFor = async (predicate, label, timeoutMs = 45000) => {
+        const startedAt = Date.now();
+        while (Date.now() - startedAt < timeoutMs) {
+          const value = await predicate();
+          if (value) return value;
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        throw new Error("Timed out waiting for " + label);
+      };
+      const clickNav = async (label) => {
+        let button = Array.from(document.querySelectorAll("button.nav-item"))
+          .find((item) => item.textContent?.trim() === label);
+        if (!button) {
+          const toggle = await waitFor(() => document.querySelector("button.icon-button"), "sidebar toggle");
+          toggle.click();
+          button = await waitFor(
+            () => Array.from(document.querySelectorAll("button.nav-item"))
+              .find((item) => item.textContent?.trim() === label),
+            "navigation " + label
+          );
+        }
+        button.click();
+      };
+      const setValue = (element, value) => {
+        const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), "value");
+        descriptor.set.call(element, value);
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+        element.dispatchEvent(new Event("change", { bubbles: true }));
+      };
+      const submit = async (composer, prompt) => {
+        setValue(composer, prompt);
+        const send = await waitFor(
+          () => document.querySelector('button[aria-label="Send"]:not(:disabled)'),
+          "enabled Home send"
+        );
+        send.click();
+      };
+      const pendingPermissionAction = async (excludeRequestIds = []) => {
+        const prompt = await waitFor(
+          () => document.querySelector('.permission-prompt[role="group"]'),
+          "Permission Broker prompt"
+        );
+        const job = await waitFor(async () => {
+          const value = await window.pige.jobs.list({ states: ["waiting_permission"], limit: 100 });
+          return value.jobs.find((candidate) =>
+            candidate.permissionRequestId && !excludeRequestIds.includes(candidate.permissionRequestId)
+          ) ?? undefined;
+        }, "waiting permission Job");
+        const request = await window.pige.permissions.pending({ requestId: job.permissionRequestId });
+        if (!request || request.jobId !== job.id) throw new Error("Permission request identity changed.");
+        return { prompt, job, request };
+      };
+
+      mark("permission_resolve_bridge");
+      await waitFor(() => window.pige, "preload bridge");
+      await clickNav("Home");
+      const composer = await waitFor(
+        () => document.querySelector('textarea[aria-label="Capture or ask"]'),
+        "Home composer"
+      );
+      mark("permission_resolve_recovered");
+      const recovered = await pendingPermissionAction();
+      const allowMatchingJobHidden = !Array.from(document.querySelectorAll(".job-pill"))
+        .some((pill) => pill.textContent?.includes(recovered.job.id));
+      const allow = Array.from(recovered.prompt.querySelectorAll("button"))
+        .find((button) => button.textContent?.trim() === "Allow once" && !button.disabled);
+      if (!allow) throw new Error("Recovered Permission Broker prompt has no Allow once action.");
+      mark("permission_resolve_allow_click");
+      allow.click();
+      const allowAnswerVisible = await waitFor(
+        () => document.body.textContent?.includes(${JSON.stringify(PERMISSION_ALLOW_ANSWER)}) &&
+          !document.querySelector(".permission-prompt") ? true : undefined,
+        "permissioned external action answer"
+      );
+      const allowCompletedJob = await waitFor(async () => {
+        const value = await window.pige.jobs.list({ limit: 100 });
+        const job = value.jobs.find((candidate) => candidate.id === recovered.job.id);
+        return job?.state === "completed" ? job : undefined;
+      }, "completed allowed permission Job");
+      const allowPendingCleared = (await window.pige.permissions.pending({
+        requestId: recovered.request.requestId
+      })) === undefined;
+
+      mark("permission_resolve_deny_submit");
+      await submit(composer, ${JSON.stringify(PERMISSION_DENY_PROMPT)});
+      const denied = await pendingPermissionAction([recovered.request.requestId]);
+      const deny = Array.from(denied.prompt.querySelectorAll("button"))
+        .find((button) => button.textContent?.trim() === "Deny" && !button.disabled);
+      if (!deny) throw new Error("Permission Broker prompt has no Deny action.");
+      mark("permission_resolve_deny_click");
+      deny.click();
+      mark("permission_resolve_deny_visible_wait");
+      const denyVisible = await waitFor(
+        () => document.body.textContent?.includes("This external action was denied. Your existing work remains saved.") &&
+          !document.querySelector(".permission-prompt") ? true : undefined,
+        "safe denied permission result"
+      );
+      mark("permission_resolve_deny_terminal_wait");
+      const denyTerminal = await waitFor(async () => {
+        const value = await window.pige.jobs.list({ limit: 100 });
+        const job = value.jobs.find((candidate) => candidate.id === denied.job.id);
+        return job?.state === "failed_final" ? job : undefined;
+      }, "failed-final denied permission Job");
+      const denyConversation = await waitFor(async () => {
+        const timeline = await window.pige.agent.conversation({ limit: 100 });
+        return timeline?.latestTurn?.jobId === denied.job.id &&
+          timeline.latestTurn.state === "failed_final" &&
+          timeline.latestTurn.error?.code === "permission.denied" ? timeline : undefined;
+      }, "safe denied permission conversation result");
+      mark("permission_resolve_deny_pending_read");
+      const denyPendingCleared = (await window.pige.permissions.pending({
+        requestId: denied.request.requestId
+      })) === undefined;
+
+      mark("permission_resolve_core_submit");
+      let corePermissionPromptSeen = false;
+      const permissionObserver = new MutationObserver(() => {
+        if (document.querySelector(".permission-prompt")) corePermissionPromptSeen = true;
+      });
+      permissionObserver.observe(document.body, { childList: true, subtree: true });
+      await submit(composer, ${JSON.stringify(PERMISSION_CORE_PROMPT)});
+      const coreAnswerVisible = await waitFor(
+        () => document.body.textContent?.includes(${JSON.stringify(PERMISSION_CORE_ANSWER)}) ? true : undefined,
+        "core Pige tool answer"
+      );
+      permissionObserver.disconnect();
+      if (document.querySelector(".permission-prompt")) corePermissionPromptSeen = true;
+      const coreTimeline = await waitFor(async () => {
+        const timeline = await window.pige.agent.conversation({ limit: 100 });
+        return timeline?.latestTurn?.state === "completed" ? timeline : undefined;
+      }, "completed core-tool conversation turn");
+      const jobs = await window.pige.jobs.list({ limit: 100 });
+      const coreJob = jobs.jobs.find((candidate) => candidate.id === coreTimeline.latestTurn.jobId);
+      if (coreJob?.state !== "completed") throw new Error("Core-tool Job did not complete.");
+      mark("permission_resolve_complete");
+      return {
+        recoveredRequestId: recovered.request.requestId,
+        recoveredJobId: recovered.job.id,
+        allowRequestId: recovered.request.requestId,
+        allowJobId: recovered.job.id,
+        allowAnswerVisible: Boolean(allowAnswerVisible),
+        allowJobState: allowCompletedJob.state,
+        allowPendingCleared,
+        allowMatchingJobHidden,
+        denyVisible: Boolean(denyVisible),
+        denyRequestId: denied.request.requestId,
+        denyJobId: denied.job.id,
+        denyJobState: denyTerminal.state,
+        denyErrorCode: denyConversation.latestTurn.error.code,
+        denyPendingCleared,
+        coreAnswerVisible: Boolean(coreAnswerVisible),
+        corePermissionPromptSeen,
+        coreJobState: coreJob.state
+      };
+    })()
+  `, true);
+}
+
+async function runPermissionReopenRenderer(browserWindow, input) {
+  return browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      const waitFor = async (predicate, label, timeoutMs = 45000) => {
+        const startedAt = Date.now();
+        while (Date.now() - startedAt < timeoutMs) {
+          const value = await predicate();
+          if (value) return value;
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        throw new Error("Timed out waiting for " + label);
+      };
+      const clickNav = async (label) => {
+        let button = Array.from(document.querySelectorAll("button.nav-item"))
+          .find((item) => item.textContent?.trim() === label);
+        if (!button) {
+          const toggle = await waitFor(() => document.querySelector("button.icon-button"), "sidebar toggle");
+          toggle.click();
+          button = await waitFor(
+            () => Array.from(document.querySelectorAll("button.nav-item"))
+              .find((item) => item.textContent?.trim() === label),
+            "navigation " + label
+          );
+        }
+        button.click();
+      };
+      await waitFor(() => window.pige, "preload bridge");
+      await clickNav("Home");
+      const jobs = await waitFor(async () => {
+        const value = await window.pige.jobs.list({ limit: 100 });
+        const allow = value.jobs.find((candidate) => candidate.id === ${JSON.stringify(input.allowJobId)});
+        const deny = value.jobs.find((candidate) => candidate.id === ${JSON.stringify(input.denyJobId)});
+        return allow && deny ? { allow, deny } : undefined;
+      }, "reopened permission Jobs");
+      const pendingAllow = await window.pige.permissions.pending({
+        requestId: ${JSON.stringify(input.allowRequestId)}
+      });
+      const pendingDeny = await window.pige.permissions.pending({
+        requestId: ${JSON.stringify(input.denyRequestId)}
+      });
+      const coreAnswerVisible = await waitFor(
+        () => document.body.textContent?.includes(${JSON.stringify(PERMISSION_CORE_ANSWER)}) ? true : undefined,
+        "reopened core-tool answer"
+      );
+      return {
+        allowJobState: jobs.allow.state,
+        denyJobState: jobs.deny.state,
+        pendingRequestsCleared: pendingAllow === undefined && pendingDeny === undefined,
+        permissionPromptVisible: Boolean(document.querySelector(".permission-prompt")),
+        coreAnswerVisible: Boolean(coreAnswerVisible)
+      };
+    })()
+  `, true);
+}
+
 async function prepareSourceRenderer(browserWindow, prompt) {
   return browserWindow.webContents.executeJavaScript(`
     (() => {
@@ -1225,6 +1855,37 @@ async function startProviderServer(requests, streamTiming) {
       writeToolCallResponse(response, "pige_provider_probe", "call_provider_probe", "provider-probe-1");
       return;
     }
+    if (
+      serializedInput.includes('"call_id":"call_permission_allow"') &&
+      serializedInput.includes("function_call_output")
+    ) {
+      writeToolCallResponse(response, "pige_finish_home_turn", "call_permission_allow_finish", "permission-allow-finish", {
+        answer: PERMISSION_ALLOW_ANSWER,
+        citationRefs: [],
+        grounding: "general"
+      });
+      return;
+    }
+    if (
+      latestUserText.includes(PERMISSION_ALLOW_PROMPT) &&
+      serializedTools.includes(PERMISSION_TOOL_NAME)
+    ) {
+      writeToolCallResponse(response, PERMISSION_TOOL_NAME, "call_permission_allow", "permission-allow", {
+        action: "read_status",
+        opaqueInput: PERMISSION_PRIVATE_MARKER
+      });
+      return;
+    }
+    if (
+      latestUserText.includes(PERMISSION_DENY_PROMPT) &&
+      serializedTools.includes(PERMISSION_TOOL_NAME)
+    ) {
+      writeToolCallResponse(response, PERMISSION_TOOL_NAME, "call_permission_deny", "permission-deny", {
+        action: "read_status",
+        opaqueInput: PERMISSION_PRIVATE_MARKER
+      });
+      return;
+    }
     if (serializedInput.includes('"call_id":"call_dataset_query"') && serializedInput.includes("function_call_output")) {
       writeToolCallResponse(response, "pige_finish_home_turn", "call_dataset_finish", "dataset-finish-1", {
         answer: DATASET_ANSWER,
@@ -1312,7 +1973,9 @@ async function startProviderServer(requests, streamTiming) {
         ? CONFIRM_ALLOW_ANSWER
         : latestUserText.includes(CONFIRM_LIVE_PROMPT)
           ? CONFIRM_LIVE_ANSWER
-          : DIRECT_ANSWER,
+          : latestUserText.includes(PERMISSION_CORE_PROMPT)
+            ? PERMISSION_CORE_ANSWER
+            : DIRECT_ANSWER,
       citationRefs: [],
       grounding: "general"
     };

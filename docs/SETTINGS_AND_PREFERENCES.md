@@ -131,7 +131,8 @@ Rules:
   Global Default; only Custom exposes protocol/Base URL.
 - Model/provider behavior must follow `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`; do not add Advanced/Fast model settings unless runtime routing support is real and tested.
 - Local embeddings, OCR, speech, parsers, and bundled tool health belong to Local Capabilities.
-- External-extension permission mode, cloud-send policy, API key storage mode, and YOLO belong to Permissions & Privacy; core knowledge autonomy is not a YOLO feature.
+- Non-default Agent/extension permission mode, cloud-send policy, API key storage mode,
+  and YOLO belong to Permissions & Privacy; standing knowledge autonomy is not YOLO.
 - Vault & Note Storage is the place to see where local notes and source assets live.
 - Trash/archive policy follows `docs/DATA_ARCHITECTURE.md`; no setting lets any actor permanently delete durable knowledge/source evidence automatically.
 
@@ -380,7 +381,7 @@ Rules:
 
 - Renderer receives display DTOs, not raw secret values or arbitrary filesystem capability.
 - Secret writes go through dedicated secret APIs.
-- External/new-authority patches route through Permission Broker; irreversible/security/
+- Agent/extension actions outside standing authority route through Permission Broker; irreversible/security/
   destination/conflict patches use exceptional intervention.
 - Settings reads should be grouped by page and redacted by default.
 - Settings changes should emit domain events so UI, jobs, and services can refresh safely.

@@ -631,9 +631,10 @@ References:
 
 ### D-20260709-Permission-Modes-And-YOLO
 
-Status: Accepted
+Status: Superseded
 Date: 2026-07-09
 Revised: 2026-07-12
+Superseded by: D-20260714-Pi-Capability-And-Authority
 
 Decision:
 
@@ -657,6 +658,40 @@ References:
 - `docs/SECURITY_THREAT_MODEL.md`
 - `docs/TECH_ARCHITECTURE.md`
 - `docs/UI_PROTOTYPE.md`
+
+### D-20260714-Pi-Capability-And-Authority
+
+Status: Accepted
+Date: 2026-07-14
+Supersedes: D-20260709-Permission-Modes-And-YOLO
+
+Decision:
+
+Pi may request arbitrary path, filesystem, command, and commit actions, but capability is
+not authority. Active-vault recoverable knowledge Markdown has standing prompt-free
+authority; a drop/picker gesture covers admission of that exact source. Other effects use
+Permission Broker unless an eligible exact grant/default applies. Destructive, policy,
+source-original, model-egress, and raw-secret boundaries remain stronger.
+
+Rationale:
+
+Pi must be free to plan useful actions and ask, without model output silently becoming
+authority over user-owned paths. Standing Markdown authority keeps normal growth quiet;
+scoped authorization keeps broader computer capability user-owned.
+
+Consequences:
+
+- Tool ownership never bypasses the gate for its exact action.
+- Allow once binds vault, Job, actor/action versions and digests, capability, resource,
+  policy/runtime and request identity, then is consumed once through Job claim/CAS.
+- UI receives bounded system-authored summaries only; main executes the exact action.
+- Permission defaults cover eligible scopes only; stronger gates and raw-secret blocks remain.
+
+References:
+
+- `docs/PRD.md`
+- `docs/SECURITY_THREAT_MODEL.md`
+- `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`
 
 ### D-20260709-Home-Composer-Unified-Entry
 

@@ -114,6 +114,11 @@ export interface JobRecordClaim {
   release(): void;
 }
 
+export interface NamedJobRecordClaim {
+  assertHeld(): void;
+  release(): void;
+}
+
 export class JobRecordStore {
   readonly #rootPath: string;
   readonly #claimRootPath: string;
@@ -275,6 +280,26 @@ export class JobRecordStore {
         }
         state.status = "released";
       }
+    };
+  }
+
+  acquireNamedClaim(namespace: string, key: string): NamedJobRecordClaim {
+    if (
+      typeof namespace !== "string" ||
+      !/^[a-z][a-z0-9_-]{2,63}$/u.test(namespace) ||
+      typeof key !== "string" ||
+      key.length === 0 ||
+      Buffer.byteLength(key, "utf8") > 512
+    ) {
+      throw new PigeDomainError("job.claim_invalid", "The named Job claim identity is invalid.");
+    }
+    const keyHash = createHash("sha256")
+      .update(`pige.job.named_claim.v1\0${namespace}\0${key}`, "utf8")
+      .digest("hex");
+    const claim = this.acquireClaim(path.join(this.#rootPath, `.named-${namespace}-${keyHash}.json`));
+    return {
+      assertHeld: claim.assertHeld,
+      release: claim.release
     };
   }
 
