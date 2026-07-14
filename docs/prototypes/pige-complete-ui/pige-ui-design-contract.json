@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Pige complete UI design and visual-regression contract",
+  "status": "UI Design handoff; not production implementation evidence",
+  "reference": {
+    "product_bundle": "ChatGPT-branded Codex desktop client",
+    "package_name": "openai-codex-electron",
+    "version": "26.707.72221",
+    "build": 5307,
+    "electron": "42.1.0",
+    "evidence_type": "clean-room observable visual behavior",
+    "boundary": [
+      "Use observable layout, typography, color, icon geometry, motion, and interaction conventions only.",
+      "Do not copy ChatGPT components, JavaScript bundles, brand artwork, or private implementation code.",
+      "Pige production behavior remains governed by docs/UI_PROTOTYPE.md and subject-owner contracts."
+    ]
+  },
+  "tokens": {
+    "font_ui": "-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+    "font_mono": "ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, monospace",
+    "font_sizes_px": [11, 12, 14, 16, 18, 20, 24, 28],
+    "font_weights": { "normal": 400, "control": 500, "emphasis": 600 },
+    "heading_tracking_em": -0.025,
+    "line_heights": [1.25, 1.375, 1.5, 1.625],
+    "colors": {
+      "surface": "#ffffff",
+      "sidebar": "#f9f9f9",
+      "hover": "#f3f3f3",
+      "hairline": "#ededed",
+      "secondary_text": "#5d5d5d",
+      "strong_secondary_text": "#4f4f4f",
+      "primary_text": "#1a1c1f",
+      "focus": "#339cff",
+      "dark_ladder": ["#414141", "#303030", "#282828", "#212121", "#181818", "#0d0d0d"],
+      "destructive_ladder": ["#ffd9d9", "#ff6764", "#fa423e", "#e02e2a", "#ba2623"],
+      "success_ladder": ["#40c977", "#04b84c", "#00a240", "#00692a"]
+    },
+    "radii_px": [2, 4, 6, 8, 10, 12, 16, 20, 24],
+    "pill_radius_px": 9999,
+    "standard_row_radius_px": 10,
+    "composer_radius_px": 22,
+    "shadows": {
+      "hairline": "0 0 0 .5px rgba(0,0,0,.10)",
+      "small": "0 1px 2px -1px rgba(0,0,0,.08)",
+      "medium": "0 2px 4px -1px rgba(0,0,0,.08)",
+      "floating": "0 8px 16px -4px rgba(0,0,0,.12)"
+    },
+    "motion": {
+      "default_ms": 150,
+      "relaxed_ms": 300,
+      "enter_easing": "cubic-bezier(.19,1,.22,1)",
+      "snappy_easing": "cubic-bezier(.23,1,.32,1)"
+    },
+    "geometry_px": {
+      "toolbar": 46,
+      "small_toolbar": 36,
+      "pane_toolbar": 40,
+      "navigation_row": 30,
+      "settings_row": 64,
+      "home": 400,
+      "sidebar": 280,
+      "reader": 680,
+      "note_agent": 432,
+      "composer_action": 28,
+      "action_gap": 4
+    }
+  },
+  "component_rules": [
+    "Sidebar toggle is a rounded pane outline with one vertical divider, no arrow, and one stable glyph for both states.",
+    "Expanded titlebar and sidebar share the same under-surface color with no seam.",
+    "Back and forward controls are absent unless real user history exists.",
+    "Icon buttons are borderless at rest and use a quiet gray hover fill.",
+    "Cards are reserved for bounded objects and decisions; settings use one hairline container with separators.",
+    "Home has one dominant composer; shortcuts, progress, confirmations, and citations remain subordinate.",
+    "Pointer focus never creates a permanent blue composer box; keyboard focus retains a native-blue focus-visible ring.",
+    "Settings is a separate stable-size window and must not resize or reflow the main Pige window.",
+    "Enter sends, Shift+Enter inserts a newline, and active IME plus the 80 ms composition-end race cannot send.",
+    "Reduced motion removes spatial interpolation without removing state feedback."
+  ],
+  "review": {
+    "base_url": "http://127.0.0.1:4174/docs/prototypes/pige-complete-ui/",
+    "serve_from": "repository root",
+    "viewports": {
+      "compact": { "width": 1144, "height": 874 },
+      "three_pane": { "width": 1536, "height": 1024 },
+      "settings": { "width": 1536, "height": 960 },
+      "narrow_breakpoint_max_width": 760
+    }
+  },
+  "screens": [
+    { "id": "H01", "route": "?screen=home", "name": "Compact Home empty", "status": "verified" },
+    { "id": "H02", "route": "?screen=activity", "name": "Recent work and Undo", "status": "verified" },
+    { "id": "H03", "route": "?screen=home-drag", "name": "Whole-window multi-file drag", "status": "verified" },
+    { "id": "H04", "route": "?screen=home-conversation", "name": "Ordinary conversation without fabricated citations", "status": "verified" },
+    { "id": "H04S", "route": "?screen=home-streaming", "name": "One safe provisional answer bubble", "status": "verified" },
+    { "id": "H05", "route": "?screen=home-retrieval", "name": "Grounded retrieval with final-only citations", "status": "verified" },
+    { "id": "H05I", "route": "?screen=home-vault-only", "name": "Explicit vault-only insufficient evidence", "status": "verified" },
+    { "id": "H06", "route": "?screen=home-model-missing", "name": "Source saved and model missing", "status": "verified" },
+    { "id": "H06F", "route": "?screen=home-file", "name": "Saved file entering Pi", "status": "verified" },
+    { "id": "H06U", "route": "?screen=home-url", "name": "Saved URL entering Pi", "status": "verified" },
+    { "id": "H07", "route": "?screen=home-confirm", "name": "Current-action local or external permission", "status": "verified" },
+    { "id": "H07E", "route": "?screen=home-model-egress", "name": "Sensitive model-egress confirmation", "status": "verified" },
+    { "id": "H08", "route": "?screen=home-error", "name": "Body-free retryable failure", "status": "verified" },
+    { "id": "H09", "route": "?screen=home-voice", "name": "Editable voice transcript", "status": "verified" },
+    { "id": "N01", "route": "?screen=expanded", "name": "Expanded Home and Library tree", "status": "verified" },
+    { "id": "N02", "route": "?screen=knowledge", "name": "Semantic Knowledge Tree", "status": "verified" },
+    { "id": "N03", "route": "?screen=search", "name": "Notes, sources, topics, and tags search", "status": "verified" },
+    { "id": "R01", "route": "?screen=note", "name": "Three-pane Markdown reader and note Agent", "status": "verified" },
+    { "id": "R02", "route": "?screen=selection", "name": "Compact selection actions", "status": "verified" },
+    { "id": "R03", "route": "?screen=proposal", "name": "Staged unified diff proposal", "status": "verified" },
+    { "id": "R04", "route": "?screen=dataset", "name": "Persistent Dataset table and source citation", "status": "verified" },
+    { "id": "F01", "route": "?screen=first-run-vault", "name": "First run local vault", "status": "verified" },
+    { "id": "F02", "route": "?screen=first-run-model", "name": "First run model or capture-only", "status": "verified" }
+  ],
+  "settings": [
+    { "id": "S01", "route": "?panel=general#settings", "name": "General", "status": "verified" },
+    { "id": "S02", "route": "?panel=appearance#settings", "name": "Appearance and language", "status": "verified" },
+    { "id": "S03", "route": "?panel=vault#settings", "name": "Vault and note storage", "status": "verified" },
+    { "id": "S04", "route": "?panel=restore#settings", "name": "Restore preview and identity mode", "status": "verified" },
+    { "id": "S05", "route": "?panel=maintenance#settings", "name": "Index and maintenance", "status": "verified" },
+    { "id": "S06", "route": "?panel=models#settings", "name": "Models and global default", "status": "verified" },
+    { "id": "S07", "route": "?panel=provider#settings", "name": "Preset provider", "status": "verified" },
+    { "id": "S07E", "route": "?panel=provider&state=error#settings", "name": "Typed provider discovery failure", "status": "verified" },
+    { "id": "S07C", "route": "?panel=provider-custom#settings", "name": "Custom provider progressive disclosure", "status": "verified" },
+    { "id": "S08", "route": "?panel=capabilities#settings", "name": "Local capabilities", "status": "verified" },
+    { "id": "S09", "route": "?panel=memory#settings", "name": "Agent and memory", "status": "verified" },
+    { "id": "S10", "route": "?panel=privacy#settings", "name": "Permissions and privacy", "status": "verified" },
+    { "id": "S11", "route": "?panel=skills#settings", "name": "Skills", "status": "verified" },
+    { "id": "S12", "route": "?panel=packages#settings", "name": "Pi Packages", "status": "verified" },
+    { "id": "S13", "route": "?panel=system#settings", "name": "Updates and diagnostics", "status": "verified" }
+  ],
+  "verification_dimensions": [
+    "Geometry and stable pane widths",
+    "Type scale, line height, and wrapping",
+    "Gray and surface hierarchy plus hairlines",
+    "Icon geometry and 28 to 34 px hit targets",
+    "Keyboard focus, labels, busy and disabled state, and IME-safe send behavior",
+    "150 and 300 ms motion plus reduced-motion fallback",
+    "No raw path, prompt, model body, provider error, command, credential, or private data",
+    "Single ownership of status and action surfaces"
+  ],
+  "browser_regression": {
+    "main_routes_checked": 23,
+    "settings_routes_checked": 15,
+    "failed_routes": [],
+    "console_errors": [],
+    "known_visual_discrepancies": []
+  }
+}
