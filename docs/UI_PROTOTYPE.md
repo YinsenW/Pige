@@ -222,10 +222,11 @@ Behavior:
 - The first idle capture-only Home shows one compact inline choice above the composer:
   `Connect Model` or quiet `Continue capture-only`. Either explicit choice dismisses it
   for that vault on this machine; it is not a modal, destination, or recurring banner.
-- A current model-repair turn or preserved source waiting for a model replaces that guide
-  and owns one status plus at most one model action. Picker and Home drop use the same
-  ownership through intermediate refresh and settled states; never duplicate composer,
-  Job-row, or page-level provider guidance.
+- A no-source model wait replaces that guide and matching Recent Work row: one localized
+  status plus `Open Models`, never Retry, Job ID, or local-capability copy. Source waits
+  keep their row. Load 100 Jobs, filter, then show six. Returning Home rereads durable
+  Vault/Job/onboarding/runtime truth and ignores stale outcomes. Picker/drop retain one
+  owner through intermediate and settled states.
 
 The timeline is not the permanent knowledge store. Important outputs should be written to Markdown pages, source pages, `index.md`, and `log.md`.
 
@@ -915,10 +916,9 @@ Personal endpoint  Needs attention · discovery failed   Manage
 Connect Provider
 ```
 
-Presets hide protocol/Endpoint and ask required credentials only. Custom alone reveals
-Chat, Responses, or Anthropic compatible protocol plus Base URL. Cloud/self-hosted/local
-is not setup taxonomy. Global Default groups enabled models by Provider, never raw ID or
-per-row action. Each Provider opens in place to one inventory:
+Presets ask only exposed credentials; Custom alone reveals protocol and Base URL.
+Cloud/self-hosted/local is internal metadata. Global Default groups enabled models by
+Provider, never raw ID or per-row action. Each Provider opens one inline inventory:
 
 ```txt
 OpenAI                                      Connected
@@ -929,10 +929,13 @@ Models                                      Refresh
 Add custom model
 ```
 
-Connect discovers; Refresh repeats. Synced/manual exact IDs merge while preserving alias,
-enabled, and default; manual ID is fallback. One `Checking connection…` Provider-level Pi
-probe gates commit, never per-model tests. Failure shows `Models could not be synced`,
-`Retry`, and `Add custom model`, not raw error or empty success.
+Connect discovers; Refresh repeats. Exact IDs merge while preserving alias/enabled/default;
+manual ID is fallback. One Provider-level Pi probe gates commit. Models alone owns initial,
+preset, Custom, discovery, manual, and post-commit-refresh failures. Body-free copy names
+only exposed fields; discovery offers `Retry` + `Add custom model`, and manual input stays.
+Sequences ignore stale outcomes. After commit, Retry rereads Models only and runtime
+best-effort—never repeats effects or refreshes Vault/Backup. Errors clear on success or
+navigation and never appear in Vault settings.
 
 Above Connect disclose the exact destination once; sensitive asks, restricted never
 sends, unknown/changed reconfirms. Hide marketplaces, matrices, routing, Advanced/Fast,

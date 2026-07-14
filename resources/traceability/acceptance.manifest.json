@@ -1008,19 +1008,7 @@
       "status": "planned",
       "plannedTarget": "Injected adapter proves exact Broker gating; production arbitrary-path/Skill/package/local-tool adapters, focused modal convergence and the full bypass matrix remain."
     },
-    "PIGE-PI-004": {
-      "status": "partial",
-      "evidence": [
-        "EV-PROVIDER",
-        "EV-PROVIDER-CONNECTION"
-      ],
-      "open": {
-        "id": "OPEN-REQ-PIGE-PI-004",
-        "description": "Full catalog/help, Provider delete, DeepSeek Anthropic, and signed packaged BYOK remain open.",
-        "targetBuilds": ["B3.01", "B3.03", "B3.04"],
-        "targetExits": ["E3.01"]
-      }
-    },
+    "PIGE-PI-004":{"status":"partial","evidence":["EV-PROVIDER","EV-PROVIDER-CONNECTION","EV-MODELS-ERROR-OWNER"],"open":{"id":"OPEN-REQ-PIGE-PI-004","description":"Models owns safe connection/discovery repair; full catalog/help, Provider delete, DeepSeek Anthropic, and signed packaged BYOK remain open.","targetBuilds":["B3.01","B3.03","B3.04"],"targetExits":["E3.01"]}},
     "PIGE-PI-005": {
       "status": "planned",
       "plannedTarget": "Every submission enters one Pi-owned Job with source preservation as its first checkpoint; Pi owns iterative tools, Pi-authored Markdown and validation repair, with safe drafts, no presentation-only provider call, distinct hard-block outcomes, and signed packaged macOS/Windows BYOK proof."
@@ -1503,34 +1491,7 @@
       "status": "planned",
       "plannedTarget": "Keyboard, focus, accessible-name, contrast, reduced-motion, and six-locale narrow-layout smoke evidence."
     },
-    "PIGE-UI-003": {
-      "status": "partial",
-      "evidence": [
-        "EV-APP-SHELL",
-        "EV-FIRST-HOME-GUIDE",
-        "EV-HOME-ENTER",
-        "EV-DATASET-QUERY-UI",
-        "EV-DATASET-TIMELINE-RESTORE",
-        "EV-KNOWLEDGE-TREE-IPC",
-        "EV-KNOWLEDGE-TREE-UI"
-      ],
-      "open": {
-        "id": "OPEN-REQ-PIGE-UI-003",
-        "description": "Capture-only Home has one persisted Connect/continue choice; broader continuity, Library depth, and full six-locale/platform acceptance remain open.",
-        "targetBuilds": [
-          "B1.03",
-          "B1.07",
-          "B1.08",
-          "B1.09",
-          "B1.17"
-        ],
-        "targetExits": [
-          "E1.02",
-          "E1.11",
-          "E1.13"
-        ]
-      }
-    },
+    "PIGE-UI-003":{"status":"partial","evidence":["EV-APP-SHELL","EV-FIRST-HOME-GUIDE","EV-HOME-MODEL-OWNER","EV-HOME-DURABLE-REFRESH","EV-HOME-ENTER","EV-DATASET-QUERY-UI","EV-DATASET-TIMELINE-RESTORE","EV-KNOWLEDGE-TREE-IPC","EV-KNOWLEDGE-TREE-UI"],"open":{"id":"OPEN-REQ-PIGE-UI-003","description":"Home owns one missing-model status and refreshes durable truth; broader continuity, Library depth, and full six-locale/platform acceptance remain open.","targetBuilds":["B1.03","B1.07","B1.08","B1.09","B1.17"],"targetExits":["E1.02","E1.11","E1.13"]}},
     "PIGE-UI-004": {
       "status": "planned",
       "plannedTarget": "Remaining Knowledge Tree density/scale, compact-platform, assistive-technology, and signed packaged visual acceptance."
@@ -1721,23 +1682,7 @@
         ]
       }
     },
-    "E1.02": {
-      "status": "partial",
-      "evidence": [
-        "EV-APP-SHELL",
-        "EV-FIRST-HOME-GUIDE"
-      ],
-      "open": {
-        "id": "OPEN-EXIT-E1.02",
-        "description": "Capture-only first-Home choice is executable; context continuity, three-level Library, and full six-locale/platform acceptance remain open.",
-        "targetBuilds": [
-          "B1.03"
-        ],
-        "targetExits": [
-          "E1.02"
-        ]
-      }
-    },
+    "E1.02":{"status":"partial","evidence":["EV-APP-SHELL","EV-FIRST-HOME-GUIDE","EV-HOME-MODEL-OWNER"],"open":{"id":"OPEN-EXIT-E1.02","description":"First Home and missing-model ownership work; context continuity, Library, and full locale/platform acceptance remain open.","targetBuilds":["B1.03"],"targetExits":["E1.02"]}},
     "E1.03": {
       "status": "partial",
       "evidence": [
@@ -1864,22 +1809,7 @@
         ]
       }
     },
-    "E1.13": {
-      "status": "partial",
-      "evidence": [
-        "EV-APP-SHELL"
-      ],
-      "open": {
-        "id": "OPEN-EXIT-E1.13",
-        "description": "Capture-only, context-continuity, three-level Library, and six-locale UI acceptance remain open.",
-        "targetBuilds": [
-          "B1.17"
-        ],
-        "targetExits": [
-          "E1.13"
-        ]
-      }
-    },
+    "E1.13":{"status":"partial","evidence":["EV-APP-SHELL","EV-HOME-MODEL-OWNER","EV-HOME-DURABLE-REFRESH"],"open":{"id":"OPEN-EXIT-E1.13","description":"Model-wait ownership and returning-Home refresh work; broader context continuity, Library, and locale UI remain open.","targetBuilds":["B1.17"],"targetExits":["E1.13"]}},
     "E1.14": {
       "status": "partial",
       "evidence": [
@@ -2107,22 +2037,7 @@
         ]
       }
     },
-    "E3.01": {
-      "status": "partial",
-      "evidence": ["EV-PROVIDER", "EV-RUNTIME", "EV-PI-PROVIDER-BINDING"],
-      "open": {
-        "id": "OPEN-EXIT-E3.01",
-        "description": "Full catalog/help, Provider delete, DeepSeek Anthropic, and signed packaged BYOK matrix remain open.",
-        "targetBuilds": [
-          "B3.01",
-          "B3.03",
-          "B3.04"
-        ],
-        "targetExits": [
-          "E3.01"
-        ]
-      }
-    },
+    "E3.01":{"status":"partial","evidence":["EV-PROVIDER","EV-RUNTIME","EV-PI-PROVIDER-BINDING","EV-MODELS-ERROR-OWNER"],"open":{"id":"OPEN-EXIT-E3.01","description":"Models-local connection repair works; full catalog/help, Provider delete, DeepSeek Anthropic, and signed packaged BYOK remain open.","targetBuilds":["B3.01","B3.03","B3.04"],"targetExits":["E3.01"]}},
     "E3.02": {
       "status": "partial",
       "evidence": [
@@ -2825,6 +2740,9 @@
     "EV-HOME-ENTER": { "kind": "test", "path": "tests/unit/home-agent-conversation-ui.test.ts", "selector": "sends a non-empty Home turn on Enter and blocks an empty Enter" },
     "EV-HOME-FOLLOWUP": { "kind": "test", "path": "tests/unit/home-agent-conversation-ui.test.ts", "selector": "Home durable Agent conversation UI" },
     "EV-FIRST-HOME-GUIDE": { "kind": "test", "path": "tests/unit/home-agent-conversation-ui.test.ts", "selector": "persists the explicit choice to continue capture-only and does not show the first-Home guide again" },
+    "EV-HOME-MODEL-OWNER":{"kind":"test","path":"tests/unit/home-agent-conversation-ui.test.ts","selector":"keeps one missing-model owner in"},
+    "EV-HOME-DURABLE-REFRESH":{"kind":"test","path":"tests/unit/home-agent-conversation-ui.test.ts","selector":"refreshes durable Home state when returning from Models"},
+    "EV-MODELS-ERROR-OWNER":{"kind":"test","path":"tests/unit/model-settings-error-ui.test.ts","selector":"Models error ownership"},
     "EV-SOURCE-WAIT-STATUS": { "kind": "test", "path": "tests/unit/home-agent-conversation-ui.test.ts", "selector": "shows one truthful source-saved model wait and one repair action across restart" },
     "EV-SOURCE-WAIT-RACE": { "kind": "test", "path": "tests/unit/home-agent-conversation-ui.test.ts", "selector": "routes a full-window Home drop through the same intermediate source owner" },
     "EV-PI-URL-INGRESS": { "kind": "test", "path": "tests/unit/agent-selected-url-ingress.test.ts", "selector": "Agent-selected URL ingress" },

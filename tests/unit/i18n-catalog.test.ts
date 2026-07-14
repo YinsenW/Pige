@@ -22,4 +22,19 @@ describe("renderer i18n catalogs", () => {
       expect(Object.values(catalog).every((value) => value.trim().length > 0)).toBe(true);
     }
   });
+
+  it("keeps preset recovery scoped to the fields visible in the preset flow", () => {
+    for (const locale of locales) {
+      const catalog = JSON.parse(
+        fs.readFileSync(path.join(localeRoot, locale, "messages.json"), "utf8")
+      ) as Record<string, string>;
+      expect(catalog["models.presetConnectionFailedApiKey"]).toBeTruthy();
+      expect(catalog["models.presetConnectionFailedNoAuth"]).toBeTruthy();
+      expect(catalog["models.manualModelFailed"]).toBeTruthy();
+      expect(catalog["models.refreshAfterSaveFailed"]).toBeTruthy();
+      expect(catalog["models.retry"]).toBeTruthy();
+      expect(catalog["models.presetConnectionFailedApiKey"]).not.toContain("Base URL");
+      expect(catalog["models.presetConnectionFailedNoAuth"]).not.toContain("Base URL");
+    }
+  });
 });
