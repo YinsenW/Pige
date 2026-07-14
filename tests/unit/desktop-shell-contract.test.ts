@@ -462,6 +462,8 @@ describe("desktop shell build contract", () => {
     );
     expect(rendererSource).toContain('homeJobStateFilter.states.push("awaiting_review")');
     expect(rendererSource).toContain("...homeJobStateFilter");
+    expect(rendererSource).toContain("limit: 100");
+    expect(homeComposer).toContain(".slice(0, 6)");
     expect(rendererSource).toContain('window.pige.proposals.list({ limit: 100, states: ["ready"] })');
     expect(homeComposer).toContain("window.pige.proposals.get({ proposalId })");
     expect(homeComposer).toContain('window.pige.proposals[decision]({ proposalId })');
@@ -509,13 +511,17 @@ describe("desktop shell build contract", () => {
     expect(presetSurface).not.toContain("baseUrl");
     expect(panel).toContain('<details className="custom-provider">');
     expect(panel).toContain('id="provider-protocol"');
-    expect(panel).toContain('manualBootstrap ? { manualModelId: manualModelId.trim() } : {}');
+    expect(panel).toContain('!retryDiscovery && manualBootstrap ? { manualModelId: manualModelId.trim() } : {}');
     expect(panel).toContain("setManualBootstrap(result)");
     expect(panel).toContain("result.discoveredModels");
     expect(panel).toContain('id="global-default-model"');
     expect(panel).toContain("refreshProviderModels");
     expect(panel).toContain("providerSyncFailures.has(provider.id)");
     expect(panel).toContain('role="alert"');
+    expect(panel).toContain('setFailure({ kind: "preset", presetId })');
+    expect(panel).not.toContain("props.onError");
+    expect(panel).not.toContain("props.onRefreshVaultState");
+    expect(panel).toContain("props.onRefreshAgentRuntimeStatus");
     expect(panel).toContain("addManualModel");
     expect(panel).toContain("setModelEnabled");
     expect(panel).toContain("setModelDisplayName");

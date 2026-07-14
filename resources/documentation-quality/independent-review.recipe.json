@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-14T17:06:33Z",
+  "reviewedAt": "2026-07-15T12:00:00Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -31,12 +31,12 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "86ad0ce8a73fafd5f6b2211a4eb2eacdcb18958936c5b2205eefddd8c8af3fd8"
+    "reviewedSha256": "d30de4f8ee982fdd984d5dccab40ce753e98ad1c7559f46630682eb61738ab87"
   },
   "reviewers": [
     {
-      "reviewerId": "durable-user-backup-ui-design-review",
-      "task": "Durable user Backup recovery and Settings ownership exact-hash review",
+      "reviewerId": "home-model-status-owner-ui-design-review",
+      "task": "Post-Backup Home and Models status ownership exact-hash review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -44,83 +44,81 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "UI Design independently reviewed the exact c4fca11d Development candidate read-only, including restarted Backup ownership, fixed localized state/action rules, raw-detail exclusion, rollback-child suppression, current last-backup truth and unchanged Restore surfaces. It returned ACCEPTED/CLEAR and requested no prototype or candidate edit."
+      "independence": "UI Design independently reproduced exact e4044cb2 patch and efc86cef content hashes, eleven-path/index/diff identity, six-locale and compact/expanded behavior, accessibility, and Backup/Restore non-regression. It returned ACCEPTED/CLEAR without edits."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "durable-user-backup-ui-design-review",
+      "reviewerId": "home-model-status-owner-ui-design-review",
       "blockerCount": 0,
-      "summary": "Existing Data, Job, API, Settings, UI, Quality and Playbook sections locate the durable Backup lifecycle and one Settings owner without a new document, page or prototype."
+      "summary": "Existing Home, onboarding, Models and Pi owner sections locate one status/error owner without a new page, prototype, schema or setting."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "durable-user-backup-ui-design-review",
+      "reviewerId": "home-model-status-owner-ui-design-review",
       "blockerCount": 0,
-      "summary": "Owners agree on pre-scan durable Job creation, five exact checkpoints, identity-bound adoption, no-replace archive publication, schema-v1 Operation limits, manifest authority, rollback-child reuse and body-free Settings summaries."
+      "summary": "Owners agree on no-source conversation ownership, source-row retention, filter-before-cap, durable Home reread, sequenced Models refresh, body-free errors and no Vault leakage."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "durable-user-backup-ui-design-review",
+      "reviewerId": "home-model-status-owner-ui-design-review",
       "blockerCount": 0,
-      "summary": "Five exact selectors update only existing partial Backup, Job, API, Settings, I18N and Exit projections; semantic lock v3 has 1,189 claims and every Requirement, Exit and phase status remains unchanged."
+      "summary": "Three exact selectors update only PIGE-UI-003, PIGE-PI-004 and existing partial E1.02/E1.13/E3.01 projections; semantic lock v3 has 1,192 claims and all statuses remain unchanged."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.7,
-      "reviewerId": "durable-user-backup-ui-design-review",
+      "reviewerId": "home-model-status-owner-ui-design-review",
       "blockerCount": 0,
-      "summary": "Development gets one executable Backup contract covering coordinator composition, exact checkpoint/restart/cancel/retry/CAS behavior, truthful manifest ranges, safe Job summaries, restarted Settings ownership and rollback recovery."
+      "summary": "Development gets one executable contract for missing-model ownership, filtered Recent Work, returning-Home truth, Models-local recovery and stale-result suppression."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "durable-user-backup-ui-design-review",
+      "reviewerId": "home-model-status-owner-ui-design-review",
       "blockerCount": 0,
-      "summary": "No Markdown file or decision is added; owner and JSON compression keeps all five leanness gates green without raising the 56-file, 1,213,000-byte or 250,000-byte trace budgets."
+      "summary": "No Markdown file or decision is added; replacement wording and JSON compression keep all leanness gates green without raising any budget."
     }
   ],
   "verification": [
     {
       "command": "npm run verify",
       "status": "passed",
-      "evidence": "The exact twenty-path Development plus ten-path governed candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all five documentation-quality dimensions."
+      "evidence": "The exact eleven-path Development plus six-path governed candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all quality dimensions."
     },
     {
-      "command": "Exact candidate test, package and downloaded-distribution evidence",
+      "command": "Exact candidate test, package and distribution evidence",
       "status": "passed",
-      "evidence": "Focused 4/95 and 6/161, full 103/1,162, typecheck/build, unified Agent and worker smokes pass. The 160,600,780-byte macOS ZIP passes ordinary and independent downloaded-distribution smoke with strict ad-hoc integrity and zero post-seal writes."
+      "evidence": "Focused 6/111, full 104/1,191, typecheck/build and unified Agent pass. The 160,602,371-byte macOS ZIP passes packaged and independent distribution smoke with strict ad-hoc integrity."
     },
     {
       "command": "npm run verify:dependencies && npm run verify:traceability && npm run verify:contracts",
       "status": "passed",
-      "evidence": "The candidate retains 57 dependency records with zero waivers; CON-001 through CON-004 and semantic lock v3/1,189 pass with no Requirement, Exit or phase status drift."
+      "evidence": "The candidate retains 57 dependency records with zero waivers; CON-001 through CON-004 and semantic lock v3/1,192 pass with no Requirement, Exit or phase status drift."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 pass with 56 Markdown files, 3,466 entry words, 4,422 trace lines, 249,489 trace bytes and 1,212,507 governed Markdown bytes."
+      "evidence": "LEN-001 through LEN-005 pass with 56 Markdown files, 3,466 entry words, 4,340 trace lines, 249,414 trace bytes and 1,212,942 governed Markdown bytes."
     }
   ],
   "coordination": {
-    "taskId": "durable-user-backup-20260715",
-    "taskTitle": "Durable user Backup recovery and Settings ownership",
+    "taskId": "home-model-status-owner-20260715",
+    "taskTitle": "Post-Backup Home and Models status ownership",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "This candidate makes user Backup Job-first and restart-safe while preserving schema v1, Restore identities, provider/permission behavior and all statuses. It adds no page, dependency, migration or platform-support claim.",
-    "acknowledgement": "Development froze exact twenty-path bytes and executable evidence. UI Design returned exact-hash ACCEPTED/CLEAR. Product Planning synchronized seven existing owners, acceptance, semantic lock and this current-only recipe without changing Development files."
+    "compatibility": "This candidate gives Home and Models one truthful status/error owner while preserving Backup/Restore, provider protocol, IPC, durable data, dependencies and all statuses.",
+    "acknowledgement": "Development froze exact eleven-path bytes and evidence. UI Design returned exact-hash ACCEPTED/CLEAR. Product Planning synchronized three existing owners, acceptance, semantic lock and this current-only recipe without changing Development files."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Schema-v1 backup_created binds Job, vault, Backup and archive digest; richer inclusion, dependency and policy facts remain manifest-owned until a versioned Operation migration.",
-    "External managed source roots remain unsupported and fail closed; explicit incomplete/external transport controls remain open.",
-    "Final-syscall TOCTOU, general cross-file transactionality and old-source cleanup remain open.",
-    "Windows packageability must be rerun online for the main/renderer/contracts delta; no new Windows claim is made.",
-    "Broader installed/signed platform recovery and Public Alpha backup/restore scenario evidence remain open."
+    "Broader Provider catalog, tray, general polish and remaining Production Ready flows stay open.",
+    "Signed installed-platform and wider manual locale/accessibility matrices remain open.",
+    "Backup/Restore, provider protocol, public IPC, durable data, permissions and dependencies are unchanged."
   ]
 }

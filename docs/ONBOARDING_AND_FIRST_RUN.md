@@ -116,9 +116,9 @@ First Home after create/open:
   screen or blocks capture.
 - Either explicit choice dismisses the guide for that vault on this machine. The bounded
   vault-ID preference is machine-local, excluded from backup, and absent from the vault.
-- An active model-repair turn or preserved source waiting for a model replaces the guide
-  with its single owning status/action. Never show a duplicate provider CTA or mislabel a
-  model wait as a missing local capability.
+- A no-source model-repair turn replaces the guide and matching Job row with one status
+  and `Open Models`, never Retry, Job ID, or a local-capability label. Source waits keep
+  their truthful row/action; stale refresh outcomes cannot replace newer Home truth.
 
 Rules:
 

@@ -12,6 +12,7 @@ import type {
   JobsListRequest,
   JobSummary,
   KnowledgeActivitySummary,
+  ModelProviderSettingsSummary,
   ModelEgressPendingRequest,
   ModelEgressResolveRequest,
   OnboardingStatus,
@@ -19,6 +20,12 @@ import type {
   PermissionResolveRequest,
   PermissionResolveResult
 } from "@pige/contracts";
+import deMessages from "../../apps/desktop/src/renderer/src/locales/de/messages.json";
+import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.json";
+import frMessages from "../../apps/desktop/src/renderer/src/locales/fr/messages.json";
+import jaMessages from "../../apps/desktop/src/renderer/src/locales/ja/messages.json";
+import koMessages from "../../apps/desktop/src/renderer/src/locales/ko/messages.json";
+import zhHansMessages from "../../apps/desktop/src/renderer/src/locales/zh-Hans/messages.json";
 
 const globalKeys = [
   "window",
@@ -33,6 +40,14 @@ const globalKeys = [
   "CompositionEvent"
 ] as const;
 const originalDescriptors = new Map<PropertyKey, PropertyDescriptor | undefined>();
+const homeLocaleCases = [
+  { locale: "zh-Hans", messages: zhHansMessages },
+  { locale: "en", messages: enMessages },
+  { locale: "ja", messages: jaMessages },
+  { locale: "ko", messages: koMessages },
+  { locale: "fr", messages: frMessages },
+  { locale: "de", messages: deMessages }
+] as const;
 
 afterEach(() => {
   for (const key of globalKeys) {
@@ -45,6 +60,191 @@ afterEach(() => {
 });
 
 describe("Home durable Agent conversation UI", () => {
+  it("lets the Models panel solely own its initial summary failure after navigation", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.windowMode = "expanded";
+    harness.sidebarOpen = true;
+    let summaryReads = 0;
+    harness.loadModelSummary = async () => {
+      summaryReads += 1;
+      if (summaryReads === 1) throw new Error("raw navigation summary failure");
+      return emptyModelSummary();
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await waitFor(dom, () => buttons(container, "Models").length === 1);
+    await clickButton(dom, container, "Models");
+    await waitFor(dom, () => container.textContent?.includes(enMessages["models.summaryRefreshFailed"]) === true);
+    expect(summaryReads).toBe(1);
+    expect(container.textContent).not.toContain("raw navigation summary failure");
+    expect(buttons(container, "Retry")).toHaveLength(1);
+
+    await clickButton(dom, container, "Retry");
+    await waitFor(dom, () => container.querySelector('[role="alert"]') === null);
+    expect(summaryReads).toBe(2);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps a late Models summary read from replacing a newer reopened view", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.windowMode = "expanded";
+    harness.sidebarOpen = true;
+    let summaryReads = 0;
+    let resolveFirstSummary: ((summary: ModelProviderSettingsSummary) => void) | undefined;
+    harness.loadModelSummary = () => {
+      summaryReads += 1;
+      if (summaryReads === 1) {
+        return new Promise((resolve) => {
+          resolveFirstSummary = resolve;
+        });
+      }
+      return Promise.resolve(connectedModelSummary());
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await clickButton(dom, container, "Models");
+    await waitFor(dom, () => summaryReads === 1);
+    await clickButton(dom, container, "Home");
+    await clickButton(dom, container, "Models");
+    await waitFor(dom, () => container.textContent?.includes("Fresh provider") === true);
+
+    await act(async () => {
+      resolveFirstSummary?.(emptyModelSummary());
+      await settle(dom);
+    });
+    expect(container.textContent).toContain("Fresh provider");
+    expect(summaryReads).toBe(2);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("refreshes durable Home state when returning from Models", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.windowMode = "expanded";
+    harness.sidebarOpen = true;
+    harness.enforceJobFilters = true;
+    harness.onboarding = captureOnlyOnboarding(false);
+    harness.jobs = [sourceWaitingForModelJob()];
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await waitFor(dom, () => container.textContent?.includes("public-alpha.csv") === true);
+    await clickButton(dom, container, "Models");
+    harness.onboarding = readyOnboarding();
+    harness.jobs = [{
+      ...sourceWaitingForModelJob(),
+      state: "running",
+      stage: "agent_running",
+      message: "Agent resumed after model connection.",
+      updatedAt: "2026-07-13T08:00:02.000Z"
+    }];
+    const readsBeforeReturn = harness.jobListRequests.length;
+
+    await clickButton(dom, container, "Home");
+    await waitFor(dom, () => container.querySelector(
+      `.job-state-dot[aria-label="${enMessages["home.jobRunning"]}"]`
+    ) !== null);
+    expect(harness.jobListRequests.length).toBeGreaterThan(readsBeforeReturn);
+    expect(container.textContent).toContain("public-alpha.csv");
+    expect(buttons(container, "Connect Model")).toHaveLength(0);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("suppresses a superseded durable Home refresh failure after a newer refresh succeeds", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.windowMode = "expanded";
+    harness.sidebarOpen = true;
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    let onboardingReads = 0;
+    let rejectOlderRefresh: ((reason?: unknown) => void) | undefined;
+    harness.loadOnboarding = () => {
+      onboardingReads += 1;
+      if (onboardingReads === 1) {
+        return new Promise((_, reject) => {
+          rejectOlderRefresh = reject;
+        });
+      }
+      return Promise.resolve(readyOnboarding());
+    };
+
+    await clickButton(dom, container, "Home");
+    await waitFor(dom, () => onboardingReads === 1);
+    await clickButton(dom, container, "Home");
+    await waitFor(dom, () => onboardingReads === 2);
+
+    await act(async () => {
+      rejectOlderRefresh?.(new Error("stale durable refresh failure"));
+      await settle(dom);
+    });
+    expect(container.textContent).not.toContain(enMessages["error.generic"]);
+    expect(container.textContent).not.toContain("stale durable refresh failure");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps an initial no-source model wait out of Recent Work until its conversation owner loads", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.onboarding = captureOnlyOnboarding(true);
+    harness.jobs = [modelWaitingJob()];
+    let resolveConversation: ((timeline: AgentConversationTimeline) => void) | undefined;
+    harness.loadConversation = () => new Promise((resolve) => {
+      resolveConversation = resolve;
+    });
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    expect(container.querySelector(".job-pill")).toBeNull();
+    expect(container.textContent).not.toContain("job_20260713_modelwait");
+    expect(container.textContent).not.toContain("Waiting for a local capability");
+
+    await act(async () => {
+      resolveConversation?.(modelWaitingTimeline());
+      await settle(dom);
+    });
+    await waitFor(dom, () => buttons(container, "Open Models").length === 1);
+    expect(buttons(container, "Open Models")).toHaveLength(1);
+    expect(container.querySelector(".job-pill")).toBeNull();
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  for (const { locale, messages } of homeLocaleCases) {
+    for (const windowMode of ["compact", "expanded"] as const) {
+      it(`keeps one missing-model owner in ${locale} ${windowMode}`, async () => {
+        const dom = createDom();
+        const harness = createHarness(modelWaitingTimeline());
+        harness.locale = locale;
+        harness.windowMode = windowMode;
+        harness.onboarding = captureOnlyOnboarding(true);
+        harness.jobs = [modelWaitingJob()];
+        const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+        const openModels = messages["home.openModels"];
+        const retry = messages["home.retryAnswer"];
+        await waitFor(dom, () => buttons(container, openModels).length === 1);
+        expect(buttons(container, openModels)).toHaveLength(1);
+        expect(buttons(container, retry)).toHaveLength(0);
+        expect(container.querySelector(".job-pill")).toBeNull();
+        expect(container.textContent).not.toContain("job_20260713_modelwait");
+        expect(container.textContent).not.toContain(messages["home.jobWaiting"]);
+        expect(container.querySelector("main.shell")?.classList.contains(`mode-${windowMode}`)).toBe(true);
+
+        await act(async () => root.unmount());
+        dom.window.close();
+      });
+    }
+  }
+
   it("sends a non-empty Home turn on Enter and blocks an empty Enter", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
@@ -176,6 +376,11 @@ describe("Home durable Agent conversation UI", () => {
     let resolveTurn: ((result: AgentSubmitTurnResult) => void) | undefined;
     harness.submitTurn = (request) => {
       harness.submitRequests.push(request);
+      harness.jobs = [{
+        ...modelWaitingJob(),
+        createdAt: new Date(Date.now() + 1_000).toISOString(),
+        updatedAt: new Date(Date.now() + 1_001).toISOString()
+      }];
       return new Promise((resolve) => { resolveTurn = resolve; });
     };
     const { container, root } = await mountHome(dom, makePigeApi(harness));
@@ -189,6 +394,9 @@ describe("Home durable Agent conversation UI", () => {
       "You can save content now. Connect a model to ask Pi Agent."
     );
     expect(modelActionButtons(container)).toHaveLength(0);
+    expect(container.querySelector(".job-pill")).toBeNull();
+    expect(container.textContent).not.toContain("job_20260713_modelwait");
+    expect(container.textContent).not.toContain("Waiting for a local capability");
 
     await act(async () => {
       resolveTurn?.(missingModelResult());
@@ -197,9 +405,75 @@ describe("Home durable Agent conversation UI", () => {
     await waitFor(dom, () => buttons(container, "Open Models").length === 1);
     expect(modelActionButtons(container)).toHaveLength(1);
     expect(buttons(container, "Connect Model")).toHaveLength(0);
+    expect(buttons(container, "Try again")).toHaveLength(0);
+    expect(container.querySelector(".job-pill")).toBeNull();
+    expect(container.textContent).not.toContain("job_20260713_modelwait");
+    expect(container.textContent).not.toContain("Waiting for a local capability");
     expect(container.textContent).not.toContain(
       "You can save content now. Connect a model to ask Pi Agent."
     );
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps old and new no-model Jobs hidden while a second turn waits for its result", async () => {
+    const dom = createDom();
+    const harness = createHarness(modelWaitingTimeline());
+    harness.jobs = [modelWaitingJob()];
+    let resolveTurn: ((result: AgentSubmitTurnResult) => void) | undefined;
+    const secondJob = {
+      ...modelWaitingJob(),
+      id: "job_20260714_modelwait02",
+      conversationEventId: "event_20260714_modelwait02",
+      createdAt: new Date(Date.now() + 1_000).toISOString(),
+      updatedAt: new Date(Date.now() + 1_001).toISOString()
+    };
+    harness.submitTurn = (request) => {
+      harness.submitRequests.push(request);
+      harness.jobs = [modelWaitingJob(), secondJob];
+      return new Promise((resolve) => {
+        resolveTurn = resolve;
+      });
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    await waitFor(dom, () => buttons(container, "Open Models").length === 1);
+
+    await setTextareaValue(dom, container, "Try this second turn.");
+    await clickButton(dom, container, "Send");
+    await waitFor(dom, () => harness.submitRequests.length === 1);
+
+    expect(container.querySelector(".job-pill")).toBeNull();
+    expect(container.textContent).not.toContain("job_20260713_modelwait");
+    expect(container.textContent).not.toContain("job_20260714_modelwait02");
+    expect(container.textContent).not.toContain("Waiting for a local capability");
+
+    const nextTimeline = modelWaitingTimeline();
+    harness.timeline = {
+      ...nextTimeline,
+      tailEventId: "event_20260714_modelwait02",
+      messages: nextTimeline.messages.map((message) => ({
+        ...message,
+        id: "event_20260714_modelwait02",
+        jobId: secondJob.id
+      })),
+      latestTurn: {
+        ...nextTimeline.latestTurn,
+        jobId: secondJob.id,
+        userEventId: "event_20260714_modelwait02"
+      }
+    };
+    await act(async () => {
+      resolveTurn?.({
+        ...missingModelResult(),
+        jobId: secondJob.id,
+        conversationEventId: "event_20260714_modelwait02",
+        tailEventId: "event_20260714_modelwait02"
+      });
+      await settle(dom);
+    });
+    await waitFor(dom, () => buttons(container, "Open Models").length === 1);
+    expect(container.querySelector(".job-pill")).toBeNull();
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -220,6 +494,8 @@ describe("Home durable Agent conversation UI", () => {
     ];
     harness.submitTurn = async (request) => {
       harness.submitRequests.push(request);
+      harness.jobs = [...harness.jobs, modelWaitingJob()];
+      harness.timeline = modelWaitingTimeline();
       return missingModelResult();
     };
     const { container, root } = await mountHome(dom, makePigeApi(harness));
@@ -233,6 +509,41 @@ describe("Home durable Agent conversation UI", () => {
     expect(modelActionButtons(container)).toHaveLength(1);
     expect(buttons(container, "Connect Model")).toHaveLength(0);
     expect(buttons(container, "Open Models")).toHaveLength(1);
+    expect(buttons(container, "Try again")).toHaveLength(0);
+    expect(container.textContent).not.toContain("job_20260713_modelwait");
+    expect(container.textContent).toContain("source.csv");
+    expect(container.textContent).toContain("second-source.csv");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("filters conversation-owned model waits before capping Recent Work", async () => {
+    const dom = createDom();
+    const harness = createHarness(modelWaitingTimeline());
+    harness.onboarding = captureOnlyOnboarding(false);
+    harness.enforceJobFilters = true;
+    harness.jobs = [
+      {
+        ...sourceWaitingForModelJob(),
+        updatedAt: "2026-07-13T08:00:00.000Z"
+      },
+      ...Array.from({ length: 6 }, (_, index) => ({
+        ...modelWaitingJob(),
+        id: `job_20260713_modelwait0${index + 1}`,
+        conversationEventId: `event_20260713_modelwait0${index + 1}`,
+        updatedAt: `2026-07-13T08:00:0${index + 2}.000Z`
+      }))
+    ];
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await waitFor(dom, () => container.textContent?.includes("public-alpha.csv") === true);
+    expect(container.textContent).toContain("public-alpha.csv");
+    expect(container.textContent).not.toContain("job_20260713_modelwait");
+    expect(buttons(container, "Open Models")).toHaveLength(1);
+    expect(harness.jobListRequests.some((request) =>
+      request.limit === 100 && request.classes?.includes("agent_turn")
+    )).toBe(true);
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -1281,6 +1592,12 @@ interface ConversationHarness {
   permissionPendingReads: number;
   readonly permissionResolveRequests: PermissionResolveRequest[];
   permissionResolveMode: "success" | "reject_pending" | "reject_unknown" | "post_commit_reject" | "success_switch_vault";
+  locale: "zh-Hans" | "en" | "ja" | "ko" | "fr" | "de";
+  windowMode: "compact" | "expanded";
+  sidebarOpen: boolean;
+  loadOnboarding: () => Promise<OnboardingStatus>;
+  loadModelSummary: () => Promise<ModelProviderSettingsSummary>;
+  loadConversation: () => Promise<AgentConversationTimeline | undefined>;
   submitTurn: (request: AgentSubmitTurnRequest) => Promise<AgentSubmitTurnResult>;
   emitDraft: (event: AgentTurnDraftEvent) => void;
 }
@@ -1309,6 +1626,12 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     permissionPendingReads: 0,
     permissionResolveRequests: [],
     permissionResolveMode: "success",
+    locale: "en",
+    windowMode: "compact",
+    sidebarOpen: false,
+    loadOnboarding: async () => harness.onboarding,
+    loadModelSummary: async () => emptyModelSummary(),
+    loadConversation: async () => harness.timeline,
     submitTurn: async (request) => {
       harness.submitRequests.push(request);
       return completedResult();
@@ -1320,20 +1643,47 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
   return harness;
 }
 
+function emptyModelSummary(): ModelProviderSettingsSummary {
+  return {
+    presets: [],
+    providers: [],
+    models: [],
+    hasDefaultModel: false,
+    defaultBinding: { state: "not_configured" }
+  };
+}
+
+function connectedModelSummary(): ModelProviderSettingsSummary {
+  return {
+    ...emptyModelSummary(),
+    providers: [{
+      id: "provider_fresh",
+      displayName: "Fresh provider",
+      providerKind: "openai",
+      endpointProtocol: "openai_responses",
+      authRequirement: "api_key",
+      modelListStrategy: "provider_api",
+      cloudBoundary: "cloud",
+      createdAt: "2026-07-14T08:00:00.000Z",
+      updatedAt: "2026-07-14T08:00:00.000Z"
+    }]
+  };
+}
+
 function makePigeApi(harness: ConversationHarness): object {
   return {
     getHealth: async () => ({ status: "ok" }),
     window: {
-      current: async () => ({ mode: "compact", sidebarOpen: false, alwaysOnTop: false })
+      current: async () => ({ mode: harness.windowMode, sidebarOpen: harness.sidebarOpen, alwaysOnTop: false })
     },
     settings: {
-      appearance: async () => ({ locale: "en", availableLocales: ["en"] })
+      appearance: async () => ({ locale: harness.locale, availableLocales: [harness.locale] })
     },
     system: {
       toolchainHealth: async () => ({ status: "ready" })
     },
     vault: {
-      onboardingStatus: async () => harness.onboarding,
+      onboardingStatus: () => harness.loadOnboarding(),
       dismissFirstHomeGuide: async () => {
         harness.dismissFirstHomeCalls += 1;
         harness.onboarding = { ...harness.onboarding, showFirstHomeGuide: false };
@@ -1345,17 +1695,11 @@ function makePigeApi(harness: ConversationHarness): object {
       status: async () => null
     },
     models: {
-      summary: async () => ({
-        presets: [],
-        providers: [],
-        models: [],
-        hasDefaultModel: false,
-        defaultBinding: { state: "not_configured" }
-      })
+      summary: () => harness.loadModelSummary()
     },
     agent: {
       runtimeStatus: async () => null,
-      conversation: async () => harness.timeline,
+      conversation: () => harness.loadConversation(),
       submitTurn: (request: AgentSubmitTurnRequest) => harness.submitTurn(request),
       onTurnDraft: (listener: (event: AgentTurnDraftEvent) => void) => {
         harness.draftListeners.add(listener);
@@ -1367,11 +1711,14 @@ function makePigeApi(harness: ConversationHarness): object {
         harness.jobListRequests.push(request);
         const stateFilter = new Set(request.states ?? []);
         const classFilter = new Set(request.classes ?? []);
-        const jobs = harness.enforceJobFilters
-          ? harness.jobs
+        const filteredJobs = harness.enforceJobFilters
+          ? [...harness.jobs]
               .filter((job) => stateFilter.size === 0 || stateFilter.has(job.state))
               .filter((job) => classFilter.size === 0 || classFilter.has(job.class))
-          : harness.jobs;
+          : [...harness.jobs];
+        const jobs = filteredJobs
+          .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+          .slice(0, request.limit ?? 20);
         return {
         scannedAt: "2026-07-12T08:00:00.000Z",
         activeVaultId: harness.onboarding.activeVault?.vaultId ?? "vault_home_conversation",
@@ -1655,6 +2002,27 @@ function completedDatasetTimeline(): AgentConversationTimeline {
   };
 }
 
+function modelWaitingTimeline(): AgentConversationTimeline {
+  return {
+    conversationId: "conv_20260713_modelwait",
+    tailEventId: "event_20260713_modelwait",
+    canFollowUp: false,
+    messages: [{
+      id: "event_20260713_modelwait",
+      role: "user",
+      createdAt: "2026-07-13T08:00:00.000Z",
+      text: "Please help me plan today.",
+      jobId: "job_20260713_modelwait"
+    }],
+    latestTurn: {
+      jobId: "job_20260713_modelwait",
+      userEventId: "event_20260713_modelwait",
+      state: "waiting_dependency",
+      error: defaultModelMissingError()
+    }
+  };
+}
+
 function completedResult(): AgentSubmitTurnResult {
   return {
     requestId: "request_20260712_turn02",
@@ -1816,6 +2184,19 @@ function runningAgentJob(): JobSummary {
     message: "Agent turn running",
     createdAt: "2026-07-12T10:00:00.000Z",
     updatedAt: "2026-07-12T10:00:00.000Z"
+  };
+}
+
+function modelWaitingJob(): JobSummary {
+  return {
+    id: "job_20260713_modelwait",
+    class: "agent_turn",
+    state: "waiting_dependency",
+    stage: "waiting_for_model",
+    conversationEventId: "event_20260713_modelwait",
+    message: "body-free model wait",
+    createdAt: "2026-07-13T08:00:00.000Z",
+    updatedAt: "2026-07-13T08:00:01.000Z"
   };
 }
 

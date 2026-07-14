@@ -166,15 +166,16 @@ type ModelProfile = {
 
 Rules:
 
-- One inventory keys exact `(providerProfileId, modelId)`; discovery/manual records merge
-  while preserving alias, enabled state, and Global Default. Missing/new refresh IDs are
-  retained/disabled respectively; failed discovery preserves inventory and offers typed
-  Retry/manual fallback rather than empty success.
+- One inventory keys `(providerProfileId, modelId)`; discovery/manual records merge while
+  preserving alias, enabled state, and Global Default. Missing/new refresh IDs are retained/
+  disabled; failed discovery preserves inventory with typed Retry/manual fallback.
 - First Connect enables its validated bootstrap model and sets it as Global Default only
   when none exists. Default selects an enabled model across Providers; disabling it needs
   an atomic replacement, and unusable bindings stay visible without auto-switch/free text.
-- Connect discovers non-durably, selects or requests a bootstrap ID, runs a real synthetic
-  Pi generation/tool probe, then readback-commits all or restores all.
+- Connect discovers non-durably, selects/requests a bootstrap ID, probes with Pi, then
+  readback-commits all or restores all. Sequencing ignores stale outcomes. Post-commit
+  refresh retries only Models truth; runtime readiness is best-effort and cannot repeat
+  provider effects. UI receives typed safe repair, never raw provider data.
 - Pi AI remains the provider runtime; Pige neither copies its catalog nor adds a parallel SDK.
 - An exact reviewed preset/model may overlay Pi's matching public model metadata when
   protocol mechanics require it, while retaining the Pige Profile ID, endpoint, model ID,

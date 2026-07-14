@@ -158,6 +158,15 @@ export function App(): React.JSX.Element {
   const [noteLoadingPageId, setNoteLoadingPageId] = useState<string | null>(null);
   const noteOpenSequence = useRef(0);
   const knowledgeTreeReturnFocusKey = useRef<string | null>(null);
+  const modelRefreshSequence = useRef(0);
+  const agentRuntimeRefreshSequence = useRef(0);
+  const vaultRefreshSequence = useRef(0);
+
+  const refreshAgentRuntimeStatus = async (): Promise<void> => {
+    const refreshId = ++agentRuntimeRefreshSequence.current;
+    const nextStatus = await window.pige.agent.runtimeStatus();
+    if (refreshId === agentRuntimeRefreshSequence.current) setAgentRuntimeStatus(nextStatus);
+  };
 
   useEffect(() => {
     void window.pige.getHealth().then(setHealth);
@@ -183,43 +192,52 @@ export function App(): React.JSX.Element {
   const t = (key: string): string => messageCatalogs[locale][key] ?? messageCatalogs.en[key] ?? key;
 
   const refreshVaultState = async (): Promise<void> => {
-    const nextOnboarding = await window.pige.vault.onboardingStatus();
-    const [nextRecentVaults, nextBackupStatus, nextAgentRuntimeStatus] = await Promise.all([
-      window.pige.vault.recent(),
-      window.pige.backup.status(),
-      window.pige.agent.runtimeStatus()
-    ]);
-    const homeJobStateFilter = {
-      states: ["queued", "running", "waiting_dependency", "failed_retryable", "failed_final"] as JobState[]
-    };
-    homeJobStateFilter.states.push("awaiting_review");
-    homeJobStateFilter.states.push("cancel_requested");
-    homeJobStateFilter.states.push("waiting_permission");
-    homeJobStateFilter.states.push("waiting_model_egress");
-    const [nextJobs, nextBackupJobs, nextProposals, nextActivities] = nextOnboarding.activeVault
-      ? await Promise.all([
-        window.pige.jobs.list({
-          limit: 6,
-          classes: ["capture", "parse", "ocr", "agent_ingest", "agent_turn", "index_rebuild"],
-          ...homeJobStateFilter
-        }).catch(() => undefined),
-        window.pige.jobs.list({
-          limit: 20,
-          classes: ["backup"],
-          states: ["queued", "running", "cancel_requested", "failed_retryable", "failed_final"]
-        }).catch(() => undefined),
-        window.pige.proposals.list({ limit: 100, states: ["ready"] }).catch(() => undefined),
-        window.pige.activity.list({ limit: 5 }).catch(() => undefined)
-      ])
-      : [undefined, undefined, undefined, undefined];
-    setOnboarding(nextOnboarding);
-    setRecentVaults(nextRecentVaults);
-    setBackupStatus(nextBackupStatus);
-    setAgentRuntimeStatus(nextAgentRuntimeStatus);
-    setRecentJobs(nextJobs?.jobs ?? []);
-    setBackupJobs(nextBackupJobs?.jobs.filter((job) => job.backupKind === "user_backup") ?? []);
-    setReadyProposals(nextProposals?.proposals ?? []);
-    setRecentActivities(nextActivities?.activities ?? []);
+    const refreshId = ++vaultRefreshSequence.current;
+    const runtimeRefreshId = ++agentRuntimeRefreshSequence.current;
+    try {
+      const nextOnboarding = await window.pige.vault.onboardingStatus();
+      const [nextRecentVaults, nextBackupStatus, nextAgentRuntimeStatus] = await Promise.all([
+        window.pige.vault.recent(),
+        window.pige.backup.status(),
+        window.pige.agent.runtimeStatus()
+      ]);
+      const homeJobStateFilter = {
+        states: ["queued", "running", "waiting_dependency", "failed_retryable", "failed_final"] as JobState[]
+      };
+      homeJobStateFilter.states.push("awaiting_review");
+      homeJobStateFilter.states.push("cancel_requested");
+      homeJobStateFilter.states.push("waiting_permission");
+      homeJobStateFilter.states.push("waiting_model_egress");
+      const [nextJobs, nextBackupJobs, nextProposals, nextActivities] = nextOnboarding.activeVault
+        ? await Promise.all([
+          window.pige.jobs.list({
+            limit: 100,
+            classes: ["capture", "parse", "ocr", "agent_ingest", "agent_turn", "index_rebuild"],
+            ...homeJobStateFilter
+          }).catch(() => undefined),
+          window.pige.jobs.list({
+            limit: 20,
+            classes: ["backup"],
+            states: ["queued", "running", "cancel_requested", "failed_retryable", "failed_final"]
+          }).catch(() => undefined),
+          window.pige.proposals.list({ limit: 100, states: ["ready"] }).catch(() => undefined),
+          window.pige.activity.list({ limit: 5 }).catch(() => undefined)
+        ])
+        : [undefined, undefined, undefined, undefined];
+      if (refreshId !== vaultRefreshSequence.current) return;
+      setOnboarding(nextOnboarding);
+      setRecentVaults(nextRecentVaults);
+      setBackupStatus(nextBackupStatus);
+      if (runtimeRefreshId === agentRuntimeRefreshSequence.current) {
+        setAgentRuntimeStatus(nextAgentRuntimeStatus);
+      }
+      setRecentJobs(nextJobs?.jobs ?? []);
+      setBackupJobs(nextBackupJobs?.jobs.filter((job) => job.backupKind === "user_backup") ?? []);
+      setReadyProposals(nextProposals?.proposals ?? []);
+      setRecentActivities(nextActivities?.activities ?? []);
+    } catch (caught) {
+      if (refreshId === vaultRefreshSequence.current) throw caught;
+    }
   };
 
   const runVaultAction = async (action: () => Promise<void>): Promise<void> => {
@@ -264,7 +282,13 @@ export function App(): React.JSX.Element {
   };
 
   const refreshModels = async (): Promise<void> => {
-    setModelSummary(await window.pige.models.summary());
+    const refreshId = ++modelRefreshSequence.current;
+    try {
+      const nextSummary = await window.pige.models.summary();
+      if (refreshId === modelRefreshSequence.current) setModelSummary(nextSummary);
+    } catch (caught) {
+      if (refreshId === modelRefreshSequence.current) throw caught;
+    }
   };
 
   const dismissFirstHomeGuide = async (): Promise<void> => {
@@ -564,7 +588,12 @@ export function App(): React.JSX.Element {
               className={view === "home" ? "nav-item active" : "nav-item"}
               type="button"
               aria-current={view === "home" ? "page" : undefined}
-              onClick={() => setView("home")}
+              onClick={() => {
+                setView("home");
+                void refreshVaultState().catch(() => {
+                  setCaptureToast({ kind: "error", message: t("error.generic") });
+                });
+              }}
             >
               {t("nav.home")}
             </button>
@@ -606,10 +635,7 @@ export function App(): React.JSX.Element {
               className={view === "models" ? "nav-item active" : "nav-item"}
               type="button"
               aria-current={view === "models" ? "page" : undefined}
-              onClick={() => {
-                setView("models");
-                void refreshModels();
-              }}
+              onClick={() => setView("models")}
             >
               {t("nav.models")}
             </button>
@@ -705,11 +731,9 @@ export function App(): React.JSX.Element {
         ) : view === "models" ? (
           <ModelSettingsPanel
             busy={busy}
-            error={error}
-            modelSummary={modelSummary}
-            onRefreshModels={refreshModels}
-            onRefreshVaultState={refreshVaultState}
-            onError={setError}
+              modelSummary={modelSummary}
+              onRefreshModels={refreshModels}
+              onRefreshAgentRuntimeStatus={refreshAgentRuntimeStatus}
             onBusy={setBusy}
             t={t}
           />
@@ -1707,14 +1731,25 @@ function HomeComposer(props: {
     ? undefined
     : pendingModelEgressRequestId;
   currentModelEgressRequestIdRef.current = modelEgressRequestId;
-  const visibleRecentJobs = props.recentJobs.filter((job) =>
-    (!permissionRequestId || job.permissionRequestId !== permissionRequestId) &&
-    (!modelEgressRequestId || job.modelEgressApprovalRequestId !== modelEgressRequestId)
-  );
+  const visibleRecentJobs = props.recentJobs
+    .filter((job) =>
+      (!permissionRequestId || job.permissionRequestId !== permissionRequestId) &&
+      (!modelEgressRequestId || job.modelEgressApprovalRequestId !== modelEgressRequestId) &&
+      !(
+        job.class === "agent_turn" &&
+        job.sourceId === undefined &&
+        job.state === "waiting_dependency" &&
+        job.stage === "waiting_for_model"
+      )
+    )
+    .slice(0, 6);
   const retryableLatestTurn = latestTurn && (
-    latestTurn.state === "failed_retryable" ||
     latestTurn.state === "cancelled" ||
-    latestTurn.state === "waiting_dependency"
+    (
+      (latestTurn.state === "failed_retryable" || latestTurn.state === "waiting_dependency") &&
+      latestTurn.error?.retryable === true &&
+      latestTurn.error.userAction === "retry"
+    )
   ) ? latestTurn : undefined;
   const sourceWaitingForModelJobs = props.recentJobs.filter(isSourceWaitingForModel);
   const activeSourceWaitingForModelJob = activeSourceTurn?.jobId
@@ -3388,18 +3423,25 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
   );
 }
 
+type ModelSettingsFailure =
+  | { readonly kind: "preset"; readonly presetId: string }
+  | { readonly kind: "custom_connection" }
+  | { readonly kind: "custom_discovery" }
+  | { readonly kind: "manual_model"; readonly providerId: string }
+  | { readonly kind: "summary_refresh" }
+  | { readonly kind: "post_commit_refresh" }
+  | { readonly kind: "model_change" };
+
 interface ModelSettingsPanelProps {
   readonly busy: boolean;
-  readonly error: string | null;
   readonly modelSummary: ModelProviderSettingsSummary | null;
   readonly onRefreshModels: () => Promise<void>;
-  readonly onRefreshVaultState: () => Promise<void>;
-  readonly onError: (error: string | null) => void;
+  readonly onRefreshAgentRuntimeStatus: () => Promise<void>;
   readonly onBusy: (busy: boolean) => void;
   readonly t: (key: string) => string;
 }
 
-function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.Element {
+export function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.Element {
   const [presetApiKeys, setPresetApiKeys] = useState<Record<string, string>>({});
   const [displayName, setDisplayName] = useState("Custom provider");
   const [endpointProtocol, setEndpointProtocol] = useState<ProviderEndpointProtocol>("openai_responses");
@@ -3408,14 +3450,65 @@ function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.Element {
   const [manualModelId, setManualModelId] = useState("");
   const [manualBootstrap, setManualBootstrap] = useState<ProviderConnectNeedsManualModel | null>(null);
   const [providerSyncFailures, setProviderSyncFailures] = useState<ReadonlySet<string>>(new Set());
+  const [failure, setFailure] = useState<ModelSettingsFailure | null>(null);
+  const refreshRequestSequence = useRef(0);
+
+  const refreshModelSummary = async (): Promise<void> => {
+    const refreshId = ++refreshRequestSequence.current;
+    try {
+      await props.onRefreshModels();
+    } catch (caught) {
+      if (refreshId === refreshRequestSequence.current) throw caught;
+    }
+  };
 
   useEffect(() => {
-    void props.onRefreshModels();
+    let active = true;
+    void refreshModelSummary().catch(() => {
+      if (active) setFailure({ kind: "summary_refresh" });
+    });
+    return () => {
+      active = false;
+    };
   }, []);
+
+  const retryModelsSummary = async (): Promise<void> => {
+    props.onBusy(true);
+    setFailure(null);
+    try {
+      await refreshModelSummary();
+    } catch {
+      setFailure({ kind: "summary_refresh" });
+    } finally {
+      props.onBusy(false);
+    }
+  };
+
+  const refreshCommittedSettings = async (): Promise<boolean> => {
+    try {
+      await refreshModelSummary();
+      setFailure(null);
+      void props.onRefreshAgentRuntimeStatus().catch(() => undefined);
+      return true;
+    } catch {
+      setFailure({ kind: "post_commit_refresh" });
+      return false;
+    }
+  };
+
+  const retryCommittedRefresh = async (): Promise<void> => {
+    props.onBusy(true);
+    setFailure(null);
+    try {
+      await refreshCommittedSettings();
+    } finally {
+      props.onBusy(false);
+    }
+  };
 
   const connectPreset = async (presetId: string): Promise<void> => {
     props.onBusy(true);
-    props.onError(null);
+    setFailure(null);
     try {
       const apiKey = presetApiKeys[presetId]?.trim();
       const result = await window.pige.models.addPresetProvider({
@@ -3424,17 +3517,17 @@ function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.Element {
       });
       if ("status" in result) throw new Error("Reviewed preset did not select a bootstrap model.");
       setPresetApiKeys((current) => ({ ...current, [presetId]: "" }));
-      await Promise.all([props.onRefreshModels(), props.onRefreshVaultState()]);
+      await refreshCommittedSettings();
     } catch {
-      props.onError(props.t("models.connectionFailed"));
+      setFailure({ kind: "preset", presetId });
     } finally {
       props.onBusy(false);
     }
   };
 
-  const saveProvider = async (): Promise<void> => {
+  const saveProvider = async (retryDiscovery = false): Promise<void> => {
     props.onBusy(true);
-    props.onError(null);
+    setFailure(null);
     try {
       const result = await window.pige.models.addManualProvider({
         displayName,
@@ -3442,21 +3535,21 @@ function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.Element {
         endpointProtocol,
         baseUrl: baseUrl.trim(),
         apiKey,
-        ...(manualBootstrap ? { manualModelId: manualModelId.trim() } : {}),
+        ...(!retryDiscovery && manualBootstrap ? { manualModelId: manualModelId.trim() } : {}),
         cloudBoundary: "unknown"
       });
       if ("status" in result) {
         setManualBootstrap(result);
         setManualModelId(result.discoveredModels[0]?.modelId ?? "");
-        if (result.error) props.onError(props.t("models.discoveryFailed"));
+        if (result.error) setFailure({ kind: "custom_discovery" });
         return;
       }
       setApiKey("");
       setManualModelId("");
       setManualBootstrap(null);
-      await Promise.all([props.onRefreshModels(), props.onRefreshVaultState()]);
+      await refreshCommittedSettings();
     } catch {
-      props.onError(props.t("models.connectionFailed"));
+      setFailure({ kind: "custom_connection" });
     } finally {
       props.onBusy(false);
     }
@@ -3464,12 +3557,12 @@ function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.Element {
 
   const setDefaultModel = async (modelProfileId: string): Promise<void> => {
     props.onBusy(true);
-    props.onError(null);
+    setFailure(null);
     try {
       await window.pige.models.setDefaultModel({ modelProfileId });
-      await Promise.all([props.onRefreshModels(), props.onRefreshVaultState()]);
+      await refreshCommittedSettings();
     } catch {
-      props.onError(props.t("models.connectionFailed"));
+      setFailure({ kind: "model_change" });
     } finally {
       props.onBusy(false);
     }
@@ -3477,7 +3570,12 @@ function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.Element {
 
   const refreshProviderModels = async (providerProfileId: string): Promise<void> => {
     props.onBusy(true);
-    props.onError(null);
+    setFailure(null);
+    setProviderSyncFailures((current) => {
+      const next = new Set(current);
+      next.delete(providerProfileId);
+      return next;
+    });
     try {
       await window.pige.models.refreshProviderModels({ providerProfileId });
       setProviderSyncFailures((current) => {
@@ -3485,10 +3583,14 @@ function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.Element {
         next.delete(providerProfileId);
         return next;
       });
-      await props.onRefreshModels();
+      try {
+        await refreshModelSummary();
+        setFailure(null);
+      } catch {
+        setFailure({ kind: "post_commit_refresh" });
+      }
     } catch {
       setProviderSyncFailures((current) => new Set(current).add(providerProfileId));
-      props.onError(props.t("models.discoveryFailed"));
     } finally {
       props.onBusy(false);
     }
@@ -3498,18 +3600,20 @@ function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.Element {
     providerProfileId: string,
     modelId: string,
     modelDisplayName: string
-  ): Promise<void> => {
+  ): Promise<boolean> => {
     props.onBusy(true);
-    props.onError(null);
+    setFailure(null);
     try {
       await window.pige.models.addManualModel({
         providerProfileId,
         modelId,
         ...(modelDisplayName.trim() ? { displayName: modelDisplayName.trim() } : {})
       });
-      await props.onRefreshModels();
+      await refreshCommittedSettings();
+      return true;
     } catch {
-      props.onError(props.t("models.connectionFailed"));
+      setFailure({ kind: "manual_model", providerId: providerProfileId });
+      return false;
     } finally {
       props.onBusy(false);
     }
@@ -3517,12 +3621,12 @@ function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.Element {
 
   const setModelEnabled = async (modelProfileId: string, enabled: boolean): Promise<void> => {
     props.onBusy(true);
-    props.onError(null);
+    setFailure(null);
     try {
       await window.pige.models.updateModel({ modelProfileId, enabled });
-      await Promise.all([props.onRefreshModels(), props.onRefreshVaultState()]);
+      await refreshCommittedSettings();
     } catch {
-      props.onError(props.t("models.connectionFailed"));
+      setFailure({ kind: "model_change" });
     } finally {
       props.onBusy(false);
     }
@@ -3533,12 +3637,12 @@ function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.Element {
     displayName: string | null
   ): Promise<void> => {
     props.onBusy(true);
-    props.onError(null);
+    setFailure(null);
     try {
       await window.pige.models.updateModel({ modelProfileId, displayName });
-      await props.onRefreshModels();
+      await refreshCommittedSettings();
     } catch {
-      props.onError(props.t("models.connectionFailed"));
+      setFailure({ kind: "model_change" });
     } finally {
       props.onBusy(false);
     }
@@ -3557,6 +3661,23 @@ function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.Element {
 
       <section className="settings-group">
         <h2>{props.t("models.addProvider")}</h2>
+        {failure?.kind === "summary_refresh" || failure?.kind === "post_commit_refresh" ? (
+          <div className="settings-inline-error" role="alert">
+            <span>{props.t(failure.kind === "summary_refresh"
+              ? "models.summaryRefreshFailed"
+              : "models.refreshAfterSaveFailed")}</span>
+            <button
+              type="button"
+              className="secondary"
+              disabled={props.busy}
+              onClick={() => void (failure.kind === "summary_refresh"
+                ? retryModelsSummary()
+                : retryCommittedRefresh())}
+            >
+              {props.t("models.retry")}
+            </button>
+          </div>
+        ) : null}
         {props.modelSummary?.presets.map((preset) => (
           <div className="preset-provider" key={preset.presetId}>
             <div>
@@ -3578,6 +3699,15 @@ function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.Element {
                 />
               </>
             ) : null}
+            {failure?.kind === "preset" && failure.presetId === preset.presetId ? (
+              <p className="error" role="alert">
+                {props.t(
+                  preset.authRequirement === "api_key" || Boolean(presetApiKeys[preset.presetId]?.trim())
+                    ? "models.presetConnectionFailedApiKey"
+                    : "models.presetConnectionFailedNoAuth"
+                )}
+              </p>
+            ) : null}
             <button
               type="button"
               onClick={() => void connectPreset(preset.presetId)}
@@ -3585,7 +3715,9 @@ function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.Element {
                 preset.authRequirement === "api_key" && !(presetApiKeys[preset.presetId] ?? "").trim()
               )}
             >
-              {props.t("models.connect")}
+              {props.t(failure?.kind === "preset" && failure.presetId === preset.presetId
+                ? "models.retry"
+                : "models.connect")}
             </button>
           </div>
         ))}
@@ -3640,15 +3772,37 @@ function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.Element {
               </>
             ) : null}
 
-            <button
-              type="button"
-              onClick={() => void saveProvider()}
-              disabled={props.busy || !baseUrl.trim() || !apiKey.trim() || (
-                manualBootstrap !== null && !manualModelId.trim()
-              )}
-            >
-              {props.t("models.testAndSave")}
-            </button>
+            {failure?.kind === "custom_connection" ? (
+              <p className="error" role="alert">{props.t("models.connectionFailed")}</p>
+            ) : failure?.kind === "custom_discovery" ? (
+              <p className="error" role="alert">{props.t("models.discoveryFailed")}</p>
+            ) : null}
+
+            <div className="settings-actions">
+              {failure?.kind === "custom_discovery" ? (
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => void saveProvider(true)}
+                  disabled={props.busy || !baseUrl.trim() || !apiKey.trim()}
+                >
+                  {props.t("models.retry")}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => void saveProvider()}
+                disabled={props.busy || !baseUrl.trim() || !apiKey.trim() || (
+                  manualBootstrap !== null && !manualModelId.trim()
+                )}
+              >
+                {props.t(manualBootstrap
+                  ? "models.addCustomModel"
+                  : failure?.kind === "custom_connection"
+                    ? "models.retry"
+                    : "models.testAndSave")}
+              </button>
+            </div>
           </div>
         </details>
       </section>
@@ -3667,6 +3821,7 @@ function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.Element {
                 providerName={provider.displayName}
                 models={summary.models.filter((model) => model.providerProfileId === provider.id)}
                 syncFailed={providerSyncFailures.has(provider.id)}
+                manualModelFailed={failure?.kind === "manual_model" && failure.providerId === provider.id}
                 busy={props.busy}
                 onRefresh={() => refreshProviderModels(provider.id)}
                 onAddCustom={(modelId, modelDisplayName) => addManualModel(provider.id, modelId, modelDisplayName)}
@@ -3713,7 +3868,9 @@ function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.Element {
         />
       ) : null}
 
-      {props.error ? <p className="error">{props.error}</p> : null}
+      {failure?.kind === "model_change" ? (
+        <p className="error" role="alert">{props.t("models.modelChangeFailed")}</p>
+      ) : null}
     </section>
   );
 }
@@ -3723,9 +3880,10 @@ function ProviderModelGroup(props: {
   readonly providerName: string;
   readonly models: readonly ModelProfileSummary[];
   readonly syncFailed: boolean;
+  readonly manualModelFailed: boolean;
   readonly busy: boolean;
   readonly onRefresh: () => Promise<void>;
-  readonly onAddCustom: (modelId: string, displayName: string) => Promise<void>;
+  readonly onAddCustom: (modelId: string, displayName: string) => Promise<boolean>;
   readonly onSetEnabled: (modelProfileId: string, enabled: boolean) => Promise<void>;
   readonly onSetDisplayName: (modelProfileId: string, displayName: string | null) => Promise<void>;
   readonly t: (key: string) => string;
@@ -3733,7 +3891,8 @@ function ProviderModelGroup(props: {
   const [modelId, setModelId] = useState("");
   const [displayName, setDisplayName] = useState("");
   const addModel = async (): Promise<void> => {
-    await props.onAddCustom(modelId.trim(), displayName.trim());
+    const added = await props.onAddCustom(modelId.trim(), displayName.trim());
+    if (!added) return;
     setModelId("");
     setDisplayName("");
   };
@@ -3742,7 +3901,7 @@ function ProviderModelGroup(props: {
       <div className="provider-model-heading">
         <h3 id={`provider-models-${props.providerId}`}>{props.providerName}</h3>
         <button type="button" className="secondary" disabled={props.busy} onClick={() => void props.onRefresh()}>
-          {props.t("library.refresh")}
+          {props.t(props.syncFailed ? "models.retry" : "library.refresh")}
         </button>
       </div>
       {props.models.length > 0 ? (
@@ -3778,8 +3937,11 @@ function ProviderModelGroup(props: {
             placeholder={props.t("models.optional")}
             onChange={(event) => setDisplayName(event.target.value)}
           />
+          {props.manualModelFailed ? (
+            <p className="error" role="alert">{props.t("models.manualModelFailed")}</p>
+          ) : null}
           <button type="button" disabled={props.busy || !modelId.trim()} onClick={() => void addModel()}>
-            {props.t("models.addCustomModel")}
+            {props.t(props.manualModelFailed ? "models.retry" : "models.addCustomModel")}
           </button>
         </div>
       </details>
