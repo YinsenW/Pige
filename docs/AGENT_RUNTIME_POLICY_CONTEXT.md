@@ -159,6 +159,7 @@ type ModelEgressDecision = {
   estimatedPayloadTokens: number;
   normalPayloadCharacterLimit: number;
   policyHash: string;
+  modelEgressApprovalRequestId?: string;
   permissionDecisionId?: string;
 };
 ```
@@ -186,6 +187,22 @@ Decision matrix:
 Exact connected, verified Profile/endpoint is standing authority; unknown or changed
 boundaries reconnect once. Labels do not prompt. Only verified loopback is local; stricter
 policy outranks YOLO.
+
+A `confirm` result creates one body-free, machine-local `model_egress` request for the
+exact pending provider invocation. It binds the vault, Job, Profile, canonical endpoint,
+model, policy, payload/evidence digests, and content classes; it is not a Permission
+Broker grant and cannot be satisfied by a saved grant or YOLO. `allow_once` is consumed
+before credential resolution and the provider call after every bound fact is re-read;
+drift invalidates it and requires a new decision. Denial preserves the turn/source and
+terminalizes the exact Job without a provider request. Cancellation invalidates an
+unresolved request.
+
+The approval record is private machine-local state, excluded from vault backup and
+bounded per vault. In-process resolution may wake the current run after its durable Job
+CAS. After restart, Pige may conservatively replay earlier read-only/model steps while
+deterministic tool effects remain idempotent; the newly pending exact provider invocation
+still needs a fresh one-use approval. Durable no-duplicate continuation of an in-flight
+Pi model/tool transcript remains open.
 
 ### 5.3 Permissions
 

@@ -23,6 +23,7 @@ export const RootBindingIdSchema = z.string().regex(/^root_[a-z0-9][a-z0-9_]{5,}
 export const BackupIdSchema = z.string().regex(/^backup_\d{8}_[a-z0-9]{8,}$/);
 export const PermissionRequestIdSchema = z.string().regex(/^permreq_\d{8}_[a-z0-9]{8,}$/);
 export const PermissionDecisionIdSchema = z.string().regex(/^permdec_\d{8}_[a-z0-9]{8,}$/);
+export const ModelEgressApprovalRequestIdSchema = z.string().regex(/^egressreq_\d{8}_[a-z0-9]{16,}$/);
 export const DatasetIdSchema = z.string().regex(/^dataset_\d{8}_[a-z0-9]{12,}$/);
 export const DatasetRevisionIdSchema = z.string().regex(/^dataset_rev_\d{8}_[a-z0-9]{12,}$/);
 export const TableIdSchema = z.string().regex(/^table_[a-z0-9]{12,}$/);
@@ -138,6 +139,7 @@ export const PigeErrorActionSchema = z.enum([
   "repair_tool",
   "download_model",
   "configure_model",
+  "confirm_model_egress",
   "grant_permission",
   "review_proposal",
   "rebuild_index",
@@ -386,8 +388,16 @@ export const ModelEgressDecisionSchema = z.object({
   estimatedPayloadTokens: z.number().int().nonnegative(),
   normalPayloadCharacterLimit: z.number().int().positive(),
   policyHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  modelEgressApprovalRequestId: ModelEgressApprovalRequestIdSchema.optional(),
   permissionDecisionId: PermissionDecisionIdSchema.optional()
 }).superRefine((decision, context) => {
+  if (decision.modelEgressApprovalRequestId && decision.outcome !== "confirm") {
+    context.addIssue({
+      code: "custom",
+      message: "Only a confirm outcome may bind a model egress approval request.",
+      path: ["modelEgressApprovalRequestId"]
+    });
+  }
   const classes = new Set(decision.contentClasses);
   if (classes.has("ordinary") && classes.size > 1) {
     context.addIssue({
@@ -456,6 +466,133 @@ export const ModelEgressDecisionSchema = z.object({
       code: "custom",
       message: `Model egress reason must be ${expectedReason} for this boundary and policy.`,
       path: ["reasonCode"]
+    });
+  }
+});
+
+export const ModelEgressApprovalStateSchema = z.enum([
+  "pending",
+  "approved",
+  "denied",
+  "consumed",
+  "invalidated"
+]);
+
+export const ModelEgressApprovalDecisionSchema = z.enum(["allow_once", "deny"]);
+
+export const ModelEgressPendingRequestQuerySchema = z.object({
+  requestId: ModelEgressApprovalRequestIdSchema
+}).strict();
+
+export const ModelEgressResolveRequestSchema = z.object({
+  requestId: ModelEgressApprovalRequestIdSchema,
+  jobId: JobIdSchema,
+  decision: ModelEgressApprovalDecisionSchema
+}).strict();
+
+export const ModelEgressPendingRequestSchema = z.object({
+  requestId: ModelEgressApprovalRequestIdSchema,
+  jobId: JobIdSchema,
+  providerProfileId: z.string().regex(/^provider_[a-z0-9_]+$/),
+  modelProfileId: z.string().regex(/^model_[a-z0-9_]+$/),
+  reasonCode: ModelEgressReasonCodeSchema,
+  contentClasses: z.array(ModelEgressContentClassSchema).min(1).refine(
+    (values) => new Set(values).size === values.length,
+    "Model egress pending content classes must be unique."
+  ),
+  requestedAt: z.string().datetime({ offset: true })
+}).strict();
+
+export const ModelEgressResolveResultSchema = z.object({
+  status: z.enum(["approved", "denied"]),
+  requestId: ModelEgressApprovalRequestIdSchema,
+  jobId: JobIdSchema
+}).strict();
+
+export const ModelEgressApprovalRequestRecordSchema = z.object({
+  schemaVersion: z.literal(1),
+  id: ModelEgressApprovalRequestIdSchema,
+  authorizationLayer: z.literal("model_egress"),
+  state: ModelEgressApprovalStateSchema,
+  jobId: JobIdSchema,
+  vaultId: VaultIdSchema,
+  providerProfileId: z.string().regex(/^provider_[a-z0-9_]+$/),
+  modelProfileId: z.string().regex(/^model_[a-z0-9_]+$/),
+  providerIdentityHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  modelIdentityHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  policyHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  payloadHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  evidenceSummaryHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  baseDecisionHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  decisionHash: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional(),
+  operationId: OperationIdSchema.optional(),
+  reasonCode: ModelEgressReasonCodeSchema,
+  contentClasses: z.array(ModelEgressContentClassSchema).min(1).refine(
+    (values) => new Set(values).size === values.length,
+    "Model egress approval content classes must be unique."
+  ),
+  payloadCharacters: z.number().int().nonnegative(),
+  estimatedPayloadTokens: z.number().int().nonnegative(),
+  normalPayloadCharacterLimit: z.number().int().positive(),
+  decision: ModelEgressApprovalDecisionSchema.optional(),
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
+  decidedAt: z.string().datetime({ offset: true }).optional(),
+  consumedAt: z.string().datetime({ offset: true }).optional(),
+  invalidatedAt: z.string().datetime({ offset: true }).optional(),
+  reconciledAt: z.string().datetime({ offset: true }).optional()
+}).strict().superRefine((request, context) => {
+  if (!new Set(["private_or_large_confirmation", "sensitive_confirmation", "confirm_all", "unknown_boundary_confirmation"]).has(request.reasonCode)) {
+    context.addIssue({
+      code: "custom",
+      path: ["reasonCode"],
+      message: "A model egress approval request must bind a confirmation reason."
+    });
+  }
+  if ((request.operationId === undefined) !== (request.decisionHash === undefined)) {
+    context.addIssue({
+      code: "custom",
+      path: ["operationId"],
+      message: "A model egress approval operation and decision hash must be bound together."
+    });
+  }
+  if (request.state === "pending" && (
+    request.decision || request.decidedAt || request.consumedAt || request.invalidatedAt || request.reconciledAt
+  )) {
+    context.addIssue({
+      code: "custom",
+      path: ["state"],
+      message: "A pending model egress approval cannot contain a decision or terminal timestamp."
+    });
+  }
+  if (request.state === "approved" && (
+    request.decision !== "allow_once" || !request.decidedAt || request.consumedAt || request.invalidatedAt || request.reconciledAt
+  )) {
+    context.addIssue({
+      code: "custom",
+      path: ["state"],
+      message: "An approved model egress request must contain one unconsumed allow-once decision."
+    });
+  }
+  if (request.state === "denied" && (request.decision !== "deny" || !request.decidedAt || request.consumedAt || request.invalidatedAt)) {
+    context.addIssue({
+      code: "custom",
+      path: ["state"],
+      message: "A denied model egress request must contain one user denial."
+    });
+  }
+  if (request.state === "consumed" && (request.decision !== "allow_once" || !request.decidedAt || !request.consumedAt || request.invalidatedAt)) {
+    context.addIssue({
+      code: "custom",
+      path: ["state"],
+      message: "A consumed model egress request must contain its one-use approval and consumption timestamps."
+    });
+  }
+  if (request.state === "invalidated" && (!request.invalidatedAt || request.consumedAt)) {
+    context.addIssue({
+      code: "custom",
+      path: ["state"],
+      message: "An invalidated model egress request must contain only its invalidation timestamp."
     });
   }
 });
@@ -1106,6 +1243,7 @@ export const JobStateSchema = z.enum([
   "running",
   "waiting_dependency",
   "waiting_permission",
+  "waiting_model_egress",
   "awaiting_review",
   "cancel_requested",
   "completed",
@@ -1196,12 +1334,14 @@ export const PigeWarningSchema = z.object({
 }).strict().superRefine(requireErrorDomainMatchesCode);
 
 export const PigeErrorSummarySchema = PigeErrorCoreSchema.extend({
+  modelEgressApprovalRequestId: ModelEgressApprovalRequestIdSchema.optional(),
   diagnosticErrorId: z.string().min(1).max(120).optional()
 }).strict().superRefine(requireErrorDomainMatchesCode);
 
 export const PigeErrorSchema = PigeErrorCoreSchema.extend({
   jobId: JobIdSchema.optional(),
   permissionRequestId: PermissionRequestIdSchema.optional(),
+  modelEgressApprovalRequestId: ModelEgressApprovalRequestIdSchema.optional(),
   diagnosticErrorId: z.string().min(1).max(120).optional()
 }).strict().superRefine(requireErrorDomainMatchesCode);
 
@@ -1371,7 +1511,8 @@ export const ModelEgressAuditSchema = z.object({
     "Model egress audit content classes must be unique."
   ),
   outcome: ModelEgressOutcomeSchema,
-  reasonCode: ModelEgressReasonCodeSchema
+  reasonCode: ModelEgressReasonCodeSchema,
+  modelEgressApprovalRequestId: ModelEgressApprovalRequestIdSchema.optional()
 }).strict();
 
 export const ChangeOperationSchema = z.discriminatedUnion("kind", [
@@ -1504,6 +1645,13 @@ export const OperationRecordSchema = z.object({
       code: "custom",
       path: ["modelEgressAudit"],
       message: "A model-egress decision operation requires a typed payload and evidence audit summary."
+    });
+  }
+  if (operation.kind === "model_egress_decision" && operation.permissionDecisionIds.length > 0) {
+    context.addIssue({
+      code: "custom",
+      path: ["permissionDecisionIds"],
+      message: "Model egress decisions cannot reuse Permission Broker decisions."
     });
   }
   if (operation.kind !== "model_egress_decision" && operation.modelEgressAudit) {
@@ -1894,6 +2042,13 @@ export type MarkdownPageStatus = z.infer<typeof MarkdownPageStatusSchema>;
 export type MarkdownPageType = z.infer<typeof MarkdownPageTypeSchema>;
 export type ModelListStrategy = z.infer<typeof ModelListStrategySchema>;
 export type ModelEgressContentClass = z.infer<typeof ModelEgressContentClassSchema>;
+export type ModelEgressApprovalDecision = z.infer<typeof ModelEgressApprovalDecisionSchema>;
+export type ModelEgressPendingRequest = z.infer<typeof ModelEgressPendingRequestSchema>;
+export type ModelEgressPendingRequestQuery = z.infer<typeof ModelEgressPendingRequestQuerySchema>;
+export type ModelEgressResolveRequest = z.infer<typeof ModelEgressResolveRequestSchema>;
+export type ModelEgressResolveResult = z.infer<typeof ModelEgressResolveResultSchema>;
+export type ModelEgressApprovalRequestRecord = z.infer<typeof ModelEgressApprovalRequestRecordSchema>;
+export type ModelEgressApprovalState = z.infer<typeof ModelEgressApprovalStateSchema>;
 export type ModelEgressDecision = z.infer<typeof ModelEgressDecisionSchema>;
 export type ModelEgressAudit = z.infer<typeof ModelEgressAuditSchema>;
 export type ModelEgressOutcome = z.infer<typeof ModelEgressOutcomeSchema>;

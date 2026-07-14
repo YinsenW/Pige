@@ -1134,6 +1134,55 @@ textarea {
   white-space: nowrap;
 }
 
+.model-egress-prompt {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 5px 12px;
+  border-top: 1px solid var(--border-light);
+  padding-top: 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.model-egress-prompt > strong,
+.model-egress-prompt > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.model-egress-prompt > strong,
+.model-egress-prompt > span,
+.model-egress-prompt > .error {
+  grid-column: 1;
+}
+
+.model-egress-actions {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.model-egress-actions button {
+  min-height: 28px;
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .model-egress-prompt {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .model-egress-actions {
+    grid-column: 1;
+    grid-row: auto;
+    justify-content: flex-end;
+  }
+}
+
 .drop-overlay {
   position: fixed;
   inset: 10px;

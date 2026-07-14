@@ -25,6 +25,11 @@ const ACTIVITY_PROMPT = "Create a grounded knowledge note from this attachment."
 const ACTIVITY_TITLE = "Unified Agent activity note";
 const DATASET_PROMPT = "Which person has the largest count in this attached Dataset?";
 const DATASET_ANSWER = "Grace has the largest count in the attached Dataset. [D1]";
+const CONFIRM_ALLOW_PROMPT = "Complete the synthetic one-use approval check for [redacted-secret].";
+const CONFIRM_ALLOW_ANSWER = "The synthetic one-use model send was approved and completed.";
+const CONFIRM_LIVE_PROMPT = "Complete the synthetic same-process approval check for [redacted-secret].";
+const CONFIRM_LIVE_ANSWER = "The synthetic same-process model send was approved and completed.";
+const CONFIRM_DENY_PROMPT = "Complete the synthetic denial check for [redacted-secret].";
 const CHILD_RESULT_PREFIX = "PIGE_ROUNDTRIP_RESULT ";
 const MAX_CHILD_MS = 90_000;
 
@@ -66,6 +71,17 @@ async function runOrchestrator() {
       activityAttachmentPath,
       datasetAttachmentPath
     });
+    const pending = await runChild("pending", {
+      rootPath,
+      userDataPath,
+      baseUrl,
+      syntheticToken,
+      attachmentPath,
+      markdownAttachmentPath,
+      activityAttachmentPath,
+      datasetAttachmentPath
+    });
+    assert.equal(requests.some((request) => request.body.includes(CONFIRM_ALLOW_PROMPT)), false);
     const reopen = await runChild("reopen", {
       rootPath,
       userDataPath,
@@ -106,17 +122,65 @@ async function runOrchestrator() {
     assert.equal(connect.datasetCitationVisible, true);
     assert.equal(connect.datasetImportJobCount, 1);
     assert.deepEqual(connect.failedRetryableJobClasses, []);
+    assert.equal(pending.confirmationVisible, true);
+    assert.equal(pending.allowOnceVisible, true);
+    assert.equal(pending.denyVisible, true);
+    assert.match(pending.requestId, /^egressreq_\d{8}_[a-z0-9]{16,}$/u);
+    assert.match(pending.jobId, /^job_\d{8}_[a-z0-9]{8,}$/u);
     assert.equal(reopen.bindingState, "ready");
     assert.equal(reopen.runtimeState, "ready");
-    assert.equal(reopen.providerProfileId, connect.providerProfileId);
-    assert.equal(reopen.modelProfileId, connect.modelProfileId);
+    assert.equal(reopen.providerProfileId, pending.providerProfileId);
+    assert.equal(reopen.modelProfileId, pending.modelProfileId);
     assert.equal(reopen.providerVisible, true);
     assert.equal(reopen.directVisible, true);
     assert.equal(reopen.datasetVisible, true);
     assert.equal(reopen.datasetCitationVisible, true);
     assert.equal(reopen.activityUndoneVisible, true);
+    assert.equal(reopen.confirmationRecovered, true);
+    assert.equal(reopen.confirmationRequestId, pending.requestId);
+    assert.equal(reopen.confirmationJobId, pending.jobId);
+    assert.equal(reopen.confirmationAnswerVisible, true);
+    assert.equal(reopen.confirmationJobState, "completed");
+    assert.equal(reopen.liveConfirmationVisible, true);
+    assert.equal(reopen.liveConfirmationAnswerVisible, true);
+    assert.equal(reopen.liveConfirmationJobState, "completed");
+    assert.notEqual(reopen.liveConfirmationRequestId, pending.requestId);
+    assert.equal(reopen.denialVisible, true);
+    assert.equal(reopen.denialJobState, "failed_final");
+    assert.equal(reopen.denialErrorCode, "model_provider.egress_denied");
+    assert.notEqual(reopen.denialRequestId, pending.requestId);
+    assert.notEqual(reopen.denialRequestId, reopen.liveConfirmationRequestId);
+    const restartedApprovalRequest = requests.find((request) =>
+      request.method === "POST" && request.body.includes(CONFIRM_ALLOW_PROMPT)
+    );
+    const liveApprovalRequest = requests.find((request) =>
+      request.method === "POST" && request.body.includes(CONFIRM_LIVE_PROMPT)
+    );
+    assert.ok(restartedApprovalRequest);
+    assert.ok(liveApprovalRequest);
+    assert.ok(restartedApprovalRequest.receivedAt >= reopen.confirmationAllowClickedAt);
+    assert.ok(liveApprovalRequest.receivedAt >= reopen.liveConfirmationAllowClickedAt);
+    assert.ok(requests.every((request) => !request.body.includes(CONFIRM_DENY_PROMPT)));
 
-    assert.equal(requests.filter((request) => request.method === "GET" && request.path === "/v1/models").length, 2);
+    const vaultPath = path.join(rootPath, "vaults", "Roundtrip Vault");
+    const restartedApprovalJob = readRoundtripRecord(vaultPath, "jobs", pending.jobId);
+    const liveApprovalJob = readRoundtripRecord(vaultPath, "jobs", reopen.liveConfirmationJobId);
+    const denialJob = readRoundtripRecord(vaultPath, "jobs", reopen.denialJobId);
+    assert.equal(restartedApprovalJob.state, "completed");
+    assert.equal(liveApprovalJob.state, "completed");
+    assert.equal(denialJob.state, "failed_final");
+    assert.equal(denialJob.error?.code, "model_provider.egress_denied");
+    const restartedApproval = readApprovalRecord(userDataPath, pending.requestId);
+    const liveApproval = readApprovalRecord(userDataPath, reopen.liveConfirmationRequestId);
+    const denialApproval = readApprovalRecord(userDataPath, reopen.denialRequestId);
+    assert.equal(restartedApproval.state, "consumed");
+    assert.equal(typeof restartedApproval.reconciledAt, "string");
+    assert.equal(liveApproval.state, "consumed");
+    assert.equal(typeof liveApproval.reconciledAt, "string");
+    assert.equal(denialApproval.state, "denied");
+    assert.equal(typeof denialApproval.reconciledAt, "string");
+
+    assert.ok(requests.filter((request) => request.method === "GET" && request.path === "/v1/models").length >= 3);
     assert.ok(requests.filter((request) => request.method === "POST" && request.path === "/v1/responses").length >= 7);
     assert.ok(requests.every((request) => request.authorization === `Bearer ${syntheticToken}`));
     assert.ok(requests.every((request) => !request.body.includes(syntheticToken)));
@@ -135,12 +199,14 @@ async function runOrchestrator() {
     const providers = JSON.parse(fs.readFileSync(path.join(userDataPath, "provider-profiles.json"), "utf8"));
     const models = JSON.parse(fs.readFileSync(path.join(userDataPath, "model-profiles.json"), "utf8"));
     assert.equal(secrets.schemaVersion, 1);
-    assert.equal(secrets.secrets.length, 1);
-    assert.match(secrets.secrets[0].ref, /^provider_secret_[a-z0-9_]+$/u);
-    assert.notEqual(secrets.secrets[0].encryptedValue, syntheticToken);
-    assert.equal(providers.providers.length, 1);
-    assert.equal(providers.providers[0].authSecretRef, secrets.secrets[0].ref);
-    assert.equal(models.defaultModelProfileId, connect.modelProfileId);
+    assert.equal(secrets.secrets.length, 2);
+    assert.ok(secrets.secrets.every((secret) => /^provider_secret_[a-z0-9_]+$/u.test(secret.ref)));
+    assert.ok(secrets.secrets.every((secret) => secret.encryptedValue !== syntheticToken));
+    assert.equal(providers.providers.length, 2);
+    assert.ok(providers.providers.every((provider) =>
+      secrets.secrets.some((secret) => secret.ref === provider.authSecretRef)
+    ));
+    assert.equal(models.defaultModelProfileId, pending.modelProfileId);
     assert.equal(findPlaintext(rootPath, syntheticToken), undefined);
 
     console.log(
@@ -149,7 +215,12 @@ async function runOrchestrator() {
       `(${connect.firstDraftReceivedAt - streamTiming.firstSafeAnswerMaterialAt}ms from first safe material), ` +
       `${connect.directDraftEventCount} authorized fallback replacements plus Enter submission, ` +
       `visible direct/cited Home, preserved-source, ` +
-      `TXT/Markdown ingress, Dataset continuation, zero retryable Jobs, and reversible Activity/Undo results.`
+      `TXT/Markdown ingress, Dataset continuation, restart-adopted and live one-use model egress approvals, ` +
+      `durable denial without a provider request, zero retryable Jobs, and reversible Activity/Undo results.`
+    );
+    console.log(
+      "Electron model-egress confirmation loopback OK: restart and live approvals were consumed and reconciled, " +
+      "the denial was reconciled without a provider request, and all exact Jobs reached their expected terminal states."
     );
   } finally {
     await new Promise((resolve) => server.close(resolve));
@@ -226,6 +297,33 @@ function readSafeJobFailureSummary(rootPath) {
     });
 }
 
+function readRoundtripRecord(vaultPath, area, recordId) {
+  return readUniqueJsonByName(path.join(vaultPath, ".pige", area), `${recordId}.json`);
+}
+
+function readApprovalRecord(userDataPath, requestId) {
+  return readUniqueJsonByName(
+    path.join(userDataPath, "model-egress", "model-egress-approvals"),
+    `${requestId}.json`
+  );
+}
+
+function readUniqueJsonByName(rootPath, expectedName) {
+  assert.equal(fs.existsSync(rootPath), true);
+  const matches = [];
+  const pending = [rootPath];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const absolute = path.join(current, entry.name);
+      if (entry.isDirectory()) pending.push(absolute);
+      else if (entry.isFile() && entry.name === expectedName) matches.push(absolute);
+    }
+  }
+  assert.equal(matches.length, 1);
+  return JSON.parse(fs.readFileSync(matches[0], "utf8"));
+}
+
 async function runElectronPhase() {
   const phase = process.argv.find((value) => value.startsWith("--phase="))?.slice("--phase=".length);
   const rootPath = requireEnv("PIGE_ROUNDTRIP_ROOT");
@@ -238,6 +336,7 @@ async function runElectronPhase() {
   const datasetAttachmentPath = requireEnv("PIGE_ROUNDTRIP_DATASET_ATTACHMENT_PATH");
   const stagePath = requireEnv("PIGE_ROUNDTRIP_STAGE_PATH");
   const { app, BrowserWindow, dialog } = await import("electron");
+  if (phase !== "connect") installSyntheticOpenAiRedirect(baseUrl);
   fs.mkdirSync(userDataPath, { recursive: true });
   app.setPath("userData", userDataPath);
   app.setPath("sessionData", path.join(userDataPath, "session"));
@@ -255,7 +354,7 @@ async function runElectronPhase() {
     if (phase === "connect") {
       const helper = await import("../out/main/unified-agent-roundtrip-smoke.js");
       helper.prepareUnifiedAgentRoundtripSmoke({ rootPath, userDataPath });
-    } else if (phase !== "reopen") {
+    } else if (phase !== "pending" && phase !== "reopen") {
       throw new Error("Unknown unified Agent roundtrip phase.");
     }
 
@@ -276,9 +375,11 @@ async function runElectronPhase() {
     });
     markStage("renderer_load");
     await waitForRenderer(browserWindow);
-    markStage(phase === "connect" ? "renderer_connect" : "renderer_reopen");
+    markStage(`renderer_${phase}`);
     let result = phase === "connect"
       ? await runConnectRenderer(browserWindow, { baseUrl, syntheticToken })
+      : phase === "pending"
+      ? await runPendingConfirmationRenderer(browserWindow, { syntheticToken })
       : await runReopenRenderer(browserWindow);
     if (phase === "connect") {
       markStage("renderer_source");
@@ -392,6 +493,11 @@ async function runConnectRenderer(browserWindow, input) {
               : undefined,
             "authoritative visible Home result"
           );
+          if (options.stage) mark(options.stage + "_authoritative_visible");
+          // The authoritative bubble can render one microtask before the submit promise clears
+          // its synchronous duplicate-submit guard. Yield once so the next real UI turn is not
+          // mistaken for an in-flight repeat.
+          await new Promise((resolve) => setTimeout(resolve, 0));
           if (options.stage) mark(options.stage + "_final_visible");
           return {
             visible: document.body.textContent?.includes(expected) === true,
@@ -561,6 +667,115 @@ async function runConnectRenderer(browserWindow, input) {
   `, true);
 }
 
+function installSyntheticOpenAiRedirect(baseUrl) {
+  const nativeFetch = globalThis.fetch.bind(globalThis);
+  globalThis.fetch = (input, init) => {
+    const source = new URL(
+      typeof input === "string" || input instanceof URL ? input.toString() : input.url
+    );
+    if (source.origin !== "https://api.openai.com") return nativeFetch(input, init);
+    const target = new URL(baseUrl);
+    const suffix = source.pathname.startsWith("/v1/") ? source.pathname.slice(3) : source.pathname;
+    target.pathname = `${target.pathname.replace(/\/$/u, "")}${suffix}`;
+    target.search = source.search;
+    if (typeof Request !== "undefined" && input instanceof Request) {
+      return nativeFetch(new Request(target, input), init);
+    }
+    return nativeFetch(target, init);
+  };
+}
+
+async function runPendingConfirmationRenderer(browserWindow, input) {
+  return browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      const waitFor = async (predicate, label, timeoutMs = 45000) => {
+        const startedAt = Date.now();
+        while (Date.now() - startedAt < timeoutMs) {
+          const value = await predicate();
+          if (value) return value;
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        throw new Error("Timed out waiting for " + label);
+      };
+      const clickNav = async (label) => {
+        let button = Array.from(document.querySelectorAll("button.nav-item"))
+          .find((item) => item.textContent?.trim() === label);
+        if (!button) {
+          const toggle = await waitFor(() => document.querySelector("button.icon-button"), "sidebar toggle");
+          toggle.click();
+          button = await waitFor(
+            () => Array.from(document.querySelectorAll("button.nav-item"))
+              .find((item) => item.textContent?.trim() === label),
+            "navigation " + label
+          );
+        }
+        button.click();
+      };
+      const setValue = (element, value) => {
+        const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), "value");
+        descriptor.set.call(element, value);
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+        element.dispatchEvent(new Event("change", { bubbles: true }));
+      };
+
+      await waitFor(() => window.pige, "preload bridge");
+      const connected = await window.pige.models.addPresetProvider({
+        presetId: "openai",
+        apiKey: ${JSON.stringify(input.syntheticToken)}
+      });
+      if (connected.status === "needs_manual_model") {
+        throw new Error("Synthetic OpenAI preset unexpectedly requires a manual bootstrap model.");
+      }
+      const cloudProvider = connected.providers.find((provider) => provider.presetId === "openai");
+      const cloudModel = connected.models.find((model) =>
+        model.providerProfileId === cloudProvider?.id && model.modelId === "gpt-5-mini" && model.enabled
+      );
+      if (!cloudProvider || !cloudModel) throw new Error("Synthetic cloud provider binding is unavailable.");
+      const cloudSummary = await window.pige.models.setDefaultModel({ modelProfileId: cloudModel.id });
+      if (
+        cloudSummary.defaultBinding.state !== "ready" ||
+        cloudSummary.defaultBinding.providerProfileId !== cloudProvider.id ||
+        cloudSummary.defaultBinding.modelProfileId !== cloudModel.id
+      ) {
+        throw new Error("Synthetic cloud provider did not become the exact Global Default.");
+      }
+      await clickNav("Home");
+      const composer = await waitFor(
+        () => document.querySelector('textarea[aria-label="Capture or ask"]'),
+        "Home composer"
+      );
+      setValue(composer, ${JSON.stringify(CONFIRM_ALLOW_PROMPT)});
+      const send = await waitFor(
+        () => document.querySelector('button[aria-label="Send"]:not(:disabled)'),
+        "Home send"
+      );
+      send.click();
+      const readyAction = await waitFor(() => {
+        const button = Array.from(document.querySelectorAll(
+          '.model-egress-prompt[role="group"] .model-egress-actions button:not(:disabled)'
+        )).find((candidate) => candidate.textContent?.trim() === "Allow once");
+        return button ? { button, prompt: button.closest(".model-egress-prompt") } : undefined;
+      }, "ready model egress prompt");
+      const prompt = readyAction.prompt;
+      if (!prompt) throw new Error("Ready model egress prompt is unavailable.");
+      const buttons = Array.from(prompt.querySelectorAll("button"));
+      const jobs = await waitFor(async () => {
+        const value = await window.pige.jobs.list({ states: ["waiting_model_egress"], limit: 20 });
+        return value.jobs.find((job) => job.modelEgressApprovalRequestId) ?? undefined;
+      }, "waiting model egress Job");
+      return {
+        confirmationVisible: Boolean(prompt),
+        allowOnceVisible: buttons.some((button) => button.textContent?.trim() === "Allow once"),
+        denyVisible: buttons.some((button) => button.textContent?.trim() === "Don't send"),
+        requestId: jobs.modelEgressApprovalRequestId,
+        jobId: jobs.id,
+        providerProfileId: cloudProvider.id,
+        modelProfileId: cloudModel.id
+      };
+    })()
+  `, true);
+}
+
 async function runReopenRenderer(browserWindow) {
   return browserWindow.webContents.executeJavaScript(`
     (async () => {
@@ -613,6 +828,103 @@ async function runReopenRenderer(browserWindow) {
       );
       mark("home_reopen");
       await clickNav("Home");
+      mark("model_egress_recovery_wait");
+      const recoveredAction = await waitFor(() => {
+        const button = Array.from(document.querySelectorAll(
+          '.model-egress-prompt[role="group"] .model-egress-actions button:not(:disabled)'
+        )).find((candidate) => candidate.textContent?.trim() === "Allow once");
+        return button ? { button, prompt: button.closest(".model-egress-prompt") } : undefined;
+      }, "ready restarted model egress prompt");
+      const recoveredPrompt = recoveredAction.prompt;
+      if (!recoveredPrompt) throw new Error("Restarted model egress prompt is unavailable.");
+      const recoveredJob = await waitFor(async () => {
+        const value = await window.pige.jobs.list({ states: ["waiting_model_egress"], limit: 20 });
+        return value.jobs.find((job) => job.modelEgressApprovalRequestId) ?? undefined;
+      }, "restarted waiting model egress Job");
+      const confirmationAllowClickedAt = Date.now();
+      recoveredAction.button.click();
+      const confirmationAnswerVisible = await waitFor(
+        () => document.body.textContent?.includes(${JSON.stringify(CONFIRM_ALLOW_ANSWER)}) &&
+          !document.querySelector(".model-egress-prompt") ? true : undefined,
+        "approved model egress answer"
+      );
+      const confirmationCompletedJob = await waitFor(async () => {
+        const value = await window.pige.jobs.list({ limit: 100 });
+        const job = value.jobs.find((candidate) => candidate.id === recoveredJob.id);
+        return job?.state === "completed" ? job : undefined;
+      }, "completed restarted model egress Job");
+      mark("model_egress_recovery_complete");
+      const composer = await waitFor(() => document.querySelector('textarea[aria-label="Capture or ask"]'), "Home composer");
+      setValue(composer, ${JSON.stringify(CONFIRM_LIVE_PROMPT)});
+      const liveSend = await waitFor(
+        () => document.querySelector('button[aria-label="Send"]:not(:disabled)'),
+        "Home live approval send"
+      );
+      liveSend.click();
+      const liveAction = await waitFor(() => {
+        const button = Array.from(document.querySelectorAll(
+          '.model-egress-prompt[role="group"] .model-egress-actions button:not(:disabled)'
+        )).find((candidate) => candidate.textContent?.trim() === "Allow once");
+        return button ? { button, prompt: button.closest(".model-egress-prompt") } : undefined;
+      }, "ready live model egress prompt");
+      const liveJob = await waitFor(async () => {
+        const value = await window.pige.jobs.list({ states: ["waiting_model_egress"], limit: 20 });
+        return value.jobs.find((job) =>
+          job.modelEgressApprovalRequestId &&
+          job.modelEgressApprovalRequestId !== recoveredJob.modelEgressApprovalRequestId
+        ) ?? undefined;
+      }, "waiting live model egress Job");
+      const liveConfirmationAllowClickedAt = Date.now();
+      liveAction.button.click();
+      const liveConfirmationAnswerVisible = await waitFor(
+        () => document.body.textContent?.includes(${JSON.stringify(CONFIRM_LIVE_ANSWER)}) &&
+          !document.querySelector(".model-egress-prompt") ? true : undefined,
+        "live approved model egress answer"
+      );
+      const liveCompletedJob = await waitFor(async () => {
+        const value = await window.pige.jobs.list({ limit: 100 });
+        const job = value.jobs.find((candidate) => candidate.id === liveJob.id);
+        return job?.state === "completed" ? job : undefined;
+      }, "completed live model egress Job");
+      setValue(composer, ${JSON.stringify(CONFIRM_DENY_PROMPT)});
+      const denialSend = await waitFor(
+        () => document.querySelector('button[aria-label="Send"]:not(:disabled)'),
+        "Home denial send"
+      );
+      denialSend.click();
+      const denialAction = await waitFor(() => {
+        const button = Array.from(document.querySelectorAll(
+          '.model-egress-prompt[role="group"] .model-egress-actions button:not(:disabled)'
+        )).find((candidate) => candidate.textContent?.trim() === "Don't send");
+        return button ? { button, prompt: button.closest(".model-egress-prompt") } : undefined;
+      }, "ready model egress denial prompt");
+      const denialPrompt = denialAction.prompt;
+      if (!denialPrompt) throw new Error("Model egress denial prompt is unavailable.");
+      const denialJob = await waitFor(async () => {
+        const value = await window.pige.jobs.list({ states: ["waiting_model_egress"], limit: 20 });
+        return value.jobs.find((job) =>
+          job.modelEgressApprovalRequestId &&
+          job.modelEgressApprovalRequestId !== recoveredJob.modelEgressApprovalRequestId &&
+          job.modelEgressApprovalRequestId !== liveJob.modelEgressApprovalRequestId
+        ) ?? undefined;
+      }, "waiting model egress denial Job");
+      denialAction.button.click();
+      const denialVisible = await waitFor(
+        () => document.body.textContent?.includes("This model send was not allowed. Your input and sources remain saved.") &&
+          !document.querySelector(".model-egress-prompt") ? true : undefined,
+        "durable model egress denial"
+      );
+      const denialTerminal = await waitFor(async () => {
+        const jobs = await window.pige.jobs.list({ limit: 100 });
+        const job = jobs.jobs.find((candidate) => candidate.id === denialJob.id);
+        if (job?.state !== "failed_final") return undefined;
+        const timeline = await window.pige.agent.conversation({ limit: 100 });
+        return timeline?.latestTurn?.jobId === denialJob.id &&
+          timeline.latestTurn.state === "failed_final" &&
+          timeline.latestTurn.error?.code === "model_provider.egress_denied"
+          ? { job, errorCode: timeline.latestTurn.error.code }
+          : undefined;
+      }, "failed-final denied model egress Job");
       mark("dataset_reopen_wait");
       const datasetVisible = await waitFor(
         () => {
@@ -640,7 +952,6 @@ async function runReopenRenderer(browserWindow) {
         "restarted visible undone Activity"
       );
       mark("direct_reopen_wait");
-      const composer = await waitFor(() => document.querySelector('textarea[aria-label="Capture or ask"]'), "Home composer");
       setValue(composer, ${JSON.stringify(DIRECT_PROMPT)});
       const send = await waitFor(() => document.querySelector('button[aria-label="Send"]:not(:disabled)'), "Home send");
       send.click();
@@ -658,7 +969,24 @@ async function runReopenRenderer(browserWindow) {
         directVisible: Boolean(directVisible),
         datasetVisible: Boolean(datasetVisible),
         datasetCitationVisible: Boolean(datasetCitationVisible),
-        activityUndoneVisible: Boolean(activityUndoneVisible)
+        activityUndoneVisible: Boolean(activityUndoneVisible),
+        confirmationRecovered: Boolean(recoveredPrompt),
+        confirmationRequestId: recoveredJob.modelEgressApprovalRequestId,
+        confirmationJobId: recoveredJob.id,
+        confirmationAnswerVisible: Boolean(confirmationAnswerVisible),
+        confirmationAllowClickedAt,
+        confirmationJobState: confirmationCompletedJob.state,
+        liveConfirmationVisible: Boolean(liveAction.prompt),
+        liveConfirmationRequestId: liveJob.modelEgressApprovalRequestId,
+        liveConfirmationJobId: liveJob.id,
+        liveConfirmationAnswerVisible: Boolean(liveConfirmationAnswerVisible),
+        liveConfirmationAllowClickedAt,
+        liveConfirmationJobState: liveCompletedJob.state,
+        denialVisible: Boolean(denialVisible),
+        denialRequestId: denialJob.modelEgressApprovalRequestId,
+        denialJobId: denialJob.id,
+        denialJobState: denialTerminal.job.state,
+        denialErrorCode: denialTerminal.errorCode
       };
     })()
   `, true);
@@ -862,11 +1190,18 @@ async function startProviderServer(requests, streamTiming) {
       method: request.method ?? "",
       path: request.url ?? "",
       authorization: typeof request.headers.authorization === "string" ? request.headers.authorization : "",
-      body
+      body,
+      receivedAt: Date.now()
     });
     if (request.method === "GET" && request.url === "/v1/models") {
       response.writeHead(200, { "content-type": "application/json" });
-      response.end(JSON.stringify({ object: "list", data: [{ id: MODEL_ID, object: "model" }] }));
+      response.end(JSON.stringify({
+        object: "list",
+        data: [
+          { id: MODEL_ID, object: "model" },
+          { id: "gpt-5-mini", object: "model" }
+        ]
+      }));
       return;
     }
     if (request.method !== "POST" || request.url !== "/v1/responses") {
@@ -973,7 +1308,11 @@ async function startProviderServer(requests, streamTiming) {
       return;
     }
     const directArgs = {
-      answer: DIRECT_ANSWER,
+      answer: latestUserText.includes(CONFIRM_ALLOW_PROMPT)
+        ? CONFIRM_ALLOW_ANSWER
+        : latestUserText.includes(CONFIRM_LIVE_PROMPT)
+          ? CONFIRM_LIVE_ANSWER
+          : DIRECT_ANSWER,
       citationRefs: [],
       grounding: "general"
     };

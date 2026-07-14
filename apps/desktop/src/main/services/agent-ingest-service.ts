@@ -71,6 +71,10 @@ import { buildAgentRuntimePolicyContext } from "./agent-policy-context";
 import { createModelEgressDecision } from "./model-egress-policy";
 import { containsRestrictedModelContent } from "./model-egress-content";
 import {
+  ModelEgressApprovalService,
+  type ModelEgressApprovalBinding
+} from "./model-egress-approval-service";
+import {
   assertApprovedModelProviderBinding,
   assertApprovedRuntimeBinding,
   assertModelProviderPair,
@@ -181,6 +185,7 @@ export type AgentIngestPublicationBinding =
 export interface AgentIngestHooks {
   readonly onPolicyResolved?: (snapshot: AgentIngestPolicySnapshot) => void;
   readonly onEgressRecorded?: (operationId: string) => void;
+  readonly onModelEgressPending?: (requestId: string) => void;
   readonly assertSourceCurrent?: (expected: SourceRecord) => void;
   readonly throwIfCancellationRequested?: () => void;
   readonly onPublicationStart?: (
@@ -449,6 +454,7 @@ export class AgentIngestService {
   readonly #toolAuthorization: AgentIngestToolAuthorizationPort;
   readonly #retrieval: AgentIngestRetrievalPort | undefined;
   readonly #proposals: AgentIngestProposalPort | undefined;
+  readonly #modelEgressApprovals: ModelEgressApprovalService | undefined;
 
   constructor(
     models: AgentIngestModelConfigPort,
@@ -457,7 +463,8 @@ export class AgentIngestService {
     evidence: EvidenceAssemblyService = new EvidenceAssemblyService(),
     toolAuthorization: AgentIngestToolAuthorizationPort = allowCurrentAgentIngestTools,
     retrieval?: AgentIngestRetrievalPort,
-    proposals?: AgentIngestProposalPort
+    proposals?: AgentIngestProposalPort,
+    modelEgressApprovals?: ModelEgressApprovalService
   ) {
     this.#models = models;
     this.#runtime = runtime;
@@ -466,6 +473,7 @@ export class AgentIngestService {
     this.#toolAuthorization = toolAuthorization;
     this.#retrieval = retrieval;
     this.#proposals = proposals;
+    this.#modelEgressApprovals = modelEgressApprovals;
   }
 
   hasDefaultModel(): boolean {
@@ -825,7 +833,8 @@ export class AgentIngestService {
     let sourceResponse: AgentIngestResponseResult | undefined;
     let datasetMaterialization: AgentIngestDatasetResult | undefined;
 
-    const authorizeCurrentModelTurn = (): void => {
+    const consumedModelEgressApprovalRequestIds = new Set<string>();
+    const authorizeCurrentModelTurn = async (consumeApproval = false): Promise<void> => {
       if (terminalToolError) throw terminalToolError;
       if (publication || datasetMaterialization) return;
       if (stagedProposal || sourceResponse) {
@@ -898,6 +907,34 @@ export class AgentIngestService {
           retrievalPrivacy?.sensitiveContent === true,
         restrictedContent: retrievalAudit?.available === false || restrictedModelContent
       });
+      const baseDecisionHash = createModelEgressDecisionHash(decision);
+      const approvalBinding: ModelEgressApprovalBinding | undefined =
+        decision.outcome === "confirm" && this.#modelEgressApprovals && job.activeVaultId
+          ? {
+              jobId: job.id,
+              vaultId: job.activeVaultId,
+              providerProfileId: defaultProvider.id,
+              modelProfileId: defaultModel.id,
+              providerIdentityHash: approvedBinding.providerIdentityHash,
+              modelIdentityHash: approvedBinding.modelIdentityHash,
+              policyHash: policy.policyHash,
+              payloadHash,
+              evidenceSummaryHash,
+              baseDecisionHash,
+              reasonCode: decision.reasonCode,
+              contentClasses: decision.contentClasses,
+              payloadCharacters: decision.payloadCharacters,
+              estimatedPayloadTokens: decision.estimatedPayloadTokens,
+              normalPayloadCharacterLimit: decision.normalPayloadCharacterLimit
+            }
+          : undefined;
+      const approvalRequest = approvalBinding
+        ? this.#modelEgressApprovals?.prepare(vaultPath, approvalBinding)
+        : undefined;
+      const auditedDecision: ModelEgressDecision = approvalRequest
+        ? { ...decision, modelEgressApprovalRequestId: approvalRequest.id }
+        : decision;
+      const decisionHash = createModelEgressDecisionHash(auditedDecision);
       const operation = writeModelEgressDecisionOperation({
         vaultPath,
         job,
@@ -907,11 +944,20 @@ export class AgentIngestService {
         policyHash: policy.policyHash,
         payloadHash,
         evidenceSummaryHash,
-        decisionHash: createModelEgressDecisionHash(decision),
-        decision,
+        decisionHash,
+        decision: auditedDecision,
         evidencePack: currentEvidencePack,
         relatedPageIds: retrievalSelection?.evidence.map(({ item }) => item.summary.pageId) ?? []
       });
+      if (approvalRequest && approvalBinding) {
+        this.#modelEgressApprovals?.bindAudit(
+          vaultPath,
+          approvalRequest.id,
+          approvalBinding,
+          operation.id,
+          decisionHash
+        );
+      }
       if (!egressOperationIds.has(operation.id)) {
         egressOperationIds.add(operation.id);
         hooks.onEgressRecorded?.(operation.id);
@@ -928,11 +974,32 @@ export class AgentIngestService {
         approvedBinding,
         "The default provider or model changed during the embedded Pi Agent turn."
       );
-      if (decision.outcome === "block") {
-        throw new PigeDomainError("model_egress.blocked", `Model egress blocked by policy: ${decision.reasonCode}.`);
+      if (auditedDecision.outcome === "block") {
+        throw new PigeDomainError("model_egress.blocked", `Model egress blocked by policy: ${auditedDecision.reasonCode}.`);
       }
-      if (decision.outcome === "confirm") {
-        throw new PigeDomainError("model_egress.confirmation_required", `Model egress requires confirmation: ${decision.reasonCode}.`);
+      if (auditedDecision.outcome === "confirm") {
+        if (approvalRequest && approvalBinding && this.#modelEgressApprovals) {
+          if (approvalRequest.state === "pending") {
+            hooks.onModelEgressPending?.(approvalRequest.id);
+            await this.#modelEgressApprovals.waitForDecision(
+              vaultPath,
+              approvalRequest.id,
+              approvalBinding,
+              hooks.signal
+            );
+          }
+          if (consumeApproval) {
+            const consumed = this.#modelEgressApprovals.consume(vaultPath, approvalRequest.id, approvalBinding);
+            consumedModelEgressApprovalRequestIds.add(consumed.id);
+          } else {
+            this.#modelEgressApprovals.assertApproved(vaultPath, approvalRequest.id, approvalBinding);
+          }
+        } else {
+          throw new PigeDomainError(
+            "model_egress.confirmation_required",
+            `Model egress requires confirmation: ${auditedDecision.reasonCode}.`
+          );
+        }
       }
       if (currentRetrievalPrivacyHash) {
         approvedRetrievalPrivacyHash = currentRetrievalPrivacyHash;
@@ -940,7 +1007,7 @@ export class AgentIngestService {
       currentPromptContext = promptContextResult.context;
     };
 
-    authorizeCurrentModelTurn();
+    await authorizeCurrentModelTurn();
     const systemPrompt = createSystemPrompt(hooks.userTurn?.objective ?? "capture") + (this.#proposals
       ? "\nUse pige_stage_knowledge_note_proposal when the generated note should wait for explicit human review. Staging does not apply or publish the proposed Markdown."
       : "");
@@ -2070,7 +2137,7 @@ export class AgentIngestService {
         systemPrompt,
         userPrompt,
         tools,
-        beforeModelTurn: authorizeCurrentModelTurn,
+        beforeModelTurn: () => authorizeCurrentModelTurn(true),
         terminalActionRecovery: {
           requiredToolNames: tools
             .map((tool) => tool.name)
@@ -2084,6 +2151,10 @@ export class AgentIngestService {
       if (stagedProposal) return stagedProposal;
       if (sourceResponse) return sourceResponse;
       throw caught;
+    } finally {
+      for (const requestId of consumedModelEgressApprovalRequestIds) {
+        this.#modelEgressApprovals?.markReconciled(vaultPath, requestId);
+      }
     }
     if (terminalToolError) throw terminalToolError;
     if (dependencyWait) {
@@ -3279,7 +3350,24 @@ function writeModelEgressDecisionOperation(input: {
   );
   const operationPath = resolveVaultRelativePath(input.vaultPath, createOperationPath(operationId));
   if (fs.existsSync(operationPath)) {
-    return OperationRecordSchema.parse(JSON.parse(fs.readFileSync(operationPath, "utf8")));
+    const existing = OperationRecordSchema.parse(JSON.parse(fs.readFileSync(operationPath, "utf8")));
+    if (
+      existing.id !== operationId ||
+      existing.jobId !== input.job.id ||
+      existing.modelProfileId !== input.modelProfileId ||
+      existing.policyAudit?.policyContextId !== input.policyContextId ||
+      existing.policyAudit.policyHash !== input.policyHash ||
+      existing.modelEgressAudit?.payloadHash !== input.payloadHash ||
+      existing.modelEgressAudit.evidenceSummaryHash !== input.evidenceSummaryHash ||
+      existing.modelEgressAudit.decisionHash !== input.decisionHash ||
+      existing.modelEgressAudit.modelEgressApprovalRequestId !== input.decision.modelEgressApprovalRequestId
+    ) {
+      throw new PigeDomainError(
+        "model_egress.audit_conflict",
+        "The existing model egress audit does not match the exact approved invocation."
+      );
+    }
+    return existing;
   }
   const operation = OperationRecordSchema.parse({
     id: operationId,
@@ -3292,7 +3380,7 @@ function writeModelEgressDecisionOperation(input: {
       clientCapabilityTier: "desktop_full"
     },
     modelProfileId: input.modelProfileId,
-    permissionDecisionIds: input.decision.permissionDecisionId ? [input.decision.permissionDecisionId] : [],
+    permissionDecisionIds: [],
     policyAudit: {
       policyContextId: input.policyContextId,
       policyHash: input.policyHash,
@@ -3307,7 +3395,10 @@ function writeModelEgressDecisionOperation(input: {
       normalPayloadCharacterLimit: input.decision.normalPayloadCharacterLimit,
       contentClasses: input.decision.contentClasses,
       outcome: input.decision.outcome,
-      reasonCode: input.decision.reasonCode
+      reasonCode: input.decision.reasonCode,
+      ...(input.decision.modelEgressApprovalRequestId
+        ? { modelEgressApprovalRequestId: input.decision.modelEgressApprovalRequestId }
+        : {})
     },
     kind: "model_egress_decision",
     targetRefs: [{ kind: "model", id: input.modelProfileId }],
@@ -4507,6 +4598,7 @@ function createModelEgressDecisionHash(decision: ModelEgressDecision): string {
     estimatedPayloadTokens: decision.estimatedPayloadTokens,
     normalPayloadCharacterLimit: decision.normalPayloadCharacterLimit,
     policyHash: decision.policyHash,
+    modelEgressApprovalRequestId: decision.modelEgressApprovalRequestId ?? null,
     permissionDecisionId: decision.permissionDecisionId ?? null
   });
   return `sha256:${createHash("sha256").update(canonicalDecision, "utf8").digest("hex")}`;

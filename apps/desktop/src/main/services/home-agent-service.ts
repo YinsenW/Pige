@@ -57,6 +57,11 @@ import {
 } from "./dataset-query-types";
 import { containsRestrictedModelContent } from "./model-egress-content";
 import { createModelEgressDecision } from "./model-egress-policy";
+import {
+  ModelEgressApprovalService,
+  ModelEgressConfirmationRequiredError,
+  type ModelEgressApprovalBinding
+} from "./model-egress-approval-service";
 import type { ModelProviderRuntimeConfig } from "./model-provider-registry";
 import {
   assertApprovedModelProviderBinding,
@@ -262,6 +267,7 @@ export class HomeAgentService {
   readonly #conversations: AgentTurnConversationStore;
   readonly #urls: HomeAgentUrlPort | undefined;
   readonly #datasets: HomeAgentDatasetQueryPort | undefined;
+  readonly #modelEgressApprovals: ModelEgressApprovalService | undefined;
 
   constructor(
     vaults: HomeAgentVaultPort,
@@ -272,7 +278,8 @@ export class HomeAgentService {
     capabilities?: AgentIngestCapabilityPort,
     conversations: AgentTurnConversationStore = new AgentTurnConversationStore(),
     urls?: HomeAgentUrlPort,
-    datasets?: HomeAgentDatasetQueryPort
+    datasets?: HomeAgentDatasetQueryPort,
+    modelEgressApprovals?: ModelEgressApprovalService
   ) {
     this.#vaults = vaults;
     this.#models = models;
@@ -283,6 +290,7 @@ export class HomeAgentService {
     this.#conversations = conversations;
     this.#urls = urls;
     this.#datasets = datasets;
+    this.#modelEgressApprovals = modelEgressApprovals;
   }
 
   async ask(request: HomeAgentAskRequest): Promise<HomeAgentAskResult> {
@@ -593,6 +601,25 @@ export class HomeAgentService {
             )
           };
         }
+        if (!datasetContinuation && sourceJob.state === "waiting_model_egress") {
+          return {
+            requestId,
+            jobId: sourceJob.id,
+            conversationEventId: preservedTurn.event.id,
+            conversationId: preservedTurn.event.conversationId,
+            tailEventId: preservedTurn.event.id,
+            state: "waiting",
+            modelUsage: "none",
+            sourceIds,
+            error: sourceJob.error ?? createErrorSummary(
+              "model_provider.egress_confirmation_required",
+              "errors.model_provider.egress_confirmation_required",
+              false,
+              "confirm_model_egress",
+              "warning"
+            )
+          };
+        }
         if (!datasetContinuation && sourceJob.state === "waiting_dependency") {
           return {
             requestId,
@@ -796,6 +823,7 @@ export class HomeAgentService {
       session.current.state === "cancel_requested" ||
       session.current.state === "waiting_dependency" ||
       session.current.state === "waiting_permission" ||
+      session.current.state === "waiting_model_egress" ||
       session.current.state === "awaiting_review"
     ) {
       return {
@@ -1117,7 +1145,8 @@ export class HomeAgentService {
       );
     };
 
-    const authorizeCurrentModelTurn = async (): Promise<void> => {
+    const consumedModelEgressApprovalRequestIds = new Set<string>();
+    const authorizeCurrentModelTurn = async (consumeApproval = false): Promise<void> => {
       assertCurrentBindingAndVault();
       let currentUrlEvidence = urlEvidence;
       let urlEvidenceDrifted = false;
@@ -1183,30 +1212,65 @@ export class HomeAgentService {
           currentDatasetEvidence?.restrictedContent === true ||
           containsRestrictedModelContent(payload)
       });
+      const payloadHash = hashValue(payload);
+      const evidenceSummaryHash = createHomeEvidenceSummaryHash(
+        searchResult,
+        approvedBinding,
+        evidencePrivacy,
+        currentUrlEvidence,
+        urlEvidenceInspected,
+        datasetCatalog,
+        datasetResult,
+        currentDatasetEvidence
+      );
+      const baseDecisionHash = createModelEgressDecisionHash(decision);
+      const approvalBinding: ModelEgressApprovalBinding | undefined =
+        decision.outcome === "confirm" && this.#modelEgressApprovals
+          ? {
+              jobId,
+              vaultId: activeVault.vaultId,
+              providerProfileId: defaultProvider.id,
+              modelProfileId: defaultModel.id,
+              providerIdentityHash: approvedBinding.providerIdentityHash,
+              modelIdentityHash: approvedBinding.modelIdentityHash,
+              policyHash: policy.policyHash,
+              payloadHash,
+              evidenceSummaryHash,
+              baseDecisionHash,
+              reasonCode: decision.reasonCode,
+              contentClasses: decision.contentClasses,
+              payloadCharacters: decision.payloadCharacters,
+              estimatedPayloadTokens: decision.estimatedPayloadTokens,
+              normalPayloadCharacterLimit: decision.normalPayloadCharacterLimit
+            }
+          : undefined;
+      const approvalRequest = approvalBinding
+        ? this.#modelEgressApprovals?.prepare(vaultPath, approvalBinding)
+        : undefined;
+      const auditedDecision: ModelEgressDecision = approvalRequest
+        ? { ...decision, modelEgressApprovalRequestId: approvalRequest.id }
+        : decision;
+      const decisionHash = createModelEgressDecisionHash(auditedDecision);
       const operation = writeHomeModelEgressDecisionOperation({
         vaultPath,
         job: session.current,
         activeVault,
         modelProfileId: defaultModel.id,
         policy,
-        payloadHash: hashValue(payload),
-        evidenceSummaryHash: createHomeEvidenceSummaryHash(
-          searchResult,
-          approvedBinding,
-          evidencePrivacy,
-          currentUrlEvidence,
-          urlEvidenceInspected,
-          datasetCatalog,
-          datasetResult,
-          currentDatasetEvidence
-        ),
-        decisionHash: createModelEgressDecisionHash(decision),
-        decision
+        payloadHash,
+        evidenceSummaryHash,
+        decisionHash,
+        decision: auditedDecision
       });
-      const permissionDecisionIds = Array.from(new Set([
-        ...(session.current.privacy?.permissionDecisionIds ?? []),
-        ...(decision.permissionDecisionId ? [decision.permissionDecisionId] : [])
-      ]));
+      if (approvalRequest && approvalBinding) {
+        this.#modelEgressApprovals?.bindAudit(
+          vaultPath,
+          approvalRequest.id,
+          approvalBinding,
+          operation.id,
+          decisionHash
+        );
+      }
       session.current = this.#jobs.writeAgentTurnJob(session.current, JobRecordSchema.parse({
         ...session.current,
         operationIds: Array.from(new Set([...(session.current.operationIds ?? []), operation.id])),
@@ -1216,7 +1280,7 @@ export class HomeAgentService {
           usedNetwork: session.current.privacy?.usedNetwork ?? false,
           usedShell: false,
           accessedExternalFiles: false,
-          permissionDecisionIds
+          permissionDecisionIds: session.current.privacy?.permissionDecisionIds ?? []
         }
       }));
       if (evidenceDrifted || urlEvidenceDrifted || datasetEvidenceDrifted) {
@@ -1225,10 +1289,50 @@ export class HomeAgentService {
           "The selected evidence binding changed during the Home Agent turn."
         );
       }
-      if (decision.outcome === "block") {
+      if (auditedDecision.outcome === "block") {
         throw new PigeDomainError("model_egress.blocked", "The Home question is blocked by model egress policy.");
       }
-      if (decision.outcome === "confirm") {
+      if (auditedDecision.outcome === "confirm") {
+        if (approvalRequest && approvalBinding && this.#modelEgressApprovals) {
+          if (approvalRequest.state === "pending") {
+            const now = new Date().toISOString();
+            const { waitingDependency: _waiting, finishedAt: _finished, ...current } = session.current;
+            session.current = this.#jobs.writeAgentTurnJob(session.current, JobRecordSchema.parse({
+              ...current,
+              state: "waiting_model_egress",
+              stage: "waiting_for_model",
+              updatedAt: now,
+              error: PigeErrorSummarySchema.parse({
+                ...createErrorSummary(
+                  "model_provider.egress_confirmation_required",
+                  "errors.model_provider.egress_confirmation_required",
+                  false,
+                  "confirm_model_egress",
+                  "warning"
+                ),
+                modelEgressApprovalRequestId: approvalRequest.id
+              }),
+              message: "Agent turn is waiting for one exact model egress decision."
+            }));
+            try {
+              await this.#modelEgressApprovals.waitForDecision(
+                vaultPath,
+                approvalRequest.id,
+                approvalBinding,
+                signal
+              );
+            } finally {
+              session.current = this.#jobs.readAgentTurnJob(session.current.id) ?? session.current;
+            }
+          }
+          if (consumeApproval) {
+            const consumed = this.#modelEgressApprovals.consume(vaultPath, approvalRequest.id, approvalBinding);
+            consumedModelEgressApprovalRequestIds.add(consumed.id);
+          } else {
+            this.#modelEgressApprovals.assertApproved(vaultPath, approvalRequest.id, approvalBinding);
+          }
+          return;
+        }
         throw new PigeDomainError(
           "model_egress.confirmation_required",
           "The Home question requires model egress confirmation."
@@ -1477,8 +1581,10 @@ export class HomeAgentService {
         tools,
         ...(signal ? { signal } : {}),
         beforeModelTurn: async () => {
+          // Pi may prepare once after a terminating tool even though no provider call follows.
+          if (finalOutput) return;
           modelTurnEpoch += 1;
-          await authorizeCurrentModelTurn();
+          await authorizeCurrentModelTurn(true);
           session.modelInvocationStarted = true;
         },
         ...(publishDraft ? {
@@ -1494,6 +1600,10 @@ export class HomeAgentService {
       if (urlToolFailure) throw urlToolFailure;
       if (datasetToolFailure) throw datasetToolFailure;
       throw caught;
+    } finally {
+      for (const requestId of consumedModelEgressApprovalRequestIds) {
+        this.#modelEgressApprovals?.markReconciled(vaultPath, requestId);
+      }
     }
     assertCurrentBindingAndVault();
 
@@ -1670,6 +1780,18 @@ export class HomeAgentService {
   ): void {
     const now = new Date().toISOString();
     const { waitingDependency: _waitingDependency, finishedAt: _finishedAt, ...current } = session.current;
+    if (failure.error.modelEgressApprovalRequestId) {
+      session.current = this.#jobs.writeAgentTurnJob(session.current, JobRecordSchema.parse({
+        ...current,
+        state: "waiting_model_egress",
+        stage: "waiting_for_model",
+        updatedAt: now,
+        error: failure.error,
+        privacy: modelInvocationPrivacy(session),
+        message: "Agent turn is waiting for one exact model egress decision."
+      }));
+      return;
+    }
     if (
       failure.error.code === "model_provider.default_model_missing" ||
       failure.error.code === "model_provider.binding_unusable"
@@ -2388,7 +2510,7 @@ function writeHomeModelEgressDecisionOperation(input: {
       clientCapabilityTier: "desktop_full"
     },
     modelProfileId: input.modelProfileId,
-    permissionDecisionIds: input.decision.permissionDecisionId ? [input.decision.permissionDecisionId] : [],
+    permissionDecisionIds: [],
     policyAudit: {
       policyContextId: input.policy.policyContextId,
       policyHash: input.policy.policyHash,
@@ -2403,7 +2525,10 @@ function writeHomeModelEgressDecisionOperation(input: {
       normalPayloadCharacterLimit: input.decision.normalPayloadCharacterLimit,
       contentClasses: input.decision.contentClasses,
       outcome: input.decision.outcome,
-      reasonCode: input.decision.reasonCode
+      reasonCode: input.decision.reasonCode,
+      ...(input.decision.modelEgressApprovalRequestId
+        ? { modelEgressApprovalRequestId: input.decision.modelEgressApprovalRequestId }
+        : {})
     },
     kind: "model_egress_decision",
     targetRefs: [{ kind: "model", id: input.modelProfileId }],
@@ -2433,6 +2558,7 @@ function createModelEgressDecisionHash(decision: ModelEgressDecision): string {
     estimatedPayloadTokens: decision.estimatedPayloadTokens,
     normalPayloadCharacterLimit: decision.normalPayloadCharacterLimit,
     policyHash: decision.policyHash,
+    modelEgressApprovalRequestId: decision.modelEgressApprovalRequestId ?? null,
     permissionDecisionId: decision.permissionDecisionId ?? null
   }));
 }
@@ -2825,14 +2951,32 @@ function toHomeAgentFailure(caught: unknown): {
       };
     }
     if (caught.code === "model_egress.confirmation_required") {
+      const requestId = caught instanceof ModelEgressConfirmationRequiredError
+        ? caught.requestId
+        : undefined;
       return {
         state: "waiting",
+        error: PigeErrorSummarySchema.parse({
+          ...createErrorSummary(
+            "model_provider.egress_confirmation_required",
+            "errors.model_provider.egress_confirmation_required",
+            false,
+            "confirm_model_egress",
+            "warning"
+          ),
+          ...(requestId ? { modelEgressApprovalRequestId: requestId } : {})
+        })
+      };
+    }
+    if (caught.code === "model_egress.denied") {
+      return {
+        state: "failed",
         error: createErrorSummary(
-          "model_provider.egress_confirmation_required",
-          "errors.model_provider.egress_confirmation_required",
+          "model_provider.egress_denied",
+          "errors.model_provider.egress_denied",
           false,
-          "configure_model",
-          "warning"
+          "none",
+          "info"
         )
       };
     }

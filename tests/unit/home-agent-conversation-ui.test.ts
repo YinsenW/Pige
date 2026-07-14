@@ -9,8 +9,11 @@ import type {
   AgentSubmitTurnRequest,
   AgentSubmitTurnResult,
   AgentTurnDraftEvent,
+  JobsListRequest,
   JobSummary,
   KnowledgeActivitySummary,
+  ModelEgressPendingRequest,
+  ModelEgressResolveRequest,
   OnboardingStatus
 } from "@pige/contracts";
 
@@ -279,6 +282,144 @@ describe("Home durable Agent conversation UI", () => {
 
     await act(async () => reopened.root.unmount());
     dom.window.close();
+  });
+
+  it("restores one bounded model-egress prompt and resumes the exact live Job once", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.jobs = [modelEgressWaitingJob()];
+    harness.modelEgressPending = modelEgressPendingRequest();
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await waitFor(dom, () => buttons(container, "Allow once").length === 1);
+    expect(buttons(container, "Don't send")).toHaveLength(1);
+    expect(container.textContent).toContain("This selected context is marked sensitive");
+    expect(container.textContent).not.toContain("provider_sensitive_home");
+    expect(container.textContent).not.toContain("This model service needs cloud-send approval");
+    expect(container.querySelector(".job-pill")).toBeNull();
+    expect(container.querySelector('[aria-label="Needs attention"]')).toBeNull();
+
+    await clickButton(dom, container, "Allow once");
+    await waitFor(dom, () => harness.modelEgressResolveRequests.length === 1);
+    expect(harness.modelEgressResolveRequests[0]).toEqual({
+      requestId: "egressreq_20260714_homeapproval0001",
+      jobId: "job_20260714_homeapproval",
+      decision: "allow_once"
+    });
+    await waitFor(dom, () => buttons(container, "Allow once").length === 0);
+    expect(buttons(container, "Don't send")).toHaveLength(0);
+    expect(container.querySelector('.job-pill [aria-label="Processing"]')).not.toBeNull();
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("discovers a live model-egress wait through the full filtered App refresh", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.enforceJobFilters = true;
+    harness.submitTurn = (request) => {
+      harness.submitRequests.push(request);
+      harness.jobs = [modelEgressWaitingJob()];
+      harness.modelEgressPending = modelEgressPendingRequest();
+      return new Promise<AgentSubmitTurnResult>(() => undefined);
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await setTextareaValue(dom, container, "Send selected sensitive context.");
+    await clickButton(dom, container, "Send");
+    await waitFor(dom, () => buttons(container, "Allow once").length === 1);
+
+    expect(harness.jobListRequests.some((request) =>
+      request.states?.includes("waiting_model_egress") === true
+    )).toBe(true);
+    expect(buttons(container, "Allow once")).toHaveLength(1);
+    expect(buttons(container, "Don't send")).toHaveLength(1);
+    expect(container.querySelector(".job-pill")).toBeNull();
+    expect(container.querySelector('[aria-label="Needs attention"]')).toBeNull();
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it.each(["allow_once", "deny"] as const)(
+    "adopts durable %s truth after a post-commit IPC rejection",
+    async (decision) => {
+      const dom = createDom();
+      const harness = createHarness(modelEgressWaitingTimeline());
+      harness.jobs = [modelEgressWaitingJob()];
+      harness.modelEgressPending = modelEgressPendingRequest();
+      harness.modelEgressResolveMode = "post_commit_reject";
+      const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+      const action = decision === "allow_once" ? "Allow once" : "Don't send";
+      await waitFor(dom, () => buttons(container, action).length === 1);
+      await clickButton(dom, container, action);
+      await waitFor(dom, () => buttons(container, "Allow once").length === 0);
+
+      expect(buttons(container, "Don't send")).toHaveLength(0);
+      expect(container.textContent).not.toContain("Saving...");
+      expect(container.textContent).not.toContain("could not verify");
+      expect(container.querySelector(
+        `.job-pill [aria-label="${decision === "deny" ? "Needs attention" : "Processing"}"]`
+      )).not.toBeNull();
+
+      await act(async () => root.unmount());
+      dom.window.close();
+    }
+  );
+
+  it("ignores an old vault decision result after the active vault changes", async () => {
+    const dom = createDom();
+    const harness = createHarness(modelEgressWaitingTimeline());
+    harness.jobs = [modelEgressWaitingJob()];
+    harness.modelEgressPending = modelEgressPendingRequest();
+    harness.modelEgressResolveMode = "success_switch_vault";
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await waitFor(dom, () => buttons(container, "Allow once").length === 1);
+    await clickButton(dom, container, "Allow once");
+    await waitFor(dom, () => harness.onboarding.activeVault?.vaultId === "vault_20260714_secondvault");
+    await act(async () => settle(dom));
+
+    expect(buttons(container, "Allow once")).toHaveLength(0);
+    expect(buttons(container, "Don't send")).toHaveLength(0);
+    expect(container.textContent).not.toContain("This selected context is marked sensitive");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps a retryable exact decision after an uncertain IPC rejection and fails closed if reread fails", async () => {
+    const retryDom = createDom();
+    const retryHarness = createHarness(undefined);
+    retryHarness.jobs = [modelEgressWaitingJob()];
+    retryHarness.modelEgressPending = modelEgressPendingRequest();
+    retryHarness.modelEgressResolveMode = "reject_pending";
+    const retryMount = await mountHome(retryDom, makePigeApi(retryHarness));
+
+    await waitFor(retryDom, () => buttons(retryMount.container, "Allow once").length === 1);
+    await clickButton(retryDom, retryMount.container, "Allow once");
+    await waitFor(retryDom, () => retryMount.container.textContent?.includes("The decision was not saved") === true);
+    expect(buttons(retryMount.container, "Allow once")).toHaveLength(1);
+    expect(buttons(retryMount.container, "Don't send")).toHaveLength(1);
+    await act(async () => retryMount.root.unmount());
+    retryDom.window.close();
+
+    const unknownDom = createDom();
+    const unknownHarness = createHarness(undefined);
+    unknownHarness.jobs = [modelEgressWaitingJob()];
+    unknownHarness.modelEgressPending = modelEgressPendingRequest();
+    unknownHarness.modelEgressResolveMode = "reject_unknown";
+    const unknownMount = await mountHome(unknownDom, makePigeApi(unknownHarness));
+
+    await waitFor(unknownDom, () => buttons(unknownMount.container, "Allow once").length === 1);
+    await clickButton(unknownDom, unknownMount.container, "Allow once");
+    await waitFor(unknownDom, () => unknownMount.container.textContent?.includes("could not verify") === true);
+    expect(buttons(unknownMount.container, "Allow once")).toHaveLength(0);
+    expect(buttons(unknownMount.container, "Don't send")).toHaveLength(0);
+    await act(async () => unknownMount.root.unmount());
+    unknownDom.window.close();
   });
 
   it("gives a picker source Job sole status ownership before submission resolves", async () => {
@@ -900,6 +1041,8 @@ interface ConversationHarness {
   timeline: AgentConversationTimeline | undefined;
   onboarding: OnboardingStatus;
   jobs: JobSummary[];
+  enforceJobFilters: boolean;
+  readonly jobListRequests: JobsListRequest[];
   activities: KnowledgeActivitySummary[];
   readonly submitRequests: AgentSubmitTurnRequest[];
   readonly retryJobIds: string[];
@@ -909,6 +1052,10 @@ interface ConversationHarness {
   activityUndoMode: "success" | "post_commit_reject" | "retryable_reject" | "unknown_reject";
   activityListReads: number;
   dismissFirstHomeCalls: number;
+  modelEgressPending: ModelEgressPendingRequest | undefined;
+  modelEgressPendingReads: number;
+  readonly modelEgressResolveRequests: ModelEgressResolveRequest[];
+  modelEgressResolveMode: "success" | "reject_pending" | "reject_unknown" | "post_commit_reject" | "success_switch_vault";
   submitTurn: (request: AgentSubmitTurnRequest) => Promise<AgentSubmitTurnResult>;
   emitDraft: (event: AgentTurnDraftEvent) => void;
 }
@@ -918,6 +1065,8 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     timeline,
     onboarding: readyOnboarding(),
     jobs: [],
+    enforceJobFilters: false,
+    jobListRequests: [],
     activities: [],
     submitRequests: [],
     retryJobIds: [],
@@ -927,6 +1076,10 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     activityUndoMode: "success",
     activityListReads: 0,
     dismissFirstHomeCalls: 0,
+    modelEgressPending: undefined,
+    modelEgressPendingReads: 0,
+    modelEgressResolveRequests: [],
+    modelEgressResolveMode: "success",
     submitTurn: async (request) => {
       harness.submitRequests.push(request);
       return completedResult();
@@ -981,13 +1134,23 @@ function makePigeApi(harness: ConversationHarness): object {
       }
     },
     jobs: {
-      list: async () => ({
+      list: async (request: JobsListRequest = {}) => {
+        harness.jobListRequests.push(request);
+        const stateFilter = new Set(request.states ?? []);
+        const classFilter = new Set(request.classes ?? []);
+        const jobs = harness.enforceJobFilters
+          ? harness.jobs
+              .filter((job) => stateFilter.size === 0 || stateFilter.has(job.state))
+              .filter((job) => classFilter.size === 0 || classFilter.has(job.class))
+          : harness.jobs;
+        return {
         scannedAt: "2026-07-12T08:00:00.000Z",
-        activeVaultId: "vault_home_conversation",
-        total: harness.jobs.length,
+        activeVaultId: harness.onboarding.activeVault?.vaultId ?? "vault_home_conversation",
+        total: jobs.length,
         invalidJobCount: 0,
-        jobs: harness.jobs
-      }),
+        jobs
+        };
+      },
       retry: async ({ jobId }: { readonly jobId: string }) => {
         harness.retryJobIds.push(jobId);
         if (harness.timeline?.latestTurn?.jobId === jobId) {
@@ -1008,6 +1171,55 @@ function makePigeApi(harness: ConversationHarness): object {
           ? { ...job, state: "cancel_requested", updatedAt: "2026-07-12T10:00:01.000Z" }
           : job);
         return { status: "cancel_requested", job: harness.jobs.find((job) => job.id === jobId) };
+      }
+    },
+    modelEgress: {
+      pending: async () => {
+        harness.modelEgressPendingReads += 1;
+        if (
+          harness.modelEgressResolveMode === "reject_unknown" &&
+          harness.modelEgressResolveRequests.length > 0
+        ) throw new Error("synthetic unreadable model egress state");
+        return harness.modelEgressPending;
+      },
+      resolve: async (request: ModelEgressResolveRequest) => {
+        harness.modelEgressResolveRequests.push(request);
+        if (harness.modelEgressResolveMode === "reject_pending" || harness.modelEgressResolveMode === "reject_unknown") {
+          throw new Error("synthetic model egress resolution failure");
+        }
+        harness.modelEgressPending = undefined;
+        harness.jobs = harness.jobs.map((job) => job.id === request.jobId
+          ? {
+              ...job,
+              state: request.decision === "deny" ? "failed_final" : "running",
+              modelEgressApprovalRequestId: undefined,
+              updatedAt: "2026-07-14T08:00:01.000Z"
+            }
+          : job);
+        if (harness.timeline?.latestTurn?.jobId === request.jobId) {
+          harness.timeline = {
+            ...harness.timeline,
+            latestTurn: {
+              jobId: harness.timeline.latestTurn.jobId,
+              userEventId: harness.timeline.latestTurn.userEventId,
+              state: request.decision === "deny" ? "failed_final" : "running"
+            }
+          };
+        }
+        if (harness.modelEgressResolveMode === "success_switch_vault") {
+          harness.onboarding = {
+            ...readyOnboarding(),
+            activeVault: { ...homeVaultSummary(), vaultId: "vault_20260714_secondvault", name: "Second vault" }
+          };
+        }
+        if (harness.modelEgressResolveMode === "post_commit_reject") {
+          throw new Error("synthetic post-commit transport rejection");
+        }
+        return {
+          status: request.decision === "deny" ? "denied" : "approved",
+          requestId: request.requestId,
+          jobId: request.jobId
+        };
       }
     },
     activity: {
@@ -1326,6 +1538,60 @@ function sourceWaitingForModelJob(): JobSummary {
     message: "Source preserved; waiting for model.",
     createdAt: "2026-07-13T08:00:00.000Z",
     updatedAt: "2026-07-13T08:00:01.000Z"
+  };
+}
+
+function modelEgressWaitingJob(): JobSummary {
+  return {
+    id: "job_20260714_homeapproval",
+    class: "agent_turn",
+    state: "waiting_model_egress",
+    stage: "waiting_for_model",
+    modelEgressApprovalRequestId: "egressreq_20260714_homeapproval0001",
+    message: "Agent turn is waiting for one exact model egress decision.",
+    createdAt: "2026-07-14T08:00:00.000Z",
+    updatedAt: "2026-07-14T08:00:00.000Z"
+  };
+}
+
+function modelEgressWaitingTimeline(): AgentConversationTimeline {
+  return {
+    conversationId: "conv_20260714_homeapproval",
+    tailEventId: "evt_20260714_homeapprovaluser",
+    canFollowUp: false,
+    messages: [{
+      id: "evt_20260714_homeapprovaluser",
+      role: "user",
+      createdAt: "2026-07-14T08:00:00.000Z",
+      text: "Send selected sensitive context.",
+      jobId: "job_20260714_homeapproval"
+    }],
+    latestTurn: {
+      jobId: "job_20260714_homeapproval",
+      userEventId: "evt_20260714_homeapprovaluser",
+      state: "waiting_model_egress",
+      error: {
+        code: "model_provider.egress_confirmation_required",
+        domain: "model_provider",
+        messageKey: "errors.model_provider.egress_confirmation_required",
+        retryable: false,
+        severity: "warning",
+        userAction: "confirm_model_egress",
+        modelEgressApprovalRequestId: "egressreq_20260714_homeapproval0001"
+      }
+    }
+  };
+}
+
+function modelEgressPendingRequest(): ModelEgressPendingRequest {
+  return {
+    requestId: "egressreq_20260714_homeapproval0001",
+    jobId: "job_20260714_homeapproval",
+    providerProfileId: "provider_sensitive_home",
+    modelProfileId: "model_sensitive_home",
+    reasonCode: "sensitive_confirmation",
+    contentClasses: ["sensitive"],
+    requestedAt: "2026-07-14T08:00:00.000Z"
   };
 }
 

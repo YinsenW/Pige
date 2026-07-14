@@ -192,6 +192,39 @@ describe("desktop shell build contract", () => {
     expect(retryHandler).toContain("scheduleAgentTurnProcessing()");
   });
 
+  it("exposes one-use Model Egress decisions through strict main and preload boundaries", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
+    const pendingHandler = mainSource.slice(
+      mainSource.indexOf('ipcMain.handle("modelEgress.pending"'),
+      mainSource.indexOf('ipcMain.handle("modelEgress.resolve"')
+    );
+    const resolveHandler = mainSource.slice(
+      mainSource.indexOf('ipcMain.handle("modelEgress.resolve"'),
+      mainSource.indexOf('ipcMain.handle("activity.list"')
+    );
+
+    expect(contractsSource).toContain("readonly modelEgress:");
+    expect(contractsSource).toContain("export interface ModelEgressResolveRequest");
+    expect(pendingHandler).toContain("ModelEgressPendingRequestQuerySchema.safeParse(request)");
+    expect(pendingHandler).toContain("getJobsService().pendingModelEgress(parsed.data.requestId)");
+    expect(pendingHandler).toContain("ModelEgressPendingRequestSchema.safeParse(pending)");
+    expect(resolveHandler).toContain("ModelEgressResolveRequestSchema.safeParse(request)");
+    expect(resolveHandler).toContain("getJobsService().resolveModelEgress(parsed.data)");
+    expect(resolveHandler).toContain("ModelEgressResolveResultSchema.safeParse(result)");
+    expect(resolveHandler).toContain("scheduleAgentTurnProcessing()");
+    expect(mainSource).toContain('rootPath: app.getPath("userData")');
+    expect(mainSource).toContain("getVaultService().assertWriterLease(vaultPath)");
+    expect(preloadSource).toContain('ipcRenderer.invoke("modelEgress.pending", request)');
+    expect(preloadSource).toContain('ipcRenderer.invoke("modelEgress.resolve", request)');
+    expect(rendererSource).toContain('window.pige.modelEgress.resolve({');
+    expect(rendererSource).toContain('decideModelEgress("allow_once")');
+    expect(rendererSource).toContain('decideModelEgress("deny")');
+    expect(resolveHandler).not.toContain("permissionDecisionId");
+  });
+
   it("routes proposal decisions through durable Job apply and startup recovery", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const approveHandler = mainSource.slice(
@@ -382,7 +415,7 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain("new DatasetQueryService()");
     expect(mainSource).toContain("getDatasetQueryService()");
     expect(mainSource).toContain('getDatasetService().canMaterialize("csv_file")');
-    expect(mainSource).toContain("getDatasetService()\n    );");
+    expect(mainSource).toContain("getDatasetService(),\n      getModelEgressApprovalService()\n    );");
     expect(buildSource).toContain("DATASET_QUERY_WORKER_ENTRY_NAME");
     expect(buildSource).toContain('alias("./src/main/workers/dataset-query-worker.ts")');
     expect(queryServiceSource).not.toContain("node:sqlite");

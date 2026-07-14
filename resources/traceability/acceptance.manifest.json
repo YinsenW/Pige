@@ -864,10 +864,10 @@
     },
     "PIGE-JOB-002": {
       "status": "partial",
-      "evidence": ["EV-JOB-DRAIN", "EV-JOB-RECOVERY", "EV-HOME-JOB-RECOVERY", "EV-HOME-AGENT", "EV-HOME-FOLLOWUP", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY", "EV-UPDATE-RECOVERY", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER", "EV-PI-DATASET-INGEST", "EV-DATASET-SERVICE", "EV-DATASET-WORKER-SMOKE", "EV-DATASET-CONTINUATION", "EV-DATASET-CONTINUATION-RESTART", "EV-JOB-RECORD-CAS", "EV-JOB-CLAIM-RECOVERY", "EV-JOB-CLAIM-INDEPENDENCE"],
+      "evidence": ["EV-JOB-DRAIN", "EV-JOB-RECOVERY", "EV-HOME-JOB-RECOVERY", "EV-HOME-AGENT", "EV-HOME-FOLLOWUP", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY", "EV-UPDATE-RECOVERY", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER", "EV-PI-DATASET-INGEST", "EV-DATASET-SERVICE", "EV-DATASET-WORKER-SMOKE", "EV-DATASET-CONTINUATION", "EV-DATASET-CONTINUATION-RESTART", "EV-JOB-RECORD-CAS", "EV-JOB-CLAIM-RECOVERY", "EV-JOB-CLAIM-INDEPENDENCE", "EV-MODEL-EGRESS-APPROVAL-STORE", "EV-MODEL-EGRESS-JOB-RECOVERY"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-002",
-        "description": "Exact-record claim/CAS, independent keys, partial-owner recovery and successor-safe cleanup cover the adopted shared-store paths; other Job classes, cross-file/domain atomicity, final filesystem-syscall TOCTOU, Windows multi-process proof, and broader checkpoints remain.",
+        "description": "Exact-record claim/CAS plus one-use model-egress allow/deny/cancel and conservative restart recovery cover the adopted shared-store paths; other Job classes, in-flight Pi transcript continuation, cross-file/domain atomicity, final filesystem-syscall TOCTOU, Windows multi-process proof, and broader checkpoints remain.",
         "targetBuilds": ["B2.08", "B2.11"],
         "targetExits": ["E2.01", "E2.10"]
       }
@@ -931,10 +931,10 @@
     },
     "PIGE-JOB-007": {
       "status": "partial",
-      "evidence": ["EV-JOB-STATUS", "EV-JOB-WAIT", "EV-JOB-CANCEL", "EV-HOME-UI", "EV-HOME-FOLLOWUP", "EV-SOURCE-WAIT-STATUS", "EV-SOURCE-WAIT-RACE", "EV-ACTIVITY-UNDO"],
+      "evidence": ["EV-JOB-STATUS", "EV-JOB-WAIT", "EV-JOB-CANCEL", "EV-HOME-UI", "EV-HOME-FOLLOWUP", "EV-SOURCE-WAIT-STATUS", "EV-SOURCE-WAIT-RACE", "EV-ACTIVITY-UNDO", "EV-MODEL-EGRESS-HOME-UI"],
       "open": {
         "id": "OPEN-REQ-PIGE-JOB-007",
-        "description": "Preserved-source model wait has one status owner/action; broader Activity, progress, non-Agent cancel, and permission UI remain.",
+        "description": "Preserved-source model wait and exact model-egress confirmation each have one status owner/action; broader Activity, progress, non-Agent cancel, and Permission Broker UI remain.",
         "targetBuilds": ["B2.10", "B2.12"],
         "targetExits": ["E2.09"]
       }
@@ -955,11 +955,13 @@
       "status": "partial",
       "evidence": [
         "EV-ERROR",
-        "EV-PI-TERMINAL-MISSING"
+        "EV-PI-TERMINAL-MISSING",
+        "EV-MODEL-EGRESS-IPC",
+        "EV-MODEL-EGRESS-SCHEMA"
       ],
       "open": {
         "id": "OPEN-REQ-PIGE-API-002",
-        "description": "Complete service, diagnostics, and UI adoption of the shared error vocabulary remains open.",
+        "description": "Model-egress wait/action/request IPC uses the shared strict vocabulary; complete service, diagnostics, and UI adoption remains open.",
         "targetBuilds": [
           "B1.20"
         ],
@@ -1042,10 +1044,10 @@
     },
     "PIGE-SEC-005": {
       "status": "partial",
-      "evidence": ["EV-EGRESS", "EV-MODEL-EGRESS-POLICY", "EV-POLICY", "EV-DESKTOP-SETTING-GUARD", "EV-EGRESS-SERVICE", "EV-EGRESS-PROFILE-BINDING", "EV-EGRESS-RUNTIME-BINDING", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-HOME-AGENT", "EV-PI-INGEST-RETRIEVAL", "EV-DATASET-QUERY-DRIFT-AUDIT"],
+      "evidence": ["EV-EGRESS", "EV-MODEL-EGRESS-POLICY", "EV-POLICY", "EV-DESKTOP-SETTING-GUARD", "EV-EGRESS-SERVICE", "EV-EGRESS-PROFILE-BINDING", "EV-EGRESS-RUNTIME-BINDING", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-HOME-AGENT", "EV-PI-INGEST-RETRIEVAL", "EV-DATASET-QUERY-DRIFT-AUDIT", "EV-MODEL-EGRESS-SCHEMA", "EV-MODEL-EGRESS-APPROVAL-STORE", "EV-MODEL-EGRESS-JOB-RECOVERY", "EV-MODEL-EGRESS-HOME", "EV-MODEL-EGRESS-INGEST", "EV-MODEL-EGRESS-HOME-UI"],
       "open": {
         "id": "OPEN-REQ-PIGE-SEC-005",
-        "description": "The ordinary_allowed default, exact connection disclosure, Home, bounded ingest retrieval, and Dataset-query privacy/drift audit gates are enforced. Stricter-policy persistence/IPC/UI, confirmation resume, and remaining provider paths stay open.",
+        "description": "The ordinary_allowed default, exact connection disclosure, Home/ingest/Dataset drift gates, and one-use current-action confirmation with restart-safe allow/deny are enforced. Persisted stricter-policy settings/UI, in-flight no-duplicate Pi continuation, remaining provider paths, and signed cross-platform proof stay open.",
         "targetBuilds": [
           "B3.05"
         ],
@@ -2139,11 +2141,13 @@
     "E1.16": {
       "status": "partial",
       "evidence": [
-        "EV-ERROR"
+        "EV-ERROR",
+        "EV-MODEL-EGRESS-IPC",
+        "EV-MODEL-EGRESS-SCHEMA"
       ],
       "open": {
         "id": "OPEN-EXIT-E1.16",
-        "description": "Full executable acceptance remains open for Exit E1.16: API errors, durable Job warnings/errors, diagnostics, and UI failure actions validate against one shared taxonomy; malformed codes or unstructured private details are rejected, and every locale covers release-visible message keys.",
+        "description": "Model-egress wait/action/request IPC uses the shared strict vocabulary; broader API errors, durable Job warnings/errors, diagnostics, UI actions, private-detail rejection, and release-locale coverage remain open.",
         "targetBuilds": [
           "B1.20"
         ],
@@ -2345,20 +2349,20 @@
     },
     "E2.09": {
       "status": "partial",
-      "evidence": ["EV-JOB-STATUS", "EV-JOB-WAIT", "EV-JOB-CANCEL", "EV-HOME-UI", "EV-HOME-FOLLOWUP", "EV-SOURCE-WAIT-STATUS", "EV-SOURCE-WAIT-RACE", "EV-ACTIVITY-UNDO"],
+      "evidence": ["EV-JOB-STATUS", "EV-JOB-WAIT", "EV-JOB-CANCEL", "EV-HOME-UI", "EV-HOME-FOLLOWUP", "EV-SOURCE-WAIT-STATUS", "EV-SOURCE-WAIT-RACE", "EV-ACTIVITY-UNDO", "EV-MODEL-EGRESS-HOME-UI"],
       "open": {
         "id": "OPEN-EXIT-E2.09",
-        "description": "Preserved-source model wait has one status owner/action; broader Activity, progress, non-Agent cancel, and permission UI remain.",
+        "description": "Preserved-source model wait and exact model-egress confirmation each have one status owner/action; broader Activity, progress, non-Agent cancel, and Permission Broker UI remain.",
         "targetBuilds": ["B2.10", "B2.12"],
         "targetExits": ["E2.09"]
       }
     },
     "E2.10": {
       "status": "partial",
-      "evidence": ["EV-JOB-RECOVERY", "EV-HOME-AGENT", "EV-HOME-FOLLOWUP", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-CREATE-RECOVERY", "EV-UPDATE-RECOVERY", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER", "EV-JOB-RECORD-CAS", "EV-JOB-CLAIM-RECOVERY", "EV-JOB-CLAIM-INDEPENDENCE"],
+      "evidence": ["EV-JOB-RECOVERY", "EV-HOME-AGENT", "EV-HOME-FOLLOWUP", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-CREATE-RECOVERY", "EV-UPDATE-RECOVERY", "EV-JOB-CANCEL", "EV-JOB-DURABLE-CANCEL", "EV-CAPTURE-PUBLICATION-GUARD", "EV-AGENT-PUBLICATION-CANCEL", "EV-PDF-OCR-SOURCE-REVISION", "EV-PDF-RENDER-GENERATION", "EV-INDEX-REBUILD-WORKER", "EV-JOB-RECORD-CAS", "EV-JOB-CLAIM-RECOVERY", "EV-JOB-CLAIM-INDEPENDENCE", "EV-MODEL-EGRESS-APPROVAL-STORE", "EV-MODEL-EGRESS-JOB-RECOVERY"],
       "open": {
         "id": "OPEN-EXIT-E2.10",
-        "description": "Exact-record claim/CAS, independent keys, partial-owner recovery and successor-safe cleanup cover the adopted shared-store paths; other Job classes, cross-file/domain atomicity, final filesystem-syscall TOCTOU, Windows multi-process proof, and broader checkpoints remain.",
+        "description": "Exact-record claim/CAS plus one-use model-egress allow/deny/cancel and conservative restart recovery cover the adopted shared-store paths; other Job classes, in-flight Pi transcript continuation, cross-file/domain atomicity, final filesystem-syscall TOCTOU, Windows multi-process proof, and broader checkpoints remain.",
         "targetBuilds": ["B2.11"],
         "targetExits": ["E2.10"]
       }
@@ -2411,10 +2415,10 @@
     },
     "E3.03": {
       "status": "partial",
-      "evidence": ["EV-EGRESS", "EV-MODEL-EGRESS-POLICY", "EV-POLICY", "EV-DESKTOP-SETTING-GUARD", "EV-EGRESS-SERVICE", "EV-EGRESS-PROFILE-BINDING", "EV-EGRESS-RUNTIME-BINDING", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-HOME-AGENT", "EV-PI-INGEST-RETRIEVAL"],
+      "evidence": ["EV-EGRESS", "EV-MODEL-EGRESS-POLICY", "EV-POLICY", "EV-DESKTOP-SETTING-GUARD", "EV-EGRESS-SERVICE", "EV-EGRESS-PROFILE-BINDING", "EV-EGRESS-RUNTIME-BINDING", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-HOME-AGENT", "EV-PI-INGEST-RETRIEVAL", "EV-MODEL-EGRESS-SCHEMA", "EV-MODEL-EGRESS-APPROVAL-STORE", "EV-MODEL-EGRESS-JOB-RECOVERY", "EV-MODEL-EGRESS-HOME", "EV-MODEL-EGRESS-INGEST", "EV-MODEL-EGRESS-HOME-UI"],
       "open": {
         "id": "OPEN-EXIT-E3.03",
-        "description": "The ordinary_allowed default, disclosure, Home and bounded ingest-retrieval policy gates, matrix, and audit/drift are proven. Stricter-policy persistence/IPC/UI, confirmation resume, and remaining provider adoption stay open.",
+        "description": "The ordinary_allowed default, disclosure, Home/ingest policy gates, audit/drift, and one-use current-action confirmation with restart-safe allow/deny are proven. Persisted stricter-policy settings/UI, in-flight no-duplicate Pi continuation, remaining provider adoption, and signed cross-platform proof stay open.",
         "targetBuilds": [
           "B3.05"
         ],
@@ -3092,6 +3096,13 @@
     "EV-EGRESS-SERVICE": { "kind": "test", "path": "tests/unit/agent-ingest-service.test.ts", "selector": "requires an egress decision before credential lookup or model invocation" },
     "EV-EGRESS-PROFILE-BINDING": { "kind": "test", "path": "tests/unit/agent-ingest-service.test.ts", "selector": "rejects a same-ID provider endpoint change before prompt rendering or credential lookup" },
     "EV-EGRESS-RUNTIME-BINDING": { "kind": "test", "path": "tests/unit/agent-ingest-service.test.ts", "selector": "rejects a same-ID runtime endpoint or model change before model invocation" },
+    "EV-MODEL-EGRESS-SCHEMA": { "kind": "test", "path": "tests/unit/security-contract-schemas.test.ts", "selector": "keeps one-use model-egress approvals strict, body-free, and distinct from Permission Broker grants" },
+    "EV-MODEL-EGRESS-APPROVAL-STORE": { "kind": "test", "path": "tests/unit/model-egress-approval-service.test.ts", "selector": "ModelEgressApprovalService" },
+    "EV-MODEL-EGRESS-JOB-RECOVERY": { "kind": "test", "path": "tests/unit/model-egress-job-recovery.test.ts", "selector": "model egress Job recovery" },
+    "EV-MODEL-EGRESS-HOME": { "kind": "test", "path": "tests/unit/home-agent-service.test.ts", "selector": "resumes the same sensitive Home turn after one exact approval and consumes it before the next model call" },
+    "EV-MODEL-EGRESS-INGEST": { "kind": "test", "path": "tests/unit/agent-ingest-service.test.ts", "selector": "consumes one exact approval before invoking an unknown-boundary ingest model" },
+    "EV-MODEL-EGRESS-HOME-UI": { "kind": "test", "path": "tests/unit/home-agent-conversation-ui.test.ts", "selector": "restores one bounded model-egress prompt and resumes the exact live Job once" },
+    "EV-MODEL-EGRESS-IPC": { "kind": "test", "path": "tests/unit/desktop-shell-contract.test.ts", "selector": "exposes one-use Model Egress decisions through strict main and preload boundaries" },
     "EV-LIBRARY": { "kind": "test", "path": "tests/unit/library-service.test.ts", "selector": "lists pages through the local database index when available" },
     "EV-DB-REBUILD": { "kind": "test", "path": "tests/unit/local-database-service.test.ts", "selector": "rebuilds after database deletion without losing Markdown knowledge" },
     "EV-INDEX-REBUILD-WORKER": { "kind": "test", "path": "tests/unit/jobs-service.test.ts", "selector": "cooperatively cancels a running index worker without changing durable Markdown" },

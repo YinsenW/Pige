@@ -26,6 +26,7 @@ import type {
   LibraryRelatedPage,
   LibraryRelatedResult,
   LocalDatabaseStatus,
+  ModelEgressPendingRequest,
   ModelProviderSettingsSummary,
   ModelProfileSummary,
   NoteRenderResult,
@@ -76,6 +77,14 @@ type HomeFileDropRequest = {
   readonly files: readonly File[];
   readonly text?: string;
 };
+type HomeModelEgressPromptState =
+  | { readonly kind: "loading"; readonly requestId: string }
+  | {
+      readonly kind: "ready" | "resolving";
+      readonly request: ModelEgressPendingRequest;
+      readonly errorMessageKey?: string;
+    }
+  | { readonly kind: "unknown"; readonly requestId: string };
 
 const initialVaultName = "Pige Vault";
 const localeLabels: Record<Locale, string> = {
@@ -162,6 +171,7 @@ export function App(): React.JSX.Element {
     };
     homeJobStateFilter.states.push("awaiting_review");
     homeJobStateFilter.states.push("cancel_requested");
+    homeJobStateFilter.states.push("waiting_model_egress");
     const [nextJobs, nextProposals, nextActivities] = nextOnboarding.activeVault
       ? await Promise.all([
         window.pige.jobs.list({
@@ -1339,6 +1349,8 @@ function HomeComposer(props: {
   const [agentDraft, setAgentDraft] = useState<AgentTurnDraftEvent | null>(null);
   const [agentRunState, setAgentRunState] = useState<HomeAgentUiState>("idle");
   const [agentError, setAgentError] = useState<PigeErrorSummary | null>(null);
+  const [modelEgressPrompt, setModelEgressPrompt] = useState<HomeModelEgressPromptState | null>(null);
+  const [resolvedModelEgressRequestId, setResolvedModelEgressRequestId] = useState<string | null>(null);
   const [agentModelUsage, setAgentModelUsage] = useState<HomeAgentModelUsage>("none");
   const [activeSourceTurn, setActiveSourceTurn] = useState<ActiveSourceTurnBinding | null>(null);
   const [conversationTimeline, setConversationTimeline] = useState<AgentConversationTimeline | undefined>();
@@ -1362,6 +1374,9 @@ function HomeComposer(props: {
   const draftRevisionRef = useRef(0);
   const noteOpenSequence = useRef(0);
   const proposalDecisionInFlight = useRef(false);
+  const modelEgressDecisionInFlight = useRef(false);
+  const modelEgressReadSequence = useRef(0);
+  const currentModelEgressRequestIdRef = useRef<string | undefined>(undefined);
   const proposalReviewTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
   const proposalFocusReturnId = useRef<string | null>(null);
   const proposalFocusReturnPending = useRef(false);
@@ -1377,6 +1392,20 @@ function HomeComposer(props: {
     ? plannedModelUsage === "cloud" ? "home.cloudSend" : null
     : agentModelUsage === "cloud" ? "home.cloudCallAttempted" : null;
   const latestTurn = conversationTimeline?.latestTurn;
+  const latestModelEgressJob = props.recentJobs.find((job) =>
+    job.state === "waiting_model_egress" &&
+    job.modelEgressApprovalRequestId !== undefined
+  );
+  const pendingModelEgressRequestId = agentError?.modelEgressApprovalRequestId ??
+    latestTurn?.error?.modelEgressApprovalRequestId ??
+    latestModelEgressJob?.modelEgressApprovalRequestId;
+  const modelEgressRequestId = pendingModelEgressRequestId === resolvedModelEgressRequestId
+    ? undefined
+    : pendingModelEgressRequestId;
+  currentModelEgressRequestIdRef.current = modelEgressRequestId;
+  const visibleRecentJobs = props.recentJobs.filter((job) =>
+    !modelEgressRequestId || job.modelEgressApprovalRequestId !== modelEgressRequestId
+  );
   const retryableLatestTurn = latestTurn && (
     latestTurn.state === "failed_retryable" ||
     latestTurn.state === "cancelled" ||
@@ -1470,6 +1499,8 @@ function HomeComposer(props: {
     setAgentAnswer(null);
     clearAgentDraft();
     setAgentError(null);
+    setModelEgressPrompt(null);
+    setResolvedModelEgressRequestId(null);
     setAgentModelUsage("none");
     setActiveSourceTurn(null);
     setAgentRunState("idle");
@@ -1478,6 +1509,32 @@ function HomeComposer(props: {
       conversationLoadSequence.current += 1;
     };
   }, [props.activeVault?.vaultId]);
+
+  useEffect(() => {
+    const sequence = modelEgressReadSequence.current + 1;
+    modelEgressReadSequence.current = sequence;
+    if (!modelEgressRequestId) {
+      setModelEgressPrompt(null);
+      return;
+    }
+    setModelEgressPrompt({ kind: "loading", requestId: modelEgressRequestId });
+    void window.pige.modelEgress.pending({ requestId: modelEgressRequestId }).then((request) => {
+      if (sequence !== modelEgressReadSequence.current) return;
+      if (!request) {
+        setModelEgressPrompt({ kind: "unknown", requestId: modelEgressRequestId });
+        return;
+      }
+      if (modelEgressRequestId !== request.requestId) {
+        setModelEgressPrompt({ kind: "unknown", requestId: modelEgressRequestId });
+        return;
+      }
+      setModelEgressPrompt({ kind: "ready", request });
+    }).catch(() => {
+      if (sequence === modelEgressReadSequence.current) {
+        setModelEgressPrompt({ kind: "unknown", requestId: modelEgressRequestId });
+      }
+    });
+  }, [modelEgressRequestId, props.activeVault?.vaultId]);
 
   useEffect(() => {
     if (!latestTurn) return;
@@ -1493,7 +1550,13 @@ function HomeComposer(props: {
     if (nextState) setAgentRunState(nextState);
     setAgentError(latestTurn.error ?? null);
     if (latestTurn.state !== "queued" && latestTurn.state !== "running") clearAgentDraft();
-  }, [agentRunState, latestTurn?.jobId, latestTurn?.state, latestTurn?.error?.code]);
+  }, [
+    agentRunState,
+    latestTurn?.jobId,
+    latestTurn?.state,
+    latestTurn?.error?.code,
+    latestTurn?.error?.modelEgressApprovalRequestId
+  ]);
 
   useEffect(() => {
     if (!props.activeVault?.vaultId || !isConversationPollingState(latestTurn?.state)) return;
@@ -1673,6 +1736,70 @@ function HomeComposer(props: {
     setAgentError(nextTimeline?.latestTurn?.error ?? null);
   };
 
+  const decideModelEgress = async (decision: "allow_once" | "deny"): Promise<void> => {
+    if (
+      modelEgressDecisionInFlight.current ||
+      modelEgressPrompt?.kind !== "ready" ||
+      modelEgressPrompt.request.requestId !== modelEgressRequestId
+    ) return;
+    const request = modelEgressPrompt.request;
+    const decisionVaultId = activeVaultIdRef.current;
+    const isCurrentDecision = (): boolean =>
+      activeVaultIdRef.current === decisionVaultId &&
+      currentModelEgressRequestIdRef.current === request.requestId;
+    modelEgressDecisionInFlight.current = true;
+    setModelEgressPrompt({ kind: "resolving", request });
+    try {
+      const result = await window.pige.modelEgress.resolve({
+        requestId: request.requestId,
+        jobId: request.jobId,
+        decision
+      });
+      if (!isCurrentDecision()) return;
+      await props.onHomeStateChanged().catch(() => undefined);
+      const timeline = await refreshConversation();
+      if (!isCurrentDecision()) return;
+      const nextState = homeUiStateForJobState(timeline?.latestTurn?.state);
+      setResolvedModelEgressRequestId(request.requestId);
+      setModelEgressPrompt(null);
+      setAgentRunState(nextState ?? (result.status === "denied" ? "failed" : "accepted"));
+      setAgentError(timeline?.latestTurn?.error ?? null);
+      if (result.status === "approved") composerInputRef.current?.focus();
+    } catch {
+      if (!isCurrentDecision()) return;
+      try {
+        const current = await window.pige.modelEgress.pending({ requestId: request.requestId });
+        if (!isCurrentDecision()) return;
+        if (current?.requestId === request.requestId && current.jobId === request.jobId) {
+          setModelEgressPrompt({
+            kind: "ready",
+            request: current,
+            errorMessageKey: "home.modelEgress.resolveFailed"
+          });
+        } else {
+          await props.onHomeStateChanged().catch(() => undefined);
+          const timeline = await refreshConversation();
+          if (!isCurrentDecision()) return;
+          if (timeline?.latestTurn?.error?.modelEgressApprovalRequestId === request.requestId) {
+            setModelEgressPrompt({ kind: "unknown", requestId: request.requestId });
+          } else {
+            const nextState = homeUiStateForJobState(timeline?.latestTurn?.state);
+            setResolvedModelEgressRequestId(request.requestId);
+            setModelEgressPrompt(null);
+            setAgentRunState(nextState ?? (decision === "deny" ? "failed" : "accepted"));
+            setAgentError(timeline?.latestTurn?.error ?? null);
+          }
+        }
+      } catch {
+        if (isCurrentDecision()) {
+          setModelEgressPrompt({ kind: "unknown", requestId: request.requestId });
+        }
+      }
+    } finally {
+      modelEgressDecisionInFlight.current = false;
+    }
+  };
+
   const openProposal = async (proposalId: string): Promise<void> => {
     proposalFocusReturnId.current = proposalId;
     setOpeningProposalId(proposalId);
@@ -1807,12 +1934,12 @@ function HomeComposer(props: {
           </div>
         </section>
       ) : null}
-      {props.recentJobs.length > 0 ? (
+      {visibleRecentJobs.length > 0 ? (
         <section className="job-strip" aria-label={props.t("home.recentCaptures")}>
           <span className="job-strip-title">
             {props.t("home.recentWork")}
           </span>
-          {props.recentJobs.slice(0, 3).map((job) => {
+          {visibleRecentJobs.slice(0, 3).map((job) => {
             const sourceWaitingForModel = isSourceWaitingForModel(job);
             const ownsSourceModelAction = sourceWaitingForModel && job.id === sourceModelActionOwner?.id;
             const statusMessageKey = jobStateMessageKey(job);
@@ -2099,7 +2226,42 @@ function HomeComposer(props: {
             {agentRunState === "accepted" || agentRunState === "running" ? props.t("home.agentRunning") : props.t("home.send")}
           </button>
         </div>
-        {agentRunState !== "idle" && !sourceWaitOwnsAgentState ? (
+        {modelEgressRequestId ? (
+          <div className="model-egress-prompt" role="group" aria-labelledby="home-model-egress-title">
+            <strong id="home-model-egress-title">{props.t("home.modelEgress.title")}</strong>
+            <span>
+              {modelEgressPrompt?.kind === "ready" || modelEgressPrompt?.kind === "resolving"
+                ? props.t(modelEgressReasonMessageKey(modelEgressPrompt.request.reasonCode))
+                : modelEgressPrompt?.kind === "unknown"
+                  ? props.t("home.modelEgress.unknown")
+                  : props.t("home.modelEgress.loading")}
+            </span>
+            {modelEgressPrompt?.kind === "ready" && modelEgressPrompt.errorMessageKey ? (
+              <span className="error">{props.t(modelEgressPrompt.errorMessageKey)}</span>
+            ) : null}
+            {modelEgressPrompt?.kind === "ready" || modelEgressPrompt?.kind === "resolving" ? (
+              <div className="model-egress-actions">
+                <button
+                  type="button"
+                  className="ghost"
+                  disabled={modelEgressPrompt.kind === "resolving"}
+                  onClick={() => void decideModelEgress("deny")}
+                >
+                  {props.t("home.modelEgress.deny")}
+                </button>
+                <button
+                  type="button"
+                  disabled={modelEgressPrompt.kind === "resolving"}
+                  onClick={() => void decideModelEgress("allow_once")}
+                >
+                  {modelEgressPrompt.kind === "resolving"
+                    ? props.t("home.modelEgress.saving")
+                    : props.t("home.modelEgress.allowOnce")}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : agentRunState !== "idle" && !sourceWaitOwnsAgentState ? (
           <div className={`agent-run-state state-${agentRunState}`} role="status" aria-live="polite">
             <span className="agent-run-dot" aria-hidden="true" />
             <span>{agentError ? props.t(agentError.messageKey) : props.t(`home.agentState.${agentRunState}`)}</span>
@@ -2142,10 +2304,22 @@ function jobStateMessageKey(job: JobSummary): string {
 function homeUiStateForJobState(state: JobState | undefined): HomeAgentUiState | undefined {
   if (state === "queued") return "accepted";
   if (state === "running" || state === "cancel_requested") return "running";
-  if (state === "waiting_dependency" || state === "waiting_permission" || state === "awaiting_review") return "waiting";
+  if (
+    state === "waiting_dependency" ||
+    state === "waiting_permission" ||
+    state === "waiting_model_egress" ||
+    state === "awaiting_review"
+  ) return "waiting";
   if (state === "completed" || state === "completed_with_warnings" || state === "compacted") return "completed";
   if (state === "failed_retryable" || state === "failed_final" || state === "cancelled") return "failed";
   return undefined;
+}
+
+function modelEgressReasonMessageKey(reasonCode: ModelEgressPendingRequest["reasonCode"]): string {
+  if (reasonCode === "sensitive_confirmation") return "home.modelEgress.sensitive";
+  if (reasonCode === "unknown_boundary_confirmation") return "home.modelEgress.unknownBoundary";
+  if (reasonCode === "private_or_large_confirmation") return "home.modelEgress.privateOrLarge";
+  return "home.modelEgress.confirmAll";
 }
 
 function isConversationPollingState(state: JobState | undefined): boolean {
