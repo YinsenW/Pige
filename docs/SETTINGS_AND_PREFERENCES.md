@@ -147,7 +147,7 @@ This table is the v0.1 baseline. Implementation can split storage files differen
 | Always-on-top preference | General/Home | `machine_local` | Window Service | OS app data | No | `none` | Immediate |
 | Sidebar visibility | General/Home | `machine_local` | Window Service | OS app data | No | `none` | Immediate |
 | Startup behavior | General | `machine_local` | Window Service, Vault Runtime Service | OS app data | No | `none` | Next launch |
-| Active vault path | Vault & Note Storage | `machine_local` | Vault Runtime Service | OS app data | No | `permission_and_confirmation` | Requires safe vault switch |
+| Active vault path | Vault & Note Storage | `machine_local` | Vault Runtime Service | OS app data | No | `permission_and_confirmation` | Safe user switch or restore-owned exact binding CAS after destination commit |
 | Recent vault list | Vault & Note Storage | `machine_local` | Vault Runtime Service | OS app data | No | `none` | Immediate |
 | First-Home guide dismissal | Home | `machine_vault_binding` | Vault Runtime Service | OS app data keyed by `vault_id` | No | `none` | Immediate after explicit Connect/continue choice; older settings default to showing it |
 | Vault ID | Vault & Note Storage | `vault_identity` | Vault Runtime Service | `.pige/manifest.json` | Yes | `explicit_confirmation` | Immutable after creation unless migration |
@@ -317,13 +317,19 @@ Default vault backup excludes:
 
 Restore rules:
 
-- Restore preview must show vault name, schema version, note/source counts, backup date, and external dependencies.
+- Restore preview must show vault name, app/schema versions, note/source counts, backup
+  date, and localized typed warning/dependency counts without raw paths or entry names.
 - Restoring a vault into a new folder creates a new machine-local active vault binding.
 - Restored vault config must not assume old absolute paths are still valid.
 - External managed-copy root bindings must be reconnected or restored into an in-vault managed-copy root; unresolved root IDs remain visible dependencies.
 - Provider profiles and secrets can be imported only through an explicit, redacted settings import/export flow.
-- `replace_existing` restore preserves the vault ID and atomically replaces its machine-local active path binding; the old and new paths cannot both remain registered.
+- `replace_existing` restore preserves the vault ID, requires explicit irreversible-flow
+  confirmation and a verified rollback backup, publishes a fresh destination, then
+  atomically CAS-replaces its machine-local active path binding. The old physical folder
+  remains intact but unregistered; the old and new paths cannot both remain registered.
 - `clone_as_new` restore mints a vault ID and a separate machine binding. It never copies permission grants, YOLO state, provider secrets, or external absolute paths from the source vault.
+- Restore coordinator Jobs and claims are machine-local OS app-data state, excluded from
+  vault backup, and never relocated into staging or the restored vault.
 
 Settings export:
 

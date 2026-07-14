@@ -98,25 +98,106 @@ describe("desktop shell build contract", () => {
   it("binds restore apply to the exact preview token across renderer, preload, and main", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
-    const registrySource = fs.readFileSync(
-      path.resolve("apps/desktop/src/main/services/restore-preview-registry.ts"),
-      "utf8"
-    );
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
     const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
+    const previewContract = contractsSource.slice(
+      contractsSource.indexOf("export type RestorePreviewResult"),
+      contractsSource.indexOf("export interface RestoreApplyRequest")
+    );
+    const warningContract = contractsSource.slice(
+      contractsSource.indexOf("export type RestorePreviewWarning"),
+      contractsSource.indexOf("export type RestorePreviewResult")
+    );
+    const requestContract = contractsSource.slice(
+      contractsSource.indexOf("export interface RestoreApplyRequest"),
+      contractsSource.indexOf("export type RestoreApplyResult")
+    );
+    const resultContract = contractsSource.slice(
+      contractsSource.indexOf("export type RestoreApplyResult"),
+      contractsSource.indexOf("export interface CreateVaultRequest")
+    );
+    const applyProjector = preloadSource.slice(
+      preloadSource.indexOf("function projectRestoreApplyResult"),
+      preloadSource.indexOf("const api:")
+    );
+    const preloadRestoreApi = preloadSource.slice(
+      preloadSource.indexOf("backup: {"),
+      preloadSource.indexOf("system: {")
+    );
 
-    expect(contractsSource.match(/readonly previewToken: string;/gu)).toHaveLength(2);
-    expect(mainSource).toContain("restorePreviewRegistry.claim(senderId, request)");
-    expect(mainSource).toContain("restorePreviewRegistry.isCurrent(senderId, acceptedPreview)");
-    expect(mainSource).toContain("acceptedPreview.archivePreviewToken");
-    expect(mainSource).toContain("restorePreviewRegistry.release(senderId, acceptedPreview)");
-    expect(mainSource).toContain("restorePreviewRegistry.consume(senderId, acceptedPreview)");
-    expect(mainSource).toContain('new PigeDomainError("restore.backup_invalid"');
-    expect(registrySource).toContain("readonly #states = new Map<number, RestorePreviewState>();");
-    expect(registrySource).toContain("publicPreviewToken: createPublicPreviewToken()");
-    expect(preloadSource).toContain('ipcRenderer.invoke("restore.apply", request)');
-    expect(rendererSource.match(/previewToken: restorePreview\.previewToken!?/gu)).toHaveLength(2);
-    expect(rendererSource.match(/setRestorePreview\(null\);/gu)?.length ?? 0).toBeGreaterThanOrEqual(4);
+    expect(contractsSource).toContain('export type RestoreMode = "clone_as_new" | "replace_existing";');
+    expect(previewContract).toContain("readonly previewId: string;");
+    expect(previewContract).toContain("readonly permittedModes: readonly RestoreMode[];");
+    expect(previewContract).toContain("readonly defaultMode: RestoreMode;");
+    expect(previewContract).not.toContain("backupPath");
+    expect(previewContract).not.toContain("previewToken");
+    expect(warningContract).toContain('readonly code: "invalid_archive_entries";');
+    expect(warningContract).toContain('readonly code: "excluded_rebuildable_roots";');
+    expect(warningContract).toContain('readonly code: "external_originals_not_included";');
+    expect(warningContract).toContain("readonly count: number;");
+    expect(requestContract).toContain("readonly previewId: string;");
+    expect(requestContract).toContain("readonly mode: RestoreMode;");
+    expect(requestContract).not.toContain("backupPath");
+    expect(requestContract).not.toContain("previewToken");
+    expect(resultContract).toContain("readonly jobId: string;");
+    expect(resultContract).not.toContain("restoredVaultPath");
+    expect(resultContract).not.toContain("VaultSummary");
+    expect(resultContract).not.toContain("localDatabaseRebuild");
+    expect(resultContract).not.toContain("manifest");
+    expect(preloadRestoreApi).toContain('ipcRenderer.invoke("restore.preview")');
+    expect(preloadRestoreApi).toContain('ipcRenderer.invoke("restore.apply", {');
+    expect(preloadRestoreApi).toContain("previewId: request.previewId");
+    expect(preloadRestoreApi).toContain("mode: request.mode");
+    expect(preloadRestoreApi).toContain("projectRestorePreviewResult(result)");
+    expect(preloadRestoreApi).toContain("projectRestoreApplyResult(result)");
+    expect(preloadRestoreApi).not.toContain("backupPath");
+    expect(preloadRestoreApi).not.toContain("previewToken");
+    expect(applyProjector).toContain('return { status: "restored", jobId: result.jobId };');
+    expect(applyProjector).not.toContain("activeVaultPathDisplay");
+    expect(applyProjector).not.toContain("knowledgeRootDisplay");
+    expect(applyProjector).not.toContain("sourceAssetRootDisplay");
+    expect(applyProjector).not.toContain("result.vault");
+    expect(applyProjector).not.toContain("result.manifest");
+    expect(rendererSource).toContain("previewId: restorePreview.previewId");
+    expect(rendererSource).toContain('idPrefix="first-run"');
+    expect(rendererSource).toContain('idPrefix="vault-settings"');
+    expect(rendererSource).not.toContain("restorePreview.backupPath");
+    expect(rendererSource).not.toContain("restorePreview.previewToken");
+    expect(rendererSource).not.toContain("restoredVaultPath");
+    expect(mainSource).toContain('ipcMain.handle("restore.preview"');
+    expect(mainSource).toContain('ipcMain.handle("restore.apply"');
+    expect(mainSource).toContain("getRestoreCoordinatorService().apply({");
+    expect(mainSource).toContain("getRestoreCoordinatorService().recoverInterrupted()");
+    expect(mainSource).toContain("RESTORE_NATIVE_COPY[getAppearanceService().summary().locale]");
+    for (const locale of ["de", "en", "fr", "ja", "ko", "zh-Hans"]) {
+      expect(mainSource).toContain(`${JSON.stringify(locale)}:`);
+    }
+    const nativeRestoreCopy = mainSource.slice(
+      mainSource.indexOf("const RESTORE_NATIVE_COPY"),
+      mainSource.indexOf("async function confirmSettingAction")
+    );
+    expect(nativeRestoreCopy.match(/destinationPickerTitle: "/gu)).toHaveLength(6);
+    for (const phrase of [
+      "nicht rückgängig",
+      "cannot be undone",
+      "ne peut pas être annulée",
+      "取り消せません",
+      "실행 취소할 수 없습니다",
+      "无法在此流程中撤销"
+    ]) {
+      expect(nativeRestoreCopy).toContain(phrase);
+    }
+    expect(mainSource).toContain("buttons: [restoreNativeCopy.cancel, restoreNativeCopy.confirm]");
+    expect(mainSource).toContain("defaultId: 0");
+    expect(mainSource).toContain("cancelId: 0");
+    expect(mainSource).toContain("title: restoreNativeCopy.destinationPickerTitle");
+    expect(mainSource).not.toContain('title: "Choose where to create the restored vault"');
+    const restoreApplyHandler = mainSource.slice(
+      mainSource.indexOf('ipcMain.handle("restore.apply"'),
+      mainSource.indexOf('ipcMain.handle("system.toolchainHealth"')
+    );
+    expect(restoreApplyHandler).not.toContain("openPath(");
+    expect(restoreApplyHandler).not.toContain("restoredVaultPath");
   });
 
   it("wires Home questions through Pi with visible typed outcomes and no raw provider error surface", () => {

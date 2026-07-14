@@ -10,6 +10,7 @@ import type {
   AgentTurnDraftEvent,
   AgentRuntimeStatus,
   AppHealth,
+  BackupManifestSummary,
   BackupCreateResult,
   AppearanceSettingsSummary,
   BackupRestoreStatus,
@@ -57,6 +58,8 @@ import type {
   RetrievalSearchResult,
   RestoreApplyRequest,
   RestoreApplyResult,
+  RestoreMode,
+  RestorePreviewWarning,
   RestorePreviewResult,
   RefreshProviderModelsRequest,
   SetAlwaysOnTopRequest,
@@ -74,6 +77,80 @@ import type {
   VaultActionResult,
   VaultSummary
 } from "@pige/contracts";
+
+function isRestoreMode(value: unknown): value is RestoreMode {
+  return value === "clone_as_new" || value === "replace_existing";
+}
+
+function projectBackupManifestSummary(manifest: BackupManifestSummary): BackupManifestSummary {
+  return {
+    formatVersion: manifest.formatVersion,
+    format: manifest.format,
+    appVersion: manifest.appVersion,
+    vaultId: manifest.vaultId,
+    vaultName: manifest.vaultName,
+    vaultSchemaVersion: manifest.vaultSchemaVersion,
+    createdAt: manifest.createdAt,
+    fileCount: manifest.fileCount,
+    totalBytes: manifest.totalBytes,
+    noteCount: manifest.noteCount,
+    sourceCount: manifest.sourceCount,
+    conversationCount: manifest.conversationCount,
+    memoryCount: manifest.memoryCount,
+    includesSecrets: false,
+    includes: {
+      markdownKnowledge: manifest.includes.markdownKnowledge,
+      sourceRecords: manifest.includes.sourceRecords,
+      managedSourceCopies: manifest.includes.managedSourceCopies,
+      conversations: manifest.includes.conversations,
+      vaultMemory: manifest.includes.vaultMemory,
+      trash: manifest.includes.trash,
+      rebuildableDatabaseCache: manifest.includes.rebuildableDatabaseCache,
+      secrets: false
+    }
+  };
+}
+
+function projectRestoreWarning(warning: RestorePreviewWarning): RestorePreviewWarning {
+  if (
+    !Number.isSafeInteger(warning.count) ||
+    warning.count < 1 ||
+    warning.count > 100_000 ||
+    ![
+      "invalid_archive_entries",
+      "excluded_rebuildable_roots",
+      "external_originals_not_included"
+    ].includes(warning.code)
+  ) {
+    throw new Error("Invalid restore preview warning response.");
+  }
+  return { code: warning.code, count: warning.count };
+}
+
+function projectRestorePreviewResult(result: RestorePreviewResult): RestorePreviewResult {
+  if (result.status === "canceled") return { status: "canceled" };
+  const permittedModes = result.permittedModes.filter(isRestoreMode);
+  if (!isRestoreMode(result.defaultMode) || !permittedModes.includes(result.defaultMode)) {
+    throw new Error("Invalid restore preview response.");
+  }
+  return {
+    status: "ready",
+    previewId: result.previewId,
+    manifest: projectBackupManifestSummary(result.manifest),
+    invalidFileCount: result.invalidFileCount,
+    warnings: result.warnings.map(projectRestoreWarning),
+    permittedModes,
+    defaultMode: result.defaultMode
+  };
+}
+
+function projectRestoreApplyResult(result: RestoreApplyResult): RestoreApplyResult {
+  if (result.status === "canceled") return { status: "canceled" };
+  if (typeof result.jobId !== "string" || result.jobId.length < 1 || result.jobId.length > 160) {
+    throw new Error("Invalid restore apply response.");
+  }
+  return { status: "restored", jobId: result.jobId };
+}
 
 const api: PigeDesktopApi = {
   getHealth: async (): Promise<AppHealth> => ipcRenderer.invoke("pige:getHealth") as Promise<AppHealth>,
@@ -223,10 +300,18 @@ const api: PigeDesktopApi = {
       ipcRenderer.invoke("backup.status") as Promise<BackupRestoreStatus>,
     create: async (): Promise<BackupCreateResult> =>
       ipcRenderer.invoke("backup.create") as Promise<BackupCreateResult>,
-    previewRestore: async (): Promise<RestorePreviewResult> =>
-      ipcRenderer.invoke("restore.preview") as Promise<RestorePreviewResult>,
-    applyRestore: async (request: RestoreApplyRequest): Promise<RestoreApplyResult> =>
-      ipcRenderer.invoke("restore.apply", request) as Promise<RestoreApplyResult>
+    previewRestore: async (): Promise<RestorePreviewResult> => {
+      const result = await ipcRenderer.invoke("restore.preview") as RestorePreviewResult;
+      return projectRestorePreviewResult(result);
+    },
+    applyRestore: async (request: RestoreApplyRequest): Promise<RestoreApplyResult> => {
+      if (!isRestoreMode(request.mode)) throw new Error("Invalid restore mode.");
+      const result = await ipcRenderer.invoke("restore.apply", {
+        previewId: request.previewId,
+        mode: request.mode
+      }) as RestoreApplyResult;
+      return projectRestoreApplyResult(result);
+    }
   },
   system: {
     toolchainHealth: async (): Promise<ToolchainHealth> =>

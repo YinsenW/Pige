@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-14T03:19:02Z",
+  "reviewedAt": "2026-07-14T06:09:59Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,12 +30,12 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "17043d3813ffdd070e9b33e9d44e68823939153608c365fc374eeee9a24bbe62"
+    "reviewedSha256": "447c45a4f82861a1eb4a95ff2b800e13ac910d471ea4c253b10e565262640411"
   },
   "reviewers": [
     {
-      "reviewerId": "production-ready-c-current-action-review",
-      "task": "019f44e0-b6a1-7bb0-a1ca-5fb43b2725c2 Production Ready C current-action model-egress confirmation CLEAR",
+      "reviewerId": "production-ready-b-restore-review",
+      "task": "019f44e0-b6a1-7bb0-a1ca-5fb43b2725c2 Production Ready B restore identity and recovery CLEAR",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -43,82 +43,83 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "UI Design independently verified the exact c22c742c replacement patch, reproduced closure of the sole duplicate-status/accessibility blocker, and returned ACCEPTED/CLEAR without editing files. Development did not edit governance; Product Planning independently matched executable schema, service, Job-recovery and selector facts before this current-only projection."
+      "independence": "UI Design independently verified the exact d12280c1 replacement patch, confirmed the safe restore result DTO, typed preview warnings, six-locale native copy and cancellation-first irreversible confirmation, and returned ACCEPTED/CLEAR without editing files. Development did not edit governance; Product Planning independently matched identity, Job ownership, recovery, binding-CAS and evidence-selector facts before this current-only projection."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "production-ready-c-current-action-review",
+      "reviewerId": "production-ready-b-restore-review",
       "blockerCount": 0,
-      "summary": "One compact Home exception card resolves an exact provider invocation without adding a mode, settings route, reusable grant surface or competing Recent Work status."
+      "summary": "The existing restore preview and native confirmation own explicit clone/replace choices, safe typed warnings and cancellation-first safety without adding navigation, path exposure or another management surface."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "production-ready-c-current-action-review",
+      "reviewerId": "production-ready-b-restore-review",
       "blockerCount": 0,
-      "summary": "Runtime Policy, API, Data, Job, Security, Quality and Playbook owners agree on a distinct backup-excluded `model_egress` layer, exact one-use binding, pre-credential revalidation and conservative restart replay."
+      "summary": "Data, Job, API, Settings, Sync, Reliability, Decision and Playbook owners agree on a machine-local pre-destination Restore Job, fresh-folder identity modes, verified rollback, binding CAS and linked vault Operation."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "production-ready-c-current-action-review",
+      "reviewerId": "production-ready-b-restore-review",
       "blockerCount": 0,
-      "summary": "Seven exact selectors bind strict schemas, private storage, Job recovery, Home and ingest authorization, typed IPC and single-owner UI only to existing partial API, Job, security and E1.16/E2.09/E2.10/E3.03 rows."
+      "summary": "Eight exact selectors bind legacy lineage, identity recovery, rollback, checkpoint adoption, durable Operation, active binding CAS and safe UI only to existing partial Vault, Job, Settings, Backup, i18n and Exit projections."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "production-ready-c-current-action-review",
+      "reviewerId": "production-ready-b-restore-review",
       "blockerCount": 0,
-      "summary": "Development gets one exact request lifecycle and typed main/preload boundary while preserving ordinary prompt-free calls, Permission Broker isolation, Job CAS, cancellation and fail-closed drift behavior."
+      "summary": "Development gets one exact eight-checkpoint restore coordinator contract, explicit identity modes and one cross-scope Job/Operation link while preserving source vault bytes, writer-lease ownership and fail-closed destination publication."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "production-ready-c-current-action-review",
+      "reviewerId": "production-ready-b-restore-review",
       "blockerCount": 0,
-      "summary": "Existing Owner, quality, Playbook and acceptance surfaces absorb the exact adoption; no PRD, Decision, new document, prototype, setting, dependency, Permission Broker breadth or status change."
+      "summary": "Existing subject owners, Decision, Playbook and acceptance surfaces absorb the exact adoption; no PRD, prototype, new document, dependency, provider, permission, schema-layout or status expansion is introduced."
     }
   ],
   "verification": [
     {
       "command": "npm run verify",
       "status": "passed",
-      "evidence": "The exact current-action model-egress candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all five documentation-quality dimensions."
+      "evidence": "The exact restore identity/recovery candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all five documentation-quality dimensions."
     },
     {
-      "command": "npm run verify:contracts && npx vitest run tests/unit/model-egress-approval-service.test.ts tests/unit/model-egress-job-recovery.test.ts tests/unit/home-agent-conversation-ui.test.ts tests/unit/home-agent-service.test.ts tests/unit/agent-ingest-service.test.ts tests/unit/desktop-shell-contract.test.ts tests/unit/security-contract-schemas.test.ts",
+      "command": "npm run verify:contracts && npx vitest run tests/unit/restore-coordinator-service.test.ts tests/unit/restore-job-store.test.ts tests/unit/restore-preview-registry.test.ts tests/unit/restore-ui.test.ts tests/unit/backup-service.test.ts tests/unit/local-settings.test.ts tests/unit/background-job-drainer.test.ts tests/unit/desktop-shell-contract.test.ts tests/unit/vault-service-writer-lease.test.ts",
       "status": "passed",
-      "evidence": "CON-001 through CON-004 and negative fixtures pass; the independently rerun 7-file / 147-test matrix proves strict body-free records, one-use CAS, restart/deny/cancel, Home/ingest pre-credential enforcement, typed IPC and one status owner."
+      "evidence": "CON-001 through CON-004 and negative fixtures pass; the independently rerun 9-file / 111-test Restore matrix proves explicit identity modes, rollback-first replacement, eight monotonic checkpoints, restart adoption, exact Job/Operation linkage, safe DTOs, localized typed warnings and binding CAS."
     },
     {
       "command": "npm run verify:traceability",
       "status": "passed",
-      "evidence": "Semantic lock schema v3 contains 1,176 claims; seven current-action model-egress selectors change only existing partial API, Job, security and Exit projections, while every Requirement, Exit and phase state remains unchanged."
+      "evidence": "Semantic lock schema v3 contains 1,184 claims; eight Restore selectors change only existing partial Vault, Job, Settings, Backup, i18n and Exit projections, while every Requirement, Exit and phase state remains unchanged."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 pass after the bounded Owner/API/Job/security/evidence projection, without PRD or Decision churn, a new governed document, prototype refresh, dependency change or unrelated permission expansion."
+      "evidence": "LEN-001 through LEN-005 pass after the bounded Owner/Decision/evidence projection, without PRD or prototype churn, a new governed document, dependency change, permission breadth or unrelated feature expansion."
     }
   ],
   "coordination": {
-    "taskId": "production-ready-c-model-egress-confirmation-20260714",
-    "taskTitle": "Current-action model-egress confirmation",
+    "taskId": "production-ready-b-restore-identity-recovery-20260714",
+    "taskTitle": "Explicit restore identity and durable recovery",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The candidate adds one distinct machine-local model-egress request layer and typed API while preserving Permission Broker ownership, ordinary connected-provider flow, durable Job/Operation truth, source/turn bytes, dependencies and public settings.",
-    "acknowledgement": "Development froze the exact 27-path c22c742c replacement after full, assembled Electron and packaged evidence. UI Design returned ACCEPTED/CLEAR after the sole duplicate-status repair; Product Planning synchronized only affected Owner/API/Job/security, quality, acceptance and current semantic/recipe surfaces."
+    "compatibility": "The candidate adds explicit clone/replace identity, machine-local restore coordination and safe recovery while preserving the portable archive format, old source bytes, writer-lease ownership, provider and permission boundaries, dependencies, durable schemas and public status states.",
+    "acknowledgement": "Development froze the exact 27-path d12280c1 replacement after full, assembled Electron, restart and packaged evidence. UI Design returned final exact-hash ACCEPTED/CLEAR; Product Planning synchronized only affected Owner/API/Job/Data/Settings/Sync/Reliability/Decision, acceptance and current semantic/recipe surfaces."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "After restart, earlier read-only/model steps may replay; durable no-duplicate continuation of an in-flight Pi model/tool transcript remains open.",
-    "Persisted stricter cloud-send policy settings/UI and reusable user policy breadth remain open; this slice adds no saved grant.",
-    "The approval store is bounded per vault and fails closed when unreconciled records exhaust capacity; broader retention management remains open.",
-    "Live timing evidence remains the assembled Responses-compatible path and package proof remains local macOS arm64; other providers, Windows, signed and notarized macOS remain open."
+    "The ordered restore checkpoints are not a general cross-file transaction, and strict cross-process CAS/locking beyond the delivered lease and claim fences remains open.",
+    "The final lstat-to-syscall and directory-swap TOCTOU interval remains a platform primitive boundary.",
+    "replace_existing preserves the old physical source folder unregistered; permanent cleanup is not part of this flow.",
+    "Versioned external dependency and durable-domain migrations beyond the implemented compatibility checks remain open.",
+    "Signed installed Windows/macOS restore proof and the broader provider/platform matrix remain open."
   ]
 }

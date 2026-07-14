@@ -227,6 +227,115 @@ describe("VaultService writer lease lifecycle", () => {
     expect(second.openPath(vault.path)).toMatchObject({ status: "completed" });
     expect(second.activeVaultPath()).toBe(canonicalVaultPath);
   });
+
+  it("closes ordinary vault access while atomically swapping a restored binding", () => {
+    const root = makeTempRoot();
+    const original = makeVault(root, "Original");
+    const restoredPath = path.join(root, "vaults", "Original Restored");
+    const restoredSummary = { ...original.summary, name: "Original Restored" };
+    const settings = makeSettingsStore(root);
+    const harness = makeLeaseHarness();
+    const service = trackService(new VaultService(settings, () => false, harness.factory));
+    service.openPath(original.path);
+
+    const transition = service.beginRestoreTransition({
+      expectedActiveVaultPath: original.path,
+      expectedActiveVaultId: original.summary.vaultId
+    });
+
+    expect(transition.previousVaultPath).toBe(original.path);
+    expect(() => service.current()).toThrowError(expect.objectContaining({
+      code: "restore.in_progress"
+    }));
+    expect(() => service.assertWriterLease(original.path)).toThrowError(expect.objectContaining({
+      code: "restore.in_progress"
+    }));
+
+    transition.commit(restoredPath, restoredSummary);
+
+    expect(harness.events.filter(({ kind }) => kind !== "assert")).toEqual([
+      { kind: "acquire", vaultPath: original.path },
+      { kind: "acquire", vaultPath: restoredPath },
+      { kind: "release", vaultPath: original.path }
+    ]);
+    expect(service.activeVaultPath()).toBe(restoredPath);
+    expect(service.current()).toMatchObject({ vaultId: original.summary.vaultId });
+    expect(settings.read().recentVaults).toEqual([
+      expect.objectContaining({ vaultId: original.summary.vaultId, path: restoredPath })
+    ]);
+  });
+
+  it("keeps the original binding fenced when restored-vault lease acquisition fails", () => {
+    const root = makeTempRoot();
+    const original = makeVault(root, "Original");
+    const restoredPath = path.join(root, "vaults", "Original Restored");
+    const settings = makeSettingsStore(root);
+    const harness = makeLeaseHarness();
+    const service = trackService(new VaultService(settings, () => false, harness.factory));
+    service.openPath(original.path);
+    harness.failAcquisition(restoredPath);
+    const transition = service.beginRestoreTransition({
+      expectedActiveVaultPath: original.path,
+      expectedActiveVaultId: original.summary.vaultId
+    });
+
+    expect(() => transition.commit(restoredPath, original.summary)).toThrowError(
+      expect.objectContaining({ code: "vault.writer_locked" })
+    );
+    expect(() => service.current()).toThrowError(expect.objectContaining({
+      code: "restore.in_progress"
+    }));
+    expect(settings.getActiveVaultPath()).toBe(original.path);
+    expect(harness.control(original.path).releaseCount).toBe(0);
+
+    transition.rollback();
+    expect(service.activeVaultPath()).toBe(original.path);
+    expect(harness.control(original.path).releaseCount).toBe(0);
+  });
+
+  it("fails closed when the persisted machine binding changes during restore", () => {
+    const root = makeTempRoot();
+    const original = makeVault(root, "Original");
+    const replacement = makeVault(root, "Unexpected");
+    const restoredPath = path.join(root, "vaults", "Original Restored");
+    const settings = makeSettingsStore(root);
+    const harness = makeLeaseHarness();
+    const service = trackService(new VaultService(settings, () => false, harness.factory));
+    service.openPath(original.path);
+    const transition = service.beginRestoreTransition({
+      expectedActiveVaultPath: original.path,
+      expectedActiveVaultId: original.summary.vaultId
+    });
+    settings.setActiveVault(replacement.path, replacement.summary);
+
+    expect(() => transition.commit(restoredPath, original.summary)).toThrowError(
+      expect.objectContaining({ code: "vault.binding_changed" })
+    );
+    expect(() => transition.rollback()).toThrowError(expect.objectContaining({
+      code: "vault.binding_changed"
+    }));
+    expect(() => service.current()).toThrowError(expect.objectContaining({
+      code: "restore.in_progress"
+    }));
+    expect(harness.control(original.path).releaseCount).toBe(0);
+    expect(harness.control(restoredPath).releaseCount).toBe(1);
+  });
+
+  it("can commit a first-run clone when no vault is active", () => {
+    const root = makeTempRoot();
+    const clone = makeVault(root, "Clone");
+    const settings = makeSettingsStore(root);
+    const harness = makeLeaseHarness();
+    const service = trackService(new VaultService(settings, () => false, harness.factory));
+    const transition = service.beginRestoreTransition();
+
+    expect(transition.previousVault).toBeUndefined();
+    transition.commit(clone.path, clone.summary);
+
+    expect(service.current()).toMatchObject({ vaultId: clone.summary.vaultId });
+    expect(settings.getActiveVaultPath()).toBe(clone.path);
+    expect(harness.acquiredPaths).toEqual([clone.path]);
+  });
 });
 
 function makeTempRoot(): string {

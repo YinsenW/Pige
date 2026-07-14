@@ -834,14 +834,16 @@ Commands:
 - `restore.preview`
 - `restore.apply`
 
-Current bridge and target request:
+Current typed bridge:
 
 ```ts
-type RestoreApplyRequest = { backupPath: string; previewToken: string };
-type RestoreApplyTarget = {
+type RestoreApplyRequest = {
   previewId: string;
   mode: "replace_existing" | "clone_as_new";
 };
+type RestoreApplyResult =
+  | { status: "restored"; jobId: string }
+  | { status: "canceled" };
 ```
 
 Rules:
@@ -849,17 +851,27 @@ Rules:
 - `backup.create` uses a trusted main-process save dialog and creates a local `.pige-backup.zip`.
 - Target preview is main-picker-only: validate manifest/entries, paths/sizes/checksums,
   schema ranges, legacy input and redacted dependencies; return permitted modes plus an
-  archive-bound ID. Renderer never scans/extracts/writes/validates arbitrary paths.
-- Target apply requires that current ID plus explicit mode: `replace_existing` preserves
+  archive-bound ID. It exposes app/schema versions and only validated typed warning
+  categories/counts; renderer never receives raw warning strings, archive entries, file
+  names, absolute paths, or archive internals.
+- Apply requires that current ID plus explicit mode: `replace_existing` preserves
   `vault_id`; `clone_as_new` mints one and records lineage. A folder is not a mode.
-- Current compatibility uses `{ backupPath, previewToken }`. Main retains the archive-
-  checksum token; renderer sees a random per-WebContents/generation token. One atomic
+- Main retains the archive-checksum token; renderer sees a random per-WebContents/
+  generation token. One atomic
   apply lease blocks replay; cancel/retryable failure releases it, while success, archive
   invalidation, or sender destruction consumes it.
-- Current apply reopens the descriptor-bound archive and validates owned 0700 staging;
+- Apply reopens the descriptor-bound archive and validates owned 0700 staging;
   Data Architecture owns its reserved, no-replace, manifest-last publication.
-- It still creates a same-ID recovery copy. Explicit modes, durable Jobs/checkpoints,
-  typed serialized errors, strict CAS/TOCTOU, complete rebuild, progress, and platforms remain open.
+- `restore.apply` returns only cancellation or the durable machine-local Restore Job ID.
+  It never returns a `VaultSummary`, manifest, rebuild DTO, raw destination path, or
+  storage-root display path; renderer refreshes ordinary vault state after success.
+- Main owns the six-locale destination picker and irreversible `replace_existing`
+  confirmation. Cancel remains the native default, and confirmation states the verified
+  rollback backup, fresh destination, logical binding switch, and lack of Undo in this
+  flow.
+- The machine-local Restore Job and vault-scoped `restore_applied` Operation link by ID.
+  Versioned dependency/schema migration matrices, generic cross-file transactionality,
+  final syscall TOCTOU, complete platform proof, and broader progress remain open.
 
 ### 6.11 Window And Layout
 

@@ -15,45 +15,111 @@ import type {
   BackupCreateResult,
   BackupManifestSummary,
   BackupRestoreStatus,
-  RestoreApplyResult,
-  RestorePreviewResult,
+  RestoreMode,
+  RestorePreviewWarning,
   VaultSummary
 } from "@pige/contracts";
 import { PIGE_APP_MIN_VERSION, PigeDomainError } from "@pige/domain";
 import {
+  BackupIdSchema,
+  BackupManifestSchema,
+  JobIdSchema,
+  VaultIdSchema,
+  VaultManifestSchema,
+  type BackupManifest,
+  type VaultManifest
+} from "@pige/schemas";
+import {
   PIGE_DURABLE_ROOTS,
   PIGE_REBUILDABLE_ROOTS,
   PIGE_TRANSIENT_RUNTIME_ROOTS,
+  assertVaultPathAllowed,
   isPigeVault,
   normalizeVaultName,
-  readVaultManifest
+  readVaultManifest,
+  type VaultPathSafetyOptions
 } from "./vault-layout";
 
-interface BackupManifestFile {
-  readonly path: string;
-  readonly size: number;
-  readonly checksum: string;
+type BackupManifestFile = BackupManifest["files"][number];
+
+export type RestoreIdentityMode = RestoreMode;
+export type RestoreBackupIdSource = "manifest" | "derived_legacy";
+export type RestoreCoreCheckpointPhase =
+  | "manifest_validated"
+  | "destination_reserved"
+  | "archive_extracted"
+  | "durable_domains_migrated"
+  | "external_dependencies_reconciled"
+  | "vault_identity_finalized"
+  | "destination_committed";
+
+export interface RestoreCoreCheckpointEvent {
+  readonly phase: RestoreCoreCheckpointPhase;
+  readonly jobId: string;
+  readonly previewId: string;
+  readonly archiveDigest: string;
+  readonly backupId: string;
+  readonly backupIdSource: RestoreBackupIdSource;
+  readonly mode: RestoreIdentityMode;
+  readonly sourceVaultId: string;
+  readonly resultVaultId: string;
+  readonly destinationIdentity: string;
+  readonly externalDependencyCount: number;
 }
 
-interface BackupManifest {
-  readonly format: "pige-backup";
-  readonly formatVersion: 1;
-  readonly appVersion: string;
-  readonly vaultId: string;
-  readonly vaultName: string;
-  readonly vaultSchemaVersion: number;
-  readonly createdAt: string;
-  readonly fileCount: number;
-  readonly totalBytes: number;
-  readonly noteCount: number;
-  readonly sourceCount: number;
-  readonly conversationCount: number;
-  readonly memoryCount: number;
-  readonly includesSecrets: false;
-  readonly includes: BackupRestoreStatus["defaultIncludes"];
-  readonly excludedRoots: readonly string[];
-  readonly externalDependencies: readonly string[];
-  readonly files: readonly BackupManifestFile[];
+export type RestoreCorePhaseReporter = (
+  event: RestoreCoreCheckpointEvent
+) => void | Promise<void>;
+
+export interface RestoreCorePreviewResult {
+  readonly backupPath: string;
+  readonly archivePreviewToken: string;
+  readonly archiveDigest: string;
+  readonly archiveSize: number;
+  readonly backupId: string;
+  readonly backupIdSource: RestoreBackupIdSource;
+  readonly sourceVaultId: string;
+  readonly sourceVaultSchemaVersion: number;
+  readonly manifest: BackupManifestSummary;
+  readonly invalidFileCount: number;
+  readonly warnings: readonly RestorePreviewWarning[];
+}
+
+export interface RestoreDestinationIdentity {
+  readonly destinationPath: string;
+  readonly parentPath: string;
+  readonly identityDigest: string;
+}
+
+export interface RestoreCoreApplyInput {
+  readonly backupPath: string;
+  readonly archivePreviewToken: string;
+  readonly previewId: string;
+  readonly archiveDigest: string;
+  readonly jobId: string;
+  readonly mode: RestoreIdentityMode;
+  readonly sourceVaultId: string;
+  readonly resultVaultId: string;
+  readonly destinationIdentity: RestoreDestinationIdentity;
+  readonly pathSafety: VaultPathSafetyOptions;
+  readonly onPhase?: RestoreCorePhaseReporter;
+}
+
+export interface RestoreCoreApplyResult {
+  readonly status: "restored";
+  readonly restoredVaultPath: string;
+  readonly backupId: string;
+  readonly backupIdSource: RestoreBackupIdSource;
+  readonly archiveDigest: string;
+  readonly mode: RestoreIdentityMode;
+  readonly sourceVaultId: string;
+  readonly resultVaultId: string;
+  readonly destinationIdentity: RestoreDestinationIdentity;
+  readonly manifest: BackupManifestSummary;
+}
+
+export interface BackupCreateOptions {
+  readonly excludeJobId?: string;
 }
 
 interface RestoreArchiveSnapshot {
@@ -68,16 +134,31 @@ interface RestoreArchiveHandle {
   readonly initialSnapshot: RestoreArchiveSnapshot;
 }
 
-interface RestorePublicationReservation {
-  readonly identityVersion: 1;
-  readonly previewToken: string;
+interface RestoreApplyBinding {
+  readonly identityVersion: 2;
+  readonly jobId: string;
+  readonly previewId: string;
+  readonly archiveDigest: string;
+  readonly mode: RestoreIdentityMode;
+  readonly sourceVaultId: string;
+  readonly resultVaultId: string;
+  readonly destinationIdentity: string;
+}
+
+interface RestorePublicationReservation extends RestoreApplyBinding {
   readonly reservationId: string;
 }
 
-interface RestorePublicationHandle {
+interface RestorePublicationReservationHandle {
   readonly reservation: RestorePublicationReservation;
   readonly sidecarPath: string;
   readonly sidecarIdentity: fs.Stats;
+  readonly createdSidecar: boolean;
+  readonly destinationCoordinates: RestoreDestinationCoordinates;
+  readonly pathSafety: VaultPathSafetyOptions;
+}
+
+interface RestorePublicationHandle extends RestorePublicationReservationHandle {
   readonly destinationPath: string;
   readonly destinationIdentity: fs.Stats;
   readonly markerPath?: string;
@@ -91,7 +172,26 @@ interface RestoreStagingHandle {
   readonly markerPath: string;
   readonly markerIdentity: fs.Stats;
   readonly markerBody: string;
+  readonly destinationCoordinates: RestoreDestinationCoordinates;
+  readonly pathSafety: VaultPathSafetyOptions;
 }
+
+interface RestoreAncestorIdentity {
+  readonly path: string;
+  readonly device: number;
+  readonly inode: number;
+}
+
+interface RestoreDestinationCoordinates extends RestoreDestinationIdentity {
+  readonly ancestors: readonly RestoreAncestorIdentity[];
+}
+
+interface ResolvedBackupIdentity {
+  readonly backupId: string;
+  readonly backupIdSource: RestoreBackupIdSource;
+}
+
+type RestoreCoreCheckpointContext = Omit<RestoreCoreCheckpointEvent, "phase">;
 
 const BACKUP_FORMAT = "pige-backup";
 const BACKUP_FORMAT_VERSION = 1;
@@ -101,7 +201,8 @@ const RESTORE_COMMIT_ENTRY = ".pige/manifest.json";
 const RESTORE_PUBLICATION_MARKER = ".pige-restore-publication.json";
 const RESTORE_STAGING_MARKER = ".pige-restore-staging-owner";
 const RESTORE_PREVIEW_TOKEN = /^sha256:[a-f0-9]{64}$/u;
-const DEFAULT_INCLUDES: BackupRestoreStatus["defaultIncludes"] = {
+const RESTORE_PREVIEW_ID = /^sha256:[a-f0-9]{64}$/u;
+const DEFAULT_INCLUDES = {
   markdownKnowledge: true,
   sourceRecords: true,
   managedSourceCopies: true,
@@ -110,7 +211,7 @@ const DEFAULT_INCLUDES: BackupRestoreStatus["defaultIncludes"] = {
   trash: true,
   rebuildableDatabaseCache: false,
   secrets: false
-};
+} as const satisfies BackupRestoreStatus["defaultIncludes"];
 
 const ROOT_FILES = ["PIGE.md", "index.md", "log.md", ".pige/manifest.json", ".pige/config.json"] as const;
 
@@ -129,7 +230,8 @@ export class BackupRestoreService {
   async createBackup(
     vaultPathInput: string,
     backupFilePathInput: string,
-    appVersion = PIGE_APP_MIN_VERSION
+    appVersion = PIGE_APP_MIN_VERSION,
+    options: BackupCreateOptions = {}
   ): Promise<BackupCreateResult> {
     const vaultPath = path.resolve(vaultPathInput);
     const backupFilePath = normalizeBackupFilePath(backupFilePathInput);
@@ -145,7 +247,7 @@ export class BackupRestoreService {
       throw new PigeDomainError("backup.destination_exists", "Backup file already exists.");
     }
 
-    const manifest = createBackupManifest(vaultPath, appVersion);
+    const manifest = createBackupManifest(vaultPath, appVersion, options);
     const manifestText = `${JSON.stringify(manifest, null, 2)}\n`;
     const stagingPath = createBackupStagingPath(backupFilePath);
     let descriptor: number | undefined;
@@ -288,22 +390,29 @@ export class BackupRestoreService {
     }
   }
 
-  async previewRestore(backupPathInput: string): Promise<RestorePreviewResult> {
+  async inspectRestoreArchive(backupPathInput: string): Promise<RestoreCorePreviewResult> {
     const backupPath = path.resolve(backupPathInput);
     const archive = openRestoreArchive(backupPath);
     try {
       const manifest = await readBackupManifest(archive.descriptor);
       const validation = await validateBackupZip(archive.descriptor, manifest);
+      await readAndAssertArchivedVaultManifest(archive.descriptor, manifest);
       const snapshotAfterValidation = snapshotRestoreArchive(archive);
       assertSameRestoreArchive(
         archive.initialSnapshot,
         snapshotAfterValidation,
         "The backup changed while its restore preview was created."
       );
+      const backupIdentity = resolveBackupIdentity(manifest, snapshotAfterValidation.checksum);
       return {
-        status: "ready",
         backupPath,
-        previewToken: createRestorePreviewToken(backupPath, snapshotAfterValidation),
+        archivePreviewToken: createRestorePreviewToken(backupPath, snapshotAfterValidation),
+        archiveDigest: snapshotAfterValidation.checksum,
+        archiveSize: snapshotAfterValidation.size,
+        backupId: backupIdentity.backupId,
+        backupIdSource: backupIdentity.backupIdSource,
+        sourceVaultId: manifest.vaultId,
+        sourceVaultSchemaVersion: manifest.vaultSchemaVersion,
         manifest: toManifestSummary(manifest),
         invalidFileCount: validation.invalidFiles.length,
         warnings: createPreviewWarnings(manifest, validation.invalidFiles)
@@ -313,76 +422,196 @@ export class BackupRestoreService {
     }
   }
 
-  async applyRestore(
-    backupPathInput: string,
-    restoreParentDirectoryInput: string,
-    previewToken: string
-  ): Promise<RestoreApplyResult> {
-    const backupPath = path.resolve(backupPathInput);
-    const restoreParentDirectory = path.resolve(restoreParentDirectoryInput);
-    assertRestorePreviewToken(previewToken);
+  async applyRestore(input: RestoreCoreApplyInput): Promise<RestoreCoreApplyResult> {
+    assertRestoreCoreApplyInput(input);
+    const backupPath = path.resolve(input.backupPath);
+    const destinationCoordinates = captureRestoreDestinationCoordinates(
+      input.destinationIdentity.destinationPath,
+      input.pathSafety
+    );
+    assertRestoreDestinationIdentity(input.destinationIdentity, destinationCoordinates);
+    const binding = createRestoreApplyBinding(input, destinationCoordinates);
     const archive = openRestoreArchive(backupPath);
     let staging: RestoreStagingHandle | undefined;
     try {
-      assertRestorePreviewMatches(backupPath, archive.initialSnapshot, previewToken);
-      const manifest = await readBackupManifest(archive.descriptor);
-      const validation = await validateBackupZip(archive.descriptor, manifest);
+      assertRestorePreviewMatches(backupPath, archive.initialSnapshot, input.archivePreviewToken);
+      assertArchiveDigest(archive.initialSnapshot, input.archiveDigest);
+      const sourceManifest = await readBackupManifest(archive.descriptor);
+      const validation = await validateBackupZip(archive.descriptor, sourceManifest);
+      await readAndAssertArchivedVaultManifest(archive.descriptor, sourceManifest);
       const snapshotAfterValidation = snapshotRestoreArchive(archive);
       assertSameRestoreArchive(
         archive.initialSnapshot,
         snapshotAfterValidation,
         "The backup changed after its restore preview."
       );
-      assertRestorePreviewMatches(backupPath, snapshotAfterValidation, previewToken);
+      assertRestorePreviewMatches(backupPath, snapshotAfterValidation, input.archivePreviewToken);
+      assertArchiveDigest(snapshotAfterValidation, input.archiveDigest);
+      if (sourceManifest.vaultId !== input.sourceVaultId) {
+        throw new PigeDomainError("restore.backup_invalid", "The restore source identity changed after preview.");
+      }
       if (validation.invalidFiles.length > 0) {
         throw new PigeDomainError("restore.backup_invalid", "Backup files failed validation.");
       }
 
-      const restoredVaultPath = path.join(
-        restoreParentDirectory,
-        normalizeVaultName(`${manifest.vaultName} Restored`)
+      const backupIdentity = resolveBackupIdentity(sourceManifest, snapshotAfterValidation.checksum);
+      const checkpointContext = createRestoreCheckpointContext(
+        binding,
+        backupIdentity,
+        sourceManifest.externalDependencies.length
       );
-      fs.mkdirSync(restoreParentDirectory, { recursive: true });
-      const restoreParentIdentity = captureRestoreDirectoryIdentity(restoreParentDirectory);
-      staging = createRestoreStagingDirectory(restoreParentDirectory);
-      await extractBackupVault(archive.descriptor, manifest, staging.path);
-      for (const rebuildableRoot of PIGE_REBUILDABLE_ROOTS) {
-        fs.mkdirSync(path.join(staging.path, rebuildableRoot), { recursive: true });
-      }
-      for (const runtimeRoot of PIGE_TRANSIENT_RUNTIME_ROOTS) {
-        fs.mkdirSync(path.join(staging.path, runtimeRoot), { recursive: true });
-      }
+      await reportRestoreCorePhase(input.onPhase, checkpointContext, "manifest_validated");
+      assertCurrentRestoreDestinationCoordinates(destinationCoordinates, input.pathSafety);
+      const reservedPublication = reserveRestorePublication(
+        destinationCoordinates,
+        input.pathSafety,
+        binding
+      );
+      await reportRestoreCorePhase(input.onPhase, checkpointContext, "destination_reserved");
+      staging = createRestoreStagingDirectory(
+        destinationCoordinates.parentPath,
+        destinationCoordinates,
+        input.pathSafety,
+        binding
+      );
+      await extractBackupVault(archive.descriptor, sourceManifest, staging);
       const snapshotAfterExtraction = snapshotRestoreArchive(archive);
       assertSameRestoreArchive(
         snapshotAfterValidation,
         snapshotAfterExtraction,
         "The backup changed while it was restored."
       );
-      assertRestorePreviewMatches(backupPath, snapshotAfterExtraction, previewToken);
-      assertRestoreDirectoryIdentity(restoreParentDirectory, restoreParentIdentity);
+      assertRestorePreviewMatches(backupPath, snapshotAfterExtraction, input.archivePreviewToken);
+      assertArchiveDigest(snapshotAfterExtraction, input.archiveDigest);
+      assertCurrentRestoreDestinationCoordinates(destinationCoordinates, input.pathSafety);
       assertRestoreStagingIdentity(staging);
-      validateExtractedRestore(staging.path, manifest);
+      for (const durableRoot of PIGE_DURABLE_ROOTS) {
+        ensureRestoreStagingDirectory(path.join(staging.path, durableRoot), staging);
+      }
+      validateExtractedRestore(staging.path, sourceManifest, [RESTORE_STAGING_MARKER]);
+      await reportRestoreCorePhase(input.onPhase, checkpointContext, "archive_extracted");
 
-      const publication = acquireRestorePublication(restoredVaultPath, previewToken, manifest);
-      publishValidatedRestore(staging.path, manifest, publication);
+      const materializedManifest = materializeRestoreIdentity(
+        staging,
+        sourceManifest,
+        backupIdentity.backupId,
+        input.mode,
+        input.resultVaultId
+      );
+      await reportRestoreCorePhase(input.onPhase, checkpointContext, "durable_domains_migrated");
+      await reportRestoreCorePhase(input.onPhase, checkpointContext, "external_dependencies_reconciled");
+      for (const rebuildableRoot of PIGE_REBUILDABLE_ROOTS) {
+        ensureRestoreStagingDirectory(path.join(staging.path, rebuildableRoot), staging);
+      }
+      for (const runtimeRoot of PIGE_TRANSIENT_RUNTIME_ROOTS) {
+        ensureRestoreStagingDirectory(path.join(staging.path, runtimeRoot), staging);
+      }
+      validateExtractedRestore(staging.path, materializedManifest, [RESTORE_STAGING_MARKER]);
+      await reportRestoreCorePhase(input.onPhase, checkpointContext, "vault_identity_finalized");
+
+      const publication = acquireRestorePublication(
+        reservedPublication,
+        materializedManifest
+      );
+      publishValidatedRestore(staging.path, materializedManifest, publication);
+      await reportRestoreCorePhase(input.onPhase, checkpointContext, "destination_committed");
       releaseRestorePublication(publication);
 
       return {
         status: "restored",
-        restoredVaultPath,
-        manifest: toManifestSummary(manifest)
+        restoredVaultPath: destinationCoordinates.destinationPath,
+        backupId: backupIdentity.backupId,
+        backupIdSource: backupIdentity.backupIdSource,
+        archiveDigest: input.archiveDigest,
+        mode: input.mode,
+        sourceVaultId: input.sourceVaultId,
+        resultVaultId: input.resultVaultId,
+        destinationIdentity: input.destinationIdentity,
+        manifest: toManifestSummary(sourceManifest)
       };
     } finally {
       fs.closeSync(archive.descriptor);
       if (staging) removeOwnedRestoreStagingDirectory(staging);
     }
   }
+
+  async adoptCommittedRestore(input: RestoreCoreApplyInput): Promise<RestoreCoreApplyResult> {
+    assertRestoreCoreApplyInput(input);
+    const backupPath = path.resolve(input.backupPath);
+    const destinationCoordinates = captureRestoreDestinationCoordinates(
+      input.destinationIdentity.destinationPath,
+      input.pathSafety
+    );
+    assertRestoreDestinationIdentity(input.destinationIdentity, destinationCoordinates);
+    const archive = openRestoreArchive(backupPath);
+    try {
+      assertRestorePreviewMatches(backupPath, archive.initialSnapshot, input.archivePreviewToken);
+      assertArchiveDigest(archive.initialSnapshot, input.archiveDigest);
+      const sourceManifest = await readBackupManifest(archive.descriptor);
+      const validation = await validateBackupZip(archive.descriptor, sourceManifest);
+      const sourceVaultManifest = await readAndAssertArchivedVaultManifest(
+        archive.descriptor,
+        sourceManifest
+      );
+      const snapshotAfterValidation = snapshotRestoreArchive(archive);
+      assertSameRestoreArchive(
+        archive.initialSnapshot,
+        snapshotAfterValidation,
+        "The backup changed while its committed restore was adopted."
+      );
+      assertRestorePreviewMatches(backupPath, snapshotAfterValidation, input.archivePreviewToken);
+      assertArchiveDigest(snapshotAfterValidation, input.archiveDigest);
+      if (sourceManifest.vaultId !== input.sourceVaultId || validation.invalidFiles.length > 0) {
+        throw new PigeDomainError("restore.backup_invalid", "Committed restore source validation failed.");
+      }
+      const backupIdentity = resolveBackupIdentity(sourceManifest, snapshotAfterValidation.checksum);
+      const materializedManifest = createMaterializedRestoreManifest(
+        sourceManifest,
+        sourceVaultManifest,
+        backupIdentity.backupId,
+        input.mode,
+        input.resultVaultId
+      );
+      const binding = createRestoreApplyBinding(input, destinationCoordinates);
+      const publication = captureCommittedRestorePublication(
+        destinationCoordinates,
+        input.pathSafety,
+        binding
+      );
+      assertCurrentRestoreDestinationCoordinates(destinationCoordinates, input.pathSafety);
+      validateExtractedRestore(
+        destinationCoordinates.destinationPath,
+        materializedManifest,
+        publication?.markerPath ? [RESTORE_PUBLICATION_MARKER] : []
+      );
+      assertCurrentRestoreDestinationCoordinates(destinationCoordinates, input.pathSafety);
+      if (publication) releaseRestorePublication(publication);
+      return {
+        status: "restored",
+        restoredVaultPath: destinationCoordinates.destinationPath,
+        backupId: backupIdentity.backupId,
+        backupIdSource: backupIdentity.backupIdSource,
+        archiveDigest: input.archiveDigest,
+        mode: input.mode,
+        sourceVaultId: input.sourceVaultId,
+        resultVaultId: input.resultVaultId,
+        destinationIdentity: input.destinationIdentity,
+        manifest: toManifestSummary(sourceManifest)
+      };
+    } finally {
+      fs.closeSync(archive.descriptor);
+    }
+  }
 }
 
-function createBackupManifest(vaultPath: string, appVersion: string): BackupManifest {
+function createBackupManifest(
+  vaultPath: string,
+  appVersion: string,
+  options: BackupCreateOptions = {}
+): BackupManifest {
   const vaultManifest = readVaultManifest(vaultPath);
   const createdAt = new Date().toISOString();
-  const files = collectBackupFiles(vaultPath).map((relativePath) => {
+  const files = collectBackupFiles(vaultPath, options).map((relativePath) => {
     const absolutePath = path.join(vaultPath, ...relativePath.split("/"));
     const snapshot = snapshotBackupSourceFile(absolutePath);
     return {
@@ -396,6 +625,7 @@ function createBackupManifest(vaultPath: string, appVersion: string): BackupMani
   return {
     format: BACKUP_FORMAT,
     formatVersion: BACKUP_FORMAT_VERSION,
+    backupId: createBackupId(createdAt),
     appVersion,
     vaultId: vaultManifest.vault_id,
     vaultName: path.basename(vaultPath),
@@ -415,8 +645,26 @@ function createBackupManifest(vaultPath: string, appVersion: string): BackupMani
   };
 }
 
-function collectBackupFiles(vaultPath: string): readonly string[] {
+export function createRestoreDestinationIdentity(
+  destinationPathInput: string,
+  pathSafety: VaultPathSafetyOptions
+): RestoreDestinationIdentity {
+  const coordinates = captureRestoreDestinationCoordinates(destinationPathInput, pathSafety);
+  return {
+    destinationPath: coordinates.destinationPath,
+    parentPath: coordinates.parentPath,
+    identityDigest: coordinates.identityDigest
+  };
+}
+
+function collectBackupFiles(
+  vaultPath: string,
+  options: BackupCreateOptions = {}
+): readonly string[] {
   const files = new Set<string>();
+  const excludedJobPath = options.excludeJobId
+    ? backupJobRelativePath(options.excludeJobId)
+    : undefined;
   for (const rootFile of ROOT_FILES) {
     const absolute = path.join(vaultPath, rootFile);
     if (isBackupFileCandidate(absolute)) files.add(rootFile);
@@ -437,7 +685,16 @@ function collectBackupFiles(vaultPath: string): readonly string[] {
     }
   }
 
+  if (excludedJobPath) files.delete(excludedJobPath);
+
   return Array.from(files).sort();
+}
+
+function backupJobRelativePath(jobIdInput: string): string {
+  const jobId = JobIdSchema.parse(jobIdInput);
+  const date = /^job_(\d{4})(\d{2})\d{2}_/u.exec(jobId);
+  if (!date) throw new PigeDomainError("backup.job_invalid", "Excluded Backup Job identity is invalid.");
+  return `.pige/jobs/${date[1]}/${date[2]}/${jobId}.json`;
 }
 
 function walkFiles(directory: string): readonly string[] {
@@ -471,57 +728,70 @@ async function readBackupManifest(source: string | number): Promise<BackupManife
 }
 
 function parseBackupManifest(value: unknown): BackupManifest {
-  if (
-    !isRecord(value) ||
-    value.format !== BACKUP_FORMAT ||
-    value.formatVersion !== BACKUP_FORMAT_VERSION ||
-    !Array.isArray(value.files)
-  ) {
+  let manifest: BackupManifest;
+  try {
+    manifest = BackupManifestSchema.parse(value);
+  } catch {
     throw new PigeDomainError("restore.manifest_invalid", "Backup manifest is not compatible.");
   }
-  const manifest = value as Partial<BackupManifest>;
-  if (
-    typeof manifest.vaultId !== "string" ||
-    typeof manifest.vaultName !== "string" ||
-    typeof manifest.createdAt !== "string" ||
-    typeof manifest.appVersion !== "string" ||
-    typeof manifest.vaultSchemaVersion !== "number"
-  ) {
-    throw new PigeDomainError("restore.manifest_invalid", "Backup manifest is incomplete.");
-  }
-  const files = manifest.files ?? [];
   const manifestPaths = new Set<string>();
-  for (const file of files) {
-    if (!isRecord(file) || typeof file.path !== "string" || typeof file.size !== "number" || typeof file.checksum !== "string") {
-      throw new PigeDomainError("restore.manifest_invalid", "Backup manifest contains invalid file entries.");
-    }
+  for (const file of manifest.files) {
     assertSafeVaultRelativePath(file.path);
     if (manifestPaths.has(file.path)) {
       throw new PigeDomainError("restore.entry_duplicate", "Backup manifest contains duplicate file entries.");
     }
     manifestPaths.add(file.path);
   }
+  const totalBytes = manifest.files.reduce((sum, file) => sum + file.size, 0);
+  if (manifest.fileCount !== manifest.files.length || manifest.totalBytes !== totalBytes) {
+    throw new PigeDomainError("restore.manifest_invalid", "Backup manifest file totals are inconsistent.");
+  }
+  return manifest;
+}
+
+async function readAndAssertArchivedVaultManifest(
+  source: string | number,
+  manifest: BackupManifest
+): Promise<VaultManifest> {
+  requireRestoreManifestFile(manifest, RESTORE_COMMIT_ENTRY);
+  const manifestText = await readZipTextEntry(source, `${BACKUP_VAULT_DIR}/${RESTORE_COMMIT_ENTRY}`);
+  if (!manifestText) {
+    throw new PigeDomainError("restore.backup_invalid", "Backup vault manifest is missing.");
+  }
+  let vaultManifest: VaultManifest;
+  try {
+    vaultManifest = VaultManifestSchema.parse(JSON.parse(manifestText) as unknown);
+  } catch {
+    throw new PigeDomainError("restore.backup_invalid", "Backup vault manifest is not compatible.");
+  }
+  if (
+    vaultManifest.vault_id !== manifest.vaultId ||
+    vaultManifest.vault_schema_version !== manifest.vaultSchemaVersion
+  ) {
+    throw new PigeDomainError("restore.backup_invalid", "Backup manifest identity does not match the archived vault.");
+  }
+  return vaultManifest;
+}
+
+function createBackupId(createdAt: string): string {
+  const date = createdAt.slice(0, 10).replaceAll("-", "");
+  return BackupIdSchema.parse(`backup_${date}_${randomUUID().replaceAll("-", "").slice(0, 16)}`);
+}
+
+function resolveBackupIdentity(manifest: BackupManifest, archiveDigest: string): ResolvedBackupIdentity {
+  if (manifest.backupId) {
+    return { backupId: manifest.backupId, backupIdSource: "manifest" };
+  }
+  const date = manifest.createdAt.slice(0, 10).replaceAll("-", "");
+  const suffix = createHash("sha256")
+    .update("pige:legacy-backup-lineage:v1\0", "utf8")
+    .update(archiveDigest, "utf8")
+    .update("\0", "utf8")
+    .update(manifest.createdAt, "utf8")
+    .digest("hex");
   return {
-    format: BACKUP_FORMAT,
-    formatVersion: BACKUP_FORMAT_VERSION,
-    appVersion: manifest.appVersion,
-    vaultId: manifest.vaultId,
-    vaultName: manifest.vaultName,
-    vaultSchemaVersion: manifest.vaultSchemaVersion,
-    createdAt: manifest.createdAt,
-    fileCount: files.length,
-    totalBytes: typeof manifest.totalBytes === "number" ? manifest.totalBytes : 0,
-    noteCount: typeof manifest.noteCount === "number" ? manifest.noteCount : 0,
-    sourceCount: typeof manifest.sourceCount === "number" ? manifest.sourceCount : 0,
-    conversationCount: typeof manifest.conversationCount === "number" ? manifest.conversationCount : 0,
-    memoryCount: typeof manifest.memoryCount === "number" ? manifest.memoryCount : 0,
-    includesSecrets: false,
-    includes: manifest.includes ?? DEFAULT_INCLUDES,
-    excludedRoots: Array.isArray(manifest.excludedRoots) ? manifest.excludedRoots.filter((entry): entry is string => typeof entry === "string") : [],
-    externalDependencies: Array.isArray(manifest.externalDependencies)
-      ? manifest.externalDependencies.filter((entry): entry is string => typeof entry === "string")
-      : [],
-    files
+    backupId: BackupIdSchema.parse(`backup_${date}_${suffix}`),
+    backupIdSource: "derived_legacy"
   };
 }
 
@@ -593,7 +863,7 @@ async function validateBackupZip(
 async function extractBackupVault(
   source: string | number,
   manifest: BackupManifest,
-  destinationPath: string
+  staging: RestoreStagingHandle
 ): Promise<void> {
   const manifestFiles = new Set(manifest.files.map((file) => file.path));
   const zipFile = await openBackupZip(source);
@@ -605,9 +875,16 @@ async function extractBackupVault(
       if (!manifestFiles.has(relativePath)) {
         throw new PigeDomainError("restore.entry_unexpected", "Backup contains an unexpected vault entry.");
       }
-      const targetPath = resolveRestoreTarget(destinationPath, relativePath);
-      fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-      await pipeline(await zipFile.openReadStreamPromise(entry), fs.createWriteStream(targetPath, { flags: "wx" }));
+      const targetPath = resolveRestoreTarget(staging.path, relativePath);
+      ensureRestoreStagingDirectory(path.dirname(targetPath), staging);
+      assertRestoreStagingIdentity(staging);
+      try {
+        await pipeline(await zipFile.openReadStreamPromise(entry), fs.createWriteStream(targetPath, { flags: "wx" }));
+      } catch (caught) {
+        assertRestoreStagingIdentity(staging);
+        throw caught;
+      }
+      assertRestoreStagingIdentity(staging);
     }
   } finally {
     zipFile.close();
@@ -833,6 +1110,171 @@ function assertSameRestoreArchive(
   }
 }
 
+function assertArchiveDigest(snapshot: RestoreArchiveSnapshot, expectedDigest: string): void {
+  if (snapshot.checksum !== expectedDigest) {
+    throw new PigeDomainError("restore.backup_invalid", "The backup digest no longer matches its restore preview.");
+  }
+}
+
+function assertRestoreCoreApplyInput(input: RestoreCoreApplyInput): void {
+  assertRestorePreviewToken(input.archivePreviewToken);
+  if (!RESTORE_PREVIEW_ID.test(input.previewId) || !RESTORE_PREVIEW_TOKEN.test(input.archiveDigest)) {
+    throw new PigeDomainError("restore.backup_invalid", "Restore identity is not valid.");
+  }
+  if (!JobIdSchema.safeParse(input.jobId).success) {
+    throw new PigeDomainError("restore.backup_invalid", "Restore Job identity is not valid.");
+  }
+  if (!VaultIdSchema.safeParse(input.sourceVaultId).success || !VaultIdSchema.safeParse(input.resultVaultId).success) {
+    throw new PigeDomainError("restore.backup_invalid", "Restore vault identity is not valid.");
+  }
+  if (input.mode === "replace_existing" && input.sourceVaultId !== input.resultVaultId) {
+    throw new PigeDomainError("restore.identity_invalid", "Replace restore must preserve the source vault identity.");
+  }
+  if (input.mode === "clone_as_new" && input.sourceVaultId === input.resultVaultId) {
+    throw new PigeDomainError("restore.identity_invalid", "Clone restore must mint a new vault identity.");
+  }
+}
+
+function createRestoreApplyBinding(
+  input: RestoreCoreApplyInput,
+  destinationCoordinates: RestoreDestinationCoordinates
+): RestoreApplyBinding {
+  return {
+    identityVersion: 2,
+    jobId: input.jobId,
+    previewId: input.previewId,
+    archiveDigest: input.archiveDigest,
+    mode: input.mode,
+    sourceVaultId: input.sourceVaultId,
+    resultVaultId: input.resultVaultId,
+    destinationIdentity: destinationCoordinates.identityDigest
+  };
+}
+
+function createRestoreCheckpointContext(
+  binding: RestoreApplyBinding,
+  backupIdentity: ResolvedBackupIdentity,
+  externalDependencyCount: number
+): RestoreCoreCheckpointContext {
+  return {
+    jobId: binding.jobId,
+    previewId: binding.previewId,
+    archiveDigest: binding.archiveDigest,
+    backupId: backupIdentity.backupId,
+    backupIdSource: backupIdentity.backupIdSource,
+    mode: binding.mode,
+    sourceVaultId: binding.sourceVaultId,
+    resultVaultId: binding.resultVaultId,
+    destinationIdentity: binding.destinationIdentity,
+    externalDependencyCount
+  };
+}
+
+async function reportRestoreCorePhase(
+  reporter: RestoreCorePhaseReporter | undefined,
+  context: RestoreCoreCheckpointContext,
+  phase: RestoreCoreCheckpointPhase
+): Promise<void> {
+  await reporter?.({ phase, ...context });
+}
+
+function captureRestoreDestinationCoordinates(
+  destinationPathInput: string,
+  pathSafety: VaultPathSafetyOptions
+): RestoreDestinationCoordinates {
+  const destinationPath = path.resolve(destinationPathInput);
+  assertVaultPathAllowed(destinationPath, pathSafety);
+  const parentPath = path.dirname(destinationPath);
+  if (parentPath === destinationPath) {
+    throw new PigeDomainError("restore.destination_invalid", "Restore destination cannot be a filesystem root.");
+  }
+  const ancestors = captureRestoreAncestorChain(parentPath);
+  assertNoAncestorVaultForRestore(ancestors);
+  if (fs.existsSync(destinationPath)) {
+    captureRestoreDirectoryIdentity(destinationPath);
+  }
+  const hash = createHash("sha256")
+    .update("pige.restore.destination.v1\0", "utf8")
+    .update(destinationPath, "utf8");
+  for (const ancestor of ancestors) {
+    hash
+      .update("\0", "utf8")
+      .update(ancestor.path, "utf8")
+      .update("\0", "utf8")
+      .update(String(ancestor.device), "utf8")
+      .update(":", "utf8")
+      .update(String(ancestor.inode), "utf8");
+  }
+  return {
+    destinationPath,
+    parentPath,
+    identityDigest: `sha256:${hash.digest("hex")}`,
+    ancestors
+  };
+}
+
+function captureRestoreAncestorChain(directoryPathInput: string): readonly RestoreAncestorIdentity[] {
+  const directoryPath = path.resolve(directoryPathInput);
+  const root = path.parse(directoryPath).root;
+  const paths: string[] = [];
+  let current = directoryPath;
+  while (true) {
+    paths.unshift(current);
+    if (current === root) break;
+    current = path.dirname(current);
+  }
+  return paths.map((entryPath) => {
+    let identity: fs.Stats;
+    try {
+      identity = fs.lstatSync(entryPath);
+    } catch {
+      throw new PigeDomainError("restore.destination_invalid", "Restore destination parent must already exist.");
+    }
+    if (!identity.isDirectory() || identity.isSymbolicLink()) {
+      throw new PigeDomainError("restore.destination_invalid", "Restore destination ancestors cannot be symbolic links.");
+    }
+    return { path: entryPath, device: identity.dev, inode: identity.ino };
+  });
+}
+
+function assertNoAncestorVaultForRestore(ancestors: readonly RestoreAncestorIdentity[]): void {
+  for (const ancestor of ancestors) {
+    const manifestPath = path.join(ancestor.path, RESTORE_COMMIT_ENTRY);
+    try {
+      fs.lstatSync(manifestPath);
+      throw new PigeDomainError("restore.destination_invalid", "Restore destination cannot be nested inside a vault.");
+    } catch (caught) {
+      if (caught instanceof PigeDomainError) throw caught;
+      if (!isErrno(caught, "ENOENT")) {
+        throw new PigeDomainError("restore.destination_invalid", "Restore destination ancestry could not be verified.");
+      }
+    }
+  }
+}
+
+function assertRestoreDestinationIdentity(
+  expected: RestoreDestinationIdentity,
+  current: RestoreDestinationCoordinates
+): void {
+  if (
+    path.resolve(expected.destinationPath) !== current.destinationPath ||
+    path.resolve(expected.parentPath) !== current.parentPath ||
+    expected.identityDigest !== current.identityDigest
+  ) {
+    throw new PigeDomainError("restore.destination_invalid", "Restore destination identity changed before apply.");
+  }
+}
+
+function assertCurrentRestoreDestinationCoordinates(
+  expected: RestoreDestinationCoordinates,
+  pathSafety: VaultPathSafetyOptions
+): void {
+  const current = captureRestoreDestinationCoordinates(expected.destinationPath, pathSafety);
+  if (current.identityDigest !== expected.identityDigest || current.parentPath !== expected.parentPath) {
+    throw new PigeDomainError("restore.destination_invalid", "Restore destination ancestry changed during apply.");
+  }
+}
+
 function captureRestoreDirectoryIdentity(directoryPath: string): fs.Stats {
   const identity = fs.lstatSync(directoryPath);
   if (!identity.isDirectory() || identity.isSymbolicLink()) {
@@ -858,22 +1300,36 @@ function assertRestoreDirectoryIdentity(directoryPath: string, expected: fs.Stat
   }
 }
 
-function createRestoreStagingDirectory(parentDirectory: string): RestoreStagingHandle {
+function createRestoreStagingDirectory(
+  parentDirectory: string,
+  destinationCoordinates: RestoreDestinationCoordinates,
+  pathSafety: VaultPathSafetyOptions,
+  binding: RestoreApplyBinding
+): RestoreStagingHandle {
+  assertCurrentRestoreDestinationCoordinates(destinationCoordinates, pathSafety);
   const stagingPath = fs.mkdtempSync(path.join(parentDirectory, ".pige-restore-"));
   fs.chmodSync(stagingPath, 0o700);
   const markerPath = path.join(stagingPath, RESTORE_STAGING_MARKER);
-  const markerBody = `pige.restore.staging.v1:${randomUUID()}\n`;
+  const markerBody = `${JSON.stringify({
+    identityVersion: 1,
+    stagingId: randomUUID(),
+    binding
+  })}\n`;
   const markerIdentity = writeExclusiveRestoreFile(markerPath, markerBody);
+  assertCurrentRestoreDestinationCoordinates(destinationCoordinates, pathSafety);
   return {
     path: stagingPath,
     identity: captureRestoreDirectoryIdentity(stagingPath),
     markerPath,
     markerIdentity,
-    markerBody
+    markerBody,
+    destinationCoordinates,
+    pathSafety
   };
 }
 
 function assertRestoreStagingIdentity(staging: RestoreStagingHandle): void {
+  assertCurrentRestoreDestinationCoordinates(staging.destinationCoordinates, staging.pathSafety);
   assertRestoreDirectoryIdentity(staging.path, staging.identity);
   assertOwnedRestoreFile(staging.markerPath, staging.markerIdentity, staging.markerBody);
 }
@@ -887,7 +1343,196 @@ function removeOwnedRestoreStagingDirectory(staging: RestoreStagingHandle): void
   }
 }
 
-function validateExtractedRestore(directoryPath: string, manifest: BackupManifest): void {
+function ensureRestoreStagingDirectory(
+  directoryPath: string,
+  staging: RestoreStagingHandle
+): void {
+  ensureSafeRestoreSubdirectory(directoryPath, staging.path, () => assertRestoreStagingIdentity(staging));
+}
+
+function ensureSafeRestoreSubdirectory(
+  directoryPath: string,
+  rootPath: string,
+  assertRootIdentity: () => void
+): void {
+  const relativePath = path.relative(rootPath, directoryPath);
+  if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+    throw new PigeDomainError("restore.result_invalid", "Restore directory escaped its owned root.");
+  }
+  let currentPath = rootPath;
+  for (const segment of relativePath.split(path.sep).filter(Boolean)) {
+    assertRootIdentity();
+    currentPath = path.join(currentPath, segment);
+    try {
+      fs.mkdirSync(currentPath, { mode: 0o700 });
+    } catch (caught) {
+      if (!isErrno(caught, "EEXIST")) throw caught;
+    }
+    const current = fs.lstatSync(currentPath);
+    if (!current.isDirectory() || current.isSymbolicLink()) {
+      throw new PigeDomainError("restore.result_invalid", "Restore directory traversal was not safe.");
+    }
+  }
+}
+
+function materializeRestoreIdentity(
+  staging: RestoreStagingHandle,
+  sourceManifest: BackupManifest,
+  backupId: string,
+  mode: RestoreIdentityMode,
+  resultVaultId: string
+): BackupManifest {
+  const sourceVaultManifest = readVaultManifest(staging.path);
+  if (
+    sourceVaultManifest.vault_id !== sourceManifest.vaultId ||
+    sourceVaultManifest.vault_schema_version !== sourceManifest.vaultSchemaVersion
+  ) {
+    throw new PigeDomainError("restore.result_invalid", "Extracted vault identity does not match the backup manifest.");
+  }
+  const materialized = createMaterializedRestoreManifest(
+    sourceManifest,
+    sourceVaultManifest,
+    backupId,
+    mode,
+    resultVaultId
+  );
+  if (mode === "replace_existing") return materialized;
+  const restoredVaultManifest = VaultManifestSchema.parse({
+    ...sourceVaultManifest,
+    vault_id: resultVaultId,
+    origin_vault_id: sourceManifest.vaultId,
+    restored_from_backup_id: backupId
+  });
+  const manifestPath = resolveRestoreTarget(staging.path, RESTORE_COMMIT_ENTRY);
+  writeOwnedStagingJson(manifestPath, restoredVaultManifest, staging);
+  const actualManifestFile = snapshotRestoredFile(manifestPath);
+  const expectedManifestFile = materialized.files.find((file) => file.path === RESTORE_COMMIT_ENTRY);
+  if (
+    !expectedManifestFile ||
+    actualManifestFile.size !== expectedManifestFile.size ||
+    actualManifestFile.checksum !== expectedManifestFile.checksum
+  ) {
+    throw new PigeDomainError("restore.result_invalid", "Restored clone identity failed exact readback.");
+  }
+  return materialized;
+}
+
+function createMaterializedRestoreManifest(
+  sourceManifest: BackupManifest,
+  sourceVaultManifest: VaultManifest,
+  backupId: string,
+  mode: RestoreIdentityMode,
+  resultVaultId: string
+): BackupManifest {
+  if (mode === "replace_existing") return { ...sourceManifest, backupId };
+  const restoredVaultManifest = VaultManifestSchema.parse({
+    ...sourceVaultManifest,
+    vault_id: resultVaultId,
+    origin_vault_id: sourceManifest.vaultId,
+    restored_from_backup_id: backupId
+  });
+  const body = Buffer.from(`${JSON.stringify(restoredVaultManifest, null, 2)}\n`, "utf8");
+  const restoredManifestFile = {
+    path: RESTORE_COMMIT_ENTRY,
+    size: body.byteLength,
+    checksum: `sha256:${createHash("sha256").update(body).digest("hex")}`
+  };
+  const files = sourceManifest.files.map((file) => file.path === RESTORE_COMMIT_ENTRY
+    ? restoredManifestFile
+    : file);
+  return {
+    ...sourceManifest,
+    backupId,
+    vaultId: resultVaultId,
+    totalBytes: files.reduce((sum, file) => sum + file.size, 0),
+    files
+  };
+}
+
+function writeOwnedStagingJson(
+  filePath: string,
+  value: unknown,
+  staging: RestoreStagingHandle
+): void {
+  assertRestoreStagingIdentity(staging);
+  const originalPathIdentity = fs.lstatSync(filePath);
+  const flags = fs.constants.O_WRONLY | (fs.constants.O_NOFOLLOW ?? 0);
+  const descriptor = fs.openSync(filePath, flags);
+  try {
+    const before = fs.fstatSync(descriptor);
+    const pathBefore = fs.lstatSync(filePath);
+    if (!sameFileRevision(originalPathIdentity, before) || !sameFileRevision(before, pathBefore)) {
+      throw new PigeDomainError("restore.result_invalid", "Restore identity file changed before it was updated.");
+    }
+    fs.ftruncateSync(descriptor, 0);
+    fs.writeFileSync(descriptor, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+    fs.fsyncSync(descriptor);
+    const after = fs.fstatSync(descriptor);
+    const pathAfter = fs.lstatSync(filePath);
+    if (!sameInodeIdentity(before, after) || !sameFileRevision(after, pathAfter)) {
+      throw new PigeDomainError("restore.result_invalid", "Restore identity file changed while it was updated.");
+    }
+  } finally {
+    fs.closeSync(descriptor);
+  }
+  fsyncDirectoryBestEffort(path.dirname(filePath));
+  assertRestoreStagingIdentity(staging);
+}
+
+function assertRestoreDirectoryShape(
+  rootPath: string,
+  manifest: BackupManifest,
+  allowedControlFiles: readonly string[]
+): void {
+  const allowedFiles = new Set([...manifest.files.map((file) => file.path), ...allowedControlFiles]);
+  const allowedDirectories = new Set<string>();
+  for (const filePath of allowedFiles) {
+    let current = path.posix.dirname(filePath);
+    while (current !== ".") {
+      allowedDirectories.add(current);
+      current = path.posix.dirname(current);
+    }
+  }
+  for (const directoryPath of [
+    ...PIGE_DURABLE_ROOTS,
+    ...PIGE_REBUILDABLE_ROOTS,
+    ...PIGE_TRANSIENT_RUNTIME_ROOTS
+  ]) {
+    let current: string = directoryPath;
+    while (current !== ".") {
+      allowedDirectories.add(current);
+      current = path.posix.dirname(current);
+    }
+  }
+
+  const visit = (directoryPath: string): void => {
+    for (const entry of fs.readdirSync(directoryPath, { withFileTypes: true })) {
+      const absolutePath = path.join(directoryPath, entry.name);
+      const relativePath = path.relative(rootPath, absolutePath).split(path.sep).join("/");
+      if (entry.isSymbolicLink()) {
+        throw new PigeDomainError("restore.result_invalid", "Restore output contains a symbolic link.");
+      }
+      if (entry.isDirectory()) {
+        if (!allowedDirectories.has(relativePath)) {
+          throw new PigeDomainError("restore.result_invalid", "Restore output contains an undeclared directory.");
+        }
+        visit(absolutePath);
+        continue;
+      }
+      if (!entry.isFile() || !allowedFiles.has(relativePath)) {
+        throw new PigeDomainError("restore.result_invalid", "Restore output contains an undeclared file.");
+      }
+    }
+  };
+  visit(rootPath);
+}
+
+function validateExtractedRestore(
+  directoryPath: string,
+  manifest: BackupManifest,
+  allowedControlFiles: readonly string[] = []
+): void {
+  assertRestoreDirectoryShape(directoryPath, manifest, allowedControlFiles);
   for (const file of manifest.files) {
     const filePath = resolveRestoreTarget(directoryPath, file.path);
     const snapshot = snapshotRestoredFile(filePath);
@@ -898,13 +1543,22 @@ function validateExtractedRestore(directoryPath: string, manifest: BackupManifes
   if (!isPigeVault(directoryPath)) {
     throw new PigeDomainError("restore.result_invalid", "Restored folder is not a compatible Pige vault.");
   }
+  const restoredManifest = readVaultManifest(directoryPath);
+  if (
+    restoredManifest.vault_id !== manifest.vaultId ||
+    restoredManifest.vault_schema_version !== manifest.vaultSchemaVersion
+  ) {
+    throw new PigeDomainError("restore.result_invalid", "Restored vault identity does not match its publication manifest.");
+  }
 }
 
-function acquireRestorePublication(
-  destinationPath: string,
-  previewToken: string,
-  manifest: BackupManifest
-): RestorePublicationHandle {
+function reserveRestorePublication(
+  destinationCoordinates: RestoreDestinationCoordinates,
+  pathSafety: VaultPathSafetyOptions,
+  binding: RestoreApplyBinding
+): RestorePublicationReservationHandle {
+  const destinationPath = destinationCoordinates.destinationPath;
+  assertCurrentRestoreDestinationCoordinates(destinationCoordinates, pathSafety);
   const sidecarPath = path.join(
     path.dirname(destinationPath),
     `.${path.basename(destinationPath)}.pige-restore.json`
@@ -914,8 +1568,7 @@ function acquireRestorePublication(
   let createdSidecar = false;
   try {
     reservation = {
-      identityVersion: 1,
-      previewToken,
+      ...binding,
       reservationId: randomUUID()
     };
     sidecarIdentity = writeExclusiveRestoreFile(sidecarPath, serializeRestoreReservation(reservation));
@@ -923,14 +1576,39 @@ function acquireRestorePublication(
   } catch (caught) {
     if (!isErrno(caught, "EEXIST")) throw caught;
     const existing = readRestoreReservation(sidecarPath);
-    if (existing.reservation.previewToken !== previewToken) {
+    if (!sameRestoreApplyBinding(existing.reservation, binding)) {
       throw new PigeDomainError("restore.destination_exists", "Restore destination is reserved by another restore.");
     }
     reservation = existing.reservation;
     sidecarIdentity = existing.identity;
   }
 
+  assertCurrentRestoreDestinationCoordinates(destinationCoordinates, pathSafety);
+  return {
+    reservation,
+    sidecarPath,
+    sidecarIdentity,
+    createdSidecar,
+    destinationCoordinates,
+    pathSafety
+  };
+}
+
+function acquireRestorePublication(
+  reserved: RestorePublicationReservationHandle,
+  manifest: BackupManifest
+): RestorePublicationHandle {
+  const {
+    reservation,
+    sidecarPath,
+    sidecarIdentity,
+    createdSidecar,
+    destinationCoordinates,
+    pathSafety
+  } = reserved;
+  const destinationPath = destinationCoordinates.destinationPath;
   const reservationBody = serializeRestoreReservation(reservation);
+  assertCurrentRestoreDestinationCoordinates(destinationCoordinates, pathSafety);
   let destinationIdentity: fs.Stats;
   let createdDestination = false;
   try {
@@ -965,7 +1643,10 @@ function acquireRestorePublication(
       destinationIdentity,
       markerPath,
       markerIdentity: marker.identity,
-      alreadyCommitted: isPigeVault(destinationPath)
+      alreadyCommitted: isPigeVault(destinationPath),
+      createdSidecar,
+      destinationCoordinates,
+      pathSafety
     };
   }
 
@@ -977,7 +1658,10 @@ function acquireRestorePublication(
       sidecarIdentity,
       destinationPath,
       destinationIdentity,
-      alreadyCommitted: true
+      alreadyCommitted: true,
+      createdSidecar,
+      destinationCoordinates,
+      pathSafety
     };
   }
 
@@ -994,7 +1678,50 @@ function acquireRestorePublication(
     destinationIdentity,
     markerPath,
     markerIdentity,
-    alreadyCommitted: false
+    alreadyCommitted: false,
+    createdSidecar,
+    destinationCoordinates,
+    pathSafety
+  };
+}
+
+function captureCommittedRestorePublication(
+  destinationCoordinates: RestoreDestinationCoordinates,
+  pathSafety: VaultPathSafetyOptions,
+  binding: RestoreApplyBinding
+): RestorePublicationHandle | undefined {
+  const destinationPath = destinationCoordinates.destinationPath;
+  const sidecarPath = path.join(
+    path.dirname(destinationPath),
+    `.${path.basename(destinationPath)}.pige-restore.json`
+  );
+  const markerPath = path.join(destinationPath, ...RESTORE_PUBLICATION_MARKER.split("/"));
+  const hasSidecar = fs.existsSync(sidecarPath);
+  const hasMarker = fs.existsSync(markerPath);
+  if (!hasSidecar && !hasMarker) return undefined;
+  if (!hasSidecar) {
+    throw new PigeDomainError("restore.destination_exists", "Committed restore ownership is incomplete.");
+  }
+  const sidecar = readRestoreReservation(sidecarPath);
+  if (!sameRestoreApplyBinding(sidecar.reservation, binding)) {
+    throw new PigeDomainError("restore.destination_exists", "Committed restore ownership changed.");
+  }
+  const marker = hasMarker ? readRestoreReservation(markerPath) : undefined;
+  if (marker && serializeRestoreReservation(marker.reservation) !== serializeRestoreReservation(sidecar.reservation)) {
+    throw new PigeDomainError("restore.destination_exists", "Committed restore marker changed.");
+  }
+  assertCurrentRestoreDestinationCoordinates(destinationCoordinates, pathSafety);
+  return {
+    reservation: sidecar.reservation,
+    sidecarPath,
+    sidecarIdentity: sidecar.identity,
+    createdSidecar: false,
+    destinationCoordinates,
+    pathSafety,
+    destinationPath,
+    destinationIdentity: captureRestoreDirectoryIdentity(destinationPath),
+    ...(marker ? { markerPath, markerIdentity: marker.identity } : {}),
+    alreadyCommitted: true
   };
 }
 
@@ -1007,6 +1734,12 @@ function publishValidatedRestore(
     for (const file of manifest.files) {
       if (file.path === RESTORE_COMMIT_ENTRY) continue;
       publishRestoreFile(stagingPath, file, publication);
+    }
+    for (const durableRoot of PIGE_DURABLE_ROOTS) {
+      ensureRestorePublicationDirectory(
+        path.join(publication.destinationPath, durableRoot),
+        publication
+      );
     }
     for (const rebuildableRoot of PIGE_REBUILDABLE_ROOTS) {
       ensureRestorePublicationDirectory(
@@ -1029,7 +1762,11 @@ function publishValidatedRestore(
   }
   reconcileRestorePublicationTemps(manifest, publication);
   assertRestorePublicationIdentity(publication);
-  validateExtractedRestore(publication.destinationPath, manifest);
+  validateExtractedRestore(
+    publication.destinationPath,
+    manifest,
+    publication.markerPath ? [RESTORE_PUBLICATION_MARKER] : []
+  );
 }
 
 function publishRestoreFile(
@@ -1130,27 +1867,15 @@ function ensureRestorePublicationDirectory(
   directoryPath: string,
   publication: RestorePublicationHandle
 ): void {
-  const relativePath = path.relative(publication.destinationPath, directoryPath);
-  if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
-    throw new PigeDomainError("restore.result_invalid", "Restore directory escaped its reserved destination.");
-  }
-  let currentPath = publication.destinationPath;
-  for (const segment of relativePath.split(path.sep).filter(Boolean)) {
-    assertRestorePublicationIdentity(publication);
-    currentPath = path.join(currentPath, segment);
-    try {
-      fs.mkdirSync(currentPath, { mode: 0o700 });
-    } catch (caught) {
-      if (!isErrno(caught, "EEXIST")) throw caught;
-    }
-    const current = fs.lstatSync(currentPath);
-    if (!current.isDirectory() || current.isSymbolicLink()) {
-      throw new PigeDomainError("restore.result_invalid", "Restore directory traversal was not safe.");
-    }
-  }
+  ensureSafeRestoreSubdirectory(
+    directoryPath,
+    publication.destinationPath,
+    () => assertRestorePublicationIdentity(publication)
+  );
 }
 
 function assertRestorePublicationIdentity(publication: RestorePublicationHandle): void {
+  assertCurrentRestoreDestinationCoordinates(publication.destinationCoordinates, publication.pathSafety);
   const reservationBody = serializeRestoreReservation(publication.reservation);
   assertOwnedRestoreFile(publication.sidecarPath, publication.sidecarIdentity, reservationBody);
   assertRestoreDirectoryIdentity(publication.destinationPath, publication.destinationIdentity);
@@ -1162,7 +1887,12 @@ function assertRestorePublicationIdentity(publication: RestorePublicationHandle)
 function releaseRestorePublication(publication: RestorePublicationHandle): void {
   const reservationBody = serializeRestoreReservation(publication.reservation);
   if (publication.markerPath && publication.markerIdentity) {
-    removeOwnedRestoreFile(publication.markerPath, publication.markerIdentity, reservationBody);
+    const markerRemoved = removeOwnedRestoreFile(
+      publication.markerPath,
+      publication.markerIdentity,
+      reservationBody
+    );
+    if (!markerRemoved) return;
   }
   removeOwnedRestoreFile(publication.sidecarPath, publication.sidecarIdentity, reservationBody);
   fsyncDirectoryBestEffort(publication.destinationPath);
@@ -1196,9 +1926,20 @@ function readRestoreReservation(filePath: string): {
   }
   if (
     !isRecord(value) ||
-    value.identityVersion !== 1 ||
-    typeof value.previewToken !== "string" ||
-    !RESTORE_PREVIEW_TOKEN.test(value.previewToken) ||
+    value.identityVersion !== 2 ||
+    typeof value.jobId !== "string" ||
+    !JobIdSchema.safeParse(value.jobId).success ||
+    typeof value.previewId !== "string" ||
+    !RESTORE_PREVIEW_ID.test(value.previewId) ||
+    typeof value.archiveDigest !== "string" ||
+    !RESTORE_PREVIEW_TOKEN.test(value.archiveDigest) ||
+    (value.mode !== "clone_as_new" && value.mode !== "replace_existing") ||
+    typeof value.sourceVaultId !== "string" ||
+    !VaultIdSchema.safeParse(value.sourceVaultId).success ||
+    typeof value.resultVaultId !== "string" ||
+    !VaultIdSchema.safeParse(value.resultVaultId).success ||
+    typeof value.destinationIdentity !== "string" ||
+    !RESTORE_PREVIEW_TOKEN.test(value.destinationIdentity) ||
     typeof value.reservationId !== "string" ||
     !/^[0-9a-f-]{36}$/u.test(value.reservationId)
   ) {
@@ -1206,12 +1947,32 @@ function readRestoreReservation(filePath: string): {
   }
   return {
     reservation: {
-      identityVersion: 1,
-      previewToken: value.previewToken,
+      identityVersion: 2,
+      jobId: value.jobId,
+      previewId: value.previewId,
+      archiveDigest: value.archiveDigest,
+      mode: value.mode,
+      sourceVaultId: value.sourceVaultId,
+      resultVaultId: value.resultVaultId,
+      destinationIdentity: value.destinationIdentity,
       reservationId: value.reservationId
     },
     identity: snapshot.identity
   };
+}
+
+function sameRestoreApplyBinding(
+  left: RestoreApplyBinding,
+  right: RestoreApplyBinding
+): boolean {
+  return left.identityVersion === right.identityVersion &&
+    left.jobId === right.jobId &&
+    left.previewId === right.previewId &&
+    left.archiveDigest === right.archiveDigest &&
+    left.mode === right.mode &&
+    left.sourceVaultId === right.sourceVaultId &&
+    left.resultVaultId === right.resultVaultId &&
+    left.destinationIdentity === right.destinationIdentity;
 }
 
 function writeExclusiveRestoreFile(filePath: string, body: string): fs.Stats {
@@ -1253,12 +2014,14 @@ function assertOwnedRestoreFile(filePath: string, expected: fs.Stats, body: stri
   }
 }
 
-function removeOwnedRestoreFile(filePath: string, expected: fs.Stats, body: string): void {
+function removeOwnedRestoreFile(filePath: string, expected: fs.Stats, body: string): boolean {
   try {
     assertOwnedRestoreFile(filePath, expected, body);
     fs.unlinkSync(filePath);
+    return true;
   } catch {
     // A stale ownership marker is safer than unlinking a path whose identity changed.
+    return false;
   }
 }
 
@@ -1359,12 +2122,24 @@ function countFiles(directory: string, predicate: (filePath: string) => boolean 
   return count;
 }
 
-function createPreviewWarnings(manifest: BackupManifest, invalidFiles: readonly string[]): readonly string[] {
+function createPreviewWarnings(
+  manifest: BackupManifest,
+  invalidFiles: readonly string[]
+): readonly RestorePreviewWarning[] {
   return [
-    ...invalidFiles.map((file) => `Checksum, size, or manifest mismatch: ${file}`),
-    ...(manifest.excludedRoots.length > 0 ? [`Excluded rebuildable roots: ${manifest.excludedRoots.join(", ")}`] : []),
+    ...(invalidFiles.length > 0 ? [{
+      code: "invalid_archive_entries" as const,
+      count: invalidFiles.length
+    }] : []),
+    ...(manifest.excludedRoots.length > 0 ? [{
+      code: "excluded_rebuildable_roots" as const,
+      count: manifest.excludedRoots.length
+    }] : []),
     ...(manifest.externalDependencies.length > 0
-      ? [`External originals are referenced but not included: ${manifest.externalDependencies.length}`]
+      ? [{
+          code: "external_originals_not_included" as const,
+          count: manifest.externalDependencies.length
+        }]
       : [])
   ];
 }
@@ -1515,7 +2290,9 @@ function assertSafeVaultRelativePath(relativePath: string): void {
     normalized === "." ||
     normalized.startsWith("../") ||
     normalized === ".." ||
-    normalized !== relativePath
+    normalized !== relativePath ||
+    relativePath === RESTORE_PUBLICATION_MARKER ||
+    relativePath === RESTORE_STAGING_MARKER
   ) {
     throw new PigeDomainError("restore.entry_invalid", "Backup manifest contains an unsafe path.");
   }

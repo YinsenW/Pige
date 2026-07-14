@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type DragEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type RefObject
+} from "react";
 import { ProposalReviewPanel } from "./components/ProposalReviewPanel";
 import deMessages from "./locales/de/messages.json";
 import enMessages from "./locales/en/messages.json";
@@ -39,6 +46,8 @@ import type {
   RetrievalAnswerCitation,
   RetrievalAskResult,
   RetrievalSearchResultItem,
+  RestoreMode,
+  RestorePreviewWarning,
   RestorePreviewResult,
   SupportBundlePreview,
   ToolchainHealth,
@@ -1219,43 +1228,290 @@ interface FirstRunPanelProps {
   readonly t: (key: string) => string;
 }
 
-function FirstRunPanel(props: FirstRunPanelProps): React.JSX.Element {
-  const [restorePreview, setRestorePreview] = useState<RestorePreviewResult | null>(null);
-  const [restoreBusy, setRestoreBusy] = useState(false);
+type ReadyRestorePreview = Extract<RestorePreviewResult, { readonly status: "ready" }>;
+
+function restoreWarningMessageKey(code: RestorePreviewWarning["code"]): string {
+  switch (code) {
+    case "invalid_archive_entries": return "backup.warningInvalidArchiveEntries";
+    case "excluded_rebuildable_roots": return "backup.warningExcludedRebuildableRoots";
+    case "external_originals_not_included": return "backup.warningExternalOriginalsNotIncluded";
+  }
+}
+type RestorePhase = "idle" | "previewing" | "applying";
+
+function restoreDefaultMode(preview: ReadyRestorePreview): RestoreMode | null {
+  if (preview.permittedModes.includes("clone_as_new")) return "clone_as_new";
+  if (preview.permittedModes.includes(preview.defaultMode)) return preview.defaultMode;
+  return preview.permittedModes[0] ?? null;
+}
+
+function useRestoreFlow(onRestored: () => Promise<void>, onRestoreStart: () => void) {
+  const [restorePreview, setRestorePreview] = useState<ReadyRestorePreview | null>(null);
+  const [restoreMode, setRestoreMode] = useState<RestoreMode | null>(null);
+  const [restorePhase, setRestorePhase] = useState<RestorePhase>("idle");
+  const [restoreErrorKey, setRestoreErrorKey] = useState<string | null>(null);
+  const restoreInFlight = useRef(false);
+  const pendingRestoreFocus = useRef<RefObject<HTMLButtonElement | null> | null>(null);
+  const previewButtonRef = useRef<HTMLButtonElement>(null);
+  const applyButtonRef = useRef<HTMLButtonElement>(null);
+
+  const commitRestoreFocus = (): void => {
+    if (!pendingRestoreFocus.current) return;
+    const control = pendingRestoreFocus.current;
+    pendingRestoreFocus.current = null;
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => control.current?.focus());
+    });
+  };
+
+  const restoreFocus = (control: RefObject<HTMLButtonElement | null>): void => {
+    pendingRestoreFocus.current = control;
+  };
 
   const previewRestore = async (): Promise<void> => {
-    props.onError(null);
+    if (restoreInFlight.current) return;
+    restoreInFlight.current = true;
+    onRestoreStart();
     setRestorePreview(null);
-    setRestoreBusy(true);
+    setRestoreMode(null);
+    setRestoreErrorKey(null);
+    setRestorePhase("previewing");
     try {
       const result = await window.pige.backup.previewRestore();
-      if (result.status === "ready") setRestorePreview(result);
-    } catch (caught) {
-      props.onError(caught instanceof Error ? caught.message : "Something went wrong.");
+      if (result.status === "canceled") {
+        restoreFocus(previewButtonRef);
+        return;
+      }
+      const mode = restoreDefaultMode(result);
+      if (!mode) {
+        setRestoreErrorKey("backup.restoreFailed");
+        restoreFocus(previewButtonRef);
+        return;
+      }
+      setRestorePreview(result);
+      setRestoreMode(mode);
+    } catch {
+      setRestoreErrorKey("backup.restoreFailed");
+      restoreFocus(previewButtonRef);
     } finally {
-      setRestoreBusy(false);
+      restoreInFlight.current = false;
+      setRestorePhase("idle");
+      commitRestoreFocus();
     }
   };
 
   const applyRestore = async (): Promise<void> => {
-    if (!restorePreview?.backupPath || !restorePreview.previewToken) return;
-    props.onError(null);
-    setRestoreBusy(true);
+    if (
+      restoreInFlight.current ||
+      !restorePreview ||
+      !restoreMode ||
+      restorePreview.invalidFileCount > 0 ||
+      !restorePreview.permittedModes.includes(restoreMode)
+    ) return;
+    restoreInFlight.current = true;
+    onRestoreStart();
+    setRestoreErrorKey(null);
+    setRestorePhase("applying");
     try {
       const result = await window.pige.backup.applyRestore({
-        backupPath: restorePreview.backupPath,
-        previewToken: restorePreview.previewToken
+        previewId: restorePreview.previewId,
+        mode: restoreMode
       });
-      if (result.status === "restored") {
-        setRestorePreview(null);
-        await props.onRestoreCompleted();
+      if (result.status === "canceled") {
+        restoreFocus(applyButtonRef);
+        return;
       }
-    } catch (caught) {
-      props.onError(caught instanceof Error ? caught.message : "Something went wrong.");
+      setRestorePreview(null);
+      setRestoreMode(null);
+      await onRestored();
+    } catch {
+      setRestoreErrorKey("backup.restoreFailed");
+      restoreFocus(restorePreview ? applyButtonRef : previewButtonRef);
     } finally {
-      setRestoreBusy(false);
+      restoreInFlight.current = false;
+      setRestorePhase("idle");
+      commitRestoreFocus();
     }
   };
+
+  const cancelRestore = (): void => {
+    if (restoreInFlight.current) return;
+    setRestorePreview(null);
+    setRestoreMode(null);
+    setRestoreErrorKey(null);
+    restoreFocus(previewButtonRef);
+    commitRestoreFocus();
+  };
+
+  const selectRestoreMode = (mode: RestoreMode): void => {
+    if (!restorePreview?.permittedModes.includes(mode) || restoreInFlight.current) return;
+    setRestoreMode(mode);
+    setRestoreErrorKey(null);
+  };
+
+  return {
+    applyButtonRef,
+    applyRestore,
+    cancelRestore,
+    previewButtonRef,
+    previewRestore,
+    restoreErrorKey,
+    restoreMode,
+    restorePhase,
+    restorePreview,
+    selectRestoreMode
+  };
+}
+
+function RestorePreviewPanel(props: {
+  readonly idPrefix: string;
+  readonly preview: ReadyRestorePreview;
+  readonly mode: RestoreMode | null;
+  readonly phase: RestorePhase;
+  readonly errorKey: string | null;
+  readonly applyButtonRef: RefObject<HTMLButtonElement | null>;
+  readonly onModeChange: (mode: RestoreMode) => void;
+  readonly onApply: () => Promise<void>;
+  readonly onCancel: () => void;
+  readonly t: (key: string) => string;
+}): React.JSX.Element {
+  const applying = props.phase === "applying";
+  const applyDisabled =
+    props.phase !== "idle" ||
+    props.mode === null ||
+    props.preview.invalidFileCount > 0 ||
+    !props.preview.permittedModes.includes(props.mode);
+
+  return (
+    <section className="restore-preview" aria-label={props.t("backup.restorePreview")}>
+      <strong>{props.t("backup.restorePreview")}</strong>
+      <dl className="restore-summary">
+        <div className="info-row">
+          <dt>{props.t("backup.vault")}</dt>
+          <dd>{props.preview.manifest.vaultName}</dd>
+        </div>
+        <div className="info-row">
+          <dt>{props.t("backup.createdAt")}</dt>
+          <dd>{props.preview.manifest.createdAt}</dd>
+        </div>
+        <div className="info-row">
+          <dt>{props.t("backup.appVersion")}</dt>
+          <dd>{props.preview.manifest.appVersion}</dd>
+        </div>
+        <div className="info-row">
+          <dt>{props.t("backup.vaultSchemaVersion")}</dt>
+          <dd>{props.preview.manifest.vaultSchemaVersion}</dd>
+        </div>
+        <div className="info-row">
+          <dt>{props.t("counts.notes")}</dt>
+          <dd>{props.preview.manifest.noteCount}</dd>
+        </div>
+        <div className="info-row">
+          <dt>{props.t("counts.sources")}</dt>
+          <dd>{props.preview.manifest.sourceCount}</dd>
+        </div>
+        <div className="info-row">
+          <dt>{props.t("backup.conversations")}</dt>
+          <dd>{props.preview.manifest.conversationCount}</dd>
+        </div>
+        <div className="info-row">
+          <dt>{props.t("backup.memories")}</dt>
+          <dd>{props.preview.manifest.memoryCount}</dd>
+        </div>
+        <div className="info-row">
+          <dt>{props.t("backup.invalidFiles")}</dt>
+          <dd>{props.preview.invalidFileCount}</dd>
+        </div>
+        <div className="info-row">
+          <dt>{props.t("backup.warnings")}</dt>
+          <dd>
+            {props.preview.warnings.length === 0 ? props.t("backup.noWarnings") : (
+              <ul className="restore-warning-list">
+                {props.preview.warnings.map((warning) => (
+                  <li key={warning.code}>
+                    <span>{props.t(restoreWarningMessageKey(warning.code))}</span>
+                    <strong>{warning.count}</strong>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </dd>
+        </div>
+      </dl>
+
+      <fieldset className="restore-mode-options">
+        <legend>{props.t("backup.restoreMode")}</legend>
+        {props.preview.permittedModes.includes("clone_as_new") ? (
+          <label htmlFor={`${props.idPrefix}-restore-clone`}>
+            <input
+              id={`${props.idPrefix}-restore-clone`}
+              type="radio"
+              name={`${props.idPrefix}-restore-mode`}
+              value="clone_as_new"
+              checked={props.mode === "clone_as_new"}
+              disabled={props.phase !== "idle"}
+              onChange={() => props.onModeChange("clone_as_new")}
+            />
+            <span>
+              <strong>{props.t("backup.modeClone")}</strong>
+              <small>{props.t("backup.modeCloneDescription")}</small>
+            </span>
+          </label>
+        ) : null}
+        {props.preview.permittedModes.includes("replace_existing") ? (
+          <label htmlFor={`${props.idPrefix}-restore-replace`}>
+            <input
+              id={`${props.idPrefix}-restore-replace`}
+              type="radio"
+              name={`${props.idPrefix}-restore-mode`}
+              value="replace_existing"
+              checked={props.mode === "replace_existing"}
+              disabled={props.phase !== "idle"}
+              onChange={() => props.onModeChange("replace_existing")}
+            />
+            <span>
+              <strong>{props.t("backup.modeReplace")}</strong>
+              <small>{props.t("backup.modeReplaceDescription")}</small>
+            </span>
+          </label>
+        ) : null}
+      </fieldset>
+
+      {props.mode === "replace_existing" ? (
+        <p className="restore-warning" role="note">{props.t("backup.replaceWarning")}</p>
+      ) : null}
+      {props.preview.invalidFileCount > 0 ? (
+        <p className="error" role="alert">{props.t("backup.restoreInvalid")}</p>
+      ) : null}
+      {props.errorKey ? <p className="error" role="alert">{props.t(props.errorKey)}</p> : null}
+      {applying ? <p className="muted" role="status">{props.t("backup.restoreProgress")}</p> : null}
+
+      <div className="settings-actions">
+        <button
+          ref={props.applyButtonRef}
+          type="button"
+          disabled={applyDisabled}
+          onClick={() => void props.onApply()}
+        >
+          {applying
+            ? props.t("backup.restoring")
+            : props.t(props.mode === "replace_existing" ? "backup.applyReplace" : "backup.applyClone")}
+        </button>
+        <button
+          type="button"
+          className="secondary"
+          disabled={props.phase !== "idle"}
+          onClick={props.onCancel}
+        >
+          {props.t("backup.restoreCancel")}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function FirstRunPanel(props: FirstRunPanelProps): React.JSX.Element {
+  const restore = useRestoreFlow(props.onRestoreCompleted, () => props.onError(null));
 
   return (
     <section className="first-run" aria-label={props.t("firstRun.aria")}>
@@ -1279,33 +1535,33 @@ function FirstRunPanel(props: FirstRunPanelProps): React.JSX.Element {
           {props.t("firstRun.openExisting")}
         </button>
         <button
+          ref={restore.previewButtonRef}
           type="button"
           className="secondary"
-          disabled={props.busy || restoreBusy}
+          disabled={props.busy || restore.restorePhase !== "idle"}
           title={props.t("firstRun.restoreHint")}
-          onClick={() => void previewRestore()}
+          onClick={() => void restore.previewRestore()}
         >
-          {props.t("firstRun.restoreBackup")}
+          {props.t(restore.restorePhase === "previewing" ? "backup.opening" : "firstRun.restoreBackup")}
         </button>
       </div>
 
-      {restorePreview?.manifest ? (
-        <div className="support-preview">
-          <strong>{props.t("backup.restorePreview")}</strong>
-          <span>{props.t("backup.vault")}: {restorePreview.manifest.vaultName}</span>
-          <span>{props.t("backup.createdAt")}: {restorePreview.manifest.createdAt}</span>
-          <span>{props.t("counts.notes")}: {restorePreview.manifest.noteCount}</span>
-          <span>{props.t("counts.sources")}: {restorePreview.manifest.sourceCount}</span>
-          <span>{props.t("backup.invalidFiles")}: {restorePreview.invalidFileCount ?? 0}</span>
-          <button
-            type="button"
-            className="secondary"
-            disabled={restoreBusy || (restorePreview.invalidFileCount ?? 0) > 0}
-            onClick={() => void applyRestore()}
-          >
-            {props.t("backup.restoreApply")}
-          </button>
-        </div>
+      {restore.restorePreview ? (
+        <RestorePreviewPanel
+          idPrefix="first-run"
+          preview={restore.restorePreview}
+          mode={restore.restoreMode}
+          phase={restore.restorePhase}
+          errorKey={restore.restoreErrorKey}
+          applyButtonRef={restore.applyButtonRef}
+          onModeChange={restore.selectRestoreMode}
+          onApply={restore.applyRestore}
+          onCancel={restore.cancelRestore}
+          t={props.t}
+        />
+      ) : null}
+      {!restore.restorePreview && restore.restoreErrorKey ? (
+        <p className="error" role="alert">{props.t(restore.restoreErrorKey)}</p>
       ) : null}
 
       <RecentVaults recentVaults={props.recentVaults} onRemoveRecent={props.onRemoveRecent} t={props.t} />
@@ -2593,9 +2849,13 @@ interface VaultSettingsPanelProps {
 }
 
 function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
-  const [restorePreview, setRestorePreview] = useState<RestorePreviewResult | null>(null);
   const [backupNotice, setBackupNotice] = useState<string | null>(null);
   const [backupBusy, setBackupBusy] = useState(false);
+  const restore = useRestoreFlow(async () => {
+    setBackupNotice(props.t("backup.restored"));
+    await props.onRefresh();
+    await props.onRefreshDiagnostics();
+  }, () => props.onError(null));
 
   const runBackupAction = async (action: () => Promise<void>): Promise<void> => {
     props.onError(null);
@@ -2618,31 +2878,6 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
         await props.onRefresh();
       }
     });
-
-  const previewRestore = async (): Promise<void> =>
-    runBackupAction(async () => {
-      setRestorePreview(null);
-      const result = await window.pige.backup.previewRestore();
-      if (result.status === "ready") {
-        setRestorePreview(result);
-      }
-    });
-
-  const applyRestore = async (): Promise<void> => {
-    if (!restorePreview?.backupPath || !restorePreview.previewToken) return;
-    await runBackupAction(async () => {
-      const result = await window.pige.backup.applyRestore({
-        backupPath: restorePreview.backupPath!,
-        previewToken: restorePreview.previewToken!
-      });
-      if (result.status === "restored") {
-        setRestorePreview(null);
-        setBackupNotice(props.t("backup.restored"));
-        await props.onRefresh();
-        await props.onRefreshDiagnostics();
-      }
-    });
-  };
 
   const updatePolicy = async (defaultStrategy: SourceStorageStrategy): Promise<void> => {
     props.onError(null);
@@ -2776,34 +3011,36 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
             {props.t("backup.create")}
           </button>
           <button
+            ref={restore.previewButtonRef}
             type="button"
             className="secondary"
-            disabled={backupBusy || !props.backupStatus?.restoreAvailable}
-            onClick={() => void previewRestore()}
+            disabled={
+              backupBusy ||
+              restore.restorePhase !== "idle" ||
+              !props.backupStatus?.restoreAvailable
+            }
+            onClick={() => void restore.previewRestore()}
           >
-            {props.t("backup.restore")}
+            {props.t(restore.restorePhase === "previewing" ? "backup.opening" : "backup.restore")}
           </button>
         </div>
         {backupNotice ? <p className="muted">{backupNotice}</p> : null}
-        {restorePreview?.manifest ? (
-          <div className="support-preview">
-            <strong>{props.t("backup.restorePreview")}</strong>
-            <span>{props.t("backup.vault")}: {restorePreview.manifest.vaultName}</span>
-            <span>{props.t("backup.createdAt")}: {restorePreview.manifest.createdAt}</span>
-            <span>{props.t("counts.notes")}: {restorePreview.manifest.noteCount}</span>
-            <span>{props.t("counts.sources")}: {restorePreview.manifest.sourceCount}</span>
-            <span>{props.t("backup.conversations")}: {restorePreview.manifest.conversationCount}</span>
-            <span>{props.t("backup.memories")}: {restorePreview.manifest.memoryCount}</span>
-            <span>{props.t("backup.invalidFiles")}: {restorePreview.invalidFileCount ?? 0}</span>
-            <button
-              type="button"
-              className="secondary"
-              disabled={backupBusy || (restorePreview.invalidFileCount ?? 0) > 0}
-              onClick={() => void applyRestore()}
-            >
-              {props.t("backup.restoreApply")}
-            </button>
-          </div>
+        {restore.restorePreview ? (
+          <RestorePreviewPanel
+            idPrefix="vault-settings"
+            preview={restore.restorePreview}
+            mode={restore.restoreMode}
+            phase={restore.restorePhase}
+            errorKey={restore.restoreErrorKey}
+            applyButtonRef={restore.applyButtonRef}
+            onModeChange={restore.selectRestoreMode}
+            onApply={restore.applyRestore}
+            onCancel={restore.cancelRestore}
+            t={props.t}
+          />
+        ) : null}
+        {!restore.restorePreview && restore.restoreErrorKey ? (
+          <p className="error" role="alert">{props.t(restore.restoreErrorKey)}</p>
         ) : null}
       </section>
 

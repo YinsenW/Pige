@@ -55,6 +55,7 @@ import {
   ModelEgressPendingRequestSchema,
   ModelEgressResolveRequestSchema,
   ModelEgressResolveResultSchema,
+  type Locale,
   UpdateModelRequestSchema,
   SetDefaultModelRequestSchema
 } from "@pige/schemas";
@@ -102,6 +103,7 @@ import { OcrService } from "./services/ocr-service";
 import { ProposalService } from "./services/proposal-service";
 import { installRendererNavigationGuard } from "./services/renderer-navigation-guard";
 import { RestorePreviewRegistry } from "./services/restore-preview-registry";
+import { RestoreCoordinatorService } from "./services/restore-coordinator-service";
 import { RetrievalService } from "./services/retrieval-service";
 import { JsonSecretStore } from "./services/secret-store";
 import { guardSettingAction, type SettingActionConfirmation } from "./services/setting-action-guard";
@@ -118,6 +120,7 @@ let modelProviderRegistry: ModelProviderRegistry | undefined;
 let modelEgressApprovalService: ModelEgressApprovalService | undefined;
 let windowModeService: WindowModeService | undefined;
 let backupRestoreService: BackupRestoreService | undefined;
+let restoreCoordinatorService: RestoreCoordinatorService | undefined;
 let agentRuntimeService: AgentRuntimeService | undefined;
 let agentIngestService: AgentIngestService | undefined;
 let homeAgentService: HomeAgentService | undefined;
@@ -139,6 +142,57 @@ let latestSupportBundlePreview: SupportBundlePreview | undefined;
 const restorePreviewRegistry = new RestorePreviewRegistry();
 const restorePreviewTrackedSenders = new Set<number>();
 const PACKAGED_RUNTIME_SMOKE_ARGUMENT = "--pige-packaged-runtime-smoke-report=";
+
+const RESTORE_NATIVE_COPY = {
+  "de": {
+    cancel: "Abbrechen",
+    confirm: "Aktuellen Tresor ersetzen",
+    destinationPickerTitle: "Zielordner für den wiederhergestellten Tresor auswählen",
+    title: "Aktiven Tresor ersetzen?",
+    message: "Dadurch wird die Bindung des aktuellen logischen Tresors ersetzt. Dieser Vorgang kann in diesem Ablauf nicht rückgängig gemacht werden. Pige erstellt und prüft zuerst ein Rollback-Backup, stellt dann in einem neuen Ordner wieder her und wechselt die aktive Tresor-Bindung."
+  },
+  "en": {
+    cancel: "Cancel",
+    confirm: "Replace Current Vault",
+    destinationPickerTitle: "Choose a destination for the restored vault",
+    title: "Replace the active vault?",
+    message: "This replaces the current logical vault binding and cannot be undone from this flow. Pige will first create and verify a rollback backup, restore into a fresh folder, then switch the active vault binding."
+  },
+  "fr": {
+    cancel: "Annuler",
+    confirm: "Remplacer le coffre actuel",
+    destinationPickerTitle: "Choisir la destination du coffre restauré",
+    title: "Remplacer le coffre actif ?",
+    message: "Cette action remplace l’association du coffre logique actuel et ne peut pas être annulée depuis ce parcours. Pige créera et vérifiera d’abord une sauvegarde de retour, restaurera dans un nouveau dossier, puis remplacera l’association du coffre actif."
+  },
+  "ja": {
+    cancel: "キャンセル",
+    confirm: "現在の Vault を置き換える",
+    destinationPickerTitle: "復元する Vault の保存先を選択",
+    title: "現在の Vault を置き換えますか？",
+    message: "現在の論理 Vault の関連付けが置き換わり、この操作はこの手順内では取り消せません。Pige は最初にロールバック用バックアップを作成して検証し、新しいフォルダーへ復元してから、アクティブな Vault の関連付けを切り替えます。"
+  },
+  "ko": {
+    cancel: "취소",
+    confirm: "현재 Vault 교체",
+    destinationPickerTitle: "복원된 Vault의 대상 폴더 선택",
+    title: "현재 Vault를 교체하시겠습니까?",
+    message: "현재 논리 Vault 연결을 교체하며 이 흐름에서는 실행 취소할 수 없습니다. Pige가 먼저 롤백 백업을 만들고 검증한 뒤 새 폴더에 복원하고 활성 Vault 연결을 전환합니다."
+  },
+  "zh-Hans": {
+    cancel: "取消",
+    confirm: "替换当前仓库",
+    destinationPickerTitle: "选择恢复仓库的目标文件夹",
+    title: "替换当前仓库？",
+    message: "这会替换当前逻辑仓库的绑定，且无法在此流程中撤销。Pige 会先创建并验证回滚备份，再恢复到新文件夹，最后切换当前仓库绑定。"
+  }
+} as const satisfies Record<Locale, {
+  readonly cancel: string;
+  readonly confirm: string;
+  readonly destinationPickerTitle: string;
+  readonly title: string;
+  readonly message: string;
+}>;
 
 async function confirmSettingAction(
   sender: WebContents,
@@ -237,6 +291,28 @@ const getBackupRestoreService = (): BackupRestoreService => {
     backupRestoreService = new BackupRestoreService();
   }
   return backupRestoreService;
+};
+
+const getRestoreCoordinatorService = (): RestoreCoordinatorService => {
+  if (!restoreCoordinatorService) {
+    restoreCoordinatorService = new RestoreCoordinatorService({
+      userDataPath: app.getPath("userData"),
+      appVersion: app.getVersion(),
+      pathSafety: {
+        appDataPath: app.getPath("appData"),
+        tempPath: app.getPath("temp")
+      },
+      backupService: getBackupRestoreService(),
+      vaultService: getVaultService(),
+      pauseMutableWork: pauseMutableWorkForRestore,
+      rebuildIndexes: async (vaultPath) => {
+        const rebuilt = await getLocalDatabaseService().rebuildInWorker(vaultPath);
+        getLocalDatabaseService().initialize(vaultPath);
+        return rebuilt;
+      }
+    });
+  }
+  return restoreCoordinatorService;
 };
 
 const getAgentRuntimeService = (): AgentRuntimeService => {
@@ -574,6 +650,28 @@ const scheduleIndexRebuildProcessing = (): void => {
     )
   });
   indexRebuildDrainer.schedule();
+};
+
+const pauseMutableWorkForRestore = async (): Promise<() => void> => {
+  const resumptions: (() => void)[] = [];
+  try {
+    for (const drainer of [
+      captureDrainer,
+      parseDrainer,
+      ocrDrainer,
+      agentIngestDrainer,
+      agentTurnDrainer,
+      indexRebuildDrainer
+    ]) {
+      if (drainer) resumptions.push(await drainer.pause());
+    }
+  } catch (caught) {
+    for (const resume of resumptions.reverse()) resume();
+    throw caught;
+  }
+  return () => {
+    for (const resume of resumptions.reverse()) resume();
+  };
 };
 
 const scheduleActivityIndexRebuild = (): void => {
@@ -1058,23 +1156,35 @@ ipcMain.handle("restore.preview", async (event): Promise<RestorePreviewResult> =
     return { status: "canceled" };
   }
   try {
-    const preview = await getBackupRestoreService().previewRestore(selection.filePaths[0]);
-    if (preview.status !== "ready") {
-      restorePreviewRegistry.cancel(senderId, generation);
-      return preview;
-    }
+    const preview = await getBackupRestoreService().inspectRestoreArchive(selection.filePaths[0]);
     const accepted = restorePreviewRegistry.complete(senderId, generation, {
       backupPath: preview.backupPath,
-      archivePreviewToken: preview.previewToken
+      archivePreviewToken: preview.archivePreviewToken,
+      archiveDigest: preview.archiveDigest,
+      backupId: preview.backupId,
+      backupIdSource: preview.backupIdSource,
+      sourceVaultId: preview.sourceVaultId
     });
-    return { ...preview, previewToken: accepted.publicPreviewToken };
+    const activeVault = getVaultService().current();
+    const permittedModes = activeVault?.vaultId === preview.sourceVaultId
+      ? ["clone_as_new", "replace_existing"] as const
+      : ["clone_as_new"] as const;
+    return {
+      status: "ready",
+      previewId: accepted.previewId,
+      manifest: preview.manifest,
+      invalidFileCount: preview.invalidFileCount,
+      warnings: preview.warnings,
+      permittedModes,
+      defaultMode: "clone_as_new"
+    };
   } catch (caught) {
     restorePreviewRegistry.cancel(senderId, generation);
     throw caught;
   }
 });
 ipcMain.handle("restore.apply", async (event, request: RestoreApplyRequest): Promise<RestoreApplyResult> => {
-  if (!request || typeof request.backupPath !== "string" || typeof request.previewToken !== "string") {
+  if (!request || typeof request.previewId !== "string") {
     throw new PigeDomainError("restore.backup_invalid", "Create a current restore preview before applying restore.");
   }
   const senderId = event.sender.id;
@@ -1084,8 +1194,43 @@ ipcMain.handle("restore.apply", async (event, request: RestoreApplyRequest): Pro
     restorePreviewRegistry.release(senderId, acceptedPreview);
     throw new Error("No active window for restore.");
   }
+  const restoreNativeCopy = RESTORE_NATIVE_COPY[getAppearanceService().summary().locale];
+  let replaceConfirmed = false;
+  if (acceptedPreview.mode === "replace_existing") {
+    let activeSourceVaultId: string | undefined;
+    try {
+      activeSourceVaultId = getVaultService().current()?.vaultId;
+    } catch (caught) {
+      restorePreviewRegistry.release(senderId, acceptedPreview);
+      throw caught;
+    }
+    if (activeSourceVaultId !== acceptedPreview.sourceVaultId) {
+      restorePreviewRegistry.release(senderId, acceptedPreview);
+      throw new PigeDomainError(
+        "restore.replace_unavailable",
+        "Replace existing requires the exact source vault to remain active."
+      );
+    }
+    const confirmation = await dialog.showMessageBox(parentWindow, {
+      type: "warning",
+      buttons: [restoreNativeCopy.cancel, restoreNativeCopy.confirm],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+      title: restoreNativeCopy.title,
+      message: restoreNativeCopy.message
+    }).catch((caught) => {
+      restorePreviewRegistry.release(senderId, acceptedPreview);
+      throw caught;
+    });
+    if (confirmation.response !== 1) {
+      restorePreviewRegistry.release(senderId, acceptedPreview);
+      return { status: "canceled" };
+    }
+    replaceConfirmed = true;
+  }
   const selection = await dialog.showOpenDialog(parentWindow, {
-    title: "Choose restore location",
+    title: restoreNativeCopy.destinationPickerTitle,
     defaultPath: app.getPath("documents"),
     properties: ["openDirectory", "createDirectory"]
   }).catch((caught) => {
@@ -1101,33 +1246,29 @@ ipcMain.handle("restore.apply", async (event, request: RestoreApplyRequest): Pro
   }
   let result: RestoreApplyResult;
   try {
-    result = await getBackupRestoreService().applyRestore(
-      acceptedPreview.backupPath,
-      selection.filePaths[0],
-      acceptedPreview.archivePreviewToken
-    );
+    result = await getRestoreCoordinatorService().apply({
+      preview: acceptedPreview,
+      destinationPath: createRestoreDestinationPath(selection.filePaths[0], acceptedPreview),
+      replaceConfirmed
+    });
   } catch (caught) {
-    if (caught instanceof PigeDomainError && caught.code === "restore.backup_invalid") {
+    if (
+      caught instanceof PigeDomainError &&
+      (caught.code === "restore.backup_invalid" || caught.code === "restore.backup_changed")
+    ) {
       restorePreviewRegistry.consume(senderId, acceptedPreview);
     } else {
       restorePreviewRegistry.release(senderId, acceptedPreview);
     }
     throw caught;
   }
-  if (result.status !== "restored" || !result.restoredVaultPath) {
+  if (result.status !== "restored") {
     restorePreviewRegistry.release(senderId, acceptedPreview);
     return result;
   }
   restorePreviewRegistry.consume(senderId, acceptedPreview);
-  const activated = getVaultService().openPath(result.restoredVaultPath);
-  initializeActiveDatabase();
-  const localDatabaseRebuild = getLocalDatabaseService().rebuild(result.restoredVaultPath);
   resumeBackgroundJobs();
-  return {
-    ...result,
-    ...(activated.status === "completed" ? { vault: activated.vault } : {}),
-    ...(localDatabaseRebuild ? { localDatabaseRebuild } : {})
-  };
+  return result;
 });
 ipcMain.handle("system.toolchainHealth", () => getToolchainService().health());
 
@@ -1193,8 +1334,18 @@ app.whenReady().then(async () => {
     getDatasetService(),
     getModelEgressApprovalService()
   );
-  initializeActiveDatabase();
   diagnosticsService = new DiagnosticsService(app.getPath("userData"));
+  const restoreRecovery = await getRestoreCoordinatorService().recoverInterrupted();
+  if (restoreRecovery.recovered > 0 || restoreRecovery.failed > 0) {
+    diagnosticsService.recordEvent({
+      level: restoreRecovery.failed > 0 ? "warning" : "info",
+      code: restoreRecovery.failed > 0 ? "restore.recovery_incomplete" : "restore.recovery_completed",
+      message: restoreRecovery.failed > 0
+        ? "Some interrupted Restore Jobs still require repair."
+        : "Interrupted Restore Jobs were reconciled from durable checkpoints."
+    });
+  }
+  initializeActiveDatabase();
   diagnosticsService.recordEvent({ level: "info", code: "app.ready", message: "App ready." });
   createMainWindow();
   resumeBackgroundJobs();
@@ -1213,8 +1364,20 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
+  restoreCoordinatorService?.close();
   vaultService?.close();
 });
+
+function createRestoreDestinationPath(
+  parentPathInput: string,
+  preview: { readonly mode: "clone_as_new" | "replace_existing"; readonly backupId: string; readonly sourceVaultId: string }
+): string {
+  const parentPath = resolve(parentPathInput);
+  const sourceSuffix = preview.sourceVaultId.replace(/[^a-z0-9]/giu, "").slice(-8) || "vault";
+  const backupSuffix = preview.backupId.replace(/[^a-z0-9]/giu, "").slice(-8) || "backup";
+  const modeSuffix = preview.mode === "clone_as_new" ? "copy" : "recovered";
+  return join(parentPath, `Pige-${modeSuffix}-${sourceSuffix}-${backupSuffix}`);
+}
 
 function requireWindow(webContents: WebContents): BrowserWindow {
   const parentWindow = BrowserWindow.fromWebContents(webContents);

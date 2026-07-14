@@ -352,6 +352,9 @@ Recovery on launch:
 - Scan unfinished jobs.
 - Validate temp files and partial outputs.
 - Reconcile operation records with file existence and checksums.
+- Reconcile machine-local Restore Jobs against exact archive/destination/checkpoint
+  bindings; adopt a committed fresh destination and its linked `restore_applied`
+  Operation without replaying publication.
 - Rebuild dirty indexes.
 - Show recoverable failures in Home status and exceptional conflicts in decision surfaces.
 

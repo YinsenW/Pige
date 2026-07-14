@@ -162,6 +162,8 @@ Examples:
 - Local tool install status.
 - Local model asset status.
 - Machine-local job records for tool/model install, update checks, repair jobs, and app-level maintenance.
+- Pre-destination restore coordinator Jobs, claims, and checkpoints. They exist before a
+  destination vault and remain machine-local after commit.
 - Machine-local package install records.
 - Machine-local provider profile metadata.
 - Body-free current-action model-egress approval records, scoped by vault and excluded
@@ -670,6 +672,13 @@ Current backup evidence and open delivery work live in the Playbook and acceptan
 manifest. Format-v1 archives remain readable legacy input, but cannot invent unknown
 domain compatibility; the inclusion/exclusion and execution rules here remain normative.
 
+When a readable format-v1 manifest has no `backupId`, preview derives lineage only as
+`backup_<YYYYMMDD>_<hex>`, where `hex` is SHA-256 over
+`pige:legacy-backup-lineage:v1\0`, the canonical `sha256:<hex>` archive digest, `\0`, and
+the exact manifest `createdAt`. The record marks that identity as `derived_legacy`; it is
+used only for lineage and idempotency and never claims that the legacy archive carried it.
+New backups always write a real `backupId` before archive publication.
+
 Backup execution contract:
 
 - Create a durable `backup` job before scan/compression begins.
@@ -682,7 +691,11 @@ Backup execution contract:
 
 Restore modes are explicit:
 
-- `replace_existing`: recovery of the same logical vault. It preserves `vault_id` and durable object IDs, replaces the machine-local path binding only after validation, and requires the old vault to be closed plus a rollback backup/explicit confirmation before overwrite.
+- `replace_existing`: recovery of the same logical vault. It preserves `vault_id` and
+  durable object IDs, pauses mutable work, creates and validates a real rollback backup,
+  closes the old vault, publishes to a fresh destination, and CAS-replaces the
+  machine-local path binding only after validation and explicit confirmation. The old
+  physical folder remains intact but unregistered; this flow never overwrites it in place.
 - `clone_as_new`: independent duplicate. It assigns a new `vault_id`, records `origin_vault_id` and `restored_from_backup_id`, and may preserve source/page/object IDs because vault identity namespaces them. It never inherits external root bindings, provider secrets, permission grants, or YOLO state.
 
 Selecting a new destination folder does not by itself select a mode. Two simultaneously registered paths must never share one `vault_id`.
@@ -691,7 +704,8 @@ Restore flow:
 
 1. Inspect backup manifest.
 2. Show vault name, source/note/Dataset counts, conversation count, memory count, app
-   version, schema version, and backup date.
+   version, schema version, backup date, and localized typed warning counts. Never expose
+   raw archive entries, file names, or absolute paths through preview.
 3. Ask for `replace_existing` or `clone_as_new`; default to `clone_as_new` when both the original and restored vault will remain available.
 4. Validate checksums where available.
 5. Rebuild SQLite database and indexes.
@@ -707,11 +721,22 @@ conflict-preserving retry before a destination becomes a vault.
 
 Restore execution contract:
 
-- `restore.preview` is read-only. `restore.apply` creates a durable `restore` job before extraction.
+- `restore.preview` is read-only. `restore.apply` creates a durable machine-local
+  `restore` Job in OS app data before extraction; it does not require an active vault and
+  is never copied into the restored vault or staging directory.
 - Checkpoint at least `manifest_validated`, `destination_reserved`, `archive_extracted`, `durable_domains_migrated`, `external_dependencies_reconciled`, `vault_identity_finalized`, `destination_committed`, and `indexes_rebuilt`.
 - All extraction/migration occurs in a staging directory outside the active vault. The final destination becomes visible only after checksums, schema compatibility, mode-specific identity, and binding rules pass.
 - A crash/retry reconciles the durable job with the staging marker and hashes; it never deletes the active vault or treats an unvalidated staging directory as restored.
-- Successful commit writes `restore_applied`; warnings list unresolved external dependencies and non-resumable machine-local jobs without secrets or raw absolute paths.
+- Successful commit writes one body-free `restore_applied` Operation in the restored
+  vault. `Operation.jobId` points to the machine-local Restore Job, while that Job's
+  `operationIds`/`outputRefs` point back to the Operation. Retry and restart reuse both
+  identities rather than duplicating either record.
+- `clone_as_new` publishes a new vault ID and lineage. `replace_existing` keeps the
+  logical vault ID, switches the registered binding only after the fresh destination is
+  committed, and leaves the old physical directory unregistered. A failed binding CAS
+  leaves the previous binding authoritative and the new folder unregistered.
+- Warnings list unresolved external dependencies and non-resumable machine-local jobs
+  without secrets or raw absolute paths.
 
 ## 13. Sync-Ready Design
 

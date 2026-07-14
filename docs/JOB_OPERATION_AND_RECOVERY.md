@@ -45,8 +45,11 @@ The core rule:
 
 Pige has two job scopes:
 
-- Vault-scoped jobs: work that reads or writes a vault, source record, source asset, Markdown page, proposal, operation, memory, Skill, backup, restore, or index.
-- Machine-local jobs: work that belongs to the app installation or device, such as local model download, bundled tool repair, app update checks, and machine-local package installation.
+- Vault-scoped jobs: work owned by an existing vault, source record, source asset,
+  Markdown page, proposal, operation, memory, Skill, backup, or index.
+- Machine-local jobs: work that belongs to the app installation or device, such as local
+  model download, bundled tool repair, app update checks, machine-local package
+  installation, and restore coordination before a destination vault exists.
 
 Vault-scoped jobs:
 
@@ -85,6 +88,9 @@ Rules:
 - Job records must not store large source bodies, full wiki page bodies after operation application, raw prompts, raw model responses, or secrets by default.
 - Vault-scoped job records are included in vault backup by default according to backup policy.
 - Machine-local job records are excluded from vault backup by default and exportable only through explicit diagnostics/settings export.
+- A successful machine-local Restore Job may link to a vault-scoped `restore_applied`
+  Operation: `Operation.jobId` points to the Job and Job `operationIds`/`outputRefs` point
+  back. The cross-scope link does not migrate or duplicate the Job into the vault.
 
 Current implementation evidence, class-specific recovery coverage, and structured open
 work live only in the Playbook and acceptance manifest. The sections below own the
@@ -764,13 +770,24 @@ Restore rules:
 - Restore identity follows the explicit modes in `docs/DATA_ARCHITECTURE.md`: `replace_existing` preserves the vault ID; `clone_as_new` mints a vault ID and records lineage. A destination folder alone does not choose the mode.
 - After restore, job indexes are rebuilt.
 - Jobs that cannot safely resume on the new machine become `failed_retryable` or `failed_final` with repair guidance.
+- Restore coordination is machine-local from creation through terminal state because it
+  must work with no active vault. Staging is temporary state, never a vault or Job owner.
 
 Durable execution gates:
 
 - Backup creates a durable `backup` job before preflight and checkpoints `preflight`, manifest emission, hashing, staged archive creation, staged validation, and atomic finalization.
-- Restore apply creates a durable `restore` job before extraction and checkpoints manifest compatibility, destination reservation, staging extraction, durable-domain migration, external dependency reconciliation, mode-specific vault identity, destination commit, and index rebuild.
+- Restore apply creates a durable machine-local `restore` Job before extraction and
+  checkpoints `manifest_validated`, `destination_reserved`, `archive_extracted`,
+  `durable_domains_migrated`, `external_dependencies_reconciled`,
+  `vault_identity_finalized`, `destination_committed`, and `indexes_rebuilt`.
 - Staging paths are job-local temporary references, not durable output truth. A restart reconciles them using checkpoint hashes; cancellation removes only proven incomplete staging data.
-- A successful backup/restore job links the `backup_created`/`restore_applied` operation. Failure/cancellation never registers a staging directory as a vault or overwrites a valid archive/vault silently.
+- A successful backup Job links `backup_created`. A successful machine-local Restore Job
+  and the restored vault's `restore_applied` Operation link each other by stable IDs.
+  Failure/cancellation never registers staging as a vault or overwrites a valid
+  archive/vault silently.
+- `replace_existing` uses a verified rollback Backup Job/Operation, a fresh destination,
+  and an exact machine-binding CAS; it retains the old physical folder unregistered.
+  `clone_as_new` mints a new vault identity and records lineage.
 
 Legacy format-v1 stays readable per `docs/SYNC_CONFLICT_AND_MIGRATION.md`. Current
 backup/restore checkpoint delivery and residual transport/restart/platform work live in
