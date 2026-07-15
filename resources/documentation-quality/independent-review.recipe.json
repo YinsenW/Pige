@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-15T02:48:07Z",
+  "reviewedAt": "2026-07-15T03:15:18Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -31,12 +31,12 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "708f8ea9c521672f5e5bb7c083d63d6a4bcc474ea47994b2438415ebe3bf11aa"
+    "reviewedSha256": "872b63ea4588c2e2e57926f207aeeaaf4604375f79fbde1f9a9eab8ab5e7d853"
   },
   "reviewers": [
     {
       "reviewerId": "vault-storage-reveal-independent-review",
-      "task": "Vault and note storage pathless reveal safety review",
+      "task": "Vault storage reveal with packaged parser diagnostic replacement review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -44,7 +44,7 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Independent security and UI Design reviews examined the exact frozen hash, canonical lease/config resolution, pathless contracts, successor fences, body-free failure, one Settings owner and focus behavior; both returned CLEAR without edits."
+      "independence": "Independent reviews covered the bound reveal candidate. Product Planning additionally checked exact HEAD 28c327a, the four-path diagnostic delta, fixed body-free parser stages, strict known-marker parsing, unchanged smoke selectors, and online Windows/macOS evidence without changing Development bytes."
     }
   ],
   "dimensions": [
@@ -74,7 +74,7 @@
       "score": 9.7,
       "reviewerId": "vault-storage-reveal-independent-review",
       "blockerCount": 0,
-      "summary": "Development gets exact schema, IPC, service and UI selectors for canonical reveal, strict preload projection, successor rejection, localized status, duplicate guard and focus restoration."
+      "summary": "Development gets exact reveal selectors plus bounded parser-worker stage diagnostics; unknown or prefixed markers fail closed without exposing worker output or weakening smoke assertions."
     },
     {
       "id": "documentation_leanness_and_maintainability",
@@ -88,12 +88,12 @@
     {
       "command": "npm run verify",
       "status": "passed",
-      "evidence": "The exact 17-path Development plus governed bind passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all quality dimensions."
+      "evidence": "The exact committed 28-path candidate plus current recipe passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all quality dimensions."
     },
     {
       "command": "Exact candidate test, package and distribution evidence",
       "status": "passed",
-      "evidence": "Focused 4/61, impacted 10/203 and full 107/1,244 pass with typecheck, build, development Electron, unified Agent and exact macOS package/distribution evidence."
+      "evidence": "Prior focused 4/61, impacted 10/203 and full 107/1,244 remain bound; replacement 1/11, build and parser smoke pass. Online CodeQL and Packageability pass on Windows x64, macOS arm64 and downloaded distribution."
     },
     {
       "command": "npm run verify:dependencies && npm run verify:traceability && npm run verify:contracts",
@@ -113,7 +113,7 @@
     "action": "Active-phase follow-up",
     "status": "acknowledged",
     "compatibility": "This candidate adds pathless storage reveal actions without changing layout, dependencies, settings storage, permission policy, product scope or statuses.",
-    "acknowledgement": "Development froze 17 paths at the supplied exact hashes; security and UI Design returned CLEAR. Product Planning bound existing Owners, PIGE-VAULT-005/E1.04 evidence, semantics and this recipe without changing Development bytes."
+    "acknowledgement": "Development committed exact HEAD 28c327a with four diagnostic-only paths over the prior bound candidate. Product Planning retained Owner, acceptance and semantic facts and refreshed only this current snapshot/recipe; statuses and Development bytes are unchanged."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
