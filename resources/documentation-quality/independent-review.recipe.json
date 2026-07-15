@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-15T17:15:44Z",
+  "reviewedAt": "2026-07-15T18:03:39Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -31,12 +31,12 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "0914ffdabf94ca2e551c9d811b1018ad3882ec01cafb77ac2ea3dbee880405ad"
+    "reviewedSha256": "d9dae1dedbc558d5a647dcc975b8477adcb2cb4f32d3cad139ad76d187fa2dab"
   },
   "reviewers": [
     {
-      "reviewerId": "ui-shell-models-progressive-independent-review",
-      "task": "macOS-first UI shell and progressive Models exact-candidate review",
+      "reviewerId": "home-model-switcher-independent-review",
+      "task": "macOS-first Home Global Default switcher exact-candidate review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -44,61 +44,61 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "UI Design directly owned all Models renderer/locale bytes and accepted the exact combined 19-path Development hash. Planning reproduced both identities and reviewed only owner, platform, evidence and unchanged-status projections without editing frozen paths."
+      "independence": "UI Design owned and accepted the exact frozen nine-path renderer candidate; Development independently audited the existing typed adapters without changing those bytes. Planning reviewed only owner wording, evidence projection and unchanged statuses."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "ui-shell-models-progressive-independent-review",
+      "reviewerId": "home-model-switcher-independent-review",
       "blockerCount": 0,
-      "summary": "Existing UI, Technical Architecture, Quality and AI-development owners locate the progressive Models flow, shared typed ownership, macOS-first gate and deferred platform qualification."
+      "summary": "The Home UI owner now locates the accessible Global Default switcher, while the existing Pi and Settings owners retain model registry, runtime and durable authority."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "ui-shell-models-progressive-independent-review",
+      "reviewerId": "home-model-switcher-independent-review",
       "blockerCount": 0,
-      "summary": "Owners agree on UI/backend parallelism, mechanical integration, Global Default-first Models pages, existing registry/secret authority, macOS hiddenInset and no false Windows claim."
+      "summary": "Owners agree that Home changes the machine-local Global Default for new calls, never a per-turn routing role, and preserves fail-closed Send plus capture-only behavior."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "ui-shell-models-progressive-independent-review",
+      "reviewerId": "home-model-switcher-independent-review",
       "blockerCount": 0,
-      "summary": "Progressive Models evidence is exact and separate from service capability; semantic lock v3 has 1,213 claims, while Windows visual qualification and every status stay open/unchanged."
+      "summary": "One exact Home model-switcher selector projects to PIGE-PI-002, PIGE-UI-003 and their existing exits; semantic lock v3 has 1,214 claims and every status remains unchanged."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.7,
-      "reviewerId": "ui-shell-models-progressive-independent-review",
+      "reviewerId": "home-model-switcher-independent-review",
       "blockerCount": 0,
-      "summary": "Planning owns UI-centered requirements; UI Design and Development proceed in parallel from one contract, then Development binds mechanically and UI Design reviews exact bytes."
+      "summary": "The M-level slice reuses one summary, one setDefaultModel adapter and sequenced runtime status; the next integrated freeze owns broader test and package verification."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "ui-shell-models-progressive-independent-review",
+      "reviewerId": "home-model-switcher-independent-review",
       "blockerCount": 0,
-      "summary": "No document or decision is added; existing owner, visual and acceptance projections remain inside fixed budgets."
+      "summary": "No document or decision is added; one Home owner subsection and one evidence selector keep the synchronization inside existing governed budgets."
     }
   ],
   "verification": [
     {
       "command": "npm run verify",
       "status": "passed",
-      "evidence": "The exact replacement candidate passes docs, decisions, UI visual, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all quality dimensions."
+      "evidence": "The exact combined candidate passes docs, decisions, UI visual, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all quality dimensions."
     },
     {
-      "command": "Exact candidate focused and macOS Electron evidence",
+      "command": "Exact candidate focused and macOS UI evidence",
       "status": "passed",
-      "evidence": "Focused 6 files/102 tests, typecheck and build pass. Real macOS Electron proves hiddenInset plus Models overview, preset, Custom and Provider detail through the typed API; UI Design accepted the exact final hash."
+      "evidence": "Development reran 4 files/106 tests, typecheck and build; UI Design supplied macOS Electron evidence and accepted exact 0a557acb/f4f864f8 UI identities."
     },
     {
       "command": "npm run verify:ui-visual && npm run verify:traceability && npm run verify:contracts",
       "status": "passed",
-      "evidence": "The 544-combination visual contract passes; semantic lock v3/1,213 and CON-001 through CON-004 pass with Requirement, Exit and Phase states unchanged."
+      "evidence": "The visual contract passes; semantic lock v3/1,214 and CON-001 through CON-004 pass with Requirement, Exit and Phase states unchanged."
     },
     {
       "command": "npm run verify:documentation-leanness",
@@ -107,18 +107,18 @@
     }
   ],
   "coordination": {
-    "taskId": "ui-shell-models-progressive-20260716",
-    "taskTitle": "macOS-first UI shell and progressive Models integration",
+    "taskId": "home-model-switcher-20260716",
+    "taskTitle": "Home Global Default model switcher integration",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The candidate changes Models presentation over existing typed calls and the already bounded window adapter; no IPC, schema, dependency, provider, permission, secret or durable owner changes.",
-    "acknowledgement": "Development froze exact 877405a0/c727e07c bytes after UI Design owned the Models production UI and accepted the combined candidate. Planning bound existing owners, visual contract, acceptance, semantic lock and this recipe without changing those bytes."
+    "compatibility": "The candidate adds a Home surface over existing typed models.summary, models.setDefaultModel and agent.runtimeStatus ownership; no IPC, schema, dependency, Job, routing role, permission, secret or durable change.",
+    "acknowledgement": "Development froze and independently audited exact 0a557acb/f4f864f8 bytes after UI Design accepted them. Planning bound only the Home owner, acceptance evidence, semantic lock and this recipe without changing the nine paths."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Replacement PR CI and macOS arm64 package/downloaded-distribution are the next complete node; tiered M verification intentionally did not repeat full local package/test gates.",
-    "Windows native titlebar qualification and its isolated evidence lane remain deferred; the coded adapter is not a Windows support claim.",
-    "Unavailable capabilities remain polished local development states, never executable feature or status evidence."
+    "The next integrated freeze is the complete full-test, verify and macOS arm64 package/downloaded-distribution node; M-level evidence intentionally avoids repeating those gates here.",
+    "Windows visual qualification remains deferred under macOS-first sequencing and is not claimed by this renderer-only slice.",
+    "Provider catalog/help, deletion, DeepSeek Anthropic and packaged BYOK remain open; the Home control adds no routing role or provider taxonomy."
   ]
 }

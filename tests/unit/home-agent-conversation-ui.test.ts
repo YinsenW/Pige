@@ -6,6 +6,7 @@ import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it } from "vitest";
 import type {
   AgentConversationTimeline,
+  AgentRuntimeStatus,
   AgentSubmitTurnRequest,
   AgentSubmitTurnResult,
   AgentTurnDraftEvent,
@@ -63,7 +64,7 @@ afterEach(() => {
 });
 
 describe("Home durable Agent conversation UI", () => {
-  it("lets the Models panel solely own its initial summary failure after navigation", async () => {
+  it("lets the Models panel solely own its scoped summary failure after Home loads", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
     harness.windowMode = "expanded";
@@ -71,20 +72,21 @@ describe("Home durable Agent conversation UI", () => {
     let summaryReads = 0;
     harness.loadModelSummary = async () => {
       summaryReads += 1;
-      if (summaryReads === 1) throw new Error("raw navigation summary failure");
+      if (summaryReads === 2) throw new Error("raw navigation summary failure");
       return emptyModelSummary();
     };
     const { container, root } = await mountHome(dom, makePigeApi(harness));
 
+    await waitFor(dom, () => summaryReads === 1);
     await openSettingsSection(dom, container, "Models");
     await waitFor(dom, () => container.textContent?.includes(enMessages["models.summaryRefreshFailed"]) === true);
-    expect(summaryReads).toBe(1);
+    expect(summaryReads).toBe(2);
     expect(container.textContent).not.toContain("raw navigation summary failure");
     expect(buttons(container, "Retry")).toHaveLength(1);
 
     await clickButton(dom, container, "Retry");
     await waitFor(dom, () => container.querySelector('[role="alert"]') === null);
-    expect(summaryReads).toBe(2);
+    expect(summaryReads).toBe(3);
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -99,17 +101,18 @@ describe("Home durable Agent conversation UI", () => {
     let resolveFirstSummary: ((summary: ModelProviderSettingsSummary) => void) | undefined;
     harness.loadModelSummary = () => {
       summaryReads += 1;
-      if (summaryReads === 1) {
+      if (summaryReads === 2) {
         return new Promise((resolve) => {
           resolveFirstSummary = resolve;
         });
       }
-      return Promise.resolve(connectedModelSummary());
+      return Promise.resolve(summaryReads === 1 ? emptyModelSummary() : connectedModelSummary());
     };
     const { container, root } = await mountHome(dom, makePigeApi(harness));
 
-    await openSettingsSection(dom, container, "Models");
     await waitFor(dom, () => summaryReads === 1);
+    await openSettingsSection(dom, container, "Models");
+    await waitFor(dom, () => summaryReads === 2);
     await clickButtonByAriaLabel(dom, container, "Close Settings");
     await openSettingsSection(dom, container, "Models");
     await waitFor(dom, () => container.textContent?.includes("Fresh provider") === true);
@@ -119,7 +122,80 @@ describe("Home durable Agent conversation UI", () => {
       await settle(dom);
     });
     expect(container.textContent).toContain("Fresh provider");
-    expect(summaryReads).toBe(2);
+    expect(summaryReads).toBe(3);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("loads the App-owned Home model summary and switches the global default with keyboard focus", async () => {
+    const dom = createDom(420);
+    const harness = createHarness(undefined);
+    let currentSummary = switchableModelSummary("model_alpha");
+    let runtimeStatus = readyAgentRuntimeStatus("model_alpha");
+    harness.loadModelSummary = async () => currentSummary;
+    harness.loadAgentRuntimeStatus = async () => runtimeStatus;
+    harness.setDefaultModel = async (modelProfileId) => {
+      harness.setDefaultModelIds.push(modelProfileId);
+      currentSummary = switchableModelSummary(modelProfileId);
+      runtimeStatus = readyAgentRuntimeStatus(modelProfileId);
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await waitFor(dom, () => buttonsByAriaLabelPrefix(container, "Model service: Alpha").length === 1);
+    const switcher = buttonsByAriaLabelPrefix(container, "Model service: Alpha")[0]!;
+    expect(switcher.getAttribute("aria-label")).toContain("Connected");
+    await clickElement(dom, switcher);
+
+    const menu = requireElement(container.querySelector<HTMLElement>('[role="listbox"]'));
+    const options = Array.from(menu.querySelectorAll<HTMLButtonElement>('[role="option"]'));
+    expect(options).toHaveLength(2);
+    expect(options[0]?.getAttribute("aria-selected")).toBe("true");
+    await waitFor(dom, () => dom.window.document.activeElement === options[0]);
+    await act(async () => {
+      menu.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+      await settle(dom);
+    });
+    expect(dom.window.document.activeElement).toBe(options[1]);
+    await clickElement(dom, options[1]!);
+
+    await waitFor(dom, () => buttonsByAriaLabelPrefix(container, "Model service: Beta").length === 1);
+    expect(harness.setDefaultModelIds).toEqual(["model_beta"]);
+    expect(container.querySelector('[role="listbox"]')).toBeNull();
+    await waitFor(dom, () => dom.window.document.activeElement === buttonsByAriaLabelPrefix(container, "Model service: Beta")[0]);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps the Home model selection unchanged and reports a body-free local failure", async () => {
+    const dom = createDom(420);
+    const harness = createHarness(undefined);
+    const currentSummary = switchableModelSummary("model_alpha");
+    harness.loadModelSummary = async () => currentSummary;
+    harness.loadAgentRuntimeStatus = async () => waitingAgentRuntimeStatus("model_alpha");
+    harness.setDefaultModel = async (modelProfileId) => {
+      harness.setDefaultModelIds.push(modelProfileId);
+      throw new Error("raw provider endpoint and credential failure");
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await waitFor(dom, () => buttonsByAriaLabelPrefix(container, "Model service: Alpha").length === 1);
+    await setTextareaValue(dom, container, "This must wait for an available model.");
+    expect(buttonsByAriaLabel(container, "Send")[0]?.disabled).toBe(true);
+    await clickElement(dom, buttonsByAriaLabelPrefix(container, "Model service: Alpha")[0]!);
+    const beta = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="option"]'))
+      .find((option) => option.textContent?.includes("Beta"));
+    if (!beta) throw new Error("Beta model option not found.");
+    await clickElement(dom, beta);
+
+    await waitFor(dom, () => container.textContent?.includes(enMessages["home.modelSwitchFailed"]) === true);
+    expect(buttonsByAriaLabelPrefix(container, "Model service: Alpha")).toHaveLength(1);
+    expect(container.querySelector('[role="listbox"]')).not.toBeNull();
+    expect(container.textContent).not.toContain("raw provider endpoint and credential failure");
+    expect(harness.setDefaultModelIds).toEqual(["model_beta"]);
+    expect(buttonsByAriaLabel(container, "Send")[0]?.disabled).toBe(true);
+    expect(harness.submitRequests).toHaveLength(0);
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -456,6 +532,7 @@ describe("Home durable Agent conversation UI", () => {
 
     expect(buttons(container, "Connect Model")).toHaveLength(1);
     await setTextareaValue(dom, container, "Please help me plan today.");
+    expect(buttonsByAriaLabel(container, "Send")[0]?.disabled).toBe(false);
     await clickButton(dom, container, "Send");
     await waitFor(dom, () => harness.submitRequests.length === 1);
 
@@ -1671,6 +1748,7 @@ interface ConversationHarness {
   readonly submitRequests: AgentSubmitTurnRequest[];
   readonly retryJobIds: string[];
   readonly cancelJobIds: string[];
+  readonly setDefaultModelIds: string[];
   readonly undoOperationIds: string[];
   readonly draftListeners: Set<(event: AgentTurnDraftEvent) => void>;
   activityUndoMode: "success" | "post_commit_reject" | "retryable_reject" | "unknown_reject";
@@ -1689,6 +1767,8 @@ interface ConversationHarness {
   sidebarOpen: boolean;
   loadOnboarding: () => Promise<OnboardingStatus>;
   loadModelSummary: () => Promise<ModelProviderSettingsSummary>;
+  loadAgentRuntimeStatus: () => Promise<AgentRuntimeStatus | null>;
+  setDefaultModel: (modelProfileId: string) => Promise<void>;
   loadConversation: () => Promise<AgentConversationTimeline | undefined>;
   submitTurn: (request: AgentSubmitTurnRequest) => Promise<AgentSubmitTurnResult>;
   emitDraft: (event: AgentTurnDraftEvent) => void;
@@ -1705,6 +1785,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     submitRequests: [],
     retryJobIds: [],
     cancelJobIds: [],
+    setDefaultModelIds: [],
     undoOperationIds: [],
     draftListeners: new Set(),
     activityUndoMode: "success",
@@ -1722,7 +1803,15 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     windowMode: "compact",
     sidebarOpen: false,
     loadOnboarding: async () => harness.onboarding,
-    loadModelSummary: async () => emptyModelSummary(),
+    loadModelSummary: async () => harness.onboarding.state === "ready"
+      ? switchableModelSummary("model_alpha")
+      : emptyModelSummary(),
+    loadAgentRuntimeStatus: async () => harness.onboarding.state === "ready"
+      ? readyAgentRuntimeStatus("model_alpha")
+      : null,
+    setDefaultModel: async (modelProfileId) => {
+      harness.setDefaultModelIds.push(modelProfileId);
+    },
     loadConversation: async () => harness.timeline,
     submitTurn: async (request) => {
       harness.submitRequests.push(request);
@@ -1762,6 +1851,79 @@ function connectedModelSummary(): ModelProviderSettingsSummary {
   };
 }
 
+function switchableModelSummary(defaultModelProfileId: string): ModelProviderSettingsSummary {
+  const models = [
+    {
+      id: "model_alpha",
+      providerProfileId: "provider_switchable",
+      modelId: "alpha",
+      displayName: "Alpha",
+      source: "provider_list" as const,
+      enabled: true,
+      isDefault: defaultModelProfileId === "model_alpha",
+      createdAt: "2026-07-14T08:00:00.000Z",
+      updatedAt: "2026-07-14T08:00:00.000Z"
+    },
+    {
+      id: "model_beta",
+      providerProfileId: "provider_switchable",
+      modelId: "beta",
+      displayName: "Beta",
+      source: "provider_list" as const,
+      enabled: true,
+      isDefault: defaultModelProfileId === "model_beta",
+      createdAt: "2026-07-14T08:00:00.000Z",
+      updatedAt: "2026-07-14T08:00:00.000Z"
+    }
+  ];
+  return {
+    presets: [],
+    providers: [{
+      id: "provider_switchable",
+      displayName: "Switchable provider",
+      providerKind: "openai",
+      endpointProtocol: "openai_responses",
+      authRequirement: "api_key",
+      modelListStrategy: "provider_api",
+      cloudBoundary: "cloud",
+      createdAt: "2026-07-14T08:00:00.000Z",
+      updatedAt: "2026-07-14T08:00:00.000Z"
+    }],
+    models,
+    defaultModelProfileId,
+    hasDefaultModel: true,
+    defaultBinding: {
+      state: "ready",
+      modelProfileId: defaultModelProfileId,
+      providerProfileId: "provider_switchable"
+    }
+  };
+}
+
+function readyAgentRuntimeStatus(defaultModelProfileId: string): AgentRuntimeStatus {
+  return {
+    runtimeKind: "desktop_local",
+    clientCapabilityTier: "desktop_full",
+    adapterMode: "embedded_pi_sdk",
+    state: "ready",
+    canRunModelJobs: true,
+    missingDependencies: [],
+    defaultModelProfileId
+  };
+}
+
+function waitingAgentRuntimeStatus(defaultModelProfileId: string): AgentRuntimeStatus {
+  return {
+    runtimeKind: "desktop_local",
+    clientCapabilityTier: "desktop_full",
+    adapterMode: "embedded_pi_sdk",
+    state: "waiting_for_model",
+    canRunModelJobs: false,
+    missingDependencies: ["default_model"],
+    defaultModelProfileId
+  };
+}
+
 function makePigeApi(harness: ConversationHarness): object {
   return {
     getHealth: async () => ({ status: "ok" }),
@@ -1796,10 +1958,12 @@ function makePigeApi(harness: ConversationHarness): object {
       status: async () => null
     },
     models: {
-      summary: () => harness.loadModelSummary()
+      summary: () => harness.loadModelSummary(),
+      setDefaultModel: ({ modelProfileId }: { readonly modelProfileId: string }) =>
+        harness.setDefaultModel(modelProfileId)
     },
     agent: {
-      runtimeStatus: async () => null,
+      runtimeStatus: () => harness.loadAgentRuntimeStatus(),
       conversation: () => harness.loadConversation(),
       submitTurn: (request: AgentSubmitTurnRequest) => harness.submitTurn(request),
       onTurnDraft: (listener: (event: AgentTurnDraftEvent) => void) => {
@@ -2732,6 +2896,11 @@ function buttons(container: HTMLElement, label: string): HTMLButtonElement[] {
 function buttonsByAriaLabel(container: HTMLElement, label: string): HTMLButtonElement[] {
   return Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
     .filter((candidate) => candidate.getAttribute("aria-label") === label);
+}
+
+function buttonsByAriaLabelPrefix(container: HTMLElement, label: string): HTMLButtonElement[] {
+  return Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
+    .filter((candidate) => candidate.getAttribute("aria-label")?.startsWith(label) === true);
 }
 
 function modelActionButtons(container: HTMLElement): HTMLButtonElement[] {
