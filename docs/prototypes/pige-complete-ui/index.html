@@ -1488,6 +1488,7 @@
     .quiet-button:disabled,
     .primary-button:disabled { cursor: default; opacity: .45; }
     .resolved-card { padding: 12px 14px; border: .5px solid var(--border-subtle); border-radius: 14px; background: var(--surface-subtle); color: var(--text-secondary); font-size: 11px; }
+    .resolved-card:focus-visible { outline: 2px solid color-mix(in oklab, var(--focus) 45%, transparent); outline-offset: 2px; }
 
     .home-demo { display: none; width: 100%; margin-top: 24px; }
     .app-window[data-screen="home"] .task-panel,
@@ -1789,7 +1790,7 @@
       cursor: pointer;
     }
     .settings-nav-item:hover { background: var(--settings-hover); color: var(--settings-text); }
-    .settings-nav-item[aria-selected="true"] { background: var(--settings-active); color: var(--settings-text); font-weight: 500; }
+    .settings-nav-item[aria-current="page"] { background: var(--settings-active); color: var(--settings-text); font-weight: 500; }
     .settings-nav-item svg { width: 16px; height: 16px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
     .settings-nav-item[hidden], .settings-nav-group[hidden] { display: none; }
     .settings-search-empty { display: none; padding: 18px 8px; color: var(--settings-tertiary); font-size: 12px; text-align: center; }
@@ -2165,7 +2166,7 @@
             </button>
           </div>
           <nav class="nav-list">
-            <button class="nav-item active" type="button" data-view="home">
+            <button class="nav-item active" type="button" data-view="home" aria-current="page">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m4 10 8-6 8 6v9a1 1 0 0 1-1 1h-5v-6h-4v6H5a1 1 0 0 1-1-1z"/></svg>
               首页
             </button>
@@ -2247,67 +2248,67 @@
                   <div class="home-demo-answer">
                     <div class="retrieval-copy"><p><strong>Pige 采用本地优先，是为了让知识保持可见、可迁移、可恢复。</strong></p><p>原始来源由用户拥有，Markdown 是长期知识层；需要模型时只发送完成当前任务所需的选定上下文。</p></div>
                     <div class="conversation-copy"><p><strong>本地优先通常意味着数据先保存在你控制的设备和文件中。</strong></p><p>即使当前仓库没有相关证据，我仍然可以继续普通对话；这条回答不会显示虚构的仓库引用。</p></div>
-                    <div class="streaming-copy"><p><strong>本地优先通常意味着数据先保存在你控制的设备和文件中。</strong></p><p aria-busy="true">Pige 正在生成安全的临时回答；内容会在完成后由最终回答原位替换<span class="safe-draft-dot"></span></p></div>
+                    <div class="streaming-copy" role="status" aria-live="polite" aria-atomic="true" aria-busy="true"><p><strong>本地优先通常意味着数据先保存在你控制的设备和文件中。</strong></p><p>Pige 正在生成安全的临时回答；内容会在完成后由最终回答原位替换<span class="safe-draft-dot"></span></p></div>
                   </div>
                   <div class="citation-list" aria-label="引用">
                     <div class="citation-row"><span class="citation-index">1</span><span class="citation-copy"><strong>产品定位</strong><span>笔记 · 本地优先</span></span><small>92%</small></div>
                     <div class="citation-row"><span class="citation-index">2</span><span class="citation-copy"><strong>数据架构</strong><span>笔记 · Markdown 来源真相</span></span><small>86%</small></div>
                   </div>
                 </section>
-                <section class="decision-card permission-card" aria-label="本机操作确认">
+                <section class="decision-card permission-card" role="region" aria-live="assertive" aria-atomic="true" aria-labelledby="permissionDecisionTitle" aria-describedby="permissionDecisionDescription">
                   <span class="decision-eyebrow">需要本次确认</span>
-                  <h2>Pige 想要执行一个外部操作</h2>
-                  <p>此操作会离开当前仓库边界。这里仅显示操作类型和原因，不显示文件路径、命令正文或凭据。</p>
+                  <h2 id="permissionDecisionTitle">Pige 想要执行一个外部操作</h2>
+                  <p id="permissionDecisionDescription">此操作会离开当前仓库边界。这里仅显示操作类型和原因，不显示文件路径、命令正文或凭据。</p>
                   <div class="decision-actions"><button class="quiet-button" type="button" data-decision-action="deny" data-decision-kind="permission">拒绝</button><button class="primary-button" type="button" data-decision-action="allow" data-decision-kind="permission">允许一次</button></div>
                 </section>
-                <section class="decision-card egress-card" aria-label="模型发送确认">
+                <section class="decision-card egress-card" role="region" aria-live="assertive" aria-atomic="true" aria-labelledby="egressDecisionTitle" aria-describedby="egressDecisionDescription">
                   <span class="decision-eyebrow">需要本次确认</span>
-                  <h2>发送这次选定内容？</h2>
-                  <p>这次请求包含敏感内容。这里只说明确认原因，不显示服务地址、模型标识、正文、引用或凭据。</p>
+                  <h2 id="egressDecisionTitle">发送这次选定内容？</h2>
+                  <p id="egressDecisionDescription">这次请求包含敏感内容。这里只说明确认原因，不显示服务地址、模型标识、正文、引用或凭据。</p>
                   <div class="decision-actions"><button class="quiet-button" type="button" data-decision-action="deny" data-decision-kind="egress">不发送</button><button class="primary-button" type="button" data-decision-action="allow" data-decision-kind="egress">允许一次</button></div>
                 </section>
-                <section class="home-demo-card model-missing-card" aria-label="等待模型">
-                  <h2>来源已保存</h2>
-                  <p>连接一个模型后，Pige 会继续处理同一个来源。当前没有额外的本地处理或重复任务。</p>
+                <section class="home-demo-card model-missing-card" role="status" aria-live="polite" aria-atomic="true" aria-labelledby="modelMissingTitle" aria-describedby="modelMissingDescription">
+                  <h2 id="modelMissingTitle">来源已保存</h2>
+                  <p id="modelMissingDescription">连接一个模型后，Pige 会继续处理同一个来源。当前没有额外的本地处理或重复任务。</p>
                   <button class="primary-button" type="button" data-open-settings="models">连接模型</button>
                 </section>
-                <section class="home-demo-card voice-card" aria-label="语音输入">
+                <section class="home-demo-card voice-card" role="status" aria-live="polite" aria-atomic="true" aria-label="语音输入">
                   <span class="decision-eyebrow">正在听</span>
                   <h2 style="margin:5px 0;font-size:13px">“我想记录一个关于本地知识库的想法…”</h2>
                   <div class="voice-wave" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span></div>
                   <p style="margin:0;color:var(--text-secondary);font-size:11px">停止后文字仍可编辑，不会自动发送。</p>
                   <div class="decision-actions"><button class="quiet-button" type="button" data-voice-action="stop">停止录音</button><button class="primary-button" type="button" data-voice-action="complete">完成</button></div>
                 </section>
-                <section class="home-demo-card voice-unsupported-card" aria-label="语音输入不可用">
+                <section class="home-demo-card voice-unsupported-card" role="status" aria-live="polite" aria-atomic="true" aria-label="语音输入不可用">
                   <span class="decision-eyebrow">当前设备不可用</span>
                   <h2 style="margin:5px 0;font-size:13px">暂时无法使用语音输入</h2>
                   <p style="margin:0;color:var(--text-secondary);font-size:11px;line-height:1.55">你仍可以键入、粘贴或添加文件。Pige 不会下载组件，也不会阻止当前输入。</p>
                   <div class="decision-actions"><button class="quiet-button" type="button" data-voice-dismiss>继续键入</button></div>
                 </section>
-                <section class="home-demo-card voice-error-card" aria-label="麦克风权限未开启">
+                <section class="home-demo-card voice-error-card" role="alert" aria-live="assertive" aria-atomic="true" aria-label="麦克风权限未开启">
                   <span class="decision-eyebrow">需要麦克风权限</span>
                   <h2 style="margin:5px 0;font-size:13px">无法开始语音输入</h2>
                   <p style="margin:0;color:var(--text-secondary);font-size:11px;line-height:1.55">Pige 没有录制任何内容。你可以继续键入，或在系统设置中允许麦克风访问后再试。</p>
                   <div class="decision-actions"><button class="quiet-button" type="button" data-voice-dismiss>继续键入</button><button class="primary-button prototype-action" type="button" aria-label="打开麦克风系统设置">打开系统设置</button></div>
                 </section>
-                <section class="home-demo-card error-card" aria-label="处理失败">
+                <section class="home-demo-card error-card" role="alert" aria-live="assertive" aria-atomic="true" aria-label="处理失败">
                   <span class="decision-eyebrow">来源已保留</span>
                   <h2 style="margin:5px 0;font-size:13px">暂时无法完成处理</h2>
                   <p style="margin:0;color:var(--text-secondary);font-size:11px;line-height:1.55">Pige 没有删除原始来源。你可以重试当前任务，或稍后从最近工作继续。</p>
                   <div class="error-code">PIGE-PROVIDER-TEMPORARY</div>
                   <div class="decision-actions"><button class="primary-button" type="button" data-retry-job>重试</button></div>
                 </section>
-                <section class="home-demo-card ingress-card file-ingress-card" aria-label="文件已进入 Agent">
+                <section class="home-demo-card ingress-card file-ingress-card" role="status" aria-live="polite" aria-atomic="true" aria-busy="true" aria-label="文件已进入 Agent">
                   <span class="decision-eyebrow">来源已保存</span>
                   <h2 style="margin:5px 0 12px;font-size:13px">Pige 正在处理这个文件</h2>
                   <div class="ingress-row"><span class="ingress-icon">PDF</span><span class="ingress-copy"><strong>产品需求文档.pdf</strong><span>已保存为来源 · Agent 正在选择所需工具</span></span><span class="ingress-state">处理中</span></div>
                 </section>
-                <section class="home-demo-card ingress-card url-ingress-card" aria-label="网址已进入 Agent">
+                <section class="home-demo-card ingress-card url-ingress-card" role="status" aria-live="polite" aria-atomic="true" aria-busy="true" aria-label="网址已进入 Agent">
                   <span class="decision-eyebrow">来源已保存</span>
                   <h2 style="margin:5px 0 12px;font-size:13px">Pige 正在阅读这个网页</h2>
                   <div class="ingress-row"><span class="ingress-icon">URL</span><span class="ingress-copy"><strong>localfirstweb.dev</strong><span>保留原始网址 · Agent 决定是否检索本地知识</span></span><span class="ingress-state">处理中</span></div>
                 </section>
-                <section class="home-demo-card insufficient-card" aria-label="仓库证据不足">
+                <section class="home-demo-card insufficient-card" role="status" aria-live="polite" aria-atomic="true" aria-label="仓库证据不足">
                   <span class="decision-eyebrow">仅限仓库</span>
                   <h2 style="margin:5px 0;font-size:13px">现有知识不足以回答</h2>
                   <p style="margin:0;color:var(--text-secondary);font-size:11px;line-height:1.55">我没有找到足够的本地证据，因此不会补造结果或引用。你可以添加来源，或改为普通对话。</p>
@@ -2317,28 +2318,28 @@
           </div>
 
           <div class="bottom-stack">
-            <section class="task-panel" id="taskPanel" aria-label="任务处理进度">
+            <section class="task-panel" id="taskPanel" aria-labelledby="taskPanelTitle">
               <span class="task-handle" aria-hidden="true"></span>
               <header class="task-header">
-                <h2><span class="task-demo-title">任务处理进度</span><span class="activity-demo-title">最近工作</span></h2>
-                <button class="task-toggle" id="taskToggle" type="button" aria-expanded="true">
+                <h2 id="taskPanelTitle"><span class="task-demo-title">任务处理进度</span><span class="activity-demo-title">最近工作</span></h2>
+                <button class="task-toggle" id="taskToggle" type="button" aria-expanded="true" aria-controls="taskList activityList">
                   <span class="task-toggle-copy">2 个任务进行中</span><span class="activity-toggle-copy">2 项最近更改</span>
                   <span class="chevron" aria-hidden="true">⌃</span>
                 </button>
               </header>
-              <div class="task-list">
+              <div class="task-list" id="taskList">
                 <div class="task-row">
                   <div class="task-name"><span class="file-badge pdf">PDF</span><span>产品需求文档.pdf</span></div>
-                  <div class="progress-track" aria-label="处理进度 72%"><div class="progress-fill" style="--progress:72%"></div></div>
+                  <div class="progress-track" role="progressbar" aria-label="产品需求文档.pdf 处理进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="72" aria-valuetext="处理中 72%"><div class="progress-fill" style="--progress:72%"></div></div>
                   <div class="task-status">处理中&nbsp; 72%</div>
                 </div>
                 <div class="task-row">
                   <div class="task-name"><span class="file-badge">TXT</span><span>市场调研资料.txt</span></div>
-                  <div class="progress-track" aria-label="整理进度 45%"><div class="progress-fill" style="--progress:45%"></div></div>
+                  <div class="progress-track" role="progressbar" aria-label="市场调研资料.txt 整理进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="45" aria-valuetext="准备中 45%"><div class="progress-fill" style="--progress:45%"></div></div>
                   <div class="task-status">准备中&nbsp; 45%</div>
                 </div>
               </div>
-              <div class="activity-demo-list">
+              <div class="activity-demo-list" id="activityList">
                 <div class="activity-row"><span class="activity-row-dot"></span><span class="activity-row-copy"><strong>已创建“市场调研资料”</strong><span>来源、Dataset 与引用均已保存</span></span><button type="button" data-activity-action="open">打开</button></div>
                 <div class="activity-row"><span class="activity-row-dot"></span><span class="activity-row-copy"><strong>已更新“产品定位”</strong><span>增加 1 个来源引用和 2 个链接</span></span><button type="button" data-activity-action="undo">撤销</button></div>
               </div>
@@ -2605,68 +2606,68 @@
         <nav aria-label="设置页面">
           <div class="settings-nav-group" data-settings-group>
             <div class="settings-nav-label">基础</div>
-            <button class="settings-nav-item" type="button" data-settings-page="general" aria-selected="true">
+            <button class="settings-nav-item" type="button" data-settings-page="general" aria-current="page">
               <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H3v-4a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L7 4.2a1.7 1.7 0 0 0 2 .4A1.7 1.7 0 0 0 10 3h4a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 2-.4L19.8 7a1.7 1.7 0 0 0-.4 2 1.7 1.7 0 0 0 1.6 1v4a1.7 1.7 0 0 0-1.6 1Z"/></svg>
               常规
             </button>
-            <button class="settings-nav-item" type="button" data-settings-page="appearance" aria-selected="false">
+            <button class="settings-nav-item" type="button" data-settings-page="appearance">
               <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2a10 10 0 0 0 0 20c1.1 0 2-.9 2-2 0-.5-.2-.9-.5-1.3-.3-.3-.5-.8-.5-1.2a2 2 0 0 1 2-2h2.1A4.9 4.9 0 0 0 22 10.6C22 5.9 17.5 2 12 2Z"/></svg>
               外观与语言
             </button>
           </div>
           <div class="settings-nav-group" data-settings-group>
             <div class="settings-nav-label">知识库</div>
-            <button class="settings-nav-item" type="button" data-settings-page="vault" aria-selected="false">
+            <button class="settings-nav-item" type="button" data-settings-page="vault">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h6l2 2h10v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M3 6a2 2 0 0 1 2-2h4l2 2"/></svg>
               仓库与笔记存储
             </button>
-            <button class="settings-nav-item" type="button" data-settings-page="maintenance" aria-selected="false">
+            <button class="settings-nav-item" type="button" data-settings-page="maintenance">
               <svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>
               索引与维护
             </button>
           </div>
           <div class="settings-nav-group" data-settings-group>
             <div class="settings-nav-label">AI</div>
-            <button class="settings-nav-item" type="button" data-settings-page="models" aria-selected="false">
+            <button class="settings-nav-item" type="button" data-settings-page="models">
               <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h6v6H9zM9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/></svg>
               模型
             </button>
-            <button class="settings-nav-item" type="button" data-settings-page="capabilities" aria-selected="false">
+            <button class="settings-nav-item" type="button" data-settings-page="capabilities">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.1-3.1a6 6 0 0 1-7.9 7.9l-5.7 5.7a2 2 0 0 1-3-3l5.7-5.7a6 6 0 0 1 7.9-7.9Z"/></svg>
               本地能力
             </button>
-            <button class="settings-nav-item" type="button" data-settings-page="memory" aria-selected="false">
+            <button class="settings-nav-item" type="button" data-settings-page="memory">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 4A2.5 2.5 0 0 0 7 6.5v.2A3.5 3.5 0 0 0 5 13a3.5 3.5 0 0 0 2 6.3v.2A2.5 2.5 0 0 0 9.5 22H12V2H9.5Z"/><path d="M14.5 4A2.5 2.5 0 0 1 17 6.5v.2a3.5 3.5 0 0 1 2 6.3 3.5 3.5 0 0 1-2 6.3v.2a2.5 2.5 0 0 1-2.5 2H12V2h2.5Z"/></svg>
               Agent 与记忆
             </button>
           </div>
           <div class="settings-nav-group" data-settings-group>
             <div class="settings-nav-label">安全</div>
-            <button class="settings-nav-item" type="button" data-settings-page="privacy" aria-selected="false">
+            <button class="settings-nav-item" type="button" data-settings-page="privacy">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V5l8-3 8 3Z"/><path d="m9 12 2 2 4-4"/></svg>
               权限与隐私
             </button>
           </div>
           <div class="settings-nav-group" data-settings-group>
             <div class="settings-nav-label">扩展</div>
-            <button class="settings-nav-item" type="button" data-settings-page="skills" aria-selected="false">
+            <button class="settings-nav-item" type="button" data-settings-page="skills">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 3a2.5 2.5 0 1 0 0 5H10v2H8.5a2.5 2.5 0 1 0 0 5H10v2H8.5a2.5 2.5 0 1 0 0 5H12V3Z"/><path d="M12 8h3.5a2.5 2.5 0 1 0 0-5H12M12 15h3.5a2.5 2.5 0 1 0 0-5H12M12 22h3.5a2.5 2.5 0 1 0 0-5H12"/></svg>
               Skills
             </button>
-            <button class="settings-nav-item" type="button" data-settings-page="packages" aria-selected="false">
+            <button class="settings-nav-item" type="button" data-settings-page="packages">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9Z"/><path d="m4.5 7.5 7.5 4 7.5-4M12 21v-9.5"/></svg>
               Pi Packages
             </button>
           </div>
           <div class="settings-nav-group" data-settings-group>
             <div class="settings-nav-label">系统</div>
-            <button class="settings-nav-item" type="button" data-settings-page="system" aria-selected="false">
+            <button class="settings-nav-item" type="button" data-settings-page="system">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/><circle cx="12" cy="12" r="3"/></svg>
               更新与诊断
             </button>
           </div>
         </nav>
-        <div class="settings-search-empty" id="settingsSearchEmpty">没有匹配的设置</div>
+        <div class="settings-search-empty" id="settingsSearchEmpty" role="status" aria-live="polite">没有匹配的设置</div>
       </div>
     </aside>
 
@@ -2689,9 +2690,9 @@
       <section class="settings-panel" data-settings-panel="appearance" aria-labelledby="settings-appearance-title">
         <header class="settings-panel-header"><h1 id="settings-appearance-title">外观与语言</h1><p>外观立即生效；知识语言只影响新生成的内容。</p></header>
         <div class="settings-section"><h2 class="settings-section-title">主题</h2><div class="theme-grid" role="radiogroup" aria-label="主题">
-          <button class="theme-option" type="button" data-theme-choice="system" role="radio" aria-checked="false"><span class="theme-preview system"></span><span>系统</span></button>
-          <button class="theme-option active" type="button" data-theme-choice="light" role="radio" aria-checked="true"><span class="theme-preview light"></span><span>浅色</span></button>
-          <button class="theme-option" type="button" data-theme-choice="dark" role="radio" aria-checked="false"><span class="theme-preview dark"></span><span>深色</span></button>
+          <button class="theme-option" type="button" data-theme-choice="system" role="radio" aria-checked="false" tabindex="-1"><span class="theme-preview system"></span><span>系统</span></button>
+          <button class="theme-option active" type="button" data-theme-choice="light" role="radio" aria-checked="true" tabindex="0"><span class="theme-preview light"></span><span>浅色</span></button>
+          <button class="theme-option" type="button" data-theme-choice="dark" role="radio" aria-checked="false" tabindex="-1"><span class="theme-preview dark"></span><span>深色</span></button>
         </div></div>
         <div class="settings-section"><h2 class="settings-section-title">语言</h2><div class="settings-card">
           <div class="settings-row"><div class="settings-row-copy"><strong>应用语言</strong><span>Pige 的菜单、按钮和状态文字</span></div><select class="settings-select" aria-label="应用语言"><option>简体中文</option><option>跟随系统</option><option>English</option><option>日本語</option><option>한국어</option><option>Français</option><option>Deutsch</option></select></div>
@@ -2724,8 +2725,10 @@
           <div class="settings-row"><div class="settings-row-copy"><strong>恢复警告</strong><span>已排除的可重建目录 4 · 不包含密钥和机器权限</span></div><span class="settings-badge">1 类</span></div>
         </div></div>
         <div class="settings-section"><h2 class="settings-section-title">身份模式</h2>
-          <button class="settings-radio active" type="button" data-radio-group="restore-mode"><span class="settings-radio-mark"></span><span class="settings-radio-copy"><strong>恢复为新的仓库（推荐）</strong><span>创建新的仓库身份；保留当前仓库和最近仓库记录。</span></span></button>
-          <button class="settings-radio" type="button" data-radio-group="restore-mode"><span class="settings-radio-mark"></span><span class="settings-radio-copy"><strong>替换当前仓库</strong><span>应用前会由系统显示不可撤销警告，并先创建和验证回滚备份。</span></span></button>
+          <div role="radiogroup" aria-label="恢复身份模式">
+            <button class="settings-radio active" type="button" role="radio" aria-checked="true" tabindex="0" data-radio-group="restore-mode"><span class="settings-radio-mark"></span><span class="settings-radio-copy"><strong>恢复为新的仓库（推荐）</strong><span>创建新的仓库身份；保留当前仓库和最近仓库记录。</span></span></button>
+            <button class="settings-radio" type="button" role="radio" aria-checked="false" tabindex="-1" data-radio-group="restore-mode"><span class="settings-radio-mark"></span><span class="settings-radio-copy"><strong>替换当前仓库</strong><span>应用前会由系统显示不可撤销警告，并先创建和验证回滚备份。</span></span></button>
+          </div>
           <div class="settings-warning">恢复不会导入 API 密钥、YOLO 状态、已保存权限授权或旧机器的绝对路径。</div>
         </div>
         <div class="settings-inline-actions" style="justify-content:flex-end"><button class="settings-button" type="button" data-settings-target="vault">取消</button><button class="settings-button primary settings-action" type="button" data-action-label="选择恢复目标文件夹">选择目标并恢复…</button></div>
@@ -2766,7 +2769,7 @@
           <div class="settings-row"><div class="settings-row-copy"><strong>gpt-4.1</strong><span>OpenAI · 已同步 · 默认显示名称</span></div><button class="settings-switch" type="button" role="switch" aria-label="启用 gpt-4.1" aria-checked="true"></button></div>
           <div class="settings-row"><div class="settings-row-copy"><strong>gpt-4.1-mini</strong><span>OpenAI · 已同步</span></div><button class="settings-switch" type="button" role="switch" aria-label="启用 gpt-4.1-mini" aria-checked="true"></button></div>
           <div class="settings-row"><div class="settings-row-copy"><strong>添加自定义模型</strong><span>仅在服务不支持模型列表或需要额外模型 ID 时使用</span></div><button class="settings-button settings-action" type="button" data-action-label="添加自定义模型">添加…</button></div>
-        </div><div class="settings-warning provider-discovery-error"><strong>无法读取模型列表</strong><br />服务暂时没有返回可用列表。没有显示原始服务错误；你可以重试，或在服务明确不支持列表时添加自定义模型。<div class="settings-inline-actions"><button class="settings-button settings-action" type="button" data-action-label="重试模型列表">重试</button><button class="settings-button settings-action" type="button" data-action-label="添加自定义模型">添加自定义模型</button></div></div><div class="settings-inline-actions"><button class="settings-button" type="button" data-settings-target="provider-custom">使用自定义 Provider…</button></div><p class="settings-note">自定义 Provider 才会显示协议和端点；普通预设服务不会暴露这些技术字段。</p></div>
+        </div><div class="settings-warning provider-discovery-error" role="alert" aria-live="assertive" aria-atomic="true"><strong>无法读取模型列表</strong><br />服务暂时没有返回可用列表。没有显示原始服务错误；你可以重试，或在服务明确不支持列表时添加自定义模型。<div class="settings-inline-actions"><button class="settings-button settings-action" type="button" data-action-label="重试模型列表">重试</button><button class="settings-button settings-action" type="button" data-action-label="添加自定义模型">添加自定义模型</button></div></div><div class="settings-inline-actions"><button class="settings-button" type="button" data-settings-target="provider-custom">使用自定义 Provider…</button></div><p class="settings-note">自定义 Provider 才会显示协议和端点；普通预设服务不会暴露这些技术字段。</p></div>
       </section>
 
       <section class="settings-panel" data-settings-panel="provider-custom" aria-labelledby="settings-provider-custom-title">
@@ -2877,6 +2880,8 @@
     const openLibrary = document.querySelector('#openLibrary');
     const taskPanel = document.querySelector('#taskPanel');
     const taskToggle = document.querySelector('#taskToggle');
+    const taskList = document.querySelector('#taskList');
+    const activityList = document.querySelector('#activityList');
     const composerInput = document.querySelector('#composerInput');
     const sendButton = document.querySelector('#sendButton');
     const attachButton = document.querySelector('#attachButton');
@@ -2927,6 +2932,11 @@
       toast.classList.add('visible');
       window.clearTimeout(toastTimer);
       toastTimer = window.setTimeout(() => toast.classList.remove('visible'), 1800);
+    }
+
+    function replaceWithFocusedStatus(container, message) {
+      container.innerHTML = `<div class="resolved-card" role="status" aria-live="polite" aria-atomic="true" tabindex="-1">${message}</div>`;
+      container.querySelector('.resolved-card').focus({ preventScroll: true });
     }
 
     function showSettingsToast(message) {
@@ -2988,7 +2998,10 @@
     function showSettingsPage(page, options = {}) {
       const target = settingsPanels.find(panel => panel.dataset.settingsPanel === page);
       if (!target) return;
-      settingsNavItems.forEach(item => item.setAttribute('aria-selected', String(item.dataset.settingsPage === page)));
+      settingsNavItems.forEach(item => {
+        if (item.dataset.settingsPage === page) item.setAttribute('aria-current', 'page');
+        else item.removeAttribute('aria-current');
+      });
       settingsPanels.forEach(panel => panel.classList.toggle('active', panel === target));
       settingsContent.scrollTop = 0;
       if (options.focus !== false) {
@@ -3037,7 +3050,10 @@
       readerNoteTitle.textContent = title;
       noteAgentTitle.textContent = fileName;
       document.querySelectorAll('.sidebar-note').forEach(note => {
-        note.classList.toggle('active', note.dataset.noteTitle === title && note.dataset.noteGroup === group);
+        const current = note.dataset.noteTitle === title && note.dataset.noteGroup === group;
+        note.classList.toggle('active', current);
+        if (current) note.setAttribute('aria-current', 'page');
+        else note.removeAttribute('aria-current');
       });
       setScreen('note');
     }
@@ -3129,9 +3145,34 @@
       }
     }
 
+    function setPrimaryNav(view) {
+      document.querySelectorAll('.nav-item').forEach(entry => {
+        const current = entry.dataset.view === view;
+        entry.classList.toggle('active', current);
+        if (current) entry.setAttribute('aria-current', 'page');
+        else entry.removeAttribute('aria-current');
+      });
+    }
+
+    function setTaskPanelCollapsed(collapsed) {
+      taskPanel.classList.toggle('collapsed', collapsed);
+      taskToggle.setAttribute('aria-expanded', String(!collapsed));
+      [taskList, activityList].forEach(region => {
+        region.inert = collapsed;
+        region.setAttribute('aria-hidden', String(collapsed));
+      });
+    }
+
     function setScreen(screen, options = {}) {
       const normalized = screen || 'home';
       appWindow.dataset.screen = normalized;
+
+      if (normalized === 'home-confirm' || normalized === 'home-model-egress') {
+        const kind = normalized === 'home-confirm' ? 'permission' : 'egress';
+        window.setTimeout(() => {
+          document.querySelector(`[data-decision-kind="${kind}"][data-decision-action="deny"]`)?.focus({ preventScroll: true });
+        }, 180);
+      }
 
       if (normalized === 'home-url-draft') {
         composerInput.value = 'https://localfirstweb.dev/article';
@@ -3148,14 +3189,14 @@
       if (normalized.startsWith('knowledge')) {
         setNoteOpen(false);
         setSidebar(!window.matchMedia('(max-width: 679px)').matches);
-        document.querySelectorAll('.nav-item').forEach(entry => entry.classList.toggle('active', entry.dataset.view === 'knowledge'));
+        setPrimaryNav('knowledge');
         return;
       }
 
       if (normalized === 'search' || normalized.startsWith('library')) {
         setNoteOpen(false);
         setSidebar(!window.matchMedia('(max-width: 679px)').matches);
-        document.querySelectorAll('.nav-item').forEach(entry => entry.classList.remove('active'));
+        setPrimaryNav(null);
         if (normalized.startsWith('library') && !options.keepQuery) librarySearchInput.value = '';
         setLibraryFamily(options.libraryFamily || 'all');
         return;
@@ -3169,12 +3210,13 @@
       if (normalized.startsWith('first-run')) {
         setNoteOpen(false);
         setSidebar(false);
+        setPrimaryNav(null);
         return;
       }
 
       setNoteOpen(false);
       setSidebar(options.sidebar === true);
-      document.querySelectorAll('.nav-item').forEach(entry => entry.classList.toggle('active', entry.dataset.view === 'home'));
+      setPrimaryNav('home');
     }
 
     function setNoteOpen(open) {
@@ -3185,11 +3227,14 @@
         const compactWorkspace = window.matchMedia('(max-width: 1439px)').matches;
         setSidebar(!compactWorkspace);
         setNoteAgent(!narrow, { restoreFocus: false });
-        document.querySelectorAll('.nav-item').forEach(entry => entry.classList.remove('active'));
+        setPrimaryNav(null);
       } else {
         setNoteAgent(false, { restoreFocus: false });
-        document.querySelectorAll('.sidebar-note').forEach(note => note.classList.remove('active'));
-        document.querySelector('[data-view="home"]').classList.add('active');
+        document.querySelectorAll('.sidebar-note').forEach(note => {
+          note.classList.remove('active');
+          note.removeAttribute('aria-current');
+        });
+        setPrimaryNav('home');
       }
     }
 
@@ -3211,8 +3256,7 @@
     openLibrary.addEventListener('click', () => setScreen('library'));
 
     taskToggle.addEventListener('click', () => {
-      const collapsed = taskPanel.classList.toggle('collapsed');
-      taskToggle.setAttribute('aria-expanded', String(!collapsed));
+      setTaskPanelCollapsed(!taskPanel.classList.contains('collapsed'));
     });
 
     composerInput.addEventListener('input', updateSendState);
@@ -3276,8 +3320,7 @@
       renderAttachments();
       updateSendState();
       showToast('已进入 Pige 处理队列（原型状态）');
-      taskPanel.classList.remove('collapsed');
-      taskToggle.setAttribute('aria-expanded', 'true');
+      setTaskPanelCollapsed(false);
     });
 
     document.querySelectorAll('.notebook-title').forEach(button => {
@@ -3442,7 +3485,7 @@
         const message = kind === 'egress'
           ? (allowed ? '已允许这一次模型发送；不会保存授权。' : '已取消发送；选定内容未离开设备。')
           : (allowed ? '已允许这一次外部操作；任务将从原位置继续。' : '已拒绝外部操作；没有执行任何动作。');
-        window.setTimeout(() => { card.innerHTML = `<div class="resolved-card" role="status">${message}</div>`; }, 180);
+        window.setTimeout(() => replaceWithFocusedStatus(card, message), 180);
       });
     });
 
@@ -3547,11 +3590,11 @@
         proposal.querySelectorAll('button').forEach(control => { control.disabled = true; });
         if (action === 'apply') {
           document.querySelector('.markdown-body blockquote').textContent = '知识以 Markdown 沉淀在本地，并保留可追溯来源。';
-          proposal.innerHTML = '<div class="resolved-card" role="status">更改已应用；原内容仍可从操作记录撤销。</div>';
+          replaceWithFocusedStatus(proposal, '更改已应用；原内容仍可从操作记录撤销。');
         } else if (action === 'later') {
-          proposal.innerHTML = '<div class="resolved-card" role="status">已保留提案，稍后仍可继续处理。</div>';
+          replaceWithFocusedStatus(proposal, '已保留提案，稍后仍可继续处理。');
         } else {
-          proposal.innerHTML = '<div class="resolved-card" role="status">已拒绝提案；笔记没有被修改。</div>';
+          replaceWithFocusedStatus(proposal, '已拒绝提案；笔记没有被修改。');
         }
       });
     });
@@ -3597,7 +3640,12 @@
     document.querySelectorAll('[data-radio-group]').forEach(button => {
       button.addEventListener('click', () => {
         const group = button.dataset.radioGroup;
-        document.querySelectorAll(`[data-radio-group="${group}"]`).forEach(option => option.classList.toggle('active', option === button));
+        document.querySelectorAll(`[data-radio-group="${group}"]`).forEach(option => {
+          const selected = option === button;
+          option.classList.toggle('active', selected);
+          option.setAttribute('aria-checked', String(selected));
+          option.tabIndex = selected ? 0 : -1;
+        });
       });
     });
 
@@ -3608,12 +3656,29 @@
           const selected = option === button;
           option.classList.toggle('active', selected);
           option.setAttribute('aria-checked', String(selected));
+          option.tabIndex = selected ? 0 : -1;
         });
         const resolvedTheme = choice === 'system'
           ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
           : choice;
         settingsWindow.dataset.theme = resolvedTheme;
         showSettingsToast(`主题已切换为${button.textContent.trim()}（原型状态）`);
+      });
+    });
+
+    document.querySelectorAll('[role="radiogroup"]').forEach(group => {
+      group.addEventListener('keydown', event => {
+        if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+        const radios = Array.from(group.querySelectorAll('[role="radio"]'));
+        const current = Math.max(0, radios.indexOf(document.activeElement));
+        const next = event.key === 'Home'
+          ? 0
+          : event.key === 'End'
+            ? radios.length - 1
+            : (current + (event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1) + radios.length) % radios.length;
+        event.preventDefault();
+        radios[next].click();
+        radios[next].focus({ preventScroll: true });
       });
     });
 
@@ -3636,8 +3701,9 @@
     });
 
     if (window.matchMedia('(max-width: 679px)').matches) {
-      taskPanel.classList.add('collapsed');
-      taskToggle.setAttribute('aria-expanded', 'false');
+      setTaskPanelCollapsed(true);
+    } else {
+      setTaskPanelCollapsed(false);
     }
 
     function getTabStops(container) {
@@ -3709,6 +3775,7 @@
           const selected = option.dataset.themeChoice === initialTheme;
           option.classList.toggle('active', selected);
           option.setAttribute('aria-checked', String(selected));
+          option.tabIndex = selected ? 0 : -1;
         });
       }
       openSettingsWindow(initialParams.get('panel') || 'general');

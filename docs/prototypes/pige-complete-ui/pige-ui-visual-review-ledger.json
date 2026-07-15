@@ -53,8 +53,9 @@
     "routes_with_accessible_name_scan": 52,
     "interactive_elements_with_structural_scan": 191,
     "routes_with_real_tab_order_walkthrough": 52,
-    "real_tab_focus_stops_checked": 644,
+    "real_tab_focus_stops_checked": 639,
     "real_tab_order_failures": 0,
+    "native_document_boundary_transitions": 2,
     "unnamed_visible_controls": 0,
     "duplicate_ids": 0,
     "positive_tabindex": 0,
@@ -72,12 +73,22 @@
       "Selection toolbar: ArrowLeft, ArrowRight, Home, End move focus without triggering an action",
       "Intermediate Library drawer: Escape closes the drawer and restores focus to the sidebar toggle",
       "Independent Settings surface: Tab and Shift+Tab remain inside the surface and wrap at both ends",
-      "Compact Note Agent at 400 and 760 px: Tab and Shift+Tab remain inside the open drawer"
+      "Compact Note Agent at 400 and 760 px: Tab and Shift+Tab remain inside the open drawer",
+      "Appearance and restore-mode radio groups: arrow keys move and select with one Tab stop",
+      "Current-action confirmations: focus starts on the safe deny action and resolves to one focused terminal status"
     ],
     "focus_return_verified": [
       "Closing Note Agent returns focus to the reader toolbar toggle",
       "Opening Note Agent moves focus to the note composer after the panel transition",
-      "Escape closes the compact Note Agent and returns focus to the reader toolbar toggle"
+      "Escape closes the compact Note Agent and returns focus to the reader toolbar toggle",
+      "Permission and model-egress decisions move focus to the single body-free terminal status"
+    ],
+    "semantic_patterns_verified": [
+      "Primary and Settings navigation expose the current page with aria-current",
+      "Safe drafts and bounded progress use polite atomic status regions",
+      "Current-action decisions and typed failures use assertive body-free regions",
+      "Task rows expose named progressbar values and collapsed task content becomes inert and aria-hidden",
+      "Appearance and restore identity choices use named roving radio groups"
     ],
     "remaining": [
       "Complete screen-reader announcement, six-locale expansion, and platform text-rendering review."

@@ -169,9 +169,20 @@
       "role": "button",
       "intent": "Reveal or collapse useful current work without creating a dashboard.",
       "states": ["expanded", "collapsed"],
-      "prototype_action": "Toggles one compact recent-work panel.",
+      "prototype_action": "Toggles one compact recent-work panel, updates aria-expanded, and removes collapsed task content from focus and the accessibility tree.",
       "production_bridge": "Renderer-local disclosure over typed Job summaries",
       "owner": "Renderer + Jobs Service"
+    },
+    {
+      "id": "home.activity_progress",
+      "surface": "Home recent work",
+      "selector": ".progress-track",
+      "role": "progressbar",
+      "intent": "Expose the bounded progress and localized state of one visible task without duplicating status ownership.",
+      "states": ["running", "waiting", "terminal"],
+      "prototype_action": "Publishes a named numeric value and localized aria-valuetext while the visible row remains the single task status owner.",
+      "production_bridge": "Typed Job summary progress projection",
+      "owner": "Jobs Service + Renderer"
     },
     {
       "id": "home.activity_open",
@@ -202,7 +213,7 @@
       "role": "button group",
       "intent": "Deny or allow exactly one sensitive external action.",
       "states": ["pending", "resolving", "allowed-once", "denied", "unknown-fail-closed"],
-      "prototype_action": "Disables both actions while resolving and replaces them with body-free terminal truth.",
+      "prototype_action": "Announces one assertive body-free decision region, starts focus on Deny, disables both actions while resolving, and replaces them with one focused terminal truth.",
       "production_bridge": "Permission Broker current-action decision",
       "owner": "Permission Broker"
     },
@@ -213,7 +224,7 @@
       "role": "button group",
       "intent": "Deny or allow one sensitive model send without saving a grant.",
       "states": ["pending", "resolving", "allowed-once", "denied", "unknown-fail-closed"],
-      "prototype_action": "Shows only body-free reason and exact one-use decision result.",
+      "prototype_action": "Announces one assertive body-free decision region, starts focus on Don't send, and resolves to one focused one-use result.",
       "production_bridge": "Model Egress Decision contract",
       "owner": "Model Egress Service"
     },
@@ -224,7 +235,7 @@
       "role": "status with action",
       "intent": "Explain that the source is preserved and offer one Models action.",
       "states": ["waiting", "opening-models", "resumed"],
-      "prototype_action": "Keeps one status and one Connect Model action.",
+      "prototype_action": "Keeps one polite status and one Connect Model action.",
       "production_bridge": "Conversation-owned model wait and Settings navigation",
       "owner": "Home Agent Service + Model Provider Registry"
     },
@@ -422,7 +433,7 @@
       "role": "button",
       "intent": "Open one conceptual Settings domain.",
       "states": ["default", "current", "focus-visible"],
-      "prototype_action": "Selects one panel, resets scroll, and focuses its heading.",
+      "prototype_action": "Selects one panel, exposes aria-current=page, resets scroll, and focuses its heading.",
       "production_bridge": "Settings page route",
       "owner": "Renderer"
     },
@@ -444,7 +455,7 @@
       "role": "radio group",
       "intent": "Select System, Light, or Dark appearance.",
       "states": ["selected", "unselected", "focus-visible"],
-      "prototype_action": "Applies the resolved theme and updates aria-checked.",
+      "prototype_action": "Uses one roving Tab stop; arrow keys move and select while applying the resolved theme and updating aria-checked.",
       "production_bridge": "Machine-local theme preference",
       "owner": "Settings Service + Renderer"
     },
@@ -455,7 +466,7 @@
       "role": "radio group",
       "intent": "Choose safe clone-as-new or explicit replace-existing restore identity mode.",
       "states": ["clone-selected", "replace-selected", "resolving"],
-      "prototype_action": "Keeps one selected mode and exposes the stronger replace warning.",
+      "prototype_action": "Uses one roving Tab stop; arrow keys keep one selected mode and expose the stronger replace warning.",
       "production_bridge": "Opaque restore preview token and main-owned apply mode",
       "owner": "Backup and Restore Service"
     },
