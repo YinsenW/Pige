@@ -205,9 +205,9 @@
       "source": "UI_PROTOTYPE 9, 10",
       "prototype": "covered",
       "production": "missing",
-      "prototype_evidence": ["?screen=search", "?screen=library", "library.search", "library.search_result"],
+      "prototype_evidence": ["?screen=search", "?screen=library", "?screen=library-loading", "?screen=library-unavailable", "library.search", "library.search_result", "library.family_tabs", "library.availability", "real loading/unavailable/retry/no-result and ArrowLeft/ArrowRight/Home/End browser walkthrough"],
       "production_evidence": [],
-      "gap": "Development needs typed search result families and keyboard/focus behavior; HTML needs loading and unavailable states in addition to live filtering.",
+      "gap": "Prototype covers live filtering, explicit no-result, typed loading/unavailable truth, one retry, and roving family tabs. Development still needs typed search result families and equivalent keyboard/focus behavior.",
       "priority": "P1"
     },
     {
@@ -392,7 +392,7 @@
       "source": "UI_PROTOTYPE 16.1, 16.2, 18, 19",
       "prototype": "partial",
       "production": "partial",
-      "prototype_evidence": ["pige-ui-element-map.json", "pige-ui-visual-review-ledger.json structural scan of 191 controls", "52-route real Tab-order walkthrough covering 677 focus stops with 18 native document-boundary transitions, one native roving-radio member skipped by Tab, and zero Pige failures", "400 and 760 px Note Agent focus containment and focus return", "400, 760, and 1280 px Settings focus containment", "Current-action safe initial focus and focused terminal truth", "Named progressbar, current-page, live-region, and roving-radio semantics", "Library and selection arrow-key navigation", "936 six-locale layout checks across 52 routes at 400, 760, and 1536 px", "prefers-reduced-motion CSS"],
+      "prototype_evidence": ["pige-ui-element-map.json", "pige-ui-visual-review-ledger.json structural scan of 191 controls", "52-route real Tab-order walkthrough covering 677 focus stops with 18 native document-boundary transitions, one native roving-radio member skipped by Tab, and zero Pige failures", "400 and 760 px Library sidebar Escape focus return", "Library and Knowledge retry focus successors", "first-run step heading focus ownership", "400 and 760 px Note Agent focus containment and focus return", "400, 760, and 1280 px Settings focus containment", "Current-action safe initial focus and focused terminal truth", "Named progressbar, current-page, live-region, and roving-radio semantics", "Library and selection arrow-key navigation", "936 six-locale layout checks across 52 routes at 400, 760, and 1536 px", "prefers-reduced-motion CSS"],
       "production_evidence": ["six locale catalogs", "focused permission/restore semantics"],
       "gap": "Names, structural ARIA, contrast, reduced motion, composite arrow-key behavior, full Tab order, compact-drawer containment, current-action focus ownership, live-region structure, tested focus return, and six-locale browser layout stress pass. Spoken screen-reader announcements and assembled platform text rendering remain open.",
       "priority": "P0"

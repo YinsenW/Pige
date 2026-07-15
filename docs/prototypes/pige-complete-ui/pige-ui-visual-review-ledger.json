@@ -101,6 +101,10 @@
       "Current-action confirmations: focus starts on the safe deny action and resolves to one focused terminal status"
     ],
     "focus_return_verified": [
+      "Escape closes the compact Library sidebar and returns focus to the titlebar sidebar toggle",
+      "A successful Library retry moves focus from the removed failure action to the restored search field",
+      "A successful Knowledge Tree retry moves focus from the removed failure action to the restored first knowledge node",
+      "First-run vault, model, and restore step transitions move focus to the newly visible step heading",
       "Closing Note Agent returns focus to the reader toolbar toggle",
       "Opening Note Agent moves focus to the note composer after the panel transition",
       "Escape closes the compact Note Agent and returns focus to the reader toolbar toggle",
@@ -121,6 +125,7 @@
     "viewport": { "width": 1280, "height": 720, "device_scale_factor": 2 },
     "compact_home": { "width_px": 400, "height_px": 688, "titlebar_px": 46, "composer_radius_px": 22, "heading": "24px / 30px / 500" },
     "expanded_home": { "width_px": 680, "height_px": 688, "sidebar_px": 280, "home_px": 400 },
+    "library_state_flow": { "loading_status_busy": true, "unavailable_body_free": true, "unavailable_retry_only": true, "retry_converges_to_library": true, "retry_focuses_search": true, "no_result_status": true, "family_tab_arrow_home_end": "passed", "tree_disclosure_persists_after_reload": true, "collapsed_descendants_inert_and_aria_hidden": true, "horizontal_overflow": false },
     "intermediate_reader": { "viewport_px": [1144, 874], "window_px": 1112, "sidebar_px": 280, "reader_px": 400, "note_agent_px": 432, "fresh_note_defaults_to_three_pane": true, "sidebar_persistent": true, "escape_preserves_resident_sidebar": true },
     "compact_reader_drawers": { "viewport_px": [760, 760], "window_px": 680, "reader_px": 680, "sidebar_overlay_px": 280, "note_agent_overlay_px": 432, "fresh_note_defaults_to_unobscured_reader": true, "note_agent_closed_on_note_open": true, "horizontal_overflow": false, "escape_and_focus_return": "passed" },
     "settings": {
@@ -315,6 +320,10 @@
       "Switching notes reopened a manually hidden resident Note Agent; note routing now preserves both sidebar and Note Agent disclosure while updating the active document.",
       "The canonical fresh ?screen=note route contradicted its three-pane name by omitting the sidebar; fresh wide note-family entries now default to three panes while fresh compact entries keep both overlays closed.",
       "Escape incorrectly dismissed a resident sidebar at 1112-1439 px; it now dismisses only compact overlay panels.",
+      "Escape closed the compact Library drawer while leaving focus inside hidden navigation; focus now returns to the titlebar sidebar toggle after the exit transition.",
+      "A successful Library retry dropped focus to the document body after removing the failure card; the restored search field now owns focus.",
+      "A successful Knowledge Tree retry dropped focus to the document body after removing the degraded card; the restored first node now owns focus.",
+      "First-run transitions hid the invoking choice or restore action without a focus successor; the new step heading now receives programmatic focus without a visual outline.",
       "The 400 px intermediate reader broke the breadcrumb into vertical glyphs; the path now stays on one line and progressively hides earlier segments and secondary actions."
     ]
   }

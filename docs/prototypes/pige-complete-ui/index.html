@@ -1482,6 +1482,7 @@
     .first-run-brand img { width: 34px; height: 34px; border-radius: 50%; }
     .first-run-brand strong { font-size: 14px; font-weight: 600; }
     .first-run-card h1 { font-size: 22px; text-align: left; }
+    .first-run-card h1:focus { outline: 0; }
     .first-run-card > p { margin: 8px 0 22px; color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
     .first-run-step { display: block; }
     .first-run-step.model { display: none; }
@@ -3219,6 +3220,7 @@
       sidebarToggle.setAttribute('aria-label', open ? '关闭侧边栏' : '打开侧边栏');
       sidebarToggle.title = open ? '关闭侧边栏' : '打开侧边栏';
       if (options.persist !== false) sessionStorage.setItem('pige.prototype.sidebar.open', String(open));
+      if (!open && options.restoreFocus) window.setTimeout(() => sidebarToggle.focus({ preventScroll: true }), 180);
     }
 
     function setNoteAgent(open, options = {}) {
@@ -3299,6 +3301,12 @@
         setNoteOpen(false);
         setSidebar(false, { persist: false });
         setPrimaryNav(null);
+        const stepName = normalized === 'first-run-model' ? 'model' : normalized === 'first-run-restore' ? 'restore' : 'vault';
+        const heading = document.querySelector(`.first-run-step.${stepName} h1`);
+        if (heading) {
+          heading.tabIndex = -1;
+          window.setTimeout(() => heading.focus({ preventScroll: true }), 180);
+        }
         return;
       }
 
@@ -3613,7 +3621,10 @@
         if (action === 'retry') {
           button.disabled = true;
           button.textContent = '正在重试…';
-          window.setTimeout(() => setScreen('knowledge'), 480);
+          window.setTimeout(() => {
+            setScreen('knowledge');
+            document.querySelector('[data-knowledge-title]')?.focus({ preventScroll: true });
+          }, 480);
           return;
         }
         showToast(action === 'suggestion' ? '已打开关系建议（原型状态）' : action === 'backlinks' ? '已打开反向链接（原型状态）' : '已打开证据列表（原型状态）');
@@ -3623,7 +3634,10 @@
     document.querySelector('[data-library-retry]').addEventListener('click', event => {
       event.currentTarget.disabled = true;
       event.currentTarget.textContent = '正在重试…';
-      window.setTimeout(() => setScreen('library'), 480);
+      window.setTimeout(() => {
+        setScreen('library');
+        librarySearchInput.focus({ preventScroll: true });
+      }, 480);
     });
 
     document.querySelectorAll('[data-reader-source-action]').forEach(button => {
@@ -3847,7 +3861,7 @@
 
       if (event.key === 'Escape' && settingsActive) closeSettingsWindow();
       else if (event.key === 'Escape' && compactNoteAgentOpen) setNoteAgent(false);
-      else if (event.key === 'Escape' && mainLayout.classList.contains('note-open') && mainLayout.classList.contains('sidebar-open') && window.matchMedia('(max-width: 1111px)').matches) setSidebar(false);
+      else if (event.key === 'Escape' && mainLayout.classList.contains('note-open') && mainLayout.classList.contains('sidebar-open') && window.matchMedia('(max-width: 1111px)').matches) setSidebar(false, { restoreFocus: true });
     });
 
     const initialParams = new URLSearchParams(location.search);

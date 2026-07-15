@@ -291,7 +291,7 @@
       "role": "button",
       "intent": "Inspect evidence, backlinks, or a bounded relationship suggestion, or recover the current Knowledge Tree state.",
       "states": ["ready", "opening", "retrying", "resolved", "focus-visible"],
-      "prototype_action": "Routes to existing Home or returns visible bounded feedback; retry never fabricates nodes.",
+      "prototype_action": "Routes to existing Home or returns visible bounded feedback; retry never fabricates nodes and returns focus to the restored first node.",
       "production_bridge": "Typed knowledge evidence, backlink, suggestion, or index-retry action",
       "owner": "Knowledge Graph Service + Renderer"
     },
@@ -346,7 +346,7 @@
       "role": "status with optional action",
       "intent": "Distinguish local loading and typed unavailable truth without suggesting that knowledge was deleted.",
       "states": ["loading", "unavailable", "retrying", "ready"],
-      "prototype_action": "Keeps one body-free status owner and one Retry only for the unavailable state.",
+      "prototype_action": "Keeps one body-free status owner and one Retry only for the unavailable state; successful retry focuses the restored search field.",
       "production_bridge": "Library Service availability and retry contract",
       "owner": "Library Service + Jobs Service"
     },
@@ -357,7 +357,7 @@
       "role": "button group",
       "intent": "Choose creation or opening of a visible local vault.",
       "states": ["unselected", "selected", "native-dialog", "error"],
-      "prototype_action": "Selects exactly one choice and enables Continue.",
+      "prototype_action": "Selects exactly one choice, enables Continue, and transfers focus to the next visible step heading after navigation.",
       "production_bridge": "Main-owned native folder workflow",
       "owner": "Vault Runtime Service"
     },
@@ -590,7 +590,7 @@
       "role": "button following restore preview and mode selection",
       "intent": "Restore a reviewed backup as a new vault or enter the stronger replace-existing confirmation path.",
       "states": ["preview-ready", "clone-selected", "replace-selected", "choosing-target", "restoring", "failed", "completed"],
-      "prototype_action": "Shows only typed manifest metadata and warnings, then advances without exposing a raw destination path.",
+      "prototype_action": "Shows only typed manifest metadata and warnings, then advances without exposing a raw destination path and focuses the next visible step heading.",
       "production_bridge": "Opaque restore preview token, native destination picker, and main-owned apply contract",
       "owner": "Backup and Restore Service + Window Service"
     },
