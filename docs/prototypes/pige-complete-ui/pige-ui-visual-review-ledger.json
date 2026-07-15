@@ -49,6 +49,28 @@
     "default_motion_ms": 150,
     "relaxed_motion_ms": 300
   },
+  "iconography_evidence": {
+    "registry": "./pige-icon-registry.json",
+    "sprite": "./pige-icon-sprite.svg",
+    "full_family_sprite": "./vendor/lucide-1.17.0-sprite.svg",
+    "full_family_sprite_sha256": "b69677e8f7b4f52a10618bdf0a5096e73c541dc7f080465885a4a9c62010d941",
+    "gallery": "./pige-icon-library.html",
+    "common_family": "Lucide 1.17.0 geometry confirmed from open-source modules in the inspected bundle",
+    "production_package": "lucide-react@1.17.0",
+    "full_family_symbols": 1713,
+    "package_svg_assets_including_aliases": 1962,
+    "active_symbols": 36,
+    "master_viewbox_px": 24,
+    "render_sizes_px": [16, 18, 20],
+    "semantic_checks": [
+      "Pin needle and shoulders are optically centered.",
+      "Settings is a gear and cannot be confused with Appearance palette or System sun.",
+      "Shell, navigation, content actions, Settings, and capability rows use one outline family.",
+      "Every icon-only control keeps its accessible name on the owning button."
+    ],
+    "manual_visual": "passed",
+    "missing_sprite_references": 0
+  },
   "accessibility_evidence": {
     "routes_with_accessible_name_scan": 52,
     "interactive_elements_with_structural_scan": 191,
@@ -99,7 +121,7 @@
     "viewport": { "width": 1280, "height": 720, "device_scale_factor": 2 },
     "compact_home": { "width_px": 400, "height_px": 688, "titlebar_px": 46, "composer_radius_px": 22, "heading": "24px / 30px / 500" },
     "expanded_home": { "width_px": 680, "height_px": 688, "sidebar_px": 280, "home_px": 400 },
-    "intermediate_reader": { "window_px": 1112, "reader_px": 680, "note_agent_px": 432, "library_drawer_px": 280, "drawer_does_not_resize_window": true },
+    "intermediate_reader": { "viewport_px": [1144, 874], "window_px": 1112, "sidebar_px": 280, "reader_px": 400, "note_agent_px": 432, "sidebar_persistent": true },
     "settings": {
       "width_px": 1180,
       "height_px": 672,
@@ -173,14 +195,14 @@
       "checks": {
         "manual_visual": "passed",
         "independent_left_and_right_rails": "passed",
-        "intermediate_width_library_drawer_at_1280x720": "passed",
+        "intermediate_width_sidebar_persistence_at_1144x874": "passed",
         "markdown_and_agent_state": "passed",
         "raster_overlay": "pending",
         "narrow_drawer": "pending"
       },
       "remaining": [
         "Lock Markdown line wrapping, heading baselines, table density, and note-agent composer alignment by overlay.",
-        "The Library rail and Note Agent now degrade to independently controlled drawers without clipping the reader."
+        "Below 1112 px the Library rail and Note Agent degrade to independently controlled drawers; at 1112 px and above the Library rail remains resident when the user leaves it open."
       ]
     },
     {

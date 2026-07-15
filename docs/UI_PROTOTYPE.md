@@ -1616,6 +1616,9 @@ The following are deliberately excluded from Pige:
   directive.
 - Any secret, credential, account data, endpoint behavior, or security-control bypass.
 
+Open-source icon families may follow upstream licenses; proprietary client glyphs and
+artwork remain excluded.
+
 Implementers should reproduce the Pige tokens and behavior in this document from first
 principles. The inspected application bundle remains external research material and is
 not a build input, repository dependency, fixture, or redistribution source.

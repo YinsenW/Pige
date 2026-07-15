@@ -414,9 +414,9 @@
       "source": "UI_PROTOTYPE 16.2-16.4",
       "prototype": "partial",
       "production": "partial",
-      "prototype_evidence": ["pige-ui-design-contract.json tokens"],
+      "prototype_evidence": ["pige-ui-design-contract.json tokens and icon_system", "pige-icon-sprite.svg governed 36-symbol common family", "pige-icon-library.html 16/18/20 px and control-state review", "seven Pige-only canonical baselines"],
       "production_evidence": ["no complete cross-screen visual baseline"],
-      "gap": "Establish canonical screenshots, overlay/difference review, tolerance ledger, and repeated correction passes; route availability alone is not pixel fidelity.",
+      "gap": "The common icon family, semantic mapping, and 16/18/20 px rendering are now explicit; equivalent-state raster overlay/difference review across canonical surfaces remains open, and route availability alone is not pixel fidelity.",
       "priority": "P0"
     }
   ],

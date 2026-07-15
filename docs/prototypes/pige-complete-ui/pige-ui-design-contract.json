@@ -19,6 +19,32 @@
       "Pige production behavior remains governed by docs/UI_PROTOTYPE.md and subject-owner contracts."
     ]
   },
+  "icon_system": {
+    "registry": "./pige-icon-registry.json",
+    "sprite": "./pige-icon-sprite.svg",
+    "full_family_sprite": "./vendor/lucide-1.17.0-sprite.svg",
+    "self_contained_review_cache": "36 symbols are also embedded in index.html so the review HTML remains functional as a standalone static artifact",
+    "review_gallery": "./pige-icon-library.html",
+    "common_family": "Lucide",
+    "family_version": "1.17.0",
+    "production_package": "lucide-react@1.17.0",
+    "family_license": "ISC",
+    "family_license_file": "./LUCIDE_LICENSE.txt",
+    "source_evidence": "Open-source createLucideIcon modules and named per-icon assets identified in the inspected desktop bundle; no proprietary product icon is a build input.",
+    "master_viewbox_px": 24,
+    "render_sizes_px": [16, 18, 20],
+    "master_stroke_px": 2,
+    "full_family_symbol_count": 1713,
+    "package_svg_asset_count_including_aliases": 1962,
+    "active_symbol_count": 36,
+    "rules": [
+      "Use the pinned full Lucide family for every common shell, navigation, content-action, Settings, status, and capability glyph; do not substitute emoji, text placeholders, arbitrary raw SVG, or a second common icon family.",
+      "The 36-symbol prototype sprite is an exact review subset of the pinned family; it is not the production library or a license to draw one-off glyphs.",
+      "Pin uses one vertically centered needle and balanced shoulders; Settings uses a gear and must remain visibly distinct from Appearance and System theme symbols.",
+      "Icon-only controls retain an accessible name, tooltip, stable hit target, and visible hover and focus-visible states.",
+      "Pige brand artwork and genuinely product-specific semantics remain independently owned; do not import proprietary client glyphs."
+    ]
+  },
   "tokens": {
     "font_ui": "-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
     "font_mono": "ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, monospace",
@@ -80,13 +106,16 @@
     "Home has one dominant composer; shortcuts, progress, confirmations, and citations remain subordinate.",
     "Pointer focus never creates a permanent blue composer box; keyboard focus retains a native-blue focus-visible ring.",
     "Settings is a separate stable-size window and must not resize or reflow the main Pige window.",
+    "Opening or switching a note preserves the user-owned sidebar state; only the sidebar control or an explicit first-run boundary may change it.",
+    "At 1112–1439 px the note layout keeps the 280 px sidebar and 432 px Agent rail resident and gives the remaining width to the reader; at 1440 px and above the reader returns to its 680 px reference width.",
     "Enter sends, Shift+Enter inserts a newline, and active IME plus the 80 ms composition-end race cannot send.",
-    "Reduced motion removes spatial interpolation without removing state feedback."
+    "Reduced motion removes spatial interpolation without removing state feedback.",
+    "Common system glyphs use the one governed Lucide-aligned sprite; Settings is a gear, Appearance is a palette, and Pin is optically centered."
   ],
   "interaction_contract": [
     "The Settings entry navigates deterministically in the prototype; production opens the same route in its independent stable-size BrowserWindow.",
     "Every notebook group is a native button with aria-expanded, keyboard activation, animated disclosure, and session-restored expansion state.",
-    "Every visible notebook row opens the three-pane reader and updates the breadcrumb, Markdown title, Agent pane title, and active-row state.",
+    "Every visible notebook row opens the three-pane reader, preserves the sidebar state, and updates the breadcrumb, Markdown title, Agent pane title, and active-row state.",
     "Knowledge Tree nodes are selectable controls and update one shared detail surface without adding modal or navigation complexity.",
     "Library search filters notes, sources, topics, and tags as the user types and exposes an explicit empty result state.",
     "First-run vault choices, permission decisions, model-egress decisions, voice completion, retry, Activity Undo, selection actions, and note proposals all resolve visibly and disable stale actions.",

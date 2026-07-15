@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pige UI 图标系统审阅</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --surface: #fff;
+      --surface-soft: #f7f7f7;
+      --line: rgba(26,28,31,.1);
+      --text: #1a1c1f;
+      --muted: #707472;
+      --accent: #19766f;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--surface); color: var(--text); }
+    main { width: min(1040px, calc(100% - 40px)); margin: 0 auto; padding: 56px 0 88px; }
+    header { display: grid; gap: 10px; margin-bottom: 34px; }
+    h1 { margin: 0; font-size: 30px; font-weight: 560; letter-spacing: -.025em; }
+    header p { max-width: 700px; margin: 0; color: var(--muted); font-size: 14px; line-height: 1.55; }
+    .rules { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); overflow: hidden; margin-bottom: 34px; border: .5px solid var(--line); border-radius: 14px; }
+    .rule { min-height: 82px; padding: 15px 16px; border-right: .5px solid var(--line); }
+    .rule:last-child { border-right: 0; }
+    .rule strong { display: block; margin-bottom: 5px; font-size: 12px; font-weight: 590; }
+    .rule span { color: var(--muted); font-size: 11px; line-height: 1.45; }
+    .section-title { margin: 30px 0 12px; font-size: 13px; font-weight: 600; }
+    .grid { display: grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap: 8px; }
+    .glyph { display: grid; min-height: 106px; place-items: center; gap: 8px; padding: 14px 8px 12px; border: .5px solid var(--line); border-radius: 13px; background: var(--surface); }
+    .glyph-icons { display: flex; align-items: center; gap: 9px; min-height: 20px; }
+    .glyph-icons svg { color: var(--text); }
+    .glyph span { color: var(--muted); font-size: 10px; text-align: center; }
+    .states { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 18px; border: .5px solid var(--line); border-radius: 14px; }
+    .icon-button { display: grid; width: 32px; height: 32px; place-items: center; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--text); }
+    .icon-button svg { width: 20px; height: 20px; }
+    .icon-button.hover { background: rgba(0,0,0,.055); }
+    .icon-button.selected { background: rgba(0,0,0,.075); }
+    .icon-button.focus { outline: 2px solid #0a84ff; outline-offset: 2px; }
+    .icon-button.disabled { color: rgba(26,28,31,.3); }
+    .send { border-radius: 999px; background: var(--accent); color: #fff; }
+    .size-sample { display: flex; align-items: end; gap: 18px; margin-left: 18px; padding-left: 18px; border-left: .5px solid var(--line); }
+    .size-sample label { display: grid; place-items: center; gap: 6px; color: var(--muted); font-size: 10px; }
+    .size-sample svg { color: var(--text); }
+    .catalog-controls { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 12px 0; }
+    .catalog-search { width: min(360px, 100%); height: 36px; padding: 0 12px; border: .5px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text); font: inherit; }
+    .catalog-search:focus-visible { outline: 2px solid #0a84ff; outline-offset: 2px; }
+    .catalog-meta { margin: 0; color: var(--muted); font-size: 11px; }
+    .catalog-grid .glyph { min-height: 88px; }
+    .catalog-grid svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    footer { margin-top: 18px; color: var(--muted); font-size: 11px; }
+    footer a { color: inherit; }
+    @media (prefers-color-scheme: dark) {
+      :root { --surface: #181818; --surface-soft: #242424; --line: rgba(255,255,255,.11); --text: #fff; --muted: rgba(255,255,255,.55); }
+      .icon-button.hover { background: rgba(255,255,255,.07); }
+      .icon-button.selected { background: rgba(255,255,255,.1); }
+      .icon-button.disabled { color: rgba(255,255,255,.28); }
+    }
+    @media (max-width: 760px) { .rules { grid-template-columns: repeat(2,1fr); } .rule:nth-child(2) { border-right: 0; } .grid { grid-template-columns: repeat(4,1fr); } }
+    @media (max-width: 460px) { main { width: min(100% - 24px, 1040px); padding-top: 32px; } .grid { grid-template-columns: repeat(3,1fr); } .size-sample { width: 100%; margin: 8px 0 0; padding: 16px 0 0; border-top: .5px solid var(--line); border-left: 0; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Pige UI 图标系统</h1>
+      <p>通用系统动作采用在参考客户端构建产物中确认的开源 Lucide 图形语言，并从 24px 母版统一适配到桌面端 16–20px；Pige 品牌与产品专属语义保持独立。任何图标都必须先有明确功能，再进入界面。</p>
+    </header>
+    <section class="rules" aria-label="图标设计规则">
+      <div class="rule"><strong>母版</strong><span>24 × 24 Lucide 坐标；界面标准显示 20px</span></div>
+      <div class="rule"><strong>光学线宽</strong><span>母版 2px；20px 显示约 1.67px</span></div>
+      <div class="rule"><strong>端点</strong><span>round cap / round join；统一负空间与重心</span></div>
+      <div class="rule"><strong>语义</strong><span>设置使用齿轮，外观使用调色盘；图标不替代文字与可访问名称</span></div>
+    </section>
+
+    <h2 class="section-title">壳层与导航</h2>
+    <section class="grid" id="shellGrid"></section>
+    <h2 class="section-title">内容与操作</h2>
+    <section class="grid" id="contentGrid"></section>
+    <h2 class="section-title">设置与能力</h2>
+    <section class="grid" id="settingsGrid"></section>
+
+    <h2 class="section-title">Lucide 1.17.0 完整矢量母库</h2>
+    <div class="catalog-controls">
+      <input class="catalog-search" id="catalogSearch" type="search" placeholder="按英文名称搜索 1,713 个 SVG symbol" aria-label="搜索完整图标库" />
+      <p class="catalog-meta" id="catalogMeta" role="status" aria-live="polite">正在读取完整母库…</p>
+    </div>
+    <section class="grid catalog-grid" id="catalogGrid" aria-label="完整 Lucide 图标库"></section>
+
+    <h2 class="section-title">控件状态与尺寸</h2>
+    <section class="states">
+      <button class="icon-button" aria-label="默认"><svg><use href="./pige-icon-sprite.svg#pi-panel"/></svg></button>
+      <button class="icon-button hover" aria-label="悬停"><svg><use href="./pige-icon-sprite.svg#pi-panel"/></svg></button>
+      <button class="icon-button selected" aria-label="选中"><svg><use href="./pige-icon-sprite.svg#pi-panel"/></svg></button>
+      <button class="icon-button focus" aria-label="键盘焦点"><svg><use href="./pige-icon-sprite.svg#pi-panel"/></svg></button>
+      <button class="icon-button disabled" aria-label="禁用"><svg><use href="./pige-icon-sprite.svg#pi-panel"/></svg></button>
+      <button class="icon-button send" aria-label="发送"><svg><use href="./pige-icon-sprite.svg#pi-send"/></svg></button>
+      <div class="size-sample">
+        <label><svg width="16" height="16"><use href="./pige-icon-sprite.svg#pi-search"/></svg>16px</label>
+        <label><svg width="18" height="18"><use href="./pige-icon-sprite.svg#pi-search"/></svg>18px</label>
+        <label><svg width="20" height="20"><use href="./pige-icon-sprite.svg#pi-search"/></svg>20px</label>
+      </div>
+    </section>
+    <footer>通用图形来源：Lucide 1.17.0（ISC）及其 Feather 衍生部分（MIT）。完整语义映射见 <a href="./pige-icon-registry.json">pige-icon-registry.json</a>；许可文本见 <a href="./LUCIDE_LICENSE.txt">LUCIDE_LICENSE.txt</a>。</footer>
+  </main>
+  <script>
+    const groups = {
+      shellGrid: [['panel','侧栏'],['pin','置顶'],['search','搜索'],['home','首页'],['knowledge','知识树'],['settings','设置'],['folder','文件夹'],['chevron-down','展开'],['arrow-left','返回']],
+      contentGrid: [['file','文件'],['file-text','文本'],['presentation','演示'],['spreadsheet','表格'],['image','图片'],['plus','添加'],['send','发送'],['edit','编辑'],['copy','复制'],['more','更多'],['close','关闭'],['thumb-up','有帮助'],['thumb-down','无帮助']],
+      settingsGrid: [['palette','外观'],['database','索引'],['model','模型'],['wrench','本地能力'],['memory','记忆'],['shield','隐私'],['skill','Skills'],['package','Packages'],['sun','系统'],['restore','恢复'],['link','链接'],['globe','网络'],['mail','消息']]
+    };
+    Object.entries(groups).forEach(([id, icons]) => {
+      document.getElementById(id).innerHTML = icons.map(([name,label]) => `<div class="glyph"><div class="glyph-icons" aria-hidden="true"><svg width="16" height="16"><use href="./pige-icon-sprite.svg#pi-${name}"/></svg><svg width="18" height="18"><use href="./pige-icon-sprite.svg#pi-${name}"/></svg><svg width="20" height="20"><use href="./pige-icon-sprite.svg#pi-${name}"/></svg></div><span>${label}<br>pi-${name}</span></div>`).join('');
+    });
+    const catalogSearch = document.getElementById('catalogSearch');
+    const catalogGrid = document.getElementById('catalogGrid');
+    const catalogMeta = document.getElementById('catalogMeta');
+    fetch('./vendor/lucide-1.17.0-sprite.svg').then(response => response.text()).then(source => {
+      const ids = [...source.matchAll(/<symbol id="([^"]+)"/g)].map(match => match[1]);
+      const renderCatalog = () => {
+        const query = catalogSearch.value.trim().toLowerCase();
+        const matches = query ? ids.filter(id => id.includes(query)) : ids;
+        const visible = matches.slice(0, 120);
+        catalogGrid.innerHTML = visible.map(id => `<div class="glyph"><div class="glyph-icons" aria-hidden="true"><svg width="18" height="18"><use href="./vendor/lucide-1.17.0-sprite.svg#${id}"/></svg></div><span>${id}</span></div>`).join('');
+        catalogMeta.textContent = `共 ${ids.length.toLocaleString()} 个；当前显示 ${visible.length} 个${matches.length > visible.length ? `，匹配 ${matches.length} 个` : ''}`;
+      };
+      catalogSearch.addEventListener('input', renderCatalog);
+      renderCatalog();
+    }).catch(() => {
+      catalogMeta.textContent = '完整母库读取失败';
+    });
+  </script>
+</body>
+</html>

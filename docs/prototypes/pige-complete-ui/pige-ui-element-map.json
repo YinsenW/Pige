@@ -7,11 +7,12 @@
     "A prototype toast is evidence of interaction feedback only; it never proves the named production service or IPC behavior exists.",
     "Decorative elements are marked decorative and cannot receive focus or imply an unavailable action.",
     "Raw paths, source bodies, prompts, provider errors, credentials, commands, hashes, and internal IDs never become default UI copy.",
-    "Repeated controls use one component-family entry only when their semantics, states, and production bridge are identical."
+    "Repeated controls use one component-family entry only when their semantics, states, and production bridge are identical.",
+    "Common glyphs come from one governed Lucide-aligned sprite; visual resemblance never changes the control's product intent or accessible name."
   ],
   "audit": {
     "interactive_elements": 191,
-    "semantic_component_families": 51,
+    "semantic_component_families": 52,
     "deterministic_stateful_or_native_boundary_simulations": 182,
     "secondary_feedback_only_controls": 9,
     "known_decorative_dead_controls": 0,
@@ -20,13 +21,24 @@
   },
   "elements": [
     {
+      "id": "shell.icon_system",
+      "surface": "All prototype surfaces",
+      "selector": "svg use[href^='#pi-'], svg use[href*='pige-icon-sprite.svg#pi-']",
+      "role": "presentation inside a named control or labeled content row",
+      "intent": "Provide one consistent visual shorthand for an already-defined product action or object.",
+      "states": ["default", "hover-owner", "selected-owner", "disabled-owner", "focus-visible-owner"],
+      "prototype_action": "Resolves one of 36 governed symbols from the self-contained review cache or shared sprite; the glyph itself never owns interaction state.",
+      "production_bridge": "Shared Icon component with an enumerated semantic name and no arbitrary raw SVG injection",
+      "owner": "UI Design + Renderer"
+    },
+    {
       "id": "shell.sidebar_toggle",
       "surface": "Shell",
       "selector": "#sidebarToggle",
       "role": "button",
       "intent": "Reveal or hide exploration navigation without changing the active task.",
       "states": ["collapsed", "expanded", "focus-visible"],
-      "prototype_action": "Toggles the fixed-width sidebar and updates aria-expanded.",
+      "prototype_action": "Toggles the fixed-width sidebar, updates aria-expanded, and persists the user-owned session state across routes.",
       "production_bridge": "Window layout preference and renderer pane state",
       "owner": "Window Service + Renderer"
     },
@@ -70,7 +82,7 @@
       "role": "button",
       "intent": "Open a stable Markdown page in the reading workspace.",
       "states": ["default", "hover", "current", "focus-visible"],
-      "prototype_action": "Updates breadcrumb, reader title, Agent context title, and active row.",
+      "prototype_action": "Preserves the current sidebar state while updating breadcrumb, reader title, Agent context title, and active row.",
       "production_bridge": "library.open with stable page ID; never an arbitrary path",
       "owner": "Library Service + Renderer"
     },
