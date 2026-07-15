@@ -2417,6 +2417,45 @@ h2 {
   gap: 6px;
 }
 
+.skills-empty-icon {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border: .5px solid var(--border-default);
+  border-radius: 9px;
+  background: var(--surface-hover);
+  color: var(--accent);
+}
+
+.settings-list-icon.neutral {
+  color: var(--text-secondary);
+}
+
+.skills-empty-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 96px;
+  padding: 16px;
+}
+
+.skills-information-row {
+  cursor: default;
+}
+
+.settings-skills .settings-action:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.settings-skills .settings-inline-actions .settings-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .vault-create,
 .settings-group {
   display: grid;

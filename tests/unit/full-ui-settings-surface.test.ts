@@ -5,6 +5,7 @@ import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   SettingsSurface,
+  SkillsSettingsPanel,
   type DevelopmentCapability,
   type SettingsSection
 } from "../../apps/desktop/src/renderer/src/App";
@@ -102,6 +103,44 @@ describe("full UI Settings surface", () => {
       dialog.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     });
     expect(close).toHaveBeenCalledOnce();
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("renders the complete Skills shell without inventing installed Skills or service work", async () => {
+    const dom = createDom();
+    const onDevelopment = vi.fn();
+    let ipcRead = false;
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      get() {
+        ipcRead = true;
+        throw new Error("Skills development actions must not access IPC.");
+      }
+    });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+
+    await act(async () => {
+      root.render(createElement(SkillsSettingsPanel, { onDevelopment, t }));
+      await settle(dom);
+    });
+
+    const page = dom.window.document.querySelector<HTMLElement>(".settings-skills")!;
+    expect(page.getAttribute("aria-labelledby")).toBe("settings-skills-title");
+    expect(page.querySelectorAll('[role="group"]')).toHaveLength(2);
+    expect(page.textContent).toContain("No Skills installed");
+    expect(page.textContent).toContain("Source, files, and warnings stay visible");
+    expect(page.querySelector('[role="switch"]')).toBeNull();
+    expect(page.querySelector("[data-skill-id]")).toBeNull();
+
+    await act(async () => {
+      buttonNamed(page, "Install from link").click();
+      buttonNamed(page, "Choose Markdown or ZIP").click();
+      await settle(dom);
+    });
+    expect(onDevelopment).toHaveBeenCalledTimes(2);
+    expect(ipcRead).toBe(false);
 
     await act(async () => root.unmount());
     dom.window.close();

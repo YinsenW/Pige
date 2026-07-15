@@ -1110,6 +1110,11 @@ export function App(): React.JSX.Element {
               onAlwaysOnTopChange={toggleAlwaysOnTop}
               t={t}
             />
+          ) : settingsSection === "skills" ? (
+            <SkillsSettingsPanel
+              onDevelopment={() => showDevelopmentCapability("settings", "skills")}
+              t={t}
+            />
           ) : (
             <DevelopmentSettingsSection section={settingsSection} t={t} />
           )}
@@ -4621,6 +4626,68 @@ function DevelopmentSettingsSection(props: {
         <h1 id={`settings-${props.section}-title`}>{props.t(`settings.section.${props.section}`)}</h1>
         <p className="muted">{props.t("development.settingsDescription")}</p>
       </div>
+    </section>
+  );
+}
+
+export function SkillsSettingsPanel(props: {
+  readonly onDevelopment: () => void;
+  readonly t: (key: string) => string;
+}): React.JSX.Element {
+  return (
+    <section className="settings-page settings-skills" aria-labelledby="settings-skills-title">
+      <header className="settings-panel-header">
+        <h1 id="settings-skills-title">{props.t("skills.title")}</h1>
+        <p>{props.t("skills.subtitle")}</p>
+      </header>
+
+      <section className="settings-section" role="group" aria-labelledby="skills-installed-title">
+        <h2 className="settings-section-title" id="skills-installed-title">{props.t("skills.installedTitle")}</h2>
+        <div className="settings-card skills-empty-card">
+          <span className="skills-empty-icon" aria-hidden="true"><PigeIcon name="skill" size={19} /></span>
+          <div className="settings-row-copy">
+            <strong>{props.t("skills.emptyTitle")}</strong>
+            <span>{props.t("skills.emptyDescription")}</span>
+          </div>
+        </div>
+        <div className="settings-inline-actions">
+          <button className="settings-button primary settings-action" type="button" onClick={props.onDevelopment}>
+            <PigeIcon name="link" size={15} aria-hidden="true" />
+            {props.t("skills.installFromLink")}
+          </button>
+          <button className="settings-button settings-action" type="button" onClick={props.onDevelopment}>
+            <PigeIcon name="fileText" size={15} aria-hidden="true" />
+            {props.t("skills.chooseFile")}
+          </button>
+        </div>
+      </section>
+
+      <section className="settings-section" role="group" aria-labelledby="skills-review-title">
+        <h2 className="settings-section-title" id="skills-review-title">{props.t("skills.reviewTitle")}</h2>
+        <div className="settings-card">
+          <div className="settings-row tall skills-information-row">
+            <span className="settings-list-icon neutral" aria-hidden="true"><PigeIcon name="fileText" size={17} /></span>
+            <div className="settings-row-copy">
+              <strong>{props.t("skills.reviewMetadata")}</strong>
+              <span>{props.t("skills.reviewMetadataDescription")}</span>
+            </div>
+          </div>
+          <div className="settings-row tall skills-information-row">
+            <span className="settings-list-icon neutral" aria-hidden="true"><PigeIcon name="shield" size={17} /></span>
+            <div className="settings-row-copy">
+              <strong>{props.t("skills.reviewPermissions")}</strong>
+              <span>{props.t("skills.reviewPermissionsDescription")}</span>
+            </div>
+          </div>
+          <div className="settings-row tall skills-information-row">
+            <span className="settings-list-icon neutral" aria-hidden="true"><PigeIcon name="folder" size={17} /></span>
+            <div className="settings-row-copy">
+              <strong>{props.t("skills.scopeTitle")}</strong>
+              <span>{props.t("skills.scopeDescription")}</span>
+            </div>
+          </div>
+        </div>
+      </section>
     </section>
   );
 }
