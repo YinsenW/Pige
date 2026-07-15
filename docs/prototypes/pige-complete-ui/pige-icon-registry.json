@@ -64,7 +64,7 @@
     "pi-shield": { "lucide": "ShieldCheck", "intent": "permissions and privacy" },
     "pi-skill": { "lucide": "Blocks", "intent": "Skills and composable capability" },
     "pi-package": { "lucide": "Package", "intent": "Pi Package" },
-    "pi-sun": { "lucide": "Sun", "intent": "system theme or appearance mode only" },
+    "pi-activity": { "lucide": "Activity", "intent": "updates, diagnostics, and system health; Sun remains reserved for theme or appearance" },
     "pi-restore": { "lucide": "ArchiveRestore", "intent": "restore from a Pige backup" },
     "pi-link": { "lucide": "Link", "intent": "linked source or network package" },
     "pi-globe": { "lucide": "Globe", "intent": "external network capability" },

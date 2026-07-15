@@ -11,8 +11,8 @@
     "Common glyphs come from one governed Lucide-aligned sprite; visual resemblance never changes the control's product intent or accessible name."
   ],
   "audit": {
-    "interactive_elements": 211,
-    "semantic_component_families": 70,
+    "interactive_elements": 212,
+    "semantic_component_families": 72,
     "deterministic_stateful_or_native_boundary_simulations": 202,
     "secondary_feedback_only_controls": 9,
     "known_decorative_dead_controls": 0,
@@ -60,7 +60,7 @@
       "role": "button",
       "intent": "Return directly to Home when the sidebar is collapsed without creating browser-style history.",
       "states": ["secondary-visible", "home-hidden", "focus-visible"],
-      "prototype_action": "Appears immediately left of the sidebar toggle only outside Home and first run; activation returns to Home and transfers focus to the composer.",
+      "prototype_action": "Appears immediately left of the sidebar toggle only outside Home and first run; it shares the toggle's 20 px icon box, 1.65 px stroke and neutral titlebar color, then returns to Home and transfers focus to the composer.",
       "production_bridge": "Renderer Home route action",
       "owner": "Renderer"
     },
@@ -415,6 +415,17 @@
       "prototype_action": "Keeps one body-free status owner and one Retry only for the unavailable state; successful retry focuses the restored search field.",
       "production_bridge": "Library Service availability and retry contract",
       "owner": "Library Service + Jobs Service"
+    },
+    {
+      "id": "library.retry",
+      "surface": "Library unavailable state",
+      "selector": "[data-library-retry]",
+      "role": "button",
+      "intent": "Retry the current typed Library read without implying that local knowledge was deleted.",
+      "states": ["ready", "retrying", "restored", "focus-visible"],
+      "prototype_action": "Clears the unavailable state, restores the Library surface, and moves focus to the surviving search field.",
+      "production_bridge": "Library Service typed read retry",
+      "owner": "Library Service + Renderer"
     },
     {
       "id": "onboarding.vault_choice",

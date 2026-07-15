@@ -23,7 +23,7 @@
     "registry": "./pige-icon-registry.json",
     "sprite": "./pige-icon-sprite.svg",
     "full_family_sprite": "./vendor/lucide-1.17.0-sprite.svg",
-    "self_contained_review_cache": "36 symbols are also embedded in index.html so the review HTML remains functional as a standalone static artifact",
+    "self_contained_review_cache": "46 symbols are also embedded in index.html so the review HTML remains functional as a standalone static artifact",
     "review_gallery": "./pige-icon-library.html",
     "common_family": "Lucide",
     "family_version": "1.17.0",
@@ -36,7 +36,7 @@
     "master_stroke_px": 2,
     "full_family_symbol_count": 1713,
     "package_svg_asset_count_including_aliases": 1962,
-    "active_symbol_count": 36,
+    "active_symbol_count": 46,
     "rules": [
       "Use the pinned full Lucide family for every common shell, navigation, content-action, Settings, status, and capability glyph; do not substitute emoji, text placeholders, arbitrary raw SVG, or a second common icon family.",
       "The 36-symbol prototype sprite is an exact review subset of the pinned family; it is not the production library or a license to draw one-off glyphs.",
@@ -61,7 +61,7 @@
       "tertiary_text": "#707472",
       "strong_secondary_text": "#4f4f4f",
       "primary_text": "#1a1c1f",
-      "focus": "#339cff",
+      "focus": "#1677d2",
       "dark_ladder": ["#414141", "#303030", "#282828", "#212121", "#181818", "#0d0d0d"],
       "destructive_ladder": ["#ffd9d9", "#ff6764", "#fa423e", "#e02e2a", "#ba2623"],
       "success_ladder": ["#40c977", "#04b84c", "#00a240", "#00692a"]
@@ -100,7 +100,7 @@
     }
   },
   "component_rules": [
-    "Sidebar toggle is a rounded pane outline with one vertical divider, no arrow, and one stable glyph for both states; secondary surfaces place one compact Home return immediately before it and hide that redundant action on Home.",
+    "Sidebar toggle is a rounded pane outline with one vertical divider, no arrow, and one stable glyph for both states; secondary surfaces place one semantic Home glyph immediately before it, hide that redundant action on Home, and render both glyphs in the same 20 px box, 1.65 px stroke, and neutral titlebar color.",
     "Expanded titlebar and sidebar share the same under-surface color with no seam.",
     "Back and forward controls are absent unless real user history exists.",
     "Icon buttons are borderless at rest and use a quiet gray hover fill.",
@@ -109,7 +109,7 @@
     "Supported file-format glyphs are a static legend, never six false action buttons; Add file and drop remain the only file-choice affordances.",
     "Home file processing defaults to one compact row; disclosure reveals five 44 px rows, then keeps panel height fixed and scrolls additional rows internally.",
     "Home and Note Agent composers expose the same actual model switcher with a green connected or red unavailable dot before the model name; neither substitutes a generic context or connected-status sentence for model choice.",
-    "Pointer focus never creates a permanent blue composer box; keyboard focus retains a native-blue focus-visible ring.",
+    "Pointer focus never creates a permanent blue composer box; keyboard focus retains a #1677d2 native-blue focus-visible ring with 4.56:1 contrast on white and 3:1 or better contrast on every supported adjacent surface.",
     "Settings is a separate stable-size window and must not resize or reflow the main Pige window.",
     "Opening or switching a note preserves the user-owned sidebar state, and switching notes preserves the Note Agent disclosure state; note routing must not silently reopen or collapse either panel.",
     "With no saved sidebar preference, direct note-family routes default to full three-pane disclosure at 1112 px and above; below 1112 px they start with an unobscured reader and closed overlays.",
@@ -119,7 +119,7 @@
     "Pane disclosure controls expose aria-expanded and an exact aria-controls relationship; when a transition removes the focused control, focus moves to the owning toggle, restored search or node, or newly visible step heading instead of falling to the document body.",
     "Reduced motion removes spatial interpolation without removing state feedback.",
     "Knowledge Tree is a deterministic data visualization, not a fixed illustration: stable topic IDs preserve growth direction; domain/topic weight controls trunk and branch width; knowledge-unit count controls side-branch depth and canopy density; evidence density and confidence control node size and color depth.",
-    "Common system glyphs use the one governed Lucide-aligned sprite; Settings is a gear, Appearance is a palette, and the Pin is optically centered, low contrast and diagonally mirrored while off, then vertical and clear while on."
+    "Common system glyphs use the one governed Lucide-aligned sprite; Settings is a gear, Appearance is a palette, Updates & Diagnostics uses Activity rather than Sun, and the Pin is optically centered, low contrast and diagonally mirrored while off, then vertical and clear while on."
   ],
   "interaction_contract": [
     "The Settings entry navigates deterministically in the prototype; production opens the same route in its independent stable-size BrowserWindow.",

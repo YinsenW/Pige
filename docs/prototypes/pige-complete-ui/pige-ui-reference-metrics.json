@@ -161,6 +161,14 @@
       "mature-dense": { "treeitems": 456, "dominant_branch": "project-management" }
     }
   },
+  "pige_accessibility_overrides": {
+    "focus_ring": {
+      "observable_reference_srgb": "#339cff",
+      "pige_token": "#1677d2",
+      "contrast_on_white": 4.56,
+      "reason": "The observable reference blue measures 2.86:1 against white. Pige preserves its hue and interaction role but darkens it so the keyboard focus indicator exceeds the 3:1 non-text contrast requirement."
+    }
+  },
   "tolerances": {
     "geometry_px": 1,
     "type_baseline_px": 1,

@@ -73,7 +73,7 @@
   },
   "accessibility_evidence": {
     "routes_with_accessible_name_scan": 52,
-    "interactive_elements_with_structural_scan": 211,
+    "interactive_elements_with_structural_scan": 212,
     "routes_with_real_tab_order_walkthrough": 52,
     "real_tab_focus_stops_checked": 677,
     "real_tab_order_failures": 0,
@@ -90,6 +90,8 @@
     "light_primary_text_contrast": 17.08,
     "light_secondary_text_contrast": 6.58,
     "light_tertiary_text_contrast": 4.74,
+    "keyboard_focus_contrast_on_white": 4.56,
+    "keyboard_focus_reference_override": "Pige uses #1677d2 instead of the observed #339cff because the observed value is only 2.86:1 on white.",
     "pointer_focus": "persistent blue outlines suppressed",
     "keyboard_focus": "focus-visible retained",
     "keyboard_patterns_verified": [
@@ -326,6 +328,41 @@
     "open_p0": ["Raster overlay/difference evidence", "Complete screen-reader announcement evidence"],
     "open_p1": ["Complete spoken screen-reader and assembled platform rendering audit"],
     "decision": "The prototype is broad and interactive, but the pixel-fidelity objective remains open."
+  },
+  "final_static_audit_2026_07_15": {
+    "scope": "Current HTML, element semantics, deterministic routes, state ownership, keyboard behavior, responsive contracts, and machine-readable design handoff.",
+    "interactive_elements": 212,
+    "semantic_component_families": 72,
+    "unmapped_interactive_elements": 0,
+    "unnamed_interactive_elements": 0,
+    "duplicate_ids": 0,
+    "missing_id_references": 0,
+    "invalid_element_map_selectors": 0,
+    "decorative_svgs_exposed_to_accessibility_tree": 0,
+    "routes_checked": 57,
+    "main_routes_checked": 41,
+    "settings_routes_checked": 16,
+    "route_state_failures": 0,
+    "critical_interaction_groups": [
+      "Note open preserves the resident sidebar and Note Agent ownership",
+      "Home return preserves sidebar state and focuses the composer",
+      "Pin, notebook, model, task, Settings, retry, and IME-safe send transitions",
+      "Settings atomic background exclusion, heading focus, and exact invoker focus return",
+      "Task disclosure hides collapsed rows from focus and the accessibility tree after exit motion"
+    ],
+    "fixes": [
+      "Mapped the previously unowned Library retry action.",
+      "Removed ten decorative task-row icons from the accessibility tree.",
+      "Named the keyboard-focusable Knowledge Tree canvas as an accessible region.",
+      "Replaced the semantically incorrect Sun glyph on Updates & Diagnostics with the governed Activity glyph.",
+      "Unified Home-return and sidebar-toggle geometry to a 20 px box, 1.65 px stroke, and one neutral titlebar color while retaining Home semantics.",
+      "Darkened the keyboard focus token from the 2.86:1 observable reference blue to a 4.56:1 Pige blue."
+    ],
+    "known_fixable_p0_p1_prototype_defects": 0,
+    "independent_evidence_boundaries": [
+      "Equivalent-state current-HTML raster overlay/difference remains unbound because the approved capture surface could not reopen the local file during this audit.",
+      "Complete spoken screen-reader announcement and assembled macOS/Windows text-rendering evidence remains a Development/platform verification boundary."
+    ]
   },
   "responsive_evidence": {
     "main_routes_at_400_and_760_px": 72,
