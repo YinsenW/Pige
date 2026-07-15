@@ -579,17 +579,17 @@ describe("desktop shell build contract", () => {
       rendererSource.indexOf("function InfoGroup")
     );
     const presetSurface = panel.slice(
-      panel.indexOf('className="preset-provider"'),
-      panel.indexOf('className="custom-provider"')
+      panel.indexOf('if (view.kind === "preset" && selectedPreset)'),
+      panel.indexOf('if (view.kind === "custom")')
     );
 
     expect(presetSurface).toContain('type="password"');
-    expect(presetSurface).toContain('preset.authRequirement !== "none"');
-    expect(presetSurface).toContain('preset.authRequirement === "api_key"');
+    expect(presetSurface).toContain('selectedPreset.authRequirement !== "none"');
+    expect(presetSurface).toContain('selectedPreset.authRequirement === "api_key"');
     expect(panel).toContain("addPresetProvider");
     expect(presetSurface).not.toContain("manualModelId");
     expect(presetSurface).not.toContain("baseUrl");
-    expect(panel).toContain('<details className="custom-provider">');
+    expect(panel).toContain('if (view.kind === "custom")');
     expect(panel).toContain('id="provider-protocol"');
     expect(panel).toContain('!retryDiscovery && manualBootstrap ? { manualModelId: manualModelId.trim() } : {}');
     expect(panel).toContain("setManualBootstrap(result)");

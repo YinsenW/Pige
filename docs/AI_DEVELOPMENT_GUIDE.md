@@ -183,29 +183,30 @@ once and change product/acceptance only when promises or proof change.
 
 ## 9.1 UI Visual Fidelity Checklist
 
-UI Design owns and commits production renderer components, CSS/tokens, icons, six locales,
-responsive/motion/accessibility behavior and UI tests from the approved baseline.
-`resources/ui-visual-contract.manifest.json` projects its protected machine contract.
-Development owns typed contracts/services, real states, integration, packaging and smoke;
-it does not redraw UI. Real Electron screenshots and thresholded comparison prove visual
-equivalence; structural tests and synthetic fixtures prove different layers. UI Design
-reviews the final exact integrated candidate before publication.
+UI-centered acceptance is global. Planning defines visible workflows/screens/actions/
+states/outcomes; Planning/Development establish one typed contract for identity,
+permission, errors, availability and durable ownership. Exact fixtures are not real state;
+`resources/ui-visual-contract.manifest.json` protects machine visual truth.
 
 ## 10. UI Implementation Rules
 
-`docs/prototypes/pige-complete-ui/index.html`, its design contract and element map are the
-sole visual/interaction baseline. UI Design mechanically migrates it into production
-React/TSX; Development binds typed APIs through adapters and returns interface gaps rather
-than restyling. Intentional differences require a capability, responsive, accessibility,
-locale or platform constraint and baseline reconciliation. Backend/UI may proceed in
-parallel from exact contract fixtures, but fixtures are never real product state.
-Unfinished entries use localized `development/unavailable` with no fake IPC, Job, data,
-progress, success or persistence. After integration, UI Design reviews the exact bytes and
-Planning binds once; acceptance separates functional, visual and final-review evidence.
+The approved prototype/contract/element map is the sole baseline. UI Design builds full
+production UI against fixtures while Development simultaneously builds services, IPC,
+jobs, storage and safety; neither waits. Unfinished UI uses localized
+`development/unavailable` without fake IPC, Job, data, progress, success or persistence;
+backend may prove the typed contract headlessly.
+
+When compatible bytes freeze, Development binds the real adapter without redrawing.
+Contract changes are explicit shared events. UI Design reviews exact visuals/interactions;
+Development proves function/safety/data/recovery; real Electron runs through the UI.
+Visual differences require capability, responsive, accessibility, locale or platform need.
 
 ## 11. Testing Expectations
 
-`docs/QUALITY_AND_TEST_STRATEGY.md` is the single owner of test layers, fixtures, and release gates. Select verification proportional to risk, prove the main and failure paths, and record why any applicable gate could not run. `docs/CODING_CONVENTIONS.md` owns only test naming and placement conventions.
+`docs/QUALITY_AND_TEST_STRATEGY.md` owns test depth and gates; coding conventions own
+naming/placement. Early delivery is macOS-first: proportional shared checks plus real and
+packaged macOS evidence close ordinary slices. Keep portable contracts and record other
+platform gaps; qualify them later before support claims unless the task targets them.
 
 ## 12. Documentation Drift Control
 

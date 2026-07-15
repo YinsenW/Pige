@@ -235,9 +235,11 @@ Tests must verify:
 
 Tests must verify:
 
-- Provider gates prove five presets, Custom-only protocols, API-key/no-auth execution plus
-  optional-auth schema/adapter, real pre-write Pi probe, unified inventory/Refresh/manual
-  merge, grouped default, transaction-journal recovery, redacted binding, and readback.
+- Provider gates prove five presets, Custom-only protocols, API-key/no-auth execution,
+  pre-write Pi probe, inventory/Refresh/manual merge, grouped default and recovery.
+- Models UI proves Global Default first, compact Provider cards, preset credential pages,
+  Custom technical setup and Provider-local inventory without routing controls; failures
+  stay on the owning page, while typed calls, secret clearing and stale guards persist.
 - Assembled loopback proves renderer→preload→main→Registry→Pi direct/cited/source turns
   and restart. A real legacy Custom DeepSeek Chat canary proves normal secret resolution,
   direct/restart-cited Home, and 14 clean diagnostics; it does not prove fresh DeepSeek
@@ -476,8 +478,8 @@ Tests must verify:
   baseline changes require rationale and UI Design review of the exact integrated bytes.
 - Synthetic contract fixtures prove state/behavior only and never represent real product
   state or substitute for rendered equivalence.
-- Critical macOS and Windows evidence records native text/window chrome separately; the
-  integrated titlebar must retain caption controls with no overlap or duplicate row.
+- macOS is the foreground real-Electron visual gate. Windows native chrome remains a
+  deferred qualification item unless targeted; no evidence may imply support early.
 
 - Compact capture layout works at narrow width.
 - Expanded workspace and full-screen reader preserve context.
@@ -577,13 +579,13 @@ cleanup, traversal, symlinked parents, successor swaps, private fields and absol
 
 ## 13. Release Gates
 
-The macOS arm64 and Windows x64 packageability preflights fail unless packaged identity,
-ASAR/resources, renderer/preload/health/toolchain, Pi/Home, workers, attribution/SBOM,
-signing state, body-free report, and size pass. macOS also proves Vision and Release
-Engineering section 8: sealed staging equals the official ZIP, then a fresh runner
-repeats integrity, expected-untrusted Gatekeeper/quarantine and runtime checks. These
-gates do not replace platform breadth, trusted signing, installed/update, Windows OCR,
-scale/recovery, or Public Alpha evidence.
+Early merge gates are macOS-first: affected shared tests, typecheck/build, assembled
+Electron, relevant macOS package/distribution and visible review. Safety-sensitive data,
+migration, backup/restore, permission/egress, worker, packaging, dependency and governance
+changes retain proportional shared gates. Windows/Linux native, installer and visual
+matrices are consolidated later unless targeted; gaps cannot prove support. Before a
+Windows or Public Alpha claim, its packageability plus remaining breadth, signing,
+installed/update, OCR, scale/recovery and alpha evidence still apply.
 
 Before alpha release:
 

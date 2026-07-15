@@ -4432,7 +4432,15 @@ interface ModelSettingsPanelProps {
   readonly t: (key: string) => string;
 }
 
+type ModelSettingsView =
+  | { readonly kind: "overview" }
+  | { readonly kind: "add_provider" }
+  | { readonly kind: "preset"; readonly presetId: string }
+  | { readonly kind: "custom" }
+  | { readonly kind: "provider"; readonly providerId: string };
+
 export function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.Element {
+  const [view, setView] = useState<ModelSettingsView>({ kind: "overview" });
   const [presetApiKeys, setPresetApiKeys] = useState<Record<string, string>>({});
   const [displayName, setDisplayName] = useState("Custom provider");
   const [endpointProtocol, setEndpointProtocol] = useState<ProviderEndpointProtocol>("openai_responses");
@@ -4497,7 +4505,7 @@ export function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.El
     }
   };
 
-  const connectPreset = async (presetId: string): Promise<void> => {
+  const connectPreset = async (presetId: string): Promise<boolean> => {
     props.onBusy(true);
     setFailure(null);
     try {
@@ -4509,14 +4517,16 @@ export function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.El
       if ("status" in result) throw new Error("Reviewed preset did not select a bootstrap model.");
       setPresetApiKeys((current) => ({ ...current, [presetId]: "" }));
       await refreshCommittedSettings();
+      return true;
     } catch {
       setFailure({ kind: "preset", presetId });
+      return false;
     } finally {
       props.onBusy(false);
     }
   };
 
-  const saveProvider = async (retryDiscovery = false): Promise<void> => {
+  const saveProvider = async (retryDiscovery = false): Promise<boolean> => {
     props.onBusy(true);
     setFailure(null);
     try {
@@ -4533,14 +4543,16 @@ export function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.El
         setManualBootstrap(result);
         setManualModelId(result.discoveredModels[0]?.modelId ?? "");
         if (result.error) setFailure({ kind: "custom_discovery" });
-        return;
+        return false;
       }
       setApiKey("");
       setManualModelId("");
       setManualBootstrap(null);
       await refreshCommittedSettings();
+      return true;
     } catch {
       setFailure({ kind: "custom_connection" });
+      return false;
     } finally {
       props.onBusy(false);
     }
@@ -4640,227 +4652,451 @@ export function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.El
   };
 
   const summary = props.modelSummary;
-  const defaultModel = summary?.models.find((model) => model.id === summary.defaultModelProfileId);
-  const defaultProvider = summary?.providers.find((provider) => provider.id === defaultModel?.providerProfileId);
+  const selectedPreset = view.kind === "preset"
+    ? summary?.presets.find((preset) => preset.presetId === view.presetId)
+    : undefined;
+  const selectedProvider = view.kind === "provider"
+    ? summary?.providers.find((provider) => provider.id === view.providerId)
+    : undefined;
 
-  return (
-    <section className="settings-page" aria-label={props.t("nav.models")}>
-      <div>
-        <h1>{props.t("models.title")}</h1>
-        <p className="muted">{props.t("models.subtitle")}</p>
-      </div>
+  const navigate = (nextView: ModelSettingsView): void => {
+    setFailure(null);
+    setManualBootstrap(null);
+    setView(nextView);
+  };
 
-      <section className="settings-group">
-        <h2>{props.t("models.addProvider")}</h2>
-        {failure?.kind === "summary_refresh" || failure?.kind === "post_commit_refresh" ? (
-          <div className="settings-inline-error" role="alert">
-            <span>{props.t(failure.kind === "summary_refresh"
-              ? "models.summaryRefreshFailed"
-              : "models.refreshAfterSaveFailed")}</span>
-            <button
-              type="button"
-              className="secondary"
-              disabled={props.busy}
-              onClick={() => void (failure.kind === "summary_refresh"
-                ? retryModelsSummary()
-                : retryCommittedRefresh())}
-            >
-              {props.t("models.retry")}
-            </button>
-          </div>
-        ) : null}
-        {props.modelSummary?.presets.map((preset) => (
-          <div className="preset-provider" key={preset.presetId}>
-            <div>
-              <strong>{preset.displayName}</strong>
-              <span>{props.t("models.recommended")}</span>
-            </div>
-            {preset.authRequirement !== "none" ? (
-              <>
-                <label htmlFor={`preset-key-${preset.presetId}`}>{props.t("models.apiKey")}</label>
+  const heading = (
+    title: string,
+    description: string,
+    back?: { readonly label: string; readonly target: ModelSettingsView }
+  ): React.JSX.Element => (
+    <header className="settings-panel-header model-settings-header">
+      {back ? (
+        <button
+          type="button"
+          className="settings-button model-settings-back"
+          onClick={() => navigate(back.target)}
+        >
+          <PigeIcon name="arrowLeft" size={15} />
+          {back.label}
+        </button>
+      ) : null}
+      <h1>{title}</h1>
+      <p>{description}</p>
+    </header>
+  );
+
+  const summaryFailure = failure?.kind === "summary_refresh" || failure?.kind === "post_commit_refresh"
+    ? (
+        <div className="settings-warning model-settings-error" role="alert">
+          <span>{props.t(failure.kind === "summary_refresh"
+            ? "models.summaryRefreshFailed"
+            : "models.refreshAfterSaveFailed")}</span>
+          <button
+            type="button"
+            className="settings-button"
+            disabled={props.busy}
+            onClick={() => void (failure.kind === "summary_refresh"
+              ? retryModelsSummary()
+              : retryCommittedRefresh())}
+          >
+            {props.t("models.retry")}
+          </button>
+        </div>
+      )
+    : null;
+
+  if (view.kind === "preset" && !selectedPreset) {
+    return (
+      <section className="settings-page model-settings-page" aria-label={props.t("nav.models")}>
+        {heading(props.t("models.addProvider"), props.t("models.chooseProviderDescription"), {
+          label: props.t("models.backToModels"),
+          target: { kind: "overview" }
+        })}
+        <div className="settings-warning" role="status">{props.t("models.providerUnavailable")}</div>
+      </section>
+    );
+  }
+
+  if (view.kind === "provider" && !selectedProvider) {
+    return (
+      <section className="settings-page model-settings-page" aria-label={props.t("nav.models")}>
+        {heading(props.t("models.title"), props.t("models.subtitle"), {
+          label: props.t("models.backToModels"),
+          target: { kind: "overview" }
+        })}
+        <div className="settings-warning" role="status">{props.t("models.providerUnavailable")}</div>
+      </section>
+    );
+  }
+
+  if (view.kind === "preset" && selectedPreset) {
+    const presetFailure = failure?.kind === "preset" && failure.presetId === selectedPreset.presetId;
+    const presetApiKey = presetApiKeys[selectedPreset.presetId] ?? "";
+    return (
+      <section className="settings-page model-settings-page" aria-label={props.t("nav.models")}>
+        {heading(`${props.t("models.connect")} ${selectedPreset.displayName}`, props.t("models.presetDescription"), {
+          label: props.t("models.backToProviders"),
+          target: { kind: "add_provider" }
+        })}
+        {summaryFailure}
+        <section className="settings-section">
+          <h2 className="settings-section-title">{props.t("models.credentials")}</h2>
+          <div className="settings-card">
+            {selectedPreset.authRequirement !== "none" ? (
+              <label className="settings-row" htmlFor={`preset-key-${selectedPreset.presetId}`}>
+                <span className="settings-row-copy">
+                  <strong>{props.t("models.apiKey")}</strong>
+                  <span>{props.t("models.apiKeyDescription")}</span>
+                </span>
                 <input
-                  id={`preset-key-${preset.presetId}`}
-                  value={presetApiKeys[preset.presetId] ?? ""}
+                  className="settings-input"
+                  id={`preset-key-${selectedPreset.presetId}`}
+                  value={presetApiKey}
                   type="password"
                   autoComplete="off"
                   onChange={(event) => setPresetApiKeys((current) => ({
                     ...current,
-                    [preset.presetId]: event.target.value
+                    [selectedPreset.presetId]: event.target.value
                   }))}
                 />
-              </>
-            ) : null}
-            {failure?.kind === "preset" && failure.presetId === preset.presetId ? (
-              <p className="error" role="alert">
-                {props.t(
-                  preset.authRequirement === "api_key" || Boolean(presetApiKeys[preset.presetId]?.trim())
-                    ? "models.presetConnectionFailedApiKey"
-                    : "models.presetConnectionFailedNoAuth"
-                )}
-              </p>
-            ) : null}
+              </label>
+            ) : (
+              <div className="settings-row">
+                <div className="settings-row-copy">
+                  <strong>{props.t("models.noCredentialRequired")}</strong>
+                  <span>{props.t("models.noCredentialDescription")}</span>
+                </div>
+                <span className="settings-status">{props.t("models.readyToConnect")}</span>
+              </div>
+            )}
+          </div>
+          {presetFailure ? (
+            <div className="settings-warning model-settings-error" role="alert">
+              {props.t(
+                selectedPreset.authRequirement === "api_key" || Boolean(presetApiKey.trim())
+                  ? "models.presetConnectionFailedApiKey"
+                  : "models.presetConnectionFailedNoAuth"
+              )}
+            </div>
+          ) : null}
+        </section>
+        <section className="settings-section">
+          <h2 className="settings-section-title">{props.t("models.connectionDisclosureTitle")}</h2>
+          <p className="settings-disclosure">{props.t("models.connectionDisclosure")}</p>
+          <div className="settings-inline-actions model-settings-footer-actions">
+            <button type="button" className="settings-button" onClick={() => navigate({ kind: "overview" })}>
+              {props.t("models.cancel")}
+            </button>
             <button
               type="button"
-              onClick={() => void connectPreset(preset.presetId)}
+              className="settings-button primary"
               disabled={props.busy || (
-                preset.authRequirement === "api_key" && !(presetApiKeys[preset.presetId] ?? "").trim()
+                selectedPreset.authRequirement === "api_key" && !presetApiKey.trim()
               )}
+              onClick={() => void connectPreset(selectedPreset.presetId).then((connected) => {
+                if (connected) setView({ kind: "overview" });
+              })}
             >
-              {props.t(failure?.kind === "preset" && failure.presetId === preset.presetId
-                ? "models.retry"
-                : "models.connect")}
+              {props.t(presetFailure ? "models.retry" : "models.connectService")}
             </button>
           </div>
-        ))}
+        </section>
+      </section>
+    );
+  }
 
-        <details className="custom-provider">
-          <summary>{props.t("models.customProvider")}</summary>
-          <div className="custom-provider-fields">
-            <label htmlFor="provider-name">{props.t("field.name")}</label>
-            <input id="provider-name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
-
-            <label htmlFor="provider-protocol">{props.t("models.endpointProtocol")}</label>
-            <select
-              id="provider-protocol"
-              value={endpointProtocol}
-              onChange={(event) => setEndpointProtocol(event.target.value as ProviderEndpointProtocol)}
-            >
-              <option value="openai_responses">{props.t("models.protocol.openaiResponses")}</option>
-              <option value="openai_chat_completions">{props.t("models.protocol.openaiChatCompletions")}</option>
-              <option value="anthropic_messages">{props.t("models.protocol.anthropicMessages")}</option>
-            </select>
-
-            <label htmlFor="provider-base-url">{props.t("models.baseUrl")}</label>
-            <input
-              id="provider-base-url"
-              value={baseUrl}
-              onChange={(event) => setBaseUrl(event.target.value)}
-            />
-
-            <label htmlFor="provider-key">{props.t("models.apiKey")}</label>
-            <input
-              id="provider-key"
-              value={apiKey}
-              type="password"
-              onChange={(event) => setApiKey(event.target.value)}
-            />
-
+  if (view.kind === "custom") {
+    return (
+      <section className="settings-page model-settings-page" aria-label={props.t("nav.models")}>
+        {heading(props.t("models.customProvider"), props.t("models.customProviderDescription"), {
+          label: props.t("models.backToProviders"),
+          target: { kind: "add_provider" }
+        })}
+        {summaryFailure}
+        <section className="settings-section">
+          <h2 className="settings-section-title">{props.t("models.connection")}</h2>
+          <div className="settings-card">
+            <label className="settings-row" htmlFor="provider-name">
+              <span className="settings-row-copy">
+                <strong>{props.t("models.displayName")}</strong>
+                <span>{props.t("models.displayNameDescription")}</span>
+              </span>
+              <input className="settings-input" id="provider-name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
+            </label>
+            <label className="settings-row" htmlFor="provider-protocol">
+              <span className="settings-row-copy">
+                <strong>{props.t("models.endpointProtocol")}</strong>
+                <span>{props.t("models.protocolDescription")}</span>
+              </span>
+              <select
+                className="settings-select"
+                id="provider-protocol"
+                value={endpointProtocol}
+                onChange={(event) => setEndpointProtocol(event.target.value as ProviderEndpointProtocol)}
+              >
+                <option value="openai_responses">{props.t("models.protocol.openaiResponses")}</option>
+                <option value="openai_chat_completions">{props.t("models.protocol.openaiChatCompletions")}</option>
+                <option value="anthropic_messages">{props.t("models.protocol.anthropicMessages")}</option>
+              </select>
+            </label>
+            <label className="settings-row" htmlFor="provider-base-url">
+              <span className="settings-row-copy">
+                <strong>{props.t("models.baseUrl")}</strong>
+                <span>{props.t("models.baseUrlDescription")}</span>
+              </span>
+              <input className="settings-input" id="provider-base-url" value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} />
+            </label>
+            <label className="settings-row" htmlFor="provider-key">
+              <span className="settings-row-copy">
+                <strong>{props.t("models.apiKey")}</strong>
+                <span>{props.t("models.apiKeyDescription")}</span>
+              </span>
+              <input className="settings-input" id="provider-key" value={apiKey} type="password" autoComplete="off" onChange={(event) => setApiKey(event.target.value)} />
+            </label>
             {manualBootstrap ? (
-              <>
-                <p className="muted">{props.t("models.bootstrapModelRequired")}</p>
-                <label htmlFor="provider-model">{props.t("models.modelId")}</label>
-                <input
-                  id="provider-model"
-                  list="provider-discovered-models"
-                  value={manualModelId}
-                  onChange={(event) => setManualModelId(event.target.value)}
-                />
-                <datalist id="provider-discovered-models">
-                  {manualBootstrap.discoveredModels.map((model) => (
-                    <option key={model.modelId} value={model.modelId}>{model.displayName ?? model.modelId}</option>
-                  ))}
-                </datalist>
-              </>
+              <label className="settings-row" htmlFor="provider-model">
+                <span className="settings-row-copy">
+                  <strong>{props.t("models.modelId")}</strong>
+                  <span>{props.t("models.bootstrapModelRequired")}</span>
+                </span>
+                <span className="model-bootstrap-field">
+                  <input
+                    className="settings-input"
+                    id="provider-model"
+                    list="provider-discovered-models"
+                    value={manualModelId}
+                    onChange={(event) => setManualModelId(event.target.value)}
+                  />
+                  <datalist id="provider-discovered-models">
+                    {manualBootstrap.discoveredModels.map((model) => (
+                      <option key={model.modelId} value={model.modelId}>{model.displayName ?? model.modelId}</option>
+                    ))}
+                  </datalist>
+                </span>
+              </label>
             ) : null}
-
-            {failure?.kind === "custom_connection" ? (
-              <p className="error" role="alert">{props.t("models.connectionFailed")}</p>
-            ) : failure?.kind === "custom_discovery" ? (
-              <p className="error" role="alert">{props.t("models.discoveryFailed")}</p>
-            ) : null}
-
-            <div className="settings-actions">
-              {failure?.kind === "custom_discovery" ? (
+          </div>
+          {failure?.kind === "custom_connection" || failure?.kind === "custom_discovery" ? (
+            <div className="settings-warning model-settings-error" role="alert">
+              <span>{props.t(failure.kind === "custom_connection" ? "models.connectionFailed" : "models.discoveryFailed")}</span>
+              {failure.kind === "custom_discovery" ? (
                 <button
                   type="button"
-                  className="secondary"
-                  onClick={() => void saveProvider(true)}
+                  className="settings-button"
                   disabled={props.busy || !baseUrl.trim() || !apiKey.trim()}
+                  onClick={() => void saveProvider(true)}
                 >
                   {props.t("models.retry")}
                 </button>
               ) : null}
+            </div>
+          ) : null}
+        </section>
+        <p className="settings-disclosure">{props.t("models.customProbeDisclosure")}</p>
+        <div className="settings-inline-actions model-settings-footer-actions">
+          <button type="button" className="settings-button" onClick={() => navigate({ kind: "overview" })}>
+            {props.t("models.cancel")}
+          </button>
+          <button
+            type="button"
+            className="settings-button primary"
+            disabled={props.busy || !displayName.trim() || !baseUrl.trim() || !apiKey.trim() || (
+              manualBootstrap !== null && !manualModelId.trim()
+            )}
+            onClick={() => void saveProvider().then((connected) => {
+              if (connected) setView({ kind: "overview" });
+            })}
+          >
+            {props.t(manualBootstrap
+              ? "models.addCustomModel"
+              : failure?.kind === "custom_connection"
+                ? "models.retry"
+                : "models.connectAndCheck")}
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  if (view.kind === "add_provider") {
+    return (
+      <section className="settings-page model-settings-page" aria-label={props.t("nav.models")}>
+        {heading(props.t("models.addProvider"), props.t("models.chooseProviderDescription"), {
+          label: props.t("models.backToModels"),
+          target: { kind: "overview" }
+        })}
+        {summaryFailure}
+        <section className="settings-section">
+          <h2 className="settings-section-title">{props.t("models.reviewedProviders")}</h2>
+          <div className="settings-card model-provider-picker">
+            {summary?.presets.map((preset) => (
               <button
                 type="button"
-                onClick={() => void saveProvider()}
-                disabled={props.busy || !baseUrl.trim() || !apiKey.trim() || (
-                  manualBootstrap !== null && !manualModelId.trim()
-                )}
+                className="settings-row model-provider-choice"
+                key={preset.presetId}
+                onClick={() => navigate({ kind: "preset", presetId: preset.presetId })}
               >
-                {props.t(manualBootstrap
-                  ? "models.addCustomModel"
-                  : failure?.kind === "custom_connection"
-                    ? "models.retry"
-                    : "models.testAndSave")}
+                <span className="settings-list-icon"><PigeIcon name="model" size={17} /></span>
+                <span className="settings-row-copy">
+                  <strong>{preset.displayName}</strong>
+                  <span>{props.t(preset.authRequirement === "none" ? "models.noCredentialRequired" : "models.credentialOnly")}</span>
+                </span>
+                <PigeIcon name="expand" size={15} />
               </button>
+            ))}
+            <button type="button" className="settings-row model-provider-choice" onClick={() => navigate({ kind: "custom" })}>
+              <span className="settings-list-icon"><PigeIcon name="wrench" size={17} /></span>
+              <span className="settings-row-copy">
+                <strong>{props.t("models.customProvider")}</strong>
+                <span>{props.t("models.customProviderDescription")}</span>
+              </span>
+              <PigeIcon name="expand" size={15} />
+            </button>
+          </div>
+        </section>
+      </section>
+    );
+  }
+
+  if (view.kind === "provider" && selectedProvider) {
+    const providerModels = summary?.models.filter((model) => model.providerProfileId === selectedProvider.id) ?? [];
+    return (
+      <section className="settings-page model-settings-page" aria-label={props.t("nav.models")}>
+        {heading(selectedProvider.displayName, props.t("models.providerDetailsDescription"), {
+          label: props.t("models.backToModels"),
+          target: { kind: "overview" }
+        })}
+        {summaryFailure}
+        <section className="settings-section">
+          <h2 className="settings-section-title">{props.t("models.modelList")}</h2>
+          <div className="settings-card provider-detail-card">
+            <ProviderModelGroup
+              providerId={selectedProvider.id}
+              providerName={selectedProvider.displayName}
+              models={providerModels}
+              syncFailed={providerSyncFailures.has(selectedProvider.id)}
+              manualModelFailed={failure?.kind === "manual_model" && failure.providerId === selectedProvider.id}
+              busy={props.busy}
+              onRefresh={() => refreshProviderModels(selectedProvider.id)}
+              onAddCustom={(modelId, modelDisplayName) => addManualModel(selectedProvider.id, modelId, modelDisplayName)}
+              onSetEnabled={setModelEnabled}
+              onSetDisplayName={setModelDisplayName}
+              t={props.t}
+            />
+          </div>
+        </section>
+      </section>
+    );
+  }
+
+  return (
+    <section className="settings-page model-settings-page" aria-label={props.t("nav.models")}>
+      {heading(props.t("models.title"), props.t("models.subtitle"))}
+      {summaryFailure}
+      <section className="settings-section">
+        <h2 className="settings-section-title">{props.t("models.globalDefault")}</h2>
+        <div className="settings-card">
+          <label className="settings-row" htmlFor="global-default-model">
+            <span className="settings-row-copy">
+              <strong>{props.t("models.defaultModel")}</strong>
+              <span>{props.t("models.defaultDescription")}</span>
+            </span>
+            <select
+              className="settings-select"
+              id="global-default-model"
+              value={summary?.defaultModelProfileId ?? ""}
+              disabled={props.busy || !summary?.models.some((model) => model.enabled)}
+              onChange={(event) => void setDefaultModel(event.target.value)}
+            >
+              <option value="" disabled>{props.t("models.noModel")}</option>
+              {summary?.providers.map((provider) => (
+                <optgroup key={provider.id} label={provider.displayName}>
+                  {summary.models
+                    .filter((model) => model.providerProfileId === provider.id && model.enabled)
+                    .map((model) => (
+                      <option key={model.id} value={model.id}>{model.displayName ?? model.modelId}</option>
+                    ))}
+                </optgroup>
+              ))}
+            </select>
+          </label>
+        </div>
+        {summary?.defaultBinding.state === "configured_unusable" ? (
+          <div className="settings-warning model-settings-error" role="alert">{props.t(summary.defaultBinding.error.messageKey)}</div>
+        ) : null}
+      </section>
+      <section className="settings-section">
+        <h2 className="settings-section-title">{props.t("models.services")}</h2>
+        {summary && summary.providers.length > 0 ? summary.providers.map((provider) => {
+          const providerModels = summary.models.filter((model) => model.providerProfileId === provider.id);
+          const enabledModels = providerModels.filter((model) => model.enabled);
+          const syncFailed = providerSyncFailures.has(provider.id);
+          return (
+            <div className="settings-card model-provider-card" key={provider.id}>
+              <div className="settings-row tall">
+                <span className="settings-list-icon"><PigeIcon name="model" size={17} /></span>
+                <span className="settings-row-copy">
+                  <strong>{provider.displayName}</strong>
+                  <span>
+                    {providerModels.length} {props.t("models.modelsCountLabel")} · {enabledModels.length} {props.t("models.enabledCountLabel")}
+                  </span>
+                </span>
+                <span className="settings-status">{props.t("models.connected")}</span>
+              </div>
+              <div className="settings-row">
+                <span className="settings-row-copy">
+                  <strong>{props.t("models.modelList")}</strong>
+                  <span>{props.t("models.modelListDescription")}</span>
+                </span>
+                <span className="settings-row-control">
+                  <button
+                    type="button"
+                    className="settings-button"
+                    disabled={props.busy}
+                    onClick={() => void refreshProviderModels(provider.id)}
+                  >
+                    {props.t(syncFailed ? "models.retry" : "library.refresh")}
+                  </button>
+                  <button type="button" className="settings-button" onClick={() => navigate({ kind: "provider", providerId: provider.id })}>
+                    {props.t("models.addCustomModel")}
+                  </button>
+                </span>
+              </div>
+              <div className="settings-row">
+                <span className="settings-row-copy">
+                  <strong>{props.t("models.connectionDetails")}</strong>
+                  <span>{props.t("models.connectionDetailsDescription")}</span>
+                </span>
+                <button type="button" className="settings-button" onClick={() => navigate({ kind: "provider", providerId: provider.id })}>
+                  {props.t("models.manage")}
+                </button>
+              </div>
+              {syncFailed ? (
+                <div className="settings-warning model-settings-error" role="alert">{props.t("models.discoveryFailed")}</div>
+              ) : null}
+            </div>
+          );
+        }) : (
+          <div className="settings-card model-empty-card">
+            <div className="settings-row tall">
+              <span className="settings-list-icon"><PigeIcon name="model" size={17} /></span>
+              <span className="settings-row-copy">
+                <strong>{props.t("models.noProvidersTitle")}</strong>
+                <span>{props.t("models.noProvidersDescription")}</span>
+              </span>
             </div>
           </div>
-        </details>
-      </section>
-
-      <section className="settings-group">
-        <h2>{props.t("models.availableModels")}</h2>
-        {summary?.defaultBinding.state === "configured_unusable" ? (
-          <p className="error" role="alert">{props.t(summary.defaultBinding.error.messageKey)}</p>
-        ) : null}
-        {summary && summary.providers.length > 0 ? (
-          <div className="provider-model-groups">
-            {summary.providers.map((provider) => (
-              <ProviderModelGroup
-                key={provider.id}
-                providerId={provider.id}
-                providerName={provider.displayName}
-                models={summary.models.filter((model) => model.providerProfileId === provider.id)}
-                syncFailed={providerSyncFailures.has(provider.id)}
-                manualModelFailed={failure?.kind === "manual_model" && failure.providerId === provider.id}
-                busy={props.busy}
-                onRefresh={() => refreshProviderModels(provider.id)}
-                onAddCustom={(modelId, modelDisplayName) => addManualModel(provider.id, modelId, modelDisplayName)}
-                onSetEnabled={setModelEnabled}
-                onSetDisplayName={setModelDisplayName}
-                t={props.t}
-              />
-            ))}
-          </div>
-        ) : (
-          <p className="muted">{props.t("models.noModel")}</p>
         )}
+        <div className="settings-inline-actions">
+          <button type="button" className="settings-button primary" onClick={() => navigate({ kind: "add_provider" })}>
+            {props.t("models.addProvider")}
+          </button>
+        </div>
+        <p className="settings-note">{props.t("models.routingNote")}</p>
       </section>
-
-      <section className="settings-group">
-        <h2>{props.t("models.defaultModel")}</h2>
-        <label htmlFor="global-default-model">{props.t("models.defaultModel")}</label>
-        <select
-          id="global-default-model"
-          value={summary?.defaultModelProfileId ?? ""}
-          disabled={props.busy || !summary?.models.some((model) => model.enabled)}
-          onChange={(event) => void setDefaultModel(event.target.value)}
-        >
-          <option value="" disabled>{props.t("models.noModel")}</option>
-          {summary?.providers.map((provider) => (
-            <optgroup key={provider.id} label={provider.displayName}>
-              {summary.models
-                .filter((model) => model.providerProfileId === provider.id && model.enabled)
-                .map((model) => (
-                  <option key={model.id} value={model.id}>{model.displayName ?? model.modelId}</option>
-                ))}
-            </optgroup>
-          ))}
-        </select>
-      </section>
-
-      {defaultProvider ? (
-        <InfoGroup
-          title={props.t("models.currentProvider")}
-          rows={[
-            [props.t("field.name"), defaultProvider.displayName],
-            [props.t("models.defaultModel"), defaultModel?.displayName ?? defaultModel?.modelId ?? props.t("models.unknown")]
-          ]}
-        />
-      ) : null}
-
       {failure?.kind === "model_change" ? (
-        <p className="error" role="alert">{props.t("models.modelChangeFailed")}</p>
+        <div className="settings-warning model-settings-error" role="alert">{props.t("models.modelChangeFailed")}</div>
       ) : null}
     </section>
   );
@@ -4889,9 +5125,13 @@ function ProviderModelGroup(props: {
   };
   return (
     <section className="provider-model-group" aria-labelledby={`provider-models-${props.providerId}`}>
-      <div className="provider-model-heading">
-        <h3 id={`provider-models-${props.providerId}`}>{props.providerName}</h3>
-        <button type="button" className="secondary" disabled={props.busy} onClick={() => void props.onRefresh()}>
+      <h3 className="visually-hidden" id={`provider-models-${props.providerId}`}>{props.providerName}</h3>
+      <div className="settings-row">
+        <span className="settings-row-copy">
+          <strong>{props.t("models.automaticSync")}</strong>
+          <span>{props.t("models.automaticSyncDescription")}</span>
+        </span>
+        <button type="button" className="settings-button" disabled={props.busy} onClick={() => void props.onRefresh()}>
           {props.t(props.syncFailed ? "models.retry" : "library.refresh")}
         </button>
       </div>
@@ -4908,32 +5148,59 @@ function ProviderModelGroup(props: {
             />
           ))}
         </div>
-      ) : <p className="muted">{props.t("models.noModel")}</p>}
+      ) : (
+        <div className="settings-row">
+          <span className="settings-row-copy">
+            <strong>{props.t("models.noModelsTitle")}</strong>
+            <span>{props.t("models.noModel")}</span>
+          </span>
+        </div>
+      )}
       {props.syncFailed ? (
-        <p className="error" role="alert">{props.t("models.discoveryFailed")}</p>
+        <div className="settings-warning provider-model-error" role="alert">{props.t("models.discoveryFailed")}</div>
       ) : null}
       <details className="custom-model">
-        <summary>{props.t("models.addCustomModel")}</summary>
+        <summary className="settings-row">
+          <span className="settings-row-copy">
+            <strong>{props.t("models.addCustomModel")}</strong>
+            <span>{props.t("models.addCustomModelDescription")}</span>
+          </span>
+          <span className="settings-button" aria-hidden="true">{props.t("models.add")}</span>
+        </summary>
         <div className="custom-provider-fields">
-          <label htmlFor={`custom-model-id-${props.providerId}`}>{props.t("models.modelId")}</label>
-          <input
-            id={`custom-model-id-${props.providerId}`}
-            value={modelId}
-            onChange={(event) => setModelId(event.target.value)}
-          />
-          <label htmlFor={`custom-model-name-${props.providerId}`}>{props.t("field.name")}</label>
-          <input
-            id={`custom-model-name-${props.providerId}`}
-            value={displayName}
-            placeholder={props.t("models.optional")}
-            onChange={(event) => setDisplayName(event.target.value)}
-          />
+          <label className="settings-row" htmlFor={`custom-model-id-${props.providerId}`}>
+            <span className="settings-row-copy">
+              <strong>{props.t("models.modelId")}</strong>
+              <span>{props.t("models.modelIdDescription")}</span>
+            </span>
+            <input
+              className="settings-input"
+              id={`custom-model-id-${props.providerId}`}
+              value={modelId}
+              onChange={(event) => setModelId(event.target.value)}
+            />
+          </label>
+          <label className="settings-row" htmlFor={`custom-model-name-${props.providerId}`}>
+            <span className="settings-row-copy">
+              <strong>{props.t("field.name")}</strong>
+              <span>{props.t("models.optional")}</span>
+            </span>
+            <input
+              className="settings-input"
+              id={`custom-model-name-${props.providerId}`}
+              value={displayName}
+              placeholder={props.t("models.optional")}
+              onChange={(event) => setDisplayName(event.target.value)}
+            />
+          </label>
           {props.manualModelFailed ? (
-            <p className="error" role="alert">{props.t("models.manualModelFailed")}</p>
+            <div className="settings-warning" role="alert">{props.t("models.manualModelFailed")}</div>
           ) : null}
-          <button type="button" disabled={props.busy || !modelId.trim()} onClick={() => void addModel()}>
-            {props.t(props.manualModelFailed ? "models.retry" : "models.addCustomModel")}
-          </button>
+          <div className="settings-inline-actions model-settings-footer-actions">
+            <button className="settings-button primary" type="button" disabled={props.busy || !modelId.trim()} onClick={() => void addModel()}>
+              {props.t(props.manualModelFailed ? "models.retry" : "models.addCustomModel")}
+            </button>
+          </div>
         </div>
       </details>
     </section>
@@ -4952,27 +5219,18 @@ function ModelInventoryRow(props: {
     : "";
   const [displayName, setDisplayName] = useState(initialName);
   return (
-    <div className="model-row">
-      <span>
+    <div className="settings-row model-row">
+      <span className="settings-row-copy">
         <strong>{props.model.displayName ?? props.model.modelId}</strong>
-        <small>{props.model.source === "manual" ? props.t("models.manual") : props.model.modelId}</small>
+        <span>{props.model.source === "manual" ? props.t("models.manual") : props.model.modelId}</span>
       </span>
-      <div className="model-row-controls">
-        <label>
-          <input
-            type="checkbox"
-            checked={props.model.enabled}
-            disabled={props.busy || props.model.isDefault}
-            aria-label={`${props.t("models.enabled")}: ${props.model.displayName ?? props.model.modelId}`}
-            onChange={(event) => void props.onSetEnabled(props.model.id, event.target.checked)}
-          />
-          {props.model.isDefault ? props.t("models.default") : props.t("models.enabled")}
-        </label>
+      <div className="settings-row-control model-row-controls">
         <details className="model-name-editor">
-          <summary>{props.t("models.editDisplayName")}</summary>
+          <summary className="settings-button">{props.t("models.editDisplayName")}</summary>
           <div className="model-name-fields">
             <label htmlFor={`model-display-name-${props.model.id}`}>{props.t("models.displayName")}</label>
             <input
+              className="settings-input"
               id={`model-display-name-${props.model.id}`}
               value={displayName}
               placeholder={props.model.modelId}
@@ -4980,7 +5238,7 @@ function ModelInventoryRow(props: {
             />
             <button
               type="button"
-              className="secondary"
+              className="settings-button"
               disabled={props.busy}
               onClick={() => void props.onSetDisplayName(props.model.id, displayName.trim() || null)}
             >
@@ -4988,6 +5246,16 @@ function ModelInventoryRow(props: {
             </button>
           </div>
         </details>
+        <button
+          type="button"
+          className="settings-switch"
+          role="switch"
+          aria-checked={props.model.enabled}
+          disabled={props.busy || props.model.isDefault}
+          aria-label={`${props.t("models.enabled")}: ${props.model.displayName ?? props.model.modelId}`}
+          title={props.model.isDefault ? props.t("models.default") : props.t("models.enabled")}
+          onClick={() => void props.onSetEnabled(props.model.id, !props.model.enabled)}
+        />
       </div>
     </div>
   );

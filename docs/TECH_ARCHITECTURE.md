@@ -1126,6 +1126,9 @@ Electron main process responsibilities:
   `#00000000` overlay, `#6f6f6f` symbols and `58px` height; leave Linux defaults intact.
   Never use `frame:false`. If Windows transparency is unstable, only main may fall back
   to approved `#f7f7f7`; renderer layout does not change.
+- macOS is the early assembled/package acceptance path. Windows/Linux native-shell
+  qualification is deferred unless targeted; adapters stay portable and unverified
+  platforms are not claimed.
 
 React renderer responsibilities:
 
@@ -1150,8 +1153,9 @@ Settings categories:
 - Basic settings: app language, theme, window preferences, always-on-top, compact/expanded/full-screen preferences, and startup behavior.
 - Knowledge Base > Vault & Note Storage settings: current vault name, active vault path, knowledge root path, source asset root path, default source storage strategy, reveal in file manager, open existing vault, create new vault, recent vaults, vault schema version, backup/restore entry points, trash policy, and backup include/exclude defaults.
 - Knowledge Base > Index & Maintenance settings: rebuild index, reset local database, chunk/index status, knowledge health repair actions, and parser/index repair jobs.
-- AI > Models: preset/custom Provider connections, per-Provider unified model inventory,
-  sync/repair status, and one Global Default selected from enabled models.
+- AI > Models: Global Default first, compact Provider summaries, separate preset credential
+  and Custom technical connection pages, then Provider-local inventory/Refresh/enable/
+  alias/manual-model management. Existing typed registry/secret owners remain authoritative.
 - No AI > Model Routing settings entry appears in v0.1. Model routing is only a deferred extension point unless Pi Agent upstream exposes stable model slots or Pige implements a tested Model Routing Service. Do not show Advanced/Fast model assignment as a user setting before it changes runtime behavior.
 - Internal model provider capability metadata is app-owned in v0.1, not a user-facing routing surface.
 - AI > Local Capabilities settings: local RAG engine status, embedding/reranking model downloads, OCR engines, speech input, parser/toolchain health, and local runtime repair state.

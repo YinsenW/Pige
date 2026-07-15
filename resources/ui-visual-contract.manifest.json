@@ -71,6 +71,9 @@
       "library-populated",
       "note-reader",
       "settings-models",
+      "settings-models-preset",
+      "settings-models-custom",
+      "settings-models-provider",
       "confirmation-required",
       "permission-dialog"
     ]

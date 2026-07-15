@@ -94,11 +94,14 @@ describe("Models error ownership", () => {
     });
     const mount = await mountPanel(dom, summary, api);
 
+    await openPreset(dom, mount.container, "OpenAI");
     await setInput(dom, mount.container, "preset-key-openai", "synthetic-key");
-    expect(buttonNamed(mount.container, "Connect").disabled).toBe(false);
-    await click(dom, buttonNamed(mount.container, "Connect"));
+    expect(buttonNamed(mount.container, enMessages["models.connectService"]).disabled).toBe(false);
+    await click(dom, buttonNamed(mount.container, enMessages["models.connectService"]));
     await waitFor(dom, () => mount.container.querySelector('[role="alert"]') !== null);
 
+    expect(inputNamed(mount.container, "preset-key-openai").value).toBe("synthetic-key");
+    expect(mount.container.textContent).toContain("Connect OpenAI");
     expect(mount.container.textContent).toContain("The connection check failed. Check the API key and try again.");
     expect(mount.container.textContent).not.toContain("protocol, Base URL, model ID");
     expect(mount.container.textContent).not.toContain("raw upstream");
@@ -107,7 +110,8 @@ describe("Models error ownership", () => {
     await click(dom, buttonNamed(mount.container, "Retry"));
     await waitFor(dom, () => mount.container.querySelector('[role="alert"]') === null);
     expect(attempts).toBe(2);
-    expect(buttonsNamed(mount.container, "Connect")).toHaveLength(1);
+    expect(mount.container.textContent).toContain(enMessages["models.globalDefault"]);
+    expect(mount.container.querySelector("#preset-key-openai")).toBeNull();
 
     await unmount(dom, mount.root);
   });
@@ -122,7 +126,8 @@ describe("Models error ownership", () => {
     });
     const mount = await mountPanel(dom, summary, api);
 
-    await click(dom, buttonNamed(mount.container, "Connect"));
+    await openPreset(dom, mount.container, "OpenAI");
+    await click(dom, buttonNamed(mount.container, enMessages["models.connectService"]));
     await waitFor(dom, () => mount.container.querySelector('[role="alert"]') !== null);
 
     expect(mount.container.textContent).toContain(enMessages["models.presetConnectionFailedNoAuth"]);
@@ -143,10 +148,11 @@ describe("Models error ownership", () => {
     });
     const first = await mountPanel(dom, summary, api);
 
+    await openCustomProvider(dom, first.container);
     await setInput(dom, first.container, "provider-base-url", "https://example.invalid");
     await setInput(dom, first.container, "provider-key", "synthetic-key");
-    expect(buttonNamed(first.container, "Test and Save").disabled).toBe(false);
-    await click(dom, buttonNamed(first.container, "Test and Save"));
+    expect(buttonNamed(first.container, enMessages["models.connectAndCheck"]).disabled).toBe(false);
+    await click(dom, buttonNamed(first.container, enMessages["models.connectAndCheck"]));
     await waitFor(dom, () => first.container.querySelector('[role="alert"]') !== null);
 
     expect(first.container.textContent).toContain("Check the protocol, Base URL, model ID, and API key");
@@ -157,6 +163,7 @@ describe("Models error ownership", () => {
     const reopened = await mountPanel(dom, summary, api);
     expect(reopened.container.querySelector('[role="alert"]')).toBeNull();
     expect(reopened.container.textContent).not.toContain("Check the protocol, Base URL, model ID, and API key");
+    expect(reopened.container.querySelector("#provider-base-url")).toBeNull();
 
     await unmount(dom, reopened.root);
   });
@@ -243,12 +250,12 @@ describe("Models error ownership", () => {
       }
     });
 
+    await openPreset(dom, mount.container, "OpenAI");
     await setInput(dom, mount.container, "preset-key-openai", "synthetic-key");
-    await click(dom, buttonNamed(mount.container, "Connect"));
+    await click(dom, buttonNamed(mount.container, enMessages["models.connectService"]));
     await waitFor(dom, () => mount.container.textContent?.includes(enMessages["models.refreshAfterSaveFailed"]) === true);
 
     expect(providerWrites).toBe(1);
-    expect(inputNamed(mount.container, "preset-key-openai").value).toBe("");
     expect(buttonsNamed(mount.container, "Retry")).toHaveLength(1);
 
     await click(dom, buttonNamed(mount.container, "Retry"));
@@ -257,6 +264,9 @@ describe("Models error ownership", () => {
     expect(modelRefreshes).toBe(3);
     await waitFor(dom, () => runtimeRefreshes === 1);
     expect(mount.container.querySelector('[role="alert"]')).toBeNull();
+
+    await openPreset(dom, mount.container, "OpenAI");
+    expect(inputNamed(mount.container, "preset-key-openai").value).toBe("");
 
     await unmount(dom, mount.root);
   });
@@ -274,6 +284,8 @@ describe("Models error ownership", () => {
     });
     const mount = await mountPanel(dom, summary, api);
 
+    await click(dom, buttonNamed(mount.container, enMessages["models.addCustomModel"]));
+    await click(dom, summaryNamed(mount.container, enMessages["models.addCustomModel"]));
     await setInput(dom, mount.container, "custom-model-id-provider_fixture", "synthetic-model");
     await setInput(dom, mount.container, "custom-model-name-provider_fixture", "Synthetic model");
     await click(dom, buttonNamed(mount.container, "Add custom model"));
@@ -288,6 +300,37 @@ describe("Models error ownership", () => {
     await waitFor(dom, () => inputNamed(mount.container, "custom-model-id-provider_fixture").value === "");
     expect(additions).toBe(2);
     expect(mount.container.querySelector('[role="alert"]')).toBeNull();
+
+    await unmount(dom, mount.root);
+  });
+
+  it("keeps the approved progressive Models structure without exposing routing controls", async () => {
+    const dom = createDom();
+    const mount = await mountPanel(dom, connectedSummary(), modelApi({}));
+
+    const globalDefault = mount.container.textContent?.indexOf(enMessages["models.globalDefault"]) ?? -1;
+    const services = mount.container.textContent?.indexOf(enMessages["models.services"]) ?? -1;
+    expect(globalDefault).toBeGreaterThanOrEqual(0);
+    expect(services).toBeGreaterThan(globalDefault);
+    expect(mount.container.querySelector("#preset-key-openai")).toBeNull();
+    expect(mount.container.querySelector("#provider-base-url")).toBeNull();
+    const interactiveCopy = Array.from(mount.container.querySelectorAll("button, select, input"))
+      .map((control) => control.getAttribute("aria-label") ?? control.textContent ?? "")
+      .join(" ");
+    expect(interactiveCopy).not.toMatch(/Advanced Model|Fast Model|model routing/i);
+
+    await click(dom, buttonNamed(mount.container, enMessages["models.addProvider"]));
+    expect(mount.container.textContent).toContain(enMessages["models.reviewedProviders"]);
+    expect(mount.container.querySelector("#preset-key-openai")).toBeNull();
+
+    await click(dom, buttonContaining(mount.container, "OpenAI"));
+    expect(mount.container.querySelector("#preset-key-openai")).not.toBeNull();
+    expect(mount.container.querySelector("#provider-base-url")).toBeNull();
+
+    await click(dom, buttonNamed(mount.container, enMessages["models.backToProviders"]));
+    await click(dom, buttonContaining(mount.container, enMessages["models.customProvider"]));
+    expect(mount.container.querySelector("#provider-base-url")).not.toBeNull();
+    expect(mount.container.querySelector("#provider-protocol")).not.toBeNull();
 
     await unmount(dom, mount.root);
   });
@@ -424,17 +467,41 @@ async function setInput(dom: JSDOM, container: HTMLElement, id: string, value: s
   });
 }
 
-async function click(dom: JSDOM, element: HTMLButtonElement): Promise<void> {
+async function click(dom: JSDOM, element: HTMLElement): Promise<void> {
   await act(async () => {
     element.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
     await settle(dom);
   });
 }
 
+async function openPreset(dom: JSDOM, container: HTMLElement, name: string): Promise<void> {
+  await click(dom, buttonNamed(container, enMessages["models.addProvider"]));
+  await click(dom, buttonContaining(container, name));
+}
+
+async function openCustomProvider(dom: JSDOM, container: HTMLElement): Promise<void> {
+  await click(dom, buttonNamed(container, enMessages["models.addProvider"]));
+  await click(dom, buttonContaining(container, enMessages["models.customProvider"]));
+}
+
 function buttonNamed(container: HTMLElement, name: string): HTMLButtonElement {
   const button = buttonsNamed(container, name)[0];
   if (!button) throw new Error(`Button not found: ${name}`);
   return button;
+}
+
+function buttonContaining(container: HTMLElement, name: string): HTMLButtonElement {
+  const button = Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
+    .find((candidate) => candidate.textContent?.includes(name));
+  if (!button) throw new Error(`Button containing text not found: ${name}`);
+  return button;
+}
+
+function summaryNamed(container: HTMLElement, name: string): HTMLElement {
+  const summary = Array.from(container.querySelectorAll<HTMLElement>("summary"))
+    .find((candidate) => candidate.textContent?.includes(name));
+  if (!summary) throw new Error(`Summary not found: ${name}`);
+  return summary;
 }
 
 function inputNamed(container: HTMLElement, id: string): HTMLInputElement {

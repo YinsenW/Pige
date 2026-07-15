@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-15T16:10:06Z",
+  "reviewedAt": "2026-07-15T17:15:44Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -31,12 +31,12 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "33643bbd07974c7230ff27e44d5631856917d8929b42bd89909e07560118318c"
+    "reviewedSha256": "0914ffdabf94ca2e551c9d811b1018ad3882ec01cafb77ac2ea3dbee880405ad"
   },
   "reviewers": [
     {
-      "reviewerId": "ui-window-shell-integration-independent-review",
-      "task": "Approved HTML-equivalent production UI and native window shell review",
+      "reviewerId": "ui-shell-models-progressive-independent-review",
+      "task": "macOS-first UI shell and progressive Models exact-candidate review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -44,61 +44,61 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "UI Design accepted the exact combined Development hash after directly owning production renderer bytes. Planning reproduced the 18-path patch/content identities, empty index and diff-check, then reviewed owner separation, native-shell mapping, visual evidence layers and unchanged status boundary without editing frozen paths."
+      "independence": "UI Design directly owned all Models renderer/locale bytes and accepted the exact combined 19-path Development hash. Planning reproduced both identities and reviewed only owner, platform, evidence and unchanged-status projections without editing frozen paths."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "ui-window-shell-integration-independent-review",
+      "reviewerId": "ui-shell-models-progressive-independent-review",
       "blockerCount": 0,
-      "summary": "Existing UI, Technical Architecture, Quality and AI-development owners locate the sole HTML baseline, production renderer ownership, window-shell mapping and evidence workflow."
+      "summary": "Existing UI, Technical Architecture, Quality and AI-development owners locate the progressive Models flow, shared typed ownership, macOS-first gate and deferred platform qualification."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "ui-window-shell-integration-independent-review",
+      "reviewerId": "ui-shell-models-progressive-independent-review",
       "blockerCount": 0,
-      "summary": "Owners agree on white canvas, #202322 text, one 58px titlebar, macOS hiddenInset, Windows transparent native overlay, Linux defaults, and no renderer redesign or frame:false."
+      "summary": "Owners agree on UI/backend parallelism, mechanical integration, Global Default-first Models pages, existing registry/secret authority, macOS hiddenInset and no false Windows claim."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "ui-window-shell-integration-independent-review",
+      "reviewerId": "ui-shell-models-progressive-independent-review",
       "blockerCount": 0,
-      "summary": "Functional window-shell evidence is distinct from macOS real-Electron visual review and still-open Windows visual proof; semantic lock v3 has 1,212 claims and no status changes."
+      "summary": "Progressive Models evidence is exact and separate from service capability; semantic lock v3 has 1,213 claims, while Windows visual qualification and every status stay open/unchanged."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.7,
-      "reviewerId": "ui-window-shell-integration-independent-review",
+      "reviewerId": "ui-shell-models-progressive-independent-review",
       "blockerCount": 0,
-      "summary": "UI Design owns production renderer bytes and final visual review; Development owns typed interfaces, integration and platform evidence, returning bounded interface gaps instead of redrawing UI."
+      "summary": "Planning owns UI-centered requirements; UI Design and Development proceed in parallel from one contract, then Development binds mechanically and UI Design reviews exact bytes."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "ui-window-shell-integration-independent-review",
+      "reviewerId": "ui-shell-models-progressive-independent-review",
       "blockerCount": 0,
-      "summary": "No document or decision is added; existing owner and trace text is compressed while fixed leanness budgets remain green."
+      "summary": "No document or decision is added; existing owner, visual and acceptance projections remain inside fixed budgets."
     }
   ],
   "verification": [
     {
       "command": "npm run verify",
       "status": "passed",
-      "evidence": "The exact frozen combined candidate passes docs, decisions, UI visual, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all quality dimensions."
+      "evidence": "The exact replacement candidate passes docs, decisions, UI visual, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all quality dimensions."
     },
     {
-      "command": "Exact candidate functional and visual evidence",
+      "command": "Exact candidate focused and macOS Electron evidence",
       "status": "passed",
-      "evidence": "Focused 7 files/104 tests, typecheck, build and development launch pass. Real macOS Electron at 420x760 shows one integrated 58px renderer titlebar with native traffic lights and no duplicate row, clipping or overlap; UI Design accepted the exact final hash."
+      "evidence": "Focused 6 files/102 tests, typecheck and build pass. Real macOS Electron proves hiddenInset plus Models overview, preset, Custom and Provider detail through the typed API; UI Design accepted the exact final hash."
     },
     {
       "command": "npm run verify:ui-visual && npm run verify:traceability && npm run verify:contracts",
       "status": "passed",
-      "evidence": "The approved canvas/text tokens and structural contract pass; semantic lock v3/1,212 and CON-001 through CON-004 pass with Requirement, Exit and Phase states unchanged."
+      "evidence": "The 544-combination visual contract passes; semantic lock v3/1,213 and CON-001 through CON-004 pass with Requirement, Exit and Phase states unchanged."
     },
     {
       "command": "npm run verify:documentation-leanness",
@@ -107,18 +107,18 @@
     }
   ],
   "coordination": {
-    "taskId": "ui-window-shell-integration-20260716",
-    "taskTitle": "Approved production UI equivalence and native window shell",
+    "taskId": "ui-shell-models-progressive-20260716",
+    "taskTitle": "macOS-first UI shell and progressive Models integration",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The candidate changes production renderer presentation and main-owned window options without new IPC, durable schema, dependency, provider, permission or backend capability. Existing typed behavior and unavailable-state truth are preserved.",
-    "acknowledgement": "Development froze exact f2cc966e/141adc36 bytes after UI Design directly owned the renderer replacement and accepted the combined candidate. Planning bound existing owners, visual contract, acceptance, semantic lock and this recipe without changing those bytes."
+    "compatibility": "The candidate changes Models presentation over existing typed calls and the already bounded window adapter; no IPC, schema, dependency, provider, permission, secret or durable owner changes.",
+    "acknowledgement": "Development froze exact 877405a0/c727e07c bytes after UI Design owned the Models production UI and accepted the combined candidate. Planning bound existing owners, visual contract, acceptance, semantic lock and this recipe without changing those bytes."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Real packaged Windows visual evidence must prove retained caption controls, safe area, no duplicate titlebar and stable transparency; only the approved main-owned #f7f7f7 fallback is allowed.",
-    "The authoritative complete test matrix and cross-platform package/distribution gates remain the post-bind PR CI node; local contention produced two unrelated timeout-only default runs.",
-    "Unavailable capabilities remain polished local development states, not executable feature or status evidence."
+    "Replacement PR CI and macOS arm64 package/downloaded-distribution are the next complete node; tiered M verification intentionally did not repeat full local package/test gates.",
+    "Windows native titlebar qualification and its isolated evidence lane remain deferred; the coded adapter is not a Windows support claim.",
+    "Unavailable capabilities remain polished local development states, never executable feature or status evidence."
   ]
 }

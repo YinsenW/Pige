@@ -884,7 +884,7 @@ payloads/revisions/views/change logs, notes, or sources.
 ### Model Settings
 
 ```txt
-Models
+Models overview
 
 Global Default
 [ OpenAI — gpt-5-mini                    ▾ ]
@@ -893,10 +893,12 @@ Providers
 OpenAI             Connected · 2 enabled · 3 models     Manage
 Personal endpoint  Needs attention · discovery failed   Manage
 
-Connect Provider
+Connect Provider → preset list | Custom Provider
 ```
 
-Presets ask only exposed credentials; Custom alone reveals protocol and Base URL.
+Global Default is first; connected Providers stay compact. Add Provider opens a reviewed
+preset list or Custom. Presets ask only exposed credentials; Custom alone reveals protocol
+and Base URL. Failed connection remains on its form; only explicit success navigates.
 Cloud/self-hosted/local is internal metadata. Global Default groups enabled models by
 Provider, never raw ID or per-row action. Each Provider opens one inline inventory:
 
