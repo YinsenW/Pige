@@ -171,6 +171,7 @@
   "errors.url_fetch.invalid": "Saisissez une adresse Web HTTP ou HTTPS publique valide.",
   "errors.rag.query_invalid": "Saisissez une question non vide et plus courte.",
   "errors.vault.not_selected": "Ouvrez ou créez un coffre avant d’interroger Pi Agent.",
+  "errors.vault.reveal_failed": "Pige n’a pas pu afficher cet emplacement. Réessayez.",
   "language.label": "Langue",
   "library.empty": "Aucune note ni page source pour le moment.",
   "library.invalid": "Ignorées",
@@ -358,8 +359,10 @@
   "vaultSettings.createNew": "Créer un nouveau coffre",
   "vaultSettings.currentVault": "Coffre actuel",
   "vaultSettings.openAnother": "Ouvrir un autre coffre",
-  "vaultSettings.openInFinder": "Ouvrir dans le Finder",
-  "vaultSettings.openSourceAssets": "Ouvrir les ressources sources",
+  "vaultSettings.openInFinder": "Afficher le stockage des notes",
+  "vaultSettings.openSourceAssets": "Afficher le stockage des sources",
+  "vaultSettings.externalRootUnavailable": "Le stockage externe n’est pas connecté",
+  "vaultSettings.revealSucceeded": "Ouvert dans le gestionnaire de fichiers du système.",
   "vaultSettings.subtitle": "Les fichiers locaux restent la source de vérité.",
   "vaultSettings.title": "Coffre et stockage des notes"
 }

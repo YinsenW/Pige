@@ -52,6 +52,7 @@ import type {
   RestorePreviewResult,
   SupportBundlePreview,
   ToolchainHealth,
+  VaultRevealTarget,
   VaultSummary,
   WindowState
 } from "@pige/contracts";
@@ -3132,6 +3133,12 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
   const [supportBundleExportRequestId, setSupportBundleExportRequestId] = useState<string | null>(null);
   const supportBundleExportRequestRef = useRef<string | null>(null);
   const supportBundleCancelRequestRef = useRef<string | null>(null);
+  const [revealTarget, setRevealTarget] = useState<VaultRevealTarget | null>(null);
+  const [revealNotice, setRevealNotice] = useState<{ readonly kind: "success" | "error"; readonly message: string } | null>(null);
+  const revealRequestSequence = useRef(0);
+  const revealRequestActiveRef = useRef(false);
+  const knowledgeRootButtonRef = useRef<HTMLButtonElement>(null);
+  const sourceAssetRootButtonRef = useRef<HTMLButtonElement>(null);
   const activeBackupJob = props.backupJobs[0];
   const restore = useRestoreFlow(async () => {
     setBackupNotice(props.t("backup.restored"));
@@ -3144,6 +3151,11 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
     if (!exportRequestId) return;
     supportBundleCancelRequestRef.current = exportRequestId;
     void window.pige.diagnostics.cancelSupportBundleExport({ exportRequestId }).catch(() => undefined);
+  }, []);
+
+  useEffect(() => () => {
+    revealRequestSequence.current += 1;
+    revealRequestActiveRef.current = false;
   }, []);
 
   const runBackupAction = async (action: () => Promise<void>): Promise<void> => {
@@ -3200,6 +3212,38 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
       await props.onRefresh();
     } catch (caught) {
       props.onError(caught instanceof Error ? caught.message : "Something went wrong.");
+    }
+  };
+
+  const revealStorageRoot = async (target: VaultRevealTarget): Promise<void> => {
+    if (props.busy || revealRequestActiveRef.current) return;
+    revealRequestActiveRef.current = true;
+    const requestId = ++revealRequestSequence.current;
+    setRevealTarget(target);
+    setRevealNotice(null);
+    try {
+      const result = target === "knowledge_root"
+        ? await window.pige.vault.revealKnowledgeRoot()
+        : await window.pige.vault.revealSourceAssetRoot();
+      if (requestId !== revealRequestSequence.current) return;
+      setRevealNotice(result.status === "revealed"
+        ? { kind: "success", message: props.t("vaultSettings.revealSucceeded") }
+        : { kind: "error", message: props.t(result.error.messageKey) });
+    } catch {
+      if (requestId === revealRequestSequence.current) {
+        setRevealNotice({ kind: "error", message: props.t("errors.vault.reveal_failed") });
+      }
+    } finally {
+      if (requestId === revealRequestSequence.current) {
+        revealRequestActiveRef.current = false;
+        setRevealTarget(null);
+        window.requestAnimationFrame(() => {
+          const button = target === "knowledge_root"
+            ? knowledgeRootButtonRef.current
+            : sourceAssetRootButtonRef.current;
+          button?.focus();
+        });
+      }
     }
   };
 
@@ -3289,7 +3333,12 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
           [props.t("field.name"), props.vault.name],
           [props.t("field.vaultPath"), props.vault.activeVaultPathDisplay],
           [props.t("field.noteStorage"), props.vault.knowledgeRootDisplay],
-          [props.t("field.sourceAssets"), props.vault.sourceAssetRootDisplay],
+          [
+            props.t("field.sourceAssets"),
+            props.vault.sourceAssetRootKind === "external_binding"
+              ? props.t("vaultSettings.externalRootUnavailable")
+              : props.vault.sourceAssetRootDisplay
+          ],
           [props.t("field.schema"), String(props.vault.schemaVersion)]
         ]}
       />
@@ -3298,7 +3347,7 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
         <h2>{props.t("sourceStorage.title")}</h2>
         <select
           value={props.vault.defaultSourceStorageStrategy}
-          disabled={props.busy}
+          disabled={props.busy || Boolean(revealTarget)}
           onChange={(event) => void updatePolicy(event.target.value as SourceStorageStrategy)}
         >
           <option value="copy_to_source_library">{props.t("sourceStorage.copy")}</option>
@@ -3306,20 +3355,36 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
         </select>
       </section>
 
-      <section className="settings-actions">
-        <button type="button" onClick={() => void window.pige.vault.revealKnowledgeRoot()}>
+      <section className="settings-actions" aria-busy={revealTarget ? "true" : undefined}>
+        <button
+          ref={knowledgeRootButtonRef}
+          type="button"
+          disabled={props.busy || Boolean(revealTarget)}
+          onClick={() => void revealStorageRoot("knowledge_root")}
+        >
           {props.t("vaultSettings.openInFinder")}
         </button>
-        <button type="button" className="secondary" onClick={() => void window.pige.vault.revealSourceAssetRoot()}>
+        <button
+          ref={sourceAssetRootButtonRef}
+          type="button"
+          className="secondary"
+          disabled={props.busy || Boolean(revealTarget)}
+          onClick={() => void revealStorageRoot("source_asset_root")}
+        >
           {props.t("vaultSettings.openSourceAssets")}
         </button>
-        <button type="button" className="secondary" onClick={props.onOpen} disabled={props.busy}>
+        <button type="button" className="secondary" onClick={props.onOpen} disabled={props.busy || Boolean(revealTarget)}>
           {props.t("vaultSettings.openAnother")}
         </button>
-        <button type="button" className="secondary" onClick={props.onCreate} disabled={props.busy}>
+        <button type="button" className="secondary" onClick={props.onCreate} disabled={props.busy || Boolean(revealTarget)}>
           {props.t("vaultSettings.createNew")}
         </button>
       </section>
+      {revealNotice ? (
+        <p className={revealNotice.kind === "error" ? "error" : "muted"} role="status" aria-live="polite">
+          {revealNotice.message}
+        </p>
+      ) : null}
 
       <InfoGroup
         title={props.t("counts.title")}

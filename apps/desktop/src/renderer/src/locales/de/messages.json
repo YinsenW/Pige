@@ -171,6 +171,7 @@
   "errors.url_fetch.invalid": "Gib eine gültige öffentliche HTTP- oder HTTPS-Webadresse ein.",
   "errors.rag.query_invalid": "Gib eine kürzere, nicht leere Frage ein.",
   "errors.vault.not_selected": "Öffne oder erstelle einen Tresor, bevor du Pi Agent fragst.",
+  "errors.vault.reveal_failed": "Pige konnte diesen Speicherort nicht anzeigen. Versuche es erneut.",
   "language.label": "Sprache",
   "library.empty": "Noch keine Notizen oder Quellseiten.",
   "library.invalid": "Übersprungen",
@@ -358,8 +359,10 @@
   "vaultSettings.createNew": "Neuen Tresor erstellen",
   "vaultSettings.currentVault": "Aktueller Tresor",
   "vaultSettings.openAnother": "Anderen Tresor öffnen",
-  "vaultSettings.openInFinder": "Im Finder öffnen",
-  "vaultSettings.openSourceAssets": "Quellressourcen öffnen",
+  "vaultSettings.openInFinder": "Notizspeicher anzeigen",
+  "vaultSettings.openSourceAssets": "Quellspeicher anzeigen",
+  "vaultSettings.externalRootUnavailable": "Externer Speicher ist nicht verbunden",
+  "vaultSettings.revealSucceeded": "Im System-Dateimanager geöffnet.",
   "vaultSettings.subtitle": "Lokale Dateien bleiben die Quelle der Wahrheit.",
   "vaultSettings.title": "Tresor und Notizspeicher"
 }

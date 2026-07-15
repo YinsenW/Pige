@@ -7,6 +7,7 @@ import {
   canonicalizeAsarEntryPath,
   findDistributableNames,
   packageabilityPaths,
+  readLastParserWorkerSmokeStage,
   resolvePackageabilityPlatform
 } from "../../scripts/release/packageability-platforms.mjs";
 import {
@@ -76,6 +77,22 @@ describe("release packageability platforms", () => {
     expect(canonicalizeAsarEntryPath("\\out\\main\\index.js")).toBe("/out/main/index.js");
     expect(canonicalizeAsarEntryPath("out\\main\\index.js")).toBe("/out/main/index.js");
     expect(() => canonicalizeAsarEntryPath("")).toThrow(/Invalid packaged ASAR entry path/u);
+  });
+
+  it("reports only the last reviewed parser-worker smoke stage", () => {
+    expect(readLastParserWorkerSmokeStage([
+      "PIGE_PARSER_WORKER_SMOKE_STAGE=worker_inventory",
+      "ignored body",
+      "PIGE_PARSER_WORKER_SMOKE_STAGE=pdf_page_renderer"
+    ].join("\n"))).toBe("pdf_page_renderer");
+    expect(readLastParserWorkerSmokeStage([
+      "PIGE_PARSER_WORKER_SMOKE_STAGE=pdf_page_renderer",
+      "PIGE_PARSER_WORKER_SMOKE_STAGE=attacker_controlled"
+    ].join("\n"))).toBe("pdf_page_renderer");
+    expect(readLastParserWorkerSmokeStage("prefix PIGE_PARSER_WORKER_SMOKE_STAGE=dataset_query"))
+      .toBeUndefined();
+    expect(readLastParserWorkerSmokeStage("PIGE_PARSER_WORKER_SMOKE_STAGE=unknown"))
+      .toBeUndefined();
   });
 
   it("treats Windows directory fsync limitations as unsupported without hiding permission failures elsewhere", () => {

@@ -9,6 +9,7 @@ import {
   canonicalizeAsarEntryPath,
   findDistributableNames,
   packageabilityPaths,
+  readLastParserWorkerSmokeStage,
   resolvePackageabilityPlatform
 } from "./packageability-platforms.mjs";
 import {
@@ -493,10 +494,17 @@ function runNodeSmoke(scriptPath, extraEnvironment) {
     maxBuffer: 4 * 1024 * 1024
   });
   if (result.status !== 0) {
+    const parserStage = path.basename(scriptPath) === "parser-worker-smoke.mjs"
+      ? readLastParserWorkerSmokeStage(`${result.stdout ?? ""}\n${result.stderr ?? ""}`)
+      : undefined;
     const safeStage = /PIGE_DIAGNOSTICS_EXPORT_WORKER_SMOKE_FAILURE=([a-z_]+)/u.exec(
       result.stderr ?? ""
     )?.[1];
-    const stageSuffix = safeStage ? ` at ${safeStage}` : "";
+    const stageSuffix = parserStage
+      ? ` at ${parserStage}`
+      : safeStage
+        ? ` at ${safeStage}`
+        : "";
     throw new Error(
       `${path.basename(scriptPath)} failed with status ${String(result.status)}${stageSuffix}.`
     );

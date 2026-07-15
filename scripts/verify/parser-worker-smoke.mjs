@@ -27,6 +27,8 @@ const datasetQuerySmokeIds = Object.freeze({
   amountColumn: "column_workersmokeamount"
 });
 
+markSmokeStage("worker_inventory");
+
 for (const workerPath of [
   pdfWorkerPath,
   pdfPageRendererWorkerPath,
@@ -41,6 +43,7 @@ for (const workerPath of [
   }
 }
 
+markSmokeStage("pdf_missing_source");
 await expectWorkerError(pdfWorkerPath, {
   requestId: "pdf-worker-smoke",
   filePath: path.join(root, ".missing-parser-worker-smoke.pdf"),
@@ -49,6 +52,7 @@ await expectWorkerError(pdfWorkerPath, {
 
 const rendererSmokeRoot = fs.mkdtempSync(path.join(os.tmpdir(), "pige-pdf-renderer-smoke-"));
 try {
+  markSmokeStage("pdf_page_renderer");
   const rendererSmokePdf = path.join(rendererSmokeRoot, "vector-page.pdf");
   fs.writeFileSync(rendererSmokePdf, createVectorPdf());
   await expectWorkerSuccess(pdfPageRendererWorkerPath, {
@@ -80,6 +84,7 @@ try {
   fs.rmSync(rendererSmokeRoot, { recursive: true, force: true });
 }
 
+markSmokeStage("office_missing_source");
 await expectWorkerError(officeWorkerPath, {
   requestId: "office-worker-smoke",
   filePath: path.join(root, ".missing-parser-worker-smoke.docx"),
@@ -97,6 +102,7 @@ await expectWorkerError(officeWorkerPath, {
 
 const officeMediaSmokeRoot = fs.mkdtempSync(path.join(os.tmpdir(), "pige-office-media-smoke-"));
 try {
+  markSmokeStage("office_media");
   const media = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
     "base64"
@@ -138,6 +144,7 @@ try {
   fs.rmSync(officeMediaSmokeRoot, { recursive: true, force: true });
 }
 
+markSmokeStage("web_extractor");
 await expectWorkerSuccess(webWorkerPath, {
   requestId: "web-worker-smoke",
   html: "<!doctype html><html><head><title>Worker smoke</title></head><body><main><h1>Worker smoke</h1><p>The bundled web extractor returns local readable text without executing page scripts or loading resources.</p></main></body></html>",
@@ -152,6 +159,7 @@ await expectWorkerSuccess(webWorkerPath, {
 
 const datasetSmokeRoot = fs.mkdtempSync(path.join(os.tmpdir(), "pige-dataset-worker-smoke-"));
 try {
+  markSmokeStage("dataset_ingest");
   const csvPath = path.join(datasetSmokeRoot, "records.csv");
   fs.writeFileSync(csvPath, "name,count\nAda,3\nGrace,5\n", "utf8");
   await expectWorkerSuccess(datasetWorkerPath, {
@@ -208,6 +216,7 @@ const datasetQuerySmokeLimits = Object.freeze({
 });
 const datasetQuerySmokeRoot = fs.mkdtempSync(path.join(os.tmpdir(), "pige-dataset-query-worker-smoke-"));
 try {
+  markSmokeStage("dataset_query");
   const payloadPath = path.join(datasetQuerySmokeRoot, "collection.sqlite");
   createDatasetQuerySmokePayload(payloadPath);
   const request = {
@@ -339,6 +348,11 @@ try {
 console.log("Built document and web parser workers loaded and returned valid protocol responses. PDF pages and selected PPTX media also materialized as bounded image bytes.");
 console.log("Built Dataset worker loaded and returned a valid bounded managed-collection import plan.");
 console.log("Built Dataset query worker projected and filtered a fixed-schema private SQLite snapshot with deterministic protocol hashes, then rejected a missing snapshot through its typed protocol.");
+markSmokeStage("completed");
+
+function markSmokeStage(stage) {
+  console.error(`PIGE_PARSER_WORKER_SMOKE_STAGE=${stage}`);
+}
 
 async function expectWorkerError(workerPath, request, expectedCode, validate = () => true) {
   const worker = new Worker(pathToFileURL(workerPath), {

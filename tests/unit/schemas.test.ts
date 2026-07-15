@@ -10,7 +10,8 @@ import {
   SourceRecordSchema,
   ToolchainManifestSchema,
   VaultConfigSchema,
-  VaultManifestSchema
+  VaultManifestSchema,
+  VaultRevealResultSchema
 } from "@pige/schemas";
 
 describe("schemas", () => {
@@ -62,6 +63,81 @@ describe("schemas", () => {
         }
       }).sourceStorage.defaultStrategy
     ).toBe("copy_to_source_library");
+  });
+
+  it("accepts only canonical portable in-vault source roots", () => {
+    const baseConfig = {
+      schemaVersion: 1 as const,
+      sourceStorage: {
+        defaultStrategy: "copy_to_source_library" as const,
+        sourceAssetRootKind: "inside_vault" as const,
+        inVaultSourceAssetRoot: "raw/files"
+      },
+      backup: {
+        includeConversations: true,
+        includeVaultMemory: true,
+        includeTrash: true
+      },
+      memory: { vaultMemoryEnabled: true }
+    };
+
+    expect(VaultConfigSchema.parse(baseConfig).sourceStorage.inVaultSourceAssetRoot).toBe("raw/files");
+    for (const unsafeRoot of [
+      "",
+      ".",
+      "..",
+      "../raw",
+      "raw/../outside",
+      "raw/./files",
+      "raw//files",
+      "raw/",
+      "/tmp/raw",
+      "C:/raw",
+      "raw\\files",
+      " raw"
+    ]) {
+      expect(() => VaultConfigSchema.parse({
+        ...baseConfig,
+        sourceStorage: { ...baseConfig.sourceStorage, inVaultSourceAssetRoot: unsafeRoot }
+      })).toThrow();
+    }
+  });
+
+  it("keeps vault reveal results strict and pathless", () => {
+    expect(VaultRevealResultSchema.parse({
+      status: "revealed",
+      target: "knowledge_root"
+    })).toEqual({ status: "revealed", target: "knowledge_root" });
+    expect(VaultRevealResultSchema.parse({
+      status: "failed",
+      target: "source_asset_root",
+      error: {
+        code: "vault.reveal_failed",
+        domain: "vault",
+        messageKey: "errors.vault.reveal_failed",
+        retryable: true,
+        severity: "warning",
+        userAction: "retry"
+      }
+    })).toMatchObject({ status: "failed", target: "source_asset_root" });
+    expect(() => VaultRevealResultSchema.parse({
+      status: "revealed",
+      target: "knowledge_root",
+      path: "/redacted-test/vault"
+    })).toThrow();
+    expect(() => VaultRevealResultSchema.parse({
+      status: "failed",
+      target: "source_asset_root",
+      error: {
+        code: "vault.reveal_failed",
+        domain: "vault",
+        messageKey: "errors.vault.reveal_failed",
+        retryable: true,
+        severity: "warning",
+        userAction: "retry",
+        redactedDetails: { path: "/redacted-test/vault" }
+      }
+    })).toThrow();
   });
 
   it("validates machine-local window preferences", () => {

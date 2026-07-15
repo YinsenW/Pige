@@ -9,6 +9,8 @@ import type {
   RestoreApplyRequest,
   RestoreApplyResult,
   RestorePreviewResult,
+  VaultRevealResult,
+  VaultRevealTarget,
   VaultSummary
 } from "@pige/contracts";
 
@@ -331,6 +333,55 @@ describe("Restore identity UI", () => {
     await act(async () => root.unmount());
     dom.window.close();
   });
+
+  it("owns storage reveal busy, failure, retry, and focus without exposing raw paths", async () => {
+    const dom = createDom();
+    const harness = createHarness(readyOnboarding(), bothModesPreview());
+    let rejectReveal: ((reason: Error) => void) | undefined;
+    harness.revealStorageRoot = (target) => {
+      harness.revealRequests.push(target);
+      return new Promise((_, reject) => { rejectReveal = reject; });
+    };
+    const { container, root } = await mountApp(dom, makePigeApi(harness, true));
+
+    await click(dom, button(container, "Vault & Note Storage"));
+    const revealNotes = button(container, "Show note storage");
+    const revealSources = button(container, "Show source storage");
+    await act(async () => {
+      revealNotes.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      revealNotes.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      await settle(dom);
+    });
+
+    expect(harness.revealRequests).toEqual(["knowledge_root"]);
+    expect(revealNotes.disabled).toBe(true);
+    expect(revealSources.disabled).toBe(true);
+    expect(button(container, "Open another vault").disabled).toBe(true);
+    expect(button(container, "Create new vault").disabled).toBe(true);
+    expect(revealNotes.closest(".settings-actions")?.getAttribute("aria-busy")).toBe("true");
+
+    await act(async () => {
+      rejectReveal?.(new Error("RAW_REVEAL_SENTINEL path-sentinel"));
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.textContent?.includes("Pige could not show this storage location") ?? false);
+    await waitFor(dom, () => dom.window.document.activeElement === revealNotes);
+    expect(container.textContent).not.toContain("RAW_REVEAL_SENTINEL");
+    expect(container.textContent).not.toContain("path-sentinel");
+    expect(revealNotes.disabled).toBe(false);
+
+    harness.revealStorageRoot = async (target) => {
+      harness.revealRequests.push(target);
+      return { status: "revealed", target };
+    };
+    await click(dom, revealNotes);
+    expect(harness.revealRequests).toEqual(["knowledge_root", "knowledge_root"]);
+    expect(container.textContent).toContain("Opened in the system file manager.");
+    await waitFor(dom, () => dom.window.document.activeElement === revealNotes);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
 });
 
 interface RestoreHarness {
@@ -340,8 +391,10 @@ interface RestoreHarness {
   jobs: JobSummary[];
   readonly retryJobIds: string[];
   readonly cancelJobIds: string[];
+  readonly revealRequests: VaultRevealTarget[];
   lastBackupAt?: string;
   applyRestore: (request: RestoreApplyRequest) => Promise<RestoreApplyResult>;
+  revealStorageRoot: (target: VaultRevealTarget) => Promise<VaultRevealResult>;
 }
 
 function createHarness(onboarding: OnboardingStatus, preview: RestorePreviewResult): RestoreHarness {
@@ -352,9 +405,14 @@ function createHarness(onboarding: OnboardingStatus, preview: RestorePreviewResu
     jobs: [],
     retryJobIds: [],
     cancelJobIds: [],
+    revealRequests: [],
     applyRestore: async (request) => {
       harness.applyRequests.push(request);
       return { status: "canceled" };
+    },
+    revealStorageRoot: async (target) => {
+      harness.revealRequests.push(target);
+      return { status: "revealed", target };
     }
   };
   return harness;
@@ -415,7 +473,9 @@ function makePigeApi(harness: RestoreHarness, sidebarOpen = false): object {
       onboardingStatus: async () => harness.onboarding,
       recent: async () => [],
       removeRecent: async () => [],
-      dismissFirstHomeGuide: async () => harness.onboarding
+      dismissFirstHomeGuide: async () => harness.onboarding,
+      revealKnowledgeRoot: async () => harness.revealStorageRoot("knowledge_root"),
+      revealSourceAssetRoot: async () => harness.revealStorageRoot("source_asset_root")
     },
     backup: {
       status: async () => ({

@@ -32,6 +32,8 @@ import type {
   SourceKind,
   SourceAssetRootKind,
   SourceStorageStrategy,
+  VaultRevealResult,
+  VaultRevealTarget,
   WindowLayoutMode
 } from "@pige/schemas";
 
@@ -43,6 +45,8 @@ export type {
   PigeErrorSeverity,
   PigeErrorSummary,
   PigeWarning,
+  VaultRevealResult,
+  VaultRevealTarget,
   PermissionActionBinding,
   PermissionActionLifecycleRecord,
   PermissionActionLifecycleState,
@@ -1185,8 +1189,8 @@ export interface PigeDesktopApi {
     readonly dismissFirstHomeGuide: () => Promise<OnboardingStatus>;
     readonly create: (request: CreateVaultRequest) => Promise<VaultActionResult>;
     readonly open: () => Promise<VaultActionResult>;
-    readonly revealKnowledgeRoot: () => Promise<void>;
-    readonly revealSourceAssetRoot: () => Promise<void>;
+    readonly revealKnowledgeRoot: () => Promise<VaultRevealResult>;
+    readonly revealSourceAssetRoot: () => Promise<VaultRevealResult>;
     readonly updateSourceStoragePolicy: (request: UpdateSourceStoragePolicyRequest) => Promise<VaultSummary>;
     readonly removeRecent: (vaultId: string) => Promise<readonly RecentVaultSummary[]>;
   };

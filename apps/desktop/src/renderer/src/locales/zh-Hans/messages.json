@@ -171,6 +171,7 @@
   "errors.url_fetch.invalid": "请输入有效的公开 HTTP 或 HTTPS 网址。",
   "errors.rag.query_invalid": "请输入非空且更短的问题。",
   "errors.vault.not_selected": "请先打开或创建仓库，再向 Pi Agent 提问。",
+  "errors.vault.reveal_failed": "Pige 无法显示这个存储位置，请重试。",
   "language.label": "语言",
   "library.empty": "还没有笔记或来源页面。",
   "library.invalid": "已跳过",
@@ -358,8 +359,10 @@
   "vaultSettings.createNew": "创建新仓库",
   "vaultSettings.currentVault": "当前仓库",
   "vaultSettings.openAnother": "打开其他仓库",
-  "vaultSettings.openInFinder": "在 Finder 中打开",
-  "vaultSettings.openSourceAssets": "打开来源资产",
+  "vaultSettings.openInFinder": "显示笔记存储",
+  "vaultSettings.openSourceAssets": "显示来源存储",
+  "vaultSettings.externalRootUnavailable": "外部存储尚未连接",
+  "vaultSettings.revealSucceeded": "已在系统文件管理器中打开。",
   "vaultSettings.subtitle": "本地文件始终是唯一权威数据。",
   "vaultSettings.title": "仓库与笔记存储"
 }

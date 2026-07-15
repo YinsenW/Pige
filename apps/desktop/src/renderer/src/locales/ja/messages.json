@@ -171,6 +171,7 @@
   "errors.url_fetch.invalid": "有効な公開 HTTP または HTTPS Web アドレスを入力してください。",
   "errors.rag.query_invalid": "空ではない短い質問を入力してください。",
   "errors.vault.not_selected": "Pi Agent に質問する前に Vault を開くか作成してください。",
+  "errors.vault.reveal_failed": "この保存先を表示できませんでした。もう一度お試しください。",
   "language.label": "言語",
   "library.empty": "ノートまたはソースページはまだありません。",
   "library.invalid": "スキップ",
@@ -358,8 +359,10 @@
   "vaultSettings.createNew": "新しい Vault を作成",
   "vaultSettings.currentVault": "現在の Vault",
   "vaultSettings.openAnother": "別の Vault を開く",
-  "vaultSettings.openInFinder": "Finder で開く",
-  "vaultSettings.openSourceAssets": "ソース資産を開く",
+  "vaultSettings.openInFinder": "ノート保存先を表示",
+  "vaultSettings.openSourceAssets": "ソース保存先を表示",
+  "vaultSettings.externalRootUnavailable": "外部ストレージは接続されていません",
+  "vaultSettings.revealSucceeded": "システムのファイルマネージャーで開きました。",
   "vaultSettings.subtitle": "ローカルファイルが唯一の正本です。",
   "vaultSettings.title": "Vault とノート保存先"
 }

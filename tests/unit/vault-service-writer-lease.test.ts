@@ -51,6 +51,7 @@ interface LeaseHarness {
   readonly factory: VaultWriterLeaseFactory;
   control(vaultPath: string): FakeLeaseControl;
   failAcquisition(vaultPath: string): void;
+  onNextAssert(vaultPath: string, callback: () => void): void;
 }
 
 beforeEach(() => {
@@ -228,6 +229,215 @@ describe("VaultService writer lease lifecycle", () => {
     expect(second.activeVaultPath()).toBe(canonicalVaultPath);
   });
 
+  it("returns the canonical summary when opening through an alias", () => {
+    const root = fs.realpathSync.native(makeTempRoot());
+    const vault = makeVault(root, "Canonical Vault");
+    const aliasPath = path.join(root, "vault-alias");
+    fs.symlinkSync(vault.path, aliasPath, process.platform === "win32" ? "junction" : "dir");
+    const factory: VaultWriterLeaseFactory = (requestedPath) => ({
+      vaultPath: fs.realpathSync.native(requestedPath),
+      assertHeld() {},
+      release() {}
+    });
+    const service = trackService(new VaultService(makeSettingsStore(root), () => false, factory));
+
+    const result = service.openPath(aliasPath);
+    expect(result).toMatchObject({
+      status: "completed",
+      vault: {
+        activeVaultPathDisplay: vault.path,
+        knowledgeRootDisplay: vault.path
+      },
+      onboarding: {
+        activeVault: {
+          activeVaultPathDisplay: vault.path,
+          knowledgeRootDisplay: vault.path
+        }
+      }
+    });
+    expect(service.current()?.activeVaultPathDisplay).toBe(vault.path);
+  });
+
+  it("reveals only canonical active storage roots and treats operating-system failures as body-free results", async () => {
+    const root = fs.realpathSync.native(makeTempRoot());
+    const vault = makeVault(root, "Reveal Safe");
+    const harness = makeLeaseHarness();
+    const revealedPaths: string[] = [];
+    const service = trackService(new VaultService(
+      makeSettingsStore(root),
+      () => false,
+      harness.factory,
+      async (targetPath) => {
+        revealedPaths.push(targetPath);
+        return "";
+      }
+    ));
+    service.openPath(vault.path);
+
+    await expect(service.revealKnowledgeRoot()).resolves.toEqual({
+      status: "revealed",
+      target: "knowledge_root"
+    });
+    await expect(service.revealSourceAssetRoot()).resolves.toEqual({
+      status: "revealed",
+      target: "source_asset_root"
+    });
+    expect(revealedPaths).toEqual([
+      fs.realpathSync.native(vault.path),
+      fs.realpathSync.native(path.join(vault.path, "raw"))
+    ]);
+
+    const osFailure = trackService(new VaultService(
+      makeSettingsStore(root, "os-failure-settings"),
+      () => false,
+      makeLeaseHarness().factory,
+      async () => "RAW_OS_FAILURE path-sentinel"
+    ));
+    osFailure.openPath(vault.path);
+    await expect(osFailure.revealKnowledgeRoot()).resolves.toEqual(revealFailure("knowledge_root"));
+
+    const rejected = trackService(new VaultService(
+      makeSettingsStore(root, "rejected-settings"),
+      () => false,
+      makeLeaseHarness().factory,
+      async () => { throw new Error("RAW_REJECTION path-sentinel"); }
+    ));
+    rejected.openPath(vault.path);
+    await expect(rejected.revealSourceAssetRoot()).resolves.toEqual(revealFailure("source_asset_root"));
+  });
+
+  it("does not reveal an unbound external root or a replaced config path", async () => {
+    const root = fs.realpathSync.native(makeTempRoot());
+    const vault = makeVault(root, "External Root");
+    const configPath = path.join(vault.path, ".pige", "config.json");
+    const config = JSON.parse(fs.readFileSync(configPath, "utf8")) as {
+      sourceStorage: { sourceAssetRootKind: string };
+    };
+    config.sourceStorage.sourceAssetRootKind = "external_binding";
+    fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+    const revealedPaths: string[] = [];
+    const service = trackService(new VaultService(
+      makeSettingsStore(root),
+      () => false,
+      makeLeaseHarness().factory,
+      async (targetPath) => {
+        revealedPaths.push(targetPath);
+        return "";
+      }
+    ));
+    service.openPath(vault.path);
+
+    expect(service.current()?.sourceAssetRootDisplay).toBe("");
+    await expect(service.revealSourceAssetRoot()).resolves.toEqual(revealFailure("source_asset_root"));
+    expect(revealedPaths).toEqual([]);
+
+    if (process.platform !== "win32") {
+      const replacementPath = path.join(root, "replacement-config.json");
+      fs.writeFileSync(replacementPath, fs.readFileSync(configPath));
+      fs.rmSync(configPath);
+      fs.symlinkSync(replacementPath, configPath);
+      await expect(service.revealSourceAssetRoot()).resolves.toEqual(revealFailure("source_asset_root"));
+      expect(revealedPaths).toEqual([]);
+    }
+  });
+
+  it("fails closed when the in-vault source root is replaced by a symlink", async () => {
+    if (process.platform === "win32") return;
+    const root = fs.realpathSync.native(makeTempRoot());
+    const vault = makeVault(root, "Source Symlink");
+    const outside = path.join(root, "outside");
+    fs.mkdirSync(outside);
+    fs.rmSync(path.join(vault.path, "raw"), { recursive: true });
+    fs.symlinkSync(outside, path.join(vault.path, "raw"), "dir");
+    const revealer = vi.fn(async () => "");
+    const service = trackService(new VaultService(
+      makeSettingsStore(root),
+      () => false,
+      makeLeaseHarness().factory,
+      revealer
+    ));
+    service.openPath(vault.path);
+
+    await expect(service.revealSourceAssetRoot()).resolves.toEqual(revealFailure("source_asset_root"));
+    expect(revealer).not.toHaveBeenCalled();
+  });
+
+  it("rejects a same-name source-root successor before calling the operating system", async () => {
+    const root = fs.realpathSync.native(makeTempRoot());
+    const vault = makeVault(root, "Source Successor");
+    const outside = path.join(root, "outside-successor");
+    fs.mkdirSync(outside);
+    const harness = makeLeaseHarness();
+    const revealer = vi.fn(async () => "");
+    const service = trackService(new VaultService(
+      makeSettingsStore(root),
+      () => false,
+      harness.factory,
+      revealer
+    ));
+    service.openPath(vault.path);
+    harness.onNextAssert(vault.path, () => undefined);
+    harness.onNextAssert(vault.path, () => {
+      fs.rmSync(path.join(vault.path, "raw"), { recursive: true });
+      fs.symlinkSync(
+        outside,
+        path.join(vault.path, "raw"),
+        process.platform === "win32" ? "junction" : "dir"
+      );
+    });
+
+    await expect(service.revealSourceAssetRoot()).resolves.toEqual(revealFailure("source_asset_root"));
+    expect(revealer).not.toHaveBeenCalled();
+    fs.rmSync(path.join(vault.path, "raw"), { recursive: true });
+    fs.mkdirSync(path.join(vault.path, "raw"));
+  });
+
+  it.skipIf(process.platform === "win32")("closes a reveal descriptor when identity inspection fails", async () => {
+    const root = fs.realpathSync.native(makeTempRoot());
+    const vault = makeVault(root, "Descriptor Inspect Failure");
+    const service = trackService(new VaultService(
+      makeSettingsStore(root),
+      () => false,
+      makeLeaseHarness().factory,
+      async () => ""
+    ));
+    service.openPath(vault.path);
+    const closeSpy = vi.spyOn(fs, "closeSync");
+    const fstatSpy = vi.spyOn(fs, "fstatSync").mockImplementationOnce(() => {
+      throw new Error("synthetic fstat failure");
+    });
+
+    await expect(service.revealKnowledgeRoot()).resolves.toEqual(revealFailure("knowledge_root"));
+    expect(closeSpy).toHaveBeenCalledTimes(1);
+    fstatSpy.mockRestore();
+    closeSpy.mockRestore();
+  });
+
+  it.skipIf(process.platform === "win32")("keeps a typed result when descriptor cleanup reports failure", async () => {
+    const root = fs.realpathSync.native(makeTempRoot());
+    const vault = makeVault(root, "Descriptor Close Failure");
+    const service = trackService(new VaultService(
+      makeSettingsStore(root),
+      () => false,
+      makeLeaseHarness().factory,
+      async () => ""
+    ));
+    service.openPath(vault.path);
+    const realClose = fs.closeSync.bind(fs);
+    let descriptorToClose: number | undefined;
+    const closeSpy = vi.spyOn(fs, "closeSync").mockImplementationOnce((descriptor) => {
+      descriptorToClose = descriptor;
+      throw new Error("synthetic close failure");
+    });
+
+    await expect(service.revealKnowledgeRoot()).resolves.toEqual({
+      status: "revealed",
+      target: "knowledge_root"
+    });
+    closeSpy.mockRestore();
+    if (descriptorToClose !== undefined) realClose(descriptorToClose);
+  });
+
   it("closes ordinary vault access while atomically swapping a restored binding", () => {
     const root = makeTempRoot();
     const original = makeVault(root, "Original");
@@ -368,11 +578,27 @@ function trackService(service: VaultService): VaultService {
   return service;
 }
 
+function revealFailure(target: "knowledge_root" | "source_asset_root") {
+  return {
+    status: "failed" as const,
+    target,
+    error: {
+      code: "vault.reveal_failed",
+      domain: "vault" as const,
+      messageKey: "errors.vault.reveal_failed",
+      retryable: true,
+      severity: "warning" as const,
+      userAction: "retry" as const
+    }
+  };
+}
+
 function makeLeaseHarness(): LeaseHarness {
   const acquiredPaths: string[] = [];
   const events: LeaseEvent[] = [];
   const failedPaths = new Set<string>();
   const controls = new Map<string, FakeLeaseControl>();
+  const assertHooks = new Map<string, Array<() => void>>();
 
   const factory: VaultWriterLeaseFactory = (vaultPathInput) => {
     const vaultPath = path.resolve(vaultPathInput);
@@ -394,6 +620,7 @@ function makeLeaseHarness(): LeaseHarness {
             "The active vault writer lease is no longer held."
           );
         }
+        assertHooks.get(vaultPath)?.shift()?.();
       },
       release() {
         events.push({ kind: "release", vaultPath });
@@ -429,6 +656,12 @@ function makeLeaseHarness(): LeaseHarness {
     },
     failAcquisition(vaultPath) {
       failedPaths.add(path.resolve(vaultPath));
+    },
+    onNextAssert(vaultPath, callback) {
+      const canonicalPath = path.resolve(vaultPath);
+      const callbacks = assertHooks.get(canonicalPath) ?? [];
+      callbacks.push(callback);
+      assertHooks.set(canonicalPath, callbacks);
     }
   };
 }
