@@ -468,18 +468,16 @@ Tests must verify:
 
 Tests must verify:
 
-- `resources/ui-visual-contract.manifest.json` agrees with the visual owner and the live
-  renderer CSS for protected tokens and structural metrics.
-- Deterministic real-render screenshots cover the governed viewport, locale, theme, and
-  state matrix for changed surfaces; synthetic data is mandatory.
-- Pixel comparison uses the manifest threshold as a review trigger, not automatic proof
-  of usability or approval.
-- Baseline changes have human review and a contract-linked rationale; bulk auto-update is
-  not an acceptable way to clear a failure.
-- Screenshot sidecars record build, platform, viewport, device scale factor, locale,
-  theme, fixture state, and font readiness so differences remain reproducible.
-- Release evidence includes macOS and Windows captures for critical workflows and records
-  platform text/window-chrome differences separately.
+- `resources/ui-visual-contract.manifest.json`, its owner and live CSS agree on protected
+  tokens/geometry.
+- Real Electron side-by-side screenshots cover changed states at representative compact,
+  resident and wide widths; thresholded comparison triggers review, never auto-approval.
+- Sidecars bind build, platform, viewport/scale, locale/theme, fixture and font readiness;
+  baseline changes require rationale and UI Design review of the exact integrated bytes.
+- Synthetic contract fixtures prove state/behavior only and never represent real product
+  state or substitute for rendered equivalence.
+- Critical macOS and Windows evidence records native text/window chrome separately; the
+  integrated titlebar must retain caption controls with no overlap or duplicate row.
 
 - Compact capture layout works at narrow width.
 - Expanded workspace and full-screen reader preserve context.
@@ -492,11 +490,9 @@ Tests must verify:
 - Long French/German labels do not overflow critical controls.
 - CJK text renders cleanly.
 
-Visual regressions are classified separately from component correctness. Renderer tests
-prove behavior and accessibility semantics; screenshot baselines prove rendered geometry
-and styling; focused human review proves that a changed composition remains calm, legible,
-and faithful to the Simplicity First contract. None of these layers substitutes for the
-others.
+Renderer tests prove behavior/accessibility; screenshots prove geometry/style; final UI
+Design review proves approved composition. These evidence layers never substitute for one
+another.
 
 ## 11. Performance Gates
 

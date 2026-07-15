@@ -2,13 +2,16 @@ import {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
   type DragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   type RefObject
 } from "react";
 import { PigeIcon, type PigeIconName } from "./components/PigeIcon";
+import { KnowledgeTreeMap } from "./components/KnowledgeTreeMap";
 import { ProposalReviewPanel } from "./components/ProposalReviewPanel";
+import pigeMarkUrl from "../../../../../resources/brand/pige-icon/master/pige-icon-1024.png";
 import deMessages from "./locales/de/messages.json";
 import enMessages from "./locales/en/messages.json";
 import frMessages from "./locales/fr/messages.json";
@@ -27,8 +30,6 @@ import type {
   HomeAgentModelUsage,
   JobSummary,
   KnowledgeActivitySummary,
-  KnowledgeTreeNode,
-  KnowledgeTreePageRef,
   KnowledgeTreeResult,
   LibraryListResult,
   LibraryPageSummary,
@@ -156,7 +157,28 @@ const messageCatalogs: Record<Locale, Record<string, string>> = {
   de: deMessages
 };
 
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(() =>
+    typeof window !== "undefined" && typeof window.matchMedia === "function"
+      ? window.matchMedia(query).matches
+      : false
+  );
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const media = window.matchMedia(query);
+    const update = (): void => setMatches(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, [query]);
+
+  return matches;
+}
+
 export function App(): React.JSX.Element {
+  const sidebarOverlayLayout = useMediaQuery("(max-width: 831px)");
+  const agentOverlayLayout = useMediaQuery("(max-width: 1199px)");
   const [health, setHealth] = useState<AppHealth | null>(null);
   const [onboarding, setOnboarding] = useState<OnboardingStatus | null>(null);
   const [recentVaults, setRecentVaults] = useState<readonly RecentVaultSummary[]>([]);
@@ -166,6 +188,7 @@ export function App(): React.JSX.Element {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
   const [developmentNotice, setDevelopmentNotice] = useState<DevelopmentNotice | null>(null);
+  const [noteAgentOpen, setNoteAgentOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [diagnosticsHealth, setDiagnosticsHealth] = useState<DiagnosticsHealth | null>(null);
@@ -197,8 +220,12 @@ export function App(): React.JSX.Element {
   const [selectedNoteRelated, setSelectedNoteRelated] = useState<NoteRelatedState>(null);
   const [noteLoadingPageId, setNoteLoadingPageId] = useState<string | null>(null);
   const noteOpenSequence = useRef(0);
+  const noteAgentDisclosureInitialized = useRef(false);
   const settingsTriggerRef = useRef<HTMLButtonElement | null>(null);
   const settingsOpenerRef = useRef<HTMLButtonElement | null>(null);
+  const sidebarRef = useRef<HTMLElement | null>(null);
+  const sidebarToggleRef = useRef<HTMLButtonElement | null>(null);
+  const noteAgentToggleRef = useRef<HTMLButtonElement | null>(null);
   const knowledgeTreeReturnFocusKey = useRef<string | null>(null);
   const modelRefreshSequence = useRef(0);
   const agentRuntimeRefreshSequence = useRef(0);
@@ -406,6 +433,10 @@ export function App(): React.JSX.Element {
     try {
       const note = await window.pige.notes.render({ pageId });
       if (requestId !== noteOpenSequence.current) return;
+      if (!noteAgentDisclosureInitialized.current) {
+        noteAgentDisclosureInitialized.current = true;
+        setNoteAgentOpen(!agentOverlayLayout);
+      }
       setSelectedNote(note);
       void loadNoteRelated(pageId, requestId, noteOpenSequence, setSelectedNoteRelated);
     } catch {
@@ -418,6 +449,7 @@ export function App(): React.JSX.Element {
 
   const toggleSidebar = async (): Promise<void> => {
     const nextSidebarOpen = !(windowState?.sidebarOpen ?? false);
+    if (nextSidebarOpen && sidebarOverlayLayout && noteAgentOpen) setNoteAgentOpen(false);
     if (nextSidebarOpen && windowState?.mode === "compact") {
       setWindowState(await window.pige.window.setMode({ mode: "expanded" }));
     } else if (!nextSidebarOpen && view === "home" && windowState?.mode === "expanded") {
@@ -425,6 +457,20 @@ export function App(): React.JSX.Element {
     }
     setWindowState(await window.pige.window.setSidebarOpen({ sidebarOpen: nextSidebarOpen }));
     if (nextSidebarOpen && activeVault) void refreshLibrary();
+    if (!nextSidebarOpen && sidebarOverlayLayout) {
+      window.requestAnimationFrame(() => sidebarToggleRef.current?.focus());
+    }
+  };
+
+  const navigateHome = (): void => {
+    noteOpenSequence.current += 1;
+    knowledgeTreeReturnFocusKey.current = null;
+    setSelectedNote(null);
+    setSelectedNoteRelated(null);
+    setView("home");
+    void refreshVaultState().catch(() => {
+      setCaptureToast({ kind: "error", message: t("error.generic") });
+    });
   };
 
   const toggleAlwaysOnTop = async (): Promise<void> => {
@@ -580,6 +626,8 @@ export function App(): React.JSX.Element {
   const activeVault = onboarding?.activeVault;
   const blocked = !onboarding || onboarding.state === "blocked_no_vault";
   const sidebarOpen = windowState?.sidebarOpen ?? false;
+  const sidebarModal = sidebarOverlayLayout && sidebarOpen;
+  const agentModal = agentOverlayLayout && Boolean(selectedNote && noteAgentOpen);
   const currentTitle = view === "home"
     ? "Pige"
     : view === "library"
@@ -591,34 +639,48 @@ export function App(): React.JSX.Element {
     void refreshLibrary();
   }, [activeVault?.vaultId, libraryList, sidebarOpen]);
 
+  useEffect(() => {
+    if (!sidebarModal) return;
+    const frame = window.requestAnimationFrame(() => {
+      focusFirstOverlayControl(sidebarRef.current);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [sidebarModal]);
+
+  const toggleNoteAgent = (): void => {
+    const nextOpen = !noteAgentOpen;
+    if (nextOpen && sidebarOverlayLayout && sidebarOpen) {
+      void toggleSidebar().then(() => setNoteAgentOpen(true));
+      return;
+    }
+    setNoteAgentOpen(nextOpen);
+  };
+
   return (
-    <main
-      className={`shell mode-${windowState?.mode ?? "compact"}${dropActive ? " drop-active" : ""}`}
+    <div
+      className={`shell app-window mode-${windowState?.mode ?? "compact"}${sidebarOpen ? " sidebar-expanded" : ""}${selectedNote ? " note-mode" : ""}${dropActive ? " drop-active" : ""}`}
       aria-label="Pige"
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <header className="topbar">
-        <div className="topbar-leading">
+      <header className="topbar titlebar" inert={agentModal}>
+        <div className="topbar-leading titlebar-navigation">
           {view !== "home" ? (
             <button
               className="icon-button home-return-button"
               type="button"
               aria-label={t("nav.home")}
               title={t("nav.home")}
-              onClick={() => {
-                setView("home");
-                void refreshVaultState().catch(() => {
-                  setCaptureToast({ kind: "error", message: t("error.generic") });
-                });
-              }}
+              tabIndex={sidebarModal ? -1 : undefined}
+              onClick={navigateHome}
             >
               <PigeIcon name="home" />
             </button>
           ) : null}
           <button
+            ref={sidebarToggleRef}
             className="icon-button sidebar-toggle-button"
             type="button"
             aria-label={sidebarOpen ? t("topbar.collapseSidebar") : t("topbar.expandSidebar")}
@@ -630,27 +692,15 @@ export function App(): React.JSX.Element {
             <PigeIcon name="panel" />
           </button>
         </div>
-        <span className="topbar-title">{currentTitle}</span>
+        <span className="topbar-title" aria-hidden="true">{currentTitle}</span>
         <div className="topbar-actions">
-          <span className="status">{health?.status === "ok" ? t("status.ready") : t("status.starting")}</span>
-          <select
-            className="locale-select"
-            aria-label={t("language.label")}
-            value={locale}
-            onChange={(event) => void updateLocale(event.target.value as Locale)}
-          >
-            {availableLocales.map((availableLocale) => (
-              <option key={availableLocale} value={availableLocale}>
-                {localeLabels[availableLocale]}
-              </option>
-            ))}
-          </select>
           <button
             type="button"
             className={windowState?.alwaysOnTop ? "icon-button pin-button active" : "icon-button pin-button"}
             aria-label={t("topbar.pin")}
             title={t("topbar.pin")}
             aria-pressed={windowState?.alwaysOnTop ?? false}
+            tabIndex={sidebarModal ? -1 : undefined}
             onClick={() => void toggleAlwaysOnTop()}
           >
             <PigeIcon name="pin" />
@@ -658,20 +708,41 @@ export function App(): React.JSX.Element {
         </div>
       </header>
 
-      <div className="workspace">
+      <div className={`main-layout${sidebarOpen ? " sidebar-open" : ""}${selectedNote ? " note-open" : ""}${selectedNote && noteAgentOpen ? " agent-open" : ""}`}>
         {sidebarOpen ? (
-          <aside className="sidebar" id="pige-library-sidebar">
-            <nav className="primary-navigation" aria-label={t("nav.library")}>
+          <aside
+            ref={sidebarRef}
+            className="sidebar"
+            id="pige-library-sidebar"
+            role={sidebarModal ? "dialog" : undefined}
+            aria-modal={sidebarModal ? "true" : undefined}
+            aria-label={sidebarModal ? t("nav.library") : undefined}
+            inert={agentModal}
+            onKeyDown={(event) => {
+              if (!sidebarModal) return;
+              containOverlayFocus(event, event.currentTarget, () => void toggleSidebar());
+            }}
+          >
+            <div className="sidebar-inner">
+            <div className="sidebar-brand">
+              <img src={pigeMarkUrl} alt="" />
+              <span>Pige Agent</span>
+              <button
+                className="icon-button sidebar-search"
+                type="button"
+                aria-label={t("library.search")}
+                title={t("library.search")}
+                onClick={() => showDevelopmentCapability("reader", "knowledge_search")}
+              >
+                <PigeIcon name="search" />
+              </button>
+            </div>
+            <nav className="primary-navigation nav-list" aria-label={t("nav.library")}>
             <button
               className={view === "home" ? "nav-item active" : "nav-item"}
               type="button"
               aria-current={view === "home" ? "page" : undefined}
-              onClick={() => {
-                setView("home");
-                void refreshVaultState().catch(() => {
-                  setCaptureToast({ kind: "error", message: t("error.generic") });
-                });
-              }}
+              onClick={navigateHome}
             >
               <PigeIcon name="home" size={16} />
               <span>{t("nav.home")}</span>
@@ -727,9 +798,10 @@ export function App(): React.JSX.Element {
               </span>
               <PigeIcon name="expand" size={14} />
             </button>
+            </div>
           </aside>
         ) : null}
-
+        <main className="workspace" inert={sidebarModal || agentModal}>
         {blocked ? (
           <FirstRunPanel
             busy={busy}
@@ -754,6 +826,7 @@ export function App(): React.JSX.Element {
             selectedNoteRelated={selectedNoteRelated}
             noteLoadingPageId={noteLoadingPageId}
             error={libraryError}
+            onGoHome={navigateHome}
             onRefresh={refreshLibrary}
             onOpenNote={openNote}
             onCloseNote={() => {
@@ -761,6 +834,9 @@ export function App(): React.JSX.Element {
               setSelectedNote(null);
               setSelectedNoteRelated(null);
             }}
+            noteAgentOpen={noteAgentOpen}
+            onToggleNoteAgent={toggleNoteAgent}
+            noteAgentToggleRef={noteAgentToggleRef}
             developmentNotice={developmentNotice?.surface === "reader" ? developmentNotice : null}
             onDevelopment={(capability) => showDevelopmentCapability("reader", capability)}
             t={t}
@@ -774,6 +850,7 @@ export function App(): React.JSX.Element {
               noteLoadingPageId={noteLoadingPageId}
               error={libraryError}
               readerBackLabel={t("knowledgeTree.back")}
+              onGoHome={navigateHome}
               onRefresh={refreshLibrary}
               onOpenNote={openNote}
               onCloseNote={() => {
@@ -782,6 +859,9 @@ export function App(): React.JSX.Element {
                 setSelectedNoteRelated(null);
                 restoreKnowledgeTreeFocus(knowledgeTreeReturnFocusKey.current);
               }}
+              noteAgentOpen={noteAgentOpen}
+              onToggleNoteAgent={toggleNoteAgent}
+              noteAgentToggleRef={noteAgentToggleRef}
               developmentNotice={developmentNotice?.surface === "reader" ? developmentNotice : null}
               onDevelopment={(capability) => showDevelopmentCapability("reader", capability)}
               t={t}
@@ -791,6 +871,7 @@ export function App(): React.JSX.Element {
               tree={knowledgeTree}
               error={libraryError}
               noteLoadingPageId={noteLoadingPageId}
+              onGoHome={navigateHome}
               onRefresh={refreshKnowledgeTree}
               onOpenNote={async (pageId, focusKey) => {
                 knowledgeTreeReturnFocusKey.current = focusKey;
@@ -833,6 +914,19 @@ export function App(): React.JSX.Element {
             t={t}
           />
         )}
+        </main>
+        {selectedNote ? (
+          <NoteAgentUnavailable
+            open={noteAgentOpen}
+            modal={agentModal}
+            noteTitle={selectedNote.summary.title}
+            onClose={() => {
+              setNoteAgentOpen(false);
+              window.requestAnimationFrame(() => noteAgentToggleRef.current?.focus());
+            }}
+            t={t}
+          />
+        ) : null}
       </div>
       {settingsOpen ? (
         <SettingsSurface
@@ -909,7 +1003,7 @@ export function App(): React.JSX.Element {
           {captureToast.message}
         </div>
       ) : null}
-    </main>
+    </div>
   );
 }
 
@@ -1051,9 +1145,13 @@ export function LibraryPanel(props: {
   readonly noteLoadingPageId: string | null;
   readonly error: string | null;
   readonly readerBackLabel?: string;
+  readonly onGoHome: () => void;
   readonly onRefresh: () => Promise<void>;
   readonly onOpenNote: (pageId: string) => Promise<void>;
   readonly onCloseNote: () => void;
+  readonly noteAgentOpen: boolean;
+  readonly onToggleNoteAgent: () => void;
+  readonly noteAgentToggleRef: RefObject<HTMLButtonElement | null>;
   readonly developmentNotice: DevelopmentNotice | null;
   readonly onDevelopment: (capability: DevelopmentCapability) => void;
   readonly t: (key: string) => string;
@@ -1076,9 +1174,17 @@ export function LibraryPanel(props: {
               <PigeIcon name="edit" size={15} />
               {props.t("development.capability.selection_actions")}
             </button>
-            <button type="button" className="ghost" onClick={() => props.onDevelopment("note_agent")}>
-              <PigeIcon name="model" size={15} />
-              {props.t("development.capability.note_agent")}
+            <button
+              ref={props.noteAgentToggleRef}
+              type="button"
+              className="icon-button reader-pane-toggle"
+              aria-label={props.noteAgentOpen ? props.t("noteAgent.hide") : props.t("noteAgent.show")}
+              title={props.noteAgentOpen ? props.t("noteAgent.hide") : props.t("noteAgent.show")}
+              aria-expanded={props.noteAgentOpen}
+              aria-controls="note-agent-pane"
+              onClick={props.onToggleNoteAgent}
+            >
+              <PigeIcon name="panel" size={17} />
             </button>
           </div>
         </div>
@@ -1149,13 +1255,36 @@ export function LibraryPanel(props: {
         ) : null}
       </div>
 
-      {props.error ? <p className="error">{props.error}</p> : null}
-      {!props.libraryList && !props.error ? (
-        <p className="library-empty">{props.t("library.loading")}</p>
+      {props.error ? (
+        <section className="library-state unavailable" role="alert">
+          <div className="state-copy">
+            <h2>{props.t("library.unavailableTitle")}</h2>
+            <p>{props.t("library.unavailableDescription")}</p>
+            <button className="primary-button" type="button" onClick={() => void props.onRefresh()}>
+              {props.t("library.refresh")}
+            </button>
+          </div>
+        </section>
+      ) : !props.libraryList ? (
+        <section className="library-state loading" role="status" aria-busy="true">
+          <div className="state-copy">
+            <span className="state-spinner" aria-hidden="true" />
+            <h2>{props.t("library.loading")}</h2>
+            <p>{props.t("library.loadingDescription")}</p>
+          </div>
+        </section>
       ) : pages.length === 0 ? (
-        <p className="library-empty">{props.t("library.empty")}</p>
+        <section className="library-state empty" role="status">
+          <div className="state-copy">
+            <h2>{props.t("library.empty")}</h2>
+            <p>{props.t("library.emptyDescription")}</p>
+            <button className="primary-button" type="button" onClick={props.onGoHome}>
+              {props.t("library.addSource")}
+            </button>
+          </div>
+        </section>
       ) : visiblePages.length === 0 ? (
-        <p className="library-empty">{props.t("library.noMatches")}</p>
+        <p className="search-empty visible" role="status">{props.t("library.noMatches")}</p>
       ) : (
         <div className="library-list">
           {visiblePages.map((page) => (
@@ -1189,6 +1318,7 @@ export function KnowledgeTreePanel(props: {
   readonly tree: KnowledgeTreeResult | null;
   readonly error: string | null;
   readonly noteLoadingPageId: string | null;
+  readonly onGoHome: () => void;
   readonly onRefresh: () => Promise<void>;
   readonly onOpenNote: (pageId: string, focusKey: string) => Promise<void>;
   readonly developmentNotice: DevelopmentNotice | null;
@@ -1196,7 +1326,6 @@ export function KnowledgeTreePanel(props: {
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const roots = props.tree?.roots ?? [];
-  const maxWeight = Math.max(1, ...roots.map((root) => root.metrics.weight));
 
   return (
     <section className="knowledge-tree-page" aria-labelledby="knowledge-tree-heading">
@@ -1216,52 +1345,52 @@ export function KnowledgeTreePanel(props: {
         </button>
       </header>
 
-      <div className="knowledge-tree-tools" role="toolbar" aria-label={props.t("knowledgeTree.title")}>
-        <button type="button" className="ghost" onClick={() => props.onDevelopment("knowledge_search")}>
-          <PigeIcon name="search" size={15} />
-          {props.t("development.capability.knowledge_search")}
-        </button>
-        <button type="button" className="ghost" onClick={() => props.onDevelopment("knowledge_filter")}>
-          <PigeIcon name="filter" size={15} />
-          {props.t("development.capability.knowledge_filter")}
-        </button>
-        <button type="button" className="ghost" onClick={() => props.onDevelopment("knowledge_view")}>
-          <PigeIcon name="fit" size={15} />
-          {props.t("development.capability.knowledge_view")}
-        </button>
-      </div>
       <DevelopmentStatus notice={props.developmentNotice} t={props.t} />
 
-      <div className="knowledge-tree-totals" aria-label={props.t("knowledgeTree.summary")}>
-        <span>{props.t("knowledgeTree.domains")}: {roots.length}</span>
-        <span>{props.t("knowledgeTree.topics")}: {props.tree?.totals.topicCount ?? 0}</span>
-        <span>{props.t("knowledgeTree.concepts")}: {props.tree?.totals.conceptCount ?? 0}</span>
-        <span>{props.t("knowledgeTree.fragments")}: {props.tree?.totals.fragmentPageCount ?? 0}</span>
-        <span>{props.t("knowledgeTree.sources")}: {props.tree?.totals.sourceCount ?? 0}</span>
-      </div>
-
-      {props.error ? <p className="error" role="alert">{props.error}</p> : null}
-      {!props.tree && !props.error ? (
-        <p className="knowledge-tree-empty" role="status">{props.t("knowledgeTree.loading")}</p>
-      ) : props.tree?.degraded ? (
-        <p className="knowledge-tree-empty" role="status">{props.t("knowledgeTree.degraded")}</p>
+      {props.error || props.tree?.degraded ? (
+        <section className="knowledge-state degraded" role={props.error ? "alert" : "status"}>
+          <div className="state-copy">
+            <h2>{props.t("knowledgeTree.degraded")}</h2>
+            <p>{props.t("knowledgeTree.degradedDescription")}</p>
+            <button className="primary-button" type="button" onClick={() => void props.onRefresh()}>
+              {props.t("library.refresh")}
+            </button>
+          </div>
+        </section>
+      ) : !props.tree ? (
+        <section className="knowledge-state loading" role="status" aria-busy="true">
+          <div className="state-copy">
+            <span className="state-spinner" aria-hidden="true" />
+            <h2>{props.t("knowledgeTree.loading")}</h2>
+            <p>{props.t("knowledgeTree.loadingDescription")}</p>
+          </div>
+        </section>
       ) : roots.length === 0 ? (
-        <p className="knowledge-tree-empty">{props.t("knowledgeTree.empty")}</p>
+        <section className="knowledge-state empty" role="status">
+          <div className="state-copy">
+            <h2>{props.t("knowledgeTree.empty")}</h2>
+            <p>{props.t("knowledgeTree.emptyDescription")}</p>
+            <button className="primary-button" type="button" onClick={props.onGoHome}>
+              {props.t("knowledgeTree.addSource")}
+            </button>
+          </div>
+        </section>
       ) : (
-        <ul className="knowledge-tree-roots" aria-label={props.t("knowledgeTree.title")}>
-          {roots.map((root, index) => (
-            <KnowledgeTreeNodeView
-              key={root.id}
-              node={root}
-              pathKey={`root-${index}`}
-              maxWeight={maxWeight}
-              defaultExpanded
-              noteLoadingPageId={props.noteLoadingPageId}
-              onOpenNote={props.onOpenNote}
-              t={props.t}
-            />
-          ))}
-        </ul>
+        <>
+          <p className="knowledge-tree-totals visually-hidden" aria-label={props.t("knowledgeTree.summary")}>
+            <span>{props.t("knowledgeTree.domains")}: {roots.length}</span>
+            <span>{props.t("knowledgeTree.topics")}: {props.tree?.totals.topicCount ?? 0}</span>
+            <span>{props.t("knowledgeTree.concepts")}: {props.tree?.totals.conceptCount ?? 0}</span>
+            <span>{props.t("knowledgeTree.fragments")}: {props.tree?.totals.fragmentPageCount ?? 0}</span>
+            <span>{props.t("knowledgeTree.sources")}: {props.tree?.totals.sourceCount ?? 0}</span>
+          </p>
+          <KnowledgeTreeMap
+            roots={roots}
+            noteLoadingPageId={props.noteLoadingPageId}
+            onOpenNote={props.onOpenNote}
+            t={props.t}
+          />
+        </>
       )}
 
       {props.tree && props.tree.invalidPageCount > 0 ? (
@@ -1271,145 +1400,6 @@ export function KnowledgeTreePanel(props: {
       ) : null}
     </section>
   );
-}
-
-function KnowledgeTreeNodeView(props: {
-  readonly node: KnowledgeTreeNode;
-  readonly pathKey: string;
-  readonly maxWeight: number;
-  readonly defaultExpanded?: boolean;
-  readonly noteLoadingPageId: string | null;
-  readonly onOpenNote: (pageId: string, focusKey: string) => Promise<void>;
-  readonly t: (key: string) => string;
-}): React.JSX.Element {
-  const [expanded, setExpanded] = useState(props.defaultExpanded ?? false);
-  const hasContents = props.node.children.length > 0 || props.node.pageRefs.length > 0;
-  const groupId = `knowledge-tree-group-${props.pathKey}`;
-  const title = knowledgeTreeNodeTitle(props.node, props.t);
-  const density = knowledgeTreeDensity(props.node);
-  const navigationFocusKey = `${props.pathKey}-node`;
-
-  return (
-    <li className={`knowledge-tree-node kind-${props.node.kind} density-${density}${props.node.status === "needs_review" ? " needs-review" : ""}`}>
-      <div className="knowledge-tree-node-row">
-        {hasContents ? (
-          <button
-            type="button"
-            className="knowledge-tree-disclosure"
-            aria-label={`${expanded ? props.t("knowledgeTree.collapse") : props.t("knowledgeTree.expand")}: ${title}`}
-            title={`${expanded ? props.t("knowledgeTree.collapse") : props.t("knowledgeTree.expand")}: ${title}`}
-            aria-expanded={expanded}
-            aria-controls={groupId}
-            onClick={() => setExpanded((current) => !current)}
-          >
-            <PigeIcon name={expanded ? "collapse" : "expand"} size={14} />
-          </button>
-        ) : <span className="knowledge-tree-disclosure-spacer" aria-hidden="true" />}
-
-        <div className="knowledge-tree-node-main">
-          <div className="knowledge-tree-node-title">
-            {props.node.navigation ? (
-              <button
-                type="button"
-                className="knowledge-tree-open"
-                data-knowledge-open-key={navigationFocusKey}
-                disabled={props.noteLoadingPageId === props.node.navigation.pageId}
-                onClick={() => void props.onOpenNote(props.node.navigation!.pageId, navigationFocusKey)}
-              >
-                {title}
-              </button>
-            ) : <strong>{title}</strong>}
-            <span>{props.t(`knowledgeTree.kind.${props.node.kind}`)}</span>
-          </div>
-          <meter
-            className="knowledge-tree-weight"
-            min={0}
-            max={props.maxWeight}
-            value={Math.min(props.node.metrics.weight, props.maxWeight)}
-            aria-label={`${props.t("knowledgeTree.weight")}: ${props.node.metrics.weight}`}
-          />
-          <div className="knowledge-tree-node-metrics">
-            <span>{props.t("knowledgeTree.weight")}: {props.node.metrics.weight}</span>
-            <span>{props.t("knowledgeTree.fragments")}: {props.node.metrics.fragmentPageCount}</span>
-            <span>{props.t("knowledgeTree.sources")}: {props.node.metrics.sourceCount}</span>
-            <span>{props.t("knowledgeTree.leaves")}: {props.node.metrics.leafCount}</span>
-            {props.node.relatedParentPageIds.length > 0 ? (
-              <span>{props.t("knowledgeTree.relatedBranches")}: {props.node.relatedParentPageIds.length}</span>
-            ) : null}
-          </div>
-        </div>
-      </div>
-
-      {hasContents && expanded ? (
-        <ul id={groupId} className="knowledge-tree-children">
-          {props.node.children.map((child, index) => (
-            <KnowledgeTreeNodeView
-              key={child.id}
-              node={child}
-              pathKey={`${props.pathKey}-child-${index}`}
-              maxWeight={props.maxWeight}
-              noteLoadingPageId={props.noteLoadingPageId}
-              onOpenNote={props.onOpenNote}
-              t={props.t}
-            />
-          ))}
-          {props.node.pageRefs.map((page, index) => (
-            <KnowledgeTreePageLeaf
-              key={page.pageId}
-              page={page}
-              focusKey={`${props.pathKey}-page-${index}`}
-              noteLoadingPageId={props.noteLoadingPageId}
-              onOpenNote={props.onOpenNote}
-              t={props.t}
-            />
-          ))}
-        </ul>
-      ) : null}
-    </li>
-  );
-}
-
-function KnowledgeTreePageLeaf(props: {
-  readonly page: KnowledgeTreePageRef;
-  readonly focusKey: string;
-  readonly noteLoadingPageId: string | null;
-  readonly onOpenNote: (pageId: string, focusKey: string) => Promise<void>;
-  readonly t: (key: string) => string;
-}): React.JSX.Element {
-  return (
-    <li className={`knowledge-tree-page-leaf${props.page.status === "needs_review" ? " needs-review" : ""}`}>
-      <span aria-hidden="true" className="knowledge-tree-leaf-mark">
-        <PigeIcon name={props.page.pageType === "source" ? "file" : "fileText"} size={13} />
-      </span>
-      <button
-        type="button"
-        className="knowledge-tree-open"
-        data-knowledge-open-key={props.focusKey}
-        disabled={props.noteLoadingPageId === props.page.pageId}
-        onClick={() => void props.onOpenNote(props.page.pageId, props.focusKey)}
-      >
-        {props.page.title}
-      </button>
-      <span>{props.t(`library.type.${props.page.pageType}`)}</span>
-      {props.page.sourceIds.length > 0 ? (
-        <span>{props.t("knowledgeTree.sources")}: {props.page.sourceIds.length}</span>
-      ) : null}
-    </li>
-  );
-}
-
-function knowledgeTreeNodeTitle(node: KnowledgeTreeNode, t: (key: string) => string): string {
-  if (node.synthetic) return t("knowledgeTree.unassigned");
-  if (node.kind === "source" && !node.navigation) return t("knowledgeTree.sourceEvidence");
-  return node.title;
-}
-
-function knowledgeTreeDensity(node: KnowledgeTreeNode): "none" | "light" | "medium" | "strong" {
-  const evidenceCount = node.metrics.fragmentPageCount + node.metrics.sourceCount;
-  if (evidenceCount === 0) return "none";
-  if (evidenceCount <= 2) return "light";
-  if (evidenceCount <= 6) return "medium";
-  return "strong";
 }
 
 function LibraryPageRow(props: {
@@ -1550,6 +1540,124 @@ function NoteRelatedPanel(props: {
       />
     </aside>
   );
+}
+
+function NoteAgentUnavailable(props: {
+  readonly open: boolean;
+  readonly modal: boolean;
+  readonly noteTitle: string;
+  readonly onClose: () => void;
+  readonly t: (key: string) => string;
+}): React.JSX.Element {
+  const paneRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!props.open || !props.modal) return;
+    const frame = window.requestAnimationFrame(() => focusFirstOverlayControl(paneRef.current));
+    return () => window.cancelAnimationFrame(frame);
+  }, [props.modal, props.open]);
+
+  if (!props.open) return <></>;
+
+  return (
+    <aside
+      ref={paneRef}
+      className="note-agent"
+      id="note-agent-pane"
+      aria-label={props.t("development.capability.note_agent")}
+      aria-modal={props.modal ? "true" : undefined}
+      role={props.modal ? "dialog" : undefined}
+      onKeyDown={(event) => {
+        if (!props.modal) return;
+        containOverlayFocus(event, event.currentTarget, props.onClose);
+      }}
+    >
+      <div className="note-agent-inner">
+        <header className="note-agent-header">
+          <PigeIcon name="file" size={16} />
+          <span title={props.noteTitle}>{props.noteTitle}</span>
+          <PigeIcon name="collapse" size={14} />
+          <button
+            className="icon-button"
+            type="button"
+            aria-label={props.t("noteAgent.hide")}
+            title={props.t("noteAgent.hide")}
+            onClick={props.onClose}
+          >
+            <PigeIcon name="close" size={17} />
+          </button>
+        </header>
+        <div className="note-agent-thread">
+          <section className="note-agent-unavailable" role="status" aria-live="polite" aria-atomic="true">
+            <img src={pigeMarkUrl} alt="" />
+            <strong>{props.t("development.capability.note_agent")}</strong>
+            <p>{props.t("development.state.unavailable")}</p>
+          </section>
+        </div>
+        <div className="note-composer-wrap">
+          <section className="note-composer" aria-label={props.t("development.capability.note_agent")}>
+            <textarea aria-label={props.t("noteAgent.placeholder")} placeholder={props.t("noteAgent.placeholder")} disabled />
+            <div className="note-composer-toolbar">
+              <button className="attach-button" type="button" aria-label={props.t("home.attachFile")} disabled>
+                <PigeIcon name="attach" size={18} />
+              </button>
+              <div className="note-agent-model" aria-label={props.t("noteAgent.modelUnavailable")}>
+                <span className="model-status-dot unavailable" aria-hidden="true" />
+                <span>{props.t("noteAgent.modelUnavailable")}</span>
+                <PigeIcon name="collapse" size={14} />
+              </div>
+              <button className="send-button" type="button" aria-label={props.t("home.send")} disabled>
+                <PigeIcon name="send" size={16} />
+              </button>
+            </div>
+          </section>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+const overlayFocusableSelector = [
+  "button:not([disabled])",
+  "[href]",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[tabindex]:not([tabindex='-1'])"
+].join(",");
+
+function focusFirstOverlayControl(container: HTMLElement | null): void {
+  container?.querySelector<HTMLElement>(overlayFocusableSelector)?.focus({ preventScroll: true });
+}
+
+function containOverlayFocus(
+  event: ReactKeyboardEvent<HTMLElement>,
+  container: HTMLElement,
+  onClose: () => void
+): void {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    event.stopPropagation();
+    onClose();
+    return;
+  }
+  if (event.key !== "Tab") return;
+
+  const controls = Array.from(container.querySelectorAll<HTMLElement>(overlayFocusableSelector))
+    .filter((element) => !element.hidden && element.getAttribute("aria-hidden") !== "true");
+  if (controls.length === 0) {
+    event.preventDefault();
+    return;
+  }
+  const first = controls[0]!;
+  const last = controls.at(-1)!;
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 function RelatedGroup(props: {
@@ -1889,60 +1997,80 @@ function RestorePreviewPanel(props: {
 
 function FirstRunPanel(props: FirstRunPanelProps): React.JSX.Element {
   const restore = useRestoreFlow(props.onRestoreCompleted, () => props.onError(null));
+  const showingRestore = Boolean(restore.restorePreview);
 
   return (
     <section className="first-run" aria-label={props.t("firstRun.aria")}>
-      <div className="first-run-copy">
-        <h1>Pige</h1>
-        <p>{props.t("firstRun.subtitle")}</p>
+      <div className="first-run-card">
+        <div className="first-run-brand">
+          <img src={pigeMarkUrl} alt="" />
+          <strong>Pige</strong>
+        </div>
+
+        {!showingRestore ? (
+          <div className="first-run-step vault">
+            <h1>{props.t("firstRun.title")}</h1>
+            <p>{props.t("firstRun.subtitle")}</p>
+            <label className="first-run-vault-name" htmlFor="vault-name">
+              <span>{props.t("firstRun.vaultName")}</span>
+              <input
+                id="vault-name"
+                value={props.vaultName}
+                onChange={(event) => props.onVaultNameChange(event.target.value)}
+                disabled={props.busy}
+              />
+            </label>
+            <button className="first-run-choice" type="button" onClick={props.onCreate} disabled={props.busy}>
+              <PigeIcon name="folder" size={20} />
+              <span className="first-run-choice-copy">
+                <strong>{props.t("firstRun.createVault")}</strong>
+                <span>{props.t("firstRun.createDescription")}</span>
+              </span>
+            </button>
+            <button className="first-run-choice" type="button" onClick={props.onOpen} disabled={props.busy}>
+              <PigeIcon name="folder" size={20} />
+              <span className="first-run-choice-copy">
+                <strong>{props.t("firstRun.openExisting")}</strong>
+                <span>{props.t("firstRun.openDescription")}</span>
+              </span>
+            </button>
+            <button
+              ref={restore.previewButtonRef}
+              type="button"
+              className="first-run-choice"
+              disabled={props.busy || restore.restorePhase !== "idle"}
+              title={props.t("firstRun.restoreHint")}
+              onClick={() => void restore.previewRestore()}
+            >
+              <PigeIcon name={restore.restorePhase === "previewing" ? "loading" : "restore"} size={20} />
+              <span className="first-run-choice-copy">
+                <strong>{props.t(restore.restorePhase === "previewing" ? "backup.opening" : "firstRun.restoreBackup")}</strong>
+                <span>{props.t("firstRun.restoreDescription")}</span>
+              </span>
+            </button>
+            {!restore.restorePreview && restore.restoreErrorKey ? (
+              <p className="error" role="alert">{props.t(restore.restoreErrorKey)}</p>
+            ) : null}
+            <RecentVaults recentVaults={props.recentVaults} onRemoveRecent={props.onRemoveRecent} t={props.t} />
+          </div>
+        ) : (
+          <div className="first-run-step restore">
+            <RestorePreviewPanel
+              idPrefix="first-run"
+              preview={restore.restorePreview!}
+              mode={restore.restoreMode}
+              phase={restore.restorePhase}
+              errorKey={restore.restoreErrorKey}
+              applyButtonRef={restore.applyButtonRef}
+              onModeChange={restore.selectRestoreMode}
+              onApply={restore.applyRestore}
+              onCancel={restore.cancelRestore}
+              t={props.t}
+            />
+          </div>
+        )}
+        {props.error ? <p className="error" role="alert">{props.error}</p> : null}
       </div>
-
-      <div className="vault-create">
-        <label htmlFor="vault-name">{props.t("firstRun.vaultName")}</label>
-        <input
-          id="vault-name"
-          value={props.vaultName}
-          onChange={(event) => props.onVaultNameChange(event.target.value)}
-          disabled={props.busy}
-        />
-        <button type="button" onClick={props.onCreate} disabled={props.busy}>
-          {props.t("firstRun.createVault")}
-        </button>
-        <button type="button" className="secondary" onClick={props.onOpen} disabled={props.busy}>
-          {props.t("firstRun.openExisting")}
-        </button>
-        <button
-          ref={restore.previewButtonRef}
-          type="button"
-          className="secondary"
-          disabled={props.busy || restore.restorePhase !== "idle"}
-          title={props.t("firstRun.restoreHint")}
-          onClick={() => void restore.previewRestore()}
-        >
-          {props.t(restore.restorePhase === "previewing" ? "backup.opening" : "firstRun.restoreBackup")}
-        </button>
-      </div>
-
-      {restore.restorePreview ? (
-        <RestorePreviewPanel
-          idPrefix="first-run"
-          preview={restore.restorePreview}
-          mode={restore.restoreMode}
-          phase={restore.restorePhase}
-          errorKey={restore.restoreErrorKey}
-          applyButtonRef={restore.applyButtonRef}
-          onModeChange={restore.selectRestoreMode}
-          onApply={restore.applyRestore}
-          onCancel={restore.cancelRestore}
-          t={props.t}
-        />
-      ) : null}
-      {!restore.restorePreview && restore.restoreErrorKey ? (
-        <p className="error" role="alert">{props.t(restore.restoreErrorKey)}</p>
-      ) : null}
-
-      <RecentVaults recentVaults={props.recentVaults} onRemoveRecent={props.onRemoveRecent} t={props.t} />
-      {props.error ? <p className="error">{props.error}</p> : null}
     </section>
   );
 }
@@ -1996,6 +2124,7 @@ function HomeComposer(props: {
   const [proposalBusy, setProposalBusy] = useState(false);
   const [openingProposalId, setOpeningProposalId] = useState<string | null>(null);
   const [proposalListExpanded, setProposalListExpanded] = useState(false);
+  const [processingListExpanded, setProcessingListExpanded] = useState(false);
   const [proposalOutcome, setProposalOutcome] = useState<ProposalDecisionResult["status"] | null>(null);
   const [proposalDecisionStateUnknown, setProposalDecisionStateUnknown] = useState(false);
   const [proposalErrorMessageKey, setProposalErrorMessageKey] = useState<string | null>(null);
@@ -2066,6 +2195,7 @@ function HomeComposer(props: {
   currentModelEgressRequestIdRef.current = modelEgressRequestId;
   const visibleRecentJobs = props.recentJobs
     .filter((job) =>
+      Boolean(job.sourceDisplayName || job.sourceId) &&
       (!permissionRequestId || job.permissionRequestId !== permissionRequestId) &&
       (!modelEgressRequestId || job.modelEgressApprovalRequestId !== modelEgressRequestId) &&
       !(
@@ -2075,7 +2205,41 @@ function HomeComposer(props: {
         job.stage === "waiting_for_model"
       )
     )
-    .slice(0, 6);
+    .slice(0, 5);
+  const latestTurnJob = latestTurn
+    ? props.recentJobs.find((job) => job.id === latestTurn.jobId)
+    : undefined;
+  const newestNoSourceActiveTurn = props.recentJobs.find((job) =>
+    job.class === "agent_turn" &&
+    !job.sourceDisplayName &&
+    !job.sourceId &&
+    (job.state === "running" || job.state === "cancel_requested")
+  );
+  const exactNoSourceCurrentTurn = latestTurnJob &&
+    latestTurnJob.class === "agent_turn" &&
+    !latestTurnJob.sourceDisplayName &&
+    !latestTurnJob.sourceId &&
+    (
+      !activeAgentDraftRef.current ||
+      activeAgentDraftRef.current.jobId === latestTurnJob.id
+    )
+    ? latestTurnJob
+    : undefined;
+  const noSourceCurrentTurn = exactNoSourceCurrentTurn ??
+    (latestTurn ? undefined : newestNoSourceActiveTurn);
+  const noSourceCancellableLatestTurn = noSourceCurrentTurn &&
+    (noSourceCurrentTurn.state === "running" || noSourceCurrentTurn.state === "cancel_requested")
+    ? noSourceCurrentTurn
+    : undefined;
+  const effectiveAgentRunState = noSourceCurrentTurn
+    ? homeUiStateForJobState(noSourceCurrentTurn.state) ?? agentRunState
+    : agentRunState;
+  const effectiveAgentError = noSourceCurrentTurn
+    ? noSourceCurrentTurn.error ?? agentError
+    : agentError;
+  const effectiveCloudUsageMessageKey = cloudUsageMessageKey ?? (
+    effectiveAgentRunState === "running" && plannedModelUsage === "cloud" ? "home.cloudSend" : null
+  );
   const retryableLatestTurn = latestTurn && (
     latestTurn.state === "cancelled" ||
     (
@@ -2101,11 +2265,17 @@ function HomeComposer(props: {
     ? undefined
     : sourceWaitOwner ?? sourceWaitingForModelJobs[0];
   const showFirstHomeGuide = props.showFirstHomeGuide &&
-    agentRunState === "idle" &&
+    effectiveAgentRunState === "idle" &&
     sourceWaitingForModelJobs.length === 0;
   const visibleConversationMessages = (conversationTimeline?.messages ?? []).filter((message) =>
     !(agentAnswer && message.role === "assistant" && message.id === liveAnswerEventId)
   );
+  const showHomeHero = visibleConversationMessages.length === 0 &&
+    agentDraft === null &&
+    agentAnswer === null &&
+    selectedNote === null &&
+    permissionPrompt === null &&
+    modelEgressPrompt === null;
 
   const beginAgentDraft = (clientTurnId: string): void => {
     activeAgentDraftRef.current = { clientTurnId, sequence: 0 };
@@ -2707,19 +2877,26 @@ function HomeComposer(props: {
   }
 
   return (
-    <section className="home" aria-label={props.t("nav.home")}>
-      <div className="home-center">
-        <span className="vault-chip">{props.activeVault?.name ?? props.t("home.noVault")}</span>
-        {props.captureOnly || props.agentRuntimeStatus ? <span className="mode-chip">{agentStatusLabel}</span> : null}
-      </div>
-      <ul className="source-format-legend" aria-label={props.t("home.supportedFormats")}>
-        <li><PigeIcon name="file" size={14} /><span>PDF</span></li>
-        <li><PigeIcon name="fileText" size={14} /><span>{props.t("home.formatText")}</span></li>
-        <li><PigeIcon name="presentation" size={14} /><span>PPT</span></li>
-        <li><PigeIcon name="spreadsheet" size={14} /><span>Excel</span></li>
-        <li><PigeIcon name="image" size={14} /><span>{props.t("home.formatImage")}</span></li>
-        <li><PigeIcon name="more" size={14} /><span>{props.t("home.formatMore")}</span></li>
-      </ul>
+    <section className={`home${showHomeHero ? " home-empty" : " home-active"}`} aria-label={props.t("nav.home")}>
+      {showHomeHero ? (
+        <div className="hero">
+          <div className="hero-content">
+            <img className="brand-mark" src={pigeMarkUrl} alt="" />
+            <h1>{props.t("home.heroTitle")}</h1>
+            <p className="hero-subtitle">{props.t("home.heroSubtitle")}</p>
+            <div className="source-picker">
+              <ul className="source-format-legend source-types" aria-label={props.t("home.supportedFormats")}>
+                <li className="source-type"><span className="source-icon"><PigeIcon name="file" /></span><span>PDF</span></li>
+                <li className="source-type"><span className="source-icon"><PigeIcon name="fileText" /></span><span>{props.t("home.formatText")}</span></li>
+                <li className="source-type"><span className="source-icon"><PigeIcon name="presentation" /></span><span>PPT</span></li>
+                <li className="source-type"><span className="source-icon"><PigeIcon name="spreadsheet" /></span><span>Excel</span></li>
+                <li className="source-type"><span className="source-icon"><PigeIcon name="image" /></span><span>{props.t("home.formatImage")}</span></li>
+                <li className="source-type"><span className="source-icon"><PigeIcon name="more" /></span><span>{props.t("home.formatMore")}</span></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {showFirstHomeGuide ? (
         <section className="first-home-guide" aria-label={props.t("home.firstGuideAria")}>
           <p>{props.t("home.firstGuideText")}</p>
@@ -2732,32 +2909,101 @@ function HomeComposer(props: {
         </section>
       ) : null}
       {visibleRecentJobs.length > 0 ? (
-        <section className="job-strip" aria-label={props.t("home.recentCaptures")}>
-          <span className="job-strip-title">
-            {props.t("home.recentWork")}
-          </span>
-          {visibleRecentJobs.slice(0, 3).map((job) => {
+        <section
+          className={processingListExpanded ? "task-panel" : "task-panel collapsed"}
+          aria-labelledby="home-processing-title"
+        >
+          <header className="task-header">
+            <div className="task-summary">
+              <PigeIcon className="task-processing-icon" name="loading" size={16} />
+              <h2 id="home-processing-title">{props.t("home.processingFiles")}</h2>
+              <span className="task-current-file">
+                {visibleRecentJobs[0]?.sourceDisplayName ?? props.t("home.processingItem")}
+              </span>
+              {!processingListExpanded && visibleRecentJobs[0] ? (
+                <span className="task-current-state">{props.t(jobStateMessageKey(visibleRecentJobs[0]))}</span>
+              ) : null}
+            </div>
+            <span className="task-count">{visibleRecentJobs.length} {props.t("home.files")}</span>
+            {!processingListExpanded && visibleRecentJobs[0] ? (() => {
+              const currentJob = visibleRecentJobs[0];
+              const sourceWaitingForModel = isSourceWaitingForModel(currentJob);
+              const ownsSourceModelAction = sourceWaitingForModel && currentJob.id === sourceModelActionOwner?.id;
+              if (ownsSourceModelAction) {
+                return <button className="job-action" type="button" onClick={(event) => void props.onOpenModels(event.currentTarget)}>{props.t("home.connectModel")}</button>;
+              }
+              if (sourceWaitingForModel) return null;
+              if (currentJob.state === "queued" || (currentJob.class === "agent_turn" && (currentJob.state === "running" || currentJob.state === "cancel_requested"))) {
+                return (
+                  <button
+                    className="task-icon-action"
+                    type="button"
+                    title={props.t("home.cancelJob")}
+                    aria-label={props.t("home.cancelJob")}
+                    disabled={currentJob.state === "cancel_requested"}
+                    onClick={() => void props.onCancelJob(currentJob.id)}
+                  >
+                    <PigeIcon name="trash" size={13} />
+                  </button>
+                );
+              }
+              if (currentJob.state === "failed_retryable" && currentJob.class !== "retrieval_query") {
+                return <button className="job-action" type="button" onClick={() => void props.onRetryJob(currentJob.id)}>{props.t("home.retryJob")}</button>;
+              }
+              return null;
+            })() : null}
+            <button
+              className="task-toggle"
+              type="button"
+              aria-expanded={processingListExpanded}
+              aria-controls="home-processing-list"
+              aria-label={props.t(processingListExpanded ? "home.collapseProcessing" : "home.expandProcessing")}
+              onClick={() => setProcessingListExpanded((current) => !current)}
+            >
+              <PigeIcon className="chevron" name="expand" size={15} />
+            </button>
+          </header>
+          {processingListExpanded ? (
+            <div className="task-list" id="home-processing-list">
+            {visibleRecentJobs.map((job) => {
             const sourceWaitingForModel = isSourceWaitingForModel(job);
             const ownsSourceModelAction = sourceWaitingForModel && job.id === sourceModelActionOwner?.id;
             const statusMessageKey = jobStateMessageKey(job);
+            const sourceName = job.sourceDisplayName ?? props.t("home.processingItem");
+            const totalUnits = job.progress?.totalUnits;
+            const progressValue = totalUnits
+              ? Math.min(100, Math.max(0, Math.round((job.progress?.completedUnits ?? 0) / totalUnits * 100)))
+              : null;
             return (
               <div
-                className={`job-pill${sourceWaitingForModel ? " source-waiting-model" : ""}`}
+                className={`task-row${sourceWaitingForModel ? " source-waiting-model" : ""}`}
                 key={job.id}
+                data-job-state={job.state}
                 role={sourceWaitingForModel ? "status" : undefined}
                 aria-live={sourceWaitingForModel ? "polite" : undefined}
               >
-                <span
-                  className={`job-state-dot state-${job.state}`}
-                  title={props.t(statusMessageKey)}
-                  aria-label={props.t(statusMessageKey)}
-                />
-                <span className="job-copy">
-                  <span className="job-source-name">{job.sourceDisplayName ?? job.sourceId ?? job.id}</span>
-                  {sourceWaitingForModel ? (
-                    <span className="job-status-label">{props.t(statusMessageKey)}</span>
-                  ) : null}
+                <span className="task-name">
+                  <span className="file-badge"><PigeIcon name={job.sourceKind === "image_file" ? "image" : "fileText"} size={14} /></span>
+                  <span className="task-file-copy">
+                    <strong>{sourceName}</strong>
+                    <small>{props.t(statusMessageKey)}</small>
+                  </span>
                 </span>
+                {progressValue !== null ? (
+                  <span
+                    className="progress-track"
+                    role="progressbar"
+                    aria-label={`${sourceName} ${props.t(statusMessageKey)}`}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={progressValue}
+                    aria-valuetext={`${props.t(statusMessageKey)} ${progressValue}%`}
+                  >
+                    <span className="progress-fill" style={{ "--progress": `${progressValue}%` } as CSSProperties} />
+                  </span>
+                ) : <span className="progress-track indeterminate" aria-hidden="true"><span className="progress-fill" /></span>}
+                <span className="task-row-actions">
+                  {progressValue === null ? null : <span className="task-status">{progressValue}%</span>}
                 {ownsSourceModelAction ? (
                   <button className="job-action" type="button" onClick={(event) => void props.onOpenModels(event.currentTarget)}>
                     {props.t("home.connectModel")}
@@ -2773,7 +3019,7 @@ function HomeComposer(props: {
                     disabled={job.state === "cancel_requested"}
                     onClick={() => void props.onCancelJob(job.id)}
                   >
-                    {props.t("home.cancelJob")}
+                    <PigeIcon name="trash" size={13} />
                   </button>
                 ) : job.state === "failed_retryable" && job.class !== "retrieval_query" ? (
                   <button
@@ -2786,9 +3032,12 @@ function HomeComposer(props: {
                     {props.t("home.retryJob")}
                   </button>
                 ) : null}
+                </span>
               </div>
             );
-          })}
+            })}
+            </div>
+          ) : null}
         </section>
       ) : null}
       {props.recentActivities.length > 0 ? (
@@ -3034,15 +3283,15 @@ function HomeComposer(props: {
             type="button"
             className="composer-send"
             aria-label={props.t("home.send")}
-            disabled={!text.trim() || agentRunState === "accepted" || agentRunState === "running"}
+            disabled={!text.trim() || effectiveAgentRunState === "accepted" || effectiveAgentRunState === "running"}
             onClick={() => void submitHomeInput()}
           >
             <PigeIcon
-              name={agentRunState === "accepted" || agentRunState === "running" ? "loading" : "send"}
-              className={agentRunState === "accepted" || agentRunState === "running" ? "spinning" : undefined}
+              name={effectiveAgentRunState === "accepted" || effectiveAgentRunState === "running" ? "loading" : "send"}
+              className={effectiveAgentRunState === "accepted" || effectiveAgentRunState === "running" ? "spinning" : undefined}
               size={16}
             />
-            <span>{agentRunState === "accepted" || agentRunState === "running" ? props.t("home.agentRunning") : props.t("home.send")}</span>
+            <span>{effectiveAgentRunState === "accepted" || effectiveAgentRunState === "running" ? props.t("home.agentRunning") : props.t("home.send")}</span>
           </button>
         </div>
         <DevelopmentStatus notice={props.developmentNotice} t={props.t} />
@@ -3137,12 +3386,18 @@ function HomeComposer(props: {
               </div>
             ) : null}
           </div>
-        ) : agentRunState !== "idle" && !sourceWaitOwnsAgentState ? (
-          <div className={`agent-run-state state-${agentRunState}`} role="status" aria-live="polite">
+        ) : effectiveAgentRunState !== "idle" && !sourceWaitOwnsAgentState ? (
+          <div className={`agent-run-state state-${effectiveAgentRunState}`} role="status" aria-live="polite">
             <span className="agent-run-dot" aria-hidden="true" />
-            <span>{agentError ? props.t(agentError.messageKey) : props.t(`home.agentState.${agentRunState}`)}</span>
-            {cloudUsageMessageKey ? (
-              <span className="agent-cloud-boundary">{props.t(cloudUsageMessageKey)}</span>
+            <span>
+              {effectiveAgentError
+                ? props.t(effectiveAgentError.messageKey)
+                : noSourceCurrentTurn
+                  ? props.t(jobStateMessageKey(noSourceCurrentTurn))
+                  : props.t(`home.agentState.${effectiveAgentRunState}`)}
+            </span>
+            {effectiveCloudUsageMessageKey ? (
+              <span className="agent-cloud-boundary">{props.t(effectiveCloudUsageMessageKey)}</span>
             ) : null}
             {agentError?.userAction === "configure_model" ? (
               <button type="button" className="ghost" onClick={(event) => void props.onOpenModels(event.currentTarget)}>{props.t("home.openModels")}</button>
@@ -3150,6 +3405,18 @@ function HomeComposer(props: {
             {retryableLatestTurn ? (
               <button type="button" className="ghost" onClick={() => void retryLatestConversationTurn()}>
                 {props.t("home.retryAnswer")}
+              </button>
+            ) : null}
+            {noSourceCancellableLatestTurn ? (
+              <button
+                type="button"
+                className="ghost"
+                title={props.t("home.cancelJob")}
+                aria-label={props.t("home.cancelJob")}
+                disabled={noSourceCancellableLatestTurn.state === "cancel_requested"}
+                onClick={() => void props.onCancelJob(noSourceCancellableLatestTurn.id)}
+              >
+                {props.t("home.cancelJob")}
               </button>
             ) : null}
           </div>
@@ -3488,6 +3755,18 @@ const settingsSections: readonly {
   { id: "system", icon: "activity", status: "development", capability: "updates" }
 ];
 
+const settingsGroups: readonly {
+  readonly id: "basic" | "knowledge" | "ai" | "security" | "extensions" | "system";
+  readonly sections: readonly SettingsSection[];
+}[] = [
+  { id: "basic", sections: ["general", "appearance"] },
+  { id: "knowledge", sections: ["vault", "maintenance"] },
+  { id: "ai", sections: ["models", "capabilities", "memory"] },
+  { id: "security", sections: ["privacy"] },
+  { id: "extensions", sections: ["skills", "packages"] },
+  { id: "system", sections: ["system"] }
+];
+
 export function DevelopmentStatus(props: {
   readonly notice: DevelopmentNotice | null;
   readonly t: (key: string) => string;
@@ -3517,6 +3796,11 @@ export function SettingsSurface(props: {
 }): React.JSX.Element {
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
+  const sectionMatches = (section: SettingsSection): boolean =>
+    normalizedQuery.length === 0 || props.t(`settings.section.${section}`).toLocaleLowerCase().includes(normalizedQuery);
+  const matchingSectionCount = settingsSections.filter((item) => sectionMatches(item.id)).length;
 
   useEffect(() => {
     closeButtonRef.current?.focus();
@@ -3557,42 +3841,74 @@ export function SettingsSurface(props: {
         aria-labelledby="settings-surface-title"
         onKeyDown={handleDialogKeyDown}
       >
-        <header className="settings-surface-header">
-          <div>
-            <h1 id="settings-surface-title">{props.t("settings.title")}</h1>
-            <p>{props.t("settings.subtitle")}</p>
-          </div>
-          <button
-            ref={closeButtonRef}
-            type="button"
-            className="icon-button"
-            title={props.t("settings.close")}
-            aria-label={props.t("settings.close")}
-            onClick={props.onClose}
-          >
-            <PigeIcon name="close" size={17} />
-          </button>
-        </header>
         <div className="settings-surface-body">
-          <nav className="settings-navigation" aria-label={props.t("settings.navigation") }>
-            {settingsSections.map((item) => (
+          <aside className="settings-sidebar" aria-label={props.t("settings.navigation") }>
+            <div className="settings-sidebar-top">
               <button
-                key={item.id}
+                ref={closeButtonRef}
                 type="button"
-                className={props.section === item.id ? "settings-nav-item active" : "settings-nav-item"}
-                aria-current={props.section === item.id ? "page" : undefined}
-                onClick={() => {
-                  props.onSectionChange(item.id);
-                  if (item.capability) props.onDevelopment(item.capability);
-                }}
+                className="settings-return"
+                title={props.t("settings.close")}
+                aria-label={props.t("settings.close")}
+                onClick={props.onClose}
               >
-                <PigeIcon name={item.icon} size={16} />
-                <span>{props.t(`settings.section.${item.id}`)}</span>
-                <small>{props.t(`settings.status.${item.status}`)}</small>
+                <PigeIcon name="arrowLeft" size={16} />
+                <span>{props.t("settings.back")}</span>
               </button>
-            ))}
-          </nav>
+              <label className="settings-search-wrap">
+                <PigeIcon name="search" size={14} />
+                <input
+                  className="settings-search"
+                  type="search"
+                  value={searchQuery}
+                  placeholder={props.t("settings.search")}
+                  aria-label={props.t("settings.search")}
+                  onInput={(event) => setSearchQuery(event.currentTarget.value)}
+                />
+              </label>
+            </div>
+            <div className="settings-nav-scroll">
+              <nav className="settings-navigation" aria-label={props.t("settings.navigation") }>
+                {settingsGroups.map((group) => {
+                  const items = settingsSections.filter((item) => group.sections.includes(item.id) && sectionMatches(item.id));
+                  if (items.length === 0) return null;
+                  return (
+                    <div
+                      className="settings-nav-group"
+                      key={group.id}
+                      role="group"
+                      aria-labelledby={`settings-group-${group.id}`}
+                    >
+                      <div className="settings-nav-label" id={`settings-group-${group.id}`}>
+                        {props.t(`settings.group.${group.id}`)}
+                      </div>
+                      {items.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          className={props.section === item.id ? "settings-nav-item active" : "settings-nav-item"}
+                          aria-current={props.section === item.id ? "page" : undefined}
+                          onClick={() => {
+                            props.onSectionChange(item.id);
+                            if (item.capability) props.onDevelopment(item.capability);
+                          }}
+                        >
+                          <PigeIcon name={item.icon} size={16} />
+                          <span>{props.t(`settings.section.${item.id}`)}</span>
+                          <small>{props.t(`settings.status.${item.status}`)}</small>
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })}
+              </nav>
+              {matchingSectionCount === 0 ? (
+                <p className="settings-search-empty visible" role="status" aria-live="polite">{props.t("settings.noMatches")}</p>
+              ) : null}
+            </div>
+          </aside>
           <div className="settings-content">
+            <h1 id="settings-surface-title" className="visually-hidden">{props.t("settings.title")}</h1>
             <DevelopmentStatus notice={props.developmentNotice} t={props.t} />
             {props.children}
           </div>

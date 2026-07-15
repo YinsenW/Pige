@@ -55,8 +55,18 @@ describe("Restore identity UI", () => {
       makePigeApi(createHarness(blockedOnboarding(), preview))
     );
 
+    expect(container.querySelector(".first-run-card")).not.toBeNull();
+    expect(container.querySelector<HTMLImageElement>(".first-run-brand img")?.alt).toBe("");
+    expect(container.querySelectorAll(".first-run-choice")).toHaveLength(3);
+    expect(container.querySelector("#vault-name")).not.toBeNull();
+    expect(container.textContent).toContain("Choose your local knowledge base");
+    expect(container.textContent).not.toContain("Connect a model");
+
     await click(dom, button(container, "Restore Backup"));
     await waitFor(dom, () => container.textContent?.includes("Restore preview") ?? false);
+
+    expect(container.querySelector(".first-run-step.vault")).toBeNull();
+    expect(container.querySelector(".first-run-step.restore .restore-preview")).not.toBeNull();
 
     const text = container.textContent ?? "";
     expect(text).toContain("App version0.0.0-test");
@@ -112,7 +122,7 @@ describe("Restore identity UI", () => {
     await waitFor(dom, () => dom.window.document.activeElement === apply);
 
     await click(dom, button(container, "Cancel"));
-    await waitFor(dom, () => dom.window.document.activeElement === restoreTrigger);
+    await waitFor(dom, () => dom.window.document.activeElement === button(container, "Restore Backup"));
     expect(container.textContent).not.toContain("Restore preview");
 
     await act(async () => root.unmount());
@@ -738,7 +748,10 @@ function installDom(dom: JSDOM): void {
 
 function button(container: HTMLElement, label: string): HTMLButtonElement {
   const match = Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
-    .find((candidate) => candidate.textContent === label);
+    .find((candidate) =>
+      candidate.textContent === label ||
+      candidate.querySelector("strong")?.textContent === label
+    );
   if (!match) throw new Error(`Button not found: ${label}`);
   return match;
 }

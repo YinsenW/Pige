@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-15T12:09:18Z",
+  "reviewedAt": "2026-07-15T16:10:06Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -31,12 +31,12 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "e7d87d1dd8e5311072153c2e4efa39c0967c3416fa2224745851eecd7e2156ea"
+    "reviewedSha256": "33643bbd07974c7230ff27e44d5631856917d8929b42bd89909e07560118318c"
   },
   "reviewers": [
     {
-      "reviewerId": "full-ui-integration-independent-review",
-      "task": "Full production UI integration and honest unavailable-state review",
+      "reviewerId": "ui-window-shell-integration-independent-review",
+      "task": "Approved HTML-equivalent production UI and native window shell review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -44,81 +44,81 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "UI Design accepted the exact frozen Development hash. Product Planning independently reproduced its 17-path patch/content identities, empty index and diff-check, then reviewed the UI owner, runtime dependency, exact selectors, service boundaries and status-preserving open work without changing Development bytes."
+      "independence": "UI Design accepted the exact combined Development hash after directly owning production renderer bytes. Planning reproduced the 18-path patch/content identities, empty index and diff-check, then reviewed owner separation, native-shell mapping, visual evidence layers and unchanged status boundary without editing frozen paths."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "full-ui-integration-independent-review",
+      "reviewerId": "ui-window-shell-integration-independent-review",
       "blockerCount": 0,
-      "summary": "The existing owners locate the approved complete-UI baseline, mechanical React migration, responsive shell, Settings ownership, icon dependency and serial UI workflow without adding a document."
+      "summary": "Existing UI, Technical Architecture, Quality and AI-development owners locate the sole HTML baseline, production renderer ownership, window-shell mapping and evidence workflow."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "full-ui-integration-independent-review",
+      "reviewerId": "ui-window-shell-integration-independent-review",
       "blockerCount": 0,
-      "summary": "Owners agree on primary navigation, Library/Reader panes, Settings and maintenance ownership, exact responsive widths, Lucide isolation, and the distinction between real, partial and unavailable surfaces."
+      "summary": "Owners agree on white canvas, #202322 text, one 58px titlebar, macOS hiddenInset, Windows transparent native overlay, Linux defaults, and no renderer redesign or frame:false."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "full-ui-integration-independent-review",
+      "reviewerId": "ui-window-shell-integration-independent-review",
       "blockerCount": 0,
-      "summary": "Four exact UI selectors project current executable evidence while semantic lock v3 has 1,211 claims; Requirement counts remain 19 verified, 62 partial and 21 planned, and Exit counts remain 14/64/22."
+      "summary": "Functional window-shell evidence is distinct from macOS real-Electron visual review and still-open Windows visual proof; semantic lock v3 has 1,212 claims and no status changes."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.7,
-      "reviewerId": "full-ui-integration-independent-review",
+      "reviewerId": "ui-window-shell-integration-independent-review",
       "blockerCount": 0,
-      "summary": "Development gets one serial UI chain, a sole approved visual baseline, typed connection points, unavailable-state rules and exact pane/dependency contracts; corrections remain baseline-led incremental candidates."
+      "summary": "UI Design owns production renderer bytes and final visual review; Development owns typed interfaces, integration and platform evidence, returning bounded interface gaps instead of redrawing UI."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "full-ui-integration-independent-review",
+      "reviewerId": "ui-window-shell-integration-independent-review",
       "blockerCount": 0,
-      "summary": "No Markdown file or decision is added; existing owners are compressed while the visual and dependency contracts remain machine-checkable within all fixed budgets."
+      "summary": "No document or decision is added; existing owner and trace text is compressed while fixed leanness budgets remain green."
     }
   ],
   "verification": [
     {
       "command": "npm run verify",
       "status": "passed",
-      "evidence": "The exact frozen candidate plus current recipe passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all quality dimensions."
+      "evidence": "The exact frozen combined candidate passes docs, decisions, UI visual, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all quality dimensions."
     },
     {
-      "command": "Exact candidate test, package, distribution and assembled UI evidence",
+      "command": "Exact candidate functional and visual evidence",
       "status": "passed",
-      "evidence": "Focused 5/97, independent UI 5/89 and full 112 files plus one skipped with 1,270 tests plus one skipped pass; typecheck, build, audit, macOS package, packaged and downloaded-distribution smokes pass. Real Electron proves responsive Home/Library/Reader/Settings, six locales, exact focus restoration and honest unavailable activation with zero Job change."
+      "evidence": "Focused 7 files/104 tests, typecheck, build and development launch pass. Real macOS Electron at 420x760 shows one integrated 58px renderer titlebar with native traffic lights and no duplicate row, clipping or overlap; UI Design accepted the exact final hash."
     },
     {
-      "command": "npm run verify:dependencies && npm run verify:traceability && npm run verify:contracts",
+      "command": "npm run verify:ui-visual && npm run verify:traceability && npm run verify:contracts",
       "status": "passed",
-      "evidence": "The candidate has 58 dependency records and zero waivers, including exact lucide-react@1.17.0 with lock integrity/license boundaries; semantic lock v3/1,211 and CON-001 through CON-004 pass with no Requirement or Exit status change."
+      "evidence": "The approved canvas/text tokens and structural contract pass; semantic lock v3/1,212 and CON-001 through CON-004 pass with Requirement, Exit and Phase states unchanged."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 pass with 56 Markdown files, 3,466 entry words, 3,629 trace lines, 249,999 trace bytes and 1,213,000 or fewer governed Markdown bytes."
+      "evidence": "LEN-001 through LEN-005 pass within the fixed entry, trace and governed Markdown budgets."
     }
   ],
   "coordination": {
-    "taskId": "full-ui-integration-20260715",
-    "taskTitle": "Full production UI integration",
+    "taskId": "ui-window-shell-integration-20260716",
+    "taskTitle": "Approved production UI equivalence and native window shell",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The candidate mechanically migrates the approved UI into the renderer and adds one renderer-only icon dependency; it adds no IPC, durable schema, provider, permission, Backup/Restore or backend capability. Unavailable entries are visual shell only.",
-    "acknowledgement": "Development froze exact 5540e025/bd8fbf85 bytes after consuming the accepted UI Design contract. Planning synchronized existing owners, dependency, visual contract, status-preserving acceptance, semantic lock and this recipe without changing Development bytes."
+    "compatibility": "The candidate changes production renderer presentation and main-owned window options without new IPC, durable schema, dependency, provider, permission or backend capability. Existing typed behavior and unavailable-state truth are preserved.",
+    "acknowledgement": "Development froze exact f2cc966e/141adc36 bytes after UI Design directly owned the renderer replacement and accepted the combined candidate. Planning bound existing owners, visual contract, acceptance, semantic lock and this recipe without changing those bytes."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Real Windows x64 packageability and packaged visual evidence remain mandatory at the next PM online checkpoint.",
-    "Appearance, capabilities, memory, reusable permission policy, Skills, packages, updates, Note Agent and unbound Reader/Knowledge actions remain unavailable visual entries rather than implemented capabilities.",
-    "Future visual corrections must update or faithfully consume the approved baseline; current acceptance does not claim pixel-perfect, signed-installed or full assistive-technology closure."
+    "Real packaged Windows visual evidence must prove retained caption controls, safe area, no duplicate titlebar and stable transparency; only the approved main-owned #f7f7f7 fallback is allowed.",
+    "The authoritative complete test matrix and cross-platform package/distribution gates remain the post-bind PR CI node; local contention produced two unrelated timeout-only default runs.",
+    "Unavailable capabilities remain polished local development states, not executable feature or status evidence."
   ]
 }

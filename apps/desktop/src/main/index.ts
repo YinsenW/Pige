@@ -127,6 +127,7 @@ import { getSettingsRegistry } from "./services/settings-registry";
 import { ToolchainService } from "./services/toolchain-service";
 import { VaultService } from "./services/vault-service";
 import { WindowModeService } from "./services/window-mode-service";
+import { getWindowShellOptions } from "./window-shell-options";
 
 let vaultService: VaultService | undefined;
 let localSettingsStore: LocalSettingsStore | undefined;
@@ -294,6 +295,7 @@ const createMainWindow = (loadRenderer = true): BrowserWindow => {
     minHeight: 560,
     title: "Pige",
     backgroundColor: "#f8f8f5",
+    ...getWindowShellOptions(process.platform),
     webPreferences: {
       preload: join(__dirname, "../preload", PRELOAD_ENTRY_FILENAME),
       contextIsolation: true,

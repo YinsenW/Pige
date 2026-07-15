@@ -14,6 +14,7 @@ import {
   WEB_EXTRACTOR_WORKER_ENTRY_NAME,
   WEB_EXTRACTOR_WORKER_ENTRY_RELATIVE_PATH
 } from "../../apps/desktop/src/shared/web-extractor-entry";
+import { getWindowShellOptions } from "../../apps/desktop/src/main/window-shell-options";
 
 describe("desktop shell build contract", () => {
   it("uses a CommonJS preload entry compatible with Electron sandboxed preload execution", () => {
@@ -40,6 +41,23 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain("const mainWindows = new Set<BrowserWindow>();");
     expect(mainSource).toContain("mainWindows.add(browserWindow);");
     expect(mainSource).toContain('browserWindow.once("closed", () => mainWindows.delete(browserWindow));');
+  });
+
+  it("uses one integrated title bar while preserving native platform controls", () => {
+    expect(getWindowShellOptions("darwin")).toEqual({ titleBarStyle: "hiddenInset" });
+    expect(getWindowShellOptions("win32")).toEqual({
+      titleBarStyle: "hidden",
+      titleBarOverlay: {
+        color: "#00000000",
+        symbolColor: "#6f6f6f",
+        height: 58
+      }
+    });
+    expect(getWindowShellOptions("linux")).toEqual({});
+
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    expect(mainSource).toContain("...getWindowShellOptions(process.platform)");
+    expect(mainSource).not.toContain("frame: false");
   });
 
   it("keeps storage reveal main-owned, window-bound, strictly projected, and pathless", () => {
@@ -475,6 +493,10 @@ describe("desktop shell build contract", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
     const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
+    const knowledgeMapSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/renderer/src/components/KnowledgeTreeMap.tsx"),
+      "utf8"
+    );
     const librarySource = fs.readFileSync(
       path.resolve("apps/desktop/src/main/services/library-service.ts"),
       "utf8"
@@ -487,9 +509,14 @@ describe("desktop shell build contract", () => {
     expect(librarySource).toContain("this.#database?.knowledgeTree(vaultPath)");
     expect(rendererSource).toContain('type View = "home" | "library" | "knowledgeTree";');
     expect(rendererSource).toContain("export type SettingsSection =");
-    expect(rendererSource).toContain('className="knowledge-tree-roots"');
-    expect(rendererSource).toContain("<meter");
+    expect(rendererSource).toContain("<KnowledgeTreeMap");
+    expect(rendererSource).toContain('className="knowledge-tree-totals visually-hidden"');
+    expect(knowledgeMapSource).toContain('role="tree"');
+    expect(knowledgeMapSource).toContain('role="treeitem"');
+    expect(knowledgeMapSource).toContain("<meter");
+    expect(knowledgeMapSource).toContain("props.onOpenNote(active.pageId!, active.focusKey!)");
     expect(rendererSource).not.toContain("window.pige.filesystem");
+    expect(knowledgeMapSource).not.toContain("window.pige.filesystem");
   });
 
   it("surfaces ready proposals in Home with a focused escaped preview before durable decisions", () => {
@@ -514,7 +541,8 @@ describe("desktop shell build contract", () => {
     expect(rendererSource).toContain('homeJobStateFilter.states.push("awaiting_review")');
     expect(rendererSource).toContain("...homeJobStateFilter");
     expect(rendererSource).toContain("limit: 100");
-    expect(homeComposer).toContain(".slice(0, 6)");
+    expect(homeComposer).toContain(".slice(0, 5)");
+    expect(homeComposer).toContain("Boolean(job.sourceDisplayName || job.sourceId)");
     expect(rendererSource).toContain('window.pige.proposals.list({ limit: 100, states: ["ready"] })');
     expect(homeComposer).toContain("window.pige.proposals.get({ proposalId })");
     expect(homeComposer).toContain('window.pige.proposals[decision]({ proposalId })');

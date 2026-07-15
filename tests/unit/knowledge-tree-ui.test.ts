@@ -14,6 +14,8 @@ const globalKeys = [
   "Node",
   "HTMLElement",
   "HTMLButtonElement",
+  "HTMLInputElement",
+  "InputEvent",
   "Event",
   "MouseEvent"
 ] as const;
@@ -41,9 +43,12 @@ describe("Knowledge Tree renderer", () => {
     expect(mount.container.textContent).toContain("Domains: 1");
     expect(mount.container.textContent).toContain("Fragments: 2");
 
-    const rootDisclosure = buttonNamed(mount.container, "Collapse: Local-first");
-    expect(rootDisclosure.getAttribute("aria-expanded")).toBe("true");
-    expect(rootDisclosure.getAttribute("aria-controls")).toBeTruthy();
+    const tree = mount.container.querySelector<SVGElement>('svg[role="tree"]');
+    expect(tree?.getAttribute("aria-label")).toBe("Knowledge Tree");
+    const rootNode = treeItemNamed(mount.container, "Local-first");
+    expect(rootNode.getAttribute("aria-level")).toBe("2");
+    expect(rootNode.getAttribute("aria-selected")).toBe("true");
+    expect(rootNode.getAttribute("tabindex")).toBe("0");
     const meter = mount.container.querySelector<HTMLMeterElement>("meter.knowledge-tree-weight");
     expect(meter?.value).toBe(9);
     expect(meter?.max).toBe(9);
@@ -51,25 +56,67 @@ describe("Knowledge Tree renderer", () => {
     expect(mount.container.textContent).toContain("Weight: 9");
     expect(mount.container.textContent).toContain("Sources: 3");
 
-    const topicDisclosure = buttonNamed(mount.container, "Expand: Local RAG");
-    expect(topicDisclosure.getAttribute("aria-expanded")).toBe("false");
-    await click(dom, topicDisclosure);
-    expect(topicDisclosure.getAttribute("aria-expanded")).toBe("true");
-    expect(mount.container.textContent).toContain("Lexical retrieval");
-    expect(mount.container.textContent).toContain("Source evidence");
+    const topicNode = treeItemNamed(mount.container, "Local RAG");
+    await click(dom, topicNode);
+    expect(topicNode.getAttribute("aria-selected")).toBe("true");
+    expect(treeItemNamed(mount.container, "Lexical retrieval")).toBeTruthy();
+    expect(treeItemNamed(mount.container, "Source evidence")).toBeTruthy();
     expect(mount.container.textContent).not.toContain("src_private_internal_01");
 
-    const openConcept = buttonNamed(mount.container, "Lexical retrieval");
-    expect(openConcept.tabIndex).toBeGreaterThanOrEqual(0);
+    const conceptNode = treeItemNamed(mount.container, "Lexical retrieval");
+    await click(dom, conceptNode);
+    expect(conceptNode.getAttribute("aria-selected")).toBe("true");
+    const openConcept = buttonNamed(mount.container, "Open");
+    expect(openConcept.dataset.knowledgeOpenKey).toBe("root-0-child-0-child-0-node");
     await click(dom, openConcept);
     expect(opened).toEqual([{
       pageId: "page_20260713_concept01",
       focusKey: "root-0-child-0-child-0-node"
     }]);
 
-    for (const button of mount.container.querySelectorAll<HTMLButtonElement>("button")) {
-      expect(button.tabIndex).toBeGreaterThanOrEqual(0);
-    }
+    const listMode = buttonNamed(mount.container, "List view");
+    await click(dom, listMode);
+    expect(listMode.getAttribute("aria-pressed")).toBe("true");
+    expect(mount.container.querySelector(".knowledge-map-status")?.textContent).toBe("Fine-grained leaf nodes hidden");
+    expect(conceptNode.getAttribute("aria-hidden")).toBe("true");
+    expect(conceptNode.getAttribute("tabindex")).toBe("-1");
+    expect(topicNode.getAttribute("aria-selected")).toBe("true");
+
+    const networkMode = buttonNamed(mount.container, "Relationship view");
+    await click(dom, networkMode);
+    expect(networkMode.getAttribute("aria-pressed")).toBe("true");
+    expect(mount.container.querySelector(".knowledge-map-status")?.textContent).toBe("Node relationships emphasized");
+    expect(conceptNode.getAttribute("aria-hidden")).toBe("false");
+
+    const treeMode = buttonNamed(mount.container, "Tree view");
+    await click(dom, treeMode);
+    expect(treeMode.getAttribute("aria-pressed")).toBe("true");
+    expect(mount.container.querySelector(".knowledge-map-status")?.textContent).toBe("Tree layout restored");
+
+    const search = mount.container.querySelector<HTMLInputElement>('input[type="search"]');
+    if (!search) throw new Error("Missing Knowledge Tree search.");
+    await inputText(dom, search, "Lexical");
+    expect(rootNode.getAttribute("aria-hidden")).toBe("false");
+    expect(rootNode.classList.contains("is-dimmed")).toBe(true);
+    expect(conceptNode.getAttribute("aria-hidden")).toBe("false");
+    expect(mount.container.querySelector(".knowledge-map-status")?.textContent).toBe("1 matching knowledge units");
+    await inputText(dom, search, "");
+
+    const filter = buttonNamed(mount.container, "Show nodes that need review");
+    await click(dom, filter);
+    expect(filter.getAttribute("aria-pressed")).toBe("true");
+    expect(topicNode.getAttribute("aria-hidden")).toBe("true");
+    expect(topicNode.getAttribute("tabindex")).toBe("-1");
+    const personalRoot = treeItemNamed(mount.container, "Personal knowledge");
+    expect(personalRoot.getAttribute("aria-selected")).toBe("true");
+    expect(personalRoot.getAttribute("tabindex")).toBe("0");
+    await click(dom, filter);
+    expect(filter.getAttribute("aria-pressed")).toBe("false");
+
+    const treeItems = Array.from(mount.container.querySelectorAll<SVGGElement>('[role="treeitem"]'));
+    expect(treeItems.filter((item) => item.getAttribute("tabindex") === "0")).toHaveLength(1);
+    expect(treeItems.every((item) => ["0", "-1"].includes(item.getAttribute("tabindex") ?? ""))).toBe(true);
+    for (const button of mount.container.querySelectorAll<HTMLButtonElement>("button")) expect(button.tabIndex).toBeGreaterThanOrEqual(0);
 
     await unmount(dom, mount.root);
   });
@@ -82,7 +129,8 @@ describe("Knowledge Tree renderer", () => {
       degradedReason: "local_database_not_ready"
     }, async () => undefined);
 
-    expect(mount.container.textContent).toContain("Knowledge Tree is unavailable until the local index is rebuilt.");
+    expect(mount.container.textContent).toContain("Knowledge Tree is temporarily unavailable");
+    expect(mount.container.querySelector(".knowledge-state.degraded .state-copy")).not.toBeNull();
     expect(mount.container.querySelector(".knowledge-tree-roots")).toBeNull();
 
     await act(async () => {
@@ -90,13 +138,17 @@ describe("Knowledge Tree renderer", () => {
         tree: emptyTree(),
         error: null,
         noteLoadingPageId: null,
+        onGoHome: () => undefined,
         onRefresh: async () => undefined,
         onOpenNote: async () => undefined,
+        developmentNotice: null,
+        onDevelopment: () => undefined,
         t
       }));
       await settle(dom);
     });
-    expect(mount.container.textContent).toContain("Your knowledge will take shape here as Pige learns with you.");
+    expect(mount.container.textContent).toContain("Knowledge Tree has no content yet");
+    expect(mount.container.querySelector(".knowledge-state.empty .state-copy")).not.toBeNull();
     expect(mount.container.querySelector(".knowledge-tree-roots")).toBeNull();
 
     await unmount(dom, mount.root);
@@ -246,8 +298,11 @@ async function mountTree(
       tree,
       error: null,
       noteLoadingPageId: null,
+      onGoHome: () => undefined,
       onRefresh: async () => undefined,
       onOpenNote,
+      developmentNotice: null,
+      onDevelopment: () => undefined,
       t
     }));
     await settle(dom);
@@ -282,9 +337,30 @@ function buttonNamed(container: HTMLElement, name: string): HTMLButtonElement {
   return button;
 }
 
+function treeItemNamed(container: HTMLElement, name: string): SVGGElement {
+  const item = Array.from(container.querySelectorAll<SVGGElement>('[role="treeitem"]'))
+    .find((candidate) => candidate.getAttribute("aria-label") === name);
+  if (!item) throw new Error(`Missing tree item: ${name}`);
+  return item;
+}
+
 async function click(dom: JSDOM, element: HTMLElement): Promise<void> {
   await act(async () => {
     element.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+    await settle(dom);
+  });
+}
+
+async function inputText(dom: JSDOM, input: HTMLInputElement, value: string): Promise<void> {
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value")?.set;
+    setter?.call(input, value);
+    input.dispatchEvent(new dom.window.InputEvent("input", {
+      bubbles: true,
+      data: value,
+      inputType: "insertText"
+    }));
+    input.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
     await settle(dom);
   });
 }

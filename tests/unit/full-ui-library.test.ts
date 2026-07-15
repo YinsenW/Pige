@@ -48,9 +48,13 @@ describe("full UI Library", () => {
         selectedNoteRelated: null,
         noteLoadingPageId: null,
         error: null,
+        onGoHome: () => undefined,
         onRefresh: async () => undefined,
         onOpenNote: async () => undefined,
         onCloseNote: () => undefined,
+        noteAgentOpen: false,
+        onToggleNoteAgent: () => undefined,
+        noteAgentToggleRef: { current: null },
         developmentNotice: null,
         onDevelopment: () => undefined,
         t

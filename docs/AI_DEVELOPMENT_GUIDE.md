@@ -183,27 +183,25 @@ once and change product/acceptance only when promises or proof change.
 
 ## 9.1 UI Visual Fidelity Checklist
 
-UI Design owns detailed states and acceptance in `docs/UI_PROTOTYPE.md` section 16 and
-`resources/ui-visual-contract.manifest.json`. Development identifies affected rows, uses
-Pige semantic tokens and synthetic data, runs visual/I18N/accessibility gates, and records
-baseline rationale. Structural checks or a low pixel delta are not packaged visual
-acceptance; uncaptured matrix entries stay explicit and are handed to UI Design.
+UI Design owns and commits production renderer components, CSS/tokens, icons, six locales,
+responsive/motion/accessibility behavior and UI tests from the approved baseline.
+`resources/ui-visual-contract.manifest.json` projects its protected machine contract.
+Development owns typed contracts/services, real states, integration, packaging and smoke;
+it does not redraw UI. Real Electron screenshots and thresholded comparison prove visual
+equivalence; structural tests and synthetic fixtures prove different layers. UI Design
+reviews the final exact integrated candidate before publication.
 
 ## 10. UI Implementation Rules
 
-`docs/UI_PROTOTYPE.md` owns the detailed minimal, calm, Agent-first interaction contract.
-Development preserves its affected state/viewport matrix, routes strings through I18N,
-and does not invent new UI behavior to satisfy implementation convenience.
-
 `docs/prototypes/pige-complete-ui/index.html`, its design contract and element map are the
-sole visual/interaction baseline. Production mechanically migrates them into React/TSX
-with typed APIs and real state; layout, IA, color, spacing, icons and interaction change
-only for baseline-reconciled capability, responsive or accessibility needs. Work stays
-serial: Development freezes service contracts, UI Design supplies baseline-faithful UI,
-Development integrates, then Planning binds once. An unfinished entry may show localized
-`development/unavailable`, but has no IPC, Job, persistence, fake result/progress,
-destructive effect, evidence or status credit. Acceptance separates UI and service/data
-owners; later capability work reuses the entry.
+sole visual/interaction baseline. UI Design mechanically migrates it into production
+React/TSX; Development binds typed APIs through adapters and returns interface gaps rather
+than restyling. Intentional differences require a capability, responsive, accessibility,
+locale or platform constraint and baseline reconciliation. Backend/UI may proceed in
+parallel from exact contract fixtures, but fixtures are never real product state.
+Unfinished entries use localized `development/unavailable` with no fake IPC, Job, data,
+progress, success or persistence. After integration, UI Design reviews the exact bytes and
+Planning binds once; acceptance separates functional, visual and final-review evidence.
 
 ## 11. Testing Expectations
 

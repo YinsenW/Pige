@@ -12,9 +12,12 @@ import type {
   JobsListRequest,
   JobSummary,
   KnowledgeActivitySummary,
+  LibraryListResult,
+  LibraryRelatedResult,
   ModelProviderSettingsSummary,
   ModelEgressPendingRequest,
   ModelEgressResolveRequest,
+  NoteRenderResult,
   OnboardingStatus,
   PermissionPendingRequest,
   PermissionResolveRequest,
@@ -122,6 +125,75 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("keeps the compact Library overlay modal at 831 and resident at 832", async () => {
+    for (const [width, modal] of [[831, true], [832, false]] as const) {
+      const dom = createDom(width);
+      const harness = createHarness(undefined);
+      harness.windowMode = "expanded";
+      harness.sidebarOpen = true;
+      const { container, root } = await mountHome(dom, makePigeApi(harness));
+      await waitFor(dom, () => container.querySelector(".library-sidebar-tree .library-tree-disclosure") !== null);
+
+      const sidebar = container.querySelector<HTMLElement>("#pige-library-sidebar");
+      const workspace = container.querySelector<HTMLElement>("main.workspace");
+      expect(sidebar?.getAttribute("role")).toBe(modal ? "dialog" : null);
+      expect(sidebar?.getAttribute("aria-modal")).toBe(modal ? "true" : null);
+      expect(workspace?.hasAttribute("inert")).toBe(modal);
+
+      if (modal && sidebar) {
+        await act(async () => {
+          sidebar.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+          await settle(dom);
+        });
+        await waitFor(dom, () => container.querySelector("#pige-library-sidebar") === null);
+        expect(harness.sidebarOpen).toBe(false);
+        await waitFor(dom, () => dom.window.document.activeElement === container.querySelector(".sidebar-toggle-button"));
+      }
+
+      await act(async () => root.unmount());
+      dom.window.close();
+    }
+  });
+
+  it("preserves the user-owned note conversation disclosure across note routing", async () => {
+    for (const [width, overlay] of [[1199, true], [1200, false]] as const) {
+      const dom = createDom(width);
+      const harness = createHarness(undefined);
+      harness.windowMode = "expanded";
+      harness.sidebarOpen = true;
+      const { container, root } = await mountHome(dom, makePigeApi(harness));
+      await waitFor(dom, () => container.querySelector(".library-sidebar-tree .library-tree-disclosure") !== null);
+      await openLibraryNote(dom, container, "Note A");
+
+      if (overlay) {
+        expect(container.querySelector(".note-agent")).toBeNull();
+        const opener = buttonsByAriaLabel(container, "Show note conversation")[0]!;
+        await clickElement(dom, opener);
+        const agent = container.querySelector<HTMLElement>(".note-agent");
+        expect(agent?.getAttribute("role")).toBe("dialog");
+        expect(agent?.getAttribute("aria-modal")).toBe("true");
+        expect(container.querySelector("main.workspace")?.hasAttribute("inert")).toBe(true);
+        await act(async () => {
+          agent?.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+          await settle(dom);
+        });
+        await waitFor(dom, () => container.querySelector(".note-agent") === null);
+        await waitFor(dom, () => dom.window.document.activeElement === opener);
+      } else {
+        expect(container.querySelector(".note-agent")?.getAttribute("aria-modal")).toBeNull();
+        await clickButtonByAriaLabel(dom, container, "Hide note conversation");
+        expect(container.querySelector(".note-agent")).toBeNull();
+      }
+
+      await openLibraryNote(dom, container, "Note B");
+      expect(container.querySelector(".note-agent")).toBeNull();
+      expect(buttonsByAriaLabel(container, "Show note conversation")).toHaveLength(1);
+
+      await act(async () => root.unmount());
+      dom.window.close();
+    }
+  });
+
   it("refreshes durable Home state when returning from Models", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
@@ -145,9 +217,7 @@ describe("Home durable Agent conversation UI", () => {
     const readsBeforeReturn = harness.jobListRequests.length;
 
     await clickButtonByAriaLabel(dom, container, "Close Settings");
-    await waitFor(dom, () => container.querySelector(
-      `.job-state-dot[aria-label="${enMessages["home.jobRunning"]}"]`
-    ) !== null);
+    await waitFor(dom, () => container.querySelector(".task-current-state")?.textContent === enMessages["home.jobRunning"]);
     expect(harness.jobListRequests.length).toBeGreaterThan(readsBeforeReturn);
     expect(container.textContent).toContain("public-alpha.csv");
     expect(buttons(container, "Connect Model")).toHaveLength(0);
@@ -201,7 +271,7 @@ describe("Home durable Agent conversation UI", () => {
     });
     const { container, root } = await mountHome(dom, makePigeApi(harness));
 
-    expect(container.querySelector(".job-pill")).toBeNull();
+    expect(container.querySelector(".task-panel")).toBeNull();
     expect(container.textContent).not.toContain("job_20260713_modelwait");
     expect(container.textContent).not.toContain("Waiting for a local capability");
 
@@ -211,7 +281,7 @@ describe("Home durable Agent conversation UI", () => {
     });
     await waitFor(dom, () => buttons(container, "Open Models").length === 1);
     expect(buttons(container, "Open Models")).toHaveLength(1);
-    expect(container.querySelector(".job-pill")).toBeNull();
+    expect(container.querySelector(".task-panel")).toBeNull();
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -233,10 +303,10 @@ describe("Home durable Agent conversation UI", () => {
         await waitFor(dom, () => buttons(container, openModels).length === 1);
         expect(buttons(container, openModels)).toHaveLength(1);
         expect(buttons(container, retry)).toHaveLength(0);
-        expect(container.querySelector(".job-pill")).toBeNull();
+        expect(container.querySelector(".task-panel")).toBeNull();
         expect(container.textContent).not.toContain("job_20260713_modelwait");
         expect(container.textContent).not.toContain(messages["home.jobWaiting"]);
-        expect(container.querySelector("main.shell")?.classList.contains(`mode-${windowMode}`)).toBe(true);
+        expect(container.querySelector('.shell[aria-label="Pige"]')?.classList.contains(`mode-${windowMode}`)).toBe(true);
 
         await act(async () => root.unmount());
         dom.window.close();
@@ -393,7 +463,7 @@ describe("Home durable Agent conversation UI", () => {
       "You can save content now. Connect a model to ask Pi Agent."
     );
     expect(modelActionButtons(container)).toHaveLength(0);
-    expect(container.querySelector(".job-pill")).toBeNull();
+    expect(container.querySelector(".task-panel")).toBeNull();
     expect(container.textContent).not.toContain("job_20260713_modelwait");
     expect(container.textContent).not.toContain("Waiting for a local capability");
 
@@ -405,7 +475,7 @@ describe("Home durable Agent conversation UI", () => {
     expect(modelActionButtons(container)).toHaveLength(1);
     expect(buttons(container, "Connect Model")).toHaveLength(0);
     expect(buttons(container, "Try again")).toHaveLength(0);
-    expect(container.querySelector(".job-pill")).toBeNull();
+    expect(container.querySelector(".task-panel")).toBeNull();
     expect(container.textContent).not.toContain("job_20260713_modelwait");
     expect(container.textContent).not.toContain("Waiting for a local capability");
     expect(container.textContent).not.toContain(
@@ -442,7 +512,7 @@ describe("Home durable Agent conversation UI", () => {
     await clickButton(dom, container, "Send");
     await waitFor(dom, () => harness.submitRequests.length === 1);
 
-    expect(container.querySelector(".job-pill")).toBeNull();
+    expect(container.querySelector(".task-panel")).toBeNull();
     expect(container.textContent).not.toContain("job_20260713_modelwait");
     expect(container.textContent).not.toContain("job_20260714_modelwait02");
     expect(container.textContent).not.toContain("Waiting for a local capability");
@@ -472,7 +542,7 @@ describe("Home durable Agent conversation UI", () => {
       await settle(dom);
     });
     await waitFor(dom, () => buttons(container, "Open Models").length === 1);
-    expect(container.querySelector(".job-pill")).toBeNull();
+    expect(container.querySelector(".task-panel")).toBeNull();
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -510,7 +580,11 @@ describe("Home durable Agent conversation UI", () => {
     expect(buttons(container, "Open Models")).toHaveLength(1);
     expect(buttons(container, "Try again")).toHaveLength(0);
     expect(container.textContent).not.toContain("job_20260713_modelwait");
-    expect(container.textContent).toContain("source.csv");
+    expect(container.querySelector(".task-list")).toBeNull();
+    expect(container.textContent).toContain("public-alpha.csv");
+    await clickButtonByAriaLabel(dom, container, "Expand processing files");
+    await waitFor(dom, () => container.querySelectorAll(".task-row").length === 2);
+    expect(container.textContent).toContain("public-alpha.csv");
     expect(container.textContent).toContain("second-source.csv");
 
     await act(async () => root.unmount());
@@ -593,7 +667,7 @@ describe("Home durable Agent conversation UI", () => {
     modelRepairOpener.focus();
     await clickElement(dom, modelRepairOpener);
     await waitFor(dom, () => harness.dismissFirstHomeCalls === 1);
-    await waitFor(dom, () => reopened.container.querySelector(".settings-content h1")?.textContent === "Models");
+    await waitFor(dom, () => reopened.container.querySelector(".settings-page[aria-label=\"Models\"] h1")?.textContent === "Models");
     expect(modelRepairOpener.isConnected).toBe(true);
 
     const settingsDialog = reopened.container.querySelector<HTMLElement>('[role="dialog"]')!;
@@ -631,7 +705,8 @@ describe("Home durable Agent conversation UI", () => {
     expect(prompt?.querySelector('[role="status"]')?.textContent).toContain("Release Notes Skill");
     expect(prompt?.textContent).toContain("Fetch release notes");
     expect(prompt?.textContent).toContain("Network access");
-    expect(container.querySelector(".job-pill")).toBeNull();
+    expect(container.querySelector(".task-panel")).toBeNull();
+    expect(container.querySelector(".agent-run-state")).toBeNull();
     expect(container.querySelector('[aria-label="Needs attention"]')).toBeNull();
     expect(container.textContent).not.toContain("errors.permission.confirmation_required");
     expect(container.textContent).not.toContain("This external action needs your permission.");
@@ -677,7 +752,8 @@ describe("Home durable Agent conversation UI", () => {
     expect(harness.jobListRequests.some((request) =>
       request.states?.includes("waiting_permission") === true
     )).toBe(true);
-    expect(container.querySelector(".job-pill")).toBeNull();
+    expect(container.querySelector(".task-panel")).toBeNull();
+    expect(container.querySelector(".agent-run-state")).toBeNull();
     await clickButton(dom, container, "Allow once");
     await waitFor(dom, () => harness.permissionResolveRequests.length === 1);
     expect(harness.permissionResolveRequests[0]).toEqual({
@@ -686,7 +762,8 @@ describe("Home durable Agent conversation UI", () => {
       decision: "allow_once"
     });
     await waitFor(dom, () => container.querySelector(".permission-prompt") === null);
-    expect(container.querySelector('.job-pill [aria-label="Processing"]')).not.toBeNull();
+    expect(container.querySelector(".task-panel")).toBeNull();
+    expect(container.querySelector(".agent-run-state.state-running")).not.toBeNull();
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -730,7 +807,8 @@ describe("Home durable Agent conversation UI", () => {
       await settle(dom);
     });
     await waitFor(dom, () => container.querySelector(".permission-prompt") === null);
-    expect(container.querySelector('.job-pill [aria-label="Needs attention"]')).not.toBeNull();
+    expect(container.querySelector(".task-panel")).toBeNull();
+    expect(container.querySelector(".agent-run-state.state-failed")).not.toBeNull();
     expect(container.textContent).toContain("This external action was denied. Your existing work remains saved.");
 
     await act(async () => root.unmount());
@@ -750,7 +828,7 @@ describe("Home durable Agent conversation UI", () => {
     await waitFor(retryDom, () => retryMount.container.textContent?.includes("The decision was not saved") === true);
     expect(buttons(retryMount.container, "Deny")[0]?.disabled).toBe(false);
     expect(buttons(retryMount.container, "Allow once")[0]?.disabled).toBe(false);
-    expect(retryMount.container.querySelector(".job-pill")).toBeNull();
+    expect(retryMount.container.querySelector(".task-panel")).toBeNull();
     expect(retryMount.container.textContent).not.toContain("synthetic");
     await act(async () => retryMount.root.unmount());
     retryDom.window.close();
@@ -765,7 +843,8 @@ describe("Home durable Agent conversation UI", () => {
     await waitFor(committedDom, () => buttons(committedMount.container, "Deny").length === 1);
     await clickButton(committedDom, committedMount.container, "Deny");
     await waitFor(committedDom, () => committedMount.container.querySelector(".permission-prompt") === null);
-    expect(committedMount.container.querySelector('.job-pill [aria-label="Needs attention"]')).not.toBeNull();
+    expect(committedMount.container.querySelector(".task-panel")).toBeNull();
+    expect(committedMount.container.querySelector(".agent-run-state.state-failed")).not.toBeNull();
     expect(committedMount.container.textContent).not.toContain("synthetic");
     await act(async () => committedMount.root.unmount());
     committedDom.window.close();
@@ -782,7 +861,7 @@ describe("Home durable Agent conversation UI", () => {
     await waitFor(unknownDom, () => unknownMount.container.textContent?.includes("could not verify the pending permission") === true);
     expect(buttons(unknownMount.container, "Deny")).toHaveLength(0);
     expect(buttons(unknownMount.container, "Allow once")).toHaveLength(0);
-    expect(unknownMount.container.querySelector(".job-pill")).toBeNull();
+    expect(unknownMount.container.querySelector(".task-panel")).toBeNull();
     expect(unknownMount.container.textContent).not.toContain("synthetic");
     const unknownReads = unknownHarness.permissionPendingReads;
     await act(async () => settle(unknownDom));
@@ -803,7 +882,7 @@ describe("Home durable Agent conversation UI", () => {
     await waitFor(staleDom, () => staleMount.container.textContent?.includes("could not verify the pending permission") === true);
     expect(buttons(staleMount.container, "Deny")).toHaveLength(0);
     expect(buttons(staleMount.container, "Allow once")).toHaveLength(0);
-    expect(staleMount.container.querySelector(".job-pill")).toBeNull();
+    expect(staleMount.container.querySelector(".task-panel")).toBeNull();
     await act(async () => staleMount.root.unmount());
     staleDom.window.close();
 
@@ -837,7 +916,8 @@ describe("Home durable Agent conversation UI", () => {
     expect(container.textContent).toContain("This selected context is marked sensitive");
     expect(container.textContent).not.toContain("provider_sensitive_home");
     expect(container.textContent).not.toContain("This model service needs cloud-send approval");
-    expect(container.querySelector(".job-pill")).toBeNull();
+    expect(container.querySelector(".task-panel")).toBeNull();
+    expect(container.querySelector(".agent-run-state")).toBeNull();
     expect(container.querySelector('[aria-label="Needs attention"]')).toBeNull();
 
     await clickButton(dom, container, "Allow once");
@@ -849,7 +929,8 @@ describe("Home durable Agent conversation UI", () => {
     });
     await waitFor(dom, () => buttons(container, "Allow once").length === 0);
     expect(buttons(container, "Don't send")).toHaveLength(0);
-    expect(container.querySelector('.job-pill [aria-label="Processing"]')).not.toBeNull();
+    expect(container.querySelector(".task-panel")).toBeNull();
+    expect(container.querySelector(".agent-run-state.state-running")).not.toBeNull();
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -876,7 +957,8 @@ describe("Home durable Agent conversation UI", () => {
     )).toBe(true);
     expect(buttons(container, "Allow once")).toHaveLength(1);
     expect(buttons(container, "Don't send")).toHaveLength(1);
-    expect(container.querySelector(".job-pill")).toBeNull();
+    expect(container.querySelector(".task-panel")).toBeNull();
+    expect(container.querySelector(".agent-run-state")).toBeNull();
     expect(container.querySelector('[aria-label="Needs attention"]')).toBeNull();
 
     await act(async () => root.unmount());
@@ -901,8 +983,9 @@ describe("Home durable Agent conversation UI", () => {
       expect(buttons(container, "Don't send")).toHaveLength(0);
       expect(container.textContent).not.toContain("Saving...");
       expect(container.textContent).not.toContain("could not verify");
+      expect(container.querySelector(".task-panel")).toBeNull();
       expect(container.querySelector(
-        `.job-pill [aria-label="${decision === "deny" ? "Needs attention" : "Processing"}"]`
+        `.agent-run-state.state-${decision === "deny" ? "failed" : "running"}`
       )).not.toBeNull();
 
       await act(async () => root.unmount());
@@ -1683,7 +1766,16 @@ function makePigeApi(harness: ConversationHarness): object {
   return {
     getHealth: async () => ({ status: "ok" }),
     window: {
-      current: async () => ({ mode: harness.windowMode, sidebarOpen: harness.sidebarOpen, alwaysOnTop: false })
+      current: async () => windowState(harness),
+      setMode: async ({ mode }: { readonly mode: "compact" | "expanded" }) => {
+        harness.windowMode = mode;
+        return windowState(harness);
+      },
+      setSidebarOpen: async ({ sidebarOpen }: { readonly sidebarOpen: boolean }) => {
+        harness.sidebarOpen = sidebarOpen;
+        return windowState(harness);
+      },
+      setAlwaysOnTop: async () => windowState(harness)
     },
     settings: {
       appearance: async () => ({ locale: harness.locale, availableLocales: [harness.locale] })
@@ -1917,14 +2009,67 @@ function makePigeApi(harness: ConversationHarness): object {
       })
     },
     library: {
-      list: async () => ({
-        scannedAt: "2026-07-12T08:00:00.000Z",
-        activeVaultId: "vault_home_conversation",
-        total: 0,
-        invalidPageCount: 0,
-        pages: []
-      })
+      list: async () => testLibraryList(),
+      related: async ({ pageId }: { readonly pageId: string }) => testRelatedPages(pageId)
+    },
+    notes: {
+      render: async ({ pageId }: { readonly pageId: string }) => testRenderedNote(pageId)
     }
+  };
+}
+
+function windowState(harness: ConversationHarness) {
+  return {
+    mode: harness.windowMode,
+    sidebarOpen: harness.sidebarOpen,
+    alwaysOnTop: false,
+    isFullScreen: false,
+    size: { width: harness.windowMode === "compact" ? 420 : 1200, height: 800 }
+  };
+}
+
+function testLibraryList(): LibraryListResult {
+  const pages = ["A", "B"].map((suffix, index) => ({
+    pageId: `page_20260715_note000${index + 1}`,
+    title: `Note ${suffix}`,
+    pageType: "note" as const,
+    status: "active" as const,
+    pagePath: `wiki/note-${suffix.toLowerCase()}.md`,
+    createdAt: "2026-07-15T08:00:00.000Z",
+    updatedAt: `2026-07-15T08:0${index}:00.000Z`,
+    language: "en",
+    sourceIds: []
+  }));
+  return {
+    scannedAt: "2026-07-15T08:02:00.000Z",
+    activeVaultId: "vault_home_conversation",
+    total: pages.length,
+    invalidPageCount: 0,
+    pages
+  };
+}
+
+function testRenderedNote(pageId: string): NoteRenderResult {
+  const summary = testLibraryList().pages.find((page) => page.pageId === pageId);
+  if (!summary) throw new Error(`Unknown test note: ${pageId}`);
+  return {
+    summary,
+    html: `<h1>${summary.title}</h1><p>Approved reader fixture.</p>`,
+    byteSize: 96
+  };
+}
+
+function testRelatedPages(pageId: string): LibraryRelatedResult {
+  return {
+    queriedAt: "2026-07-15T08:03:00.000Z",
+    activeVaultId: "vault_home_conversation",
+    pageId,
+    totalOutgoing: 0,
+    totalBacklinks: 0,
+    invalidPageCount: 0,
+    outgoing: [],
+    backlinks: [],
+    degraded: false
   };
 }
 
@@ -2393,10 +2538,29 @@ function safeCallError() {
   };
 }
 
-function createDom(): JSDOM {
+function createDom(width = 1200): JSDOM {
   const dom = new JSDOM("<!doctype html><html><body><div id=\"root\"></div></body></html>", {
     pretendToBeVisual: true,
     url: "http://pige.test"
+  });
+  Object.defineProperty(dom.window, "innerWidth", { configurable: true, value: width });
+  Object.defineProperty(dom.window, "matchMedia", {
+    configurable: true,
+    value: (query: string) => {
+      const max = query.match(/max-width:\s*(\d+)px/)?.[1];
+      const min = query.match(/min-width:\s*(\d+)px/)?.[1];
+      const matches = (max === undefined || width <= Number(max)) && (min === undefined || width >= Number(min));
+      return {
+        matches,
+        media: query,
+        onchange: null,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+        addListener: () => undefined,
+        removeListener: () => undefined,
+        dispatchEvent: () => false
+      };
+    }
   });
   dom.window.requestAnimationFrame = (callback: FrameRequestCallback): number =>
     dom.window.setTimeout(() => callback(Date.now()), 0);
@@ -2495,7 +2659,7 @@ async function attachFile(dom: JSDOM, container: HTMLElement, name: string, cont
 }
 
 async function dropFile(dom: JSDOM, container: HTMLElement, name: string, content: string): Promise<void> {
-  const shell = container.querySelector<HTMLElement>("main.shell");
+  const shell = container.querySelector<HTMLElement>('.shell[aria-label="Pige"]');
   if (!shell) throw new Error("Application shell not found.");
   const file = new dom.window.File([content], name, { type: "text/csv" });
   const event = new dom.window.Event("drop", { bubbles: true, cancelable: true });
@@ -2535,6 +2699,22 @@ async function openSettingsSection(dom: JSDOM, container: HTMLElement, label: st
     .find((candidate) => candidate.querySelector("span")?.textContent === label);
   if (!section) throw new Error(`Settings section not found: ${label}`);
   await clickElement(dom, section);
+}
+
+async function openLibraryNote(dom: JSDOM, container: HTMLElement, title: string): Promise<void> {
+  const familyDisclosure = Array.from(container.querySelectorAll<HTMLButtonElement>(".library-tree-disclosure"))
+    .find((candidate) => candidate.querySelector("span")?.textContent === "Knowledge");
+  if (!familyDisclosure) throw new Error("Knowledge disclosure not found.");
+  if (familyDisclosure.getAttribute("aria-expanded") !== "true") await clickElement(dom, familyDisclosure);
+  const typeDisclosure = Array.from(container.querySelectorAll<HTMLButtonElement>(".type-disclosure"))
+    .find((candidate) => candidate.querySelector("span")?.textContent === "Note");
+  if (!typeDisclosure) throw new Error("Note disclosure not found.");
+  if (typeDisclosure.getAttribute("aria-expanded") !== "true") await clickElement(dom, typeDisclosure);
+  const note = Array.from(container.querySelectorAll<HTMLButtonElement>(".library-tree-page"))
+    .find((candidate) => candidate.querySelector("span")?.textContent === title);
+  if (!note) throw new Error(`Library note not found: ${title}`);
+  await clickElement(dom, note);
+  await waitFor(dom, () => container.querySelector(".note-reader h1")?.textContent === title);
 }
 
 async function clickElement(dom: JSDOM, element: HTMLButtonElement): Promise<void> {

@@ -1504,6 +1504,8 @@ differ. `resources/ui-visual-contract.manifest.json` projects the machine subset
 - Primary toolbar height is `46px`; compact toolbars are `36px`; pane toolbars are
   `40px`. Icon-button hit targets should normally be at least `32px`, and never below
   `28px` in dense desktop contexts.
+- The app uses one integrated `58px` renderer titlebar while retaining native macOS and
+  Windows caption controls; never add a second title row or overlap their safe area.
 - Expanded navigation starts at `240px`, prefers `280px`, and may grow to
   `320px` for localized labels or tree depth. It must leave at least `320px` for the
   active content pane and must be hidden, not squeezed into noise, in Compact Home.
@@ -1529,7 +1531,7 @@ differ. `resources/ui-visual-contract.manifest.json` projects the machine subset
   `canvas`, `surface`, `surface-subtle`, `surface-elevated`, `text-primary`,
   `text-secondary`, `text-tertiary`, `border-subtle`, `border-strong`, `focus`,
   `accent`, `success`, `processing`, `warning`, and `danger`.
-- The light theme starts with near-white canvas and white primary surfaces; the dark
+- The approved light baseline uses `#ffffff` canvas and `#202322` primary text; the dark
   theme uses a stepped neutral range rather than pure black for every layer. Adjacent
   panes should differ only enough to clarify structure.
 - Primary text must meet WCAG AA contrast. Secondary and tertiary text may be quieter

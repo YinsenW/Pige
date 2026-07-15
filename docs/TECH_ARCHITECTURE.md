@@ -1115,25 +1115,23 @@ Rules:
 
 Responsibilities:
 
-- Manage Electron window modes: compact capture, expanded workspace, and full-screen reading.
-- Persist machine-local window preferences such as compact size, expanded size, position, sidebar visibility, right rail visibility, full-screen state, and always-on-top state.
-- Expose typed IPC actions for toggling always-on-top, entering/exiting full-screen, opening/closing sidebars, and switching layout modes.
-- Keep whole-window drag-and-drop capture behavior active in compact and expanded modes.
-- Ensure full-screen reading uses surplus width for navigation, related context, source references, and Note Agent panels rather than stretching Markdown prose.
-- Restore the last useful window mode on launch, while keeping first-run default as compact capture.
+- Manage compact, expanded and full-screen modes, machine-local geometry/rail/pin state,
+  typed layout IPC, whole-window drop and first-run compact restoration.
+- Give surplus reading width to navigation/context/Agent panes rather than prose.
 
 Electron main process responsibilities:
 
-- Own native window flags such as always-on-top and full-screen.
-- Store machine-specific window preferences outside the vault.
-- Avoid writing window state into Markdown or portable vault config.
+- Own native flags and keep machine state outside portable vault data.
+- Use `hiddenInset` on macOS; on Windows use `hidden` plus a transparent
+  `#00000000` overlay, `#6f6f6f` symbols and `58px` height; leave Linux defaults intact.
+  Never use `frame:false`. If Windows transparency is unstable, only main may fall back
+  to approved `#f7f7f7`; renderer layout does not change.
 
 React renderer responsibilities:
 
-- Apply responsive layout breakpoints for compact, expanded, and full-screen reading states.
-- Preserve user task context when switching between compact and expanded modes.
-- Let side rails be hidden independently in reading mode.
-- Keep selection action popovers within the note viewport and away from selected text when possible.
+- Render the approved single `58px` titlebar without duplicating/overlapping native
+  caption controls; apply governed breakpoints, preserve task context and independent
+  rails, and keep selection popovers inside the note viewport.
 
 ### 5.7 Settings And Secrets Service
 

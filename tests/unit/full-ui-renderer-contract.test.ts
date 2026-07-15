@@ -22,7 +22,8 @@ describe("full production UI renderer contract", () => {
       "--reader-prose-max: 720px;",
       "--agent-pane-min: 360px;",
       "--agent-pane-default: 400px;",
-      "--agent-pane-max: 440px;"
+      "--agent-pane-max: 440px;",
+      "--radius-composer: 22px;"
     ]) {
       expect(cssSource).toContain(declaration);
     }
@@ -33,6 +34,12 @@ describe("full production UI renderer contract", () => {
     expect(cssSource).toContain("@media (min-width: 1440px)");
     expect(cssSource).toContain("width: min(100%, var(--home-pane-max));");
     expect(cssSource).toContain("grid-template-columns: minmax(0, 1fr);");
+    expect(cssSource).toContain("env(titlebar-area-x, 0px)");
+    expect(cssSource).toContain("env(titlebar-area-width, 100vw)");
+    expect(cssSource).toContain("padding-right: max(10px, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)))");
+    expect(cssSource).not.toContain(".app-window .titlebar { padding-right: 10px; }");
+    const homeComposer = cssSource.match(/\.home > \.composer \{[\s\S]*?\n\}/)?.[0] ?? "";
+    expect(homeComposer).toContain("border-radius: 22px;");
   });
 
   it("keeps Home-only navigation hidden and exposes one controlled Library tree", () => {
@@ -44,9 +51,10 @@ describe("full production UI renderer contract", () => {
     expect(appSource).toContain('aria-expanded={typeExpanded}');
     expect(appSource).toContain('!nextSidebarOpen && view === "home" && windowState?.mode === "expanded"');
     expect(appSource).toContain('setMode({ mode: "compact" })');
+    const primaryNavigationStart = appSource.indexOf('<nav className="primary-navigation nav-list"');
     const primaryNavigation = appSource.slice(
-      appSource.indexOf('<nav className="primary-navigation"'),
-      appSource.indexOf("</nav>", appSource.indexOf('<nav className="primary-navigation"'))
+      primaryNavigationStart,
+      appSource.indexOf("</nav>", primaryNavigationStart)
     );
     expect(primaryNavigation).toContain('t("nav.home")');
     expect(primaryNavigation).toContain('t("nav.knowledgeTree")');
