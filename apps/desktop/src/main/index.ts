@@ -1059,6 +1059,7 @@ ipcMain.handle("agent.submitTurn", async (event, payload: {
     locale: request.locale,
     ...(request.text === undefined ? {} : { text: request.text }),
     ...(request.objective === undefined ? {} : { objective: request.objective }),
+    ...(request.scope === undefined ? {} : { scope: request.scope }),
     ...(request.clientTurnId === undefined ? {} : { clientTurnId: request.clientTurnId }),
     ...(request.conversationId === undefined ? {} : { conversationId: request.conversationId }),
     ...(request.expectedTailEventId === undefined ? {} : { expectedTailEventId: request.expectedTailEventId })

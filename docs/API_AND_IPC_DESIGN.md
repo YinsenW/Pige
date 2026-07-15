@@ -590,19 +590,20 @@ Events:
 
 - `agent.turnDraft`
 
-Library `retrieval.search` accepts active-vault scope, at most 320 Unicode code points,
-optional limit and page types. Preload/main validate both and fence active
-vault before/after work and on result. Responses bound IDs, relative Markdown paths,
-snippets and match reasons; body-free errors exclude bodies, absolute paths, vector/policy
-details and uncalibrated scores. Other DTOs follow
+Library `retrieval.search` accepts active-vault scope, at most 320 Unicode code points and
+optional limit/page types. Preload/main validate and fence active vault before/after work
+and on result. Responses bound IDs, relative Markdown paths, snippets and match reasons;
+body-free errors exclude bodies, absolute paths, vector/policy details and uncalibrated
+scores. Other DTOs follow
 `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`.
 
-Schema-v1 `agent.submitTurn` binds optional client/conversation/tail IDs. Exact retry adopts
-its event/Job; changed input/binding or stale tail fails before Job/Pi. `agent.conversation`
-returns at most 100 bounded messages, tail, follow-up eligibility and safe latest Job; Home
-asks for 24. Results carry conversation/tail IDs, preserve one file and exclude bodies,
-paths, prompts, credentials, endpoints and raw errors. Legacy handlers remain readable;
-save-answer/multi-attachment recovery stays open.
+Schema-v1 `agent.submitTurn` binds optional client/conversation/tail IDs and strict
+`current_note` page ID; preload projects no path. Exact retry adopts its event/Job;
+changed binding/scope or stale tail fails before Job/Pi. `agent.conversation` requires
+matching scope and returns at most 100 bounded messages, tail, follow-up eligibility and
+safe latest Job; Home asks for 24. Results exclude bodies, paths, prompts, credentials,
+endpoints and raw errors. Legacy handlers remain readable; save-answer/multi-attachment
+recovery stays open.
 
 `agent.turnDraft` is a sender-scoped presentation event for an active
 `agent.submitTurn`, not a durable result or raw runtime stream:

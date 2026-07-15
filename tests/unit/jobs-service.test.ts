@@ -357,6 +357,57 @@ describe("jobs service", () => {
     expect(jobs.readAgentTurnJob(created.id)?.operationIds).toEqual(["op_20260714_staleturn1"]);
   });
 
+  it("creates current-note Jobs with an atomic scope ref and never adopts a missing legacy binding", () => {
+    const { vaultPath, vault } = makeVault();
+    const vaults = { current: () => vault, activeVaultPath: () => vaultPath };
+    const jobs = new JobsService(vaults);
+    const bindingHash = `sha256:${"c".repeat(64)}`;
+    const currentNoteScope = {
+      pageId: "page_20260716_atomicnote",
+      bindingHash
+    };
+    const atomic = jobs.createAgentTurnJob({
+      conversationEventId: "evt_20260716_atomicnote01",
+      conversationLocator: ".pige/conversations/2026/07/conv_20260716.jsonl",
+      inputHash: `sha256:${"d".repeat(64)}`,
+      currentNoteScope
+    });
+    expect(atomic.inputRefs).toEqual(expect.arrayContaining([
+      {
+        kind: "page",
+        id: currentNoteScope.pageId,
+        role: "agent_turn_current_note_scope",
+        checksum: bindingHash
+      }
+    ]));
+
+    const legacyRequest = {
+      conversationEventId: "evt_20260716_legacygap001",
+      conversationLocator: ".pige/conversations/2026/07/conv_20260716_legacy.jsonl",
+      inputHash: `sha256:${"e".repeat(64)}`
+    };
+    const legacy = jobs.createAgentTurnJob(legacyRequest);
+    expect(legacy.inputRefs?.some((ref) => ref.role === "agent_turn_current_note_scope")).toBe(false);
+    expect(() => jobs.createAgentTurnJob({ ...legacyRequest, currentNoteScope }))
+      .toThrowError(expect.objectContaining({ code: "agent_runtime.turn_binding_invalid" }));
+
+    const startedRequest = {
+      conversationEventId: "evt_20260716_startedgap01",
+      conversationLocator: ".pige/conversations/2026/07/conv_20260716_started.jsonl",
+      inputHash: `sha256:${"f".repeat(64)}`
+    };
+    const started = jobs.createAgentTurnJob(startedRequest);
+    jobs.writeAgentTurnJob(started, JobRecordSchema.parse({
+      ...started,
+      state: "running",
+      stage: "planning",
+      startedAt: "2026-07-16T01:00:00.000Z",
+      updatedAt: "2026-07-16T01:00:00.000Z"
+    }));
+    expect(() => jobs.createAgentTurnJob({ ...startedRequest, currentNoteScope }))
+      .toThrowError(expect.objectContaining({ code: "agent_runtime.turn_binding_invalid" }));
+  });
+
   it("processes queued text captures into source pages and log entries", () => {
     const { vaultPath, vault } = makeVault();
     const { capture, jobs } = makeServices(vaultPath, vault);

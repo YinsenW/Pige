@@ -527,6 +527,94 @@ describe("Agent turn conversation store", () => {
     expect(readEvents(vaultPath, first.locator)).toHaveLength(3);
   });
 
+  it("isolates checksum-bound current-note conversations across restart and follow-up", () => {
+    const vaultPath = makeVault();
+    const service = new AgentTurnConversationStore();
+    const scopeA = { kind: "current_note", pageId: "page_20260712_noteaaaa" } as const;
+    const scopeB = { kind: "current_note", pageId: "page_20260712_notebbbb" } as const;
+    const metadata = { inputKind: "typed_text", objective: "auto", locale: "en", scope: scopeA } as const;
+    const first = service.appendUserTurn(vaultPath, "What does this note say?", metadata, {
+      clientTurnId: "turn_20260712_noteaaaa0001"
+    });
+    const assistant = service.appendAssistantTurn(
+      vaultPath,
+      first,
+      "job_20260712_noteaaaa0001",
+      "It describes a synthetic launch date."
+    );
+
+    const restarted = new AgentTurnConversationStore();
+    expect(restarted.readConversationTimeline(vaultPath, undefined, 24, scopeA)).toMatchObject({
+      conversationId: first.event.conversationId,
+      tailEventId: assistant.id
+    });
+    expect(restarted.readConversationTimeline(vaultPath, undefined, 24)).toBeUndefined();
+    expect(restarted.readConversationTimeline(vaultPath, undefined, 24, scopeB)).toBeUndefined();
+    expect(captureError(() => restarted.readConversationTimeline(
+      vaultPath,
+      first.event.conversationId,
+      24,
+      scopeB
+    ))).toMatchObject({ code: "agent_runtime.turn_binding_invalid" });
+
+    const sameScopeFollowUp = restarted.appendUserTurn(vaultPath, "Continue in this note.", {
+      ...metadata,
+      inputKind: "follow_up"
+    }, {
+      clientTurnId: "turn_20260712_noteaaaa0002",
+      conversationId: first.event.conversationId,
+      expectedTailEventId: assistant.id
+    });
+    expect(restarted.readContextBeforeUserTurn(vaultPath, sameScopeFollowUp)).toEqual([
+      expect.objectContaining({ role: "user", historyContentClasses: ["sensitive"] }),
+      expect.objectContaining({ role: "assistant", historyContentClasses: ["sensitive"] })
+    ]);
+
+    expect(captureError(() => restarted.appendUserTurn(vaultPath, "Cross-note follow-up.", {
+      ...metadata,
+      inputKind: "follow_up",
+      scope: scopeB
+    }, {
+      clientTurnId: "turn_20260712_notebbbb0002",
+      conversationId: first.event.conversationId,
+      expectedTailEventId: assistant.id
+    }))).toMatchObject({ code: "agent_runtime.turn_binding_invalid" });
+
+    const events = readEvents(vaultPath, first.locator);
+    const mixedEvents = [events[0], {
+      schemaVersion: 1,
+      id: "evt_20260712_sourceref1",
+      conversationId: first.event.conversationId,
+      type: "source_reference",
+      createdAt: "2026-07-12T00:00:00.000Z",
+      sourceId: "src_20260712_sourceref1"
+    }, events[1]];
+    fs.writeFileSync(
+      conversationPath(vaultPath, first.locator),
+      `${mixedEvents.map((event) => JSON.stringify(event)).join("\n")}\n`,
+      "utf8"
+    );
+    expect(captureError(() => restarted.readConversationTimeline(
+      vaultPath,
+      first.event.conversationId,
+      24,
+      scopeA
+    ))).toMatchObject({ code: "agent_runtime.turn_binding_invalid" });
+
+    events[0] = { ...events[0], scope: scopeB };
+    fs.writeFileSync(
+      conversationPath(vaultPath, first.locator),
+      `${events.map((event) => JSON.stringify(event)).join("\n")}\n`,
+      "utf8"
+    );
+    expect(captureError(() => restarted.readConversationTimeline(
+      vaultPath,
+      first.event.conversationId,
+      24,
+      scopeA
+    ))).toMatchObject({ code: "agent_runtime.turn_changed" });
+  });
+
   it("returns bounded context and exact/latest timelines after restart", () => {
     const vaultPath = makeVault();
     const writer = new AgentTurnConversationStore();

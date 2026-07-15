@@ -863,11 +863,19 @@ export type AgentTurnInputKind =
 
 export type AgentTurnObjective = "auto" | "capture" | "vault_only";
 
+export interface AgentTurnCurrentNoteScope {
+  readonly kind: "current_note";
+  readonly pageId: string;
+}
+
+export type AgentTurnScope = AgentTurnCurrentNoteScope;
+
 export interface AgentSubmitTurnRequest {
   readonly schemaVersion?: 1;
   readonly text?: string;
   readonly inputKind: AgentTurnInputKind;
   readonly objective?: AgentTurnObjective;
+  readonly scope?: AgentTurnScope;
   readonly locale: Locale;
   readonly clientTurnId?: string;
   readonly conversationId?: string;
@@ -919,6 +927,7 @@ export type AgentSubmitTurnResult =
 
 export interface AgentConversationRequest {
   readonly conversationId?: string;
+  readonly scope?: AgentTurnScope;
   readonly limit?: number;
 }
 

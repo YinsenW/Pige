@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   DatasetAnswerCitation,
   DatasetQueryPreview,
@@ -15,6 +15,7 @@ import type {
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
 import { AgentTurnConversationStore } from "../../apps/desktop/src/main/services/agent-turn-conversation-store";
 import {
+  AgentSubmitTurnRequestSchema,
   HomeAgentService,
   type HomeAgentDatasetQueryPort,
   type HomeAgentModelPort,
@@ -30,6 +31,10 @@ import type {
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
 import { ModelEgressApprovalService } from "../../apps/desktop/src/main/services/model-egress-approval-service";
 import { readMarkdownPageByRelativePath } from "../../apps/desktop/src/main/services/markdown-page-index";
+import {
+  readCurrentNoteEvidenceBinding,
+  resolveCurrentNoteEvidenceQuoteLocator
+} from "../../apps/desktop/src/main/services/retrieval-evidence-boundary";
 import {
   PiAgentRuntimeAdapter,
   type PiFauxResponse,
@@ -1754,6 +1759,60 @@ describe("Home Pi Agent service", () => {
     });
   });
 
+  it("cancels a current-note turn after the bounded read without publishing an assistant", async () => {
+    const fixture = makeFixture();
+    const jobs = new JobsService(fixture.vaults);
+    let releaseRead!: () => void;
+    const readComplete = new Promise<void>((resolve) => { releaseRead = resolve; });
+    const service = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      jobs,
+      {
+        run: async (request) => {
+          await request.beforeModelTurn?.();
+          const readTool = request.tools.find((tool) => tool.name === "pige_read_current_note");
+          if (!readTool) throw new Error("Missing current-note tool.");
+          const signal = request.signal ?? new AbortController().signal;
+          await readTool.execute({}, signal, { toolCallId: "pi_tool_cancel_current_note", signal });
+          releaseRead();
+          await new Promise<never>((_resolve, reject) => {
+            const abort = (): void => {
+              const error = new Error("synthetic scoped cancellation");
+              error.name = "AbortError";
+              reject(error);
+            };
+            if (signal.aborted) abort();
+            else signal.addEventListener("abort", abort, { once: true });
+          });
+          throw new Error("unreachable");
+        }
+      }
+    );
+    const submission = service.submitTurn({
+      clientTurnId: "turn_20260716_notecancel01",
+      text: "Stop this scoped note answer.",
+      inputKind: "typed_text",
+      scope: { kind: "current_note", pageId: HOME_PAGE_ID },
+      locale: "en"
+    });
+    await readComplete;
+    const running = jobs.list({ classes: ["agent_turn"] }).jobs[0];
+    expect(running).toMatchObject({ state: "running" });
+    expect(jobs.cancel({ jobId: running!.id })).toMatchObject({ status: "cancel_requested" });
+
+    await expect(submission).resolves.toMatchObject({
+      state: "failed",
+      error: { code: "agent_runtime.turn_cancelled" }
+    });
+    expect(jobs.readAgentTurnJob(running!.id)).toMatchObject({ state: "cancelled" });
+    expect(service.conversation({ scope: { kind: "current_note", pageId: HOME_PAGE_ID } })).toMatchObject({
+      messages: [{ role: "user", text: "Stop this scoped note answer." }],
+      latestTurn: { state: "cancelled" }
+    });
+  });
+
   it("reports a verified local Pi binding as local rather than cloud usage", async () => {
     const fixture = makeFixture();
     const outcome = await new HomeAgentService(
@@ -1777,6 +1836,837 @@ describe("Home Pi Agent service", () => {
     expect(readRecords<JobRecord>(path.join(fixture.vaultPath, ".pige", "jobs"))).toEqual([
       expect.objectContaining({ privacy: expect.objectContaining({ usedCloudModel: false, usedNetwork: false }) })
     ]);
+  });
+
+  it("answers through only the exact current-note read and terminal tools", async () => {
+    const fixture = makeFixture();
+    let observedToolNames: string[] = [];
+    let observedToolContract: unknown;
+    let observedToolDetails: unknown;
+    let observedModelText = "";
+    fs.writeFileSync(path.join(fixture.vaultPath, "wiki", "distractor.md"), `---
+id: "page_20260711_distract"
+schema_version: 1
+title: "Distractor"
+type: "note"
+created_at: "2026-07-10T00:00:00.000Z"
+updated_at: "2026-07-11T00:00:00.000Z"
+status: "active"
+language: "en"
+source_ids: []
+---
+
+SYNTHETIC_DISTRACTOR_BODY
+`, "utf8");
+    const service = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId, {
+        onSearch: () => { throw new Error("Vault search must remain unavailable."); }
+      }),
+      new JobsService(fixture.vaults),
+      {
+        run: async (request) => {
+          observedToolNames = request.tools.map((tool) => tool.name);
+          const currentNoteTool = request.tools[0];
+          observedToolContract = currentNoteTool;
+          await request.beforeModelTurn?.();
+          const signal = new AbortController().signal;
+          const context = { toolCallId: "pi_tool_current_note", signal };
+          const result = await currentNoteTool?.execute({}, signal, context);
+          observedToolDetails = result?.details;
+          observedModelText = result?.modelText ?? "";
+          await request.beforeModelTurn?.();
+          return makeRuntimeResult(request, "pige_read_current_note", {
+            answer: "This note says the launch date is July 18. [1]",
+            citationRefs: ["citation_1"],
+            grounding: "local_knowledge",
+            evidenceQuotes: [{ citationRef: "citation_1", quote: "The launch date is July 18." }]
+          });
+        }
+      }
+    );
+
+    const outcome = await service.submitTurn({
+      text: "What launch date does this note state?",
+      inputKind: "typed_text",
+      scope: { kind: "current_note", pageId: HOME_PAGE_ID },
+      locale: "en",
+      clientTurnId: "turn_20260711_currentnote01"
+    });
+
+    expect(outcome.state, JSON.stringify(outcome)).toBe("completed");
+    expect(observedToolNames).toEqual(["pige_read_current_note", "pige_finish_home_turn"]);
+    expect(observedToolContract).toMatchObject({
+      dataBoundary: { resourceScope: "current_note" },
+      idempotency: { mode: "idempotent", scope: "current_note" },
+      outputSchema: expect.objectContaining({
+        required: ["workflow", "evidenceCount", "suppliedBytes", "totalBytes", "truncated"]
+      })
+    });
+    expect(observedToolDetails).toMatchObject({
+      workflow: "note_agent",
+      evidenceCount: 1,
+      truncated: false
+    });
+    expect(observedModelText).toContain('"workflow":"note_agent"');
+    expect(observedModelText).toContain('"budgetClass":"note_agent"');
+    expect(observedModelText).toContain("The launch date is July 18.");
+    expect(observedModelText).not.toContain("SYNTHETIC_DISTRACTOR_BODY");
+    expect(observedModelText).not.toContain(fixture.vaultPath);
+    expect(observedModelText).not.toContain("wiki/launch.md");
+    expect(outcome).toMatchObject({
+      state: "completed",
+      answer: {
+        grounding: "local_knowledge",
+        citations: [expect.objectContaining({ pageId: HOME_PAGE_ID })]
+      }
+    });
+    const job = readRecords<JobRecord>(path.join(fixture.vaultPath, ".pige", "jobs"))[0];
+    expect(job?.inputRefs).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: "page",
+        id: HOME_PAGE_ID,
+        role: "agent_turn_current_note_scope",
+        checksum: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u)
+      })
+    ]));
+    expect(job?.permissionDecisionIds ?? []).toEqual([]);
+    expect(service.conversation({ scope: { kind: "current_note", pageId: HOME_PAGE_ID } })).toMatchObject({
+      canFollowUp: true,
+      messages: [
+        expect.objectContaining({ role: "user" }),
+        expect.objectContaining({ role: "assistant", answer: expect.objectContaining({ grounding: "local_knowledge" }) })
+      ]
+    });
+    expect(service.conversation()).toBeUndefined();
+  });
+
+  it("requires insufficient evidence for an empty current-note body", async () => {
+    const fixture = makeFixture();
+    writeKnowledgePage(fixture.vaultPath, [], "");
+    const service = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      {
+        run: async (request) => {
+          await request.beforeModelTurn?.();
+          const readTool = request.tools.find((tool) => tool.name === "pige_read_current_note");
+          if (!readTool) throw new Error("Missing current-note tool.");
+          const signal = new AbortController().signal;
+          const result = await readTool.execute({}, signal, { toolCallId: "pi_tool_empty_note", signal });
+          expect(result.modelText).toContain('"status":"insufficient_evidence"');
+          expect(result.modelText).toContain('"endExclusive":0');
+          expect(result.modelText).toContain('"total":0');
+          await request.beforeModelTurn?.();
+          return makeRuntimeResult(request, "pige_read_current_note", {
+            answer: "There is no readable content in this note.",
+            citationRefs: [],
+            grounding: "insufficient_evidence"
+          });
+        }
+      }
+    );
+
+    const outcome = await service.submitTurn({
+      text: "What does this note say?",
+      inputKind: "typed_text",
+      scope: { kind: "current_note", pageId: HOME_PAGE_ID },
+      locale: "en",
+      clientTurnId: "turn_20260716_emptynote001"
+    });
+
+    expect(outcome.state, JSON.stringify(outcome)).toBe("completed");
+    expect(outcome).toMatchObject({
+      state: "completed",
+      answer: { grounding: "insufficient_evidence", citations: [] }
+    });
+  });
+
+  it("reports current-note truncation and rejects citation support outside the supplied byte range", async () => {
+    const fixture = makeFixture();
+    const hiddenTail = "SYNTHETIC_HIDDEN_AFTER_CURRENT_NOTE_BOUND";
+    writeKnowledgePage(
+      fixture.vaultPath,
+      [],
+      `Visible bounded prefix. ${"x".repeat(9_000)} ${hiddenTail}`
+    );
+    let rejectedOutOfRangeQuote = false;
+    const service = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      {
+        run: async (request) => {
+          await request.beforeModelTurn?.();
+          const readTool = request.tools.find((tool) => tool.name === "pige_read_current_note");
+          const finishTool = request.tools.find((tool) => tool.name === "pige_finish_home_turn");
+          if (!readTool || !finishTool) throw new Error("Missing current-note tools.");
+          const signal = new AbortController().signal;
+          const context = { toolCallId: "pi_tool_truncated_note", signal };
+          const result = await readTool.execute({}, signal, context);
+          expect(result.modelText).toContain('"endExclusive":8192');
+          expect(result.modelText).toContain('"truncated":true');
+          expect(result.modelText).not.toContain(hiddenTail);
+          await request.beforeModelTurn?.();
+          try {
+            await finishTool.execute({
+              answer: "The hidden tail exists. [1]",
+              citationRefs: ["citation_1"],
+              grounding: "local_knowledge",
+              evidenceQuotes: [{ citationRef: "citation_1", quote: hiddenTail }]
+            }, signal, { toolCallId: "pi_tool_truncated_finish_invalid", signal });
+          } catch (caught) {
+            rejectedOutOfRangeQuote = caught instanceof Error && caught.name === "AgentRepairRequiredError";
+          }
+          return makeRuntimeResult(request, "pige_read_current_note", {
+            answer: "The supplied range does not contain the requested tail.",
+            citationRefs: [],
+            grounding: "insufficient_evidence"
+          });
+        }
+      }
+    );
+
+    const outcome = await service.submitTurn({
+      text: "What appears at the hidden tail of this note?",
+      inputKind: "typed_text",
+      scope: { kind: "current_note", pageId: HOME_PAGE_ID },
+      locale: "en",
+      clientTurnId: "turn_20260716_truncated001"
+    });
+
+    expect(rejectedOutOfRangeQuote).toBe(true);
+    expect(outcome).toMatchObject({
+      state: "completed",
+      answer: { grounding: "insufficient_evidence", citations: [] }
+    });
+  });
+
+  it("truncates multibyte current-note evidence only at a valid UTF-8 code-point boundary", async () => {
+    const fixture = makeFixture();
+    writeKnowledgePage(fixture.vaultPath, [], "界".repeat(3_000));
+    const service = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      {
+        run: async (request) => {
+          await request.beforeModelTurn?.();
+          const readTool = request.tools.find((tool) => tool.name === "pige_read_current_note");
+          if (!readTool) throw new Error("Missing current-note tool.");
+          const signal = new AbortController().signal;
+          const result = await readTool.execute({}, signal, { toolCallId: "pi_tool_multibyte_note", signal });
+          expect(result.modelText).toContain('"endExclusive":8190');
+          expect(result.modelText).toContain('"total":9001');
+          expect(result.modelText).toContain('"truncated":true');
+          expect(result.modelText).not.toContain("�");
+          await request.beforeModelTurn?.();
+          return makeRuntimeResult(request, "pige_read_current_note", {
+            answer: "The supplied range contains the repeated character. [1]",
+            citationRefs: ["citation_1"],
+            grounding: "local_knowledge",
+            evidenceQuotes: [{ citationRef: "citation_1", quote: "界界" }]
+          });
+        }
+      }
+    );
+
+    const outcome = await service.submitTurn({
+      text: "Which character appears in this note?",
+      inputKind: "typed_text",
+      scope: { kind: "current_note", pageId: HOME_PAGE_ID },
+      locale: "en",
+      clientTurnId: "turn_20260716_multibyte001"
+    });
+
+    const rawPage = fs.readFileSync(path.join(fixture.vaultPath, "wiki", "launch.md"));
+    const quoteStart = rawPage.indexOf(Buffer.from("界界", "utf8"));
+    expect(quoteStart).toBeGreaterThan(0);
+    expect(outcome.state, JSON.stringify(outcome)).toBe("completed");
+    expect(outcome).toMatchObject({
+      state: "completed",
+      answer: {
+        grounding: "local_knowledge",
+        citations: [expect.objectContaining({
+          locator: `utf8_bytes:${quoteStart}:${quoteStart + Buffer.byteLength("界界", "utf8")}`
+        })]
+      }
+    });
+  });
+
+  it("fails closed on malformed UTF-8 current-note bytes before Job creation or Pi", async () => {
+    const fixture = makeFixture();
+    const pagePath = path.join(fixture.vaultPath, "wiki", "launch.md");
+    const valid = fs.readFileSync(pagePath);
+    fs.writeFileSync(pagePath, Buffer.concat([valid, Buffer.from([0xc3, 0x28])]));
+    let runtimeCalls = 0;
+    const jobs = new JobsService(fixture.vaults);
+    const outcome = await new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      jobs,
+      { run: async () => { runtimeCalls += 1; throw new Error("Malformed UTF-8 must not reach Pi."); } }
+    ).submitTurn({
+      text: "Read this malformed note.",
+      inputKind: "typed_text",
+      scope: { kind: "current_note", pageId: HOME_PAGE_ID },
+      locale: "en",
+      clientTurnId: "turn_20260716_invalidutf801"
+    });
+
+    expect(outcome).toMatchObject({ state: "failed" });
+    expect(runtimeCalls).toBe(0);
+    expect(jobs.list({ classes: ["agent_turn"] }).jobs).toEqual([]);
+    expect(JSON.stringify(outcome)).not.toContain("�");
+    expect(JSON.stringify(outcome)).not.toContain("0xc3");
+  });
+
+  it("rejects a same-name current-note successor installed after the signature scan", () => {
+    const fixture = makeFixture();
+    const wikiPath = path.join(fixture.vaultPath, "wiki");
+    const originalWikiPath = path.join(fixture.vaultPath, "wiki-original");
+    const pagePath = path.join(wikiPath, "launch.md");
+    const originalOpenSync = fs.openSync;
+    let replaced = false;
+    const openSpy = vi.spyOn(fs, "openSync").mockImplementation(((file, flags, mode) => {
+      if (!replaced && path.resolve(String(file)) === path.resolve(pagePath)) {
+        replaced = true;
+        fs.renameSync(wikiPath, originalWikiPath);
+        fs.mkdirSync(wikiPath);
+        fs.copyFileSync(path.join(originalWikiPath, "launch.md"), pagePath);
+      }
+      return mode === undefined
+        ? originalOpenSync(file, flags)
+        : originalOpenSync(file, flags, mode);
+    }) as typeof fs.openSync);
+
+    let caught: unknown;
+    try {
+      readCurrentNoteEvidenceBinding(fixture.vaultPath, HOME_PAGE_ID);
+    } catch (error) {
+      caught = error;
+    } finally {
+      openSpy.mockRestore();
+      if (fs.existsSync(originalWikiPath)) {
+        fs.rmSync(wikiPath, { recursive: true, force: true });
+        fs.renameSync(originalWikiPath, wikiPath);
+      }
+    }
+
+    expect(replaced).toBe(true);
+    expect(caught).toMatchObject({ code: "rag.evidence_privacy_unavailable" });
+  });
+
+  it("rejects a successor installed during the final parent-chain recheck", () => {
+    const fixture = makeFixture();
+    const wikiPath = path.join(fixture.vaultPath, "wiki");
+    const originalWikiPath = path.join(fixture.vaultPath, "wiki-original");
+    const originalOpenSync = fs.openSync;
+    const originalRealpathNative = fs.realpathSync.native;
+    let targetOpened = false;
+    let replaced = false;
+    const openSpy = vi.spyOn(fs, "openSync").mockImplementation(((file, flags, mode) => {
+      if (path.resolve(String(file)) === path.join(wikiPath, "launch.md")) targetOpened = true;
+      return mode === undefined
+        ? originalOpenSync(file, flags)
+        : originalOpenSync(file, flags, mode);
+    }) as typeof fs.openSync);
+    const realpathSpy = vi.spyOn(fs.realpathSync, "native").mockImplementation(((value) => {
+      if (targetOpened && !replaced) {
+        replaced = true;
+        fs.renameSync(wikiPath, originalWikiPath);
+        fs.mkdirSync(wikiPath);
+        fs.copyFileSync(path.join(originalWikiPath, "launch.md"), path.join(wikiPath, "launch.md"));
+      }
+      return originalRealpathNative(value);
+    }) as typeof fs.realpathSync.native);
+
+    let caught: unknown;
+    try {
+      readCurrentNoteEvidenceBinding(fixture.vaultPath, HOME_PAGE_ID);
+    } catch (error) {
+      caught = error;
+    } finally {
+      realpathSpy.mockRestore();
+      openSpy.mockRestore();
+      if (fs.existsSync(originalWikiPath)) {
+        fs.rmSync(wikiPath, { recursive: true, force: true });
+        fs.renameSync(originalWikiPath, wikiPath);
+      }
+    }
+
+    expect(replaced).toBe(true);
+    expect(caught).toMatchObject({ code: "rag.evidence_privacy_unavailable" });
+  });
+
+  it("never resolves the redaction marker as durable current-note citation support", () => {
+    const fixture = makeFixture();
+    writeKnowledgePage(fixture.vaultPath, [], "The protected value is [redacted-secret].");
+    const binding = readCurrentNoteEvidenceBinding(fixture.vaultPath, HOME_PAGE_ID);
+
+    expect(resolveCurrentNoteEvidenceQuoteLocator(binding, "[redacted-secret]")).toBeUndefined();
+  });
+
+  it("makes the first current-note model turn query-only and confirms sensitive evidence only after the read", async () => {
+    const fixture = makeFixture();
+    const sourceId = "src_20260716_notesensitive";
+    writeSourceRecord(fixture.vaultPath, sourceId, { sensitive: true });
+    writeKnowledgePage(fixture.vaultPath, [sourceId]);
+    let runtimeCalls = 0;
+    let readAttempted = false;
+    const service = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      {
+        run: async (request) => {
+          runtimeCalls += 1;
+          await request.beforeModelTurn?.();
+          const readTool = request.tools.find((tool) => tool.name === "pige_read_current_note");
+          if (!readTool) throw new Error("Missing current-note tool.");
+          readAttempted = true;
+          const signal = new AbortController().signal;
+          await readTool.execute({}, signal, { toolCallId: "pi_tool_sensitive_current_note", signal });
+          throw new Error("Sensitive evidence must wait before another provider turn.");
+        }
+      }
+    );
+
+    const outcome = await service.submitTurn({
+      text: "What does this sensitive note say?",
+      inputKind: "typed_text",
+      scope: { kind: "current_note", pageId: HOME_PAGE_ID },
+      locale: "en",
+      clientTurnId: "turn_20260716_notesensitive01"
+    });
+
+    expect(runtimeCalls).toBe(1);
+    expect(readAttempted).toBe(true);
+    expect(outcome).toMatchObject({
+      state: "waiting",
+      error: { code: "model_provider.egress_confirmation_required" }
+    });
+    const confirmationAudits = readRecords<OperationRecord>(path.join(fixture.vaultPath, ".pige", "operations"))
+      .filter((operation) => operation.modelEgressAudit?.outcome === "confirm");
+    expect(confirmationAudits).toHaveLength(1);
+    expect(confirmationAudits[0]).toMatchObject({
+      modelEgressAudit: { contentClasses: ["sensitive"], reasonCode: "sensitive_confirmation" }
+    });
+  });
+
+  it("treats current-note vault-only as the exact scoped read rather than requiring a vault search", async () => {
+    const fixture = makeFixture();
+    const service = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId, {
+        onSearch: () => { throw new Error("Current-note vault-only must not search the vault."); }
+      }),
+      new JobsService(fixture.vaults),
+      {
+        run: async (request) => {
+          await request.beforeModelTurn?.();
+          const readTool = request.tools.find((tool) => tool.name === "pige_read_current_note");
+          if (!readTool) throw new Error("Missing current-note tool.");
+          const signal = new AbortController().signal;
+          await readTool.execute({}, signal, { toolCallId: "pi_tool_vault_only_current_note", signal });
+          await request.beforeModelTurn?.();
+          return makeRuntimeResult(request, "pige_read_current_note", {
+            answer: "The scoped note says July 18. [1]",
+            citationRefs: ["citation_1"],
+            grounding: "local_knowledge",
+            evidenceQuotes: [{ citationRef: "citation_1", quote: "The launch date is July 18." }]
+          });
+        }
+      }
+    );
+
+    await expect(service.submitTurn({
+      text: "Read only this note.",
+      inputKind: "typed_text",
+      objective: "vault_only",
+      scope: { kind: "current_note", pageId: HOME_PAGE_ID },
+      locale: "en",
+      clientTurnId: "turn_20260716_notevaultonly"
+    })).resolves.toMatchObject({ state: "completed" });
+  });
+
+  it("confirms sensitive current-note follow-up history before any provider runtime call", async () => {
+    const fixture = makeFixture();
+    const sourceId = "src_20260716_scopehistory";
+    writeSourceRecord(fixture.vaultPath, sourceId, { sensitive: true });
+    writeKnowledgePage(fixture.vaultPath, [sourceId]);
+    const conversations = new AgentTurnConversationStore();
+    const scope = { kind: "current_note", pageId: HOME_PAGE_ID } as const;
+    const first = conversations.appendUserTurn(
+      fixture.vaultPath,
+      "What date is in this sensitive note?",
+      { inputKind: "typed_text", objective: "auto", locale: "en", scope },
+      { clientTurnId: "turn_20260716_scopehistory01" }
+    );
+    const assistant = conversations.appendAssistantTurn(
+      fixture.vaultPath,
+      first,
+      "job_20260716_scopehistory01",
+      {
+        answer: "The sensitive note says July 18.",
+        grounding: "local_knowledge",
+        citations: []
+      }
+    );
+    writeSourceRecord(fixture.vaultPath, sourceId, { sensitive: false }, "2026-07-16T02:00:00.000Z");
+    writeKnowledgePage(fixture.vaultPath, []);
+    const machineRoot = path.join(path.dirname(fixture.vaultPath), "machine-scope-history-egress");
+    fs.mkdirSync(machineRoot);
+    const approvals = new ModelEgressApprovalService({ rootPath: machineRoot, unsafeAllowUnfenced: true });
+    const jobs = new JobsService(fixture.vaults, undefined, undefined, undefined, undefined, undefined, approvals);
+    let runtimeCalls = 0;
+    const service = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      jobs,
+      { run: async () => { runtimeCalls += 1; throw new Error("Provider runtime must wait for confirmation."); } },
+      undefined,
+      conversations,
+      undefined,
+      undefined,
+      approvals
+    );
+
+    const outcomePromise = service.submitTurn({
+      text: "Repeat that date.",
+      inputKind: "follow_up",
+      scope,
+      locale: "en",
+      clientTurnId: "turn_20260716_scopehistory02",
+      conversationId: first.event.conversationId,
+      expectedTailEventId: assistant.id
+    });
+    const waitingJob = await waitForValue(() => jobs.list({ states: ["waiting_model_egress"] }).jobs[0]);
+    expect(runtimeCalls).toBe(0);
+    const durableWaitingJob = jobs.readAgentTurnJob(waitingJob.id);
+    expect(durableWaitingJob?.inputRefs).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: "page",
+        id: HOME_PAGE_ID,
+        role: "agent_turn_current_note_scope",
+        checksum: expect.stringMatching(/^sha256:/u)
+      })
+    ]));
+    const requestId = waitingJob.modelEgressApprovalRequestId;
+    expect(jobs.pendingModelEgress(requestId ?? "")).toMatchObject({
+      reasonCode: "sensitive_confirmation",
+      contentClasses: ["sensitive"]
+    });
+    expect(jobs.resolveModelEgress({
+      requestId: requestId ?? "",
+      jobId: waitingJob.id,
+      decision: "deny"
+    }).status).toBe("denied");
+    expect(await outcomePromise).toMatchObject({ state: "failed" });
+    expect(runtimeCalls).toBe(0);
+  });
+
+  it("rejects scoped attachments and duplicate current-note page identities before Pi", async () => {
+    expect(AgentSubmitTurnRequestSchema.safeParse({
+      text: "Mix this note with an attachment.",
+      inputKind: "file_picker",
+      scope: { kind: "current_note", pageId: HOME_PAGE_ID },
+      locale: "en"
+    }).success).toBe(false);
+
+    const fixture = makeFixture();
+    fs.writeFileSync(
+      path.join(fixture.vaultPath, "wiki", "duplicate-launch.md"),
+      fs.readFileSync(path.join(fixture.vaultPath, "wiki", "launch.md"), "utf8"),
+      "utf8"
+    );
+    let runtimeCalls = 0;
+    const outcome = await new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      { run: async () => { runtimeCalls += 1; throw new Error("Duplicate page identity must not reach Pi."); } }
+    ).submitTurn({
+      text: "Read this exact note.",
+      inputKind: "typed_text",
+      scope: { kind: "current_note", pageId: HOME_PAGE_ID },
+      locale: "en",
+      clientTurnId: "turn_20260711_duplicatepage"
+    });
+
+    expect(runtimeCalls).toBe(0);
+    expect(outcome).toMatchObject({ state: "failed" });
+  });
+
+  it("binds the current note before a model wait and rejects changed evidence on restart", async () => {
+    const fixture = makeFixture();
+    const models = makeMutableHomeModels(false);
+    const jobs = new JobsService(fixture.vaults);
+    let runtimeCalls = 0;
+    const service = new HomeAgentService(
+      fixture.vaults,
+      models,
+      makeRetrievalPort(fixture.vault.vaultId),
+      jobs,
+      { run: async () => { runtimeCalls += 1; throw new Error("Changed note must not reach Pi."); } }
+    );
+    const waiting = await service.submitTurn({
+      text: "Remember this exact note while the model is unavailable.",
+      inputKind: "typed_text",
+      scope: { kind: "current_note", pageId: HOME_PAGE_ID },
+      locale: "en",
+      clientTurnId: "turn_20260711_notewait0001"
+    });
+    expect(waiting).toMatchObject({ state: "waiting", error: { code: "model_provider.default_model_missing" } });
+    if (!waiting.jobId) throw new Error("Expected a durable waiting Job.");
+    const boundRef = jobs.readAgentTurnJob(waiting.jobId)?.inputRefs?.find(
+      (ref) => ref.role === "agent_turn_current_note_scope"
+    );
+    expect(boundRef).toMatchObject({ kind: "page", id: HOME_PAGE_ID, checksum: expect.stringMatching(/^sha256:/u) });
+
+    const pagePath = path.join(fixture.vaultPath, "wiki", "launch.md");
+    fs.writeFileSync(pagePath, fs.readFileSync(pagePath, "utf8").replace(
+      "The launch date is July 18.",
+      "The launch date changed while the model was unavailable."
+    ), "utf8");
+    models.setReady(true);
+    const restarted = new HomeAgentService(
+      fixture.vaults,
+      models,
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      { run: async () => { runtimeCalls += 1; throw new Error("Changed note must not reach Pi."); } }
+    );
+
+    expect(await restarted.resumeWaitingTurns()).toEqual({
+      requeued: 1,
+      processed: 1,
+      completed: 0,
+      waiting: 0,
+      failed: 1
+    });
+    expect(runtimeCalls).toBe(0);
+    expect(jobs.readAgentTurnJob(waiting.jobId)).toMatchObject({
+      state: "failed_final",
+      inputRefs: expect.arrayContaining([boundRef])
+    });
+  });
+
+  it("adopts a crash-published scoped assistant before rereading a drifted current note", async () => {
+    const fixture = makeFixture();
+    const conversations = new AgentTurnConversationStore();
+    const jobs = new JobsService(fixture.vaults);
+    const scope = { kind: "current_note", pageId: HOME_PAGE_ID } as const;
+    const preserved = conversations.appendUserTurn(
+      fixture.vaultPath,
+      "Read the current note before a synthetic publication crash.",
+      { inputKind: "typed_text", objective: "auto", locale: "en", scope },
+      { clientTurnId: "turn_20260716_publishcrash1" }
+    );
+    const binding = readCurrentNoteEvidenceBinding(fixture.vaultPath, HOME_PAGE_ID);
+    const job = jobs.createAgentTurnJob({
+      conversationEventId: preserved.event.id,
+      conversationLocator: preserved.locator,
+      inputHash: preserved.inputHash,
+      currentNoteScope: { pageId: HOME_PAGE_ID, bindingHash: binding.bindingHash }
+    });
+    const assistant = conversations.appendAssistantTurn(
+      fixture.vaultPath,
+      preserved,
+      job.id,
+      {
+        answer: "The already-durable scoped answer survives restart.",
+        grounding: "local_knowledge",
+        citations: []
+      },
+      ["sensitive"]
+    );
+    writeKnowledgePage(fixture.vaultPath, [], "The note changed after assistant publication.");
+    let runtimeCalls = 0;
+    const restartedJobs = new JobsService(fixture.vaults);
+    const restarted = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      restartedJobs,
+      { run: async () => { runtimeCalls += 1; throw new Error("Durable assistant must be adopted first."); } },
+      undefined,
+      new AgentTurnConversationStore()
+    );
+
+    expect(await restarted.resumeWaitingTurns()).toEqual({
+      requeued: 0,
+      processed: 1,
+      completed: 1,
+      waiting: 0,
+      failed: 0
+    });
+    expect(runtimeCalls).toBe(0);
+    expect(restartedJobs.readAgentTurnJob(job.id)).toMatchObject({
+      state: "completed",
+      outputRefs: expect.arrayContaining([
+        expect.objectContaining({ id: assistant.id, role: "agent_turn_assistant_event" })
+      ])
+    });
+  });
+
+  it("fails closed when a restarted current-note Job lacks its creation-time scope ref", async () => {
+    const fixture = makeFixture();
+    const conversations = new AgentTurnConversationStore();
+    const scope = { kind: "current_note", pageId: HOME_PAGE_ID } as const;
+    const preserved = conversations.appendUserTurn(
+      fixture.vaultPath,
+      "Resume this current-note turn after the old scope-ref crash window.",
+      { inputKind: "typed_text", objective: "auto", locale: "en", scope },
+      { clientTurnId: "turn_20260716_missingref01" }
+    );
+    const legacyJob = new JobsService(fixture.vaults).createAgentTurnJob({
+      conversationEventId: preserved.event.id,
+      conversationLocator: preserved.locator,
+      inputHash: preserved.inputHash
+    });
+    let runtimeCalls = 0;
+    const restartedJobs = new JobsService(fixture.vaults);
+    const restarted = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      restartedJobs,
+      { run: async () => { runtimeCalls += 1; throw new Error("Missing scope ref must stop before Pi."); } },
+      undefined,
+      new AgentTurnConversationStore()
+    );
+
+    expect(await restarted.resumeWaitingTurns()).toEqual({
+      requeued: 0,
+      processed: 1,
+      completed: 0,
+      waiting: 0,
+      failed: 1
+    });
+    expect(runtimeCalls).toBe(0);
+    expect(restartedJobs.readAgentTurnJob(legacyJob.id)).toMatchObject({
+      state: "failed_final",
+      error: { code: "agent_runtime.turn_binding_invalid" }
+    });
+  });
+
+  it("audits current-note privacy drift and blocks the terminal answer from publication", async () => {
+    const fixture = makeFixture();
+    const sourceId = "src_20260711_noteprivacy";
+    writeKnowledgePage(fixture.vaultPath, [sourceId]);
+    writeSourceRecord(fixture.vaultPath, sourceId, { private: false, sensitive: false });
+    const machineRoot = path.join(path.dirname(fixture.vaultPath), "machine-note-egress");
+    fs.mkdirSync(machineRoot);
+    const approvals = new ModelEgressApprovalService({ rootPath: machineRoot, unsafeAllowUnfenced: true });
+    const jobs = new JobsService(fixture.vaults, undefined, undefined, undefined, undefined, undefined, approvals);
+    const service = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      jobs,
+      {
+        run: async (request) => {
+          await request.beforeModelTurn?.();
+          const currentNoteTool = request.tools.find((tool) => tool.name === "pige_read_current_note");
+          if (!currentNoteTool) throw new Error("Missing current-note tool.");
+          const signal = new AbortController().signal;
+          await currentNoteTool.execute({}, signal, { toolCallId: "pi_tool_current_note_privacy", signal });
+          await request.beforeModelTurn?.();
+          const result = await makeRuntimeResult(request, "pige_read_current_note", {
+            answer: "This answer must never be published after privacy drift. [1]",
+            citationRefs: ["citation_1"],
+            grounding: "local_knowledge",
+            evidenceQuotes: [{ citationRef: "citation_1", quote: "The launch date is July 18." }]
+          });
+          writeSourceRecord(
+            fixture.vaultPath,
+            sourceId,
+            { private: true, sensitive: true },
+            "2026-07-11T02:00:00.000Z"
+          );
+          return result;
+        }
+      },
+      undefined,
+      new AgentTurnConversationStore(),
+      undefined,
+      undefined,
+      approvals
+    );
+
+    const outcome = await service.submitTurn({
+      text: "Summarize the current note.",
+      inputKind: "typed_text",
+      scope: { kind: "current_note", pageId: HOME_PAGE_ID },
+      locale: "en",
+      clientTurnId: "turn_20260711_noteprivacy1"
+    });
+
+    expect(outcome).toMatchObject({ state: "failed", error: { code: "model_provider.egress_blocked" } });
+    expect(outcome.jobId).toBeDefined();
+    expect(approvals.listForJob(fixture.vaultPath, outcome.jobId ?? "")).toEqual([]);
+    expect(service.conversation({ scope: { kind: "current_note", pageId: HOME_PAGE_ID } })?.messages).toEqual([
+      expect.objectContaining({ role: "user" })
+    ]);
+    const operations = readRecords<OperationRecord>(path.join(fixture.vaultPath, ".pige", "operations"));
+    expect(new Set(operations.map((operation) => operation.modelEgressAudit?.evidenceSummaryHash)).size)
+      .toBeGreaterThan(1);
+    expect(operations.find((operation) => operation.modelEgressAudit?.contentClasses.includes("private"))).toMatchObject({
+      kind: "model_egress_decision",
+      modelEgressAudit: { contentClasses: expect.arrayContaining(["private"]) }
+    });
+    expect(JSON.stringify({ operations, jobs: jobs.list({ classes: ["agent_turn"] }).jobs }))
+      .not.toContain("This answer must never be published");
+  });
+
+  it("stops before a later provider turn when the bound current-note body changes", async () => {
+    const fixture = makeFixture();
+    let reachedChangedProviderTurn = false;
+    const service = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      {
+        run: async (request) => {
+          await request.beforeModelTurn?.();
+          const currentNoteTool = request.tools.find((tool) => tool.name === "pige_read_current_note");
+          if (!currentNoteTool) throw new Error("Missing current-note tool.");
+          const signal = new AbortController().signal;
+          await currentNoteTool.execute({}, signal, { toolCallId: "pi_tool_current_note_drift", signal });
+          const pagePath = path.join(fixture.vaultPath, "wiki", "launch.md");
+          fs.writeFileSync(pagePath, fs.readFileSync(pagePath, "utf8").replace(
+            "The launch date is July 18.",
+            "The launch date changed before the next provider call."
+          ), "utf8");
+          await request.beforeModelTurn?.();
+          reachedChangedProviderTurn = true;
+          throw new Error("Unreachable provider turn.");
+        }
+      }
+    );
+
+    const outcome = await service.submitTurn({
+      text: "What date does this note state?",
+      inputKind: "typed_text",
+      scope: { kind: "current_note", pageId: HOME_PAGE_ID },
+      locale: "en",
+      clientTurnId: "turn_20260711_notebodydrift"
+    });
+
+    expect(reachedChangedProviderTurn).toBe(false);
+    expect(outcome).toMatchObject({ state: "failed", error: { code: "model_provider.egress_blocked" } });
   });
 });
 
@@ -2050,6 +2940,7 @@ async function makeRuntimeResult(
     readonly answer: string;
     readonly citationRefs: readonly string[];
     readonly grounding?: "general" | "local_knowledge" | "source" | "insufficient_evidence";
+    readonly evidenceQuotes?: readonly { readonly citationRef: string; readonly quote: string }[];
   }
 ): Promise<PiAgentRunResult> {
   const terminalOutput = { ...output, grounding: output.grounding ?? "local_knowledge" };
@@ -2086,6 +2977,7 @@ interface HomeAgentOutputFixture {
   readonly answer: string;
   readonly citationRefs: readonly string[];
   readonly grounding: "general" | "local_knowledge" | "source" | "insufficient_evidence";
+  readonly evidenceQuotes?: readonly { readonly citationRef: string; readonly quote: string }[];
 }
 
 async function runUntilSecondModelTurn(
@@ -2175,7 +3067,11 @@ function makeEmptySearchResult(vaultId: string, query: string): RetrievalSearchR
   };
 }
 
-function writeKnowledgePage(vaultPath: string, sourceIds: readonly string[]): void {
+function writeKnowledgePage(
+  vaultPath: string,
+  sourceIds: readonly string[],
+  body = "The launch date is July 18."
+): void {
   const pagePath = path.join(vaultPath, "wiki", "launch.md");
   fs.mkdirSync(path.dirname(pagePath), { recursive: true });
   fs.writeFileSync(pagePath, `---
@@ -2190,7 +3086,7 @@ language: "en"
 source_ids: ${JSON.stringify(sourceIds)}
 ---
 
-The launch date is July 18.
+${body}
 `, "utf8");
 }
 

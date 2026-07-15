@@ -245,8 +245,12 @@ const api: PigeDesktopApi = {
       ipcRenderer.invoke("agent.ask", request) as Promise<HomeAgentAskResult>,
     conversation: async (
       request?: AgentConversationRequest
-    ): Promise<AgentConversationTimeline | undefined> =>
-      ipcRenderer.invoke("agent.conversation", request) as Promise<AgentConversationTimeline | undefined>,
+    ): Promise<AgentConversationTimeline | undefined> => {
+      const normalizedRequest = request?.scope
+        ? { ...request, scope: { kind: "current_note" as const, pageId: request.scope.pageId } }
+        : request;
+      return ipcRenderer.invoke("agent.conversation", normalizedRequest) as Promise<AgentConversationTimeline | undefined>;
+    },
     submitTurn: async (
       request: AgentSubmitTurnRequest,
       files: readonly File[] = []
@@ -254,7 +258,13 @@ const api: PigeDesktopApi = {
       const filePaths = files
         .map((file) => webUtils.getPathForFile(file))
         .filter((filePath): filePath is string => filePath.length > 0);
-      return ipcRenderer.invoke("agent.submitTurn", { request, filePaths }) as Promise<AgentSubmitTurnResult>;
+      const normalizedRequest = request.scope
+        ? { ...request, scope: { kind: "current_note" as const, pageId: request.scope.pageId } }
+        : request;
+      return ipcRenderer.invoke("agent.submitTurn", {
+        request: normalizedRequest,
+        filePaths
+      }) as Promise<AgentSubmitTurnResult>;
     },
     onTurnDraft: (listener: (event: AgentTurnDraftEvent) => void): (() => void) => {
       const handleDraft = (_event: IpcRendererEvent, draft: AgentTurnDraftEvent): void => listener(draft);
