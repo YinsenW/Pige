@@ -142,6 +142,8 @@
     .icon-button svg { width: 21px; height: 21px; }
 
     .pin-button { margin-left: auto; color: #838886; }
+    .pin-button svg { transform: rotate(-32deg); transform-origin: 50% 55%; transition: transform 180ms cubic-bezier(.22, 1, .36, 1); }
+    .pin-button[aria-pressed="true"] svg { transform: rotate(0); }
     .pin-button[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
 
     .main-layout {
@@ -521,17 +523,6 @@
 
     .note-composer-wrap { padding: 0 20px 18px; }
 
-    .note-composer-context {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 10px 12px 8px;
-      color: var(--text-secondary);
-      font-size: 12px;
-    }
-
-    .note-composer-context span:first-child { margin-right: auto; }
-
     .note-composer {
       min-height: 132px;
       padding: 14px 14px 12px;
@@ -556,7 +547,7 @@
     .note-composer textarea::placeholder { color: #b5b9b7; }
 
     .note-composer-toolbar { display: flex; align-items: center; gap: 8px; }
-    .note-context-label { margin-left: auto; color: var(--text-secondary); font-size: 12px; }
+    .note-composer-toolbar .model-switcher-wrap { margin-left: auto; }
 
     .hero {
       display: flex;
@@ -644,14 +635,6 @@
 
     .source-icon svg { width: 27px; height: 27px; }
     .source-type span:last-child { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
-
-    .drop-hint {
-      margin: 24px 0 0;
-      color: #8a8f8c;
-      font-size: 15px;
-      line-height: 1.5;
-      text-align: center;
-    }
 
     .bottom-stack {
       position: relative;
@@ -1040,7 +1023,6 @@
       .hero { padding-top: 16px; padding-bottom: 22px; }
       .brand-mark { width: 70px; height: 70px; margin-bottom: 16px; }
       .source-picker { margin-top: 34px; padding: 20px 24px; }
-      .drop-hint { margin-top: 16px; }
       .bottom-stack { margin-bottom: 14px; }
     }
 
@@ -1316,7 +1298,6 @@
     }
     .source-icon svg { width: 20px; height: 20px; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
     .source-type span:last-child { font-size: 11px; }
-    .drop-hint { margin: 14px 0 0; color: var(--text-tertiary); font-size: 12px; }
 
     .bottom-stack { width: min(720px, calc(100% - 48px)); margin-bottom: 16px; }
     .task-panel {
@@ -1434,7 +1415,6 @@
     .message-actions button:hover { background: var(--surface-hover); }
     .message-actions svg { width: 16px; height: 16px; }
     .note-composer-wrap { padding: 0 16px 14px; }
-    .note-composer-context { gap: 7px; padding: 8px 10px 7px; font-size: 11px; }
     .note-composer {
       min-height: 112px;
       padding: 12px 12px 9px;
@@ -1446,7 +1426,6 @@
     }
     .note-composer textarea { min-height: 58px; font-size: 13px; }
     .note-composer-toolbar { gap: 4px; }
-    .note-context-label { font-size: 11px; }
 
     .toast { top: 12px; padding: 7px 11px; border: 0; border-radius: 9999px; box-shadow: var(--shadow-float); font-size: 12px; transition: opacity 150ms var(--ease-basic), transform 150ms var(--ease-enter); }
 
@@ -1456,7 +1435,6 @@
       .hero { padding-top: 12px; padding-bottom: 18px; }
       .brand-mark { width: 48px; height: 48px; margin-bottom: 14px; }
       .source-picker { margin-top: 26px; padding: 14px 16px; }
-      .drop-hint { margin-top: 10px; }
       .bottom-stack { margin-bottom: 12px; }
     }
 
@@ -1828,7 +1806,6 @@
       .source-icon { width: 38px; height: 38px; border-radius: 10px; }
       .source-icon svg { width: 18px; height: 18px; }
       .source-type span:last-child { font-size: 10px; }
-      .drop-hint { margin-top: 10px; font-size: 10px; }
       .bottom-stack { width: calc(100% - 20px); margin-bottom: 10px; }
       .task-panel { margin-inline: 7px; padding: 14px 12px 28px; }
       .task-list { gap: 9px; }
@@ -2250,8 +2227,6 @@
     .restore-mode-copy span { color: var(--text-tertiary); font-size: 10px; line-height: 1.45; }
     .restore-warning-copy { margin: 10px 0 0; color: var(--text-secondary); font-size: 10px; line-height: 1.5; }
     .sidebar-label { display: flex; align-items: center; justify-content: space-between; }
-    .sidebar-library-open { padding: 2px 5px; border: 0; border-radius: 6px; background: transparent; color: var(--text-tertiary); font-size: 10px; cursor: pointer; }
-    .sidebar-library-open:hover { background: var(--surface-hover); color: var(--text-secondary); }
     .app-window[data-screen^="library"] .home { opacity: 0; visibility: hidden; pointer-events: none; }
     .app-window[data-screen^="library"] { width: calc(var(--sidebar-pane-width) + 760px); }
     .app-window[data-screen^="library"] .main-layout { grid-template-columns: var(--sidebar-pane-width) 760px 0; }
@@ -2460,7 +2435,7 @@
               知识树
             </button>
           </nav>
-          <div class="sidebar-label"><span>笔记库</span><button class="sidebar-library-open" id="openLibrary" type="button">浏览全部</button></div>
+          <div class="sidebar-label"><span>笔记库</span></div>
           <div class="notebook-group" data-notebook="pico8">
             <button class="notebook-title" type="button" aria-expanded="true" aria-controls="notebook-pico8-pages"><span class="notebook-chevron" aria-hidden="true">⌄</span><span>Pico8</span></button>
             <div class="notebook-pages" id="notebook-pico8-pages">
@@ -2520,7 +2495,6 @@
                     <span class="source-icon"><svg viewBox="0 0 20 20" aria-hidden="true"><use href="./pige-icon-sprite.svg#pi-more"/></svg></span><span>更多</span>
                   </li>
                 </ul>
-                <p class="drop-hint">拖拽文件到这里，或直接开始输入</p>
               </div>
 
               <div class="conversation-preview" id="conversationPreview">
@@ -2901,14 +2875,22 @@
             </section>
           </div>
           <div class="note-composer-wrap">
-            <div class="note-composer-context"><span>⌑&nbsp; xinmingwong</span><span>PDF</span><span>文本</span><span>••• 更多</span></div>
             <section class="note-composer" aria-label="笔记输入">
               <textarea id="noteComposerInput" aria-label="针对当前笔记提问" placeholder="随心输入，或粘贴文本 / 文件"></textarea>
               <div class="note-composer-toolbar">
                 <button class="attach-button prototype-action" type="button" aria-label="添加笔记资料">
                   <svg viewBox="0 0 20 20" aria-hidden="true"><use href="./pige-icon-sprite.svg#pi-plus"/></svg>
                 </button>
-                <span class="note-context-label">当前笔记</span>
+                <div class="model-switcher-wrap">
+                  <button class="model-switcher" id="noteModelSwitcher" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="noteModelMenu" aria-label="切换模型，当前 DeepSeek Chat，连接正常">
+                    <span class="model-status-dot connected" aria-hidden="true"></span><span class="model-switcher-name">DeepSeek Chat</span><svg viewBox="0 0 24 24" aria-hidden="true"><use href="./pige-icon-sprite.svg#pi-chevron-down"/></svg>
+                  </button>
+                  <div class="model-menu" id="noteModelMenu" role="listbox" aria-label="选择笔记对话模型" hidden>
+                    <button class="model-option" type="button" role="option" aria-selected="true" data-model-name="DeepSeek Chat" data-model-connected="true"><span class="model-status-dot connected" aria-hidden="true"></span><span class="model-option-copy"><strong>DeepSeek Chat</strong><small>连接正常</small></span><span class="model-option-check" aria-hidden="true">✓</span></button>
+                    <button class="model-option" type="button" role="option" aria-selected="false" data-model-name="GPT-4o" data-model-connected="true"><span class="model-status-dot connected" aria-hidden="true"></span><span class="model-option-copy"><strong>GPT-4o</strong><small>连接正常</small></span><span class="model-option-check" aria-hidden="true"></span></button>
+                    <button class="model-option" type="button" role="option" aria-selected="false" data-model-name="Local capture only" data-model-connected="false"><span class="model-status-dot" aria-hidden="true"></span><span class="model-option-copy"><strong>Local capture only</strong><small>当前不可用</small></span><span class="model-option-check" aria-hidden="true"></span></button>
+                  </div>
+                </div>
                 <button class="send-button" id="noteSendButton" type="button" aria-label="发送笔记问题" disabled>
                   <svg viewBox="0 0 20 20" aria-hidden="true"><use href="./pige-icon-sprite.svg#pi-send"/></svg>
                 </button>
@@ -3216,7 +3198,6 @@
     const sidebarToggle = document.querySelector('#sidebarToggle');
     const pinButton = document.querySelector('#pinButton');
     const sidebarSearch = document.querySelector('#sidebarSearch');
-    const openLibrary = document.querySelector('#openLibrary');
     const taskPanel = document.querySelector('#taskPanel');
     const taskToggle = document.querySelector('#taskToggle');
     const taskList = document.querySelector('#taskList');
@@ -3249,6 +3230,8 @@
     const noteAgentTitle = document.querySelector('#noteAgentTitle');
     const noteComposerInput = document.querySelector('#noteComposerInput');
     const noteSendButton = document.querySelector('#noteSendButton');
+    const noteModelSwitcher = document.querySelector('#noteModelSwitcher');
+    const noteModelMenu = document.querySelector('#noteModelMenu');
     const librarySearchInput = document.querySelector('#librarySearchInput');
     const librarySearchEmpty = document.querySelector('#librarySearchEmpty');
     const knowledgeTreeCard = document.querySelector('.tree-card');
@@ -3281,6 +3264,7 @@
     let composerCompositionEndedAt = 0;
     let noteComposerComposing = false;
     let noteComposerCompositionEndedAt = 0;
+    let noteModelAvailable = true;
     let attachedFiles = [];
     let activeLibraryFamily = 'all';
     let knowledgeZoom = 1;
@@ -3958,6 +3942,7 @@
       toggleNoteAgent.setAttribute('aria-expanded', String(nextOpen));
       toggleNoteAgent.setAttribute('aria-label', nextOpen ? '隐藏笔记对话' : '显示笔记对话');
       toggleNoteAgent.title = nextOpen ? '隐藏笔记对话' : '显示笔记对话';
+      if (!nextOpen) closeNoteModelMenu();
       if (options.restoreFocus !== false) {
         if (nextOpen) window.setTimeout(() => noteComposerInput.focus({ preventScroll: true }), 300);
         else window.setTimeout(() => toggleNoteAgent.focus({ preventScroll: true }), 180);
@@ -4034,6 +4019,22 @@
       modelMenu.hidden = false;
       modelSwitcher.setAttribute('aria-expanded', 'true');
       modelMenu.querySelector('[aria-selected="true"]')?.focus({ preventScroll: true });
+    }
+
+    function updateNoteSendState() {
+      noteSendButton.disabled = !noteComposerInput.value.trim() || !noteModelAvailable;
+    }
+
+    function closeNoteModelMenu(options = {}) {
+      noteModelMenu.hidden = true;
+      noteModelSwitcher.setAttribute('aria-expanded', 'false');
+      if (options.restoreFocus) noteModelSwitcher.focus({ preventScroll: true });
+    }
+
+    function openNoteModelMenu() {
+      noteModelMenu.hidden = false;
+      noteModelSwitcher.setAttribute('aria-expanded', 'true');
+      noteModelMenu.querySelector('[aria-selected="true"]')?.focus({ preventScroll: true });
     }
 
     function setScreen(screen, options = {}) {
@@ -4129,11 +4130,12 @@
     pinButton.addEventListener('click', () => {
       const pinned = pinButton.getAttribute('aria-pressed') !== 'true';
       pinButton.setAttribute('aria-pressed', String(pinned));
+      pinButton.setAttribute('aria-label', pinned ? '取消置顶窗口' : '置顶窗口');
+      pinButton.setAttribute('title', pinned ? '取消置顶窗口' : '置顶窗口');
       showToast(pinned ? '窗口已置顶（原型状态）' : '已取消置顶（原型状态）');
     });
 
     sidebarSearch.addEventListener('click', () => setScreen('search'));
-    openLibrary.addEventListener('click', () => setScreen('library'));
 
     taskToggle.addEventListener('click', () => {
       setTaskPanelCollapsed(!taskPanel.classList.contains('collapsed'));
@@ -4220,8 +4222,45 @@
       }
     });
 
+    noteModelSwitcher.addEventListener('click', () => {
+      if (noteModelMenu.hidden) openNoteModelMenu();
+      else closeNoteModelMenu({ restoreFocus: true });
+    });
+
+    noteModelMenu.addEventListener('click', event => {
+      const option = event.target.closest('.model-option');
+      if (!option) return;
+      const name = option.dataset.modelName;
+      noteModelAvailable = option.dataset.modelConnected === 'true';
+      noteModelMenu.querySelectorAll('.model-option').forEach(entry => {
+        const selected = entry === option;
+        entry.setAttribute('aria-selected', String(selected));
+        entry.querySelector('.model-option-check').textContent = selected ? '✓' : '';
+      });
+      noteModelSwitcher.querySelector('.model-switcher-name').textContent = name;
+      noteModelSwitcher.querySelector('.model-status-dot').classList.toggle('connected', noteModelAvailable);
+      noteModelSwitcher.setAttribute('aria-label', `切换模型，当前 ${name}，${noteModelAvailable ? '连接正常' : '当前不可用'}`);
+      updateNoteSendState();
+      closeNoteModelMenu({ restoreFocus: true });
+      showToast(`笔记对话已切换到 ${name}（原型状态）`);
+    });
+
+    noteModelMenu.addEventListener('keydown', event => {
+      const options = Array.from(noteModelMenu.querySelectorAll('.model-option'));
+      const current = options.indexOf(document.activeElement);
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeNoteModelMenu({ restoreFocus: true });
+      } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        const delta = event.key === 'ArrowDown' ? 1 : -1;
+        options[(current + delta + options.length) % options.length]?.focus();
+      }
+    });
+
     document.addEventListener('pointerdown', event => {
       if (!modelMenu.hidden && !event.target.closest('.model-switcher-wrap')) closeModelMenu();
+      if (!noteModelMenu.hidden && !event.target.closest('#noteModelSwitcher, #noteModelMenu')) closeNoteModelMenu();
     });
 
     ['dragenter', 'dragover'].forEach(type => {
@@ -4282,9 +4321,7 @@
 
     closeProductNote.addEventListener('click', () => setScreen('home', { sidebar: true }));
 
-    noteComposerInput.addEventListener('input', () => {
-      noteSendButton.disabled = !noteComposerInput.value.trim();
-    });
+    noteComposerInput.addEventListener('input', updateNoteSendState);
 
     noteComposerInput.addEventListener('compositionstart', () => { noteComposerComposing = true; });
     noteComposerInput.addEventListener('compositionend', () => {
@@ -4303,7 +4340,7 @@
       if (!noteComposerInput.value.trim()) return;
       showToast('已针对当前笔记提问（原型状态）');
       noteComposerInput.value = '';
-      noteSendButton.disabled = true;
+      updateNoteSendState();
     });
 
     document.querySelectorAll('.nav-item').forEach(item => {

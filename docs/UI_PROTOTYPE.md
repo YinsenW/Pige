@@ -101,7 +101,7 @@ Behavior:
 
 - The compact window is the default first-run shape.
 - The home composer is visually docked to the bottom.
-- The pin button toggles always-on-top and should show a quiet active state when enabled.
+- The pin leans diagonally when unpinned, straightens when pinned, and adds only a quiet active state.
 - The user can drag files anywhere onto the window.
 - Sidebar and Library are hidden unless explicitly opened.
 - Resizing wider should not immediately clutter the capture experience; exploration chrome appears only after the user opens it.
@@ -595,31 +595,16 @@ Current Phase 4 reader context foundation:
 
 When a note is open, the right side can host a contextual Agent panel.
 
-Prototype:
-
-```txt
-┌───────────────┬────────────────────────────┬─────────────────────┐
-│ Library       │ Agent-maintained Wiki      │ Note Agent          │
-│               │ #agent #markdown           │                     │
-│ Notes         │                            │ Ask about this note │
-│ Sources       │ Summary                    │                     │
-│ Topics        │ ...                        │ Related             │
-│ Tags          │                            │ BYOK                │
-│               │ Key Points                 │ Local-first         │
-│               │ ...                        │                     │
-│               │                            │ Suggested actions   │
-│               │ Sources                    │ Summarize           │
-│               │ ...                        │ Find contradictions │
-└───────────────┴────────────────────────────┴─────────────────────┘
-```
+Wide layout is Library | Markdown reader | Note Agent. Narrow layouts keep the Agent
+as an independent drawer rather than collapsing the Library.
 
 Note Agent behavior:
 
-- Uses current note as primary context.
-- Can answer questions about the note, its sources, and related notes.
-- Can suggest backlinks and related pages.
-- Applies eligible evidence-backed edits with Activity/Undo; exceptional conflicts open review.
-- Read-only answers stay in the panel and do not automatically become notes.
+- Uses the current note as implicit context; omit redundant vault, file-type, and generic context strips.
+- Reuses Home's model switcher; unavailable selection disables send without a second warning.
+- Answers about the note and evidence, and can suggest backlinks or related pages.
+- Evidence-backed edits use Activity/Undo; conflicts open review.
+- Read-only answers stay in the panel and never auto-write notes.
 
 ### 8.3 Selection Actions
 

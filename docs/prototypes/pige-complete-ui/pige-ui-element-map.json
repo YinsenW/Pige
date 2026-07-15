@@ -11,9 +11,9 @@
     "Common glyphs come from one governed Lucide-aligned sprite; visual resemblance never changes the control's product intent or accessible name."
   ],
   "audit": {
-    "interactive_elements": 191,
-    "semantic_component_families": 52,
-    "deterministic_stateful_or_native_boundary_simulations": 182,
+    "interactive_elements": 211,
+    "semantic_component_families": 70,
+    "deterministic_stateful_or_native_boundary_simulations": 202,
     "secondary_feedback_only_controls": 9,
     "known_decorative_dead_controls": 0,
     "production_service_evidence_from_html": 0,
@@ -49,7 +49,7 @@
       "role": "button",
       "intent": "Explicitly toggle always-on-top.",
       "states": ["off", "on", "focus-visible"],
-      "prototype_action": "Updates aria-pressed and quiet active feedback.",
+      "prototype_action": "Updates aria-pressed, accessible name, a diagonal-off/vertical-on glyph orientation, and quiet active feedback.",
       "production_bridge": "Validated always-on-top window preference",
       "owner": "Window Service"
     },
@@ -98,6 +98,28 @@
       "owner": "Window Service + Settings Service"
     },
     {
+      "id": "shell.search_entry",
+      "surface": "Sidebar header",
+      "selector": "#sidebarSearch",
+      "role": "button",
+      "intent": "Open one local search surface for notes, sources, topics, and tags.",
+      "states": ["default", "hover", "opening", "focus-visible"],
+      "prototype_action": "Opens Library search without creating a second sidebar destination or browser history control.",
+      "production_bridge": "Renderer route to local Retrieval Service search",
+      "owner": "Retrieval Service + Renderer"
+    },
+    {
+      "id": "settings.flow_navigation",
+      "surface": "Settings shell and nested Settings flows",
+      "selector": "#closeSettings, .settings-button[data-settings-target]",
+      "role": "button",
+      "intent": "Return to Pige or move between already-defined Settings panels without creating browser history controls.",
+      "states": ["default", "hover", "pressed", "focus-visible"],
+      "prototype_action": "Moves to the named Settings panel or closes Settings while preserving the stable window geometry and restoring focus to the invoking entry.",
+      "production_bridge": "Renderer Settings route and modal focus lifecycle",
+      "owner": "Renderer + Settings Service"
+    },
+    {
       "id": "home.source_format_legend",
       "surface": "Compact Home",
       "selector": ".source-type",
@@ -133,7 +155,7 @@
     {
       "id": "home.attach",
       "surface": "Home composer",
-      "selector": "#attachButton",
+      "selector": "#attachButton, #fileInput",
       "role": "button",
       "intent": "Choose one or more source files without choosing a semantic workflow.",
       "states": ["default", "hover", "focus-visible", "disabled-in-flight"],
@@ -144,7 +166,7 @@
     {
       "id": "home.model_switcher",
       "surface": "Home composer toolbar",
-      "selector": "#modelSwitcher",
+      "selector": "#modelSwitcher, #modelMenu .model-option",
       "role": "button with listbox",
       "intent": "Choose the current enabled model while exposing only a quiet connected or unavailable signal.",
       "states": ["connected", "unavailable", "expanded", "collapsed", "focus-visible"],
@@ -265,7 +287,7 @@
     {
       "id": "home.missing_model",
       "surface": "Home conversation",
-      "selector": ".model-missing-card",
+      "selector": ".model-missing-card, .model-missing-card .primary-button, .model-missing-card .secondary-button",
       "role": "status with action",
       "intent": "Explain that the source is preserved and offer one Models action.",
       "states": ["waiting", "opening-models", "resumed"],
@@ -309,7 +331,7 @@
     {
       "id": "knowledge.viewport_controls",
       "surface": "Knowledge Tree canvas",
-      "selector": "[data-knowledge-mode], [data-knowledge-zoom], #knowledgeFilterButton, #knowledgeSearchInput",
+      "selector": "#knowledgeMapViewport, [data-knowledge-mode], [data-knowledge-zoom], #knowledgeFilterButton, #knowledgeSearchInput",
       "role": "searchbox and button groups",
       "intent": "Search, filter, change relationship emphasis, zoom, pan, or fit the same knowledge graph without creating a second navigation surface.",
       "states": ["tree", "network", "topic-summary", "filtered", "search-match", "zoomed", "fitted"],
@@ -406,6 +428,39 @@
       "owner": "Vault Runtime Service + Model Provider Registry"
     },
     {
+      "id": "onboarding.vault_navigation",
+      "surface": "First run vault step",
+      "selector": ".first-run-step.vault [data-next-screen], .first-run-step.vault [data-first-run-later]",
+      "role": "button group",
+      "intent": "Continue from a valid vault choice, preview restore, or explicitly defer setup.",
+      "states": ["disabled", "ready", "deferred", "navigating"],
+      "prototype_action": "Keeps Continue disabled until a vault choice exists, routes Restore to preview, and exposes defer as an explicit capture-only path.",
+      "production_bridge": "Onboarding step state and first-run persistence",
+      "owner": "Vault Runtime Service + Onboarding Service"
+    },
+    {
+      "id": "onboarding.restore_mode",
+      "surface": "First run restore preview",
+      "selector": "input[name=\"first-run-restore-mode\"]",
+      "role": "radio group",
+      "intent": "Choose clone-as-new or the stronger replace-existing restore path.",
+      "states": ["clone-selected", "replace-selected", "disabled-in-flight"],
+      "prototype_action": "Uses native radio semantics and keeps clone-as-new selected by default.",
+      "production_bridge": "Opaque restore preview token and main-owned identity mode",
+      "owner": "Backup and Restore Service"
+    },
+    {
+      "id": "onboarding.restore_navigation",
+      "surface": "First run restore preview",
+      "selector": ".first-run-step.restore [data-next-screen]",
+      "role": "button",
+      "intent": "Cancel restore and return to the vault choice without applying changes.",
+      "states": ["ready", "navigating", "focus-visible"],
+      "prototype_action": "Returns to the vault step and never commits a restore operation.",
+      "production_bridge": "Onboarding restore cancel transition",
+      "owner": "Onboarding Service + Backup and Restore Service"
+    },
+    {
       "id": "reader.document_actions",
       "surface": "Markdown reader",
       "selector": ".reader-toolbar-actions .prototype-action",
@@ -441,7 +496,7 @@
     {
       "id": "reader.note_agent_composer",
       "surface": "Note Agent",
-      "selector": "#noteComposerInput, #noteSendButton",
+      "selector": "#noteComposerInput, #noteSendButton, .note-composer .attach-button",
       "role": "textbox and button",
       "intent": "Ask about the open note with explicit current-note context.",
       "states": ["empty", "draft", "IME-composing", "ready", "in-flight"],
@@ -449,6 +504,39 @@
       "layout_contract": "The Note Agent is a focus-contained overlay drawer through 1111 px and a fixed 432 px rail only above 1111 px; opening or closing it never squeezes the Markdown reader below its governed width.",
       "production_bridge": "Note Agent submit-turn contract",
       "owner": "Note Agent Service"
+    },
+    {
+      "id": "reader.model_switcher",
+      "surface": "Note Agent composer",
+      "selector": "#noteModelSwitcher, #noteModelMenu .model-option",
+      "role": "button with listbox",
+      "intent": "Choose the model used for the current note conversation without showing a generic context label.",
+      "states": ["closed", "open", "connected", "unavailable", "focus-visible"],
+      "prototype_action": "Uses the same status-dot, model-name, listbox, Escape, arrow-key, selection, and focus-return behavior as Home; unavailable selection disables send without adding another warning surface.",
+      "production_bridge": "Shared Agent model selector bound to the Note Agent turn",
+      "owner": "Provider Profile Service + Note Agent Service"
+    },
+    {
+      "id": "reader.pane_close",
+      "surface": "Markdown reader and Note Agent",
+      "selector": "#closeProductNote, #closeNoteAgent",
+      "role": "button",
+      "intent": "Close the current reader task or its Note Agent pane without collapsing the persistent sidebar.",
+      "states": ["reader-open", "agent-open", "closing", "focus-visible"],
+      "prototype_action": "Closes only the named pane, preserves resident sidebar state, and returns focus to the owning toggle or Home task surface.",
+      "production_bridge": "Renderer pane state and focus restoration",
+      "owner": "Renderer"
+    },
+    {
+      "id": "reader.message_actions",
+      "surface": "Note Agent answer",
+      "selector": ".message-actions .prototype-action",
+      "role": "button group",
+      "intent": "Copy, rate, or open secondary actions for one completed Note Agent answer.",
+      "states": ["default", "hover", "acknowledged", "focus-visible"],
+      "prototype_action": "Returns bounded local feedback and never creates a second answer or status owner.",
+      "production_bridge": "Clipboard or optional answer-feedback action",
+      "owner": "Renderer + Note Agent Service"
     },
     {
       "id": "reader.proposal_decision",
@@ -506,6 +594,28 @@
       "owner": "Settings Service + Renderer"
     },
     {
+      "id": "settings.preference_select",
+      "surface": "Settings",
+      "selector": ".settings-select",
+      "role": "combobox",
+      "intent": "Choose one bounded visible preference from its localized row options.",
+      "states": ["default", "open", "selected", "disabled", "focus-visible"],
+      "prototype_action": "Uses native select semantics, returns localized apply feedback, and never exposes registry keys.",
+      "production_bridge": "Typed Settings registry mutation owned by the named domain row",
+      "owner": "Settings Service + named domain owner"
+    },
+    {
+      "id": "settings.provider_field",
+      "surface": "Provider Settings",
+      "selector": ".settings-input",
+      "role": "textbox",
+      "intent": "Enter the minimum provider display, endpoint, or credential value required by the chosen flow.",
+      "states": ["empty", "filled", "invalid", "disabled-in-flight", "focus-visible"],
+      "prototype_action": "Keeps credentials masked, exposes protocol and endpoint only for Custom Provider, and never copies values into feedback.",
+      "production_bridge": "Provider Profile draft plus OS secret store for credentials",
+      "owner": "Model Provider Registry + Settings and Secrets Service"
+    },
+    {
       "id": "settings.restore_mode",
       "surface": "Vault and note storage",
       "selector": "[data-radio-group=\"restore-mode\"]",
@@ -515,6 +625,28 @@
       "prototype_action": "Uses one roving Tab stop; arrow keys keep one selected mode and expose the stronger replace warning.",
       "production_bridge": "Opaque restore preview token and main-owned apply mode",
       "owner": "Backup and Restore Service"
+    },
+    {
+      "id": "settings.vault_storage_action",
+      "surface": "Vault and note storage",
+      "selector": "[data-action-label=\"在 Finder 中显示笔记存储\"], [data-action-label=\"在 Finder 中显示来源文件\"], [data-action-label=\"打开另一个仓库\"], [data-action-label=\"创建新仓库\"]",
+      "role": "button group",
+      "intent": "Reveal a canonical local storage target or enter a main-owned vault open/create flow without exposing raw paths through renderer state.",
+      "states": ["ready", "busy", "completed", "unavailable", "failed", "focus-visible"],
+      "prototype_action": "Returns one localized pathless status owner and never substitutes a false Vault fallback for unavailable external storage.",
+      "production_bridge": "Vault Runtime pathless reveal and main-owned native folder workflow",
+      "owner": "Vault Runtime Service + Window Service"
+    },
+    {
+      "id": "settings.backup_restore_action",
+      "surface": "Vault backup and restore",
+      "selector": "[data-action-label=\"创建备份\"], [data-action-label=\"选择恢复目标文件夹\"]",
+      "role": "button group",
+      "intent": "Start a backup or apply the reviewed restore preview through the selected identity mode.",
+      "states": ["ready", "busy", "disabled-in-flight", "completed", "failed", "focus-visible"],
+      "prototype_action": "Keeps restore behind preview and identity choice, then returns only typed pathless feedback.",
+      "production_bridge": "Backup Job or opaque restore preview/apply contract",
+      "owner": "Backup and Restore Service + Window Service"
     },
     {
       "id": "settings.provider_connect",
@@ -531,13 +663,35 @@
     {
       "id": "settings.model_inventory",
       "surface": "Models",
-      "selector": "[data-action-label=\"刷新模型列表\"], [data-action-label=\"添加自定义模型\"]",
+      "selector": "[data-action-label=\"刷新模型列表\"], [data-action-label=\"刷新 OpenAI 模型\"], [data-action-label=\"重试模型列表\"], [data-action-label=\"添加自定义模型\"]",
       "role": "button group",
       "intent": "Refresh one provider inventory or add a manual model fallback.",
       "states": ["ready", "refreshing", "synced", "typed-failure", "manual-entry"],
       "prototype_action": "Provides visible feedback and a provider-local recovery route.",
       "production_bridge": "Provider model discovery and manual model contracts",
       "owner": "Model Provider Registry"
+    },
+    {
+      "id": "settings.model_service_management",
+      "surface": "Models",
+      "selector": "[data-action-label=\"管理 OpenAI 服务\"]",
+      "role": "button",
+      "intent": "Open the existing provider profile for bounded connection and inventory management.",
+      "states": ["ready", "opening", "unavailable", "focus-visible"],
+      "prototype_action": "Returns explicit transition feedback without exposing provider internals on the Models summary.",
+      "production_bridge": "Model Provider Registry profile navigation",
+      "owner": "Model Provider Registry + Renderer"
+    },
+    {
+      "id": "settings.maintenance_action",
+      "surface": "Index and maintenance",
+      "selector": "[data-action-label=\"检查索引\"], [data-action-label=\"重建索引\"], [data-action-label=\"预览重置本地数据库\"]",
+      "role": "button group",
+      "intent": "Inspect or rebuild derived local indexes, or preview a recoverable database reset without touching durable knowledge.",
+      "states": ["ready", "running", "confirming", "completed", "failed"],
+      "prototype_action": "Returns body-free localized feedback and keeps the destructive-looking reset behind preview.",
+      "production_bridge": "Index maintenance Job and review-first local database reset",
+      "owner": "Index Service + Jobs Service"
     },
     {
       "id": "settings.provider_failure",

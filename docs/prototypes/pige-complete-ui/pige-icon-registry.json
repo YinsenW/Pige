@@ -32,7 +32,7 @@
   ],
   "active_mappings": {
     "pi-panel": { "lucide": "PanelLeft", "intent": "show or hide the navigation pane" },
-    "pi-pin": { "lucide": "Pin", "intent": "toggle always-on-top; centered needle" },
+    "pi-pin": { "lucide": "Pin", "intent": "toggle always-on-top; diagonal when off and centered when on" },
     "pi-search": { "lucide": "Search", "intent": "search the current bounded collection" },
     "pi-home": { "lucide": "House", "intent": "open Home" },
     "pi-knowledge": { "lucide": "TreePine", "intent": "open semantic Knowledge Tree" },

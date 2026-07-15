@@ -278,11 +278,11 @@
     },
     {
       "id": "READER-04",
-      "requirement": "Wide notes expose a contextual Note Agent that can answer, suggest links, and stage edits without auto-writing.",
+      "requirement": "Wide notes expose a contextual Note Agent that can answer, suggest links, stage edits without auto-writing, and use the same compact model switcher as Home without a redundant context strip.",
       "source": "UI_PROTOTYPE 8.2, 18, 19",
       "prototype": "covered",
       "production": "missing",
-      "prototype_evidence": ["?screen=note", "?screen=proposal", "reader.note_agent", "reader.proposal"],
+      "prototype_evidence": ["?screen=note", "?screen=proposal", "reader.note_agent_composer", "reader.model_switcher", "reader.proposal_decision"],
       "production_evidence": [],
       "gap": "Development needs the current-note typed context bridge, read-only answer state, proposal lifecycle, cancellation, error, and narrow drawer.",
       "priority": "P1"
@@ -293,7 +293,7 @@
       "source": "UI_PROTOTYPE 8.3, 18, 19",
       "prototype": "covered",
       "production": "missing",
-      "prototype_evidence": ["?screen=selection", "reader.selection_actions"],
+      "prototype_evidence": ["?screen=selection", "reader.selection_action"],
       "production_evidence": [],
       "gap": "Development needs native selection anchoring, keyboard dismissal, copy/quote local actions, Agent handoff, and mutation proposal boundaries.",
       "priority": "P1"
@@ -359,7 +359,7 @@
       "source": "UI_PROTOTYPE 13 Local Capabilities, 18",
       "prototype": "covered",
       "production": "missing",
-      "prototype_evidence": ["?panel=capabilities#settings", "settings.local_capability"],
+      "prototype_evidence": ["?panel=capabilities#settings", "settings.local_capability_action"],
       "production_evidence": [],
       "gap": "Development needs typed capability status, optional download consent, install progress, diagnostics, retry/remove, and no hidden ordinary-flow downloads.",
       "priority": "P1"
@@ -414,7 +414,7 @@
       "source": "UI_PROTOTYPE 16.1, 16.2, 18, 19",
       "prototype": "partial",
       "production": "partial",
-      "prototype_evidence": ["pige-ui-element-map.json", "pige-ui-visual-review-ledger.json structural scan of 191 controls", "52-route real Tab-order walkthrough covering 677 focus stops with 18 native document-boundary transitions, one native roving-radio member skipped by Tab, and zero Pige failures", "400 and 760 px Library sidebar Escape focus return", "Library and Knowledge retry focus successors", "first-run step heading focus ownership", "400 and 760 px Note Agent focus containment and focus return", "400, 760, and 1280 px Settings focus containment", "Current-action safe initial focus and focused terminal truth", "Named progressbar, current-page, live-region, and roving-radio semantics", "Library and selection arrow-key navigation", "936 six-locale layout checks across 52 routes at 400, 760, and 1536 px", "prefers-reduced-motion CSS"],
+      "prototype_evidence": ["pige-ui-element-map.json", "pige-ui-visual-review-ledger.json structural scan of 211 controls", "52-route real Tab-order walkthrough covering 677 focus stops with 18 native document-boundary transitions, one native roving-radio member skipped by Tab, and zero Pige failures", "400 and 760 px Library sidebar Escape focus return", "Library and Knowledge retry focus successors", "first-run step heading focus ownership", "400 and 760 px Note Agent focus containment and focus return", "400, 760, and 1280 px Settings focus containment", "Current-action safe initial focus and focused terminal truth", "Named progressbar, current-page, live-region, and roving-radio semantics", "Library and selection arrow-key navigation", "936 six-locale layout checks across 52 routes at 400, 760, and 1536 px", "prefers-reduced-motion CSS"],
       "production_evidence": ["six locale catalogs", "focused permission/restore semantics"],
       "gap": "Names, structural ARIA, contrast, reduced motion, composite arrow-key behavior, full Tab order, compact-drawer containment, current-action focus ownership, live-region structure, tested focus return, and six-locale browser layout stress pass. Spoken screen-reader announcements and assembled platform text rendering remain open.",
       "priority": "P0"

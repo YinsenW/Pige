@@ -73,7 +73,7 @@
   },
   "accessibility_evidence": {
     "routes_with_accessible_name_scan": 52,
-    "interactive_elements_with_structural_scan": 191,
+    "interactive_elements_with_structural_scan": 211,
     "routes_with_real_tab_order_walkthrough": 52,
     "real_tab_focus_stops_checked": 677,
     "real_tab_order_failures": 0,
