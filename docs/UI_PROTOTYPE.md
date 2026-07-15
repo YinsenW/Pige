@@ -164,8 +164,8 @@ Behavior:
 - The note body should never stretch into an unreadably wide line length.
 - On wide screens, the reading column can be centered with side rails for navigation and context.
 - Wide mode places the Note Agent on the right; related notes, backlinks, and sources can share its rail or follow the note when it is closed.
-- Users can hide either rail; note routing preserves both states. Below `1200px`, rails
-  are independent, Escape-dismissible overlays.
+- Users can hide either rail; note routing preserves both states. The Library becomes
+  resident at `832px`; the Note Agent remains an Escape-dismissible overlay until `1200px`.
 - Selection actions should appear near selected text without covering the paragraph being read.
 
 ## 3. Navigation Model
@@ -1507,9 +1507,9 @@ visual-capture matrix. The manifest must not invent behavior absent from this do
   `28px` in dense desktop contexts.
 - Pane widths use min/default/max: Home `360/420/420px`; Library `240/280/320px`;
   reader `560/720/960px` with a `720px` prose cap; Note Agent `360/400/440px`.
-- Rails add width before shrinking content. Three panes may remain resident at `1200px`,
-  two panes at `832px`; below those thresholds rails become overlays. Only the reader
-  absorbs ultrawide surplus.
+- Rails add width before shrinking content. The Library + reader may remain resident at
+  `832px`; all three panes at `1200px`. Each rail becomes an overlay only below its own
+  threshold. Only the reader absorbs ultrawide surplus.
 - Navigation and settings rows normally occupy `32` to `36px`; settings rows containing
   descriptions may grow to `64px`. Do not force explanatory text into a compact row.
 - Pane padding is `16px` in narrow windows and `20` to `24px` in expanded workspaces.

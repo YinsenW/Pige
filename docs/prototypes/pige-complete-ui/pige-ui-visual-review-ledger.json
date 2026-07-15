@@ -149,7 +149,7 @@
     "rules": [
       "Opening or closing rails changes the outer window first and preserves preferred pane widths.",
       "At 1200–1439 px resident panes may shrink only within their governed ranges.",
-      "Below 1200 px the reader remains primary and Library and Note Agent become independent overlays.",
+      "At 680–831 px both rails overlay the reader; from 832–1199 px the Library is resident when opened and only Note Agent remains an overlay.",
       "Ultrawide surplus may grow only the reader, while Markdown prose remains centered at no more than 720 px."
     ],
     "open_evidence": "Equivalent-state current-HTML raster capture and assembled platform text rendering must be rebound after this width-contract change."
@@ -282,7 +282,7 @@
       },
       "remaining": [
         "Lock Markdown line wrapping, heading baselines, table density, and note-agent composer alignment by overlay.",
-        "Below 1200 px the Library rail and Note Agent degrade to independently controlled drawers; at 1200 px and above they may remain resident within their governed ranges."
+        "Below 832 px both rails become independently controlled drawers; from 832 px the Library remains resident, and from 1200 px the Note Agent may also remain resident."
       ]
     },
     {
