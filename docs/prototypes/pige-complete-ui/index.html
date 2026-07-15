@@ -3821,20 +3821,18 @@
           : openSettings;
         settingsOpenedFromDeepLink = options.deepLink === true;
       }
-      appWindow.inert = true;
-      appWindow.setAttribute('aria-hidden', 'true');
       settingsWindow.hidden = false;
       resetSettingsSearch();
       showSettingsPage(page, { focus: false });
       window.requestAnimationFrame(() => {
         document.body.classList.add('settings-active');
-        window.setTimeout(() => {
-          const heading = settingsWindow.querySelector('.settings-panel.active h1');
-          if (heading) {
-            heading.tabIndex = -1;
-            heading.focus({ preventScroll: true });
-          }
-        }, 180);
+        appWindow.inert = true;
+        appWindow.setAttribute('aria-hidden', 'true');
+        const heading = settingsWindow.querySelector('.settings-panel.active h1');
+        if (heading) {
+          heading.tabIndex = -1;
+          heading.focus({ preventScroll: true });
+        }
       });
     }
 
@@ -3842,22 +3840,20 @@
       const returnTarget = settingsReturnTarget;
       const deepLink = settingsOpenedFromDeepLink;
       document.body.classList.remove('settings-active');
-      window.setTimeout(() => {
-        settingsWindow.hidden = true;
-        appWindow.inert = false;
-        appWindow.removeAttribute('aria-hidden');
-        if (deepLink) history.replaceState(null, '', './?screen=home&sidebar=1');
-        settingsOpenedFromDeepLink = false;
-        settingsReturnTarget = null;
-        const returnTargetIsUsable = returnTarget instanceof HTMLElement
-          && returnTarget.isConnected
-          && !returnTarget.disabled
-          && !returnTarget.closest('[hidden]');
-        const focusTarget = returnTargetIsUsable
-          ? returnTarget
-          : mainLayout.classList.contains('sidebar-open') ? openSettings : sidebarToggle;
-        focusTarget.focus({ preventScroll: true });
-      }, 180);
+      settingsWindow.hidden = true;
+      appWindow.inert = false;
+      appWindow.removeAttribute('aria-hidden');
+      if (deepLink) history.replaceState(null, '', './?screen=home&sidebar=1');
+      settingsOpenedFromDeepLink = false;
+      settingsReturnTarget = null;
+      const returnTargetIsUsable = returnTarget instanceof HTMLElement
+        && returnTarget.isConnected
+        && !returnTarget.disabled
+        && !returnTarget.closest('[hidden]');
+      const focusTarget = returnTargetIsUsable
+        ? returnTarget
+        : mainLayout.classList.contains('sidebar-open') ? openSettings : sidebarToggle;
+      focusTarget.focus({ preventScroll: true });
     }
 
     function openNote(title = '产品定位', group = 'Pige', options = {}) {

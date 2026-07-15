@@ -806,10 +806,10 @@ Settings rules:
 - Open Settings as one independent, stable-size window/surface. It must not replace,
   reload, resize, or reset the active Home, Library, Knowledge Tree, reader, sidebar,
   or Note Agent workspace.
-- Opening Settings records the invoking control and the current workspace/pane state.
-  Closing or pressing Escape restores that exact state and returns focus to the invoker;
-  it must not force navigation to Home. A Settings deep link without an invoking
-  workspace may close to expanded Home as the safe fallback.
+- Opening records the invoker and workspace/pane state. In one frame it excludes the
+  workspace and focuses the Settings heading. Close/Escape restores that state and
+  invoker focus before hiding Settings; only a no-invoker deep link falls back to
+  expanded Home.
 - A settings page owns one conceptual domain. Do not mix models, permissions, local tools, extensions, and backup in one screen.
 - Models contains cloud language model provider connection only.
 - Local Capabilities contains local RAG, embedding/reranking downloads, OCR, speech input, parsers, and bundled toolchain health.
@@ -1420,6 +1420,8 @@ v0.1 accessibility requirements:
 - Every glyph-only control exposes an accessible name plus hover/focus help.
 - Status states use text plus visual treatment, not color alone.
 - Error messages are announced in a way screen readers can understand.
+- A surface that makes its background inert moves focus inside in the same frame and
+  restores focus before it is hidden.
 - The compact capture window remains usable with larger system text.
 - The note reader keeps readable contrast in light and dark modes.
 - Motion respects OS reduced-motion settings.
