@@ -66,9 +66,18 @@ describe("full production UI renderer contract", () => {
     expect(appSource).toContain('settingsSection === "vault" || settingsSection === "maintenance"');
   });
 
-  it("binds Library filtering and Home composer icons to existing real actions", () => {
+  it("binds the approved Library search surface and Home composer icons to existing real actions", () => {
     expect(appSource).toContain('type="search"');
-    expect(appSource).toContain('aria-pressed={filter === value}');
+    expect(appSource).toContain('onClick={() => void navigateLibrarySearch()}');
+    expect(appSource).toContain('onSearch={(request) => window.pige.retrieval.search(request)}');
+    expect(appSource).toContain('role="tablist"');
+    expect(appSource).toContain('aria-selected={family === value}');
+    expect(appSource).toContain('if (family === "sources") return ["source"]');
+    expect(appSource).toContain('family === "tags"');
+    expect(appSource).toContain('onInput={(event) => setQuery(event.currentTarget.value)}');
+    expect(cssSource).toContain("width: min(100%, 680px);");
+    expect(cssSource).toContain("min-height: 42px;");
+    expect(cssSource).toContain("min-height: 48px;");
     expect(appSource).toContain('onClick={() => fileInputRef.current?.click()}');
     expect(appSource).toContain('name="attach"');
     expect(appSource).toContain('? "loading" : "send"');
@@ -87,10 +96,22 @@ describe("full production UI renderer contract", () => {
     const locales = ["de", "en", "fr", "ja", "ko", "zh-Hans"];
     const requiredKeys = [
       "library.all",
+      "library.content",
+      "library.family.all",
+      "library.family.notes",
+      "library.family.sources",
+      "library.family.tags",
+      "library.family.topics",
       "library.filter",
       "library.knowledge",
       "library.noMatches",
-      "library.search"
+      "library.search",
+      "library.searchDegraded",
+      "library.searchLoading",
+      "library.searchUnavailableDescription",
+      "library.searchUnavailableTitle",
+      "library.tagsUnavailableDescription",
+      "library.tagsUnavailableTitle"
     ];
 
     requiredKeys.push(
