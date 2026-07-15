@@ -1229,18 +1229,20 @@ export function LibraryPanel(props: {
 
   useEffect(() => {
     const requestId = ++searchSequence.current;
-    if (props.selectedNote || !normalizedQuery || family === "tags") {
+    if (props.selectedNote || !activeVaultId || !normalizedQuery || family === "tags") {
       setSearchState({ kind: "idle" });
       return;
     }
     setSearchState({ kind: "loading", query: normalizedQuery, family });
     const timer = window.setTimeout(() => {
       const pageTypes = libraryFamilyPageTypes(family);
-      void props.onSearch({
+      const request = {
         query: normalizedQuery,
         limit: 20,
-        ...(pageTypes ? { pageTypes } : {})
-      }).then((result) => {
+        ...(pageTypes ? { pageTypes } : {}),
+        scope: { kind: "active_vault" as const, vaultId: activeVaultId }
+      };
+      void props.onSearch(request).then((result) => {
         if (requestId !== searchSequence.current) return;
         if (activeVaultId && result.activeVaultId !== activeVaultId) {
           setSearchState({ kind: "error", query: normalizedQuery, family });
@@ -1356,6 +1358,7 @@ export function LibraryPanel(props: {
             ref={searchInputRef}
             id="librarySearchInput"
             type="search"
+            maxLength={320}
             value={query}
             placeholder={props.t("library.search")}
             aria-label={props.t("library.search")}

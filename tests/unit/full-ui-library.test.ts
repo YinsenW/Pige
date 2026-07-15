@@ -116,6 +116,7 @@ describe("full UI Library", () => {
     });
     const container = dom.window.document.querySelector("#root")!;
     const search = requireElement(container.querySelector<HTMLInputElement>("#librarySearchInput"));
+    expect(search.maxLength).toBe(320);
 
     await act(async () => {
       buttonNamed(container, "Sources").click();
@@ -125,13 +126,23 @@ describe("full UI Library", () => {
     await act(async () => {
       await delay(dom, 150);
     });
-    expect(requests).toEqual([{ query: "alpha", limit: 20, pageTypes: ["source"] }]);
+    expect(requests).toEqual([{
+      query: "alpha",
+      limit: 20,
+      pageTypes: ["source"],
+      scope: { kind: "active_vault", vaultId: "vault_20260715_fullui01" }
+    }]);
 
     await inputText(dom, search, "beta");
     await act(async () => {
       await delay(dom, 150);
     });
-    expect(requests.at(-1)).toEqual({ query: "beta", limit: 20, pageTypes: ["source"] });
+    expect(requests.at(-1)).toEqual({
+      query: "beta",
+      limit: 20,
+      pageTypes: ["source"],
+      scope: { kind: "active_vault", vaultId: "vault_20260715_fullui01" }
+    });
 
     await act(async () => {
       resolvers.get("beta")?.(searchResult("beta", [{
@@ -164,6 +175,48 @@ describe("full UI Library", () => {
       await settle(dom);
     });
     expect(opened).toEqual(["page_20260715_beta2222"]);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("does not search without an active vault", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const requests: RetrievalSearchRequest[] = [];
+    await act(async () => {
+      root.render(createElement(LibraryPanel, {
+        libraryList: null,
+        selectedNote: null,
+        selectedNoteRelated: null,
+        noteLoadingPageId: null,
+        error: null,
+        onGoHome: () => undefined,
+        onRefresh: async () => undefined,
+        onSearch: async (request) => {
+          requests.push(request);
+          return searchResult(request.query, []);
+        },
+        searchFocusRequest: 0,
+        onOpenNote: async () => undefined,
+        onCloseNote: () => undefined,
+        noteAgentOpen: false,
+        onToggleNoteAgent: () => undefined,
+        noteAgentToggleRef: { current: null },
+        developmentNotice: null,
+        onDevelopment: () => undefined,
+        t
+      }));
+      await settle(dom);
+    });
+
+    const container = dom.window.document.querySelector("#root")!;
+    const search = requireElement(container.querySelector<HTMLInputElement>("#librarySearchInput"));
+    await inputText(dom, search, "alpha");
+    await act(async () => {
+      await delay(dom, 150);
+    });
+    expect(requests).toEqual([]);
 
     await act(async () => root.unmount());
     dom.window.close();
