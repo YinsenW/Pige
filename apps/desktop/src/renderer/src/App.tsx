@@ -9,6 +9,7 @@ import {
   type RefObject
 } from "react";
 import { PigeIcon, type PigeIconName } from "./components/PigeIcon";
+import { HomeVoicePanel, type HomeVoicePanelState } from "./components/HomeVoicePanel";
 import { KnowledgeTreeMap } from "./components/KnowledgeTreeMap";
 import { CurrentNoteAgent } from "./components/CurrentNoteAgent";
 import { ProposalReviewPanel } from "./components/ProposalReviewPanel";
@@ -2588,6 +2589,7 @@ function HomeComposer(props: {
   const [openingProposalId, setOpeningProposalId] = useState<string | null>(null);
   const [proposalListExpanded, setProposalListExpanded] = useState(false);
   const [processingListExpanded, setProcessingListExpanded] = useState(false);
+  const [voicePanelState, setVoicePanelState] = useState<HomeVoicePanelState | null>(null);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [modelSwitching, setModelSwitching] = useState(false);
   const [modelSwitchFailed, setModelSwitchFailed] = useState(false);
@@ -2599,6 +2601,7 @@ function HomeComposer(props: {
   const [noteLoadingPageId, setNoteLoadingPageId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const voiceButtonRef = useRef<HTMLButtonElement | null>(null);
   const composerSubmitInFlightRef = useRef(false);
   const composerCompositionActiveRef = useRef(false);
   const composerCompositionRaceRef = useRef(false);
@@ -3398,6 +3401,11 @@ function HomeComposer(props: {
     }
   };
 
+  const dismissVoicePanel = (): void => {
+    setVoicePanelState(null);
+    window.requestAnimationFrame(() => voiceButtonRef.current?.focus());
+  };
+
   if (selectedProposal) {
     return (
       <section className="home proposal-review-home" aria-label={props.t("nav.home")}>
@@ -3753,6 +3761,13 @@ function HomeComposer(props: {
           <p>{agentAnswer.answer}</p>
         </section>
       ) : null}
+      {voicePanelState ? (
+        <HomeVoicePanel
+          state={voicePanelState}
+          onDismiss={dismissVoicePanel}
+          t={props.t}
+        />
+      ) : null}
       <section className="composer">
         <textarea
           ref={composerInputRef}
@@ -3890,11 +3905,14 @@ function HomeComposer(props: {
             }}
           />
           <button
+            ref={voiceButtonRef}
             className="round-button"
             type="button"
-            title={props.t("development.capability.voice_input")}
-            aria-label={props.t("development.capability.voice_input")}
-            onClick={() => props.onDevelopment("voice_input")}
+            title={props.t("home.voice.start")}
+            aria-label={props.t("home.voice.start")}
+            aria-expanded={voicePanelState !== null}
+            aria-controls={voicePanelState ? "home-voice-panel" : undefined}
+            onClick={() => setVoicePanelState("unsupported")}
           >
             <PigeIcon name="voice" size={17} />
           </button>

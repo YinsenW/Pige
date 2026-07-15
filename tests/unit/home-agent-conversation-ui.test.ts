@@ -64,6 +64,39 @@ afterEach(() => {
 });
 
 describe("Home durable Agent conversation UI", () => {
+  it("shows the honest voice-unavailable state and returns focus to its exact trigger", async () => {
+    const dom = createDom(420);
+    const harness = createHarness(undefined);
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    const voiceButton = buttonsByAriaLabel(container, enMessages["home.voice.start"])[0]!;
+
+    await act(async () => {
+      voiceButton.click();
+      await settle(dom);
+    });
+    expect(container.querySelector('[role="status"]')?.textContent).toContain(enMessages["home.voice.unsupportedTitle"]);
+    expect(container.querySelector(".home-voice-wave")).toBeNull();
+    expect(container.querySelector(".development-status")).toBeNull();
+
+    await clickButton(dom, container, enMessages["home.voice.continueTyping"]);
+    await waitFor(dom, () => dom.window.document.activeElement === voiceButton);
+    expect(container.querySelector(".home-voice-panel")).toBeNull();
+
+    await act(async () => {
+      voiceButton.click();
+      await settle(dom);
+      container.querySelector(".home-voice-panel")?.dispatchEvent(
+        new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true })
+      );
+      await settle(dom);
+    });
+    await waitFor(dom, () => dom.window.document.activeElement === voiceButton);
+    expect(container.querySelector(".home-voice-panel")).toBeNull();
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("lets the Models panel solely own its scoped summary failure after Home loads", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);

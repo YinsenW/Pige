@@ -580,6 +580,101 @@ button.ghost {
   white-space: nowrap;
 }
 
+.home-voice-panel {
+  width: 100%;
+  margin-bottom: 10px;
+  border: .5px solid var(--border-default);
+  border-radius: 16px;
+  padding: 14px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 4%);
+}
+
+.home-voice-eyebrow {
+  color: var(--text-tertiary);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.home-voice-panel h2 {
+  margin: 5px 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.home-voice-panel h2:focus-visible { outline: none; }
+
+.home-voice-panel p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.home-voice-wave {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin: 12px 0;
+}
+
+.home-voice-wave span {
+  width: 3px;
+  border-radius: 999px;
+  background: var(--accent);
+  animation: home-voice-level 900ms ease-in-out infinite alternate;
+}
+
+.home-voice-wave span:nth-child(1) { height: 8px; animation-delay: -720ms; }
+.home-voice-wave span:nth-child(2) { height: 17px; animation-delay: -540ms; }
+.home-voice-wave span:nth-child(3) { height: 23px; animation-delay: -360ms; }
+.home-voice-wave span:nth-child(4) { height: 12px; animation-delay: -180ms; }
+.home-voice-wave span:nth-child(5) { height: 19px; animation-delay: -90ms; }
+.home-voice-wave span:nth-child(6) { height: 7px; }
+
+@keyframes home-voice-level {
+  from { transform: scaleY(.65); opacity: .55; }
+  to { transform: scaleY(1); opacity: 1; }
+}
+
+.home-voice-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 14px;
+}
+
+.home-voice-actions button {
+  min-height: 32px;
+  border: .5px solid var(--border-default);
+  border-radius: 9px;
+  padding: 6px 12px;
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.home-voice-actions button:hover:not(:disabled) { background: var(--surface-muted); }
+
+.home-voice-actions .primary {
+  border-color: var(--text-primary);
+  background: var(--text-primary);
+  color: var(--surface);
+}
+
+.home-voice-actions button:disabled { opacity: .45; }
+
+@media (prefers-reduced-motion: reduce) {
+  .home-voice-wave span { animation: none; }
+}
+
 .job-strip {
   width: min(100%, var(--home-pane-max));
   justify-self: center;
