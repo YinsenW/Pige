@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   SettingsSurface,
   SkillsSettingsPanel,
+  SystemSettingsPanel,
   type DevelopmentCapability,
   type SettingsSection
 } from "../../apps/desktop/src/renderer/src/App";
@@ -141,6 +142,82 @@ describe("full UI Settings surface", () => {
     });
     expect(onDevelopment).toHaveBeenCalledTimes(2);
     expect(ipcRead).toBe(false);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps Updates local while binding real redacted diagnostics and support preview", async () => {
+    const dom = createDom();
+    const refreshDiagnostics = vi.fn(async () => undefined);
+    const previewSupportBundle = vi.fn(async () => ({
+      previewId: "support_preview",
+      generatedAt: "2026-07-16T00:00:00.000Z",
+      localOnly: true as const,
+      estimatedBytes: 2048,
+      includedCategories: [{ id: "health", label: "/private/raw-label", included: true, reason: "private body" }],
+      excludedCategories: [{ id: "content", label: "RAW CONTENT", included: false, reason: "excluded" }],
+      privacyWarnings: ["review before export"]
+    }));
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: {
+        diagnostics: {
+          previewSupportBundle,
+          exportSupportBundle: vi.fn(),
+          cancelSupportBundleExport: vi.fn()
+        }
+      }
+    });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+
+    function Harness(): React.JSX.Element {
+      const [preview, setPreview] = useState<Awaited<ReturnType<typeof previewSupportBundle>> | null>(null);
+      return createElement(SystemSettingsPanel, {
+        diagnosticsHealth: {
+          status: "ok",
+          checkedAt: "2026-07-16T00:00:00.000Z",
+          localOnly: true,
+          recentErrorCount: 0,
+          checks: []
+        },
+        supportBundlePreview: preview,
+        onRefreshDiagnostics: refreshDiagnostics,
+        onSupportBundlePreviewChange: setPreview,
+        t
+      });
+    }
+
+    await act(async () => {
+      root.render(createElement(Harness));
+      await settle(dom);
+    });
+    const panel = dom.window.document.querySelector<HTMLElement>(".settings-system-page")!;
+    expect(panel.querySelector<HTMLSelectElement>('select[aria-label="Update channel"]')?.disabled).toBe(true);
+    expect(buttonNamed(panel, "Clear…").disabled).toBe(true);
+
+    await act(async () => {
+      buttonNamed(panel, "Check for updates").click();
+      await settle(dom);
+    });
+    expect(panel.textContent).toContain("Update Service is in development");
+    expect(previewSupportBundle).not.toHaveBeenCalled();
+
+    await act(async () => {
+      buttonNamed(panel, "Refresh").click();
+      await settle(dom);
+    });
+    expect(refreshDiagnostics).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      buttonNamed(panel, "Preview and export…").click();
+      await settle(dom);
+    });
+    expect(previewSupportBundle).toHaveBeenCalledOnce();
+    expect(panel.textContent).toContain("Preview ready");
+    expect(panel.textContent).toContain("Included: 1");
+    expect(panel.textContent).not.toContain("/private/raw-label");
+    expect(panel.textContent).not.toContain("RAW CONTENT");
 
     await act(async () => root.unmount());
     dom.window.close();

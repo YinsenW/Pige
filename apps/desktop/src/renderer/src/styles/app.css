@@ -4649,6 +4649,16 @@ dd {
   content: "";
 }
 
+.settings-status.degraded::before {
+  background: #c98a22;
+}
+
+.system-support-preview {
+  margin-top: 12px;
+  padding: 14px;
+  background: var(--surface-elevated);
+}
+
 .settings-inline-actions {
   display: flex;
   flex-wrap: wrap;
@@ -5139,6 +5149,19 @@ dd {
     align-items: flex-start;
     flex-direction: column;
     gap: 9px;
+  }
+  .settings-system-page .settings-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 9px;
+  }
+  .settings-system-page .settings-row-control {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .settings-system-page .settings-row > .settings-select {
+    width: 100%;
+    max-width: 100%;
   }
   .model-settings-page .settings-row-control {
     width: 100%;

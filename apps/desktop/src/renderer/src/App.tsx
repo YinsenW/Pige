@@ -1084,9 +1084,7 @@ export function App(): React.JSX.Element {
                 busy={busy}
                 error={error}
                 vault={activeVault}
-                diagnosticsHealth={diagnosticsHealth}
                 localDatabaseStatus={localDatabaseStatus}
-                supportBundlePreview={supportBundlePreview}
                 backupStatus={backupStatus}
                 backupJobs={backupJobs}
                 toolchainHealth={toolchainHealth}
@@ -1095,7 +1093,6 @@ export function App(): React.JSX.Element {
                 onCreate={createVault}
                 onRefresh={refreshVaultState}
                 onRefreshDiagnostics={refreshDiagnostics}
-                onSupportBundlePreviewChange={setSupportBundlePreview}
                 onRemoveRecent={removeRecent}
                 onError={setError}
                 t={t}
@@ -1113,6 +1110,14 @@ export function App(): React.JSX.Element {
           ) : settingsSection === "skills" ? (
             <SkillsSettingsPanel
               onDevelopment={() => showDevelopmentCapability("settings", "skills")}
+              t={t}
+            />
+          ) : settingsSection === "system" ? (
+            <SystemSettingsPanel
+              diagnosticsHealth={diagnosticsHealth}
+              supportBundlePreview={supportBundlePreview}
+              onRefreshDiagnostics={refreshDiagnostics}
+              onSupportBundlePreviewChange={setSupportBundlePreview}
               t={t}
             />
           ) : (
@@ -4404,7 +4409,7 @@ const settingsSections: readonly {
   { id: "privacy", icon: "shield", status: "development", capability: "permissions_privacy" },
   { id: "skills", icon: "skill", status: "development", capability: "skills" },
   { id: "packages", icon: "package", status: "development", capability: "packages" },
-  { id: "system", icon: "activity", status: "development", capability: "updates" }
+  { id: "system", icon: "activity", status: "partial" }
 ];
 
 const settingsGroups: readonly {
@@ -4692,14 +4697,236 @@ export function SkillsSettingsPanel(props: {
   );
 }
 
+export function SystemSettingsPanel(props: {
+  readonly diagnosticsHealth: DiagnosticsHealth | null;
+  readonly supportBundlePreview: SupportBundlePreview | null;
+  readonly onRefreshDiagnostics: () => Promise<void>;
+  readonly onSupportBundlePreviewChange: (preview: SupportBundlePreview | null) => void;
+  readonly t: (key: string) => string;
+}): React.JSX.Element {
+  const [diagnosticsBusy, setDiagnosticsBusy] = useState<"refresh" | "preview" | "export" | "cancel" | null>(null);
+  const [notice, setNotice] = useState<{ readonly kind: "success" | "error"; readonly key: string } | null>(null);
+  const supportBundleExportRequestRef = useRef<string | null>(null);
+  const supportBundleCancelRequestRef = useRef<string | null>(null);
+
+  useEffect(() => () => {
+    const exportRequestId = supportBundleExportRequestRef.current;
+    if (!exportRequestId) return;
+    supportBundleCancelRequestRef.current = exportRequestId;
+    void window.pige.diagnostics.cancelSupportBundleExport({ exportRequestId }).catch(() => undefined);
+  }, []);
+
+  const refreshDiagnostics = async (): Promise<void> => {
+    if (diagnosticsBusy) return;
+    setDiagnosticsBusy("refresh");
+    setNotice(null);
+    try {
+      await props.onRefreshDiagnostics();
+      setNotice({ kind: "success", key: "system.healthRefreshed" });
+    } catch {
+      setNotice({ kind: "error", key: "system.healthFailed" });
+    } finally {
+      setDiagnosticsBusy(null);
+    }
+  };
+
+  const previewSupportBundle = async (): Promise<void> => {
+    if (diagnosticsBusy) return;
+    setDiagnosticsBusy("preview");
+    setNotice(null);
+    try {
+      props.onSupportBundlePreviewChange(await window.pige.diagnostics.previewSupportBundle());
+    } catch {
+      setNotice({ kind: "error", key: "system.previewFailed" });
+    } finally {
+      setDiagnosticsBusy(null);
+    }
+  };
+
+  const exportSupportBundle = async (): Promise<void> => {
+    if (!props.supportBundlePreview || diagnosticsBusy || supportBundleExportRequestRef.current) return;
+    const exportRequestId = crypto.randomUUID();
+    supportBundleExportRequestRef.current = exportRequestId;
+    setDiagnosticsBusy("export");
+    setNotice(null);
+    try {
+      const result = await window.pige.diagnostics.exportSupportBundle({
+        previewId: props.supportBundlePreview.previewId,
+        exportRequestId
+      });
+      if (result.status === "exported") {
+        props.onSupportBundlePreviewChange(null);
+        await props.onRefreshDiagnostics();
+        setNotice({ kind: "success", key: "system.exported" });
+      }
+    } catch {
+      if (supportBundleCancelRequestRef.current !== exportRequestId) {
+        setNotice({ kind: "error", key: "support.exportFailed" });
+      }
+    } finally {
+      if (supportBundleExportRequestRef.current === exportRequestId) {
+        supportBundleExportRequestRef.current = null;
+        setDiagnosticsBusy(null);
+      }
+      if (supportBundleCancelRequestRef.current === exportRequestId) {
+        supportBundleCancelRequestRef.current = null;
+      }
+    }
+  };
+
+  const cancelSupportBundleExport = async (): Promise<void> => {
+    const exportRequestId = supportBundleExportRequestRef.current;
+    if (!exportRequestId || supportBundleCancelRequestRef.current === exportRequestId) return;
+    supportBundleCancelRequestRef.current = exportRequestId;
+    setDiagnosticsBusy("cancel");
+    try {
+      await window.pige.diagnostics.cancelSupportBundleExport({ exportRequestId });
+      setNotice({ kind: "success", key: "system.exportCanceled" });
+    } catch {
+      supportBundleCancelRequestRef.current = null;
+      setDiagnosticsBusy("export");
+      setNotice({ kind: "error", key: "support.exportFailed" });
+    }
+  };
+
+  const healthStatusKey = props.diagnosticsHealth?.status === "ok"
+    ? "system.healthOk"
+    : props.diagnosticsHealth?.status === "degraded"
+      ? "system.healthDegraded"
+      : "system.healthLoading";
+  const showUpdateUnavailable = (): void => {
+    setNotice({ kind: "success", key: "system.updateUnavailable" });
+  };
+
+  return (
+    <section className="settings-page settings-system-page" aria-labelledby="settings-system-title">
+      <header className="settings-panel-header">
+        <h1 id="settings-system-title">{props.t("system.title")}</h1>
+        <p>{props.t("system.subtitle")}</p>
+      </header>
+
+      <section className="settings-section" aria-labelledby="system-update-title">
+        <h2 className="settings-section-title" id="system-update-title">{props.t("system.updateSection")}</h2>
+        <div className="settings-card">
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("system.updateChannel")}</strong>
+              <span>{props.t("system.updateChannelDescription")}</span>
+            </div>
+            <select className="settings-select" aria-label={props.t("system.updateChannel")} value="public_alpha" disabled>
+              <option value="public_alpha">{props.t("system.publicAlpha")}</option>
+            </select>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("system.autoDownload")}</strong>
+              <span>{props.t("system.autoDownloadDescription")}</span>
+            </div>
+            <button
+              className="settings-switch"
+              type="button"
+              role="switch"
+              aria-checked="false"
+              aria-label={props.t("system.autoDownload")}
+              onClick={showUpdateUnavailable}
+            />
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("system.updateStatus")}</strong>
+              <span>{props.t("system.updateStatusDescription")}</span>
+            </div>
+            <button className="settings-button" type="button" onClick={showUpdateUnavailable}>
+              {props.t("system.checkUpdates")}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="settings-section" aria-labelledby="system-health-title">
+        <h2 className="settings-section-title" id="system-health-title">{props.t("system.localHealth")}</h2>
+        <div className="settings-card">
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("system.health")}</strong>
+              <span>{props.t("system.healthDescription")}</span>
+            </div>
+            <div className="settings-row-control">
+              <span className={`settings-status ${props.diagnosticsHealth?.status === "degraded" ? "degraded" : ""}`}>
+                {props.t(healthStatusKey)}
+              </span>
+              <button
+                className="settings-button"
+                type="button"
+                disabled={Boolean(diagnosticsBusy)}
+                onClick={() => void refreshDiagnostics()}
+              >
+                {props.t("system.refreshHealth")}
+              </button>
+            </div>
+          </div>
+          <div className="settings-row tall">
+            <div className="settings-row-copy">
+              <strong>{props.t("system.supportBundle")}</strong>
+              <span>{props.t("system.supportBundleDescription")}</span>
+            </div>
+            <button
+              className="settings-button"
+              type="button"
+              disabled={Boolean(diagnosticsBusy)}
+              onClick={() => void previewSupportBundle()}
+            >
+              {props.t("system.previewSupport")}
+            </button>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("system.clearDiagnostics")}</strong>
+              <span>{props.t("system.clearDiagnosticsDescription")}</span>
+            </div>
+            <button className="settings-button" type="button" disabled title={props.t("development.state.unavailable")}>
+              {props.t("system.clear")}
+            </button>
+          </div>
+        </div>
+
+        {props.supportBundlePreview ? (
+          <div className="support-preview system-support-preview" aria-label={props.t("support.previewReady")}>
+            <strong>{props.t("support.previewReady")}</strong>
+            <span>{props.t("support.estimatedSize")}: {Math.ceil(props.supportBundlePreview.estimatedBytes / 1024)} KB</span>
+            <span>{props.t("support.included")}: {props.supportBundlePreview.includedCategories.length}</span>
+            <span>{props.t("support.excluded")}: {props.supportBundlePreview.excludedCategories.length}</span>
+            <span>{props.t("system.privacyWarnings")}: {props.supportBundlePreview.privacyWarnings.length}</span>
+            <div className="settings-inline-actions">
+              {diagnosticsBusy === "export" || diagnosticsBusy === "cancel" ? (
+                <button className="settings-button" type="button" disabled={diagnosticsBusy === "cancel"} onClick={() => void cancelSupportBundleExport()}>
+                  {props.t("maintenance.cancelSupportExport")}
+                </button>
+              ) : (
+                <button className="settings-button primary" type="button" onClick={() => void exportSupportBundle()}>
+                  {props.t("maintenance.exportSupport")}
+                </button>
+              )}
+            </div>
+          </div>
+        ) : null}
+        {notice ? (
+          <p className={notice.kind === "error" ? "error" : "muted"} role={notice.kind === "error" ? "alert" : "status"} aria-live="polite">
+            {props.t(notice.key)}
+          </p>
+        ) : null}
+        <p className="settings-note">{props.t("system.localOnlyNote")}</p>
+      </section>
+    </section>
+  );
+}
+
 interface VaultSettingsPanelProps {
   readonly surface: "vault" | "maintenance";
   readonly busy: boolean;
   readonly error: string | null;
   readonly vault: VaultSummary;
-  readonly diagnosticsHealth: DiagnosticsHealth | null;
   readonly localDatabaseStatus: LocalDatabaseStatus | null;
-  readonly supportBundlePreview: SupportBundlePreview | null;
   readonly backupStatus: BackupRestoreStatus | null;
   readonly backupJobs: readonly JobSummary[];
   readonly toolchainHealth: ToolchainHealth | null;
@@ -4708,7 +4935,6 @@ interface VaultSettingsPanelProps {
   readonly onCreate: () => Promise<void>;
   readonly onRefresh: () => Promise<void>;
   readonly onRefreshDiagnostics: () => Promise<void>;
-  readonly onSupportBundlePreviewChange: (preview: SupportBundlePreview | null) => void;
   readonly onRemoveRecent: (vaultId: string) => Promise<void>;
   readonly onError: (error: string | null) => void;
   readonly t: (key: string) => string;
@@ -4717,9 +4943,6 @@ interface VaultSettingsPanelProps {
 function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
   const [backupNotice, setBackupNotice] = useState<string | null>(null);
   const [backupBusy, setBackupBusy] = useState(false);
-  const [supportBundleExportRequestId, setSupportBundleExportRequestId] = useState<string | null>(null);
-  const supportBundleExportRequestRef = useRef<string | null>(null);
-  const supportBundleCancelRequestRef = useRef<string | null>(null);
   const [revealTarget, setRevealTarget] = useState<VaultRevealTarget | null>(null);
   const [revealNotice, setRevealNotice] = useState<{ readonly kind: "success" | "error"; readonly message: string } | null>(null);
   const revealRequestSequence = useRef(0);
@@ -4732,13 +4955,6 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
     await props.onRefresh();
     await props.onRefreshDiagnostics();
   }, () => props.onError(null));
-
-  useEffect(() => () => {
-    const exportRequestId = supportBundleExportRequestRef.current;
-    if (!exportRequestId) return;
-    supportBundleCancelRequestRef.current = exportRequestId;
-    void window.pige.diagnostics.cancelSupportBundleExport({ exportRequestId }).catch(() => undefined);
-  }, []);
 
   useEffect(() => () => {
     revealRequestSequence.current += 1;
@@ -4853,57 +5069,6 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
       await props.onRefreshDiagnostics();
     } catch (caught) {
       props.onError(caught instanceof Error ? caught.message : "Something went wrong.");
-    }
-  };
-
-  const previewSupportBundle = async (): Promise<void> => {
-    props.onError(null);
-    try {
-      props.onSupportBundlePreviewChange(await window.pige.diagnostics.previewSupportBundle());
-    } catch (caught) {
-      props.onError(caught instanceof Error ? caught.message : "Something went wrong.");
-    }
-  };
-
-  const exportSupportBundle = async (): Promise<void> => {
-    if (!props.supportBundlePreview || supportBundleExportRequestRef.current) return;
-    const exportRequestId = crypto.randomUUID();
-    supportBundleExportRequestRef.current = exportRequestId;
-    setSupportBundleExportRequestId(exportRequestId);
-    props.onError(null);
-    try {
-      const result = await window.pige.diagnostics.exportSupportBundle({
-        previewId: props.supportBundlePreview.previewId,
-        exportRequestId
-      });
-      if (result.status === "exported") {
-        props.onSupportBundlePreviewChange(null);
-        await props.onRefreshDiagnostics();
-      }
-    } catch {
-      if (supportBundleCancelRequestRef.current !== exportRequestId) {
-        props.onError(props.t("support.exportFailed"));
-      }
-    } finally {
-      if (supportBundleExportRequestRef.current === exportRequestId) {
-        supportBundleExportRequestRef.current = null;
-        setSupportBundleExportRequestId(null);
-      }
-      if (supportBundleCancelRequestRef.current === exportRequestId) {
-        supportBundleCancelRequestRef.current = null;
-      }
-    }
-  };
-
-  const cancelSupportBundleExport = async (): Promise<void> => {
-    const exportRequestId = supportBundleExportRequestRef.current;
-    if (!exportRequestId || supportBundleCancelRequestRef.current === exportRequestId) return;
-    supportBundleCancelRequestRef.current = exportRequestId;
-    try {
-      await window.pige.diagnostics.cancelSupportBundleExport({ exportRequestId });
-    } catch {
-      supportBundleCancelRequestRef.current = null;
-      props.onError(props.t("support.exportFailed"));
     }
   };
 
@@ -5059,7 +5224,7 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
       </> : null}
 
       {props.surface === "maintenance" ? (
-      <section className="settings-group" aria-busy={supportBundleExportRequestId ? "true" : undefined}>
+      <section className="settings-group">
         <div className="settings-actions">
           <button type="button" className="secondary" onClick={() => void rebuildLocalDatabase()}>
             {props.t("maintenance.rebuildIndex")}
@@ -5067,37 +5232,7 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
           <button type="button" className="secondary" onClick={() => void resetLocalDatabase()}>
             {props.t("maintenance.resetDatabase")}
           </button>
-          <button type="button" className="secondary" onClick={() => void props.onRefreshDiagnostics()}>
-            {props.t("maintenance.checkDiagnostics")}
-          </button>
-          <button
-            type="button"
-            className="secondary"
-            disabled={Boolean(supportBundleExportRequestId)}
-            onClick={() => void previewSupportBundle()}
-          >
-            {props.t("maintenance.previewSupport")}
-          </button>
-          {supportBundleExportRequestId ? (
-            <button type="button" className="secondary" onClick={() => void cancelSupportBundleExport()}>
-              {props.t("maintenance.cancelSupportExport")}
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="secondary"
-              disabled={!props.supportBundlePreview}
-              onClick={() => void exportSupportBundle()}
-            >
-              {props.t("maintenance.exportSupport")}
-            </button>
-          )}
         </div>
-        {props.diagnosticsHealth ? (
-          <p className="muted">
-            {props.t("maintenance.diagnostics")}: {props.diagnosticsHealth.status}; {props.t("maintenance.recentErrors")}: {props.diagnosticsHealth.recentErrorCount}
-          </p>
-        ) : null}
         {props.localDatabaseStatus ? (
           <p className="muted">
             {props.t("maintenance.localDb")}: {props.localDatabaseStatus.status}; {props.t("maintenance.migrations")}: {props.localDatabaseStatus.appliedMigrationCount}
@@ -5108,14 +5243,6 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
             {props.t("maintenance.toolchain")}: {props.toolchainHealth.status}; {props.t("maintenance.missingTools")}:{" "}
             {props.toolchainHealth.tools.filter((tool) => tool.status === "missing").length}
           </p>
-        ) : null}
-        {props.supportBundlePreview ? (
-          <div className="support-preview">
-            <strong>{props.t("support.previewReady")}</strong>
-            <span>{props.t("support.estimatedSize")}: {Math.ceil(props.supportBundlePreview.estimatedBytes / 1024)} KB</span>
-            <span>{props.t("support.included")}: {props.supportBundlePreview.includedCategories.map((category) => category.label).join(", ")}</span>
-            <span>{props.t("support.excluded")}: {props.supportBundlePreview.excludedCategories.map((category) => category.label).join(", ")}</span>
-          </div>
         ) : null}
       </section>
       ) : null}
