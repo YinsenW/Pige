@@ -4,8 +4,10 @@ import {
   useState,
   type DragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
   type RefObject
 } from "react";
+import { PigeIcon, type PigeIconName } from "./components/PigeIcon";
 import { ProposalReviewPanel } from "./components/ProposalReviewPanel";
 import deMessages from "./locales/de/messages.json";
 import enMessages from "./locales/en/messages.json";
@@ -61,12 +63,43 @@ import type {
   JobState,
   Locale,
   ProviderEndpointProtocol,
-  SourceStorageStrategy,
-  WindowLayoutMode
+  SourceStorageStrategy
 } from "@pige/schemas";
 
-type View = "home" | "library" | "knowledgeTree" | "settings" | "models";
+type View = "home" | "library" | "knowledgeTree";
+export type SettingsSection =
+  | "general"
+  | "appearance"
+  | "vault"
+  | "maintenance"
+  | "models"
+  | "capabilities"
+  | "memory"
+  | "privacy"
+  | "skills"
+  | "packages"
+  | "system";
 type CaptureToast = { readonly kind: "success" | "error"; readonly message: string };
+type DevelopmentSurface = "home" | "reader" | "knowledge" | "settings";
+export type DevelopmentCapability =
+  | "voice_input"
+  | "knowledge_search"
+  | "knowledge_filter"
+  | "knowledge_view"
+  | "note_agent"
+  | "selection_actions"
+  | "appearance"
+  | "local_capabilities"
+  | "agent_memory"
+  | "permissions_privacy"
+  | "skills"
+  | "packages"
+  | "updates";
+export type DevelopmentNotice = {
+  readonly surface: DevelopmentSurface;
+  readonly capability: DevelopmentCapability;
+  readonly state: "development" | "unavailable";
+};
 type NoteRelatedState = LibraryRelatedResult | "loading" | "unavailable" | null;
 type HomeAgentUiState = "idle" | "accepted" | "running" | "waiting" | "failed" | "completed";
 type ActiveAgentDraftBinding = {
@@ -130,6 +163,9 @@ export function App(): React.JSX.Element {
   const [vaultName, setVaultName] = useState(initialVaultName);
   const [windowState, setWindowState] = useState<WindowState | null>(null);
   const [view, setView] = useState<View>("home");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
+  const [developmentNotice, setDevelopmentNotice] = useState<DevelopmentNotice | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [diagnosticsHealth, setDiagnosticsHealth] = useState<DiagnosticsHealth | null>(null);
@@ -152,12 +188,17 @@ export function App(): React.JSX.Element {
   const [activityBlockedIds, setActivityBlockedIds] = useState<readonly string[]>([]);
   const [readyProposals, setReadyProposals] = useState<readonly ProposalSummary[]>([]);
   const [libraryList, setLibraryList] = useState<LibraryListResult | null>(null);
+  const [librarySidebarExpandedGroups, setLibrarySidebarExpandedGroups] = useState<ReadonlySet<string>>(
+    () => new Set(["family:knowledge", "family:sources"])
+  );
   const [knowledgeTree, setKnowledgeTree] = useState<KnowledgeTreeResult | null>(null);
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [selectedNote, setSelectedNote] = useState<NoteRenderResult | null>(null);
   const [selectedNoteRelated, setSelectedNoteRelated] = useState<NoteRelatedState>(null);
   const [noteLoadingPageId, setNoteLoadingPageId] = useState<string | null>(null);
   const noteOpenSequence = useRef(0);
+  const settingsTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const settingsOpenerRef = useRef<HTMLButtonElement | null>(null);
   const knowledgeTreeReturnFocusKey = useRef<string | null>(null);
   const modelRefreshSequence = useRef(0);
   const agentRuntimeRefreshSequence = useRef(0);
@@ -300,9 +341,41 @@ export function App(): React.JSX.Element {
     }
   };
 
-  const openModelsFromHome = async (): Promise<void> => {
+  const openModelsFromHome = async (opener: HTMLButtonElement): Promise<void> => {
+    settingsOpenerRef.current = opener;
     await dismissFirstHomeGuide();
-    setView("models");
+    setSettingsSection("models");
+    setDevelopmentNotice(null);
+    setSettingsOpen(true);
+  };
+
+  const openSettings = (section: SettingsSection, opener: HTMLButtonElement): void => {
+    settingsOpenerRef.current = opener;
+    setSettingsSection(section);
+    setDevelopmentNotice(null);
+    setSettingsOpen(true);
+  };
+
+  const closeSettings = (): void => {
+    setSettingsOpen(false);
+    setDevelopmentNotice(null);
+    void refreshVaultState().catch(() => {
+      setCaptureToast({ kind: "error", message: t("error.generic") });
+    });
+    const opener = settingsOpenerRef.current;
+    settingsOpenerRef.current = null;
+    window.requestAnimationFrame(() => {
+      if (opener?.isConnected) opener.focus();
+      else if (settingsTriggerRef.current?.isConnected) settingsTriggerRef.current.focus();
+    });
+  };
+
+  const showDevelopmentCapability = (
+    surface: DevelopmentSurface,
+    capability: DevelopmentCapability,
+    state: DevelopmentNotice["state"] = "development"
+  ): void => {
+    setDevelopmentNotice({ surface, capability, state });
   };
 
   const refreshLibrary = async (): Promise<void> => {
@@ -345,11 +418,13 @@ export function App(): React.JSX.Element {
 
   const toggleSidebar = async (): Promise<void> => {
     const nextSidebarOpen = !(windowState?.sidebarOpen ?? false);
+    if (nextSidebarOpen && windowState?.mode === "compact") {
+      setWindowState(await window.pige.window.setMode({ mode: "expanded" }));
+    } else if (!nextSidebarOpen && view === "home" && windowState?.mode === "expanded") {
+      setWindowState(await window.pige.window.setMode({ mode: "compact" }));
+    }
     setWindowState(await window.pige.window.setSidebarOpen({ sidebarOpen: nextSidebarOpen }));
-  };
-
-  const setWindowMode = async (mode: WindowLayoutMode): Promise<void> => {
-    setWindowState(await window.pige.window.setMode({ mode }));
+    if (nextSidebarOpen && activeVault) void refreshLibrary();
   };
 
   const toggleAlwaysOnTop = async (): Promise<void> => {
@@ -505,6 +580,16 @@ export function App(): React.JSX.Element {
   const activeVault = onboarding?.activeVault;
   const blocked = !onboarding || onboarding.state === "blocked_no_vault";
   const sidebarOpen = windowState?.sidebarOpen ?? false;
+  const currentTitle = view === "home"
+    ? "Pige"
+    : view === "library"
+      ? t("nav.library")
+      : t("nav.knowledgeTree");
+
+  useEffect(() => {
+    if (!sidebarOpen || !activeVault || libraryList) return;
+    void refreshLibrary();
+  }, [activeVault?.vaultId, libraryList, sidebarOpen]);
 
   return (
     <main
@@ -516,15 +601,36 @@ export function App(): React.JSX.Element {
       onDrop={handleDrop}
     >
       <header className="topbar">
-        <button
-          className="icon-button"
-          type="button"
-          aria-label={sidebarOpen ? t("topbar.collapseSidebar") : t("topbar.expandSidebar")}
-          onClick={() => void toggleSidebar()}
-        >
-          =
-        </button>
-        <span>Pige</span>
+        <div className="topbar-leading">
+          {view !== "home" ? (
+            <button
+              className="icon-button home-return-button"
+              type="button"
+              aria-label={t("nav.home")}
+              title={t("nav.home")}
+              onClick={() => {
+                setView("home");
+                void refreshVaultState().catch(() => {
+                  setCaptureToast({ kind: "error", message: t("error.generic") });
+                });
+              }}
+            >
+              <PigeIcon name="home" />
+            </button>
+          ) : null}
+          <button
+            className="icon-button sidebar-toggle-button"
+            type="button"
+            aria-label={sidebarOpen ? t("topbar.collapseSidebar") : t("topbar.expandSidebar")}
+            title={sidebarOpen ? t("topbar.collapseSidebar") : t("topbar.expandSidebar")}
+            aria-expanded={sidebarOpen}
+            aria-controls="pige-library-sidebar"
+            onClick={() => void toggleSidebar()}
+          >
+            <PigeIcon name="panel" />
+          </button>
+        </div>
+        <span className="topbar-title">{currentTitle}</span>
         <div className="topbar-actions">
           <span className="status">{health?.status === "ok" ? t("status.ready") : t("status.starting")}</span>
           <select
@@ -541,50 +647,21 @@ export function App(): React.JSX.Element {
           </select>
           <button
             type="button"
-            className={windowState?.alwaysOnTop ? "topbar-button active" : "topbar-button"}
+            className={windowState?.alwaysOnTop ? "icon-button pin-button active" : "icon-button pin-button"}
             aria-label={t("topbar.pin")}
             title={t("topbar.pin")}
             aria-pressed={windowState?.alwaysOnTop ?? false}
             onClick={() => void toggleAlwaysOnTop()}
           >
-            {t("topbar.pinShort")}
-          </button>
-          <button
-            type="button"
-            className={windowState?.mode === "compact" ? "topbar-button active" : "topbar-button"}
-            aria-label={t("topbar.compact")}
-            title={t("topbar.compact")}
-            aria-pressed={windowState?.mode === "compact"}
-            onClick={() => void setWindowMode("compact")}
-          >
-            C
-          </button>
-          <button
-            type="button"
-            className={windowState?.mode === "expanded" ? "topbar-button active" : "topbar-button"}
-            aria-label={t("topbar.expanded")}
-            title={t("topbar.expanded")}
-            aria-pressed={windowState?.mode === "expanded"}
-            onClick={() => void setWindowMode("expanded")}
-          >
-            W
-          </button>
-          <button
-            type="button"
-            className={windowState?.mode === "fullscreen" ? "topbar-button active" : "topbar-button"}
-            aria-label={t("topbar.fullscreen")}
-            title={t("topbar.fullscreen")}
-            aria-pressed={windowState?.mode === "fullscreen"}
-            onClick={() => void setWindowMode("fullscreen")}
-          >
-            F
+            <PigeIcon name="pin" />
           </button>
         </div>
       </header>
 
       <div className="workspace">
         {sidebarOpen ? (
-          <aside className="sidebar">
+          <aside className="sidebar" id="pige-library-sidebar">
+            <nav className="primary-navigation" aria-label={t("nav.library")}>
             <button
               className={view === "home" ? "nav-item active" : "nav-item"}
               type="button"
@@ -596,18 +673,8 @@ export function App(): React.JSX.Element {
                 });
               }}
             >
-              {t("nav.home")}
-            </button>
-            <button
-              className={view === "library" ? "nav-item active" : "nav-item"}
-              type="button"
-              aria-current={view === "library" ? "page" : undefined}
-              onClick={() => {
-                setView("library");
-                void refreshLibrary();
-              }}
-            >
-              {t("nav.library")}
+              <PigeIcon name="home" size={16} />
+              <span>{t("nav.home")}</span>
             </button>
             <button
               className={view === "knowledgeTree" ? "nav-item active" : "nav-item"}
@@ -622,23 +689,43 @@ export function App(): React.JSX.Element {
                 void refreshKnowledgeTree();
               }}
             >
-              {t("nav.knowledgeTree")}
+              <PigeIcon name="knowledge" size={16} />
+              <span>{t("nav.knowledgeTree")}</span>
             </button>
+            </nav>
+            {activeVault ? (
+              <LibrarySidebarTree
+                libraryList={libraryList}
+                selectedPageId={selectedNote?.summary.pageId}
+                expandedGroups={librarySidebarExpandedGroups}
+                onToggleGroup={(groupId) => {
+                  setLibrarySidebarExpandedGroups((current) => {
+                    const next = new Set(current);
+                    if (next.has(groupId)) next.delete(groupId);
+                    else next.add(groupId);
+                    return next;
+                  });
+                }}
+                onOpenNote={async (pageId) => {
+                  setView("library");
+                  await openNote(pageId);
+                }}
+                t={t}
+              />
+            ) : null}
             <button
-              className={view === "settings" ? "nav-item active" : "nav-item"}
+              ref={settingsTriggerRef}
+              className="sidebar-settings-control"
               type="button"
-              aria-current={view === "settings" ? "page" : undefined}
-              onClick={() => setView("settings")}
+              aria-haspopup="dialog"
+              onClick={(event) => openSettings("general", event.currentTarget)}
             >
-              {t("nav.vaultSettings")}
-            </button>
-            <button
-              className={view === "models" ? "nav-item active" : "nav-item"}
-              type="button"
-              aria-current={view === "models" ? "page" : undefined}
-              onClick={() => setView("models")}
-            >
-              {t("nav.models")}
+              <PigeIcon name="settings" size={16} />
+              <span>
+                <strong>{activeVault?.name ?? "Pige"}</strong>
+                <small>{t("settings.open")}</small>
+              </span>
+              <PigeIcon name="expand" size={14} />
             </button>
           </aside>
         ) : null}
@@ -674,6 +761,8 @@ export function App(): React.JSX.Element {
               setSelectedNote(null);
               setSelectedNoteRelated(null);
             }}
+            developmentNotice={developmentNotice?.surface === "reader" ? developmentNotice : null}
+            onDevelopment={(capability) => showDevelopmentCapability("reader", capability)}
             t={t}
           />
         ) : view === "knowledgeTree" && activeVault ? (
@@ -693,6 +782,8 @@ export function App(): React.JSX.Element {
                 setSelectedNoteRelated(null);
                 restoreKnowledgeTreeFocus(knowledgeTreeReturnFocusKey.current);
               }}
+              developmentNotice={developmentNotice?.surface === "reader" ? developmentNotice : null}
+              onDevelopment={(capability) => showDevelopmentCapability("reader", capability)}
               t={t}
             />
           ) : (
@@ -705,39 +796,11 @@ export function App(): React.JSX.Element {
                 knowledgeTreeReturnFocusKey.current = focusKey;
                 await openNote(pageId);
               }}
+              developmentNotice={developmentNotice?.surface === "knowledge" ? developmentNotice : null}
+              onDevelopment={(capability) => showDevelopmentCapability("knowledge", capability)}
               t={t}
             />
           )
-        ) : view === "settings" && activeVault ? (
-          <VaultSettingsPanel
-            busy={busy}
-            error={error}
-            vault={activeVault}
-            diagnosticsHealth={diagnosticsHealth}
-            localDatabaseStatus={localDatabaseStatus}
-            supportBundlePreview={supportBundlePreview}
-            backupStatus={backupStatus}
-            backupJobs={backupJobs}
-            toolchainHealth={toolchainHealth}
-            recentVaults={recentVaults}
-            onOpen={openVault}
-            onCreate={createVault}
-            onRefresh={refreshVaultState}
-            onRefreshDiagnostics={refreshDiagnostics}
-            onSupportBundlePreviewChange={setSupportBundlePreview}
-            onRemoveRecent={removeRecent}
-            onError={setError}
-            t={t}
-          />
-        ) : view === "models" ? (
-          <ModelSettingsPanel
-            busy={busy}
-              modelSummary={modelSummary}
-              onRefreshModels={refreshModels}
-              onRefreshAgentRuntimeStatus={refreshAgentRuntimeStatus}
-            onBusy={setBusy}
-            t={t}
-          />
         ) : (
           <HomeComposer
             activeVault={activeVault}
@@ -765,10 +828,76 @@ export function App(): React.JSX.Element {
             onProposalChanged={refreshVaultState}
             onOpenModels={openModelsFromHome}
             onDismissFirstHome={dismissFirstHomeGuide}
+            developmentNotice={developmentNotice?.surface === "home" ? developmentNotice : null}
+            onDevelopment={(capability) => showDevelopmentCapability("home", capability)}
             t={t}
           />
         )}
       </div>
+      {settingsOpen ? (
+        <SettingsSurface
+          section={settingsSection}
+          locale={locale}
+          availableLocales={availableLocales}
+          alwaysOnTop={windowState?.alwaysOnTop ?? false}
+          developmentNotice={developmentNotice?.surface === "settings" ? developmentNotice : null}
+          onSectionChange={(section) => {
+            setSettingsSection(section);
+            setDevelopmentNotice(null);
+          }}
+          onClose={closeSettings}
+          onLocaleChange={updateLocale}
+          onAlwaysOnTopChange={toggleAlwaysOnTop}
+          onDevelopment={(capability) => showDevelopmentCapability("settings", capability)}
+          t={t}
+        >
+          {settingsSection === "models" ? (
+            <ModelSettingsPanel
+              busy={busy}
+              modelSummary={modelSummary}
+              onRefreshModels={refreshModels}
+              onRefreshAgentRuntimeStatus={refreshAgentRuntimeStatus}
+              onBusy={setBusy}
+              t={t}
+            />
+          ) : settingsSection === "vault" || settingsSection === "maintenance" ? (
+            activeVault ? (
+              <VaultSettingsPanel
+                surface={settingsSection}
+                busy={busy}
+                error={error}
+                vault={activeVault}
+                diagnosticsHealth={diagnosticsHealth}
+                localDatabaseStatus={localDatabaseStatus}
+                supportBundlePreview={supportBundlePreview}
+                backupStatus={backupStatus}
+                backupJobs={backupJobs}
+                toolchainHealth={toolchainHealth}
+                recentVaults={recentVaults}
+                onOpen={openVault}
+                onCreate={createVault}
+                onRefresh={refreshVaultState}
+                onRefreshDiagnostics={refreshDiagnostics}
+                onSupportBundlePreviewChange={setSupportBundlePreview}
+                onRemoveRecent={removeRecent}
+                onError={setError}
+                t={t}
+              />
+            ) : null
+          ) : settingsSection === "general" ? (
+            <GeneralSettingsPanel
+              locale={locale}
+              availableLocales={availableLocales}
+              alwaysOnTop={windowState?.alwaysOnTop ?? false}
+              onLocaleChange={updateLocale}
+              onAlwaysOnTopChange={toggleAlwaysOnTop}
+              t={t}
+            />
+          ) : (
+            <DevelopmentSettingsSection section={settingsSection} t={t} />
+          )}
+        </SettingsSurface>
+      ) : null}
       {dropActive ? <div className="drop-overlay">{t("home.dropToCapture")}</div> : null}
       {captureToast ? (
         <div
@@ -804,7 +933,118 @@ function restoreKnowledgeTreeFocus(focusKey: string | null): void {
   }, 0);
 }
 
-function LibraryPanel(props: {
+const libraryKnowledgePageTypes = ["note", "topic", "concept", "entity", "claim", "question"] as const;
+
+function LibrarySidebarTree(props: {
+  readonly libraryList: LibraryListResult | null;
+  readonly selectedPageId: string | undefined;
+  readonly expandedGroups: ReadonlySet<string>;
+  readonly onToggleGroup: (groupId: string) => void;
+  readonly onOpenNote: (pageId: string) => Promise<void>;
+  readonly t: (key: string) => string;
+}): React.JSX.Element {
+  const pages = props.libraryList?.pages ?? [];
+  const families = [
+    {
+      id: "sources",
+      label: props.t("library.sources"),
+      types: ["source"] as const,
+      icon: "file" as const
+    },
+    {
+      id: "knowledge",
+      label: props.t("library.knowledge"),
+      types: libraryKnowledgePageTypes,
+      icon: "folder" as const
+    }
+  ];
+
+  return (
+    <section className="library-sidebar-tree" aria-labelledby="library-sidebar-heading">
+      <div className="library-sidebar-heading-row">
+        <h2 id="library-sidebar-heading">{props.t("nav.library")}</h2>
+        <span>{props.libraryList?.total ?? 0}</span>
+      </div>
+      {!props.libraryList ? (
+        <p className="library-sidebar-state" role="status">{props.t("library.loading")}</p>
+      ) : pages.length === 0 ? (
+        <p className="library-sidebar-state">{props.t("library.empty")}</p>
+      ) : (
+        <ul className="library-tree-root">
+          {families.map((family) => {
+            const familyPages = pages.filter((page) => family.types.some((pageType) => pageType === page.pageType));
+            if (familyPages.length === 0) return null;
+            const familyKey = `family:${family.id}`;
+            const familyExpanded = props.expandedGroups.has(familyKey);
+            const familyPanelId = `library-sidebar-${family.id}`;
+            return (
+              <li key={family.id}>
+                <button
+                  className="library-tree-disclosure"
+                  type="button"
+                  aria-expanded={familyExpanded}
+                  aria-controls={familyPanelId}
+                  onClick={() => props.onToggleGroup(familyKey)}
+                >
+                  <PigeIcon name={familyExpanded ? "collapse" : "expand"} size={14} />
+                  <PigeIcon name={family.icon} size={15} />
+                  <span>{family.label}</span>
+                  <small>{familyPages.length}</small>
+                </button>
+                {familyExpanded ? (
+                  <ul id={familyPanelId} className="library-tree-types">
+                    {family.types.map((pageType) => {
+                      const typedPages = familyPages.filter((page) => page.pageType === pageType);
+                      if (typedPages.length === 0) return null;
+                      const typeKey = `type:${pageType}`;
+                      const typeExpanded = props.expandedGroups.has(typeKey);
+                      const typePanelId = `library-sidebar-type-${pageType}`;
+                      return (
+                        <li key={pageType}>
+                          <button
+                            className="library-tree-disclosure type-disclosure"
+                            type="button"
+                            aria-expanded={typeExpanded}
+                            aria-controls={typePanelId}
+                            onClick={() => props.onToggleGroup(typeKey)}
+                          >
+                            <PigeIcon name={typeExpanded ? "collapse" : "expand"} size={13} />
+                            <span>{props.t(`library.type.${pageType}`)}</span>
+                            <small>{typedPages.length}</small>
+                          </button>
+                          {typeExpanded ? (
+                            <ul id={typePanelId} className="library-tree-pages">
+                              {typedPages.map((page) => (
+                                <li key={page.pageId}>
+                                  <button
+                                    type="button"
+                                    className={props.selectedPageId === page.pageId ? "library-tree-page active" : "library-tree-page"}
+                                    aria-current={props.selectedPageId === page.pageId ? "page" : undefined}
+                                    title={page.title}
+                                    onClick={() => void props.onOpenNote(page.pageId)}
+                                  >
+                                    <PigeIcon name={page.pageType === "source" ? "file" : "fileText"} size={14} />
+                                    <span>{page.title}</span>
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+export function LibraryPanel(props: {
   readonly libraryList: LibraryListResult | null;
   readonly selectedNote: NoteRenderResult | null;
   readonly selectedNoteRelated: NoteRelatedState;
@@ -814,16 +1054,35 @@ function LibraryPanel(props: {
   readonly onRefresh: () => Promise<void>;
   readonly onOpenNote: (pageId: string) => Promise<void>;
   readonly onCloseNote: () => void;
+  readonly developmentNotice: DevelopmentNotice | null;
+  readonly onDevelopment: (capability: DevelopmentCapability) => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const pages = props.libraryList?.pages ?? [];
+  const [filter, setFilter] = useState<"all" | "note" | "source" | "topic">("all");
+  const [query, setQuery] = useState("");
+  const visiblePages = filterLibraryPages(pages, filter, query);
 
   if (props.selectedNote) {
     return (
       <section className="library-page reader-page" aria-label={props.t("note.reader")}>
-        <button type="button" className="ghost back-button" onClick={props.onCloseNote}>
-          {props.readerBackLabel ?? props.t("note.backToLibrary")}
-        </button>
+        <div className="reader-action-bar">
+          <button type="button" className="ghost back-button" onClick={props.onCloseNote}>
+            <PigeIcon name="arrowLeft" size={15} />
+            {props.readerBackLabel ?? props.t("note.backToLibrary")}
+          </button>
+          <div>
+            <button type="button" className="ghost" onClick={() => props.onDevelopment("selection_actions")}>
+              <PigeIcon name="edit" size={15} />
+              {props.t("development.capability.selection_actions")}
+            </button>
+            <button type="button" className="ghost" onClick={() => props.onDevelopment("note_agent")}>
+              <PigeIcon name="model" size={15} />
+              {props.t("development.capability.note_agent")}
+            </button>
+          </div>
+        </div>
+        <DevelopmentStatus notice={props.developmentNotice} t={props.t} />
         <NoteReader
           note={props.selectedNote}
           related={props.selectedNoteRelated}
@@ -843,10 +1102,41 @@ function LibraryPanel(props: {
           <h1>{props.t("library.title")}</h1>
           <p className="muted">{props.t("library.subtitle")}</p>
         </div>
-        <button type="button" className="secondary" onClick={() => void props.onRefresh()}>
-          {props.t("library.refresh")}
+        <button
+          type="button"
+          className="icon-button"
+          title={props.t("library.refresh")}
+          aria-label={props.t("library.refresh")}
+          onClick={() => void props.onRefresh()}
+        >
+          <PigeIcon name="loading" size={16} />
         </button>
       </header>
+
+      <div className="library-toolbar">
+        <label className="library-search">
+          <PigeIcon name="search" size={15} />
+          <input
+            type="search"
+            value={query}
+            placeholder={props.t("library.search")}
+            aria-label={props.t("library.search")}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </label>
+        <div className="library-filters" role="group" aria-label={props.t("library.filter")}>
+          {(["all", "note", "source", "topic"] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={filter === value}
+              onClick={() => setFilter(value)}
+            >
+              {props.t(value === "all" ? "library.all" : `library.type.${value}`)}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="library-meta">
         <span>
@@ -864,9 +1154,11 @@ function LibraryPanel(props: {
         <p className="library-empty">{props.t("library.loading")}</p>
       ) : pages.length === 0 ? (
         <p className="library-empty">{props.t("library.empty")}</p>
+      ) : visiblePages.length === 0 ? (
+        <p className="library-empty">{props.t("library.noMatches")}</p>
       ) : (
         <div className="library-list">
-          {pages.map((page) => (
+          {visiblePages.map((page) => (
             <LibraryPageRow
               key={page.pageId}
               page={page}
@@ -881,12 +1173,26 @@ function LibraryPanel(props: {
   );
 }
 
+export function filterLibraryPages(
+  pages: LibraryListResult["pages"],
+  filter: "all" | "note" | "source" | "topic",
+  query: string
+): LibraryListResult["pages"] {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  return pages.filter((page) => {
+    if (filter !== "all" && page.pageType !== filter) return false;
+    return !normalizedQuery || page.title.toLocaleLowerCase().includes(normalizedQuery);
+  });
+}
+
 export function KnowledgeTreePanel(props: {
   readonly tree: KnowledgeTreeResult | null;
   readonly error: string | null;
   readonly noteLoadingPageId: string | null;
   readonly onRefresh: () => Promise<void>;
   readonly onOpenNote: (pageId: string, focusKey: string) => Promise<void>;
+  readonly developmentNotice: DevelopmentNotice | null;
+  readonly onDevelopment: (capability: DevelopmentCapability) => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const roots = props.tree?.roots ?? [];
@@ -899,10 +1205,32 @@ export function KnowledgeTreePanel(props: {
           <h1 id="knowledge-tree-heading" tabIndex={-1}>{props.t("knowledgeTree.title")}</h1>
           <p className="muted">{props.t("knowledgeTree.subtitle")}</p>
         </div>
-        <button type="button" className="secondary" onClick={() => void props.onRefresh()}>
-          {props.t("knowledgeTree.refresh")}
+        <button
+          type="button"
+          className="icon-button"
+          title={props.t("knowledgeTree.refresh")}
+          aria-label={props.t("knowledgeTree.refresh")}
+          onClick={() => void props.onRefresh()}
+        >
+          <PigeIcon name="loading" size={16} />
         </button>
       </header>
+
+      <div className="knowledge-tree-tools" role="toolbar" aria-label={props.t("knowledgeTree.title")}>
+        <button type="button" className="ghost" onClick={() => props.onDevelopment("knowledge_search")}>
+          <PigeIcon name="search" size={15} />
+          {props.t("development.capability.knowledge_search")}
+        </button>
+        <button type="button" className="ghost" onClick={() => props.onDevelopment("knowledge_filter")}>
+          <PigeIcon name="filter" size={15} />
+          {props.t("development.capability.knowledge_filter")}
+        </button>
+        <button type="button" className="ghost" onClick={() => props.onDevelopment("knowledge_view")}>
+          <PigeIcon name="fit" size={15} />
+          {props.t("development.capability.knowledge_view")}
+        </button>
+      </div>
+      <DevelopmentStatus notice={props.developmentNotice} t={props.t} />
 
       <div className="knowledge-tree-totals" aria-label={props.t("knowledgeTree.summary")}>
         <span>{props.t("knowledgeTree.domains")}: {roots.length}</span>
@@ -974,7 +1302,7 @@ function KnowledgeTreeNodeView(props: {
             aria-controls={groupId}
             onClick={() => setExpanded((current) => !current)}
           >
-            <span aria-hidden="true">{expanded ? "▾" : "▸"}</span>
+            <PigeIcon name={expanded ? "collapse" : "expand"} size={14} />
           </button>
         ) : <span className="knowledge-tree-disclosure-spacer" aria-hidden="true" />}
 
@@ -1050,7 +1378,9 @@ function KnowledgeTreePageLeaf(props: {
 }): React.JSX.Element {
   return (
     <li className={`knowledge-tree-page-leaf${props.page.status === "needs_review" ? " needs-review" : ""}`}>
-      <span aria-hidden="true" className="knowledge-tree-leaf-mark" />
+      <span aria-hidden="true" className="knowledge-tree-leaf-mark">
+        <PigeIcon name={props.page.pageType === "source" ? "file" : "fileText"} size={13} />
+      </span>
       <button
         type="button"
         className="knowledge-tree-open"
@@ -1642,8 +1972,10 @@ function HomeComposer(props: {
   readonly onUndoActivity: (operationId: string) => Promise<void>;
   readonly onHomeStateChanged: () => Promise<void>;
   readonly onProposalChanged: () => Promise<void>;
-  readonly onOpenModels: () => Promise<void>;
+  readonly onOpenModels: (opener: HTMLButtonElement) => Promise<void>;
   readonly onDismissFirstHome: () => Promise<void>;
+  readonly developmentNotice: DevelopmentNotice | null;
+  readonly onDevelopment: (capability: DevelopmentCapability) => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const text = props.draftText;
@@ -2380,11 +2712,19 @@ function HomeComposer(props: {
         <span className="vault-chip">{props.activeVault?.name ?? props.t("home.noVault")}</span>
         {props.captureOnly || props.agentRuntimeStatus ? <span className="mode-chip">{agentStatusLabel}</span> : null}
       </div>
+      <ul className="source-format-legend" aria-label={props.t("home.supportedFormats")}>
+        <li><PigeIcon name="file" size={14} /><span>PDF</span></li>
+        <li><PigeIcon name="fileText" size={14} /><span>{props.t("home.formatText")}</span></li>
+        <li><PigeIcon name="presentation" size={14} /><span>PPT</span></li>
+        <li><PigeIcon name="spreadsheet" size={14} /><span>Excel</span></li>
+        <li><PigeIcon name="image" size={14} /><span>{props.t("home.formatImage")}</span></li>
+        <li><PigeIcon name="more" size={14} /><span>{props.t("home.formatMore")}</span></li>
+      </ul>
       {showFirstHomeGuide ? (
         <section className="first-home-guide" aria-label={props.t("home.firstGuideAria")}>
           <p>{props.t("home.firstGuideText")}</p>
           <div className="first-home-guide-actions">
-            <button type="button" onClick={() => void props.onOpenModels()}>{props.t("home.connectModel")}</button>
+            <button type="button" onClick={(event) => void props.onOpenModels(event.currentTarget)}>{props.t("home.connectModel")}</button>
             <button type="button" className="ghost" onClick={() => void props.onDismissFirstHome()}>
               {props.t("home.continueCaptureOnly")}
             </button>
@@ -2419,7 +2759,7 @@ function HomeComposer(props: {
                   ) : null}
                 </span>
                 {ownsSourceModelAction ? (
-                  <button className="job-action" type="button" onClick={() => void props.onOpenModels()}>
+                  <button className="job-action" type="button" onClick={(event) => void props.onOpenModels(event.currentTarget)}>
                     {props.t("home.connectModel")}
                   </button>
                 ) : sourceWaitingForModel ? null : job.state === "queued" || (
@@ -2653,7 +2993,13 @@ function HomeComposer(props: {
           onKeyDown={handleComposerKeyDown}
         />
         <div className="toolbar">
-          <span>{props.t("home.toolbarHint")}</span>
+          <div
+            className="composer-model-switcher"
+            aria-label={`${props.t("home.modelSwitcher")}: ${agentStatusLabel}`}
+          >
+            <span className={props.agentRuntimeStatus?.state === "ready" ? "model-status-dot connected" : "model-status-dot unavailable"} />
+            <span>{agentStatusLabel}</span>
+          </div>
           <input
             ref={fileInputRef}
             className="visually-hidden"
@@ -2669,20 +3015,37 @@ function HomeComposer(props: {
           <button
             className="round-button"
             type="button"
+            title={props.t("development.capability.voice_input")}
+            aria-label={props.t("development.capability.voice_input")}
+            onClick={() => props.onDevelopment("voice_input")}
+          >
+            <PigeIcon name="voice" size={17} />
+          </button>
+          <button
+            className="round-button"
+            type="button"
+            title={props.t("home.attachFile")}
             aria-label={props.t("home.attachFile")}
             onClick={() => fileInputRef.current?.click()}
           >
-            +
+            <PigeIcon name="attach" size={17} />
           </button>
           <button
             type="button"
+            className="composer-send"
             aria-label={props.t("home.send")}
             disabled={!text.trim() || agentRunState === "accepted" || agentRunState === "running"}
             onClick={() => void submitHomeInput()}
           >
-            {agentRunState === "accepted" || agentRunState === "running" ? props.t("home.agentRunning") : props.t("home.send")}
+            <PigeIcon
+              name={agentRunState === "accepted" || agentRunState === "running" ? "loading" : "send"}
+              className={agentRunState === "accepted" || agentRunState === "running" ? "spinning" : undefined}
+              size={16}
+            />
+            <span>{agentRunState === "accepted" || agentRunState === "running" ? props.t("home.agentRunning") : props.t("home.send")}</span>
           </button>
         </div>
+        <DevelopmentStatus notice={props.developmentNotice} t={props.t} />
         {permissionRequestId ? (
           <section
             className="permission-prompt"
@@ -2782,7 +3145,7 @@ function HomeComposer(props: {
               <span className="agent-cloud-boundary">{props.t(cloudUsageMessageKey)}</span>
             ) : null}
             {agentError?.userAction === "configure_model" ? (
-              <button type="button" className="ghost" onClick={() => void props.onOpenModels()}>{props.t("home.openModels")}</button>
+              <button type="button" className="ghost" onClick={(event) => void props.onOpenModels(event.currentTarget)}>{props.t("home.openModels")}</button>
             ) : null}
             {retryableLatestTurn ? (
               <button type="button" className="ghost" onClick={() => void retryLatestConversationTurn()}>
@@ -3106,7 +3469,201 @@ function backupJobMessageKey(job: JobSummary): string {
   return "backup.failedFinal";
 }
 
+const settingsSections: readonly {
+  readonly id: SettingsSection;
+  readonly icon: PigeIconName;
+  readonly status: "real" | "partial" | "development";
+  readonly capability?: DevelopmentCapability;
+}[] = [
+  { id: "general", icon: "settings", status: "real" },
+  { id: "appearance", icon: "palette", status: "development", capability: "appearance" },
+  { id: "vault", icon: "folder", status: "real" },
+  { id: "maintenance", icon: "database", status: "real" },
+  { id: "models", icon: "model", status: "real" },
+  { id: "capabilities", icon: "wrench", status: "development", capability: "local_capabilities" },
+  { id: "memory", icon: "memory", status: "development", capability: "agent_memory" },
+  { id: "privacy", icon: "shield", status: "development", capability: "permissions_privacy" },
+  { id: "skills", icon: "skill", status: "development", capability: "skills" },
+  { id: "packages", icon: "package", status: "development", capability: "packages" },
+  { id: "system", icon: "activity", status: "development", capability: "updates" }
+];
+
+export function DevelopmentStatus(props: {
+  readonly notice: DevelopmentNotice | null;
+  readonly t: (key: string) => string;
+}): React.JSX.Element | null {
+  if (!props.notice) return null;
+  return (
+    <p className="development-status" role="status" aria-live="polite" aria-atomic="true">
+      <strong>{props.t(`development.capability.${props.notice.capability}`)}</strong>
+      <span>{props.t(`development.state.${props.notice.state}`)}</span>
+    </p>
+  );
+}
+
+export function SettingsSurface(props: {
+  readonly section: SettingsSection;
+  readonly locale: Locale;
+  readonly availableLocales: readonly Locale[];
+  readonly alwaysOnTop: boolean;
+  readonly developmentNotice: DevelopmentNotice | null;
+  readonly onSectionChange: (section: SettingsSection) => void;
+  readonly onClose: () => void;
+  readonly onLocaleChange: (locale: Locale) => Promise<void>;
+  readonly onAlwaysOnTopChange: () => Promise<void>;
+  readonly onDevelopment: (capability: DevelopmentCapability) => void;
+  readonly t: (key: string) => string;
+  readonly children: ReactNode;
+}): React.JSX.Element {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    closeButtonRef.current?.focus();
+  }, []);
+
+  const handleDialogKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      props.onClose();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), select:not([disabled]), input:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+    ) ?? []).filter((element) => !element.hidden && element.getAttribute("aria-hidden") !== "true");
+    if (focusable.length === 0) {
+      event.preventDefault();
+      return;
+    }
+    const first = focusable[0]!;
+    const last = focusable[focusable.length - 1]!;
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
+  return (
+    <div className="settings-overlay" data-settings-overlay="true">
+      <div
+        ref={dialogRef}
+        className="settings-surface"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-surface-title"
+        onKeyDown={handleDialogKeyDown}
+      >
+        <header className="settings-surface-header">
+          <div>
+            <h1 id="settings-surface-title">{props.t("settings.title")}</h1>
+            <p>{props.t("settings.subtitle")}</p>
+          </div>
+          <button
+            ref={closeButtonRef}
+            type="button"
+            className="icon-button"
+            title={props.t("settings.close")}
+            aria-label={props.t("settings.close")}
+            onClick={props.onClose}
+          >
+            <PigeIcon name="close" size={17} />
+          </button>
+        </header>
+        <div className="settings-surface-body">
+          <nav className="settings-navigation" aria-label={props.t("settings.navigation") }>
+            {settingsSections.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={props.section === item.id ? "settings-nav-item active" : "settings-nav-item"}
+                aria-current={props.section === item.id ? "page" : undefined}
+                onClick={() => {
+                  props.onSectionChange(item.id);
+                  if (item.capability) props.onDevelopment(item.capability);
+                }}
+              >
+                <PigeIcon name={item.icon} size={16} />
+                <span>{props.t(`settings.section.${item.id}`)}</span>
+                <small>{props.t(`settings.status.${item.status}`)}</small>
+              </button>
+            ))}
+          </nav>
+          <div className="settings-content">
+            <DevelopmentStatus notice={props.developmentNotice} t={props.t} />
+            {props.children}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GeneralSettingsPanel(props: {
+  readonly locale: Locale;
+  readonly availableLocales: readonly Locale[];
+  readonly alwaysOnTop: boolean;
+  readonly onLocaleChange: (locale: Locale) => Promise<void>;
+  readonly onAlwaysOnTopChange: () => Promise<void>;
+  readonly t: (key: string) => string;
+}): React.JSX.Element {
+  return (
+    <section className="settings-page settings-general" aria-labelledby="settings-general-title">
+      <div>
+        <h1 id="settings-general-title">{props.t("settings.general.title")}</h1>
+        <p className="muted">{props.t("settings.general.subtitle")}</p>
+      </div>
+      <section className="settings-group">
+        <label htmlFor="settings-language">{props.t("language.label")}</label>
+        <select
+          id="settings-language"
+          value={props.locale}
+          onChange={(event) => void props.onLocaleChange(event.target.value as Locale)}
+        >
+          {props.availableLocales.map((availableLocale) => (
+            <option key={availableLocale} value={availableLocale}>{localeLabels[availableLocale]}</option>
+          ))}
+        </select>
+      </section>
+      <section className="settings-group settings-toggle-row">
+        <div>
+          <h2>{props.t("settings.general.alwaysOnTop")}</h2>
+          <p className="muted">{props.t("settings.general.alwaysOnTopDescription")}</p>
+        </div>
+        <button
+          type="button"
+          className={props.alwaysOnTop ? "toggle-button active" : "toggle-button"}
+          role="switch"
+          aria-checked={props.alwaysOnTop}
+          onClick={() => void props.onAlwaysOnTopChange()}
+        >
+          {props.t(props.alwaysOnTop ? "settings.enabled" : "settings.disabled")}
+        </button>
+      </section>
+    </section>
+  );
+}
+
+function DevelopmentSettingsSection(props: {
+  readonly section: Exclude<SettingsSection, "general" | "vault" | "maintenance" | "models">;
+  readonly t: (key: string) => string;
+}): React.JSX.Element {
+  return (
+    <section className="settings-page settings-development" aria-labelledby={`settings-${props.section}-title`}>
+      <PigeIcon name={settingsSections.find((item) => item.id === props.section)?.icon ?? "settings"} size={28} />
+      <div>
+        <h1 id={`settings-${props.section}-title`}>{props.t(`settings.section.${props.section}`)}</h1>
+        <p className="muted">{props.t("development.settingsDescription")}</p>
+      </div>
+    </section>
+  );
+}
+
 interface VaultSettingsPanelProps {
+  readonly surface: "vault" | "maintenance";
   readonly busy: boolean;
   readonly error: string | null;
   readonly vault: VaultSummary;
@@ -3321,12 +3878,17 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
   };
 
   return (
-    <section className="settings-page" aria-label={props.t("nav.vaultSettings")}>
+    <section className="settings-page" aria-label={props.t(
+      props.surface === "maintenance" ? "maintenance.title" : "nav.vaultSettings"
+    )}>
       <div>
-        <h1>{props.t("vaultSettings.title")}</h1>
-        <p className="muted">{props.t("vaultSettings.subtitle")}</p>
+        <h1>{props.t(props.surface === "maintenance" ? "maintenance.title" : "vaultSettings.title")}</h1>
+        <p className="muted">{props.t(
+          props.surface === "maintenance" ? "maintenance.resetCopy" : "vaultSettings.subtitle"
+        )}</p>
       </div>
 
+      {props.surface === "vault" ? <>
       <InfoGroup
         title={props.t("vaultSettings.currentVault")}
         rows={[
@@ -3464,12 +4026,10 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
           <p className="error" role="alert">{props.t(restore.restoreErrorKey)}</p>
         ) : null}
       </section>
+      </> : null}
 
+      {props.surface === "maintenance" ? (
       <section className="settings-group" aria-busy={supportBundleExportRequestId ? "true" : undefined}>
-        <h2>{props.t("maintenance.title")}</h2>
-        <p className="muted">
-          {props.t("maintenance.resetCopy")}
-        </p>
         <div className="settings-actions">
           <button type="button" className="secondary" onClick={() => void rebuildLocalDatabase()}>
             {props.t("maintenance.rebuildIndex")}
@@ -3528,8 +4088,11 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
           </div>
         ) : null}
       </section>
+      ) : null}
 
-      <RecentVaults recentVaults={props.recentVaults} onRemoveRecent={props.onRemoveRecent} t={props.t} />
+      {props.surface === "vault" ? (
+        <RecentVaults recentVaults={props.recentVaults} onRemoveRecent={props.onRemoveRecent} t={props.t} />
+      ) : null}
       {props.error ? <p className="error">{props.error}</p> : null}
     </section>
   );

@@ -195,6 +195,16 @@ acceptance; uncaptured matrix entries stay explicit and are handed to UI Design.
 Development preserves its affected state/viewport matrix, routes strings through I18N,
 and does not invent new UI behavior to satisfy implementation convenience.
 
+`docs/prototypes/pige-complete-ui/index.html`, its design contract and element map are the
+sole visual/interaction baseline. Production mechanically migrates them into React/TSX
+with typed APIs and real state; layout, IA, color, spacing, icons and interaction change
+only for baseline-reconciled capability, responsive or accessibility needs. Work stays
+serial: Development freezes service contracts, UI Design supplies baseline-faithful UI,
+Development integrates, then Planning binds once. An unfinished entry may show localized
+`development/unavailable`, but has no IPC, Job, persistence, fake result/progress,
+destructive effect, evidence or status credit. Acceptance separates UI and service/data
+owners; later capability work reuses the entry.
+
 ## 11. Testing Expectations
 
 `docs/QUALITY_AND_TEST_STRATEGY.md` is the single owner of test layers, fixtures, and release gates. Select verification proportional to risk, prove the main and failure paths, and record why any applicable gate could not run. `docs/CODING_CONVENTIONS.md` owns only test naming and placement conventions.

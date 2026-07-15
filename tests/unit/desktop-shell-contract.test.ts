@@ -485,7 +485,8 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain('ipcMain.handle("library.tree", () => getLibraryService().tree())');
     expect(preloadSource).toContain('ipcRenderer.invoke("library.tree")');
     expect(librarySource).toContain("this.#database?.knowledgeTree(vaultPath)");
-    expect(rendererSource).toContain('type View = "home" | "library" | "knowledgeTree" | "settings" | "models";');
+    expect(rendererSource).toContain('type View = "home" | "library" | "knowledgeTree";');
+    expect(rendererSource).toContain("export type SettingsSection =");
     expect(rendererSource).toContain('className="knowledge-tree-roots"');
     expect(rendererSource).toContain("<meter");
     expect(rendererSource).not.toContain("window.pige.filesystem");
@@ -535,7 +536,8 @@ describe("desktop shell build contract", () => {
     expect(proposalStyles).toContain("overflow-wrap: anywhere;");
     expect(proposalStyles).toContain("max-height: min(46vh, 30rem);");
     expect(proposalStyles).toContain("position: sticky;");
-    expect(rendererSource).toContain('type View = "home" | "library" | "knowledgeTree" | "settings" | "models";');
+    expect(rendererSource).toContain('type View = "home" | "library" | "knowledgeTree";');
+    expect(rendererSource).toContain("export type SettingsSection =");
     expect(rendererSource).not.toContain('type View = "review"');
   });
 

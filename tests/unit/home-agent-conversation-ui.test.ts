@@ -73,8 +73,7 @@ describe("Home durable Agent conversation UI", () => {
     };
     const { container, root } = await mountHome(dom, makePigeApi(harness));
 
-    await waitFor(dom, () => buttons(container, "Models").length === 1);
-    await clickButton(dom, container, "Models");
+    await openSettingsSection(dom, container, "Models");
     await waitFor(dom, () => container.textContent?.includes(enMessages["models.summaryRefreshFailed"]) === true);
     expect(summaryReads).toBe(1);
     expect(container.textContent).not.toContain("raw navigation summary failure");
@@ -106,10 +105,10 @@ describe("Home durable Agent conversation UI", () => {
     };
     const { container, root } = await mountHome(dom, makePigeApi(harness));
 
-    await clickButton(dom, container, "Models");
+    await openSettingsSection(dom, container, "Models");
     await waitFor(dom, () => summaryReads === 1);
-    await clickButton(dom, container, "Home");
-    await clickButton(dom, container, "Models");
+    await clickButtonByAriaLabel(dom, container, "Close Settings");
+    await openSettingsSection(dom, container, "Models");
     await waitFor(dom, () => container.textContent?.includes("Fresh provider") === true);
 
     await act(async () => {
@@ -134,7 +133,7 @@ describe("Home durable Agent conversation UI", () => {
     const { container, root } = await mountHome(dom, makePigeApi(harness));
 
     await waitFor(dom, () => container.textContent?.includes("public-alpha.csv") === true);
-    await clickButton(dom, container, "Models");
+    await openSettingsSection(dom, container, "Models");
     harness.onboarding = readyOnboarding();
     harness.jobs = [{
       ...sourceWaitingForModelJob(),
@@ -145,7 +144,7 @@ describe("Home durable Agent conversation UI", () => {
     }];
     const readsBeforeReturn = harness.jobListRequests.length;
 
-    await clickButton(dom, container, "Home");
+    await clickButtonByAriaLabel(dom, container, "Close Settings");
     await waitFor(dom, () => container.querySelector(
       `.job-state-dot[aria-label="${enMessages["home.jobRunning"]}"]`
     ) !== null);
@@ -590,9 +589,19 @@ describe("Home durable Agent conversation UI", () => {
     expect(buttons(reopened.container, "Connect Model")).toHaveLength(1);
     expect(reopened.container.textContent).not.toContain("Waiting for a local capability");
 
-    await clickButton(dom, reopened.container, "Connect Model");
+    const modelRepairOpener = buttons(reopened.container, "Connect Model")[0]!;
+    modelRepairOpener.focus();
+    await clickElement(dom, modelRepairOpener);
     await waitFor(dom, () => harness.dismissFirstHomeCalls === 1);
-    await waitFor(dom, () => reopened.container.querySelector("h1")?.textContent === "Models");
+    await waitFor(dom, () => reopened.container.querySelector(".settings-content h1")?.textContent === "Models");
+    expect(modelRepairOpener.isConnected).toBe(true);
+
+    const settingsDialog = reopened.container.querySelector<HTMLElement>('[role="dialog"]')!;
+    await act(async () => {
+      settingsDialog.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await settle(dom);
+    });
+    await waitFor(dom, () => dom.window.document.activeElement === modelRepairOpener);
 
     await act(async () => reopened.root.unmount());
     dom.window.close();
@@ -2510,6 +2519,22 @@ async function clickButton(dom: JSDOM, container: HTMLElement, label: string): P
   const match = buttons(container, label)[0];
   if (!match) throw new Error(`Button not found: ${label}`);
   await clickElement(dom, match);
+}
+
+async function clickButtonByAriaLabel(dom: JSDOM, container: HTMLElement, label: string): Promise<void> {
+  const match = buttonsByAriaLabel(container, label)[0];
+  if (!match) throw new Error(`Button not found by aria-label: ${label}`);
+  await clickElement(dom, match);
+}
+
+async function openSettingsSection(dom: JSDOM, container: HTMLElement, label: string): Promise<void> {
+  const settingsTrigger = container.querySelector<HTMLButtonElement>(".sidebar-settings-control");
+  if (!settingsTrigger) throw new Error("Settings trigger not found.");
+  await clickElement(dom, settingsTrigger);
+  const section = Array.from(container.querySelectorAll<HTMLButtonElement>(".settings-nav-item"))
+    .find((candidate) => candidate.querySelector("span")?.textContent === label);
+  if (!section) throw new Error(`Settings section not found: ${label}`);
+  await clickElement(dom, section);
 }
 
 async function clickElement(dom: JSDOM, element: HTMLButtonElement): Promise<void> {
