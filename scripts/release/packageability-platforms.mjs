@@ -39,6 +39,18 @@ const definitions = {
   }
 };
 
+const parserWorkerSmokeStages = new Set([
+  "worker_inventory",
+  "pdf_missing_source",
+  "pdf_page_renderer",
+  "office_missing_source",
+  "office_media",
+  "web_extractor",
+  "dataset_ingest",
+  "dataset_query",
+  "completed"
+]);
+
 export function resolvePackageabilityPlatform(platform, arch) {
   const definition = Object.values(definitions).find((candidate) =>
     candidate.arch === arch && candidate.platformAliases.includes(platform)
@@ -84,4 +96,14 @@ export function canonicalizeAsarEntryPath(entry) {
     throw new Error("Invalid packaged ASAR entry path.");
   }
   return `/${entry.replaceAll("\\", "/").replace(/^\/+/u, "")}`;
+}
+
+export function readLastParserWorkerSmokeStage(output) {
+  if (typeof output !== "string" || output.length > 4 * 1024 * 1024) return undefined;
+  const matches = output.matchAll(/(?:^|\n)PIGE_PARSER_WORKER_SMOKE_STAGE=([a-z_]+)(?=\r?$)/gmu);
+  let lastStage;
+  for (const match of matches) {
+    if (parserWorkerSmokeStages.has(match[1])) lastStage = match[1];
+  }
+  return lastStage;
 }
