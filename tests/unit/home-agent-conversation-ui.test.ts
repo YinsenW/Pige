@@ -1586,6 +1586,8 @@ describe("Home durable Agent conversation UI", () => {
     const successToast = container.querySelector<HTMLElement>('[role="status"]');
     expect(successToast?.getAttribute("aria-live")).toBe("polite");
     const activityRow = container.querySelector<HTMLElement>('[data-activity-row-id="op_20260712_activityfixture"]');
+    expect(activityRow?.querySelector(".activity-row-copy")).not.toBeNull();
+    expect(activityRow?.querySelector(".activity-row-dot")?.classList.contains("is-undone")).toBe(true);
     await waitFor(dom, () => dom.window.document.activeElement === activityRow);
 
     await act(async () => root.unmount());
@@ -1696,6 +1698,8 @@ describe("Home durable Agent conversation UI", () => {
       path.resolve("apps/desktop/src/renderer/src/styles/app.css"),
       "utf8"
     );
+    expect(styles).toMatch(/\.activity-row\s*\{[\s\S]*?grid-template-columns:\s*8px minmax\(0, 1fr\) auto;[\s\S]*?min-height:\s*32px;/);
+    expect(styles).toMatch(/\.activity-row-dot\s*\{[\s\S]*?width:\s*6px;[\s\S]*?background:\s*var\(--success\);/);
     const submitFiles = appSource.slice(
       appSource.indexOf("const submitFiles"),
       appSource.indexOf("const cancelJob")

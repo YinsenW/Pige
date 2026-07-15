@@ -3597,7 +3597,11 @@ function HomeComposer(props: {
                   data-activity-row-id={activity.operationId}
                   tabIndex={-1}
                 >
-                  <div>
+                  <span
+                    className={`activity-row-dot${activity.status === "undone" ? " is-undone" : ""}`}
+                    aria-hidden="true"
+                  />
+                  <div className="activity-row-copy">
                     <strong>
                       {props.t(activityMessageKey)}
                       {activity.targetLabel ? `: ${activity.targetLabel}` : ""}

@@ -700,43 +700,56 @@ button.ghost {
 
 .activity-list {
   display: grid;
+  gap: 6px;
 }
 
 .activity-row {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
-  border-top: 1px solid var(--border-default);
-  padding: 8px 0;
+  gap: 8px;
+  min-height: 32px;
+  padding: 4px 2px;
+  font-size: 11px;
 }
 
-.activity-row:last-child {
-  border-bottom: 1px solid var(--border-default);
+.activity-row-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
 }
 
-.activity-row div {
+.activity-row-dot.is-undone {
+  background: var(--text-tertiary);
+}
+
+.activity-row-copy {
   min-width: 0;
   display: grid;
-  gap: 2px;
+  gap: 1px;
 }
 
-.activity-row strong {
+.activity-row-copy strong {
   overflow-wrap: anywhere;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
 }
 
-.activity-row span {
+.activity-row-copy span {
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: 9px;
 }
 
 .activity-row button {
-  min-height: 28px;
-  padding: 3px 8px;
-  font-size: 11px;
+  min-height: 26px;
+  border: .5px solid var(--border-default);
+  border-radius: 8px;
+  padding: 4px 8px;
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 10px;
 }
 
 .proposal-strip {
