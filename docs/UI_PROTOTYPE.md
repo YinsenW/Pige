@@ -1395,6 +1395,8 @@ Typography:
 Components:
 
 - Icon buttons for sidebar, attach, send, settings, search, backup, restore.
+- Secondary titlebars show Home before the sidebar toggle only outside Home; Pin is a
+  quiet mirrored diagonal when off and vertical when on.
 - Tooltips for icon-only controls.
 - Segmented controls for views.
 - Toggles for binary options.
@@ -1418,6 +1420,7 @@ v0.1 accessibility requirements:
 - Primary flows are keyboard reachable: home composer, attach, voice, send, sidebar, knowledge retrieval results, note reader, confirmation cards, and Settings.
 - Focus states are visible and not color-only.
 - Every glyph-only control exposes an accessible name plus hover/focus help.
+- Pane disclosure controls expose both `aria-expanded` and the exact controlled panel.
 - Status states use text plus visual treatment, not color alone.
 - Error messages are announced in a way screen readers can understand.
 - A surface that makes its background inert moves focus inside in the same frame and

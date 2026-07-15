@@ -36,11 +36,11 @@
     },
     {
       "id": "SHELL-02",
-      "requirement": "Sidebar toggle, pin, navigation, and Settings entry use accurate semantics with no decorative history controls.",
+      "requirement": "Secondary surfaces provide one direct Home return beside the sidebar toggle; pin, navigation, and Settings entry use accurate semantics with no decorative history controls.",
       "source": "UI_PROTOTYPE 3, 16.2, 17",
       "prototype": "covered",
       "production": "partial",
-      "prototype_evidence": ["shell.sidebar_toggle", "shell.pin", "shell.primary_navigation", "shell.settings_entry"],
+      "prototype_evidence": ["shell.home_return", "shell.sidebar_toggle", "shell.pin", "shell.primary_navigation", "shell.settings_entry"],
       "production_evidence": ["App.tsx topbar and sidebar"],
       "gap": "Production topbar still uses text placeholders for pane and window controls and keeps Settings inside the primary renderer view.",
       "priority": "P1"

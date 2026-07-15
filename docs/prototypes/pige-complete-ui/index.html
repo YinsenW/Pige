@@ -141,10 +141,12 @@
     .icon-button:active { transform: scale(.96); }
     .icon-button svg { width: 21px; height: 21px; }
 
-    .pin-button { margin-left: auto; color: #838886; }
-    .pin-button svg { transform: rotate(-32deg); transform-origin: 50% 55%; transition: transform 180ms cubic-bezier(.22, 1, .36, 1); }
+    .titlebar-navigation { display: flex; align-items: center; gap: 2px; -webkit-app-region: no-drag; }
+    .pin-button { margin-left: auto; color: #9a9e9c; opacity: .62; transition: background 150ms ease, color 150ms ease, opacity 150ms ease, transform 150ms ease; }
+    .pin-button:hover { opacity: .9; }
+    .pin-button svg { transform: rotate(32deg); transform-origin: 50% 55%; transition: transform 180ms cubic-bezier(.22, 1, .36, 1); }
     .pin-button[aria-pressed="true"] svg { transform: rotate(0); }
-    .pin-button[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
+    .pin-button[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); opacity: 1; }
 
     .main-layout {
       position: relative;
@@ -2405,18 +2407,23 @@
         <span class="traffic-light minimize"></span>
         <span class="traffic-light expand"></span>
       </div>
-      <button class="icon-button" id="sidebarToggle" type="button" aria-label="打开侧边栏" aria-expanded="false" title="打开侧边栏">
-        <span class="sidebar-toggle-icon" aria-hidden="true">
-          <svg viewBox="0 0 20 20" aria-hidden="true"><use href="./pige-icon-sprite.svg#pi-panel"/></svg>
-        </span>
-      </button>
+      <div class="titlebar-navigation">
+        <button class="icon-button home-return" id="homeButton" type="button" aria-label="返回首页" title="返回首页" hidden>
+          <svg viewBox="0 0 20 20" aria-hidden="true"><use href="./pige-icon-sprite.svg#pi-home"/></svg>
+        </button>
+        <button class="icon-button" id="sidebarToggle" type="button" aria-label="打开侧边栏" aria-expanded="false" aria-controls="mainSidebar" title="打开侧边栏">
+          <span class="sidebar-toggle-icon" aria-hidden="true">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><use href="./pige-icon-sprite.svg#pi-panel"/></svg>
+          </span>
+        </button>
+      </div>
       <button class="icon-button pin-button" id="pinButton" type="button" aria-label="置顶窗口" aria-pressed="false" title="置顶窗口">
         <svg viewBox="0 0 20 20" aria-hidden="true"><use href="./pige-icon-sprite.svg#pi-pin"/></svg>
       </button>
     </header>
 
     <div class="main-layout" id="mainLayout">
-      <aside class="sidebar" aria-label="主导航">
+      <aside class="sidebar" id="mainSidebar" aria-label="主导航">
         <div class="sidebar-inner">
           <div class="sidebar-brand">
             <img src="../../../resources/brand/pige-icon/master/pige-icon-1024.png" alt="" />
@@ -2760,7 +2767,7 @@
           <header class="reader-toolbar">
             <nav class="reader-breadcrumbs" aria-label="笔记路径"><span>笔记库</span><span aria-hidden="true">›</span><span id="readerGroup">Pige</span><span aria-hidden="true">›</span><span id="readerNoteParent">产品规划</span><span aria-hidden="true">›</span><strong id="readerNoteFile" aria-current="page">产品定位.md</strong></nav>
             <div class="reader-toolbar-actions">
-              <button class="icon-button reader-pane-toggle" id="toggleNoteAgent" type="button" aria-label="隐藏笔记对话" aria-expanded="true" title="隐藏笔记对话">
+              <button class="icon-button reader-pane-toggle" id="toggleNoteAgent" type="button" aria-label="隐藏笔记对话" aria-expanded="true" aria-controls="noteAgent" title="隐藏笔记对话">
                 <svg viewBox="0 0 20 20" aria-hidden="true"><use href="./pige-icon-sprite.svg#pi-panel"/></svg>
               </button>
               <button class="icon-button prototype-action" type="button" aria-label="编辑笔记" title="编辑笔记">
@@ -2827,7 +2834,7 @@
         </article>
       </main>
 
-      <aside class="note-agent" aria-label="当前笔记对话">
+      <aside class="note-agent" id="noteAgent" aria-label="当前笔记对话">
         <div class="note-agent-inner">
           <header class="note-agent-header">
             <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><use href="./pige-icon-sprite.svg#pi-file"/></svg>
@@ -3195,6 +3202,7 @@
 
     const appWindow = document.querySelector('#appWindow');
     const mainLayout = document.querySelector('#mainLayout');
+    const homeButton = document.querySelector('#homeButton');
     const sidebarToggle = document.querySelector('#sidebarToggle');
     const pinButton = document.querySelector('#pinButton');
     const sidebarSearch = document.querySelector('#sidebarSearch');
@@ -4056,6 +4064,7 @@
     function setScreen(screen, options = {}) {
       const normalized = screen || 'home';
       appWindow.dataset.screen = normalized;
+      homeButton.hidden = normalized.startsWith('home') || normalized.startsWith('first-run');
       if (normalized === 'activity') taskPanel.hidden = false;
       else updateTaskSummary();
 
@@ -4134,6 +4143,11 @@
         setPrimaryNav('home');
       }
     }
+
+    homeButton.addEventListener('click', () => {
+      setScreen('home');
+      composerInput.focus({ preventScroll: true });
+    });
 
     sidebarToggle.addEventListener('click', () => {
       const open = !mainLayout.classList.contains('sidebar-open');

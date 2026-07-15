@@ -38,7 +38,7 @@
       "role": "button",
       "intent": "Reveal or hide exploration navigation without changing the active task.",
       "states": ["collapsed", "expanded", "focus-visible"],
-      "prototype_action": "Toggles the fixed-width sidebar, updates aria-expanded, and persists the user-owned session state across routes.",
+      "prototype_action": "Toggles the fixed-width sidebar, binds the control to its panel with aria-controls, updates aria-expanded, and persists the user-owned session state across routes.",
       "production_bridge": "Window layout preference and renderer pane state",
       "owner": "Window Service + Renderer"
     },
@@ -49,9 +49,20 @@
       "role": "button",
       "intent": "Explicitly toggle always-on-top.",
       "states": ["off", "on", "focus-visible"],
-      "prototype_action": "Updates aria-pressed, accessible name, a diagonal-off/vertical-on glyph orientation, and quiet active feedback.",
+      "prototype_action": "Updates aria-pressed and its accessible name; the quiet off state uses a low-contrast mirrored diagonal, while the on state becomes vertical and fully legible.",
       "production_bridge": "Validated always-on-top window preference",
       "owner": "Window Service"
+    },
+    {
+      "id": "shell.home_return",
+      "surface": "Secondary-surface titlebar",
+      "selector": "#homeButton",
+      "role": "button",
+      "intent": "Return directly to Home when the sidebar is collapsed without creating browser-style history.",
+      "states": ["secondary-visible", "home-hidden", "focus-visible"],
+      "prototype_action": "Appears immediately left of the sidebar toggle only outside Home and first run; activation returns to Home and transfers focus to the composer.",
+      "production_bridge": "Renderer Home route action",
+      "owner": "Renderer"
     },
     {
       "id": "shell.primary_navigation",
@@ -788,7 +799,7 @@
       "role": "button",
       "intent": "Reveal or hide current-note Agent context independently from the Library rail.",
       "states": ["collapsed", "expanded", "narrow-drawer", "focus-visible"],
-      "prototype_action": "Changes only the right rail, preserves reader measure, traps Tab and Shift+Tab inside compact drawers, moves focus to the composer when opened, and restores focus to the toolbar when closed or dismissed with Escape.",
+      "prototype_action": "Changes only the aria-controls-bound right rail, preserves reader measure, traps Tab and Shift+Tab inside compact drawers, moves focus to the composer when opened, and restores focus to the toolbar when closed or dismissed with Escape.",
       "production_bridge": "Renderer pane state keyed to the reading workspace",
       "owner": "Renderer + Window Service"
     }

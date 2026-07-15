@@ -85,6 +85,7 @@
     "images_missing_alt": 0,
     "switches_missing_aria_checked": 0,
     "tabs_missing_selected_or_controls": 0,
+    "expanded_controls_missing_controls": 0,
     "tabpanels_missing_label": 0,
     "light_primary_text_contrast": 17.08,
     "light_secondary_text_contrast": 6.58,
@@ -119,6 +120,8 @@
     ],
     "semantic_patterns_verified": [
       "Primary and Settings navigation expose the current page with aria-current",
+      "Secondary surfaces expose one direct Home return before the sidebar toggle; Home and first run remove the redundant action",
+      "Sidebar and Note Agent disclosure controls expose exact aria-controls panel ownership",
       "Safe drafts and bounded progress use polite atomic status regions",
       "Current-action decisions and typed failures use assertive body-free regions",
       "Task rows expose named progressbar values and collapsed task content becomes inert, aria-hidden, and hidden after its exit motion",
