@@ -167,9 +167,11 @@
     { "id": "H09E", "route": "?screen=home-voice-error", "name": "Body-free microphone permission failure", "status": "verified" },
     { "id": "N01", "route": "?screen=expanded", "name": "Expanded Home and Library tree", "status": "verified" },
     { "id": "N02", "route": "?screen=knowledge", "name": "Semantic Knowledge Tree", "status": "verified" },
+    { "id": "N02S", "route": "?screen=knowledge&knowledgeScenario=starter-sparse", "name": "Starter-sparse Knowledge Tree growth", "status": "verified" },
     { "id": "N02P", "route": "?screen=knowledge&knowledgeScenario=product-heavy", "name": "Product-heavy Knowledge Tree growth", "status": "verified" },
     { "id": "N02C", "route": "?screen=knowledge&knowledgeScenario=dual-core", "name": "Dual-core Knowledge Tree growth", "status": "verified" },
     { "id": "N02T", "route": "?screen=knowledge&knowledgeScenario=long-tail", "name": "Long-tail Knowledge Tree growth", "status": "verified" },
+    { "id": "N02M", "route": "?screen=knowledge&knowledgeScenario=mature-dense", "name": "Mature-dense Knowledge Tree growth", "status": "verified" },
     { "id": "N02E", "route": "?screen=knowledge-empty", "name": "Knowledge Tree empty state", "status": "verified" },
     { "id": "N02L", "route": "?screen=knowledge-loading", "name": "Knowledge Tree rebuilding state", "status": "verified" },
     { "id": "N02D", "route": "?screen=knowledge-degraded", "name": "Knowledge Tree body-free degraded state", "status": "verified" },
@@ -240,10 +242,12 @@
     "composite_radio_groups_verified": ["appearance theme", "restore identity mode"],
     "collapsed_task_content_removed_from_accessibility_tree": true,
     "knowledge_tree_scenarios": {
+      "starter-sparse": { "treeitems": 48, "dominant_branch": "product-design", "dominant_branch_width_px": 4.4 },
       "balanced": { "treeitems": 260, "dominant_branch": "project-management", "dominant_branch_width_px": 4.4 },
       "product-heavy": { "treeitems": 236, "dominant_branch": "product-design", "dominant_branch_width_px": 4.4 },
       "dual-core": { "treeitems": 262, "dominant_branches": ["product-design", "project-management"], "dominant_branch_width_px": 4.4 },
       "long-tail": { "treeitems": 169, "dominant_branch": "writing", "dominant_branch_width_px": 4.4 },
+      "mature-dense": { "treeitems": 456, "dominant_branch": "project-management", "dominant_branch_width_px": 4.4 },
       "stable_topic_labels": 7,
       "search_match_visibility_verified": true,
       "pointer_focus_zoom_verified": true,
@@ -254,7 +258,7 @@
     "failed_routes": [],
     "console_errors": [],
     "known_visual_discrepancies": [
-      "Automated raster overlay remains open beyond the measured shared primitives and seven Pige-only canonical baselines.",
+      "Automated raster overlay remains open beyond the measured shared primitives and eight Pige-only canonical baselines.",
       "Spoken screen-reader announcement and assembled platform text-rendering review remain open."
     ]
   }

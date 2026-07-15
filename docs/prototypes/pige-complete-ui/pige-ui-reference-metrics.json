@@ -153,10 +153,12 @@
     "confidence": "full versus muted node treatment",
     "reference_ratios": { "root_x": 0.5, "canopy_width": 0.79, "canopy_height": 0.91 },
     "mock_distributions": {
+      "starter-sparse": { "treeitems": 48, "dominant_branch": "product-design" },
       "balanced": { "treeitems": 260, "dominant_branch": "project-management" },
       "product-heavy": { "treeitems": 236, "dominant_branch": "product-design" },
       "dual-core": { "treeitems": 262, "dominant_branches": ["product-design", "project-management"] },
-      "long-tail": { "treeitems": 169, "dominant_branch": "writing" }
+      "long-tail": { "treeitems": 169, "dominant_branch": "writing" },
+      "mature-dense": { "treeitems": 456, "dominant_branch": "project-management" }
     }
   },
   "tolerances": {

@@ -238,9 +238,9 @@
       "source": "UI_PROTOTYPE 11, 18",
       "prototype": "covered",
       "production": "partial",
-      "prototype_evidence": ["?screen=knowledge", "?screen=knowledge&knowledgeScenario=product-heavy", "?screen=knowledge&knowledgeScenario=dual-core", "?screen=knowledge&knowledgeScenario=long-tail", "?screen=knowledge-empty", "?screen=knowledge-loading", "?screen=knowledge-degraded", "169-262 interactive treeitems across four deterministic mock distributions", "knowledge.node", "knowledge.viewport_controls", "knowledge.secondary_action", "knowledge.availability"],
+      "prototype_evidence": ["?screen=knowledge", "?screen=knowledge&knowledgeScenario=starter-sparse", "?screen=knowledge&knowledgeScenario=product-heavy", "?screen=knowledge&knowledgeScenario=dual-core", "?screen=knowledge&knowledgeScenario=long-tail", "?screen=knowledge&knowledgeScenario=mature-dense", "?screen=knowledge-empty", "?screen=knowledge-loading", "?screen=knowledge-degraded", "48-456 interactive treeitems across six deterministic mock distributions", "knowledge.node", "knowledge.viewport_controls", "knowledge.secondary_action", "knowledge.availability"],
       "production_evidence": ["KnowledgeTreePanel", "KnowledgeTreeNodeView"],
-      "gap": "Prototype includes deterministic weight/count/evidence-driven growth across balanced, single-domain-heavy, dual-core, and long-tail data; 169-262 interactive nodes; focus zoom/pan; branch emphasis; search/filter/modes; bounded evidence/backlink/suggestion actions; and empty/loading/degraded truth. Production still needs the governed typed graph projection and equivalent interaction breadth.",
+      "gap": "Prototype includes deterministic weight/count/evidence-driven growth across sparse, balanced, dominant-domain, dual-core, long-tail, and mature-dense data; 48-456 interactive nodes; focus zoom/pan; branch emphasis; search/filter/modes; bounded evidence/backlink/suggestion actions; and empty/loading/degraded truth. Production still needs the governed typed graph projection and equivalent interaction breadth.",
       "priority": "P1"
     },
     {
@@ -425,7 +425,7 @@
       "source": "UI_PROTOTYPE 2.1, 16.2, 19",
       "prototype": "covered",
       "production": "partial",
-      "prototype_evidence": ["visual-review-harness.html", "236 browser-rendered canonical/narrow/long-copy/boundary checks", "936 six-locale checks across 52 routes at 400, 760, and 1536 px", "760 px independent sidebar and Note Agent overlay checks with zero horizontal overflow, safe default Agent closure, Escape dismissal, and focus return", "1144 px resident 280 / 400 / 432 pane check with persistent sidebar ownership", "seven current Pige-only JPEG baseline screenshots", "pige-ui-reference-metrics.json", "pige-ui-visual-review-ledger.json"],
+      "prototype_evidence": ["visual-review-harness.html", "236 browser-rendered canonical/narrow/long-copy/boundary checks", "936 six-locale checks across 52 routes at 400, 760, and 1536 px", "760 px independent sidebar and Note Agent overlay checks with zero horizontal overflow, safe default Agent closure, Escape dismissal, and focus return", "1144 px resident 280 / 400 / 432 pane check with persistent sidebar ownership", "eight current Pige-only JPEG baseline screenshots", "pige-ui-reference-metrics.json", "pige-ui-visual-review-ledger.json"],
       "production_evidence": ["responsive CSS foundations"],
       "gap": "Prototype has zero horizontal overflow, target text overflow, or visible-control clipping across the 936-route/language/viewport matrix. Targeted 679/680 checks lock the compact Home boundary; targeted 760 and 1144 px checks lock independent overlays below 1112 px and resident pane ownership above it. Production must repeat the governed matrix on assembled macOS and Windows builds.",
       "priority": "P0"
@@ -436,7 +436,7 @@
       "source": "UI_PROTOTYPE 16.2-16.4",
       "prototype": "partial",
       "production": "partial",
-      "prototype_evidence": ["pige-ui-design-contract.json tokens and icon_system", "pige-icon-sprite.svg governed 36-symbol common family", "pige-icon-library.html 16/18/20 px and control-state review", "seven Pige-only canonical baselines"],
+      "prototype_evidence": ["pige-ui-design-contract.json tokens and icon_system", "pige-icon-sprite.svg governed 36-symbol common family", "pige-icon-library.html 16/18/20 px and control-state review", "eight Pige-only canonical baselines"],
       "production_evidence": ["no complete cross-screen visual baseline"],
       "gap": "The common icon family, semantic mapping, and 16/18/20 px rendering are now explicit; equivalent-state raster overlay/difference review across canonical surfaces remains open, and route availability alone is not pixel fidelity.",
       "priority": "P0"

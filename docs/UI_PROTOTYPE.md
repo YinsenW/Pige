@@ -756,9 +756,8 @@ Visual and interaction contract:
   and color depth. Core Knowledge continues upward as
   the shared growth axis. Adjacent text exposes the exact counts so color and width are
   never the only explanation.
-- Balanced, single-domain-heavy, dual-core, and long-tail data remain legible. Larger
-  branches may claim more canopy without clipping UI or peers. Same IDs rebuild
-  deterministically.
+- Sparse, balanced, dominant-domain, dual-core, long-tail, and mature-dense data stay
+  legible without clipping. Same IDs rebuild deterministically.
 - Every visible semantic node is a named `treeitem`. Pointer or Enter selection updates
   one inspector and smoothly focuses the node; direction keys traverse nearby nodes.
   Search, filter, modes, wheel, plus/minus, fit, and drag pan share one camera. Search

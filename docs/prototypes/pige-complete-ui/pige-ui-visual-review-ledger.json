@@ -137,9 +137,9 @@
     "knowledge_tree": {
       "svg_viewbox": [0, 0, 900, 620],
       "stable_topic_labels": 7,
-      "scenario_treeitems": { "balanced": 260, "product-heavy": 236, "dual-core": 262, "long-tail": 169 },
+      "scenario_treeitems": { "starter-sparse": 48, "balanced": 260, "product-heavy": 236, "dual-core": 262, "long-tail": 169, "mature-dense": 456 },
       "dominant_branch_width_px": 4.4,
-      "dominant_branch_by_scenario": { "balanced": "project-management", "product-heavy": "product-design", "dual-core": ["product-design", "project-management"], "long-tail": "writing" },
+      "dominant_branch_by_scenario": { "starter-sparse": "product-design", "balanced": "project-management", "product-heavy": "product-design", "dual-core": ["product-design", "project-management"], "long-tail": "writing", "mature-dense": "project-management" },
       "pointer_selection_auto_zoom": "1.56x leaf / 1.30x topic",
       "directional_keyboard_navigation": "passed",
       "search_match_visibility_after_cross-branch_selection": "45 of 45 project matches visible",
