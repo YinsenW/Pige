@@ -258,7 +258,7 @@
     "failed_routes": [],
     "console_errors": [],
     "known_visual_discrepancies": [
-      "Automated raster overlay remains open beyond the measured shared primitives and eight Pige-only canonical baselines.",
+      "Automated raster overlay remains open beyond measured shared primitives; the eight JPEG composition baselines predate the current Home and Note Agent control semantics and require recapture.",
       "Spoken screen-reader announcement and assembled platform text-rendering review remain open."
     ]
   }

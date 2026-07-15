@@ -99,7 +99,7 @@
       "Compact Note Agent at 400 and 760 px: Tab and Shift+Tab remain inside the open drawer; the overlay contract extends through 1111 px",
       "Appearance and restore-mode radio groups: arrow keys move and select with one Tab stop",
       "Current-action confirmations: focus starts on the safe deny action and resolves to one focused terminal status",
-      "Home model listbox: ArrowUp and ArrowDown move among models, Escape closes it, and selection reports connected or unavailable truth",
+      "Home and Note Agent model listboxes: ArrowUp and ArrowDown move among models, Escape closes them, and selection reports connected or unavailable truth",
       "Home processing files: disclosure reveals exactly five 44 px rows before internal scrolling; pause, continue, and remove retain named actions",
       "Knowledge Tree: pointer or Enter selects and zooms one named treeitem; directional keys move selection and focus among nearby nodes"
     ],
@@ -112,7 +112,7 @@
       "Opening Note Agent moves focus to the note composer after the panel transition",
       "Escape closes the compact Note Agent and returns focus to the reader toolbar toggle",
       "Permission and model-egress decisions move focus to the single body-free terminal status",
-      "Model selection and Escape return focus to the composer model switcher",
+      "Model selection and Escape return focus to the owning Home or Note Agent model switcher",
       "Removing a processing row returns focus to the next row's remove action; removing the current summary item retains the summary action"
     ],
     "semantic_patterns_verified": [
@@ -122,7 +122,7 @@
       "Task rows expose named progressbar values and collapsed task content becomes inert, aria-hidden, and hidden after its exit motion",
       "Supported source-format glyphs are a named informational list with zero nested controls",
       "Appearance and restore identity choices use named roving radio groups",
-      "Knowledge Tree exposes 169-262 individually named treeitems across four deterministic data distributions; search results supersede stale branch dimming"
+      "Knowledge Tree exposes 48-456 individually named treeitems across six deterministic data distributions; search results supersede stale branch dimming"
     ],
     "remaining": [
       "Complete spoken screen-reader announcement and assembled platform text-rendering review."
@@ -183,7 +183,8 @@
       "settings-appearance-dark-1280x720.jpg": "?panel=appearance&theme=dark#settings",
       "first-run-1280x720.jpg": "?screen=first-run-vault&sidebar=0"
     },
-    "all_current_html": true,
+    "all_current_html": false,
+    "current_html_recapture_required": "Home and Note Agent control semantics changed after this JPEG set; retain these images only as historical composition references until recaptured and reviewed.",
     "all_horizontal_overflow_checks": "passed",
     "human_visual_review": "passed"
   },
@@ -277,10 +278,10 @@
       "id": "VR-KNOWLEDGE",
       "route": "?screen=knowledge",
       "viewport": { "width": 1144, "height": 874 },
-      "prototype_geometry": { "content_width_px": 980, "balanced_interactive_treeitems": 260, "scenario_interactive_treeitems_range": [169, 262] },
+      "prototype_geometry": { "content_width_px": 980, "balanced_interactive_treeitems": 260, "scenario_interactive_treeitems_range": [48, 456] },
       "checks": {
         "manual_visual": "corrected after reference comparison; user re-review pending",
-        "data_driven_weight_and_density": "passed across four distributions",
+        "data_driven_weight_and_density": "passed across six distributions",
         "node_selection": "passed",
         "node_auto_zoom_and_pan": "passed",
         "search_filter_and_keyboard_navigation": "passed",
@@ -313,7 +314,8 @@
   ],
   "overall": {
     "canonical_surfaces": 6,
-    "manual_visual_passed": 6,
+    "manual_visual_passed": 5,
+    "manual_visual_corrected_user_rereview_pending": 1,
     "raster_overlay_locked": 0,
     "narrow_or_small_viewport_locked": 6,
     "open_p0": ["Raster overlay/difference evidence", "Complete screen-reader announcement evidence"],

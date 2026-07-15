@@ -4,7 +4,7 @@
   "status": "Active UI Design audit; gaps are intentionally explicit and are not release-status claims",
   "audited_against": {
     "product_contract": "docs/UI_PROTOTYPE.md",
-    "production_baseline": "origin/main@129c3c0371a9f20ce20c670075e79e0c9013850f",
+    "production_baseline": "origin/main@e90a5947799c21884958b38f892b5f1ba1876b56",
     "prototype": "docs/prototypes/pige-complete-ui/index.html",
     "visual_reference": "ChatGPT-branded Codex desktop client 26.707.72221 clean-room observable behavior"
   },
@@ -61,10 +61,10 @@
       "requirement": "Model connection is optional; skipping enters capture-only and can resume preserved work later.",
       "source": "UI_PROTOTYPE 14, 15.3; ONBOARDING_AND_FIRST_RUN",
       "prototype": "covered",
-      "production": "partial",
+      "production": "implemented",
       "prototype_evidence": ["?screen=first-run-model", "onboarding.model_choice", "?screen=home-model-missing"],
-      "production_evidence": ["HomeComposer captureOnly", "ModelSettingsPanel"],
-      "gap": "The audited baseline has the foundation, while final single-owner missing-model convergence remains in a separate Development candidate.",
+      "production_evidence": ["HomeComposer captureOnly", "ModelSettingsPanel", "conversation-owned no-source model wait suppression and return-to-Home durable refresh"],
+      "gap": "Keep capture-only dismissal durable and preserve one conversation-owned missing-model status when returning from Models.",
       "priority": "P1"
     },
     {
@@ -171,10 +171,10 @@
       "requirement": "Missing-model and retryable failure states expose exactly one localized status owner and one relevant action.",
       "source": "UI_PROTOTYPE 6.1, 15.3",
       "prototype": "covered",
-      "production": "partial",
+      "production": "implemented",
       "prototype_evidence": ["?screen=home-model-missing", "?screen=home-error", "home.missing_model", "home.retry"],
-      "production_evidence": ["Home error and Job surfaces"],
-      "gap": "Final race-safe ownership and Models-local recovery are pending in the frozen replacement Development candidate.",
+      "production_evidence": ["Home error and Job surfaces", "100-Job service-bounded fetch before hidden-wait filtering", "sequenced Models summary and scoped body-free recovery"],
+      "gap": "Retain last-started-wins summary reads, source-backed Job visibility, and one Home status/action across reopen and return-from-Models races.",
       "priority": "P0"
     },
     {
@@ -338,7 +338,7 @@
       "prototype": "covered",
       "production": "partial",
       "prototype_evidence": ["?panel=vault#settings", "?panel=restore#settings", "?panel=maintenance#settings"],
-      "production_evidence": ["VaultSettingsPanel", "useRestoreFlow", "backup Job status"],
+      "production_evidence": ["VaultSettingsPanel", "useRestoreFlow", "backup Job status", "typed pathless note/source storage reveal actions"],
       "gap": "Move the implemented foundation into the grouped Settings surface and complete index-maintenance separation and body-free repair errors.",
       "priority": "P1"
     },
@@ -404,8 +404,8 @@
       "prototype": "covered",
       "production": "partial",
       "prototype_evidence": ["?panel=system#settings", "settings.system_action"],
-      "production_evidence": ["diagnostics and support bundle foundation in VaultSettingsPanel"],
-      "gap": "Move diagnostics into System Settings, add update state, preview categories, explicit export, clearing confirmation, and error recovery.",
+      "production_evidence": ["cancellable diagnostics export worker and body-free status in VaultSettingsPanel"],
+      "gap": "Move diagnostics into System Settings; add update state, preview categories, safe clearing confirmation, and grouped-surface error recovery.",
       "priority": "P1"
     },
     {
@@ -425,7 +425,7 @@
       "source": "UI_PROTOTYPE 2.1, 16.2, 19",
       "prototype": "covered",
       "production": "partial",
-      "prototype_evidence": ["visual-review-harness.html", "236 browser-rendered canonical/narrow/long-copy/boundary checks", "936 six-locale checks across 52 routes at 400, 760, and 1536 px", "760 px independent sidebar and Note Agent overlay checks with zero horizontal overflow, safe default Agent closure, Escape dismissal, and focus return", "1144 px resident 280 / 400 / 432 pane check with persistent sidebar ownership", "eight current Pige-only JPEG baseline screenshots", "pige-ui-reference-metrics.json", "pige-ui-visual-review-ledger.json"],
+      "prototype_evidence": ["visual-review-harness.html", "236 browser-rendered canonical/narrow/long-copy/boundary checks", "936 six-locale checks across 52 routes at 400, 760, and 1536 px", "760 px independent sidebar and Note Agent overlay checks with zero horizontal overflow, safe default Agent closure, Escape dismissal, and focus return", "1144 px resident 280 / 400 / 432 pane check with persistent sidebar ownership", "eight historical Pige-only JPEG composition baselines pending current-HTML recapture", "pige-ui-reference-metrics.json", "pige-ui-visual-review-ledger.json"],
       "production_evidence": ["responsive CSS foundations"],
       "gap": "Prototype has zero horizontal overflow, target text overflow, or visible-control clipping across the 936-route/language/viewport matrix. Targeted 679/680 checks lock the compact Home boundary; targeted 760 and 1144 px checks lock independent overlays below 1112 px and resident pane ownership above it. Production must repeat the governed matrix on assembled macOS and Windows builds.",
       "priority": "P0"
@@ -436,7 +436,7 @@
       "source": "UI_PROTOTYPE 16.2-16.4",
       "prototype": "partial",
       "production": "partial",
-      "prototype_evidence": ["pige-ui-design-contract.json tokens and icon_system", "pige-icon-sprite.svg governed 36-symbol common family", "pige-icon-library.html 16/18/20 px and control-state review", "eight Pige-only canonical baselines"],
+      "prototype_evidence": ["pige-ui-design-contract.json tokens and icon_system", "pige-icon-sprite.svg governed 36-symbol common family", "pige-icon-library.html 16/18/20 px and control-state review", "eight historical Pige-only canonical composition baselines pending recapture"],
       "production_evidence": ["no complete cross-screen visual baseline"],
       "gap": "The common icon family, semantic mapping, and 16/18/20 px rendering are now explicit; equivalent-state raster overlay/difference review across canonical surfaces remains open, and route availability alone is not pixel fidelity.",
       "priority": "P0"
