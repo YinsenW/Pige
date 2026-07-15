@@ -40,6 +40,10 @@
     "pi-folder": { "lucide": "Folder", "intent": "represent a local group or folder choice" },
     "pi-chevron-down": { "lucide": "ChevronDown", "intent": "disclose expanded content" },
     "pi-chevron-right": { "lucide": "ChevronRight", "intent": "disclose collapsed content" },
+    "pi-loader-circle": { "lucide": "LoaderCircle", "intent": "quietly indicate active file processing" },
+    "pi-circle-pause": { "lucide": "CirclePause", "intent": "pause one active bounded process" },
+    "pi-play": { "lucide": "Play", "intent": "continue one paused bounded process" },
+    "pi-trash": { "lucide": "Trash2", "intent": "remove one item from the current visible processing list; never imply deletion of preserved source evidence" },
     "pi-arrow-left": { "lucide": "ArrowLeft", "intent": "return to the owning surface" },
     "pi-plus": { "lucide": "Plus", "intent": "add or attach" },
     "pi-send": { "lucide": "ArrowUp", "intent": "send the current composer turn" },
@@ -66,6 +70,12 @@
     "pi-globe": { "lucide": "Globe", "intent": "external network capability" },
     "pi-mail": { "lucide": "Mail", "intent": "mail or meeting-note Skill example" },
     "pi-thumb-up": { "lucide": "ThumbsUp", "intent": "positive answer feedback" },
-    "pi-thumb-down": { "lucide": "ThumbsDown", "intent": "negative answer feedback" }
+    "pi-thumb-down": { "lucide": "ThumbsDown", "intent": "negative answer feedback" },
+    "pi-filter": { "lucide": "Funnel", "intent": "filter the current Knowledge Tree view" },
+    "pi-network": { "lucide": "Network", "intent": "emphasize semantic relationships" },
+    "pi-list-tree": { "lucide": "ListTree", "intent": "switch to topic-summary hierarchy" },
+    "pi-focus": { "lucide": "Focus", "intent": "fit the full interactive tree into view" },
+    "pi-zoom-in": { "lucide": "ZoomIn", "intent": "increase Knowledge Tree scale" },
+    "pi-zoom-out": { "lucide": "ZoomOut", "intent": "decrease Knowledge Tree scale" }
   }
 }

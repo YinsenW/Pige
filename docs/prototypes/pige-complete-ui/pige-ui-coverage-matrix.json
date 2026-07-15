@@ -178,6 +178,28 @@
       "priority": "P0"
     },
     {
+      "id": "HOME-11",
+      "requirement": "Supported format glyphs remain a static informational legend, while the composer exposes one real model switcher with green connected and red unavailable truth.",
+      "source": "UI_PROTOTYPE 2; UI Design element contract",
+      "prototype": "covered",
+      "production": "partial",
+      "prototype_evidence": ["?screen=home", "home.source_format_legend", "home.attach", "home.model_switcher"],
+      "production_evidence": ["HomeComposer attachment and model state"],
+      "gap": "Development must keep format hints non-interactive, bind the listbox to enabled models and typed availability, and disable submit for an unavailable selection without adding a second model-status owner.",
+      "priority": "P1"
+    },
+    {
+      "id": "HOME-12",
+      "requirement": "Active file processing collapses to one current filename and expands to five visible 44 px progress rows with internal scrolling, pause/continue, removal, and safe focus return.",
+      "source": "UI_PROTOTYPE 2; UI Design element contract",
+      "prototype": "covered",
+      "production": "partial",
+      "prototype_evidence": ["?screen=home", "home.activity_disclosure", "home.activity_progress", "home.processing_file_actions"],
+      "production_evidence": ["visibleRecentJobs and Home source status"],
+      "gap": "Development must project typed file Jobs into this single owner; pause/remove semantics must preserve source evidence, and more than five rows must scroll inside the fixed panel rather than resize the composer.",
+      "priority": "P1"
+    },
+    {
       "id": "LIBRARY-01",
       "requirement": "Expanded sidebar exposes an Agent-maintained Library tree with at least three visible levels and keyboard disclosure.",
       "source": "UI_PROTOTYPE 3, 4.4, 18",
@@ -212,13 +234,13 @@
     },
     {
       "id": "KNOWLEDGE-01",
-      "requirement": "Knowledge Tree is a separate semantic hierarchy with selectable nodes, evidence counts, backlinks, and suggested-link confidence where useful.",
+      "requirement": "Knowledge Tree is a separate semantic hierarchy with individually selectable nodes, automatic focus zoom, refined branch motion, evidence counts, backlinks, and suggested-link confidence where useful.",
       "source": "UI_PROTOTYPE 11, 18",
       "prototype": "covered",
       "production": "partial",
-      "prototype_evidence": ["?screen=knowledge", "?screen=knowledge-empty", "?screen=knowledge-loading", "?screen=knowledge-degraded", "knowledge.node", "knowledge.secondary_action", "knowledge.availability"],
+      "prototype_evidence": ["?screen=knowledge", "?screen=knowledge-empty", "?screen=knowledge-loading", "?screen=knowledge-degraded", "128 interactive treeitems", "knowledge.node", "knowledge.viewport_controls", "knowledge.secondary_action", "knowledge.availability"],
       "production_evidence": ["KnowledgeTreePanel", "KnowledgeTreeNodeView"],
-      "gap": "Prototype includes bounded evidence/backlink/suggestion actions and empty/loading/degraded truth. Production still needs the governed typed actions and remaining Knowledge Tree breadth.",
+      "gap": "Prototype includes 128 interactive nodes, focus zoom/pan, branch emphasis, search/filter/modes, bounded evidence/backlink/suggestion actions, and empty/loading/degraded truth. Production still needs the governed typed graph projection and equivalent interaction breadth.",
       "priority": "P1"
     },
     {
@@ -425,6 +447,6 @@
     "prototype": { "covered": 34, "partial": 2, "missing": 0 },
     "production": { "implemented": 11, "partial": 14, "missing": 11 },
     "known_p0_gaps": ["HOME-10", "SETTINGS-04", "A11Y-01", "VISUAL-01"],
-    "known_p1_gaps": ["SHELL-01", "SHELL-02", "ONBOARD-02", "HOME-05", "LIBRARY-01", "LIBRARY-02", "LIBRARY-03", "KNOWLEDGE-01", "READER-02", "READER-03", "READER-04", "READER-05", "SETTINGS-01", "SETTINGS-02", "SETTINGS-03", "SETTINGS-05", "SETTINGS-06", "SETTINGS-07", "SETTINGS-08", "SETTINGS-09"]
+    "known_p1_gaps": ["SHELL-01", "SHELL-02", "ONBOARD-02", "HOME-05", "HOME-11", "HOME-12", "LIBRARY-01", "LIBRARY-02", "LIBRARY-03", "KNOWLEDGE-01", "READER-02", "READER-03", "READER-04", "READER-05", "SETTINGS-01", "SETTINGS-02", "SETTINGS-03", "SETTINGS-05", "SETTINGS-06", "SETTINGS-07", "SETTINGS-08", "SETTINGS-09"]
   }
 }

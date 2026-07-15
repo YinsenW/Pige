@@ -46,7 +46,7 @@ Default desktop window:
 - Ordinary conversation needs no vault match. When Pi uses local knowledge, show the
   evidence and citations without turning Home into a search dashboard.
 - Sidebar hidden by default, not merely collapsed into visual noise.
-- Recent activity appears only after the user has active capture, parser, OCR, Agent ingest, or index jobs. The compact Home strip uses localized status dots and at most three visible source names; it is not a second Inbox or Review destination.
+- Recent activity appears only after the user has active capture, parser, OCR, Agent ingest, or index jobs. The compact Home strip collapses to one current filename; expanding it shows at most five 44 px processing rows, then keeps its height fixed and scrolls additional rows internally. It is not a second Inbox or Review destination.
 - Home refreshes the strip while a job is queued or running, then stops polling for dependency-waiting or terminal jobs to keep idle work low.
 - Whole window becomes a file drop hot zone while dragging files over it.
 
@@ -212,6 +212,12 @@ Behavior:
   input cannot create a duplicate turn, and the visible Send button remains available.
 - Menu and settings are present but visually quiet.
 - User can type a question, paste a URL, paste long text, attach a file, or drag files anywhere onto the window.
+- Familiar PDF/text/presentation/spreadsheet/image glyphs are a static supported-format
+  legend, not six buttons or workflow choices. Only Add file and whole-window drop open
+  file ingress.
+- The composer footer has one model switcher: a green dot precedes an available model,
+  a red dot marks the selected model unavailable, and unavailable selection prevents
+  submit until the user selects an available model.
 - On supported macOS versions, the microphone button starts voice dictation into the same input.
 - Recent activity appears above the composer only after there is something useful to show.
 - The same input supports capture and retrieval questions. User should not see separate "Capture" and "Ask" modes.
@@ -252,7 +258,7 @@ Behavior:
 - Multi-file drops are grouped as one capture batch.
 - Unsupported files are preserved when possible and reported with clear warnings.
 
-### 4.3 Activity State
+### 4.3 Processing and Activity State
 
 ```txt
 ┌────────────────────────────────────┐
@@ -275,6 +281,12 @@ Behavior:
 Behavior:
 
 - Activity is secondary to the home composer.
+- While files are active, one compact row directly above the composer shows
+  `Processing files`, the current filename, count, pause, remove, and disclosure.
+  Disclosure reveals five 44 px rows; additional rows scroll inside the fixed panel.
+  Collapsing removes rows from keyboard and accessibility traversal. Pausing and
+  removing return focus to a safe surviving action, and removing a row never implies
+  deletion of preserved source evidence.
 - Recent rows summarize durable changes. Unchanged generated pages offer direct Undo;
   reread announces truth, restores focus, keeps eligible retry, or fails closed.
 - The user can ignore the activity area and keep adding sources or asking questions.
@@ -755,6 +767,18 @@ Visual encoding:
 - Leaf size represents the size or importance of a leaf cluster.
 - Leaf color depth represents density: deeper color means more accumulated fragments or stronger evidence.
 - New or low-confidence growth can use lighter leaves until evidence reinforces it.
+
+Interactive prototype target:
+
+- The tree is rendered from front-end SVG/DOM primitives, not a static image.
+- Every root, topic, and leaf is an individually named `treeitem`. Pointer selection or
+  Enter updates one floating inspector, highlights the selected branch, and smoothly
+  pans/zooms the node into view without changing page or hiding the sidebar.
+- Direction keys traverse nearby nodes. Search focuses the first match on Enter;
+  filter, relationship emphasis, topic-summary mode, wheel zoom, plus/minus, fit, and
+  drag pan all operate on the same graph camera.
+- Reduced motion removes spatial interpolation while preserving the same selected,
+  filtered, zoomed, and inspected end states.
 
 Current bounded slice:
 

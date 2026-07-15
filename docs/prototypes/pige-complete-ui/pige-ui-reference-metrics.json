@@ -53,6 +53,30 @@
       "status": "matched"
     },
     {
+      "id": "settings-content-column-width",
+      "source_coordinate_px": {
+        "left_x": 1527,
+        "right_x": 3062,
+        "sample_y": 650
+      },
+      "reference_logical_px": 768,
+      "pige_target_logical_px": 768,
+      "tolerance_px": 1,
+      "status": "matched"
+    },
+    {
+      "id": "settings-row-height",
+      "source_coordinate_px": {
+        "card_top_y": 585,
+        "card_bottom_y": 841,
+        "rows": 2
+      },
+      "reference_logical_px": 64,
+      "pige_target_logical_px": 64,
+      "tolerance_px": 1,
+      "status": "matched"
+    },
+    {
       "id": "settings-light-main-surface",
       "source_coordinate_px": { "x": 2000, "y": 1000 },
       "reference_srgb": "#ffffff",

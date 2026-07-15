@@ -98,15 +98,15 @@
       "owner": "Window Service + Settings Service"
     },
     {
-      "id": "home.source_shortcut",
+      "id": "home.source_format_legend",
       "surface": "Compact Home",
       "selector": ".source-type",
-      "role": "button",
-      "intent": "Open the system file choice affordance with a familiar format hint, not select a processing mode.",
-      "states": ["default", "hover", "focus-visible"],
-      "prototype_action": "Adds a visible attachment chip; More opens the file chooser.",
-      "production_bridge": "Home-owned submitHomeFiles after native file selection",
-      "owner": "Capture Service + Renderer"
+      "role": "list item",
+      "intent": "Quietly show familiar supported format families without presenting six false workflow choices.",
+      "states": ["informational"],
+      "prototype_action": "None. The legend has no pointer, keyboard, hover, or file-choice action; Add file and whole-window drop remain the real inputs.",
+      "production_bridge": "Static localized capability hints derived from supported ingress families",
+      "owner": "UI Design + Renderer"
     },
     {
       "id": "home.drop_surface",
@@ -140,6 +140,17 @@
       "prototype_action": "Opens the native file input and exposes removable attachment state.",
       "production_bridge": "Native file picker and Home-owned submission",
       "owner": "Capture Service + Renderer"
+    },
+    {
+      "id": "home.model_switcher",
+      "surface": "Home composer toolbar",
+      "selector": "#modelSwitcher",
+      "role": "button with listbox",
+      "intent": "Choose the current enabled model while exposing only a quiet connected or unavailable signal.",
+      "states": ["connected", "unavailable", "expanded", "collapsed", "focus-visible"],
+      "prototype_action": "Opens one compact listbox, supports arrow-key movement and Escape, updates the current model plus green/red status dot, disables send while the selected model is unavailable, then restores focus to the switcher.",
+      "production_bridge": "Global Default / enabled model selection and typed provider availability",
+      "owner": "Model Settings Service + Renderer"
     },
     {
       "id": "home.send",
@@ -176,24 +187,35 @@
     },
     {
       "id": "home.activity_disclosure",
-      "surface": "Home recent work",
+      "surface": "Home processing files and Activity recent work",
       "selector": "#taskToggle",
       "role": "button",
-      "intent": "Reveal or collapse useful current work without creating a dashboard.",
+      "intent": "Reveal or collapse useful current work without creating a dashboard; Home defaults to one compact processing row.",
       "states": ["expanded", "collapsed"],
-      "prototype_action": "Toggles one compact recent-work panel, updates aria-expanded, and removes collapsed task content from focus and the accessibility tree.",
+      "prototype_action": "Toggles one compact panel, updates aria-expanded, shows at most five file rows before internal scrolling, and removes collapsed content from focus and the accessibility tree.",
       "production_bridge": "Renderer-local disclosure over typed Job summaries",
       "owner": "Renderer + Jobs Service"
     },
     {
       "id": "home.activity_progress",
-      "surface": "Home recent work",
+      "surface": "Home processing files",
       "selector": ".progress-track",
       "role": "progressbar",
       "intent": "Expose the bounded progress and localized state of one visible task without duplicating status ownership.",
-      "states": ["running", "waiting", "terminal"],
+      "states": ["running", "paused", "waiting", "terminal"],
       "prototype_action": "Publishes a named numeric value and localized aria-valuetext while the visible row remains the single task status owner.",
       "production_bridge": "Typed Job summary progress projection",
+      "owner": "Jobs Service + Renderer"
+    },
+    {
+      "id": "home.processing_file_actions",
+      "surface": "Home processing files",
+      "selector": "#taskPauseAll, #taskRemoveCurrent, [data-task-action]",
+      "role": "buttons",
+      "intent": "Pause, continue, or remove one visible processing item without duplicating its Job status owner.",
+      "states": ["ready", "paused", "resumed", "removed", "disabled-empty", "focus-visible"],
+      "prototype_action": "Updates pause state in place, preserves body-free progress copy, removes one row, recalculates the summary, and restores focus to the next safe action.",
+      "production_bridge": "Typed Job pause/cancel semantics; remove never implies deletion of durable source evidence",
       "owner": "Jobs Service + Renderer"
     },
     {
@@ -276,12 +298,23 @@
     {
       "id": "knowledge.node",
       "surface": "Knowledge Tree",
-      "selector": ".tree-node[data-knowledge-title]",
-      "role": "button",
+      "selector": "[data-knowledge-node][role=\"treeitem\"]",
+      "role": "treeitem",
       "intent": "Inspect one semantic concept/topic branch and its evidence boundary.",
-      "states": ["default", "selected", "focus-visible"],
-      "prototype_action": "Updates one shared detail surface without modal or navigation churn.",
+      "states": ["default", "selected", "related", "dimmed", "focus-visible"],
+      "prototype_action": "Updates one shared floating detail surface, automatically zooms and pans the selected node into focus, highlights its branch, and supports directional-key traversal without modal or navigation churn.",
       "production_bridge": "Knowledge graph node selection using stable semantic ID",
+      "owner": "Knowledge Graph Service + Renderer"
+    },
+    {
+      "id": "knowledge.viewport_controls",
+      "surface": "Knowledge Tree canvas",
+      "selector": "[data-knowledge-mode], [data-knowledge-zoom], #knowledgeFilterButton, #knowledgeSearchInput",
+      "role": "searchbox and button groups",
+      "intent": "Search, filter, change relationship emphasis, zoom, pan, or fit the same knowledge graph without creating a second navigation surface.",
+      "states": ["tree", "network", "topic-summary", "filtered", "search-match", "zoomed", "fitted"],
+      "prototype_action": "Search focuses the first result on Enter; modes preserve selection; plus/minus/fit and wheel update the canvas; reduced motion preserves every final state without spatial interpolation.",
+      "production_bridge": "Renderer-local graph camera over stable Knowledge Graph query results",
       "owner": "Knowledge Graph Service + Renderer"
     },
     {

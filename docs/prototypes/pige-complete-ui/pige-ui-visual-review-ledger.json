@@ -59,7 +59,7 @@
     "production_package": "lucide-react@1.17.0",
     "full_family_symbols": 1713,
     "package_svg_assets_including_aliases": 1962,
-    "active_symbols": 36,
+    "active_symbols": 46,
     "master_viewbox_px": 24,
     "render_sizes_px": [16, 18, 20],
     "semantic_checks": [
@@ -98,7 +98,9 @@
       "Independent Settings surface: Tab and Shift+Tab remain inside the surface and wrap at both ends",
       "Compact Note Agent at 400 and 760 px: Tab and Shift+Tab remain inside the open drawer; the overlay contract extends through 1111 px",
       "Appearance and restore-mode radio groups: arrow keys move and select with one Tab stop",
-      "Current-action confirmations: focus starts on the safe deny action and resolves to one focused terminal status"
+      "Current-action confirmations: focus starts on the safe deny action and resolves to one focused terminal status",
+      "Home model listbox: ArrowUp and ArrowDown move among models, Escape closes it, and selection reports connected or unavailable truth",
+      "Home processing files: disclosure reveals exactly five 44 px rows before internal scrolling; pause, continue, and remove retain named actions"
     ],
     "focus_return_verified": [
       "Escape closes the compact Library sidebar and returns focus to the titlebar sidebar toggle",
@@ -108,13 +110,16 @@
       "Closing Note Agent returns focus to the reader toolbar toggle",
       "Opening Note Agent moves focus to the note composer after the panel transition",
       "Escape closes the compact Note Agent and returns focus to the reader toolbar toggle",
-      "Permission and model-egress decisions move focus to the single body-free terminal status"
+      "Permission and model-egress decisions move focus to the single body-free terminal status",
+      "Model selection and Escape return focus to the composer model switcher",
+      "Removing a processing row returns focus to the next row's remove action; removing the current summary item retains the summary action"
     ],
     "semantic_patterns_verified": [
       "Primary and Settings navigation expose the current page with aria-current",
       "Safe drafts and bounded progress use polite atomic status regions",
       "Current-action decisions and typed failures use assertive body-free regions",
-      "Task rows expose named progressbar values and collapsed task content becomes inert and aria-hidden",
+      "Task rows expose named progressbar values and collapsed task content becomes inert, aria-hidden, and hidden after its exit motion",
+      "Supported source-format glyphs are a named informational list with zero nested controls",
       "Appearance and restore identity choices use named roving radio groups"
     ],
     "remaining": [
@@ -124,6 +129,7 @@
   "measured_browser_evidence": {
     "viewport": { "width": 1280, "height": 720, "device_scale_factor": 2 },
     "compact_home": { "width_px": 400, "height_px": 688, "titlebar_px": 46, "composer_radius_px": 22, "heading": "24px / 30px / 500" },
+    "compact_home_processing_at_1144x874": { "window_width_px": 400, "window_height_px": 842, "source_legend_nested_controls": 0, "processing_rows": 7, "expanded_visible_rows": 5, "processing_list_client_height_px": 220, "processing_list_scroll_height_px": 362, "processing_composer_overlap_px": 0, "model_switcher_connected_and_unavailable_states": true },
     "expanded_home": { "width_px": 680, "height_px": 688, "sidebar_px": 280, "home_px": 400 },
     "library_state_flow": { "loading_status_busy": true, "unavailable_body_free": true, "unavailable_retry_only": true, "retry_converges_to_library": true, "retry_focuses_search": true, "no_result_status": true, "family_tab_arrow_home_end": "passed", "tree_disclosure_persists_after_reload": true, "collapsed_descendants_inert_and_aria_hidden": true, "horizontal_overflow": false },
     "intermediate_reader": { "viewport_px": [1144, 874], "window_px": 1112, "sidebar_px": 280, "reader_px": 400, "note_agent_px": 432, "fresh_note_defaults_to_three_pane": true, "sidebar_persistent": true, "escape_preserves_resident_sidebar": true },
@@ -249,15 +255,18 @@
       "id": "VR-KNOWLEDGE",
       "route": "?screen=knowledge",
       "viewport": { "width": 1144, "height": 874 },
-      "prototype_geometry": { "sidebar_width_px": 280, "content_width_px": 760 },
+      "prototype_geometry": { "content_width_px": 980, "interactive_treeitems": 128 },
       "checks": {
         "manual_visual": "passed",
         "node_selection": "passed",
+        "node_auto_zoom_and_pan": "passed",
+        "search_filter_and_keyboard_navigation": "passed",
+        "branch_focus_motion_and_reduced_motion_fallback": "passed",
         "empty_loading_degraded_states": "passed",
         "raster_overlay": "pending"
       },
       "remaining": [
-        "Lock hierarchy indentation, evidence density, and detail surface by overlay."
+        "Lock branch opacity, node density, label baselines, and floating detail surface by equivalent-state overlay."
       ]
     },
     {
