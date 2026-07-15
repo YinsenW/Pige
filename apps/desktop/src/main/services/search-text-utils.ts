@@ -36,6 +36,10 @@ export function createSnippet(markdownBody: string, query: QueryTerms): string {
   return truncateSnippet(`${prefix}${plain.slice(start, end).trim()}${suffix}`);
 }
 
+export function truncateSearchSnippet(value: string): string {
+  return truncateSnippet(value);
+}
+
 export function normalizeDisplayText(value: string): string {
   return value
     .replace(/```[\s\S]*?```/gu, " ")

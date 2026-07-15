@@ -26,6 +26,10 @@ import type {
   ProviderAuthRequirement,
   ProviderEndpointProtocol,
   ProviderKind,
+  RetrievalSearchRequest,
+  RetrievalSearchResult,
+  RetrievalSearchResultItem,
+  RetrievalSearchScope,
   SettingApplyBehavior,
   SettingPermissionRequirement,
   SettingScope,
@@ -53,7 +57,11 @@ export type {
   PermissionPendingRequest,
   PermissionPendingRequestQuery,
   PermissionResolveRequest,
-  PermissionResolveResult
+  PermissionResolveResult,
+  RetrievalSearchRequest,
+  RetrievalSearchResult,
+  RetrievalSearchResultItem,
+  RetrievalSearchScope
 } from "@pige/schemas";
 
 export interface AppHealth {
@@ -711,32 +719,10 @@ export interface NoteRenderResult {
   readonly byteSize: number;
 }
 
-export interface RetrievalSearchRequest {
+export interface RetrievalAskRequest {
   readonly query: string;
   readonly limit?: number;
   readonly pageTypes?: readonly MarkdownPageType[];
-}
-
-export interface RetrievalSearchResultItem {
-  readonly summary: LibraryPageSummary;
-  readonly score: number;
-  readonly snippets: readonly string[];
-  readonly matchReasons: readonly string[];
-}
-
-export interface RetrievalSearchResult {
-  readonly searchedAt: string;
-  readonly activeVaultId: string;
-  readonly query: string;
-  readonly mode: "lexical_markdown_scan" | "lexical_sqlite_fts";
-  readonly total: number;
-  readonly invalidPageCount: number;
-  readonly degraded: boolean;
-  readonly degradedReason?: "local_database_not_ready" | "local_rag_not_installed";
-  readonly results: readonly RetrievalSearchResultItem[];
-}
-
-export interface RetrievalAskRequest extends RetrievalSearchRequest {
   readonly locale?: Locale;
 }
 

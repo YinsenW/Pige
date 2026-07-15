@@ -363,6 +363,27 @@ describe("desktop shell build contract", () => {
     expect(retryHandler).toContain("scheduleAgentTurnProcessing()");
   });
 
+  it("runtime-validates retrieval.search at preload and main boundaries", () => {
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const ipcSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/services/retrieval-search-ipc.ts"),
+      "utf8"
+    );
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+
+    expect(mainSource).toContain("handleRetrievalSearchIpc(request, getRetrievalService())");
+    expect(ipcSource).toContain("RetrievalSearchRequestSchema.safeParse(request)");
+    expect(ipcSource).toContain("rawResult = retrieval.search(parsedRequest.data)");
+    expect(ipcSource).toContain('PigeDomainError("rag.search_unavailable"');
+    expect(ipcSource).toContain("RetrievalSearchResultSchema.safeParse(rawResult)");
+    expect(preloadSource).toContain("RetrievalSearchRequestSchema.safeParse(request)");
+    expect(preloadSource).toContain('const response: unknown = await ipcRenderer.invoke("retrieval.search", parsedRequest.data)');
+    expect(preloadSource).toContain("RetrievalSearchResultSchema.safeParse(response)");
+    expect(preloadSource).not.toContain(
+      'ipcRenderer.invoke("retrieval.search", request) as Promise<RetrievalSearchResult>'
+    );
+  });
+
   it("exposes one-use Model Egress decisions through strict main and preload boundaries", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");

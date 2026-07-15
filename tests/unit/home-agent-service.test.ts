@@ -124,6 +124,33 @@ describe("Home Pi Agent service", () => {
     expect(durableAudit).not.toContain(fixture.vaultPath);
   });
 
+  it("bounds the Host-authored Home retrieval query to 320 characters", async () => {
+    const fixture = makeFixture();
+    let retrievalQuery = "";
+    const service = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId, {
+        onSearch: (request) => { retrievalQuery = request.query; }
+      }),
+      new JobsService(fixture.vaults),
+      new PiAgentRuntimeAdapter({
+        fauxResponses: [
+          { kind: "tool_call", toolName: "pige_search_knowledge", args: {} },
+          finishHome({
+            answer: "The bounded result is grounded. [1]",
+            citationRefs: ["citation_1"],
+            grounding: "local_knowledge"
+          })
+        ]
+      })
+    );
+
+    const outcome = await service.ask({ query: "a".repeat(400), limit: 8, locale: "en" });
+    expect(outcome.state).toBe("completed");
+    expect(retrievalQuery).toBe("a".repeat(320));
+  });
+
   it("binds safe provisional answer snapshots to the exact non-durable Home turn identity", async () => {
     const fixture = makeFixture();
     const drafts: Array<{
@@ -2002,11 +2029,11 @@ function makeRetrievalPort(
   vaultId: string,
   options: {
     readonly result?: RetrievalSearchResult;
-    readonly onSearch?: () => void;
+    readonly onSearch?: (request: HomeAgentAskRequest) => void;
   } = {}
 ): HomeAgentRetrievalPort {
   const search = (request: HomeAgentAskRequest): RetrievalSearchResult => {
-    options.onSearch?.();
+    options.onSearch?.(request);
     const result = options.result ?? makeSearchResult(vaultId);
     return result.query === request.query ? result : { ...result, query: request.query };
   };

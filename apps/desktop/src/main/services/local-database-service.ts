@@ -14,7 +14,12 @@ import type {
 } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 import { createPigeTagKey, extractPigeMarkdownLinkRefs, type PigeMarkdownLinkRef } from "@pige/markdown";
-import { LocalDatabaseSchemaStateSchema, type LocalDatabaseSchemaState, type MarkdownPageType } from "@pige/schemas";
+import {
+  LocalDatabaseSchemaStateSchema,
+  RetrievalSearchResultItemSchema,
+  type LocalDatabaseSchemaState,
+  type MarkdownPageType
+} from "@pige/schemas";
 import {
   buildKnowledgeTreeSnapshot,
   type KnowledgeTreeRelationInput,
@@ -22,6 +27,7 @@ import {
 } from "./knowledge-tree-aggregate";
 import {
   assertMarkdownPagePathConfined,
+  MARKDOWN_FRONTMATTER_READ_LIMIT_BYTES,
   readMarkdownPageBody,
   scanMarkdownFileSignatures,
   scanMarkdownPages,
@@ -39,6 +45,7 @@ import {
   createQueryTerms,
   normalizeSearchText,
   sanitizeSearchBody,
+  truncateSearchSnippet,
   type QueryTerms
 } from "./search-text-utils";
 
@@ -392,12 +399,6 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
       const pageTypes = sanitizePageTypes(request.pageTypes);
       const where = pageTypeWhereSql(pageTypes, "p");
       const params = [ftsQuery, ...(pageTypes as SQLInputValue[])];
-      const countSql = `
-        SELECT COUNT(*) AS count
-        FROM pages_fts
-        JOIN pages p ON p.page_id = pages_fts.page_id
-        WHERE pages_fts MATCH ? ${where.andSql}
-      `;
       const rows = db.prepare(
         `
           SELECT
@@ -408,14 +409,26 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
           JOIN pages p ON p.page_id = pages_fts.page_id
           WHERE pages_fts MATCH ? ${where.andSql}
           ORDER BY rank ASC, p.updated_at DESC
-          LIMIT ?
         `
-      ).all(...params, clampLimit(request.limit, DEFAULT_SEARCH_LIMIT, MAX_SEARCH_LIMIT));
+      ).iterate(...params);
+      const requestedLimit = clampLimit(request.limit, DEFAULT_SEARCH_LIMIT, MAX_SEARCH_LIMIT);
+      const results: RetrievalSearchResultItem[] = [];
+      let validResultCount = 0;
+      let invalidResultCount = 0;
+      for (const row of rows) {
+        const item = rowToSearchResult(row, terms);
+        if (!RetrievalSearchResultItemSchema.safeParse(item).success) {
+          invalidResultCount += 1;
+          continue;
+        }
+        validResultCount += 1;
+        if (results.length < requestedLimit) results.push(item);
+      }
 
       return {
-        total: readCount(db, countSql, params),
-        invalidPageCount: readInvalidPageCount(db),
-        results: rows.map((row) => rowToSearchResult(row, terms))
+        total: validResultCount,
+        invalidPageCount: readInvalidPageCount(db) + invalidResultCount,
+        results
       };
     } finally {
       db.close();
@@ -670,6 +683,7 @@ const MAX_SEARCH_LIMIT = 20;
 const DEFAULT_RELATED_LIMIT = 12;
 const MAX_RELATED_LIMIT = 50;
 const MAX_INDEXED_BODY_CHARS = 500_000;
+const MAX_INDEXED_BODY_BYTES = MARKDOWN_FRONTMATTER_READ_LIMIT_BYTES + (MAX_INDEXED_BODY_CHARS * 4);
 const REBUILD_PROGRESS_INTERVAL = 100;
 
 function openVaultDatabase(vaultPath: string): DatabaseSync {
@@ -1079,7 +1093,7 @@ function readStableIndexedBody(vaultPath: string, page: MarkdownPageRecord, expe
     if (expected && !samePageSignature(before, expected)) {
       throw new Error("Markdown changed while the local index was rebuilding.");
     }
-    const rawBody = readMarkdownPageBody(descriptor).slice(0, MAX_INDEXED_BODY_CHARS);
+    const rawBody = readMarkdownPageBody(descriptor, MAX_INDEXED_BODY_BYTES).slice(0, MAX_INDEXED_BODY_CHARS);
     const searchBody = sanitizeSearchBody(rawBody);
     const after = pageSignatureFromStat(fs.fstatSync(descriptor));
     const named = getPageSignature(page);
@@ -1184,7 +1198,7 @@ function rowToKnowledgeTreeRelation(row: Record<string, unknown>): KnowledgeTree
 
 function rowToSearchResult(row: Record<string, unknown>, query: QueryTerms): RetrievalSearchResultItem {
   const summary = rowToSummary(row);
-  const snippet = String(row.snippet ?? "").trim();
+  const snippet = truncateSearchSnippet(String(row.snippet ?? "").trim());
   const rank = toNumber(row.rank);
   return {
     summary,

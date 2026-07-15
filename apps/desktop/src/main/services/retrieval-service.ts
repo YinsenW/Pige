@@ -8,12 +8,17 @@ import type {
   RetrievalSearchRequest,
   RetrievalSearchResult,
   RetrievalSearchResultItem,
+  RetrievalSearchScope,
   VaultSummary
 } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
-import type { MarkdownPageType } from "@pige/schemas";
+import { RetrievalSearchResultItemSchema, type MarkdownPageType } from "@pige/schemas";
 import type { LocalDatabaseService } from "./local-database-service";
-import { readMarkdownPageBody, scanMarkdownPages } from "./markdown-page-index";
+import {
+  MARKDOWN_FRONTMATTER_READ_LIMIT_BYTES,
+  readMarkdownPageBodyAtSignature,
+  scanMarkdownPages
+} from "./markdown-page-index";
 import {
   countOccurrences,
   createQueryTerms,
@@ -35,9 +40,15 @@ interface ScoredMatch {
   readonly matchReasons: readonly string[];
 }
 
+interface ActiveVaultBinding {
+  readonly vaultId: string;
+  readonly vaultPath: string;
+}
+
 const DEFAULT_SEARCH_LIMIT = 8;
 const MAX_SEARCH_LIMIT = 20;
 const MAX_BODY_CHARS_FOR_SCAN = 120_000;
+const MAX_BODY_BYTES_FOR_SCAN = MARKDOWN_FRONTMATTER_READ_LIMIT_BYTES + (MAX_BODY_CHARS_FOR_SCAN * 4);
 const MAX_HOME_EVIDENCE = 8;
 const MAX_ANSWER_EVIDENCE = 3;
 
@@ -89,61 +100,131 @@ export class RetrievalService {
   }
 
   search(request: RetrievalSearchRequest): RetrievalSearchResult {
-    const activeVault = this.#vaults.current();
-    const vaultPath = this.#vaults.activeVaultPath();
-    if (!activeVault || !vaultPath) {
-      throw new PigeDomainError("vault_missing", "No active Pige vault is selected.");
-    }
+    const binding = this.#captureActiveVaultBinding(request.scope);
 
     const query = request.query.trim();
     if (!query) {
       throw new PigeDomainError("retrieval_empty", "Search query cannot be empty.");
     }
+    if (Array.from(query).length > 320) {
+      throw new PigeDomainError("retrieval_query_too_long", "Search query exceeds the local retrieval bound.");
+    }
 
     const terms = createQueryTerms(query);
     const pageTypes = new Set<MarkdownPageType>(request.pageTypes ?? []);
     const limit = clampLimit(request.limit);
-    const indexed = this.#database?.searchPages(vaultPath, { ...request, query, limit });
+    const indexed = this.#database?.searchPages(binding.vaultPath, { ...request, query, limit });
     if (indexed) {
-      return {
+      const projected = projectSearchItems(indexed.results);
+      const result: RetrievalSearchResult = {
         searchedAt: new Date().toISOString(),
-        activeVaultId: activeVault.vaultId,
+        activeVaultId: binding.vaultId,
         query,
         mode: "lexical_sqlite_fts",
         total: indexed.total,
-        invalidPageCount: indexed.invalidPageCount,
+        invalidPageCount: indexed.invalidPageCount + projected.invalidCount,
         degraded: false,
-        results: indexed.results
+        results: projected.items
       };
+      this.#assertActiveVaultBinding(request.scope, binding);
+      return result;
     }
 
-    const scanned = scanMarkdownPages(vaultPath);
-    const matches = scanned.pages
-      .filter((page) => pageTypes.size === 0 || pageTypes.has(page.summary.pageType))
-      .map((page) => {
-        const body = sanitizeSearchBody(readMarkdownPageBody(page.absolutePath)).slice(0, MAX_BODY_CHARS_FOR_SCAN);
-        return scorePage(page.summary, body, terms);
-      })
-      .filter((match): match is ScoredMatch => Boolean(match))
-      .sort(compareMatches);
+    const scanned = scanMarkdownPages(binding.vaultPath);
+    const signatures = new Map(scanned.files.map((file) => [file.absolutePath, file]));
+    const matches: ScoredMatch[] = [];
+    let invalidPageCount = scanned.invalidPageCount;
+    for (const page of scanned.pages) {
+      if (pageTypes.size > 0 && !pageTypes.has(page.summary.pageType)) continue;
+      const signature = signatures.get(page.absolutePath);
+      if (!signature) {
+        invalidPageCount += 1;
+        continue;
+      }
+      try {
+        const body = sanitizeSearchBody(
+          readMarkdownPageBodyAtSignature(binding.vaultPath, signature, MAX_BODY_BYTES_FOR_SCAN)
+        ).slice(0, MAX_BODY_CHARS_FOR_SCAN);
+        const match = scorePage(page.summary, body, terms);
+        if (!match) continue;
+        const projected = RetrievalSearchResultItemSchema.safeParse(match);
+        if (projected.success) matches.push(match);
+        else invalidPageCount += 1;
+      } catch {
+        invalidPageCount += 1;
+      }
+    }
+    matches.sort(compareMatches);
 
-    return {
+    const result: RetrievalSearchResult = {
       searchedAt: new Date().toISOString(),
-      activeVaultId: activeVault.vaultId,
+      activeVaultId: binding.vaultId,
       query,
       mode: "lexical_markdown_scan",
       total: matches.length,
-      invalidPageCount: scanned.invalidPageCount,
+      invalidPageCount,
       degraded: true,
       degradedReason: "local_database_not_ready",
       results: matches.slice(0, limit)
     };
+    this.#assertActiveVaultBinding(request.scope, binding);
+    return result;
   }
 
   ask(request: RetrievalAskRequest): RetrievalAskResult {
-    const searchResult = this.search(request);
+    const activeVault = this.#vaults.current();
+    if (!activeVault) {
+      throw new PigeDomainError("vault_missing", "No active Pige vault is selected.");
+    }
+    const searchResult = this.search({
+      query: request.query,
+      ...(request.limit === undefined ? {} : { limit: request.limit }),
+      ...(request.pageTypes === undefined ? {} : { pageTypes: [...request.pageTypes] }),
+      scope: { kind: "active_vault", vaultId: activeVault.vaultId }
+    });
     return buildLocalExtractiveAskResult(request, searchResult);
   }
+
+  #captureActiveVaultBinding(scope: RetrievalSearchScope): ActiveVaultBinding {
+    const activeVault = this.#vaults.current();
+    const vaultPath = this.#vaults.activeVaultPath();
+    if (!activeVault || !vaultPath) {
+      throw new PigeDomainError("vault_missing", "No active Pige vault is selected.");
+    }
+    const binding = { vaultId: activeVault.vaultId, vaultPath };
+    this.#assertActiveVaultBinding(scope, binding);
+    return binding;
+  }
+
+  #assertActiveVaultBinding(scope: RetrievalSearchScope, binding: ActiveVaultBinding): void {
+    const activeVault = this.#vaults.current();
+    const vaultPath = this.#vaults.activeVaultPath();
+    if (
+      scope.kind !== "active_vault" ||
+      scope.vaultId !== binding.vaultId ||
+      activeVault?.vaultId !== binding.vaultId ||
+      vaultPath !== binding.vaultPath
+    ) {
+      throw new PigeDomainError(
+        "vault.binding_changed",
+        "The active vault binding changed during local search."
+      );
+    }
+  }
+}
+
+function projectSearchItems(items: readonly RetrievalSearchResultItem[]): {
+  readonly items: readonly RetrievalSearchResultItem[];
+  readonly invalidCount: number;
+} {
+  const projected: RetrievalSearchResultItem[] = [];
+  let invalidCount = 0;
+  for (const item of items) {
+    const parsed = RetrievalSearchResultItemSchema.safeParse(item);
+    if (parsed.success) projected.push(parsed.data);
+    else invalidCount += 1;
+  }
+  return { items: projected, invalidCount };
 }
 
 export function buildLocalExtractiveAskResult(
