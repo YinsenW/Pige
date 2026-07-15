@@ -848,53 +848,21 @@ Settings rules:
 
 ### Vault, Note Storage, And Backup
 
-```txt
-Vault & Note Storage
-
-Current vault
-Pige Vault
-/Users/name/Documents/Pige Vault
-
-Note storage
-/Users/name/Documents/Pige Vault
-
-Source assets
-/Users/name/Documents/Pige Vault/raw
-Default: copy dropped files into Pige source storage
-
-Open in Finder
-Open another vault
-Create new vault
-
-Recent vaults
-Work Notes
-Research Archive
-
-Backup and restore
-Last backup: Never
-Create Backup
-Restore Backup
-```
-
 Vault & Note Storage ("仓库与笔记存储") is calm local-file control: location first;
 backup/restore protect the vault without displacing storage ownership.
 
 Required controls:
 
-- Show current vault name and active vault path at the top.
-- Show note/knowledge root and source asset root separately, even when both are inside the same Pige vault folder.
-- Let users choose the default source storage strategy: copy to Pige source storage or reference original. A future advanced link strategy can appear only after platform behavior is proven safe.
-- Reveal current vault in Finder or File Explorer.
-- Open another existing vault folder.
-- Create a new vault by choosing a parent folder and vault name.
-- Show recent vaults with "remove from list" behavior that does not delete files.
-- Own restarted user Backup here: localized state/valid actions, no raw Job/path/message,
-  error or rollback child. Latest completed user Backup derives Last backup; keep both entries.
-- Show schema version and basic counts when available: notes, sources, managed source copies, referenced originals, and artifacts.
-- Warn against nested vaults and app/system data folders.
-- Do not hide note storage controls inside backup, export, diagnostics, or index maintenance.
+- Show current vault name/path first, then note and source roots separately even when colocated.
+- Let users choose copy-to-Pige or reference-original for new sources; defer advanced link strategies until proven safe.
+- Offer separate platform-neutral Show note storage and Show source storage actions; unavailable external source storage reads “not connected” and has no fallback reveal.
+- One local busy/status surface owns reveal; disable conflicting storage controls in flight, show only localized pathless results, and restore focus to the invoking action.
+- Open or create vaults; recent-vault removal never deletes files.
+- Own restarted user Backup here with localized valid actions and no raw Job/path/error or rollback child; latest completion derives Last backup.
+- Show schema and note/source/copy/reference/artifact counts when available.
+- Warn against nested/system locations; never hide storage controls inside backup, export, diagnostics, or maintenance.
 - Do not expose database file paths, cache folders, parser artifact internals, checksums, or symlink mechanics on the default page.
-- Do not offer a one-click "move current vault" in v0.1. If Pige later moves a vault itself, it must be a guarded migration wizard with preflight checks, backup, copy verification, and rollback.
+- No one-click vault move in v0.1; any future move requires preflight, backup, verified copy, and rollback.
 
 Reset Local Search Database is a repair action under Index & Maintenance. It deletes only
 rebuildable `.pige` indexes/caches and recreates them from Markdown, Dataset Bundles,

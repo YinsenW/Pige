@@ -6,6 +6,8 @@ import type {
   RecentVaultSummary,
   UpdateSourceStoragePolicyRequest,
   VaultActionResult,
+  VaultRevealResult,
+  VaultRevealTarget,
   VaultSummary
 } from "@pige/contracts";
 import { PIGE_DEFAULT_VAULT_NAME, PigeDomainError } from "@pige/domain";
@@ -15,6 +17,7 @@ import {
   isPigeVault,
   loadVaultSummary,
   normalizeVaultName,
+  prepareVaultStorageRevealBinding,
   resetRebuildableVaultStorage,
   updateVaultSourceStorageStrategy
 } from "./vault-layout";
@@ -29,6 +32,7 @@ export interface VaultWriterLeasePort {
 }
 
 export type VaultWriterLeaseFactory = (vaultPath: string) => VaultWriterLeasePort;
+export type VaultPathRevealer = (targetPath: string) => Promise<string>;
 
 export interface VaultRestoreTransition {
   readonly previousVaultPath?: string;
@@ -49,6 +53,7 @@ export class VaultService {
   readonly #settings: LocalSettingsStore;
   readonly #hasDefaultModel: () => boolean;
   readonly #acquireWriterLease: VaultWriterLeaseFactory;
+  readonly #revealPath: VaultPathRevealer;
   #activeVaultPath: string | undefined;
   #activeVault: VaultSummary | undefined;
   #activeWriterLease: VaultWriterLeasePort | undefined;
@@ -57,11 +62,13 @@ export class VaultService {
   constructor(
     settings: LocalSettingsStore,
     hasDefaultModel: () => boolean = () => false,
-    acquireWriterLease: VaultWriterLeaseFactory = acquireVaultWriterLease
+    acquireWriterLease: VaultWriterLeaseFactory = acquireVaultWriterLease,
+    revealPath: VaultPathRevealer = (targetPath) => shell.openPath(targetPath)
   ) {
     this.#settings = settings;
     this.#hasDefaultModel = hasDefaultModel;
     this.#acquireWriterLease = acquireWriterLease;
+    this.#revealPath = revealPath;
     this.#restoreActiveVaultFromSettings();
   }
 
@@ -155,7 +162,7 @@ export class VaultService {
     });
     const vaultPath = path.join(parentDirectory, normalizeVaultName(request.vaultName));
     this.#setActiveVault(vaultPath, vault);
-    return { status: "completed", vault, onboarding: this.onboardingStatus() };
+    return { status: "completed", vault: this.#requireActiveVault(), onboarding: this.onboardingStatus() };
   }
 
   async open(parentWindow: BrowserWindow): Promise<VaultActionResult> {
@@ -178,7 +185,7 @@ export class VaultService {
 
     const vault = loadVaultSummary(vaultPath);
     this.#setActiveVault(vaultPath, vault);
-    return { status: "completed", vault, onboarding: this.onboardingStatus() };
+    return { status: "completed", vault: this.#requireActiveVault(), onboarding: this.onboardingStatus() };
   }
 
   openPath(vaultPathInput: string): VaultActionResult {
@@ -189,17 +196,15 @@ export class VaultService {
     }
     const vault = loadVaultSummary(vaultPath);
     this.#setActiveVault(vaultPath, vault);
-    return { status: "completed", vault, onboarding: this.onboardingStatus() };
+    return { status: "completed", vault: this.#requireActiveVault(), onboarding: this.onboardingStatus() };
   }
 
-  async revealKnowledgeRoot(): Promise<void> {
-    const activeVaultPath = this.#requireActiveVaultPath();
-    await shell.openPath(activeVaultPath);
+  async revealKnowledgeRoot(): Promise<VaultRevealResult> {
+    return this.#revealStorageRoot("knowledge_root");
   }
 
-  async revealSourceAssetRoot(): Promise<void> {
-    const activeVault = this.#requireActiveVault();
-    await shell.openPath(activeVault.sourceAssetRootDisplay);
+  async revealSourceAssetRoot(): Promise<VaultRevealResult> {
+    return this.#revealStorageRoot("source_asset_root");
   }
 
   updateSourceStoragePolicy(request: UpdateSourceStoragePolicyRequest): VaultSummary {
@@ -351,7 +356,12 @@ export class VaultService {
     let settingsCommitted = false;
     try {
       nextLease.assertHeld();
-      this.#settings.setActiveVault(nextPath, vault);
+      const nextVault = nextPath === requestedPath ? vault : loadVaultSummary(nextPath);
+      if (nextVault.vaultId !== vault.vaultId) {
+        throw new PigeDomainError("vault.binding_changed", "The canonical vault identity changed.");
+      }
+      this.#settings.setActiveVault(nextPath, nextVault);
+      this.#activeVault = nextVault;
       settingsCommitted = true;
     } finally {
       if (!settingsCommitted) nextLease.release();
@@ -360,7 +370,6 @@ export class VaultService {
     const previousLease = this.#activeWriterLease;
     this.#activeWriterLease = nextLease;
     this.#activeVaultPath = nextPath;
-    this.#activeVault = vault;
     if (previousLease) {
       try {
         previousLease.release();
@@ -380,6 +389,36 @@ export class VaultService {
   #assertNoRestoreTransition(): void {
     if (this.#restoreTransition) {
       throw new PigeDomainError("restore.in_progress", "The active vault is closed for restore coordination.");
+    }
+  }
+
+  async #revealStorageRoot(target: VaultRevealTarget): Promise<VaultRevealResult> {
+    let binding: ReturnType<typeof prepareVaultStorageRevealBinding> | undefined;
+    try {
+      const activeVaultPath = this.#requireActiveVaultPath();
+      binding = prepareVaultStorageRevealBinding(activeVaultPath, target);
+      this.assertWriterLease(activeVaultPath);
+      binding.assertCurrent();
+      const openError = await this.#revealPath(binding.targetPath);
+      binding.assertCurrent();
+      this.assertWriterLease(activeVaultPath);
+      if (openError !== "") throw new Error("The operating system did not reveal the storage root.");
+      return { status: "revealed", target };
+    } catch {
+      return {
+        status: "failed",
+        target,
+        error: {
+          code: "vault.reveal_failed",
+          domain: "vault",
+          messageKey: "errors.vault.reveal_failed",
+          retryable: true,
+          severity: "warning",
+          userAction: "retry"
+        }
+      };
+    } finally {
+      binding?.release();
     }
   }
 

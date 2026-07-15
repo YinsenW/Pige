@@ -134,7 +134,7 @@ Rules:
 - Non-default Agent/extension permission mode, cloud-send policy, API key storage mode,
   and YOLO belong to Permissions & Privacy; standing active-vault knowledge-Markdown
   autonomy is not YOLO.
-- Vault & Note Storage is the place to see where local notes and source assets live.
+- Vault & Note Storage separately shows note and source locations; each available root has one platform-neutral reveal action, while an unavailable external source binding is shown as not connected and cannot fall back to the vault root.
 - Trash/archive policy follows `docs/DATA_ARCHITECTURE.md`; no setting lets any actor permanently delete durable knowledge/source evidence automatically.
 
 ## 6. Setting Registry

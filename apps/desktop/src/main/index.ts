@@ -1272,8 +1272,14 @@ ipcMain.handle("vault.open", async (event) => {
   }
   return result;
 });
-ipcMain.handle("vault.revealKnowledgeRoot", () => getVaultService().revealKnowledgeRoot());
-ipcMain.handle("vault.revealSourceAssetRoot", () => getVaultService().revealSourceAssetRoot());
+ipcMain.handle("vault.revealKnowledgeRoot", (event) => {
+  requireWindow(event.sender);
+  return getVaultService().revealKnowledgeRoot();
+});
+ipcMain.handle("vault.revealSourceAssetRoot", (event) => {
+  requireWindow(event.sender);
+  return getVaultService().revealSourceAssetRoot();
+});
 ipcMain.handle("vault.updateSourceStoragePolicy", (_event, request: UpdateSourceStoragePolicyRequest) =>
   getVaultService().updateSourceStoragePolicy(request)
 );

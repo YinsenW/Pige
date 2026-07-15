@@ -15,7 +15,12 @@ import {
   type VaultConfig,
   type VaultManifest
 } from "@pige/schemas";
-import type { LocalDatabaseResetResult, VaultCounts, VaultSummary } from "@pige/contracts";
+import type {
+  LocalDatabaseResetResult,
+  VaultCounts,
+  VaultRevealTarget,
+  VaultSummary
+} from "@pige/contracts";
 
 export const PIGE_DURABLE_ROOTS = [
   "raw",
@@ -48,6 +53,12 @@ export interface CreateVaultOnDiskOptions extends VaultPathSafetyOptions {
   readonly vaultName: string;
   readonly locale?: VaultManifest["default_locale"];
   readonly now?: Date;
+}
+
+export interface VaultStorageRevealBinding {
+  readonly targetPath: string;
+  assertCurrent(): void;
+  release(): void;
 }
 
 export function normalizeVaultName(input: string): string {
@@ -132,7 +143,7 @@ export function loadVaultSummary(vaultPathInput: string): VaultSummary {
   const config = readVaultConfig(vaultPath);
   const sourceAssetRoot = config.sourceStorage.sourceAssetRootKind === "inside_vault"
     ? path.join(vaultPath, config.sourceStorage.inVaultSourceAssetRoot)
-    : vaultPath;
+    : "";
 
   return {
     vaultId: manifest.vault_id,
@@ -164,7 +175,33 @@ export function readVaultManifest(vaultPath: string): VaultManifest {
 
 export function readVaultConfig(vaultPath: string): VaultConfig {
   const configPath = path.join(vaultPath, ".pige/config.json");
-  return VaultConfigSchema.parse(JSON.parse(fs.readFileSync(configPath, "utf8")));
+  return VaultConfigSchema.parse(JSON.parse(readBoundedRegularFileNoFollow(configPath, 64 * 1024)));
+}
+
+export function prepareVaultStorageRevealBinding(
+  vaultPathInput: string,
+  target: VaultRevealTarget
+): VaultStorageRevealBinding {
+  const vaultPath = path.resolve(vaultPathInput);
+  assertRevealableDirectory(vaultPath, vaultPath);
+  if (target === "knowledge_root") return bindRevealableDirectory(vaultPath, vaultPath);
+
+  const config = readVaultConfig(vaultPath);
+  if (config.sourceStorage.sourceAssetRootKind !== "inside_vault") {
+    throw new PigeDomainError(
+      "vault.external_binding_unavailable",
+      "The external managed-copy root is not connected on this machine."
+    );
+  }
+
+  const segments = config.sourceStorage.inVaultSourceAssetRoot.split("/");
+  const sourceRoot = path.resolve(vaultPath, ...segments);
+  const relative = path.relative(vaultPath, sourceRoot);
+  if (!relative || relative.startsWith(`..${path.sep}`) || relative === ".." || path.isAbsolute(relative)) {
+    throw new PigeDomainError("vault.reveal_failed", "The managed-copy root is outside the active vault.");
+  }
+  assertRevealableDirectory(vaultPath, sourceRoot);
+  return bindRevealableDirectory(vaultPath, sourceRoot);
 }
 
 export function updateVaultSourceStorageStrategy(vaultPath: string, defaultStrategy: SourceStorageStrategy): VaultSummary {
@@ -351,6 +388,126 @@ function createDefaultLogMarkdown(timestamp: string): string {
 
 function writeJson(filePath: string, value: unknown): void {
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+}
+
+function readBoundedRegularFileNoFollow(filePath: string, maxBytes: number): string {
+  const before = fs.lstatSync(filePath);
+  if (before.isSymbolicLink() || !before.isFile() || before.size > maxBytes) {
+    throw new PigeDomainError("vault.config_invalid", "The vault configuration is not a safe regular file.");
+  }
+
+  let descriptor: number | undefined;
+  try {
+    descriptor = fs.openSync(filePath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+    const opened = fs.fstatSync(descriptor);
+    const named = fs.lstatSync(filePath);
+    if (
+      !opened.isFile() ||
+      opened.size > maxBytes ||
+      named.isSymbolicLink() ||
+      !named.isFile() ||
+      opened.dev !== named.dev ||
+      opened.ino !== named.ino
+    ) {
+      throw new PigeDomainError("vault.config_invalid", "The vault configuration changed while opening.");
+    }
+    return fs.readFileSync(descriptor, "utf8");
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
+  }
+}
+
+function bindRevealableDirectory(vaultPath: string, candidatePath: string): VaultStorageRevealBinding {
+  const initial = assertRevealableDirectory(vaultPath, candidatePath);
+  let descriptor: number | undefined;
+  if (process.platform !== "win32") {
+    try {
+      descriptor = fs.openSync(
+        candidatePath,
+        fs.constants.O_RDONLY | (fs.constants.O_DIRECTORY ?? 0) | (fs.constants.O_NOFOLLOW ?? 0)
+      );
+      const opened = fs.fstatSync(descriptor);
+      if (!sameRevealDirectoryIdentity(initial, opened)) {
+        throw new PigeDomainError("vault.reveal_failed", "The storage root changed while binding.");
+      }
+    } catch (error) {
+      if (descriptor !== undefined) {
+        try {
+          fs.closeSync(descriptor);
+        } catch {
+          // The reveal still fails closed even if the operating system cannot report descriptor cleanup.
+        }
+        descriptor = undefined;
+      }
+      throw error;
+    }
+  }
+
+  let released = false;
+  return {
+    targetPath: candidatePath,
+    assertCurrent() {
+      if (released) throw new PigeDomainError("vault.reveal_failed", "The storage root binding is closed.");
+      const named = assertRevealableDirectory(vaultPath, candidatePath);
+      if (!sameRevealDirectoryIdentity(initial, named)) {
+        throw new PigeDomainError("vault.reveal_failed", "The storage root was replaced.");
+      }
+      if (descriptor !== undefined) {
+        const opened = fs.fstatSync(descriptor);
+        if (!sameRevealDirectoryIdentity(initial, opened)) {
+          throw new PigeDomainError("vault.reveal_failed", "The storage root binding changed.");
+        }
+      }
+    },
+    release() {
+      if (released) return;
+      released = true;
+      const descriptorToClose = descriptor;
+      descriptor = undefined;
+      if (descriptorToClose !== undefined) {
+        try {
+          fs.closeSync(descriptorToClose);
+        } catch {
+          // Cleanup failure must not turn the fixed reveal result into a raw IPC rejection.
+        }
+      }
+    }
+  };
+}
+
+function assertRevealableDirectory(vaultPath: string, candidatePath: string): fs.Stats {
+  const relative = path.relative(vaultPath, candidatePath);
+  const segments = relative ? relative.split(path.sep) : [];
+  let current = vaultPath;
+  let candidateStat: fs.Stats | undefined;
+  for (const segment of ["", ...segments]) {
+    if (segment) current = path.join(current, segment);
+    const stat = fs.lstatSync(current);
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      throw new PigeDomainError("vault.reveal_failed", "The storage root is not a safe directory.");
+    }
+    candidateStat = stat;
+  }
+
+  const canonical = fs.realpathSync.native(candidatePath);
+  const expected = path.resolve(candidatePath);
+  const matches = process.platform === "win32"
+    ? canonical.toLocaleLowerCase("en-US") === expected.toLocaleLowerCase("en-US")
+    : canonical === expected;
+  if (!matches) {
+    throw new PigeDomainError("vault.reveal_failed", "The storage root resolves through another path.");
+  }
+  if (!candidateStat) throw new PigeDomainError("vault.reveal_failed", "The storage root is unavailable.");
+  return candidateStat;
+}
+
+function sameRevealDirectoryIdentity(left: fs.Stats, right: fs.Stats): boolean {
+  return left.isDirectory() &&
+    right.isDirectory() &&
+    left.dev === right.dev &&
+    left.ino === right.ino &&
+    left.mode === right.mode &&
+    left.birthtimeMs === right.birthtimeMs;
 }
 
 function withTrailingSeparator(input: string): string {

@@ -81,6 +81,8 @@ import type {
   UpdateSourceStoragePolicyRequest,
   WindowState,
   VaultActionResult,
+  VaultRevealResult,
+  VaultRevealTarget,
   VaultSummary
 } from "@pige/contracts";
 
@@ -156,6 +158,53 @@ function projectRestoreApplyResult(result: RestoreApplyResult): RestoreApplyResu
     throw new Error("Invalid restore apply response.");
   }
   return { status: "restored", jobId: result.jobId };
+}
+
+function isVaultRevealTarget(value: unknown): value is VaultRevealTarget {
+  return value === "knowledge_root" || value === "source_asset_root";
+}
+
+function projectVaultRevealResult(
+  result: unknown,
+  expectedTarget: VaultRevealTarget
+): VaultRevealResult {
+  if (!result || typeof result !== "object") throw new Error("Invalid vault reveal response.");
+  const record = result as Record<string, unknown>;
+  if (!isVaultRevealTarget(record.target) || record.target !== expectedTarget) {
+    throw new Error("Invalid vault reveal response.");
+  }
+  if (record.status === "revealed" && Object.keys(record).sort().join(",") === "status,target") {
+    return { status: "revealed", target: record.target };
+  }
+  if (record.status !== "failed" || Object.keys(record).sort().join(",") !== "error,status,target") {
+    throw new Error("Invalid vault reveal response.");
+  }
+  const error = record.error;
+  if (!error || typeof error !== "object") throw new Error("Invalid vault reveal response.");
+  const safeError = error as Record<string, unknown>;
+  if (
+    Object.keys(safeError).sort().join(",") !== "code,domain,messageKey,retryable,severity,userAction" ||
+    safeError.code !== "vault.reveal_failed" ||
+    safeError.domain !== "vault" ||
+    safeError.messageKey !== "errors.vault.reveal_failed" ||
+    safeError.retryable !== true ||
+    safeError.severity !== "warning" ||
+    safeError.userAction !== "retry"
+  ) {
+    throw new Error("Invalid vault reveal response.");
+  }
+  return {
+    status: "failed",
+    target: record.target,
+    error: {
+      code: "vault.reveal_failed",
+      domain: "vault",
+      messageKey: "errors.vault.reveal_failed",
+      retryable: true,
+      severity: "warning",
+      userAction: "retry"
+    }
+  };
 }
 
 const api: PigeDesktopApi = {
@@ -259,9 +308,10 @@ const api: PigeDesktopApi = {
     create: async (request: CreateVaultRequest): Promise<VaultActionResult> =>
       ipcRenderer.invoke("vault.create", request) as Promise<VaultActionResult>,
     open: async (): Promise<VaultActionResult> => ipcRenderer.invoke("vault.open") as Promise<VaultActionResult>,
-    revealKnowledgeRoot: async (): Promise<void> => ipcRenderer.invoke("vault.revealKnowledgeRoot") as Promise<void>,
-    revealSourceAssetRoot: async (): Promise<void> =>
-      ipcRenderer.invoke("vault.revealSourceAssetRoot") as Promise<void>,
+    revealKnowledgeRoot: async (): Promise<VaultRevealResult> =>
+      projectVaultRevealResult(await ipcRenderer.invoke("vault.revealKnowledgeRoot"), "knowledge_root"),
+    revealSourceAssetRoot: async (): Promise<VaultRevealResult> =>
+      projectVaultRevealResult(await ipcRenderer.invoke("vault.revealSourceAssetRoot"), "source_asset_root"),
     updateSourceStoragePolicy: async (request: UpdateSourceStoragePolicyRequest): Promise<VaultSummary> =>
       ipcRenderer.invoke("vault.updateSourceStoragePolicy", request) as Promise<VaultSummary>,
     removeRecent: async (vaultId: string): Promise<readonly RecentVaultSummary[]> =>

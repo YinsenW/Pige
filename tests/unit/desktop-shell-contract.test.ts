@@ -42,6 +42,33 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain('browserWindow.once("closed", () => mainWindows.delete(browserWindow));');
   });
 
+  it("keeps storage reveal main-owned, window-bound, strictly projected, and pathless", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const handlerStart = mainSource.indexOf('ipcMain.handle("vault.revealKnowledgeRoot"');
+    const handlerEnd = mainSource.indexOf('ipcMain.handle("vault.updateSourceStoragePolicy"');
+    const handlers = mainSource.slice(handlerStart, handlerEnd);
+
+    expect(contractsSource).toContain("readonly revealKnowledgeRoot: () => Promise<VaultRevealResult>;");
+    expect(contractsSource).toContain("readonly revealSourceAssetRoot: () => Promise<VaultRevealResult>;");
+    expect(contractsSource).not.toContain("readonly revealKnowledgeRoot: () => Promise<void>;");
+    expect(handlers).toContain("requireWindow(event.sender);");
+    expect(handlers.indexOf("requireWindow(event.sender);")).toBeLessThan(
+      handlers.indexOf("getVaultService().revealKnowledgeRoot()")
+    );
+    expect(preloadSource).toContain("expectedTarget: VaultRevealTarget");
+    expect(preloadSource).toContain("record.target !== expectedTarget");
+    expect(preloadSource).toContain("Object.keys(record).sort().join(\",\") === \"status,target\"");
+    expect(preloadSource).toContain('ipcRenderer.invoke("vault.revealKnowledgeRoot")');
+    expect(preloadSource).toContain(
+      'projectVaultRevealResult(await ipcRenderer.invoke("vault.revealKnowledgeRoot"), "knowledge_root")'
+    );
+    expect(preloadSource).not.toContain(
+      'ipcRenderer.invoke("vault.revealKnowledgeRoot") as Promise<VaultRevealResult>'
+    );
+  });
+
   it("assembles the background index worker and repository toolchain manifest in a development build", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const readyPath = mainSource.slice(

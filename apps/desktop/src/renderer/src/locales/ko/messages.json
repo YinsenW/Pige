@@ -171,6 +171,7 @@
   "errors.url_fetch.invalid": "유효한 공개 HTTP 또는 HTTPS 웹 주소를 입력하세요.",
   "errors.rag.query_invalid": "비어 있지 않은 더 짧은 질문을 입력하세요.",
   "errors.vault.not_selected": "Pi Agent에게 질문하기 전에 Vault를 열거나 만드세요.",
+  "errors.vault.reveal_failed": "이 저장 위치를 표시하지 못했습니다. 다시 시도하세요.",
   "language.label": "언어",
   "library.empty": "아직 노트나 소스 페이지가 없습니다.",
   "library.invalid": "건너뜀",
@@ -358,8 +359,10 @@
   "vaultSettings.createNew": "새 Vault 만들기",
   "vaultSettings.currentVault": "현재 Vault",
   "vaultSettings.openAnother": "다른 Vault 열기",
-  "vaultSettings.openInFinder": "Finder에서 열기",
-  "vaultSettings.openSourceAssets": "소스 자산 열기",
+  "vaultSettings.openInFinder": "노트 저장소 표시",
+  "vaultSettings.openSourceAssets": "소스 저장소 표시",
+  "vaultSettings.externalRootUnavailable": "외부 저장소가 연결되지 않았습니다",
+  "vaultSettings.revealSucceeded": "시스템 파일 관리자에서 열었습니다.",
   "vaultSettings.subtitle": "로컬 파일이 유일한 기준 데이터입니다.",
   "vaultSettings.title": "Vault 및 노트 저장소"
 }

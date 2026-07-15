@@ -188,53 +188,32 @@ Rules:
 
 ### 6.1 Vault
 
-Current renderer/preload command:
+Current renderer/preload commands: `onboarding.dismissFirstHome`, `vault.revealKnowledgeRoot`, and `vault.revealSourceAssetRoot`.
 
-- `onboarding.dismissFirstHome`
+Internal compatibility/recovery commands: `vault.create`, `vault.open`, `onboarding.complete`, `vault.updateSourceStoragePolicy`, `vault.removeRecent`, `maintenance.rebuildLocalDatabase`, and `maintenance.resetLocalDatabase`.
 
-Internal compatibility/recovery commands (not current renderer/preload ingress):
-
-- `vault.create`
-- `vault.open`
-- `onboarding.complete`
-- `vault.revealKnowledgeRoot`
-- `vault.revealSourceAssetRoot`
-- `vault.updateSourceStoragePolicy`
-- `vault.removeRecent`
-- `maintenance.rebuildLocalDatabase`
-- `maintenance.resetLocalDatabase`
-
-Queries:
-
-- `vault.current`
-- `vault.recent`
-- `vault.health`
-- `onboarding.status`
-- `maintenance.localDatabaseStatus`
+Queries: `vault.current`, `vault.recent`, `vault.health`, `onboarding.status`, and `maintenance.localDatabaseStatus`.
 
 Vault DTOs:
 
 ```ts
 type VaultSummary = {
-  vaultId: string;
-  name: string;
-  activeVaultPathDisplay: string;
-  knowledgeRootDisplay: string;
-  sourceAssetRootDisplay: string;
+  vaultId: string; name: string;
+  activeVaultPathDisplay: string; knowledgeRootDisplay: string; sourceAssetRootDisplay: string;
   sourceAssetRootKind: "inside_vault" | "external_binding";
   defaultSourceStorageStrategy: "copy_to_source_library" | "reference_original";
-  schemaVersion: number;
-  counts?: {
-    notes: number;
-    sources: number;
-    managedSourceCopies: number;
-    referencedOriginals: number;
-  };
+  schemaVersion: number; counts?: { notes: number; sources: number; managedSourceCopies: number; referencedOriginals: number };
   lastBackupAt?: string;
 };
+
+type VaultRevealResult =
+  | { status: "revealed"; target: "knowledge_root" | "source_asset_root" }
+  | { status: "failed"; target: "knowledge_root" | "source_asset_root"; error: PigeErrorSummary };
 ```
 
-`sourceAssetRootDisplay`/`sourceAssetRootKind` are schema-v1 compatibility DTO names for the managed-copy root. They do not include the artifact root, which remains `<knowledgeRoot>/artifacts` in v0.1. Future renaming must be versioned; renderer code must not infer path relationships from the display string.
+`sourceAssetRootDisplay`/`sourceAssetRootKind` are schema-v1 compatibility names for the managed-copy root, not the `<knowledgeRoot>/artifacts` root. Renaming must be versioned; renderer code cannot infer path relationships from display text.
+
+Storage reveal is main-owned and pathless: main resolves the root from the active-vault lease and bounded no-follow config; preload admits exact target/result keys. Unavailable external bindings never fall back to the vault. Identity checks fail to `vault.reveal_failed`; final check-to-shell TOCTOU remains.
 
 Onboarding DTO:
 

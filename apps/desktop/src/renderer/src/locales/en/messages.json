@@ -171,6 +171,7 @@
   "errors.url_fetch.invalid": "Enter a valid public HTTP or HTTPS web address.",
   "errors.rag.query_invalid": "Enter a shorter, non-empty question.",
   "errors.vault.not_selected": "Open or create a vault before asking Pi Agent.",
+  "errors.vault.reveal_failed": "Pige could not show this storage location. Try again.",
   "language.label": "Language",
   "library.empty": "No notes or source pages yet.",
   "library.invalid": "Skipped",
@@ -358,8 +359,10 @@
   "vaultSettings.createNew": "Create new vault",
   "vaultSettings.currentVault": "Current vault",
   "vaultSettings.openAnother": "Open another vault",
-  "vaultSettings.openInFinder": "Open in Finder",
-  "vaultSettings.openSourceAssets": "Open source assets",
+  "vaultSettings.openInFinder": "Show note storage",
+  "vaultSettings.openSourceAssets": "Show source storage",
+  "vaultSettings.externalRootUnavailable": "External storage is not connected",
+  "vaultSettings.revealSucceeded": "Opened in the system file manager.",
   "vaultSettings.subtitle": "Local files remain the source of truth.",
   "vaultSettings.title": "Vault & Note Storage"
 }

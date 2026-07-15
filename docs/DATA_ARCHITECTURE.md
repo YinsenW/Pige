@@ -295,7 +295,7 @@ Local note storage control model:
 - If `managedCopyRoot` is inside the vault, store it as a relative vault preference in `.pige/config.json`.
 - If `managedCopyRoot` points outside the vault, assign it a stable `root_` ID in machine-local `vault-bindings.json`, keyed by `vault_id`, and record the one selected default in `VaultBindingsFileSchema.defaults`. Source records keep the root ID plus a root-relative path; raw absolute paths stay machine-local.
 - Changing the default binding affects new captures only. Existing source records keep their prior `rootId`, so a preference change cannot silently retarget evidence.
-- An unavailable root binding is an external dependency and makes affected jobs `waiting_dependency`; Pige must not guess another path.
+- An unavailable root binding is an external dependency and makes affected jobs `waiting_dependency`; Pige must not guess or reveal a substitute path.
 
 Initial `.pige/config.json` shape:
 
@@ -321,7 +321,7 @@ Initial `.pige/config.json` shape:
 Rules:
 
 - `defaultStrategy` applies to new captures only.
-- `sourceAssetRootKind` and `inVaultSourceAssetRoot` are schema-v1 compatibility field names for managed-copy placement. `inVaultSourceAssetRoot` is relative to the vault root and defaults to `raw`.
+- `sourceAssetRootKind` and `inVaultSourceAssetRoot` are schema-v1 compatibility field names for managed-copy placement. `inVaultSourceAssetRoot` is a canonical portable path relative to the vault root and defaults to `raw`.
 - A future config rename to `managedCopyRootKind`/`inVaultManagedCopyRoot` is a versioned additive migration; v1 readers/writers remain supported until that migration ships.
 - Active vault path, recent vault list, external managed-copy root absolute paths, provider secrets, permission grants, and update state are not allowed in this file.
 

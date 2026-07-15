@@ -867,12 +867,35 @@ export const VaultManifestSchema = z.object({
   restored_from_backup_id: BackupIdSchema.optional()
 }).passthrough();
 
+export const InVaultSourceAssetRootSchema = z.string()
+  .min(1)
+  .max(240)
+  .superRefine((value, context) => {
+    const segments = value.split("/");
+    if (
+      value !== value.trim() ||
+      value === "." ||
+      value === ".." ||
+      value.startsWith("/") ||
+      value.includes("\\") ||
+      /^[A-Za-z]:/u.test(value) ||
+      segments.some((segment) => !segment || segment === "." || segment === "..")
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "The in-vault source asset root must be a canonical portable relative path."
+      });
+    }
+  });
+
+export const VaultRevealTargetSchema = z.enum(["knowledge_root", "source_asset_root"]);
+
 export const VaultConfigSchema = z.object({
   schemaVersion: z.literal(1),
   sourceStorage: z.object({
     defaultStrategy: SourceStorageStrategySchema,
     sourceAssetRootKind: SourceAssetRootKindSchema,
-    inVaultSourceAssetRoot: z.string().min(1)
+    inVaultSourceAssetRoot: InVaultSourceAssetRootSchema
   }),
   backup: z.object({
     includeConversations: z.boolean(),
@@ -1551,6 +1574,25 @@ export const PigeErrorSummarySchema = PigeErrorCoreSchema.extend({
   modelEgressApprovalRequestId: ModelEgressApprovalRequestIdSchema.optional(),
   diagnosticErrorId: z.string().min(1).max(120).optional()
 }).strict().superRefine(requireErrorDomainMatchesCode);
+
+export const VaultRevealResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("revealed"),
+    target: VaultRevealTargetSchema
+  }).strict(),
+  z.object({
+    status: z.literal("failed"),
+    target: VaultRevealTargetSchema,
+    error: z.object({
+      code: z.literal("vault.reveal_failed"),
+      domain: z.literal("vault"),
+      messageKey: z.literal("errors.vault.reveal_failed"),
+      retryable: z.literal(true),
+      severity: z.literal("warning"),
+      userAction: z.literal("retry")
+    }).strict()
+  }).strict()
+]);
 
 export const PigeErrorSchema = PigeErrorCoreSchema.extend({
   jobId: JobIdSchema.optional(),
@@ -2277,6 +2319,8 @@ export type PigeErrorAction = z.infer<typeof PigeErrorActionSchema>;
 export type PigeErrorDomain = z.infer<typeof PigeErrorDomainSchema>;
 export type PigeErrorSeverity = z.infer<typeof PigeErrorSeveritySchema>;
 export type PigeErrorSummary = z.infer<typeof PigeErrorSummarySchema>;
+export type VaultRevealResult = z.infer<typeof VaultRevealResultSchema>;
+export type VaultRevealTarget = z.infer<typeof VaultRevealTargetSchema>;
 export type PigeWarning = z.infer<typeof PigeWarningSchema>;
 export type PermissionActionBinding = z.infer<typeof PermissionActionBindingSchema>;
 export type PermissionActionLifecycleRecord = z.infer<typeof PermissionActionLifecycleRecordSchema>;

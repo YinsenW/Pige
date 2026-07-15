@@ -53,11 +53,7 @@
       "builds": ["B9.07", "B9.08"],
       "exits": ["E9.03", "E9.04"]
     },
-    "vault.storage-settings-layout": {
-      "requirement": "PIGE-VAULT-005",
-      "builds": ["B1.02", "B1.04", "B1.05", "B1.06"],
-      "exits": ["E1.01", "E1.03", "E1.04"]
-    },
+    "vault.storage-settings-layout":{"requirement":"PIGE-VAULT-005","builds":["B1.02","B1.04","B1.05","B1.06"],"exits":["E1.01","E1.03","E1.04"]},
     "vault.atomic-conflict": {
       "requirement": "PIGE-VAULT-006",
       "builds": ["B1.25"],
@@ -726,119 +722,17 @@
         ]
       }
     },
-    "PIGE-VAULT-004": {
-      "status": "partial",
-      "evidence": ["EV-BACKUP", "EV-ACTIVITY-UNDO"],
-      "open": {
-        "id": "OPEN-REQ-PIGE-VAULT-004",
-        "description": "Other classes and restore/compaction/cleanup/reset/package/migration tests remain.",
-        "targetBuilds": ["B9.07", "B9.08"],
-        "targetExits": ["E9.03", "E9.04"]
-      }
-    },
-    "PIGE-VAULT-005": {
-      "status": "partial",
-      "evidence": [
-        "EV-VAULT-LAYOUT",
-        "EV-VAULT-POLICY"
-      ],
-      "open": {
-        "id": "OPEN-REQ-PIGE-VAULT-005",
-        "description": "Complete Settings UI acceptance for root switching, recent vaults, and backup/restore entry points remains open.",
-        "targetBuilds": [
-          "B1.02",
-          "B1.04",
-          "B1.05",
-          "B1.06"
-        ],
-        "targetExits": [
-          "E1.01",
-          "E1.03",
-          "E1.04"
-        ]
-      }
-    },
+    "PIGE-VAULT-004":{"status":"partial","evidence":["EV-BACKUP","EV-ACTIVITY-UNDO"],"open":{"id":"OPEN-REQ-PIGE-VAULT-004","description":"Other classes and restore/compaction/cleanup/reset/package/migration tests remain.","targetBuilds":["B9.07","B9.08"],"targetExits":["E9.03","E9.04"]}},
+    "PIGE-VAULT-005":{"status":"partial","evidence":["EV-VAULT-LAYOUT","EV-VAULT-POLICY","EV-VAULT-REVEAL-SCHEMA","EV-VAULT-REVEAL-IPC","EV-VAULT-REVEAL-FENCE","EV-VAULT-REVEAL-UI"],"open":{"id":"OPEN-REQ-PIGE-VAULT-005","description":"Storage reveal is pathless and fenced; root switching, external binding setup, recent vaults, and Settings breadth remain open.","targetBuilds":["B1.02","B1.04","B1.05","B1.06"],"targetExits":["E1.01","E1.03","E1.04"]}},
     "PIGE-VAULT-006":{"status":"partial","evidence":["EV-MARKDOWN-ATOMIC","EV-DB-EXTERNAL-EDIT","EV-SOURCE-PAGE-CONFLICT-PRESERVATION","EV-SOURCE-PAGE-SOURCE-REVISION","EV-GENERATED-NOTE-FINAL-FENCE","EV-GENERATED-NOTE-CONFLICT-PRESERVATION","EV-VAULT-WRITER-LEASE","EV-VAULT-LEASE-FENCE","EV-VAULT-STALE-REFRESH","EV-VAULT-SENTINEL-GENERATION","EV-RESTORE-BINDING-CAS"],"open":{"id":"OPEN-REQ-PIGE-VAULT-006","description":"The adopted vault/Job paths and Restore binding swap have fenced successor-safe single-writer/CAS coverage; user-visible conflict resolution, general cross-file/domain commit fences, the final filesystem-syscall TOCTOU interval, Windows proof, and broader destination binding remain open.","targetBuilds":["B1.25"],"targetExits":["E1.21"]}},
-    "PIGE-VAULT-007": {
-      "status": "partial",
-      "evidence": [
-        "EV-SYNC-CONFLICT",
-        "EV-SCHEMAS"
-      ],
-      "open": {
-        "id": "OPEN-REQ-PIGE-VAULT-007",
-        "description": "Complete revision and tombstone fields plus conflict-detection fixtures remain open.",
-        "targetBuilds": [
-          "B1.21"
-        ],
-        "targetExits": [
-          "E1.17"
-        ]
-      }
-    },
-    "PIGE-SCHEMA-001": {
-      "status": "partial",
-      "evidence": ["EV-MARKDOWN", "EV-AGENT-INGEST", "EV-SOURCE-PAGE-PATH-PROJECTION", "EV-TAG-NORMALIZATION"],
-      "open": {
-        "id": "OPEN-REQ-PIGE-SCHEMA-001",
-        "description": "All managed page types and bounded sidecar fields still need schema round-trip coverage.",
-        "targetBuilds": [
-          "B3.08",
-          "B3.09"
-        ],
-        "targetExits": [
-          "E3.04"
-        ]
-      }
-    },
-    "PIGE-KNOW-001": {
-      "status": "partial",
-      "evidence": ["EV-LIBRARY", "EV-DB-LINKS", "EV-DB-TAGS"],
-      "open": {
-        "id": "OPEN-REQ-PIGE-KNOW-001",
-        "description": "Durable lifecycle fixtures for topic, concept, entity, claim, and question pages remain open.",
-        "targetBuilds": ["B4.01", "B4.06", "B4.07", "B4.08"],
-        "targetExits": ["E4.01", "E4.04", "E4.05", "E4.06"]
-      }
-    },
-    "PIGE-KNOW-002": {
-      "status": "partial",
-      "evidence": ["EV-DB-LINKS", "EV-KNOWLEDGE-TREE-AGGREGATE", "EV-KNOWLEDGE-TREE-SERVICE", "EV-KNOWLEDGE-TREE-UI"],
-      "open": {
-        "id": "OPEN-REQ-PIGE-KNOW-002",
-        "description": "Public body-free tree navigation works; broader relationship/branch inputs, 10k worker-backed and incremental rebuild proof, and packaged-platform aggregate parity remain open.",
-        "targetBuilds": ["B6.09", "B6.12"],
-        "targetExits": ["E6.07"]
-      }
-    },
-    "PIGE-KNOW-003": {
-      "status": "partial",
-      "evidence": ["EV-PROPOSAL", "EV-PI-INGEST-LINK", "EV-LINK-RECOVERY", "EV-PI-INGEST-TAGS", "EV-TAG-RECOVERY"],
-      "open": {
-        "id": "OPEN-REQ-PIGE-KNOW-003",
-        "description": "One cited directed link and bounded additive tags on clean generated notes are proved; removal/replacement/synonyms, other pages/types/organization, conflicts, CAS, and platforms remain.",
-        "targetBuilds": ["B7.01", "B7.02", "B7.03", "B7.04"],
-        "targetExits": ["E7.01"]
-      }
-    },
-    "PIGE-KNOW-004": {
-      "status": "planned",
-      "plannedTarget": "Full Knowledge Tree acceptance across broader aggregate semantics, scale/incremental rebuild, health/edit boundaries, and signed packaged platforms."
-    },
-    "PIGE-KNOW-005": {
-      "status": "planned",
-      "plannedTarget": "Deterministic issue detection plus autonomous-repair/Undo and exact-exception routing fixtures."
-    },
-    "PIGE-KNOW-006": {
-      "status": "partial",
-      "evidence": ["EV-AGENT-INGEST", "EV-CREATE-RECOVERY", "EV-PI-INGEST-UPDATE", "EV-UPDATE-RECOVERY"],
-      "open": {
-        "id": "OPEN-REQ-PIGE-KNOW-006",
-        "description": "Outcomes and recovery refs beyond exact create/additive update remain.",
-        "targetBuilds": ["B3.06", "B3.07", "B3.08", "B3.09", "B3.10", "B3.12"],
-        "targetExits": ["E3.04", "E3.05", "E3.07"]
-      }
-    },
+    "PIGE-VAULT-007":{"status":"partial","evidence":["EV-SYNC-CONFLICT","EV-SCHEMAS"],"open":{"id":"OPEN-REQ-PIGE-VAULT-007","description":"Complete revision and tombstone fields plus conflict-detection fixtures remain open.","targetBuilds":["B1.21"],"targetExits":["E1.17"]}},
+    "PIGE-SCHEMA-001":{"status":"partial","evidence":["EV-MARKDOWN","EV-AGENT-INGEST","EV-SOURCE-PAGE-PATH-PROJECTION","EV-TAG-NORMALIZATION"],"open":{"id":"OPEN-REQ-PIGE-SCHEMA-001","description":"All managed page types and bounded sidecar fields still need schema round-trip coverage.","targetBuilds":["B3.08","B3.09"],"targetExits":["E3.04"]}},
+    "PIGE-KNOW-001":{"status":"partial","evidence":["EV-LIBRARY","EV-DB-LINKS","EV-DB-TAGS"],"open":{"id":"OPEN-REQ-PIGE-KNOW-001","description":"Durable lifecycle fixtures for topic, concept, entity, claim, and question pages remain open.","targetBuilds":["B4.01","B4.06","B4.07","B4.08"],"targetExits":["E4.01","E4.04","E4.05","E4.06"]}},
+    "PIGE-KNOW-002":{"status":"partial","evidence":["EV-DB-LINKS","EV-KNOWLEDGE-TREE-AGGREGATE","EV-KNOWLEDGE-TREE-SERVICE","EV-KNOWLEDGE-TREE-UI"],"open":{"id":"OPEN-REQ-PIGE-KNOW-002","description":"Public body-free tree navigation works; broader relationship/branch inputs, 10k worker-backed and incremental rebuild proof, and packaged-platform aggregate parity remain open.","targetBuilds":["B6.09","B6.12"],"targetExits":["E6.07"]}},
+    "PIGE-KNOW-003":{"status":"partial","evidence":["EV-PROPOSAL","EV-PI-INGEST-LINK","EV-LINK-RECOVERY","EV-PI-INGEST-TAGS","EV-TAG-RECOVERY"],"open":{"id":"OPEN-REQ-PIGE-KNOW-003","description":"One cited directed link and bounded additive tags on clean generated notes are proved; removal/replacement/synonyms, other pages/types/organization, conflicts, CAS, and platforms remain.","targetBuilds":["B7.01","B7.02","B7.03","B7.04"],"targetExits":["E7.01"]}},
+    "PIGE-KNOW-004":{"status":"planned","plannedTarget":"Full Knowledge Tree acceptance across broader aggregate semantics, scale/incremental rebuild, health/edit boundaries, and signed packaged platforms."},
+    "PIGE-KNOW-005":{"status":"planned","plannedTarget":"Deterministic issue detection plus autonomous-repair/Undo and exact-exception routing fixtures."},
+    "PIGE-KNOW-006":{"status":"partial","evidence":["EV-AGENT-INGEST","EV-CREATE-RECOVERY","EV-PI-INGEST-UPDATE","EV-UPDATE-RECOVERY"],"open":{"id":"OPEN-REQ-PIGE-KNOW-006","description":"Outcomes and recovery refs beyond exact create/additive update remain.","targetBuilds":["B3.06","B3.07","B3.08","B3.09","B3.10","B3.12"],"targetExits":["E3.04","E3.05","E3.07"]}},
     "PIGE-JOB-001":{"status":"partial","evidence":["EV-JOB-RECOVERY","EV-HOME-AGENT","EV-PI-PDF-PARSE-TOOL","EV-PI-PDF-OCR-TOOL","EV-PI-OFFICE-PARSE-OCR-TOOL","EV-PI-IMAGE-OCR-TOOL","EV-PARSE-FOLLOWUP-DURABILITY","EV-OCR-FOLLOWUP-DURABILITY","EV-PI-DATASET-INGEST","EV-DATASET-CONTINUATION","EV-DATASET-CONTINUATION-RESTART","EV-BACKUP-JOB-LIFECYCLE","EV-RESTORE-JOB-RECOVERY"],"open":{"id":"OPEN-REQ-PIGE-JOB-001","description":"Home, Dataset, Backup and Restore are Job-first; remaining parser, permission and migration paths need assertions.","targetBuilds":["B2.08"],"targetExits":["E2.01"]}},
     "PIGE-JOB-002":{"status":"partial","evidence":["EV-JOB-DRAIN","EV-JOB-RECOVERY","EV-HOME-JOB-RECOVERY","EV-HOME-AGENT","EV-HOME-FOLLOWUP","EV-PI-PDF-PARSE-TOOL","EV-PI-PDF-OCR-TOOL","EV-PI-OFFICE-PARSE-OCR-TOOL","EV-PI-IMAGE-OCR-TOOL","EV-PI-INGEST-PROPOSAL","EV-PROPOSAL-REVIEW-LIFECYCLE","EV-ACTIVITY-UNDO","EV-CREATE-RECOVERY","EV-UPDATE-RECOVERY","EV-JOB-CANCEL","EV-JOB-DURABLE-CANCEL","EV-CAPTURE-PUBLICATION-GUARD","EV-AGENT-PUBLICATION-CANCEL","EV-PDF-OCR-SOURCE-REVISION","EV-PDF-RENDER-GENERATION","EV-INDEX-REBUILD-WORKER","EV-PI-DATASET-INGEST","EV-DATASET-SERVICE","EV-DATASET-WORKER-SMOKE","EV-DATASET-CONTINUATION","EV-DATASET-CONTINUATION-RESTART","EV-JOB-RECORD-CAS","EV-JOB-CLAIM-RECOVERY","EV-JOB-CLAIM-INDEPENDENCE","EV-MODEL-EGRESS-APPROVAL-STORE","EV-MODEL-EGRESS-JOB-RECOVERY","EV-BACKUP-JOB-LIFECYCLE","EV-RESTORE-ROLLBACK-RECOVERY","EV-RESTORE-JOB-RECOVERY","EV-RESTORE-STARTUP-ADOPTION"],"open":{"id":"OPEN-REQ-PIGE-JOB-002","description":"Adopted paths include fenced CAS plus egress, Backup and Restore recovery; other classes, Pi transcript continuation, general atomicity, final-syscall TOCTOU and Windows multi-process proof remain.","targetBuilds":["B2.08","B2.11"],"targetExits":["E2.01","E2.10"]}},
     "PIGE-JOB-003":{"status":"partial","evidence":["EV-PROPOSAL","EV-PI-INGEST-PROPOSAL","EV-PROPOSAL-REVIEW-LIFECYCLE","EV-PROPOSAL-UI"],"open":{"id":"OPEN-REQ-PIGE-JOB-003","description":"Current review is transitional; autonomous eligibility, generic exceptions, and cross-process work remain.","targetBuilds":["B7.01","B7.02","B7.03","B7.04"],"targetExits":["E7.01"]}},
@@ -846,39 +740,11 @@
     "PIGE-JOB-005":{"status":"partial","evidence":["EV-AGENT-INGEST","EV-PROPOSAL-REVIEW-LIFECYCLE","EV-ACTIVITY-UNDO","EV-CREATE-RECOVERY","EV-PI-INGEST-UPDATE","EV-UPDATE-RECOVERY"],"open":{"id":"OPEN-REQ-PIGE-JOB-005","description":"Legacy hashless create recovery and Agent writes beyond exact create/additive update remain.","targetBuilds":["B7.04"],"targetExits":["E7.01"]}},
     "PIGE-JOB-006":{"status":"partial","evidence":["EV-CAPTURE","EV-HOME-AGENT","EV-HOME-FOLLOWUP","EV-DATASET-QUERY-DURABILITY","EV-DATASET-QUERY-INTEGRITY","EV-DATASET-TIMELINE-RESTORE"],"open":{"id":"OPEN-REQ-PIGE-JOB-006","description":"Dataset result restart and checksum rejection work; compaction, cross-process kill/reopen, and packaged history proof remain.","targetBuilds":["B7.08","B7.09"],"targetExits":["E7.03","E7.04"]}},
     "PIGE-JOB-007":{"status":"partial","evidence":["EV-JOB-STATUS","EV-JOB-WAIT","EV-JOB-CANCEL","EV-HOME-UI","EV-HOME-FOLLOWUP","EV-SOURCE-WAIT-STATUS","EV-SOURCE-WAIT-RACE","EV-ACTIVITY-UNDO","EV-MODEL-EGRESS-HOME-UI"],"open":{"id":"OPEN-REQ-PIGE-JOB-007","description":"Preserved-source model wait and exact model-egress confirmation each have one status owner/action; broader Activity, progress, non-Agent cancel, and Permission Broker UI remain.","targetBuilds":["B2.10","B2.12"],"targetExits":["E2.09"]}},
-    "PIGE-JOB-008": {
-      "status": "verified",
-      "evidence": [
-        "EV-DURABLE-VOCAB"
-      ]
-    },
-    "PIGE-API-001": {
-      "status": "verified",
-      "evidence": [
-        "EV-BOUNDARY"
-      ]
-    },
+    "PIGE-JOB-008":{"status":"verified","evidence":["EV-DURABLE-VOCAB"]},
+    "PIGE-API-001":{"status":"verified","evidence":["EV-BOUNDARY"]},
     "PIGE-API-002":{"status":"partial","evidence":["EV-ERROR","EV-PI-TERMINAL-MISSING","EV-MODEL-EGRESS-IPC","EV-MODEL-EGRESS-SCHEMA","EV-BACKUP-SAFE-JOB-SUMMARY"],"open":{"id":"OPEN-REQ-PIGE-API-002","description":"Model-egress and Backup summaries use strict typed errors; complete service, diagnostics and UI adoption remains.","targetBuilds":["B1.20"],"targetExits":["E1.16"]}},
-    "PIGE-DB-001": {
-      "status": "verified",
-      "evidence": ["EV-DB-REBUILD", "EV-DB-EXTERNAL-EDIT", "EV-INDEX-REBUILD-WORKER"]
-    },
-    "PIGE-DB-002": {
-      "status": "partial",
-      "evidence": [
-        "EV-DB-DRIVER"
-      ],
-      "open": {
-        "id": "OPEN-REQ-PIGE-DB-002",
-        "description": "Schema and migration coverage for graph, job, chunk, memory, and rebuild-status domains remains open.",
-        "targetBuilds": [
-          "B4.01"
-        ],
-        "targetExits": [
-          "E4.05"
-        ]
-      }
-    },
+    "PIGE-DB-001":{"status":"verified","evidence":["EV-DB-REBUILD","EV-DB-EXTERNAL-EDIT","EV-INDEX-REBUILD-WORKER"]},
+    "PIGE-DB-002":{"status":"partial","evidence":["EV-DB-DRIVER"],"open":{"id":"OPEN-REQ-PIGE-DB-002","description":"Schema and migration coverage for graph, job, chunk, memory, and rebuild-status domains remains open.","targetBuilds":["B4.01"],"targetExits":["E4.05"]}},
     "PIGE-DATA-001": {
       "status": "planned",
       "plannedTarget": "Lossless preserve-first CSV/XLSX/SQLite Dataset import, manifest/schema/revision, no-execution, recovery, and backup fixtures."
@@ -1458,7 +1324,7 @@
         ]
       }
     },
-    "E1.04":{"status":"partial","evidence":["EV-VAULT-POLICY","EV-BACKUP-SETTINGS-UI"],"open":{"id":"OPEN-EXIT-E1.04","description":"Backup/restore entry and user Backup status are covered; full storage reveal/switch/create acceptance remains.","targetBuilds":["B1.04"],"targetExits":["E1.04"]}},
+    "E1.04":{"status":"partial","evidence":["EV-VAULT-POLICY","EV-BACKUP-SETTINGS-UI","EV-VAULT-REVEAL-SCHEMA","EV-VAULT-REVEAL-IPC","EV-VAULT-REVEAL-FENCE","EV-VAULT-REVEAL-UI"],"open":{"id":"OPEN-EXIT-E1.04","description":"Backup/restore, user Backup status, and safe storage reveal are covered; switching, external binding setup, and broader create acceptance remain.","targetBuilds":["B1.04"],"targetExits":["E1.04"]}},
     "E1.05":{"status":"partial","evidence":["EV-SETTINGS","EV-LOCAL-SETTINGS","EV-FIRST-HOME-PREFERENCE","EV-BACKUP-SETTINGS-UI"],"open":{"id":"OPEN-EXIT-E1.05","description":"User Backup ownership is registered; the complete settings census and backup-input exclusion matrix remain.","targetBuilds":["B1.10","B1.11"],"targetExits":["E1.05"]}},
     "E1.06": {
       "status": "partial",
@@ -2254,6 +2120,10 @@
     "EV-VAULT-STALE-REFRESH": { "kind": "test", "path": "tests/unit/vault-writer-lease.test.ts", "selector": "does not remove a lock whose heartbeat becomes fresh at stale-cleanup commit" },
     "EV-VAULT-SENTINEL-GENERATION": { "kind": "test", "path": "tests/unit/vault-writer-lease.test.ts", "selector": "rejects an in-place sentinel generation change even when file identity is unchanged" },
     "EV-VAULT-RESET": { "kind": "test", "path": "tests/unit/vault-layout.test.ts", "selector": "resets only rebuildable database and index roots" },
+    "EV-VAULT-REVEAL-SCHEMA": { "kind": "test", "path": "tests/unit/schemas.test.ts", "selector": "keeps vault reveal results strict and pathless" },
+    "EV-VAULT-REVEAL-IPC": { "kind": "test", "path": "tests/unit/desktop-shell-contract.test.ts", "selector": "keeps storage reveal main-owned, window-bound, strictly projected, and pathless" },
+    "EV-VAULT-REVEAL-FENCE": { "kind": "test", "path": "tests/unit/vault-service-writer-lease.test.ts", "selector": "reveals only canonical active storage roots and treats operating-system failures as body-free results" },
+    "EV-VAULT-REVEAL-UI": { "kind": "test", "path": "tests/unit/restore-ui.test.ts", "selector": "owns storage reveal busy, failure, retry, and focus without exposing raw paths" },
     "EV-SCHEMAS": { "kind": "implementation", "path": "packages/schemas/src/index.ts", "selector": "export const PageIdSchema" },
     "EV-STABLE-ID": { "kind": "test", "path": "tests/unit/domain.test.ts", "selector": "creates sync-ready local vault IDs" },
     "EV-SYNC-CONFLICT": { "kind": "test", "path": "tests/unit/durable-contract-schemas.test.ts", "selector": "uses one stable ID vocabulary and rejects retired aliases" },
