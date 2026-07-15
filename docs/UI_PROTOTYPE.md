@@ -677,15 +677,17 @@ Prototype:
 
 Sources is a tab inside Library in v0.1. The sidebar can still expose it as a shortcut later if usage proves it deserves top-level placement.
 
-Phase 2/3 implementation bridge:
+Current Library bridge:
 
-- The sidebar exposes a single Library entry.
-- The Library panel may initially show a simple frontmatter-derived list of source and wiki pages.
-- It should show page title, type, status, relative page path, language, and source count only.
-- Library rows can open a minimal rendered reader for the selected page.
-- Full Library tree, source tabs, related pages, edit mode, Note Agent, selection actions, reveal-source actions, and Knowledge Tree remain later UI slices.
-- A structured Source may link to its Dataset result. Source evidence and Dataset
-  knowledge remain distinct, and both open within Library.
+- Lists body-free page summaries and opens Reader through stable page IDs.
+- Local active-vault search accepts at most 320 Unicode code points. All, Notes, Sources,
+  and Topics select declared page types; Tags is localized development/unavailable and
+  invokes no IPC or Job.
+- No active vault means no request. Stale requests/vaults fail closed; results show bounded
+  snippets and localized match reasons, never score percentages, raw errors, IDs, or paths.
+  Retry restores focus.
+- Source evidence and Dataset knowledge remain distinct. Editing, source reveal, Note
+  Agent, selection actions, and Tags search remain open.
 
 ## 10. Topics And Tags
 

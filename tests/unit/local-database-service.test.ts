@@ -428,17 +428,25 @@ Beta conclusion.`
       });
       const filePath = path.join(vaultPath, relativePath);
       const retiredPath = `${filePath}.retired`;
-      const originalRead = fs.readFileSync.bind(fs);
+      const originalRead = fs.readSync.bind(fs);
+      let readCalls = 0;
       let replaced = false;
-      const readSpy = vi.spyOn(fs, "readFileSync").mockImplementation(((target: fs.PathOrFileDescriptor, options?: unknown) => {
-        const result = (originalRead as (...args: unknown[]) => unknown)(target, options);
-        if (typeof target === "number" && !replaced) {
+      const readSpy = vi.spyOn(fs, "readSync").mockImplementation(((
+        fileDescriptor: number,
+        buffer: NodeJS.ArrayBufferView,
+        offset: number,
+        length: number,
+        position: fs.ReadPosition | null
+      ) => {
+        const result = originalRead(fileDescriptor, buffer, offset, length, position);
+        readCalls += 1;
+        if (readCalls === 2 && !replaced) {
           replaced = true;
           fs.renameSync(filePath, retiredPath);
           fs.writeFileSync(filePath, fs.readFileSync(retiredPath));
         }
         return result;
-      }) as typeof fs.readFileSync);
+      }) as typeof fs.readSync);
       try {
         expect(() => new LocalDatabaseService().rebuild(vaultPath)).toThrow(
           "Markdown changed while the local index was rebuilding"

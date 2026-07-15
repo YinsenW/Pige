@@ -42,7 +42,7 @@ export interface MarkdownFileSignatureRecord {
   readonly fileId: string;
 }
 
-const FRONTMATTER_READ_LIMIT_BYTES = 64 * 1024;
+export const MARKDOWN_FRONTMATTER_READ_LIMIT_BYTES = 64 * 1024;
 const PAGE_ROOTS = ["sources", "wiki"] as const;
 
 export function scanMarkdownPages(vaultPath: string): MarkdownPageScanResult {
@@ -158,10 +158,47 @@ export function readMarkdownPageByRelativePath(
   }
 }
 
-export function readMarkdownPageBody(filePath: string | number): string {
-  const markdown = fs.readFileSync(filePath, "utf8");
+export function readMarkdownPageBody(filePath: string | number, maxBytes?: number): string {
+  const markdown = maxBytes === undefined
+    ? fs.readFileSync(filePath, "utf8")
+    : readBoundedUtf8(filePath, maxBytes);
   const parsed = parsePigeFrontmatter(markdown);
   return parsed ? markdown.slice(parsed.bodyStartOffset).trimStart() : markdown;
+}
+
+export function readMarkdownPageBodyAtSignature(
+  vaultPath: string,
+  expected: MarkdownFileSignatureRecord,
+  maxBytes: number
+): string {
+  let descriptor: number | undefined;
+  try {
+    assertMarkdownPagePathConfined(vaultPath, expected.absolutePath);
+    descriptor = fs.openSync(
+      expected.absolutePath,
+      fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0)
+    );
+    const before = fs.fstatSync(descriptor);
+    if (before.isSymbolicLink() || !before.isFile() || !matchesSignature(before, expected)) {
+      throw new Error("Markdown file changed before its body was read.");
+    }
+    const body = readMarkdownPageBody(descriptor, maxBytes);
+    const after = fs.fstatSync(descriptor);
+    const named = fs.lstatSync(expected.absolutePath);
+    assertMarkdownPagePathConfined(vaultPath, expected.absolutePath);
+    if (
+      !sameFileIdentity(before, after) ||
+      named.isSymbolicLink() ||
+      !named.isFile() ||
+      !sameFileIdentity(before, named) ||
+      !matchesSignature(after, expected)
+    ) {
+      throw new Error("Markdown file changed while its body was read.");
+    }
+    return body;
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
+  }
 }
 
 function readMarkdownPageRecord(
@@ -262,7 +299,7 @@ function readFilePrefix(filePath: string, expected?: MarkdownFileSignatureRecord
     if (before.isSymbolicLink() || !before.isFile() || (expected && !matchesSignature(before, expected))) {
       throw new Error("Markdown file changed before its frontmatter was read.");
     }
-    const bytesToRead = Math.min(before.size, FRONTMATTER_READ_LIMIT_BYTES);
+    const bytesToRead = Math.min(before.size, MARKDOWN_FRONTMATTER_READ_LIMIT_BYTES);
     const buffer = Buffer.alloc(bytesToRead);
     const bytesRead = fs.readSync(file, buffer, 0, bytesToRead, 0);
     const after = fs.fstatSync(file);
@@ -279,6 +316,27 @@ function readFilePrefix(filePath: string, expected?: MarkdownFileSignatureRecord
     return buffer.subarray(0, bytesRead).toString("utf8");
   } finally {
     fs.closeSync(file);
+  }
+}
+
+function readBoundedUtf8(filePath: string | number, maxBytes: number): string {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
+    throw new Error("Markdown read bound must be a positive safe integer.");
+  }
+  const descriptor = typeof filePath === "number"
+    ? filePath
+    : fs.openSync(filePath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+  try {
+    const stat = fs.fstatSync(descriptor);
+    if (stat.isSymbolicLink() || !stat.isFile()) {
+      throw new Error("Markdown body must remain a regular file.");
+    }
+    const bytesToRead = Math.min(stat.size, maxBytes);
+    const buffer = Buffer.alloc(bytesToRead);
+    const bytesRead = fs.readSync(descriptor, buffer, 0, bytesToRead, 0);
+    return buffer.subarray(0, bytesRead).toString("utf8");
+  } finally {
+    if (typeof filePath !== "number") fs.closeSync(descriptor);
   }
 }
 

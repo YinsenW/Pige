@@ -19,6 +19,15 @@ import { getWindowShellOptions } from "../../apps/desktop/src/main/window-shell-
 describe("desktop shell build contract", () => {
   it("uses a CommonJS preload entry compatible with Electron sandboxed preload execution", () => {
     expect(PRELOAD_ENTRY_FILENAME).toBe("index.cjs");
+
+    const buildSource = fs.readFileSync(path.resolve("apps/desktop/electron.vite.config.ts"), "utf8");
+    const preloadConfig = buildSource.slice(
+      buildSource.indexOf("preload: {"),
+      buildSource.indexOf("renderer: {")
+    );
+    expect(preloadConfig).toContain('exclude: ["@pige/domain", "@pige/schemas", "zod"]');
+    expect(preloadConfig).toContain('"@pige/schemas": alias("../../packages/schemas/src/index.ts")');
+    expect(preloadConfig).toContain('"@pige/domain": alias("../../packages/domain/src/index.ts")');
   });
 
   it("keeps the PDF parser worker build name aligned with its runtime URL", () => {
@@ -361,6 +370,27 @@ describe("desktop shell build contract", () => {
     expect(retryHandler).toContain('result.job?.class === "agent_turn"');
     expect(retryHandler).toContain("scheduleAgentIngestProcessing()");
     expect(retryHandler).toContain("scheduleAgentTurnProcessing()");
+  });
+
+  it("runtime-validates retrieval.search at preload and main boundaries", () => {
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const ipcSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/services/retrieval-search-ipc.ts"),
+      "utf8"
+    );
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+
+    expect(mainSource).toContain("handleRetrievalSearchIpc(request, getRetrievalService())");
+    expect(ipcSource).toContain("RetrievalSearchRequestSchema.safeParse(request)");
+    expect(ipcSource).toContain("rawResult = retrieval.search(parsedRequest.data)");
+    expect(ipcSource).toContain('PigeDomainError("rag.search_unavailable"');
+    expect(ipcSource).toContain("RetrievalSearchResultSchema.safeParse(rawResult)");
+    expect(preloadSource).toContain("RetrievalSearchRequestSchema.safeParse(request)");
+    expect(preloadSource).toContain('const response: unknown = await ipcRenderer.invoke("retrieval.search", parsedRequest.data)');
+    expect(preloadSource).toContain("RetrievalSearchResultSchema.safeParse(response)");
+    expect(preloadSource).not.toContain(
+      'ipcRenderer.invoke("retrieval.search", request) as Promise<RetrievalSearchResult>'
+    );
   });
 
   it("exposes one-use Model Egress decisions through strict main and preload boundaries", () => {

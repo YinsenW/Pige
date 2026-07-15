@@ -1252,6 +1252,73 @@ export const DatasetEvidenceRefSchema = z.object({
   }
 });
 
+const RetrievalVaultIdSchema = VaultIdSchema.max(128);
+const RetrievalPageIdSchema = PageIdSchema.max(128);
+const RetrievalSourceIdSchema = SourceIdSchema.max(128);
+const RetrievalRelativePagePathSchema = z.string().min(1).max(1_024).refine((value) => {
+  if (value.includes("\\") || /[\u0000-\u001f\u007f]/u.test(value)) return false;
+  const segments = value.split("/");
+  return (
+    (segments[0] === "wiki" || segments[0] === "sources") &&
+    segments.length >= 2 &&
+    segments.every((segment) => segment.length > 0 && segment !== "." && segment !== "..") &&
+    (segments.at(-1)?.toLocaleLowerCase("en-US").endsWith(".md") ?? false)
+  );
+}, "Retrieval page paths must identify a vault Markdown page.");
+
+export const RetrievalSearchScopeSchema = z.object({
+  kind: z.literal("active_vault"),
+  vaultId: RetrievalVaultIdSchema
+}).strict();
+
+export const RetrievalSearchRequestSchema = z.object({
+  scope: RetrievalSearchScopeSchema,
+  query: z.string().trim().min(1).refine(
+    (value) => Array.from(value).length <= 320,
+    "Retrieval queries must contain at most 320 Unicode characters."
+  ),
+  limit: z.number().int().min(1).max(20).optional(),
+  pageTypes: z.array(MarkdownPageTypeSchema).max(7).readonly().optional()
+}).strict();
+
+export const RetrievalSearchPageSummarySchema = z.object({
+  pageId: RetrievalPageIdSchema,
+  title: z.string().min(1).max(240),
+  pageType: MarkdownPageTypeSchema,
+  status: MarkdownPageStatusSchema,
+  pagePath: RetrievalRelativePagePathSchema,
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
+  language: z.string().min(1).max(64).optional(),
+  sourceIds: z.array(RetrievalSourceIdSchema).max(128).readonly()
+}).strict().transform((summary) => {
+  if (summary.language !== undefined) return { ...summary, language: summary.language };
+  const { language: _language, ...withoutLanguage } = summary;
+  return withoutLanguage;
+});
+
+export const RetrievalSearchResultItemSchema = z.object({
+  summary: RetrievalSearchPageSummarySchema,
+  score: z.number().finite(),
+  snippets: z.array(z.string().max(260)).max(3).readonly(),
+  matchReasons: z.array(z.string().min(1).max(80)).max(8).readonly()
+}).strict();
+
+export const RetrievalSearchResultSchema = z.object({
+  searchedAt: z.string().datetime({ offset: true }),
+  activeVaultId: RetrievalVaultIdSchema,
+  query: z.string().trim().min(1).refine(
+    (value) => Array.from(value).length <= 320,
+    "Retrieval queries must contain at most 320 Unicode characters."
+  ),
+  mode: z.enum(["lexical_markdown_scan", "lexical_sqlite_fts"]),
+  total: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  invalidPageCount: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  degraded: z.boolean(),
+  degradedReason: z.enum(["local_database_not_ready", "local_rag_not_installed"]).optional(),
+  results: z.array(RetrievalSearchResultItemSchema).max(20).readonly()
+}).strict();
+
 export const RetrievalAnswerCitationSchema = z.object({
   refId: z.string().min(1).max(64),
   label: z.string().min(1).max(160),
@@ -2343,6 +2410,10 @@ export type ProviderEndpointProtocol = z.infer<typeof ProviderEndpointProtocolSc
 export type ProviderAuthRequirement = z.infer<typeof ProviderAuthRequirementSchema>;
 export type ProviderProfile = z.infer<typeof ProviderProfileSchema>;
 export type ProviderProfilesFile = z.infer<typeof ProviderProfilesFileSchema>;
+export type RetrievalSearchRequest = z.infer<typeof RetrievalSearchRequestSchema>;
+export type RetrievalSearchResult = z.infer<typeof RetrievalSearchResultSchema>;
+export type RetrievalSearchResultItem = z.infer<typeof RetrievalSearchResultItemSchema>;
+export type RetrievalSearchScope = z.infer<typeof RetrievalSearchScopeSchema>;
 export type RetrievalAnswerCitation = z.infer<typeof RetrievalAnswerCitationSchema>;
 export type SettingApplyBehavior = z.infer<typeof SettingApplyBehaviorSchema>;
 export type SettingPermissionRequirement = z.infer<typeof SettingPermissionRequirementSchema>;

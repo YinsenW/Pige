@@ -18,6 +18,7 @@ import type {
   ProviderProfileSummary,
   RetrievalAnswerCitation,
   RetrievalAskResult,
+  RetrievalSearchRequest,
   RetrievalSearchResult,
   VaultSummary
 } from "@pige/contracts";
@@ -109,7 +110,7 @@ export interface HomeAgentModelPort {
 }
 
 export interface HomeAgentRetrievalPort {
-  search(request: HomeAgentAskRequest): RetrievalSearchResult;
+  search(request: RetrievalSearchRequest): RetrievalSearchResult;
   ask(request: HomeAgentAskRequest): RetrievalAskResult;
 }
 
@@ -1121,6 +1122,7 @@ export class HomeAgentService {
     datasetCatalogScope?: DatasetQueryCatalogScope
   ): Promise<{ readonly answer: AgentTurnAnswer; readonly sourceIds: readonly string[] }> {
     const query = request.text.trim();
+    const retrievalQuery = Array.from(query).slice(0, 320).join("");
     if (history.some((message) => containsRestrictedModelContent(message.text))) {
       throw new PigeDomainError(
         "model_egress.blocked",
@@ -1756,8 +1758,12 @@ export class HomeAgentService {
             );
           }
           searchToolUsed = true;
-          const result = this.#retrieval.search({ query, limit: 8 });
-          if (result.activeVaultId !== activeVault.vaultId || result.query !== query) {
+          const result = this.#retrieval.search({
+            scope: { kind: "active_vault", vaultId: activeVault.vaultId },
+            query: retrievalQuery,
+            limit: 8
+          });
+          if (result.activeVaultId !== activeVault.vaultId || result.query !== retrievalQuery) {
             throw new PigeDomainError(
               "rag.search_binding_invalid",
               "The local retrieval result does not match the active vault and exact Home turn."

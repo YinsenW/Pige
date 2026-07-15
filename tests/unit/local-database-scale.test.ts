@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
+import type { RetrievalSearchRequest } from "@pige/contracts";
 import { LibraryService } from "../../apps/desktop/src/main/services/library-service";
 import {
   LocalDatabaseService,
@@ -62,6 +63,10 @@ describe("local database scale evidence", () => {
       };
       const library = new LibraryService(vaultPort, database);
       const retrieval = new RetrievalService(vaultPort, database);
+      const retrievalScope: RetrievalSearchRequest["scope"] = {
+        kind: "active_vault",
+        vaultId: currentVault.vaultId
+      };
 
       expect(fixture).toMatchObject({ pageCount: PAGE_COUNT, expectedChunkCount: CHUNK_COUNT });
       expect(rebuilt).toMatchObject({ pageCount: PAGE_COUNT, invalidPageCount: 0 });
@@ -76,14 +81,14 @@ describe("local database scale evidence", () => {
       });
 
       library.list({ limit: 50 });
-      retrieval.search({ query: "bounded local retrieval", limit: 8 });
-      retrieval.search({ query: "本地规模检索", limit: 8 });
+      retrieval.search({ scope: retrievalScope, query: "bounded local retrieval", limit: 8 });
+      retrieval.search({ scope: retrievalScope, query: "本地规模检索", limit: 8 });
       const librarySamples = measureFive(() => library.list({ limit: 50 }));
-      const latinSamples = measureFive(() => retrieval.search({ query: "bounded local retrieval", limit: 8 }));
-      const cjkSamples = measureFive(() => retrieval.search({ query: "本地规模检索", limit: 8 }));
+      const latinSamples = measureFive(() => retrieval.search({ scope: retrievalScope, query: "bounded local retrieval", limit: 8 }));
+      const cjkSamples = measureFive(() => retrieval.search({ scope: retrievalScope, query: "本地规模检索", limit: 8 }));
       const libraryResult = library.list({ limit: 50 });
-      const latinResult = retrieval.search({ query: "bounded local retrieval", limit: 8 });
-      const cjkResult = retrieval.search({ query: "本地规模检索", limit: 8 });
+      const latinResult = retrieval.search({ scope: retrievalScope, query: "bounded local retrieval", limit: 8 });
+      const cjkResult = retrieval.search({ scope: retrievalScope, query: "本地规模检索", limit: 8 });
 
       expect(Math.max(...librarySamples)).toBeLessThan(LIBRARY_LIMIT_MS);
       expect(Math.max(...latinSamples)).toBeLessThan(SEARCH_LIMIT_MS);

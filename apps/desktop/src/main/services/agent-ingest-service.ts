@@ -1671,6 +1671,7 @@ export class AgentIngestService {
               const normalizedQuery = normalizeAgentRetrievalQuery(query);
               retrievalAttempted = true;
               const searchResult = retrieval.search(vaultPath, {
+                scope: { kind: "active_vault", vaultId: policy.vaultId },
                 query: normalizedQuery,
                 limit: MAX_AGENT_RETRIEVAL_RESULTS,
                 pageTypes: AGENT_RETRIEVAL_PAGE_TYPES

@@ -85,9 +85,29 @@ import type {
   VaultRevealTarget,
   VaultSummary
 } from "@pige/contracts";
+import {
+  RetrievalSearchRequestSchema,
+  RetrievalSearchResultSchema
+} from "@pige/schemas";
 
 function isRestoreMode(value: unknown): value is RestoreMode {
   return value === "clone_as_new" || value === "replace_existing";
+}
+
+async function invokeRetrievalSearch(request: RetrievalSearchRequest): Promise<RetrievalSearchResult> {
+  const parsedRequest = RetrievalSearchRequestSchema.safeParse(request);
+  if (!parsedRequest.success) throw new Error("Invalid local search request.");
+
+  const response: unknown = await ipcRenderer.invoke("retrieval.search", parsedRequest.data);
+  const parsedResponse = RetrievalSearchResultSchema.safeParse(response);
+  if (
+    !parsedResponse.success ||
+    parsedResponse.data.activeVaultId !== parsedRequest.data.scope.vaultId ||
+    parsedResponse.data.query !== parsedRequest.data.query
+  ) {
+    throw new Error("Invalid local search response.");
+  }
+  return parsedResponse.data;
 }
 
 function projectBackupManifestSummary(manifest: BackupManifestSummary): BackupManifestSummary {
@@ -293,8 +313,7 @@ const api: PigeDesktopApi = {
       ipcRenderer.invoke("notes.render", request) as Promise<NoteRenderResult>
   },
   retrieval: {
-    search: async (request: RetrievalSearchRequest): Promise<RetrievalSearchResult> =>
-      ipcRenderer.invoke("retrieval.search", request) as Promise<RetrievalSearchResult>
+    search: invokeRetrievalSearch
   },
   vault: {
     current: async (): Promise<VaultSummary | undefined> =>

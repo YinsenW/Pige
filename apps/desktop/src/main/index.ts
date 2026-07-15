@@ -34,7 +34,6 @@ import type {
   ProposalsListRequest,
   ProviderConnectResult,
   RetrievalAskRequest,
-  RetrievalSearchRequest,
   RestoreApplyRequest,
   RestoreApplyResult,
   RestorePreviewResult,
@@ -120,6 +119,7 @@ import { installRendererNavigationGuard } from "./services/renderer-navigation-g
 import { RestorePreviewRegistry } from "./services/restore-preview-registry";
 import { RestoreCoordinatorService } from "./services/restore-coordinator-service";
 import { writeBackupCreatedOperation } from "./services/restore-job-store";
+import { handleRetrievalSearchIpc } from "./services/retrieval-search-ipc";
 import { RetrievalService } from "./services/retrieval-service";
 import { JsonSecretStore } from "./services/secret-store";
 import { guardSettingAction, type SettingActionConfirmation } from "./services/setting-action-guard";
@@ -1248,7 +1248,9 @@ ipcMain.handle("proposals.approve", (_event, request: ProposalDecisionRequest) =
 ipcMain.handle("proposals.reject", (_event, request: ProposalDecisionRequest) =>
   getJobsService().rejectProposal(getProposalService(), request)
 );
-ipcMain.handle("retrieval.search", (_event, request: RetrievalSearchRequest) => getRetrievalService().search(request));
+ipcMain.handle("retrieval.search", (_event, request: unknown) =>
+  handleRetrievalSearchIpc(request, getRetrievalService())
+);
 ipcMain.handle("retrieval.ask", (_event, request: RetrievalAskRequest) => getRetrievalService().ask(request));
 ipcMain.handle("vault.current", () => getVaultService().current());
 ipcMain.handle("vault.recent", () => getVaultService().recent());

@@ -49,6 +49,8 @@ import type {
   RecentVaultSummary,
   RetrievalAnswerCitation,
   RetrievalAskResult,
+  RetrievalSearchRequest,
+  RetrievalSearchResult,
   RetrievalSearchResultItem,
   RestoreMode,
   RestorePreviewWarning,
@@ -211,6 +213,7 @@ export function App(): React.JSX.Element {
   const [activityBlockedIds, setActivityBlockedIds] = useState<readonly string[]>([]);
   const [readyProposals, setReadyProposals] = useState<readonly ProposalSummary[]>([]);
   const [libraryList, setLibraryList] = useState<LibraryListResult | null>(null);
+  const [librarySearchFocusRequest, setLibrarySearchFocusRequest] = useState(0);
   const [librarySidebarExpandedGroups, setLibrarySidebarExpandedGroups] = useState<ReadonlySet<string>>(
     () => new Set(["family:knowledge", "family:sources"])
   );
@@ -497,6 +500,25 @@ export function App(): React.JSX.Element {
     });
   };
 
+  const navigateLibrarySearch = async (): Promise<void> => {
+    noteOpenSequence.current += 1;
+    knowledgeTreeReturnFocusKey.current = null;
+    setSelectedNote(null);
+    setSelectedNoteRelated(null);
+    setDevelopmentNotice(null);
+    setView("library");
+    void refreshLibrary();
+    if (sidebarOverlayLayout && (windowState?.sidebarOpen ?? false)) {
+      try {
+        setWindowState(await window.pige.window.setSidebarOpen({ sidebarOpen: false }));
+      } finally {
+        setLibrarySearchFocusRequest((current) => current + 1);
+      }
+      return;
+    }
+    setLibrarySearchFocusRequest((current) => current + 1);
+  };
+
   const toggleAlwaysOnTop = async (): Promise<void> => {
     setWindowState(await window.pige.window.setAlwaysOnTop({ alwaysOnTop: !(windowState?.alwaysOnTop ?? false) }));
   };
@@ -756,7 +778,7 @@ export function App(): React.JSX.Element {
                 type="button"
                 aria-label={t("library.search")}
                 title={t("library.search")}
-                onClick={() => showDevelopmentCapability("reader", "knowledge_search")}
+                onClick={() => void navigateLibrarySearch()}
               >
                 <PigeIcon name="search" />
               </button>
@@ -852,6 +874,8 @@ export function App(): React.JSX.Element {
             error={libraryError}
             onGoHome={navigateHome}
             onRefresh={refreshLibrary}
+            onSearch={(request) => window.pige.retrieval.search(request)}
+            searchFocusRequest={librarySearchFocusRequest}
             onOpenNote={openNote}
             onCloseNote={() => {
               noteOpenSequence.current += 1;
@@ -876,6 +900,8 @@ export function App(): React.JSX.Element {
               readerBackLabel={t("knowledgeTree.back")}
               onGoHome={navigateHome}
               onRefresh={refreshLibrary}
+              onSearch={(request) => window.pige.retrieval.search(request)}
+              searchFocusRequest={librarySearchFocusRequest}
               onOpenNote={openNote}
               onCloseNote={() => {
                 noteOpenSequence.current += 1;
@@ -1173,6 +1199,8 @@ export function LibraryPanel(props: {
   readonly readerBackLabel?: string;
   readonly onGoHome: () => void;
   readonly onRefresh: () => Promise<void>;
+  readonly onSearch: (request: RetrievalSearchRequest) => Promise<RetrievalSearchResult>;
+  readonly searchFocusRequest: number;
   readonly onOpenNote: (pageId: string) => Promise<void>;
   readonly onCloseNote: () => void;
   readonly noteAgentOpen: boolean;
@@ -1183,9 +1211,76 @@ export function LibraryPanel(props: {
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const pages = props.libraryList?.pages ?? [];
-  const [filter, setFilter] = useState<"all" | "note" | "source" | "topic">("all");
+  const [family, setFamily] = useState<LibraryFamily>("all");
   const [query, setQuery] = useState("");
-  const visiblePages = filterLibraryPages(pages, filter, query);
+  const [searchRevision, setSearchRevision] = useState(0);
+  const [searchState, setSearchState] = useState<LibrarySearchState>({ kind: "idle" });
+  const searchSequence = useRef(0);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const tabRefs = useRef(new Map<LibraryFamily, HTMLButtonElement>());
+  const focusSearchAfterRetry = useRef(false);
+  const normalizedQuery = query.trim();
+  const activeVaultId = props.libraryList?.activeVaultId;
+
+  useEffect(() => {
+    if (props.searchFocusRequest <= 0) return;
+    searchInputRef.current?.focus();
+  }, [props.searchFocusRequest]);
+
+  useEffect(() => {
+    const requestId = ++searchSequence.current;
+    if (props.selectedNote || !activeVaultId || !normalizedQuery || family === "tags") {
+      setSearchState({ kind: "idle" });
+      return;
+    }
+    setSearchState({ kind: "loading", query: normalizedQuery, family });
+    const timer = window.setTimeout(() => {
+      const pageTypes = libraryFamilyPageTypes(family);
+      const request = {
+        query: normalizedQuery,
+        limit: 20,
+        ...(pageTypes ? { pageTypes } : {}),
+        scope: { kind: "active_vault" as const, vaultId: activeVaultId }
+      };
+      void props.onSearch(request).then((result) => {
+        if (requestId !== searchSequence.current) return;
+        if (activeVaultId && result.activeVaultId !== activeVaultId) {
+          setSearchState({ kind: "error", query: normalizedQuery, family });
+          return;
+        }
+        setSearchState({ kind: "result", query: normalizedQuery, family, result });
+        if (focusSearchAfterRetry.current) {
+          focusSearchAfterRetry.current = false;
+          window.requestAnimationFrame(() => searchInputRef.current?.focus());
+        }
+      }).catch(() => {
+        if (requestId !== searchSequence.current) return;
+        setSearchState({ kind: "error", query: normalizedQuery, family });
+      });
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [activeVaultId, family, normalizedQuery, props.selectedNote?.summary.pageId, searchRevision]);
+
+  const selectFamily = (nextFamily: LibraryFamily, restoreFocus = false): void => {
+    setFamily(nextFamily);
+    if (restoreFocus) window.requestAnimationFrame(() => tabRefs.current.get(nextFamily)?.focus());
+  };
+
+  const handleFamilyKeyDown = (
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+    currentFamily: LibraryFamily
+  ): void => {
+    const currentIndex = LIBRARY_FAMILIES.indexOf(currentFamily);
+    let nextIndex: number | null = null;
+    if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % LIBRARY_FAMILIES.length;
+    else if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + LIBRARY_FAMILIES.length) % LIBRARY_FAMILIES.length;
+    else if (event.key === "Home") nextIndex = 0;
+    else if (event.key === "End") nextIndex = LIBRARY_FAMILIES.length - 1;
+    if (nextIndex === null) return;
+    event.preventDefault();
+    const nextFamily = LIBRARY_FAMILIES[nextIndex];
+    if (nextFamily) selectFamily(nextFamily, true);
+  };
 
   if (props.selectedNote) {
     return (
@@ -1227,13 +1322,24 @@ export function LibraryPanel(props: {
     );
   }
 
+  const resultMatchesCurrentQuery = searchState.kind === "result" &&
+    searchState.query === normalizedQuery && searchState.family === family;
+  const errorMatchesCurrentQuery = searchState.kind === "error" &&
+    searchState.query === normalizedQuery && searchState.family === family;
+  const loadingCurrentQuery = normalizedQuery.length > 0 && family !== "tags" &&
+    (!resultMatchesCurrentQuery && !errorMatchesCurrentQuery);
+  const displayedItems = resultMatchesCurrentQuery
+    ? searchState.result.results
+    : normalizedQuery.length === 0
+      ? libraryBrowseItems(pages, family)
+      : [];
+  const groupedItems = groupLibrarySearchItems(displayedItems);
+
   return (
-    <section className="library-page" aria-label={props.t("nav.library")}>
-      <header className="library-header">
-        <div>
-          <h1>{props.t("library.title")}</h1>
-          <p className="muted">{props.t("library.subtitle")}</p>
-        </div>
+    <section className="library-page library-search-view" aria-label={props.t("nav.library")}>
+      <header className="library-header view-toolbar">
+        <strong>{props.t("library.title")}</strong>
+        <span className="toolbar-meta">{props.t("library.content")}</span>
         <button
           type="button"
           className="icon-button"
@@ -1245,42 +1351,48 @@ export function LibraryPanel(props: {
         </button>
       </header>
 
-      <div className="library-toolbar">
-        <label className="library-search">
+      <div className="library-search-content">
+        <label className="library-search-field">
           <PigeIcon name="search" size={15} />
           <input
+            ref={searchInputRef}
+            id="librarySearchInput"
             type="search"
+            maxLength={320}
             value={query}
             placeholder={props.t("library.search")}
             aria-label={props.t("library.search")}
-            onChange={(event) => setQuery(event.target.value)}
+            onInput={(event) => setQuery(event.currentTarget.value)}
           />
         </label>
-        <div className="library-filters" role="group" aria-label={props.t("library.filter")}>
-          {(["all", "note", "source", "topic"] as const).map((value) => (
+        <div className="library-tabs" role="tablist" aria-label={props.t("library.content")}>
+          {LIBRARY_FAMILIES.map((value) => (
             <button
               key={value}
+              ref={(element) => {
+                if (element) tabRefs.current.set(value, element);
+                else tabRefs.current.delete(value);
+              }}
+              id={`library-tab-${value}`}
+              className={family === value ? "library-tab active" : "library-tab"}
               type="button"
-              aria-pressed={filter === value}
-              onClick={() => setFilter(value)}
+              role="tab"
+              aria-selected={family === value}
+              aria-controls="library-search-results"
+              tabIndex={family === value ? 0 : -1}
+              onClick={() => selectFamily(value)}
+              onKeyDown={(event) => handleFamilyKeyDown(event, value)}
             >
-              {props.t(value === "all" ? "library.all" : `library.type.${value}`)}
+              {props.t(`library.family.${value}`)}
             </button>
           ))}
         </div>
-      </div>
 
-      <div className="library-meta">
-        <span>
-          {props.t("library.total")}: {props.libraryList?.total ?? 0}
-        </span>
-        {props.libraryList && props.libraryList.invalidPageCount > 0 ? (
-          <span>
-            {props.t("library.invalid")}: {props.libraryList.invalidPageCount}
-          </span>
-        ) : null}
-      </div>
-
+        <div
+          id="library-search-results"
+          role="tabpanel"
+          aria-labelledby={`library-tab-${family}`}
+        >
       {props.error ? (
         <section className="library-state unavailable" role="alert">
           <div className="state-copy">
@@ -1299,7 +1411,38 @@ export function LibraryPanel(props: {
             <p>{props.t("library.loadingDescription")}</p>
           </div>
         </section>
-      ) : pages.length === 0 ? (
+      ) : family === "tags" ? (
+        <section className="library-state inline-unavailable" role="status" aria-live="polite">
+          <div className="state-copy">
+            <h2>{props.t("library.tagsUnavailableTitle")}</h2>
+            <p>{props.t("library.tagsUnavailableDescription")}</p>
+          </div>
+        </section>
+      ) : loadingCurrentQuery ? (
+        <section className="library-state inline-loading" role="status" aria-live="polite" aria-busy="true">
+          <div className="state-copy">
+            <span className="state-spinner" aria-hidden="true" />
+            <h2>{props.t("library.searchLoading")}</h2>
+          </div>
+        </section>
+      ) : errorMatchesCurrentQuery ? (
+        <section className="library-state inline-unavailable" role="alert">
+          <div className="state-copy">
+            <h2>{props.t("library.searchUnavailableTitle")}</h2>
+            <p>{props.t("library.searchUnavailableDescription")}</p>
+            <button
+              className="primary-button"
+              type="button"
+              onClick={() => {
+                focusSearchAfterRetry.current = true;
+                setSearchRevision((current) => current + 1);
+              }}
+            >
+              {props.t("library.refresh")}
+            </button>
+          </div>
+        </section>
+      ) : pages.length === 0 && normalizedQuery.length === 0 ? (
         <section className="library-state empty" role="status">
           <div className="state-copy">
             <h2>{props.t("library.empty")}</h2>
@@ -1309,23 +1452,126 @@ export function LibraryPanel(props: {
             </button>
           </div>
         </section>
-      ) : visiblePages.length === 0 ? (
+      ) : displayedItems.length === 0 ? (
         <p className="search-empty visible" role="status">{props.t("library.noMatches")}</p>
       ) : (
-        <div className="library-list">
-          {visiblePages.map((page) => (
-            <LibraryPageRow
-              key={page.pageId}
-              page={page}
-              loading={props.noteLoadingPageId === page.pageId}
-              onOpen={props.onOpenNote}
-              t={props.t}
-            />
-          ))}
-        </div>
+        <>
+          {resultMatchesCurrentQuery && searchState.result.degraded ? (
+            <p className="library-search-degraded" role="status">{props.t("library.searchDegraded")}</p>
+          ) : null}
+          {LIBRARY_RESULT_GROUPS.map((group) => {
+            const items = groupedItems[group];
+            if (items.length === 0) return null;
+            return (
+              <section className="search-group" key={group} aria-labelledby={`library-group-${group}`}>
+                <h2 id={`library-group-${group}`}>{props.t(`library.family.${group}`)}</h2>
+                {items.map((item) => {
+                  const opening = props.noteLoadingPageId === item.summary.pageId;
+                  const matchReason = resultMatchesCurrentQuery
+                    ? libraryMatchReasonLabel(item.matchReasons, props.t)
+                    : null;
+                  const resultMeta = opening
+                    ? props.t("note.opening")
+                    : resultMatchesCurrentQuery
+                      ? matchReason
+                      : props.t(`library.type.${item.summary.pageType}`);
+                  return (
+                    <button
+                      className="search-result"
+                      type="button"
+                      key={item.summary.pageId}
+                      disabled={opening}
+                      aria-busy={opening}
+                      onClick={() => void props.onOpenNote(item.summary.pageId)}
+                    >
+                      <span className="search-result-icon" aria-hidden="true">
+                        {libraryResultIconLabel(item.summary.pageType)}
+                      </span>
+                      <span className="search-result-copy">
+                        <strong>{item.summary.title}</strong>
+                        <span>{item.snippets[0] ?? props.t(`library.type.${item.summary.pageType}`)}</span>
+                      </span>
+                      {resultMeta ? <small>{resultMeta}</small> : null}
+                    </button>
+                  );
+                })}
+              </section>
+            );
+          })}
+        </>
       )}
+        </div>
+      </div>
     </section>
   );
+}
+
+type LibraryFamily = "all" | "notes" | "sources" | "topics" | "tags";
+type LibraryResultGroup = "notes" | "sources" | "topics";
+type LibrarySearchState =
+  | { readonly kind: "idle" }
+  | { readonly kind: "loading"; readonly query: string; readonly family: LibraryFamily }
+  | { readonly kind: "result"; readonly query: string; readonly family: LibraryFamily; readonly result: RetrievalSearchResult }
+  | { readonly kind: "error"; readonly query: string; readonly family: LibraryFamily };
+
+const LIBRARY_FAMILIES: readonly LibraryFamily[] = ["all", "notes", "sources", "topics", "tags"];
+const LIBRARY_RESULT_GROUPS: readonly LibraryResultGroup[] = ["notes", "sources", "topics"];
+const LIBRARY_TOPIC_PAGE_TYPES = ["topic", "concept", "entity", "claim", "question"] as const;
+
+function libraryFamilyPageTypes(family: LibraryFamily): RetrievalSearchRequest["pageTypes"] | undefined {
+  if (family === "notes") return ["note"];
+  if (family === "sources") return ["source"];
+  if (family === "topics") return LIBRARY_TOPIC_PAGE_TYPES;
+  return undefined;
+}
+
+function libraryResultGroup(page: LibraryPageSummary): LibraryResultGroup {
+  if (page.pageType === "source") return "sources";
+  if (page.pageType === "note") return "notes";
+  return "topics";
+}
+
+function groupLibrarySearchItems(
+  items: readonly RetrievalSearchResultItem[]
+): Record<LibraryResultGroup, readonly RetrievalSearchResultItem[]> {
+  const groups: Record<LibraryResultGroup, RetrievalSearchResultItem[]> = {
+    notes: [],
+    sources: [],
+    topics: []
+  };
+  for (const item of items) groups[libraryResultGroup(item.summary)].push(item);
+  return groups;
+}
+
+function libraryMatchReasonLabel(
+  matchReasons: readonly string[],
+  t: (key: string) => string
+): string | null {
+  const labels: string[] = [];
+  const knownReasons = new Set<string>();
+  for (const reason of matchReasons) {
+    if (reason !== "title" && reason !== "body" && reason !== "path") continue;
+    if (knownReasons.has(reason)) continue;
+    knownReasons.add(reason);
+    labels.push(t(`library.matchReason.${reason}`));
+  }
+  return labels.length > 0 ? labels.join(" · ") : null;
+}
+
+function libraryBrowseItems(
+  pages: LibraryListResult["pages"],
+  family: LibraryFamily
+): readonly RetrievalSearchResultItem[] {
+  if (family === "tags") return [];
+  return pages
+    .filter((page) => family === "all" || libraryResultGroup(page) === family)
+    .map((summary) => ({ summary, score: 0, snippets: [], matchReasons: [] }));
+}
+
+function libraryResultIconLabel(pageType: LibraryPageSummary["pageType"]): string {
+  if (pageType === "source") return "SRC";
+  if (pageType === "note") return "MD";
+  return "#";
 }
 
 export function filterLibraryPages(
