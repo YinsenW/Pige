@@ -516,13 +516,12 @@ Build:
 - [B6.16 -> E6.11] Bounded local Dataset inspection/query and table view with exact
   revision/schema/row/range/aggregate evidence refs; whole Dataset payloads stay local.
 
-Current Home has durable direct chat, optional cited retrieval, wait/resume, bounded
-transcript, follow-up/retry/cancel, IME-safe Enter-to-send, and visibly progressive safe
-answer replacement. Recoverable terminal/citation validation now returns typed feedback
-to Pi and completes inside the same Home Job without a user retry or presentation-only
-provider turn. Durable mid-repair recovery, legacy agent_ingest repair, RAG, Note Agent,
-compaction/indexing, real production Broker callers, packaged platforms, and 10k proof
-remain open.
+Current Home has durable chat, optional cited retrieval, wait/resume, bounded transcript,
+follow-up/retry/cancel, IME-safe Enter and safe draft replacement. Terminal/citation repair
+stays inside its Job. B6.07 now has deterministic metadata-only chunking, worker rebuild
+and 10,000-page/100,000-chunk warm lexical evidence. Embeddings, vectors, semantic
+retrieval/reranking, model lifecycle, full RAG, mid-repair recovery, Note Agent, production
+Broker callers and packaged cross-platform proof remain open; E6.02 is partial.
 
 B6.16 foundation evidence covers one Pi-selected `pige_query_dataset@1` catalog/query,
 opaque refs and strict typed plans, exact managed-collection revision/privacy binding,

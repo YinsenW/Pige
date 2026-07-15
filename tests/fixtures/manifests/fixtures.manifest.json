@@ -2,6 +2,22 @@
   "schemaVersion": 1,
   "fixtures": [
     {
+      "id": "generated-local-database-scale-v1",
+      "path": "tests/unit/helpers/local-scale-fixture.ts",
+      "kind": "generated-markdown-scale-vault",
+      "license": "Apache-2.0 (Pige synthetic fixture)",
+      "expectedOutputRefs": [
+        "tests/unit/local-scale-fixture.test.ts",
+        "tests/unit/local-database-scale.test.ts",
+        "scripts/release/local-database-scale-evidence.mjs"
+      ],
+      "redactionStatus": "synthetic_no_sensitive_data",
+      "sizeClass": "generated-large",
+      "requiredPlatformCapabilities": ["node-sqlite-worker"],
+      "owner": "Local Retrieval and Quality",
+      "updatePolicy": "Update with the Markdown chunker, worker rebuild, or 10,000-page/100,000-chunk scale contract."
+    },
+    {
       "id": "generated-pdf-embedded-text",
       "path": "tests/unit/helpers/pdf-fixture.ts",
       "kind": "generated-pdf",

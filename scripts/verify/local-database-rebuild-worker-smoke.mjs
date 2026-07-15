@@ -69,14 +69,24 @@ The local database rebuild worker keeps the Electron main thread responsive.
   });
   try {
     const row = database.prepare("SELECT page_id, title FROM pages").get();
-    if (row?.page_id !== "page_20260711_workerindex" || row?.title !== "Worker Index") {
+    const chunk = database.prepare(
+      "SELECT owner_id, chunker_version, character_start, character_end FROM chunks"
+    ).get();
+    if (
+      row?.page_id !== "page_20260711_workerindex" ||
+      row?.title !== "Worker Index" ||
+      chunk?.owner_id !== "page_20260711_workerindex" ||
+      chunk?.chunker_version !== "pige-markdown-v1" ||
+      Number(chunk?.character_start) !== 0 ||
+      Number(chunk?.character_end) <= 0
+    ) {
       throw new Error("Built index worker did not publish the expected rebuildable page metadata.");
     }
   } finally {
     database.close();
   }
 
-  console.log("Built local database rebuild worker reported progress and published a searchable SQLite index.");
+  console.log("Built local database rebuild worker reported progress and published page plus chunk metadata.");
 } finally {
   fs.rmSync(tempRoot, { recursive: true, force: true });
 }

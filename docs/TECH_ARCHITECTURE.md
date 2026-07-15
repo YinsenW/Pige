@@ -950,40 +950,20 @@ Local RAG manifest:
 
 ```ts
 type RagManifest = {
-  schemaVersion: number;
-  embeddingModelId?: string;
-  embeddingModelVersion?: string;
-  embeddingModelSha256?: string;
-  embeddingDimension?: number;
-  rerankerModelId?: string;
-  rerankerModelVersion?: string;
-  chunkerVersion: string;
-  indexedAt?: string;
-  pageCount: number;
-  chunkCount: number;
+  schemaVersion: number; chunkerVersion: string; indexedAt?: string;
+  embeddingModelId?: string; embeddingModelVersion?: string;
+  embeddingModelSha256?: string; embeddingDimension?: number;
+  rerankerModelId?: string; rerankerModelVersion?: string;
+  pageCount: number; chunkCount: number;
   status: "not_installed" | "indexing" | "ready" | "needs_rebuild" | "error";
   warnings: string[];
 };
 ```
 
-Chunk contract:
-
-```ts
-type RagChunk = {
-  id: string;
-  pageId: string;
-  sourceIds: string[];
-  path: string;
-  pageType: PageType;
-  headingPath: string[];
-  text: string;
-  tokenCount: number;
-  startOffset?: number;
-  endOffset?: number;
-  citationRefs: CitationRef[];
-  embeddingRef?: string;
-};
-```
+Persisted chunk metadata comprises stable chunk/owner identity, page path/type, sorted
+source IDs, heading path, raw-body range, redacted text digest, token estimate and chunker
+version. `pige-markdown-v1` uses heading-aware 1,200-character chunks/120 overlap and
+stores no body. Embeddings/vectors remain future caches.
 
 Privacy boundary:
 

@@ -205,10 +205,9 @@ Rules:
 
 v0.1:
 
-- Use SQLite FTS5 for lexical search when available through the chosen driver/runtime.
-- Store chunk metadata and embedding references in SQLite.
-- Store vector data in a controlled local index format or SQLite-backed table depending on runtime validation.
-- Evaluate `sqlite-vec` only after packaging, performance, and extension-loading safety are proven.
+- Use SQLite FTS5 for lexical search; store chunk metadata and embedding refs in SQLite.
+- Keep vectors in a controlled local index/table. Adopt `sqlite-vec` only after package,
+  performance and extension-loading safety proof.
 
 The vector store is a derived cache. It can be rebuilt from Markdown, source pages, artifacts, memory text, and local embedding model output.
 
@@ -232,9 +231,11 @@ Initial schema areas:
 - `operations_index`: fast lookup over `.pige/operations/`.
 - `schema_migrations`: local database migration state.
 
-Durable truth stays in files. Index revision 3 rebuilds canonical `tags`/`page_tags` from
-valid Markdown; malformed/over-12 pages count invalid without truncation/abort, and
-deletion reproduces facets. Markdown owns display; Knowledge Model owns semantics.
+Durable truth stays in files. App schema v2/index revision 4 replaces metadata-only
+`chunks` through `002_rebuildable_chunk_metadata`; ranges, headings, sources, digest/token
+and chunker persist, never body text. Warm file/directory generation signatures avoid
+frontmatter parsing; changes still rebuild. Held no-follow descriptors plus named checks
+reject successors. Revision 3 tags remain rebuildable; Markdown owns display.
 
 ## 9. User-Facing Behavior
 

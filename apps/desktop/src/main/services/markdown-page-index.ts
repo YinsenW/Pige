@@ -29,6 +29,17 @@ export interface MarkdownPageKnowledgeFields {
 export interface MarkdownPageScanResult {
   readonly pages: readonly MarkdownPageRecord[];
   readonly invalidPageCount: number;
+  readonly files: readonly MarkdownFileSignatureRecord[];
+}
+
+export interface MarkdownFileSignatureRecord {
+  readonly absolutePath: string;
+  readonly pagePath: string;
+  readonly sizeBytes: number;
+  readonly mtimeMs: number;
+  readonly ctimeMs: number;
+  readonly deviceId: string;
+  readonly fileId: string;
 }
 
 const FRONTMATTER_READ_LIMIT_BYTES = 64 * 1024;
@@ -37,34 +48,63 @@ const PAGE_ROOTS = ["sources", "wiki"] as const;
 export function scanMarkdownPages(vaultPath: string): MarkdownPageScanResult {
   const pages: MarkdownPageRecord[] = [];
   let invalidPageCount = 0;
+  const files = scanMarkdownFileSignatures(vaultPath);
 
-  for (const root of PAGE_ROOTS) {
-    const rootPath = resolveVaultRelativePath(vaultPath, root);
-    if (!fs.existsSync(rootPath)) continue;
-
-    for (const filePath of listMarkdownFiles(rootPath)) {
-      const record = readMarkdownPageRecord(vaultPath, filePath);
-      if (record) {
-        pages.push(record);
-      } else {
-        invalidPageCount += 1;
-      }
+  for (const file of files) {
+    assertMarkdownPagePathConfined(vaultPath, file.absolutePath);
+    const record = readMarkdownPageRecord(vaultPath, file.absolutePath, file);
+    if (record) {
+      pages.push(record);
+    } else {
+      invalidPageCount += 1;
     }
   }
 
-  return { pages, invalidPageCount };
+  return { pages, invalidPageCount, files };
+}
+
+export function scanMarkdownFileSignatures(vaultPath: string): readonly MarkdownFileSignatureRecord[] {
+  const files: MarkdownFileSignatureRecord[] = [];
+  const canonicalVault = fs.realpathSync.native(path.resolve(vaultPath));
+  for (const root of PAGE_ROOTS) {
+    const rootPath = resolveVaultRelativePath(vaultPath, root);
+    if (!fs.existsSync(rootPath)) continue;
+    const canonicalRoot = assertRealConfinedDirectory(rootPath, canonicalVault);
+    for (const absolutePath of listMarkdownFiles(rootPath, canonicalRoot)) {
+      const stat = fs.lstatSync(absolutePath);
+      if (stat.isSymbolicLink() || !stat.isFile()) continue;
+      files.push({
+        absolutePath,
+        pagePath: toVaultRelativePath(vaultPath, absolutePath),
+        sizeBytes: stat.size,
+        mtimeMs: stat.mtimeMs,
+        ctimeMs: stat.ctimeMs,
+        deviceId: String(stat.dev),
+        fileId: String(stat.ino)
+      });
+    }
+  }
+  return files.sort((left, right) => left.pagePath.localeCompare(right.pagePath, "en-US"));
+}
+
+export function assertMarkdownPagePathConfined(vaultPath: string, filePath: string): void {
+  const pagePath = toVaultRelativePath(vaultPath, filePath);
+  const rootName = pagePath.split("/", 1)[0];
+  if (!rootName || !PAGE_ROOTS.includes(rootName as (typeof PAGE_ROOTS)[number])) {
+    throw new Error("Markdown file is outside a governed page root.");
+  }
+  const canonicalVault = fs.realpathSync.native(path.resolve(vaultPath));
+  const rootPath = resolveVaultRelativePath(vaultPath, rootName);
+  const canonicalRoot = assertRealConfinedDirectory(rootPath, canonicalVault);
+  assertRealParentChain(rootPath, path.dirname(filePath), canonicalRoot);
 }
 
 export function findMarkdownPageById(vaultPath: string, pageId: string): MarkdownPageRecord | undefined {
   if (!/^page_\d{8}_[a-z0-9]{8,}$/u.test(pageId)) return undefined;
-  for (const root of PAGE_ROOTS) {
-    const rootPath = resolveVaultRelativePath(vaultPath, root);
-    if (!fs.existsSync(rootPath)) continue;
-
-    for (const filePath of listMarkdownFiles(rootPath)) {
-      const record = readMarkdownPageRecord(vaultPath, filePath);
-      if (record?.summary.pageId === pageId) return record;
-    }
+  for (const file of scanMarkdownFileSignatures(vaultPath)) {
+    assertMarkdownPagePathConfined(vaultPath, file.absolutePath);
+    const record = readMarkdownPageRecord(vaultPath, file.absolutePath, file);
+    if (record?.summary.pageId === pageId) return record;
   }
   return undefined;
 }
@@ -118,14 +158,18 @@ export function readMarkdownPageByRelativePath(
   }
 }
 
-export function readMarkdownPageBody(filePath: string): string {
+export function readMarkdownPageBody(filePath: string | number): string {
   const markdown = fs.readFileSync(filePath, "utf8");
   const parsed = parsePigeFrontmatter(markdown);
   return parsed ? markdown.slice(parsed.bodyStartOffset).trimStart() : markdown;
 }
 
-function readMarkdownPageRecord(vaultPath: string, filePath: string): MarkdownPageRecord | undefined {
-  const parsed = parsePigeFrontmatter(readFilePrefix(filePath));
+function readMarkdownPageRecord(
+  vaultPath: string,
+  filePath: string,
+  expected?: MarkdownFileSignatureRecord
+): MarkdownPageRecord | undefined {
+  const parsed = parsePigeFrontmatter(readFilePrefix(filePath, expected));
   if (!parsed) return undefined;
   const hasTagsField = parsed.raw.split(/\r?\n/u).some((line) => line.startsWith("tags:"));
   const rawTags = parsed.frontmatter.tags;
@@ -176,32 +220,115 @@ function frontmatterToSummary(
   };
 }
 
-function listMarkdownFiles(root: string): string[] {
+function listMarkdownFiles(root: string, canonicalRoot: string): string[] {
+  const before = fs.lstatSync(root);
+  if (before.isSymbolicLink() || !before.isDirectory()) {
+    throw new Error("Markdown root descendants must remain real directories.");
+  }
+  const canonicalDirectory = fs.realpathSync.native(root);
+  if (!isWithinRoot(canonicalRoot, canonicalDirectory, true)) {
+    throw new Error("Markdown directory escaped its canonical vault root.");
+  }
   const files: string[] = [];
   for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
     const fullPath = path.join(root, entry.name);
     if (entry.isDirectory()) {
-      files.push(...listMarkdownFiles(fullPath));
+      files.push(...listMarkdownFiles(fullPath, canonicalRoot));
       continue;
     }
     if (entry.isFile() && entry.name.toLowerCase().endsWith(".md")) {
       files.push(fullPath);
     }
   }
+  const after = fs.lstatSync(root);
+  if (
+    after.isSymbolicLink() ||
+    !after.isDirectory() ||
+    !sameFileIdentity(before, after) ||
+    fs.realpathSync.native(root) !== canonicalDirectory
+  ) {
+    throw new Error("Markdown directory changed while it was scanned.");
+  }
   return files;
 }
 
-function readFilePrefix(filePath: string): string {
-  const size = fs.statSync(filePath).size;
-  const bytesToRead = Math.min(size, FRONTMATTER_READ_LIMIT_BYTES);
-  const file = fs.openSync(filePath, "r");
+function readFilePrefix(filePath: string, expected?: MarkdownFileSignatureRecord): string {
+  const file = fs.openSync(
+    filePath,
+    fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0)
+  );
   try {
+    const before = fs.fstatSync(file);
+    if (before.isSymbolicLink() || !before.isFile() || (expected && !matchesSignature(before, expected))) {
+      throw new Error("Markdown file changed before its frontmatter was read.");
+    }
+    const bytesToRead = Math.min(before.size, FRONTMATTER_READ_LIMIT_BYTES);
     const buffer = Buffer.alloc(bytesToRead);
     const bytesRead = fs.readSync(file, buffer, 0, bytesToRead, 0);
+    const after = fs.fstatSync(file);
+    const named = fs.lstatSync(filePath);
+    if (
+      !sameFileIdentity(before, after) ||
+      named.isSymbolicLink() ||
+      !named.isFile() ||
+      !sameFileIdentity(before, named) ||
+      (expected && !matchesSignature(after, expected))
+    ) {
+      throw new Error("Markdown file changed while its frontmatter was read.");
+    }
     return buffer.subarray(0, bytesRead).toString("utf8");
   } finally {
     fs.closeSync(file);
   }
+}
+
+function assertRealConfinedDirectory(directoryPath: string, canonicalParent: string): string {
+  const stat = fs.lstatSync(directoryPath);
+  if (stat.isSymbolicLink() || !stat.isDirectory()) {
+    throw new Error("Markdown roots must be real directories.");
+  }
+  const canonical = fs.realpathSync.native(directoryPath);
+  if (!isWithinRoot(canonicalParent, canonical)) {
+    throw new Error("Markdown root escaped the active vault.");
+  }
+  return canonical;
+}
+
+function assertRealParentChain(rootPath: string, parentPath: string, canonicalRoot: string): void {
+  let current = parentPath;
+  while (true) {
+    const stat = fs.lstatSync(current);
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      throw new Error("Markdown parent paths must remain real directories.");
+    }
+    const canonical = fs.realpathSync.native(current);
+    if (!isWithinRoot(canonicalRoot, canonical, true)) {
+      throw new Error("Markdown parent escaped its canonical vault root.");
+    }
+    if (path.resolve(current) === path.resolve(rootPath)) return;
+    const next = path.dirname(current);
+    if (next === current) throw new Error("Markdown parent chain did not reach its vault root.");
+    current = next;
+  }
+}
+
+function isWithinRoot(root: string, candidate: string, allowRoot = false): boolean {
+  const relative = path.relative(root, candidate);
+  return (allowRoot && relative === "") || (relative !== "" && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+}
+
+function sameFileIdentity(left: fs.Stats, right: fs.Stats): boolean {
+  return left.dev === right.dev && left.ino === right.ino;
+}
+
+function matchesSignature(stat: fs.Stats, expected: MarkdownFileSignatureRecord): boolean {
+  return (
+    stat.size === expected.sizeBytes &&
+    stat.mtimeMs === expected.mtimeMs &&
+    stat.ctimeMs === expected.ctimeMs &&
+    String(stat.dev) === expected.deviceId &&
+    String(stat.ino) === expected.fileId
+  );
 }
 
 function sanitizeSourceIds(sourceIds: readonly string[]): readonly string[] {

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-15T03:15:18Z",
+  "reviewedAt": "2026-07-15T05:27:50Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -31,12 +31,12 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "872b63ea4588c2e2e57926f207aeeaaf4604375f79fbde1f9a9eab8ab5e7d853"
+    "reviewedSha256": "1f37effc61fb735798ddc889ec503003abbeb290ceda0d2fbfce181362497a59"
   },
   "reviewers": [
     {
-      "reviewerId": "vault-storage-reveal-independent-review",
-      "task": "Vault storage reveal with packaged parser diagnostic replacement review",
+      "reviewerId": "release-scale-memory-independent-review",
+      "task": "Deterministic Markdown chunk metadata and local scale review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -44,80 +44,81 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Independent reviews covered the bound reveal candidate. Product Planning additionally checked exact HEAD 28c327a, the four-path diagnostic delta, fixed body-free parser stages, strict known-marker parsing, unchanged smoke selectors, and online Windows/macOS evidence without changing Development bytes."
+      "independence": "An independent reviewer cleared the exact frozen Development bytes. Product Planning reproduced both supplied hashes, empty index and diff-check, then reviewed the existing owners, exact selectors, authorized status boundary and open retrieval/platform work without changing Development bytes."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "vault-storage-reveal-independent-review",
+      "reviewerId": "release-scale-memory-independent-review",
       "blockerCount": 0,
-      "summary": "Existing API, Data, Settings and UI owners locate storage reveal and its residual without a new document, setting, page or prototype surface."
+      "summary": "Existing Technical Architecture, Local Database, Performance, Quality and Playbook owners locate chunk/index/scale truth without a new document or UI surface."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "vault-storage-reveal-independent-review",
+      "reviewerId": "release-scale-memory-independent-review",
       "blockerCount": 0,
-      "summary": "Owners agree on typed pathless results, canonical active-vault/config authority, unavailable external-root truth, segment/identity fencing, fixed failure and final shell-syscall residual."
+      "summary": "Owners agree on metadata-only schema v2/index revision 4, deterministic chunking, warm signatures and fencing, body-free scale evidence, and the still-open vector/semantic/platform boundaries."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "vault-storage-reveal-independent-review",
+      "reviewerId": "release-scale-memory-independent-review",
       "blockerCount": 0,
-      "summary": "Four exact selectors project only PIGE-VAULT-005 and partial E1.04; semantic lock v3 has 1,204 claims and every Requirement, Exit and phase status remains unchanged."
+      "summary": "Three exact selectors move only PIGE-SEARCH-003 and E6.02 from planned to partial; semantic lock v3 has 1,207 claims and all other Requirement, Exit and phase statuses remain unchanged."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.7,
-      "reviewerId": "vault-storage-reveal-independent-review",
+      "reviewerId": "release-scale-memory-independent-review",
       "blockerCount": 0,
-      "summary": "Development gets exact reveal selectors plus bounded parser-worker stage diagnostics; unknown or prefixed markers fail closed without exposing worker output or weakening smoke assertions."
+      "summary": "Development gets exact chunk, database and 10k/100k scale selectors plus measured warm Library and Latin/CJK retrieval evidence; semantic/vector and release-scale acceptance remain explicitly open."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "vault-storage-reveal-independent-review",
+      "reviewerId": "release-scale-memory-independent-review",
       "blockerCount": 0,
-      "summary": "No Markdown file or decision is added; relevant owner deduplication and semantic-neutral manifest compression keep every leanness budget green."
+      "summary": "No Markdown file or decision is added; relevant owners and trace entries are compressed without changing unrelated semantics, keeping every leanness budget green."
     }
   ],
   "verification": [
     {
       "command": "npm run verify",
       "status": "passed",
-      "evidence": "The exact committed 28-path candidate plus current recipe passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all quality dimensions."
+      "evidence": "The exact frozen candidate plus current recipe passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all quality dimensions."
     },
     {
       "command": "Exact candidate test, package and distribution evidence",
       "status": "passed",
-      "evidence": "Prior focused 4/61, impacted 10/203 and full 107/1,244 remain bound; replacement 1/11, build and parser smoke pass. Online CodeQL and Packageability pass on Windows x64, macOS arm64 and downloaded distribution."
+      "evidence": "Focused 4/27, broader 8/89 and full 109 files plus one skipped with 1,261 tests plus one skipped pass; typecheck, build, rebuild worker, macOS package and packaged smoke pass. The scale report records 10,000 pages, 100,000 chunks, 11,862 ms rebuild, Library 148.42 ms, Latin 208.91 ms and CJK 303.39 ms maxima."
     },
     {
       "command": "npm run verify:dependencies && npm run verify:traceability && npm run verify:contracts",
       "status": "passed",
-      "evidence": "The candidate retains 57 dependency records with zero waivers; CON-001 through CON-004 and semantic lock v3/1,204 pass with no Requirement, Exit or phase status drift."
+      "evidence": "The candidate retains 57 dependency records with zero waivers; CON-001 through CON-004 and semantic lock v3/1,207 pass. Only the authorized PIGE-SEARCH-003 and E6.02 statuses change from planned to partial."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 pass with 56 Markdown files, 3,466 entry words, 3,928 trace lines, 249,992 trace bytes and 1,212,971 governed Markdown bytes."
+      "evidence": "LEN-001 through LEN-005 pass with 56 Markdown files, 3,466 entry words, 3,792 trace lines, 249,977 trace bytes and 1,212,960 governed Markdown bytes."
     }
   ],
   "coordination": {
-    "taskId": "vault-storage-reveal-safety-20260715",
-    "taskTitle": "Vault and note storage reveal safety",
+    "taskId": "release-scale-memory-20260715",
+    "taskTitle": "Deterministic Markdown chunk metadata and local scale evidence",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "This candidate adds pathless storage reveal actions without changing layout, dependencies, settings storage, permission policy, product scope or statuses.",
-    "acknowledgement": "Development committed exact HEAD 28c327a with four diagnostic-only paths over the prior bound candidate. Product Planning retained Owner, acceptance and semantic facts and refreshed only this current snapshot/recipe; statuses and Development bytes are unchanged."
+    "compatibility": "This candidate changes only the rebuildable local database schema/index and executable scale evidence; durable Markdown, public IPC, dependencies, UI, permissions, providers and product scope are unchanged.",
+    "acknowledgement": "Development froze exact d1255b8b/1906ddc6 bytes. Product Planning synchronized existing owners, acceptance, the two authorized partial statuses, semantic lock and this recipe without changing Development bytes."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "The final checked-path-to-shell.openPath syscall TOCTOU remains a platform primitive residual.",
-    "External source-root binding setup and move workflows remain open; unavailable bindings only report not connected and fail closed."
+    "Embeddings, vector indexing, semantic retrieval/reranking and complete retrieval acceptance remain open.",
+    "Packaged cross-platform scale, renderer first-render and memory budgets, 100GB vault evidence and broader recovery matrices remain open.",
+    "Final userspace identity-check-to-filesystem syscall intervals remain platform primitive residuals; no cross-file transaction claim is added."
   ]
 }

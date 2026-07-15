@@ -141,8 +141,7 @@ Vault fixtures:
 
 - Empty vault.
 - Small normal vault.
-- 10,000-page metadata vault.
-- 100,000-chunk index fixture.
+- Deterministic 10,000-page/100,000-product-chunk metadata fixture.
 - Long conversation history with referenced sources.
 - Vault with external edits.
 - Vault with missing/corrupt `.pige/db/`.
@@ -505,14 +504,13 @@ Use `docs/PERFORMANCE_AND_RELIABILITY.md` as the source of performance budgets.
 
 Required gates:
 
-- Warm Library render for 10,000 pages under target.
-- Lexical search over target metadata under target.
+- Scale gate: worker rebuild of 10,000 pages/100,000 metadata chunks, then warm
+  Library and Latin/CJK lexical APIs against exact targets.
 - Renderer remains responsive during OCR, indexing, backup, and restore.
 - Idle memory stays below target where Electron overhead allows.
 - Ordinary active memory stays below target outside heavy jobs.
 - Heavy workers release memory after completion.
-- Safe Home draft propagation meets the p95 overhead target without typing/timeline
-  regression, unbounded event growth, or draft replay after restart.
+- Safe Home drafts meet p95 without typing/timeline regression, unbounded growth or replay.
 - Backup/restore show restart-safe progress and only valid Cancel/Retry actions.
 
 ## 12. Documentation Control Gates
