@@ -10,6 +10,7 @@ import {
 } from "react";
 import { PigeIcon, type PigeIconName } from "./components/PigeIcon";
 import { KnowledgeTreeMap } from "./components/KnowledgeTreeMap";
+import { NoteAgentPanel } from "./components/NoteAgentPanel";
 import { ProposalReviewPanel } from "./components/ProposalReviewPanel";
 import pigeMarkUrl from "../../../../../resources/brand/pige-icon/master/pige-icon-1024.png";
 import deMessages from "./locales/de/messages.json";
@@ -967,15 +968,34 @@ export function App(): React.JSX.Element {
           />
         )}
         </main>
-        {selectedNote ? (
-          <NoteAgentUnavailable
-            open={noteAgentOpen}
+        {selectedNote && noteAgentOpen ? (
+          <NoteAgentPanel
             modal={agentModal}
             noteTitle={selectedNote.summary.title}
+            availability="unavailable"
+            messages={[]}
+            proposal={null}
+            draft=""
+            models={(modelSummary?.models ?? []).filter((model) => model.enabled).map((model) => {
+              const providerName = modelSummary?.providers.find((provider) => provider.id === model.providerProfileId)?.displayName;
+              return {
+                id: model.id,
+                name: model.displayName ?? model.modelId,
+                ...(providerName ? { providerName } : {}),
+                selected: model.id === modelSummary?.defaultModelProfileId,
+                ready: model.id === modelSummary?.defaultModelProfileId &&
+                  agentRuntimeStatus?.state === "ready" &&
+                  agentRuntimeStatus.canRunModelJobs &&
+                  agentRuntimeStatus.defaultModelProfileId === model.id
+              };
+            })}
+            switchingModel={false}
             onClose={() => {
               setNoteAgentOpen(false);
               window.requestAnimationFrame(() => noteAgentToggleRef.current?.focus());
             }}
+            onDraftChange={() => undefined}
+            onSelectModel={setHomeDefaultModel}
             t={t}
           />
         ) : null}
@@ -1810,81 +1830,6 @@ function NoteRelatedPanel(props: {
         onOpen={props.onOpen}
         t={props.t}
       />
-    </aside>
-  );
-}
-
-function NoteAgentUnavailable(props: {
-  readonly open: boolean;
-  readonly modal: boolean;
-  readonly noteTitle: string;
-  readonly onClose: () => void;
-  readonly t: (key: string) => string;
-}): React.JSX.Element {
-  const paneRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    if (!props.open || !props.modal) return;
-    const frame = window.requestAnimationFrame(() => focusFirstOverlayControl(paneRef.current));
-    return () => window.cancelAnimationFrame(frame);
-  }, [props.modal, props.open]);
-
-  if (!props.open) return <></>;
-
-  return (
-    <aside
-      ref={paneRef}
-      className="note-agent"
-      id="note-agent-pane"
-      aria-label={props.t("development.capability.note_agent")}
-      aria-modal={props.modal ? "true" : undefined}
-      role={props.modal ? "dialog" : undefined}
-      onKeyDown={(event) => {
-        if (!props.modal) return;
-        containOverlayFocus(event, event.currentTarget, props.onClose);
-      }}
-    >
-      <div className="note-agent-inner">
-        <header className="note-agent-header">
-          <PigeIcon name="file" size={16} />
-          <span title={props.noteTitle}>{props.noteTitle}</span>
-          <PigeIcon name="collapse" size={14} />
-          <button
-            className="icon-button"
-            type="button"
-            aria-label={props.t("noteAgent.hide")}
-            title={props.t("noteAgent.hide")}
-            onClick={props.onClose}
-          >
-            <PigeIcon name="close" size={17} />
-          </button>
-        </header>
-        <div className="note-agent-thread">
-          <section className="note-agent-unavailable" role="status" aria-live="polite" aria-atomic="true">
-            <img src={pigeMarkUrl} alt="" />
-            <strong>{props.t("development.capability.note_agent")}</strong>
-            <p>{props.t("development.state.unavailable")}</p>
-          </section>
-        </div>
-        <div className="note-composer-wrap">
-          <section className="note-composer" aria-label={props.t("development.capability.note_agent")}>
-            <textarea aria-label={props.t("noteAgent.placeholder")} placeholder={props.t("noteAgent.placeholder")} disabled />
-            <div className="note-composer-toolbar">
-              <button className="attach-button" type="button" aria-label={props.t("home.attachFile")} disabled>
-                <PigeIcon name="attach" size={18} />
-              </button>
-              <div className="note-agent-model" aria-label={props.t("noteAgent.modelUnavailable")}>
-                <span className="model-status-dot unavailable" aria-hidden="true" />
-                <span>{props.t("noteAgent.modelUnavailable")}</span>
-                <PigeIcon name="collapse" size={14} />
-              </div>
-              <button className="send-button" type="button" aria-label={props.t("home.send")} disabled>
-                <PigeIcon name="send" size={16} />
-              </button>
-            </div>
-          </section>
-        </div>
-      </div>
     </aside>
   );
 }
