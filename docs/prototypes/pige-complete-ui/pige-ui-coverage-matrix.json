@@ -443,10 +443,10 @@
     }
   ],
   "summary": {
-    "total": 36,
-    "prototype": { "covered": 34, "partial": 2, "missing": 0 },
-    "production": { "implemented": 11, "partial": 14, "missing": 11 },
-    "known_p0_gaps": ["HOME-10", "SETTINGS-04", "A11Y-01", "VISUAL-01"],
-    "known_p1_gaps": ["SHELL-01", "SHELL-02", "ONBOARD-02", "HOME-05", "HOME-11", "HOME-12", "LIBRARY-01", "LIBRARY-02", "LIBRARY-03", "KNOWLEDGE-01", "READER-02", "READER-03", "READER-04", "READER-05", "SETTINGS-01", "SETTINGS-02", "SETTINGS-03", "SETTINGS-05", "SETTINGS-06", "SETTINGS-07", "SETTINGS-08", "SETTINGS-09"]
+    "total": 38,
+    "prototype": { "covered": 36, "partial": 2, "missing": 0 },
+    "production": { "implemented": 13, "partial": 14, "missing": 11 },
+    "known_p0_gaps": ["SETTINGS-04", "A11Y-01", "RESPONSIVE-01", "VISUAL-01"],
+    "known_p1_gaps": ["SHELL-01", "SHELL-02", "HOME-05", "HOME-11", "HOME-12", "LIBRARY-01", "LIBRARY-02", "LIBRARY-03", "KNOWLEDGE-01", "READER-02", "READER-03", "READER-04", "READER-05", "SETTINGS-01", "SETTINGS-02", "SETTINGS-03", "SETTINGS-05", "SETTINGS-06", "SETTINGS-07", "SETTINGS-08", "SETTINGS-09"]
   }
 }
