@@ -104,14 +104,8 @@ Required workflows:
 - Support policy and public issue-triage readiness check before public alpha.
 - Code of conduct and GitHub issue/PR template readiness check before public alpha.
 
-Pull request checks:
-
-- Type-check.
-- Lint.
-- Unit tests.
-- Schema validation tests.
-- Markdown/documentation checks.
-- Dependency registry consistency check.
+PRs run root checks plus format/schema/docs/deps. Under xvfb no-sandbox requires
+Linux+CI+GITHUB_ACTIONS+fixed=1; foundation runs Electron and uploads body-free report.
 
 Release build:
 

@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -206,7 +207,7 @@ describe("release packageability platforms", () => {
   });
 
   it("compares exact bounded Bundle manifests including modes, checksums, and symlinks", () => {
-    const tempRoot = fs.mkdtempSync(path.join(root, "artifacts", "packageability-manifest-test-"));
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "pige-packageability-manifest-test-"));
     try {
       const first = path.join(tempRoot, "first");
       const second = path.join(tempRoot, "second");

@@ -364,12 +364,17 @@ artifacts/
           logs-redacted/
 ```
 
-Evidence rules:
+`artifacts/` is gitignored output, not a requirement source. Reports bind a recipe SHA, schema,
+time, safe IDs and exact checks; private content, model traffic, credentials and absolute paths
+are forbidden. Publication holds random no-follow temp and POSIX parent fds, rechecks bytes and
+destination generation, and rejects unsafe/symlink/successor state without deleting successors.
 
-- `artifacts/` is generated output and should not be committed by default.
-- Release evidence reports must reference fixture manifest versions and app build IDs.
-- Reports must be redacted by default and must not contain private vault content, source bodies, raw prompts, raw model responses, API keys, tokens, or absolute private paths.
-- CI should upload release evidence as workflow artifacts or attach it to release records as appropriate.
+Foundation prepares/runs root checks, then `npm run dev` with temp `userData`/loopback DevTools.
+Strips secret/Electron plus case-folded no-sandbox env; restore requires
+linux+CI=true+GITHUB_ACTIONS=true+fixed=1. `#root`/preload/health must pass; it kills tree and emits
+launcher_error/launcher_exited/renderer_not_ready/startup_timeout
+(default launcher_error), and writes
+`artifacts/test-reports/repository-foundation/<platform>/<build-id>/report.json`.
 
 Rules:
 

@@ -576,16 +576,10 @@ Scoring rules:
 
 ### 12.2 Repository Structure Gates
 
-Scaffold and CI checks must verify:
-
-- Workspace packages exist according to `docs/REPOSITORY_STRUCTURE.md`.
-- `packages/*` do not import from `apps/desktop`.
-- Renderer code does not import main-process services, adapters, Node filesystem APIs, SQLite, keychain, shell, parser tools, model providers, or secret APIs.
-- Shared package code does not depend on Electron or renderer-only UI libraries.
-- Type-check, lint, and tests run across all workspace members.
-- Path aliases resolve consistently in app code, packages, tests, and scripts.
-- Fixture manifest validation passes for committed fixtures and generated fixture recipes.
-- Release evidence reports follow the generated artifact layout and redaction rules from `docs/REPOSITORY_STRUCTURE.md`.
+Scaffold/CI checks cover workspace shape, boundaries, aliases, fixtures and explicit root
+typecheck/test/build. The repository-foundation gate then runs the exact fresh-install,
+real-launch and report contract in `docs/REPOSITORY_STRUCTURE.md`; mutations cover process-tree
+cleanup, traversal, symlinked parents, successor swaps, private fields and absolute paths.
 
 ## 13. Release Gates
 

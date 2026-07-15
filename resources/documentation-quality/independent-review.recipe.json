@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-14T23:49:53Z",
+  "reviewedAt": "2026-07-15T01:30:37Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -31,12 +31,12 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "894ceb9e6885e2a6bd0c8aaa42e71b5bb8053ff27c8186e083438abb2800cd4f"
+    "reviewedSha256": "749613501a346f685f7385d9e182aca3457060752d57b248d33360d46b14c34e"
   },
   "reviewers": [
     {
-      "reviewerId": "diagnostics-windows-portability-independent-review",
-      "task": "Diagnostics Windows content-digest destination binding replacement review",
+      "reviewerId": "repository-foundation-independent-review",
+      "task": "Repository foundation Linux CI development-launch replacement review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -44,81 +44,81 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "The independent replacement reviewer examined the frozen discriminated binding, Windows stable digest readback, POSIX held-descriptor fence, successor cases, cleanup and packaged evidence and returned CLEAR before this rebind."
+      "independence": "The independent replacement reviewer examined the exact four-part Linux CI predicate, case-folded environment stripping, exhaustive body-free stages, real launch and process-tree cleanup and returned CLEAR after all three blockers were repaired."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "diagnostics-windows-portability-independent-review",
+      "reviewerId": "repository-foundation-independent-review",
       "blockerCount": 0,
-      "summary": "Existing Diagnostics, API, Quality and B1.14 acceptance owners locate preview, export, cancellation and residual boundaries without a new document or product surface."
+      "summary": "Existing Repository, Quality, Release and Phase 0 owners locate root commands, fresh-install launch evidence and generated reports without a new document or product surface."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "diagnostics-windows-portability-independent-review",
+      "reviewerId": "repository-foundation-independent-review",
       "blockerCount": 0,
-      "summary": "Owners agree on sender binding, bounded worker output, one exact POSIX held-descriptor or Windows bounded-digest shape, changed-byte successor rejection, exact-content Windows replacement, cancellation and body-free evidence."
+      "summary": "Owners agree on explicit root checks, isolated Electron, Linux+CI+GitHub-Actions+fixed no-sandbox authority, case-folded stripping, exhaustive safe stages, readiness, cleanup and upload."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "diagnostics-windows-portability-independent-review",
+      "reviewerId": "repository-foundation-independent-review",
       "blockerCount": 0,
-      "summary": "Six exact selectors update only existing partial PIGE-DIAG-002 and E1.07 projections; semantic lock v3 has 1,197 claims and every Requirement, Exit and phase status remains unchanged."
+      "summary": "Three exact selectors update repository and partial E0.01/E0.02/E0.04/E0.10 evidence; semantic lock v3 has 1,200 claims and every Requirement, Exit and phase status remains unchanged."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.7,
-      "reviewerId": "diagnostics-windows-portability-independent-review",
+      "reviewerId": "repository-foundation-independent-review",
       "blockerCount": 0,
-      "summary": "Development gets one executable cross-platform contract: POSIX retains descriptor fencing; Windows closes stable bounded readback, rejects changed bytes and permits exact-content-equivalent replacement without a deny-delete handle."
+      "summary": "Development gets one root recipe that strips inherited authority across platform name semantics, admits only the exact Linux CI predicate, reports four exhaustive safe stages and terminates its process tree."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "diagnostics-windows-portability-independent-review",
+      "reviewerId": "repository-foundation-independent-review",
       "blockerCount": 0,
-      "summary": "No Markdown file or decision is added; owner replacement text and semantic-neutral manifest compression keep every leanness budget unchanged and green."
+      "summary": "No Markdown file or decision is added; owner deduplication and semantic-neutral manifest compression keep every leanness budget green."
     }
   ],
   "verification": [
     {
       "command": "npm run verify",
       "status": "passed",
-      "evidence": "The exact 24-path Development plus governed candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all quality dimensions."
+      "evidence": "The exact seven-path Development plus six-path governed candidate passes docs, decisions, UI, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all quality dimensions."
     },
     {
       "command": "Exact candidate test, package and distribution evidence",
       "status": "passed",
-      "evidence": "Focused 4/51, full 106/1,223, typecheck/build, built worker and macOS package/distribution smokes pass. The 160,609,459-byte artifact preserves packaged renderer, preload, Pi and workers."
+      "evidence": "Focused 2/20 and full 107/1,233 pass with typecheck, build, real development Electron and the prior exact package/distribution evidence unchanged."
     },
     {
       "command": "npm run verify:dependencies && npm run verify:traceability && npm run verify:contracts",
       "status": "passed",
-      "evidence": "The candidate retains 57 dependency records with zero waivers; CON-001 through CON-004 and semantic lock v3/1,197 pass with no Requirement, Exit or phase status drift."
+      "evidence": "The candidate retains 57 dependency records with zero waivers; CON-001 through CON-004 and semantic lock v3/1,200 pass with no Requirement, Exit or phase status drift."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 pass after the platform-binding owner and evidence replacement without adding a document or raising any budget."
+      "evidence": "LEN-001 through LEN-005 pass with 56 Markdown files, 3,466 entry words, 4,054 trace lines, 249,852 trace bytes and 1,212,998 governed Markdown bytes."
     }
   ],
   "coordination": {
-    "taskId": "diagnostics-windows-content-digest-20260715",
-    "taskTitle": "Diagnostics Windows content-digest destination binding replacement",
+    "taskId": "repository-foundation-linux-launch-20260715",
+    "taskTitle": "Repository foundation Linux CI development-launch replacement",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "This replacement uses a bounded content digest on Windows and retains the POSIX held-descriptor fence without weakening success, rejection, cancellation, redaction, local-only export, dependencies or statuses.",
-    "acknowledgement": "Development froze the six-path replacement and final 24-path identities; independent review returned CLEAR. Product Planning minimally rebound existing owners, exact evidence, semantic lock and this recipe without changing Development files."
+    "compatibility": "This candidate adds executable repository evidence without changing application behavior, dependencies, runtime ownership, public claims or statuses.",
+    "acknowledgement": "Development froze replacement v2 across the same seven paths; independent review returned CLEAR after three P1 repairs. Product Planning rebound only the six existing governed files without changing Development bytes."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Optional reviewed bundle content, progress and restart-resumable export semantics remain open.",
-    "Real Windows Packageability remains required before merge; replacement Linux/macOS PR gates also remain publication evidence.",
-    "Final check-to-rename and release-to-unlink syscall intervals remain open; the export stays process-local rather than a durable Job."
+    "Replacement Linux CI and actual Windows development-launch/process-tree evidence remain external/open until online gates pass.",
+    "Final lstat-to-rename syscall TOCTOU and broader signed/installed platform proof remain open.",
+    "The separate public-template YAML validator remains open until a direct reviewed dependency exists."
   ]
 }
