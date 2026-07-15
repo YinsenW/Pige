@@ -100,7 +100,8 @@
       "Appearance and restore-mode radio groups: arrow keys move and select with one Tab stop",
       "Current-action confirmations: focus starts on the safe deny action and resolves to one focused terminal status",
       "Home model listbox: ArrowUp and ArrowDown move among models, Escape closes it, and selection reports connected or unavailable truth",
-      "Home processing files: disclosure reveals exactly five 44 px rows before internal scrolling; pause, continue, and remove retain named actions"
+      "Home processing files: disclosure reveals exactly five 44 px rows before internal scrolling; pause, continue, and remove retain named actions",
+      "Knowledge Tree: pointer or Enter selects and zooms one named treeitem; directional keys move selection and focus among nearby nodes"
     ],
     "focus_return_verified": [
       "Escape closes the compact Library sidebar and returns focus to the titlebar sidebar toggle",
@@ -120,7 +121,8 @@
       "Current-action decisions and typed failures use assertive body-free regions",
       "Task rows expose named progressbar values and collapsed task content becomes inert, aria-hidden, and hidden after its exit motion",
       "Supported source-format glyphs are a named informational list with zero nested controls",
-      "Appearance and restore identity choices use named roving radio groups"
+      "Appearance and restore identity choices use named roving radio groups",
+      "Knowledge Tree exposes 169-262 individually named treeitems across four deterministic data distributions; search results supersede stale branch dimming"
     ],
     "remaining": [
       "Complete spoken screen-reader announcement and assembled platform text-rendering review."
@@ -132,6 +134,17 @@
     "compact_home_processing_at_1144x874": { "window_width_px": 400, "window_height_px": 842, "source_legend_nested_controls": 0, "processing_rows": 7, "expanded_visible_rows": 5, "processing_list_client_height_px": 220, "processing_list_scroll_height_px": 362, "processing_composer_overlap_px": 0, "model_switcher_connected_and_unavailable_states": true },
     "expanded_home": { "width_px": 680, "height_px": 688, "sidebar_px": 280, "home_px": 400 },
     "library_state_flow": { "loading_status_busy": true, "unavailable_body_free": true, "unavailable_retry_only": true, "retry_converges_to_library": true, "retry_focuses_search": true, "no_result_status": true, "family_tab_arrow_home_end": "passed", "tree_disclosure_persists_after_reload": true, "collapsed_descendants_inert_and_aria_hidden": true, "horizontal_overflow": false },
+    "knowledge_tree": {
+      "svg_viewbox": [0, 0, 900, 620],
+      "stable_topic_labels": 7,
+      "scenario_treeitems": { "balanced": 260, "product-heavy": 236, "dual-core": 262, "long-tail": 169 },
+      "dominant_branch_width_px": 4.4,
+      "dominant_branch_by_scenario": { "balanced": "project-management", "product-heavy": "product-design", "dual-core": ["product-design", "project-management"], "long-tail": "writing" },
+      "pointer_selection_auto_zoom": "1.56x leaf / 1.30x topic",
+      "directional_keyboard_navigation": "passed",
+      "search_match_visibility_after_cross-branch_selection": "45 of 45 project matches visible",
+      "same_stable_ids_repeat_geometry": true
+    },
     "intermediate_reader": { "viewport_px": [1144, 874], "window_px": 1112, "sidebar_px": 280, "reader_px": 400, "note_agent_px": 432, "fresh_note_defaults_to_three_pane": true, "sidebar_persistent": true, "escape_preserves_resident_sidebar": true },
     "compact_reader_drawers": { "viewport_px": [760, 760], "window_px": 680, "reader_px": 680, "sidebar_overlay_px": 280, "note_agent_overlay_px": 432, "fresh_note_defaults_to_unobscured_reader": true, "note_agent_closed_on_note_open": true, "horizontal_overflow": false, "escape_and_focus_return": "passed" },
     "settings": {
@@ -156,7 +169,8 @@
     "./baselines/settings-general-1280x720.jpg",
     "./baselines/settings-appearance-dark-1280x720.jpg",
     "./baselines/first-run-1280x720.jpg",
-    "./baselines/reader-narrow-1280x720.jpg"
+    "./baselines/reader-narrow-1280x720.jpg",
+    "./baselines/knowledge-tree-balanced-1144x874.jpg"
   ],
   "prototype_baseline_capture": {
     "viewport_px": [1280, 720],
@@ -173,11 +187,19 @@
     "all_horizontal_overflow_checks": "passed",
     "human_visual_review": "passed"
   },
+  "knowledge_tree_baseline_capture": {
+    "viewport_px": [1144, 874],
+    "route": "?screen=knowledge&knowledgeScenario=balanced",
+    "treeitems": 260,
+    "artifact": "./baselines/knowledge-tree-balanced-1144x874.jpg",
+    "human_visual_review": "corrected after user reference comparison; user re-review pending"
+  },
   "prototype_baseline_encoding": "JPEG emitted by the approved in-app browser capture surface; use for human visual review, not lossless pixel-color truth",
   "prototype_baseline_sha256": {
     "first-run-1280x720.jpg": "4b6fd0b642bb86d98a9c41c28c5f38794dd513b908da96714f0460ffa4934efa",
     "home-compact-1280x720.jpg": "4636f5b825217165bcd6a36a45338d873c455172c8d9c32a94bff0fcc0778196",
     "home-expanded-1280x720.jpg": "32d6e2e96732856137e572a555a1e1732d3d635f0212e9c7cf52e4598422e983",
+    "knowledge-tree-balanced-1144x874.jpg": "d1e7da92a9dbcaa07985a33e7518a7c84c231195b2646d560a8d24f29fcdec45",
     "reader-intermediate-1280x720.jpg": "f93e3a053b68079dc8db56855ba68c25f38943b2cf12378bda748bd769018879",
     "reader-narrow-1280x720.jpg": "0d441ce3bf73ef83416dc201ac60128e30373f4bd8b27604c136e3a3c1a77b64",
     "settings-appearance-dark-1280x720.jpg": "39353fce14be660a247114d84cf3f4a577f97474fdef54b3dd48a5d255a022f4",
@@ -255,9 +277,10 @@
       "id": "VR-KNOWLEDGE",
       "route": "?screen=knowledge",
       "viewport": { "width": 1144, "height": 874 },
-      "prototype_geometry": { "content_width_px": 980, "interactive_treeitems": 128 },
+      "prototype_geometry": { "content_width_px": 980, "balanced_interactive_treeitems": 260, "scenario_interactive_treeitems_range": [169, 262] },
       "checks": {
-        "manual_visual": "passed",
+        "manual_visual": "corrected after reference comparison; user re-review pending",
+        "data_driven_weight_and_density": "passed across four distributions",
         "node_selection": "passed",
         "node_auto_zoom_and_pan": "passed",
         "search_filter_and_keyboard_navigation": "passed",
@@ -266,7 +289,7 @@
         "raster_overlay": "pending"
       },
       "remaining": [
-        "Lock branch opacity, node density, label baselines, and floating detail surface by equivalent-state overlay."
+        "Obtain user acceptance on the corrected botanical silhouette, then lock branch opacity, node density, label baselines, and floating detail surface by equivalent-state overlay."
       ]
     },
     {
@@ -332,6 +355,8 @@
       "Escape closed the compact Library drawer while leaving focus inside hidden navigation; focus now returns to the titlebar sidebar toggle after the exit transition.",
       "A successful Library retry dropped focus to the document body after removing the failure card; the restored search field now owns focus.",
       "A successful Knowledge Tree retry dropped focus to the document body after removing the degraded card; the restored first node now owns focus.",
+      "Knowledge Tree used a fixed sparse radial graph that contradicted the botanical reference and could not reflect changing knowledge data; it now grows deterministically from stable semantic directions, maps weight/count/evidence to trunk width, canopy density, node size/color, and has been exercised with four mock distributions.",
+      "Knowledge Tree search reported matches while the previous selected branch dimmed all of them; an active query now supersedes branch dimming and clearing the query restores selection context.",
       "First-run transitions hid the invoking choice or restore action without a focus successor; the new step heading now receives programmatic focus without a visual outline.",
       "The 400 px intermediate reader broke the breadcrumb into vertical glyphs; the path now stays on one line and progressively hides earlier segments and secondary actions."
     ]

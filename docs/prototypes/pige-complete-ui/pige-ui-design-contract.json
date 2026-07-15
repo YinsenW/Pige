@@ -118,6 +118,7 @@
     "Enter sends, Shift+Enter inserts a newline, and active IME plus the 80 ms composition-end race cannot send.",
     "When a transition removes the focused control, focus moves to the owning toggle, restored search or node, or newly visible step heading instead of falling to the document body.",
     "Reduced motion removes spatial interpolation without removing state feedback.",
+    "Knowledge Tree is a deterministic data visualization, not a fixed illustration: stable topic IDs preserve growth direction; domain/topic weight controls trunk and branch width; knowledge-unit count controls side-branch depth and canopy density; evidence density and confidence control node size and color depth.",
     "Common system glyphs use the one governed Lucide-aligned sprite; Settings is a gear, Appearance is a palette, and Pin is optically centered."
   ],
   "interaction_contract": [
@@ -126,7 +127,7 @@
     "Every visible notebook row opens the three-pane reader, preserves the sidebar state, and updates the breadcrumb, Markdown title, Agent pane title, and active-row state.",
     "The Home processing strip owns file progress, pause, continue, and removal actions; collapse removes its rows from keyboard and accessibility traversal, and removal returns focus to the next safe action.",
     "The model listbox supports arrow-key movement and Escape, reports the selected model and availability, and restores focus to the composer switcher after selection.",
-    "Knowledge Tree nodes are selectable controls and update one shared detail surface without adding modal or navigation complexity.",
+    "Knowledge Tree nodes are selectable controls and update one shared detail surface without adding modal or navigation complexity; search supersedes the previous branch dimming until the query is cleared.",
     "Library search filters notes, sources, topics, and tags as the user types and exposes an explicit empty result state.",
     "First-run vault choices, permission decisions, model-egress decisions, voice completion, retry, Activity Undo, selection actions, and note proposals all resolve visibly and disable stale actions.",
     "No visible primary control is a decorative dead end; intentionally illustrative secondary controls return localized prototype feedback."
@@ -166,6 +167,9 @@
     { "id": "H09E", "route": "?screen=home-voice-error", "name": "Body-free microphone permission failure", "status": "verified" },
     { "id": "N01", "route": "?screen=expanded", "name": "Expanded Home and Library tree", "status": "verified" },
     { "id": "N02", "route": "?screen=knowledge", "name": "Semantic Knowledge Tree", "status": "verified" },
+    { "id": "N02P", "route": "?screen=knowledge&knowledgeScenario=product-heavy", "name": "Product-heavy Knowledge Tree growth", "status": "verified" },
+    { "id": "N02C", "route": "?screen=knowledge&knowledgeScenario=dual-core", "name": "Dual-core Knowledge Tree growth", "status": "verified" },
+    { "id": "N02T", "route": "?screen=knowledge&knowledgeScenario=long-tail", "name": "Long-tail Knowledge Tree growth", "status": "verified" },
     { "id": "N02E", "route": "?screen=knowledge-empty", "name": "Knowledge Tree empty state", "status": "verified" },
     { "id": "N02L", "route": "?screen=knowledge-loading", "name": "Knowledge Tree rebuilding state", "status": "verified" },
     { "id": "N02D", "route": "?screen=knowledge-degraded", "name": "Knowledge Tree body-free degraded state", "status": "verified" },
@@ -214,7 +218,7 @@
     "settings_routes_checked": 16,
     "interaction_flows_checked": 29,
     "responsive_render_checks": 232,
-    "prototype_baseline_screenshots": 7,
+    "prototype_baseline_screenshots": 8,
     "accessible_name_routes_checked": 52,
     "tab_order_routes_checked": 52,
     "tab_order_focus_stops_checked": 677,
@@ -235,6 +239,16 @@
     "live_region_patterns_verified": ["safe draft", "current-action confirmation", "typed retryable error", "source wait", "ingress progress"],
     "composite_radio_groups_verified": ["appearance theme", "restore identity mode"],
     "collapsed_task_content_removed_from_accessibility_tree": true,
+    "knowledge_tree_scenarios": {
+      "balanced": { "treeitems": 260, "dominant_branch": "project-management", "dominant_branch_width_px": 4.4 },
+      "product-heavy": { "treeitems": 236, "dominant_branch": "product-design", "dominant_branch_width_px": 4.4 },
+      "dual-core": { "treeitems": 262, "dominant_branches": ["product-design", "project-management"], "dominant_branch_width_px": 4.4 },
+      "long-tail": { "treeitems": 169, "dominant_branch": "writing", "dominant_branch_width_px": 4.4 },
+      "stable_topic_labels": 7,
+      "search_match_visibility_verified": true,
+      "pointer_focus_zoom_verified": true,
+      "directional_keyboard_navigation_verified": true
+    },
     "horizontal_overflow_failures": 0,
     "visible_control_clipping_failures": 0,
     "failed_routes": [],

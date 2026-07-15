@@ -238,9 +238,9 @@
       "source": "UI_PROTOTYPE 11, 18",
       "prototype": "covered",
       "production": "partial",
-      "prototype_evidence": ["?screen=knowledge", "?screen=knowledge-empty", "?screen=knowledge-loading", "?screen=knowledge-degraded", "128 interactive treeitems", "knowledge.node", "knowledge.viewport_controls", "knowledge.secondary_action", "knowledge.availability"],
+      "prototype_evidence": ["?screen=knowledge", "?screen=knowledge&knowledgeScenario=product-heavy", "?screen=knowledge&knowledgeScenario=dual-core", "?screen=knowledge&knowledgeScenario=long-tail", "?screen=knowledge-empty", "?screen=knowledge-loading", "?screen=knowledge-degraded", "169-262 interactive treeitems across four deterministic mock distributions", "knowledge.node", "knowledge.viewport_controls", "knowledge.secondary_action", "knowledge.availability"],
       "production_evidence": ["KnowledgeTreePanel", "KnowledgeTreeNodeView"],
-      "gap": "Prototype includes 128 interactive nodes, focus zoom/pan, branch emphasis, search/filter/modes, bounded evidence/backlink/suggestion actions, and empty/loading/degraded truth. Production still needs the governed typed graph projection and equivalent interaction breadth.",
+      "gap": "Prototype includes deterministic weight/count/evidence-driven growth across balanced, single-domain-heavy, dual-core, and long-tail data; 169-262 interactive nodes; focus zoom/pan; branch emphasis; search/filter/modes; bounded evidence/backlink/suggestion actions; and empty/loading/degraded truth. Production still needs the governed typed graph projection and equivalent interaction breadth.",
       "priority": "P1"
     },
     {

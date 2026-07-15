@@ -1535,8 +1535,8 @@
     .knowledge-toolbar-title { flex: 0 0 auto; }
     .knowledge-toolbar-search {
       display: flex;
-      width: min(330px, 42vw);
-      min-width: 180px;
+      width: min(220px, 34vw);
+      min-width: 168px;
       height: 30px;
       align-items: center;
       gap: 7px;
@@ -1581,36 +1581,42 @@
     .knowledge-map-viewport.is-dragging { cursor: grabbing; }
     .tree-svg { width: 100%; height: 100%; overflow: visible; }
     .knowledge-map-stage { transform-origin: 0 0; transition: transform 680ms cubic-bezier(.16, 1, .3, 1); }
-    .knowledge-map-branch { fill: none; stroke: #8794a6; stroke-linecap: round; vector-effect: non-scaling-stroke; transition: opacity 260ms ease, stroke 260ms ease; }
-    .knowledge-map-branch.level-0 { stroke: #344154; stroke-width: 5.6; opacity: .68; }
-    .knowledge-map-branch.level-1 { stroke-width: 2.3; opacity: .54; }
-    .knowledge-map-branch.level-2 { stroke-width: 1.05; opacity: .32; }
-    .knowledge-map-branch.level-3 { stroke-width: .7; opacity: .22; }
+    .knowledge-root-fiber,
+    .knowledge-map-branch { fill: none; stroke: #8794a6; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+    .knowledge-root-fiber { opacity: .13; }
+    .knowledge-map-branch { stroke-width: var(--branch-width, 1px); opacity: var(--branch-opacity, .34); transition: opacity 260ms ease, stroke 260ms ease, stroke-width 520ms cubic-bezier(.16,1,.3,1); }
+    .knowledge-map-branch.level-1 { stroke: #38475c; }
+    .knowledge-map-branch.level-2 { stroke: #65748a; }
+    .knowledge-map-branch.level-3,
+    .knowledge-map-branch.level-4 { stroke: #99a5b5; }
     .knowledge-map-node { color: #58667a; cursor: pointer; outline: none; }
     .knowledge-map-node circle { fill: currentColor; stroke: rgba(255,255,255,.94); stroke-width: 1.15; vector-effect: non-scaling-stroke; transition: r 240ms cubic-bezier(.16,1,.3,1), fill 240ms ease, opacity 240ms ease, filter 240ms ease; }
     .knowledge-map-node.level-0 { color: #253247; }
+    .knowledge-map-node.level-0 circle { opacity: .08; }
     .knowledge-map-node.level-1 { color: #3e4c62; }
     .knowledge-map-node.level-2 { color: #718096; }
-    .knowledge-map-node.level-3 { color: #a2adbc; }
+    .knowledge-map-node.level-3,
+    .knowledge-map-node.level-4 { color: #8997aa; }
     .knowledge-map-node:hover circle,
     .knowledge-map-node:focus-visible circle { r: 6.4px; fill: #202d42; filter: drop-shadow(0 2px 4px rgba(21,31,48,.24)); }
     .knowledge-map-node:focus-visible circle { stroke: var(--focus); stroke-width: 2.4; }
-    .knowledge-map-node.active circle { r: 7px; fill: #1e2b41; stroke: #fff; stroke-width: 2.2; filter: drop-shadow(0 3px 6px rgba(24,34,51,.28)); }
-    .knowledge-map-node.is-dimmed { opacity: .32; }
-    .knowledge-map-branch.is-dimmed { opacity: .22; }
+    .knowledge-map-node.active circle { r: 5.6px; fill: #1e2b41; stroke: #fff; stroke-width: 1.8; filter: drop-shadow(0 2px 5px rgba(24,34,51,.24)); }
+    .knowledge-map-node.is-dimmed { opacity: .48; }
+    .knowledge-map-branch.is-dimmed { opacity: calc(var(--branch-opacity, .34) * .58); }
     .tree-card.mode-network .knowledge-map-branch { stroke-width: 1.2; opacity: .48; }
     .tree-card.mode-network .knowledge-map-branch.level-0 { stroke-width: 2.2; opacity: .68; }
     .tree-card.mode-network .knowledge-map-node circle { fill: #536176; }
     .tree-card.mode-list .knowledge-map-node.level-3,
-    .tree-card.mode-list .knowledge-map-branch.level-3 { opacity: 0; pointer-events: none; }
-    .knowledge-map-label { fill: #252c38; font: 500 12px/1.2 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; letter-spacing: 0; pointer-events: none; paint-order: stroke; stroke: rgba(255,255,255,.92); stroke-width: 4px; stroke-linejoin: round; }
-    .knowledge-map-root-label { fill: #313844; font-size: 11px; }
+    .tree-card.mode-list .knowledge-map-node.level-4,
+    .tree-card.mode-list .knowledge-map-branch.level-3,
+    .tree-card.mode-list .knowledge-map-branch.level-4 { opacity: 0; pointer-events: none; }
+    .knowledge-map-label { fill: #252c38; font: 500 10.5px/1.2 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; letter-spacing: 0; pointer-events: none; paint-order: stroke; stroke: rgba(255,255,255,.94); stroke-width: 3.5px; stroke-linejoin: round; }
     .knowledge-map-pulse { fill: none; stroke: #5f6d82; stroke-width: 1.2; opacity: 0; vector-effect: non-scaling-stroke; pointer-events: none; }
     .knowledge-map-node.active .knowledge-map-pulse { animation: knowledge-pulse 1.4s cubic-bezier(.16,1,.3,1); }
     @keyframes knowledge-pulse { 0% { r: 6px; opacity: .38; } 100% { r: 22px; opacity: 0; } }
-    .knowledge-inspector { position: absolute; z-index: 6; top: 145px; right: 22px; width: 224px; padding: 16px; border: .5px solid var(--border-subtle); border-radius: 14px; background: rgba(255,255,255,.92); box-shadow: 0 12px 30px rgba(31,42,55,.09), 0 2px 8px rgba(31,42,55,.04); backdrop-filter: blur(18px); transform: translateY(0); transition: opacity 200ms ease, transform 500ms cubic-bezier(.16,1,.3,1); }
+    .knowledge-inspector { position: absolute; z-index: 6; top: 128px; right: 18px; width: 188px; padding: 14px; border: .5px solid var(--border-subtle); border-radius: 13px; background: rgba(255,255,255,.93); box-shadow: 0 12px 30px rgba(31,42,55,.08), 0 2px 8px rgba(31,42,55,.04); backdrop-filter: blur(18px); transform: translateY(0); transition: opacity 200ms ease, transform 500ms cubic-bezier(.16,1,.3,1); }
     .knowledge-inspector.updating { opacity: .72; transform: translateY(4px); }
-    .knowledge-inspector h2 { margin: 0; font-size: 14px; font-weight: 600; }
+    .knowledge-inspector h2 { margin: 0; font-size: 13px; font-weight: 600; }
     .knowledge-inspector-meta { display: block; margin-top: 5px; color: var(--text-tertiary); font-size: 10px; }
     .knowledge-inspector p { margin: 12px 0 0; color: var(--text-secondary); font-size: 10px; line-height: 1.62; }
     .knowledge-inspector-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 12px; }
@@ -1623,7 +1629,7 @@
     .knowledge-map-control:last-child { border-right: 0; }
     .knowledge-map-control:hover { background: var(--surface-hover); color: var(--text-primary); }
     .knowledge-map-control svg { width: 15px; height: 15px; }
-    .knowledge-minimap { position: absolute; z-index: 5; right: 22px; bottom: 62px; width: 82px; height: 94px; overflow: hidden; border: .5px solid var(--border-subtle); border-radius: 10px; background: rgba(255,255,255,.88); box-shadow: var(--shadow-xs); backdrop-filter: blur(12px); }
+    .knowledge-minimap { position: absolute; z-index: 5; right: 18px; bottom: 58px; width: 62px; height: 74px; overflow: hidden; border: .5px solid var(--border-subtle); border-radius: 9px; background: rgba(255,255,255,.9); box-shadow: var(--shadow-xs); backdrop-filter: blur(12px); }
     .knowledge-minimap svg { width: 100%; height: 100%; opacity: .7; }
     .knowledge-map-status { position: absolute; z-index: 4; left: 16px; bottom: 14px; margin: 0; color: var(--text-tertiary); font-size: 9px; pointer-events: none; }
     .knowledge-card { padding: 14px; }
@@ -2700,7 +2706,7 @@
                   </button>
                 </div>
                 <div class="knowledge-map-viewport" id="knowledgeMapViewport" tabindex="0" aria-label="知识树画布。使用方向键在节点间移动，回车聚焦节点，减号和加号缩放。">
-                  <svg class="tree-svg" id="knowledgeTreeSvg" viewBox="0 0 900 620" role="tree" aria-label="128 个知识单元组成的个人知识树">
+                  <svg class="tree-svg" id="knowledgeTreeSvg" viewBox="0 0 900 620" role="tree" aria-label="数据驱动的个人知识树">
                     <g class="knowledge-map-stage" id="knowledgeMapStage">
                       <g id="knowledgeMapBranches" aria-hidden="true"></g>
                       <g id="knowledgeMapNodes"></g>
@@ -2715,14 +2721,14 @@
                   <button class="knowledge-inspector-open" type="button" data-knowledge-action="open-topic">进入查看</button>
                 </aside>
                 <div class="knowledge-minimap" aria-hidden="true">
-                  <svg viewBox="0 0 90 110"><path d="M45 104 C45 84 45 70 45 57 M45 80 C34 70 25 58 18 43 M45 72 C57 60 67 45 74 29 M45 86 C31 82 22 76 12 68 M45 82 C61 78 72 69 82 58" fill="none" stroke="#657286" stroke-linecap="round" stroke-width="1.2"/><g fill="#718096"><circle cx="45" cy="104" r="1.8"/><circle cx="18" cy="43" r="1.4"/><circle cx="74" cy="29" r="1.4"/><circle cx="12" cy="68" r="1.2"/><circle cx="82" cy="58" r="1.2"/></g></svg>
+                  <svg id="knowledgeMinimapSvg" viewBox="0 0 900 620" preserveAspectRatio="xMidYMid meet"></svg>
                 </div>
                 <div class="knowledge-map-controls" role="group" aria-label="知识树缩放">
                   <button class="knowledge-map-control" type="button" aria-label="缩小知识树" data-knowledge-zoom="out"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="./pige-icon-sprite.svg#pi-zoom-out"/></svg></button>
                   <button class="knowledge-map-control" type="button" aria-label="放大知识树" data-knowledge-zoom="in"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="./pige-icon-sprite.svg#pi-zoom-in"/></svg></button>
                   <button class="knowledge-map-control" type="button" aria-label="显示完整知识树" data-knowledge-zoom="fit"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="./pige-icon-sprite.svg#pi-focus"/></svg></button>
                 </div>
-                <p class="knowledge-map-status" id="knowledgeMapStatus" role="status">显示全部 128 个知识单元</p>
+                <p class="knowledge-map-status" id="knowledgeMapStatus" role="status">正在生成知识树</p>
               </section>
             </div>
             <section class="knowledge-state empty" role="status"><div class="state-copy"><h2>知识树还没有内容</h2><p>添加笔记或来源后，Pi 可以提出关系建议；Pige 不会为了填满界面而编造节点。</p><button class="primary-button" type="button" data-knowledge-action="add-source">添加来源</button></div></section>
@@ -3291,64 +3297,200 @@
     }
 
     const knowledgeTopicDefinitions = [
-      { id: 'thinking', title: '思维模型', x: 298, y: 128, count: 17, tags: ['决策', '系统', '认知'], detail: '用于分析复杂问题、更新判断和复盘决策的思考框架。', concepts: ['第一性原理', '系统思考', '反事实分析', '贝叶斯更新', '概率思维', '机会成本', '约束理论', '反馈回路', '二阶效应', '逆向思考', '边际分析', '长期主义', '风险评估', '认知偏差', '复杂系统', '决策日志', '复盘框架'] },
-      { id: 'writing', title: '写作', x: 142, y: 318, count: 16, tags: ['表达', '结构', '编辑'], detail: '从素材整理到成稿编辑的写作方法与可复用结构。', concepts: ['写作结构', '核心论点', '叙事节奏', '标题设计', '开篇方式', '证据组织', '案例表达', '段落衔接', '语气校准', '读者视角', '编辑清单', '事实核验', '摘要模板', '长文框架', '演讲稿', '发布复盘'] },
-      { id: 'learning', title: '学习', x: 124, y: 462, count: 16, tags: ['学习', '记忆', '实践'], detail: '围绕主动学习、刻意练习和长期记忆形成的知识联系。', concepts: ['学习计划', '主动回忆', '间隔重复', '费曼技巧', '刻意练习', '问题清单', '阅读笔记', '课程地图', '输出驱动', '迁移练习', '知识卡片', '错题复盘', '学习日志', '技能分解', '反馈周期', '阶段总结'] },
-      { id: 'core', title: '核心知识', x: 452, y: 505, count: 17, tags: ['原则', '索引', '长期'], detail: '跨主题复用频率最高、经过持续验证的个人核心知识。', concepts: ['个人原则', '年度主题', '关键假设', '长期目标', '常用方法', '核心概念', '重要关系', '决策标准', '价值排序', '知识索引', '常用模板', '工作原则', '学习原则', '创作原则', '生活原则', '待验证命题', '年度复盘'] },
-      { id: 'product-design', title: '产品与设计', x: 690, y: 108, count: 18, tags: ['产品', '体验', '设计'], detail: '产品策略、体验原则、界面系统和用户研究之间的联系。', concepts: ['产品定位', '用户问题', '价值主张', '需求分层', '任务流程', '信息架构', '交互原则', '视觉系统', '设计令牌', '原型验证', '可用性测试', '无障碍', '响应式', '动效原则', '设计评审', '指标体系', '发布反馈', '体验债务'] },
-      { id: 'project-management', title: '项目管理', x: 640, y: 305, count: 18, tags: ['方法论', '流程', '复盘'], detail: '关于项目规划、任务拆解、进度跟踪与复盘的知识联系。', concepts: ['项目目标', '里程碑', '任务拆解', '依赖管理', '优先级', '风险清单', '资源计划', '沟通节奏', '决策记录', '状态同步', '质量门禁', '发布计划', '验收标准', '问题跟踪', '变更控制', '项目复盘', '交付节奏', '后续行动'] },
-      { id: 'life', title: '生活', x: 718, y: 465, count: 18, tags: ['生活', '健康', '关系'], detail: '健康、日常系统、关系与个人兴趣形成的生活知识分支。', concepts: ['睡眠记录', '运动计划', '饮食习惯', '健康检查', '旅行计划', '家庭事项', '朋友联系', '兴趣项目', '阅读清单', '观影记录', '财务习惯', '空间整理', '数字生活', '每日回顾', '周末计划', '重要日期', '生活实验', '幸福清单'] }
+      { id: 'thinking', title: '思维模型', anchor: [235, 142], label: [-18, -4, 'end'], tags: ['决策', '系统', '认知'], detail: '用于分析复杂问题、更新判断和复盘决策的思考框架。', concepts: ['第一性原理', '系统思考', '反事实分析', '贝叶斯更新', '概率思维', '机会成本', '约束理论', '反馈回路', '二阶效应', '逆向思考', '边际分析', '长期主义', '风险评估', '认知偏差', '复杂系统', '决策日志', '复盘框架'] },
+      { id: 'writing', title: '写作', anchor: [112, 312], label: [-18, 0, 'end'], tags: ['表达', '结构', '编辑'], detail: '从素材整理到成稿编辑的写作方法与可复用结构。', concepts: ['写作结构', '核心论点', '叙事节奏', '标题设计', '开篇方式', '证据组织', '案例表达', '段落衔接', '语气校准', '读者视角', '编辑清单', '事实核验', '摘要模板', '长文框架', '演讲稿', '发布复盘'] },
+      { id: 'learning', title: '学习', anchor: [104, 458], label: [-18, 0, 'end'], tags: ['学习', '记忆', '实践'], detail: '围绕主动学习、刻意练习和长期记忆形成的知识联系。', concepts: ['学习计划', '主动回忆', '间隔重复', '费曼技巧', '刻意练习', '问题清单', '阅读笔记', '课程地图', '输出驱动', '迁移练习', '知识卡片', '错题复盘', '学习日志', '技能分解', '反馈周期', '阶段总结'] },
+      { id: 'core', title: '核心知识', anchor: [416, 528], label: [14, -10, 'start'], tags: ['原则', '索引', '长期'], detail: '跨主题复用频率最高、经过持续验证的个人核心知识。', concepts: ['个人原则', '年度主题', '关键假设', '长期目标', '常用方法', '核心概念', '重要关系', '决策标准', '价值排序', '知识索引', '常用模板', '工作原则', '学习原则', '创作原则', '生活原则', '待验证命题', '年度复盘'] },
+      { id: 'product-design', title: '产品与设计', anchor: [635, 106], label: [16, -4, 'start'], tags: ['产品', '体验', '设计'], detail: '产品策略、体验原则、界面系统和用户研究之间的联系。', concepts: ['产品定位', '用户问题', '价值主张', '需求分层', '任务流程', '信息架构', '交互原则', '视觉系统', '设计令牌', '原型验证', '可用性测试', '无障碍', '响应式', '动效原则', '设计评审', '指标体系', '发布反馈', '体验债务'] },
+      { id: 'project-management', title: '项目管理', anchor: [590, 292], label: [15, -8, 'start'], tags: ['方法论', '流程', '复盘'], detail: '关于项目规划、任务拆解、进度跟踪与复盘的知识联系。', concepts: ['项目目标', '里程碑', '任务拆解', '依赖管理', '优先级', '风险清单', '资源计划', '沟通节奏', '决策记录', '状态同步', '质量门禁', '发布计划', '验收标准', '问题跟踪', '变更控制', '项目复盘', '交付节奏', '后续行动'] },
+      { id: 'life', title: '生活', anchor: [610, 454], label: [16, 0, 'start'], tags: ['生活', '健康', '关系'], detail: '健康、日常系统、关系与个人兴趣形成的生活知识分支。', concepts: ['睡眠记录', '运动计划', '饮食习惯', '健康检查', '旅行计划', '家庭事项', '朋友联系', '兴趣项目', '阅读清单', '观影记录', '财务习惯', '空间整理', '数字生活', '每日回顾', '周末计划', '重要日期', '生活实验', '幸福清单'] }
     ];
 
-    const knowledgeNodeData = [{
-      id: 'personal-knowledge', title: '个人知识', x: 450, y: 590, level: 0, topicId: 'personal-knowledge', parentId: null,
-      tags: ['本地优先', '可检查', '持续生长'], detail: '由 Markdown、来源引用和已确认关系重建的个人知识树。', meta: '7 个主题 · 128 个知识单元'
-    }];
+    const knowledgeScenarioDefinitions = {
+      balanced: { title: '均衡生长', counts: [36, 32, 32, 22, 44, 50, 36], evidence: [74, 62, 68, 88, 81, 79, 65] },
+      'product-heavy': { title: '产品设计集中生长', counts: [18, 16, 14, 24, 92, 44, 20], evidence: [52, 46, 48, 72, 91, 77, 43] },
+      'dual-core': { title: '双核心生长', counts: [22, 18, 18, 30, 70, 72, 24], evidence: [58, 43, 45, 86, 92, 89, 52] },
+      'long-tail': { title: '长尾稀疏', counts: [12, 64, 13, 26, 16, 20, 10], evidence: [47, 83, 41, 72, 55, 59, 38] }
+    };
 
-    knowledgeTopicDefinitions.forEach((topic, topicIndex) => {
-      knowledgeNodeData.push({ ...topic, level: 1, topicId: topic.id, parentId: 'personal-knowledge', meta: `${topic.count + 1} 个节点 · ${topic.count * 2 + 4} 个连接` });
-      const outwardAngle = Math.atan2(topic.y - 388, topic.x - 450);
-      const generated = [];
-      for (let index = 0; index < topic.count; index += 1) {
-        let parent;
-        let angle;
-        let radius;
-        let level;
-        if (index < 4) {
-          parent = topic;
-          level = 2;
-          angle = outwardAngle + (index - 1.5) * .42;
-          radius = 48 + (index % 2) * 8;
-        } else if (index < 12) {
-          parent = generated[(index - 4) % 4];
-          level = 3;
-          angle = Math.atan2(parent.y - topic.y, parent.x - topic.x) + (((index - 4) % 2) ? .29 : -.29);
-          radius = 34 + ((index + topicIndex) % 3) * 7;
-        } else {
-          parent = generated[4 + ((index - 12) % 8)];
-          level = 3;
-          angle = Math.atan2(parent.y - topic.y, parent.x - topic.x) + (((index + topicIndex) % 3) - 1) * .25;
-          radius = 24 + ((index + topicIndex) % 4) * 5;
-        }
-        const node = {
-          id: `${topic.id}-${index + 1}`,
-          title: topic.concepts[index],
-          x: Math.max(36, Math.min(864, parent.x + Math.cos(angle) * radius)),
-          y: Math.max(32, Math.min(570, parent.y + Math.sin(angle) * radius)),
-          level,
-          topicId: topic.id,
-          parentId: parent.id,
-          tags: [topic.title, index % 2 ? '笔记' : '来源', index % 3 ? '已确认' : '待复盘'],
-          detail: `${topic.concepts[index]}属于“${topic.title}”分支，连接相关笔记、来源证据与已确认关系。`,
-          meta: `${3 + (index % 7)} 条证据 · ${1 + (index % 5)} 个连接`,
-          confidence: index % 7 === 6 ? 'low' : 'high'
+    const knowledgeRoot = { id: 'personal-knowledge', title: '个人知识', x: 420, y: 608, level: 0, topicId: 'personal-knowledge', parentId: null };
+    let knowledgeScenarioId = new URLSearchParams(window.location.search).get('knowledgeScenario') || 'balanced';
+    if (!knowledgeScenarioDefinitions[knowledgeScenarioId]) knowledgeScenarioId = 'balanced';
+    let knowledgeNodeData = [];
+    let knowledgeNodeById = new Map();
+    let knowledgeMaxTopicWeight = 1;
+
+    function seededUnit(seed) {
+      const value = Math.sin(seed * 12.9898 + 78.233) * 43758.5453;
+      return value - Math.floor(value);
+    }
+
+    function clampKnowledgePoint(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function knowledgeTopicCurve(node) {
+      const controls = {
+        thinking: [[416, 430], [315, 238]], writing: [[410, 475], [242, 360]], learning: [[395, 520], [210, 486]],
+        core: [[418, 570], [416, 545]], 'product-design': [[424, 425], [535, 196]],
+        'project-management': [[430, 475], [515, 350]], life: [[442, 522], [530, 482]]
+      };
+      const [control1, control2] = controls[node.id] || [[knowledgeRoot.x, knowledgeRoot.y - 70], [node.x, node.y + 50]];
+      return [{ x: knowledgeRoot.x, y: knowledgeRoot.y }, { x: control1[0], y: control1[1] }, { x: control2[0], y: control2[1] }, { x: node.x, y: node.y }];
+    }
+
+    function knowledgeTopicGrowthCurve(node) {
+      if (node.id !== 'core') return knowledgeTopicCurve(node);
+      return [{ x: node.x, y: node.y }, { x: 408, y: 430 }, { x: 424, y: 220 }, { x: 440, y: 84 }];
+    }
+
+    function cubicKnowledgePoint(curve, t) {
+      const inverse = 1 - t;
+      return {
+        x: inverse ** 3 * curve[0].x + 3 * inverse ** 2 * t * curve[1].x + 3 * inverse * t ** 2 * curve[2].x + t ** 3 * curve[3].x,
+        y: inverse ** 3 * curve[0].y + 3 * inverse ** 2 * t * curve[1].y + 3 * inverse * t ** 2 * curve[2].y + t ** 3 * curve[3].y
+      };
+    }
+
+    function cubicKnowledgeTangent(curve, t) {
+      const inverse = 1 - t;
+      const x = 3 * inverse ** 2 * (curve[1].x - curve[0].x) + 6 * inverse * t * (curve[2].x - curve[1].x) + 3 * t ** 2 * (curve[3].x - curve[2].x);
+      const y = 3 * inverse ** 2 * (curve[1].y - curve[0].y) + 6 * inverse * t * (curve[2].y - curve[1].y) + 3 * t ** 2 * (curve[3].y - curve[2].y);
+      const length = Math.max(1, Math.hypot(x, y));
+      return { x: x / length, y: y / length };
+    }
+
+    function buildKnowledgeTreeData(scenarioId) {
+      const scenario = knowledgeScenarioDefinitions[scenarioId] || knowledgeScenarioDefinitions.balanced;
+      const topics = knowledgeTopicDefinitions.map((definition, topicIndex) => {
+        const count = scenario.counts[topicIndex];
+        const evidenceDensity = scenario.evidence[topicIndex];
+        const weight = count * (.72 + evidenceDensity / 180);
+        const weightRatio = weight / Math.max(...scenario.counts.map((entry, index) => entry * (.72 + scenario.evidence[index] / 180)));
+        const displacement = (weightRatio - .55) * 14;
+        const side = definition.anchor[0] < knowledgeRoot.x ? -1 : 1;
+        return {
+          ...definition,
+          x: definition.anchor[0] + side * displacement,
+          y: definition.anchor[1] - Math.max(0, displacement * .28),
+          count,
+          evidenceDensity,
+          weight,
+          weightRatio,
+          footprint: 56 + Math.sqrt(count) * 10.2
         };
-        generated.push(node);
-        knowledgeNodeData.push(node);
-      }
-    });
+      });
+      knowledgeMaxTopicWeight = Math.max(...topics.map(topic => topic.weight));
+      const totalCount = 1 + topics.length + topics.reduce((sum, topic) => sum + topic.count, 0);
+      const nodes = [{
+        ...knowledgeRoot,
+        tags: ['本地优先', '可检查', '持续生长'],
+        detail: '由 Markdown、来源引用和已确认关系重建的个人知识树。',
+        meta: `${topics.length} 个主题 · ${totalCount} 个知识单元`,
+        subtreeWeight: topics.reduce((sum, topic) => sum + topic.weight, 0)
+      }];
 
-    const knowledgeNodeById = new Map(knowledgeNodeData.map(node => [node.id, node]));
+      topics.forEach((topic, topicIndex) => {
+        const topicNode = {
+          ...topic,
+          level: 1,
+          topicId: topic.id,
+          parentId: knowledgeRoot.id,
+          meta: `${topic.count + 1} 个节点 · ${Math.round(topic.count * 1.48 + topic.evidenceDensity / 9)} 个连接`,
+          subtreeWeight: topic.weight
+        };
+        nodes.push(topicNode);
+        const curve = knowledgeTopicGrowthCurve(topicNode);
+        const growthPointCount = Math.max(4, Math.min(8, Math.round(Math.sqrt(topic.count))));
+        const branchRootCount = growthPointCount * 2;
+        const branchRoots = [];
+        const branchChains = Array.from({ length: branchRootCount }, () => []);
+
+        for (let index = 0; index < topic.count; index += 1) {
+          let parent = topicNode;
+          let visualStart = null;
+          let x = topic.x;
+          let y = topic.y;
+          let level = 2;
+          if (index < branchRootCount) {
+            const growthIndex = Math.floor(index / 2);
+            const side = index % 2 ? 1 : -1;
+            const t = .54 + (growthIndex / Math.max(1, growthPointCount - 1)) * .45;
+            const point = cubicKnowledgePoint(curve, t);
+            const tangent = cubicKnowledgeTangent(curve, t);
+            const normal = { x: -tangent.y, y: tangent.x };
+            const sideLength = 12 + seededUnit(topicIndex * 97 + index) * 16 + t * 8;
+            const advance = 10 + seededUnit(topicIndex * 131 + index) * 12 + sideLength * .64;
+            visualStart = point;
+            x = point.x + normal.x * side * sideLength + tangent.x * advance;
+            y = point.y + normal.y * side * sideLength + tangent.y * advance;
+          } else {
+            const branchSlot = (index - branchRootCount) % branchRootCount;
+            const side = branchSlot % 2 ? 1 : -1;
+            const layer = Math.floor((index - branchRootCount) / branchRootCount);
+            const chain = branchChains[branchSlot];
+            parent = layer === 0 ? branchRoots[branchSlot] : chain[layer - 1] || branchRoots[branchSlot];
+            level = Math.min(4, 3 + Math.floor(layer / 2));
+            const parentStart = parent.visualStart || topicNode;
+            const branchAngle = Math.atan2(parent.y - parentStart.y, parent.x - parentStart.x);
+            const angle = branchAngle + side * (.12 + layer * .06) + (seededUnit(topicIndex * 151 + index) - .5) * .16;
+            const length = 15 + seededUnit(topicIndex * 211 + index) * 12 + Math.min(layer, 2) * 2.1;
+            x = parent.x + Math.cos(angle) * length;
+            y = parent.y + Math.sin(angle) * length;
+          }
+          const title = topic.concepts[index] || `${topic.title}知识 ${index + 1}`;
+          const confidence = (index + topicIndex * 2) % 9 === 8 ? 'low' : 'high';
+          const node = {
+            id: `${topic.id}-${index + 1}`,
+            title,
+            x: clampKnowledgePoint(x, 34, 726),
+            y: clampKnowledgePoint(y, 34, 574),
+            level,
+            topicId: topic.id,
+            parentId: parent.id,
+            visualStart,
+            tags: [topic.title, index % 2 ? '笔记' : '来源', confidence === 'high' ? '已确认' : '待复盘'],
+            detail: `${title}属于“${topic.title}”分支，连接相关笔记、来源证据与已确认关系。`,
+            meta: `${3 + (index % 7)} 条证据 · ${1 + (index % 5)} 个连接`,
+            confidence,
+            evidenceDensity: Math.max(18, topic.evidenceDensity - (index % 5) * 7),
+            subtreeWeight: 1
+          };
+          nodes.push(node);
+          if (index < branchRootCount) {
+            branchRoots.push(node);
+          } else {
+            branchChains[(index - branchRootCount) % branchRootCount].push(node);
+          }
+        }
+      });
+
+      const byId = new Map(nodes.map(node => [node.id, node]));
+      [...nodes].reverse().forEach(node => {
+        if (!node.parentId) return;
+        const parent = byId.get(node.parentId);
+        if (parent && parent.level >= 2) parent.subtreeWeight += node.subtreeWeight;
+      });
+      return { nodes, byId, topics, totalCount, scenario };
+    }
+
+    function setKnowledgeScenario(scenarioId, options = {}) {
+      if (!knowledgeScenarioDefinitions[scenarioId]) return false;
+      knowledgeScenarioId = scenarioId;
+      const built = buildKnowledgeTreeData(scenarioId);
+      knowledgeNodeData = built.nodes;
+      knowledgeNodeById = built.byId;
+      knowledgeTreeSvg.setAttribute('aria-label', `${built.totalCount} 个知识单元组成的个人知识树`);
+      knowledgeTreeCard.dataset.knowledgeScenario = scenarioId;
+      activeKnowledgeNodeId = knowledgeNodeById.has(options.activeNodeId || 'project-management') ? (options.activeNodeId || 'project-management') : 'personal-knowledge';
+      renderKnowledgeTree();
+      knowledgeZoom = 1;
+      knowledgePanX = 0;
+      knowledgePanY = 0;
+      applyKnowledgeTransform();
+      focusKnowledgeNode(activeKnowledgeNodeId, { zoom: false, moveFocus: options.moveFocus === true });
+      return true;
+    }
 
     function createSvgElement(name, attributes = {}) {
       const element = document.createElementNS('http://www.w3.org/2000/svg', name);
@@ -3357,31 +3499,85 @@
     }
 
     function knowledgeBranchPath(parent, node) {
-      const verticalBias = Math.max(18, Math.abs(node.y - parent.y) * .46);
-      const direction = node.y < parent.y ? -1 : 1;
-      const c1x = parent.x + (node.x - parent.x) * .23;
-      const c2x = parent.x + (node.x - parent.x) * .76;
-      return `M ${parent.x} ${parent.y} C ${c1x} ${parent.y + verticalBias * direction}, ${c2x} ${node.y - verticalBias * direction}, ${node.x} ${node.y}`;
+      if (node.level === 1) {
+        const curve = knowledgeTopicCurve(node);
+        return `M ${curve[0].x} ${curve[0].y} C ${curve[1].x} ${curve[1].y}, ${curve[2].x} ${curve[2].y}, ${curve[3].x} ${curve[3].y}`;
+      }
+      const start = node.visualStart || parent;
+      const dx = node.x - start.x;
+      const dy = node.y - start.y;
+      const normalX = -dy;
+      const normalY = dx;
+      const normalLength = Math.max(1, Math.hypot(normalX, normalY));
+      const curve = (seededUnit(node.id.length * 29 + node.x * .13 + node.y * .07) - .5) * Math.min(16, Math.hypot(dx, dy) * .28);
+      const c1x = start.x + dx * .34 + normalX / normalLength * curve;
+      const c1y = start.y + dy * .34 + normalY / normalLength * curve;
+      const c2x = start.x + dx * .72 + normalX / normalLength * curve * .36;
+      const c2y = start.y + dy * .72 + normalY / normalLength * curve * .36;
+      return `M ${start.x} ${start.y} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${node.x} ${node.y}`;
+    }
+
+    function knowledgeBranchVisual(node) {
+      if (node.level === 1) {
+        const ratio = Math.max(.15, node.weight / knowledgeMaxTopicWeight);
+        return { width: 1.25 + Math.sqrt(ratio) * 3.15, opacity: .34 + ratio * .34 };
+      }
+      const topic = knowledgeNodeById.get(node.topicId);
+      const topicCount = Math.max(1, topic?.count || 1);
+      const subtreeRatio = Math.min(1, node.subtreeWeight / topicCount);
+      if (node.level === 2) return { width: .8 + Math.sqrt(subtreeRatio) * 1.65, opacity: .38 + subtreeRatio * .25 };
+      if (node.level === 3) return { width: .5 + Math.sqrt(subtreeRatio) * .92, opacity: .29 + subtreeRatio * .2 };
+      return { width: .42 + Math.sqrt(subtreeRatio) * .58, opacity: .25 + subtreeRatio * .15 };
+    }
+
+    function appendKnowledgeRootFibers() {
+      for (let index = 0; index < 24; index += 1) {
+        const side = index % 2 ? 1 : -1;
+        const spread = 20 + Math.floor(index / 2) * 6.2;
+        const path = createSvgElement('path', {
+          d: `M ${knowledgeRoot.x + side * (index % 4) * .7} ${knowledgeRoot.y + 2} C ${knowledgeRoot.x + side * spread * .12} ${knowledgeRoot.y - 38}, ${knowledgeRoot.x + side * spread * .56} ${knowledgeRoot.y - 68}, ${knowledgeRoot.x + side * spread} ${knowledgeRoot.y - 84 - (index % 5) * 5}`,
+          class: 'knowledge-root-fiber',
+          'stroke-width': (.5 + (index % 4) * .12).toFixed(2)
+        });
+        knowledgeMapBranches.append(path);
+      }
+    }
+
+    function appendKnowledgeCoreGrowthTrunk() {
+      const core = knowledgeNodeById.get('core');
+      if (!core) return;
+      const curve = knowledgeTopicGrowthCurve(core);
+      const ratio = Math.max(.15, core.weight / knowledgeMaxTopicWeight);
+      knowledgeMapBranches.append(createSvgElement('path', {
+        d: `M ${curve[0].x} ${curve[0].y} C ${curve[1].x} ${curve[1].y}, ${curve[2].x} ${curve[2].y}, ${curve[3].x} ${curve[3].y}`,
+        class: 'knowledge-map-branch level-1 knowledge-core-growth-trunk',
+        style: `--branch-width:${(1.15 + Math.sqrt(ratio) * 2.9).toFixed(2)}px;--branch-opacity:${(.3 + ratio * .3).toFixed(2)}`,
+        'data-topic-id': 'core'
+      }));
     }
 
     function renderKnowledgeTree() {
       knowledgeMapBranches.replaceChildren();
       knowledgeMapNodes.replaceChildren();
+      appendKnowledgeRootFibers();
+      appendKnowledgeCoreGrowthTrunk();
       knowledgeNodeData.forEach(node => {
         const parent = node.parentId ? knowledgeNodeById.get(node.parentId) : null;
         if (parent) {
+          const visual = knowledgeBranchVisual(node);
           const branch = createSvgElement('path', {
             d: knowledgeBranchPath(parent, node),
-            class: `knowledge-map-branch level-${Math.min(node.level, 3)}`,
+            class: `knowledge-map-branch level-${Math.min(node.level, 4)}`,
             'data-knowledge-branch': node.id,
             'data-topic-id': node.topicId,
-            'data-confidence': node.confidence || 'high'
+            'data-confidence': node.confidence || 'high',
+            style: `--branch-width:${visual.width.toFixed(2)}px;--branch-opacity:${visual.opacity.toFixed(2)}`
           });
           knowledgeMapBranches.append(branch);
         }
 
         const group = createSvgElement('g', {
-          class: `knowledge-map-node level-${Math.min(node.level, 3)}${node.id === activeKnowledgeNodeId ? ' active' : ''}`,
+          class: `knowledge-map-node level-${Math.min(node.level, 4)}${node.id === activeKnowledgeNodeId ? ' active' : ''}`,
           transform: `translate(${node.x} ${node.y})`,
           role: 'treeitem',
           tabindex: node.id === activeKnowledgeNodeId ? '0' : '-1',
@@ -3395,21 +3591,42 @@
         });
         const title = createSvgElement('title');
         title.textContent = `${node.title} · ${node.meta}`;
-        const radius = node.level === 0 ? 5.6 : node.level === 1 ? 4.8 : node.level === 2 ? 3.2 : 2.35;
+        const density = Math.max(.2, (node.evidenceDensity || 54) / 100);
+        const radius = node.level === 0 ? 2 : node.level === 1 ? 3.7 + density * 1.2 : node.level === 2 ? 2.2 + density * .8 : 1.35 + density * .72;
         const circle = createSvgElement('circle', { r: radius });
         const pulse = createSvgElement('circle', { r: radius + 1, class: 'knowledge-map-pulse' });
         group.append(title, pulse, circle);
-        if (node.level <= 1) {
+        if (node.level === 1) {
+          const [labelX, labelY, anchor] = node.label || [node.x < knowledgeRoot.x ? -13 : 13, -8, node.x < knowledgeRoot.x ? 'end' : 'start'];
           const label = createSvgElement('text', {
-            x: node.x < 410 ? -13 : 13,
-            y: node.level === 0 ? 4 : -8,
-            class: `knowledge-map-label${node.level === 0 ? ' knowledge-map-root-label' : ''}`,
-            'text-anchor': node.x < 410 ? 'end' : 'start'
+            x: labelX,
+            y: labelY,
+            class: 'knowledge-map-label',
+            'text-anchor': anchor
           });
           label.textContent = node.title;
           group.append(label);
         }
         knowledgeMapNodes.append(group);
+      });
+      renderKnowledgeMinimap();
+    }
+
+    function renderKnowledgeMinimap() {
+      const minimap = document.querySelector('#knowledgeMinimapSvg');
+      if (!minimap) return;
+      minimap.replaceChildren();
+      knowledgeNodeData.filter(node => node.parentId).forEach(node => {
+        const parent = knowledgeNodeById.get(node.parentId);
+        const visual = knowledgeBranchVisual(node);
+        minimap.append(createSvgElement('path', {
+          d: knowledgeBranchPath(parent, node),
+          fill: 'none',
+          stroke: '#657286',
+          'stroke-linecap': 'round',
+          'stroke-width': Math.max(.5, visual.width * .32),
+          opacity: Math.min(.7, visual.opacity + .08)
+        }));
       });
     }
 
@@ -3440,7 +3657,7 @@
       document.querySelectorAll('[data-knowledge-node]').forEach(element => {
         const node = knowledgeNodeById.get(element.dataset.knowledgeNode);
         const searchMatch = !query || `${node.title} ${node.tags.join(' ')}`.toLocaleLowerCase('zh-CN').includes(query);
-        const sameBranch = !active || active.id === 'personal-knowledge' || node.topicId === active.topicId || node.id === 'personal-knowledge';
+        const sameBranch = Boolean(query) || !active || active.id === 'personal-knowledge' || node.topicId === active.topicId || node.id === 'personal-knowledge';
         const available = !(filtered && node.confidence === 'low');
         element.classList.toggle('is-dimmed', !searchMatch || !sameBranch || !available);
         element.style.pointerEvents = available ? '' : 'none';
@@ -3448,7 +3665,7 @@
       document.querySelectorAll('[data-knowledge-branch]').forEach(element => {
         const node = knowledgeNodeById.get(element.dataset.knowledgeBranch);
         const searchMatch = !query || `${node.title} ${node.tags.join(' ')}`.toLocaleLowerCase('zh-CN').includes(query);
-        const sameBranch = !active || active.id === 'personal-knowledge' || node.topicId === active.topicId;
+        const sameBranch = Boolean(query) || !active || active.id === 'personal-knowledge' || node.topicId === active.topicId;
         const available = !(filtered && node.confidence === 'low');
         element.classList.toggle('is-dimmed', !searchMatch || !sameBranch || !available);
       });
@@ -3473,8 +3690,8 @@
       });
       updateKnowledgeInspector(node);
       if (options.zoom !== false) {
-        knowledgeZoom = node.level === 0 ? 1 : node.level === 1 ? 1.48 : 1.82;
-        knowledgePanX = 450 - node.x * knowledgeZoom;
+        knowledgeZoom = node.level === 0 ? 1 : node.level === 1 ? 1.3 : 1.56;
+        knowledgePanX = 392 - node.x * knowledgeZoom;
         knowledgePanY = 310 - node.y * knowledgeZoom;
         applyKnowledgeTransform();
       }
@@ -3487,17 +3704,16 @@
       knowledgeZoom = 1;
       knowledgePanX = 0;
       knowledgePanY = 0;
-      activeKnowledgeNodeId = 'personal-knowledge';
       applyKnowledgeTransform();
-      focusKnowledgeNode('personal-knowledge', { zoom: false });
+      focusKnowledgeNode(activeKnowledgeNodeId, { zoom: false });
     }
 
     function changeKnowledgeZoom(delta) {
       const nextZoom = Math.max(.78, Math.min(2.2, knowledgeZoom + delta));
-      const mapCenterX = (450 - knowledgePanX) / knowledgeZoom;
+      const mapCenterX = (420 - knowledgePanX) / knowledgeZoom;
       const mapCenterY = (310 - knowledgePanY) / knowledgeZoom;
       knowledgeZoom = nextZoom;
-      knowledgePanX = 450 - mapCenterX * knowledgeZoom;
+      knowledgePanX = 420 - mapCenterX * knowledgeZoom;
       knowledgePanY = 310 - mapCenterY * knowledgeZoom;
       applyKnowledgeTransform();
       knowledgeMapStatus.textContent = `知识树缩放 ${Math.round(knowledgeZoom * 100)}%`;
@@ -3516,8 +3732,19 @@
       return directional.sort((a, b) => Math.hypot(a.x - origin.x, a.y - origin.y) - Math.hypot(b.x - origin.x, b.y - origin.y))[0];
     }
 
-    renderKnowledgeTree();
-    focusKnowledgeNode(activeKnowledgeNodeId, { zoom: false });
+    setKnowledgeScenario(knowledgeScenarioId);
+    window.__pigeKnowledgeTreeAudit = {
+      scenarios: Object.keys(knowledgeScenarioDefinitions),
+      setScenario: scenarioId => setKnowledgeScenario(scenarioId),
+      snapshot: () => ({
+        scenario: knowledgeScenarioId,
+        nodeCount: knowledgeNodeData.length,
+        topics: knowledgeTopicDefinitions.map(topic => {
+          const node = knowledgeNodeById.get(topic.id);
+          return { id: topic.id, count: node?.count || 0, weight: Number((node?.weight || 0).toFixed(2)), x: Number((node?.x || 0).toFixed(1)), y: Number((node?.y || 0).toFixed(1)) };
+        })
+      })
+    };
 
     function replaceWithFocusedStatus(container, message) {
       container.innerHTML = `<div class="resolved-card" role="status" aria-live="polite" aria-atomic="true" tabindex="-1">${message}</div>`;

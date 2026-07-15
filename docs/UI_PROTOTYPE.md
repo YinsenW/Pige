@@ -744,69 +744,29 @@ Model Providers
 
 ## 11. Knowledge Tree
 
-Knowledge Tree is the semantic exploration surface. It should answer "how is my knowledge growing?" and "how are my ideas connected?" rather than "where is this file stored?"
+Knowledge Tree answers how knowledge is growing and connected; it is neither a file tree
+nor a graph editor. `KNOWLEDGE_MODEL_AND_LINKING.md` owns node, relation, evidence, and
+rebuild semantics.
 
-The data contract for topics, concepts, entities, relationship types, review gates, and graph rebuild behavior lives in `docs/KNOWLEDGE_MODEL_AND_LINKING.md`.
+Visual and interaction contract:
 
-It should show:
-
-- Trunk, branch, and leaf structure.
-- Main trunk for broad knowledge domains.
-- Branches for topics, concepts, projects, or recurring questions.
-- Leaves for fragmented knowledge units such as notes, chunks, source fragments, claims, examples, or accepted insights.
-- Related notes and source evidence.
-- Backlinks and suggested links.
-- Relationship confidence or status when useful.
-- Autonomous relationship Activity and exceptional unresolved conflicts.
-
-Visual encoding:
-
-- Trunk thickness represents the total weight of a knowledge domain.
-- Branch thickness represents the weight of a topic or concept.
-- Leaf count represents the number of fragmented knowledge units under that branch.
-- Leaf size represents the size or importance of a leaf cluster.
-- Leaf color depth represents density: deeper color means more accumulated fragments or stronger evidence.
-- New or low-confidence growth can use lighter leaves until evidence reinforces it.
-
-Interactive prototype target:
-
-- The tree is rendered from front-end SVG/DOM primitives, not a static image.
-- Every root, topic, and leaf is an individually named `treeitem`. Pointer selection or
-  Enter updates one floating inspector, highlights the selected branch, and smoothly
-  pans/zooms the node into view without changing page or hiding the sidebar.
-- Direction keys traverse nearby nodes. Search focuses the first match on Enter;
-  filter, relationship emphasis, topic-summary mode, wheel zoom, plus/minus, fit, and
-  drag pan all operate on the same graph camera.
-- Reduced motion removes spatial interpolation while preserving the same selected,
-  filtered, zoomed, and inspected end states.
-
-Current bounded slice:
-
-- Knowledge Tree is a separate sidebar destination, not a folder browser or graph editor.
-- A compact heading, Refresh action, totals, and nested disclosures expose domains,
-  concepts, source evidence, and supporting notes.
-- Native meters and adjacent text state exact weight, fragment, source, and leaf counts;
-  color or thickness is never the only explanation.
-- Navigable nodes open the existing confined Note Reader. Back restores focus to the
-  invoking tree button when it is still rendered, otherwise to the Knowledge Tree heading.
-  Opaque source IDs without a navigable Source Page display only a localized
-  `Source evidence` label.
-- Loading, ready, empty, degraded, and error states are localized. Force graphs, manual
-  taxonomy, editing, health workflows, and advanced graph analytics remain open.
-
-Illustrative hierarchy:
-
-```txt
-Knowledge Tree
-
-Main trunk: Local-first
-  Branch: Local RAG
-    Leaves: Embedding, lexical search, reranker, chunks, citations
-  Branch: Agent Memory
-    Leaves: preferences, corrections, scenarios
-  Branch: OCR Pipeline
-    Leaves: screenshots, scanned PDFs, slides
-```
+- SVG/DOM renders a botanical tree. Stable
+  topic IDs retain stable growth directions; domain/topic weight controls trunk/branch
+  width, unit count controls side-branch depth, and evidence/confidence controls node size
+  and color depth. Core Knowledge continues upward as
+  the shared growth axis. Adjacent text exposes the exact counts so color and width are
+  never the only explanation.
+- Balanced, single-domain-heavy, dual-core, and long-tail data remain legible. Larger
+  branches may claim more canopy without clipping UI or peers. Same IDs rebuild
+  deterministically.
+- Every visible semantic node is a named `treeitem`. Pointer or Enter selection updates
+  one inspector and smoothly focuses the node; direction keys traverse nearby nodes.
+  Search, filter, modes, wheel, plus/minus, fit, and drag pan share one camera. Search
+  supersedes stale branch dimming until cleared. Reduced motion preserves end states.
+- The separate sidebar destination supports localized ready, loading, empty, degraded,
+  and error states. Navigable nodes open the confined Reader and Back restores the
+  invoking node or heading. Opaque source IDs show only `Source evidence`. Force graphs,
+  taxonomy editing, health workflows, and advanced analytics remain open.
 
 ## 12. Knowledge Health
 

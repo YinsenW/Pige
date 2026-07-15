@@ -302,7 +302,7 @@
       "role": "treeitem",
       "intent": "Inspect one semantic concept/topic branch and its evidence boundary.",
       "states": ["default", "selected", "related", "dimmed", "focus-visible"],
-      "prototype_action": "Updates one shared floating detail surface, automatically zooms and pans the selected node into focus, highlights its branch, and supports directional-key traversal without modal or navigation churn.",
+      "prototype_action": "Renders deterministic data-driven growth from stable semantic IDs; topic weight changes branch width and canopy density. Selection updates one shared floating detail surface, automatically zooms and pans the selected node into focus, highlights its branch, and supports directional-key traversal without modal or navigation churn.",
       "production_bridge": "Knowledge graph node selection using stable semantic ID",
       "owner": "Knowledge Graph Service + Renderer"
     },
@@ -313,7 +313,7 @@
       "role": "searchbox and button groups",
       "intent": "Search, filter, change relationship emphasis, zoom, pan, or fit the same knowledge graph without creating a second navigation surface.",
       "states": ["tree", "network", "topic-summary", "filtered", "search-match", "zoomed", "fitted"],
-      "prototype_action": "Search focuses the first result on Enter; modes preserve selection; plus/minus/fit and wheel update the canvas; reduced motion preserves every final state without spatial interpolation.",
+      "prototype_action": "Search supersedes selected-branch dimming and focuses the first result on Enter; clearing search restores selection context. Modes preserve selection; plus/minus/fit and wheel update the canvas; reduced motion preserves every final state without spatial interpolation.",
       "production_bridge": "Renderer-local graph camera over stable Knowledge Graph query results",
       "owner": "Knowledge Graph Service + Renderer"
     },

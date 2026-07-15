@@ -35,6 +35,15 @@
       "observable_window_px": { "left": 100, "top": 80, "right": 3939, "bottom": 1999 },
       "derived_window_logical_px": { "width": 1920, "height": 960 },
       "committed": false
+    },
+    {
+      "filename": "codex-clipboard-b109ed1a-084d-4297-9c3e-f226c80f2d38.png",
+      "surface": "user-approved botanical Knowledge Tree composition",
+      "scale_factor": 1,
+      "image_px": { "width": 492, "height": 398 },
+      "observable_tree_root_px": { "x": 246, "y": 387 },
+      "observable_canopy_bounds_px": { "left": 31, "top": 27, "right": 421, "bottom": 389 },
+      "committed": false
     }
   ],
   "measurement_method": {
@@ -127,6 +136,28 @@
     "artifact": "./baselines/settings-appearance-dark-1280x720.jpg",
     "encoding": "JPEG emitted by the approved in-app browser capture surface",
     "use": "Human visual regression and geometry review; exact color truth comes from the measured token contract above."
+  },
+  "knowledge_tree_pige_baseline": {
+    "route": "?screen=knowledge&knowledgeScenario=balanced",
+    "viewport_px": { "width": 1144, "height": 874 },
+    "artifact": "./baselines/knowledge-tree-balanced-1144x874.jpg",
+    "encoding": "JPEG emitted by the approved in-app browser capture surface",
+    "use": "Human botanical silhouette and dynamic-density regression; semantic truth comes from the data-mapping contract."
+  },
+  "knowledge_tree_data_mapping": {
+    "stable_layout_seed": "semantic topic ID plus stable node index",
+    "domain_weight": "main trunk width",
+    "topic_weight": "topic branch width and canopy claim",
+    "knowledge_unit_count": "growth-point count, side-branch count, and recursive depth",
+    "evidence_density": "node radius and color depth",
+    "confidence": "full versus muted node treatment",
+    "reference_ratios": { "root_x": 0.5, "canopy_width": 0.79, "canopy_height": 0.91 },
+    "mock_distributions": {
+      "balanced": { "treeitems": 260, "dominant_branch": "project-management" },
+      "product-heavy": { "treeitems": 236, "dominant_branch": "product-design" },
+      "dual-core": { "treeitems": 262, "dominant_branches": ["product-design", "project-management"] },
+      "long-tail": { "treeitems": 169, "dominant_branch": "writing" }
+    }
   },
   "tolerances": {
     "geometry_px": 1,
