@@ -401,6 +401,7 @@
       "intent": "Ask about the open note with explicit current-note context.",
       "states": ["empty", "draft", "IME-composing", "ready", "in-flight"],
       "prototype_action": "Supports IME-safe Enter, Shift+Enter, and disabled-empty send.",
+      "layout_contract": "The Note Agent is a focus-contained overlay drawer through 1111 px and a fixed 432 px rail only above 1111 px; opening or closing it never squeezes the Markdown reader below its governed width.",
       "production_bridge": "Note Agent submit-turn contract",
       "owner": "Note Agent Service"
     },
@@ -478,6 +479,7 @@
       "intent": "Validate and commit one provider-level bootstrap connection.",
       "states": ["disabled-missing-credential", "ready", "checking", "connected", "failed"],
       "prototype_action": "Returns localized prototype feedback without exposing endpoint, credential, or raw provider error.",
+      "layout_contract": "Preset rows expose only required credentials; Custom Provider protocol and endpoint controls shrink to the available Settings row at 400 px and wrap their descriptive copy without horizontal overflow.",
       "production_bridge": "Model Provider Registry connect contract and secret store",
       "owner": "Model Provider Registry + Settings and Secrets Service"
     },

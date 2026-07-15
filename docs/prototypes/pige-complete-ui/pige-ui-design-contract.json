@@ -95,6 +95,7 @@
   "review": {
     "base_url": "http://127.0.0.1:4174/docs/prototypes/pige-complete-ui/",
     "viewport_harness": "./visual-review-harness.html?width=680&height=680&route=%3Fscreen%3Dhome",
+    "locale_stress_harness": "./visual-review-harness.html?width=400&height=760&locale=fr&route=%3Fpanel%3Dprovider-custom%23settings",
     "serve_from": "repository root",
     "viewports": {
       "compact": { "width": 1144, "height": 874 },
@@ -177,11 +178,19 @@
     "prototype_baseline_screenshots": 7,
     "accessible_name_routes_checked": 52,
     "tab_order_routes_checked": 52,
-    "tab_order_focus_stops_checked": 639,
+    "tab_order_focus_stops_checked": 677,
     "tab_order_failures": 0,
-    "native_document_boundary_transitions": 2,
+    "native_document_boundary_transitions": 18,
+    "native_roving_radio_members_skipped_by_tab": 1,
     "narrow_note_agent_focus_containment_viewports_px": [400, 760],
+    "compact_note_agent_overlay_max_width_px": 1111,
     "settings_focus_containment_viewports_px": [400, 760, 1280],
+    "locale_catalogs_checked": 6,
+    "locale_keys_per_catalog": 361,
+    "locale_stress_routes_checked": 52,
+    "locale_stress_viewports_px": [[400, 760], [760, 760], [1536, 900]],
+    "locale_stress_render_checks": 936,
+    "locale_stress_failures": 0,
     "current_action_safe_initial_focus": "deny",
     "current_action_terminal_focus": "single body-free status",
     "live_region_patterns_verified": ["safe draft", "current-action confirmation", "typed retryable error", "source wait", "ingress progress"],
@@ -193,7 +202,7 @@
     "console_errors": [],
     "known_visual_discrepancies": [
       "Automated raster overlay remains open beyond the measured shared primitives and seven Pige-only canonical baselines.",
-      "Screen-reader announcement, six-locale text expansion, and assembled platform text-rendering review remain open."
+      "Spoken screen-reader announcement and assembled platform text-rendering review remain open."
     ]
   }
 }

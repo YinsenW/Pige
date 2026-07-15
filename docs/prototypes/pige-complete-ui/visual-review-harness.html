@@ -46,13 +46,91 @@
     const width = Math.min(1536, Math.max(320, Number(params.get('width')) || 680));
     const height = Math.min(1200, Math.max(568, Number(params.get('height')) || 680));
     const route = params.get('route') || '?screen=home';
+    const locale = params.get('locale') || '';
     const safeRoute = route.startsWith('?') ? route : '?screen=home';
+    const localeStressCopy = {
+      'zh-Hans': {
+        lang: 'zh-CN', firstGuide: '现在可以保存内容。连接模型后可向 Pi Agent 提问。',
+        decisionTitle: '将这些上下文发送到已配置的模型？', decisionBody: '所选上下文属于私密内容，或超过了你的确认阈值。',
+        deny: '不发送', allow: '仅本次允许', statusLong: '备份与恢复可用。备份默认排除可重建索引、缓存、本地模型和密钥。',
+        errorLong: '连接失败。请检查协议、Base URL、模型 ID 和 API Key 后重试。', retry: '重试', models: '模型', vault: '仓库与笔记存储'
+      },
+      en: {
+        lang: 'en', firstGuide: 'You can save content now. Connect a model to ask Pi Agent.',
+        decisionTitle: 'Send this context to the configured model?', decisionBody: 'This selected context is private or larger than your confirmation threshold.',
+        deny: "Don't send", allow: 'Allow once', statusLong: 'Backup and restore are available. Backups exclude rebuildable indexes, caches, local models, and secrets.',
+        errorLong: 'Connection failed. Check the protocol, Base URL, model ID, and API key, then try again.', retry: 'Retry', models: 'Models', vault: 'Vault & Note Storage'
+      },
+      de: {
+        lang: 'de', firstGuide: 'Sie können Inhalte jetzt speichern. Verbinden Sie ein Modell, um Pi Agent zu fragen.',
+        decisionTitle: 'Diesen Kontext an das konfigurierte Modell senden?', decisionBody: 'Der ausgewahlte Kontext ist privat oder uberschreitet deine Bestatigungsschwelle.',
+        deny: 'Nicht senden', allow: 'Einmal erlauben', statusLong: 'Backup und Wiederherstellung sind verfügbar. Backups schließen neu aufbaubare Indizes, Caches, lokale Modelle und Geheimnisse aus.',
+        errorLong: 'Verbindung fehlgeschlagen. Prüfe Protokoll, Base URL, Modell-ID und API-Schlüssel und versuche es erneut.', retry: 'Erneut versuchen', models: 'Modelle', vault: 'Tresor und Notizen'
+      },
+      fr: {
+        lang: 'fr', firstGuide: 'Vous pouvez enregistrer du contenu maintenant. Connectez un modèle pour interroger Pi Agent.',
+        decisionTitle: 'Envoyer ce contexte au modele configure ?', decisionBody: 'Le contexte selectionne est prive ou depasse votre seuil de confirmation.',
+        deny: 'Ne pas envoyer', allow: 'Autoriser une fois', statusLong: 'La sauvegarde et la restauration sont disponibles. Les sauvegardes excluent les index reconstruisibles, les caches, les modèles locaux et les secrets.',
+        errorLong: 'Échec de la connexion. Vérifiez le protocole, l’URL de base, l’ID du modèle et la clé API, puis réessayez.', retry: 'Réessayer', models: 'Modèles', vault: 'Coffre et notes'
+      },
+      ja: {
+        lang: 'ja', firstGuide: 'コンテンツは今すぐ保存できます。モデルを接続すると Pi Agent に質問できます。',
+        decisionTitle: 'このコンテキストを設定済みモデルに送信しますか？', decisionBody: '選択したコンテキストはプライベート、または確認しきい値を超えています。',
+        deny: '送信しない', allow: '今回のみ許可', statusLong: 'バックアップと復元を利用できます。バックアップは再構築可能なインデックス、キャッシュ、ローカルモデル、秘密情報を除外します。',
+        errorLong: '接続できませんでした。プロトコル、Base URL、モデル ID、API キーを確認して再試行してください。', retry: '再試行', models: 'モデル', vault: 'Vault とノート保存先'
+      },
+      ko: {
+        lang: 'ko', firstGuide: '지금 콘텐츠를 저장할 수 있습니다. 모델을 연결하면 Pi Agent에게 질문할 수 있습니다.',
+        decisionTitle: '이 컨텍스트를 구성된 모델로 보낼까요?', decisionBody: '선택한 컨텍스트가 비공개이거나 확인 기준보다 큽니다.',
+        deny: '보내지 않기', allow: '이번만 허용', statusLong: '백업 및 복원을 사용할 수 있습니다. 백업은 재생성 가능한 인덱스, 캐시, 로컬 모델, 비밀 정보를 제외합니다.',
+        errorLong: '연결에 실패했습니다. 프로토콜, Base URL, 모델 ID, API 키를 확인한 뒤 다시 시도하세요.', retry: '다시 시도', models: '모델', vault: 'Vault 및 노트 저장소'
+      }
+    };
     const reviewFrame = document.querySelector('#reviewFrame');
     reviewFrame.style.width = `${width}px`;
     reviewFrame.style.height = `${height}px`;
-    document.querySelector('#prototypeFrame').src = `./index.html${safeRoute}`;
+    const prototypeFrame = document.querySelector('#prototypeFrame');
+    prototypeFrame.addEventListener('load', () => {
+      const copy = localeStressCopy[locale];
+      if (!copy) return;
+      const doc = prototypeFrame.contentDocument;
+      if (!doc) return;
+      doc.documentElement.lang = copy.lang;
+      doc.documentElement.dataset.localeStress = locale;
+
+      const setText = (selector, text) => {
+        const element = doc.querySelector(selector);
+        if (element) element.textContent = text;
+      };
+      const setOwnText = (selector, text) => {
+        const element = doc.querySelector(selector);
+        if (!element) return;
+        const textNodes = [...element.childNodes].filter(node => node.nodeType === Node.TEXT_NODE);
+        const labelNode = textNodes.find(node => node.nodeValue.trim()) || textNodes.at(-1);
+        textNodes.forEach(node => { node.nodeValue = node === labelNode ? text : ''; });
+        if (!labelNode) element.append(document.createTextNode(text));
+      };
+
+      setText('.hero-subtitle', copy.firstGuide);
+      setText('.egress-card h2', copy.decisionTitle);
+      setText('.egress-card p', copy.decisionBody);
+      setText('.egress-card [data-decision-action="deny"]', copy.deny);
+      setText('.egress-card [data-decision-action="allow"]', copy.allow);
+      setText('.permission-card p', copy.decisionBody);
+      setText('.model-missing-card p', copy.firstGuide);
+      setText('.error-card p', copy.errorLong);
+      setText('.error-card [data-retry-job]', copy.retry);
+      setOwnText('[data-settings-page="models"]', copy.models);
+      setOwnText('[data-settings-page="vault"]', copy.vault);
+      doc.querySelectorAll('.settings-panel.active .settings-row-copy span').forEach((element, index) => {
+        element.textContent = index % 2 === 0 ? copy.statusLong : copy.errorLong;
+      });
+      setText('.settings-panel.active .settings-panel-header p', copy.statusLong);
+      prototypeFrame.contentWindow?.dispatchEvent(new Event('resize'));
+    });
+    prototypeFrame.src = `./index.html${safeRoute}`;
     const viewportLabel = document.querySelector('#viewportLabel');
-    viewportLabel.value = `${width} × ${height} · ${safeRoute}`;
+    viewportLabel.value = `${width} × ${height} · ${safeRoute}${locale ? ` · ${locale}` : ''}`;
     viewportLabel.hidden = params.get('label') === '0';
   </script>
 </body>

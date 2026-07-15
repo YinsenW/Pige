@@ -1852,7 +1852,7 @@
     .settings-button.primary { border-color: var(--accent); background: var(--accent); color: #fff; }
     .settings-button.danger { border-color: color-mix(in oklab, var(--settings-danger) 22%, transparent); background: color-mix(in oklab, var(--settings-danger) 8%, transparent); color: var(--settings-danger); }
     .settings-button.link { min-height: auto; padding: 0; border: 0; background: transparent; color: var(--accent); }
-    .settings-select { max-width: 240px; cursor: pointer; outline: 0; }
+    .settings-select { min-width: 0; max-width: 240px; cursor: pointer; outline: 0; }
     .settings-input {
       width: min(320px, 100%);
       min-height: 32px;
@@ -1970,6 +1970,7 @@
       .theme-preview { height: 84px; }
       .settings-row { align-items: flex-start; flex-direction: column; gap: 9px; }
       .settings-row-control { width: 100%; justify-content: flex-end; }
+      .settings-row > .settings-select { width: 100%; max-width: 100%; }
     }
 
     @media (max-width: 520px) {
@@ -2134,6 +2135,20 @@
         pointer-events: auto;
         transform: translateX(0);
       }
+    }
+
+    @media (min-width: 680px) and (max-width: 1111px) {
+      .app-window.note-mode,
+      .app-window.note-mode.sidebar-expanded,
+      .app-window.note-mode.agent-expanded,
+      .app-window.note-mode.sidebar-expanded.agent-expanded { width: min(100vw, var(--reader-pane-width)); }
+      .main-layout.note-open,
+      .main-layout.note-open.sidebar-open,
+      .main-layout.note-open.agent-open,
+      .main-layout.note-open.sidebar-open.agent-open { grid-template-columns: 0 minmax(0, 1fr) 0; }
+      .note-agent { display: block; position: absolute; z-index: 25; inset: 0 0 0 auto; width: min(100vw, var(--agent-pane-width)); box-shadow: -14px 0 32px rgba(0,0,0,.12); }
+      .note-agent-inner { width: min(100vw, var(--agent-pane-width)); }
+      .note-open:not(.agent-open) .note-agent { transform: translateX(100%); }
     }
   </style>
 </head>
@@ -3737,7 +3752,7 @@
       const settingsActive = document.body.classList.contains('settings-active');
       const compactNoteAgentOpen = mainLayout.classList.contains('note-open')
         && mainLayout.classList.contains('agent-open')
-        && window.matchMedia('(max-width: 1439px)').matches;
+        && window.matchMedia('(max-width: 1111px)').matches;
 
       if (event.key === 'Tab' && (settingsActive || compactNoteAgentOpen)) {
         const focusRoot = settingsActive ? settingsWindow : document.querySelector('.note-agent');

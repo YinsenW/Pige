@@ -53,9 +53,10 @@
     "routes_with_accessible_name_scan": 52,
     "interactive_elements_with_structural_scan": 191,
     "routes_with_real_tab_order_walkthrough": 52,
-    "real_tab_focus_stops_checked": 639,
+    "real_tab_focus_stops_checked": 677,
     "real_tab_order_failures": 0,
-    "native_document_boundary_transitions": 2,
+    "native_document_boundary_transitions": 18,
+    "native_roving_radio_members_skipped_by_tab": 1,
     "unnamed_visible_controls": 0,
     "duplicate_ids": 0,
     "positive_tabindex": 0,
@@ -73,7 +74,7 @@
       "Selection toolbar: ArrowLeft, ArrowRight, Home, End move focus without triggering an action",
       "Intermediate Library drawer: Escape closes the drawer and restores focus to the sidebar toggle",
       "Independent Settings surface: Tab and Shift+Tab remain inside the surface and wrap at both ends",
-      "Compact Note Agent at 400 and 760 px: Tab and Shift+Tab remain inside the open drawer",
+      "Compact Note Agent at 400 and 760 px: Tab and Shift+Tab remain inside the open drawer; the overlay contract extends through 1111 px",
       "Appearance and restore-mode radio groups: arrow keys move and select with one Tab stop",
       "Current-action confirmations: focus starts on the safe deny action and resolves to one focused terminal status"
     ],
@@ -91,7 +92,7 @@
       "Appearance and restore identity choices use named roving radio groups"
     ],
     "remaining": [
-      "Complete screen-reader announcement, six-locale expansion, and platform text-rendering review."
+      "Complete spoken screen-reader announcement and assembled platform text-rendering review."
     ]
   },
   "measured_browser_evidence": {
@@ -238,7 +239,7 @@
     "raster_overlay_locked": 0,
     "narrow_or_small_viewport_locked": 6,
     "open_p0": ["Raster overlay/difference evidence", "Complete screen-reader announcement evidence"],
-    "open_p1": ["Complete screen-reader, six-locale text-expansion, and assembled platform rendering audit"],
+    "open_p1": ["Complete spoken screen-reader and assembled platform rendering audit"],
     "decision": "The prototype is broad and interactive, but the pixel-fidelity objective remains open."
   },
   "responsive_evidence": {
@@ -249,6 +250,13 @@
     "additional_679_px_routes_checked": 26,
     "explicit_679_to_680_sidebar_boundary_checks": 2,
     "total_render_checks": 236,
+    "locale_catalogs_checked": 6,
+    "locale_keys_per_catalog": 361,
+    "locale_stress_routes_checked": 52,
+    "locale_stress_viewports_px": [[400, 760], [760, 760], [1536, 900]],
+    "locale_stress_render_checks": 936,
+    "locale_stress_failures": 0,
+    "compact_note_agent_overlay_max_width_px": 1111,
     "horizontal_overflow_failures": 0,
     "visible_control_clipping_failures": 0,
     "fixed_during_review": [
@@ -258,7 +266,9 @@
       "Reader initialization stole focus and showed an unsolicited blue focus ring.",
       "Narrow reader breadcrumb and secondary toolbar actions crowded the title row.",
       "Long localized selection actions escaped the 400 px viewport.",
-      "The 760 px narrow breakpoint misclassified the exact 680 px expanded Home as an overlay; the corrected 679 px boundary preserves 280 + 400 px side-by-side geometry at 680 px."
+      "The 760 px narrow breakpoint misclassified the exact 680 px expanded Home as an overlay; the corrected 679 px boundary preserves 280 + 400 px side-by-side geometry at 680 px.",
+      "Custom Provider protocol selection exceeded its narrow Settings row because of intrinsic select width; the control now shrinks to the row at 400 px in all six locales.",
+      "At 760 px the fixed Note Agent rail was pushed outside the reader window; 680-1111 px now uses the same bounded overlay drawer and focus-containment model as compact widths."
     ]
   }
 }

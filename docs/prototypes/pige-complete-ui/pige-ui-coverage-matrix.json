@@ -392,9 +392,9 @@
       "source": "UI_PROTOTYPE 16.1, 16.2, 18, 19",
       "prototype": "partial",
       "production": "partial",
-      "prototype_evidence": ["pige-ui-element-map.json", "pige-ui-visual-review-ledger.json structural scan of 191 controls", "52-route real Tab-order walkthrough covering 639 focus stops with two native document-boundary transitions and zero Pige failures", "400 and 760 px Note Agent focus containment and focus return", "400, 760, and 1280 px Settings focus containment", "Current-action safe initial focus and focused terminal truth", "Named progressbar, current-page, live-region, and roving-radio semantics", "Library and selection arrow-key navigation", "prefers-reduced-motion CSS"],
+      "prototype_evidence": ["pige-ui-element-map.json", "pige-ui-visual-review-ledger.json structural scan of 191 controls", "52-route real Tab-order walkthrough covering 677 focus stops with 18 native document-boundary transitions, one native roving-radio member skipped by Tab, and zero Pige failures", "400 and 760 px Note Agent focus containment and focus return", "400, 760, and 1280 px Settings focus containment", "Current-action safe initial focus and focused terminal truth", "Named progressbar, current-page, live-region, and roving-radio semantics", "Library and selection arrow-key navigation", "936 six-locale layout checks across 52 routes at 400, 760, and 1536 px", "prefers-reduced-motion CSS"],
       "production_evidence": ["six locale catalogs", "focused permission/restore semantics"],
-      "gap": "Names, structural ARIA, contrast, reduced motion, composite arrow-key behavior, full Tab order, compact-drawer containment, current-action focus ownership, live-region structure, and tested focus return pass. Spoken screen-reader announcements, six-locale copy expansion, and assembled platform text rendering remain open.",
+      "gap": "Names, structural ARIA, contrast, reduced motion, composite arrow-key behavior, full Tab order, compact-drawer containment, current-action focus ownership, live-region structure, tested focus return, and six-locale browser layout stress pass. Spoken screen-reader announcements and assembled platform text rendering remain open.",
       "priority": "P0"
     },
     {
@@ -403,9 +403,9 @@
       "source": "UI_PROTOTYPE 2.1, 16.2, 19",
       "prototype": "covered",
       "production": "partial",
-      "prototype_evidence": ["visual-review-harness.html", "236 browser-rendered canonical/narrow/long-copy/boundary checks", "seven Pige-only JPEG baseline screenshots", "pige-ui-reference-metrics.json", "pige-ui-visual-review-ledger.json"],
+      "prototype_evidence": ["visual-review-harness.html", "236 browser-rendered canonical/narrow/long-copy/boundary checks", "936 six-locale checks across 52 routes at 400, 760, and 1536 px", "680-1111 px bounded Note Agent overlay contract", "seven Pige-only JPEG baseline screenshots", "pige-ui-reference-metrics.json", "pige-ui-visual-review-ledger.json"],
       "production_evidence": ["responsive CSS foundations"],
-      "gap": "Prototype has zero horizontal overflow or visible-control clipping across all routes at 400, 760, and 1536 px plus 400 px long-copy stress; targeted 679/680 checks lock the overlay-to-fixed-rail boundary. Production must repeat the governed matrix on assembled macOS and Windows builds.",
+      "gap": "Prototype has zero horizontal overflow, target text overflow, or visible-control clipping across the 936-route/language/viewport matrix. Targeted 679/680 checks lock the compact Home boundary, while the Note Agent remains a bounded overlay through 1111 px and becomes a fixed rail above it. Production must repeat the governed matrix on assembled macOS and Windows builds.",
       "priority": "P0"
     },
     {
