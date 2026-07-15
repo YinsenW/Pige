@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, safeStorage, type WebContents } from "electron";
-import { existsSync, realpathSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { existsSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { PigeDomainError } from "@pige/domain";
 import type {
@@ -105,6 +105,9 @@ import { HomeAgentUrlService } from "./services/home-agent-url-service";
 import { LocalDatabaseRebuildWorkerService } from "./services/local-database-rebuild-worker-service";
 import { LocalDatabaseService } from "./services/local-database-service";
 import { listMarkdownTagCatalog } from "./services/markdown-page-index";
+import { runPackagedMemoryApplicationEvidence } from "./services/packaged-memory-application-evidence";
+import { generatePackagedMemoryFixture } from "./services/packaged-memory-fixture";
+import { samplePackagedAppMemory } from "./services/packaged-memory-metrics";
 import { LocalSettingsStore } from "./services/local-settings";
 import { ModelProviderRegistry } from "./services/model-provider-registry";
 import { ModelEgressApprovalService } from "./services/model-egress-approval-service";
@@ -115,6 +118,7 @@ import {
 } from "./services/permissioned-external-capability-service";
 import { NotesService } from "./services/notes-service";
 import { OcrService } from "./services/ocr-service";
+import { resolvePackagedEvidenceMode } from "./services/packaged-evidence-mode";
 import { ProposalService } from "./services/proposal-service";
 import { installRendererNavigationGuard } from "./services/renderer-navigation-guard";
 import { RestorePreviewRegistry } from "./services/restore-preview-registry";
@@ -126,6 +130,7 @@ import { guardSettingAction, type SettingActionConfirmation } from "./services/s
 import { getSettingsRegistry } from "./services/settings-registry";
 import { ToolchainService } from "./services/toolchain-service";
 import { VaultService } from "./services/vault-service";
+import { createTemporaryEvidenceVaultOnDisk, createVaultOnDisk } from "./services/vault-layout";
 import { WindowModeService } from "./services/window-mode-service";
 
 let vaultService: VaultService | undefined;
@@ -164,8 +169,6 @@ const activeSupportBundleExports = new Map<string, {
 }>();
 const restorePreviewRegistry = new RestorePreviewRegistry();
 const restorePreviewTrackedSenders = new Set<number>();
-const PACKAGED_RUNTIME_SMOKE_ARGUMENT = "--pige-packaged-runtime-smoke-report=";
-
 const RESTORE_NATIVE_COPY = {
   "de": {
     cancel: "Abbrechen",
@@ -263,6 +266,15 @@ type PackagedRuntimeSmokeStage =
   | "renderer_window"
   | "renderer_load"
   | "renderer_probe"
+  | "report_write";
+
+type PackagedMemoryEvidenceStage =
+  | "fixture_create"
+  | "vault_bind"
+  | "initial_rebuild"
+  | "renderer_window"
+  | "renderer_load"
+  | "memory_scenario"
   | "report_write";
 
 interface PackagedRuntimeSmokeFailure {
@@ -1603,8 +1615,138 @@ ipcMain.handle("restore.apply", async (event, request: RestoreApplyRequest): Pro
 ipcMain.handle("system.toolchainHealth", () => getToolchainService().health());
 
 app.whenReady().then(async () => {
-  const packagedRuntimeSmokeReportPath = resolvePackagedRuntimeSmokeReportPath();
-  if (packagedRuntimeSmokeReportPath) {
+  let packagedEvidenceMode;
+  try {
+    packagedEvidenceMode = resolvePackagedEvidenceMode({
+      argv: process.argv,
+      isPackaged: app.isPackaged,
+      tempPath: app.getPath("temp")
+    });
+  } catch {
+    app.exit(1);
+    return;
+  }
+  if (packagedEvidenceMode.kind === "memory") {
+    const packagedMemoryReportPath = packagedEvidenceMode.reportPath;
+    let memoryWindow: BrowserWindow | undefined;
+    let memoryStage: PackagedMemoryEvidenceStage = "fixture_create";
+    try {
+      const scenarioRoot = dirname(packagedMemoryReportPath);
+      const vaultName = "PackagedMemoryVault";
+      const vaultPath = join(scenarioRoot, vaultName);
+      createTemporaryEvidenceVaultOnDisk({
+        evidenceRoot: scenarioRoot,
+        vaultName,
+        tempPath: app.getPath("temp"),
+        now: new Date("2026-07-15T00:00:00.000Z"),
+        locale: "en"
+      });
+      const fixture = generatePackagedMemoryFixture(vaultPath, 10_000);
+
+      memoryStage = "vault_bind";
+      localSettingsStore = new LocalSettingsStore(app.getPath("userData"));
+      vaultService = new VaultService(getLocalSettingsStore(), () => false);
+      getVaultService().openPath(vaultPath);
+      localDatabaseService = new LocalDatabaseService(
+        undefined,
+        new LocalDatabaseRebuildWorkerService()
+      );
+      jobsService = new JobsService(getVaultService(), undefined, getLocalDatabaseService());
+      toolchainService = new ToolchainService(resolveToolchainManifestPath());
+
+      memoryStage = "initial_rebuild";
+      let initialProgressEventCount = 0;
+      const initialized = await getLocalDatabaseService().rebuildInWorker(vaultPath, {
+        onProgress: () => { initialProgressEventCount += 1; }
+      });
+      const initializedChunks = getLocalDatabaseService().chunkIndexStatus(vaultPath);
+      if (
+        initialized.pageCount !== 10_000 ||
+        initialized.invalidPageCount !== 0 ||
+        initializedChunks?.chunkCount !== 100_000 ||
+        initialProgressEventCount <= 0
+      ) {
+        throw new Error("Packaged memory fixture did not initialize its reviewed index.");
+      }
+
+      memoryStage = "renderer_window";
+      memoryWindow = createMainWindow(false);
+      memoryStage = "renderer_load";
+      const renderer = await runPackagedRendererSmoke(memoryWindow);
+
+      memoryStage = "memory_scenario";
+      const evidence = await runPackagedMemoryApplicationEvidence({
+        browserWindow: memoryWindow,
+        capture: getCaptureService(),
+        database: getLocalDatabaseService(),
+        heavyJob: {
+          requestIndexRebuild: (options) => getJobsService().requestIndexRebuild(options),
+          readIndexRebuild: (jobId) => getJobsService()
+            .list({ classes: ["index_rebuild"], limit: 100 })
+            .jobs.find((job) => job.id === jobId)
+        },
+        vaultPath,
+        firstPageId: fixture.firstPageId,
+        sample: () => samplePackagedAppMemory(app.getAppMetrics())
+      });
+
+      memoryStage = "report_write";
+      const memoryReport = `${JSON.stringify({
+        schemaVersion: 1,
+        status: "passed",
+        runtimeIdentity: {
+          appName: app.getName(),
+          appVersion: app.getVersion(),
+          isPackaged: app.isPackaged
+        },
+        renderer: {
+          titleReady: renderer.title === "Pige",
+          rootReady: renderer.rootReady,
+          preloadReady: renderer.preloadReady,
+          healthReady: renderer.healthReady
+        },
+        fixture: {
+          pageCount: fixture.pageCount,
+          chunkCount: fixture.expectedChunkCount,
+          fixtureSha256: fixture.fixtureSha256,
+          initialProgressEventCount
+        },
+        evidence
+      })}\n`;
+      if (Buffer.byteLength(memoryReport, "utf8") > 2 * 1024 * 1024) {
+        throw new Error("Packaged memory evidence report exceeded its reviewed byte bound.");
+      }
+      writeFileSync(packagedMemoryReportPath, memoryReport, {
+        encoding: "utf8",
+        mode: 0o600,
+        flag: "wx"
+      });
+      memoryWindow.destroy();
+      getVaultService().close();
+      app.exit(0);
+    } catch {
+      try {
+        writeFileSync(packagedMemoryReportPath, `${JSON.stringify({
+          schemaVersion: 1,
+          status: "failed",
+          stage: memoryStage
+        })}\n`, {
+          encoding: "utf8",
+          mode: 0o600,
+          flag: "wx"
+        });
+      } catch {
+        // Preserve the original fail-closed exit if the bounded report cannot be written.
+      }
+      memoryWindow?.destroy();
+      vaultService?.close();
+      app.exit(1);
+    }
+    return;
+  }
+
+  if (packagedEvidenceMode.kind === "runtime_smoke") {
+    const packagedRuntimeSmokeReportPath = packagedEvidenceMode.reportPath;
     let smokeWindow: BrowserWindow | undefined;
     let smokeStage: PackagedRuntimeSmokeStage = "runtime_import";
     try {
@@ -1770,19 +1912,4 @@ function resolveToolchainManifestPath(): string {
     join(app.getAppPath(), "../../resources/toolchain-manifest/toolchain.manifest.json")
   ];
   return candidates.find((candidate) => existsSync(candidate)) ?? fallback;
-}
-
-function resolvePackagedRuntimeSmokeReportPath(): string | undefined {
-  if (!app.isPackaged) return undefined;
-  const argument = process.argv.find((value) => value.startsWith(PACKAGED_RUNTIME_SMOKE_ARGUMENT));
-  const requestedPath = argument?.slice(PACKAGED_RUNTIME_SMOKE_ARGUMENT.length);
-  if (!requestedPath || !isAbsolute(requestedPath)) return undefined;
-  const reportPath = resolve(requestedPath);
-  const tempRoot = realpathSync(app.getPath("temp"));
-  const reportParent = realpathSync(dirname(reportPath));
-  const relativeParent = relative(tempRoot, reportParent);
-  if (relativeParent === ".." || relativeParent.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) || isAbsolute(relativeParent)) {
-    return undefined;
-  }
-  return reportPath;
 }

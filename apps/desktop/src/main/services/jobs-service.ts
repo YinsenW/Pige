@@ -53,6 +53,7 @@ import type { DocumentParserPort } from "./document-parser-service";
 import type { DatasetMaterializerPort } from "./dataset-service";
 import { SourcePageService } from "./source-page-service";
 import type { LocalDatabaseService } from "./local-database-service";
+import type { LocalDatabaseRebuildProgress } from "./local-database-rebuild-types";
 import type { OcrPort, OcrSourceCapability } from "./ocr-service";
 import {
   JobCancellationError,
@@ -179,6 +180,7 @@ export interface AgentTurnUrlSourceLink {
 export interface ProcessQueuedIndexRebuildRequest {
   readonly jobIds?: readonly string[];
   readonly limit?: number;
+  readonly onProgress?: (progress: LocalDatabaseRebuildProgress) => void;
 }
 
 export interface ProcessQueuedIndexRebuildResult extends ProcessQueuedCapturesResult {
@@ -2106,10 +2108,12 @@ export class JobsService implements PermissionedExternalJobPort {
     return { requeued };
   }
 
-  async requestIndexRebuild(): Promise<LocalDatabaseRebuildResult> {
+  async requestIndexRebuild(
+    options: Pick<ProcessQueuedIndexRebuildRequest, "onProgress"> = {}
+  ): Promise<LocalDatabaseRebuildResult> {
     const vaultPath = this.#requireActiveVaultPath();
     const job = createIndexRebuildJob(this.#jobRecordStore(vaultPath), vaultPath);
-    const result = await this.processQueuedIndexRebuild({ jobIds: [job.id] });
+    const result = await this.processQueuedIndexRebuild({ jobIds: [job.id], ...options });
     if (!result.lastRebuild) {
       throw new PigeDomainError("index_rebuild_failed", "Index rebuild failed. The job remains retryable.");
     }
@@ -3642,7 +3646,10 @@ export class JobsService implements PermissionedExternalJobPort {
       try {
         const rebuild = await database.rebuildInWorker(vaultPath, {
           signal: execution.control.signal,
-          onProgress: (progress) => execution.control.reportProgress(progress)
+          onProgress: (progress) => {
+            execution.control.reportProgress(progress);
+            request.onProgress?.(progress);
+          }
         });
         execution.control.throwIfCancellationRequested();
         let completionState: Extract<JobState, "completed" | "completed_with_warnings"> = "completed";

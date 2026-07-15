@@ -32,6 +32,8 @@
     "smoke:packaged:mac:arm64": "node scripts/release/packaged-electron-smoke.mjs --platform=mac --arch=arm64",
     "smoke:distributed:mac:arm64": "node scripts/release/packaged-electron-smoke.mjs --platform=mac --arch=arm64 --distribution-only=true",
     "smoke:packaged:win:x64": "node scripts/release/packaged-electron-smoke.mjs --platform=win --arch=x64",
+    "evidence:packaged-memory:mac:arm64": "node scripts/release/packaged-memory-evidence.mjs --platform=mac --arch=arm64",
+    "evidence:packaged-memory:win:x64": "node scripts/release/packaged-memory-evidence.mjs --platform=win --arch=x64",
     "lint": "npm run verify:boundaries",
     "format:check": "npm run verify:whitespace",
     "verify": "npm run verify:docs && npm run verify:decisions && npm run verify:ui-visual && npm run verify:independent-documentation-review && npm run verify:traceability && npm run verify:contracts && npm run verify:dependencies && npm run verify:fixtures && npm run verify:boundaries && npm run verify:no-telemetry && npm run verify:source-artifacts && npm run verify:documentation-leanness && npm run verify:documentation-quality",

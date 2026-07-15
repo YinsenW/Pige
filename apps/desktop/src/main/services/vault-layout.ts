@@ -55,6 +55,14 @@ export interface CreateVaultOnDiskOptions extends VaultPathSafetyOptions {
   readonly now?: Date;
 }
 
+export interface CreateTemporaryEvidenceVaultOptions {
+  readonly evidenceRoot: string;
+  readonly tempPath: string;
+  readonly vaultName: string;
+  readonly locale?: VaultManifest["default_locale"];
+  readonly now?: Date;
+}
+
 export interface VaultStorageRevealBinding {
   readonly targetPath: string;
   assertCurrent(): void;
@@ -96,12 +104,51 @@ export function getDefaultVaultConfig(): VaultConfig {
 }
 
 export function createVaultOnDisk(options: CreateVaultOnDiskOptions): VaultSummary {
-  const now = options.now ?? new Date();
   const parentDirectory = path.resolve(options.parentDirectory);
   const vaultName = normalizeVaultName(options.vaultName);
   const vaultPath = path.resolve(parentDirectory, vaultName);
 
   assertVaultPathAllowed(vaultPath, options);
+  return createVaultAtPath(vaultPath, vaultName, options.now, options.locale);
+}
+
+export function createTemporaryEvidenceVaultOnDisk(
+  options: CreateTemporaryEvidenceVaultOptions
+): VaultSummary {
+  const tempRoot = fs.realpathSync(options.tempPath);
+  const evidenceRoot = fs.realpathSync(options.evidenceRoot);
+  const requestedEvidenceRoot = path.resolve(options.evidenceRoot);
+  const relativeEvidenceRoot = path.relative(tempRoot, evidenceRoot);
+  if (
+    requestedEvidenceRoot !== evidenceRoot ||
+    !relativeEvidenceRoot ||
+    relativeEvidenceRoot === ".." ||
+    relativeEvidenceRoot.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relativeEvidenceRoot) ||
+    fs.lstatSync(evidenceRoot).isSymbolicLink() ||
+    !fs.lstatSync(evidenceRoot).isDirectory()
+  ) {
+    throw new PigeDomainError(
+      "vault_path_blocked",
+      "Temporary evidence vault root must be a canonical directory beneath the system temporary root."
+    );
+  }
+  assertCanonicalDirectoryChain(tempRoot, evidenceRoot);
+  const vaultName = normalizeVaultName(options.vaultName);
+  const vaultPath = path.resolve(evidenceRoot, vaultName);
+  if (path.dirname(vaultPath) !== evidenceRoot) {
+    throw new PigeDomainError("vault_path_blocked", "Temporary evidence vault name escaped its root.");
+  }
+  return createVaultAtPath(vaultPath, vaultName, options.now, options.locale);
+}
+
+function createVaultAtPath(
+  vaultPath: string,
+  vaultName: string,
+  nowInput?: Date,
+  locale?: VaultManifest["default_locale"]
+): VaultSummary {
+  const now = nowInput ?? new Date();
   assertNoAncestorVault(vaultPath);
   assertCreatableVaultDirectory(vaultPath);
 
@@ -121,7 +168,7 @@ export function createVaultOnDisk(options: CreateVaultOnDiskOptions): VaultSumma
     created_at: timestamp,
     updated_at: timestamp,
     app_min_version: PIGE_APP_MIN_VERSION,
-    default_locale: options.locale ?? "zh-Hans",
+    default_locale: locale ?? "zh-Hans",
     durable_roots: [...PIGE_DURABLE_ROOTS],
     rebuildable_roots: [...PIGE_REBUILDABLE_ROOTS]
   };
@@ -135,6 +182,21 @@ export function createVaultOnDisk(options: CreateVaultOnDiskOptions): VaultSumma
   fs.writeFileSync(path.join(vaultPath, "log.md"), createDefaultLogMarkdown(timestamp), "utf8");
 
   return loadVaultSummary(vaultPath);
+}
+
+function assertCanonicalDirectoryChain(root: string, target: string): void {
+  const relativeTarget = path.relative(root, target);
+  let current = root;
+  for (const segment of relativeTarget.split(path.sep).filter(Boolean)) {
+    current = path.join(current, segment);
+    const stat = fs.lstatSync(current);
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      throw new PigeDomainError(
+        "vault_path_blocked",
+        "Temporary evidence vault root cannot traverse symbolic links or non-directories."
+      );
+    }
+  }
 }
 
 export function loadVaultSummary(vaultPathInput: string): VaultSummary {
@@ -272,8 +334,16 @@ function assertNoAncestorVault(vaultPathInput: string): void {
 }
 
 function assertCreatableVaultDirectory(vaultPath: string): void {
-  if (!fs.existsSync(vaultPath)) return;
-  const stat = fs.statSync(vaultPath);
+  let stat: fs.Stats;
+  try {
+    stat = fs.lstatSync(vaultPath);
+  } catch (caught) {
+    if (caught && typeof caught === "object" && "code" in caught && caught.code === "ENOENT") return;
+    throw caught;
+  }
+  if (stat.isSymbolicLink()) {
+    throw new PigeDomainError("vault_path_blocked", "Vault path cannot be a symbolic link.");
+  }
   if (!stat.isDirectory()) {
     throw new PigeDomainError("vault_path_not_directory", "Vault path must be a folder.");
   }

@@ -38,6 +38,11 @@ jobs:
         env:
           PIGE_REPORT_BUILD_ID: ${{ github.sha }}
 
+      - name: Measure packaged application memory
+        run: npm run evidence:packaged-memory:mac:arm64
+        env:
+          PIGE_REPORT_BUILD_ID: ${{ github.sha }}
+
       - name: Upload packageability evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -46,6 +51,7 @@ jobs:
             artifacts/release-packageability/macos-arm64/Pige-0.0.0-arm64.zip
             artifacts/release-packageability/macos-arm64/Pige-0.0.0-arm64.zip.blockmap
             artifacts/test-reports/packageability/macos-arm64/${{ github.sha }}/report.json
+            artifacts/test-reports/packaged-memory/macos-arm64/${{ github.sha }}/report.json
           if-no-files-found: error
           retention-days: 14
 
@@ -115,6 +121,11 @@ jobs:
         env:
           PIGE_REPORT_BUILD_ID: ${{ github.sha }}
 
+      - name: Measure packaged application memory
+        run: npm run evidence:packaged-memory:win:x64
+        env:
+          PIGE_REPORT_BUILD_ID: ${{ github.sha }}
+
       - name: Upload packageability evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -122,5 +133,6 @@ jobs:
           path: |
             artifacts/release-packageability/windows-x64/Pige-0.0.0-x64-setup.exe
             artifacts/test-reports/packageability/windows-x64/${{ github.sha }}/report.json
+            artifacts/test-reports/packaged-memory/windows-x64/${{ github.sha }}/report.json
           if-no-files-found: error
           retention-days: 14
