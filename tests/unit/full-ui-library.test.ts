@@ -3,8 +3,8 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it } from "vitest";
-import type { LibraryListResult, RetrievalSearchRequest, RetrievalSearchResult } from "@pige/contracts";
-import { filterLibraryPages, LibraryPanel } from "../../apps/desktop/src/renderer/src/App";
+import type { LibraryListResult, NoteRenderResult, RetrievalSearchRequest, RetrievalSearchResult } from "@pige/contracts";
+import { filterLibraryPages, LibraryPanel, NoteReader } from "../../apps/desktop/src/renderer/src/App";
 import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.json";
 
 const globalKeys = [
@@ -294,7 +294,146 @@ describe("full UI Library", () => {
     await act(async () => root.unmount());
     dom.window.close();
   });
+
+  it("binds the approved Reader toolbar to real copy and keeps unowned actions honest", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const copied: string[] = [];
+    const unavailable: string[] = [];
+    let cleared = 0;
+    const note = readerNote();
+    await act(async () => {
+      root.render(createElement(LibraryPanel, {
+        libraryList: libraryList(),
+        selectedNote: note,
+        selectedNoteRelated: null,
+        noteLoadingPageId: null,
+        error: null,
+        onGoHome: () => undefined,
+        onRefresh: async () => undefined,
+        onSearch: async () => searchResult("unused", []),
+        searchFocusRequest: 0,
+        onOpenNote: async () => undefined,
+        onCloseNote: () => undefined,
+        noteAgentOpen: false,
+        onToggleNoteAgent: () => undefined,
+        noteAgentToggleRef: { current: null },
+        developmentNotice: null,
+        onClearDevelopment: () => { cleared += 1; },
+        onCopyNote: async (pageId) => { copied.push(pageId); return true; },
+        onDevelopment: (capability) => unavailable.push(capability),
+        t
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+
+    await act(async () => {
+      buttonWithLabel(container, "Copy Markdown").click();
+      await settle(dom);
+    });
+    expect(copied).toEqual([note.summary.pageId]);
+    expect(container.textContent).toContain("Markdown copied.");
+    expect(container.querySelectorAll('[role="status"]')).toHaveLength(1);
+
+    await act(async () => {
+      buttonWithLabel(container, "Edit note").click();
+      await settle(dom);
+    });
+    expect(unavailable).toEqual(["document_actions"]);
+    expect(cleared).toBeGreaterThan(0);
+    expect(container.textContent).not.toContain("Markdown copied.");
+
+    const sourceButtons = container.querySelectorAll<HTMLButtonElement>(".reader-source");
+    expect(sourceButtons).toHaveLength(2);
+    expect(container.textContent).toContain("Saved source 1");
+    expect(container.textContent).not.toContain("source_private_0001");
+    expect(container.textContent).not.toContain("/Users/example/private.md");
+    await act(async () => {
+      sourceButtons[0]!.click();
+      await settle(dom);
+    });
+    expect(unavailable.at(-1)).toBe("source_reference");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps selection actions roving, selection-preserving, and honestly unavailable", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const unavailable: string[] = [];
+    await act(async () => {
+      root.render(createElement(NoteReader, {
+        note: readerNote(),
+        related: null,
+        relatedLoadingPageId: null,
+        onOpenRelated: async () => undefined,
+        onDevelopment: (capability) => unavailable.push(capability),
+        t
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    const selectedParagraph = requireElement(container.querySelector(".markdown-body p"));
+    Object.defineProperty(dom.window, "getSelection", {
+      configurable: true,
+      value: () => ({
+        isCollapsed: false,
+        rangeCount: 1,
+        getRangeAt: () => ({
+          commonAncestorContainer: selectedParagraph,
+          getBoundingClientRect: () => ({ left: 120, top: 160, width: 80, height: 18, right: 200, bottom: 178 })
+        })
+      })
+    });
+    await act(async () => {
+      dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+      await settle(dom);
+    });
+
+    const toolbar = requireElement(container.querySelector<HTMLElement>('[role="toolbar"]'));
+    const actions = Array.from(toolbar.querySelectorAll<HTMLButtonElement>("button"));
+    expect(actions.map((button) => button.textContent)).toEqual(["Explain", "Summarize", "Link", "More"]);
+    expect(actions.map((button) => button.tabIndex)).toEqual([0, -1, -1, -1]);
+    actions[0]!.focus();
+    await act(async () => {
+      toolbar.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+      await settle(dom);
+    });
+    expect(dom.window.document.activeElement).toBe(actions[1]);
+    expect(actions.map((button) => button.tabIndex)).toEqual([-1, 0, -1, -1]);
+
+    await act(async () => {
+      actions[1]!.dispatchEvent(new dom.window.MouseEvent("pointerdown", { bubbles: true, cancelable: true }));
+      actions[1]!.click();
+      await settle(dom);
+    });
+    expect(unavailable).toEqual(["selection_actions"]);
+    expect(container.querySelector('[role="toolbar"]')).toBeNull();
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
 });
+
+function readerNote(): NoteRenderResult {
+  return {
+    summary: {
+      pageId: "page_20260715_reader1111",
+      title: "Reader actions",
+      pageType: "note",
+      status: "active",
+      pagePath: "wiki/reader-actions.md",
+      createdAt: "2026-07-15T10:00:00.000Z",
+      updatedAt: "2026-07-15T10:00:00.000Z",
+      language: "en",
+      sourceIds: ["source_private_0001", "source_private_0002"]
+    },
+    html: "<p>Selected note body</p>",
+    byteSize: 256
+  };
+}
 
 function libraryList(): LibraryListResult {
   return {
@@ -390,6 +529,13 @@ function buttonContaining(container: ParentNode, text: string): HTMLButtonElemen
   const button = Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
     .find((candidate) => candidate.textContent?.includes(text));
   if (!button) throw new Error(`Missing button containing: ${text}`);
+  return button;
+}
+
+function buttonWithLabel(container: ParentNode, label: string): HTMLButtonElement {
+  const button = Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
+    .find((candidate) => candidate.getAttribute("aria-label") === label);
+  if (!button) throw new Error(`Missing button with label: ${label}`);
   return button;
 }
 

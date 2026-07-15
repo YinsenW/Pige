@@ -91,7 +91,9 @@ export type DevelopmentCapability =
   | "knowledge_filter"
   | "knowledge_view"
   | "note_agent"
+  | "document_actions"
   | "selection_actions"
+  | "source_reference"
   | "appearance"
   | "local_capabilities"
   | "agent_memory"
@@ -468,6 +470,7 @@ export function App(): React.JSX.Element {
     if (!vaultId) return;
     const requestId = noteOpenSequence.current + 1;
     noteOpenSequence.current = requestId;
+    setDevelopmentNotice(null);
     setLibraryError(null);
     setSelectedNoteRelated("loading");
     setNoteLoadingPageId(pageId);
@@ -486,6 +489,23 @@ export function App(): React.JSX.Element {
       setLibraryError(t("error.generic"));
     } finally {
       if (requestId === noteOpenSequence.current) setNoteLoadingPageId(null);
+    }
+  };
+
+  const copyNoteMarkdown = async (pageId: string): Promise<boolean> => {
+    const requestId = noteOpenSequence.current;
+    try {
+      const note = await window.pige.notes.get({ pageId });
+      if (
+        requestId !== noteOpenSequence.current ||
+        note.summary.pageId !== pageId ||
+        selectedNote?.summary.pageId !== pageId ||
+        !navigator.clipboard?.writeText
+      ) return false;
+      await navigator.clipboard.writeText(note.markdownBody);
+      return requestId === noteOpenSequence.current && selectedNote?.summary.pageId === pageId;
+    } catch {
+      return false;
     }
   };
 
@@ -910,6 +930,8 @@ export function App(): React.JSX.Element {
             onToggleNoteAgent={toggleNoteAgent}
             noteAgentToggleRef={noteAgentToggleRef}
             developmentNotice={developmentNotice?.surface === "reader" ? developmentNotice : null}
+            onClearDevelopment={() => setDevelopmentNotice(null)}
+            onCopyNote={copyNoteMarkdown}
             onDevelopment={(capability) => showDevelopmentCapability("reader", capability)}
             t={t}
           />
@@ -937,6 +959,8 @@ export function App(): React.JSX.Element {
               onToggleNoteAgent={toggleNoteAgent}
               noteAgentToggleRef={noteAgentToggleRef}
               developmentNotice={developmentNotice?.surface === "reader" ? developmentNotice : null}
+              onClearDevelopment={() => setDevelopmentNotice(null)}
+              onCopyNote={copyNoteMarkdown}
               onDevelopment={(capability) => showDevelopmentCapability("reader", capability)}
               t={t}
             />
@@ -1253,6 +1277,8 @@ export function LibraryPanel(props: {
   readonly onToggleNoteAgent: () => void;
   readonly noteAgentToggleRef: RefObject<HTMLButtonElement | null>;
   readonly developmentNotice: DevelopmentNotice | null;
+  readonly onClearDevelopment: () => void;
+  readonly onCopyNote: (pageId: string) => Promise<boolean>;
   readonly onDevelopment: (capability: DevelopmentCapability) => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
@@ -1265,8 +1291,32 @@ export function LibraryPanel(props: {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const tabRefs = useRef(new Map<LibraryFamily, HTMLButtonElement>());
   const focusSearchAfterRetry = useRef(false);
+  const readerActionSequence = useRef(0);
+  const [readerActionState, setReaderActionState] = useState<"idle" | "copying" | "copied" | "copy_failed">("idle");
   const normalizedQuery = query.trim();
   const activeVaultId = props.libraryList?.activeVaultId;
+
+  useEffect(() => {
+    readerActionSequence.current += 1;
+    setReaderActionState("idle");
+  }, [props.selectedNote?.summary.pageId]);
+
+  const showReaderDevelopment = (capability: DevelopmentCapability): void => {
+    readerActionSequence.current += 1;
+    setReaderActionState("idle");
+    props.onClearDevelopment();
+    props.onDevelopment(capability);
+  };
+
+  const copySelectedNote = async (pageId: string): Promise<void> => {
+    const requestId = readerActionSequence.current + 1;
+    readerActionSequence.current = requestId;
+    props.onClearDevelopment();
+    setReaderActionState("copying");
+    const copied = await props.onCopyNote(pageId);
+    if (requestId !== readerActionSequence.current) return;
+    setReaderActionState(copied ? "copied" : "copy_failed");
+  };
 
   useEffect(() => {
     if (props.searchFocusRequest <= 0) return;
@@ -1329,18 +1379,18 @@ export function LibraryPanel(props: {
   };
 
   if (props.selectedNote) {
+    const summary = props.selectedNote.summary;
     return (
       <section className="library-page reader-page" aria-label={props.t("note.reader")}>
-        <div className="reader-action-bar">
-          <button type="button" className="ghost back-button" onClick={props.onCloseNote}>
-            <PigeIcon name="arrowLeft" size={15} />
-            {props.readerBackLabel ?? props.t("note.backToLibrary")}
-          </button>
-          <div>
-            <button type="button" className="ghost" onClick={() => props.onDevelopment("selection_actions")}>
-              <PigeIcon name="edit" size={15} />
-              {props.t("development.capability.selection_actions")}
-            </button>
+        <header className="reader-toolbar">
+          <nav className="reader-breadcrumbs" aria-label={props.t("note.path")}>
+            <span>{props.readerBackLabel ?? props.t("library.title")}</span>
+            <span aria-hidden="true">›</span>
+            <span>{props.t(`library.type.${summary.pageType}`)}</span>
+            <span aria-hidden="true">›</span>
+            <strong aria-current="page" title={summary.title}>{summary.title}</strong>
+          </nav>
+          <div className="reader-toolbar-actions">
             <button
               ref={props.noteAgentToggleRef}
               type="button"
@@ -1353,14 +1403,62 @@ export function LibraryPanel(props: {
             >
               <PigeIcon name="panel" size={17} />
             </button>
+            <button
+              type="button"
+              data-reader-action="edit"
+              className="icon-button prototype-action"
+              aria-label={props.t("note.edit")}
+              title={props.t("note.edit")}
+              onClick={() => showReaderDevelopment("document_actions")}
+            >
+              <PigeIcon name="edit" size={16} />
+            </button>
+            <button
+              type="button"
+              className="icon-button"
+              data-reader-action="copy"
+              aria-label={props.t("note.copy")}
+              title={props.t("note.copy")}
+              disabled={readerActionState === "copying"}
+              aria-busy={readerActionState === "copying"}
+              onClick={() => void copySelectedNote(summary.pageId)}
+            >
+              <PigeIcon name="copy" size={16} />
+            </button>
+            <button
+              type="button"
+              data-reader-action="more"
+              className="icon-button prototype-action"
+              aria-label={props.t("note.moreActions")}
+              title={props.t("note.moreActions")}
+              onClick={() => showReaderDevelopment("document_actions")}
+            >
+              <PigeIcon name="more" size={16} />
+            </button>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label={props.t("note.close")}
+              title={props.t("note.close")}
+              onClick={props.onCloseNote}
+            >
+              <PigeIcon name="close" size={17} />
+            </button>
           </div>
-        </div>
-        <DevelopmentStatus notice={props.developmentNotice} t={props.t} />
+        </header>
+        {readerActionState !== "idle" ? (
+          <p className={`reader-action-status ${readerActionState}`} role="status" aria-live="polite" aria-atomic="true">
+            {props.t(`note.document.${readerActionState}`)}
+          </p>
+        ) : (
+          <DevelopmentStatus notice={props.developmentNotice} t={props.t} />
+        )}
         <NoteReader
           note={props.selectedNote}
           related={props.selectedNoteRelated}
           relatedLoadingPageId={props.noteLoadingPageId}
           onOpenRelated={props.onOpenNote}
+          onDevelopment={showReaderDevelopment}
           t={props.t}
         />
         {props.error ? <p className="error">{props.error}</p> : null}
@@ -1764,26 +1862,118 @@ async function loadNoteRelated(
   }
 }
 
-function NoteReader(props: {
+export function NoteReader(props: {
   readonly note: NoteRenderResult;
   readonly related: NoteRelatedState;
   readonly relatedLoadingPageId: string | null;
   readonly onOpenRelated: (pageId: string) => Promise<void>;
+  readonly onDevelopment: (capability: DevelopmentCapability) => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const summary = props.note.summary;
+  const readerRef = useRef<HTMLElement | null>(null);
+  const selectionToolbarRef = useRef<HTMLDivElement | null>(null);
+  const selectionActionRefs = useRef(new Map<number, HTMLButtonElement>());
+  const selectionFocusTransition = useRef(false);
+  const [selectionPosition, setSelectionPosition] = useState<{ readonly left: number; readonly top: number } | null>(null);
+  const [selectionActionIndex, setSelectionActionIndex] = useState(0);
+
+  useEffect(() => {
+    const updateSelection = (): void => {
+      if (selectionFocusTransition.current) return;
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+        if (selectionToolbarRef.current?.contains(document.activeElement)) return;
+        setSelectionPosition(null);
+        return;
+      }
+      const range = selection.getRangeAt(0);
+      const selectionNode = range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
+        ? range.commonAncestorContainer as Element
+        : range.commonAncestorContainer.parentElement;
+      if (!selectionNode || !readerRef.current?.contains(selectionNode) || typeof range.getBoundingClientRect !== "function") {
+        setSelectionPosition(null);
+        return;
+      }
+      const rect = range.getBoundingClientRect();
+      if (!Number.isFinite(rect.left) || !Number.isFinite(rect.top) || rect.width <= 0) {
+        setSelectionPosition(null);
+        return;
+      }
+      const toolbarWidth = 244;
+      const left = Math.max(12, Math.min(window.innerWidth - toolbarWidth - 12, rect.left + (rect.width / 2) - (toolbarWidth / 2)));
+      const top = Math.max(12, rect.top - 42);
+      setSelectionActionIndex(0);
+      setSelectionPosition({ left, top });
+    };
+    document.addEventListener("selectionchange", updateSelection);
+    window.addEventListener("resize", updateSelection);
+    return () => {
+      document.removeEventListener("selectionchange", updateSelection);
+      window.removeEventListener("resize", updateSelection);
+    };
+  }, [summary.pageId]);
+
+  const moveSelectionActionFocus = (index: number): void => {
+    selectionFocusTransition.current = true;
+    setSelectionActionIndex(index);
+    window.requestAnimationFrame(() => {
+      selectionActionRefs.current.get(index)?.focus();
+      window.requestAnimationFrame(() => { selectionFocusTransition.current = false; });
+    });
+  };
 
   return (
-    <article className="note-reader">
-      <header className="note-header">
-        <div>
-          <p className="note-kicker">{props.t(`library.type.${summary.pageType}`)}</p>
-          <h1>{summary.title}</h1>
+    <article className="note-reader" ref={readerRef}>
+      {selectionPosition ? (
+        <div
+          ref={selectionToolbarRef}
+          className="selection-toolbar visible"
+          role="toolbar"
+          aria-label={props.t("note.selectionActions")}
+          style={{ left: selectionPosition.left, top: selectionPosition.top }}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              setSelectionPosition(null);
+              return;
+            }
+            let nextIndex: number | null = null;
+            if (event.key === "ArrowRight") nextIndex = (selectionActionIndex + 1) % 4;
+            else if (event.key === "ArrowLeft") nextIndex = (selectionActionIndex + 3) % 4;
+            else if (event.key === "Home") nextIndex = 0;
+            else if (event.key === "End") nextIndex = 3;
+            if (nextIndex === null) return;
+            event.preventDefault();
+            moveSelectionActionFocus(nextIndex);
+          }}
+        >
+          {(["explain", "summarize", "link", "more"] as const).map((action, index) => (
+            <button
+              key={action}
+              ref={(element) => {
+                if (element) selectionActionRefs.current.set(index, element);
+                else selectionActionRefs.current.delete(index);
+              }}
+              type="button"
+              tabIndex={selectionActionIndex === index ? 0 : -1}
+              data-selection-action={action}
+              onPointerDown={(event) => event.preventDefault()}
+              onClick={() => {
+                setSelectionPosition(null);
+                props.onDevelopment("selection_actions");
+              }}
+            >
+              {props.t(`note.selection.${action}`)}
+            </button>
+          ))}
         </div>
+      ) : null}
+      <header className="note-header">
+        <h1>{summary.title}</h1>
         <div className="note-meta" aria-label={props.t("note.metadata")}>
           <span>{summary.status}</span>
           {summary.language ? <span>{summary.language}</span> : null}
-          <span>{summary.pagePath}</span>
           <span>
             {props.t("note.size")}: {Math.ceil(props.note.byteSize / 1024)} KB
           </span>
@@ -1799,6 +1989,34 @@ function NoteReader(props: {
         // HTML is produced by the main-process Markdown renderer after sanitization.
         dangerouslySetInnerHTML={{ __html: props.note.html }}
       />
+      {summary.sourceIds.length > 0 ? (
+        <section className="reader-sources" aria-label={props.t("note.sources")}>
+          <h2>{props.t("note.sources")}</h2>
+          <div className="reader-source-list">
+            {summary.sourceIds.slice(0, 5).map((sourceId, index) => (
+              <button
+                className="reader-source"
+                type="button"
+                key={sourceId}
+                data-reader-source-action="unavailable"
+                onClick={() => props.onDevelopment("source_reference")}
+              >
+                <span className="reader-source-icon" aria-hidden="true">SRC</span>
+                <span className="reader-source-copy">
+                  <strong>{props.t("note.savedSource").replace("{number}", String(index + 1))}</strong>
+                  <span>{props.t("note.sourceReferenceUnavailable")}</span>
+                </span>
+                <small>{props.t("note.preview")}</small>
+              </button>
+            ))}
+          </div>
+          {summary.sourceIds.length > 5 ? (
+            <p className="reader-source-overflow">
+              {props.t("note.moreSources").replace("{count}", String(summary.sourceIds.length - 5))}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
       <NoteRelatedPanel
         related={props.related}
         loadingPageId={props.relatedLoadingPageId}
@@ -3508,6 +3726,7 @@ function HomeComposer(props: {
             related={selectedNoteRelated}
             relatedLoadingPageId={noteLoadingPageId}
             onOpenRelated={openResult}
+            onDevelopment={props.onDevelopment}
             t={props.t}
           />
         </section>

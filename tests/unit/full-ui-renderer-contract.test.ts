@@ -84,6 +84,24 @@ describe("full production UI renderer contract", () => {
     expect(appSource).toContain("onKeyDown={handleComposerKeyDown}");
   });
 
+  it("binds the approved Reader actions without inventing edit, selection, or source services", () => {
+    expect(appSource).toContain("const copyNoteMarkdown = async (pageId: string): Promise<boolean>");
+    expect(appSource).toContain("window.pige.notes.get({ pageId })");
+    expect(appSource).toContain("navigator.clipboard.writeText(note.markdownBody)");
+    expect(appSource).toContain('data-reader-action="edit"');
+    expect(appSource).toContain('data-reader-action="copy"');
+    expect(appSource).toContain('data-reader-action="more"');
+    expect(appSource).toContain('props.onDevelopment("selection_actions")');
+    expect(appSource).toContain('props.onDevelopment("source_reference")');
+    expect(appSource).toContain('event.key === "ArrowRight"');
+    expect(appSource).toContain('event.key === "ArrowLeft"');
+    expect(appSource).toContain('event.key === "Home"');
+    expect(appSource).toContain('event.key === "End"');
+    expect(appSource).toContain("event.preventDefault()");
+    expect(appSource).not.toContain("sourceId}</");
+    expect(cssSource).toContain('.reader-toolbar-actions .prototype-action:not([data-reader-action="more"])');
+  });
+
   it("uses one reviewed tree-shaken Lucide family without raw renderer SVG", () => {
     expect(iconSource).toContain('from "lucide-react";');
     expect(iconSource).toContain("TreePine");
@@ -115,7 +133,27 @@ describe("full production UI renderer contract", () => {
     ];
 
     requiredKeys.push(
+      "development.capability.document_actions",
+      "development.capability.source_reference",
       "development.state.development",
+      "note.close",
+      "note.copy",
+      "note.document.copied",
+      "note.document.copy_failed",
+      "note.document.copying",
+      "note.edit",
+      "note.moreActions",
+      "note.moreSources",
+      "note.path",
+      "note.preview",
+      "note.savedSource",
+      "note.selection.explain",
+      "note.selection.link",
+      "note.selection.more",
+      "note.selection.summarize",
+      "note.selectionActions",
+      "note.sourceReferenceUnavailable",
+      "note.sources",
       "settings.close",
       "settings.navigation",
       "settings.section.maintenance",
