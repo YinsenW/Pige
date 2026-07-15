@@ -128,7 +128,7 @@ describe("Restore identity UI", () => {
     };
     const { container, root } = await mountApp(dom, makePigeApi(harness, true));
 
-    await click(dom, button(container, "Vault & Note Storage"));
+    await openVaultSettings(dom, container);
     await click(dom, button(container, "Restore Backup"));
     await waitFor(dom, () => container.textContent?.includes("Restore preview") ?? false);
 
@@ -184,7 +184,7 @@ describe("Restore identity UI", () => {
     harness.jobs = [backupJob("failed_retryable", "retry")];
     const { container, root } = await mountApp(dom, makePigeApi(harness, true));
 
-    await click(dom, button(container, "Vault & Note Storage"));
+    await openVaultSettings(dom, container);
     await waitFor(dom, () => container.textContent?.includes("The backup stopped safely") ?? false);
 
     expect(container.textContent).not.toContain("RAW_BACKUP_SENTINEL");
@@ -223,7 +223,7 @@ describe("Restore identity UI", () => {
     };
     const { container, root } = await mountApp(dom, api);
 
-    await click(dom, button(container, "Vault & Note Storage"));
+    await openSettingsSection(dom, container, "Index & Maintenance");
     await click(dom, button(container, "Preview Support Bundle"));
     await waitFor(dom, () => container.textContent?.includes("Preview ready") ?? false);
     await click(dom, button(container, "Export Support Bundle"));
@@ -268,12 +268,12 @@ describe("Restore identity UI", () => {
     };
     const { container, root } = await mountApp(dom, api);
 
-    await click(dom, button(container, "Vault & Note Storage"));
+    await openSettingsSection(dom, container, "Index & Maintenance");
     await click(dom, button(container, "Preview Support Bundle"));
     await waitFor(dom, () => container.textContent?.includes("Preview ready") ?? false);
     await click(dom, button(container, "Export Support Bundle"));
     await waitFor(dom, () => container.textContent?.includes("Cancel Export") ?? false);
-    await click(dom, button(container, "Home"));
+    await click(dom, buttonByAriaLabel(container, "Close Settings"));
     await waitFor(dom, () => cancelRequests.length === 1);
     expect(cancelRequests).toEqual([exportRequestId]);
 
@@ -291,7 +291,7 @@ describe("Restore identity UI", () => {
     runningHarness.jobs = [backupJob("running")];
     const runningApp = await mountApp(runningDom, makePigeApi(runningHarness, true));
 
-    await click(runningDom, button(runningApp.container, "Vault & Note Storage"));
+    await openVaultSettings(runningDom, runningApp.container);
     await waitFor(runningDom, () => runningApp.container.textContent?.includes("Creating and validating") ?? false);
     expect(runningApp.container.textContent).not.toContain("RAW_BACKUP_SENTINEL");
     await click(runningDom, button(runningApp.container, "Cancel"));
@@ -305,7 +305,7 @@ describe("Restore identity UI", () => {
     failedHarness.jobs = [backupJob("failed_final")];
     const failedApp = await mountApp(failedDom, makePigeApi(failedHarness, true));
 
-    await click(failedDom, button(failedApp.container, "Vault & Note Storage"));
+    await openVaultSettings(failedDom, failedApp.container);
     await waitFor(failedDom, () => failedApp.container.textContent?.includes("could not continue safely") ?? false);
     expect(failedApp.container.textContent).not.toContain("RAW_BACKUP_SENTINEL");
     expect(Array.from(failedApp.container.querySelectorAll("button")).some((item) => item.textContent === "Retry"))
@@ -321,7 +321,7 @@ describe("Restore identity UI", () => {
     harness.jobs = [backupJob("running")];
     const { container, root } = await mountApp(dom, makePigeApi(harness, true));
 
-    await click(dom, button(container, "Vault & Note Storage"));
+    await openVaultSettings(dom, container);
     await waitFor(dom, () => container.textContent?.includes("Creating and validating") ?? false);
     harness.jobs = [];
     await act(async () => {
@@ -344,7 +344,7 @@ describe("Restore identity UI", () => {
     };
     const { container, root } = await mountApp(dom, makePigeApi(harness, true));
 
-    await click(dom, button(container, "Vault & Note Storage"));
+    await openVaultSettings(dom, container);
     const revealNotes = button(container, "Show note storage");
     const revealSources = button(container, "Show source storage");
     await act(async () => {
@@ -741,6 +741,26 @@ function button(container: HTMLElement, label: string): HTMLButtonElement {
     .find((candidate) => candidate.textContent === label);
   if (!match) throw new Error(`Button not found: ${label}`);
   return match;
+}
+
+function buttonByAriaLabel(container: HTMLElement, label: string): HTMLButtonElement {
+  const match = container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+  if (!match) throw new Error(`Button not found by aria-label: ${label}`);
+  return match;
+}
+
+async function openVaultSettings(dom: JSDOM, container: HTMLElement): Promise<void> {
+  await openSettingsSection(dom, container, "Vault & Note Storage");
+}
+
+async function openSettingsSection(dom: JSDOM, container: HTMLElement, label: string): Promise<void> {
+  const settingsTrigger = container.querySelector<HTMLButtonElement>(".sidebar-settings-control");
+  if (!settingsTrigger) throw new Error("Settings trigger not found.");
+  await click(dom, settingsTrigger);
+  const section = Array.from(container.querySelectorAll<HTMLButtonElement>(".settings-nav-item"))
+    .find((candidate) => candidate.querySelector("span")?.textContent === label);
+  if (!section) throw new Error(`Settings section not found: ${label}`);
+  await click(dom, section);
 }
 
 function radio(container: HTMLElement, value: string): HTMLInputElement {

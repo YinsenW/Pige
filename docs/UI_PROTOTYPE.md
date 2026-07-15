@@ -846,6 +846,18 @@ Settings rules:
 - Skills and Pi Packages are both under Extensions, but remain separate pages.
 - Cross-links are allowed, but cards from another domain should not be embedded in the current page.
 
+Current shell: primary navigation is Home + Knowledge Tree; Library is below it; Settings
+opens from the bottom vault/profile control; Models is only a Settings/Home repair target.
+Vault owns storage/Backup/Restore; Index & Maintenance owns index/diagnostic/support
+actions. Home, Library/Reader, Knowledge Tree, Models, Vault, Backup/Restore, maintenance,
+locale/window-pin and current-action prompts are real; Settings framing and Reader related
+context are partial. Appearance, local capabilities, Agent/memory, reusable permission
+policy, Skills, Pi Packages, updates, Note Agent, unbound Reader and Knowledge controls
+are development-only: one localized polite unavailable status, never IPC, Job,
+persistence, fake result/progress, destructive effect, evidence, or status credit. Until
+a separate `BrowserWindow` owner exists, Settings is an in-app focus-trapped dialog with
+Escape/exact-invoker restoration and no outer-window resize.
+
 ### Vault, Note Storage, And Backup
 
 Vault & Note Storage ("仓库与笔记存储") is calm local-file control: location first;
@@ -909,8 +921,9 @@ Above Connect disclose the exact destination once; sensitive asks, restricted ne
 sends, unknown/changed reconfirms. Hide marketplaces, matrices, routing, Advanced/Fast,
 local tools, Skills, backup, and memory.
 
-The Playbook and acceptance manifest own current Provider-screen evidence and remaining
-polish; prototype images express direction, not frozen renderer status.
+The Playbook and acceptance manifest own capability status. The complete-UI HTML,
+design contract and element map own frozen visual/interaction detail; they do not make an
+unavailable capability executable.
 
 ### Deferred Model Routing Settings
 
@@ -1422,13 +1435,10 @@ v0.1 accessibility requirements:
 
 ## 16.2 Pige Visual System
 
-This section is the production visual baseline for Pige. It translates the quiet,
-low-friction qualities observed in polished chat-style desktop applications into an
-original Pige system. Values are implementation targets rather than permission to copy
-another product's source, assets, trademarks, illustrations, or exact screen composition.
-`resources/ui-visual-contract.manifest.json` projects the machine-checkable subset of
-this owner contract into renderer tokens, structural declarations, and the governed
-visual-capture matrix. The manifest must not invent behavior absent from this document.
+The sole baseline is `docs/prototypes/pige-complete-ui/index.html` plus its adjacent
+design contract and element map. React/TSX preserves layout, IA, color, spacing, icons
+and interaction; only reconciled capability, responsive or accessibility needs may
+differ. `resources/ui-visual-contract.manifest.json` projects the machine subset.
 
 ### Brand and application icon
 
@@ -1466,9 +1476,9 @@ visual-capture matrix. The manifest must not invent behavior absent from this do
 - Body and navigation text use weight `400`; interactive labels and compact headings
   may use `500`; page headings may use `600`. Avoid relying on weight `700` for routine
   hierarchy. Keep letter spacing at `0`; Pige does not use negative tracking.
-- Reading content should normally remain between `640px` and `768px`. Expanded Home
-  dialogue, retrieval, and composer surfaces use a shared `48rem` (`768px`) alignment
-  grid; compact dialogue may use a narrower `480px` to `560px` measure.
+- Reading prose is capped at `720px`. Governed pane min/default/max widths are Home
+  `360/420/420px`, Library `240/280/320px`, Reader `560/720/960px`, and Note Agent
+  `360/400/440px`.
 
 ### Shape, elevation, and boundaries
 
@@ -1494,9 +1504,12 @@ visual-capture matrix. The manifest must not invent behavior absent from this do
 - Primary toolbar height is `46px`; compact toolbars are `36px`; pane toolbars are
   `40px`. Icon-button hit targets should normally be at least `32px`, and never below
   `28px` in dense desktop contexts.
-- Expanded navigation starts near `240px`, prefers about `272px`, and may grow to
+- Expanded navigation starts at `240px`, prefers `280px`, and may grow to
   `320px` for localized labels or tree depth. It must leave at least `320px` for the
   active content pane and must be hidden, not squeezed into noise, in Compact Home.
+- At `680–831px`, Library and Note Agent are independent overlays. At `832–1199px`,
+  Library is resident with Reader while Note Agent remains an overlay. At `1200px` all
+  three panes may be resident; from `1440px`, only Reader absorbs bounded surplus.
 - Navigation and settings rows normally occupy `32` to `36px`; settings rows containing
   descriptions may grow to `64px`. Do not force explanatory text into a compact row.
 - Pane padding is `16px` in narrow windows and `20` to `24px` in expanded workspaces.
@@ -1563,56 +1576,21 @@ visual-capture matrix. The manifest must not invent behavior absent from this do
 
 ## 16.3 Clean-Room Reference Record
 
-The visual system above was informed by a read-only inspection on 2026-07-10 of the
-macOS Electron application supplied as `ChatGPT.dmg`, bundle version `26.707.31428`.
-The inspection covered packaged HTML/CSS metadata and visible structural constants such
-as spacing, typography, radii, toolbar sizes, sidebar sizing, theme roles, and motion.
-The second pass also compared those observations with Pige's renderer CSS and applied
-the resulting Pige semantic tokens to the live desktop shell. Confirmed structural
-observations included a `48rem` Electron content grid, `16px` conversation-group spacing,
-`4px` grouped-item spacing, `28px` Composer actions, `30` to `36px` navigation/control
-rows, layered half-pixel elevation strokes, and explicit reduced-motion/transparency
-fallbacks.
-
-The following are deliberately excluded from Pige:
-
-- OpenAI/ChatGPT/Codex names, logos, icons, illustrations, sounds, and branded fonts.
-- Copied JavaScript, React component code, CSS bundles, localized product copy, or
-  proprietary assets.
-- Product-specific screens, developer workflows, model marketplaces, capability
-  catalogs, and provider/runtime complexity that conflict with Pige's Simplicity First
-  directive.
-- Any secret, credential, account data, endpoint behavior, or security-control bypass.
-
-Implementers should reproduce the Pige tokens and behavior in this document from first
-principles. The inspected application bundle remains external research material and is
-not a build input, repository dependency, fixture, or redistribution source.
+A 2026-07-10 read-only inspection of supplied macOS Electron bundle `26.707.31428`
+informed generic visual observations. It implements original tokens from first
+principles. External names, marks, assets, source, copy, screens, secrets and control
+bypasses are excluded. The bundle is research, not build authority.
 
 ## 16.4 Visual Fidelity Workflow
 
-Visual fidelity is verified as a development workflow, not accepted from visual memory.
-
-1. Implement against the semantic tokens and component metrics in section 16.2.
-2. Run `npm run verify:ui-visual` before capturing screenshots. This rejects drift in
-   protected tokens and structural metrics.
-3. Render the state matrix declared by `resources/ui-visual-contract.manifest.json` with
-   deterministic synthetic content, fixed locale, theme, viewport, device scale factor,
-   reduced-motion setting, and stable fonts.
-4. Save the screenshot and sidecar metadata under the manifest's governed artifact path.
-   Metadata records app build, platform, commit, viewport, scale factor, locale, theme,
-   state fixture, font readiness, and capture time.
-5. Compare against the approved baseline. A pixel difference above the manifest threshold
-   requires inspection; a difference below it may still fail for hierarchy, legibility,
-   focus, clipping, or interaction-state reasons.
-6. Baselines change only with a reviewed rationale tied to the owner contract. Never
-   auto-accept screenshots merely to make CI green.
-
-The required matrix covers compact, expanded, and reading widths; light and dark themes;
-Chinese, English, German, and Japanese; and empty, typing, attachment, processing,
-retrieval, error, drag, navigation, library, reader, settings, confirmation, and permission
-states. Release evidence must include macOS and Windows because native text rendering and
-window chrome differ. Private vault content, real account data, secrets, and external
-product screenshots are forbidden in committed baselines.
+Visual acceptance follows the manifest, not memory: implement section 16.2; run
+`verify:ui-visual`; render deterministic synthetic states at governed locale/theme/
+viewport/scale/motion/font inputs; save screenshot plus build/platform/commit/state
+metadata; inspect pixel and semantic differences; change baselines only with reviewed
+rationale. Low pixel delta never excuses hierarchy, legibility, focus or clipping.
+The matrix covers compact/expanded/reader widths, light/dark, governed locales and all
+listed workflow states on macOS and Windows. Baselines never contain private vault/account
+data, secrets, or external-product screenshots.
 
 ## 17. Interaction Rules
 
@@ -1682,6 +1660,8 @@ Can wait:
 - Opened notes can show a contextual Agent panel.
 - Selected text exposes common actions without leaving the note.
 - Settings offers preset connection, unified sync/manual inventory, and grouped Global Default without protocol/raw-ID work.
+- The production shell exposes unfinished destinations only as one localized
+  development/unavailable status; those entries never imply completed capability.
 - Autonomous exact-page Undo is non-confirming, announced, focus-safe, and distinct from exceptional/failure states.
 - The user can tell when captured content is being sent to a cloud model provider.
 - The user can dictate into the main input on supported macOS versions without learning a separate recording workflow.

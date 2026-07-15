@@ -15,22 +15,39 @@
     "--radius-composer": "22px",
     "--duration-fast": "150ms",
     "--duration-relaxed": "300ms",
-    "--ease-enter": "cubic-bezier(0.19, 1, 0.22, 1)"
+    "--ease-enter": "cubic-bezier(0.19, 1, 0.22, 1)",
+    "--home-pane-min": "360px",
+    "--home-pane-default": "420px",
+    "--home-pane-max": "420px",
+    "--library-pane-min": "240px",
+    "--library-pane-default": "280px",
+    "--library-pane-max": "320px",
+    "--reader-pane-min": "560px",
+    "--reader-pane-default": "720px",
+    "--reader-pane-max": "960px",
+    "--reader-prose-max": "720px",
+    "--agent-pane-min": "360px",
+    "--agent-pane-default": "400px",
+    "--agent-pane-max": "440px"
   },
   "requiredRuleDeclarations": [
     { "selector": ".topbar", "property": "height", "value": "46px" },
-    { "selector": ".sidebar", "property": "width", "valueIncludes": "clamp(240px, 275px" },
+    { "selector": ".sidebar", "property": "width", "value": "clamp(var(--library-pane-min), var(--library-pane-default), var(--library-pane-max))" },
     { "selector": ".nav-item", "property": "min-height", "value": "30px" },
-    { "selector": ".composer", "property": "width", "value": "min(100%, 48rem)" },
+    { "selector": ".composer", "property": "width", "value": "min(100%, var(--home-pane-max))" },
     { "selector": ".composer", "property": "border-radius", "value": "var(--radius-composer)" },
     { "selector": ".toolbar .round-button", "property": "width", "value": "28px" },
-    { "selector": ".markdown-body", "property": "width", "value": "min(100%, 48rem)" },
+    { "selector": ".markdown-body", "property": "width", "value": "min(100%, var(--reader-prose-max))" },
     { "selector": ".markdown-body", "property": "line-height", "value": "1.625" }
   ],
   "requiredStylesheetMarkers": [
     "@media (prefers-color-scheme: dark)",
     "@media (prefers-reduced-transparency: reduce)",
-    "@media (prefers-reduced-motion: reduce)"
+    "@media (prefers-reduced-motion: reduce)",
+    "@media (max-width: 831px)",
+    "@media (min-width: 832px) and (max-width: 1199px)",
+    "@media (min-width: 1200px) and (max-width: 1439px)",
+    "@media (min-width: 1440px)"
   ],
   "captureMatrix": {
     "viewports": [
