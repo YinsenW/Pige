@@ -36,6 +36,29 @@ export const PACKAGED_MEMORY_RECIPE = Object.freeze({
   })
 });
 
+export const PACKAGED_MEMORY_SCENARIO_FAILURE_CODES = Object.freeze([
+  "idle_sample_gap_too_small",
+  "idle_sample_gap_too_large",
+  "ordinary_sample_gap_too_small",
+  "ordinary_sample_gap_too_large",
+  "ordinary_action_gap_too_small",
+  "ordinary_action_gap_too_large",
+  "recovery_sample_gap_too_small",
+  "recovery_sample_gap_too_large",
+  "scheduler_sleep_timeout",
+  "scheduler_sleep_failed",
+  "memory_sample_failed",
+  "ordinary_action_timeout",
+  "ordinary_action_failed",
+  "ordinary_action_invalid",
+  "ordinary_evidence_invalid",
+  "ordinary_action_timing_unavailable",
+  "heavy_timeout",
+  "heavy_work_failed",
+  "heavy_evidence_invalid",
+  "unclassified"
+]);
+
 export function evaluatePackagedMemoryEvidence(input) {
   const idle = validateSamples("idle", input?.idleSamples, PACKAGED_MEMORY_RECIPE.idle.sampleCount, {
     minimumGapMs: PACKAGED_MEMORY_RECIPE.idle.sampleSpacingMs - 1_000,
@@ -137,11 +160,15 @@ function validateOrdinaryActionTiming(value, ordinaryStartedAtMs, ordinaryComple
     value.firstStartedAtMs < ordinaryStartedAtMs ||
     value.firstStartedAtMs > ordinaryStartedAtMs + 2_000 ||
     value.lastStartedAtMs < ordinaryStartedAtMs + 599_000 ||
-    value.lastStartedAtMs > ordinaryCompletedAtMs ||
-    value.minimumGapMs < PACKAGED_MEMORY_RECIPE.ordinary.minimumSampleGapMs ||
-    value.maximumGapMs > PACKAGED_MEMORY_RECIPE.ordinary.maximumSampleGapMs
+    value.lastStartedAtMs > ordinaryCompletedAtMs
   ) {
     throw new Error("Packaged memory ordinary action cadence is invalid.");
+  }
+  if (value.minimumGapMs < PACKAGED_MEMORY_RECIPE.ordinary.minimumSampleGapMs) {
+    throw new Error("Packaged memory ordinary action cadence_too_small.");
+  }
+  if (value.maximumGapMs > PACKAGED_MEMORY_RECIPE.ordinary.maximumSampleGapMs) {
+    throw new Error("Packaged memory ordinary action cadence_too_large.");
   }
   return Object.freeze({ ...value });
 }
@@ -217,12 +244,11 @@ function validateSamples(label, samples, expectedCount, cadence = {}) {
     }
     if (previousMonotonicMs !== undefined) {
       const gap = sample.monotonicMs - previousMonotonicMs;
-      if (
-        gap <= 0 ||
-        (cadence.minimumGapMs !== undefined && gap < cadence.minimumGapMs) ||
-        (cadence.maximumGapMs !== undefined && gap > cadence.maximumGapMs)
-      ) {
-        throw new Error(`Packaged memory ${label} sample cadence is invalid.`);
+      if (gap <= 0 || (cadence.minimumGapMs !== undefined && gap < cadence.minimumGapMs)) {
+        throw new Error(`Packaged memory ${label} sample cadence_too_small.`);
+      }
+      if (cadence.maximumGapMs !== undefined && gap > cadence.maximumGapMs) {
+        throw new Error(`Packaged memory ${label} sample cadence_too_large.`);
       }
     }
     previousMonotonicMs = sample.monotonicMs;

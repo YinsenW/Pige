@@ -115,7 +115,12 @@ describe("packaged memory evidence contract", () => {
       ...valid,
       ordinarySamples: valid.ordinarySamples.map((sample, index) =>
         index === 2 ? { ...sample, monotonicMs: sample.monotonicMs + 3_000 } : sample)
-    })).toThrow("cadence");
+    })).toThrow("cadence_too_large");
+    expect(() => evaluatePackagedMemoryEvidence({
+      ...valid,
+      ordinarySamples: valid.ordinarySamples.map((sample, index) =>
+        index === 2 ? { ...sample, monotonicMs: sample.monotonicMs - 750 } : sample)
+    })).toThrow("cadence_too_small");
     expect(() => evaluatePackagedMemoryEvidence({
       ...valid,
       recoverySamples: valid.recoverySamples.map((sample, index) => index === 10
@@ -157,7 +162,11 @@ describe("packaged memory evidence contract", () => {
     expect(() => evaluatePackagedMemoryEvidence({
       ...valid,
       ordinaryActionTiming: { ...valid.ordinaryActionTiming, minimumGapMs: 0 }
-    })).toThrow("ordinary action cadence");
+    })).toThrow("ordinary action cadence_too_small");
+    expect(() => evaluatePackagedMemoryEvidence({
+      ...valid,
+      ordinaryActionTiming: { ...valid.ordinaryActionTiming, maximumGapMs: 2_001 }
+    })).toThrow("ordinary action cadence_too_large");
     expect(() => evaluatePackagedMemoryEvidence({
       ...valid,
       heavy: { ...valid.heavy, terminalState: "failed" }

@@ -2,6 +2,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { PACKAGED_MEMORY_SCENARIO_FAILURE_CODES as applicationFailureCodes } from
+  "../../apps/desktop/src/main/services/packaged-memory-scenario";
+import { PACKAGED_MEMORY_SCENARIO_FAILURE_CODES as reportFailureCodes } from
+  "../../scripts/release/packaged-memory-contract.mjs";
+
 const root = process.cwd();
 
 describe("packaged memory release contract", () => {
@@ -27,5 +32,8 @@ describe("packaged memory release contract", () => {
     expect(main).toContain("createTemporaryEvidenceVaultOnDisk");
     expect(main).toContain("requestIndexRebuild: (options) => getJobsService().requestIndexRebuild(options)");
     expect(main).toContain('Buffer.byteLength(memoryReport, "utf8") > 2 * 1024 * 1024');
+    expect(main).toContain("resolvePackagedMemoryScenarioFailureCode(caught)");
+    expect(runner).toContain("PACKAGED_MEMORY_SCENARIO_FAILURE_CODES.includes(value)");
+    expect(reportFailureCodes).toEqual(applicationFailureCodes);
   });
 });

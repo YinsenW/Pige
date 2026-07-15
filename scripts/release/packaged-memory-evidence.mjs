@@ -11,7 +11,8 @@ import {
 } from "./packageability-platforms.mjs";
 import {
   evaluatePackagedMemoryEvidence,
-  PACKAGED_MEMORY_RECIPE
+  PACKAGED_MEMORY_RECIPE,
+  PACKAGED_MEMORY_SCENARIO_FAILURE_CODES
 } from "./packaged-memory-contract.mjs";
 import {
   assertGeneratedReportEnvelope,
@@ -52,7 +53,10 @@ try {
   const appReport = readAppReport(appReportPath);
   if (result.error || result.signal || result.status !== 0 || appReport?.status !== "passed") {
     const stage = isSafeFailureStage(appReport?.stage) ? appReport.stage : "report_unavailable";
-    throw new Error(`Packaged memory evidence failed at ${stage}.`);
+    const failureCode = isSafeFailureCode(appReport?.failureCode)
+      ? `:${appReport.failureCode}`
+      : "";
+    throw new Error(`Packaged memory evidence failed at ${stage}${failureCode}.`);
   }
   assertAppReport(appReport);
   const memory = evaluatePackagedMemoryEvidence(appReport.evidence);
@@ -161,6 +165,10 @@ function isSafeFailureStage(value) {
     "fixture_create", "vault_bind", "initial_rebuild", "renderer_window",
     "renderer_load", "memory_scenario", "report_write"
   ]).has(value);
+}
+
+function isSafeFailureCode(value) {
+  return typeof value === "string" && PACKAGED_MEMORY_SCENARIO_FAILURE_CODES.includes(value);
 }
 
 function safeEnvironment(extra = {}) {

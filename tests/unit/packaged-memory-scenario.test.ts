@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  PackagedMemoryScenarioError,
+  resolvePackagedMemoryScenarioFailureCode,
   runPackagedMemoryScenario,
   type PackagedMemoryOrdinaryActionResult
 } from "../../apps/desktop/src/main/services/packaged-memory-scenario";
@@ -61,12 +63,12 @@ describe("packaged memory application scenario", () => {
     await expectScenarioFailure(
       () => ordinaryAction(0),
       heavyResult(),
-      "capture evidence"
+      "ordinary_evidence_invalid"
     );
     await expectScenarioFailure(
       (index) => ordinaryAction(index === 0 ? 1_024 : 0),
       { ...heavyResult(), progressEventCount: 0 },
-      "heavy Job"
+      "heavy_evidence_invalid"
     );
   });
 
@@ -77,7 +79,7 @@ describe("packaged memory application scenario", () => {
       ...baseDependencies(),
       performOrdinaryAction: async () => new Promise<never>(() => undefined)
     });
-    const actionAssertion = expect(hungAction).rejects.toThrow("ordinary action timed out");
+    const actionAssertion = expect(hungAction).rejects.toThrow("ordinary_action_timeout");
     await vi.advanceTimersByTimeAsync(76_000);
     await actionAssertion;
 
@@ -86,9 +88,54 @@ describe("packaged memory application scenario", () => {
       ...baseDependencies(),
       performHeavyWork: async () => new Promise<never>(() => undefined)
     });
-    const heavyAssertion = expect(hungHeavy).rejects.toThrow("heavy Job timed out");
+    const heavyAssertion = expect(hungHeavy).rejects.toThrow("heavy_timeout");
     await vi.advanceTimersByTimeAsync(1_571_000);
     await heavyAssertion;
+  });
+
+  it("does not create catch-up bursts after a bounded event-loop delay", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    let sampleCount = 0;
+    const pending = runPackagedMemoryScenario({
+      ...baseDependencies(),
+      sample: () => {
+        sampleCount += 1;
+        if (sampleCount === 20) vi.setSystemTime(Date.now() + 700);
+        return memorySample();
+      }
+    });
+
+    await vi.advanceTimersByTimeAsync(731_000);
+    const evidence = await pending;
+    const ordinaryGaps = gaps(evidence.ordinarySamples.map((sample) => sample.monotonicMs));
+    expect(ordinaryGaps).toContain(500);
+    expect(Math.min(...ordinaryGaps)).toBeGreaterThanOrEqual(500);
+    expect(evaluatePackagedMemoryEvidence(evidence).status).toBe("passed");
+  });
+
+  it("keeps a blocked gap above two seconds fail closed with a safe exact code", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    let sampleCount = 0;
+    const pending = runPackagedMemoryScenario({
+      ...baseDependencies(),
+      sample: () => {
+        sampleCount += 1;
+        if (sampleCount === 20) vi.setSystemTime(Date.now() + 2_100);
+        return memorySample();
+      }
+    });
+    const assertion = expect(pending).rejects.toMatchObject({
+      code: "ordinary_sample_gap_too_large"
+    });
+    await vi.advanceTimersByTimeAsync(733_000);
+    await assertion;
+    expect(resolvePackagedMemoryScenarioFailureCode(
+      new PackagedMemoryScenarioError("ordinary_sample_gap_too_large")
+    )).toBe("ordinary_sample_gap_too_large");
+    expect(resolvePackagedMemoryScenarioFailureCode(new Error("private detail")))
+      .toBe("unclassified");
   });
 
   afterEach(() => vi.useRealTimers());
@@ -121,15 +168,23 @@ function ordinaryAction(capturedBytes: number): PackagedMemoryOrdinaryActionResu
   return { capturedBytes, noteRead: true, noteRendered: true, searched: true };
 }
 
+function memorySample() {
+  return {
+    residentBytes: 1,
+    processCount: 2,
+    processTypeCounts: { Browser: 1, Tab: 1 }
+  };
+}
+
+function gaps(values: readonly number[]): number[] {
+  return values.slice(1).map((value, index) => value - (values[index] ?? value));
+}
+
 function baseDependencies() {
   return {
     now: () => Date.now(),
     sleep: (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds)),
-    sample: () => ({
-      residentBytes: 1,
-      processCount: 2,
-      processTypeCounts: { Browser: 1, Tab: 1 }
-    }),
+    sample: memorySample,
     performOrdinaryAction: async (index: number) => ordinaryAction(index === 0 ? 1_024 : 0),
     performHeavyWork: async () => heavyResult()
   };

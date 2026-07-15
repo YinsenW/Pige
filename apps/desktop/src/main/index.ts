@@ -108,6 +108,7 @@ import { listMarkdownTagCatalog } from "./services/markdown-page-index";
 import { runPackagedMemoryApplicationEvidence } from "./services/packaged-memory-application-evidence";
 import { generatePackagedMemoryFixture } from "./services/packaged-memory-fixture";
 import { samplePackagedAppMemory } from "./services/packaged-memory-metrics";
+import { resolvePackagedMemoryScenarioFailureCode } from "./services/packaged-memory-scenario";
 import { LocalSettingsStore } from "./services/local-settings";
 import { ModelProviderRegistry } from "./services/model-provider-registry";
 import { ModelEgressApprovalService } from "./services/model-egress-approval-service";
@@ -1724,12 +1725,15 @@ app.whenReady().then(async () => {
       memoryWindow.destroy();
       getVaultService().close();
       app.exit(0);
-    } catch {
+    } catch (caught) {
       try {
         writeFileSync(packagedMemoryReportPath, `${JSON.stringify({
           schemaVersion: 1,
           status: "failed",
-          stage: memoryStage
+          stage: memoryStage,
+          ...(memoryStage === "memory_scenario"
+            ? { failureCode: resolvePackagedMemoryScenarioFailureCode(caught) }
+            : {})
         })}\n`, {
           encoding: "utf8",
           mode: 0o600,
