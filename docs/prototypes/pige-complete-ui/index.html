@@ -2904,7 +2904,7 @@
     <input class="file-input" id="fileInput" type="file" multiple aria-label="选择要添加的文件" />
   </div>
 
-  <section class="settings-window" id="settingsWindow" data-theme="light" aria-label="Pige 设置" hidden>
+  <section class="settings-window" id="settingsWindow" data-theme="light" role="dialog" aria-modal="true" aria-label="Pige 设置" hidden>
     <aside class="settings-sidebar" aria-label="设置分类">
       <div class="settings-sidebar-top">
         <div class="settings-traffic" aria-hidden="true">
@@ -3260,6 +3260,8 @@
     const settingsToast = document.querySelector('#settingsToast');
     let toastTimer;
     let settingsToastTimer;
+    let settingsReturnTarget = null;
+    let settingsOpenedFromDeepLink = false;
     let composerComposing = false;
     let composerCompositionEndedAt = 0;
     let noteComposerComposing = false;
@@ -3811,13 +3813,21 @@
       }
     }
 
-    function openSettingsWindow(page = 'general') {
+    function openSettingsWindow(page = 'general', options = {}) {
+      if (!document.body.classList.contains('settings-active')) {
+        const candidate = options.returnTarget || document.activeElement;
+        settingsReturnTarget = candidate instanceof HTMLElement && appWindow.contains(candidate)
+          ? candidate
+          : openSettings;
+        settingsOpenedFromDeepLink = options.deepLink === true;
+      }
+      appWindow.inert = true;
+      appWindow.setAttribute('aria-hidden', 'true');
       settingsWindow.hidden = false;
       resetSettingsSearch();
       showSettingsPage(page, { focus: false });
       window.requestAnimationFrame(() => {
         document.body.classList.add('settings-active');
-        history.replaceState(null, '', '#settings');
         window.setTimeout(() => {
           const heading = settingsWindow.querySelector('.settings-panel.active h1');
           if (heading) {
@@ -3828,15 +3838,25 @@
       });
     }
 
-    function navigateSettings(page = 'general') {
-      location.assign(`./?panel=${encodeURIComponent(page)}#settings`);
-    }
-
     function closeSettingsWindow() {
+      const returnTarget = settingsReturnTarget;
+      const deepLink = settingsOpenedFromDeepLink;
       document.body.classList.remove('settings-active');
       window.setTimeout(() => {
         settingsWindow.hidden = true;
-        location.assign('./?screen=home&sidebar=1');
+        appWindow.inert = false;
+        appWindow.removeAttribute('aria-hidden');
+        if (deepLink) history.replaceState(null, '', './?screen=home&sidebar=1');
+        settingsOpenedFromDeepLink = false;
+        settingsReturnTarget = null;
+        const returnTargetIsUsable = returnTarget instanceof HTMLElement
+          && returnTarget.isConnected
+          && !returnTarget.disabled
+          && !returnTarget.closest('[hidden]');
+        const focusTarget = returnTargetIsUsable
+          ? returnTarget
+          : mainLayout.classList.contains('sidebar-open') ? openSettings : sidebarToggle;
+        focusTarget.focus({ preventScroll: true });
       }, 180);
     }
 
@@ -4360,7 +4380,7 @@
       button.addEventListener('click', event => {
         event.preventDefault();
         const panel = button.dataset.openSettings || 'general';
-        navigateSettings(panel);
+        openSettingsWindow(panel, { returnTarget: button });
       });
     });
 
@@ -4853,6 +4873,7 @@
     updateSendState();
     filterLibraryResults();
     if (location.hash === '#settings') {
+      setScreen('home', { sidebar: true });
       settingsWindow.dataset.state = initialParams.get('state') || '';
       if (initialTheme === 'light' || initialTheme === 'dark') {
         settingsWindow.dataset.theme = initialTheme;
@@ -4863,7 +4884,7 @@
           option.tabIndex = selected ? 0 : -1;
         });
       }
-      openSettingsWindow(initialParams.get('panel') || 'general');
+      openSettingsWindow(initialParams.get('panel') || 'general', { deepLink: true, returnTarget: openSettings });
     } else {
       setScreen(initialScreen, {
         sidebar: initialSidebar,

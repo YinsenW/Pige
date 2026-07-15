@@ -10,6 +10,9 @@ This folder contains two deliberately separate prototype layers:
 
 - `pige-key-screens.html` is the compact interaction board used to validate product flow and information architecture.
 - `pige-complete-ui/index.html` is the high-fidelity, interactive UI Design handoff used for semantic control mapping, state coverage, responsive checks, and clean-room visual regression.
+- Its independent Settings surface opens and closes without reloading or replacing the
+  underlying workspace, preserves pane disclosure, and restores the invoking control;
+  direct Settings links use expanded Home only as a no-invoker fallback.
 
 Prototype boundary:
 

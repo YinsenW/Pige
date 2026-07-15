@@ -93,7 +93,7 @@
       "role": "link",
       "intent": "Open the independent stable-size Settings surface.",
       "states": ["default", "hover", "focus-visible"],
-      "prototype_action": "Navigates deterministically to the requested Settings panel.",
+      "prototype_action": "Opens the requested panel in the independent Settings surface without reloading or changing the underlying workspace, and records the invoking control for return focus.",
       "production_bridge": "Settings BrowserWindow and typed settings page route",
       "owner": "Window Service + Settings Service"
     },
@@ -115,7 +115,7 @@
       "role": "button",
       "intent": "Return to Pige or move between already-defined Settings panels without creating browser history controls.",
       "states": ["default", "hover", "pressed", "focus-visible"],
-      "prototype_action": "Moves to the named Settings panel or closes Settings while preserving the stable window geometry and restoring focus to the invoking entry.",
+      "prototype_action": "Moves to the named Settings panel or closes Settings in place while preserving the underlying workspace and pane disclosures, removing the background from the accessibility tree while open, and restoring focus to the invoking entry. Direct Settings deep links close to a safe expanded-Home fallback.",
       "production_bridge": "Renderer Settings route and modal focus lifecycle",
       "owner": "Renderer + Settings Service"
     },

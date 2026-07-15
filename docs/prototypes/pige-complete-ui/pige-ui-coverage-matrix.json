@@ -315,9 +315,9 @@
       "source": "UI_PROTOTYPE 13, 16.2",
       "prototype": "covered",
       "production": "missing",
-      "prototype_evidence": ["?panel=general#settings", "shell.settings_entry"],
+      "prototype_evidence": ["?panel=general#settings", "shell.settings_entry", "settings.flow_navigation", "in-place open/close preserves the underlying screen, pane disclosure, and invoking-control focus"],
       "production_evidence": ["Settings currently rendered as main View"],
-      "gap": "Development needs a dedicated Settings BrowserWindow with route restore, close/return focus, stable dimensions, and shared typed settings state.",
+      "gap": "Prototype opens and closes Settings without reloading or losing the underlying workspace, restores invoking-control focus, and gives direct deep links a safe fallback. Development still needs a dedicated Settings BrowserWindow with the same route restore, focus, stable-dimension, and shared typed-state contract.",
       "priority": "P1"
     },
     {

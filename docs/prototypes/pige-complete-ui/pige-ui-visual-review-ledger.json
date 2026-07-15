@@ -113,6 +113,7 @@
       "Escape closes the compact Note Agent and returns focus to the reader toolbar toggle",
       "Permission and model-egress decisions move focus to the single body-free terminal status",
       "Model selection and Escape return focus to the owning Home or Note Agent model switcher",
+      "Closing the independent Settings surface restores the invoking control without reloading or replacing the underlying workspace",
       "Removing a processing row returns focus to the next row's remove action; removing the current summary item retains the summary action"
     ],
     "semantic_patterns_verified": [

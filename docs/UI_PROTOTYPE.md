@@ -803,6 +803,13 @@ This section owns only how that taxonomy is presented and interacted with.
 
 Settings rules:
 
+- Open Settings as one independent, stable-size window/surface. It must not replace,
+  reload, resize, or reset the active Home, Library, Knowledge Tree, reader, sidebar,
+  or Note Agent workspace.
+- Opening Settings records the invoking control and the current workspace/pane state.
+  Closing or pressing Escape restores that exact state and returns focus to the invoker;
+  it must not force navigation to Home. A Settings deep link without an invoking
+  workspace may close to expanded Home as the safe fallback.
 - A settings page owns one conceptual domain. Do not mix models, permissions, local tools, extensions, and backup in one screen.
 - Models contains cloud language model provider connection only.
 - Local Capabilities contains local RAG, embedding/reranking downloads, OCR, speech input, parsers, and bundled toolchain health.
