@@ -235,9 +235,11 @@ Tests must verify:
 
 Tests must verify:
 
-- Provider gates prove five presets, Custom-only protocols, API-key/no-auth execution plus
-  optional-auth schema/adapter, real pre-write Pi probe, unified inventory/Refresh/manual
-  merge, grouped default, transaction-journal recovery, redacted binding, and readback.
+- Provider gates prove five presets, Custom-only protocols, API-key/no-auth execution,
+  pre-write Pi probe, inventory/Refresh/manual merge, grouped default and recovery.
+- Models UI proves Global Default first, compact Provider cards, preset credential pages,
+  Custom technical setup and Provider-local inventory without routing controls; failures
+  stay on the owning page, while typed calls, secret clearing and stale guards persist.
 - Assembled loopback proves renderer→preload→main→Registry→Pi direct/cited/source turns
   and restart. A real legacy Custom DeepSeek Chat canary proves normal secret resolution,
   direct/restart-cited Home, and 14 clean diagnostics; it does not prove fresh DeepSeek
@@ -468,18 +470,16 @@ Tests must verify:
 
 Tests must verify:
 
-- `resources/ui-visual-contract.manifest.json` agrees with the visual owner and the live
-  renderer CSS for protected tokens and structural metrics.
-- Deterministic real-render screenshots cover the governed viewport, locale, theme, and
-  state matrix for changed surfaces; synthetic data is mandatory.
-- Pixel comparison uses the manifest threshold as a review trigger, not automatic proof
-  of usability or approval.
-- Baseline changes have human review and a contract-linked rationale; bulk auto-update is
-  not an acceptable way to clear a failure.
-- Screenshot sidecars record build, platform, viewport, device scale factor, locale,
-  theme, fixture state, and font readiness so differences remain reproducible.
-- Release evidence includes macOS and Windows captures for critical workflows and records
-  platform text/window-chrome differences separately.
+- `resources/ui-visual-contract.manifest.json`, its owner and live CSS agree on protected
+  tokens/geometry.
+- Real Electron side-by-side screenshots cover changed states at representative compact,
+  resident and wide widths; thresholded comparison triggers review, never auto-approval.
+- Sidecars bind build, platform, viewport/scale, locale/theme, fixture and font readiness;
+  baseline changes require rationale and UI Design review of the exact integrated bytes.
+- Synthetic contract fixtures prove state/behavior only and never represent real product
+  state or substitute for rendered equivalence.
+- macOS is the foreground real-Electron visual gate. Windows native chrome remains a
+  deferred qualification item unless targeted; no evidence may imply support early.
 
 - Compact capture layout works at narrow width.
 - Expanded workspace and full-screen reader preserve context.
@@ -492,11 +492,9 @@ Tests must verify:
 - Long French/German labels do not overflow critical controls.
 - CJK text renders cleanly.
 
-Visual regressions are classified separately from component correctness. Renderer tests
-prove behavior and accessibility semantics; screenshot baselines prove rendered geometry
-and styling; focused human review proves that a changed composition remains calm, legible,
-and faithful to the Simplicity First contract. None of these layers substitutes for the
-others.
+Renderer tests prove behavior/accessibility; screenshots prove geometry/style; final UI
+Design review proves approved composition. These evidence layers never substitute for one
+another.
 
 ## 11. Performance Gates
 
@@ -581,13 +579,13 @@ cleanup, traversal, symlinked parents, successor swaps, private fields and absol
 
 ## 13. Release Gates
 
-The macOS arm64 and Windows x64 packageability preflights fail unless packaged identity,
-ASAR/resources, renderer/preload/health/toolchain, Pi/Home, workers, attribution/SBOM,
-signing state, body-free report, and size pass. macOS also proves Vision and Release
-Engineering section 8: sealed staging equals the official ZIP, then a fresh runner
-repeats integrity, expected-untrusted Gatekeeper/quarantine and runtime checks. These
-gates do not replace platform breadth, trusted signing, installed/update, Windows OCR,
-scale/recovery, or Public Alpha evidence.
+Early merge gates are macOS-first: affected shared tests, typecheck/build, assembled
+Electron, relevant macOS package/distribution and visible review. Safety-sensitive data,
+migration, backup/restore, permission/egress, worker, packaging, dependency and governance
+changes retain proportional shared gates. Windows/Linux native, installer and visual
+matrices are consolidated later unless targeted; gaps cannot prove support. Before a
+Windows or Public Alpha claim, its packageability plus remaining breadth, signing,
+installed/update, OCR, scale/recovery and alpha evidence still apply.
 
 Before alpha release:
 

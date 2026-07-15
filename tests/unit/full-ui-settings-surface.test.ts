@@ -63,6 +63,13 @@ describe("full UI Settings surface", () => {
     const dialog = dom.window.document.querySelector<HTMLElement>('[role="dialog"]')!;
     const closeButton = buttonNamed(dialog, "Close Settings");
     expect(dom.window.document.activeElement).toBe(closeButton);
+    const groups = Array.from(dialog.querySelectorAll<HTMLElement>('.settings-nav-group[role="group"]'));
+    expect(groups).toHaveLength(6);
+    for (const group of groups) {
+      const labelId = group.getAttribute("aria-labelledby");
+      expect(labelId).toBeTruthy();
+      expect(group.querySelector(`#${labelId}`)?.textContent?.trim().length).toBeGreaterThan(0);
+    }
 
     await act(async () => {
       buttonNamed(dialog, "Index & MaintenanceAvailable").click();

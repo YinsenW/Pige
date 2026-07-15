@@ -5,9 +5,9 @@
   "referenceBoundary": "clean-room-observation-only",
   "requiredCustomProperties": {
     "--space": "4px",
-    "--canvas": "#f9f9f9",
+    "--canvas": "#ffffff",
     "--surface": "#ffffff",
-    "--text-primary": "#1a1c1f",
+    "--text-primary": "#202322",
     "--radius-md": "8px",
     "--radius-xl": "12px",
     "--radius-2xl": "16px",
@@ -71,6 +71,9 @@
       "library-populated",
       "note-reader",
       "settings-models",
+      "settings-models-preset",
+      "settings-models-custom",
+      "settings-models-provider",
       "confirmation-required",
       "permission-dialog"
     ]

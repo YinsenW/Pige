@@ -874,7 +874,7 @@
       "status": "planned",
       "plannedTarget": "Injected adapter proves exact Broker gating; production arbitrary-path/Skill/package/local-tool adapters, focused modal convergence and the full bypass matrix remain."
     },
-    "PIGE-PI-004":{"status":"partial","evidence":["EV-PROVIDER","EV-PROVIDER-CONNECTION","EV-MODELS-ERROR-OWNER"],"open":{"id":"OPEN-REQ-PIGE-PI-004","description":"Models owns safe connection/discovery repair; full catalog/help, Provider delete, DeepSeek Anthropic, and signed packaged BYOK remain open.","targetBuilds":["B3.01","B3.03","B3.04"],"targetExits":["E3.01"]}},
+    "PIGE-PI-004":{"status":"partial","evidence":["EV-PROVIDER","EV-PROVIDER-CONNECTION","EV-MODELS-ERROR-OWNER","EV-MODELS-PROGRESSIVE-UI"],"open":{"id":"OPEN-REQ-PIGE-PI-004","description":"Progressive Models owns repair; catalog/help, deletion, DeepSeek Anthropic and packaged BYOK remain.","targetBuilds":["B3.01","B3.03","B3.04"],"targetExits":["E3.01"]}},
     "PIGE-PI-005": {
       "status": "planned",
       "plannedTarget": "Every submission enters one Pi-owned Job with source preservation as its first checkpoint; Pi owns iterative tools, Pi-authored Markdown and validation repair, with safe drafts, no presentation-only provider call, distinct hard-block outcomes, and signed packaged macOS/Windows BYOK proof."
@@ -1164,53 +1164,28 @@
       }
     },
     "PIGE-REPO-001":{"status":"verified","evidence":["EV-REPO","EV-REPO-FOUNDATION","EV-DEV-LAUNCH"]},
-    "PIGE-REPO-002": {
-      "status": "verified",
-      "evidence": [
-        "EV-BOUNDARY",
-        "EV-CI"
-      ]
-    },
+    "PIGE-REPO-002":{"status":"verified","evidence":["EV-BOUNDARY","EV-CI"]},
     "PIGE-REPO-003":{"status":"verified","evidence":["EV-FIXTURE","EV-ARTIFACT-LAYOUT","EV-REPO-FOUNDATION"]},
-    "PIGE-REPO-004": {
-      "status": "verified",
-      "evidence": [
-        "EV-PHASE-PREFLIGHT"
-      ]
-    },
+    "PIGE-REPO-004":{"status":"verified","evidence":["EV-PHASE-PREFLIGHT"]},
     "PIGE-DIAG-001":{"status":"partial","evidence":["EV-DIAGNOSTICS","EV-NO-TELEMETRY","EV-PRIVACY-POLICY"],"open":{"id":"OPEN-REQ-PIGE-DIAG-001","description":"Static no-telemetry/no-auto-upload enforcement is executable; crash-hook review and future unknown SDKs, computed endpoints, indirect transports, and generated configuration remain open.","targetBuilds":["B1.23"],"targetExits":["E1.19"]}},
     "PIGE-DIAG-002":{"status":"partial","evidence":["EV-DIAGNOSTICS","EV-DIAG-EXPORT-CORE","EV-DIAG-EXPORT-WORKER","EV-DIAG-EXPORT-CANCEL-IPC","EV-DIAG-EXPORT-CANCEL-UI","EV-DIAG-EXPORT-WORKER-SMOKE"],"open":{"id":"OPEN-REQ-PIGE-DIAG-002","description":"Bounded preview/export/cancel and selected local destination are executable; optional reviewed content, progress/restart semantics, and broader platform/path evidence remain open.","targetBuilds":["B1.14"],"targetExits":["E1.07"]}},
     "PIGE-DIAG-003":{"status":"partial","evidence":["EV-DIAGNOSTICS","EV-DIAG-ROTATION","EV-DIAG-RETENTION","EV-DIAG-PERSISTENCE-SAFETY"],"open":{"id":"OPEN-REQ-PIGE-DIAG-003","description":"Broader diagnostic stores, crash-recovery correlation, and user-clear semantics remain open.","targetBuilds":["B1.23"],"targetExits":["E1.19"]}},
     "PIGE-SUPPORT-001":{"status":"partial","evidence":["EV-SUPPORT-POLICY"],"open":{"id":"OPEN-REQ-PIGE-SUPPORT-001","description":"Release-time public issue/support template review and maintainer workflow acceptance remain open.","targetBuilds":["B9.17"],"targetExits":["E9.11"]}},
     "PIGE-GOV-001":{"status":"partial","evidence":["EV-PUBLIC-WORKFLOW","EV-PUBLIC-CONDUCT","EV-PUBLIC-BUG","EV-PUBLIC-SECURITY"],"open":{"id":"OPEN-REQ-PIGE-GOV-001","description":"Automated schema validation for every public issue template and live private-reporting availability remain open.","targetBuilds":["B0.15"],"targetExits":["E0.12"]}},
-    "PIGE-GOV-002": {
-      "status": "verified",
-      "evidence": [
-        "EV-LICENSE-PACKAGE",
-        "EV-LICENSE-TEXT",
-        "EV-LICENSE-NOTICE",
-        "EV-DOCMAP"
-      ]
-    },
+    "PIGE-GOV-002":{"status":"verified","evidence":["EV-LICENSE-PACKAGE","EV-LICENSE-TEXT","EV-LICENSE-NOTICE","EV-DOCMAP"]},
     "PIGE-DOC-001":{"status":"verified","evidence":["EV-DOCMAP"]},
     "PIGE-DOC-002":{"status":"verified","evidence":["EV-DOCMAP"]},
     "PIGE-DOC-003":{"status":"verified","evidence":["EV-TRACE"]},
     "PIGE-DOC-004":{"status":"verified","evidence":["EV-PHASE-PREFLIGHT"]},
     "PIGE-DOC-005":{"status":"verified","evidence":["EV-DOCQUALITY","EV-DOCQUALITY-INDEPENDENT"]},
     "PIGE-UI-001":{"status":"partial","evidence":["EV-RENDERER","EV-READER-RESOURCE-SAFETY","EV-RENDERER-NAVIGATION-GUARD","EV-FULL-UI-RESPONSIVE"],"open":{"id":"OPEN-REQ-PIGE-UI-001","description":"Source-preserving editing, IME, long-page budget and external-conflict UI tests remain open.","targetBuilds":["B6.08","B6.13"],"targetExits":["E6.05","E6.08"]}},
-    "PIGE-UI-002":{"status":"planned","plannedTarget":"Keyboard, focus, accessible-name, contrast, reduced-motion, and six-locale narrow-layout smoke evidence."},
-    "PIGE-UI-003":{"status":"partial","evidence":["EV-APP-SHELL","EV-FIRST-HOME-GUIDE","EV-HOME-MODEL-OWNER","EV-HOME-DURABLE-REFRESH","EV-HOME-ENTER","EV-DATASET-QUERY-UI","EV-DATASET-TIMELINE-RESTORE","EV-KNOWLEDGE-TREE-IPC","EV-KNOWLEDGE-TREE-UI","EV-FULL-UI-RESPONSIVE","EV-FULL-UI-NAVIGATION","EV-FULL-UI-LIBRARY","EV-FULL-UI-SETTINGS"],"open":{"id":"OPEN-REQ-PIGE-UI-003","description":"The responsive shell and unavailable states work; capability completion, continuity and Windows packaged visuals remain open.","targetBuilds":["B1.03","B1.07","B1.08","B1.09","B1.17"],"targetExits":["E1.02","E1.11","E1.13"]}},
+    "PIGE-UI-002":{"status":"planned","plannedTarget":"Complete accessibility, final UI Design review and real macOS/Windows visual equivalence."},
+    "PIGE-UI-003":{"status":"partial","evidence":["EV-APP-SHELL","EV-FIRST-HOME-GUIDE","EV-HOME-MODEL-OWNER","EV-HOME-DURABLE-REFRESH","EV-HOME-ENTER","EV-DATASET-QUERY-UI","EV-DATASET-TIMELINE-RESTORE","EV-KNOWLEDGE-TREE-IPC","EV-KNOWLEDGE-TREE-UI","EV-FULL-UI-RESPONSIVE","EV-FULL-UI-NAVIGATION","EV-FULL-UI-LIBRARY","EV-FULL-UI-SETTINGS","EV-UI-WINDOW-SHELL"],"open":{"id":"OPEN-REQ-PIGE-UI-003","description":"Production shell/macOS review work; unavailable UI proves no capability; capability and Windows qualification remain.","targetBuilds":["B1.03","B1.07","B1.08","B1.09","B1.17"],"targetExits":["E1.02","E1.11","E1.13"]}},
     "PIGE-UI-004":{"status":"planned","plannedTarget":"Remaining Knowledge Tree density/scale, compact-platform, assistive-technology, and signed packaged visual acceptance."},
     "PIGE-UI-005":{"status":"planned","plannedTarget":"Note Agent local-copy, auto-apply, Activity/Undo, and exception tests."},
     "PIGE-UI-006":{"status":"partial","evidence":["EV-READER-RELATED","EV-READER-UI","EV-FULL-UI-LIBRARY","EV-FULL-UI-RESPONSIVE"],"open":{"id":"OPEN-REQ-PIGE-UI-006","description":"Library opens Reader and related context in governed panes; source metadata, typed edit/copy/reveal and unavailable-graph degradation remain open.","targetBuilds":["B6.08","B6.09"],"targetExits":["E6.05","E6.07"]}},
-    "PIGE-SKILL-001": {
-      "status": "planned",
-      "plannedTarget": "Settings/chat staging, URL/Markdown/ZIP, update, lifecycle, export, path-safety, and permission tests."
-    },
-    "PIGE-SKILL-002": {
-      "status": "planned",
-      "plannedTarget": "Catalog, install, update, version-pin, rollback, uninstall, disclosure, and no-hidden-install tests."
-    }
+    "PIGE-SKILL-001":{"status":"planned","plannedTarget":"Settings/chat staging, URL/Markdown/ZIP, update, lifecycle, export, path-safety, and permission tests."},
+    "PIGE-SKILL-002":{"status":"planned","plannedTarget":"Catalog, install, update, version-pin, rollback, uninstall, disclosure, and no-hidden-install tests."}
   },
   "exits": {
     "E0.01":{"status":"partial","evidence":["EV-REPO","EV-REPO-FOUNDATION","EV-DEV-LAUNCH"],"open":{"id":"OPEN-EXIT-E0.01","description":"Real local launch and process-tree cleanup are executable; current Windows CI launch evidence remains open.","targetBuilds":["B0.03"],"targetExits":["E0.01"]}},
@@ -1226,22 +1201,7 @@
     "E0.11":{"status":"verified","evidence":["EV-DOCQUALITY","EV-DOCQUALITY-INDEPENDENT"]},
     "E0.12":{"status":"partial","evidence":["EV-PUBLIC-WORKFLOW","EV-PUBLIC-CONDUCT","EV-PUBLIC-BUG","EV-PUBLIC-SECURITY"],"open":{"id":"OPEN-EXIT-E0.12","description":"Automated template-schema validation and live private-reporting availability remain open.","targetBuilds":["B0.15"],"targetExits":["E0.12"]}},
     "E0.13":{"status":"verified","evidence":["EV-TRACE","EV-PHASE-PREFLIGHT"]},
-    "E1.01": {
-      "status": "partial",
-      "evidence": [
-        "EV-VAULT-LAYOUT"
-      ],
-      "open": {
-        "id": "OPEN-EXIT-E1.01",
-        "description": "Full executable acceptance remains open for Exit E1.01: User can create and open a vault through validated paths.",
-        "targetBuilds": [
-          "B1.02"
-        ],
-        "targetExits": [
-          "E1.01"
-        ]
-      }
-    },
+    "E1.01":{"status":"partial","evidence":["EV-VAULT-LAYOUT"],"open":{"id":"OPEN-EXIT-E1.01","description":"Full executable acceptance remains open for Exit E1.01: User can create and open a vault through validated paths.","targetBuilds":["B1.02"],"targetExits":["E1.01"]}},
     "E1.02":{"status":"partial","evidence":["EV-APP-SHELL","EV-FIRST-HOME-GUIDE","EV-HOME-MODEL-OWNER","EV-FULL-UI-NAVIGATION","EV-FULL-UI-RESPONSIVE","EV-I18N"],"open":{"id":"OPEN-EXIT-E1.02","description":"First Home, model ownership and the responsive shell work locally; broader continuity and Windows packaged visual acceptance remain open.","targetBuilds":["B1.03"],"targetExits":["E1.02"]}},
     "E1.03": {
       "status": "partial",
@@ -1267,7 +1227,7 @@
     "E1.08":{"status":"partial","evidence":["EV-VAULT-RESET","EV-DB-REBUILD"],"open":{"id":"OPEN-EXIT-E1.08","description":"Full executable acceptance remains open for Exit E1.08: Deleting `.pige/db/` does not delete user-owned files, and the empty migration/rebuild path succeeds.","targetBuilds":["B1.15"],"targetExits":["E1.08"]}},
     "E1.09":{"status":"partial","evidence":["EV-VAULT-RESET","EV-DB-REBUILD"],"open":{"id":"OPEN-EXIT-E1.09","description":"Full executable acceptance remains open for Exit E1.09: Reset Local Database cannot delete Markdown knowledge, source records/assets, memory, conversations, proposals, operations, or trash.","targetBuilds":["B1.16"],"targetExits":["E1.09"]}},
     "E1.10":{"status":"verified","evidence":["EV-BOUNDARY"]},
-    "E1.11":{"status":"partial","evidence":["EV-APP-SHELL","EV-FULL-UI-NAVIGATION","EV-FULL-UI-RESPONSIVE","EV-FULL-UI-LIBRARY","EV-I18N"],"open":{"id":"OPEN-EXIT-E1.11","description":"The Home/Library shell, responsive panes and six catalogs are covered; complete continuity and Windows packaged visual acceptance remain open.","targetBuilds":["B1.07","B1.08","B1.09"],"targetExits":["E1.11"]}},
+    "E1.11":{"status":"partial","evidence":["EV-APP-SHELL","EV-FULL-UI-NAVIGATION","EV-FULL-UI-RESPONSIVE","EV-FULL-UI-LIBRARY","EV-I18N","EV-UI-WINDOW-SHELL"],"open":{"id":"OPEN-EXIT-E1.11","description":"Mac-reviewed shell/catalogs; Windows qualification and continuity remain.","targetBuilds":["B1.07","B1.08","B1.09"],"targetExits":["E1.11"]}},
     "E1.12":{"status":"partial","evidence":["EV-RUNTIME","EV-PROVIDER"],"open":{"id":"OPEN-EXIT-E1.12","description":"Full executable acceptance remains open for Exit E1.12: One default model profile can be stored and resolved through the adapter contract without exposing ineffective Advanced/Fast controls.","targetBuilds":["B1.13"],"targetExits":["E1.12"]}},
     "E1.13":{"status":"partial","evidence":["EV-APP-SHELL","EV-HOME-MODEL-OWNER","EV-HOME-DURABLE-REFRESH","EV-FULL-UI-NAVIGATION","EV-FULL-UI-LIBRARY","EV-I18N"],"open":{"id":"OPEN-EXIT-E1.13","description":"Model-wait ownership, Home refresh and the Library shell work; broader continuity and Windows packaged visual acceptance remain open.","targetBuilds":["B1.17"],"targetExits":["E1.13"]}},
     "E1.14":{"status":"partial","evidence":["EV-TOOLCHAIN"],"open":{"id":"OPEN-EXIT-E1.14","description":"Full executable acceptance remains open for Exit E1.14: Packaged core tools are version-pinned, report ready/missing/damaged state, and expose a user-visible repair path without an ordinary job improvising a download.","targetBuilds":["B1.18"],"targetExits":["E1.14"]}},
@@ -1340,7 +1300,7 @@
         ]
       }
     },
-    "E3.01":{"status":"partial","evidence":["EV-PROVIDER","EV-RUNTIME","EV-PI-PROVIDER-BINDING","EV-MODELS-ERROR-OWNER"],"open":{"id":"OPEN-EXIT-E3.01","description":"Models-local connection repair works; full catalog/help, Provider delete, DeepSeek Anthropic, and signed packaged BYOK remain open.","targetBuilds":["B3.01","B3.03","B3.04"],"targetExits":["E3.01"]}},
+    "E3.01":{"status":"partial","evidence":["EV-PROVIDER","EV-RUNTIME","EV-PI-PROVIDER-BINDING","EV-MODELS-ERROR-OWNER","EV-MODELS-PROGRESSIVE-UI"],"open":{"id":"OPEN-EXIT-E3.01","description":"Progressive Models repair works on macOS; catalog/help, deletion, DeepSeek Anthropic and packaged BYOK remain.","targetBuilds":["B3.01","B3.03","B3.04"],"targetExits":["E3.01"]}},
     "E3.02": {
       "status": "partial",
       "evidence": [
@@ -1767,6 +1727,7 @@
     "EV-FULL-UI-NAVIGATION": { "kind": "test", "path": "tests/unit/full-ui-renderer-contract.test.ts", "selector": "keeps Home-only navigation hidden and exposes one controlled Library tree" },
     "EV-FULL-UI-LIBRARY": { "kind": "test", "path": "tests/unit/full-ui-library.test.ts", "selector": "filters real page summaries by title and durable page type" },
     "EV-FULL-UI-SETTINGS": { "kind": "test", "path": "tests/unit/full-ui-settings-surface.test.ts", "selector": "traps focus, closes with Escape, and keeps development activation local" },
+    "EV-UI-WINDOW-SHELL": { "kind": "test", "path": "tests/unit/desktop-shell-contract.test.ts", "selector": "uses one integrated title bar while preserving native platform controls" },
     "EV-SETTINGS": { "kind": "test", "path": "tests/unit/settings-registry.test.ts", "selector": "classifies implemented user-visible and agent-affecting settings" },
     "EV-LOCAL-SETTINGS": { "kind": "test", "path": "tests/unit/local-settings.test.ts", "selector": "preserves machine-local window preferences when activating a vault" },
     "EV-FIRST-HOME-PREFERENCE": { "kind": "test", "path": "tests/unit/local-settings.test.ts", "selector": "persists an explicit first-Home choice across settings rewrites and restart" },
@@ -1951,6 +1912,7 @@
     "EV-HOME-MODEL-OWNER":{"kind":"test","path":"tests/unit/home-agent-conversation-ui.test.ts","selector":"keeps one missing-model owner in"},
     "EV-HOME-DURABLE-REFRESH":{"kind":"test","path":"tests/unit/home-agent-conversation-ui.test.ts","selector":"refreshes durable Home state when returning from Models"},
     "EV-MODELS-ERROR-OWNER":{"kind":"test","path":"tests/unit/model-settings-error-ui.test.ts","selector":"Models error ownership"},
+    "EV-MODELS-PROGRESSIVE-UI":{"kind":"test","path":"tests/unit/model-settings-error-ui.test.ts","selector":"keeps the approved progressive Models structure without exposing routing controls"},
     "EV-SOURCE-WAIT-STATUS": { "kind": "test", "path": "tests/unit/home-agent-conversation-ui.test.ts", "selector": "shows one truthful source-saved model wait and one repair action across restart" },
     "EV-SOURCE-WAIT-RACE": { "kind": "test", "path": "tests/unit/home-agent-conversation-ui.test.ts", "selector": "routes a full-window Home drop through the same intermediate source owner" },
     "EV-PI-URL-INGRESS": { "kind": "test", "path": "tests/unit/agent-selected-url-ingress.test.ts", "selector": "Agent-selected URL ingress" },
