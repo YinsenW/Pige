@@ -1325,12 +1325,7 @@
         ]
       }
     },
-    "PIGE-REPO-001": {
-      "status": "verified",
-      "evidence": [
-        "EV-REPO"
-      ]
-    },
+    "PIGE-REPO-001":{"status":"verified","evidence":["EV-REPO","EV-REPO-FOUNDATION","EV-DEV-LAUNCH"]},
     "PIGE-REPO-002": {
       "status": "verified",
       "evidence": [
@@ -1338,13 +1333,7 @@
         "EV-CI"
       ]
     },
-    "PIGE-REPO-003": {
-      "status": "verified",
-      "evidence": [
-        "EV-FIXTURE",
-        "EV-ARTIFACT-LAYOUT"
-      ]
-    },
+    "PIGE-REPO-003":{"status":"verified","evidence":["EV-FIXTURE","EV-ARTIFACT-LAYOUT","EV-REPO-FOUNDATION"]},
     "PIGE-REPO-004": {
       "status": "verified",
       "evidence": [
@@ -1422,143 +1411,19 @@
     }
   },
   "exits": {
-    "E0.01": {
-      "status": "partial",
-      "evidence": [
-        "EV-REPO"
-      ],
-      "open": {
-        "id": "OPEN-EXIT-E0.01",
-        "description": "A dedicated launch/root-command smoke report remains open.",
-        "targetBuilds": [
-          "B0.03"
-        ],
-        "targetExits": [
-          "E0.01"
-        ]
-      }
-    },
-    "E0.02": {
-      "status": "partial",
-      "evidence": [
-        "EV-REPO"
-      ],
-      "open": {
-        "id": "OPEN-EXIT-E0.02",
-        "description": "A dedicated launch/root-command smoke report remains open.",
-        "targetBuilds": [
-          "B0.01",
-          "B0.04"
-        ],
-        "targetExits": [
-          "E0.02"
-        ]
-      }
-    },
-    "E0.03": {
-      "status": "verified",
-      "evidence": [
-        "EV-BOUNDARY"
-      ]
-    },
-    "E0.04": {
-      "status": "partial",
-      "evidence": [
-        "EV-CI"
-      ],
-      "open": {
-        "id": "OPEN-EXIT-E0.04",
-        "description": "The workflow contract exists; a current CI run report remains external evidence.",
-        "targetBuilds": [
-          "B0.06"
-        ],
-        "targetExits": [
-          "E0.04"
-        ]
-      }
-    },
-    "E0.05": {
-      "status": "verified",
-      "evidence": [
-        "EV-DEPENDENCY"
-      ]
-    },
-    "E0.06": {
-      "status": "verified",
-      "evidence": [
-        "EV-FIXTURE"
-      ]
-    },
-    "E0.07": {
-      "status": "verified",
-      "evidence": [
-        "EV-TRACE"
-      ]
-    },
-    "E0.08": {
-      "status": "verified",
-      "evidence": [
-        "EV-LICENSE-PACKAGE",
-        "EV-LICENSE-TEXT",
-        "EV-LICENSE-NOTICE",
-        "EV-DOCMAP"
-      ]
-    },
-    "E0.09": {
-      "status": "verified",
-      "evidence": [
-        "EV-I18N"
-      ]
-    },
-    "E0.10": {
-      "status": "partial",
-      "evidence": [
-        "EV-ARTIFACT-LAYOUT"
-      ],
-      "open": {
-        "id": "OPEN-EXIT-E0.10",
-        "description": "A generated report schema smoke remains open.",
-        "targetBuilds": [
-          "B0.13"
-        ],
-        "targetExits": [
-          "E0.10"
-        ]
-      }
-    },
-    "E0.11": {
-      "status": "verified",
-      "evidence": [
-        "EV-DOCQUALITY",
-        "EV-DOCQUALITY-INDEPENDENT"
-      ]
-    },
-    "E0.12": {
-      "status": "partial",
-      "evidence": [
-        "EV-PUBLIC-WORKFLOW",
-        "EV-PUBLIC-CONDUCT",
-        "EV-PUBLIC-BUG",
-        "EV-PUBLIC-SECURITY"
-      ],
-      "open": {
-        "id": "OPEN-EXIT-E0.12",
-        "description": "Automated template-schema validation and live private-reporting availability remain open.",
-        "targetBuilds": [
-          "B0.15"
-        ],
-        "targetExits": [
-          "E0.12"
-        ]
-      }
-    },
-    "E0.13": {
-      "status": "verified",
-      "evidence": [
-        "EV-TRACE",
-        "EV-PHASE-PREFLIGHT"
-      ]
-    },
+    "E0.01":{"status":"partial","evidence":["EV-REPO","EV-REPO-FOUNDATION","EV-DEV-LAUNCH"],"open":{"id":"OPEN-EXIT-E0.01","description":"Real local launch and process-tree cleanup are executable; current Windows CI launch evidence remains open.","targetBuilds":["B0.03"],"targetExits":["E0.01"]}},
+    "E0.02":{"status":"partial","evidence":["EV-REPO","EV-REPO-FOUNDATION"],"open":{"id":"OPEN-EXIT-E0.02","description":"Exact root commands and report contract are executable; current CI matrix evidence remains open.","targetBuilds":["B0.01","B0.04"],"targetExits":["E0.02"]}},
+    "E0.03":{"status":"verified","evidence":["EV-BOUNDARY"]},
+    "E0.04":{"status":"partial","evidence":["EV-CI","EV-REPO-FOUNDATION-CI"],"open":{"id":"OPEN-EXIT-E0.04","description":"The workflow and report-upload contract are executable; a current online CI run remains external evidence.","targetBuilds":["B0.06"],"targetExits":["E0.04"]}},
+    "E0.05":{"status":"verified","evidence":["EV-DEPENDENCY"]},
+    "E0.06":{"status":"verified","evidence":["EV-FIXTURE"]},
+    "E0.07":{"status":"verified","evidence":["EV-TRACE"]},
+    "E0.08":{"status":"verified","evidence":["EV-LICENSE-PACKAGE","EV-LICENSE-TEXT","EV-LICENSE-NOTICE","EV-DOCMAP"]},
+    "E0.09":{"status":"verified","evidence":["EV-I18N"]},
+    "E0.10":{"status":"partial","evidence":["EV-ARTIFACT-LAYOUT","EV-REPO-FOUNDATION"],"open":{"id":"OPEN-EXIT-E0.10","description":"Recipe-bound report and successor fences are executable; current online artifact retrieval proof remains open.","targetBuilds":["B0.13"],"targetExits":["E0.10"]}},
+    "E0.11":{"status":"verified","evidence":["EV-DOCQUALITY","EV-DOCQUALITY-INDEPENDENT"]},
+    "E0.12":{"status":"partial","evidence":["EV-PUBLIC-WORKFLOW","EV-PUBLIC-CONDUCT","EV-PUBLIC-BUG","EV-PUBLIC-SECURITY"],"open":{"id":"OPEN-EXIT-E0.12","description":"Automated template-schema validation and live private-reporting availability remain open.","targetBuilds":["B0.15"],"targetExits":["E0.12"]}},
+    "E0.13":{"status":"verified","evidence":["EV-TRACE","EV-PHASE-PREFLIGHT"]},
     "E1.01": {
       "status": "partial",
       "evidence": [
@@ -2285,6 +2150,9 @@
       "path": "package.json",
       "selector": "\"workspaces\""
     },
+    "EV-REPO-FOUNDATION": { "kind": "test", "path": "tests/unit/repository-foundation-smoke.test.ts", "selector": "repository foundation smoke" },
+    "EV-REPO-FOUNDATION-CI": { "kind": "test", "path": "tests/unit/repository-foundation-smoke.test.ts", "selector": "runs and uploads the exact report from the root CI gate" },
+    "EV-DEV-LAUNCH": { "kind": "test", "path": "tests/unit/repository-foundation-smoke.test.ts", "selector": "isolates development launch state and requires a loopback renderer target" },
     "EV-CI": {
       "kind": "contract",
       "path": ".github/workflows/ci.yml",

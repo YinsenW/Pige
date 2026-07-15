@@ -26,14 +26,32 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
       - name: Verify docs, manifests, and boundaries
         run: npm run verify
 
-      - name: Type-check
-        run: npm run typecheck
+      - name: Verify root commands and development Electron launch
+        run: xvfb-run -a npm run smoke:repository-foundation
+        env:
+          PIGE_REPORT_BUILD_ID: ${{ github.sha }}
+          PIGE_DEVELOPMENT_SMOKE_NO_SANDBOX: "1"
 
-      - name: Unit tests
-        run: npm test
+      - name: Upload repository foundation report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: repository-foundation-${{ github.sha }}
+          path: artifacts/test-reports/repository-foundation/linux-x64/${{ github.sha }}/report.json
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Generate retrieval regression report
         run: npm run test:eval:report
@@ -48,9 +66,6 @@ jobs:
           path: artifacts/test-reports/retrieval-regression/linux-x64/${{ github.sha }}/report.json
           if-no-files-found: error
           retention-days: 14
-
-      - name: Build
-        run: npm run build
 
       - name: Smoke local index rebuild worker
         run: npm run smoke:index-rebuild-worker
