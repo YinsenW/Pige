@@ -1291,7 +1291,11 @@ export const RetrievalSearchPageSummarySchema = z.object({
   updatedAt: z.string().datetime({ offset: true }),
   language: z.string().min(1).max(64).optional(),
   sourceIds: z.array(RetrievalSourceIdSchema).max(128).readonly()
-}).strict();
+}).strict().transform((summary) => {
+  if (summary.language !== undefined) return { ...summary, language: summary.language };
+  const { language: _language, ...withoutLanguage } = summary;
+  return withoutLanguage;
+});
 
 export const RetrievalSearchResultItemSchema = z.object({
   summary: RetrievalSearchPageSummarySchema,
