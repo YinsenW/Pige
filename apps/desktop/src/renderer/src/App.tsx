@@ -1332,9 +1332,6 @@ export function LibraryPanel(props: {
       ? libraryBrowseItems(pages, family)
       : [];
   const groupedItems = groupLibrarySearchItems(displayedItems);
-  const maxScore = resultMatchesCurrentQuery
-    ? Math.max(0, ...searchState.result.results.map((item) => item.score))
-    : 0;
 
   return (
     <section className="library-page library-search-view" aria-label={props.t("nav.library")}>
@@ -1467,9 +1464,14 @@ export function LibraryPanel(props: {
                 <h2 id={`library-group-${group}`}>{props.t(`library.family.${group}`)}</h2>
                 {items.map((item) => {
                   const opening = props.noteLoadingPageId === item.summary.pageId;
-                  const score = resultMatchesCurrentQuery && maxScore > 0
-                    ? Math.max(1, Math.min(100, Math.round((item.score / maxScore) * 100)))
+                  const matchReason = resultMatchesCurrentQuery
+                    ? libraryMatchReasonLabel(item.matchReasons, props.t)
                     : null;
+                  const resultMeta = opening
+                    ? props.t("note.opening")
+                    : resultMatchesCurrentQuery
+                      ? matchReason
+                      : props.t(`library.type.${item.summary.pageType}`);
                   return (
                     <button
                       className="search-result"
@@ -1486,11 +1488,7 @@ export function LibraryPanel(props: {
                         <strong>{item.summary.title}</strong>
                         <span>{item.snippets[0] ?? props.t(`library.type.${item.summary.pageType}`)}</span>
                       </span>
-                      <small>{opening
-                        ? props.t("note.opening")
-                        : score === null
-                          ? props.t(`library.type.${item.summary.pageType}`)
-                          : `${score}%`}</small>
+                      {resultMeta ? <small>{resultMeta}</small> : null}
                     </button>
                   );
                 })}
@@ -1540,6 +1538,21 @@ function groupLibrarySearchItems(
   };
   for (const item of items) groups[libraryResultGroup(item.summary)].push(item);
   return groups;
+}
+
+function libraryMatchReasonLabel(
+  matchReasons: readonly string[],
+  t: (key: string) => string
+): string | null {
+  const labels: string[] = [];
+  const knownReasons = new Set<string>();
+  for (const reason of matchReasons) {
+    if (reason !== "title" && reason !== "body" && reason !== "path") continue;
+    if (knownReasons.has(reason)) continue;
+    knownReasons.add(reason);
+    labels.push(t(`library.matchReason.${reason}`));
+  }
+  return labels.length > 0 ? labels.join(" · ") : null;
 }
 
 function libraryBrowseItems(

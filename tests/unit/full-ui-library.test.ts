@@ -143,6 +143,8 @@ describe("full UI Library", () => {
       await settle(dom);
     });
     expect(container.textContent).toContain("Beta source");
+    expect(container.textContent).toContain("Content match");
+    expect(container.textContent).not.toContain("100%");
     expect(container.textContent).not.toContain("Alpha source");
 
     await act(async () => {
