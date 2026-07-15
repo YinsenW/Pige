@@ -10,7 +10,7 @@ import {
 } from "react";
 import { PigeIcon, type PigeIconName } from "./components/PigeIcon";
 import { KnowledgeTreeMap } from "./components/KnowledgeTreeMap";
-import { NoteAgentPanel } from "./components/NoteAgentPanel";
+import { CurrentNoteAgent } from "./components/CurrentNoteAgent";
 import { ProposalReviewPanel } from "./components/ProposalReviewPanel";
 import pigeMarkUrl from "../../../../../resources/brand/pige-icon/master/pige-icon-1024.png";
 import deMessages from "./locales/de/messages.json";
@@ -969,13 +969,12 @@ export function App(): React.JSX.Element {
         )}
         </main>
         {selectedNote && noteAgentOpen ? (
-          <NoteAgentPanel
+          <CurrentNoteAgent
+            key={selectedNote.summary.pageId}
             modal={agentModal}
+            pageId={selectedNote.summary.pageId}
             noteTitle={selectedNote.summary.title}
-            availability="unavailable"
-            messages={[]}
-            proposal={null}
-            draft=""
+            locale={locale}
             models={(modelSummary?.models ?? []).filter((model) => model.enabled).map((model) => {
               const providerName = modelSummary?.providers.find((provider) => provider.id === model.providerProfileId)?.displayName;
               return {
@@ -994,8 +993,12 @@ export function App(): React.JSX.Element {
               setNoteAgentOpen(false);
               window.requestAnimationFrame(() => noteAgentToggleRef.current?.focus());
             }}
-            onDraftChange={() => undefined}
+            onOpenModels={(opener) => openSettings("models", opener)}
             onSelectModel={setHomeDefaultModel}
+            onOpenCitation={(pageId) => {
+              if (pageId !== selectedNote.summary.pageId) return;
+              void openNote(pageId);
+            }}
             t={t}
           />
         ) : null}
