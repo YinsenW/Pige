@@ -55,7 +55,7 @@ export type PigeAgentToolTrust = "model_generated" | "untrusted_source" | "host_
 export type PigeAgentToolExecution = "sequential" | "parallel_read_only";
 
 export interface PigeAgentToolDataBoundary {
-  readonly resourceScope: "none" | "current_source" | "current_vault";
+  readonly resourceScope: "none" | "current_source" | "current_note" | "current_vault";
   readonly pathAuthority: "host_only";
   readonly sourceIdAuthority: "host_only";
   readonly modelAuthority: "none";
@@ -63,7 +63,7 @@ export interface PigeAgentToolDataBoundary {
 
 export interface PigeAgentToolIdempotency {
   readonly mode: "idempotent" | "non_idempotent";
-  readonly scope: "current_source" | "current_vault" | "tool_call" | "none";
+  readonly scope: "current_source" | "current_note" | "current_vault" | "tool_call" | "none";
 }
 
 export interface PigeAgentToolExecutionLimits {
@@ -1230,7 +1230,8 @@ function isPigeAgentToolExecution(value: unknown): value is PigeAgentToolExecuti
 
 function isPigeAgentToolDataBoundary(value: unknown): value is PigeAgentToolDataBoundary {
   return isExactRecord(value, ["resourceScope", "pathAuthority", "sourceIdAuthority", "modelAuthority"]) &&
-    (value.resourceScope === "none" || value.resourceScope === "current_source" || value.resourceScope === "current_vault") &&
+    (value.resourceScope === "none" || value.resourceScope === "current_source" ||
+      value.resourceScope === "current_note" || value.resourceScope === "current_vault") &&
     value.pathAuthority === "host_only" &&
     value.sourceIdAuthority === "host_only" &&
     value.modelAuthority === "none";
@@ -1239,7 +1240,8 @@ function isPigeAgentToolDataBoundary(value: unknown): value is PigeAgentToolData
 function isPigeAgentToolIdempotency(value: unknown): value is PigeAgentToolIdempotency {
   if (!isExactRecord(value, ["mode", "scope"])) return false;
   return value.mode === "idempotent"
-    ? value.scope === "none" || value.scope === "current_source" || value.scope === "current_vault" || value.scope === "tool_call"
+    ? value.scope === "none" || value.scope === "current_source" || value.scope === "current_note" ||
+      value.scope === "current_vault" || value.scope === "tool_call"
     : value.mode === "non_idempotent" && value.scope === "none";
 }
 

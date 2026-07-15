@@ -2,11 +2,17 @@ import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import type { RetrievalSearchResultItem } from "@pige/contracts";
+import { TextDecoder } from "node:util";
+import type { LibraryPageSummary, RetrievalSearchResultItem } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 import { parsePigeFrontmatter } from "@pige/markdown";
 import { PageIdSchema, SourceRecordSchema } from "@pige/schemas";
-import { readMarkdownPageByRelativePath } from "./markdown-page-index";
+import {
+  assertMarkdownPagePathConfined,
+  readMarkdownPageByRelativePath,
+  scanMarkdownPages,
+  type MarkdownFileSignatureRecord
+} from "./markdown-page-index";
 import { createQueryTerms, createSnippet, sanitizeSearchBody } from "./search-text-utils";
 
 export interface RetrievalEvidencePrivacySourceFact {
@@ -46,9 +52,35 @@ export interface CurrentRetrievalPageMutationBinding {
   readonly absolutePath: string;
 }
 
+export interface CurrentNoteEvidenceBinding {
+  readonly page: Pick<
+    LibraryPageSummary,
+    "pageId" | "title" | "pageType" | "status" | "updatedAt" | "sourceIds"
+  >;
+  readonly modelText: string;
+  readonly snapshot: RetrievalEvidencePrivacySnapshot;
+  readonly contentHash: string;
+  readonly bindingHash: string;
+  readonly modelSuppliedRange: {
+    readonly unit: "utf8_bytes";
+    readonly start: 0;
+    readonly endExclusive: number;
+    readonly total: number;
+    readonly truncated: boolean;
+  };
+  readonly durableBodyRange: {
+    readonly locator: string;
+    readonly start: number;
+    readonly endExclusive: number;
+  };
+  readonly durableBodyText: string;
+}
+
 const MAX_RETRIEVAL_SOURCE_REFS = 64;
 const MAX_RETRIEVAL_MARKDOWN_PAGE_BYTES = 4 * 1024 * 1024;
 const MAX_SOURCE_RECORD_BYTES = 1024 * 1024;
+const MAX_CURRENT_NOTE_MODEL_BYTES = 8 * 1024;
+const MAX_CURRENT_NOTE_TITLE_BYTES = 512;
 
 export function readRetrievalEvidencePrivacySnapshot(
   vaultPath: string,
@@ -80,6 +112,86 @@ export function readCurrentRetrievalPageForMutation(
   indexedItem: RetrievalSearchResultItem
 ): CurrentRetrievalPageMutationBinding {
   return readCurrentRetrievalPageBinding(vaultPath, indexedItem);
+}
+
+export function readCurrentNoteEvidenceBinding(
+  vaultPath: string,
+  pageId: string
+): CurrentNoteEvidenceBinding {
+  try {
+    if (!PageIdSchema.safeParse(pageId).success) throw evidencePrivacyUnavailableError();
+    const scan = scanMarkdownPages(vaultPath);
+    const matches = scan.pages.filter((page) => page.summary.pageId === pageId);
+    if (matches.length !== 1) throw evidencePrivacyUnavailableError();
+    const page = matches[0];
+    if (!page) throw evidencePrivacyUnavailableError();
+    const signature = scan.files.find((file) => file.pagePath === page.summary.pagePath);
+    if (!signature) throw evidencePrivacyUnavailableError();
+    const binding = readCurrentRetrievalPageBinding(vaultPath, {
+      summary: page.summary,
+      score: 1,
+      snippets: [],
+      matchReasons: ["current_note"]
+    }, undefined, signature);
+    const parsed = parsePigeFrontmatter(binding.markdown);
+    if (!parsed) throw evidencePrivacyUnavailableError();
+    const durableBodyText = binding.markdown.slice(parsed.bodyStartOffset);
+    const durableBodyStart = Buffer.byteLength(
+      binding.markdown.slice(0, parsed.bodyStartOffset),
+      "utf8"
+    );
+    const durableBodyEnd = durableBodyStart + Buffer.byteLength(durableBodyText, "utf8");
+    const body = sanitizeSearchBody(durableBodyText.trimStart());
+    const boundedBody = truncateUtf8(body, MAX_CURRENT_NOTE_MODEL_BYTES);
+    const snapshot = createPrivacySnapshot(vaultPath, [binding.page]);
+    return {
+      page: {
+        pageId: binding.item.summary.pageId,
+        title: truncateUtf8(binding.item.summary.title, MAX_CURRENT_NOTE_TITLE_BYTES).value,
+        pageType: binding.item.summary.pageType,
+        status: binding.item.summary.status,
+        updatedAt: binding.item.summary.updatedAt,
+        sourceIds: binding.item.summary.sourceIds
+      },
+      modelText: boundedBody.value,
+      snapshot,
+      contentHash: binding.page.contentHash,
+      bindingHash: createRetrievalEvidencePrivacyHash(snapshot),
+      modelSuppliedRange: {
+        unit: "utf8_bytes",
+        start: 0,
+        endExclusive: boundedBody.suppliedBytes,
+        total: boundedBody.totalBytes,
+        truncated: boundedBody.truncated
+      },
+      durableBodyRange: {
+        locator: `utf8_bytes:${durableBodyStart}:${durableBodyEnd}`,
+        start: durableBodyStart,
+        endExclusive: durableBodyEnd
+      },
+      durableBodyText
+    };
+  } catch (caught) {
+    if (caught instanceof PigeDomainError && caught.code === "rag.evidence_privacy_unavailable") {
+      throw caught;
+    }
+    throw evidencePrivacyUnavailableError();
+  }
+}
+
+export function resolveCurrentNoteEvidenceQuoteLocator(
+  binding: CurrentNoteEvidenceBinding,
+  quote: string
+): string | undefined {
+  if (!quote || quote.includes("[redacted-secret]")) return undefined;
+  const characterOffset = binding.durableBodyText.indexOf(quote);
+  if (characterOffset < 0) return undefined;
+  const start = binding.durableBodyRange.start + Buffer.byteLength(
+    binding.durableBodyText.slice(0, characterOffset),
+    "utf8"
+  );
+  const endExclusive = start + Buffer.byteLength(quote, "utf8");
+  return `utf8_bytes:${start}:${endExclusive}`;
 }
 
 export function readRetrievalEvidenceAuditSnapshot(
@@ -138,14 +250,24 @@ export function createRetrievalEvidencePrivacyHash(snapshot: RetrievalEvidencePr
 function readCurrentRetrievalPageBinding(
   vaultPath: string,
   indexedItem: RetrievalSearchResultItem,
-  queryTerms?: ReturnType<typeof createQueryTerms>
+  queryTerms?: ReturnType<typeof createQueryTerms>,
+  expectedSignature?: MarkdownFileSignatureRecord
 ): CurrentRetrievalPageMutationBinding {
   if (!PageIdSchema.safeParse(indexedItem.summary.pageId).success) {
     throw evidencePrivacyUnavailableError();
   }
   const currentPage = readMarkdownPageByRelativePath(vaultPath, indexedItem.summary.pagePath);
   if (!currentPage) throw evidencePrivacyUnavailableError();
-  const boundedPage = readBoundedMarkdownPage(currentPage.absolutePath);
+  if (
+    expectedSignature &&
+    (
+      expectedSignature.pagePath !== currentPage.summary.pagePath ||
+      path.resolve(expectedSignature.absolutePath) !== path.resolve(currentPage.absolutePath)
+    )
+  ) {
+    throw evidencePrivacyUnavailableError();
+  }
+  const boundedPage = readBoundedMarkdownPage(vaultPath, currentPage.absolutePath, expectedSignature);
   const parsed = parsePigeFrontmatter(boundedPage.markdown);
   if (!parsed) throw evidencePrivacyUnavailableError();
   const sourceIds = [...new Set(
@@ -190,15 +312,27 @@ function readCurrentRetrievalPageBinding(
   };
 }
 
-function readBoundedMarkdownPage(filePath: string): {
+function readBoundedMarkdownPage(
+  vaultPath: string,
+  filePath: string,
+  expectedSignature?: MarkdownFileSignatureRecord
+): {
   readonly markdown: string;
   readonly contentHash: string;
 } {
   let descriptor: number | undefined;
   try {
-    descriptor = fs.openSync(filePath, "r");
+    assertMarkdownPagePathConfined(vaultPath, filePath);
+    descriptor = fs.openSync(
+      filePath,
+      fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0)
+    );
     const before = fs.fstatSync(descriptor);
-    if (!before.isFile() || before.size > MAX_RETRIEVAL_MARKDOWN_PAGE_BYTES) {
+    if (
+      !before.isFile() ||
+      before.size > MAX_RETRIEVAL_MARKDOWN_PAGE_BYTES ||
+      (expectedSignature && !matchesMarkdownSignature(before, expectedSignature))
+    ) {
       throw evidencePrivacyUnavailableError();
     }
     const bytes = Buffer.alloc(before.size);
@@ -209,6 +343,7 @@ function readBoundedMarkdownPage(filePath: string): {
       offset += bytesRead;
     }
     const after = fs.fstatSync(descriptor);
+    assertMarkdownPagePathConfined(vaultPath, filePath);
     const currentPath = fs.lstatSync(filePath);
     if (
       currentPath.isSymbolicLink() ||
@@ -222,12 +357,14 @@ function readBoundedMarkdownPage(filePath: string): {
       currentPath.ino !== after.ino ||
       currentPath.size !== after.size ||
       currentPath.mtimeMs !== after.mtimeMs ||
-      currentPath.ctimeMs !== after.ctimeMs
+      currentPath.ctimeMs !== after.ctimeMs ||
+      (expectedSignature && !matchesMarkdownSignature(after, expectedSignature))
     ) {
       throw evidencePrivacyUnavailableError();
     }
+    const markdown = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
     return {
-      markdown: bytes.toString("utf8"),
+      markdown,
       contentHash: `sha256:${createHash("sha256").update(bytes).digest("hex")}`
     };
   } catch (caught) {
@@ -236,6 +373,14 @@ function readBoundedMarkdownPage(filePath: string): {
   } finally {
     if (descriptor !== undefined) fs.closeSync(descriptor);
   }
+}
+
+function matchesMarkdownSignature(stat: fs.Stats, expected: MarkdownFileSignatureRecord): boolean {
+  return stat.size === expected.sizeBytes &&
+    stat.mtimeMs === expected.mtimeMs &&
+    stat.ctimeMs === expected.ctimeMs &&
+    String(stat.dev) === expected.deviceId &&
+    String(stat.ino) === expected.fileId;
 }
 
 function normalizeTitle(value: string): string {
@@ -301,4 +446,25 @@ function evidencePrivacyUnavailableError(): PigeDomainError {
 
 function hashValue(value: string): string {
   return `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
+}
+
+function truncateUtf8(value: string, maxBytes: number): {
+  readonly value: string;
+  readonly suppliedBytes: number;
+  readonly totalBytes: number;
+  readonly truncated: boolean;
+} {
+  const totalBytes = Buffer.byteLength(value, "utf8");
+  if (totalBytes <= maxBytes) {
+    return { value, suppliedBytes: totalBytes, totalBytes, truncated: false };
+  }
+  let bytes = 0;
+  let result = "";
+  for (const character of value) {
+    const size = Buffer.byteLength(character, "utf8");
+    if (bytes + size > maxBytes) break;
+    result += character;
+    bytes += size;
+  }
+  return { value: result, suppliedBytes: bytes, totalBytes, truncated: true };
 }

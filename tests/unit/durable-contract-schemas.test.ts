@@ -380,6 +380,23 @@ describe("durable contract schemas", () => {
     expect(dataset.answerDatasetResult).toEqual(preview);
   });
 
+  it("accepts only a strict current-note scope on durable conversation events", () => {
+    const event = ConversationEventSchema.parse({
+      id: "evt_20260716_currentscope",
+      conversationId: "conv_20260716_scope",
+      type: "user_message",
+      createdAt: timestamp,
+      text: "Read this note.",
+      scope: { kind: "current_note", pageId: "page_20260716_scopepage" }
+    });
+
+    expect(event.scope).toEqual({ kind: "current_note", pageId: "page_20260716_scopepage" });
+    expect(() => ConversationEventSchema.parse({
+      ...event,
+      scope: { kind: "current_note", pageId: "invalid", path: "/private/note.md" }
+    })).toThrow();
+  });
+
   it("rejects non-finite or oversized Dataset query values and unbounded preview shapes", () => {
     const { preview } = datasetAnswerFixture();
 

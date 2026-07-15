@@ -118,26 +118,27 @@ Required v0.1 job classes:
 | `migration` | schema/frontmatter migration | migrated files, operation records | Usually no after apply starts | Only through new plan |
 | `maintenance` | compaction, cleanup, health check | compacted job refs, repair proposals | Yes | Yes |
 
-`packages/schemas/src/index.ts` owns the executable `JobClassSchema`. This table explains those exact values; no document or DTO may introduce aliases such as `capture_preserve`, `parse_source`, `backup_create`, or `restore_validate`.
+`packages/schemas/src/index.ts` owns executable `JobClassSchema`; this table explains its
+exact values. Aliases such as `capture_preserve`, `parse_source`, `backup_create`, or
+`restore_validate` are forbidden.
 
-`agent_turn` appends a bounded user event then its Job and preserve-first source ref. No
-model waits/resumes the same identity. Exact-tail follow-up rehydrates bounded history;
-valid assistant output is adopted without another model call. Short chat creates no
-Source Record; one attachment reconciles preservation/linkage crashes. Legacy records
-remain readable and Pi-selected URL work uses the turn; multi-source/cross-process
-recovery remains open.
+`agent_turn` writes a bounded user event, Job and preserve-first source ref. `current_note`
+atomically binds one page ref/checksum and isolates conversation/follow-up. Adoption,
+continuation and cancellation reject missing, duplicate or drifted refs. Exact-tail
+follow-up rehydrates bounded history; valid output is adopted without another model call.
+Short chat creates no Source Record; one attachment reconciles preservation crashes.
+Legacy records remain readable; multi-source/cross-process recovery stays open.
 
 An in-progress Home `draft_replace` is sender/turn/Job-bound temporary UI state, never a
-conversation event, Job output, checkpoint, recovery input, or assistant truth. Only the
-fully validated assistant event and terminal Job result survive restart. Cancellation or
-failure stops further draft delivery and cannot promote the last draft to durable output.
+conversation event, checkpoint, recovery input or assistant truth. Only validated
+assistant/terminal Job results survive restart; cancellation/failure stops delivery and
+cannot promote the last draft.
 
-A validated Home Dataset answer stores one bounded preview and exact Dataset citation in
-the checksum-bound assistant event. Its `agent_turn` output refs bind source, Dataset,
-revision, table, and assistant checksum; restart adopts the same event without another
-query/model turn, while preview or citation tampering fails timeline/history recovery.
-Whole Dataset payloads, SQL, paths, handles, and raw provider output never enter the Job
-or conversation record.
+A validated Home Dataset answer stores one bounded preview and exact citation in its
+checksum-bound assistant event. `agent_turn` refs bind source, Dataset, revision, table
+and assistant checksum; restart adopts it without another query/model turn. Preview or
+citation tampering fails recovery. Whole payloads, SQL, paths, handles and raw provider
+output never enter Job/conversation records.
 
 Jobs may have parent-child structure:
 

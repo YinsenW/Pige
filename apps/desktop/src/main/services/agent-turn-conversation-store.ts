@@ -6,10 +6,17 @@ import type {
   AgentConversationMessage,
   AgentTurnAnswer,
   AgentTurnInputKind,
-  AgentTurnObjective
+  AgentTurnObjective,
+  AgentTurnScope
 } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
-import { ConversationEventSchema, type ConversationEvent, type Locale } from "@pige/schemas";
+import {
+  AgentTurnCurrentNoteScopeSchema,
+  ConversationEventSchema,
+  type ConversationEvent,
+  type Locale,
+  type ModelEgressContentClass
+} from "@pige/schemas";
 
 const MAX_TURN_TEXT_BYTES = 64 * 1024;
 const MAX_CONVERSATION_FILE_BYTES = 8 * 1024 * 1024;
@@ -38,6 +45,7 @@ export interface AgentTurnConversationMetadata {
   readonly inputKind: AgentTurnInputKind;
   readonly objective: AgentTurnObjective;
   readonly locale: Locale;
+  readonly scope?: AgentTurnScope;
 }
 
 export interface AgentTurnConversationBinding {
@@ -50,6 +58,7 @@ export interface AgentTurnConversationContextMessage {
   readonly role: "user" | "assistant";
   readonly createdAt: string;
   readonly text: string;
+  readonly historyContentClasses: readonly ModelEgressContentClass[];
 }
 
 export interface AgentTurnConversationTimeline {
@@ -235,32 +244,37 @@ export class AgentTurnConversationStore {
     if (matchingIndexes.length !== 1 || matchingIndex === undefined || events[matchingIndex]?.type !== "user_message") {
       throw new PigeDomainError("agent_runtime.turn_unavailable", "The Agent context boundary was not found.");
     }
-    return selectRecentMessages(
-      events.slice(0, matchingIndex),
+    const contextEvents = events.slice(0, matchingIndex);
+    return selectRecentContextMessages(
+      contextEvents,
       MAX_CONTEXT_MESSAGES,
-      MAX_CONTEXT_TEXT_BYTES
-    ).map(({ role, createdAt, text }) => ({ role, createdAt, text }));
+      MAX_CONTEXT_TEXT_BYTES,
+      contextEvents.some((event) => event.type === "user_message" && event.scope?.kind === "current_note")
+    );
   }
 
   readConversationTimeline(
     vaultPath: string,
     conversationId?: string,
-    limit = DEFAULT_TIMELINE_MESSAGES
+    limit = DEFAULT_TIMELINE_MESSAGES,
+    scope?: AgentTurnScope
   ): AgentTurnConversationTimeline | undefined {
     if (conversationId === undefined) {
-      return this.readLatestConversationTimeline(vaultPath, limit);
+      return this.readLatestConversationTimeline(vaultPath, limit, scope);
     }
     const boundedLimit = validateTimelineLimit(limit);
     const locator = conversationLocator(conversationId);
     const events = readConversationEventsIfExists(vaultPath, locator);
     if (!events || events.length === 0) return undefined;
     assertConversationEventsBelong(events, conversationId);
+    assertConversationScope(events, scope);
     return createTimeline(events, boundedLimit);
   }
 
   readLatestConversationTimeline(
     vaultPath: string,
-    limit = DEFAULT_TIMELINE_MESSAGES
+    limit = DEFAULT_TIMELINE_MESSAGES,
+    scope?: AgentTurnScope
   ): AgentTurnConversationTimeline | undefined {
     const boundedLimit = validateTimelineLimit(limit);
     const candidates = discoverConversationCandidates(vaultPath);
@@ -275,6 +289,7 @@ export class AgentTurnConversationStore {
       if (events.length === 0) continue;
       const locatorConversationId = conversationIdFromLocator(candidate.locator);
       assertConversationEventsBelong(events, locatorConversationId);
+      if (!conversationHasScope(events, scope)) continue;
       const latestMessage = [...events].reverse().find(
         (event) => event.type === "user_message" || event.type === "assistant_message"
       );
@@ -337,6 +352,7 @@ export class AgentTurnConversationStore {
         throw new PigeDomainError("agent_runtime.turn_conflict", "The Agent turn event identity is already in use.");
       }
       if (resolved.isFollowUp) {
+        assertConversationScope(events, metadata?.scope);
         if (events.at(-1)?.id !== resolved.parentEventId) {
           throw new PigeDomainError("agent_runtime.turn_conflict", "The Agent conversation tail changed before append.");
         }
@@ -636,11 +652,18 @@ function readTurnMetadata(event: ConversationEvent): AgentTurnConversationMetada
   ) {
     return undefined;
   }
+  const scope = readTurnScope(value.scope);
   return {
     inputKind: value.inputKind as AgentTurnInputKind,
     objective: value.objective as AgentTurnObjective,
-    locale: value.locale as Locale
+    locale: value.locale as Locale,
+    ...(scope ? { scope } : {})
   };
+}
+
+function readTurnScope(value: unknown): AgentTurnScope | undefined {
+  const parsed = AgentTurnCurrentNoteScopeSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }
 
 function assertStoredUserIntegrity(event: ConversationEvent): void {
@@ -669,11 +692,80 @@ function hasExactTurnMetadata(
 ): boolean {
   const value = event as ConversationEvent & Record<string, unknown>;
   if (!metadata) {
-    return value.inputKind === undefined && value.objective === undefined && value.locale === undefined;
+    return value.inputKind === undefined &&
+      value.objective === undefined &&
+      value.locale === undefined &&
+      value.scope === undefined;
   }
   return value.inputKind === metadata.inputKind &&
     value.objective === metadata.objective &&
-    value.locale === metadata.locale;
+    value.locale === metadata.locale &&
+    scopesEqual(readTurnScope(value.scope), metadata.scope);
+}
+
+function conversationHasScope(events: readonly ConversationEvent[], scope: AgentTurnScope | undefined): boolean {
+  if (scope && events.some((event) =>
+    event.type === "attachment_reference" ||
+    event.type === "capture_reference" ||
+    event.type === "source_reference"
+  )) {
+    return false;
+  }
+  const userEvents = events.filter((event) => event.type === "user_message");
+  return userEvents.length > 0 && userEvents.every((event) =>
+    scopesEqual(readTurnMetadata(event)?.scope, scope)
+  );
+}
+
+function assertConversationScope(events: readonly ConversationEvent[], scope: AgentTurnScope | undefined): void {
+  if (!conversationHasScope(events, scope)) {
+    throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The Agent conversation scope changed.");
+  }
+}
+
+function scopesEqual(left: AgentTurnScope | undefined, right: AgentTurnScope | undefined): boolean {
+  return left?.kind === right?.kind && left?.pageId === right?.pageId;
+}
+
+function selectRecentContextMessages(
+  events: readonly ConversationEvent[],
+  limit: number,
+  maxTextBytes: number,
+  scopedConversation: boolean
+): AgentTurnConversationContextMessage[] {
+  const selected: AgentTurnConversationContextMessage[] = [];
+  let textBytes = 0;
+  for (let index = events.length - 1; index >= 0 && selected.length < limit; index -= 1) {
+    const event = events[index];
+    if (
+      !event ||
+      (event.type !== "user_message" && event.type !== "assistant_message") ||
+      typeof event.text !== "string"
+    ) {
+      continue;
+    }
+    const bytes = Buffer.byteLength(event.text, "utf8");
+    if (textBytes + bytes > maxTextBytes) break;
+    const messageNeedsConservativeClassification =
+      scopedConversation ||
+      (
+        event.type === "assistant_message" &&
+        (
+          event.answerGrounding === "local_knowledge" ||
+          event.answerGrounding === "source"
+        )
+      );
+    selected.push({
+      role: event.type === "user_message" ? "user" : "assistant",
+      createdAt: event.createdAt,
+      text: event.text,
+      historyContentClasses: messageNeedsConservativeClassification
+        ? ["sensitive"]
+        : ["ordinary"]
+    });
+    textBytes += bytes;
+  }
+  return selected.reverse();
 }
 
 function selectRecentMessages(
@@ -989,13 +1081,14 @@ function createTurnInputHash(
   const stableMetadata = metadata ? {
     inputKind: metadata.inputKind,
     objective: metadata.objective,
-    locale: metadata.locale
+    locale: metadata.locale,
+    ...(metadata.scope ? { scope: metadata.scope } : {})
   } : null;
   if (!binding) {
     return hashValue(`pige.agent_turn.${kind}.v1\0${text}\0${JSON.stringify(stableMetadata)}`);
   }
   return hashValue(
-    `pige.agent_turn.${kind}.v2\0${text}\0${JSON.stringify(stableMetadata)}\0` +
+    `pige.agent_turn.${kind}.${metadata?.scope ? "v3" : "v2"}\0${text}\0${JSON.stringify(stableMetadata)}\0` +
     `${binding.clientTurnId}\0${binding.conversationId}\0${binding.parentEventId ?? ""}`
   );
 }

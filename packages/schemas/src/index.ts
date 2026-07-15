@@ -15,6 +15,10 @@ export const CaptureIdSchema = z.string().regex(/^cap_\d{8}_[a-z0-9]{8,}$/);
 export const ConversationIdSchema = z.string().regex(/^conv_\d{8}(?:_[a-z0-9]{4,})?$/);
 export const ConversationEventIdSchema = z.string().regex(/^evt_\d{8}_[a-z0-9]{8,}$/);
 export const AgentClientTurnIdSchema = z.string().regex(/^turn_\d{8}_[a-z0-9]{12,64}$/);
+export const AgentTurnCurrentNoteScopeSchema = z.object({
+  kind: z.literal("current_note"),
+  pageId: PageIdSchema
+}).strict();
 export const JobIdSchema = z.string().regex(/^job_\d{8}_[a-z0-9]{8,}$/);
 export const ProposalIdSchema = z.string().regex(/^proposal_\d{8}_[a-z0-9]{8,}$/);
 export const OperationIdSchema = z.string().regex(/^op_\d{8}_[a-z0-9]{8,}$/);
@@ -1452,6 +1456,7 @@ export const ConversationEventSchema = z.object({
   clientTurnId: AgentClientTurnIdSchema.optional(),
   parentEventId: ConversationEventIdSchema.optional(),
   inputHash: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional(),
+  scope: AgentTurnCurrentNoteScopeSchema.optional(),
   contentHash: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional(),
   sourceId: SourceIdSchema.optional(),
   captureId: CaptureIdSchema.optional(),

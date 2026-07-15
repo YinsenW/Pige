@@ -316,11 +316,16 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain('ipcMain.handle("agent.submitTurn"');
     expect(mainSource).toContain('event.sender.send("agent.turnDraft", draft)');
     expect(mainSource).toContain("return await getHomeAgentService().submitTurn(normalizedRequest, draftContext)");
+    expect(mainSource).toContain("...(request.scope === undefined ? {} : { scope: request.scope })");
     expect(mainSource).toContain("draftPublisher.close()");
-    expect(preloadSource).toContain('ipcRenderer.invoke("agent.submitTurn", { request, filePaths })');
+    expect(preloadSource).toContain('scope: { kind: "current_note" as const, pageId: request.scope.pageId }');
+    expect(preloadSource).toContain('ipcRenderer.invoke("agent.submitTurn", {');
+    expect(preloadSource).toContain("request: normalizedRequest");
     expect(preloadSource).toContain('ipcRenderer.on("agent.turnDraft", handleDraft)');
     expect(preloadSource).toContain('ipcRenderer.removeListener("agent.turnDraft", handleDraft)');
     expect(contractsSource).toContain("export interface AgentTurnDraftEvent");
+    expect(contractsSource).toContain("export interface AgentTurnCurrentNoteScope");
+    expect(contractsSource).toContain("readonly scope?: AgentTurnScope");
     expect(contractsSource).toContain("readonly onTurnDraft:");
     expect(runtimeSource).toContain("terminalDrafts.observe(event)");
     expect(runtimeSource).toContain("terminalDrafts.afterToolExecute(executedTool, args, result)");

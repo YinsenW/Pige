@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-15T21:04:34Z",
+  "reviewedAt": "2026-07-15T22:59:55Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -31,12 +31,12 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "76ef161157e2f8c67cedec2a08f5f072df6644f51058169910c7d0ce804ce677"
+    "reviewedSha256": "8ee375a706b238e2c34cb167eeb154d3906c4b1de736b38e5245994ea60c91c7"
   },
   "reviewers": [
     {
-      "reviewerId": "library-search-independent-review",
-      "task": "macOS-first Library Search UI and typed retrieval boundary exact-candidate review",
+      "reviewerId": "note-agent-readonly-independent-review",
+      "task": "macOS-first Note Agent current-note read-only foundation exact-candidate review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -44,44 +44,44 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Development froze the exact 28-path typed IPC, preload, retrieval and renderer candidate; UI Design independently accepted its exact hashes. Planning changed only existing owner, evidence, semantic and review artifacts, never the frozen Development bytes."
+      "independence": "Development froze the exact 16-path typed scope, conversation, Job, Pi and safe-read candidate after an independent adversarial review. Planning changed only existing owner, evidence, semantic and review artifacts, never the frozen Development bytes."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "library-search-independent-review",
+      "reviewerId": "note-agent-readonly-independent-review",
       "blockerCount": 0,
-      "summary": "The Library UI and API owners now locate the complete active-vault search surface and exact typed retrieval boundary; Context Policy retains local-first retrieval authority."
+      "summary": "API, Context and Job owners locate the strict current-note scope, pathless preload projection, exact Job binding and read-only Pi boundary; UI remains separately owned and unavailable."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "library-search-independent-review",
+      "reviewerId": "note-agent-readonly-independent-review",
       "blockerCount": 0,
-      "summary": "Owners agree on active-vault scope, 320 Unicode code points, preload/main validation, stale-vault fences, bounded IDs/snippets/match reasons and body-free failure without scores or paths."
+      "summary": "Owners agree on exact page/checksum scope, scope-isolated history, restart/cancel drift rejection, query-only first egress, fresh evidence classification and exact raw-quote citations."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "library-search-independent-review",
+      "reviewerId": "note-agent-readonly-independent-review",
       "blockerCount": 0,
-      "summary": "Three exact Library Search selectors project to existing API, Search and UI requirements/exits; semantic lock v3 has 1,217 claims and every status remains unchanged."
+      "summary": "Five exact selectors project only to existing API, Job, Pi, security and Context requirements/exits; semantic lock v3 has 1,222 claims while PIGE-UI-005/E6.06 and all statuses remain unchanged."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.7,
-      "reviewerId": "library-search-independent-review",
+      "reviewerId": "note-agent-readonly-independent-review",
       "blockerCount": 0,
-      "summary": "The H-level slice has full test, focused, scale, typecheck, build and real macOS Electron evidence; post-bind macOS package/distribution is the next complete node."
+      "summary": "The service slice has focused/full tests, typecheck, build, Pi runtime smoke and adversarial evidence; the later compatible UI integration owns assembled Note Agent acceptance."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "library-search-independent-review",
+      "reviewerId": "note-agent-readonly-independent-review",
       "blockerCount": 0,
-      "summary": "No document or decision is added; two owner updates, three selectors and semantic-neutral manifest compression keep every fixed budget green."
+      "summary": "No document or decision is added; three owner updates, five selectors and semantic-neutral compression keep every fixed budget green."
     }
   ],
   "verification": [
@@ -91,14 +91,14 @@
       "evidence": "The exact combined candidate passes docs, decisions, UI visual, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all quality dimensions."
     },
     {
-      "command": "Exact candidate focused and macOS UI evidence",
+      "command": "Exact candidate service, recovery and Pi evidence",
       "status": "passed",
-      "evidence": "Development ran 113 passed/1 skipped files and 1,298 passed/1 skipped tests, focused 111/1, 10k/100k scale, typecheck, build and real macOS Electron; UI Design accepted exact caad52cb/cb055965 identities."
+      "evidence": "Development ran focused 6 files/195 tests, full 113 passed/1 skipped files and 1,320 passed/1 skipped tests, typecheck, build and Electron Pi runtime smoke; adversarial review cleared exact 68875c66/aadbd23d identities."
     },
     {
       "command": "npm run verify:ui-visual && npm run verify:traceability && npm run verify:contracts",
       "status": "passed",
-      "evidence": "The visual contract passes; semantic lock v3/1,217 and CON-001 through CON-004 pass with Requirement, Exit and Phase states unchanged."
+      "evidence": "The visual contract passes unchanged; semantic lock v3/1,222 and CON-001 through CON-004 pass with Requirement, Exit and Phase states unchanged."
     },
     {
       "command": "npm run verify:documentation-leanness",
@@ -107,18 +107,18 @@
     }
   ],
   "coordination": {
-    "taskId": "library-search-integration-20260716",
-    "taskTitle": "Library Search UI and typed retrieval boundary integration",
+    "taskId": "note-agent-readonly-foundation-20260716",
+    "taskTitle": "Note Agent current-note read-only service foundation",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The candidate adds a typed active-vault retrieval.search IPC/schema/preload boundary and Library UI over existing rebuildable retrieval data; no durable schema, migration, dependency, setting, permission, provider, Job or backup/restore change.",
-    "acknowledgement": "Development froze exact caad52cb/cb055965 bytes and UI Design accepted them. Planning bound only existing Library/API owners, acceptance evidence, semantic lock and this recipe without changing the 28 paths."
+    "compatibility": "The candidate adds an optional strict current_note scope, exact Job/page binding and read-only Pi tool over existing agent.submitTurn/conversation/model-egress ownership; no migration, dependency, setting, permission mode, mutation, Operation or UI change.",
+    "acknowledgement": "Development froze exact 68875c66/aadbd23d bytes after adversarial review. Planning bound only existing API/Context/Job owners, evidence, semantic lock and this recipe without changing the 16 paths."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "macOS arm64 package and downloaded-distribution evidence is the next complete H-level node because this slice changes preload build configuration.",
-    "Windows and Linux qualification remains deferred under macOS-first sequencing and is not claimed by this slice.",
-    "Tags search remains localized development/unavailable; queued Privacy, Appearance, Local Capabilities, Activity, Voice and Note Agent UI lanes are excluded."
+    "PIGE-UI-005 and E6.06 remain planned until the separately owned UI is mechanically integrated and read-only plus reversible mutation acceptance is complete.",
+    "Selection, related/backlink expansion, memory, attachments, editing, translate/polish, proposals, Operations and cross-note retrieval remain open.",
+    "The assembled unified-agent smoke has a stale Models selector unrelated to these service bytes; Windows/Linux qualification remains deferred under macOS-first sequencing."
   ]
 }

@@ -171,7 +171,8 @@ type RetrievalScope =
 Rules:
 
 - When Pi selects Home retrieval without a narrower explicit scope, use vault scope.
-- Note Agent questions default to current-note scope plus related-note expansion.
+- Note Agent's current read-only foundation admits exact current-note scope only;
+  related-note/vault expansion stays open.
 - Selection actions default to selection scope and may retrieve local neighbors only when useful.
 - Ingest starts with the current preserved source. Related summaries enter only after
   the Agent selects a retrieval tool; parser/OCR evidence enters only from its selected

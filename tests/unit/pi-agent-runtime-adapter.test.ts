@@ -67,6 +67,29 @@ const BASE_TOOL_DESCRIPTOR = {
 } as const;
 
 describe("Pi Agent runtime adapter", () => {
+  it("accepts an exact current-note read boundary without widening it to the vault", async () => {
+    const adapter = new PiAgentRuntimeAdapter({
+      fauxResponses: [{ kind: "tool_call", toolName: "pige_read_current_note", args: {} }]
+    });
+    const tool: PigeAgentToolDefinition = {
+      ...BASE_TOOL_DESCRIPTOR,
+      name: "pige_read_current_note",
+      label: "Read current note",
+      description: "Read only the Host-bound current note.",
+      capability: "read_current_note",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+      dataBoundary: { ...BASE_TOOL_DESCRIPTOR.dataBoundary, resourceScope: "current_note" },
+      idempotency: { mode: "idempotent", scope: "current_note" },
+      execute: async () => ({ modelText: "Bound current-note evidence.", details: {}, terminate: true })
+    };
+
+    const result = await adapter.run(makeRequest([tool]));
+
+    expect(result.invokedTools).toEqual(["pige_read_current_note"]);
+    expect(tool.dataBoundary.resourceScope).toBe("current_note");
+    expect(tool.idempotency.scope).toBe("current_note");
+  });
+
   it("runs the real Pi loop through ordered Pige-owned inspect and durable action tools", async () => {
     const calls: string[] = [];
     const published: unknown[] = [];
