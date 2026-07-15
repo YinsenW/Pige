@@ -1085,38 +1085,10 @@
         ]
       }
     },
-    "PIGE-SEARCH-001": {
-      "status": "partial",
-      "evidence": ["EV-RETRIEVAL", "EV-HOME-AGENT", "EV-HOME-UI"],
-      "open": {
-        "id": "OPEN-REQ-PIGE-SEARCH-001",
-        "description": "Bounded retrieval works; optional Pi use, empty-vault chat, vault-only insufficiency, 10k, regression, and packaged UI remain open.",
-        "targetBuilds": [
-          "B6.01",
-          "B6.02",
-          "B6.03"
-        ],
-        "targetExits": [
-          "E6.01",
-          "E6.04"
-        ]
-      }
-    },
-    "PIGE-SEARCH-002": {
-      "status": "verified",
-      "evidence": [
-        "EV-CJK",
-        "EV-LIBRARY"
-      ]
-    },
-    "PIGE-SEARCH-003": {
-      "status": "planned",
-      "plannedTarget": "Verified embedding-model lifecycle, vector rebuild, lexical fallback, and optional local-reranker tests."
-    },
-    "PIGE-MEM-001": {
-      "status": "planned",
-      "plannedTarget": "Remember, provenance, inspect, disable, delete, export, backup, and secret-scan integration tests."
-    },
+    "PIGE-SEARCH-001":{"status":"partial","evidence":["EV-RETRIEVAL","EV-HOME-AGENT","EV-HOME-UI"],"open":{"id":"OPEN-REQ-PIGE-SEARCH-001","description":"Bounded retrieval works; optional Pi use, empty-vault chat, vault-only insufficiency, 10k, regression, and packaged UI remain open.","targetBuilds":["B6.01","B6.02","B6.03"],"targetExits":["E6.01","E6.04"]}},
+    "PIGE-SEARCH-002":{"status":"verified","evidence":["EV-CJK","EV-LIBRARY","EV-LOCAL-SCALE"]},
+    "PIGE-SEARCH-003":{"status":"partial","evidence":["EV-RAG-CHUNKS","EV-DB-CHUNKS","EV-LOCAL-SCALE"],"open":{"id":"OPEN-REQ-PIGE-SEARCH-003","description":"Deterministic metadata-only chunks and rebuild/10k lexical scale work; embedding lifecycle, vectors, semantic retrieval/reranking and packaged platforms remain.","targetBuilds":["B6.05","B6.06","B6.07"],"targetExits":["E6.02"]}},
+    "PIGE-MEM-001":{"status":"planned","plannedTarget":"Remember, provenance, inspect, disable, delete, export, backup, and secret-scan integration tests."},
     "PIGE-BACKUP-001":{"status":"partial","evidence":["EV-BACKUP","EV-BACKUP-DURABLE-COVERAGE","EV-BACKUP-MANIFEST-TRUTH"],"open":{"id":"OPEN-REQ-PIGE-BACKUP-001","description":"Registered roots and truthful schema ranges are covered; external managed roots, include controls and complete memory/conversation fixtures remain.","targetBuilds":["B9.02"],"targetExits":["E9.01"]}},
     "PIGE-BACKUP-002":{"status":"partial","evidence":["EV-BACKUP"],"open":{"id":"OPEN-REQ-PIGE-BACKUP-002","description":"Release backup scans for every secret, model, tool, database, index, and cache class remain open.","targetBuilds":["B9.02"],"targetExits":["E9.01"]}},
     "PIGE-BACKUP-003":{"status":"partial","evidence":["EV-BACKUP","EV-BACKUP-ATOMIC-FINALIZATION","EV-BACKUP-JOB-LIFECYCLE","EV-BACKUP-MANIFEST-TRUTH"],"open":{"id":"OPEN-REQ-PIGE-BACKUP-003","description":"The prior boundary ‘Durable backup Job/checkpoint resume and external-dependency completeness remain open.’ is narrowed: checkpoints/adoption are covered; external managed-root controls and richer Operation facts remain.","targetBuilds":["B9.01","B9.02"],"targetExits":["E9.01"]}},
@@ -1700,25 +1672,7 @@
       "status": "planned",
       "plannedTarget": "One durable Home Job autonomously repairs rejected candidates/tool inputs, streams Pi-owned provisional answers without a reproduction-only provider turn, returns distinct hard blocks, and passes signed packaged macOS/Windows BYOK proof."
     },
-    "E4.01": {
-      "status": "partial",
-      "evidence": [
-        "EV-CJK",
-        "EV-LIBRARY"
-      ],
-      "open": {
-        "id": "OPEN-EXIT-E4.01",
-        "description": "The 10,000-page budget fixture remains open.",
-        "targetBuilds": [
-          "B4.02",
-          "B4.03",
-          "B4.06"
-        ],
-        "targetExits": [
-          "E4.01"
-        ]
-      }
-    },
+    "E4.01":{"status":"partial","evidence":["EV-CJK","EV-LIBRARY","EV-LOCAL-SCALE"],"open":{"id":"OPEN-EXIT-E4.01","description":"10,000-page warm Library/lexical budgets work; packaged cross-platform and broader metadata/relationship parity remain.","targetBuilds":["B4.02","B4.03","B4.06"],"targetExits":["E4.01"]}},
     "E4.02": {
       "status": "verified",
       "evidence": ["EV-DB-REBUILD", "EV-INDEX-REBUILD-WORKER"]
@@ -1828,101 +1782,17 @@
       "status": "planned",
       "plannedTarget": "CSV/XLSX/SQLite lossless typed Dataset import, source-preservation, no-execution, deterministic retry/recovery, and packaged-platform report."
     },
-    "E6.01": {
-      "status": "partial",
-      "evidence": ["EV-RETRIEVAL", "EV-HOME-AGENT", "EV-HOME-UI", "EV-HOME-DRAFT-ADAPTER", "EV-HOME-DRAFT-FAIL-CLOSED", "EV-HOME-DRAFT-PUBLISHER", "EV-HOME-DRAFT-UI", "EV-HOME-ENTER", "EV-PI-ELECTRON-SMOKE", "EV-PI-DATASET-QUERY", "EV-DATASET-QUERY-UI", "EV-DATASET-TIMELINE-RESTORE"],
-      "open": {
-        "id": "OPEN-EXIT-E6.01",
-        "description": "Ranked retrieval, safe draft replacement, Home same-Job validation repair, and one bounded Dataset table work. Durable mid-repair recovery, 10k, mixed-source/query breadth, and signed installed macOS/Windows UI remain open.",
-        "targetBuilds": [
-          "B6.01",
-          "B6.02"
-        ],
-        "targetExits": [
-          "E6.01"
-        ]
-      }
-    },
-    "E6.02": {
-      "status": "planned",
-      "plannedTarget": "Verified local embedding model lifecycle, vector rebuild, lexical fallback, and optional reranker report."
-    },
-    "E6.03": {
-      "status": "partial",
-      "evidence": ["EV-CONTEXT", "EV-AGENT-EVIDENCE-REVISION", "EV-HOME-AGENT", "EV-PI-INGEST-RETRIEVAL", "EV-DATASET-QUERY-SERVICE", "EV-DATASET-QUERY-DRIFT-AUDIT", "EV-DATASET-QUERY-DURABILITY"],
-      "open": {
-        "id": "OPEN-EXIT-E6.03",
-        "description": "Home, bounded ingest retrieval, and one Dataset selected-evidence/privacy path are proven; Note Agent, mixed selection, memory, compaction, and remote packs remain open.",
-        "targetBuilds": [
-          "B6.04"
-        ],
-        "targetExits": [
-          "E6.03"
-        ]
-      }
-    },
-    "E6.04": {
-      "status": "partial",
-      "evidence": [
-        "EV-RETRIEVAL"
-      ],
-      "open": {
-        "id": "OPEN-EXIT-E6.04",
-        "description": "Full executable acceptance remains open for Exit E6.04: Retrieval fixtures pass expected top-result, grounded-summary, citation-coverage, and insufficient-evidence checks.",
-        "targetBuilds": [
-          "B6.03"
-        ],
-        "targetExits": [
-          "E6.04"
-        ]
-      }
-    },
-    "E6.05": {
-      "status": "partial",
-      "evidence": ["EV-RENDERER", "EV-READER-RESOURCE-SAFETY", "EV-RENDERER-NAVIGATION-GUARD"],
-      "open": {
-        "id": "OPEN-EXIT-E6.05",
-        "description": "Keyboard reachability and long-page rendering-budget evidence remain open.",
-        "targetBuilds": ["B6.08"],
-        "targetExits": ["E6.05"]
-      }
-    },
-    "E6.06": {
-      "status": "planned",
-      "plannedTarget": "Note Agent proves scoped auto-apply, Activity/Undo, and exceptional review."
-    },
-    "E6.07": {
-      "status": "partial",
-      "evidence": ["EV-DB-LINKS", "EV-KNOWLEDGE-TREE-AGGREGATE", "EV-KNOWLEDGE-TREE-SERVICE", "EV-KNOWLEDGE-TREE-IPC", "EV-KNOWLEDGE-TREE-UI"],
-      "open": {
-        "id": "OPEN-EXIT-E6.07",
-        "description": "Public source-backed Knowledge Tree navigation works; broader relationship/branch semantics, 10k worker-backed and incremental rebuild performance, and packaged-platform aggregate parity remain open.",
-        "targetBuilds": ["B6.09", "B6.12"],
-        "targetExits": ["E6.07"]
-      }
-    },
-    "E6.08": {
-      "status": "planned",
-      "plannedTarget": "Source-preserving Markdown editing, IME, and external-edit conflict tests."
-    },
-    "E6.09": {
-      "status": "planned",
-      "plannedTarget": "Complete Knowledge Tree density/weight accessibility and signed compact/desktop platform report."
-    },
-    "E6.10": {
-      "status": "partial",
-      "evidence": ["EV-RETRIEVAL", "EV-DB-LINKS", "EV-RETRIEVAL-REGRESSION-GOLDEN", "EV-RETRIEVAL-REGRESSION-REPORT"],
-      "open": {
-        "id": "OPEN-EXIT-E6.10",
-        "description": "The deterministic foundation still lacks model-grounded summary/citation validation and cloud-send/Permission enforcement, linking metrics beyond wiki links/backlinks, vector/reranker coverage, large-scale and packaged/UI proof, and broader locales and Knowledge Tree cases.",
-        "targetBuilds": ["B6.15"],
-        "targetExits": ["E6.10"]
-      }
-    },
-    "E6.11": {
-      "status": "planned",
-      "plannedTarget": "Dataset table-view and typed-query report proving bounds, deterministic hashes, exact citations, stale-revision rejection, and zero whole-payload/model/renderer authority."
-    },
+    "E6.01":{"status":"partial","evidence":["EV-RETRIEVAL","EV-HOME-AGENT","EV-HOME-UI","EV-HOME-DRAFT-ADAPTER","EV-HOME-DRAFT-FAIL-CLOSED","EV-HOME-DRAFT-PUBLISHER","EV-HOME-DRAFT-UI","EV-HOME-ENTER","EV-PI-ELECTRON-SMOKE","EV-PI-DATASET-QUERY","EV-DATASET-QUERY-UI","EV-DATASET-TIMELINE-RESTORE"],"open":{"id":"OPEN-EXIT-E6.01","description":"Ranked retrieval, safe drafts, Home repair and one Dataset table work; mid-repair recovery, 10k, mixed-source/query breadth and signed installed UI remain.","targetBuilds":["B6.01","B6.02"],"targetExits":["E6.01"]}},
+    "E6.02":{"status":"partial","evidence":["EV-RAG-CHUNKS","EV-DB-CHUNKS","EV-LOCAL-SCALE"],"open":{"id":"OPEN-EXIT-E6.02","description":"Metadata-only chunk/rebuild and 10k lexical scale work; embedding model lifecycle, vectors, semantic retrieval/reranking and packaged platforms remain.","targetBuilds":["B6.05","B6.06","B6.07"],"targetExits":["E6.02"]}},
+    "E6.03":{"status":"partial","evidence":["EV-CONTEXT","EV-AGENT-EVIDENCE-REVISION","EV-HOME-AGENT","EV-PI-INGEST-RETRIEVAL","EV-DATASET-QUERY-SERVICE","EV-DATASET-QUERY-DRIFT-AUDIT","EV-DATASET-QUERY-DURABILITY"],"open":{"id":"OPEN-EXIT-E6.03","description":"Home, bounded ingest retrieval, and one Dataset selected-evidence/privacy path are proven; Note Agent, mixed selection, memory, compaction, and remote packs remain open.","targetBuilds":["B6.04"],"targetExits":["E6.03"]}},
+    "E6.04":{"status":"partial","evidence":["EV-RETRIEVAL"],"open":{"id":"OPEN-EXIT-E6.04","description":"Full executable acceptance remains open for Exit E6.04: Retrieval fixtures pass expected top-result, grounded-summary, citation-coverage, and insufficient-evidence checks.","targetBuilds":["B6.03"],"targetExits":["E6.04"]}},
+    "E6.05":{"status":"partial","evidence":["EV-RENDERER","EV-READER-RESOURCE-SAFETY","EV-RENDERER-NAVIGATION-GUARD"],"open":{"id":"OPEN-EXIT-E6.05","description":"Keyboard reachability and long-page rendering-budget evidence remain open.","targetBuilds":["B6.08"],"targetExits":["E6.05"]}},
+    "E6.06":{"status":"planned","plannedTarget":"Note Agent proves scoped auto-apply, Activity/Undo, and exceptional review."},
+    "E6.07":{"status":"partial","evidence":["EV-DB-LINKS","EV-KNOWLEDGE-TREE-AGGREGATE","EV-KNOWLEDGE-TREE-SERVICE","EV-KNOWLEDGE-TREE-IPC","EV-KNOWLEDGE-TREE-UI"],"open":{"id":"OPEN-EXIT-E6.07","description":"Public source-backed Knowledge Tree navigation works; broader relationship/branch semantics, 10k worker-backed and incremental rebuild performance, and packaged-platform aggregate parity remain open.","targetBuilds":["B6.09","B6.12"],"targetExits":["E6.07"]}},
+    "E6.08":{"status":"planned","plannedTarget":"Source-preserving Markdown editing, IME, and external-edit conflict tests."},
+    "E6.09":{"status":"planned","plannedTarget":"Complete Knowledge Tree density/weight accessibility and signed compact/desktop platform report."},
+    "E6.10":{"status":"partial","evidence":["EV-RETRIEVAL","EV-DB-LINKS","EV-RETRIEVAL-REGRESSION-GOLDEN","EV-RETRIEVAL-REGRESSION-REPORT"],"open":{"id":"OPEN-EXIT-E6.10","description":"The deterministic foundation still lacks model-grounded summary/citation validation and cloud-send/Permission enforcement, linking metrics beyond wiki links/backlinks, vector/reranker coverage, large-scale and packaged/UI proof, and broader locales and Knowledge Tree cases.","targetBuilds":["B6.15"],"targetExits":["E6.10"]}},
+    "E6.11":{"status":"planned","plannedTarget":"Dataset table-view and typed-query report proving bounds, deterministic hashes, exact citations, stale-revision rejection, and zero whole-payload/model/renderer authority."},
     "E7.01": {
       "status": "partial",
       "evidence": ["EV-PROPOSAL", "EV-AGENT-INGEST", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-PROPOSAL-UI", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY", "EV-PI-INGEST-UPDATE", "EV-UPDATE-RECOVERY", "EV-PI-INGEST-LINK", "EV-LINK-RECOVERY", "EV-PI-INGEST-TAGS", "EV-TAG-RECOVERY"],
@@ -1933,10 +1803,7 @@
         "targetExits": ["E7.01"]
       }
     },
-    "E7.02": {
-      "status": "planned",
-      "plannedTarget": "Autonomous memory provenance/Undo, backup, secret scan, and exception report."
-    },
+    "E7.02":{"status":"planned","plannedTarget":"Autonomous memory provenance/Undo, backup, secret scan, and exception report."},
     "E7.03": {
       "status": "partial",
       "evidence": ["EV-CAPTURE", "EV-HOME-AGENT", "EV-HOME-FOLLOWUP"],
@@ -1951,18 +1818,9 @@
         ]
       }
     },
-    "E7.04": {
-      "status": "planned",
-      "plannedTarget": "Conversation compaction identity/reference preservation tests."
-    },
-    "E7.05": {
-      "status": "planned",
-      "plannedTarget": "Memory lifecycle, provenance, backup, and secret-scan integration report."
-    },
-    "E7.06": {
-      "status": "planned",
-      "plannedTarget": "Managed Collection typed fields, views, relations/formulas, revision conflict, Activity/Undo, and exception-boundary integration report."
-    },
+    "E7.04":{"status":"planned","plannedTarget":"Conversation compaction identity/reference preservation tests."},
+    "E7.05":{"status":"planned","plannedTarget":"Memory lifecycle, provenance, backup, and secret-scan integration report."},
+    "E7.06":{"status":"planned","plannedTarget":"Managed Collection typed fields, views, relations/formulas, revision conflict, Activity/Undo, and exception-boundary integration report."},
     "E8.01": {
       "status": "planned",
       "plannedTarget": "Skill Settings/chat staging and complete lifecycle report."
@@ -2297,6 +2155,9 @@
     "EV-DB-EXTERNAL-EDIT": { "kind": "test", "path": "tests/unit/local-database-service.test.ts", "selector": "detects external Markdown edits and refreshes the FTS index" },
     "EV-DB-LINKS": { "kind": "test", "path": "tests/unit/local-database-service.test.ts", "selector": "indexes wiki links and local Markdown links as rebuildable related pages" },
     "EV-DB-TAGS": { "kind": "test", "path": "tests/unit/local-database-service.test.ts", "selector": "rebuilds canonical tag facets from Markdown without treating SQLite as durable knowledge" },
+    "EV-RAG-CHUNKS":{"kind":"test","path":"tests/unit/rag-chunker.test.ts","selector":"creates stable bounded metadata with heading paths and exact character ranges"},
+    "EV-DB-CHUNKS":{"kind":"test","path":"tests/unit/local-database-service.test.ts","selector":"rebuilds exact-range chunk metadata without persisting chunk text"},
+    "EV-LOCAL-SCALE":{"kind":"test","path":"tests/unit/local-database-scale.test.ts","selector":"rebuilds 10,000 Markdown pages into 100,000 product chunks with bounded warm APIs"},
     "EV-KNOWLEDGE-TREE-AGGREGATE": { "kind": "test", "path": "tests/unit/knowledge-tree-aggregate.test.ts", "selector": "rebuilds an explainable domain, topic, concept, and source tree from durable Markdown" },
     "EV-KNOWLEDGE-TREE-SERVICE": { "kind": "test", "path": "tests/unit/library-service.test.ts", "selector": "serves a body-free Knowledge Tree rebuilt from durable Markdown" },
     "EV-KNOWLEDGE-TREE-IPC": { "kind": "test", "path": "tests/unit/desktop-shell-contract.test.ts", "selector": "keeps Knowledge Tree aggregation in main while exposing a body-free renderer bridge" },

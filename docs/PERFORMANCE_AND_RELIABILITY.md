@@ -196,7 +196,10 @@ Rules:
 - A new capture should not wait behind a full index rebuild.
 - Search should return lexical results even if semantic index is rebuilding.
 - Phase 2/3 Markdown-scan retrieval is a bridge before SQLite/FTS. It must return bounded snippets only and keep full page bodies out of renderer state; Phase 4 indexing owns the 10k-page performance target.
-- Explicit Phase 4 rebuild is worker-backed, process-local serialized, cancellable, and bounded by a 15-minute timeout plus 512 MiB V8 old-generation limit; two-pass indexing retains bounded metadata and one capped body. Formal 10k CPU/RSS/latency, incremental/staging-swap, implicit first-query workerization, cross-process locking, crash fencing, and packaged-platform proof remain open.
+- Explicit rebuild is worker-backed, serialized, cancellable, and bounded by 15 minutes
+  plus a 512 MiB V8 old-generation limit. The product path proves 10,000 pages/100,000
+  metadata-only chunks and warm Library/Latin/CJK lexical budgets. CPU/RSS, incremental
+  staging swap, implicit-query workerization, cross-process fencing and packaged platforms remain open.
 - OCR and embedding workers should pause or reduce concurrency when the user is actively interacting.
 
 ## 7. Indexing Strategy
@@ -412,8 +415,7 @@ No automatic telemetry upload in v0.1.
 
 Required fixtures:
 
-- 10,000 generated Markdown notes.
-- 100,000 generated chunks.
+- Deterministic 10,000-page/100,000-product-chunk fixture and body-free local scale report.
 - 100 GB synthetic vault layout, with sparse large files where possible for CI.
 - Long conversation history with referenced source bodies.
 - Long Markdown note with tables, images, code blocks, and citations.
@@ -432,8 +434,7 @@ Before v0.1 public alpha:
 
 - App opens compact capture view within target on a modern macOS machine.
 - Input remains responsive during background indexing.
-- 10,000-page Library renders from warm DB within target.
-- Search returns lexical results within target on warm DB.
+- The 10,000-page warm Library and Latin/CJK lexical report passes its exact targets.
 - Index rebuild resumes after forced quit.
 - OCR failure does not lose the source record or source asset.
 - Backup/restore succeeds without `.pige/db/` and `.pige/indexes/`.

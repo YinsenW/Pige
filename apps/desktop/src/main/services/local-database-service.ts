@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
@@ -20,13 +20,20 @@ import {
   type KnowledgeTreeRelationInput,
   type KnowledgeTreeSnapshot
 } from "./knowledge-tree-aggregate";
-import { readMarkdownPageBody, scanMarkdownPages, type MarkdownPageRecord } from "./markdown-page-index";
+import {
+  assertMarkdownPagePathConfined,
+  readMarkdownPageBody,
+  scanMarkdownFileSignatures,
+  scanMarkdownPages,
+  type MarkdownPageRecord
+} from "./markdown-page-index";
 import {
   LOCAL_DATABASE_REBUILD_ERROR_MESSAGES,
   type LocalDatabaseRebuildExecutionOptions,
   type LocalDatabaseRebuildPort,
   type LocalDatabaseRebuildProgress
 } from "./local-database-rebuild-types";
+import { createMarkdownRagChunks, RAG_CHUNKER_VERSION } from "./rag-chunker";
 import {
   createCjkSearchAugmentation,
   createQueryTerms,
@@ -47,6 +54,7 @@ export interface LocalDatabaseDriver {
   readonly relatedPages: (vaultPath: string, request: LibraryRelatedRequest) => LocalDatabaseRelatedPages | undefined;
   readonly searchPages: (vaultPath: string, request: RetrievalSearchRequest) => LocalDatabaseSearchResult | undefined;
   readonly knowledgeTree: (vaultPath: string) => KnowledgeTreeSnapshot | undefined;
+  readonly chunkIndexStatus: (vaultPath: string) => LocalDatabaseChunkIndexStatus | undefined;
 }
 
 export interface LocalDatabaseRebuildCallbacks {
@@ -92,6 +100,10 @@ export class PendingSqliteDriver implements LocalDatabaseDriver {
   knowledgeTree(): undefined {
     return undefined;
   }
+
+  chunkIndexStatus(): undefined {
+    return undefined;
+  }
 }
 
 export interface LocalDatabasePageList {
@@ -114,6 +126,13 @@ export interface LocalDatabaseRelatedPages {
   readonly backlinks: readonly LibraryRelatedPage[];
 }
 
+export interface LocalDatabaseChunkIndexStatus {
+  readonly indexedPageCount: number;
+  readonly chunkCount: number;
+  readonly chunkerVersion: string;
+  readonly indexRevision: number;
+}
+
 export class NodeSqliteDriver implements LocalDatabaseDriver {
   readonly id = "node_sqlite";
 
@@ -124,14 +143,17 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
     } finally {
       db.close();
     }
-    const state = createSchemaState("node_sqlite", 1, [INITIAL_MIGRATION_ID]);
+    const state = createSchemaState("node_sqlite", CURRENT_APP_SCHEMA_VERSION, REQUIRED_MIGRATION_IDS);
     writeSchemaState(vaultPath, state);
     return state;
   }
 
   status(vaultPath: string): LocalDatabaseStatus {
     try {
-      const state = readSchemaState(vaultPath) ?? this.initialize(vaultPath);
+      const recordedState = readSchemaState(vaultPath);
+      const state = recordedState && isCurrentNodeSqliteSchemaState(recordedState)
+        ? recordedState
+        : this.initialize(vaultPath);
       const dbPath = getDatabasePath(vaultPath);
       const ready = fs.existsSync(dbPath) && state.driver === this.id && hasInitialMigration(vaultPath);
       return {
@@ -164,8 +186,9 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
       transaction(db, () => {
         clearRebuildableRows(db);
         const insertVaultFile = db.prepare(`
-          INSERT INTO vault_files(path, page_id, file_type, size_bytes, mtime_ms)
-          VALUES (?, ?, 'markdown_page', ?, ?)
+          INSERT INTO vault_files(
+            path, page_id, file_type, size_bytes, mtime_ms, ctime_ms, device_id, file_id
+          ) VALUES (?, ?, 'markdown_page', ?, ?, ?, ?, ?)
         `);
         const insertPage = db.prepare(`
           INSERT INTO pages(
@@ -177,14 +200,24 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
           INSERT OR IGNORE INTO sources(source_id, page_id, created_at, updated_at)
           VALUES (?, ?, ?, ?)
         `);
+        const insertChunk = db.prepare(`
+          INSERT INTO chunks(
+            chunk_id, owner_id, owner_type, page_path, page_type, source_ids_json,
+            heading_path_json, character_start, character_end, text_hash, token_count,
+            chunker_version, embedding_ref
+          ) VALUES (?, ?, 'page', ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+        `);
         const signatures = new Map<string, PageSignature>();
+        const fileSignatures = scanned.files;
+        const fileSignatureByPath = new Map(fileSignatures.map((file) => [file.pagePath, file]));
 
         for (const page of scanned.pages) {
-          const stablePage = readStableIndexedBody(page);
+          const scannedSignature = fileSignatureByPath.get(page.summary.pagePath);
+          if (!scannedSignature) throw new Error("Scanned Markdown signature is missing during index rebuild.");
+          const stablePage = readStableIndexedBody(vaultPath, page, scannedSignature);
           const signature = stablePage.signature;
-          const safeBody = stablePage.body;
+          const safeBody = stablePage.searchBody;
           const grams = createCjkSearchAugmentation(`${page.summary.title}\n${safeBody}`);
-          insertVaultFile.run(page.summary.pagePath, page.summary.pageId, signature.sizeBytes, signature.mtimeMs);
           insertPage.run(
             page.summary.pageId,
             page.summary.pageType,
@@ -197,6 +230,27 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
             JSON.stringify(page.summary.sourceIds)
           );
           insertPageFts.run(page.summary.pageId, page.summary.title, safeBody, grams);
+          for (const chunk of createMarkdownRagChunks({
+            pageId: page.summary.pageId,
+            pagePath: page.summary.pagePath,
+            pageType: page.summary.pageType,
+            sourceIds: page.summary.sourceIds,
+            body: stablePage.rawBody
+          })) {
+            insertChunk.run(
+              chunk.chunkId,
+              chunk.ownerId,
+              chunk.pagePath,
+              chunk.pageType,
+              JSON.stringify(chunk.sourceIds),
+              JSON.stringify(chunk.headingPath),
+              chunk.characterStart,
+              chunk.characterEnd,
+              chunk.textHash,
+              chunk.tokenCount,
+              chunk.chunkerVersion
+            );
+          }
           for (const sourceId of page.summary.sourceIds) {
             insertSource.run(sourceId, page.summary.pageId, page.summary.createdAt, page.summary.updatedAt);
           }
@@ -205,8 +259,23 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
           reportRebuildProgress(callbacks, completedUnits, totalUnits);
         }
 
+        const pageIdByPath = new Map(scanned.pages.map((page) => [page.summary.pagePath, page.summary.pageId]));
+        for (const file of fileSignatures) {
+          const pageId = pageIdByPath.get(file.pagePath);
+          const stableSignature = pageId ? signatures.get(pageId) : undefined;
+          insertVaultFile.run(
+            file.pagePath,
+            pageId ?? null,
+            stableSignature?.sizeBytes ?? file.sizeBytes,
+            stableSignature?.mtimeMs ?? file.mtimeMs,
+            stableSignature?.ctimeMs ?? file.ctimeMs,
+            stableSignature?.deviceId ?? file.deviceId,
+            stableSignature?.fileId ?? file.fileId
+          );
+        }
+
         indexPageKnowledge(db, scanned.pages);
-        indexPageLinks(db, scanned.pages, signatures, () => {
+        indexPageLinks(db, vaultPath, scanned.pages, signatures, () => {
           completedUnits += 1;
           reportRebuildProgress(callbacks, completedUnits, totalUnits);
         });
@@ -218,7 +287,7 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
     } finally {
       db.close();
     }
-    const state = createSchemaState("node_sqlite", 1, [INITIAL_MIGRATION_ID]);
+    const state = createSchemaState("node_sqlite", CURRENT_APP_SCHEMA_VERSION, REQUIRED_MIGRATION_IDS);
     writeSchemaState(vaultPath, state);
     completedUnits = totalUnits;
     reportRebuildProgress(callbacks, completedUnits, totalUnits);
@@ -353,6 +422,29 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
     }
   }
 
+  chunkIndexStatus(vaultPath: string): LocalDatabaseChunkIndexStatus | undefined {
+    if (!this.ensureReady(vaultPath)) return undefined;
+    const db = openVaultDatabase(vaultPath);
+    try {
+      const row = db.prepare(`
+        SELECT COUNT(*) AS chunk_count, COUNT(DISTINCT owner_id) AS page_count,
+          MIN(chunker_version) AS min_version, MAX(chunker_version) AS max_version
+        FROM chunks
+      `).get();
+      const minimumVersion = String(row?.min_version ?? RAG_CHUNKER_VERSION);
+      const maximumVersion = String(row?.max_version ?? RAG_CHUNKER_VERSION);
+      if (minimumVersion !== maximumVersion || maximumVersion !== RAG_CHUNKER_VERSION) return undefined;
+      return {
+        indexedPageCount: toNumber(row?.page_count),
+        chunkCount: toNumber(row?.chunk_count),
+        chunkerVersion: maximumVersion,
+        indexRevision: readUserVersion(db)
+      };
+    } finally {
+      db.close();
+    }
+  }
+
   private ensureReady(vaultPath: string): boolean {
     try {
       const status = this.status(vaultPath);
@@ -365,7 +457,7 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
   }
 
   private needsRebuild(vaultPath: string): boolean {
-    const scanned = scanMarkdownPages(vaultPath);
+    const files = scanMarkdownFileSignatures(vaultPath);
     const db = openVaultDatabase(vaultPath);
     try {
       migrate(db);
@@ -373,20 +465,24 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
       if (indexRevision !== CURRENT_INDEX_REVISION) return true;
       const stateRows = db.prepare("SELECT invalid_page_count FROM index_state WHERE id = 1").all();
       if (stateRows.length === 0) return true;
-      const invalidPageCount = toNumber(stateRows[0]?.invalid_page_count);
-      if (invalidPageCount !== scanned.invalidPageCount) return true;
 
       const rows = db.prepare(
-        "SELECT path, page_id, size_bytes, mtime_ms FROM vault_files WHERE file_type = 'markdown_page'"
+        `SELECT path, page_id, size_bytes, mtime_ms, ctime_ms, device_id, file_id
+        FROM vault_files WHERE file_type = 'markdown_page'`
       ).all();
-      if (rows.length !== scanned.pages.length) return true;
+      if (rows.length !== files.length) return true;
 
       const stored = new Map(rows.map((row) => [String(row.path), row]));
-      for (const page of scanned.pages) {
-        const row = stored.get(page.summary.pagePath);
-        if (!row || String(row.page_id) !== page.summary.pageId) return true;
-        const signature = getPageSignature(page);
-        if (toNumber(row.size_bytes) !== signature.sizeBytes || toNumber(row.mtime_ms) !== signature.mtimeMs) {
+      for (const file of files) {
+        const row = stored.get(file.pagePath);
+        if (!row) return true;
+        if (
+          toNumber(row.size_bytes) !== file.sizeBytes ||
+          toNumber(row.mtime_ms) !== file.mtimeMs ||
+          toNumber(row.ctime_ms) !== file.ctimeMs ||
+          String(row.device_id) !== file.deviceId ||
+          String(row.file_id) !== file.fileId
+        ) {
           return true;
         }
       }
@@ -450,6 +546,10 @@ export class LocalDatabaseService {
   knowledgeTree(vaultPath: string): KnowledgeTreeSnapshot | undefined {
     return this.#driver.knowledgeTree(vaultPath);
   }
+
+  chunkIndexStatus(vaultPath: string): LocalDatabaseChunkIndexStatus | undefined {
+    return this.#driver.chunkIndexStatus(vaultPath);
+  }
 }
 
 export function createEmptySchemaState(): LocalDatabaseSchemaState {
@@ -474,13 +574,80 @@ function createSchemaState(
 function readSchemaState(vaultPath: string): LocalDatabaseSchemaState | undefined {
   const statePath = getSchemaStatePath(vaultPath);
   if (!fs.existsSync(statePath)) return undefined;
-  return LocalDatabaseSchemaStateSchema.parse(JSON.parse(fs.readFileSync(statePath, "utf8")));
+  try {
+    const stat = fs.lstatSync(statePath);
+    if (stat.isSymbolicLink() || !stat.isFile()) return undefined;
+    return LocalDatabaseSchemaStateSchema.parse(JSON.parse(fs.readFileSync(statePath, "utf8")));
+  } catch {
+    return undefined;
+  }
 }
 
 function writeSchemaState(vaultPath: string, state: LocalDatabaseSchemaState): void {
   const statePath = getSchemaStatePath(vaultPath);
-  fs.mkdirSync(path.dirname(statePath), { recursive: true });
-  fs.writeFileSync(statePath, `${JSON.stringify(LocalDatabaseSchemaStateSchema.parse(state), null, 2)}\n`, "utf8");
+  const directoryPath = path.dirname(statePath);
+  fs.mkdirSync(directoryPath, { recursive: true });
+  const temporaryPath = path.join(
+    directoryPath,
+    `.${path.basename(statePath)}.${process.pid}.${randomUUID()}.tmp`
+  );
+  let descriptor: number | undefined;
+  try {
+    descriptor = fs.openSync(
+      temporaryPath,
+      fs.constants.O_WRONLY |
+        fs.constants.O_CREAT |
+        fs.constants.O_EXCL |
+        (fs.constants.O_NOFOLLOW ?? 0),
+      0o600
+    );
+    fs.writeFileSync(
+      descriptor,
+      `${JSON.stringify(LocalDatabaseSchemaStateSchema.parse(state), null, 2)}\n`,
+      "utf8"
+    );
+    fs.fsyncSync(descriptor);
+    fs.closeSync(descriptor);
+    descriptor = undefined;
+    fs.renameSync(temporaryPath, statePath);
+    flushDirectoryWhereSupported(directoryPath);
+  } finally {
+    if (descriptor !== undefined) {
+      try {
+        fs.closeSync(descriptor);
+      } catch {
+        // Preserve the authoritative write failure.
+      }
+    }
+    try {
+      fs.rmSync(temporaryPath, { force: true });
+    } catch {
+      // Preserve the authoritative write result.
+    }
+  }
+}
+
+function flushDirectoryWhereSupported(directoryPath: string): void {
+  let descriptor: number | undefined;
+  try {
+    descriptor = fs.openSync(directoryPath, fs.constants.O_RDONLY);
+    fs.fsyncSync(descriptor);
+  } catch (caught) {
+    if (!isUnsupportedDirectoryFlush(caught)) throw caught;
+  } finally {
+    if (descriptor !== undefined) {
+      try {
+        fs.closeSync(descriptor);
+      } catch {
+        // A directory cleanup failure must not replace the durable write result.
+      }
+    }
+  }
+}
+
+function isUnsupportedDirectoryFlush(caught: unknown): boolean {
+  return caught instanceof Error && "code" in caught &&
+    ["EINVAL", "EISDIR", "EPERM", "ENOTSUP", "EBADF"].includes(String(caught.code));
 }
 
 function getSchemaStatePath(vaultPath: string): string {
@@ -492,7 +659,10 @@ function getDatabasePath(vaultPath: string): string {
 }
 
 const INITIAL_MIGRATION_ID = "001_node_sqlite_initial_index";
-const CURRENT_INDEX_REVISION = 3;
+const CHUNK_METADATA_MIGRATION_ID = "002_rebuildable_chunk_metadata";
+const REQUIRED_MIGRATION_IDS = [INITIAL_MIGRATION_ID, CHUNK_METADATA_MIGRATION_ID] as const;
+const CURRENT_APP_SCHEMA_VERSION = 2;
+const CURRENT_INDEX_REVISION = 4;
 const DEFAULT_LIBRARY_LIMIT = 50;
 const MAX_LIBRARY_LIMIT = 200;
 const DEFAULT_SEARCH_LIMIT = 8;
@@ -531,10 +701,8 @@ function migrate(db: DatabaseSync): void {
       applied_at TEXT NOT NULL
     );
   `);
-  const applied = db.prepare("SELECT id FROM schema_migrations WHERE id = ?").all(INITIAL_MIGRATION_ID);
-  if (applied.length > 0) return;
-
-  transaction(db, () => {
+  const initialApplied = db.prepare("SELECT id FROM schema_migrations WHERE id = ?").all(INITIAL_MIGRATION_ID);
+  if (initialApplied.length === 0) transaction(db, () => {
     db.exec(`
       CREATE TABLE IF NOT EXISTS vault_files (
         path TEXT PRIMARY KEY,
@@ -662,6 +830,40 @@ function migrate(db: DatabaseSync): void {
     );
     db.exec("PRAGMA user_version = 1");
   });
+
+  const chunkMetadataApplied = db.prepare("SELECT id FROM schema_migrations WHERE id = ?")
+    .all(CHUNK_METADATA_MIGRATION_ID);
+  if (chunkMetadataApplied.length === 0) transaction(db, () => {
+    db.exec(`
+      ALTER TABLE vault_files ADD COLUMN ctime_ms REAL NOT NULL DEFAULT 0;
+      ALTER TABLE vault_files ADD COLUMN device_id TEXT NOT NULL DEFAULT '';
+      ALTER TABLE vault_files ADD COLUMN file_id TEXT NOT NULL DEFAULT '';
+    `);
+    db.exec("DROP TABLE IF EXISTS chunks");
+    db.exec(`
+      CREATE TABLE chunks (
+        chunk_id TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        owner_type TEXT NOT NULL CHECK(owner_type = 'page'),
+        page_path TEXT NOT NULL,
+        page_type TEXT NOT NULL,
+        source_ids_json TEXT NOT NULL CHECK(json_valid(source_ids_json)),
+        heading_path_json TEXT NOT NULL CHECK(json_valid(heading_path_json)),
+        character_start INTEGER NOT NULL CHECK(character_start >= 0),
+        character_end INTEGER NOT NULL CHECK(character_end > character_start),
+        text_hash TEXT NOT NULL,
+        token_count INTEGER NOT NULL CHECK(token_count > 0),
+        chunker_version TEXT NOT NULL,
+        embedding_ref TEXT
+      );
+      CREATE INDEX chunks_owner_id_idx ON chunks(owner_id, character_start);
+      CREATE INDEX chunks_text_hash_idx ON chunks(text_hash);
+    `);
+    db.prepare("INSERT INTO schema_migrations(id, applied_at) VALUES (?, ?)").run(
+      CHUNK_METADATA_MIGRATION_ID,
+      new Date().toISOString()
+    );
+  });
 }
 
 function transaction(db: DatabaseSync, work: () => void): void {
@@ -736,6 +938,7 @@ function indexPageKnowledge(db: DatabaseSync, pages: readonly MarkdownPageRecord
 
 function indexPageLinks(
   db: DatabaseSync,
+  vaultPath: string,
   pages: readonly MarkdownPageRecord[],
   expectedSignatures: ReadonlyMap<string, PageSignature>,
   onPageIndexed: () => void
@@ -751,7 +954,7 @@ function indexPageLinks(
   for (const page of pages) {
     const expectedSignature = expectedSignatures.get(page.summary.pageId);
     if (!expectedSignature) throw new Error("Indexed page signature is missing during link rebuild.");
-    const body = readStableIndexedBody(page, expectedSignature).body;
+    const body = readStableIndexedBody(vaultPath, page, expectedSignature).searchBody;
     for (const link of extractPigeMarkdownLinkRefs(body)) {
       const resolvedPageId = resolveLinkedPageId(lookup, page.summary.pagePath, link);
       insertLink.run(page.summary.pageId, resolvedPageId, link.target);
@@ -824,40 +1027,93 @@ function hasInitialMigration(vaultPath: string): boolean {
   const db = openVaultDatabase(vaultPath);
   try {
     migrate(db);
-    return db.prepare("SELECT id FROM schema_migrations WHERE id = ?").all(INITIAL_MIGRATION_ID).length === 1;
+    return REQUIRED_MIGRATION_IDS.every((migrationId) =>
+      db.prepare("SELECT id FROM schema_migrations WHERE id = ?").all(migrationId).length === 1
+    );
   } finally {
     db.close();
   }
 }
 
+function isCurrentNodeSqliteSchemaState(state: LocalDatabaseSchemaState): boolean {
+  return (
+    state.driver === "node_sqlite" &&
+    state.appSchemaVersion === CURRENT_APP_SCHEMA_VERSION &&
+    state.appliedMigrations.length === REQUIRED_MIGRATION_IDS.length &&
+    REQUIRED_MIGRATION_IDS.every((migrationId) =>
+      state.appliedMigrations.some((migration) => migration.id === migrationId)
+    )
+  );
+}
+
+function readUserVersion(db: DatabaseSync): number {
+  return toNumber(db.prepare("PRAGMA user_version").get()?.user_version);
+}
+
 interface PageSignature {
   readonly sizeBytes: number;
   readonly mtimeMs: number;
+  readonly ctimeMs: number;
+  readonly deviceId: string;
+  readonly fileId: string;
 }
 
 function getPageSignature(page: MarkdownPageRecord): PageSignature {
-  const stat = fs.statSync(page.absolutePath);
-  return { sizeBytes: stat.size, mtimeMs: Math.round(stat.mtimeMs) };
+  const stat = fs.lstatSync(page.absolutePath);
+  return pageSignatureFromStat(stat);
 }
 
-function readStableIndexedBody(page: MarkdownPageRecord, expected?: PageSignature): {
-  readonly body: string;
+function readStableIndexedBody(vaultPath: string, page: MarkdownPageRecord, expected?: PageSignature): {
+  readonly rawBody: string;
+  readonly searchBody: string;
   readonly signature: PageSignature;
 } {
-  const before = getPageSignature(page);
-  if (expected && !samePageSignature(before, expected)) {
-    throw new Error("Markdown changed while the local index was rebuilding.");
+  let descriptor: number | undefined;
+  try {
+    assertMarkdownPagePathConfined(vaultPath, page.absolutePath);
+    descriptor = fs.openSync(
+      page.absolutePath,
+      fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0)
+    );
+    const before = pageSignatureFromStat(fs.fstatSync(descriptor));
+    if (expected && !samePageSignature(before, expected)) {
+      throw new Error("Markdown changed while the local index was rebuilding.");
+    }
+    const rawBody = readMarkdownPageBody(descriptor).slice(0, MAX_INDEXED_BODY_CHARS);
+    const searchBody = sanitizeSearchBody(rawBody);
+    const after = pageSignatureFromStat(fs.fstatSync(descriptor));
+    const named = getPageSignature(page);
+    assertMarkdownPagePathConfined(vaultPath, page.absolutePath);
+    if (!samePageSignature(before, after) || !samePageSignature(before, named)) {
+      throw new Error("Markdown changed while the local index was rebuilding.");
+    }
+    return { rawBody, searchBody, signature: after };
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
   }
-  const body = sanitizeSearchBody(readMarkdownPageBody(page.absolutePath)).slice(0, MAX_INDEXED_BODY_CHARS);
-  const after = getPageSignature(page);
-  if (!samePageSignature(before, after)) {
-    throw new Error("Markdown changed while the local index was rebuilding.");
+}
+
+function pageSignatureFromStat(stat: fs.Stats): PageSignature {
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    throw new Error("Markdown page must remain a regular file while rebuilding the local index.");
   }
-  return { body, signature: after };
+  return {
+    sizeBytes: stat.size,
+    mtimeMs: stat.mtimeMs,
+    ctimeMs: stat.ctimeMs,
+    deviceId: String(stat.dev),
+    fileId: String(stat.ino)
+  };
 }
 
 function samePageSignature(left: PageSignature, right: PageSignature): boolean {
-  return left.sizeBytes === right.sizeBytes && left.mtimeMs === right.mtimeMs;
+  return (
+    left.sizeBytes === right.sizeBytes &&
+    left.mtimeMs === right.mtimeMs &&
+    left.ctimeMs === right.ctimeMs &&
+    left.deviceId === right.deviceId &&
+    left.fileId === right.fileId
+  );
 }
 
 function reportRebuildProgress(
