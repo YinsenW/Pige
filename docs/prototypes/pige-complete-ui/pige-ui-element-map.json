@@ -82,7 +82,7 @@
       "role": "button",
       "intent": "Open a stable Markdown page in the reading workspace.",
       "states": ["default", "hover", "current", "focus-visible"],
-      "prototype_action": "Preserves the current sidebar state while updating breadcrumb, reader title, Agent context title, and active row.",
+      "prototype_action": "Preserves the current sidebar and Note Agent disclosure states while updating breadcrumb, reader title, Agent context title, and active row.",
       "production_bridge": "library.open with stable page ID; never an arbitrary path",
       "owner": "Library Service + Renderer"
     },

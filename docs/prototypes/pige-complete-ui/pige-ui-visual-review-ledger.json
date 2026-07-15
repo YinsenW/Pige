@@ -121,7 +121,8 @@
     "viewport": { "width": 1280, "height": 720, "device_scale_factor": 2 },
     "compact_home": { "width_px": 400, "height_px": 688, "titlebar_px": 46, "composer_radius_px": 22, "heading": "24px / 30px / 500" },
     "expanded_home": { "width_px": 680, "height_px": 688, "sidebar_px": 280, "home_px": 400 },
-    "intermediate_reader": { "viewport_px": [1144, 874], "window_px": 1112, "sidebar_px": 280, "reader_px": 400, "note_agent_px": 432, "sidebar_persistent": true },
+    "intermediate_reader": { "viewport_px": [1144, 874], "window_px": 1112, "sidebar_px": 280, "reader_px": 400, "note_agent_px": 432, "fresh_note_defaults_to_three_pane": true, "sidebar_persistent": true, "escape_preserves_resident_sidebar": true },
+    "compact_reader_drawers": { "viewport_px": [760, 760], "window_px": 680, "reader_px": 680, "sidebar_overlay_px": 280, "note_agent_overlay_px": 432, "fresh_note_defaults_to_unobscured_reader": true, "note_agent_closed_on_note_open": true, "horizontal_overflow": false, "escape_and_focus_return": "passed" },
     "settings": {
       "width_px": 1180,
       "height_px": 672,
@@ -130,6 +131,9 @@
       "dark_sidebar_srgb": "#444646",
       "dark_surface_srgb": "#181818",
       "dark_elevated_srgb": "#242424",
+      "route_geometry_checks": 32,
+      "stable_geometries_px": { "1280x720": [50, 24, 1180, 672], "760x760": [0, 0, 760, 760] },
+      "route_size_or_horizontal_overflow_failures": 0,
       "body_scroll_matches_viewport": true
     },
     "note": "At taller viewports Settings reaches its 820 px cap; at 720 px it retains a 24 px safe inset without overflow. Wide three-pane review remains bound to the 1536 x 1024 target viewport."
@@ -143,15 +147,30 @@
     "./baselines/first-run-1280x720.jpg",
     "./baselines/reader-narrow-1280x720.jpg"
   ],
+  "prototype_baseline_capture": {
+    "viewport_px": [1280, 720],
+    "routes": {
+      "home-compact-1280x720.jpg": "?screen=home&sidebar=0",
+      "home-expanded-1280x720.jpg": "?screen=expanded&sidebar=1",
+      "reader-intermediate-1280x720.jpg": "?screen=note&sidebar=1",
+      "reader-narrow-1280x720.jpg": "visual-review-harness.html?width=400&height=680&route=%3Fscreen%3Dnote%26sidebar%3D0&label=0",
+      "settings-general-1280x720.jpg": "?panel=general#settings",
+      "settings-appearance-dark-1280x720.jpg": "?panel=appearance&theme=dark#settings",
+      "first-run-1280x720.jpg": "?screen=first-run-vault&sidebar=0"
+    },
+    "all_current_html": true,
+    "all_horizontal_overflow_checks": "passed",
+    "human_visual_review": "passed"
+  },
   "prototype_baseline_encoding": "JPEG emitted by the approved in-app browser capture surface; use for human visual review, not lossless pixel-color truth",
   "prototype_baseline_sha256": {
-    "first-run-1280x720.jpg": "8115f4e79284d44b46a8d415479054dfdb7bb77cc5b2f2cdcba49c92e6184fad",
-    "home-compact-1280x720.jpg": "ec72a9a96cb80b4577a24e91b0909b5c8e1fcab2c8a4f8bf797d482b8dc6286f",
-    "home-expanded-1280x720.jpg": "b35b09fe1d39fe5e3e181d6fd5ca552965f92a207201325043c5eefb91386405",
-    "reader-intermediate-1280x720.jpg": "c3c95d1b4566e202c960c985dd9c7f725ba84af5c49986309a8d8784a7732ba4",
-    "reader-narrow-1280x720.jpg": "d670cc370ec2e54c70325d7a3232e0d0088ee311068411cc71ae352719389a46",
-    "settings-appearance-dark-1280x720.jpg": "a011c7e455de74bb76e67d76004e9395d0f63dacc576e414d0297744ec6eb3a7",
-    "settings-general-1280x720.jpg": "60cbb638893867ddd8680fc91b3a6c14d0dd8d6414c499c014f61ecb208c9fec"
+    "first-run-1280x720.jpg": "4b6fd0b642bb86d98a9c41c28c5f38794dd513b908da96714f0460ffa4934efa",
+    "home-compact-1280x720.jpg": "4636f5b825217165bcd6a36a45338d873c455172c8d9c32a94bff0fcc0778196",
+    "home-expanded-1280x720.jpg": "32d6e2e96732856137e572a555a1e1732d3d635f0212e9c7cf52e4598422e983",
+    "reader-intermediate-1280x720.jpg": "f93e3a053b68079dc8db56855ba68c25f38943b2cf12378bda748bd769018879",
+    "reader-narrow-1280x720.jpg": "0d441ce3bf73ef83416dc201ac60128e30373f4bd8b27604c136e3a3c1a77b64",
+    "settings-appearance-dark-1280x720.jpg": "39353fce14be660a247114d84cf3f4a577f97474fdef54b3dd48a5d255a022f4",
+    "settings-general-1280x720.jpg": "20e7c437c441919fdee5be48e9dfe969cced1ee9a49fc7f6b92cfeffdc2bb1b7"
   },
   "canonical_surfaces": [
     {
@@ -189,7 +208,7 @@
     },
     {
       "id": "VR-READER-THREE-PANE",
-      "route": "?screen=note",
+      "route": "?screen=note&sidebar=1",
       "viewport": { "width": 1536, "height": 1024 },
       "prototype_geometry": { "sidebar_width_px": 280, "reader_width_px": 680, "note_agent_width_px": 432, "total_content_width_px": 1392 },
       "checks": {
@@ -290,7 +309,13 @@
       "Long localized selection actions escaped the 400 px viewport.",
       "The 760 px narrow breakpoint misclassified the exact 680 px expanded Home as an overlay; the corrected 679 px boundary preserves 280 + 400 px side-by-side geometry at 680 px.",
       "Custom Provider protocol selection exceeded its narrow Settings row because of intrinsic select width; the control now shrinks to the row at 400 px in all six locales.",
-      "At 760 px the fixed Note Agent rail was pushed outside the reader window; 680-1111 px now uses the same bounded overlay drawer and focus-containment model as compact widths."
+      "At 760 px the fixed Note Agent rail was pushed outside the reader window; 680-1111 px now uses the same bounded overlay drawer and focus-containment model as compact widths.",
+      "A preserved sidebar state selected a higher-specificity 960 px note width inside a 760 px viewport; the reader is now fixed to 680 px with a 280 px overlay sidebar and zero horizontal document overflow.",
+      "Opening a note at 680-1111 px automatically opened the Note Agent over the reader; it now stays closed until explicitly requested, then returns focus to the reader control on Escape.",
+      "Switching notes reopened a manually hidden resident Note Agent; note routing now preserves both sidebar and Note Agent disclosure while updating the active document.",
+      "The canonical fresh ?screen=note route contradicted its three-pane name by omitting the sidebar; fresh wide note-family entries now default to three panes while fresh compact entries keep both overlays closed.",
+      "Escape incorrectly dismissed a resident sidebar at 1112-1439 px; it now dismisses only compact overlay panels.",
+      "The 400 px intermediate reader broke the breadcrumb into vertical glyphs; the path now stays on one line and progressively hides earlier segments and secondary actions."
     ]
   }
 }

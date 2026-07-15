@@ -163,9 +163,8 @@ Behavior:
 
 - The note body should never stretch into an unreadably wide line length.
 - On wide screens, the reading column can be centered with side rails for navigation and context.
-- The Note Agent should sit on the right in wide/full-screen mode.
-- Related notes, backlinks, and sources can share the right rail or appear below the note when the Agent panel is closed.
-- The user can hide the left sidebar, right context rail, or both.
+- Wide mode places the Note Agent on the right; related notes, backlinks, and sources can share its rail or follow the note when it is closed.
+- Users can hide either rail. Note routing preserves both panel states: at 1112 px or wider, the 280 px Library and 432 px Agent rails remain resident; narrower layouts use independent, Escape-dismissible overlays without horizontal overflow.
 - Selection actions should appear near selected text without covering the paragraph being read.
 
 ## 3. Navigation Model

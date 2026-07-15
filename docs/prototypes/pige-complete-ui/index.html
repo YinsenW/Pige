@@ -367,8 +367,23 @@
       backdrop-filter: blur(10px);
     }
 
-    .reader-toolbar strong { color: var(--text-primary); font-weight: 500; }
-    .reader-toolbar-actions { display: flex; gap: 2px; margin-left: auto; }
+    .reader-breadcrumbs {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      gap: 7px;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+    .reader-breadcrumbs > * { flex: 0 0 auto; }
+    .reader-breadcrumbs strong {
+      min-width: 0;
+      overflow: hidden;
+      color: var(--text-primary);
+      font-weight: 500;
+      text-overflow: ellipsis;
+    }
+    .reader-toolbar-actions { display: flex; flex: 0 0 auto; gap: 2px; margin-left: auto; }
 
     .markdown-body {
       width: min(100%, 620px);
@@ -2116,17 +2131,34 @@
       .main-layout.note-open.sidebar-open:not(.agent-open) { grid-template-columns: var(--sidebar-pane-width) minmax(0, 1fr) 0; }
       .main-layout.note-open.agent-open:not(.sidebar-open) { grid-template-columns: 0 minmax(0, 1fr) var(--agent-pane-width); }
       .main-layout.note-open.sidebar-open.agent-open { grid-template-columns: var(--sidebar-pane-width) minmax(0, 1fr) var(--agent-pane-width); }
+      .reader-breadcrumbs > :nth-child(-n + 4) { display: none; }
+      .reader-toolbar-actions .prototype-action:not([aria-label="更多笔记操作"]) { display: none; }
     }
 
     @media (min-width: 680px) and (max-width: 1111px) {
       .app-window.note-mode,
       .app-window.note-mode.sidebar-expanded,
       .app-window.note-mode.agent-expanded,
-      .app-window.note-mode.sidebar-expanded.agent-expanded { width: min(100vw, var(--reader-pane-width)); }
+      .app-window.note-mode.sidebar-expanded.agent-expanded { width: min(100vw, var(--reader-pane-width)) !important; }
       .main-layout.note-open,
       .main-layout.note-open.sidebar-open,
       .main-layout.note-open.agent-open,
-      .main-layout.note-open.sidebar-open.agent-open { grid-template-columns: 0 minmax(0, 1fr) 0; }
+      .main-layout.note-open.sidebar-open.agent-open { grid-template-columns: 0 minmax(0, 1fr) 0 !important; }
+      .main-layout.note-open .sidebar {
+        position: absolute;
+        z-index: 26;
+        inset: 0 auto 0 0;
+        width: var(--sidebar-pane-width);
+        box-shadow: 12px 0 32px rgba(0,0,0,.12);
+        opacity: 0;
+        pointer-events: none;
+        transform: translateX(-100%);
+      }
+      .main-layout.note-open.sidebar-open .sidebar {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateX(0);
+      }
       .note-agent { display: block; position: absolute; z-index: 25; inset: 0 0 0 auto; width: min(100vw, var(--agent-pane-width)); box-shadow: -14px 0 32px rgba(0,0,0,.12); }
       .note-agent-inner { width: min(100vw, var(--agent-pane-width)); }
       .note-open:not(.agent-open) .note-agent { transform: translateX(100%); }
@@ -2501,7 +2533,7 @@
 
         <article class="markdown-reader" id="markdownReader" aria-label="Markdown 阅读器">
           <header class="reader-toolbar">
-            <span>笔记库</span><span>›</span><span id="readerGroup">Pige</span><span>›</span><span id="readerNoteParent">产品规划</span><span>›</span><strong id="readerNoteFile">产品定位.md</strong>
+            <nav class="reader-breadcrumbs" aria-label="笔记路径"><span>笔记库</span><span aria-hidden="true">›</span><span id="readerGroup">Pige</span><span aria-hidden="true">›</span><span id="readerNoteParent">产品规划</span><span aria-hidden="true">›</span><strong id="readerNoteFile" aria-current="page">产品定位.md</strong></nav>
             <div class="reader-toolbar-actions">
               <button class="icon-button reader-pane-toggle" id="toggleNoteAgent" type="button" aria-label="隐藏笔记对话" aria-expanded="true" title="隐藏笔记对话">
                 <svg viewBox="0 0 20 20" aria-hidden="true"><use href="./pige-icon-sprite.svg#pi-panel"/></svg>
@@ -3098,7 +3130,7 @@
       }, 180);
     }
 
-    function openNote(title = '产品定位', group = 'Pige') {
+    function openNote(title = '产品定位', group = 'Pige', options = {}) {
       const fileName = `${title}.md`;
       readerGroup.textContent = group;
       readerNoteParent.textContent = title;
@@ -3111,7 +3143,7 @@
         if (current) note.setAttribute('aria-current', 'page');
         else note.removeAttribute('aria-current');
       });
-      setScreen('note');
+      setScreen('note', { sidebar: options.sidebar });
     }
 
     function filterLibraryResults() {
@@ -3276,11 +3308,13 @@
     }
 
     function setNoteOpen(open) {
+      const wasNoteOpen = mainLayout.classList.contains('note-open');
+      const wasAgentOpen = mainLayout.classList.contains('agent-open');
       mainLayout.classList.toggle('note-open', open);
       appWindow.classList.toggle('note-mode', open);
       if (open) {
-        const narrow = window.matchMedia('(max-width: 679px)').matches;
-        setNoteAgent(!narrow, { restoreFocus: false });
+        const canKeepAgentResident = window.matchMedia('(min-width: 1112px)').matches;
+        setNoteAgent(wasNoteOpen ? wasAgentOpen : canKeepAgentResident, { restoreFocus: false });
         setPrimaryNav(null);
       } else {
         setNoteAgent(false, { restoreFocus: false });
@@ -3399,7 +3433,7 @@
     });
 
     document.querySelectorAll('.sidebar-note').forEach(note => {
-      note.addEventListener('click', () => openNote(note.dataset.noteTitle, note.dataset.noteGroup));
+      note.addEventListener('click', () => openNote(note.dataset.noteTitle, note.dataset.noteGroup, { sidebar: true }));
     });
 
     closeProductNote.addEventListener('click', () => setScreen('home', { sidebar: true }));
@@ -3813,17 +3847,20 @@
 
       if (event.key === 'Escape' && settingsActive) closeSettingsWindow();
       else if (event.key === 'Escape' && compactNoteAgentOpen) setNoteAgent(false);
-      else if (event.key === 'Escape' && mainLayout.classList.contains('note-open') && mainLayout.classList.contains('sidebar-open') && window.matchMedia('(max-width: 1439px)').matches) setSidebar(false);
+      else if (event.key === 'Escape' && mainLayout.classList.contains('note-open') && mainLayout.classList.contains('sidebar-open') && window.matchMedia('(max-width: 1111px)').matches) setSidebar(false);
     });
 
     const initialParams = new URLSearchParams(location.search);
     const initialScreen = initialParams.get('screen') || 'home';
     const initialTheme = initialParams.get('theme');
     const storedSidebar = sessionStorage.getItem('pige.prototype.sidebar.open');
+    const noteFamilyScreens = new Set(['note', 'selection', 'dataset', 'proposal']);
+    const defaultSidebarOpen = initialScreen === 'expanded'
+      || (noteFamilyScreens.has(initialScreen) && window.matchMedia('(min-width: 1112px)').matches);
     const initialSidebar = initialParams.has('sidebar')
       ? initialParams.get('sidebar') === '1'
       : storedSidebar === null
-        ? initialScreen === 'expanded'
+        ? defaultSidebarOpen
         : storedSidebar === 'true';
     updateSendState();
     filterLibraryResults();

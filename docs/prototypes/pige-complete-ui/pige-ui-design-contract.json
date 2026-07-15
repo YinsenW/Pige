@@ -106,8 +106,10 @@
     "Home has one dominant composer; shortcuts, progress, confirmations, and citations remain subordinate.",
     "Pointer focus never creates a permanent blue composer box; keyboard focus retains a native-blue focus-visible ring.",
     "Settings is a separate stable-size window and must not resize or reflow the main Pige window.",
-    "Opening or switching a note preserves the user-owned sidebar state; only the sidebar control or an explicit first-run boundary may change it.",
+    "Opening or switching a note preserves the user-owned sidebar state, and switching notes preserves the Note Agent disclosure state; note routing must not silently reopen or collapse either panel.",
+    "With no saved sidebar preference, direct note-family routes default to full three-pane disclosure at 1112 px and above; below 1112 px they start with an unobscured reader and closed overlays.",
     "At 1112–1439 px the note layout keeps the 280 px sidebar and 432 px Agent rail resident and gives the remaining width to the reader; at 1440 px and above the reader returns to its 680 px reference width.",
+    "At 680–1111 px the reader stays within 680 px with no horizontal document overflow; the sidebar and Note Agent are independent overlays, the Note Agent is closed by default, and Escape dismisses only the active overlay.",
     "Enter sends, Shift+Enter inserts a newline, and active IME plus the 80 ms composition-end race cannot send.",
     "Reduced motion removes spatial interpolation without removing state feedback.",
     "Common system glyphs use the one governed Lucide-aligned sprite; Settings is a gear, Appearance is a palette, and Pin is optically centered."
