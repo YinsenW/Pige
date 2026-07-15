@@ -385,6 +385,9 @@ On submit:
 - CSV, XLSX, and supported SQLite follow this same flow. Do not show an
   Import/Table/Database mode; after preservation, Pi decides whether to inspect or query.
 
+Home's accessible model listbox changes the Global Default for new calls, never
+per-turn routing. Unavailable or switching blocks Agent Send, not capture-only.
+
 ## 6. Processing Timeline
 
 The timeline should show Agent work as durable changes.

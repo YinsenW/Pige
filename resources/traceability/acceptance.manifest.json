@@ -843,33 +843,8 @@
         ]
       }
     },
-    "PIGE-PI-001": {
-      "status": "partial",
-      "evidence": ["EV-RUNTIME", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-BOUNDARY", "EV-WAITING-AGENT-REQUEUE", "EV-PI-AGENT-SPINE", "EV-PI-PDF-PARSE-TOOL", "EV-PI-PDF-OCR-TOOL", "EV-PI-OFFICE-PARSE-OCR-TOOL", "EV-PI-IMAGE-OCR-TOOL", "EV-PI-INGEST-RETRIEVAL", "EV-PI-INGEST-UPDATE", "EV-UPDATE-RECOVERY", "EV-PI-INGEST-PROPOSAL", "EV-PI-URL-INGRESS", "EV-PI-TOOL-CALL-ID", "EV-PI-RUNTIME-BOUNDARY", "EV-PI-RUNTIME-MUTATIONS", "EV-PI-IMPORT-SNAPSHOT", "EV-PI-PROVIDER-BINDING", "EV-PI-ELECTRON-SMOKE", "EV-PI-STREAM-STRUCTURAL-BUDGET", "EV-PI-TERMINAL-RECOVERY", "EV-PI-TERMINAL-MISSING", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY", "EV-PI-DATASET-INGEST", "EV-DATASET-CONTINUATION", "EV-PI-DATASET-QUERY", "EV-DATASET-QUERY-CORE", "EV-DATASET-QUERY-WORKER-SMOKE", "EV-BUNDLED-WORKER-AVAILABILITY", "EV-ASSEMBLED-RUNTIME-COMPOSITION"],
-      "open": {
-        "id": "OPEN-REQ-PIGE-PI-001",
-        "description": "Hash-bound create/update recovery, Home same-Job typed terminal repair, and one Dataset-query route work. Legacy agent_ingest repair, durable mid-repair checkpoint/restart, broader eligibility/query composition, real production Broker callers, and signed packaged BYOK remain open.",
-        "targetBuilds": ["B3.06", "B3.13"],
-        "targetExits": ["E3.04", "E3.08"]
-      }
-    },
-    "PIGE-PI-002": {
-      "status": "partial",
-      "evidence": [
-        "EV-PROVIDER",
-        "EV-PI-PROVIDER-BINDING"
-      ],
-      "open": {
-        "id": "OPEN-REQ-PIGE-PI-002",
-        "description": "Full catalog/help, Provider delete, DeepSeek Anthropic, and packaged model matrix remain; Advanced/Fast stays hidden.",
-        "targetBuilds": [
-          "B3.04"
-        ],
-        "targetExits": [
-          "E3.01"
-        ]
-      }
-    },
+    "PIGE-PI-001":{"status":"partial","evidence":["EV-RUNTIME","EV-RUNTIME-NONSECRET-BINDING","EV-JOB-NONSECRET-READINESS","EV-AGENT-INGEST","EV-HOME-AGENT","EV-BOUNDARY","EV-WAITING-AGENT-REQUEUE","EV-PI-AGENT-SPINE","EV-PI-PDF-PARSE-TOOL","EV-PI-PDF-OCR-TOOL","EV-PI-OFFICE-PARSE-OCR-TOOL","EV-PI-IMAGE-OCR-TOOL","EV-PI-INGEST-RETRIEVAL","EV-PI-INGEST-UPDATE","EV-UPDATE-RECOVERY","EV-PI-INGEST-PROPOSAL","EV-PI-URL-INGRESS","EV-PI-TOOL-CALL-ID","EV-PI-RUNTIME-BOUNDARY","EV-PI-RUNTIME-MUTATIONS","EV-PI-IMPORT-SNAPSHOT","EV-PI-PROVIDER-BINDING","EV-PI-ELECTRON-SMOKE","EV-PI-STREAM-STRUCTURAL-BUDGET","EV-PI-TERMINAL-RECOVERY","EV-PI-TERMINAL-MISSING","EV-ACTIVITY-UNDO","EV-CREATE-RECOVERY","EV-PI-DATASET-INGEST","EV-DATASET-CONTINUATION","EV-PI-DATASET-QUERY","EV-DATASET-QUERY-CORE","EV-DATASET-QUERY-WORKER-SMOKE","EV-BUNDLED-WORKER-AVAILABILITY","EV-ASSEMBLED-RUNTIME-COMPOSITION"],"open":{"id":"OPEN-REQ-PIGE-PI-001","description":"Hash-bound create/update recovery, Home same-Job typed terminal repair, and one Dataset-query route work. Legacy agent_ingest repair, durable mid-repair checkpoint/restart, broader eligibility/query composition, real production Broker callers, and signed packaged BYOK remain open.","targetBuilds":["B3.06","B3.13"],"targetExits":["E3.04","E3.08"]}},
+    "PIGE-PI-002":{"status":"partial","evidence":["EV-PROVIDER","EV-PI-PROVIDER-BINDING","EV-HOME-MODEL-SWITCHER"],"open":{"id":"OPEN-REQ-PIGE-PI-002","description":"Full catalog/help, Provider delete, DeepSeek Anthropic, and packaged model matrix remain; Advanced/Fast stays hidden.","targetBuilds":["B3.04"],"targetExits":["E3.01"]}},
     "PIGE-PI-003": {
       "status": "planned",
       "plannedTarget": "Injected adapter proves exact Broker gating; production arbitrary-path/Skill/package/local-tool adapters, focused modal convergence and the full bypass matrix remain."
@@ -1180,7 +1155,7 @@
     "PIGE-DOC-005":{"status":"verified","evidence":["EV-DOCQUALITY","EV-DOCQUALITY-INDEPENDENT"]},
     "PIGE-UI-001":{"status":"partial","evidence":["EV-RENDERER","EV-READER-RESOURCE-SAFETY","EV-RENDERER-NAVIGATION-GUARD","EV-FULL-UI-RESPONSIVE"],"open":{"id":"OPEN-REQ-PIGE-UI-001","description":"Source-preserving editing, IME, long-page budget and external-conflict UI tests remain open.","targetBuilds":["B6.08","B6.13"],"targetExits":["E6.05","E6.08"]}},
     "PIGE-UI-002":{"status":"planned","plannedTarget":"Complete accessibility, final UI Design review and real macOS/Windows visual equivalence."},
-    "PIGE-UI-003":{"status":"partial","evidence":["EV-APP-SHELL","EV-FIRST-HOME-GUIDE","EV-HOME-MODEL-OWNER","EV-HOME-DURABLE-REFRESH","EV-HOME-ENTER","EV-DATASET-QUERY-UI","EV-DATASET-TIMELINE-RESTORE","EV-KNOWLEDGE-TREE-IPC","EV-KNOWLEDGE-TREE-UI","EV-FULL-UI-RESPONSIVE","EV-FULL-UI-NAVIGATION","EV-FULL-UI-LIBRARY","EV-FULL-UI-SETTINGS","EV-UI-WINDOW-SHELL"],"open":{"id":"OPEN-REQ-PIGE-UI-003","description":"Production shell/macOS review work; unavailable UI proves no capability; capability and Windows qualification remain.","targetBuilds":["B1.03","B1.07","B1.08","B1.09","B1.17"],"targetExits":["E1.02","E1.11","E1.13"]}},
+    "PIGE-UI-003":{"status":"partial","evidence":["EV-APP-SHELL","EV-FIRST-HOME-GUIDE","EV-HOME-MODEL-OWNER","EV-HOME-MODEL-SWITCHER","EV-HOME-DURABLE-REFRESH","EV-HOME-ENTER","EV-DATASET-QUERY-UI","EV-DATASET-TIMELINE-RESTORE","EV-KNOWLEDGE-TREE-IPC","EV-KNOWLEDGE-TREE-UI","EV-FULL-UI-RESPONSIVE","EV-FULL-UI-NAVIGATION","EV-FULL-UI-LIBRARY","EV-FULL-UI-SETTINGS","EV-UI-WINDOW-SHELL"],"open":{"id":"OPEN-REQ-PIGE-UI-003","description":"Production shell/macOS review work; unavailable UI proves no capability; capability and Windows qualification remain.","targetBuilds":["B1.03","B1.07","B1.08","B1.09","B1.17"],"targetExits":["E1.02","E1.11","E1.13"]}},
     "PIGE-UI-004":{"status":"planned","plannedTarget":"Remaining Knowledge Tree density/scale, compact-platform, assistive-technology, and signed packaged visual acceptance."},
     "PIGE-UI-005":{"status":"planned","plannedTarget":"Note Agent local-copy, auto-apply, Activity/Undo, and exception tests."},
     "PIGE-UI-006":{"status":"partial","evidence":["EV-READER-RELATED","EV-READER-UI","EV-FULL-UI-LIBRARY","EV-FULL-UI-RESPONSIVE"],"open":{"id":"OPEN-REQ-PIGE-UI-006","description":"Library opens Reader and related context in governed panes; source metadata, typed edit/copy/reveal and unavailable-graph degradation remain open.","targetBuilds":["B6.08","B6.09"],"targetExits":["E6.05","E6.07"]}},
@@ -1202,7 +1177,7 @@
     "E0.12":{"status":"partial","evidence":["EV-PUBLIC-WORKFLOW","EV-PUBLIC-CONDUCT","EV-PUBLIC-BUG","EV-PUBLIC-SECURITY"],"open":{"id":"OPEN-EXIT-E0.12","description":"Automated template-schema validation and live private-reporting availability remain open.","targetBuilds":["B0.15"],"targetExits":["E0.12"]}},
     "E0.13":{"status":"verified","evidence":["EV-TRACE","EV-PHASE-PREFLIGHT"]},
     "E1.01":{"status":"partial","evidence":["EV-VAULT-LAYOUT"],"open":{"id":"OPEN-EXIT-E1.01","description":"Full executable acceptance remains open for Exit E1.01: User can create and open a vault through validated paths.","targetBuilds":["B1.02"],"targetExits":["E1.01"]}},
-    "E1.02":{"status":"partial","evidence":["EV-APP-SHELL","EV-FIRST-HOME-GUIDE","EV-HOME-MODEL-OWNER","EV-FULL-UI-NAVIGATION","EV-FULL-UI-RESPONSIVE","EV-I18N"],"open":{"id":"OPEN-EXIT-E1.02","description":"First Home, model ownership and the responsive shell work locally; broader continuity and Windows packaged visual acceptance remain open.","targetBuilds":["B1.03"],"targetExits":["E1.02"]}},
+    "E1.02":{"status":"partial","evidence":["EV-APP-SHELL","EV-FIRST-HOME-GUIDE","EV-HOME-MODEL-OWNER","EV-HOME-MODEL-SWITCHER","EV-FULL-UI-NAVIGATION","EV-FULL-UI-RESPONSIVE","EV-I18N"],"open":{"id":"OPEN-EXIT-E1.02","description":"First Home, model ownership and the responsive shell work locally; broader continuity and Windows packaged visual acceptance remain open.","targetBuilds":["B1.03"],"targetExits":["E1.02"]}},
     "E1.03": {
       "status": "partial",
       "evidence": [
@@ -1229,7 +1204,7 @@
     "E1.10":{"status":"verified","evidence":["EV-BOUNDARY"]},
     "E1.11":{"status":"partial","evidence":["EV-APP-SHELL","EV-FULL-UI-NAVIGATION","EV-FULL-UI-RESPONSIVE","EV-FULL-UI-LIBRARY","EV-I18N","EV-UI-WINDOW-SHELL"],"open":{"id":"OPEN-EXIT-E1.11","description":"Mac-reviewed shell/catalogs; Windows qualification and continuity remain.","targetBuilds":["B1.07","B1.08","B1.09"],"targetExits":["E1.11"]}},
     "E1.12":{"status":"partial","evidence":["EV-RUNTIME","EV-PROVIDER"],"open":{"id":"OPEN-EXIT-E1.12","description":"Full executable acceptance remains open for Exit E1.12: One default model profile can be stored and resolved through the adapter contract without exposing ineffective Advanced/Fast controls.","targetBuilds":["B1.13"],"targetExits":["E1.12"]}},
-    "E1.13":{"status":"partial","evidence":["EV-APP-SHELL","EV-HOME-MODEL-OWNER","EV-HOME-DURABLE-REFRESH","EV-FULL-UI-NAVIGATION","EV-FULL-UI-LIBRARY","EV-I18N"],"open":{"id":"OPEN-EXIT-E1.13","description":"Model-wait ownership, Home refresh and the Library shell work; broader continuity and Windows packaged visual acceptance remain open.","targetBuilds":["B1.17"],"targetExits":["E1.13"]}},
+    "E1.13":{"status":"partial","evidence":["EV-APP-SHELL","EV-HOME-MODEL-OWNER","EV-HOME-MODEL-SWITCHER","EV-HOME-DURABLE-REFRESH","EV-FULL-UI-NAVIGATION","EV-FULL-UI-LIBRARY","EV-I18N"],"open":{"id":"OPEN-EXIT-E1.13","description":"Model-wait ownership, Home refresh and the Library shell work; broader continuity and Windows packaged visual acceptance remain open.","targetBuilds":["B1.17"],"targetExits":["E1.13"]}},
     "E1.14":{"status":"partial","evidence":["EV-TOOLCHAIN"],"open":{"id":"OPEN-EXIT-E1.14","description":"Full executable acceptance remains open for Exit E1.14: Packaged core tools are version-pinned, report ready/missing/damaged state, and expose a user-visible repair path without an ordinary job improvising a download.","targetBuilds":["B1.18"],"targetExits":["E1.14"]}},
     "E1.15":{"status":"partial","evidence":["EV-PROVIDER"],"open":{"id":"OPEN-EXIT-E1.15","description":"Full executable acceptance remains open for Exit E1.15: The secret-storage adapter protects a synthetic value outside vault files, SQLite, logs, diagnostics, and backups; P3 proves provider-key integration.","targetBuilds":["B1.19"],"targetExits":["E1.15"]}},
     "E1.16":{"status":"partial","evidence":["EV-ERROR","EV-MODEL-EGRESS-IPC","EV-MODEL-EGRESS-SCHEMA","EV-BACKUP-SAFE-JOB-SUMMARY"],"open":{"id":"OPEN-EXIT-E1.16","description":"Model-egress and Backup summaries use strict errors; broader Job/diagnostic/UI/private-detail/locale coverage remains.","targetBuilds":["B1.20"],"targetExits":["E1.16"]}},
@@ -1300,23 +1275,8 @@
         ]
       }
     },
-    "E3.01":{"status":"partial","evidence":["EV-PROVIDER","EV-RUNTIME","EV-PI-PROVIDER-BINDING","EV-MODELS-ERROR-OWNER","EV-MODELS-PROGRESSIVE-UI"],"open":{"id":"OPEN-EXIT-E3.01","description":"Progressive Models repair works on macOS; catalog/help, deletion, DeepSeek Anthropic and packaged BYOK remain.","targetBuilds":["B3.01","B3.03","B3.04"],"targetExits":["E3.01"]}},
-    "E3.02": {
-      "status": "partial",
-      "evidence": [
-        "EV-PROVIDER"
-      ],
-      "open": {
-        "id": "OPEN-EXIT-E3.02",
-        "description": "OpenAI key ingress/rollback is redacted; full packaged exclusion and remaining provider acceptance stay open.",
-        "targetBuilds": [
-          "B3.02"
-        ],
-        "targetExits": [
-          "E3.02"
-        ]
-      }
-    },
+    "E3.01":{"status":"partial","evidence":["EV-PROVIDER","EV-RUNTIME","EV-PI-PROVIDER-BINDING","EV-MODELS-ERROR-OWNER","EV-MODELS-PROGRESSIVE-UI","EV-HOME-MODEL-SWITCHER"],"open":{"id":"OPEN-EXIT-E3.01","description":"Progressive Models repair works on macOS; catalog/help, deletion, DeepSeek Anthropic and packaged BYOK remain.","targetBuilds":["B3.01","B3.03","B3.04"],"targetExits":["E3.01"]}},
+    "E3.02":{"status":"partial","evidence":["EV-PROVIDER"],"open":{"id":"OPEN-EXIT-E3.02","description":"OpenAI key ingress/rollback is redacted; full packaged exclusion and remaining provider acceptance stay open.","targetBuilds":["B3.02"],"targetExits":["E3.02"]}},
     "E3.03": {
       "status": "partial",
       "evidence": ["EV-EGRESS", "EV-MODEL-EGRESS-POLICY", "EV-POLICY", "EV-DESKTOP-SETTING-GUARD", "EV-EGRESS-SERVICE", "EV-EGRESS-PROFILE-BINDING", "EV-EGRESS-RUNTIME-BINDING", "EV-RUNTIME-NONSECRET-BINDING", "EV-JOB-NONSECRET-READINESS", "EV-HOME-AGENT", "EV-PI-INGEST-RETRIEVAL", "EV-MODEL-EGRESS-SCHEMA", "EV-MODEL-EGRESS-APPROVAL-STORE", "EV-MODEL-EGRESS-JOB-RECOVERY", "EV-MODEL-EGRESS-HOME", "EV-MODEL-EGRESS-INGEST", "EV-MODEL-EGRESS-HOME-UI"],
@@ -1910,6 +1870,7 @@
     "EV-HOME-FOLLOWUP": { "kind": "test", "path": "tests/unit/home-agent-conversation-ui.test.ts", "selector": "Home durable Agent conversation UI" },
     "EV-FIRST-HOME-GUIDE": { "kind": "test", "path": "tests/unit/home-agent-conversation-ui.test.ts", "selector": "persists the explicit choice to continue capture-only and does not show the first-Home guide again" },
     "EV-HOME-MODEL-OWNER":{"kind":"test","path":"tests/unit/home-agent-conversation-ui.test.ts","selector":"keeps one missing-model owner in"},
+    "EV-HOME-MODEL-SWITCHER":{"kind":"test","path":"tests/unit/home-agent-conversation-ui.test.ts","selector":"Home model"},
     "EV-HOME-DURABLE-REFRESH":{"kind":"test","path":"tests/unit/home-agent-conversation-ui.test.ts","selector":"refreshes durable Home state when returning from Models"},
     "EV-MODELS-ERROR-OWNER":{"kind":"test","path":"tests/unit/model-settings-error-ui.test.ts","selector":"Models error ownership"},
     "EV-MODELS-PROGRESSIVE-UI":{"kind":"test","path":"tests/unit/model-settings-error-ui.test.ts","selector":"keeps the approved progressive Models structure without exposing routing controls"},
