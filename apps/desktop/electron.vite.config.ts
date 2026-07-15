@@ -47,6 +47,9 @@ export default defineConfig({
   },
   preload: {
     build: {
+      externalizeDeps: {
+        exclude: ["@pige/domain", "@pige/schemas", "zod"]
+      },
       rollupOptions: {
         output: {
           format: "cjs",
@@ -56,7 +59,9 @@ export default defineConfig({
     },
     resolve: {
       alias: {
-        "@pige/contracts": alias("../../packages/contracts/src/index.ts")
+        "@pige/contracts": alias("../../packages/contracts/src/index.ts"),
+        "@pige/domain": alias("../../packages/domain/src/index.ts"),
+        "@pige/schemas": alias("../../packages/schemas/src/index.ts")
       }
     }
   },

@@ -19,6 +19,15 @@ import { getWindowShellOptions } from "../../apps/desktop/src/main/window-shell-
 describe("desktop shell build contract", () => {
   it("uses a CommonJS preload entry compatible with Electron sandboxed preload execution", () => {
     expect(PRELOAD_ENTRY_FILENAME).toBe("index.cjs");
+
+    const buildSource = fs.readFileSync(path.resolve("apps/desktop/electron.vite.config.ts"), "utf8");
+    const preloadConfig = buildSource.slice(
+      buildSource.indexOf("preload: {"),
+      buildSource.indexOf("renderer: {")
+    );
+    expect(preloadConfig).toContain('exclude: ["@pige/domain", "@pige/schemas", "zod"]');
+    expect(preloadConfig).toContain('"@pige/schemas": alias("../../packages/schemas/src/index.ts")');
+    expect(preloadConfig).toContain('"@pige/domain": alias("../../packages/domain/src/index.ts")');
   });
 
   it("keeps the PDF parser worker build name aligned with its runtime URL", () => {
