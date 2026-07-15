@@ -741,8 +741,8 @@
     "PIGE-JOB-006":{"status":"partial","evidence":["EV-CAPTURE","EV-HOME-AGENT","EV-HOME-FOLLOWUP","EV-DATASET-QUERY-DURABILITY","EV-DATASET-QUERY-INTEGRITY","EV-DATASET-TIMELINE-RESTORE"],"open":{"id":"OPEN-REQ-PIGE-JOB-006","description":"Dataset result restart and checksum rejection work; compaction, cross-process kill/reopen, and packaged history proof remain.","targetBuilds":["B7.08","B7.09"],"targetExits":["E7.03","E7.04"]}},
     "PIGE-JOB-007":{"status":"partial","evidence":["EV-JOB-STATUS","EV-JOB-WAIT","EV-JOB-CANCEL","EV-HOME-UI","EV-HOME-FOLLOWUP","EV-SOURCE-WAIT-STATUS","EV-SOURCE-WAIT-RACE","EV-ACTIVITY-UNDO","EV-MODEL-EGRESS-HOME-UI"],"open":{"id":"OPEN-REQ-PIGE-JOB-007","description":"Preserved-source model wait and exact model-egress confirmation each have one status owner/action; broader Activity, progress, non-Agent cancel, and Permission Broker UI remain.","targetBuilds":["B2.10","B2.12"],"targetExits":["E2.09"]}},
     "PIGE-JOB-008":{"status":"verified","evidence":["EV-DURABLE-VOCAB"]},
-    "PIGE-API-001":{"status":"verified","evidence":["EV-BOUNDARY"]},
-    "PIGE-API-002":{"status":"partial","evidence":["EV-ERROR","EV-PI-TERMINAL-MISSING","EV-MODEL-EGRESS-IPC","EV-MODEL-EGRESS-SCHEMA","EV-BACKUP-SAFE-JOB-SUMMARY"],"open":{"id":"OPEN-REQ-PIGE-API-002","description":"Model-egress and Backup summaries use strict typed errors; complete service, diagnostics and UI adoption remains.","targetBuilds":["B1.20"],"targetExits":["E1.16"]}},
+    "PIGE-API-001":{"status":"verified","evidence":["EV-BOUNDARY","EV-LIBRARY-SEARCH-IPC"]},
+    "PIGE-API-002":{"status":"partial","evidence":["EV-ERROR","EV-PI-TERMINAL-MISSING","EV-MODEL-EGRESS-IPC","EV-MODEL-EGRESS-SCHEMA","EV-BACKUP-SAFE-JOB-SUMMARY","EV-LIBRARY-SEARCH-IPC"],"open":{"id":"OPEN-REQ-PIGE-API-002","description":"Model-egress, Backup, and Library Search use strict typed errors; complete service, diagnostics and UI adoption remains.","targetBuilds":["B1.20"],"targetExits":["E1.16"]}},
     "PIGE-DB-001":{"status":"verified","evidence":["EV-DB-REBUILD","EV-DB-EXTERNAL-EDIT","EV-INDEX-REBUILD-WORKER"]},
     "PIGE-DB-002":{"status":"partial","evidence":["EV-DB-DRIVER"],"open":{"id":"OPEN-REQ-PIGE-DB-002","description":"Schema and migration coverage for graph, job, chunk, memory, and rebuild-status domains remains open.","targetBuilds":["B4.01"],"targetExits":["E4.05"]}},
     "PIGE-DATA-001": {
@@ -940,112 +940,13 @@
         ]
       }
     },
-    "PIGE-PROMPT-001": {
-      "status": "partial",
-      "evidence": ["EV-AGENT-INGEST", "EV-HOME-AGENT", "EV-PI-INGEST-RETRIEVAL", "EV-UNTRUSTED-SOURCE-BOUNDARY", "EV-UNTRUSTED-OUTPUT-SCHEMA"],
-      "open": {
-        "id": "OPEN-REQ-PIGE-PROMPT-001",
-        "description": "Public ingest, Home retrieval, and bounded ingest related-evidence envelopes are executable; remaining tool adversarial and persisted Broker coverage stays open.",
-        "targetBuilds": [
-          "B5.11"
-        ],
-        "targetExits": [
-          "E5.03"
-        ]
-      }
-    },
-    "PIGE-PROMPT-002": {
-      "status": "partial",
-      "evidence": [
-        "EV-POLICY"
-      ],
-      "open": {
-        "id": "OPEN-REQ-PIGE-PROMPT-002",
-        "description": "Complete owning-service enforcement for every Agent-affecting policy field remains open.",
-        "targetBuilds": [
-          "B1.12"
-        ],
-        "targetExits": [
-          "E1.06"
-        ]
-      }
-    },
-    "PIGE-CONTEXT-001": {
-      "status": "partial",
-      "evidence": ["EV-CONTEXT", "EV-AGENT-EVIDENCE-REVISION", "EV-HOME-AGENT", "EV-PI-INGEST-RETRIEVAL", "EV-DATASET-QUERY-SERVICE", "EV-DATASET-QUERY-DRIFT-AUDIT"],
-      "open": {
-        "id": "OPEN-REQ-PIGE-CONTEXT-001",
-        "description": "Home, bounded ingest retrieval, and one bound Dataset-query path are integrated; Note Agent, mixed-source selection, memory, and compaction remain.",
-        "targetBuilds": [
-          "B6.04"
-        ],
-        "targetExits": [
-          "E6.03"
-        ]
-      }
-    },
-    "PIGE-CONTEXT-002": {
-      "status": "partial",
-      "evidence": ["EV-CONTEXT", "EV-HOME-AGENT", "EV-PI-INGEST-RETRIEVAL", "EV-DATASET-QUERY-SERVICE", "EV-DATASET-QUERY-DURABILITY", "EV-DATASET-QUERY-INTEGRITY"],
-      "open": {
-        "id": "OPEN-REQ-PIGE-CONTEXT-002",
-        "description": "Home, bounded ingest retrieval, and exact Dataset preview/citation packs are integrated; Note Agent, mixed-source selection, memory, and compaction remain.",
-        "targetBuilds": [
-          "B6.04"
-        ],
-        "targetExits": [
-          "E6.03"
-        ]
-      }
-    },
-    "PIGE-EVAL-001": {
-      "status": "verified",
-      "evidence": [
-        "EV-AGENT-INGEST-EVAL",
-        "EV-FIXTURE-MANIFEST",
-        "EV-UNTRUSTED-SOURCE-BOUNDARY",
-        "EV-UNTRUSTED-OUTPUT-SCHEMA"
-      ]
-    },
-    "PIGE-EVAL-002": {
-      "status": "partial",
-      "evidence": [
-        "EV-LOW-CONFIDENCE",
-        "EV-PROPOSAL"
-      ],
-      "open": {
-        "id": "OPEN-REQ-PIGE-EVAL-002",
-        "description": "Home same-Job citation/schema repair and typed non-progress incompatibility work. Legacy agent_ingest repair, durable mid-repair recovery, broader uncertainty preservation/abstention, and true-exception fixtures remain open.",
-        "targetBuilds": [
-          "B3.07",
-          "B3.11"
-        ],
-        "targetExits": [
-          "E3.05",
-          "E3.06"
-        ]
-      }
-    },
-    "PIGE-EVAL-003": {
-      "status": "partial",
-      "evidence": [
-        "EV-SAFE-AUTO-APPLY",
-        "EV-LOW-CONFIDENCE"
-      ],
-      "open": {
-        "id": "OPEN-REQ-PIGE-EVAL-003",
-        "description": "Complete recovery eligibility and exceptional-boundary matrix remain open.",
-        "targetBuilds": [
-          "B3.07",
-          "B3.08",
-          "B3.09"
-        ],
-        "targetExits": [
-          "E3.04",
-          "E3.05"
-        ]
-      }
-    },
+    "PIGE-PROMPT-001":{"status":"partial","evidence":["EV-AGENT-INGEST","EV-HOME-AGENT","EV-PI-INGEST-RETRIEVAL","EV-UNTRUSTED-SOURCE-BOUNDARY","EV-UNTRUSTED-OUTPUT-SCHEMA"],"open":{"id":"OPEN-REQ-PIGE-PROMPT-001","description":"Public ingest, Home retrieval, and bounded ingest related-evidence envelopes are executable; remaining tool adversarial and persisted Broker coverage stays open.","targetBuilds":["B5.11"],"targetExits":["E5.03"]}},
+    "PIGE-PROMPT-002":{"status":"partial","evidence":["EV-POLICY"],"open":{"id":"OPEN-REQ-PIGE-PROMPT-002","description":"Complete owning-service enforcement for every Agent-affecting policy field remains open.","targetBuilds":["B1.12"],"targetExits":["E1.06"]}},
+    "PIGE-CONTEXT-001":{"status":"partial","evidence":["EV-CONTEXT","EV-AGENT-EVIDENCE-REVISION","EV-HOME-AGENT","EV-PI-INGEST-RETRIEVAL","EV-DATASET-QUERY-SERVICE","EV-DATASET-QUERY-DRIFT-AUDIT"],"open":{"id":"OPEN-REQ-PIGE-CONTEXT-001","description":"Home, bounded ingest retrieval, and one bound Dataset-query path are integrated; Note Agent, mixed-source selection, memory, and compaction remain.","targetBuilds":["B6.04"],"targetExits":["E6.03"]}},
+    "PIGE-CONTEXT-002":{"status":"partial","evidence":["EV-CONTEXT","EV-HOME-AGENT","EV-PI-INGEST-RETRIEVAL","EV-DATASET-QUERY-SERVICE","EV-DATASET-QUERY-DURABILITY","EV-DATASET-QUERY-INTEGRITY"],"open":{"id":"OPEN-REQ-PIGE-CONTEXT-002","description":"Home, bounded ingest retrieval, and exact Dataset preview/citation packs are integrated; Note Agent, mixed-source selection, memory, and compaction remain.","targetBuilds":["B6.04"],"targetExits":["E6.03"]}},
+    "PIGE-EVAL-001":{"status":"verified","evidence":["EV-AGENT-INGEST-EVAL","EV-FIXTURE-MANIFEST","EV-UNTRUSTED-SOURCE-BOUNDARY","EV-UNTRUSTED-OUTPUT-SCHEMA"]},
+    "PIGE-EVAL-002":{"status":"partial","evidence":["EV-LOW-CONFIDENCE","EV-PROPOSAL"],"open":{"id":"OPEN-REQ-PIGE-EVAL-002","description":"Home same-Job citation/schema repair and typed non-progress incompatibility work. Legacy agent_ingest repair, durable mid-repair recovery, broader uncertainty preservation/abstention, and true-exception fixtures remain open.","targetBuilds":["B3.07","B3.11"],"targetExits":["E3.05","E3.06"]}},
+    "PIGE-EVAL-003":{"status":"partial","evidence":["EV-SAFE-AUTO-APPLY","EV-LOW-CONFIDENCE"],"open":{"id":"OPEN-REQ-PIGE-EVAL-003","description":"Complete recovery eligibility and exceptional-boundary matrix remain open.","targetBuilds":["B3.07","B3.08","B3.09"],"targetExits":["E3.04","E3.05"]}},
     "PIGE-EVAL-004": {
       "status": "partial",
       "evidence": ["EV-RETRIEVAL", "EV-DB-LINKS", "EV-RETRIEVAL-REGRESSION-GOLDEN", "EV-RETRIEVAL-REGRESSION-REPORT"],
@@ -1061,7 +962,7 @@
       }
     },
     "PIGE-SEARCH-001":{"status":"partial","evidence":["EV-RETRIEVAL","EV-HOME-AGENT","EV-HOME-UI"],"open":{"id":"OPEN-REQ-PIGE-SEARCH-001","description":"Bounded retrieval works; optional Pi use, empty-vault chat, vault-only insufficiency, 10k, regression, and packaged UI remain open.","targetBuilds":["B6.01","B6.02","B6.03"],"targetExits":["E6.01","E6.04"]}},
-    "PIGE-SEARCH-002":{"status":"verified","evidence":["EV-CJK","EV-LIBRARY","EV-LOCAL-SCALE"]},
+    "PIGE-SEARCH-002":{"status":"verified","evidence":["EV-CJK","EV-LIBRARY","EV-LOCAL-SCALE","EV-LIBRARY-SEARCH-SERVICE","EV-LIBRARY-SEARCH-IPC","EV-LIBRARY-SEARCH-UI"]},
     "PIGE-SEARCH-003":{"status":"partial","evidence":["EV-RAG-CHUNKS","EV-DB-CHUNKS","EV-LOCAL-SCALE"],"open":{"id":"OPEN-REQ-PIGE-SEARCH-003","description":"Deterministic metadata-only chunks and rebuild/10k lexical scale work; embedding lifecycle, vectors, semantic retrieval/reranking and packaged platforms remain.","targetBuilds":["B6.05","B6.06","B6.07"],"targetExits":["E6.02"]}},
     "PIGE-MEM-001":{"status":"planned","plannedTarget":"Remember, provenance, inspect, disable, delete, export, backup, and secret-scan integration tests."},
     "PIGE-BACKUP-001":{"status":"partial","evidence":["EV-BACKUP","EV-BACKUP-DURABLE-COVERAGE","EV-BACKUP-MANIFEST-TRUTH"],"open":{"id":"OPEN-REQ-PIGE-BACKUP-001","description":"Registered roots and truthful schema ranges are covered; external managed roots, include controls and complete memory/conversation fixtures remain.","targetBuilds":["B9.02"],"targetExits":["E9.01"]}},
@@ -1155,7 +1056,7 @@
     "PIGE-DOC-005":{"status":"verified","evidence":["EV-DOCQUALITY","EV-DOCQUALITY-INDEPENDENT"]},
     "PIGE-UI-001":{"status":"partial","evidence":["EV-RENDERER","EV-READER-RESOURCE-SAFETY","EV-RENDERER-NAVIGATION-GUARD","EV-FULL-UI-RESPONSIVE"],"open":{"id":"OPEN-REQ-PIGE-UI-001","description":"Source-preserving editing, IME, long-page budget and external-conflict UI tests remain open.","targetBuilds":["B6.08","B6.13"],"targetExits":["E6.05","E6.08"]}},
     "PIGE-UI-002":{"status":"planned","plannedTarget":"Complete accessibility, final UI Design review and real macOS/Windows visual equivalence."},
-    "PIGE-UI-003":{"status":"partial","evidence":["EV-APP-SHELL","EV-FIRST-HOME-GUIDE","EV-HOME-MODEL-OWNER","EV-HOME-MODEL-SWITCHER","EV-HOME-DURABLE-REFRESH","EV-HOME-ENTER","EV-DATASET-QUERY-UI","EV-DATASET-TIMELINE-RESTORE","EV-KNOWLEDGE-TREE-IPC","EV-KNOWLEDGE-TREE-UI","EV-FULL-UI-RESPONSIVE","EV-FULL-UI-NAVIGATION","EV-FULL-UI-LIBRARY","EV-FULL-UI-SETTINGS","EV-UI-WINDOW-SHELL"],"open":{"id":"OPEN-REQ-PIGE-UI-003","description":"Production shell/macOS review work; unavailable UI proves no capability; capability and Windows qualification remain.","targetBuilds":["B1.03","B1.07","B1.08","B1.09","B1.17"],"targetExits":["E1.02","E1.11","E1.13"]}},
+    "PIGE-UI-003":{"status":"partial","evidence":["EV-APP-SHELL","EV-FIRST-HOME-GUIDE","EV-HOME-MODEL-OWNER","EV-HOME-MODEL-SWITCHER","EV-HOME-DURABLE-REFRESH","EV-HOME-ENTER","EV-DATASET-QUERY-UI","EV-DATASET-TIMELINE-RESTORE","EV-KNOWLEDGE-TREE-IPC","EV-KNOWLEDGE-TREE-UI","EV-FULL-UI-RESPONSIVE","EV-FULL-UI-NAVIGATION","EV-FULL-UI-LIBRARY","EV-FULL-UI-SETTINGS","EV-UI-WINDOW-SHELL","EV-LIBRARY-SEARCH-UI"],"open":{"id":"OPEN-REQ-PIGE-UI-003","description":"Production shell/macOS review work; unavailable UI proves no capability; capability and Windows qualification remain.","targetBuilds":["B1.03","B1.07","B1.08","B1.09","B1.17"],"targetExits":["E1.02","E1.11","E1.13"]}},
     "PIGE-UI-004":{"status":"planned","plannedTarget":"Remaining Knowledge Tree density/scale, compact-platform, assistive-technology, and signed packaged visual acceptance."},
     "PIGE-UI-005":{"status":"planned","plannedTarget":"Note Agent local-copy, auto-apply, Activity/Undo, and exception tests."},
     "PIGE-UI-006":{"status":"partial","evidence":["EV-READER-RELATED","EV-READER-UI","EV-FULL-UI-LIBRARY","EV-FULL-UI-RESPONSIVE"],"open":{"id":"OPEN-REQ-PIGE-UI-006","description":"Library opens Reader and related context in governed panes; source metadata, typed edit/copy/reveal and unavailable-graph degradation remain open.","targetBuilds":["B6.08","B6.09"],"targetExits":["E6.05","E6.07"]}},
@@ -1201,13 +1102,13 @@
     "E1.07":{"status":"partial","evidence":["EV-DIAGNOSTICS","EV-DIAG-EXPORT-CORE","EV-DIAG-EXPORT-WORKER","EV-DIAG-EXPORT-CANCEL-IPC","EV-DIAG-EXPORT-CANCEL-UI","EV-DIAG-EXPORT-WORKER-SMOKE"],"open":{"id":"OPEN-EXIT-E1.07","description":"Bounded redacted local preview/export/cancel is executable; optional reviewed content, progress/restart semantics, and broader platform/path proof remain open.","targetBuilds":["B1.14"],"targetExits":["E1.07"]}},
     "E1.08":{"status":"partial","evidence":["EV-VAULT-RESET","EV-DB-REBUILD"],"open":{"id":"OPEN-EXIT-E1.08","description":"Full executable acceptance remains open for Exit E1.08: Deleting `.pige/db/` does not delete user-owned files, and the empty migration/rebuild path succeeds.","targetBuilds":["B1.15"],"targetExits":["E1.08"]}},
     "E1.09":{"status":"partial","evidence":["EV-VAULT-RESET","EV-DB-REBUILD"],"open":{"id":"OPEN-EXIT-E1.09","description":"Full executable acceptance remains open for Exit E1.09: Reset Local Database cannot delete Markdown knowledge, source records/assets, memory, conversations, proposals, operations, or trash.","targetBuilds":["B1.16"],"targetExits":["E1.09"]}},
-    "E1.10":{"status":"verified","evidence":["EV-BOUNDARY"]},
+    "E1.10":{"status":"verified","evidence":["EV-BOUNDARY","EV-LIBRARY-SEARCH-IPC"]},
     "E1.11":{"status":"partial","evidence":["EV-APP-SHELL","EV-FULL-UI-NAVIGATION","EV-FULL-UI-RESPONSIVE","EV-FULL-UI-LIBRARY","EV-I18N","EV-UI-WINDOW-SHELL"],"open":{"id":"OPEN-EXIT-E1.11","description":"Mac-reviewed shell/catalogs; Windows qualification and continuity remain.","targetBuilds":["B1.07","B1.08","B1.09"],"targetExits":["E1.11"]}},
     "E1.12":{"status":"partial","evidence":["EV-RUNTIME","EV-PROVIDER"],"open":{"id":"OPEN-EXIT-E1.12","description":"Full executable acceptance remains open for Exit E1.12: One default model profile can be stored and resolved through the adapter contract without exposing ineffective Advanced/Fast controls.","targetBuilds":["B1.13"],"targetExits":["E1.12"]}},
-    "E1.13":{"status":"partial","evidence":["EV-APP-SHELL","EV-HOME-MODEL-OWNER","EV-HOME-MODEL-SWITCHER","EV-HOME-DURABLE-REFRESH","EV-FULL-UI-NAVIGATION","EV-FULL-UI-LIBRARY","EV-I18N"],"open":{"id":"OPEN-EXIT-E1.13","description":"Model-wait ownership, Home refresh and the Library shell work; broader continuity and Windows packaged visual acceptance remain open.","targetBuilds":["B1.17"],"targetExits":["E1.13"]}},
+    "E1.13":{"status":"partial","evidence":["EV-APP-SHELL","EV-HOME-MODEL-OWNER","EV-HOME-MODEL-SWITCHER","EV-HOME-DURABLE-REFRESH","EV-FULL-UI-NAVIGATION","EV-FULL-UI-LIBRARY","EV-LIBRARY-SEARCH-UI","EV-I18N"],"open":{"id":"OPEN-EXIT-E1.13","description":"Model-wait ownership, Home refresh and the Library shell work; broader continuity and Windows packaged visual acceptance remain open.","targetBuilds":["B1.17"],"targetExits":["E1.13"]}},
     "E1.14":{"status":"partial","evidence":["EV-TOOLCHAIN"],"open":{"id":"OPEN-EXIT-E1.14","description":"Full executable acceptance remains open for Exit E1.14: Packaged core tools are version-pinned, report ready/missing/damaged state, and expose a user-visible repair path without an ordinary job improvising a download.","targetBuilds":["B1.18"],"targetExits":["E1.14"]}},
     "E1.15":{"status":"partial","evidence":["EV-PROVIDER"],"open":{"id":"OPEN-EXIT-E1.15","description":"Full executable acceptance remains open for Exit E1.15: The secret-storage adapter protects a synthetic value outside vault files, SQLite, logs, diagnostics, and backups; P3 proves provider-key integration.","targetBuilds":["B1.19"],"targetExits":["E1.15"]}},
-    "E1.16":{"status":"partial","evidence":["EV-ERROR","EV-MODEL-EGRESS-IPC","EV-MODEL-EGRESS-SCHEMA","EV-BACKUP-SAFE-JOB-SUMMARY"],"open":{"id":"OPEN-EXIT-E1.16","description":"Model-egress and Backup summaries use strict errors; broader Job/diagnostic/UI/private-detail/locale coverage remains.","targetBuilds":["B1.20"],"targetExits":["E1.16"]}},
+    "E1.16":{"status":"partial","evidence":["EV-ERROR","EV-MODEL-EGRESS-IPC","EV-MODEL-EGRESS-SCHEMA","EV-BACKUP-SAFE-JOB-SUMMARY","EV-LIBRARY-SEARCH-IPC"],"open":{"id":"OPEN-EXIT-E1.16","description":"Model-egress, Backup, and Library Search use strict errors; broader Job/diagnostic/UI/private-detail/locale coverage remains.","targetBuilds":["B1.20"],"targetExits":["E1.16"]}},
     "E1.17":{"status":"partial","evidence":["EV-STABLE-ID","EV-SYNC-CONFLICT"],"open":{"id":"OPEN-EXIT-E1.17","description":"All durable ID rename/move fixtures and complete conflict/tombstone metadata remain open.","targetBuilds":["B1.21"],"targetExits":["E1.17"]}},
     "E1.18":{"status":"partial","evidence":["EV-RUNTIME","EV-RUNTIME-CONTRACT","EV-OCR-ADAPTER"],"open":{"id":"OPEN-EXIT-E1.18","description":"Tool, parser, OCR, and RAG adapter parity and degraded-state tests remain open.","targetBuilds":["B1.22"],"targetExits":["E1.18"]}},
     "E1.19":{"status":"partial","evidence":["EV-DIAGNOSTICS","EV-DIAG-ROTATION","EV-DIAG-RETENTION","EV-DIAG-PERSISTENCE-SAFETY","EV-NO-TELEMETRY"],"open":{"id":"OPEN-EXIT-E1.19","description":"Crash-hook review, broader-store coverage, recovery correlation, and user-clear semantics remain open.","targetBuilds":["B1.23"],"targetExits":["E1.19"]}},
@@ -1362,7 +1263,7 @@
       "status": "planned",
       "plannedTarget": "One durable Home Job autonomously repairs rejected candidates/tool inputs, streams Pi-owned provisional answers without a reproduction-only provider turn, returns distinct hard blocks, and passes signed packaged macOS/Windows BYOK proof."
     },
-    "E4.01":{"status":"partial","evidence":["EV-CJK","EV-LIBRARY","EV-LOCAL-SCALE"],"open":{"id":"OPEN-EXIT-E4.01","description":"10,000-page warm Library/lexical budgets work; packaged cross-platform and broader metadata/relationship parity remain.","targetBuilds":["B4.02","B4.03","B4.06"],"targetExits":["E4.01"]}},
+    "E4.01":{"status":"partial","evidence":["EV-CJK","EV-LIBRARY","EV-LOCAL-SCALE","EV-LIBRARY-SEARCH-SERVICE","EV-LIBRARY-SEARCH-IPC","EV-LIBRARY-SEARCH-UI"],"open":{"id":"OPEN-EXIT-E4.01","description":"Active-vault Library UI/IPC and 10,000-page warm lexical budgets work; packaged platforms and broader metadata/relationship parity remain.","targetBuilds":["B4.02","B4.03","B4.06"],"targetExits":["E4.01"]}},
     "E4.02": {
       "status": "verified",
       "evidence": ["EV-DB-REBUILD", "EV-INDEX-REBUILD-WORKER"]
@@ -1845,6 +1746,9 @@
     "EV-MODEL-EGRESS-HOME-UI": { "kind": "test", "path": "tests/unit/home-agent-conversation-ui.test.ts", "selector": "restores one bounded model-egress prompt and resumes the exact live Job once" },
     "EV-MODEL-EGRESS-IPC": { "kind": "test", "path": "tests/unit/desktop-shell-contract.test.ts", "selector": "exposes one-use Model Egress decisions through strict main and preload boundaries" },
     "EV-LIBRARY": { "kind": "test", "path": "tests/unit/library-service.test.ts", "selector": "lists pages through the local database index when available" },
+    "EV-LIBRARY-SEARCH-SERVICE":{"kind":"test","path":"tests/unit/retrieval-service.test.ts","selector":"retrieval service"},
+    "EV-LIBRARY-SEARCH-IPC":{"kind":"test","path":"tests/unit/retrieval-search-ipc.test.ts","selector":"retrieval.search IPC boundary"},
+    "EV-LIBRARY-SEARCH-UI":{"kind":"test","path":"tests/unit/full-ui-library.test.ts","selector":"full UI Library"},
     "EV-DB-REBUILD": { "kind": "test", "path": "tests/unit/local-database-service.test.ts", "selector": "rebuilds after database deletion without losing Markdown knowledge" },
     "EV-INDEX-REBUILD-WORKER": { "kind": "test", "path": "tests/unit/jobs-service.test.ts", "selector": "cooperatively cancels a running index worker without changing durable Markdown" },
     "EV-DB-EXTERNAL-EDIT": { "kind": "test", "path": "tests/unit/local-database-service.test.ts", "selector": "detects external Markdown edits and refreshes the FTS index" },

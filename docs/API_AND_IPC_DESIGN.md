@@ -590,15 +590,19 @@ Events:
 
 - `agent.turnDraft`
 
-Retrieval DTOs and internal context-pack refs must follow `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`. Renderer-facing responses show grounded answers, ranked results, snippets, citations, and degraded-search state; they do not expose raw prompts, context budgets, full retrieved bodies, raw vector data, or secret-bearing policy details.
+Library `retrieval.search` accepts active-vault scope, at most 320 Unicode code points,
+optional limit and page types. Preload/main validate both and fence active
+vault before/after work and on result. Responses bound IDs, relative Markdown paths,
+snippets and match reasons; body-free errors exclude bodies, absolute paths, vector/policy
+details and uncalibrated scores. Other DTOs follow
+`docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`.
 
-Current renderer uses schema-v1 `agent.submitTurn`. Optional client/conversation/tail IDs
-bind follow-up; exact retry adopts its event/Job, while changed input/binding or stale tail
-fails pre-Job/Pi. `agent.conversation` returns at most 100 bounded messages, tail,
-follow-up eligibility, and safe latest Job state; Home requests 24. Durable results include
-conversation/tail IDs. One file is preserved; no model waits/resumes without fallback.
-Responses exclude bodies, paths, prompts, credentials, endpoints, and raw errors. Legacy
-handlers stay readable; save-answer/multi-attachment recovery remain open.
+Schema-v1 `agent.submitTurn` binds optional client/conversation/tail IDs. Exact retry adopts
+its event/Job; changed input/binding or stale tail fails before Job/Pi. `agent.conversation`
+returns at most 100 bounded messages, tail, follow-up eligibility and safe latest Job; Home
+asks for 24. Results carry conversation/tail IDs, preserve one file and exclude bodies,
+paths, prompts, credentials, endpoints and raw errors. Legacy handlers remain readable;
+save-answer/multi-attachment recovery stays open.
 
 `agent.turnDraft` is a sender-scoped presentation event for an active
 `agent.submitTurn`, not a durable result or raw runtime stream:

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-15T18:03:39Z",
+  "reviewedAt": "2026-07-15T21:04:34Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -31,12 +31,12 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "d9dae1dedbc558d5a647dcc975b8477adcb2cb4f32d3cad139ad76d187fa2dab"
+    "reviewedSha256": "76ef161157e2f8c67cedec2a08f5f072df6644f51058169910c7d0ce804ce677"
   },
   "reviewers": [
     {
-      "reviewerId": "home-model-switcher-independent-review",
-      "task": "macOS-first Home Global Default switcher exact-candidate review",
+      "reviewerId": "library-search-independent-review",
+      "task": "macOS-first Library Search UI and typed retrieval boundary exact-candidate review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -44,44 +44,44 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "UI Design owned and accepted the exact frozen nine-path renderer candidate; Development independently audited the existing typed adapters without changing those bytes. Planning reviewed only owner wording, evidence projection and unchanged statuses."
+      "independence": "Development froze the exact 28-path typed IPC, preload, retrieval and renderer candidate; UI Design independently accepted its exact hashes. Planning changed only existing owner, evidence, semantic and review artifacts, never the frozen Development bytes."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "home-model-switcher-independent-review",
+      "reviewerId": "library-search-independent-review",
       "blockerCount": 0,
-      "summary": "The Home UI owner now locates the accessible Global Default switcher, while the existing Pi and Settings owners retain model registry, runtime and durable authority."
+      "summary": "The Library UI and API owners now locate the complete active-vault search surface and exact typed retrieval boundary; Context Policy retains local-first retrieval authority."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "home-model-switcher-independent-review",
+      "reviewerId": "library-search-independent-review",
       "blockerCount": 0,
-      "summary": "Owners agree that Home changes the machine-local Global Default for new calls, never a per-turn routing role, and preserves fail-closed Send plus capture-only behavior."
+      "summary": "Owners agree on active-vault scope, 320 Unicode code points, preload/main validation, stale-vault fences, bounded IDs/snippets/match reasons and body-free failure without scores or paths."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "home-model-switcher-independent-review",
+      "reviewerId": "library-search-independent-review",
       "blockerCount": 0,
-      "summary": "One exact Home model-switcher selector projects to PIGE-PI-002, PIGE-UI-003 and their existing exits; semantic lock v3 has 1,214 claims and every status remains unchanged."
+      "summary": "Three exact Library Search selectors project to existing API, Search and UI requirements/exits; semantic lock v3 has 1,217 claims and every status remains unchanged."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.7,
-      "reviewerId": "home-model-switcher-independent-review",
+      "reviewerId": "library-search-independent-review",
       "blockerCount": 0,
-      "summary": "The M-level slice reuses one summary, one setDefaultModel adapter and sequenced runtime status; the next integrated freeze owns broader test and package verification."
+      "summary": "The H-level slice has full test, focused, scale, typecheck, build and real macOS Electron evidence; post-bind macOS package/distribution is the next complete node."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "home-model-switcher-independent-review",
+      "reviewerId": "library-search-independent-review",
       "blockerCount": 0,
-      "summary": "No document or decision is added; one Home owner subsection and one evidence selector keep the synchronization inside existing governed budgets."
+      "summary": "No document or decision is added; two owner updates, three selectors and semantic-neutral manifest compression keep every fixed budget green."
     }
   ],
   "verification": [
@@ -93,12 +93,12 @@
     {
       "command": "Exact candidate focused and macOS UI evidence",
       "status": "passed",
-      "evidence": "Development reran 4 files/106 tests, typecheck and build; UI Design supplied macOS Electron evidence and accepted exact 0a557acb/f4f864f8 UI identities."
+      "evidence": "Development ran 113 passed/1 skipped files and 1,298 passed/1 skipped tests, focused 111/1, 10k/100k scale, typecheck, build and real macOS Electron; UI Design accepted exact caad52cb/cb055965 identities."
     },
     {
       "command": "npm run verify:ui-visual && npm run verify:traceability && npm run verify:contracts",
       "status": "passed",
-      "evidence": "The visual contract passes; semantic lock v3/1,214 and CON-001 through CON-004 pass with Requirement, Exit and Phase states unchanged."
+      "evidence": "The visual contract passes; semantic lock v3/1,217 and CON-001 through CON-004 pass with Requirement, Exit and Phase states unchanged."
     },
     {
       "command": "npm run verify:documentation-leanness",
@@ -107,18 +107,18 @@
     }
   ],
   "coordination": {
-    "taskId": "home-model-switcher-20260716",
-    "taskTitle": "Home Global Default model switcher integration",
+    "taskId": "library-search-integration-20260716",
+    "taskTitle": "Library Search UI and typed retrieval boundary integration",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The candidate adds a Home surface over existing typed models.summary, models.setDefaultModel and agent.runtimeStatus ownership; no IPC, schema, dependency, Job, routing role, permission, secret or durable change.",
-    "acknowledgement": "Development froze and independently audited exact 0a557acb/f4f864f8 bytes after UI Design accepted them. Planning bound only the Home owner, acceptance evidence, semantic lock and this recipe without changing the nine paths."
+    "compatibility": "The candidate adds a typed active-vault retrieval.search IPC/schema/preload boundary and Library UI over existing rebuildable retrieval data; no durable schema, migration, dependency, setting, permission, provider, Job or backup/restore change.",
+    "acknowledgement": "Development froze exact caad52cb/cb055965 bytes and UI Design accepted them. Planning bound only existing Library/API owners, acceptance evidence, semantic lock and this recipe without changing the 28 paths."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "The next integrated freeze is the complete full-test, verify and macOS arm64 package/downloaded-distribution node; M-level evidence intentionally avoids repeating those gates here.",
-    "Windows visual qualification remains deferred under macOS-first sequencing and is not claimed by this renderer-only slice.",
-    "Provider catalog/help, deletion, DeepSeek Anthropic and packaged BYOK remain open; the Home control adds no routing role or provider taxonomy."
+    "macOS arm64 package and downloaded-distribution evidence is the next complete H-level node because this slice changes preload build configuration.",
+    "Windows and Linux qualification remains deferred under macOS-first sequencing and is not claimed by this slice.",
+    "Tags search remains localized development/unavailable; queued Privacy, Appearance, Local Capabilities, Activity, Voice and Note Agent UI lanes are excluded."
   ]
 }
