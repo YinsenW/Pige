@@ -237,6 +237,19 @@ export function App(): React.JSX.Element {
     if (refreshId === agentRuntimeRefreshSequence.current) setAgentRuntimeStatus(nextStatus);
   };
 
+  const refreshModels = async (): Promise<ModelProviderSettingsSummary | null> => {
+    const refreshId = ++modelRefreshSequence.current;
+    try {
+      const nextSummary = await window.pige.models.summary();
+      if (refreshId !== modelRefreshSequence.current) return null;
+      setModelSummary(nextSummary);
+      return nextSummary;
+    } catch (caught) {
+      if (refreshId === modelRefreshSequence.current) throw caught;
+      return null;
+    }
+  };
+
   useEffect(() => {
     void window.pige.getHealth().then(setHealth);
     void window.pige.window.current().then(setWindowState);
@@ -246,6 +259,7 @@ export function App(): React.JSX.Element {
     });
     void window.pige.system.toolchainHealth().then(setToolchainHealth);
     void refreshVaultState();
+    void refreshModels().catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -350,13 +364,23 @@ export function App(): React.JSX.Element {
     setToolchainHealth(nextToolchainHealth);
   };
 
-  const refreshModels = async (): Promise<void> => {
-    const refreshId = ++modelRefreshSequence.current;
+  const setHomeDefaultModel = async (modelProfileId: string): Promise<boolean> => {
+    const modelRequestId = ++modelRefreshSequence.current;
     try {
+      await window.pige.models.setDefaultModel({ modelProfileId });
       const nextSummary = await window.pige.models.summary();
-      if (refreshId === modelRefreshSequence.current) setModelSummary(nextSummary);
-    } catch (caught) {
-      if (refreshId === modelRefreshSequence.current) throw caught;
+      if (modelRequestId !== modelRefreshSequence.current) return false;
+      const runtimeRequestId = ++agentRuntimeRefreshSequence.current;
+      const nextRuntimeStatus = await window.pige.agent.runtimeStatus();
+      if (
+        modelRequestId !== modelRefreshSequence.current ||
+        runtimeRequestId !== agentRuntimeRefreshSequence.current
+      ) return false;
+      setModelSummary(nextSummary);
+      setAgentRuntimeStatus(nextRuntimeStatus);
+      return true;
+    } catch {
+      return false;
     }
   };
 
@@ -887,6 +911,7 @@ export function App(): React.JSX.Element {
             activeVault={activeVault}
             captureOnly={onboarding?.state === "capture_only"}
             agentRuntimeStatus={agentRuntimeStatus}
+            modelSummary={modelSummary}
             recentJobs={recentJobs}
             recentActivities={recentActivities}
             activityUndoingId={activityUndoingId}
@@ -907,6 +932,7 @@ export function App(): React.JSX.Element {
             onUndoActivity={undoActivity}
             onHomeStateChanged={refreshVaultState}
             onProposalChanged={refreshVaultState}
+            onSetDefaultModel={setHomeDefaultModel}
             onOpenModels={openModelsFromHome}
             onDismissFirstHome={dismissFirstHomeGuide}
             developmentNotice={developmentNotice?.surface === "home" ? developmentNotice : null}
@@ -2079,6 +2105,7 @@ function HomeComposer(props: {
   readonly activeVault: VaultSummary | undefined;
   readonly captureOnly: boolean;
   readonly agentRuntimeStatus: AgentRuntimeStatus | null;
+  readonly modelSummary: ModelProviderSettingsSummary | null;
   readonly recentJobs: readonly JobSummary[];
   readonly recentActivities: readonly KnowledgeActivitySummary[];
   readonly activityUndoingId: string | null;
@@ -2100,6 +2127,7 @@ function HomeComposer(props: {
   readonly onUndoActivity: (operationId: string) => Promise<void>;
   readonly onHomeStateChanged: () => Promise<void>;
   readonly onProposalChanged: () => Promise<void>;
+  readonly onSetDefaultModel: (modelProfileId: string) => Promise<boolean>;
   readonly onOpenModels: (opener: HTMLButtonElement) => Promise<void>;
   readonly onDismissFirstHome: () => Promise<void>;
   readonly developmentNotice: DevelopmentNotice | null;
@@ -2125,6 +2153,9 @@ function HomeComposer(props: {
   const [openingProposalId, setOpeningProposalId] = useState<string | null>(null);
   const [proposalListExpanded, setProposalListExpanded] = useState(false);
   const [processingListExpanded, setProcessingListExpanded] = useState(false);
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const [modelSwitching, setModelSwitching] = useState(false);
+  const [modelSwitchFailed, setModelSwitchFailed] = useState(false);
   const [proposalOutcome, setProposalOutcome] = useState<ProposalDecisionResult["status"] | null>(null);
   const [proposalDecisionStateUnknown, setProposalDecisionStateUnknown] = useState(false);
   const [proposalErrorMessageKey, setProposalErrorMessageKey] = useState<string | null>(null);
@@ -2153,12 +2184,84 @@ function HomeComposer(props: {
   const proposalFocusReturnId = useRef<string | null>(null);
   const proposalFocusReturnPending = useRef(false);
   const proposalQueueHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  const modelSwitcherRef = useRef<HTMLButtonElement | null>(null);
+  const modelMenuRef = useRef<HTMLDivElement | null>(null);
+  const modelOptionRefs = useRef(new Map<string, HTMLButtonElement>());
   const conversationLoadSequence = useRef(0);
   const handledFileDropClientTurnIdRef = useRef<string | null>(null);
   const activeVaultIdRef = useRef<string | undefined>(props.activeVault?.vaultId);
   const activeAgentDraftRef = useRef<ActiveAgentDraftBinding | null>(null);
   activeVaultIdRef.current = props.activeVault?.vaultId;
   const agentStatusLabel = props.agentRuntimeStatus?.state === "ready" ? props.t("home.agentReady") : props.t("home.captureOnly");
+  const enabledHomeModels = props.modelSummary?.models.filter((model) => model.enabled) ?? [];
+  const selectedHomeModel = enabledHomeModels.find(
+    (model) => model.id === props.modelSummary?.defaultModelProfileId
+  );
+  const selectedHomeModelReady = Boolean(
+    selectedHomeModel &&
+    props.agentRuntimeStatus?.state === "ready" &&
+    props.agentRuntimeStatus.canRunModelJobs &&
+    props.agentRuntimeStatus.defaultModelProfileId === selectedHomeModel.id
+  );
+  const homeModelSendAvailable = props.captureOnly || selectedHomeModelReady;
+  const selectedHomeModelName = selectedHomeModel?.displayName ?? selectedHomeModel?.modelId ?? agentStatusLabel;
+  const homeModelProviders = new Map(
+    (props.modelSummary?.providers ?? []).map((provider) => [provider.id, provider.displayName] as const)
+  );
+
+  const closeModelMenu = (restoreFocus = false): void => {
+    setModelMenuOpen(false);
+    if (restoreFocus) {
+      window.requestAnimationFrame(() => modelSwitcherRef.current?.focus());
+    }
+  };
+
+  const openModelMenu = (): void => {
+    if (enabledHomeModels.length === 0 || modelSwitching) return;
+    setModelSwitchFailed(false);
+    setModelMenuOpen(true);
+    const focusId = selectedHomeModel?.id ?? enabledHomeModels[0]?.id;
+    window.requestAnimationFrame(() => {
+      if (focusId) modelOptionRefs.current.get(focusId)?.focus();
+    });
+  };
+
+  const moveModelOptionFocus = (delta: 1 | -1): void => {
+    const options = enabledHomeModels
+      .map((model) => modelOptionRefs.current.get(model.id))
+      .filter((option): option is HTMLButtonElement => option !== undefined);
+    if (options.length === 0) return;
+    const currentIndex = options.indexOf(document.activeElement as HTMLButtonElement);
+    const nextIndex = currentIndex < 0
+      ? delta === 1 ? 0 : options.length - 1
+      : (currentIndex + delta + options.length) % options.length;
+    options[nextIndex]?.focus();
+  };
+
+  const switchHomeModel = async (modelProfileId: string): Promise<void> => {
+    if (modelSwitching || modelProfileId === selectedHomeModel?.id) {
+      if (modelProfileId === selectedHomeModel?.id) closeModelMenu(true);
+      return;
+    }
+    setModelSwitching(true);
+    setModelSwitchFailed(false);
+    const changed = await props.onSetDefaultModel(modelProfileId);
+    setModelSwitching(false);
+    if (changed) closeModelMenu(true);
+    else setModelSwitchFailed(true);
+  };
+
+  useEffect(() => {
+    if (!modelMenuOpen) return;
+    const dismissOnPointerDown = (event: PointerEvent): void => {
+      if (event.target instanceof Node && !modelMenuRef.current?.contains(event.target) && event.target !== modelSwitcherRef.current) {
+        closeModelMenu(false);
+      }
+    };
+    document.addEventListener("pointerdown", dismissOnPointerDown);
+    return () => document.removeEventListener("pointerdown", dismissOnPointerDown);
+  }, [modelMenuOpen]);
+
   const plannedModelUsage = homeRuntimeModelUsage(props.agentRuntimeStatus);
   const cloudUsageMessageKey = agentRunState === "accepted" || agentRunState === "running"
     ? plannedModelUsage === "cloud" ? "home.cloudSend" : null
@@ -2452,7 +2555,7 @@ function HomeComposer(props: {
   }, [props.activeVault?.vaultId, latestTurn?.jobId, latestTurn?.state]);
 
   const submitHomeInput = async (): Promise<void> => {
-    if (!text.trim() || composerSubmitInFlightRef.current) return;
+    if (!text.trim() || !homeModelSendAvailable || modelSwitching || composerSubmitInFlightRef.current) return;
     composerSubmitInFlightRef.current = true;
     setCaptureError(null);
     setAgentError(null);
@@ -2548,6 +2651,8 @@ function HomeComposer(props: {
     if (
       event.repeat ||
       composerSubmitInFlightRef.current ||
+      !homeModelSendAvailable ||
+      modelSwitching ||
       agentRunState === "accepted" ||
       agentRunState === "running" ||
       !text.trim()
@@ -3242,12 +3347,95 @@ function HomeComposer(props: {
           onKeyDown={handleComposerKeyDown}
         />
         <div className="toolbar">
-          <div
-            className="composer-model-switcher"
-            aria-label={`${props.t("home.modelSwitcher")}: ${agentStatusLabel}`}
-          >
-            <span className={props.agentRuntimeStatus?.state === "ready" ? "model-status-dot connected" : "model-status-dot unavailable"} />
-            <span>{agentStatusLabel}</span>
+          <div className="model-switcher-wrap home-model-switcher-wrap">
+            <button
+              ref={modelSwitcherRef}
+              className="composer-model-switcher model-switcher"
+              type="button"
+              aria-haspopup="listbox"
+              aria-expanded={modelMenuOpen}
+              aria-controls="home-model-menu"
+              aria-label={`${props.t("home.modelSwitcher")}: ${selectedHomeModelName}, ${props.t(selectedHomeModelReady ? "home.modelConnected" : "home.modelUnavailable")}`}
+              disabled={enabledHomeModels.length === 0 || modelSwitching}
+              onClick={() => {
+                if (modelMenuOpen) closeModelMenu(true);
+                else openModelMenu();
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+                event.preventDefault();
+                openModelMenu();
+              }}
+            >
+              <span className={selectedHomeModelReady ? "model-status-dot connected" : "model-status-dot unavailable"} aria-hidden="true" />
+              <span className="model-switcher-name">{selectedHomeModelName}</span>
+              <PigeIcon name="collapse" size={14} />
+            </button>
+            {modelMenuOpen ? (
+              <div
+                ref={modelMenuRef}
+                className="model-menu home-model-menu"
+                id="home-model-menu"
+                role="listbox"
+                aria-label={props.t("home.modelMenu")}
+                aria-busy={modelSwitching}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    closeModelMenu(true);
+                  } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                    event.preventDefault();
+                    moveModelOptionFocus(event.key === "ArrowDown" ? 1 : -1);
+                  }
+                }}
+              >
+                {enabledHomeModels.map((model) => {
+                  const selected = model.id === selectedHomeModel?.id;
+                  const ready = selected && selectedHomeModelReady;
+                  const providerName = homeModelProviders.get(model.providerProfileId);
+                  return (
+                    <button
+                      key={model.id}
+                      ref={(element) => {
+                        if (element) modelOptionRefs.current.set(model.id, element);
+                        else modelOptionRefs.current.delete(model.id);
+                      }}
+                      className="model-option"
+                      type="button"
+                      role="option"
+                      aria-selected={selected}
+                      disabled={modelSwitching}
+                      onClick={() => void switchHomeModel(model.id)}
+                    >
+                      <span
+                        className={ready
+                          ? "model-status-dot connected"
+                          : selected
+                            ? "model-status-dot unavailable"
+                            : "model-status-dot enabled"}
+                        aria-hidden="true"
+                      />
+                      <span className="model-option-copy">
+                        <strong>{model.displayName ?? model.modelId}</strong>
+                        <small>{selected
+                          ? props.t(ready ? "home.modelConnected" : "home.modelUnavailable")
+                          : providerName ?? props.t("models.enabled")}</small>
+                      </span>
+                      <span className="model-option-check" aria-hidden="true">{selected ? "✓" : ""}</span>
+                    </button>
+                  );
+                })}
+                {modelSwitching ? (
+                  <div className="model-menu-status" role="status" aria-live="polite">
+                    {props.t("home.modelSwitching")}
+                  </div>
+                ) : modelSwitchFailed ? (
+                  <div className="model-menu-status error" role="status" aria-live="polite">
+                    {props.t("home.modelSwitchFailed")}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
           <input
             ref={fileInputRef}
@@ -3283,7 +3471,8 @@ function HomeComposer(props: {
             type="button"
             className="composer-send"
             aria-label={props.t("home.send")}
-            disabled={!text.trim() || effectiveAgentRunState === "accepted" || effectiveAgentRunState === "running"}
+            title={!homeModelSendAvailable && !props.captureOnly ? props.t("home.modelUnavailable") : undefined}
+            disabled={!text.trim() || !homeModelSendAvailable || modelSwitching || effectiveAgentRunState === "accepted" || effectiveAgentRunState === "running"}
             onClick={() => void submitHomeInput()}
           >
             <PigeIcon
@@ -4426,7 +4615,7 @@ type ModelSettingsFailure =
 interface ModelSettingsPanelProps {
   readonly busy: boolean;
   readonly modelSummary: ModelProviderSettingsSummary | null;
-  readonly onRefreshModels: () => Promise<void>;
+  readonly onRefreshModels: () => Promise<ModelProviderSettingsSummary | null>;
   readonly onRefreshAgentRuntimeStatus: () => Promise<void>;
   readonly onBusy: (busy: boolean) => void;
   readonly t: (key: string) => string;
