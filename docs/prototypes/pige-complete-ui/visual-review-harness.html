@@ -43,7 +43,7 @@
   <output id="viewportLabel"></output>
   <script>
     const params = new URLSearchParams(location.search);
-    const width = Math.min(1536, Math.max(320, Number(params.get('width')) || 680));
+    const width = Math.min(2560, Math.max(320, Number(params.get('width')) || 700));
     const height = Math.min(1200, Math.max(568, Number(params.get('height')) || 680));
     const route = params.get('route') || '?screen=home';
     const locale = params.get('locale') || '';

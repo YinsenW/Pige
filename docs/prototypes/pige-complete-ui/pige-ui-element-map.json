@@ -523,7 +523,7 @@
       "intent": "Ask about the open note with explicit current-note context.",
       "states": ["empty", "draft", "IME-composing", "ready", "in-flight"],
       "prototype_action": "Supports IME-safe Enter, Shift+Enter, and disabled-empty send.",
-      "layout_contract": "The Note Agent is a focus-contained overlay drawer through 1111 px and a fixed 432 px rail only above 1111 px; opening or closing it never squeezes the Markdown reader below its governed width.",
+      "layout_contract": "The Note Agent is a focus-contained overlay drawer through 1199 px and a 360–440 px resident rail from 1200 px upward, preferring 400 px; opening or closing it expands the outer window first and never squeezes the Markdown reader below 560 px.",
       "production_bridge": "Note Agent submit-turn contract",
       "owner": "Note Agent Service"
     },

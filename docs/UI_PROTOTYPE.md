@@ -164,7 +164,8 @@ Behavior:
 - The note body should never stretch into an unreadably wide line length.
 - On wide screens, the reading column can be centered with side rails for navigation and context.
 - Wide mode places the Note Agent on the right; related notes, backlinks, and sources can share its rail or follow the note when it is closed.
-- Users can hide either rail. Note routing preserves both panel states: at 1112 px or wider, the 280 px Library and 432 px Agent rails remain resident; narrower layouts use independent, Escape-dismissible overlays without horizontal overflow.
+- Users can hide either rail; note routing preserves both states. Below `1200px`, rails
+  are independent, Escape-dismissible overlays.
 - Selection actions should appear near selected text without covering the paragraph being read.
 
 ## 3. Navigation Model
@@ -1477,9 +1478,8 @@ visual-capture matrix. The manifest must not invent behavior absent from this do
 - Body and navigation text use weight `400`; interactive labels and compact headings
   may use `500`; page headings may use `600`. Avoid relying on weight `700` for routine
   hierarchy. Keep letter spacing at `0`; Pige does not use negative tracking.
-- Reading content should normally remain between `640px` and `768px`. Expanded Home
-  dialogue, retrieval, and composer surfaces use a shared `48rem` (`768px`) alignment
-  grid; compact dialogue may use a narrower `480px` to `560px` measure.
+- Markdown prose stays centered, contracts without horizontal scrolling, and never
+  exceeds `720px`.
 
 ### Shape, elevation, and boundaries
 
@@ -1505,9 +1505,11 @@ visual-capture matrix. The manifest must not invent behavior absent from this do
 - Primary toolbar height is `46px`; compact toolbars are `36px`; pane toolbars are
   `40px`. Icon-button hit targets should normally be at least `32px`, and never below
   `28px` in dense desktop contexts.
-- Expanded navigation starts near `240px`, prefers about `272px`, and may grow to
-  `320px` for localized labels or tree depth. It must leave at least `320px` for the
-  active content pane and must be hidden, not squeezed into noise, in Compact Home.
+- Pane widths use min/default/max: Home `360/420/420px`; Library `240/280/320px`;
+  reader `560/720/960px` with a `720px` prose cap; Note Agent `360/400/440px`.
+- Rails add width before shrinking content. Three panes may remain resident at `1200px`,
+  two panes at `832px`; below those thresholds rails become overlays. Only the reader
+  absorbs ultrawide surplus.
 - Navigation and settings rows normally occupy `32` to `36px`; settings rows containing
   descriptions may grow to `64px`. Do not force explanatory text into a compact row.
 - Pane padding is `16px` in narrow windows and `20` to `24px` in expanded workspaces.

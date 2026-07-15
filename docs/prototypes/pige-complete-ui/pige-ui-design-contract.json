@@ -90,13 +90,19 @@
       "settings_row": 64,
       "settings_content": 768,
       "settings_content_top": 64,
-      "home": 400,
+      "home": 420,
       "sidebar": 280,
       "settings_sidebar": 275,
-      "reader": 680,
-      "note_agent": 432,
+      "reader": 720,
+      "note_agent": 400,
       "composer_action": 28,
       "action_gap": 4
+    },
+    "pane_width_ranges_px": {
+      "home": { "min": 360, "default": 420, "max": 420 },
+      "sidebar": { "min": 240, "default": 280, "max": 320 },
+      "reader": { "min": 560, "default": 720, "max": 960, "markdown_content_max": 720 },
+      "note_agent": { "min": 360, "default": 400, "max": 440 }
     }
   },
   "component_rules": [
@@ -112,9 +118,12 @@
     "Pointer focus never creates a permanent blue composer box; keyboard focus retains a #1677d2 native-blue focus-visible ring with 4.56:1 contrast on white and 3:1 or better contrast on every supported adjacent surface.",
     "Settings is a separate stable-size window and must not resize or reflow the main Pige window.",
     "Opening or switching a note preserves the user-owned sidebar state, and switching notes preserves the Note Agent disclosure state; note routing must not silently reopen or collapse either panel.",
-    "With no saved sidebar preference, direct note-family routes default to full three-pane disclosure at 1112 px and above; below 1112 px they start with an unobscured reader and closed overlays.",
-    "At 1112–1439 px the note layout keeps the 280 px sidebar and 432 px Agent rail resident and gives the remaining width to the reader; at 1440 px and above the reader returns to its 680 px reference width.",
-    "At 680–1111 px the reader stays within 680 px with no horizontal document overflow; the sidebar and Note Agent are independent overlays, the Note Agent is closed by default, and Escape dismisses only the active overlay.",
+    "Compact Home is 420 px by default and never grows beyond 420 px; it may compress to 360 px before the desktop window reaches its minimum width.",
+    "Opening or closing a rail preserves the other panes' preferred widths and expands or contracts the outer window first; only viewport pressure may shrink a pane within its governed range or convert a rail to an overlay.",
+    "With no saved sidebar preference, direct note-family routes default to full three-pane disclosure at 1200 px and above; below 1200 px they start with an unobscured reader and closed overlays.",
+    "At 1200–1439 px viewport pressure shrinks the reader from 720 to 560 px first, then the sidebar from 280 to 240 px, then Note Agent from 400 to 360 px; from 1440 px upward it starts at the 280 / 720 / 400 px defaults and assigns additional safe width only to the reader.",
+    "At 680–1199 px the reader remains the primary 720 px-or-narrower surface with no horizontal document overflow; the sidebar and Note Agent are independent overlays, the Note Agent is closed by default, and Escape dismisses only the active overlay.",
+    "On wide and ultrawide displays only the reader may grow materially, up to 960 px; its Markdown prose column remains centered and capped at 720 px, while the sidebar and Note Agent never auto-grow beyond 320 and 440 px.",
     "Enter sends, Shift+Enter inserts a newline, and active IME plus the 80 ms composition-end race cannot send.",
     "Pane disclosure controls expose aria-expanded and an exact aria-controls relationship; when a transition removes the focused control, focus moves to the owning toggle, restored search or node, or newly visible step heading instead of falling to the document body.",
     "Reduced motion removes spatial interpolation without removing state feedback.",
@@ -134,14 +143,16 @@
   ],
   "review": {
     "base_url": "http://127.0.0.1:4174/docs/prototypes/pige-complete-ui/",
-    "viewport_harness": "./visual-review-harness.html?width=680&height=680&route=%3Fscreen%3Dhome",
+    "viewport_harness": "./visual-review-harness.html?width=700&height=680&route=%3Fscreen%3Dhome",
     "locale_stress_harness": "./visual-review-harness.html?width=400&height=760&locale=fr&route=%3Fpanel%3Dprovider-custom%23settings",
     "serve_from": "repository root",
     "viewports": {
       "compact": { "width": 1144, "height": 874 },
       "three_pane": { "width": 1536, "height": 1024 },
       "settings": { "width": 1536, "height": 960 },
-      "narrow_breakpoint_max_width": 679
+      "narrow_breakpoint_max_width": 679,
+      "two_pane_resident_min_width": 832,
+      "three_pane_resident_min_width": 1200
     }
   },
   "screens": [
@@ -220,6 +231,8 @@
     "settings_routes_checked": 16,
     "interaction_flows_checked": 29,
     "responsive_render_checks": 232,
+    "responsive_width_contract_raster_recheck": "pending for 360, 420, 832, 1199, 1200, 1439, 1440 and ultrawide widths",
+    "responsive_width_contract_viewports_px": [360, 420, 832, 1199, 1200, 1439, 1440, 1920, 2560],
     "prototype_baseline_screenshots": 8,
     "accessible_name_routes_checked": 52,
     "tab_order_routes_checked": 52,
@@ -228,7 +241,7 @@
     "native_document_boundary_transitions": 18,
     "native_roving_radio_members_skipped_by_tab": 1,
     "narrow_note_agent_focus_containment_viewports_px": [400, 760],
-    "compact_note_agent_overlay_max_width_px": 1111,
+    "compact_note_agent_overlay_max_width_px": 1199,
     "settings_focus_containment_viewports_px": [400, 760, 1280],
     "settings_in_place_workspace_preservation": true,
     "settings_invoker_focus_return": true,

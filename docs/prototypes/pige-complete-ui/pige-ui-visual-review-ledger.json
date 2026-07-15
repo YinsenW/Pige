@@ -40,11 +40,11 @@
     "navigation_row_height_px": 30,
     "pane_toolbar_height_px": 40,
     "settings_row_height_px": 64,
-    "compact_home_width_px": 400,
+    "compact_home_width_px": 420,
     "sidebar_width_px": 280,
     "settings_sidebar_width_px": 275,
-    "reader_width_px": 680,
-    "note_agent_width_px": 432,
+    "reader_width_px": 720,
+    "note_agent_width_px": 400,
     "composer_radius_px": 22,
     "default_motion_ms": 150,
     "relaxed_motion_ms": 300
@@ -99,7 +99,7 @@
       "Selection toolbar: ArrowLeft, ArrowRight, Home, End move focus without triggering an action",
       "Intermediate Library drawer: Escape closes the drawer and restores focus to the sidebar toggle",
       "Independent Settings surface: Tab and Shift+Tab remain inside the surface and wrap at both ends",
-      "Compact Note Agent at 400 and 760 px: Tab and Shift+Tab remain inside the open drawer; the overlay contract extends through 1111 px",
+      "Compact Note Agent at 400 and 760 px: Tab and Shift+Tab remain inside the open drawer; the responsive overlay contract now extends through 1199 px",
       "Appearance and restore-mode radio groups: arrow keys move and select with one Tab stop",
       "Current-action confirmations: focus starts on the safe deny action and resolves to one focused terminal status",
       "Home and Note Agent model listboxes: ArrowUp and ArrowDown move among models, Escape closes them, and selection reports connected or unavailable truth",
@@ -135,7 +135,27 @@
       "Complete spoken screen-reader announcement and assembled platform text-rendering review."
     ]
   },
+  "responsive_width_contract_2026_07_15": {
+    "status": "implemented_static_and_dom_verified_raster_recheck_open",
+    "home_px": { "min": 360, "default": 420, "max": 420 },
+    "sidebar_px": { "min": 240, "default": 280, "max": 320 },
+    "reader_px": { "min": 560, "default": 720, "max": 960, "markdown_content_max": 720 },
+    "note_agent_px": { "min": 360, "default": 400, "max": 440 },
+    "default_three_pane_total_px": 1400,
+    "minimum_three_pane_total_px": 1160,
+    "two_pane_resident_min_viewport_px": 832,
+    "three_pane_resident_min_viewport_px": 1200,
+    "wide_default_min_viewport_px": 1440,
+    "rules": [
+      "Opening or closing rails changes the outer window first and preserves preferred pane widths.",
+      "At 1200–1439 px resident panes may shrink only within their governed ranges.",
+      "Below 1200 px the reader remains primary and Library and Note Agent become independent overlays.",
+      "Ultrawide surplus may grow only the reader, while Markdown prose remains centered at no more than 720 px."
+    ],
+    "open_evidence": "Equivalent-state current-HTML raster capture and assembled platform text rendering must be rebound after this width-contract change."
+  },
   "measured_browser_evidence": {
+    "status": "historical_before_2026_07_15_width_contract",
     "viewport": { "width": 1280, "height": 720, "device_scale_factor": 2 },
     "compact_home": { "width_px": 400, "height_px": 688, "titlebar_px": 46, "composer_radius_px": 22, "heading": "24px / 30px / 500" },
     "compact_home_processing_at_1144x874": { "window_width_px": 400, "window_height_px": 842, "source_legend_nested_controls": 0, "processing_rows": 7, "expanded_visible_rows": 5, "processing_list_client_height_px": 220, "processing_list_scroll_height_px": 362, "processing_composer_overlap_px": 0, "model_switcher_connected_and_unavailable_states": true },
@@ -218,9 +238,9 @@
       "id": "VR-HOME-COMPACT",
       "route": "?screen=home",
       "viewport": { "width": 1144, "height": 874 },
-      "prototype_geometry": { "window_width_px": 400, "titlebar_height_px": 46, "composer_radius_px": 22 },
+      "prototype_geometry": { "window_width_px": 420, "window_min_width_px": 360, "titlebar_height_px": 46, "composer_radius_px": 22 },
       "checks": {
-        "manual_visual": "passed",
+        "manual_visual": "historical_pass_current_width_raster_pending",
         "semantic_and_keyboard": "passed",
         "raster_overlay": "pending",
         "narrow_window": "passed"
@@ -234,9 +254,9 @@
       "id": "VR-HOME-EXPANDED",
       "route": "?screen=expanded",
       "viewport": { "width": 1144, "height": 874 },
-      "prototype_geometry": { "sidebar_width_px": 280, "home_width_px": 400, "total_content_width_px": 680 },
+      "prototype_geometry": { "sidebar_width_px": 280, "home_width_px": 420, "total_content_width_px": 700 },
       "checks": {
-        "manual_visual": "passed",
+        "manual_visual": "historical_pass_current_width_raster_pending",
         "sidebar_disclosure": "passed",
         "titlebar_sidebar_surface_continuity": "passed",
         "raster_overlay": "pending",
@@ -244,25 +264,25 @@
       },
       "remaining": [
         "Lock sidebar row rhythm, icon optical weight, and titlebar seam with an overlay.",
-        "Keep the verified 400 and 760 px drawer focus containment in regression."
+        "Keep the verified 400 and 760 px focus-containment behavior while rebinding 360–420 px Home geometry."
       ]
     },
     {
       "id": "VR-READER-THREE-PANE",
       "route": "?screen=note&sidebar=1",
       "viewport": { "width": 1536, "height": 1024 },
-      "prototype_geometry": { "sidebar_width_px": 280, "reader_width_px": 680, "note_agent_width_px": 432, "total_content_width_px": 1392 },
+      "prototype_geometry": { "sidebar_width_px": 280, "reader_width_px": 720, "note_agent_width_px": 400, "total_content_width_px": 1400 },
       "checks": {
-        "manual_visual": "passed",
+        "manual_visual": "historical_pass_current_width_raster_pending",
         "independent_left_and_right_rails": "passed",
-        "intermediate_width_sidebar_persistence_at_1144x874": "passed",
+        "intermediate_width_sidebar_overlay_at_1144x874": "implemented_static_current_raster_pending",
         "markdown_and_agent_state": "passed",
         "raster_overlay": "pending",
         "narrow_drawer": "pending"
       },
       "remaining": [
         "Lock Markdown line wrapping, heading baselines, table density, and note-agent composer alignment by overlay.",
-        "Below 1112 px the Library rail and Note Agent degrade to independently controlled drawers; at 1112 px and above the Library rail remains resident when the user leaves it open."
+        "Below 1200 px the Library rail and Note Agent degrade to independently controlled drawers; at 1200 px and above they may remain resident within their governed ranges."
       ]
     },
     {
@@ -378,7 +398,15 @@
     "locale_stress_viewports_px": [[400, 760], [760, 760], [1536, 900]],
     "locale_stress_render_checks": 936,
     "locale_stress_failures": 0,
-    "compact_note_agent_overlay_max_width_px": 1111,
+    "compact_note_agent_overlay_max_width_px": 1199,
+    "current_width_contract_static_checks": {
+      "pane_ranges_present": true,
+      "default_three_pane_total_px": 1400,
+      "minimum_three_pane_total_px": 1160,
+      "two_pane_resident_min_viewport_px": 832,
+      "three_pane_resident_min_viewport_px": 1200,
+      "current_raster_matrix": "pending"
+    },
     "horizontal_overflow_failures": 0,
     "visible_control_clipping_failures": 0,
     "fixed_during_review": [
