@@ -17,6 +17,8 @@ import type {
   CreateVaultRequest,
   DiagnosticsHealth,
   ExportSupportBundleRequest,
+  CancelSupportBundleExportRequest,
+  CancelSupportBundleExportResult,
   HomeAgentAskRequest,
   HomeAgentAskResult,
   JobActionRequest,
@@ -279,7 +281,11 @@ const api: PigeDesktopApi = {
     previewSupportBundle: async (): Promise<SupportBundlePreview> =>
       ipcRenderer.invoke("diagnostics.previewSupportBundle") as Promise<SupportBundlePreview>,
     exportSupportBundle: async (request: ExportSupportBundleRequest): Promise<SupportBundleExportResult> =>
-      ipcRenderer.invoke("diagnostics.exportSupportBundle", request) as Promise<SupportBundleExportResult>
+      ipcRenderer.invoke("diagnostics.exportSupportBundle", request) as Promise<SupportBundleExportResult>,
+    cancelSupportBundleExport: async (
+      request: CancelSupportBundleExportRequest
+    ): Promise<CancelSupportBundleExportResult> =>
+      ipcRenderer.invoke("diagnostics.cancelSupportBundleExport", request) as Promise<CancelSupportBundleExportResult>
   },
   models: {
     summary: async (): Promise<ModelProviderSettingsSummary> =>

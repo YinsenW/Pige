@@ -9,6 +9,7 @@ import { PDF_PARSER_WORKER_ENTRY_NAME } from "./src/shared/pdf-parser-entry";
 import { WEB_EXTRACTOR_WORKER_ENTRY_NAME } from "./src/shared/web-extractor-entry";
 import { DATASET_INGEST_WORKER_ENTRY_NAME } from "./src/shared/dataset-ingest-worker";
 import { DATASET_QUERY_WORKER_ENTRY_NAME } from "./src/shared/dataset-query-worker";
+import { DIAGNOSTICS_EXPORT_WORKER_ENTRY_NAME } from "./src/shared/diagnostics-export-entry";
 
 const alias = (path: string): string => fileURLToPath(new URL(path, import.meta.url));
 
@@ -25,6 +26,7 @@ export default defineConfig({
           "unified-agent-roundtrip-smoke": alias("./src/main/smokes/unified-agent-roundtrip-smoke.ts"),
           [DATASET_INGEST_WORKER_ENTRY_NAME]: alias("./src/main/workers/dataset-ingest-worker.ts"),
           [DATASET_QUERY_WORKER_ENTRY_NAME]: alias("./src/main/workers/dataset-query-worker.ts"),
+          [DIAGNOSTICS_EXPORT_WORKER_ENTRY_NAME]: alias("./src/main/workers/diagnostics-export-worker.ts"),
           [LOCAL_DATABASE_REBUILD_WORKER_ENTRY_NAME]: alias("./src/main/workers/local-database-rebuild-worker.ts"),
           [OFFICE_PARSER_WORKER_ENTRY_NAME]: alias("./src/main/workers/office-parser-worker.ts"),
           [PDF_PAGE_RENDERER_WORKER_ENTRY_NAME]: alias("./src/main/workers/pdf-page-renderer-worker.ts"),

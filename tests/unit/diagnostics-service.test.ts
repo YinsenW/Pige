@@ -7,6 +7,7 @@ import {
   redactDiagnosticText,
   redactPaths
 } from "../../apps/desktop/src/main/services/diagnostics-service";
+import { writeDiagnosticsExportFile } from "../../apps/desktop/src/main/services/diagnostics-export-core";
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
 const tempRoots: string[] = [];
@@ -229,9 +230,16 @@ describe("diagnostics service", () => {
     expect(preview.privacyWarnings.join(" ")).toContain("not uploaded automatically");
   });
 
-  it("exports only bounded redacted local support bundle content", () => {
+  it("exports only bounded redacted local support bundle content", async () => {
     const userDataPath = makeTempRoot();
-    const service = new DiagnosticsService(userDataPath, { maxStringBytes: 256 });
+    const service = new DiagnosticsService(userDataPath, {
+      maxStringBytes: 256,
+      exporter: {
+        write: async ({ outputPath, content }) => ({
+          bytesWritten: writeDiagnosticsExportFile(outputPath, content)
+        })
+      }
+    });
     const opaqueTopLevelMessage = "totally opaque private memory and credential zebra-frost-91";
     service.recordEvent({
       level: "error",
@@ -254,7 +262,7 @@ describe("diagnostics service", () => {
       .join("");
     const preview = service.previewSupportBundle();
     const outputPath = path.join(userDataPath, "support.json");
-    const result = service.exportSupportBundle(outputPath, preview);
+    const result = await service.exportSupportBundle(outputPath, preview);
     const exported = fs.readFileSync(outputPath, "utf8");
 
     expect(result.status).toBe("exported");
@@ -292,6 +300,22 @@ describe("diagnostics service", () => {
       expect(persistedBeforeExport).not.toContain(`"${key}"`);
       expect(exported).not.toContain(`"${key}"`);
     }
+  });
+
+  it("does not record a successful export when the worker fails closed", async () => {
+    const userDataPath = makeTempRoot();
+    const service = new DiagnosticsService(userDataPath, {
+      exporter: {
+        write: async () => {
+          throw new Error("synthetic worker failure");
+        }
+      }
+    });
+    const preview = service.previewSupportBundle();
+
+    await expect(service.exportSupportBundle(path.join(userDataPath, "support.json"), preview)).rejects.toThrow();
+    expect(readEvents(userDataPath).map(({ code }) => code)).not.toContain("diagnostics.exportSupportBundle");
+    expect(fs.existsSync(path.join(userDataPath, "support.json"))).toBe(false);
   });
 
   it("normalizes legacy top-level messages through the same fixed catalog", () => {

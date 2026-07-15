@@ -217,6 +217,15 @@ export interface SupportBundleExportResult {
 
 export interface ExportSupportBundleRequest {
   readonly previewId: string;
+  readonly exportRequestId: string;
+}
+
+export interface CancelSupportBundleExportRequest {
+  readonly exportRequestId: string;
+}
+
+export interface CancelSupportBundleExportResult {
+  readonly status: "cancel_requested" | "not_found";
 }
 
 export interface LocalDatabaseResetResult {
@@ -1190,6 +1199,9 @@ export interface PigeDesktopApi {
     readonly health: () => Promise<DiagnosticsHealth>;
     readonly previewSupportBundle: () => Promise<SupportBundlePreview>;
     readonly exportSupportBundle: (request: ExportSupportBundleRequest) => Promise<SupportBundleExportResult>;
+    readonly cancelSupportBundleExport: (
+      request: CancelSupportBundleExportRequest
+    ) => Promise<CancelSupportBundleExportResult>;
   };
   readonly models: {
     readonly summary: () => Promise<ModelProviderSettingsSummary>;

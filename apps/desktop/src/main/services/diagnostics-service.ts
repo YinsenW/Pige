@@ -1,8 +1,15 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import type { DiagnosticsHealth, SupportBundleExportResult, SupportBundlePreview } from "@pige/contracts";
+import {
+  redactDiagnosticText,
+  redactPaths
+} from "./diagnostics-export-core";
+import type { DiagnosticsExportPort, DiagnosticsExportWriteOptions } from "./diagnostics-export-types";
+import { DiagnosticsExportWorkerService } from "./diagnostics-export-worker-service";
+
+export { redactDiagnosticText, redactPaths } from "./diagnostics-export-core";
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
 const DEFAULT_MAX_APP_EVENT_BYTES = 25 * 1024 * 1024;
@@ -115,6 +122,7 @@ interface DiagnosticsServiceOptions {
   readonly maxEventBytes?: number;
   readonly maxSegmentBytes?: number;
   readonly maxStringBytes?: number;
+  readonly exporter?: DiagnosticsExportPort;
 }
 
 interface PersistedDiagnosticEvent extends DiagnosticEvent {
@@ -135,6 +143,7 @@ export class DiagnosticsService {
   readonly #maxEventBytes: number;
   readonly #maxSegmentBytes: number;
   readonly #maxStringBytes: number;
+  readonly #exporter: DiagnosticsExportPort;
   #currentSegmentBytes: number | undefined;
   #nextExpiryAtMs: number | undefined;
   #storeBytes: number | undefined;
@@ -165,6 +174,7 @@ export class DiagnosticsService {
       options.maxStringBytes ?? DEFAULT_MAX_STRING_BYTES,
       "maxStringBytes"
     );
+    this.#exporter = options.exporter ?? new DiagnosticsExportWorkerService();
   }
 
   health(): DiagnosticsHealth {
@@ -204,9 +214,12 @@ export class DiagnosticsService {
     return preview;
   }
 
-  exportSupportBundle(outputPath: string, preview: SupportBundlePreview): SupportBundleExportResult {
+  async exportSupportBundle(
+    outputPath: string,
+    preview: SupportBundlePreview,
+    options: DiagnosticsExportWriteOptions = {}
+  ): Promise<SupportBundleExportResult> {
     const safeOutputPath = path.resolve(outputPath);
-    fs.mkdirSync(path.dirname(safeOutputPath), { recursive: true });
     const bundle = {
       schemaVersion: 1,
       exportedAt: this.#nowIso(),
@@ -228,8 +241,10 @@ export class DiagnosticsService {
       recentEvents: this.#readRecentEvents()
     };
     const redacted = `${JSON.stringify(redactDiagnosticValue(bundle), null, 2)}\n`;
-    fs.writeFileSync(safeOutputPath, redacted, "utf8");
-    const bytesWritten = Buffer.byteLength(redacted);
+    const { bytesWritten } = await this.#exporter.write({
+      outputPath: safeOutputPath,
+      content: redacted
+    }, options);
     this.recordEvent({
       level: "info",
       code: "diagnostics.exportSupportBundle",
@@ -439,37 +454,6 @@ export class DiagnosticsService {
     }
     return now.toISOString();
   }
-}
-
-export function redactDiagnosticText(input: string): string {
-  return input
-    .replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, "[REDACTED_SECRET]")
-    .replace(/\b(?:sk|rk)-(?:proj-|ant-api\d*-)?[A-Za-z0-9_-]{12,}/g, "[REDACTED_SECRET]")
-    .replace(/\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b/g, "[REDACTED_SECRET]")
-    .replace(/\bAKIA[0-9A-Z]{16}\b/g, "[REDACTED_SECRET]")
-    .replace(/\bxox[baprs]-[A-Za-z0-9-]{12,}\b/g, "[REDACTED_SECRET]")
-    .replace(/Bearer\s+[A-Za-z0-9._~-]+/gi, "Bearer [REDACTED_SECRET]")
-    .replace(/\b(https?:\/\/)[^\s/@:]+:[^\s/@]+@/gi, "$1[REDACTED_SECRET]@")
-    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[REDACTED_EMAIL]")
-    .replace(/(Authorization|Cookie):\s*[^\n\r]+/gi, "$1: [REDACTED_SECRET]")
-    .replace(/(api[_-]?key|access[_-]?token|refresh[_-]?token|token|secret|password)=([^&\s]+)/gi, "$1=[REDACTED_SECRET]")
-    .replace(
-      /(["']?(?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|secret|password)["']?\s*:\s*)["'][^"'\n\r]+["']/gi,
-      "$1\"[REDACTED_SECRET]\""
-    );
-}
-
-export function redactPaths(input: string): string {
-  const home = os.homedir();
-  const escapedHome = escapeRegExp(home);
-  const homeRedacted = input
-    .replace(new RegExp(escapedHome, "g"), "<home>")
-    .replace(/\/Users\/[^/\n\r"]+/g, "<home>")
-    .replace(/\/home\/[^/\n\r"]+/g, "<home>");
-  return homeRedacted.replace(/[A-Z]:\\Users\\[^"\n\r]+/gi, (match) => {
-    const parts = match.split("\\");
-    return ["<home>", ...parts.slice(3)].join("\\");
-  });
 }
 
 function buildSupportBundlePreview(estimatedBytes: number, generatedAt: string): SupportBundlePreview {

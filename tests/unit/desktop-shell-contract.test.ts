@@ -95,6 +95,29 @@ describe("desktop shell build contract", () => {
     }
   });
 
+  it("binds support-bundle cancellation to one active renderer request", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
+    const handler = mainSource.slice(
+      mainSource.indexOf('ipcMain.handle("diagnostics.exportSupportBundle"'),
+      mainSource.indexOf('ipcMain.handle("models.summary"')
+    );
+
+    expect(contractsSource).toContain("readonly exportRequestId: string;");
+    expect(contractsSource).toContain("cancelSupportBundleExport");
+    expect(preloadSource).toContain('ipcRenderer.invoke("diagnostics.cancelSupportBundleExport", request)');
+    expect(handler).toContain("active.senderId !== event.sender.id");
+    expect(handler).toContain("active.senderId === event.sender.id");
+    expect(handler).toContain("active.controller.abort()");
+    expect(handler).toContain('event.sender.once("destroyed", abortOnSenderDestroyed)');
+    expect(handler).toContain("{ signal: controller.signal }");
+    expect(rendererSource).toContain('props.t("maintenance.cancelSupportExport")');
+    expect(rendererSource).toContain("supportBundleCancelRequestRef");
+    expect(rendererSource).toContain("void window.pige.diagnostics.cancelSupportBundleExport");
+  });
+
   it("binds restore apply to the exact preview token across renderer, preload, and main", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");

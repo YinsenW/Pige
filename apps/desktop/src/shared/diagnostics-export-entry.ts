@@ -1,0 +1,2 @@
+export const DIAGNOSTICS_EXPORT_WORKER_ENTRY_NAME = "workers/diagnostics-export-worker";
+export const DIAGNOSTICS_EXPORT_WORKER_ENTRY_RELATIVE_PATH = `./${DIAGNOSTICS_EXPORT_WORKER_ENTRY_NAME}.js`;

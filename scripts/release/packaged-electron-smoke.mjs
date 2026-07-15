@@ -43,6 +43,7 @@ if (distributableBytes > 330_000_000) {
 const requiredEntries = [
   "/out/main/index.js",
   "/out/main/pi-agent-runtime-smoke.js",
+  "/out/main/workers/diagnostics-export-worker.js",
   "/out/main/workers/local-database-rebuild-worker.js",
   "/out/main/workers/office-parser-worker.js",
   "/out/main/workers/pdf-page-renderer-worker.js",
@@ -122,6 +123,9 @@ try {
     PIGE_BUILT_APP_ROOT: extractedRoot
   });
   runNodeSmoke("scripts/verify/local-database-rebuild-worker-smoke.mjs", {
+    PIGE_BUILT_APP_ROOT: extractedRoot
+  });
+  runNodeSmoke("scripts/verify/diagnostics-export-worker-smoke.mjs", {
     PIGE_BUILT_APP_ROOT: extractedRoot
   });
   if (target.nativeSmokeScript) {
@@ -488,7 +492,15 @@ function runNodeSmoke(scriptPath, extraEnvironment) {
     timeout: 60_000,
     maxBuffer: 4 * 1024 * 1024
   });
-  if (result.status !== 0) throw new Error(`${path.basename(scriptPath)} failed with status ${String(result.status)}.`);
+  if (result.status !== 0) {
+    const safeStage = /PIGE_DIAGNOSTICS_EXPORT_WORKER_SMOKE_FAILURE=([a-z_]+)/u.exec(
+      result.stderr ?? ""
+    )?.[1];
+    const stageSuffix = safeStage ? ` at ${safeStage}` : "";
+    throw new Error(
+      `${path.basename(scriptPath)} failed with status ${String(result.status)}${stageSuffix}.`
+    );
+  }
 }
 
 function readApplicationIdentity({ target, appPath, runtimeIdentity }) {

@@ -182,52 +182,23 @@ The summary must not expose secrets or raw source contents.
 
 Support bundle export is user-initiated only.
 
-Default included:
+Defaults include app/platform/locale, vault schema and hashed ID, non-secret settings,
+tool/model health, recent redacted errors/jobs/permissions/lifecycle, database status, and
+crash recovery. Credentials; full notes, sources, conversations, memory, model traffic;
+unsafe output; binaries; and unredacted grants stay excluded. Selected redacted excerpts,
+paths, or Provider metadata require preview review.
 
-- App version, platform, architecture.
-- Locale and selected UI language.
-- Vault schema version and hashed vault ID.
-- Settings scopes summary, excluding secrets.
-- Tool and model asset health summaries.
-- Recent error summaries.
-- Recent job summaries with IDs, states, durations, and error codes.
-- Recent permission decision summaries without secrets.
-- Recent backup/restore/update summaries.
-- Local database migration and rebuild status.
-- Redacted crash recovery records.
-
-Default excluded:
-
-- API keys, tokens, cookies, credentials.
-- Full notes, full source files, full source artifacts.
-- Full conversation history.
-- Full Agent memory.
-- Full prompts and raw model responses.
-- Raw tool stdout/stderr if it may include content.
-- Local model files, parser binaries, package files.
-- Permission grants that reveal sensitive paths unless redacted.
-
-Optional, preview-required inclusions:
-
-- Selected redacted note excerpts.
-- Selected redacted source excerpts.
-- Selected redacted prompt/response snippets.
-- Selected file paths.
-- Selected provider request metadata.
-
-Support bundle UX:
-
-- Show what categories will be included.
-- Show estimated size.
-- Show privacy warning before export.
-- Let user open a preview report.
-- Let user cancel before file creation.
-- Export to a user-selected local path.
-- Do not upload automatically.
-
-Current bundle evidence and excluded/open categories live in acceptance. Preview binding,
-user-selected local export, recursive redaction, and no durable-vault mutation remain the
-stable contract.
+UX shows categories, estimated size, privacy warning, preview, cancel, and a trusted local
+destination; it never uploads. Current B1.14 evidence binds the preview and one
+`exportRequestId` to its sender, then writes at most 2 MiB in a worker limited to 64 MiB
+old-generation and 30 seconds. Main holds the temp descriptor. Existing output binds a
+POSIX held descriptor or closed Windows 2 MiB-bounded stable size+SHA-256 readback;
+recheck precedes rename. Changed bytes fail; equal Windows content may replace; owned
+fds close.
+Unsafe bodies, symlink/root drift, redaction failure, cancel, sender loss, or timeout fail
+closed; post-publication cancel adopts the exact output. Export is process-local,
+not a durable Job. Final check-to-rename/release-to-unlink syscall windows, optional content,
+progress, restart, and broader platform/path evidence remain open.
 
 ## 10. Redaction Rules
 
@@ -299,15 +270,13 @@ Advanced diagnostics can show technical detail behind explicit disclosure.
 
 ## 13. API And IPC Requirements
 
-The [Diagnostics API domain](API_AND_IPC_DESIGN.md#69-diagnostics) is the sole owner of diagnostics channel names and renderer DTOs. A future health-change or export-progress event must be registered there before implementation; this document owns diagnostic behavior, classification, redaction, and retention rather than a parallel channel list.
+The [Diagnostics API domain](API_AND_IPC_DESIGN.md#69-diagnostics) is the sole owner of diagnostics channel names
+and renderer DTOs; this document owns behavior and redaction.
 
 Rules:
 
-- Renderer receives redacted DTOs.
-- Export runs in a worker or utility process.
-- Export is cancelable.
-- Export progress does not include raw content.
-- Support bundle creation records a local event but not the bundle contents.
+- Renderer DTOs are redacted; progress has no raw content.
+- Export is bounded/cancelable; only a local event, never contents, is recorded.
 
 ## 14. Future Cloud And Mobile
 

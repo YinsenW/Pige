@@ -386,11 +386,12 @@ Tests must verify:
 
 Tests must verify:
 
-- Diagnostics fixtures execute the Owner’s default exclusion matrix, explicit local
-  preview/export/cancel flow, secret/path redaction, shared error taxonomy, six-locale
-  message coverage, bounded retention, vault-safe clearing, forced-quit recovery, and
-  renderer DTO boundary. Exact excluded fields and retention semantics remain in
-  `docs/DIAGNOSTICS_AND_OBSERVABILITY.md`.
+- Diagnostics fixtures execute the Owner exclusion matrix, local preview/export/cancel,
+  secret/path redaction, shared errors, six locales, retention, vault-safe clearing,
+  recovery, and renderer DTO boundary. Export tests enforce 2 MiB output, 64 MiB/30-second
+  worker bounds, held-temp and POSIX-descriptor/Windows-digest binding, successor identity,
+  and sender cancel; packaged smoke loads the worker. Exclusions and
+  retention remain in `docs/DIAGNOSTICS_AND_OBSERVABILITY.md`.
 
 ## 7. Permission Gates
 

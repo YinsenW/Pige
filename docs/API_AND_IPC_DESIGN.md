@@ -808,6 +808,7 @@ Diagnostics APIs must follow `docs/DIAGNOSTICS_AND_OBSERVABILITY.md`.
 Commands:
 
 - `diagnostics.exportSupportBundle`
+- `diagnostics.cancelSupportBundleExport`
 - `diagnostics.clearLocalDiagnostics`
 - `diagnostics.openSupportBundleFolder`
 
@@ -853,6 +854,10 @@ type SupportBundlePreview = {
   privacyWarnings: string[];
 };
 
+type ExportSupportBundleRequest = { previewId: string; exportRequestId: string };
+type CancelSupportBundleExportRequest = { exportRequestId: string };
+type CancelSupportBundleExportResult = { status: "cancel_requested" | "not_found" };
+
 type SupportBundleExportResult = {
   status: "exported" | "canceled";
   exportedAt?: string;
@@ -867,6 +872,9 @@ Rules:
 - Support bundle export is user-initiated, previewed, cancelable, and local-only in v0.1.
 - `diagnostics.exportSupportBundle` requires a current `previewId` from `diagnostics.previewSupportBundle`.
 - Export uses a trusted OS save dialog; canceling the dialog returns `status: "canceled"` without creating a file.
+- A renderer owns at most one bounded `exportRequestId`; only that sender may cancel it,
+  and sender destruction aborts it. Completion/cancel races adopt only an exact
+  verified committed output and otherwise fail closed.
 - Diagnostics APIs never return raw secrets. Default diagnostics also exclude full source bodies, full notes, full memory, and raw prompts/responses; an explicit support export may add only separately reviewed, redacted content categories.
 
 ### 6.10 Backup And Restore
