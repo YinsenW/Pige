@@ -6,9 +6,15 @@ import {
   PiAgentRuntimeAdapter,
   createAgentRepairFeedback,
   createPigeAgentToolCatalogHash,
+  createPigeTextToolResult,
   type PigeAgentToolDefinition
 } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
+import {
+  assertPigeAgentToolDescriptors,
+  toPiTool,
+  type PigeAgentToolResult
+} from "../../apps/desktop/src/main/services/pi-agent-tool-boundary";
 
 const runtimeConfig: ModelProviderRuntimeConfig = {
   provider: {
@@ -80,7 +86,11 @@ describe("Pi Agent runtime adapter", () => {
       parameters: { type: "object", properties: {}, additionalProperties: false },
       dataBoundary: { ...BASE_TOOL_DESCRIPTOR.dataBoundary, resourceScope: "current_note" },
       idempotency: { mode: "idempotent", scope: "current_note" },
-      execute: async () => ({ modelText: "Bound current-note evidence.", details: {}, terminate: true })
+      execute: async () => createPigeTextToolResult(
+        "Bound current-note evidence.",
+        {},
+        { terminate: true }
+      )
     };
 
     const result = await adapter.run(makeRequest([tool]));
@@ -121,6 +131,206 @@ describe("Pi Agent runtime adapter", () => {
     ]);
     expect(result.events[0]?.type).toBe("agent_start");
     expect(result.events.at(-1)?.type).toBe("agent_end");
+  });
+
+  it("lets Pi overlap one batch of explicitly read-only tools", async () => {
+    let active = 0;
+    let maxActive = 0;
+    const runRead = async (): Promise<ReturnType<typeof createPigeTextToolResult>> => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      active -= 1;
+      return createPigeTextToolResult("Bounded read result.", {});
+    };
+    const tools = ["pige_read_alpha", "pige_read_beta"].map((name) => ({
+      ...BASE_TOOL_DESCRIPTOR,
+      name,
+      label: name,
+      description: `Read ${name} without side effects.`,
+      parameters: { type: "object", properties: {}, additionalProperties: false } as const,
+      execution: "parallel_read_only" as const,
+      authorize: () => true,
+      execute: runRead
+    } satisfies PigeAgentToolDefinition));
+    const adapter = new PiAgentRuntimeAdapter({
+      fauxResponses: [
+        {
+          kind: "tool_calls",
+          calls: tools.map((tool) => ({ toolName: tool.name, args: {} }))
+        },
+        { kind: "text", text: "Read batch complete." }
+      ]
+    });
+
+    const result = await adapter.run(makeRequest(tools));
+
+    expect(maxActive).toBe(2);
+    expect(result.invokedTools).toEqual(["pige_read_alpha", "pige_read_beta"]);
+  });
+
+  it("lets Pi serialize a mixed batch containing a side-effect tool", async () => {
+    let active = 0;
+    let maxActive = 0;
+    const order: string[] = [];
+    const makeScheduledTool = (
+      name: string,
+      execution: "parallel_read_only" | "sequential",
+      effect: "read_only" | "idempotent_write"
+    ): PigeAgentToolDefinition => ({
+      ...BASE_TOOL_DESCRIPTOR,
+      name,
+      label: name,
+      description: `Exercise ${name} scheduling.`,
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+      execution,
+      effect,
+      authorize: () => true,
+      execute: async () => {
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        order.push(`${name}:start`);
+        await new Promise((resolve) => setTimeout(resolve, 15));
+        order.push(`${name}:end`);
+        active -= 1;
+        return createPigeTextToolResult("Scheduled result.", {});
+      }
+    });
+    const tools = [
+      makeScheduledTool("pige_read_safe", "parallel_read_only", "read_only"),
+      makeScheduledTool("pige_write_safe", "sequential", "idempotent_write")
+    ];
+    const adapter = new PiAgentRuntimeAdapter({
+      fauxResponses: [
+        {
+          kind: "tool_calls",
+          calls: tools.map((tool) => ({ toolName: tool.name, args: {} }))
+        },
+        { kind: "text", text: "Mixed batch complete." }
+      ]
+    });
+
+    await adapter.run(makeRequest(tools));
+
+    expect(maxActive).toBe(1);
+    expect(order).toEqual([
+      "pige_read_safe:start",
+      "pige_read_safe:end",
+      "pige_write_safe:start",
+      "pige_write_safe:end"
+    ]);
+  });
+
+  it("preserves native tool updates and fixed-catalog added tool names", async () => {
+    const tools: PigeAgentToolDefinition[] = [
+      {
+        ...BASE_TOOL_DESCRIPTOR,
+        name: "pige_stream_read",
+        label: "Stream read",
+        description: "Stream one bounded read result.",
+        parameters: { type: "object", properties: {}, additionalProperties: false },
+        authorize: () => true,
+        execute: async (_args, _signal, _context, onUpdate) => {
+          onUpdate?.(createPigeTextToolResult("Partial result.", { partial: true }));
+          return createPigeTextToolResult(
+            "Final result.",
+            { partial: false },
+            { addedToolNames: ["pige_catalog_peer"] }
+          );
+        }
+      },
+      {
+        ...BASE_TOOL_DESCRIPTOR,
+        name: "pige_catalog_peer",
+        label: "Catalog peer",
+        description: "Remain available in the fixed Pige catalog.",
+        parameters: { type: "object", properties: {}, additionalProperties: false },
+        execute: async () => createPigeTextToolResult("Peer result.", {})
+      }
+    ];
+    const adapter = new PiAgentRuntimeAdapter({
+      fauxResponses: [
+        { kind: "tool_call", toolName: "pige_stream_read", args: {} },
+        { kind: "text", text: "Streaming complete." }
+      ]
+    });
+
+    const result = await adapter.run(makeRequest(tools));
+
+    expect(result.events).toContainEqual({
+      type: "tool_execution_update",
+      toolName: "pige_stream_read"
+    });
+  });
+
+  it("passes native image, update, added-tool, and future result fields through the Pi bridge", async () => {
+    const partial: PigeAgentToolResult = {
+      content: [{ type: "image", data: "c3ludGhldGlj", mimeType: "image/png" }],
+      details: { stage: "partial" }
+    };
+    const final = {
+      content: [
+        { type: "text" as const, text: "Final result." },
+        { type: "image" as const, data: "c3ludGhldGlj", mimeType: "image/png" }
+      ],
+      details: { stage: "final" },
+      addedToolNames: ["pige_native_result"],
+      futureMetadata: { retained: true }
+    } as unknown as PigeAgentToolResult;
+    const tool: PigeAgentToolDefinition = {
+      ...BASE_TOOL_DESCRIPTOR,
+      name: "pige_native_result",
+      label: "Native result",
+      description: "Preserve native Pi result capabilities.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+      execute: async (_args, _signal, _context, onUpdate) => {
+        onUpdate?.(partial);
+        return final;
+      }
+    };
+    const tools = [tool];
+    assertPigeAgentToolDescriptors(tools);
+    const descriptor = tools[0];
+    if (!descriptor) throw new Error("Missing native result tool.");
+    const updates: PigeAgentToolResult[] = [];
+    const bridged = toPiTool(descriptor, new Map([[descriptor.name, descriptor]]));
+
+    const result = await bridged.execute(
+      "pi_tool_native_result",
+      {},
+      new AbortController().signal,
+      (update) => updates.push(update)
+    );
+
+    expect(updates).toEqual([partial]);
+    expect(result).toBe(final);
+    expect(result).toMatchObject({
+      content: expect.arrayContaining([expect.objectContaining({ type: "image", mimeType: "image/png" })]),
+      addedToolNames: ["pige_native_result"],
+      futureMetadata: { retained: true }
+    });
+  });
+
+  it("rejects added tool names outside the fixed Pige catalog", async () => {
+    const tool: PigeAgentToolDefinition = {
+      ...BASE_TOOL_DESCRIPTOR,
+      name: "pige_fixed_catalog",
+      label: "Fixed catalog",
+      description: "Reject dynamic tool activation.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+      execute: async () => createPigeTextToolResult(
+        "Result.",
+        {},
+        { addedToolNames: ["pige_dynamic_unknown"] }
+      )
+    };
+    const adapter = new PiAgentRuntimeAdapter({
+      fauxResponses: [{ kind: "tool_call", toolName: tool.name, args: {} }]
+    });
+
+    await expect(adapter.run(makeRequest([tool]))).rejects.toMatchObject({
+      code: "agent_runtime.dynamic_tool_activation_forbidden"
+    });
   });
 
   it("propagates Host permission control flow instead of letting Pi continue the model loop", async () => {
@@ -230,7 +440,7 @@ describe("Pi Agent runtime adapter", () => {
 
     const result = await adapter.run({
       ...makeRequest([makeFinishHomeTool()]),
-      completionRepair: makeCompletionRepairBoundary(),
+      completionPolicy: makeCompletionBoundary(),
       terminalDraft: {
         toolName: "pige_finish_home_turn",
         argumentName: "answer",
@@ -248,11 +458,11 @@ describe("Pi Agent runtime adapter", () => {
     expect(drafts.join(" ")).not.toContain("citationRefs");
   });
 
-  it("continues after more than one prose omission before a registered terminal action", async () => {
+  it("does not inject a Host follow-up after a prose-only stop", async () => {
+    let modelTurnChecks = 0;
     const adapter = new PiAgentRuntimeAdapter({
       fauxResponses: [
         { kind: "text", text: "First incomplete prose response." },
-        { kind: "text", text: "Second incomplete prose response." },
         {
           kind: "tool_call",
           toolName: "pige_finish_home_turn",
@@ -261,12 +471,15 @@ describe("Pi Agent runtime adapter", () => {
       ]
     });
 
-    const result = await adapter.run({
+    await expect(adapter.run({
       ...makeRequest([makeFinishHomeTool()]),
-      completionRepair: makeCompletionRepairBoundary()
-    });
+      beforeModelTurn: () => {
+        modelTurnChecks += 1;
+      },
+      completionPolicy: makeCompletionBoundary()
+    })).rejects.toMatchObject({ code: "agent_runtime.knowledge_action_missing" });
 
-    expect(result.invokedTools).toEqual(["pige_finish_home_turn"]);
+    expect(modelTurnChecks).toBe(1);
   });
 
   it("allows a safe read revisit after rejected terminal evidence and then completes", async () => {
@@ -280,7 +493,7 @@ describe("Pi Agent runtime adapter", () => {
       parameters: { type: "object", properties: {}, additionalProperties: false },
       execute: async () => {
         reads.push("read");
-        return { modelText: "citation_1", details: {} };
+        return createPigeTextToolResult("citation_1");
       }
     };
     const adapter = new PiAgentRuntimeAdapter({
@@ -302,7 +515,7 @@ describe("Pi Agent runtime adapter", () => {
 
     const result = await adapter.run({
       ...makeRequest([readTool, finishTool]),
-      completionRepair: makeCompletionRepairBoundary()
+      completionPolicy: makeCompletionBoundary()
     });
 
     expect(reads).toEqual(["read", "read"]);
@@ -325,8 +538,8 @@ describe("Pi Agent runtime adapter", () => {
 
     await expect(adapter.run({
       ...makeRequest([makeFinishHomeTool()]),
-      completionRepair: {
-        ...makeCompletionRepairBoundary(),
+      completionPolicy: {
+        ...makeCompletionBoundary(),
         maxRepeatedFailureFingerprints: 2
       }
     })).rejects.toMatchObject({ code: "model_provider.tool_protocol_incompatible" });
@@ -434,7 +647,7 @@ describe("Pi Agent runtime adapter", () => {
       authorize: () => false,
       execute: async () => {
         publishCalls += 1;
-        return { modelText: "should not run", details: {} };
+        return createPigeTextToolResult("should not run");
       }
     };
     const adapter = new PiAgentRuntimeAdapter({
@@ -464,7 +677,7 @@ describe("Pi Agent runtime adapter", () => {
       ...tools[0]!,
       execute: async () => {
         toolExecuted = true;
-        return { modelText: "Inspected.", details: {} };
+        return createPigeTextToolResult("Inspected.");
       }
     };
     const adapter = new PiAgentRuntimeAdapter({
@@ -500,7 +713,7 @@ describe("Pi Agent runtime adapter", () => {
       },
       execute: async (_args, _signal, context) => {
         executedIds.push(context.toolCallId);
-        return { modelText: "Inspected.", details: {} };
+        return createPigeTextToolResult("Inspected.");
       }
     };
     const adapter = new PiAgentRuntimeAdapter({
@@ -534,7 +747,7 @@ describe("Pi Agent runtime adapter", () => {
       },
       execute: async () => {
         handlerCalls += 1;
-        return { modelText: "should not run", details: {} };
+        return createPigeTextToolResult("should not run");
       }
     };
     const adapter = new PiAgentRuntimeAdapter({
@@ -568,7 +781,7 @@ describe("Pi Agent runtime adapter", () => {
       },
       execute: async () => {
         handlerCalls += 1;
-        return { modelText: "should not run", details: {} };
+        return createPigeTextToolResult("should not run");
       }
     };
     const adapter = new PiAgentRuntimeAdapter({
@@ -586,7 +799,7 @@ describe("Pi Agent runtime adapter", () => {
     const tools = makeTools([], []);
     const sameSemantics = tools.map((tool) => ({
       ...tool,
-      execute: async () => ({ modelText: "different handler instance", details: {} })
+      execute: async () => createPigeTextToolResult("different handler instance")
     }));
     const changedVersion = tools.map((tool, index) => index === 0
       ? { ...tool, version: "2" }
@@ -621,7 +834,7 @@ describe("Pi Agent runtime adapter", () => {
           if (signal.aborted) abort();
           else signal.addEventListener("abort", abort, { once: true });
         });
-        return { modelText: "unreachable", details: {} };
+        return createPigeTextToolResult("unreachable");
       }
     }, makeFinishHomeTool()];
     const adapter = new PiAgentRuntimeAdapter({
@@ -629,7 +842,7 @@ describe("Pi Agent runtime adapter", () => {
     });
     const run = adapter.run({
       ...makeRequest(tools),
-      completionRepair: makeCompletionRepairBoundary(),
+      completionPolicy: makeCompletionBoundary(),
       signal: controller.signal
     });
     await started;
@@ -738,10 +951,10 @@ function makeTools(calls: string[], published: unknown[]): PigeAgentToolDefiniti
       authorize: () => true,
       execute: async () => {
         calls.push("inspect");
-        return {
-          modelText: JSON.stringify({ evidence: [{ ref: "ev_01", text: "Synthetic evidence" }] }),
-          details: { fragmentCount: 1 }
-        };
+        return createPigeTextToolResult(
+          JSON.stringify({ evidence: [{ ref: "ev_01", text: "Synthetic evidence" }] }),
+          { fragmentCount: 1 }
+        );
       }
     },
     {
@@ -765,13 +978,17 @@ function makeTools(calls: string[], published: unknown[]): PigeAgentToolDefiniti
       execute: async (args) => {
         calls.push("publish");
         published.push(args);
-        return { modelText: JSON.stringify({ status: "created" }), details: {}, terminate: true };
+        return createPigeTextToolResult(
+          JSON.stringify({ status: "created" }),
+          {},
+          { terminate: true }
+        );
       }
     }
   ];
 }
 
-function makeCompletionRepairBoundary() {
+function makeCompletionBoundary() {
   return {
     terminalToolNames: ["pige_finish_home_turn"],
     maxWallTimeMs: 30_000,
@@ -814,7 +1031,7 @@ function makeFinishHomeTool(options: { readonly rejectCitation?: string } = {}):
           progressFingerprint: options.rejectCitation
         }));
       }
-      return { modelText: "Home turn finished.", details: {}, terminate: true };
+      return createPigeTextToolResult("Home turn finished.", {}, { terminate: true });
     }
   };
 }

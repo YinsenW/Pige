@@ -834,8 +834,8 @@
       "usage": "Official Pi Agent loop, event, queue, and tool lifecycle behind the sole Pige adapter.",
       "packageManager": "npm",
       "packageId": "@earendil-works/pi-agent-core",
-      "version": "0.80.6",
-      "upstreamUrl": "https://github.com/earendil-works/pi/tree/v0.80.6/packages/agent",
+      "version": "0.80.7",
+      "upstreamUrl": "https://github.com/earendil-works/pi/tree/v0.80.7/packages/agent",
       "license": "MIT",
       "noticeRequired": true,
       "distributionMode": "bundled",
@@ -847,9 +847,9 @@
       "sizeClass": "small",
       "updatePolicy": "manual-review",
       "replacementPath": "Adopt an official compat-free Agent entry when reviewed; both Pi pins move or roll back together.",
-      "lastReviewedAt": "2026-07-11",
+      "lastReviewedAt": "2026-07-16",
       "reviewedBy": "Codex",
-      "notes": "Integrity sha512-Lvn89ko42h5ETUb6Z0Ku6ldskEqXaTdQBYvSa0+7bdG9V6rUEpXptv5e0OVZ1HDcvi8s6/2lGCQWsxKX+DFHNw==. Its unavoidable pi-ai/compat initialization is contained in the sole adapter; Pige does not use the global catalog or default dispatcher. MIT text is bundled at resources/licenses/pi-MIT.txt and attributed in NOTICE."
+      "notes": "Integrity sha512-EFjyAuoz2kn24sR9Q5A86sZCG6mD+nz58DCsA2I2wxgmS50cF1tSLCBOZaHKI5U9Y3pJs4BefeK3LRkB5TdJag==. Reviewed upstream commit 818d67457cdd6b60bce6b121d16b23141c252dd8 and 0.80.6-to-0.80.7 source-diff SHA-256 e8442dda88e28e116b1d6fdd18973c5c7f787929a90f1f6cabb7de56fa6fba77. Its unavoidable pi-ai/compat initialization is contained in the sole adapter; Pige does not use the global catalog or default dispatcher. Native AgentToolResult fields pass to the fixed-catalog authority gate. MIT text is bundled at resources/licenses/pi-MIT.txt and attributed in NOTICE."
     },
     {
       "registryRef": "runtime.pi-ai",
@@ -859,8 +859,8 @@
       "usage": "Official Pi provider/model factories and streaming for the embedded Pi Agent.",
       "packageManager": "npm",
       "packageId": "@earendil-works/pi-ai",
-      "version": "0.80.6",
-      "upstreamUrl": "https://github.com/earendil-works/pi/tree/v0.80.6/packages/ai",
+      "version": "0.80.7",
+      "upstreamUrl": "https://github.com/earendil-works/pi/tree/v0.80.7/packages/ai",
       "license": "MIT",
       "noticeRequired": true,
       "distributionMode": "bundled",
@@ -872,9 +872,9 @@
       "sizeClass": "medium",
       "updatePolicy": "manual-review",
       "replacementPath": "Keep the official Pi provider runtime and update in lockstep with pi-agent-core; do not add a parallel AI SDK.",
-      "lastReviewedAt": "2026-07-11",
+      "lastReviewedAt": "2026-07-16",
       "reviewedBy": "Codex",
-      "notes": "Integrity sha512-7xfLk8sANBp+bpPEbjoOZTbPxsa+++b1JXAoSJsNa3vbs9AHHEclmvg54XLQcxH+fuwaeti/g2jeIfJ+mVYLpA==. Each run creates an isolated model collection with scoped credentials and no ambient auth. Transitive @opentelemetry/api@1.9.0 is Apache-2.0 with integrity sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg== and remains inert: Pige imports/configures no telemetry API, provider, exporter, or observability module. Every Pi update re-audits the transitive graph, side effects, network, licenses, and no-upload boundary. MIT text is bundled at resources/licenses/pi-MIT.txt and attributed in NOTICE."
+      "notes": "Integrity sha512-8RLKLwe5TFM9kKFMNu/lTzveduq4GxZbnlG6ba8FAhLeb5wJP4zbj1eBumKBRvggpFQnW5R/Vo2a8zTlHsV9SQ==. Reviewed upstream commit 818d67457cdd6b60bce6b121d16b23141c252dd8 and source-diff SHA-256 e8442dda88e28e116b1d6fdd18973c5c7f787929a90f1f6cabb7de56fa6fba77. Each run creates an isolated model collection with scoped credentials and no ambient auth; reviewed Pi metadata merges with explicit Pige profile facts and unknown models fail conservative. Transitive @opentelemetry/api@1.9.0 is Apache-2.0 with integrity sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg== and remains inert: Pige imports/configures no telemetry API, provider, exporter, or observability module. Every Pi update re-audits the transitive graph, side effects, network, licenses, and no-upload boundary. MIT text is bundled at resources/licenses/pi-MIT.txt and attributed in NOTICE."
     },
     {
       "registryRef": "provider.openai-models-api",

@@ -2,7 +2,7 @@
 
 Status: Draft baseline
 Date: 2026-07-09
-Last reviewed: 2026-07-11
+Last reviewed: 2026-07-16
 
 ## 1. Purpose
 
@@ -22,8 +22,10 @@ maintaining a parallel Agent runtime. Pige still owns product policy and data.
 
 ## 2. Upstream Facts Verified
 
-Reviewed upstream snapshot: `v0.80.6`
-(`2b3fda9921b5590f285165287bd442a25817f17b`) on 2026-07-10.
+Reviewed upstream snapshot: `v0.80.7`
+(`818d67457cdd6b60bce6b121d16b23141c252dd8`) on 2026-07-16. The reviewed
+`v0.80.6`→`v0.80.7` source diff is
+`e8442dda88e28e116b1d6fdd18973c5c7f787929a90f1f6cabb7de56fa6fba77`.
 
 `@earendil-works/pi-ai` is the official provider/model package inside the same Pi
 monorepo, not a second Agent framework. Pige does not add Vercel AI SDK or another
@@ -31,7 +33,7 @@ parallel provider runtime.
 
 - `pi-agent-core` owns Agent mechanics; the side-effect-free `pi-ai` root provides
   isolated `Models`, provider factories, injected auth, and streaming.
-- In `v0.80.6`, both official `pi-agent-core` entries still load `pi-ai/compat`;
+- In `v0.80.7`, both official `pi-agent-core` entries still load `pi-ai/compat`;
   that import registers APIs and constructs the broad catalog. No official
   compat-free Agent subpath exists.
 - Supplying an explicit receiver-bound `streamFn` avoids using the compat dispatcher,
@@ -88,12 +90,10 @@ Rules:
 - Do not deep-import, alias, patch, vendor, or fork Pi, and do not preserve the
   transitional direct provider bridge as a silent fallback after Pi adoption.
 
-Checkpoint A implementation: the user approved and Pige adopted exact `v0.80.6`.
-The sole adapter uses isolated `Models`, a receiver-bound stream, scoped credentials,
-and no ambient auth; compat globals/catalog/default dispatch remain unused. Mutations,
-an import snapshot, protocol tests, and an Electron smoke prove containment. Deep
-imports, patches, forks, and copied loops remain forbidden. Replace the exception when
-an official compat-free entry passes review; other Agent tool paths remain separate work.
+Checkpoint A adopts exact `v0.80.7`: one isolated, scoped, receiver-bound adapter; no
+ambient auth, compat dispatch, deep import/fork, or copied loop. H1 reduces it
+1,398→250 LOC (480 custom-control LOC), preserves native results and Pi follow-up/read
+concurrency, and makes responsibility/import/Electron gates reject shadow ownership.
 
 ## 5. Package Boundary
 
@@ -141,7 +141,7 @@ Rules:
   Responses, `anthropic` kinds to Messages, and compatible/legacy `custom` to Chat
   Completions without reinterpretation.
 - Keys live only in the secret store. Required auth needs a reference, optional auth
-  stores one only when supplied, and `none` forbids one. Pi AI 0.80.6 gets an in-memory
+  stores one only when supplied, and `none` forbids one. Pi AI 0.80.7 gets an in-memory
   non-secret token sentinel for `none`; adapters strip auth headers.
 - `ProviderProfileSchema` rejects missing or non-`builtin_verified` boundary metadata;
   custom URLs are canonical HTTPS or loopback HTTP without userinfo/query/fragment. Profiles stay out of backup;

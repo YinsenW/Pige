@@ -28,7 +28,8 @@ import {
   type PiAgentRunRequest,
   type PiAgentRunResult,
   type PiFauxResponse,
-  type PigeAgentToolDefinition
+  type PigeAgentToolDefinition,
+  type PigeAgentToolResult
 } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
 import { SourceFetchService } from "../../apps/desktop/src/main/services/source-fetch-service";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
@@ -512,7 +513,7 @@ describe("Agent-selected URL ingress", () => {
         const inspectTool = requireTool(request, "pige_inspect_url_source");
         const inspectContext = toolContext("hostile_inspect");
         expect(await inspectTool.authorize?.({}, inspectContext)).not.toBe(false);
-        inspectedOutput = (await inspectTool.execute({}, inspectContext.signal, inspectContext)).modelText;
+        inspectedOutput = readPiToolText(await inspectTool.execute({}, inspectContext.signal, inspectContext));
 
         await request.beforeModelTurn?.();
         const finishTool = requireTool(request, "pige_finish_home_turn");
@@ -878,6 +879,10 @@ function makeHome(
       urls
     )
   };
+}
+
+function readPiToolText(result: PigeAgentToolResult): string {
+  return result.content.map((item) => item.type === "text" ? item.text : "").join("");
 }
 
 function makeFixture(): {

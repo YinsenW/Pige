@@ -267,7 +267,7 @@ Human review is still required for dependencies that affect native modules, sign
 
 Before updating a dependency:
 
-1. Find it in the Technical Architecture external dependency registry.
+1. Find it in the Technical Architecture registry; Pi core/AI update together.
 2. Review upstream release notes.
 3. Check license changes.
 4. Check security advisories.

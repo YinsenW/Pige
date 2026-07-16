@@ -80,6 +80,7 @@ import {
   AgentRepairRequiredError,
   createAgentRepairFeedback,
   createPigeAgentToolCatalogHash,
+  createPigeTextToolResult,
   PiAgentRuntimeAdapter,
   type PiAgentRunRequest,
   type PiAgentRunResult,
@@ -2095,7 +2096,7 @@ export class HomeAgentService {
           await authorizeCurrentModelTurn(true);
           session.modelInvocationStarted = true;
         },
-        completionRepair: {
+        completionPolicy: {
           terminalToolNames: [HOME_FINISH_TOOL_NAME],
           maxWallTimeMs: HOME_COMPLETION_REPAIR_MAX_WALL_TIME_MS,
           maxToolCalls: HOME_COMPLETION_REPAIR_MAX_TOOL_CALLS,
@@ -2332,14 +2333,11 @@ function createFetchUrlTool(options: {
         );
       }
       const evidence = await options.fetch(parsed.data.candidateIndex, context);
-      return {
-        modelText: createUntrustedUrlReceiptEnvelope(evidence),
-        details: {
+      return createPigeTextToolResult(createUntrustedUrlReceiptEnvelope(evidence), {
           sourceId: evidence.sourceId,
           pageId: evidence.pageId,
           warningCount: evidence.warnings.length
-        }
-      };
+        });
     }
   };
 }
@@ -2374,7 +2372,7 @@ function createInspectFetchedUrlTool(options: {
       sourceIdAuthority: "host_only",
       modelAuthority: "none"
     },
-    execution: "sequential",
+    execution: "parallel_read_only",
     idempotency: { mode: "idempotent", scope: "current_source" },
     limits: { maxInputBytes: 2, maxOutputBytes: 64 * 1_024, timeoutMs: 10_000 },
     ownerService: "SourceFetchService",
@@ -2391,15 +2389,12 @@ function createInspectFetchedUrlTool(options: {
         throw new PigeDomainError("agent_runtime.tool_binding_changed", "The URL inspection input changed.");
       }
       const evidence = await options.inspect();
-      return {
-        modelText: createUntrustedUrlEvidenceEnvelope(evidence),
-        details: {
+      return createPigeTextToolResult(createUntrustedUrlEvidenceEnvelope(evidence), {
           sourceId: evidence.sourceId,
           pageId: evidence.pageId,
           evidenceCharacters: Array.from(evidence.extractedText).length,
           warningCount: evidence.warnings.length
-        }
-      };
+        });
     }
   };
 }
@@ -2435,7 +2430,7 @@ function createSearchTool(options: {
       sourceIdAuthority: "host_only",
       modelAuthority: "none"
     },
-    execution: "sequential",
+    execution: "parallel_read_only",
     idempotency: { mode: "idempotent", scope: "current_vault" },
     limits: { maxInputBytes: 1_024, maxOutputBytes: 64 * 1_024, timeoutMs: 30_000 },
     ownerService: "HomeAgentService",
@@ -2447,14 +2442,11 @@ function createSearchTool(options: {
       options.authorize();
       const result = await options.search();
       const context = buildHomeQueryContextPack(result);
-      return {
-        modelText: createUntrustedEvidenceEnvelope(result),
-        details: {
+      return createPigeTextToolResult(createUntrustedEvidenceEnvelope(result), {
           resultCount: context.selectedEvidence.length,
           invalidPageCount: result.invalidPageCount,
           degraded: result.degraded
-        }
-      };
+        });
     }
   };
 }
@@ -2491,7 +2483,7 @@ function createCurrentNoteTool(options: {
       sourceIdAuthority: "host_only",
       modelAuthority: "none"
     },
-    execution: "sequential",
+    execution: "parallel_read_only",
     idempotency: { mode: "idempotent", scope: "current_note" },
     limits: { maxInputBytes: 1_024, maxOutputBytes: 64 * 1_024, timeoutMs: 30_000 },
     ownerService: "HomeAgentService",
@@ -2503,16 +2495,13 @@ function createCurrentNoteTool(options: {
       options.authorize();
       const binding = await options.read();
       const context = buildNoteAgentContextPack(binding);
-      return {
-        modelText: createUntrustedCurrentNoteEnvelope(binding),
-        details: {
+      return createPigeTextToolResult(createUntrustedCurrentNoteEnvelope(binding), {
           workflow: context.pack.workflow,
           evidenceCount: context.pack.evidenceRefs.length,
           suppliedBytes: context.modelSuppliedRange.endExclusive,
           totalBytes: context.modelSuppliedRange.total,
           truncated: context.modelSuppliedRange.truncated
-        }
-      };
+        });
     }
   };
 }
@@ -2668,7 +2657,8 @@ function createDatasetQueryTool(options: {
     },
     execute: async (args, _signal, context) => {
       options.authorize();
-      return options.execute(args, context);
+      const result = await options.execute(args, context);
+      return createPigeTextToolResult(result.modelText, result.details);
     }
   };
 }
@@ -2756,15 +2746,11 @@ function createFinishHomeTurnTool(options: {
         }));
       }
       options.finish(parsed.data);
-      return {
-        modelText: "Pige accepted the validated Home result.",
-        details: {
+      return createPigeTextToolResult("Pige accepted the validated Home result.", {
           accepted: true,
           citationCount: parsed.data.citationRefs.length,
           grounding: parsed.data.grounding
-        },
-        terminate: true
-      };
+        }, { terminate: true });
     }
   };
 }

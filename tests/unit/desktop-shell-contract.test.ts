@@ -341,6 +341,10 @@ describe("desktop shell build contract", () => {
       path.resolve("apps/desktop/src/main/services/pi-agent-runtime-adapter.ts"),
       "utf8"
     );
+    const projectionSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/services/pi-agent-safe-projection.ts"),
+      "utf8"
+    );
     const homeComposer = rendererSource.slice(
       rendererSource.indexOf("function HomeComposer"),
       rendererSource.indexOf("function jobStateMessageKey")
@@ -362,7 +366,7 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain("readonly onTurnDraft:");
     expect(runtimeSource).toContain("terminalDrafts.observe(event)");
     expect(runtimeSource).toContain("terminalDrafts.afterToolExecute(executedTool, args, result)");
-    expect(runtimeSource).toContain('toolName: "pige_finish_home_turn"');
+    expect(projectionSource).toContain('toolName: "pige_finish_home_turn"');
     expect(preloadSource).not.toContain('ipcRenderer.invoke("capture.submit');
     expect(preloadSource).not.toContain('ipcRenderer.invoke("retrieval.ask"');
     expect(homeComposer).toContain("window.pige.agent.submitTurn");

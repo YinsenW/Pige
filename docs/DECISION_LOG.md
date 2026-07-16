@@ -2514,18 +2514,21 @@ References:
 
 Status: Accepted
 Date: 2026-07-11
+Revised: 2026-07-16
 
 Decision:
 
-Pi selects post-preservation semantic tools; Host services enforce safety and commits.
+Host provides capability, authority and reliability; Pi decides semantic work; Host
+shadow loops and fixed semantic chains are forbidden.
 
 Rationale:
 
-Fixed service chains duplicate Agent planning.
+Duplicated planning narrows the Agent and splits recovery ownership.
 
 Consequences:
 
-- Its tool/Host boundary survives; the replacement extends Pi control to every turn.
+- H1-H4 align Pi, converge Host orchestrators, and require responsibility deltas without
+  compression targets or status promotion.
 
 References:
 
@@ -2576,7 +2579,7 @@ Date: 2026-07-11
 
 Decision:
 
-Pige may temporarily adopt exact official Pi core/AI `0.80.6` packages despite the
+Pige may temporarily adopt exact official Pi core/AI packages despite the
 core's transitive `pi-ai/compat` load. The sole adapter uses isolated `Models` and a
 receiver-bound stream; compat globals/catalog/default dispatch remain unused. Deep
 imports, patches, forks, and vendoring remain banned.

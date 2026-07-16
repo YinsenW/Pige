@@ -457,11 +457,11 @@ describe("Agent-selected ingest proposal tool", () => {
     if (winner === "proposal") {
       expect(proposals.list().total).toBe(1);
       expect(generatedNotes(fixture.vaultPath)).toEqual([]);
-      expect(siblingResults[1]?.modelText).toContain("already_awaiting_review");
+      expect(readPiToolText(siblingResults[1])).toContain("already_awaiting_review");
     } else {
       expect(proposals.list().total).toBe(0);
       expect(generatedNotes(fixture.vaultPath)).toHaveLength(1);
-      expect(siblingResults[1]?.modelText).toContain("already_published");
+      expect(readPiToolText(siblingResults[1])).toContain("already_published");
     }
   });
 
@@ -772,6 +772,12 @@ async function invokeTool(
     throw new Error(`Test tool ${toolName} was unexpectedly denied.`);
   }
   return tool.execute(args, signal, context);
+}
+
+function readPiToolText(result: PigeAgentToolResult | undefined): string {
+  return result?.content
+    .map((item) => item.type === "text" ? item.text : "")
+    .join("") ?? "";
 }
 
 function runtimeResult(request: PiAgentRunRequest, invokedTools: readonly string[]): PiAgentRunResult {

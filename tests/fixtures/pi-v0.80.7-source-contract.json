@@ -1,0 +1,81 @@
+{
+  "apiVersion": 1,
+  "upstream": "earendil-works/pi",
+  "fromVersion": "0.80.6",
+  "fromCommit": "2b3fda9921b5590f285165287bd442a25817f17b",
+  "toVersion": "0.80.7",
+  "toCommit": "818d67457cdd6b60bce6b121d16b23141c252dd8",
+  "reviewedSourceDiffSha256": "e8442dda88e28e116b1d6fdd18973c5c7f787929a90f1f6cabb7de56fa6fba77",
+  "agentCoreChange": {
+    "files": [
+      "packages/agent/src/agent-loop.ts",
+      "packages/agent/src/types.ts"
+    ],
+    "summary": "AgentToolResult.addedToolNames is preserved on ToolResultMessage; no Agent lifecycle API changed."
+  },
+  "aiChange": {
+    "reviewedAreas": [
+      "provider streaming",
+      "deferred tool loading",
+      "token estimation",
+      "model metadata"
+    ],
+    "summary": "Provider and model metadata changed broadly; Pige consumes reviewed lazy providers and explicit model catalogs only."
+  },
+  "sources": [
+    {
+      "package": "@earendil-works/pi-agent-core",
+      "map": "dist/agent.js.map",
+      "source": "../src/agent.ts",
+      "sha256": "28bd9032a9ec7f1b6b3a55c6c876c0332879d51030483cb191cde8b53be9646f"
+    },
+    {
+      "package": "@earendil-works/pi-agent-core",
+      "map": "dist/agent-loop.js.map",
+      "source": "../src/agent-loop.ts",
+      "sha256": "fbc59bc12d7feeaec6a966b42bae3131f6db9cd96e537f623653c506f6967ffb"
+    },
+    {
+      "package": "@earendil-works/pi-agent-core",
+      "map": "dist/types.js.map",
+      "source": "../src/types.ts",
+      "sha256": "9b7cbb96a8ea8dd8527fd0ca437571bdeede87ef793ff9887c332c78ec285cad"
+    },
+    {
+      "package": "@earendil-works/pi-ai",
+      "map": "dist/types.js.map",
+      "source": "../src/types.ts",
+      "sha256": "f689b370104c9c8a2d38ab6e0618eb86109e00a0f0ff53bc1eaff13756f97056"
+    },
+    {
+      "package": "@earendil-works/pi-ai",
+      "map": "dist/utils/deferred-tools.js.map",
+      "source": "../../src/utils/deferred-tools.ts",
+      "sha256": "cab1dbf6c0b40a64e2db3079dd3efa23786ad4cdae64abdedc04b1088a301d65"
+    },
+    {
+      "package": "@earendil-works/pi-ai",
+      "map": "dist/utils/estimate.js.map",
+      "source": "../../src/utils/estimate.ts",
+      "sha256": "8334f683185cc11d7e867f30963dfc4b9d89c3db79e852364e89a24cb89b316a"
+    },
+    {
+      "package": "@earendil-works/pi-ai",
+      "map": "dist/api/openai-responses.js.map",
+      "source": "../../src/api/openai-responses.ts",
+      "sha256": "17ae078644e35cea894d64aa23ab70034341edb67e8b4c4db7f6a315e40a58f5"
+    },
+    {
+      "package": "@earendil-works/pi-ai",
+      "map": "dist/api/openai-completions.js.map",
+      "source": "../../src/api/openai-completions.ts",
+      "sha256": "08c01159af77147b93f2fe1db64cada31411f19dadcefe5c4796ea6a61def53e"
+    },
+    {
+      "package": "@earendil-works/pi-ai",
+      "map": "dist/api/anthropic-messages.js.map",
+      "source": "../../src/api/anthropic-messages.ts",
+      "sha256": "8a0cdafd227298f05e6b48c0c3f9781be529a5d91f9d77a5e133fb33d6ded00a"
+    }
+  ]
+}

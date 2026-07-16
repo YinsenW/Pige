@@ -1618,7 +1618,7 @@ describe("Agent-selected ingest retrieval tool", () => {
         "search_batched_failure"
       );
       expect(failure).toMatchObject({ terminate: true });
-      expect(failure.modelText).not.toContain(privateHostError);
+      expect(readPiToolText(failure)).not.toContain(privateHostError);
       try {
         await invokeTool(
           request,
@@ -1681,7 +1681,7 @@ describe("Agent-selected ingest retrieval tool", () => {
     ).ingestSource(fixture.vaultPath, prepared.source, prepared.parent);
 
     expect(postPublicationSearch).toMatchObject({ terminate: true });
-    expect(postPublicationSearch?.modelText).toContain('"status":"already_published"');
+    expect(readPiToolText(postPublicationSearch)).toContain('"status":"already_published"');
     expect(retrieval.calls).toEqual([]);
     expect(generatedNotes(fixture.vaultPath)).toHaveLength(1);
     expect(readOperations(fixture.vaultPath).filter((operation) => operation.kind === "create_page"))
@@ -2399,7 +2399,7 @@ class ObservingPiRuntime implements AgentIngestRuntimePort {
           ...tool,
           execute: async (args, signal, context) => {
             const result = await tool.execute(args, signal, context);
-            this.searchOutput = result.modelText;
+            this.searchOutput = readPiToolText(result);
             return result;
           }
         }
@@ -2420,6 +2420,12 @@ class FunctionalRuntime implements AgentIngestRuntimePort {
   run(request: PiAgentRunRequest): Promise<PiAgentRunResult> {
     return this.callback(request);
   }
+}
+
+function readPiToolText(result: PigeAgentToolResult | undefined): string {
+  return result?.content
+    .map((item) => item.type === "text" ? item.text : "")
+    .join("") ?? "";
 }
 
 class RecordingRetrievalPort implements AgentIngestRetrievalPort {

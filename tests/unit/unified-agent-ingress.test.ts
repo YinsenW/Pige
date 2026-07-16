@@ -436,7 +436,7 @@ describe("Unified Agent ingress", () => {
     ]);
   });
 
-  it("uses one bounded correction turn when a provider stops after inspection without a terminal tool", async () => {
+  it("does not schedule a Host correction turn after provider prose stops the Pi loop", async () => {
     const fixture = makeVault();
     const sourceFile = path.join(path.dirname(fixture.vaultPath), "terminal-recovery-source.md");
     fs.writeFileSync(sourceFile, "# Recovery\n\nThe source remains bounded evidence.\n", "utf8");
@@ -448,7 +448,7 @@ describe("Unified Agent ingress", () => {
         {
           kind: "tool_call",
           toolName: "pige_respond_to_user",
-          args: { answer: "The bounded correction completed the source turn.", evidenceRefs: ["ev_01"] }
+          args: { answer: "This Host-forced terminal turn must never run.", evidenceRefs: ["ev_01"] }
         }
       ]
     })));
@@ -468,17 +468,20 @@ describe("Unified Agent ingress", () => {
     const outcome = await home.submitPreparedSourceTurn(prepared);
 
     expect(outcome).toMatchObject({
-      state: "completed",
+      state: "failed",
       jobId: prepared.jobId,
-      answer: {
-        answer: "The bounded correction completed the source turn.",
-        grounding: "source"
+      error: {
+        code: "agent_runtime.knowledge_action_missing",
+        messageKey: "errors.agent_runtime.source_turn_failed"
       }
     });
-    expect(jobs.readAgentTurnJob(prepared.jobId)).toMatchObject({ state: "completed" });
+    expect(jobs.readAgentTurnJob(prepared.jobId)).toMatchObject({
+      state: "failed_retryable",
+      error: { code: "agent_runtime.knowledge_action_missing" }
+    });
   });
 
-  it("persists a body-free terminal-action error when the bounded correction still stops as prose", async () => {
+  it("persists a body-free terminal-action error when the provider stops as prose", async () => {
     const fixture = makeVault();
     const sourceFile = path.join(path.dirname(fixture.vaultPath), "terminal-missing-source.txt");
     fs.writeFileSync(sourceFile, "The source remains retryable when no terminal tool succeeds.\n", "utf8");
@@ -486,8 +489,7 @@ describe("Unified Agent ingress", () => {
     const jobs = new JobsService(fixture.vaultPort, new AgentIngestService(models, new PiAgentRuntimeAdapter({
       fauxResponses: [
         { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
-        { kind: "text", text: "First incomplete response." },
-        { kind: "text", text: "Second incomplete response." }
+        { kind: "text", text: "Incomplete response without a terminal action." }
       ]
     })));
     const home = new HomeAgentService(fixture.vaultPort, models, neverRetrieval, jobs);
