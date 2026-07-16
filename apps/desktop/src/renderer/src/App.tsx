@@ -187,8 +187,9 @@ function useMediaQuery(query: string): boolean {
 
 export function App(): React.JSX.Element {
   const macosWindowShell = /Macintosh|Mac OS X/.test(window.navigator.userAgent);
-  const sidebarOverlayLayout = useMediaQuery("(max-width: 831px)");
-  const agentOverlayLayout = useMediaQuery("(max-width: 1199px)");
+  const sidebarOverlayViewport = useMediaQuery("(max-width: 839px)");
+  const agentSoloOverlayViewport = useMediaQuery("(max-width: 959px)");
+  const agentThreePaneOverlayViewport = useMediaQuery("(max-width: 1159px)");
   const [health, setHealth] = useState<AppHealth | null>(null);
   const [onboarding, setOnboarding] = useState<OnboardingStatus | null>(null);
   const [recentVaults, setRecentVaults] = useState<readonly RecentVaultSummary[]>([]);
@@ -238,6 +239,7 @@ export function App(): React.JSX.Element {
   const sidebarRef = useRef<HTMLElement | null>(null);
   const sidebarToggleRef = useRef<HTMLButtonElement | null>(null);
   const noteAgentToggleRef = useRef<HTMLButtonElement | null>(null);
+  const paneAutoExpandedWindowRef = useRef(false);
   const knowledgeTreeReturnFocusKey = useRef<string | null>(null);
   const modelRefreshSequence = useRef(0);
   const agentRuntimeRefreshSequence = useRef(0);
@@ -249,6 +251,9 @@ export function App(): React.JSX.Element {
   } | null>(null);
   const activeVaultIdRef = useRef<string | undefined>(onboarding?.activeVault?.vaultId);
   activeVaultIdRef.current = onboarding?.activeVault?.vaultId;
+  const sidebarOpen = windowState?.sidebarOpen ?? false;
+  const sidebarOverlayLayout = sidebarOverlayViewport;
+  const agentOverlayLayout = agentSoloOverlayViewport || (sidebarOpen && agentThreePaneOverlayViewport);
 
   const updateVoiceAssetInstallOwnership = (active: boolean): void => {
     voiceAssetInstallActiveRef.current = active;
@@ -541,11 +546,18 @@ export function App(): React.JSX.Element {
   };
 
   const toggleSidebar = async (): Promise<void> => {
-    const nextSidebarOpen = !(windowState?.sidebarOpen ?? false);
-    if (nextSidebarOpen && sidebarOverlayLayout && noteAgentOpen) setNoteAgentOpen(false);
+    const nextSidebarOpen = !sidebarOpen;
     if (nextSidebarOpen && windowState?.mode === "compact") {
+      paneAutoExpandedWindowRef.current = true;
       setWindowState(await window.pige.window.setMode({ mode: "expanded" }));
-    } else if (!nextSidebarOpen && view === "home" && windowState?.mode === "expanded") {
+    } else if (
+      !nextSidebarOpen &&
+      !noteAgentOpen &&
+      view === "home" &&
+      paneAutoExpandedWindowRef.current &&
+      windowState?.mode === "expanded"
+    ) {
+      paneAutoExpandedWindowRef.current = false;
       setWindowState(await window.pige.window.setMode({ mode: "compact" }));
     }
     setWindowState(await window.pige.window.setSidebarOpen({ sidebarOpen: nextSidebarOpen }));
@@ -739,7 +751,6 @@ export function App(): React.JSX.Element {
 
   const activeVault = onboarding?.activeVault;
   const blocked = !onboarding || onboarding.state === "blocked_no_vault";
-  const sidebarOpen = windowState?.sidebarOpen ?? false;
   const sidebarModal = sidebarOverlayLayout && sidebarOpen;
   const agentModal = agentOverlayLayout && Boolean(selectedNote && noteAgentOpen);
   const currentTitle = view === "home"
@@ -770,13 +781,25 @@ export function App(): React.JSX.Element {
     return () => window.cancelAnimationFrame(frame);
   }, [sidebarModal]);
 
-  const toggleNoteAgent = (): void => {
+  const toggleNoteAgent = async (): Promise<void> => {
     const nextOpen = !noteAgentOpen;
-    if (nextOpen && sidebarOverlayLayout && sidebarOpen) {
-      void toggleSidebar().then(() => setNoteAgentOpen(true));
+    if (nextOpen && windowState?.mode === "compact") {
+      paneAutoExpandedWindowRef.current = true;
+      setWindowState(await window.pige.window.setMode({ mode: "expanded" }));
+      setNoteAgentOpen(true);
       return;
     }
     setNoteAgentOpen(nextOpen);
+    if (
+      !nextOpen &&
+      !sidebarOpen &&
+      view === "home" &&
+      paneAutoExpandedWindowRef.current &&
+      windowState?.mode === "expanded"
+    ) {
+      paneAutoExpandedWindowRef.current = false;
+      setWindowState(await window.pige.window.setMode({ mode: "compact" }));
+    }
   };
 
   return (

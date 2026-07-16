@@ -43,6 +43,9 @@
   --home-pane-min: 360px;
   --home-pane-default: 420px;
   --home-pane-max: 420px;
+  --home-pane-wide-max: 1120px;
+  --home-conversation-max: 960px;
+  --home-composer-max: 840px;
   --library-pane-min: 240px;
   --library-pane-default: 280px;
   --library-pane-max: 320px;
@@ -2901,7 +2904,7 @@ dd {
   }
 }
 
-@media (min-width: 832px) and (max-width: 1199px) {
+@media (min-width: 840px) and (max-width: 1199px) {
   .sidebar {
     width: var(--library-pane-min);
     min-width: var(--library-pane-min);
@@ -3102,7 +3105,7 @@ dd {
   }
 }
 
-@media (max-width: 831px) {
+@media (max-width: 839px) {
   .workspace {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -5273,7 +5276,7 @@ dd {
   text-align: center;
 }
 
-@media (max-width: 1199px) {
+@media (max-width: 959px) {
   .main-layout.note-open.agent-open,
   .main-layout.note-open.sidebar-open.agent-open {
     grid-template-columns: var(--sidebar-pane-width) minmax(0, 1fr);
@@ -5291,7 +5294,24 @@ dd {
   .note-agent-inner { width: min(var(--agent-pane-width), 100vw); }
 }
 
-@media (max-width: 831px) {
+@media (min-width: 960px) and (max-width: 1159px) {
+  .main-layout.note-open.sidebar-open.agent-open {
+    grid-template-columns: var(--sidebar-pane-width) minmax(0, 1fr);
+  }
+
+  .main-layout.note-open.sidebar-open.agent-open .note-agent {
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: min(var(--agent-pane-width), 100%);
+    box-shadow: -14px 0 32px rgb(0 0 0 / 12%);
+  }
+
+  .main-layout.note-open.sidebar-open.agent-open .note-agent-inner {
+    width: min(var(--agent-pane-width), 100vw);
+  }
+}
+
+@media (max-width: 839px) {
   .main-layout.sidebar-open,
   .main-layout.note-open.sidebar-open,
   .main-layout.note-open.sidebar-open.agent-open {
@@ -5379,9 +5399,45 @@ dd {
   .settings-surface-body { grid-template-columns: 210px minmax(0, 1fr); }
 }
 
-@media (min-width: 832px) and (max-width: 1199px) {
+@media (min-width: 840px) and (max-width: 1199px) {
   .app-window {
     --sidebar-pane-width: clamp(240px, calc(100vw - 592px), 280px);
+  }
+}
+
+@media (min-width: 720px) {
+  .app-window { --home-pane-max: var(--home-pane-wide-max); }
+
+  .home {
+    padding-inline: clamp(20px, 4vw, 48px);
+  }
+
+  .hero-content,
+  .source-picker {
+    max-width: 720px;
+  }
+
+  .home > .composer {
+    width: min(100%, var(--home-composer-max));
+    align-self: center;
+  }
+
+  .first-home-guide {
+    max-width: var(--home-composer-max);
+  }
+
+  .activity-strip,
+  .proposal-strip,
+  .conversation-timeline,
+  .retrieval-results,
+  .retrieval-answer,
+  .dataset-answer,
+  .home-reader {
+    max-width: var(--home-conversation-max);
+  }
+
+  .conversation-timeline {
+    max-height: min(48vh, 38rem);
   }
 }
 
@@ -5412,7 +5468,7 @@ dd {
   .selection-toolbar button { flex: 1 1 calc(50% - 2px); }
 }
 
-@media (min-width: 1200px) {
+@media (min-width: 1160px) {
   .main-layout.note-open.sidebar-open.agent-open {
     grid-template-columns:
       clamp(var(--library-pane-min), 20vw, var(--library-pane-default))
