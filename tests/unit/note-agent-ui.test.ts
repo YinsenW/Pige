@@ -904,6 +904,8 @@ describe("Note Agent production UI", () => {
     expect(cssSource).toContain(".agent-message-card {");
     expect(cssSource).toContain(".agent-message-card.provisional {");
     expect(cssSource).toContain(".proposal-panel {");
+    expect(cssSource).toMatch(/\.note-agent\s*\{[\s\S]*?background:\s*var\(--surface\);/);
+    expect(cssSource).not.toMatch(/\.note-agent\s*\{[\s\S]*?background:\s*#fdfdfd;/);
     expect(cssSource).toMatch(/\.note-agent-header\s*\{[\s\S]*?padding:\s*0 20px;/);
     expect(cssSource).toMatch(/\.note-agent-thread\s*\{[\s\S]*?padding:\s*22px 20px;/);
     expect(cssSource).toMatch(/\.note-composer\s*\{[\s\S]*?min-height:\s*132px;[\s\S]*?border-radius:\s*20px;/);

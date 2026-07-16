@@ -4221,7 +4221,7 @@ dd {
   height: 100%;
   overflow: hidden;
   border-left: 1px solid var(--border-subtle);
-  background: #fdfdfd;
+  background: var(--surface);
 }
 
 .note-agent-inner {
