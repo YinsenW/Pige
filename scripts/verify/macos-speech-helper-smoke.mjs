@@ -21,7 +21,7 @@ const embeddedInfo = readEmbeddedInfoPlist(binaryPath);
 if (
   manifest.schemaVersion !== 1 ||
   manifest.id !== "pige-speech" ||
-  manifest.helperVersion !== "1.0.0" ||
+  manifest.helperVersion !== "1.1.0" ||
   manifest.protocolVersion !== 1 ||
   manifest.platform !== "macos" ||
   manifest.arch !== process.arch ||
@@ -29,7 +29,9 @@ if (
   manifest.binarySha256 !== `sha256:${createHash("sha256").update(binary).digest("hex")}` ||
   typeof manifest.infoPlistSha256 !== "string" ||
   manifest.hiddenDownloads !== false ||
-  manifest.networkAccess !== false ||
+  manifest.networkAccess !== true ||
+  manifest.networkAccessScope !== "apple_speech_language_assets" ||
+  manifest.downloadTrigger !== "explicit_user_action" ||
   !embeddedInfo.includes("com.yinsenw.pige.speech") ||
   !embeddedInfo.includes("NSMicrophoneUsageDescription") ||
   !embeddedInfo.includes("Pige uses the microphone only while you explicitly dictate text.")

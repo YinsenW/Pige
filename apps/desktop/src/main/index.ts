@@ -48,6 +48,7 @@ import type {
   SubmitUrlCaptureRequest,
   SetWindowModeRequest,
   SpeechAvailabilityRequest,
+  SpeechAssetInstallRequest,
   SpeechCancelRequest,
   SpeechSessionRequest,
   SpeechStartRequest,
@@ -71,6 +72,8 @@ import {
   UpdateModelRequestSchema,
   SetDefaultModelRequestSchema,
   SpeechAvailabilityRequestSchema,
+  SpeechAssetInstallEventSchema,
+  SpeechAssetInstallRequestSchema,
   SpeechCancelRequestSchema,
   SpeechSessionEventSchema,
   SpeechSessionRequestSchema,
@@ -1073,6 +1076,24 @@ ipcMain.handle("window.setSidebarOpen", (event, request: SetSidebarOpenRequest) 
 ipcMain.handle("speech.availability", (_event, request: SpeechAvailabilityRequest) =>
   getSpeechService().availability(SpeechAvailabilityRequestSchema.parse(request))
 );
+ipcMain.handle("speech.installLanguageAsset", async (event, request: SpeechAssetInstallRequest) => {
+  const sender = event.sender;
+  if (!speechTrackedSenders.has(sender.id)) {
+    speechTrackedSenders.add(sender.id);
+    sender.once("destroyed", () => {
+      speechTrackedSenders.delete(sender.id);
+      void getSpeechService().cancelOwner(sender.id);
+    });
+  }
+  const parsed = SpeechAssetInstallRequestSchema.parse(request);
+  const result = await getSpeechService().installLanguageAsset(sender.id, parsed, (installEvent) => {
+    if (!sender.isDestroyed()) {
+      sender.send("speech.assetInstallEvent", SpeechAssetInstallEventSchema.parse(installEvent));
+    }
+  });
+  if (sender.isDestroyed()) await getSpeechService().cancelOwner(sender.id);
+  return result;
+});
 ipcMain.handle("speech.start", async (event, request: SpeechStartRequest) => {
   const sender = event.sender;
   if (!speechTrackedSenders.has(sender.id)) {

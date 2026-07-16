@@ -6,12 +6,13 @@ import { StringDecoder } from "node:string_decoder";
 import { PigeDomainError } from "@pige/domain";
 import type { SpeechNativePort, SpeechNativeProbeResult, SpeechNativeStartResult } from "./speech-service";
 
-const SPEECH_HELPER_VERSION = "1.0.0";
+const SPEECH_HELPER_VERSION = "1.1.0";
 const SPEECH_PROTOCOL_VERSION = 1;
 const MAX_LINE_BYTES = 128 * 1024;
 const PROBE_TIMEOUT_MS = 5_000;
 const START_TIMEOUT_MS = 8_000;
 const STOP_TIMEOUT_MS = 15_000;
+const ASSET_INSTALL_TIMEOUT_MS = 30 * 60_000;
 
 interface SpeechHelperDescriptor {
   readonly binaryPath: string;
@@ -34,9 +35,22 @@ interface ActiveHelperSession {
   rejectStop?: () => void;
 }
 
+interface ActiveAssetInstall {
+  readonly installationId: string;
+  readonly child: ChildProcessWithoutNullStreams;
+  readonly onProgress: (completedFraction: number) => void;
+  readonly framer: SpeechProtocolFramer;
+  readonly closed: Promise<void>;
+  readonly resolveClosed: () => void;
+  stderrBytes: number;
+  settled: boolean;
+  failed: boolean;
+}
+
 export class MacOSSpeechAdapter implements SpeechNativePort {
   readonly #locateHelper: () => SpeechHelperDescriptor | undefined;
   #active: ActiveHelperSession | undefined;
+  #assetInstall: ActiveAssetInstall | undefined;
 
   constructor(locateHelper: () => SpeechHelperDescriptor | undefined = locateVerifiedMacOSSpeechHelper) {
     this.#locateHelper = locateHelper;
@@ -79,7 +93,9 @@ export class MacOSSpeechAdapter implements SpeechNativePort {
     readonly onMeter: (elapsedMs: number, level: number) => void;
     readonly onFailure: () => void;
   }): Promise<SpeechNativeStartResult> {
-    if (this.#active) throw new PigeDomainError("speech.session_busy", "A local speech session is already active.");
+    if (this.#active || this.#assetInstall) {
+      throw new PigeDomainError("speech.session_busy", "A local speech operation is already active.");
+    }
     const helper = this.#requireHelper();
     const child = spawn(helper.binaryPath, ["--session", input.sessionId, input.languageTag], {
       cwd: path.parse(helper.binaryPath).root,
@@ -132,6 +148,117 @@ export class MacOSSpeechAdapter implements SpeechNativePort {
         }
       });
     });
+  }
+
+  async installLanguageAsset(input: {
+    readonly installationId: string;
+    readonly languageTag: string;
+    readonly onProgress: (completedFraction: number) => void;
+  }): Promise<void> {
+    if (this.#active || this.#assetInstall) {
+      throw new PigeDomainError("speech.asset_install_busy", "A local speech operation is already active.");
+    }
+    const helper = this.#requireHelper();
+    const child = spawn(helper.binaryPath, ["--install", input.installationId, input.languageTag], {
+      cwd: path.parse(helper.binaryPath).root,
+      env: sanitizedEnvironment(),
+      shell: false,
+      stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true
+    });
+    let resolveClosed = (): void => undefined;
+    const closed = new Promise<void>((resolve) => {
+      resolveClosed = resolve;
+    });
+    const install: ActiveAssetInstall = {
+      installationId: input.installationId,
+      child,
+      onProgress: input.onProgress,
+      framer: new SpeechProtocolFramer(),
+      closed,
+      resolveClosed,
+      stderrBytes: 0,
+      settled: false,
+      failed: false
+    };
+    this.#assetInstall = install;
+    return new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => failInstall(), ASSET_INSTALL_TIMEOUT_MS);
+      timer.unref();
+      const failInstall = (): void => {
+        if (install.failed) return;
+        install.failed = true;
+        this.#terminateAssetInstall(install);
+      };
+      child.once("error", failInstall);
+      child.stdout.on("data", (chunk: Buffer) => {
+        if (this.#assetInstall !== install) return;
+        try {
+          for (const line of install.framer.push(chunk)) {
+            const event = parseJsonLine(line);
+            if (
+              event.protocolVersion !== SPEECH_PROTOCOL_VERSION ||
+              event.installationId !== install.installationId
+            ) {
+              throw new Error("identity");
+            }
+            if (
+              event.kind === "asset_install_progress" &&
+              typeof event.completedFraction === "number" &&
+              Number.isFinite(event.completedFraction) &&
+              event.completedFraction >= 0 &&
+              event.completedFraction <= 1
+            ) {
+              install.onProgress(event.completedFraction);
+              continue;
+            }
+            if (event.kind === "asset_installed" && !install.settled) {
+              install.settled = true;
+              continue;
+            }
+            if (event.kind === "asset_install_failed") {
+              failInstall();
+              return;
+            }
+            throw new Error("shape");
+          }
+        } catch {
+          failInstall();
+        }
+      });
+      child.stderr.on("data", (chunk: Buffer) => {
+        install.stderrBytes += chunk.byteLength;
+        if (install.stderrBytes > MAX_LINE_BYTES) {
+          failInstall();
+        }
+      });
+      child.once("close", (code, signal) => {
+        install.resolveClosed();
+        try {
+          install.framer.end();
+        } catch {
+          clearTimeout(timer);
+          if (this.#assetInstall === install) this.#assetInstall = undefined;
+          reject(new PigeDomainError("speech.asset_install_failed", "The language asset installation failed."));
+          return;
+        }
+        clearTimeout(timer);
+        if (this.#assetInstall === install) this.#assetInstall = undefined;
+        if (install.failed || !install.settled || code !== 0 || signal !== null) {
+          reject(new PigeDomainError("speech.asset_install_failed", "The language asset installation failed."));
+          return;
+        }
+        resolve();
+      });
+    });
+  }
+
+  async abandonLanguageAssetInstall(installationId: string): Promise<void> {
+    const install = this.#assetInstall;
+    if (!install || install.installationId !== installationId) return;
+    this.#terminateAssetInstall(install);
+    await install.closed;
+    if (this.#assetInstall === install) this.#assetInstall = undefined;
   }
 
   async stop(sessionId: string): Promise<string> {
@@ -254,6 +381,10 @@ export class MacOSSpeechAdapter implements SpeechNativePort {
   #terminate(session: ActiveHelperSession): void {
     if (this.#active === session) this.#active = undefined;
     if (!session.child.killed) session.child.kill("SIGKILL");
+  }
+
+  #terminateAssetInstall(install: ActiveAssetInstall): void {
+    if (!install.child.killed) install.child.kill("SIGKILL");
   }
 
   #requireHelper(): SpeechHelperDescriptor {

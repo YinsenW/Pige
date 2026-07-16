@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -8,10 +9,15 @@ import {
 } from "../../apps/desktop/src/main/services/macos-speech-adapter";
 
 describe("macOS Speech adapter", () => {
-  it("uses installed Speech assets and exports only transcript and normalized metering", () => {
+  it("installs Speech assets only through the explicit helper command and exports no audio", () => {
     const source = fs.readFileSync(path.resolve("apps/desktop/native/macos-speech/PigeSpeech.swift"), "utf8");
     expect(source).toContain("AssetInventory.status(forModules:");
-    expect(source).not.toContain("downloadAndInstall");
+    expect(source).toContain('arguments[0] == "--install"');
+    expect(source).toContain("AssetInventory.assetInstallationRequest(supporting:");
+    expect(source).toContain("installation.downloadAndInstall()");
+    expect(source).not.toContain("installation.progress.cancel()");
+    expect(source).toContain('kind: "asset_install_progress"');
+    expect(source).toContain('kind: "asset_installed"');
     expect(source).toContain("result.resultsFinalizationTime");
     expect(source).toContain("CMTimeRangeGetIntersection");
     expect(source).toContain("AVCaptureDevice.requestAccess(for: .audio)");
@@ -21,6 +27,54 @@ describe("macOS Speech adapter", () => {
     expect(source).toContain("let rms = sqrt");
     expect(source).toContain('kind: "meter"');
     expect(source).not.toContain("FileHandle.standardError.write");
+    const probeBody = source.slice(source.indexOf("private static func probe"), source.indexOf("private static func installLanguageAsset"));
+    const sessionBody = source.slice(source.indexOf("private static func runSession"), source.indexOf("private static func writeProbe"));
+    expect(probeBody).not.toContain("downloadAndInstall");
+    expect(sessionBody).not.toContain("downloadAndInstall");
+  });
+
+  it.runIf(process.platform === "darwin")("validates native install identity and waits for terminal helper exit", async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "pige-speech-install-"));
+    const helper = path.join(directory, "helper");
+    fs.writeFileSync(helper, `#!/bin/sh
+printf '{"protocolVersion":1,"kind":"asset_install_progress","installationId":"%s","completedFraction":0.25}\\n' "$2"
+printf '{"protocolVersion":1,"kind":"asset_installed","installationId":"%s"}\\n' "$2"
+`, { mode: 0o755 });
+    const adapter = new MacOSSpeechAdapter(() => ({ binaryPath: helper, binarySha256: `sha256:${"0".repeat(64)}` }));
+    const progress: number[] = [];
+    try {
+      await expect(adapter.installLanguageAsset({
+        installationId: `speechinstall_${"a".repeat(16)}`,
+        languageTag: "en-US",
+        onProgress: (value) => progress.push(value)
+      })).resolves.toBeUndefined();
+      expect(progress).toEqual([0.25]);
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it.runIf(process.platform === "darwin")("abandons and awaits the exact helper without claiming system cancellation", async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "pige-speech-cancel-"));
+    const helper = path.join(directory, "helper");
+    fs.writeFileSync(helper, "#!/bin/sh\nsleep 30\n", { mode: 0o755 });
+    const adapter = new MacOSSpeechAdapter(() => ({ binaryPath: helper, binarySha256: `sha256:${"0".repeat(64)}` }));
+    const installationId = `speechinstall_${"b".repeat(16)}`;
+    const installing = adapter.installLanguageAsset({
+      installationId,
+      languageTag: "en-US",
+      onProgress: () => undefined
+    });
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      await expect(Promise.all([
+        adapter.abandonLanguageAssetInstall(installationId),
+        adapter.abandonLanguageAssetInstall(installationId)
+      ])).resolves.toEqual([undefined, undefined]);
+      await expect(installing).rejects.toMatchObject({ code: "speech.asset_install_failed" });
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it("decodes split multibyte protocol lines without replacement characters", () => {

@@ -89,11 +89,15 @@ describe("desktop shell build contract", () => {
     expect(helperInfo).toContain("NSMicrophoneUsageDescription");
     expect(helperInfo).toContain("com.yinsenw.pige.speech");
     expect(mainSource).toContain('ipcMain.handle("speech.start"');
+    expect(mainSource).toContain('ipcMain.handle("speech.installLanguageAsset"');
+    expect(mainSource).toContain('"speech.assetInstallEvent", SpeechAssetInstallEventSchema.parse(installEvent)');
     expect(mainSource).toContain("const speechTrackedSenders = new Set<number>();");
     expect(mainSource).toContain("void getSpeechService().cancelOwner(sender.id);");
     expect(mainSource).toContain("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone");
     expect(preloadSource).toContain("SpeechSessionEventSchema.safeParse(value)");
+    expect(preloadSource).toContain("SpeechAssetInstallEventSchema.safeParse(value)");
     expect(preloadSource).toContain('ipcRenderer.invoke("speech.start", parsedRequest)');
+    expect(preloadSource).toContain('ipcRenderer.invoke("speech.installLanguageAsset", parsedRequest)');
     expect(preloadSource).not.toContain("PIGE_PACKAGED_RESOURCES_PATH");
     expect(builderConfig).toContain("NSMicrophoneUsageDescription:");
   });

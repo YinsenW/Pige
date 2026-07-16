@@ -32,6 +32,11 @@ import type {
   RetrievalSearchScope,
   SpeechAvailabilityRequest,
   SpeechAvailabilityResult,
+  SpeechAssetInstallationId,
+  SpeechAssetInstallEvent,
+  SpeechAssetInstallRequest,
+  SpeechAssetInstallResult,
+  SpeechAssetRequestId,
   SpeechCancelRequest,
   SpeechCancelResult,
   SpeechOpenSystemSettingsResult,
@@ -74,6 +79,11 @@ export type {
   RetrievalSearchScope,
   SpeechAvailabilityRequest,
   SpeechAvailabilityResult,
+  SpeechAssetInstallationId,
+  SpeechAssetInstallEvent,
+  SpeechAssetInstallRequest,
+  SpeechAssetInstallResult,
+  SpeechAssetRequestId,
   SpeechCancelRequest,
   SpeechCancelResult,
   SpeechOpenSystemSettingsResult,
@@ -1247,10 +1257,12 @@ export interface PigeDesktopApi {
   };
   readonly speech: {
     readonly availability: (request: SpeechAvailabilityRequest) => Promise<SpeechAvailabilityResult>;
+    readonly installLanguageAsset: (request: SpeechAssetInstallRequest) => Promise<SpeechAssetInstallResult>;
     readonly start: (request: SpeechStartRequest) => Promise<SpeechStartResult>;
     readonly stop: (request: SpeechSessionRequest) => Promise<SpeechStopResult>;
     readonly cancel: (request: SpeechCancelRequest) => Promise<SpeechCancelResult>;
     readonly openSystemSettings: () => Promise<SpeechOpenSystemSettingsResult>;
+    readonly onAssetInstallEvent: (listener: (event: SpeechAssetInstallEvent) => void) => () => void;
     readonly onSessionEvent: (listener: (event: SpeechSessionEvent) => void) => () => void;
   };
 }

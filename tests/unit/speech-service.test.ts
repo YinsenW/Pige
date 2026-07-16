@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { SpeechSessionEvent } from "@pige/contracts";
+import type { SpeechAssetInstallEvent, SpeechSessionEvent } from "@pige/contracts";
 import {
   SpeechService,
   type SpeechNativePort,
@@ -8,6 +8,7 @@ import {
 } from "../../apps/desktop/src/main/services/speech-service";
 
 const request = { requestId: `speechreq_${"a".repeat(16)}`, languageTag: "en-US" } as const;
+const assetRequest = { requestId: `speechasset_${"a".repeat(16)}`, languageTag: "en-US" } as const;
 
 describe("speech service", () => {
   it("projects helper-owned permission without prompting during availability", async () => {
@@ -27,8 +28,9 @@ describe("speech service", () => {
   });
 
   it("fails closed off macOS and for denied permission", async () => {
+    const unsupportedNative = new FakeNative();
     const unsupported = new SpeechService({
-      native: new FakeNative(),
+      native: unsupportedNative,
       permission: new FakePermission(),
       platform: "win32",
       systemVersion: "26.0"
@@ -38,6 +40,11 @@ describe("speech service", () => {
       reason: "unsupported_platform",
       canOpenSystemSettings: false
     });
+    await expect(unsupported.installLanguageAsset(1, assetRequest, () => undefined)).resolves.toMatchObject({
+      status: "blocked",
+      error: { code: "speech.unsupported_platform", retryable: false }
+    });
+    expect(unsupportedNative.installCount).toBe(0);
 
     const permission = new FakePermission();
     const deniedNative = new FakeNative();
@@ -178,25 +185,209 @@ describe("speech service", () => {
     expect(left).toMatchObject({ status: "stopped", transcript: "final" });
     expect(native.stopCount).toBe(1);
   });
+
+  it("installs one explicit language asset with monotonic bounded progress", async () => {
+    const native = new FakeNative();
+    native.probeResult = { status: "unsupported", reason: "assets_unavailable", permission: "not-determined" };
+    let releaseInstall: (() => void) | undefined;
+    native.installDelay = new Promise<void>((resolve) => {
+      releaseInstall = resolve;
+    });
+    const service = createService(native, new FakePermission());
+    const events: SpeechAssetInstallEvent[] = [];
+    const started = await service.installLanguageAsset(51, assetRequest, (event) => events.push(event));
+    expect(started).toMatchObject({
+      status: "started",
+      requestId: assetRequest.requestId,
+      installationId: expect.stringMatching(/^speechinstall_[a-z0-9]{16,64}$/u),
+      metering: "available"
+    });
+    await native.installEntered;
+
+    native.emitInstallProgress(0.04);
+    native.emitInstallProgress(0.04);
+    native.emitInstallProgress(0.02);
+    native.emitInstallProgress(1.4);
+    releaseInstall?.();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(events).toEqual([
+      expect.objectContaining({ kind: "progress", sequence: 1, completedFraction: 0.04 }),
+      expect.objectContaining({ kind: "progress", sequence: 2, completedFraction: 1 }),
+      expect.objectContaining({ kind: "installed", sequence: 3, languageTag: "en-US" })
+    ]);
+  });
+
+  it("serializes asset installation with sessions and ignores another renderer teardown", async () => {
+    const native = new FakeNative();
+    native.probeResult = { status: "unsupported", reason: "assets_unavailable", permission: "not-determined" };
+    let releaseInstall: (() => void) | undefined;
+    native.installDelay = new Promise<void>((resolve) => {
+      releaseInstall = resolve;
+    });
+    const service = createService(native, new FakePermission());
+    const events: SpeechAssetInstallEvent[] = [];
+    const started = await service.installLanguageAsset(61, assetRequest, (event) => events.push(event));
+    if (started.status !== "started") throw new Error("asset installation did not start");
+    await native.installEntered;
+
+    await expect(service.start(61, { ...request, requestId: `speechreq_${"b".repeat(16)}` }, () => undefined))
+      .resolves.toMatchObject({ status: "blocked", error: { code: "speech.session_busy" } });
+    await service.cancelOwner(62);
+    expect(native.abandonAssetInstallCount).toBe(0);
+    releaseInstall?.();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(events).toEqual([
+      expect.objectContaining({ kind: "installed", installationId: started.installationId, sequence: 1 })
+    ]);
+  });
+
+  it("abandons an owned helper on renderer destruction without releasing the slot early", async () => {
+    const native = new FakeNative();
+    native.probeResult = { status: "unsupported", reason: "assets_unavailable", permission: "not-determined" };
+    let releaseInstall: (() => void) | undefined;
+    let releaseAbandon: (() => void) | undefined;
+    native.installDelay = new Promise<void>((resolve) => {
+      releaseInstall = resolve;
+    });
+    native.abandonDelay = new Promise<void>((resolve) => {
+      releaseAbandon = resolve;
+    });
+    const service = createService(native, new FakePermission());
+    const events: SpeechAssetInstallEvent[] = [];
+    await expect(service.installLanguageAsset(63, assetRequest, (event) => events.push(event)))
+      .resolves.toMatchObject({ status: "started" });
+    await native.installEntered;
+
+    const abandoning = service.cancelOwner(63);
+    await native.abandonEntered;
+    const alsoAbandoning = service.cancelOwner(63);
+    await expect(service.start(
+      64,
+      { ...request, requestId: `speechreq_${"e".repeat(16)}` },
+      () => undefined
+    )).resolves.toMatchObject({ status: "blocked", error: { code: "speech.session_busy" } });
+    await expect(service.installLanguageAsset(
+      64,
+      { ...assetRequest, requestId: `speechasset_${"e".repeat(16)}` },
+      () => undefined
+    )).resolves.toMatchObject({ status: "blocked", error: { code: "speech.asset_install_busy" } });
+    releaseAbandon?.();
+    await Promise.all([abandoning, alsoAbandoning]);
+    releaseInstall?.();
+    await Promise.resolve();
+
+    expect(native.abandonAssetInstallCount).toBe(2);
+    expect(events).toEqual([]);
+    native.installDelay = undefined;
+    await expect(service.installLanguageAsset(
+      64,
+      { ...assetRequest, requestId: `speechasset_${"c".repeat(16)}` },
+      () => undefined
+    )).resolves.toMatchObject({ status: "started" });
+  });
+
+  it("fails language asset installation closed without leaking native failures", async () => {
+    const native = new FakeNative();
+    native.probeResult = { status: "unsupported", reason: "assets_unavailable", permission: "not-determined" };
+    native.installFailure = true;
+    const service = createService(native, new FakePermission());
+    const events: SpeechAssetInstallEvent[] = [];
+    await expect(service.installLanguageAsset(71, assetRequest, (event) => events.push(event)))
+      .resolves.toMatchObject({ status: "started", requestId: assetRequest.requestId });
+    await native.installEntered;
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(events).toEqual([
+      expect.objectContaining({
+        kind: "failed",
+        error: expect.objectContaining({ code: "speech.asset_install_failed", userAction: "retry" })
+      })
+    ]);
+  });
+
+  it("preflights the exact language and installs only when its native assets are unavailable", async () => {
+    const installed = new FakeNative();
+    const installedService = createService(installed, new FakePermission());
+    await expect(installedService.installLanguageAsset(81, assetRequest, () => undefined)).resolves.toMatchObject({
+      status: "blocked",
+      error: { code: "speech.asset_already_installed", retryable: false }
+    });
+    expect(installed.installCount).toBe(0);
+
+    const unavailable = new FakeNative();
+    unavailable.probeResult = {
+      status: "unsupported",
+      reason: "language_unavailable",
+      permission: "not-determined"
+    };
+    await expect(createService(unavailable, new FakePermission()).installLanguageAsset(
+      82,
+      { ...assetRequest, requestId: `speechasset_${"d".repeat(16)}` },
+      () => undefined
+    )).resolves.toMatchObject({
+      status: "blocked",
+      error: { code: "speech.language_unavailable", retryable: false }
+    });
+    expect(unavailable.installCount).toBe(0);
+  });
+
+  it("does not start a download when its renderer is destroyed during asset preflight", async () => {
+    const native = new FakeNative();
+    native.probeResult = { status: "unsupported", reason: "assets_unavailable", permission: "not-determined" };
+    let releaseProbe: (() => void) | undefined;
+    native.probeDelay = new Promise<void>((resolve) => {
+      releaseProbe = resolve;
+    });
+    const service = createService(native, new FakePermission());
+    const starting = service.installLanguageAsset(83, assetRequest, () => undefined);
+    await Promise.resolve();
+
+    await service.cancelOwner(83);
+    releaseProbe?.();
+
+    await expect(starting).resolves.toMatchObject({
+      status: "blocked",
+      error: { code: "speech.asset_install_canceled" }
+    });
+    expect(native.installCount).toBe(0);
+  });
 });
 
 class FakeNative implements SpeechNativePort {
   finalTranscript = "final";
   cancelCount = 0;
+  abandonAssetInstallCount = 0;
+  installCount = 0;
   probeResult: SpeechNativeProbeResult = { status: "supported", permission: "granted" };
   probeDelay: Promise<void> | undefined;
   startResult: Awaited<ReturnType<SpeechNativePort["start"]>> = { status: "started", metering: "available" };
   startDelay: Promise<void> | undefined;
+  installDelay: Promise<void> | undefined;
+  abandonDelay: Promise<void> | undefined;
+  installFailure = false;
   stopDelay: Promise<void> | undefined;
   stopCount = 0;
   readonly startEntered: Promise<void>;
+  readonly installEntered: Promise<void>;
+  readonly abandonEntered: Promise<void>;
   #markStartEntered: (() => void) | undefined;
+  #markInstallEntered: (() => void) | undefined;
+  #markAbandonEntered: (() => void) | undefined;
   #transcript: ((value: string) => void) | undefined;
   #meter: ((elapsedMs: number, level: number) => void) | undefined;
+  #installProgress: ((progress: number) => void) | undefined;
 
   constructor() {
     this.startEntered = new Promise<void>((resolve) => {
       this.#markStartEntered = resolve;
+    });
+    this.installEntered = new Promise<void>((resolve) => {
+      this.#markInstallEntered = resolve;
+    });
+    this.abandonEntered = new Promise<void>((resolve) => {
+      this.#markAbandonEntered = resolve;
     });
   }
 
@@ -211,6 +402,22 @@ class FakeNative implements SpeechNativePort {
     this.#transcript = input.onTranscript;
     this.#meter = input.onMeter;
     return this.startResult;
+  }
+
+  async installLanguageAsset(
+    input: Parameters<SpeechNativePort["installLanguageAsset"]>[0]
+  ): ReturnType<SpeechNativePort["installLanguageAsset"]> {
+    this.installCount += 1;
+    this.#installProgress = input.onProgress;
+    this.#markInstallEntered?.();
+    await this.installDelay;
+    if (this.installFailure) throw new Error("private native failure");
+  }
+
+  async abandonLanguageAssetInstall(): Promise<void> {
+    this.abandonAssetInstallCount += 1;
+    this.#markAbandonEntered?.();
+    await this.abandonDelay;
   }
 
   async stop(): Promise<string> {
@@ -229,6 +436,10 @@ class FakeNative implements SpeechNativePort {
 
   emitMeter(elapsedMs: number, level: number): void {
     this.#meter?.(elapsedMs, level);
+  }
+
+  emitInstallProgress(progress: number): void {
+    this.#installProgress?.(progress);
   }
 }
 
