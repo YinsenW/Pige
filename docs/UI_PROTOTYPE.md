@@ -581,7 +581,7 @@ Current Phase 4 reader context foundation:
 - Library/Home results expose outgoing links and backlinks through `library.related`.
 - Related pages open by stable ID; the renderer gets neither arbitrary paths nor note bodies.
 - The context rail is right-side when wide and below Markdown when narrow.
-- Current-note Agent is read-only; edit/copy/selection/reveal remain later.
+- Current-note Agent and Reader copy are real; edit/selection/reveal remain unavailable.
 
 ### 8.2 Note Agent Panel
 
@@ -850,17 +850,17 @@ Settings rules:
 - Skills and Pi Packages are both under Extensions, but remain separate pages.
 - Cross-links are allowed, but cards from another domain should not be embedded in the current page.
 
-Current shell: primary navigation is Home + Knowledge Tree; Library is below it; Settings
-opens from the bottom vault/profile control; Models is only a Settings/Home repair target.
-Vault owns storage/Backup/Restore; Index & Maintenance owns index/diagnostic/support
-actions. Home, Library/Reader, Knowledge Tree, Models, Vault, Backup/Restore, maintenance,
-locale/window-pin and current-action prompts are real; Settings framing and Reader related
-context are partial. Appearance, local capabilities, Agent/memory, reusable permission
-policy, Skills, Pi Packages, updates, Note Agent, unbound Reader and Knowledge controls
-are development-only: one localized polite unavailable status, never IPC, Job,
-persistence, fake result/progress, destructive effect, evidence, or status credit. Until
-a separate `BrowserWindow` owner exists, Settings is an in-app focus-trapped dialog with
-Escape/exact-invoker restoration and no outer-window resize.
+Current shell: Home + Knowledge Tree are primary; Library sits below; Settings opens via
+vault/profile; Models is only a Settings/Home repair target. Vault owns storage/Backup/
+Restore; Index & Maintenance owns index/diagnostics/support. Real surfaces include Home,
+Library/Reader, Knowledge Tree, Models, Vault, Backup/Restore, maintenance, current-note
+Agent, Reader copy, composer processing, compact Activity/Undo, locale/window pin and
+current-action prompts. Settings framing and Reader related context remain partial.
+Appearance, local capabilities, Agent/memory, reusable permission policy, Skills, Pi
+Packages, updates/voice, Reader mutations and unbound Knowledge controls remain localized
+unavailable without IPC, Job, persistence, fake result/progress or status credit. Until a
+separate `BrowserWindow` owner exists, Settings remains an in-app focus-trapped dialog
+with Escape/exact-invoker restoration and no outer-window resize.
 
 ### Vault, Note Storage, And Backup
 

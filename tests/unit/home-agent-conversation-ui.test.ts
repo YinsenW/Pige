@@ -64,6 +64,23 @@ afterEach(() => {
 });
 
 describe("Home durable Agent conversation UI", () => {
+  it("keeps the unsupported production voice trigger disabled with an accessible explanation", async () => {
+    const dom = createDom(420);
+    const harness = createHarness(undefined);
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    const voiceButton = buttonsByAriaLabel(container, enMessages["home.voice.unsupportedTitle"])[0]!;
+
+    expect(voiceButton.disabled).toBe(true);
+    expect(voiceButton.title).toBe(enMessages["home.voice.unsupportedTitle"]);
+    expect(voiceButton.getAttribute("aria-describedby")).toBe("home-voice-unavailable-description");
+    expect(container.querySelector("#home-voice-unavailable-description")?.textContent)
+      .toBe(enMessages["home.voice.unsupportedDescription"]);
+    expect(container.querySelector(".home-voice-panel")).toBeNull();
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("lets the Models panel solely own its scoped summary failure after Home loads", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
@@ -666,6 +683,53 @@ describe("Home durable Agent conversation UI", () => {
 
     await act(async () => root.unmount());
     dom.window.close();
+  });
+
+  it("docks processing files to the composer and removes terminal or non-source Jobs", async () => {
+    const dom = createDom(420);
+    const harness = createHarness(undefined);
+    harness.onboarding = captureOnlyOnboarding(true);
+    harness.jobs = [
+      sourceWaitingForModelJob(),
+      {
+        ...sourceWaitingForModelJob(),
+        id: "job_20260716_completedsource",
+        state: "completed",
+        sourceDisplayName: "completed-source.csv"
+      },
+      {
+        ...sourceWaitingForModelJob(),
+        id: "job_20260716_failedsource",
+        state: "failed_final",
+        sourceDisplayName: "failed-source.csv"
+      },
+      runningAgentJob()
+    ];
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await waitFor(dom, () => container.querySelector(".task-panel") !== null);
+    expect(container.textContent).toContain("public-alpha.csv");
+    expect(container.textContent).not.toContain("completed-source.csv");
+    expect(container.textContent).not.toContain("failed-source.csv");
+    await clickButtonByAriaLabel(dom, container, "Expand processing files");
+    expect(container.querySelectorAll(".task-row")).toHaveLength(1);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+
+    const terminalDom = createDom(420);
+    const terminalHarness = createHarness(undefined);
+    terminalHarness.onboarding = captureOnlyOnboarding(true);
+    terminalHarness.jobs = [{
+      ...sourceWaitingForModelJob(),
+      state: "completed",
+      sourceDisplayName: "completed-source.csv"
+    }];
+    const terminalMount = await mountHome(terminalDom, makePigeApi(terminalHarness));
+    expect(terminalMount.container.querySelector(".task-panel")).toBeNull();
+
+    await act(async () => terminalMount.root.unmount());
+    terminalDom.window.close();
   });
 
   it("filters conversation-owned model waits before capping Recent Work", async () => {
@@ -1586,6 +1650,8 @@ describe("Home durable Agent conversation UI", () => {
     const successToast = container.querySelector<HTMLElement>('[role="status"]');
     expect(successToast?.getAttribute("aria-live")).toBe("polite");
     const activityRow = container.querySelector<HTMLElement>('[data-activity-row-id="op_20260712_activityfixture"]');
+    expect(activityRow?.querySelector(".activity-row-copy")).not.toBeNull();
+    expect(activityRow?.querySelector(".activity-row-dot")?.classList.contains("is-undone")).toBe(true);
     await waitFor(dom, () => dom.window.document.activeElement === activityRow);
 
     await act(async () => root.unmount());
@@ -1696,6 +1762,8 @@ describe("Home durable Agent conversation UI", () => {
       path.resolve("apps/desktop/src/renderer/src/styles/app.css"),
       "utf8"
     );
+    expect(styles).toMatch(/\.activity-row\s*\{[\s\S]*?grid-template-columns:\s*8px minmax\(0, 1fr\) auto;[\s\S]*?min-height:\s*32px;/);
+    expect(styles).toMatch(/\.activity-row-dot\s*\{[\s\S]*?width:\s*6px;[\s\S]*?background:\s*var\(--success\);/);
     const submitFiles = appSource.slice(
       appSource.indexOf("const submitFiles"),
       appSource.indexOf("const cancelJob")

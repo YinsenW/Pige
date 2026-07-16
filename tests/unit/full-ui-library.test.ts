@@ -3,8 +3,8 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it } from "vitest";
-import type { LibraryListResult, RetrievalSearchRequest, RetrievalSearchResult } from "@pige/contracts";
-import { filterLibraryPages, LibraryPanel } from "../../apps/desktop/src/renderer/src/App";
+import type { LibraryListResult, NoteRenderResult, RetrievalSearchRequest, RetrievalSearchResult } from "@pige/contracts";
+import { filterLibraryPages, LibraryPanel, NoteReader } from "../../apps/desktop/src/renderer/src/App";
 import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.json";
 
 const globalKeys = [
@@ -294,7 +294,225 @@ describe("full UI Library", () => {
     await act(async () => root.unmount());
     dom.window.close();
   });
+
+  it("binds the approved Reader toolbar to real copy and keeps unowned actions honest", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const copied: string[] = [];
+    const unavailable: string[] = [];
+    let cleared = 0;
+    const note = readerNote();
+    await act(async () => {
+      root.render(createElement(LibraryPanel, {
+        libraryList: libraryList(),
+        selectedNote: note,
+        selectedNoteRelated: null,
+        noteLoadingPageId: null,
+        error: null,
+        onGoHome: () => undefined,
+        onRefresh: async () => undefined,
+        onSearch: async () => searchResult("unused", []),
+        searchFocusRequest: 0,
+        onOpenNote: async () => undefined,
+        onCloseNote: () => undefined,
+        noteAgentOpen: false,
+        onToggleNoteAgent: () => undefined,
+        noteAgentToggleRef: { current: null },
+        developmentNotice: null,
+        onClearDevelopment: () => { cleared += 1; },
+        onCopyNote: async (pageId) => { copied.push(pageId); return true; },
+        onDevelopment: (capability) => unavailable.push(capability),
+        t
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+
+    await act(async () => {
+      buttonWithLabel(container, "Copy Markdown").click();
+      await settle(dom);
+    });
+    expect(copied).toEqual([note.summary.pageId]);
+    expect(container.textContent).toContain("Markdown copied.");
+    expect(container.querySelectorAll('[role="status"]')).toHaveLength(1);
+
+    await act(async () => {
+      buttonWithLabel(container, "Edit note").click();
+      await settle(dom);
+    });
+    expect(unavailable).toEqual(["document_actions"]);
+    expect(cleared).toBeGreaterThan(0);
+    expect(container.textContent).not.toContain("Markdown copied.");
+
+    const sourceButtons = container.querySelectorAll<HTMLButtonElement>(".reader-source");
+    expect(sourceButtons).toHaveLength(2);
+    expect(container.textContent).toContain("Saved source 1");
+    expect(container.textContent).not.toContain("source_private_0001");
+    expect(container.textContent).not.toContain("/Users/example/private.md");
+    await act(async () => {
+      sourceButtons[0]!.click();
+      await settle(dom);
+    });
+    expect(unavailable.at(-1)).toBe("source_reference");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("measures compact selection actions, dismisses on scroll, and restores exact focus ownership", async () => {
+    const dom = createDom();
+    Object.defineProperty(dom.window, "innerWidth", { configurable: true, value: 360 });
+    Object.defineProperty(dom.window, "innerHeight", { configurable: true, value: 240 });
+    const focusOwner = dom.window.document.createElement("button");
+    focusOwner.textContent = "Reader focus owner";
+    dom.window.document.body.prepend(focusOwner);
+    focusOwner.focus();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const unavailable: string[] = [];
+    await act(async () => {
+      root.render(createElement(NoteReader, {
+        note: readerNote(),
+        related: null,
+        relatedLoadingPageId: null,
+        onOpenRelated: async () => undefined,
+        onDevelopment: (capability) => unavailable.push(capability),
+        t
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    requireElement(container.querySelector(".markdown-body p"));
+    const originalBoundingClientRect = dom.window.HTMLElement.prototype.getBoundingClientRect;
+    dom.window.HTMLElement.prototype.getBoundingClientRect = function getBoundingClientRect(): DOMRect {
+      if ((this as HTMLElement).classList.contains("selection-toolbar")) {
+        return {
+          left: 0,
+          top: 0,
+          width: 330,
+          height: 84,
+          right: 330,
+          bottom: 84,
+          x: 0,
+          y: 0,
+          toJSON: () => ({})
+        } as DOMRect;
+      }
+      return originalBoundingClientRect.call(this);
+    };
+    let selectionCollapsed = false;
+    Object.defineProperty(dom.window, "getSelection", {
+      configurable: true,
+      value: () => ({
+        isCollapsed: selectionCollapsed,
+        rangeCount: selectionCollapsed ? 0 : 1,
+        getRangeAt: () => ({
+          commonAncestorContainer: requireElement(container.querySelector(".markdown-body p")),
+          getBoundingClientRect: () => ({ left: 330, top: 15, width: 20, height: 18, right: 350, bottom: 33 })
+        })
+      })
+    });
+    await act(async () => {
+      dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.querySelector<HTMLElement>('[role="toolbar"]')?.style.left === "18px");
+
+    let toolbar = requireElement(container.querySelector<HTMLElement>('[role="toolbar"]'));
+    let actions = Array.from(toolbar.querySelectorAll<HTMLButtonElement>("button"));
+    expect(toolbar.style.left).toBe("18px");
+    expect(toolbar.style.top).toBe("41px");
+    expect(actions.map((button) => button.textContent)).toEqual(["Explain", "Summarize", "Link", "More"]);
+    expect(actions.map((button) => button.tabIndex)).toEqual([0, -1, -1, -1]);
+    actions[0]!.focus();
+    await act(async () => {
+      toolbar.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+      await settle(dom);
+    });
+    expect(dom.window.document.activeElement).toBe(actions[1]);
+    expect(actions.map((button) => button.tabIndex)).toEqual([-1, 0, -1, -1]);
+
+    await act(async () => {
+      toolbar.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.querySelector('[role="toolbar"]') === null);
+    await waitFor(dom, () => dom.window.document.activeElement === focusOwner);
+
+    focusOwner.focus();
+    await act(async () => {
+      selectionCollapsed = true;
+      dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+      selectionCollapsed = false;
+      dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.querySelector<HTMLElement>('[role="toolbar"]')?.style.left === "18px");
+    toolbar = requireElement(container.querySelector<HTMLElement>('[role="toolbar"]'));
+    actions = Array.from(toolbar.querySelectorAll<HTMLButtonElement>("button"));
+    const pointerDown = new dom.window.MouseEvent("pointerdown", { bubbles: true, cancelable: true });
+    await act(async () => {
+      actions[1]!.dispatchEvent(pointerDown);
+      actions[1]!.click();
+      await settle(dom);
+    });
+    expect(pointerDown.defaultPrevented).toBe(true);
+    await waitFor(dom, () => dom.window.document.activeElement === focusOwner);
+    expect(unavailable).toEqual(["selection_actions"]);
+    expect(container.querySelector('[role="toolbar"]')).toBeNull();
+
+    focusOwner.focus();
+    await act(async () => {
+      selectionCollapsed = true;
+      dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+      selectionCollapsed = false;
+      dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.querySelector('[role="toolbar"]') !== null);
+    await act(async () => {
+      dom.window.dispatchEvent(new dom.window.Event("scroll"));
+      await settle(dom);
+    });
+    expect(container.querySelector('[role="toolbar"]')).toBeNull();
+
+    focusOwner.remove();
+    await act(async () => {
+      selectionCollapsed = true;
+      dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+      selectionCollapsed = false;
+      dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+      await settle(dom);
+    });
+    toolbar = requireElement(container.querySelector<HTMLElement>('[role="toolbar"]'));
+    await act(async () => {
+      toolbar.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await settle(dom);
+    });
+    await waitFor(dom, () => dom.window.document.activeElement === container.querySelector(".note-reader"));
+
+    await act(async () => root.unmount());
+    dom.window.HTMLElement.prototype.getBoundingClientRect = originalBoundingClientRect;
+    dom.window.close();
+  });
 });
+
+function readerNote(): NoteRenderResult {
+  return {
+    summary: {
+      pageId: "page_20260715_reader1111",
+      title: "Reader actions",
+      pageType: "note",
+      status: "active",
+      pagePath: "wiki/reader-actions.md",
+      createdAt: "2026-07-15T10:00:00.000Z",
+      updatedAt: "2026-07-15T10:00:00.000Z",
+      language: "en",
+      sourceIds: ["source_private_0001", "source_private_0002"]
+    },
+    html: "<p>Selected note body</p>",
+    byteSize: 256
+  };
+}
 
 function libraryList(): LibraryListResult {
   return {
@@ -376,6 +594,10 @@ function createDom(): JSDOM {
     configurable: true,
     value: (callback: FrameRequestCallback) => dom.window.setTimeout(() => callback(Date.now()), 0)
   });
+  Object.defineProperty(dom.window, "cancelAnimationFrame", {
+    configurable: true,
+    value: (handle: number) => dom.window.clearTimeout(handle)
+  });
   return dom;
 }
 
@@ -390,6 +612,13 @@ function buttonContaining(container: ParentNode, text: string): HTMLButtonElemen
   const button = Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
     .find((candidate) => candidate.textContent?.includes(text));
   if (!button) throw new Error(`Missing button containing: ${text}`);
+  return button;
+}
+
+function buttonWithLabel(container: ParentNode, label: string): HTMLButtonElement {
+  const button = Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
+    .find((candidate) => candidate.getAttribute("aria-label") === label);
+  if (!button) throw new Error(`Missing button with label: ${label}`);
   return button;
 }
 

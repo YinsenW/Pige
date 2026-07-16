@@ -233,8 +233,8 @@ describe("Restore identity UI", () => {
     };
     const { container, root } = await mountApp(dom, api);
 
-    await openSettingsSection(dom, container, "Index & Maintenance");
-    await click(dom, button(container, "Preview Support Bundle"));
+    await openSettingsSection(dom, container, "Updates & Diagnostics");
+    await click(dom, button(container, "Preview and export…"));
     await waitFor(dom, () => container.textContent?.includes("Preview ready") ?? false);
     await click(dom, button(container, "Export Support Bundle"));
     await waitFor(dom, () => button(container, "Cancel Export") !== undefined);
@@ -278,8 +278,8 @@ describe("Restore identity UI", () => {
     };
     const { container, root } = await mountApp(dom, api);
 
-    await openSettingsSection(dom, container, "Index & Maintenance");
-    await click(dom, button(container, "Preview Support Bundle"));
+    await openSettingsSection(dom, container, "Updates & Diagnostics");
+    await click(dom, button(container, "Preview and export…"));
     await waitFor(dom, () => container.textContent?.includes("Preview ready") ?? false);
     await click(dom, button(container, "Export Support Bundle"));
     await waitFor(dom, () => container.textContent?.includes("Cancel Export") ?? false);

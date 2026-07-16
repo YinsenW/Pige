@@ -757,6 +757,43 @@ async function runConnectRenderer(browserWindow, input) {
         }
         button.click();
       };
+      const openSettingsSection = async (label) => {
+        let trigger = document.querySelector("button.sidebar-settings-control");
+        if (!trigger) {
+          const toggle = await waitFor(
+            () => document.querySelector("button.sidebar-toggle-button"),
+            "sidebar toggle"
+          );
+          toggle.click();
+          trigger = await waitFor(
+            () => document.querySelector("button.sidebar-settings-control"),
+            "Settings trigger"
+          );
+        }
+        trigger.click();
+        const section = await waitFor(
+          () => Array.from(document.querySelectorAll("button.settings-nav-item"))
+            .find((item) => item.querySelector("span")?.textContent?.trim() === label),
+          "Settings section " + label
+        );
+        section.click();
+        return waitFor(
+          () => Array.from(document.querySelectorAll("section.settings-page"))
+            .find((item) => item.getAttribute("aria-label") === label),
+          label + " Settings page"
+        );
+      };
+      const closeSettings = async () => {
+        const close = await waitFor(
+          () => document.querySelector("button.settings-return"),
+          "Settings close"
+        );
+        close.click();
+        await waitFor(
+          () => document.querySelector("[data-settings-overlay]") ? undefined : true,
+          "closed Settings"
+        );
+      };
       const setValue = (element, value) => {
         const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), "value");
         descriptor.set.call(element, value);
@@ -820,6 +857,8 @@ async function runConnectRenderer(browserWindow, input) {
 
       await waitFor(() => window.pige, "preload bridge");
       const toolchain = await window.pige.system.toolchainHealth();
+      const modelsBeforeConnect = await window.pige.models.summary();
+      const reviewedPresetNames = new Set(modelsBeforeConnect.presets.map((preset) => preset.displayName));
       const requiredSourceTools = [
         "pdf-parser",
         "pdf-parser-runtime",
@@ -835,10 +874,32 @@ async function runConnectRenderer(browserWindow, input) {
       );
       if (!sourceToolchainReady) throw new Error("Bundled source toolchain is not ready in the assembled app.");
       mark("models_nav");
-      await clickNav("Models");
+      let modelsPage = await openSettingsSection("Models");
+      mark("models_overview");
+      const addProviderButton = await waitFor(
+        () => modelsPage.querySelector(".settings-inline-actions button.settings-button.primary:not(:disabled)"),
+        "Add Provider action"
+      );
+      addProviderButton.click();
+      modelsPage = await waitFor(
+        () => Array.from(document.querySelectorAll('section.settings-page[aria-label="Models"]'))
+          .find((page) => page.querySelector(".model-provider-picker button.model-provider-choice")),
+        "Add Provider page"
+      );
+      mark("models_add_provider");
+      const providerChoices = Array.from(modelsPage.querySelectorAll(".model-provider-picker button.model-provider-choice"));
+      const customProviderButton = providerChoices.find((choice) => {
+        const choiceName = choice.querySelector("strong")?.textContent?.trim();
+        return choiceName && !reviewedPresetNames.has(choiceName);
+      });
+      if (!customProviderButton) throw new Error("Custom provider choice missing.");
+      customProviderButton.click();
+      mark("models_custom_provider");
       mark("provider_form");
-      const details = await waitFor(() => document.querySelector("details.custom-provider"), "custom provider form");
-      details.open = true;
+      const customProviderPage = await waitFor(
+        () => document.querySelector('section.settings-page[aria-label="Models"] #provider-name')?.closest("section.settings-page"),
+        "custom provider form"
+      );
       const protocolSelect = document.querySelector("#provider-protocol");
       const keyInput = document.querySelector("#provider-key");
       if (!protocolSelect || !Array.from(protocolSelect.options).some((option) => option.value === "openai_responses")) {
@@ -850,15 +911,18 @@ async function runConnectRenderer(browserWindow, input) {
       setValue(protocolSelect, "openai_responses");
       setValue(document.querySelector("#provider-base-url"), ${JSON.stringify(input.baseUrl)});
       setValue(keyInput, ${JSON.stringify(input.syntheticToken)});
+      mark("provider_form_filled");
       const discoverButton = await waitFor(
-        () => details.querySelector("button:not(:disabled)"),
+        () => customProviderPage.querySelector(".model-settings-footer-actions button.primary:not(:disabled)"),
         "enabled provider discovery button"
       );
       discoverButton.click();
+      mark("provider_discovery_started");
       const modelInput = await waitFor(
         () => document.querySelector("#provider-model"),
         "bootstrap model selection"
       );
+      mark("provider_bootstrap_visible");
       if (modelInput.value !== ${JSON.stringify(MODEL_ID)}) {
         throw new Error("Discovered bootstrap model was not selected safely.");
       }
@@ -867,25 +931,57 @@ async function runConnectRenderer(browserWindow, input) {
         throw new Error("Provider discovery wrote durable state before the bootstrap probe.");
       }
       const connectButton = await waitFor(
-        () => details.querySelector("button:not(:disabled)"),
+        () => customProviderPage.querySelector(".model-settings-footer-actions button.primary:not(:disabled)"),
         "enabled provider connect button"
       );
       connectButton.click();
+      mark("provider_commit_started");
       const summary = await waitFor(async () => {
         const value = await window.pige.models.summary();
         return value.defaultBinding.state === "ready" ? value : undefined;
       }, "ready provider binding");
+      mark("provider_binding_ready");
+      const connectedOverview = await waitFor(
+        () => Array.from(document.querySelectorAll('section.settings-page[aria-label="Models"]'))
+          .find((page) => page.querySelector("#global-default-model")),
+        "connected provider overview"
+      );
+      const reopenAddProvider = await waitFor(
+        () => connectedOverview.querySelector(".settings-inline-actions button.settings-button.primary:not(:disabled)"),
+        "reopen Add Provider action"
+      );
+      reopenAddProvider.click();
+      const reopenedPicker = await waitFor(
+        () => Array.from(document.querySelectorAll('section.settings-page[aria-label="Models"]'))
+          .find((page) => page.querySelector(".model-provider-picker button.model-provider-choice")),
+        "reopened Add Provider page"
+      );
+      const reopenedCustomProvider = Array.from(
+        reopenedPicker.querySelectorAll(".model-provider-picker button.model-provider-choice")
+      ).find((choice) => {
+        const choiceName = choice.querySelector("strong")?.textContent?.trim();
+        return choiceName && !reviewedPresetNames.has(choiceName);
+      });
+      if (!reopenedCustomProvider) throw new Error("Reopened custom provider choice missing.");
+      reopenedCustomProvider.click();
       const secretFieldCleared = await waitFor(
         () => document.querySelector("#provider-key")?.value === "" ? true : undefined,
         "cleared provider key field"
       );
+      mark("provider_secret_cleared");
+      await closeSettings();
+      mark("provider_settings_closed");
       await clickNav("Home");
-      await clickNav("Models");
+      mark("provider_home_visible");
+      await openSettingsSection("Models");
+      mark("provider_models_reopened");
       await waitFor(() => document.body.textContent?.includes(${JSON.stringify(PROVIDER_NAME)}), "visible default provider");
+      mark("provider_visible");
       const defaultSelect = await waitFor(
         () => document.querySelector("#global-default-model"),
         "global default model selector"
       );
+      mark("provider_default_visible");
       const selectedOption = defaultSelect.selectedOptions[0];
       const defaultProviderLabel = selectedOption?.parentElement?.tagName === "OPTGROUP"
         ? selectedOption.parentElement.label
@@ -894,10 +990,24 @@ async function runConnectRenderer(browserWindow, input) {
       if (defaultProviderLabel !== ${JSON.stringify(PROVIDER_NAME)} || defaultModelLabel !== ${JSON.stringify(MODEL_ID)}) {
         throw new Error("Global Default does not identify the connected provider model.");
       }
-      const providerGroup = document.querySelector(".provider-model-group");
+      const providerCard = Array.from(document.querySelectorAll(".model-provider-card"))
+        .find((card) => card.textContent?.includes(${JSON.stringify(PROVIDER_NAME)}));
+      const providerDetailButton = providerCard
+        ? providerCard.querySelector(".settings-row > button.settings-button:not(:disabled)")
+        : null;
+      if (!providerDetailButton) throw new Error("Connected provider detail action is not available.");
+      providerDetailButton.click();
+      const providerGroup = await waitFor(
+        () => document.querySelector(".provider-model-group"),
+        "connected provider model inventory"
+      );
       if (!providerGroup?.textContent?.includes(${JSON.stringify(MODEL_ID)})) {
         throw new Error("Connected provider model inventory is not visible.");
       }
+      mark("provider_inventory_visible");
+      await closeSettings();
+      await clickNav("Home");
+      mark("provider_home_ready");
 
       mark("api_turn");
       const draftEvents = [];
@@ -1113,6 +1223,43 @@ async function runReopenRenderer(browserWindow) {
         }
         button.click();
       };
+      const openSettingsSection = async (label) => {
+        let trigger = document.querySelector("button.sidebar-settings-control");
+        if (!trigger) {
+          const toggle = await waitFor(
+            () => document.querySelector("button.sidebar-toggle-button"),
+            "sidebar toggle"
+          );
+          toggle.click();
+          trigger = await waitFor(
+            () => document.querySelector("button.sidebar-settings-control"),
+            "Settings trigger"
+          );
+        }
+        trigger.click();
+        const section = await waitFor(
+          () => Array.from(document.querySelectorAll("button.settings-nav-item"))
+            .find((item) => item.querySelector("span")?.textContent?.trim() === label),
+          "Settings section " + label
+        );
+        section.click();
+        return waitFor(
+          () => Array.from(document.querySelectorAll("section.settings-page"))
+            .find((item) => item.getAttribute("aria-label") === label),
+          label + " Settings page"
+        );
+      };
+      const closeSettings = async () => {
+        const close = await waitFor(
+          () => document.querySelector("button.settings-return"),
+          "Settings close"
+        );
+        close.click();
+        await waitFor(
+          () => document.querySelector("[data-settings-overlay]") ? undefined : true,
+          "closed Settings"
+        );
+      };
       const setValue = (element, value) => {
         const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), "value");
         descriptor.set.call(element, value);
@@ -1128,11 +1275,12 @@ async function runReopenRenderer(browserWindow) {
       }, "reopened provider binding");
       const runtimeStatus = await window.pige.agent.runtimeStatus();
       mark("models_reopen");
-      await clickNav("Models");
+      await openSettingsSection("Models");
       const providerVisible = await waitFor(
         () => document.body.textContent?.includes(${JSON.stringify(PROVIDER_NAME)}),
         "reopened default provider"
       );
+      await closeSettings();
       mark("home_reopen");
       await clickNav("Home");
       mark("model_egress_recovery_wait");

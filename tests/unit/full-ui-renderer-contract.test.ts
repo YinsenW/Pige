@@ -36,10 +36,30 @@ describe("full production UI renderer contract", () => {
     expect(cssSource).toContain("grid-template-columns: minmax(0, 1fr);");
     expect(cssSource).toContain("env(titlebar-area-x, 0px)");
     expect(cssSource).toContain("env(titlebar-area-width, 100vw)");
+    expect(appSource).toContain('macosWindowShell ? " platform-macos" : ""');
+    expect(cssSource).toContain(".app-window.platform-macos .titlebar-navigation");
+    expect(cssSource).toContain("transform: translateY(-11px);");
     expect(cssSource).toContain("padding-right: max(10px, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)))");
     expect(cssSource).not.toContain(".app-window .titlebar { padding-right: 10px; }");
     const homeComposer = cssSource.match(/\.home > \.composer \{[\s\S]*?\n\}/)?.[0] ?? "";
     expect(homeComposer).toContain("border-radius: 22px;");
+    expect(homeComposer).toContain("anchor-name: --home-composer;");
+    const processingPanel = cssSource.match(/\.task-panel \{[\s\S]*?\n\}/)?.[0] ?? "";
+    expect(processingPanel).toContain("position: fixed;");
+    expect(processingPanel).toContain("position-anchor: --home-composer;");
+    expect(processingPanel).toContain("left: anchor(left);");
+    expect(processingPanel).toContain("width: anchor-size(width);");
+    expect(processingPanel).toContain("bottom: calc(anchor(top) - 14px);");
+    expect(processingPanel).toContain("margin: 0;");
+    const processingProjection = appSource.slice(
+      appSource.indexOf("function isActiveProcessingFileJob"),
+      appSource.indexOf("function jobStateMessageKey")
+    );
+    expect(processingProjection).toContain('job.state === "running"');
+    expect(processingProjection).toContain('job.state === "failed_retryable"');
+    expect(processingProjection).not.toContain('job.state === "completed"');
+    expect(processingProjection).not.toContain('job.state === "failed_final"');
+    expect(processingProjection).not.toContain('job.state === "cancelled"');
   });
 
   it("keeps Home-only navigation hidden and exposes one controlled Library tree", () => {
@@ -63,7 +83,9 @@ describe("full production UI renderer contract", () => {
     expect(appSource).toContain('className="sidebar-settings-control"');
     expect(appSource).toContain('aria-haspopup="dialog"');
     expect(appSource).toContain('{ id: "maintenance", icon: "database", status: "real" }');
+    expect(appSource).toContain('{ id: "system", icon: "activity", status: "partial" }');
     expect(appSource).toContain('settingsSection === "vault" || settingsSection === "maintenance"');
+    expect(appSource).toContain('settingsSection === "system"');
   });
 
   it("binds the approved Library search surface and Home composer icons to existing real actions", () => {
@@ -82,6 +104,31 @@ describe("full production UI renderer contract", () => {
     expect(appSource).toContain('name="attach"');
     expect(appSource).toContain('? "loading" : "send"');
     expect(appSource).toContain("onKeyDown={handleComposerKeyDown}");
+  });
+
+  it("binds the approved Reader actions without inventing edit, selection, or source services", () => {
+    expect(appSource).toContain("const copyNoteMarkdown = async (pageId: string): Promise<boolean>");
+    expect(appSource).toContain("window.pige.notes.get({ pageId })");
+    expect(appSource).toContain("navigator.clipboard.writeText(note.markdownBody)");
+    expect(appSource).toContain('data-reader-action="edit"');
+    expect(appSource).toContain('data-reader-action="copy"');
+    expect(appSource).toContain('data-reader-action="more"');
+    expect(appSource).toContain('props.onDevelopment("selection_actions")');
+    expect(appSource).toContain('props.onDevelopment("source_reference")');
+    expect(appSource).toContain('event.key === "ArrowRight"');
+    expect(appSource).toContain('event.key === "ArrowLeft"');
+    expect(appSource).toContain('event.key === "Home"');
+    expect(appSource).toContain('event.key === "End"');
+    expect(appSource).toContain("event.preventDefault()");
+    expect(appSource).toContain("const toolbarRect = toolbar.getBoundingClientRect()");
+    expect(appSource).toContain('window.addEventListener("scroll", dismissOnScroll, true)');
+    expect(appSource).toContain("priorOwner?.isConnected ? priorOwner : readerRef.current");
+    expect(appSource).not.toContain("const toolbarWidth = 244");
+    expect(appSource).not.toContain("const toolbarHeight = 42");
+    expect(appSource).not.toContain("sourceId}</");
+    expect(cssSource).toContain("max-width: calc(100vw - 24px);");
+    expect(cssSource).toContain("max-height: calc(100vh - 24px);");
+    expect(cssSource).toContain('.reader-toolbar-actions .prototype-action:not([data-reader-action="more"])');
   });
 
   it("uses one reviewed tree-shaken Lucide family without raw renderer SVG", () => {
@@ -115,13 +162,37 @@ describe("full production UI renderer contract", () => {
     ];
 
     requiredKeys.push(
+      "development.capability.document_actions",
+      "development.capability.source_reference",
       "development.state.development",
+      "note.close",
+      "note.copy",
+      "note.document.copied",
+      "note.document.copy_failed",
+      "note.document.copying",
+      "note.edit",
+      "note.moreActions",
+      "note.moreSources",
+      "note.path",
+      "note.preview",
+      "note.savedSource",
+      "note.selection.explain",
+      "note.selection.link",
+      "note.selection.more",
+      "note.selection.summarize",
+      "note.selectionActions",
+      "note.sourceReferenceUnavailable",
+      "note.sources",
       "settings.close",
       "settings.navigation",
       "settings.section.maintenance",
       "settings.section.models",
+      "settings.section.system",
       "settings.section.vault",
-      "settings.status.development"
+      "settings.status.development",
+      "system.localOnlyNote",
+      "system.previewSupport",
+      "system.title"
     );
 
     for (const locale of locales) {

@@ -5,6 +5,8 @@ import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   SettingsSurface,
+  SkillsSettingsPanel,
+  SystemSettingsPanel,
   type DevelopmentCapability,
   type SettingsSection
 } from "../../apps/desktop/src/renderer/src/App";
@@ -102,6 +104,175 @@ describe("full UI Settings surface", () => {
       dialog.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     });
     expect(close).toHaveBeenCalledOnce();
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("renders the complete Skills shell without inventing installed Skills or service work", async () => {
+    const dom = createDom();
+    const onDevelopment = vi.fn();
+    let ipcRead = false;
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      get() {
+        ipcRead = true;
+        throw new Error("Skills development actions must not access IPC.");
+      }
+    });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+
+    await act(async () => {
+      root.render(createElement(SkillsSettingsPanel, { onDevelopment, t }));
+      await settle(dom);
+    });
+
+    const page = dom.window.document.querySelector<HTMLElement>(".settings-skills")!;
+    expect(page.getAttribute("aria-labelledby")).toBe("settings-skills-title");
+    expect(page.querySelectorAll('[role="group"]')).toHaveLength(2);
+    expect(page.textContent).toContain("Skill inventory unavailable");
+    expect(page.textContent).toContain("Nothing has been read or changed yet");
+    expect(page.textContent).toContain("Source, files, and warnings stay visible");
+    expect(page.querySelector('[role="switch"]')).toBeNull();
+    expect(page.querySelector("[data-skill-id]")).toBeNull();
+
+    await act(async () => {
+      buttonNamed(page, "Install from link").click();
+      buttonNamed(page, "Choose Markdown or ZIP").click();
+      await settle(dom);
+    });
+    expect(onDevelopment).toHaveBeenCalledTimes(2);
+    expect(ipcRead).toBe(false);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps Updates local while binding real redacted diagnostics and support preview", async () => {
+    const dom = createDom();
+    const refreshDiagnostics = vi.fn(async () => undefined);
+    const previewSupportBundle = vi.fn(async () => ({
+      previewId: "support_preview",
+      generatedAt: "2026-07-16T00:00:00.000Z",
+      localOnly: true as const,
+      estimatedBytes: 2048,
+      includedCategories: [{ id: "app_runtime", label: "/private/raw-label", included: true, reason: "private body" }],
+      excludedCategories: [{ id: "content", label: "RAW CONTENT", included: false, reason: "excluded" }],
+      privacyWarnings: [
+        "The bundle is created locally and is not uploaded automatically.",
+        "Paths, emails, and common secret patterns are redacted by default.",
+        "Review the preview before exporting."
+      ]
+    }));
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: {
+        diagnostics: {
+          previewSupportBundle,
+          exportSupportBundle: vi.fn(),
+          cancelSupportBundleExport: vi.fn()
+        }
+      }
+    });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+
+    function Harness(): React.JSX.Element {
+      const [preview, setPreview] = useState<Awaited<ReturnType<typeof previewSupportBundle>> | null>(null);
+      return createElement(SystemSettingsPanel, {
+        diagnosticsHealth: {
+          status: "ok",
+          checkedAt: "2026-07-16T00:00:00.000Z",
+          localOnly: true,
+          recentErrorCount: 0,
+          checks: []
+        },
+        supportBundlePreview: preview,
+        onRefreshDiagnostics: refreshDiagnostics,
+        onSupportBundlePreviewChange: setPreview,
+        t
+      });
+    }
+
+    await act(async () => {
+      root.render(createElement(Harness));
+      await settle(dom);
+    });
+    const panel = dom.window.document.querySelector<HTMLElement>(".settings-system-page")!;
+    expect(panel.querySelector('select[aria-label="Update channel"]')).toBeNull();
+    expect(panel.querySelector('[role="switch"][aria-label="Automatically download updates"]')).toBeNull();
+    expect(buttonNamed(panel, "Temporarily unavailable. Nothing was changed.").disabled).toBe(true);
+    expect(buttonNamed(panel, "Clear…").disabled).toBe(true);
+
+    await act(async () => {
+      buttonNamed(panel, "Check for updates").click();
+      await settle(dom);
+    });
+    expect(panel.textContent).toContain("Update Service is in development");
+    expect(previewSupportBundle).not.toHaveBeenCalled();
+
+    await act(async () => {
+      buttonNamed(panel, "Refresh").click();
+      await settle(dom);
+    });
+    expect(refreshDiagnostics).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      buttonNamed(panel, "Preview and export…").click();
+      await settle(dom);
+    });
+    expect(previewSupportBundle).toHaveBeenCalledOnce();
+    expect(panel.textContent).toContain("Preview ready");
+    expect(panel.textContent).toContain("App and platform");
+    expect(panel.textContent).toContain("Private knowledge content");
+    expect(panel.textContent).toContain("The bundle is created locally and is never uploaded automatically.");
+    expect(buttonNamed(panel, "Export Support Bundle").disabled).toBe(false);
+    expect(panel.textContent).not.toContain("/private/raw-label");
+    expect(panel.textContent).not.toContain("private body");
+    expect(panel.textContent).not.toContain("RAW CONTENT");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("fails closed when a support preview contains an unreviewed projection", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: {
+        diagnostics: {
+          previewSupportBundle: vi.fn(),
+          exportSupportBundle: vi.fn(),
+          cancelSupportBundleExport: vi.fn()
+        }
+      }
+    });
+
+    await act(async () => {
+      root.render(createElement(SystemSettingsPanel, {
+        diagnosticsHealth: null,
+        supportBundlePreview: {
+          previewId: "support_unknown",
+          generatedAt: "2026-07-16T00:00:00.000Z",
+          localOnly: true,
+          estimatedBytes: 1024,
+          includedCategories: [{ id: "future_private_category", label: "/raw/path", included: true, reason: "raw reason" }],
+          excludedCategories: [],
+          privacyWarnings: ["raw warning"]
+        },
+        onRefreshDiagnostics: async () => undefined,
+        onSupportBundlePreviewChange: vi.fn(),
+        t
+      }));
+      await settle(dom);
+    });
+
+    const panel = dom.window.document.querySelector<HTMLElement>(".settings-system-page")!;
+    expect(panel.querySelector('[role="alert"]')?.textContent).toContain("cannot safely describe every preview item");
+    expect(buttonNamed(panel, "Export Support Bundle").disabled).toBe(true);
+    expect(panel.textContent).not.toContain("/raw/path");
+    expect(panel.textContent).not.toContain("raw reason");
+    expect(panel.textContent).not.toContain("raw warning");
 
     await act(async () => root.unmount());
     dom.window.close();

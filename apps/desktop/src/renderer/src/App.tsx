@@ -91,7 +91,9 @@ export type DevelopmentCapability =
   | "knowledge_filter"
   | "knowledge_view"
   | "note_agent"
+  | "document_actions"
   | "selection_actions"
+  | "source_reference"
   | "appearance"
   | "local_capabilities"
   | "agent_memory"
@@ -180,6 +182,7 @@ function useMediaQuery(query: string): boolean {
 }
 
 export function App(): React.JSX.Element {
+  const macosWindowShell = /Macintosh|Mac OS X/.test(window.navigator.userAgent);
   const sidebarOverlayLayout = useMediaQuery("(max-width: 831px)");
   const agentOverlayLayout = useMediaQuery("(max-width: 1199px)");
   const [health, setHealth] = useState<AppHealth | null>(null);
@@ -468,6 +471,7 @@ export function App(): React.JSX.Element {
     if (!vaultId) return;
     const requestId = noteOpenSequence.current + 1;
     noteOpenSequence.current = requestId;
+    setDevelopmentNotice(null);
     setLibraryError(null);
     setSelectedNoteRelated("loading");
     setNoteLoadingPageId(pageId);
@@ -486,6 +490,23 @@ export function App(): React.JSX.Element {
       setLibraryError(t("error.generic"));
     } finally {
       if (requestId === noteOpenSequence.current) setNoteLoadingPageId(null);
+    }
+  };
+
+  const copyNoteMarkdown = async (pageId: string): Promise<boolean> => {
+    const requestId = noteOpenSequence.current;
+    try {
+      const note = await window.pige.notes.get({ pageId });
+      if (
+        requestId !== noteOpenSequence.current ||
+        note.summary.pageId !== pageId ||
+        selectedNote?.summary.pageId !== pageId ||
+        !navigator.clipboard?.writeText
+      ) return false;
+      await navigator.clipboard.writeText(note.markdownBody);
+      return requestId === noteOpenSequence.current && selectedNote?.summary.pageId === pageId;
+    } catch {
+      return false;
     }
   };
 
@@ -728,7 +749,7 @@ export function App(): React.JSX.Element {
 
   return (
     <div
-      className={`shell app-window mode-${windowState?.mode ?? "compact"}${sidebarOpen ? " sidebar-expanded" : ""}${selectedNote ? " note-mode" : ""}${dropActive ? " drop-active" : ""}`}
+      className={`shell app-window mode-${windowState?.mode ?? "compact"}${macosWindowShell ? " platform-macos" : ""}${sidebarOpen ? " sidebar-expanded" : ""}${selectedNote ? " note-mode" : ""}${dropActive ? " drop-active" : ""}`}
       aria-label="Pige"
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
@@ -910,6 +931,8 @@ export function App(): React.JSX.Element {
             onToggleNoteAgent={toggleNoteAgent}
             noteAgentToggleRef={noteAgentToggleRef}
             developmentNotice={developmentNotice?.surface === "reader" ? developmentNotice : null}
+            onClearDevelopment={() => setDevelopmentNotice(null)}
+            onCopyNote={copyNoteMarkdown}
             onDevelopment={(capability) => showDevelopmentCapability("reader", capability)}
             t={t}
           />
@@ -937,6 +960,8 @@ export function App(): React.JSX.Element {
               onToggleNoteAgent={toggleNoteAgent}
               noteAgentToggleRef={noteAgentToggleRef}
               developmentNotice={developmentNotice?.surface === "reader" ? developmentNotice : null}
+              onClearDevelopment={() => setDevelopmentNotice(null)}
+              onCopyNote={copyNoteMarkdown}
               onDevelopment={(capability) => showDevelopmentCapability("reader", capability)}
               t={t}
             />
@@ -1059,9 +1084,7 @@ export function App(): React.JSX.Element {
                 busy={busy}
                 error={error}
                 vault={activeVault}
-                diagnosticsHealth={diagnosticsHealth}
                 localDatabaseStatus={localDatabaseStatus}
-                supportBundlePreview={supportBundlePreview}
                 backupStatus={backupStatus}
                 backupJobs={backupJobs}
                 toolchainHealth={toolchainHealth}
@@ -1070,7 +1093,6 @@ export function App(): React.JSX.Element {
                 onCreate={createVault}
                 onRefresh={refreshVaultState}
                 onRefreshDiagnostics={refreshDiagnostics}
-                onSupportBundlePreviewChange={setSupportBundlePreview}
                 onRemoveRecent={removeRecent}
                 onError={setError}
                 t={t}
@@ -1083,6 +1105,19 @@ export function App(): React.JSX.Element {
               alwaysOnTop={windowState?.alwaysOnTop ?? false}
               onLocaleChange={updateLocale}
               onAlwaysOnTopChange={toggleAlwaysOnTop}
+              t={t}
+            />
+          ) : settingsSection === "skills" ? (
+            <SkillsSettingsPanel
+              onDevelopment={() => showDevelopmentCapability("settings", "skills")}
+              t={t}
+            />
+          ) : settingsSection === "system" ? (
+            <SystemSettingsPanel
+              diagnosticsHealth={diagnosticsHealth}
+              supportBundlePreview={supportBundlePreview}
+              onRefreshDiagnostics={refreshDiagnostics}
+              onSupportBundlePreviewChange={setSupportBundlePreview}
               t={t}
             />
           ) : (
@@ -1253,6 +1288,8 @@ export function LibraryPanel(props: {
   readonly onToggleNoteAgent: () => void;
   readonly noteAgentToggleRef: RefObject<HTMLButtonElement | null>;
   readonly developmentNotice: DevelopmentNotice | null;
+  readonly onClearDevelopment: () => void;
+  readonly onCopyNote: (pageId: string) => Promise<boolean>;
   readonly onDevelopment: (capability: DevelopmentCapability) => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
@@ -1265,8 +1302,32 @@ export function LibraryPanel(props: {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const tabRefs = useRef(new Map<LibraryFamily, HTMLButtonElement>());
   const focusSearchAfterRetry = useRef(false);
+  const readerActionSequence = useRef(0);
+  const [readerActionState, setReaderActionState] = useState<"idle" | "copying" | "copied" | "copy_failed">("idle");
   const normalizedQuery = query.trim();
   const activeVaultId = props.libraryList?.activeVaultId;
+
+  useEffect(() => {
+    readerActionSequence.current += 1;
+    setReaderActionState("idle");
+  }, [props.selectedNote?.summary.pageId]);
+
+  const showReaderDevelopment = (capability: DevelopmentCapability): void => {
+    readerActionSequence.current += 1;
+    setReaderActionState("idle");
+    props.onClearDevelopment();
+    props.onDevelopment(capability);
+  };
+
+  const copySelectedNote = async (pageId: string): Promise<void> => {
+    const requestId = readerActionSequence.current + 1;
+    readerActionSequence.current = requestId;
+    props.onClearDevelopment();
+    setReaderActionState("copying");
+    const copied = await props.onCopyNote(pageId);
+    if (requestId !== readerActionSequence.current) return;
+    setReaderActionState(copied ? "copied" : "copy_failed");
+  };
 
   useEffect(() => {
     if (props.searchFocusRequest <= 0) return;
@@ -1329,18 +1390,18 @@ export function LibraryPanel(props: {
   };
 
   if (props.selectedNote) {
+    const summary = props.selectedNote.summary;
     return (
       <section className="library-page reader-page" aria-label={props.t("note.reader")}>
-        <div className="reader-action-bar">
-          <button type="button" className="ghost back-button" onClick={props.onCloseNote}>
-            <PigeIcon name="arrowLeft" size={15} />
-            {props.readerBackLabel ?? props.t("note.backToLibrary")}
-          </button>
-          <div>
-            <button type="button" className="ghost" onClick={() => props.onDevelopment("selection_actions")}>
-              <PigeIcon name="edit" size={15} />
-              {props.t("development.capability.selection_actions")}
-            </button>
+        <header className="reader-toolbar">
+          <nav className="reader-breadcrumbs" aria-label={props.t("note.path")}>
+            <span>{props.readerBackLabel ?? props.t("library.title")}</span>
+            <span aria-hidden="true">›</span>
+            <span>{props.t(`library.type.${summary.pageType}`)}</span>
+            <span aria-hidden="true">›</span>
+            <strong aria-current="page" title={summary.title}>{summary.title}</strong>
+          </nav>
+          <div className="reader-toolbar-actions">
             <button
               ref={props.noteAgentToggleRef}
               type="button"
@@ -1353,14 +1414,62 @@ export function LibraryPanel(props: {
             >
               <PigeIcon name="panel" size={17} />
             </button>
+            <button
+              type="button"
+              data-reader-action="edit"
+              className="icon-button prototype-action"
+              aria-label={props.t("note.edit")}
+              title={props.t("note.edit")}
+              onClick={() => showReaderDevelopment("document_actions")}
+            >
+              <PigeIcon name="edit" size={16} />
+            </button>
+            <button
+              type="button"
+              className="icon-button"
+              data-reader-action="copy"
+              aria-label={props.t("note.copy")}
+              title={props.t("note.copy")}
+              disabled={readerActionState === "copying"}
+              aria-busy={readerActionState === "copying"}
+              onClick={() => void copySelectedNote(summary.pageId)}
+            >
+              <PigeIcon name="copy" size={16} />
+            </button>
+            <button
+              type="button"
+              data-reader-action="more"
+              className="icon-button prototype-action"
+              aria-label={props.t("note.moreActions")}
+              title={props.t("note.moreActions")}
+              onClick={() => showReaderDevelopment("document_actions")}
+            >
+              <PigeIcon name="more" size={16} />
+            </button>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label={props.t("note.close")}
+              title={props.t("note.close")}
+              onClick={props.onCloseNote}
+            >
+              <PigeIcon name="close" size={17} />
+            </button>
           </div>
-        </div>
-        <DevelopmentStatus notice={props.developmentNotice} t={props.t} />
+        </header>
+        {readerActionState !== "idle" ? (
+          <p className={`reader-action-status ${readerActionState}`} role="status" aria-live="polite" aria-atomic="true">
+            {props.t(`note.document.${readerActionState}`)}
+          </p>
+        ) : (
+          <DevelopmentStatus notice={props.developmentNotice} t={props.t} />
+        )}
         <NoteReader
           note={props.selectedNote}
           related={props.selectedNoteRelated}
           relatedLoadingPageId={props.noteLoadingPageId}
           onOpenRelated={props.onOpenNote}
+          onDevelopment={showReaderDevelopment}
           t={props.t}
         />
         {props.error ? <p className="error">{props.error}</p> : null}
@@ -1764,26 +1873,199 @@ async function loadNoteRelated(
   }
 }
 
-function NoteReader(props: {
+export function NoteReader(props: {
   readonly note: NoteRenderResult;
   readonly related: NoteRelatedState;
   readonly relatedLoadingPageId: string | null;
   readonly onOpenRelated: (pageId: string) => Promise<void>;
+  readonly onDevelopment: (capability: DevelopmentCapability) => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const summary = props.note.summary;
+  const readerRef = useRef<HTMLElement | null>(null);
+  const selectionToolbarRef = useRef<HTMLDivElement | null>(null);
+  const selectionActionRefs = useRef(new Map<number, HTMLButtonElement>());
+  const selectionFocusTransition = useRef(false);
+  const selectionFocusOwnerRef = useRef<HTMLElement | null>(null);
+  const currentSelectionRef = useRef<{
+    readonly left: number;
+    readonly top: number;
+    readonly right: number;
+    readonly bottom: number;
+  } | null>(null);
+  const dismissedSelectionRef = useRef<typeof currentSelectionRef.current>(null);
+  const [selectionAnchor, setSelectionAnchor] = useState<{
+    readonly left: number;
+    readonly top: number;
+    readonly bottom: number;
+    readonly width: number;
+  } | null>(null);
+  const [selectionPosition, setSelectionPosition] = useState<{ readonly left: number; readonly top: number } | null>(null);
+  const [selectionActionIndex, setSelectionActionIndex] = useState(0);
+
+  const closeSelectionToolbar = (restoreFocus: boolean): void => {
+    selectionFocusTransition.current = false;
+    dismissedSelectionRef.current = currentSelectionRef.current;
+    setSelectionAnchor(null);
+    setSelectionPosition(null);
+    if (!restoreFocus) return;
+    const priorOwner = selectionFocusOwnerRef.current;
+    const focusTarget = priorOwner?.isConnected ? priorOwner : readerRef.current;
+    window.requestAnimationFrame(() => focusTarget?.focus({ preventScroll: true }));
+  };
+
+  useEffect(() => {
+    const updateSelection = (): void => {
+      if (selectionFocusTransition.current) return;
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+        currentSelectionRef.current = null;
+        dismissedSelectionRef.current = null;
+        if (selectionToolbarRef.current?.contains(document.activeElement)) return;
+        setSelectionAnchor(null);
+        setSelectionPosition(null);
+        return;
+      }
+      const range = selection.getRangeAt(0);
+      const selectionNode = range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
+        ? range.commonAncestorContainer as Element
+        : range.commonAncestorContainer.parentElement;
+      if (!selectionNode || !readerRef.current?.contains(selectionNode) || typeof range.getBoundingClientRect !== "function") {
+        setSelectionPosition(null);
+        return;
+      }
+      const rect = range.getBoundingClientRect();
+      if (!Number.isFinite(rect.left) || !Number.isFinite(rect.top) || rect.width <= 0) {
+        setSelectionAnchor(null);
+        setSelectionPosition(null);
+        return;
+      }
+      const nextSelection = {
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom
+      };
+      currentSelectionRef.current = nextSelection;
+      const dismissed = dismissedSelectionRef.current;
+      if (dismissed
+        && dismissed.left === nextSelection.left
+        && dismissed.top === nextSelection.top
+        && dismissed.right === nextSelection.right
+        && dismissed.bottom === nextSelection.bottom) return;
+      dismissedSelectionRef.current = null;
+      const activeElement = document.activeElement;
+      if (activeElement instanceof HTMLElement && !selectionToolbarRef.current?.contains(activeElement)) {
+        selectionFocusOwnerRef.current = activeElement === document.body ? readerRef.current : activeElement;
+      }
+      const anchor = {
+        left: rect.left,
+        top: rect.top,
+        bottom: rect.bottom,
+        width: rect.width
+      };
+      setSelectionAnchor(anchor);
+      setSelectionActionIndex(0);
+      setSelectionPosition({ left: Math.max(12, anchor.left), top: Math.max(12, anchor.top) });
+    };
+    const dismissOnScroll = (): void => {
+      dismissedSelectionRef.current = currentSelectionRef.current;
+      setSelectionAnchor(null);
+      setSelectionPosition(null);
+    };
+    document.addEventListener("selectionchange", updateSelection);
+    window.addEventListener("resize", updateSelection);
+    window.addEventListener("scroll", dismissOnScroll, true);
+    return () => {
+      document.removeEventListener("selectionchange", updateSelection);
+      window.removeEventListener("resize", updateSelection);
+      window.removeEventListener("scroll", dismissOnScroll, true);
+    };
+  }, [summary.pageId]);
+
+  useEffect(() => {
+    if (!selectionAnchor) return;
+    const frame = window.requestAnimationFrame(() => {
+      const toolbar = selectionToolbarRef.current;
+      if (!toolbar) return;
+      const toolbarRect = toolbar.getBoundingClientRect();
+      const width = Math.max(toolbarRect.width, toolbar.offsetWidth, toolbar.scrollWidth);
+      const height = Math.max(toolbarRect.height, toolbar.offsetHeight, toolbar.scrollHeight);
+      if (width <= 0 || height <= 0) return;
+      const maxLeft = Math.max(12, window.innerWidth - width - 12);
+      const maxTop = Math.max(12, window.innerHeight - height - 12);
+      const preferredLeft = selectionAnchor.left + (selectionAnchor.width / 2) - (width / 2);
+      const above = selectionAnchor.top - height - 8;
+      const preferredTop = above >= 12 ? above : selectionAnchor.bottom + 8;
+      const next = {
+        left: Math.max(12, Math.min(maxLeft, preferredLeft)),
+        top: Math.max(12, Math.min(maxTop, preferredTop))
+      };
+      setSelectionPosition((current) => current?.left === next.left && current.top === next.top ? current : next);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [selectionAnchor]);
+
+  const moveSelectionActionFocus = (index: number): void => {
+    selectionFocusTransition.current = true;
+    setSelectionActionIndex(index);
+    window.requestAnimationFrame(() => {
+      selectionActionRefs.current.get(index)?.focus();
+      window.requestAnimationFrame(() => { selectionFocusTransition.current = false; });
+    });
+  };
 
   return (
-    <article className="note-reader">
-      <header className="note-header">
-        <div>
-          <p className="note-kicker">{props.t(`library.type.${summary.pageType}`)}</p>
-          <h1>{summary.title}</h1>
+    <article className="note-reader" ref={readerRef} tabIndex={-1}>
+      {selectionAnchor && selectionPosition ? (
+        <div
+          ref={selectionToolbarRef}
+          className="selection-toolbar visible"
+          role="toolbar"
+          aria-label={props.t("note.selectionActions")}
+          style={{ left: selectionPosition.left, top: selectionPosition.top }}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              closeSelectionToolbar(true);
+              return;
+            }
+            let nextIndex: number | null = null;
+            if (event.key === "ArrowRight") nextIndex = (selectionActionIndex + 1) % 4;
+            else if (event.key === "ArrowLeft") nextIndex = (selectionActionIndex + 3) % 4;
+            else if (event.key === "Home") nextIndex = 0;
+            else if (event.key === "End") nextIndex = 3;
+            if (nextIndex === null) return;
+            event.preventDefault();
+            moveSelectionActionFocus(nextIndex);
+          }}
+        >
+          {(["explain", "summarize", "link", "more"] as const).map((action, index) => (
+            <button
+              key={action}
+              ref={(element) => {
+                if (element) selectionActionRefs.current.set(index, element);
+                else selectionActionRefs.current.delete(index);
+              }}
+              type="button"
+              tabIndex={selectionActionIndex === index ? 0 : -1}
+              data-selection-action={action}
+              onPointerDown={(event) => event.preventDefault()}
+              onClick={() => {
+                closeSelectionToolbar(true);
+                props.onDevelopment("selection_actions");
+              }}
+            >
+              {props.t(`note.selection.${action}`)}
+            </button>
+          ))}
         </div>
+      ) : null}
+      <header className="note-header">
+        <h1>{summary.title}</h1>
         <div className="note-meta" aria-label={props.t("note.metadata")}>
           <span>{summary.status}</span>
           {summary.language ? <span>{summary.language}</span> : null}
-          <span>{summary.pagePath}</span>
           <span>
             {props.t("note.size")}: {Math.ceil(props.note.byteSize / 1024)} KB
           </span>
@@ -1799,6 +2081,34 @@ function NoteReader(props: {
         // HTML is produced by the main-process Markdown renderer after sanitization.
         dangerouslySetInnerHTML={{ __html: props.note.html }}
       />
+      {summary.sourceIds.length > 0 ? (
+        <section className="reader-sources" aria-label={props.t("note.sources")}>
+          <h2>{props.t("note.sources")}</h2>
+          <div className="reader-source-list">
+            {summary.sourceIds.slice(0, 5).map((sourceId, index) => (
+              <button
+                className="reader-source"
+                type="button"
+                key={sourceId}
+                data-reader-source-action="unavailable"
+                onClick={() => props.onDevelopment("source_reference")}
+              >
+                <span className="reader-source-icon" aria-hidden="true">SRC</span>
+                <span className="reader-source-copy">
+                  <strong>{props.t("note.savedSource").replace("{number}", String(index + 1))}</strong>
+                  <span>{props.t("note.sourceReferenceUnavailable")}</span>
+                </span>
+                <small>{props.t("note.preview")}</small>
+              </button>
+            ))}
+          </div>
+          {summary.sourceIds.length > 5 ? (
+            <p className="reader-source-overflow">
+              {props.t("note.moreSources").replace("{count}", String(summary.sourceIds.length - 5))}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
       <NoteRelatedPanel
         related={props.related}
         loadingPageId={props.relatedLoadingPageId}
@@ -2515,7 +2825,7 @@ function HomeComposer(props: {
   currentModelEgressRequestIdRef.current = modelEgressRequestId;
   const visibleRecentJobs = props.recentJobs
     .filter((job) =>
-      Boolean(job.sourceDisplayName || job.sourceId) &&
+      isActiveProcessingFileJob(job) &&
       (!permissionRequestId || job.permissionRequestId !== permissionRequestId) &&
       (!modelEgressRequestId || job.modelEgressApprovalRequestId !== modelEgressRequestId) &&
       !(
@@ -3379,7 +3689,11 @@ function HomeComposer(props: {
                   data-activity-row-id={activity.operationId}
                   tabIndex={-1}
                 >
-                  <div>
+                  <span
+                    className={`activity-row-dot${activity.status === "undone" ? " is-undone" : ""}`}
+                    aria-hidden="true"
+                  />
+                  <div className="activity-row-copy">
                     <strong>
                       {props.t(activityMessageKey)}
                       {activity.targetLabel ? `: ${activity.targetLabel}` : ""}
@@ -3508,6 +3822,7 @@ function HomeComposer(props: {
             related={selectedNoteRelated}
             relatedLoadingPageId={noteLoadingPageId}
             onOpenRelated={openResult}
+            onDevelopment={props.onDevelopment}
             t={props.t}
           />
         </section>
@@ -3666,12 +3981,16 @@ function HomeComposer(props: {
               void submitHomeFiles(files, text, clientTurnId);
             }}
           />
+          <span id="home-voice-unavailable-description" className="visually-hidden">
+            {props.t("home.voice.unsupportedDescription")}
+          </span>
           <button
             className="round-button"
             type="button"
-            title={props.t("development.capability.voice_input")}
-            aria-label={props.t("development.capability.voice_input")}
-            onClick={() => props.onDevelopment("voice_input")}
+            title={props.t("home.voice.unsupportedTitle")}
+            aria-label={props.t("home.voice.unsupportedTitle")}
+            aria-describedby="home-voice-unavailable-description"
+            disabled
           >
             <PigeIcon name="voice" size={17} />
           </button>
@@ -3838,6 +4157,18 @@ function isSourceWaitingForModel(job: JobSummary): boolean {
     job.state === "waiting_dependency" &&
     job.stage === "waiting_for_model" &&
     Boolean(job.sourceId);
+}
+
+function isActiveProcessingFileJob(job: JobSummary): boolean {
+  if (!job.sourceDisplayName && !job.sourceId) return false;
+  return job.state === "queued" ||
+    job.state === "running" ||
+    job.state === "waiting_dependency" ||
+    job.state === "waiting_permission" ||
+    job.state === "waiting_model_egress" ||
+    job.state === "awaiting_review" ||
+    job.state === "cancel_requested" ||
+    job.state === "failed_retryable";
 }
 
 function jobStateMessageKey(job: JobSummary): string {
@@ -4158,7 +4489,7 @@ const settingsSections: readonly {
   { id: "privacy", icon: "shield", status: "development", capability: "permissions_privacy" },
   { id: "skills", icon: "skill", status: "development", capability: "skills" },
   { id: "packages", icon: "package", status: "development", capability: "packages" },
-  { id: "system", icon: "activity", status: "development", capability: "updates" }
+  { id: "system", icon: "activity", status: "partial" }
 ];
 
 const settingsGroups: readonly {
@@ -4384,14 +4715,389 @@ function DevelopmentSettingsSection(props: {
   );
 }
 
+export function SkillsSettingsPanel(props: {
+  readonly onDevelopment: () => void;
+  readonly t: (key: string) => string;
+}): React.JSX.Element {
+  return (
+    <section className="settings-page settings-skills" aria-labelledby="settings-skills-title">
+      <header className="settings-panel-header">
+        <h1 id="settings-skills-title">{props.t("skills.title")}</h1>
+        <p>{props.t("skills.subtitle")}</p>
+      </header>
+
+      <section className="settings-section" role="group" aria-labelledby="skills-installed-title">
+        <h2 className="settings-section-title" id="skills-installed-title">{props.t("skills.installedTitle")}</h2>
+        <div className="settings-card skills-empty-card">
+          <span className="skills-empty-icon" aria-hidden="true"><PigeIcon name="skill" size={19} /></span>
+          <div className="settings-row-copy">
+            <strong>{props.t("skills.emptyTitle")}</strong>
+            <span>{props.t("skills.emptyDescription")}</span>
+          </div>
+        </div>
+        <div className="settings-inline-actions">
+          <button className="settings-button primary settings-action" type="button" onClick={props.onDevelopment}>
+            <PigeIcon name="link" size={15} aria-hidden="true" />
+            {props.t("skills.installFromLink")}
+          </button>
+          <button className="settings-button settings-action" type="button" onClick={props.onDevelopment}>
+            <PigeIcon name="fileText" size={15} aria-hidden="true" />
+            {props.t("skills.chooseFile")}
+          </button>
+        </div>
+      </section>
+
+      <section className="settings-section" role="group" aria-labelledby="skills-review-title">
+        <h2 className="settings-section-title" id="skills-review-title">{props.t("skills.reviewTitle")}</h2>
+        <div className="settings-card">
+          <div className="settings-row tall skills-information-row">
+            <span className="settings-list-icon neutral" aria-hidden="true"><PigeIcon name="fileText" size={17} /></span>
+            <div className="settings-row-copy">
+              <strong>{props.t("skills.reviewMetadata")}</strong>
+              <span>{props.t("skills.reviewMetadataDescription")}</span>
+            </div>
+          </div>
+          <div className="settings-row tall skills-information-row">
+            <span className="settings-list-icon neutral" aria-hidden="true"><PigeIcon name="shield" size={17} /></span>
+            <div className="settings-row-copy">
+              <strong>{props.t("skills.reviewPermissions")}</strong>
+              <span>{props.t("skills.reviewPermissionsDescription")}</span>
+            </div>
+          </div>
+          <div className="settings-row tall skills-information-row">
+            <span className="settings-list-icon neutral" aria-hidden="true"><PigeIcon name="folder" size={17} /></span>
+            <div className="settings-row-copy">
+              <strong>{props.t("skills.scopeTitle")}</strong>
+              <span>{props.t("skills.scopeDescription")}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </section>
+  );
+}
+
+type SupportBundleCategoryProjection = {
+  readonly titleKey: string;
+  readonly descriptionKey: string;
+};
+
+function projectSupportBundleCategory(categoryId: string): SupportBundleCategoryProjection | null {
+  const projections: Readonly<Record<string, SupportBundleCategoryProjection>> = {
+    app_runtime: {
+      titleKey: "support.category.appRuntime",
+      descriptionKey: "support.category.appRuntimeDescription"
+    },
+    diagnostics_health: {
+      titleKey: "support.category.diagnosticsHealth",
+      descriptionKey: "support.category.diagnosticsHealthDescription"
+    },
+    recent_errors: {
+      titleKey: "support.category.recentErrors",
+      descriptionKey: "support.category.recentErrorsDescription"
+    },
+    secrets: {
+      titleKey: "support.category.secrets",
+      descriptionKey: "support.category.secretsDescription"
+    },
+    content: {
+      titleKey: "support.category.privateContent",
+      descriptionKey: "support.category.privateContentDescription"
+    },
+    binaries: {
+      titleKey: "support.category.binaries",
+      descriptionKey: "support.category.binariesDescription"
+    }
+  };
+  return projections[categoryId] ?? null;
+}
+
+function projectSupportBundlePrivacyWarning(warning: string): string | null {
+  const projections: Readonly<Record<string, string>> = {
+    "The bundle is created locally and is not uploaded automatically.": "support.warning.localOnly",
+    "Paths, emails, and common secret patterns are redacted by default.": "support.warning.redacted",
+    "Review the preview before exporting.": "support.warning.review"
+  };
+  return projections[warning] ?? null;
+}
+
+function supportBundlePreviewIsFullyProjected(preview: SupportBundlePreview): boolean {
+  return preview.includedCategories.every((category) => projectSupportBundleCategory(category.id) !== null) &&
+    preview.excludedCategories.every((category) => projectSupportBundleCategory(category.id) !== null) &&
+    preview.privacyWarnings.every((warning) => projectSupportBundlePrivacyWarning(warning) !== null);
+}
+
+export function SystemSettingsPanel(props: {
+  readonly diagnosticsHealth: DiagnosticsHealth | null;
+  readonly supportBundlePreview: SupportBundlePreview | null;
+  readonly onRefreshDiagnostics: () => Promise<void>;
+  readonly onSupportBundlePreviewChange: (preview: SupportBundlePreview | null) => void;
+  readonly t: (key: string) => string;
+}): React.JSX.Element {
+  const [diagnosticsBusy, setDiagnosticsBusy] = useState<"refresh" | "preview" | "export" | "cancel" | null>(null);
+  const [notice, setNotice] = useState<{ readonly kind: "success" | "error"; readonly key: string } | null>(null);
+  const supportBundleExportRequestRef = useRef<string | null>(null);
+  const supportBundleCancelRequestRef = useRef<string | null>(null);
+
+  useEffect(() => () => {
+    const exportRequestId = supportBundleExportRequestRef.current;
+    if (!exportRequestId) return;
+    supportBundleCancelRequestRef.current = exportRequestId;
+    void window.pige.diagnostics.cancelSupportBundleExport({ exportRequestId }).catch(() => undefined);
+  }, []);
+
+  const refreshDiagnostics = async (): Promise<void> => {
+    if (diagnosticsBusy) return;
+    setDiagnosticsBusy("refresh");
+    setNotice(null);
+    try {
+      await props.onRefreshDiagnostics();
+      setNotice({ kind: "success", key: "system.healthRefreshed" });
+    } catch {
+      setNotice({ kind: "error", key: "system.healthFailed" });
+    } finally {
+      setDiagnosticsBusy(null);
+    }
+  };
+
+  const previewSupportBundle = async (): Promise<void> => {
+    if (diagnosticsBusy) return;
+    setDiagnosticsBusy("preview");
+    setNotice(null);
+    try {
+      props.onSupportBundlePreviewChange(await window.pige.diagnostics.previewSupportBundle());
+    } catch {
+      setNotice({ kind: "error", key: "system.previewFailed" });
+    } finally {
+      setDiagnosticsBusy(null);
+    }
+  };
+
+  const exportSupportBundle = async (): Promise<void> => {
+    if (
+      !props.supportBundlePreview ||
+      !supportBundlePreviewIsFullyProjected(props.supportBundlePreview) ||
+      diagnosticsBusy ||
+      supportBundleExportRequestRef.current
+    ) return;
+    const exportRequestId = crypto.randomUUID();
+    supportBundleExportRequestRef.current = exportRequestId;
+    setDiagnosticsBusy("export");
+    setNotice(null);
+    try {
+      const result = await window.pige.diagnostics.exportSupportBundle({
+        previewId: props.supportBundlePreview.previewId,
+        exportRequestId
+      });
+      if (result.status === "exported") {
+        props.onSupportBundlePreviewChange(null);
+        await props.onRefreshDiagnostics();
+        setNotice({ kind: "success", key: "system.exported" });
+      }
+    } catch {
+      if (supportBundleCancelRequestRef.current !== exportRequestId) {
+        setNotice({ kind: "error", key: "support.exportFailed" });
+      }
+    } finally {
+      if (supportBundleExportRequestRef.current === exportRequestId) {
+        supportBundleExportRequestRef.current = null;
+        setDiagnosticsBusy(null);
+      }
+      if (supportBundleCancelRequestRef.current === exportRequestId) {
+        supportBundleCancelRequestRef.current = null;
+      }
+    }
+  };
+
+  const cancelSupportBundleExport = async (): Promise<void> => {
+    const exportRequestId = supportBundleExportRequestRef.current;
+    if (!exportRequestId || supportBundleCancelRequestRef.current === exportRequestId) return;
+    supportBundleCancelRequestRef.current = exportRequestId;
+    setDiagnosticsBusy("cancel");
+    try {
+      await window.pige.diagnostics.cancelSupportBundleExport({ exportRequestId });
+      setNotice({ kind: "success", key: "system.exportCanceled" });
+    } catch {
+      supportBundleCancelRequestRef.current = null;
+      setDiagnosticsBusy("export");
+      setNotice({ kind: "error", key: "support.exportFailed" });
+    }
+  };
+
+  const healthStatusKey = props.diagnosticsHealth?.status === "ok"
+    ? "system.healthOk"
+    : props.diagnosticsHealth?.status === "degraded"
+      ? "system.healthDegraded"
+      : "system.healthLoading";
+  const showUpdateUnavailable = (): void => {
+    setNotice({ kind: "success", key: "system.updateUnavailable" });
+  };
+  const supportPreviewProjection = props.supportBundlePreview
+    ? {
+        included: props.supportBundlePreview.includedCategories.map((category) => projectSupportBundleCategory(category.id)),
+        excluded: props.supportBundlePreview.excludedCategories.map((category) => projectSupportBundleCategory(category.id)),
+        warnings: props.supportBundlePreview.privacyWarnings.map(projectSupportBundlePrivacyWarning),
+        complete: supportBundlePreviewIsFullyProjected(props.supportBundlePreview)
+      }
+    : null;
+
+  return (
+    <section className="settings-page settings-system-page" aria-labelledby="settings-system-title">
+      <header className="settings-panel-header">
+        <h1 id="settings-system-title">{props.t("system.title")}</h1>
+        <p>{props.t("system.subtitle")}</p>
+      </header>
+
+      <section className="settings-section" aria-labelledby="system-update-title">
+        <h2 className="settings-section-title" id="system-update-title">{props.t("system.updateSection")}</h2>
+        <div className="settings-card">
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("system.updateChannel")}</strong>
+              <span>{props.t("system.updateChannelDescription")}</span>
+            </div>
+            <span className="settings-status unavailable">{props.t("development.state.unavailable")}</span>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("system.autoDownload")}</strong>
+              <span>{props.t("system.autoDownloadDescription")}</span>
+            </div>
+            <button className="settings-button" type="button" disabled title={props.t("development.state.unavailable")}>
+              {props.t("development.state.unavailable")}
+            </button>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("system.updateStatus")}</strong>
+              <span>{props.t("system.updateStatusDescription")}</span>
+            </div>
+            <button className="settings-button" type="button" onClick={showUpdateUnavailable}>
+              {props.t("system.checkUpdates")}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="settings-section" aria-labelledby="system-health-title">
+        <h2 className="settings-section-title" id="system-health-title">{props.t("system.localHealth")}</h2>
+        <div className="settings-card">
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("system.health")}</strong>
+              <span>{props.t("system.healthDescription")}</span>
+            </div>
+            <div className="settings-row-control">
+              <span className={`settings-status ${props.diagnosticsHealth?.status === "degraded" ? "degraded" : ""}`}>
+                {props.t(healthStatusKey)}
+              </span>
+              <button
+                className="settings-button"
+                type="button"
+                disabled={Boolean(diagnosticsBusy)}
+                onClick={() => void refreshDiagnostics()}
+              >
+                {props.t("system.refreshHealth")}
+              </button>
+            </div>
+          </div>
+          <div className="settings-row tall">
+            <div className="settings-row-copy">
+              <strong>{props.t("system.supportBundle")}</strong>
+              <span>{props.t("system.supportBundleDescription")}</span>
+            </div>
+            <button
+              className="settings-button"
+              type="button"
+              disabled={Boolean(diagnosticsBusy)}
+              onClick={() => void previewSupportBundle()}
+            >
+              {props.t("system.previewSupport")}
+            </button>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("system.clearDiagnostics")}</strong>
+              <span>{props.t("system.clearDiagnosticsDescription")}</span>
+            </div>
+            <button className="settings-button" type="button" disabled title={props.t("development.state.unavailable")}>
+              {props.t("system.clear")}
+            </button>
+          </div>
+        </div>
+
+        {props.supportBundlePreview && supportPreviewProjection ? (
+          <div className="support-preview system-support-preview" aria-label={props.t("support.previewReady")}>
+            <strong>{props.t("support.previewReady")}</strong>
+            <span>{props.t("support.estimatedSize")}: {Math.ceil(props.supportBundlePreview.estimatedBytes / 1024)} KB</span>
+            <section className="support-preview-section" aria-labelledby="support-preview-included">
+              <h3 id="support-preview-included">{props.t("support.included")}</h3>
+              <ul className="support-preview-list">
+                {supportPreviewProjection.included.map((projection, index) => projection ? (
+                  <li key={props.supportBundlePreview?.includedCategories[index]?.id ?? `included-${index}`}>
+                    <strong>{props.t(projection.titleKey)}</strong>
+                    <span>{props.t(projection.descriptionKey)}</span>
+                  </li>
+                ) : null)}
+              </ul>
+            </section>
+            <section className="support-preview-section" aria-labelledby="support-preview-excluded">
+              <h3 id="support-preview-excluded">{props.t("support.excluded")}</h3>
+              <ul className="support-preview-list">
+                {supportPreviewProjection.excluded.map((projection, index) => projection ? (
+                  <li key={props.supportBundlePreview?.excludedCategories[index]?.id ?? `excluded-${index}`}>
+                    <strong>{props.t(projection.titleKey)}</strong>
+                    <span>{props.t(projection.descriptionKey)}</span>
+                  </li>
+                ) : null)}
+              </ul>
+            </section>
+            <section className="support-preview-section" aria-labelledby="support-preview-warnings">
+              <h3 id="support-preview-warnings">{props.t("system.privacyWarnings")}</h3>
+              <ul className="support-preview-list warnings">
+                {supportPreviewProjection.warnings.map((warningKey, index) => warningKey ? (
+                  <li key={warningKey}>{props.t(warningKey)}</li>
+                ) : null)}
+              </ul>
+            </section>
+            {!supportPreviewProjection.complete ? (
+              <p className="error" role="alert">{props.t("support.previewUnsafe")}</p>
+            ) : null}
+            <div className="settings-inline-actions">
+              {diagnosticsBusy === "export" || diagnosticsBusy === "cancel" ? (
+                <button className="settings-button" type="button" disabled={diagnosticsBusy === "cancel"} onClick={() => void cancelSupportBundleExport()}>
+                  {props.t("maintenance.cancelSupportExport")}
+                </button>
+              ) : (
+                <button
+                  className="settings-button primary"
+                  type="button"
+                  disabled={!supportPreviewProjection.complete}
+                  onClick={() => void exportSupportBundle()}
+                >
+                  {props.t("maintenance.exportSupport")}
+                </button>
+              )}
+            </div>
+          </div>
+        ) : null}
+        {notice ? (
+          <p className={notice.kind === "error" ? "error" : "muted"} role={notice.kind === "error" ? "alert" : "status"} aria-live="polite">
+            {props.t(notice.key)}
+          </p>
+        ) : null}
+        <p className="settings-note">{props.t("system.localOnlyNote")}</p>
+      </section>
+    </section>
+  );
+}
+
 interface VaultSettingsPanelProps {
   readonly surface: "vault" | "maintenance";
   readonly busy: boolean;
   readonly error: string | null;
   readonly vault: VaultSummary;
-  readonly diagnosticsHealth: DiagnosticsHealth | null;
   readonly localDatabaseStatus: LocalDatabaseStatus | null;
-  readonly supportBundlePreview: SupportBundlePreview | null;
   readonly backupStatus: BackupRestoreStatus | null;
   readonly backupJobs: readonly JobSummary[];
   readonly toolchainHealth: ToolchainHealth | null;
@@ -4400,7 +5106,6 @@ interface VaultSettingsPanelProps {
   readonly onCreate: () => Promise<void>;
   readonly onRefresh: () => Promise<void>;
   readonly onRefreshDiagnostics: () => Promise<void>;
-  readonly onSupportBundlePreviewChange: (preview: SupportBundlePreview | null) => void;
   readonly onRemoveRecent: (vaultId: string) => Promise<void>;
   readonly onError: (error: string | null) => void;
   readonly t: (key: string) => string;
@@ -4409,9 +5114,6 @@ interface VaultSettingsPanelProps {
 function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
   const [backupNotice, setBackupNotice] = useState<string | null>(null);
   const [backupBusy, setBackupBusy] = useState(false);
-  const [supportBundleExportRequestId, setSupportBundleExportRequestId] = useState<string | null>(null);
-  const supportBundleExportRequestRef = useRef<string | null>(null);
-  const supportBundleCancelRequestRef = useRef<string | null>(null);
   const [revealTarget, setRevealTarget] = useState<VaultRevealTarget | null>(null);
   const [revealNotice, setRevealNotice] = useState<{ readonly kind: "success" | "error"; readonly message: string } | null>(null);
   const revealRequestSequence = useRef(0);
@@ -4424,13 +5126,6 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
     await props.onRefresh();
     await props.onRefreshDiagnostics();
   }, () => props.onError(null));
-
-  useEffect(() => () => {
-    const exportRequestId = supportBundleExportRequestRef.current;
-    if (!exportRequestId) return;
-    supportBundleCancelRequestRef.current = exportRequestId;
-    void window.pige.diagnostics.cancelSupportBundleExport({ exportRequestId }).catch(() => undefined);
-  }, []);
 
   useEffect(() => () => {
     revealRequestSequence.current += 1;
@@ -4545,57 +5240,6 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
       await props.onRefreshDiagnostics();
     } catch (caught) {
       props.onError(caught instanceof Error ? caught.message : "Something went wrong.");
-    }
-  };
-
-  const previewSupportBundle = async (): Promise<void> => {
-    props.onError(null);
-    try {
-      props.onSupportBundlePreviewChange(await window.pige.diagnostics.previewSupportBundle());
-    } catch (caught) {
-      props.onError(caught instanceof Error ? caught.message : "Something went wrong.");
-    }
-  };
-
-  const exportSupportBundle = async (): Promise<void> => {
-    if (!props.supportBundlePreview || supportBundleExportRequestRef.current) return;
-    const exportRequestId = crypto.randomUUID();
-    supportBundleExportRequestRef.current = exportRequestId;
-    setSupportBundleExportRequestId(exportRequestId);
-    props.onError(null);
-    try {
-      const result = await window.pige.diagnostics.exportSupportBundle({
-        previewId: props.supportBundlePreview.previewId,
-        exportRequestId
-      });
-      if (result.status === "exported") {
-        props.onSupportBundlePreviewChange(null);
-        await props.onRefreshDiagnostics();
-      }
-    } catch {
-      if (supportBundleCancelRequestRef.current !== exportRequestId) {
-        props.onError(props.t("support.exportFailed"));
-      }
-    } finally {
-      if (supportBundleExportRequestRef.current === exportRequestId) {
-        supportBundleExportRequestRef.current = null;
-        setSupportBundleExportRequestId(null);
-      }
-      if (supportBundleCancelRequestRef.current === exportRequestId) {
-        supportBundleCancelRequestRef.current = null;
-      }
-    }
-  };
-
-  const cancelSupportBundleExport = async (): Promise<void> => {
-    const exportRequestId = supportBundleExportRequestRef.current;
-    if (!exportRequestId || supportBundleCancelRequestRef.current === exportRequestId) return;
-    supportBundleCancelRequestRef.current = exportRequestId;
-    try {
-      await window.pige.diagnostics.cancelSupportBundleExport({ exportRequestId });
-    } catch {
-      supportBundleCancelRequestRef.current = null;
-      props.onError(props.t("support.exportFailed"));
     }
   };
 
@@ -4751,7 +5395,7 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
       </> : null}
 
       {props.surface === "maintenance" ? (
-      <section className="settings-group" aria-busy={supportBundleExportRequestId ? "true" : undefined}>
+      <section className="settings-group">
         <div className="settings-actions">
           <button type="button" className="secondary" onClick={() => void rebuildLocalDatabase()}>
             {props.t("maintenance.rebuildIndex")}
@@ -4759,37 +5403,7 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
           <button type="button" className="secondary" onClick={() => void resetLocalDatabase()}>
             {props.t("maintenance.resetDatabase")}
           </button>
-          <button type="button" className="secondary" onClick={() => void props.onRefreshDiagnostics()}>
-            {props.t("maintenance.checkDiagnostics")}
-          </button>
-          <button
-            type="button"
-            className="secondary"
-            disabled={Boolean(supportBundleExportRequestId)}
-            onClick={() => void previewSupportBundle()}
-          >
-            {props.t("maintenance.previewSupport")}
-          </button>
-          {supportBundleExportRequestId ? (
-            <button type="button" className="secondary" onClick={() => void cancelSupportBundleExport()}>
-              {props.t("maintenance.cancelSupportExport")}
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="secondary"
-              disabled={!props.supportBundlePreview}
-              onClick={() => void exportSupportBundle()}
-            >
-              {props.t("maintenance.exportSupport")}
-            </button>
-          )}
         </div>
-        {props.diagnosticsHealth ? (
-          <p className="muted">
-            {props.t("maintenance.diagnostics")}: {props.diagnosticsHealth.status}; {props.t("maintenance.recentErrors")}: {props.diagnosticsHealth.recentErrorCount}
-          </p>
-        ) : null}
         {props.localDatabaseStatus ? (
           <p className="muted">
             {props.t("maintenance.localDb")}: {props.localDatabaseStatus.status}; {props.t("maintenance.migrations")}: {props.localDatabaseStatus.appliedMigrationCount}
@@ -4800,14 +5414,6 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
             {props.t("maintenance.toolchain")}: {props.toolchainHealth.status}; {props.t("maintenance.missingTools")}:{" "}
             {props.toolchainHealth.tools.filter((tool) => tool.status === "missing").length}
           </p>
-        ) : null}
-        {props.supportBundlePreview ? (
-          <div className="support-preview">
-            <strong>{props.t("support.previewReady")}</strong>
-            <span>{props.t("support.estimatedSize")}: {Math.ceil(props.supportBundlePreview.estimatedBytes / 1024)} KB</span>
-            <span>{props.t("support.included")}: {props.supportBundlePreview.includedCategories.map((category) => category.label).join(", ")}</span>
-            <span>{props.t("support.excluded")}: {props.supportBundlePreview.excludedCategories.map((category) => category.label).join(", ")}</span>
-          </div>
         ) : null}
       </section>
       ) : null}
