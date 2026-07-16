@@ -509,6 +509,9 @@ function makePigeApi(harness: RestoreHarness, sidebarOpen = false): object {
       applyRestore: (request: RestoreApplyRequest) => harness.applyRestore(request),
       create: async () => ({ status: "canceled" })
     },
+    speech: {
+      onAssetInstallEvent: () => () => undefined
+    },
     agent: {
       runtimeStatus: async () => null,
       conversation: async () => undefined,
