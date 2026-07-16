@@ -93,15 +93,36 @@ export class JsonSecretStore {
     if (!fs.existsSync(this.#secretsPath)) {
       return { schemaVersion: 1, secrets: [] };
     }
-    const raw = JSON.parse(fs.readFileSync(this.#secretsPath, "utf8"));
+    const raw: unknown = JSON.parse(fs.readFileSync(this.#secretsPath, "utf8"));
     if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
       throw new PigeDomainError("secret_store_invalid", "Secret store is invalid.");
     }
-    const parsed = raw as SecretStoreFile;
-    if (parsed.schemaVersion !== 1 || !Array.isArray(parsed.secrets)) {
+    const file = raw as Record<string, unknown>;
+    if (file.schemaVersion !== 1 || !Array.isArray(file.secrets)) {
       throw new PigeDomainError("secret_store_invalid", "Secret store is invalid.");
     }
-    return parsed;
+    const secrets: SecretRecord[] = [];
+    for (const entry of file.secrets) {
+      if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
+        throw new PigeDomainError("secret_store_invalid", "Secret store is invalid.");
+      }
+      const record = entry as Record<string, unknown>;
+      if (
+        typeof record.ref !== "string" ||
+        typeof record.encryptedValue !== "string" ||
+        typeof record.createdAt !== "string" ||
+        typeof record.updatedAt !== "string"
+      ) {
+        throw new PigeDomainError("secret_store_invalid", "Secret store is invalid.");
+      }
+      secrets.push({
+        ref: record.ref,
+        encryptedValue: record.encryptedValue,
+        createdAt: record.createdAt,
+        updatedAt: record.updatedAt
+      });
+    }
+    return { schemaVersion: 1, secrets };
   }
 
   #write(file: SecretStoreFile): void {

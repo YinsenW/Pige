@@ -5460,3 +5460,59 @@ dd {
   .first-run { padding: 16px; }
   .first-run-card { padding: 22px; }
 }
+
+/* ── Error Boundary ── */
+
+.error-boundary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: var(--space-6, 24px);
+  background: var(--canvas);
+}
+
+.error-boundary__card {
+  max-width: 400px;
+  padding: var(--space-8, 32px);
+  text-align: center;
+  background: var(--surface);
+  border: var(--shadow-hairline);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-floating);
+}
+
+.error-boundary__title {
+  margin: 0 0 var(--space-2, 8px);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.error-boundary__description {
+  margin: 0 0 var(--space-6, 24px);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.error-boundary__retry {
+  padding: var(--space-2, 8px) var(--space-5, 20px);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--canvas);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: opacity var(--duration-fast) var(--ease-standard);
+}
+
+.error-boundary__retry:hover {
+  opacity: 0.9;
+}
+
+.error-boundary__retry:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}

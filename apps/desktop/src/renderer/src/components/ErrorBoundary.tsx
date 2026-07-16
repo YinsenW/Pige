@@ -4,33 +4,35 @@ import type { ErrorInfo, ReactNode } from "react";
 interface Props {
   children: ReactNode;
   fallback?: ReactNode;
+  translate?: (key: string) => string;
 }
 
 interface State {
   hasError: boolean;
-  error: Error | null;
 }
 
 /**
- * Error boundary component to catch React rendering errors
- * and prevent the entire app from crashing
+ * Error boundary that catches React rendering errors and shows a
+ * localized, body-free recovery UI. Raw error details are never
+ * displayed or logged to protect user privacy.
  */
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false };
   }
 
-  static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
+  static getDerivedStateFromError(): State {
+    return { hasError: true };
   }
 
-  componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-    console.error("ErrorBoundary caught an error:", error, errorInfo);
+  componentDidCatch(_error: Error, _errorInfo: ErrorInfo): void {
+    // Intentionally no-op: raw error details must not be logged
+    // to protect user privacy (file paths, provider content, etc.).
   }
 
   handleReset = (): void => {
-    this.setState({ hasError: false, error: null });
+    this.setState({ hasError: false });
   };
 
   render(): ReactNode {
@@ -39,20 +41,22 @@ export class ErrorBoundary extends Component<Props, State> {
         return this.props.fallback;
       }
 
+      const t = this.props.translate ?? ((key: string) => key);
+
       return (
-        <div className="flex h-screen w-screen items-center justify-center bg-background">
-          <div className="max-w-md space-y-4 rounded-lg border border-border bg-card p-6 shadow-lg">
-            <h2 className="text-xl font-semibold text-foreground">
-              Something went wrong
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              {this.state.error?.message || "An unexpected error occurred"}
+        <div className="error-boundary" role="alert" aria-live="assertive">
+          <div className="error-boundary__card">
+            <h2 className="error-boundary__title">{t("errorBoundary.title")}</h2>
+            <p className="error-boundary__description">
+              {t("errorBoundary.description")}
             </p>
             <button
+              type="button"
+              className="error-boundary__retry"
               onClick={this.handleReset}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+              autoFocus
             >
-              Try again
+              {t("errorBoundary.retry")}
             </button>
           </div>
         </div>
