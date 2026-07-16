@@ -532,17 +532,23 @@ describe("Note Agent production UI", () => {
     const dom = createDom();
     let resolveTimeline!: (value: unknown) => void;
     const conversation = vi.fn().mockReturnValue(new Promise((resolve) => { resolveTimeline = resolve; }));
+    const onSelectModel = vi.fn().mockResolvedValue(true);
     Object.defineProperty(dom.window, "pige", { configurable: true, value: noteAgentApi(conversation) });
     const container = dom.window.document.createElement("div");
     dom.window.document.body.append(container);
     const { createRoot } = await import("react-dom/client");
     const root = createRoot(container);
     await act(async () => {
-      root.render(createElement(CurrentNoteAgent, currentNoteAgentProps("page_initial_read")));
+      root.render(createElement(CurrentNoteAgent, {
+        ...currentNoteAgentProps("page_initial_read"),
+        onSelectModel
+      }));
       await settle(dom);
     });
     expect(required(container.querySelector<HTMLTextAreaElement>("textarea")).disabled).toBe(true);
     expect(required(container.querySelector<HTMLButtonElement>(".send-button")).disabled).toBe(true);
+    expect(required(container.querySelector<HTMLButtonElement>(".note-agent-model-switcher")).disabled).toBe(true);
+    expect(onSelectModel).not.toHaveBeenCalled();
     expect(container.querySelector(".note-agent-state")).toBeNull();
     expect(container.querySelectorAll(".note-agent-run-state")).toHaveLength(1);
 
@@ -560,7 +566,10 @@ describe("Note Agent production UI", () => {
     failedDom.window.document.body.append(failedContainer);
     const failedRoot = createRoot(failedContainer);
     await act(async () => {
-      failedRoot.render(createElement(CurrentNoteAgent, currentNoteAgentProps("page_failed_read")));
+      failedRoot.render(createElement(CurrentNoteAgent, {
+        ...currentNoteAgentProps("page_failed_read"),
+        onSelectModel
+      }));
       await settle(failedDom);
     });
     await waitFor(failedDom, () => failedContainer.querySelector('[role="alert"]') !== null);
@@ -570,6 +579,8 @@ describe("Note Agent production UI", () => {
     expect(failedContainer.querySelectorAll(".note-agent-run-state")).toHaveLength(1);
     expect(required(failedContainer.querySelector<HTMLTextAreaElement>("textarea")).disabled).toBe(true);
     expect(required(failedContainer.querySelector<HTMLButtonElement>(".send-button")).disabled).toBe(true);
+    expect(required(failedContainer.querySelector<HTMLButtonElement>(".note-agent-model-switcher")).disabled).toBe(true);
+    expect(onSelectModel).not.toHaveBeenCalled();
     await unmount(failedDom, failedRoot);
   });
 
@@ -741,6 +752,140 @@ describe("Note Agent production UI", () => {
       await unmount(dom, root);
     }
   );
+
+  it("revokes a provisional draft immediately when submit fails and the scoped reread also fails", async () => {
+    const dom = createDom();
+    const draftListeners: Array<(event: Record<string, unknown>) => void> = [];
+    const conversation = vi.fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("private reread failure must stay hidden"));
+    let resolveSubmission!: (value: unknown) => void;
+    const submitTurn = vi.fn().mockReturnValue(new Promise((resolve) => { resolveSubmission = resolve; }));
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: { ...noteAgentApi(conversation), agent: {
+        conversation,
+        submitTurn,
+        onTurnDraft: (listener: (event: Record<string, unknown>) => void) => {
+          draftListeners.push(listener);
+          return () => undefined;
+        }
+      } }
+    });
+    const container = dom.window.document.createElement("div");
+    dom.window.document.body.append(container);
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(CurrentNoteAgent, currentNoteAgentProps("page_failed_submission")));
+      await settle(dom);
+    });
+    await waitFor(dom, () => required(container.querySelector<HTMLTextAreaElement>("textarea")).disabled === false);
+    const textarea = required(container.querySelector<HTMLTextAreaElement>("textarea"));
+    await input(dom, textarea, "Fail this scoped turn safely");
+    await keydown(dom, textarea, { key: "Enter" });
+    await waitFor(dom, () => submitTurn.mock.calls.length === 1);
+    await act(async () => {
+      draftListeners[0]?.({
+        apiVersion: 1,
+        kind: "draft_replace",
+        requestId: "request_failed_submission",
+        clientTurnId: submitTurn.mock.calls[0]?.[0]?.clientTurnId,
+        jobId: "job_failed_submission",
+        conversationId: "conversation_failed_submission",
+        conversationEventId: "event_failed_submission",
+        sequence: 1,
+        text: "Provisional text that must be revoked"
+      });
+      await settle(dom);
+    });
+    expect(container.querySelector('[data-provisional="true"]')?.textContent).toContain("Provisional text that must be revoked");
+
+    await act(async () => {
+      resolveSubmission({
+        requestId: "request_failed_submission",
+        jobId: "job_failed_submission",
+        conversationEventId: "event_failed_submission",
+        conversationId: "conversation_failed_submission",
+        tailEventId: "event_failed_submission",
+        state: "failed",
+        modelUsage: "none",
+        sourceIds: [],
+        error: {
+          code: "agent.internal_error",
+          domain: "agent",
+          messageKey: "error.generic",
+          retryable: false,
+          severity: "error",
+          userAction: "none"
+        }
+      });
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.querySelector('[data-provisional="true"]') === null);
+    expect(container.textContent).not.toContain("Provisional text that must be revoked");
+    expect(container.textContent).not.toContain("private reread failure");
+    expect(container.querySelectorAll(".note-agent-run-state.error")).toHaveLength(1);
+    expect(container.querySelector(".agent-message-card .message-actions")).toBeNull();
+    expect(container.querySelector(".agent-message-card .note-agent-citations")).toBeNull();
+    await unmount(dom, root);
+  });
+
+  it("revokes a provisional draft when the submit transport fails", async () => {
+    const dom = createDom();
+    const draftListeners: Array<(event: Record<string, unknown>) => void> = [];
+    const conversation = vi.fn().mockResolvedValue(undefined);
+    let rejectSubmission!: (reason: unknown) => void;
+    const submitTurn = vi.fn().mockReturnValue(new Promise((_, reject) => { rejectSubmission = reject; }));
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: { ...noteAgentApi(conversation), agent: {
+        conversation,
+        submitTurn,
+        onTurnDraft: (listener: (event: Record<string, unknown>) => void) => {
+          draftListeners.push(listener);
+          return () => undefined;
+        }
+      } }
+    });
+    const container = dom.window.document.createElement("div");
+    dom.window.document.body.append(container);
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(CurrentNoteAgent, currentNoteAgentProps("page_transport_failure")));
+      await settle(dom);
+    });
+    await waitFor(dom, () => required(container.querySelector<HTMLTextAreaElement>("textarea")).disabled === false);
+    const textarea = required(container.querySelector<HTMLTextAreaElement>("textarea"));
+    await input(dom, textarea, "Fail the transport safely");
+    await keydown(dom, textarea, { key: "Enter" });
+    await waitFor(dom, () => submitTurn.mock.calls.length === 1);
+    await act(async () => {
+      draftListeners[0]?.({
+        apiVersion: 1,
+        kind: "draft_replace",
+        requestId: "request_transport_failure",
+        clientTurnId: submitTurn.mock.calls[0]?.[0]?.clientTurnId,
+        jobId: "job_transport_failure",
+        conversationId: "conversation_transport_failure",
+        conversationEventId: "event_transport_failure",
+        sequence: 1,
+        text: "Transport draft that must be revoked"
+      });
+      await settle(dom);
+    });
+    expect(container.querySelector('[data-provisional="true"]')).not.toBeNull();
+    await act(async () => {
+      rejectSubmission(new Error("private transport detail must stay hidden"));
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.querySelector('[data-provisional="true"]') === null);
+    expect(container.textContent).not.toContain("Transport draft that must be revoked");
+    expect(container.textContent).not.toContain("private transport detail");
+    expect(container.querySelectorAll(".note-agent-run-state.error")).toHaveLength(1);
+    await unmount(dom, root);
+  });
 
   it("keeps the UI adapter service-free, responsive, and localized in all six catalogs", () => {
     expect(componentSource).not.toContain("window.pige");

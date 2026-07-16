@@ -200,7 +200,8 @@ export function CurrentNoteAgent(props: {
     currentOutcome?.state
   );
   const egressPrompt = noteAgentEgressPrompt(egress);
-  const modelSwitchBlocked = isModelSwitchBlocked(latestTurn?.state, activeEgressRequestId, submitting);
+  const modelSwitchBlocked = timelineReadState !== "ready" ||
+    isModelSwitchBlocked(latestTurn?.state, activeEgressRequestId, submitting);
 
   const selectModel = async (modelId: string): Promise<boolean> => {
     if (modelSwitchInFlightRef.current || modelSwitchBlocked) return false;
@@ -259,13 +260,17 @@ export function CurrentNoteAgent(props: {
         };
       }
       setError(outcome.state === "completed" ? null : outcome.error);
-      if (outcome.state === "completed") {
+      if (outcome.state === "completed" || outcome.state === "failed") {
         activeDraftRef.current = null;
         setLiveDraft(null);
       }
       await refreshTimeline();
     } catch {
-      if (activePageIdRef.current === pageId && activeVaultIdRef.current === vaultId) setError(genericAgentError());
+      if (activePageIdRef.current === pageId && activeVaultIdRef.current === vaultId) {
+        activeDraftRef.current = null;
+        setLiveDraft(null);
+        setError(genericAgentError());
+      }
     } finally {
       if (activePageIdRef.current === pageId && activeVaultIdRef.current === vaultId) setSubmitting(false);
       submitInFlightRef.current = false;
