@@ -3978,6 +3978,9 @@ dd {
   display: flex;
   align-items: center;
   gap: 2px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
+  overflow: auto;
   padding: 4px;
   border-radius: 10px;
   background: #212121;

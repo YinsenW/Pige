@@ -1886,15 +1886,43 @@ export function NoteReader(props: {
   const selectionToolbarRef = useRef<HTMLDivElement | null>(null);
   const selectionActionRefs = useRef(new Map<number, HTMLButtonElement>());
   const selectionFocusTransition = useRef(false);
+  const selectionFocusOwnerRef = useRef<HTMLElement | null>(null);
+  const currentSelectionRef = useRef<{
+    readonly left: number;
+    readonly top: number;
+    readonly right: number;
+    readonly bottom: number;
+  } | null>(null);
+  const dismissedSelectionRef = useRef<typeof currentSelectionRef.current>(null);
+  const [selectionAnchor, setSelectionAnchor] = useState<{
+    readonly left: number;
+    readonly top: number;
+    readonly bottom: number;
+    readonly width: number;
+  } | null>(null);
   const [selectionPosition, setSelectionPosition] = useState<{ readonly left: number; readonly top: number } | null>(null);
   const [selectionActionIndex, setSelectionActionIndex] = useState(0);
+
+  const closeSelectionToolbar = (restoreFocus: boolean): void => {
+    selectionFocusTransition.current = false;
+    dismissedSelectionRef.current = currentSelectionRef.current;
+    setSelectionAnchor(null);
+    setSelectionPosition(null);
+    if (!restoreFocus) return;
+    const priorOwner = selectionFocusOwnerRef.current;
+    const focusTarget = priorOwner?.isConnected ? priorOwner : readerRef.current;
+    window.requestAnimationFrame(() => focusTarget?.focus({ preventScroll: true }));
+  };
 
   useEffect(() => {
     const updateSelection = (): void => {
       if (selectionFocusTransition.current) return;
       const selection = window.getSelection();
       if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+        currentSelectionRef.current = null;
+        dismissedSelectionRef.current = null;
         if (selectionToolbarRef.current?.contains(document.activeElement)) return;
+        setSelectionAnchor(null);
         setSelectionPosition(null);
         return;
       }
@@ -1908,22 +1936,75 @@ export function NoteReader(props: {
       }
       const rect = range.getBoundingClientRect();
       if (!Number.isFinite(rect.left) || !Number.isFinite(rect.top) || rect.width <= 0) {
+        setSelectionAnchor(null);
         setSelectionPosition(null);
         return;
       }
-      const toolbarWidth = 244;
-      const left = Math.max(12, Math.min(window.innerWidth - toolbarWidth - 12, rect.left + (rect.width / 2) - (toolbarWidth / 2)));
-      const top = Math.max(12, rect.top - 42);
+      const nextSelection = {
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom
+      };
+      currentSelectionRef.current = nextSelection;
+      const dismissed = dismissedSelectionRef.current;
+      if (dismissed
+        && dismissed.left === nextSelection.left
+        && dismissed.top === nextSelection.top
+        && dismissed.right === nextSelection.right
+        && dismissed.bottom === nextSelection.bottom) return;
+      dismissedSelectionRef.current = null;
+      const activeElement = document.activeElement;
+      if (activeElement instanceof HTMLElement && !selectionToolbarRef.current?.contains(activeElement)) {
+        selectionFocusOwnerRef.current = activeElement === document.body ? readerRef.current : activeElement;
+      }
+      const anchor = {
+        left: rect.left,
+        top: rect.top,
+        bottom: rect.bottom,
+        width: rect.width
+      };
+      setSelectionAnchor(anchor);
       setSelectionActionIndex(0);
-      setSelectionPosition({ left, top });
+      setSelectionPosition({ left: Math.max(12, anchor.left), top: Math.max(12, anchor.top) });
+    };
+    const dismissOnScroll = (): void => {
+      dismissedSelectionRef.current = currentSelectionRef.current;
+      setSelectionAnchor(null);
+      setSelectionPosition(null);
     };
     document.addEventListener("selectionchange", updateSelection);
     window.addEventListener("resize", updateSelection);
+    window.addEventListener("scroll", dismissOnScroll, true);
     return () => {
       document.removeEventListener("selectionchange", updateSelection);
       window.removeEventListener("resize", updateSelection);
+      window.removeEventListener("scroll", dismissOnScroll, true);
     };
   }, [summary.pageId]);
+
+  useEffect(() => {
+    if (!selectionAnchor) return;
+    const frame = window.requestAnimationFrame(() => {
+      const toolbar = selectionToolbarRef.current;
+      if (!toolbar) return;
+      const toolbarRect = toolbar.getBoundingClientRect();
+      const width = Math.max(toolbarRect.width, toolbar.offsetWidth, toolbar.scrollWidth);
+      const height = Math.max(toolbarRect.height, toolbar.offsetHeight, toolbar.scrollHeight);
+      if (width <= 0 || height <= 0) return;
+      const maxLeft = Math.max(12, window.innerWidth - width - 12);
+      const maxTop = Math.max(12, window.innerHeight - height - 12);
+      const preferredLeft = selectionAnchor.left + (selectionAnchor.width / 2) - (width / 2);
+      const above = selectionAnchor.top - height - 8;
+      const preferredTop = above >= 12 ? above : selectionAnchor.bottom + 8;
+      const next = {
+        left: Math.max(12, Math.min(maxLeft, preferredLeft)),
+        top: Math.max(12, Math.min(maxTop, preferredTop))
+      };
+      setSelectionPosition((current) => current?.left === next.left && current.top === next.top ? current : next);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [selectionAnchor]);
 
   const moveSelectionActionFocus = (index: number): void => {
     selectionFocusTransition.current = true;
@@ -1935,8 +2016,8 @@ export function NoteReader(props: {
   };
 
   return (
-    <article className="note-reader" ref={readerRef}>
-      {selectionPosition ? (
+    <article className="note-reader" ref={readerRef} tabIndex={-1}>
+      {selectionAnchor && selectionPosition ? (
         <div
           ref={selectionToolbarRef}
           className="selection-toolbar visible"
@@ -1946,7 +2027,7 @@ export function NoteReader(props: {
           onKeyDown={(event) => {
             if (event.key === "Escape") {
               event.preventDefault();
-              setSelectionPosition(null);
+              closeSelectionToolbar(true);
               return;
             }
             let nextIndex: number | null = null;
@@ -1971,7 +2052,7 @@ export function NoteReader(props: {
               data-selection-action={action}
               onPointerDown={(event) => event.preventDefault()}
               onClick={() => {
-                setSelectionPosition(null);
+                closeSelectionToolbar(true);
                 props.onDevelopment("selection_actions");
               }}
             >

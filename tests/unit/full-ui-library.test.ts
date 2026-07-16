@@ -359,8 +359,14 @@ describe("full UI Library", () => {
     dom.window.close();
   });
 
-  it("keeps selection actions roving, selection-preserving, and honestly unavailable", async () => {
+  it("measures compact selection actions, dismisses on scroll, and restores exact focus ownership", async () => {
     const dom = createDom();
+    Object.defineProperty(dom.window, "innerWidth", { configurable: true, value: 360 });
+    Object.defineProperty(dom.window, "innerHeight", { configurable: true, value: 240 });
+    const focusOwner = dom.window.document.createElement("button");
+    focusOwner.textContent = "Reader focus owner";
+    dom.window.document.body.prepend(focusOwner);
+    focusOwner.focus();
     const root = createRoot(dom.window.document.querySelector("#root")!);
     const unavailable: string[] = [];
     await act(async () => {
@@ -375,15 +381,33 @@ describe("full UI Library", () => {
       await settle(dom);
     });
     const container = dom.window.document.querySelector("#root")!;
-    const selectedParagraph = requireElement(container.querySelector(".markdown-body p"));
+    requireElement(container.querySelector(".markdown-body p"));
+    const originalBoundingClientRect = dom.window.HTMLElement.prototype.getBoundingClientRect;
+    dom.window.HTMLElement.prototype.getBoundingClientRect = function getBoundingClientRect(): DOMRect {
+      if ((this as HTMLElement).classList.contains("selection-toolbar")) {
+        return {
+          left: 0,
+          top: 0,
+          width: 330,
+          height: 84,
+          right: 330,
+          bottom: 84,
+          x: 0,
+          y: 0,
+          toJSON: () => ({})
+        } as DOMRect;
+      }
+      return originalBoundingClientRect.call(this);
+    };
+    let selectionCollapsed = false;
     Object.defineProperty(dom.window, "getSelection", {
       configurable: true,
       value: () => ({
-        isCollapsed: false,
-        rangeCount: 1,
+        isCollapsed: selectionCollapsed,
+        rangeCount: selectionCollapsed ? 0 : 1,
         getRangeAt: () => ({
-          commonAncestorContainer: selectedParagraph,
-          getBoundingClientRect: () => ({ left: 120, top: 160, width: 80, height: 18, right: 200, bottom: 178 })
+          commonAncestorContainer: requireElement(container.querySelector(".markdown-body p")),
+          getBoundingClientRect: () => ({ left: 330, top: 15, width: 20, height: 18, right: 350, bottom: 33 })
         })
       })
     });
@@ -391,9 +415,12 @@ describe("full UI Library", () => {
       dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
       await settle(dom);
     });
+    await waitFor(dom, () => container.querySelector<HTMLElement>('[role="toolbar"]')?.style.left === "18px");
 
-    const toolbar = requireElement(container.querySelector<HTMLElement>('[role="toolbar"]'));
-    const actions = Array.from(toolbar.querySelectorAll<HTMLButtonElement>("button"));
+    let toolbar = requireElement(container.querySelector<HTMLElement>('[role="toolbar"]'));
+    let actions = Array.from(toolbar.querySelectorAll<HTMLButtonElement>("button"));
+    expect(toolbar.style.left).toBe("18px");
+    expect(toolbar.style.top).toBe("41px");
     expect(actions.map((button) => button.textContent)).toEqual(["Explain", "Summarize", "Link", "More"]);
     expect(actions.map((button) => button.tabIndex)).toEqual([0, -1, -1, -1]);
     actions[0]!.focus();
@@ -405,14 +432,66 @@ describe("full UI Library", () => {
     expect(actions.map((button) => button.tabIndex)).toEqual([-1, 0, -1, -1]);
 
     await act(async () => {
-      actions[1]!.dispatchEvent(new dom.window.MouseEvent("pointerdown", { bubbles: true, cancelable: true }));
+      toolbar.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.querySelector('[role="toolbar"]') === null);
+    await waitFor(dom, () => dom.window.document.activeElement === focusOwner);
+
+    focusOwner.focus();
+    await act(async () => {
+      selectionCollapsed = true;
+      dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+      selectionCollapsed = false;
+      dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.querySelector<HTMLElement>('[role="toolbar"]')?.style.left === "18px");
+    toolbar = requireElement(container.querySelector<HTMLElement>('[role="toolbar"]'));
+    actions = Array.from(toolbar.querySelectorAll<HTMLButtonElement>("button"));
+    const pointerDown = new dom.window.MouseEvent("pointerdown", { bubbles: true, cancelable: true });
+    await act(async () => {
+      actions[1]!.dispatchEvent(pointerDown);
       actions[1]!.click();
       await settle(dom);
     });
+    expect(pointerDown.defaultPrevented).toBe(true);
+    await waitFor(dom, () => dom.window.document.activeElement === focusOwner);
     expect(unavailable).toEqual(["selection_actions"]);
     expect(container.querySelector('[role="toolbar"]')).toBeNull();
 
+    focusOwner.focus();
+    await act(async () => {
+      selectionCollapsed = true;
+      dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+      selectionCollapsed = false;
+      dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.querySelector('[role="toolbar"]') !== null);
+    await act(async () => {
+      dom.window.dispatchEvent(new dom.window.Event("scroll"));
+      await settle(dom);
+    });
+    expect(container.querySelector('[role="toolbar"]')).toBeNull();
+
+    focusOwner.remove();
+    await act(async () => {
+      selectionCollapsed = true;
+      dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+      selectionCollapsed = false;
+      dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+      await settle(dom);
+    });
+    toolbar = requireElement(container.querySelector<HTMLElement>('[role="toolbar"]'));
+    await act(async () => {
+      toolbar.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await settle(dom);
+    });
+    await waitFor(dom, () => dom.window.document.activeElement === container.querySelector(".note-reader"));
+
     await act(async () => root.unmount());
+    dom.window.HTMLElement.prototype.getBoundingClientRect = originalBoundingClientRect;
     dom.window.close();
   });
 });
@@ -514,6 +593,10 @@ function createDom(): JSDOM {
   Object.defineProperty(dom.window, "requestAnimationFrame", {
     configurable: true,
     value: (callback: FrameRequestCallback) => dom.window.setTimeout(() => callback(Date.now()), 0)
+  });
+  Object.defineProperty(dom.window, "cancelAnimationFrame", {
+    configurable: true,
+    value: (handle: number) => dom.window.clearTimeout(handle)
   });
   return dom;
 }
