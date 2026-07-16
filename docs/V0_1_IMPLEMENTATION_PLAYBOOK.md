@@ -250,8 +250,10 @@ Exit criteria:
 Current B2.08/B2.11 evidence covers first-wins cancellation, Home recovery, index
 progress, note races, per-vault lease, exact Job CAS, independent keys, failed-sentinel
 recovery and same-name successor-safe cleanup. Other Job classes, conflict repair,
-cross-file atomicity, final-syscall TOCTOU and Windows proof remain open. B2.02 UI is
-disabled/unsupported with no speech bridge, Job, transcript or success; E2.04 stays planned.
+cross-file atomicity, final-syscall TOCTOU and Windows proof remain open. B2.02 has exact
+macOS 26 helper/session/UI, permission, editable transcript, no-audio, teardown and arm64
+package/distribution candidate evidence. E2.04/statuses stay planned; publication,
+macOS x64, Windows/Linux speech and public signing remain open.
 
 ## 8. Phase 3: BYOK And Basic Agent Ingest
 

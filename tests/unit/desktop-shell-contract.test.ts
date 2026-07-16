@@ -53,7 +53,10 @@ describe("desktop shell build contract", () => {
   });
 
   it("uses one integrated title bar while preserving native platform controls", () => {
-    expect(getWindowShellOptions("darwin")).toEqual({ titleBarStyle: "hiddenInset" });
+    expect(getWindowShellOptions("darwin")).toEqual({
+      titleBarStyle: "hiddenInset",
+      trafficLightPosition: { x: 17, y: 17 }
+    });
     expect(getWindowShellOptions("win32")).toEqual({
       titleBarStyle: "hidden",
       titleBarOverlay: {
@@ -67,6 +70,32 @@ describe("desktop shell build contract", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     expect(mainSource).toContain("...getWindowShellOptions(process.platform)");
     expect(mainSource).not.toContain("frame: false");
+  });
+
+  it("keeps local dictation main-owned, strictly projected, and permission-on-demand", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const builderConfig = fs.readFileSync(path.resolve("apps/desktop/electron-builder.yml"), "utf8");
+    const helperSource = fs.readFileSync(path.resolve("apps/desktop/native/macos-speech/PigeSpeech.swift"), "utf8");
+    const helperInfo = fs.readFileSync(path.resolve("apps/desktop/native/macos-speech/Info.plist"), "utf8");
+
+    expect(contractsSource).toContain("readonly speech: {");
+    expect(contractsSource).not.toContain("audioBytes");
+    expect(mainSource).not.toContain('systemPreferences.askForMediaAccess("microphone")');
+    expect(mainSource).not.toContain('systemPreferences.getMediaAccessStatus("microphone")');
+    expect(helperSource).toContain("AVCaptureDevice.requestAccess(for: .audio)");
+    expect(helperSource).toContain("AVCaptureDevice.authorizationStatus(for: .audio)");
+    expect(helperInfo).toContain("NSMicrophoneUsageDescription");
+    expect(helperInfo).toContain("com.yinsenw.pige.speech");
+    expect(mainSource).toContain('ipcMain.handle("speech.start"');
+    expect(mainSource).toContain("const speechTrackedSenders = new Set<number>();");
+    expect(mainSource).toContain("void getSpeechService().cancelOwner(sender.id);");
+    expect(mainSource).toContain("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone");
+    expect(preloadSource).toContain("SpeechSessionEventSchema.safeParse(value)");
+    expect(preloadSource).toContain('ipcRenderer.invoke("speech.start", parsedRequest)');
+    expect(preloadSource).not.toContain("PIGE_PACKAGED_RESOURCES_PATH");
+    expect(builderConfig).toContain("NSMicrophoneUsageDescription:");
   });
 
   it("keeps storage reveal main-owned, window-bound, strictly projected, and pathless", () => {

@@ -82,6 +82,7 @@ type PigeErrorDomain =
   | "restore"
   | "database"
   | "settings"
+  | "speech"
   | "update"
   | "diagnostics"
   | "renderer"
@@ -277,7 +278,6 @@ Commands:
 - `capture.submitText`
 - `capture.submitFiles`
 - `capture.submitUrl`
-- `capture.submitVoiceTranscript`
 
 Returns:
 
@@ -349,25 +349,47 @@ type SubmitUrlCaptureRequest = {
 
 Rules:
 
-- `capture.submitText` preserves text as a managed text source before creating the source record, conversation event, and queued capture job.
-- Large pasted text is stored once in the managed source file and referenced from conversation history by source ID and preview.
-- `capture.submitUrl` runs only in the main process through Source Fetch Service. Renderer code never fetches web pages directly.
-- URL capture supports HTTP/HTTPS only, blocks non-public network targets and embedded credentials, revalidates redirects, pins production connections to already validated DNS addresses, enforces the deadline through body reads, caps declared/decompressed streamed bytes, stores decoded HTML/text snapshots under `raw/web/YYYY/MM/`, and stores extracted readable text under `artifacts/web/YYYY/MM/`.
-- URL source records store redacted original/final/canonical URLs, content type, effective charset, selected article metadata, redacted image references, extraction identity/version/mode/counts/truncation/warnings, and a checksummed `extracted_text` artifact. Query values for sensitive keys such as token, api_key, password, secret, signature, and similar are redacted before durable storage.
-- HTML parsing and Readability extraction run in a bounded local worker with scripts and subresources disabled. Renderer IPC receives capture IDs/status only; it never receives raw HTML, article DOM, arbitrary response headers, dispatcher handles, or network credentials.
-- URL capture conversation events store only source ID, display name, and source kind. Raw HTML and extracted web text are not duplicated in `.pige/conversations/`.
-- Current preload uses `agent.submitTurn`: it extracts one selected file path with Electron
-  `webUtils.getPathForFile`; main preserves it first, then links the same user draft and
-  Source ref to one durable `agent_turn`. Historical capture handlers remain internal.
-- `capture.submitFiles` accepts `.md`, `.markdown`, `.txt`, `.pdf`, `.docx`, `.pptx`, `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, `.tif`, `.tiff`, and `.bmp`. It consumes the active vault's `sourceStorage.defaultStrategy`: managed-copy mode writes `raw/files/YYYY/MM/`; reference-original mode records checksum/size/mtime and does not duplicate the file. Both modes create one source record, conversation event, and queued capture job per accepted file and return display-name-only rejection summaries.
-- File bodies are never copied into conversation history; conversation events reference source IDs, display names, and source kinds.
-- The renderer receives IDs and status, not arbitrary filesystem paths or file handles.
-- After preservation, desktop main may immediately process queued text/Markdown/TXT/URL capture jobs into minimal source pages. The capture return value still reports preservation status; Home observes source-page completion through `jobs.list`.
-- Preserved PDF/DOCX/PPTX/image sources create metadata-only projections and queue Agent
-  work; only Pi parse/OCR events create document or image children.
-- OCR execution is internal main-to-helper orchestration behind `OcrPort`; no new renderer command exposes a native path, raw OCR request, helper response, image bytes, or Artifact body. Home observes only the existing safe Job summaries.
-- `agent_ingest` uses embedded Pi for text and selected document/image parse or OCR, and
-  waits without semantic work when no model exists.
+- Text is preserved once before its Source/event/Job; large bodies remain source refs.
+- URL capture is main-only HTTP(S): validated/pinned public addresses, bounded redirects/
+  deadlines/decoded bytes, inert worker extraction, redacted metadata/query secrets and
+  checksummed raw/extracted artifacts. Conversation/renderer receive only safe refs,
+  IDs and status, never HTML/DOM/headers/dispatcher/credentials.
+- Preload resolves one selected file via `webUtils`; main preserves before linking the
+  draft/ref to one `agent_turn`. Historical capture handlers remain internal.
+- Files allow Markdown/TXT/PDF/DOCX/PPTX/common images and obey the active copy/reference
+  policy. Each accepted file has one Source/event/Job; rejections use display names only,
+  and renderer/history receive no body, arbitrary path, or handle.
+- Preserved text/Markdown/TXT/URL may produce minimal pages; documents/images remain
+  metadata-only until Pi selects parse/OCR. Home observes safe Job summaries.
+- OCR stays behind main-owned `OcrPort`; `agent_ingest` uses embedded Pi and waits without
+  semantic work when no model exists.
+
+#### 6.2.1 Native Speech Session
+
+Channels:
+
+- `speech.availability`
+- `speech.start`
+- `speech.stop`
+- `speech.cancel`
+- `speech.openSystemSettings`
+- event `speech.sessionEvent`
+
+Strict schemas own requests/results/errors and `transcript_replace | meter |
+session_failed`; each event binds one session/positive sequence and carries only bounded
+replacement text or elapsed time/normalized level.
+
+Rules:
+
+- Main permits one WebContents-owned session; stale identity/sequence and teardown fail
+  closed. Stop returns editable text but never submits or creates Job/source/model work.
+- Native audio/handles never cross preload or enter files, logs, diagnostics, vault,
+  backup, conversation or models; IPC is body-free except bounded transcript/meter data.
+- Explicit start alone requests permission; recovery opens only the fixed macOS
+  Microphone Privacy pane. Language is explicit and defaults to app locale; persisted
+  dictation language remains open.
+- Missing assets/platform support are typed unavailable; no install, Broker grant or
+  cloud fallback occurs.
 
 ### 6.3 Jobs
 

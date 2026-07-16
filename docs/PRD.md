@@ -897,7 +897,8 @@ Unsupported platforms:
 Minimum output:
 
 - Final transcript inserted into the home composer.
-- Optional raw transcript artifact if the user submits the voice capture.
+- No raw audio or standalone transcript artifact in v0.1; only the user-edited composer
+  text may enter the normal submission flow.
 - Normal ingest flow after submission.
 
 Platform API selection, availability probes, language assets, permissions, artifacts,

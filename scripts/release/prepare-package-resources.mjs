@@ -111,23 +111,25 @@ for (const entry of packages) {
 
 const nativeComponentRefs = [];
 if (target.platform === "macos") {
-  const helperPath = path.join(root, "artifacts/native/macos/arm64/pige-vision-ocr");
-  const helperManifest = readJson(path.join(root, "artifacts/native/macos/arm64/pige-vision-ocr.manifest.json"));
-  if (!fs.statSync(helperPath).isFile()) throw new Error("The macOS Vision OCR helper must be built before package resources.");
-  const helperRef = `pkg:generic/pige-vision-ocr@${encodeURIComponent(helperManifest.helperVersion)}`;
-  nativeComponentRefs.push(helperRef);
-  components.push({
-    type: "file",
-    "bom-ref": helperRef,
-    name: "pige-vision-ocr",
-    version: helperManifest.helperVersion,
-    hashes: [{ alg: "SHA-256", content: checksumFile(helperPath).replace("sha256:", "") }],
-    properties: [
-      { name: "pige:platform", value: helperManifest.platform },
-      { name: "pige:arch", value: helperManifest.arch },
-      { name: "pige:protocolVersion", value: String(helperManifest.protocolVersion) }
-    ]
-  });
+  for (const helperName of ["pige-speech", "pige-vision-ocr"]) {
+    const helperPath = path.join(root, `artifacts/native/macos/arm64/${helperName}`);
+    const helperManifest = readJson(`${helperPath}.manifest.json`);
+    if (!fs.statSync(helperPath).isFile()) throw new Error("A required macOS native helper must be built before package resources.");
+    const helperRef = `pkg:generic/${helperName}@${encodeURIComponent(helperManifest.helperVersion)}`;
+    nativeComponentRefs.push(helperRef);
+    components.push({
+      type: "file",
+      "bom-ref": helperRef,
+      name: helperName,
+      version: helperManifest.helperVersion,
+      hashes: [{ alg: "SHA-256", content: checksumFile(helperPath).replace("sha256:", "") }],
+      properties: [
+        { name: "pige:platform", value: helperManifest.platform },
+        { name: "pige:arch", value: helperManifest.arch },
+        { name: "pige:protocolVersion", value: String(helperManifest.protocolVersion) }
+      ]
+    });
+  }
 }
 
 const appRef = "pkg:generic/pige@0.0.0";

@@ -129,8 +129,8 @@ try {
   runNodeSmoke("scripts/verify/diagnostics-export-worker-smoke.mjs", {
     PIGE_BUILT_APP_ROOT: extractedRoot
   });
-  if (target.nativeSmokeScript) {
-    runNodeSmoke(target.nativeSmokeScript, {
+  for (const nativeSmokeScript of target.nativeSmokeScripts) {
+    runNodeSmoke(nativeSmokeScript, {
       PIGE_PACKAGED_RESOURCES_PATH: distributedApplication.resourcesPath,
       PIGE_SMOKE_ARTIFACT_ROOT: path.join(tempRoot, "ocr-artifacts")
     });
@@ -161,6 +161,7 @@ try {
       parserWorkers: true,
       indexWorker: true,
       platformNativeOcr: target.platform === "macos",
+      platformNativeSpeech: target.platform === "macos",
       licenseNoticeResources: true,
       packageResources,
       toolchainManifest
@@ -293,30 +294,32 @@ function verifyMacDistributionSignature(distributedAppPath) {
   if (hasCodeSignEntitlements(distributedAppPath)) {
     throw new Error("Distributed macOS application unexpectedly contains signing entitlements.");
   }
-  const nestedHelperPath = path.join(
-    distributedAppPath,
-    "Contents/Resources/native/macos/arm64/pige-vision-ocr"
-  );
-  runMacCommand(
-    "/usr/bin/codesign",
-    ["--verify", "--strict", "--verbose=2", nestedHelperPath],
-    "nested_helper_codesign_verify"
-  );
-  const nestedHelperSignature = parseMacCodeSignatureDescription(runMacCommand(
-    "/usr/bin/codesign",
-    ["--display", "--verbose=4", nestedHelperPath],
-    "nested_helper_codesign_describe"
-  ));
-  if (
-    !nestedHelperSignature.adHoc ||
-    nestedHelperSignature.teamIdentifierPresent ||
-    nestedHelperSignature.developerIdPresent ||
-    nestedHelperSignature.hardenedRuntime
-  ) {
-    throw new Error("Packaged macOS Vision helper does not share the bounded ad-hoc distribution identity.");
-  }
-  if (hasCodeSignEntitlements(nestedHelperPath)) {
-    throw new Error("Packaged macOS Vision helper unexpectedly contains signing entitlements.");
+  for (const helperName of ["pige-speech", "pige-vision-ocr"]) {
+    const nestedHelperPath = path.join(
+      distributedAppPath,
+      `Contents/Resources/native/macos/arm64/${helperName}`
+    );
+    runMacCommand(
+      "/usr/bin/codesign",
+      ["--verify", "--strict", "--verbose=2", nestedHelperPath],
+      "nested_helper_codesign_verify"
+    );
+    const nestedHelperSignature = parseMacCodeSignatureDescription(runMacCommand(
+      "/usr/bin/codesign",
+      ["--display", "--verbose=4", nestedHelperPath],
+      "nested_helper_codesign_describe"
+    ));
+    if (
+      !nestedHelperSignature.adHoc ||
+      nestedHelperSignature.teamIdentifierPresent ||
+      nestedHelperSignature.developerIdPresent ||
+      nestedHelperSignature.hardenedRuntime
+    ) {
+      throw new Error("A packaged macOS native helper does not share the bounded ad-hoc distribution identity.");
+    }
+    if (hasCodeSignEntitlements(nestedHelperPath)) {
+      throw new Error("A packaged macOS native helper unexpectedly contains signing entitlements.");
+    }
   }
   const assessment = spawnSync(
     "/usr/sbin/spctl",

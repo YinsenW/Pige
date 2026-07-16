@@ -11,6 +11,7 @@ import {
 import { PigeIcon, type PigeIconName } from "./components/PigeIcon";
 import { KnowledgeTreeMap } from "./components/KnowledgeTreeMap";
 import { CurrentNoteAgent } from "./components/CurrentNoteAgent";
+import { HomeVoicePanel, type HomeVoicePanelState } from "./components/HomeVoicePanel";
 import { ProposalReviewPanel } from "./components/ProposalReviewPanel";
 import pigeMarkUrl from "../../../../../resources/brand/pige-icon/master/pige-icon-1024.png";
 import deMessages from "./locales/de/messages.json";
@@ -2683,6 +2684,11 @@ function HomeComposer(props: {
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [modelSwitching, setModelSwitching] = useState(false);
   const [modelSwitchFailed, setModelSwitchFailed] = useState(false);
+  const [voiceState, setVoiceState] = useState<HomeVoicePanelState | null>(null);
+  const [voiceTranscript, setVoiceTranscript] = useState("");
+  const [voiceElapsedMs, setVoiceElapsedMs] = useState<number | undefined>(undefined);
+  const [voiceLevels, setVoiceLevels] = useState<readonly number[]>([]);
+  const [voiceCanOpenSystemSettings, setVoiceCanOpenSystemSettings] = useState(false);
   const [proposalOutcome, setProposalOutcome] = useState<ProposalDecisionResult["status"] | null>(null);
   const [proposalDecisionStateUnknown, setProposalDecisionStateUnknown] = useState(false);
   const [proposalErrorMessageKey, setProposalErrorMessageKey] = useState<string | null>(null);
@@ -2714,11 +2720,19 @@ function HomeComposer(props: {
   const modelSwitcherRef = useRef<HTMLButtonElement | null>(null);
   const modelMenuRef = useRef<HTMLDivElement | null>(null);
   const modelOptionRefs = useRef(new Map<string, HTMLButtonElement>());
+  const voiceTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const voicePendingRequestIdRef = useRef<string | null>(null);
+  const voiceSessionIdRef = useRef<string | null>(null);
+  const voiceEventSequenceRef = useRef(0);
+  const voiceRequestSequenceRef = useRef(0);
+  const voiceMeteringAvailableRef = useRef(false);
+  const draftTextRef = useRef(text);
   const conversationLoadSequence = useRef(0);
   const handledFileDropClientTurnIdRef = useRef<string | null>(null);
   const activeVaultIdRef = useRef<string | undefined>(props.activeVault?.vaultId);
   const activeAgentDraftRef = useRef<ActiveAgentDraftBinding | null>(null);
   activeVaultIdRef.current = props.activeVault?.vaultId;
+  draftTextRef.current = text;
   const agentStatusLabel = props.agentRuntimeStatus?.state === "ready" ? props.t("home.agentReady") : props.t("home.captureOnly");
   const enabledHomeModels = props.modelSummary?.models.filter((model) => model.enabled) ?? [];
   const selectedHomeModel = enabledHomeModels.find(
@@ -2777,6 +2791,166 @@ function HomeComposer(props: {
     if (changed) closeModelMenu(true);
     else setModelSwitchFailed(true);
   };
+
+  const clearVoiceState = (restoreFocus: boolean): void => {
+    voicePendingRequestIdRef.current = null;
+    voiceSessionIdRef.current = null;
+    voiceEventSequenceRef.current = 0;
+    voiceMeteringAvailableRef.current = false;
+    setVoiceState(null);
+    setVoiceTranscript("");
+    setVoiceElapsedMs(undefined);
+    setVoiceLevels([]);
+    setVoiceCanOpenSystemSettings(false);
+    if (restoreFocus) {
+      window.requestAnimationFrame(() => voiceTriggerRef.current?.focus());
+    }
+  };
+
+  const cancelVoice = (restoreFocus = true): void => {
+    voiceRequestSequenceRef.current += 1;
+    const requestId = voicePendingRequestIdRef.current;
+    const sessionId = voiceSessionIdRef.current;
+    clearVoiceState(restoreFocus);
+    if (sessionId) void window.pige.speech.cancel({ sessionId }).catch(() => undefined);
+    else if (requestId) void window.pige.speech.cancel({ requestId }).catch(() => undefined);
+  };
+
+  const beginVoice = async (): Promise<void> => {
+    const requestSequence = voiceRequestSequenceRef.current + 1;
+    voiceRequestSequenceRef.current = requestSequence;
+    const previousSessionId = voiceSessionIdRef.current;
+    if (previousSessionId) {
+      voiceSessionIdRef.current = null;
+      await window.pige.speech.cancel({ sessionId: previousSessionId }).catch(() => undefined);
+      if (voiceRequestSequenceRef.current !== requestSequence) return;
+    }
+    setVoiceState("requesting_permission");
+    setVoiceTranscript("");
+    setVoiceElapsedMs(undefined);
+    setVoiceLevels([]);
+    setVoiceCanOpenSystemSettings(false);
+    voiceEventSequenceRef.current = 0;
+    voiceMeteringAvailableRef.current = false;
+    try {
+      const availability = await window.pige.speech.availability({ languageTag: props.locale });
+      if (voiceRequestSequenceRef.current !== requestSequence) return;
+      if (availability.status === "failed") {
+        setVoiceState("failed");
+        return;
+      }
+      if (availability.status === "unsupported") {
+        setVoiceState(availability.reason === "assets_unavailable" ? "assets_unavailable" : "unsupported");
+        return;
+      }
+      setVoiceCanOpenSystemSettings(availability.canOpenSystemSettings);
+      const requestId = createSpeechRequestId();
+      voicePendingRequestIdRef.current = requestId;
+      const result = await window.pige.speech.start({
+        requestId,
+        languageTag: props.locale
+      });
+      if (voicePendingRequestIdRef.current === requestId) voicePendingRequestIdRef.current = null;
+      if (voiceRequestSequenceRef.current !== requestSequence) {
+        if (result.status === "started") {
+          void window.pige.speech.cancel({ sessionId: result.sessionId }).catch(() => undefined);
+        }
+        return;
+      }
+      if (result.status === "blocked") {
+        setVoiceState(voiceStateForError(result.error.code));
+        setVoiceCanOpenSystemSettings(result.error.userAction === "open_settings");
+        return;
+      }
+      voiceSessionIdRef.current = result.sessionId;
+      voiceMeteringAvailableRef.current = result.metering === "available";
+      setVoiceState("recording");
+    } catch {
+      if (voiceRequestSequenceRef.current === requestSequence) setVoiceState("failed");
+    }
+  };
+
+  const useVoiceTranscript = (transcript: string): void => {
+    const normalized = transcript.trim();
+    if (!normalized) return;
+    const currentDraft = draftTextRef.current;
+    draftRevisionRef.current += 1;
+    props.onDraftChange(joinVoiceTranscript(currentDraft, normalized));
+    clearVoiceState(false);
+    window.requestAnimationFrame(() => composerInputRef.current?.focus());
+  };
+
+  const stopVoice = async (useTranscriptAfterStop: boolean): Promise<void> => {
+    const sessionId = voiceSessionIdRef.current;
+    if (!sessionId) return;
+    const requestSequence = voiceRequestSequenceRef.current;
+    setVoiceState("transcribing");
+    try {
+      const result = await window.pige.speech.stop({ sessionId });
+      if (
+        voiceRequestSequenceRef.current !== requestSequence ||
+        voiceSessionIdRef.current !== sessionId
+      ) return;
+      voiceSessionIdRef.current = null;
+      voiceMeteringAvailableRef.current = false;
+      setVoiceElapsedMs(undefined);
+      setVoiceLevels([]);
+      if (result.status !== "stopped") {
+        setVoiceState("failed");
+        return;
+      }
+      setVoiceTranscript(result.transcript);
+      if (useTranscriptAfterStop && result.transcript.trim()) {
+        useVoiceTranscript(result.transcript);
+      } else {
+        setVoiceState(result.transcript.trim() ? "ready" : "stopped");
+      }
+    } catch {
+      if (
+        voiceRequestSequenceRef.current === requestSequence &&
+        voiceSessionIdRef.current === sessionId
+      ) {
+        voiceSessionIdRef.current = null;
+        setVoiceState("failed");
+      }
+    }
+  };
+
+  useEffect(() => window.pige.speech?.onSessionEvent?.((event) => {
+    if (
+      event.sessionId !== voiceSessionIdRef.current ||
+      event.sequence <= voiceEventSequenceRef.current
+    ) return;
+    voiceEventSequenceRef.current = event.sequence;
+    if (event.kind === "transcript_replace") {
+      setVoiceTranscript(event.transcript);
+      return;
+    }
+    if (event.kind === "meter") {
+      if (!voiceMeteringAvailableRef.current) return;
+      setVoiceElapsedMs(event.elapsedMs);
+      setVoiceLevels((current) => [...current.slice(-63), event.level]);
+      return;
+    }
+    voiceSessionIdRef.current = null;
+    voiceMeteringAvailableRef.current = false;
+    setVoiceState("failed");
+    setVoiceElapsedMs(undefined);
+    setVoiceLevels([]);
+  }) ?? (() => undefined), []);
+
+  useEffect(() => {
+    clearVoiceState(false);
+    return () => {
+      voiceRequestSequenceRef.current += 1;
+      const requestId = voicePendingRequestIdRef.current;
+      const sessionId = voiceSessionIdRef.current;
+      voicePendingRequestIdRef.current = null;
+      voiceSessionIdRef.current = null;
+      if (sessionId) void window.pige.speech.cancel({ sessionId }).catch(() => undefined);
+      else if (requestId) void window.pige.speech.cancel({ requestId }).catch(() => undefined);
+    };
+  }, [props.activeVault?.vaultId]);
 
   useEffect(() => {
     if (!modelMenuOpen) return;
@@ -3846,6 +4020,30 @@ function HomeComposer(props: {
         </section>
       ) : null}
       <section className="composer">
+        {voiceState ? (
+          <HomeVoicePanel
+            state={voiceState}
+            transcript={voiceTranscript}
+            levels={voiceLevels}
+            onDismiss={() => cancelVoice(true)}
+            {...(voiceElapsedMs === undefined ? {} : { elapsedMs: voiceElapsedMs })}
+            {...(voiceState === "stopped" || voiceState === "ready"
+              ? { onTranscriptChange: setVoiceTranscript }
+              : {})}
+            {...(voiceState === "recording" ? { onStop: () => void stopVoice(false) } : {})}
+            {...(voiceState === "recording"
+              ? { onComplete: () => void stopVoice(true) }
+              : voiceState === "stopped" || voiceState === "ready"
+                ? { onComplete: () => useVoiceTranscript(voiceTranscript) }
+                : {})}
+            {...(voiceState === "failed" ? { onRetry: () => void beginVoice() } : {})}
+            {...(voiceCanOpenSystemSettings
+              ? { onOpenSystemSettings: () => void window.pige.speech.openSystemSettings() }
+              : {})}
+            t={props.t}
+          />
+        ) : (
+          <>
         <textarea
           ref={composerInputRef}
           data-home-composer="true"
@@ -3981,16 +4179,13 @@ function HomeComposer(props: {
               void submitHomeFiles(files, text, clientTurnId);
             }}
           />
-          <span id="home-voice-unavailable-description" className="visually-hidden">
-            {props.t("home.voice.unsupportedDescription")}
-          </span>
           <button
+            ref={voiceTriggerRef}
             className="round-button"
             type="button"
-            title={props.t("home.voice.unsupportedTitle")}
-            aria-label={props.t("home.voice.unsupportedTitle")}
-            aria-describedby="home-voice-unavailable-description"
-            disabled
+            title={props.t("home.voice.start")}
+            aria-label={props.t("home.voice.start")}
+            onClick={() => void beginVoice()}
           >
             <PigeIcon name="voice" size={17} />
           </button>
@@ -4019,6 +4214,8 @@ function HomeComposer(props: {
             <span>{effectiveAgentRunState === "accepted" || effectiveAgentRunState === "running" ? props.t("home.agentRunning") : props.t("home.send")}</span>
           </button>
         </div>
+          </>
+        )}
         <DevelopmentStatus notice={props.developmentNotice} t={props.t} />
         {permissionRequestId ? (
           <section
@@ -4257,6 +4454,42 @@ function createAgentClientTurnId(now = new Date()): string {
   ].join("");
   const opaqueId = window.crypto.randomUUID().replaceAll("-", "").toLowerCase();
   return `turn_${date}_${opaqueId}`;
+}
+
+function createSpeechRequestId(): string {
+  return `speechreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
+}
+
+function voiceStateForError(code: string): HomeVoicePanelState {
+  if (code === "speech.permission_denied" || code === "speech.permission_restricted") {
+    return "permission_denied";
+  }
+  if (code === "speech.assets_unavailable") return "assets_unavailable";
+  if (code === "speech.unsupported_platform" || code === "speech.unsupported_os_version") {
+    return "unsupported";
+  }
+  return "failed";
+}
+
+function joinVoiceTranscript(draft: string, transcript: string): string {
+  if (!draft || /\s$/u.test(draft) || /^\s/u.test(transcript)) return `${draft}${transcript}`;
+  const leftCharacters = Array.from(draft);
+  const rightCharacters = Array.from(transcript);
+  const left = leftCharacters.at(-1) ?? "";
+  const right = rightCharacters[0] ?? "";
+  const compactScript = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
+  const punctuationOrSeparator = /[\p{P}\p{Z}]/u;
+  const opensWithoutSpace = /[\p{Ps}\p{Pi}]/u;
+  const closesWithoutSpace = /[\p{Pe}\p{Pf}\p{Po}]/u;
+  const leftContent = leftCharacters.findLast((character) => !punctuationOrSeparator.test(character)) ?? left;
+  const rightContent = rightCharacters.find((character) => !punctuationOrSeparator.test(character)) ?? right;
+  const compactBoundary =
+    (compactScript.test(leftContent) && compactScript.test(rightContent)) ||
+    opensWithoutSpace.test(left) ||
+    closesWithoutSpace.test(right);
+  return compactBoundary
+    ? `${draft}${transcript}`
+    : `${draft} ${transcript}`;
 }
 
 function proposalOutcomeForDurableState(

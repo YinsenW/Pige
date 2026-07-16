@@ -125,11 +125,18 @@ Release build:
 
 macOS native OCR build order:
 
-- Compile `apps/desktop/native/macos-vision-ocr/PigeVisionOCR.swift` for each release architecture with the macOS 26 SDK before packaging the Electron application.
-- Generate and verify the adjacent helper manifest containing source/compiler/target metadata plus exact binary size and SHA-256.
-- Embed the helper and manifest under application resources at the path resolved by `MacOSVisionOcrAdapter`.
-- Sign the nested helper before signing the enclosing application, then notarize/staple the final artifact.
-- Run capability probe, visible-text recognition, invalid-image rejection, and app-level OCR Job/Artifact smoke from the packaged application. A source-tree helper smoke is necessary but not sufficient release evidence.
+- Compile `PigeVisionOCR.swift` per architecture with macOS 26; generate/embed its exact
+  source/compiler/target/size/SHA-256 manifest at the adapter-owned resource path.
+- Sign helper before app/notary/staple; packaged probe, valid/invalid recognition and
+  app OCR Job/Artifact smoke are required beyond source-tree smoke.
+
+macOS native speech build order:
+
+- Compile `PigeSpeech.swift` with macOS 26, emit/embed its exact architecture/version/
+  size/SHA-256 manifest, and package `NSMicrophoneUsageDescription` (not
+  `NSSpeechRecognitionUsageDescription` unless a new reviewed API requires it).
+- Preserve/sign both native helpers inside-out; verify protocol/permission/transcript
+  bounds, discovery, deep seal, staging/ZIP equality and fresh-distribution runtime.
 
 Secrets:
 
@@ -376,6 +383,8 @@ Test categories:
 - Packaged web-extractor worker startup with Mozilla Readability, jsdom, and Undici resolvable from the installed application; a source-tree-only success is insufficient release evidence.
 - OCR capability detection.
 - Packaged macOS Vision OCR helper integrity/probe plus direct-image recognition and invalid-image rejection on arm64 and x64.
+- Packaged macOS speech helper explicit-start, permission, transcript, teardown,
+  unsupported-language and no-audio-egress checks.
 - SQLite migration and FTS.
 - Local RAG model manifest without model installed.
 - Backup/restore.
@@ -402,10 +411,13 @@ Current packageability foundation, last reconciled 2026-07-14:
 - macOS applies section 8, compares staging/ZIP manifests, then has a fresh runner repeat
   integrity/quarantine/runtime checks without staging. Variable ad-hoc bytes make ZIP
   hashes build evidence, not release IDs.
+- Current arm64 speech evidence preserves both helpers, records `native speech: true`
+  and zero post-seal writes; it claims no Team/Developer ID, hardened runtime,
+  entitlement, notarization, staple or public trust.
 - Build-only tools stay outside the runtime SBOM; Git, Bun and `uv` remain missing IDs.
 
 This is packageability preflight, not Public Alpha release acceptance. macOS x64,
-Windows 10/11 breadth, Windows native OCR, signed nested helpers, hardened runtime,
+Windows 10/11 breadth, Windows native OCR/speech, signed nested helpers, hardened runtime,
 signing/notarization, installed upgrade/uninstall and alpha-to-alpha update behavior,
 installed-app memory/scale/post-heavy recovery, release notes, bundled Git/Bun/uv,
 PaddleOCR, and manual signed-platform evidence remain open.

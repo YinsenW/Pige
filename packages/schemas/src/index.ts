@@ -119,6 +119,7 @@ export const PigeErrorDomainSchema = z.enum([
   "source_storage",
   "parser",
   "ocr",
+  "speech",
   "rag",
   "model_provider",
   "agent_runtime",
@@ -1666,6 +1667,160 @@ export const VaultRevealResultSchema = z.discriminatedUnion("status", [
   }).strict()
 ]);
 
+export const SpeechRequestIdSchema = z.string().regex(/^speechreq_[a-z0-9]{16,64}$/);
+export const SpeechSessionIdSchema = z.string().regex(/^speech_[a-z0-9]{16,64}$/);
+export const SpeechLanguageTagSchema = z.string()
+  .min(2)
+  .max(64)
+  .regex(/^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/);
+export const SpeechPermissionStateSchema = z.enum([
+  "not-determined",
+  "granted",
+  "denied",
+  "restricted"
+]);
+export const SpeechUnavailableReasonSchema = z.enum([
+  "unsupported_platform",
+  "unsupported_os_version",
+  "language_unavailable",
+  "assets_unavailable",
+  "service_unavailable"
+]);
+
+const SpeechErrorSummarySchema = z.object({
+  code: PigeErrorCodeSchema.refine((code) => code.startsWith("speech.")),
+  domain: z.literal("speech"),
+  messageKey: PigeMessageKeySchema,
+  retryable: z.boolean(),
+  severity: PigeErrorSeveritySchema,
+  userAction: PigeErrorActionSchema
+}).strict();
+
+export const SpeechAvailabilityRequestSchema = z.object({
+  languageTag: SpeechLanguageTagSchema
+}).strict();
+
+export const SpeechAvailabilityResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("supported"),
+    languageTag: SpeechLanguageTagSchema,
+    permission: SpeechPermissionStateSchema,
+    canOpenSystemSettings: z.boolean()
+  }).strict(),
+  z.object({
+    status: z.literal("unsupported"),
+    reason: SpeechUnavailableReasonSchema,
+    canOpenSystemSettings: z.literal(false)
+  }).strict(),
+  z.object({
+    status: z.literal("failed"),
+    error: SpeechErrorSummarySchema
+  }).strict()
+]);
+
+export const SpeechStartRequestSchema = z.object({
+  requestId: SpeechRequestIdSchema,
+  languageTag: SpeechLanguageTagSchema
+}).strict();
+
+export const SpeechStartResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("started"),
+    requestId: SpeechRequestIdSchema,
+    sessionId: SpeechSessionIdSchema,
+    languageTag: SpeechLanguageTagSchema,
+    metering: z.enum(["available", "unavailable"])
+  }).strict(),
+  z.object({
+    status: z.literal("blocked"),
+    requestId: SpeechRequestIdSchema,
+    error: SpeechErrorSummarySchema
+  }).strict()
+]);
+
+export const SpeechSessionRequestSchema = z.object({
+  sessionId: SpeechSessionIdSchema
+}).strict();
+
+export const SpeechCancelRequestSchema = z.union([
+  z.object({ requestId: SpeechRequestIdSchema }).strict(),
+  SpeechSessionRequestSchema
+]);
+
+export const SpeechStopResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("stopped"),
+    sessionId: SpeechSessionIdSchema,
+    sequence: z.number().int().nonnegative(),
+    transcript: z.string().max(32_000)
+  }).strict(),
+  z.object({
+    status: z.literal("stale_session"),
+    sessionId: SpeechSessionIdSchema
+  }).strict(),
+  z.object({
+    status: z.literal("failed"),
+    sessionId: SpeechSessionIdSchema,
+    error: SpeechErrorSummarySchema
+  }).strict()
+]);
+
+export const SpeechCancelResultSchema = z.union([
+  z.object({
+    status: z.literal("canceled"),
+    sessionId: SpeechSessionIdSchema
+  }).strict(),
+  z.object({
+    status: z.literal("canceled"),
+    requestId: SpeechRequestIdSchema
+  }).strict(),
+  z.object({
+    status: z.literal("stale_session"),
+    sessionId: SpeechSessionIdSchema
+  }).strict(),
+  z.object({
+    status: z.literal("stale_request"),
+    requestId: SpeechRequestIdSchema
+  }).strict()
+]);
+
+export const SpeechOpenSystemSettingsResultSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("opened") }).strict(),
+  z.object({ status: z.literal("unavailable") }).strict()
+]);
+
+export const SpeechTranscriptEventSchema = z.object({
+  apiVersion: z.literal(1),
+  kind: z.literal("transcript_replace"),
+  sessionId: SpeechSessionIdSchema,
+  sequence: z.number().int().positive(),
+  transcript: z.string().max(32_000),
+  final: z.boolean()
+}).strict();
+
+export const SpeechSessionFailureEventSchema = z.object({
+  apiVersion: z.literal(1),
+  kind: z.literal("session_failed"),
+  sessionId: SpeechSessionIdSchema,
+  sequence: z.number().int().positive(),
+  error: SpeechErrorSummarySchema
+}).strict();
+
+export const SpeechMeterEventSchema = z.object({
+  apiVersion: z.literal(1),
+  kind: z.literal("meter"),
+  sessionId: SpeechSessionIdSchema,
+  sequence: z.number().int().positive(),
+  elapsedMs: z.number().int().nonnegative().max(86_400_000),
+  level: z.number().min(0).max(1)
+}).strict();
+
+export const SpeechSessionEventSchema = z.discriminatedUnion("kind", [
+  SpeechTranscriptEventSchema,
+  SpeechMeterEventSchema,
+  SpeechSessionFailureEventSchema
+]);
+
 export const PigeErrorSchema = PigeErrorCoreSchema.extend({
   jobId: JobIdSchema.optional(),
   permissionRequestId: PermissionRequestIdSchema.optional(),
@@ -2419,6 +2574,18 @@ export type RetrievalSearchRequest = z.infer<typeof RetrievalSearchRequestSchema
 export type RetrievalSearchResult = z.infer<typeof RetrievalSearchResultSchema>;
 export type RetrievalSearchResultItem = z.infer<typeof RetrievalSearchResultItemSchema>;
 export type RetrievalSearchScope = z.infer<typeof RetrievalSearchScopeSchema>;
+export type SpeechAvailabilityRequest = z.infer<typeof SpeechAvailabilityRequestSchema>;
+export type SpeechAvailabilityResult = z.infer<typeof SpeechAvailabilityResultSchema>;
+export type SpeechCancelRequest = z.infer<typeof SpeechCancelRequestSchema>;
+export type SpeechCancelResult = z.infer<typeof SpeechCancelResultSchema>;
+export type SpeechOpenSystemSettingsResult = z.infer<typeof SpeechOpenSystemSettingsResultSchema>;
+export type SpeechPermissionState = z.infer<typeof SpeechPermissionStateSchema>;
+export type SpeechSessionEvent = z.infer<typeof SpeechSessionEventSchema>;
+export type SpeechSessionRequest = z.infer<typeof SpeechSessionRequestSchema>;
+export type SpeechStartRequest = z.infer<typeof SpeechStartRequestSchema>;
+export type SpeechStartResult = z.infer<typeof SpeechStartResultSchema>;
+export type SpeechStopResult = z.infer<typeof SpeechStopResultSchema>;
+export type SpeechUnavailableReason = z.infer<typeof SpeechUnavailableReasonSchema>;
 export type RetrievalAnswerCitation = z.infer<typeof RetrievalAnswerCitationSchema>;
 export type SettingApplyBehavior = z.infer<typeof SettingApplyBehaviorSchema>;
 export type SettingPermissionRequirement = z.infer<typeof SettingPermissionRequirementSchema>;

@@ -1,10 +1,16 @@
 import type { BrowserWindowConstructorOptions } from "electron";
 
-type WindowShellOptions = Pick<BrowserWindowConstructorOptions, "titleBarOverlay" | "titleBarStyle">;
+type WindowShellOptions = Pick<
+  BrowserWindowConstructorOptions,
+  "titleBarOverlay" | "titleBarStyle" | "trafficLightPosition"
+>;
 
 export function getWindowShellOptions(platform: NodeJS.Platform): WindowShellOptions {
   if (platform === "darwin") {
-    return { titleBarStyle: "hiddenInset" };
+    return {
+      titleBarStyle: "hiddenInset",
+      trafficLightPosition: { x: 17, y: 17 }
+    };
   }
 
   if (platform === "win32") {

@@ -348,9 +348,11 @@ Behavior:
 
 - The microphone button lives in the input toolbar.
 - Recording starts only after explicit user action.
-- Live transcript appears in the input as editable text.
-- Finalized transcript remains editable before submission.
-- Stop recording does not automatically submit unless the user chooses that behavior later.
+- Recording shows Attach, neutral-or-metered waveform, timer, Stop and Done. Session
+  replacement text becomes editable without overwriting existing composer text.
+- Stop/Done never auto-submit or create Job/source/model work. States are localized and
+  body-free; denial may open fixed macOS Microphone Settings, while missing assets stay
+  unavailable until a typed inventory owner exists.
 - On unsupported platforms, the microphone button is hidden or disabled with a short tooltip.
 
 ### 5.2 URL Present
@@ -1512,6 +1514,7 @@ differ. `resources/ui-visual-contract.manifest.json` projects the machine subset
   `28px` in dense desktop contexts.
 - The app uses one integrated `58px` renderer titlebar while retaining native macOS and
   Windows caption controls; never add a second title row or overlap their safe area.
+- macOS traffic lights use `17px,17px`, with `84px` inset and `-5px` titlebar controls.
 - Expanded navigation starts at `240px`, prefers `280px`, and may grow to
   `320px` for localized labels or tree depth. It must leave at least `320px` for the
   active content pane and must be hidden, not squeezed into noise, in Compact Home.
