@@ -43,7 +43,6 @@ const EXPLICIT_RETRY_STATES = new Set<JobState>([
   "cancelled"
 ]);
 
-const OUTCOME_SOURCE_STATES = new Set<JobState>(["running", "cancel_requested"]);
 const PRE_EXECUTION_OUTCOME_STATES = new Set<JobState>([
   "waiting_dependency",
   "waiting_permission",
@@ -66,6 +65,11 @@ const OUTCOME_STATES = new Set<JobState>([
   "completed_with_warnings",
   "failed_retryable",
   "failed_final",
+  "cancelled"
+]);
+const CANCELLATION_OUTCOME_STATES = new Set<JobState>([
+  "completed_with_warnings",
+  "failed_retryable",
   "cancelled"
 ]);
 
@@ -121,7 +125,11 @@ export type JobExecutionResumeProof =
   | {
       readonly kind: "dependency_repaired";
       readonly dependency: WaitingDependency;
-      readonly operationId: string;
+    }
+  | {
+      readonly kind: "source_preserved";
+      readonly sourceId: string;
+      readonly conversationEventId: string;
     }
   | {
       readonly kind: "permission_decided";
@@ -218,6 +226,7 @@ export interface PrepareJobRetryInput {
 
 export type QueueJobReason =
   | "dependency_repaired"
+  | "source_preserved"
   | "idempotent_recovery"
   | "agent_continuation"
   | "source_changed"
@@ -225,14 +234,44 @@ export type QueueJobReason =
   | "model_egress_decided"
   | "review_resolved";
 
-export interface QueueJobInput {
-  readonly reason: QueueJobReason;
+interface QueueJobInputBase {
   readonly message: string;
   readonly stage?: JobStage;
   readonly clearStage?: boolean;
-  readonly proof?: JobExecutionResumeProof;
   readonly facts?: JobExecutionFactsPatch;
 }
+
+export type QueueJobInput = QueueJobInputBase & (
+  | {
+      readonly reason: "dependency_repaired";
+      readonly proof: Extract<JobExecutionResumeProof, { kind: "dependency_repaired" }>;
+    }
+  | {
+      readonly reason: "source_preserved";
+      readonly proof: Extract<JobExecutionResumeProof, { kind: "source_preserved" }>;
+    }
+  | {
+      readonly reason: "permission_decided";
+      readonly proof: Extract<JobExecutionResumeProof, { kind: "permission_decided" }>;
+    }
+  | {
+      readonly reason: "model_egress_decided";
+      readonly proof: Extract<JobExecutionResumeProof, { kind: "model_egress_decided" }>;
+    }
+  | {
+      readonly reason: "review_resolved";
+      readonly proof: Extract<JobExecutionResumeProof, { kind: "review_resolved" }>;
+    }
+  | {
+      readonly reason: Exclude<QueueJobReason,
+        | "dependency_repaired"
+        | "source_preserved"
+        | "permission_decided"
+        | "model_egress_decided"
+        | "review_resolved">;
+      readonly proof?: never;
+    }
+);
 
 export interface RecoverInterruptedJobInput {
   readonly canResumeIdempotently: boolean;
@@ -292,7 +331,8 @@ export function isLegalJobStateTransition(from: JobState, to: JobState): boolean
   if (PENDING_CANCELLATION_STATES.has(from) && to === "cancelled") return true;
   if (from === "running" && to === "cancel_requested") return true;
   if (from === "queued" && PRE_EXECUTION_OUTCOME_STATES.has(to)) return true;
-  return OUTCOME_SOURCE_STATES.has(from) && OUTCOME_STATES.has(to);
+  if (from === "running" && OUTCOME_STATES.has(to)) return true;
+  return from === "cancel_requested" && CANCELLATION_OUTCOME_STATES.has(to);
 }
 
 export class JobExecutionCoordinator {
@@ -465,6 +505,9 @@ export class JobExecutionCoordinator {
         "The Job failure state must agree with the shared error retryability projection."
       );
     }
+    if (snapshot.job.state === "cancel_requested") {
+      return this.#lateCancellationOutcome(snapshot, input.message, input.facts);
+    }
     this.#assertTransition(snapshot.job, "failed_final");
     const next = applyFacts(snapshot.job, input.facts);
     const timestamp = this.#timestamp(snapshot.job);
@@ -487,6 +530,9 @@ export class JobExecutionCoordinator {
         "job.failure_invalid",
         "A requeued Job requires a retryable shared error projection."
       );
+    }
+    if (snapshot.job.state === "cancel_requested") {
+      return this.#lateCancellationOutcome(snapshot, input.message, input.facts);
     }
     this.#assertTransition(snapshot.job, "failed_retryable");
     const next = applyFacts(snapshot.job, input.facts);
@@ -593,13 +639,18 @@ export class JobExecutionCoordinator {
   queue(snapshot: JobRecordSnapshot, input: QueueJobInput): JobRecordSnapshot {
     assertKeys(input, ["reason", "message", "stage", "clearStage", "proof", "facts"]);
     if (input.facts) assertFacts(input.facts);
-    const decisionReason = input.reason === "permission_decided" ||
+    const resumeReason = input.reason === "dependency_repaired" ||
+      input.reason === "source_preserved" ||
+      input.reason === "permission_decided" ||
       input.reason === "model_egress_decided" ||
       input.reason === "review_resolved";
-    const proofFacts = decisionReason
-      ? validateQueueDecisionProof(snapshot.job, input.reason, input.proof)
+    const decisionReason = resumeReason &&
+      input.reason !== "dependency_repaired" &&
+      input.reason !== "source_preserved";
+    const proofFacts = resumeReason
+      ? validateQueueResumeProof(snapshot.job, input.reason, input.proof)
       : undefined;
-    if (!decisionReason && input.proof) {
+    if (!resumeReason && input.proof) {
       throw new PigeDomainError("job.command_invalid", "This queue reason does not accept a decision proof.");
     }
     const allowed = decisionReason
@@ -607,6 +658,8 @@ export class JobExecutionCoordinator {
         (input.reason === "model_egress_decided" && snapshot.job.state === "failed_retryable")
       : input.reason === "dependency_repaired"
         ? snapshot.job.state === "waiting_dependency"
+        : input.reason === "source_preserved"
+          ? snapshot.job.state === "waiting_dependency"
         : input.reason === "idempotent_recovery"
           ? snapshot.job.state === "running"
           : snapshot.job.state === "running" || snapshot.job.state === "cancel_requested";
@@ -694,6 +747,15 @@ export class JobExecutionCoordinator {
     if (error.retryable) {
       throw new PigeDomainError("job.failure_invalid", "An uncertain external effect must fail closed without replay.");
     }
+    if (snapshot.job.state === "cancel_requested") {
+      return this.#projectCancellationOutcome(snapshot, {
+        cancelledMessage: input.message,
+        preservedResultMessage: input.message,
+        partialResultMessage: input.message,
+        safeCheckpointId: input.checkpointId,
+        ...(input.facts ? { facts: input.facts } : {})
+      }, true);
+    }
     const timestamp = this.#timestamp(snapshot.job);
     const next = applyFacts(snapshot.job, input.facts);
     return this.#commit(snapshot, {
@@ -733,6 +795,15 @@ export class JobExecutionCoordinator {
         "job.recovery_proof_invalid",
         "Adopting a durable completion requires its checkpoint and output reference."
       );
+    }
+    if (snapshot.job.state === "cancel_requested") {
+      return this.#projectCancellationOutcome(snapshot, {
+        cancelledMessage: input.message,
+        preservedResultMessage: input.message,
+        safeCheckpointId: input.checkpointId,
+        durableResultComplete: true,
+        facts: input.facts
+      }, true);
     }
     const timestamp = this.#timestamp(snapshot.job);
     const next = applyFacts(snapshot.job, input.facts);
@@ -820,13 +891,38 @@ export class JobExecutionCoordinator {
     if (snapshot.job.state !== "cancel_requested") {
       throw invalidTransition(snapshot.job.state, "cancelled");
     }
-    const durableWritesApplied = snapshot.job.cancellation?.durableWritesApplied === true;
+    return this.#projectCancellationOutcome(snapshot, input);
+  }
+
+  #lateCancellationOutcome(
+    snapshot: JobRecordSnapshot,
+    message: string,
+    facts?: JobExecutionFactsPatch
+  ): JobRecordSnapshot {
+    return this.#projectCancellationOutcome(snapshot, {
+      cancelledMessage: message,
+      preservedResultMessage: message,
+      partialResultMessage: message,
+      ...(facts ? { facts } : {})
+    });
+  }
+
+  #projectCancellationOutcome(
+    snapshot: JobRecordSnapshot,
+    input: CancellationOutcomeInput,
+    provenDurableWritesApplied = false
+  ): JobRecordSnapshot {
+    if (snapshot.job.state !== "cancel_requested") {
+      throw invalidTransition(snapshot.job.state, "cancelled");
+    }
+    const durableWritesApplied = provenDurableWritesApplied ||
+      snapshot.job.cancellation?.durableWritesApplied === true;
     const state = durableWritesApplied
       ? input.durableResultComplete === true ? "completed_with_warnings" : "failed_retryable"
       : "cancelled";
     this.#assertTransition(snapshot.job, state);
     const timestamp = this.#timestamp(snapshot.job);
-    const next = applyFacts(snapshot.job, input.facts);
+    const next = durableWritesApplied ? applyFacts(snapshot.job, input.facts) : snapshot.job;
     const safeCheckpointId = input.safeCheckpointId ??
       snapshot.job.cancellation?.safeCheckpointId ??
       (durableWritesApplied ? undefined : "before_durable_write");
@@ -875,6 +971,9 @@ export class JobExecutionCoordinator {
     facts?: JobExecutionFactsPatch,
     additions: Partial<Pick<JobRecord, "waitingDependency" | "error">> = {}
   ): JobRecordSnapshot {
+    if (snapshot.job.state === "cancel_requested") {
+      return this.#lateCancellationOutcome(snapshot, message, facts);
+    }
     this.#assertTransition(snapshot.job, state);
     const next = applyFacts(snapshot.job, facts);
     return this.#commit(snapshot, {
@@ -1003,18 +1102,19 @@ function assertOutcomeKeys(outcome: JobExecutionOutcome): void {
   }
 }
 
-function validateQueueDecisionProof(
+function validateQueueResumeProof(
   job: JobRecord,
-  reason: Extract<QueueJobReason, "permission_decided" | "model_egress_decided" | "review_resolved">,
+  reason: Extract<QueueJobReason,
+    | "dependency_repaired"
+    | "source_preserved"
+    | "permission_decided"
+    | "model_egress_decided"
+    | "review_resolved">,
   proof: JobExecutionResumeProof | undefined
 ): JobExecutionFactsPatch {
-  const expectedKind = reason === "permission_decided"
-    ? "permission_decided"
-    : reason === "model_egress_decided"
-      ? "model_egress_decided"
-      : "review_resolved";
+  const expectedKind = reason;
   if (!proof || proof.kind !== expectedKind) {
-    throw new PigeDomainError("job.resume_proof_invalid", "The queued Job decision proof does not match its owner.");
+    throw new PigeDomainError("job.resume_proof_invalid", "The queued Job resume proof does not match its owner.");
   }
   return validateResumeProof(job, proof);
 }
@@ -1022,15 +1122,27 @@ function validateQueueDecisionProof(
 function validateResumeProof(job: JobRecord, proof: JobExecutionResumeProof): JobExecutionFactsPatch {
   switch (proof.kind) {
     case "dependency_repaired":
-      assertKeys(proof, ["kind", "dependency", "operationId"]);
+      assertKeys(proof, ["kind", "dependency"]);
       if (
         job.state !== "waiting_dependency" ||
         !job.waitingDependency ||
-        JSON.stringify(job.waitingDependency) !== JSON.stringify(proof.dependency)
+        !isExactDependencyBinding(job.waitingDependency, proof.dependency)
       ) {
         throw invalidResumeProof();
       }
-      return { operationIds: [proof.operationId] };
+      return {};
+    case "source_preserved":
+      assertKeys(proof, ["kind", "sourceId", "conversationEventId"]);
+      if (
+        job.state !== "waiting_dependency" ||
+        job.class !== "agent_turn" ||
+        job.stage !== "capturing_source" ||
+        job.sourceId !== proof.sourceId ||
+        job.conversationEventId !== proof.conversationEventId
+      ) {
+        throw invalidResumeProof();
+      }
+      return {};
     case "permission_decided":
       assertKeys(proof, ["kind", "permissionRequestId", "permissionDecisionId"]);
       if (
@@ -1065,6 +1177,15 @@ function validateResumeProof(job: JobRecord, proof: JobExecutionResumeProof): Jo
       }
       return { operationIds: [proof.operationId] };
   }
+}
+
+function isExactDependencyBinding(current: WaitingDependency, proof: WaitingDependency): boolean {
+  const allowedKeys = new Set(["dependencyKind", "dependencyId", "requiredAction", "messageKey"]);
+  if (Object.keys(proof).some((key) => !allowedKeys.has(key))) return false;
+  return current.dependencyKind === proof.dependencyKind &&
+    current.dependencyId === proof.dependencyId &&
+    current.requiredAction === proof.requiredAction &&
+    current.messageKey === proof.messageKey;
 }
 
 function assertMatchingOptionalId(current: string | undefined, expected: string): void {

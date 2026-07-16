@@ -6,7 +6,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   JobExecutionCoordinator,
   isLegalJobStateTransition,
-  isTerminalJobState
+  isTerminalJobState,
+  type JobExecutionOutcome
 } from "../../apps/desktop/src/main/services/job-execution-coordinator";
 import {
   JobRecordStore,
@@ -52,8 +53,23 @@ describe("JobExecutionCoordinator", () => {
     expect(isLegalJobStateTransition("queued", "waiting_dependency")).toBe(true);
     expect(isLegalJobStateTransition("queued", "failed_final")).toBe(true);
     expect(isLegalJobStateTransition("queued", "completed")).toBe(false);
-    for (const from of ["running", "cancel_requested"] satisfies JobState[]) {
-      for (const state of outcomeStates) expect(isLegalJobStateTransition(from, state)).toBe(true);
+    for (const state of outcomeStates) expect(isLegalJobStateTransition("running", state)).toBe(true);
+    for (const state of [
+      "completed_with_warnings",
+      "failed_retryable",
+      "cancelled"
+    ] satisfies JobState[]) {
+      expect(isLegalJobStateTransition("cancel_requested", state)).toBe(true);
+    }
+    for (const state of [
+      "completed",
+      "failed_final",
+      "waiting_dependency",
+      "waiting_permission",
+      "waiting_model_egress",
+      "awaiting_review"
+    ] satisfies JobState[]) {
+      expect(isLegalJobStateTransition("cancel_requested", state)).toBe(false);
     }
     for (const terminal of [
       "completed",
@@ -202,8 +218,7 @@ describe("JobExecutionCoordinator", () => {
       message: "Wrong dependency repaired.",
       proof: {
         kind: "dependency_repaired",
-        dependency: { ...dependency(), dependencyId: "provider_other" },
-        operationId: "op_20260716_dependency01"
+        dependency: { ...dependency(), dependencyId: "provider_other" }
       }
     })).toThrowError(expect.objectContaining({ code: "job.resume_proof_invalid" }));
     const resumedDependency = fixture.coordinator.resume(waitingDependency, {
@@ -211,11 +226,10 @@ describe("JobExecutionCoordinator", () => {
       message: "Model configured.",
       proof: {
         kind: "dependency_repaired",
-        dependency: dependency(),
-        operationId: "op_20260716_dependency01"
+        dependency: dependency()
       }
     });
-    expect(resumedDependency.job.operationIds).toContain("op_20260716_dependency01");
+    expect(resumedDependency.job.operationIds).toBeUndefined();
     const waitingPermission = fixture.coordinator.settle(resumedDependency, {
       kind: "waiting",
       reason: "permission",
@@ -309,7 +323,6 @@ describe("JobExecutionCoordinator", () => {
     expect(resumedReview.job).toMatchObject({
       state: "running",
       operationIds: [
-        "op_20260716_dependency01",
         "op_20260716_egress0001",
         "op_20260716_review0001"
       ]
@@ -435,15 +448,66 @@ describe("JobExecutionCoordinator", () => {
         message: "Configure a model."
       }
     );
+    expect(() => dependencyFixture.coordinator.queue(waiting, {
+      reason: "dependency_repaired",
+      clearStage: true,
+      message: "Missing proof."
+    } as never)).toThrowError(expect.objectContaining({ code: "job.resume_proof_invalid" }));
+    expect(() => dependencyFixture.coordinator.queue(waiting, {
+      reason: "dependency_repaired",
+      clearStage: true,
+      message: "Mismatched proof.",
+      proof: {
+        kind: "dependency_repaired",
+        dependency: { ...dependency(), dependencyId: "provider_other" }
+      }
+    })).toThrowError(expect.objectContaining({ code: "job.resume_proof_invalid" }));
     const queued = dependencyFixture.coordinator.queue(waiting, {
       reason: "dependency_repaired",
       clearStage: true,
-      message: "Dependency repaired."
+      message: "Dependency repaired.",
+      proof: {
+        kind: "dependency_repaired",
+        dependency: dependency()
+      }
     }).job;
-    expect(queued).toMatchObject({ state: "queued", message: "Dependency repaired." });
+    expect(queued).toMatchObject({
+      state: "queued",
+      message: "Dependency repaired."
+    });
     expect(queued.stage).toBeUndefined();
     expect(queued.waitingDependency).toBeUndefined();
     expect(Date.parse(queued.updatedAt)).toBeGreaterThan(Date.parse(waiting.job.updatedAt));
+
+    const sourceFixture = makeFixture(7);
+    const sourceWaiting = sourceFixture.create(makeJob(sourceFixture.jobId, {
+      state: "waiting_dependency",
+      stage: "capturing_source",
+      sourceId: "src_20260716_abcdef12",
+      conversationEventId: "evt_20260716_abcdef12",
+      message: "Waiting for source preservation."
+    }));
+    expect(() => sourceFixture.coordinator.queue(sourceWaiting, {
+      reason: "source_preserved",
+      message: "Wrong source.",
+      proof: {
+        kind: "source_preserved",
+        sourceId: "src_20260716_other123",
+        conversationEventId: "evt_20260716_abcdef12"
+      }
+    })).toThrowError(expect.objectContaining({ code: "job.resume_proof_invalid" }));
+    const sourceQueued = sourceFixture.coordinator.queue(sourceWaiting, {
+      reason: "source_preserved",
+      clearStage: true,
+      message: "Source preservation completed.",
+      proof: {
+        kind: "source_preserved",
+        sourceId: "src_20260716_abcdef12",
+        conversationEventId: "evt_20260716_abcdef12"
+      }
+    }).job;
+    expect(sourceQueued).toMatchObject({ state: "queued", sourceId: "src_20260716_abcdef12" });
+    expect(sourceQueued.stage).toBeUndefined();
 
     const continuationFixture = makeFixture(1);
     const running = continuationFixture.coordinator.begin(continuationFixture.create(), {
@@ -493,15 +557,14 @@ describe("JobExecutionCoordinator", () => {
       }),
       { requestedBy: "user", message: "Cancellation requested." }
     );
-    const retryable = uncertainFixture.coordinator.recoverInterrupted(requested, {
+    const cancelled = uncertainFixture.coordinator.recoverInterrupted(requested, {
       canResumeIdempotently: false,
       queuedMessage: "Do not queue.",
       retryableMessage: "Retry explicitly after restart."
     }).job;
-    expect(retryable).toMatchObject({
-      state: "failed_retryable",
-      error: { retryable: true },
-      retry: { requiresUserAction: true }
+    expect(cancelled).toMatchObject({
+      state: "cancelled",
+      cancellation: { requestedBy: "user", durableWritesApplied: false }
     });
   });
 
@@ -566,6 +629,28 @@ describe("JobExecutionCoordinator", () => {
     });
     expect(completed.job.startedAt).toBeUndefined();
     expect(completed.job.finishedAt).toBe(completed.job.updatedAt);
+
+    const cancellationRace = makeCancellationRace(1, false);
+    const preserved = cancellationRace.fixture.coordinator.adoptDurableCompletion(
+      cancellationRace.requested,
+      {
+        checkpointId: "assistant_event_committed",
+        message: "Recovered durable output after cancellation was requested.",
+        facts: {
+          outputRefs: [{ kind: "conversation", id: "conversation_20260716_abcdef12" }],
+          operationIds: ["op_20260716_abcdef12"]
+        }
+      }
+    ).job;
+    expect(preserved).toMatchObject({
+      state: "completed_with_warnings",
+      outputRefs: [{ kind: "conversation", id: "conversation_20260716_abcdef12" }],
+      cancellation: {
+        requestedBy: "user",
+        safeCheckpointId: "assistant_event_committed",
+        durableWritesApplied: true
+      }
+    });
   });
 
   it("resolves only the exact bound review and leaves the terminal result immutable", () => {
@@ -704,6 +789,100 @@ describe("JobExecutionCoordinator", () => {
     })).toThrowError(expect.objectContaining({ code: "job.cancellation_unsafe" }));
   });
 
+  it("projects every late wait or failure to clean cancellation when no durable effect exists", () => {
+    for (const [index, outcome] of lateNonCompletionOutcomes().entries()) {
+      const race = makeCancellationRace(index, false);
+      const projected = race.fixture.coordinator.settle(race.requested, outcome).job;
+
+      expect(projected).toMatchObject({
+        state: "cancelled",
+        cancellation: { requestedBy: "user", durableWritesApplied: false }
+      });
+      expect(projected.waitingDependency).toBeUndefined();
+      expect(projected.error).toBeUndefined();
+      expect(projected.finishedAt).toBe(projected.updatedAt);
+    }
+
+    const unprovenCompletionRace = makeCancellationRace(18, false);
+    const unprovenCompletion = unprovenCompletionRace.fixture.coordinator.settle(
+      unprovenCompletionRace.requested,
+      {
+        kind: "completed",
+        message: "An unproven completion arrived after cancellation.",
+        facts: { outputRefs: [{ kind: "page", id: "page_01" }] }
+      }
+    ).job;
+    expect(unprovenCompletion).toMatchObject({
+      state: "cancelled",
+      cancellation: { durableWritesApplied: false }
+    });
+    expect(unprovenCompletion.outputRefs).toBeUndefined();
+  });
+
+  it("fails closed for late partial outcomes and preserves only proven complete durable output", () => {
+    for (const [index, outcome] of lateNonCompletionOutcomes().entries()) {
+      const race = makeCancellationRace(index, true);
+      const projected = race.fixture.coordinator.settle(race.requested, outcome).job;
+
+      expect(projected).toMatchObject({
+        state: "failed_retryable",
+        cancellation: {
+          requestedBy: "user",
+          safeCheckpointId: "publication_started",
+          durableWritesApplied: true
+        },
+        retry: {
+          maxAutomaticRetries: 0,
+          requiresUserAction: true,
+          lastRetryReason: "job.cancelled_after_durable_output"
+        }
+      });
+      expect(projected.waitingDependency).toBeUndefined();
+      expect(projected.finishedAt).toBeUndefined();
+    }
+
+    const uncertainRace = makeCancellationRace(19, false);
+    const uncertain = uncertainRace.fixture.coordinator.terminalizeUncertainEffect(
+      uncertainRace.requested,
+      {
+        checkpointId: "publication_acknowledgement_missing",
+        error: finalError(),
+        reason: "publication_acknowledgement_missing",
+        message: "Durable publication could not be verified after cancellation."
+      }
+    ).job;
+    expect(uncertain).toMatchObject({
+      state: "failed_retryable",
+      cancellation: {
+        requestedBy: "user",
+        safeCheckpointId: "publication_acknowledgement_missing",
+        durableWritesApplied: true
+      },
+      retry: {
+        maxAutomaticRetries: 0,
+        requiresUserAction: true,
+        lastRetryReason: "job.cancelled_after_durable_output"
+      }
+    });
+
+    const completeRace = makeCancellationRace(20, true);
+    const completed = completeRace.fixture.coordinator.settle(completeRace.requested, {
+      kind: "completed",
+      message: "Durable output completed while cancellation was in flight.",
+      facts: { outputRefs: [{ kind: "page", id: "page_01" }] }
+    }).job;
+    expect(completed).toMatchObject({
+      state: "completed_with_warnings",
+      outputRefs: [{ kind: "page", id: "page_01" }],
+      cancellation: {
+        requestedBy: "user",
+        safeCheckpointId: "publication_started",
+        durableWritesApplied: true
+      }
+    });
+    expect(completed.finishedAt).toBe(completed.updatedAt);
+  });
+
   it("rejects body-bearing or retry-inconsistent failure summaries without changing the record", () => {
     const fixture = makeFixture();
     const running = fixture.coordinator.begin(fixture.create(), {
@@ -742,6 +921,73 @@ describe("JobExecutionCoordinator", () => {
     expect(source.match(/compareAndSwap\(/gu)).toHaveLength(2);
   });
 });
+
+function makeCancellationRace(index: number, durableWritesApplied: boolean): {
+  fixture: ReturnType<typeof makeFixture>;
+  requested: JobRecordSnapshot;
+} {
+  const fixture = makeFixture(index);
+  let running = fixture.coordinator.begin(fixture.create(), {
+    stage: "writing",
+    message: "Publishing output."
+  });
+  if (durableWritesApplied) {
+    running = fixture.coordinator.markDurableBoundary(running, {
+      checkpointId: "publication_started"
+    });
+  }
+  return {
+    fixture,
+    requested: fixture.coordinator.requestCancellation(running, {
+      requestedBy: "user",
+      message: "Cancellation requested."
+    })
+  };
+}
+
+function lateNonCompletionOutcomes(): JobExecutionOutcome[] {
+  return [
+    {
+      kind: "waiting",
+      reason: "dependency",
+      dependency: dependency(),
+      error: retryableError(),
+      message: "Late dependency wait."
+    },
+    {
+      kind: "waiting",
+      reason: "permission",
+      permissionRequestId: "permreq_20260716_abcdef12",
+      error: permissionError(),
+      message: "Late permission wait."
+    },
+    {
+      kind: "waiting",
+      reason: "model_egress",
+      approvalRequestId: "egressreq_20260716_abcdef1234567890",
+      error: egressError(),
+      message: "Late model-egress wait."
+    },
+    {
+      kind: "waiting",
+      reason: "review",
+      proposalId: "proposal_20260716_abcdef12",
+      message: "Late review wait."
+    },
+    {
+      kind: "requeue",
+      error: retryableError(),
+      reason: "late_retryable_failure",
+      maxAutomaticRetries: 3,
+      message: "Late retryable failure."
+    },
+    {
+      kind: "failed",
+      error: finalError(),
+      message: "Late final failure."
+    }
+  ];
+}
 
 function makeFixture(index = 0): {
   root: string;

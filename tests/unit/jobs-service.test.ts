@@ -354,18 +354,18 @@ describe("jobs service", () => {
     const queued = jobs.list({ states: ["queued"], limit: 10 }).jobs;
     const retryable = jobs.list({ states: ["failed_retryable"], limit: 10 }).jobs;
 
-    expect(result).toEqual({ requeued: 4, failedRetryable: 2 });
+    expect(result).toEqual({ requeued: 4, failedRetryable: 1 });
     expect(queued.map((job) => job.class).sort()).toEqual(["agent_ingest", "capture", "ocr", "parse"]);
     expect(queued.every((job) => job.message.includes("validated outputs will be reused"))).toBe(true);
     expect(readJobCancellation(vaultPath, "job_20260710_capture01")).toEqual({
       safeCheckpointId: "capture_source_page_publication_started",
       durableWritesApplied: true
     });
-    expect(retryable.map((job) => job.id).sort()).toEqual([
-      "job_20260710_cancel001",
-      "job_20260710_restore01"
-    ]);
+    expect(retryable.map((job) => job.id)).toEqual(["job_20260710_restore01"]);
     expect(retryable.every((job) => job.message.includes("explicit retry"))).toBe(true);
+    expect(jobs.list({ states: ["cancelled"], limit: 10 }).jobs).toEqual([
+      expect.objectContaining({ id: "job_20260710_cancel001", state: "cancelled" })
+    ]);
     expect(jobs.list({ classes: ["backup"], limit: 10 }).jobs).toEqual([
       expect.objectContaining({ id: "job_20260710_backup001", state: "running" })
     ]);
@@ -2893,6 +2893,14 @@ function seedExplicitImageOcrJob(
     createdAt: now,
     updatedAt: now,
     sourceId,
+    ...(state === "waiting_dependency" ? {
+      waitingDependency: {
+        dependencyKind: "local_tool",
+        dependencyId: "ocr:image_file",
+        requiredAction: "repair_tool",
+        messageKey: "errors.agent_runtime.tool_dependency_waiting"
+      }
+    } : {}),
     ...(parent.captureId ? { captureId: parent.captureId } : {}),
     ...(parent.conversationEventId ? { conversationEventId: parent.conversationEventId } : {}),
     message: state === "waiting_dependency"

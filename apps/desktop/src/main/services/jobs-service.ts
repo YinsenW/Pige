@@ -73,6 +73,7 @@ import {
   type AdoptDurableCompletionInput,
   type JobExecutionFactsPatch,
   type JobExecutionOutcome,
+  type JobExecutionResumeProof,
   type ResumeJobInput
 } from "./job-execution-coordinator";
 import {
@@ -1394,6 +1395,7 @@ export class JobsService implements PermissionedExternalJobPort {
       !jobFile ||
       jobFile.job.class !== "agent_turn" ||
       jobFile.job.sourceId !== sourceId ||
+      !jobFile.job.conversationEventId ||
       !sourceRecordFile ||
       sourceRecordFile.sourceRecord.metadata.agentTurnJobId !== jobId
     ) {
@@ -1413,7 +1415,12 @@ export class JobsService implements PermissionedExternalJobPort {
       );
     }
     return this.#jobExecutionCoordinator(vaultPath).queue(snapshot!, {
-      reason: "dependency_repaired",
+      reason: "source_preserved",
+      proof: {
+        kind: "source_preserved",
+        sourceId,
+        conversationEventId: jobFile.job.conversationEventId
+      },
       clearStage: true,
       message: "Agent turn source preservation completed; semantic processing is queued."
     }).job;
@@ -1875,8 +1882,12 @@ export class JobsService implements PermissionedExternalJobPort {
       ) {
         continue;
       }
-      this.#jobExecutionCoordinator(vaultPath).queue(this.#jobRecordStore(vaultPath).read(jobFile.path), {
+      const snapshot = this.#jobRecordStore(vaultPath).read(jobFile.path);
+      const proof = dependencyRepairProof(snapshot.job);
+      if (!proof) continue;
+      this.#jobExecutionCoordinator(vaultPath).queue(snapshot, {
         reason: "dependency_repaired",
+        proof,
         ...(jobFile.job.sourceId === undefined ? {} : { stage: "planning" as const }),
         ...(jobFile.job.sourceId === undefined ? { clearStage: true } : {}),
         message: "The preserved Agent turn is queued after model setup became ready."
@@ -1934,16 +1945,16 @@ export class JobsService implements PermissionedExternalJobPort {
       const message = canResumeIdempotently
         ? "Pige restarted during this idempotent local job; validated outputs will be reused and processing has been requeued."
         : "Pige restarted before this job reached a safe completion point. Preserved inputs remain available for an explicit retry.";
-      this.#jobExecutionCoordinator(vaultPath).recoverInterrupted(
+      const recovered = this.#jobExecutionCoordinator(vaultPath).recoverInterrupted(
         this.#jobRecordStore(vaultPath).read(jobFile.path),
         {
           canResumeIdempotently,
           queuedMessage: message,
           retryableMessage: message
         }
-      );
-      if (canResumeIdempotently) requeued += 1;
-      else failedRetryable += 1;
+      ).job;
+      if (recovered.state === "queued") requeued += 1;
+      else if (recovered.state === "failed_retryable") failedRetryable += 1;
     }
     return { requeued, failedRetryable };
   }
@@ -1990,8 +2001,12 @@ export class JobsService implements PermissionedExternalJobPort {
         hasWaitingAgentDatasetChild(store, vaultPath, jobFile.job) &&
         !this.#datasets?.canMaterialize(sourceRecord.kind)
       ) continue;
-      this.#jobExecutionCoordinator(vaultPath).queue(this.#jobRecordStore(vaultPath).read(jobFile.path), {
+      const snapshot = this.#jobRecordStore(vaultPath).read(jobFile.path);
+      const proof = dependencyRepairProof(snapshot.job);
+      if (!proof) continue;
+      this.#jobExecutionCoordinator(vaultPath).queue(snapshot, {
         reason: "dependency_repaired",
+        proof,
         message: "Default model is ready; Agent ingest requeued."
       });
       requeued += 1;
@@ -2011,8 +2026,12 @@ export class JobsService implements PermissionedExternalJobPort {
       if (isAgentSelectedParseJob(jobFile.job)) continue;
       const sourceRecord = readSourceRecord(vaultPath, jobFile.job.sourceId);
       if (!sourceRecord || !parser.canParse(sourceRecord.kind)) continue;
-      this.#jobExecutionCoordinator(vaultPath).queue(this.#jobRecordStore(vaultPath).read(jobFile.path), {
+      const snapshot = this.#jobRecordStore(vaultPath).read(jobFile.path);
+      const proof = dependencyRepairProof(snapshot.job);
+      if (!proof) continue;
+      this.#jobExecutionCoordinator(vaultPath).queue(snapshot, {
         reason: "dependency_repaired",
+        proof,
         message: "Bundled document parser is ready; parse requeued."
       });
       requeued += 1;
@@ -2031,8 +2050,12 @@ export class JobsService implements PermissionedExternalJobPort {
       if (isAgentSelectedOcrJob(jobFile.job)) continue;
       const sourceRecord = readSourceRecord(vaultPath, jobFile.job.sourceId);
       if (!sourceRecord || !inspectOcrSource(ocr, sourceRecord).ready) continue;
-      this.#jobExecutionCoordinator(vaultPath).queue(this.#jobRecordStore(vaultPath).read(jobFile.path), {
+      const snapshot = this.#jobRecordStore(vaultPath).read(jobFile.path);
+      const proof = dependencyRepairProof(snapshot.job);
+      if (!proof) continue;
+      this.#jobExecutionCoordinator(vaultPath).queue(snapshot, {
         reason: "dependency_repaired",
+        proof,
         message: "Local OCR capability is ready; OCR requeued."
       });
       requeued += 1;
@@ -5913,6 +5936,9 @@ function ensureAgentParseToolJob(
     ...(parentJob.conversationEventId ? { conversationEventId: parentJob.conversationEventId } : {}),
     policyContextId: parentJob.policyContextId,
     policyHash: request.policyHash,
+    ...(state === "waiting_dependency"
+      ? { waitingDependency: localToolWaitingDependency(request.toolId) }
+      : {}),
     inputRefs: createAgentToolInputRefs({
       sourceRecord,
       sourceRevision,
@@ -5968,6 +5994,9 @@ function ensureAgentOcrToolJob(
     ...(parentJob.conversationEventId ? { conversationEventId: parentJob.conversationEventId } : {}),
     policyContextId: parentJob.policyContextId,
     policyHash: request.policyHash,
+    ...(state === "waiting_dependency"
+      ? { waitingDependency: localToolWaitingDependency(request.toolId) }
+      : {}),
     inputRefs: createAgentToolInputRefs({
       sourceRecord,
       sourceRevision,
@@ -6025,6 +6054,9 @@ function ensureAgentDatasetToolJob(
     ...(parentJob.conversationEventId ? { conversationEventId: parentJob.conversationEventId } : {}),
     policyContextId: parentJob.policyContextId,
     policyHash: request.policyHash,
+    ...(state === "waiting_dependency"
+      ? { waitingDependency: localToolWaitingDependency(request.toolId) }
+      : {}),
     inputRefs: createAgentToolInputRefs({
       sourceRecord,
       sourceRevision,
@@ -6453,6 +6485,9 @@ function ensureParserOrOcrFollowUpJob(
     createdAt: now,
     updatedAt: now,
     sourceId: sourceRecord.id,
+    ...(state === "waiting_dependency"
+      ? { waitingDependency: localToolWaitingDependency(`${jobClass}:${sourceRecord.kind}`) }
+      : {}),
     ...(parentJob.captureId ? { captureId: parentJob.captureId } : {}),
     ...(parentJob.conversationEventId ? { conversationEventId: parentJob.conversationEventId } : {}),
     message
@@ -6674,6 +6709,9 @@ function ensureAgentIngestJob(
     updatedAt: now,
     sourceId,
     activeVaultId,
+    ...(nextState === "waiting_dependency"
+      ? { waitingDependency: modelProviderWaitingDependency() }
+      : {}),
     ...(parentJob.captureId ? { captureId: parentJob.captureId } : {}),
     ...(parentJob.conversationEventId ? { conversationEventId: parentJob.conversationEventId } : {}),
     message: nextMessage
@@ -6696,6 +6734,35 @@ function ensureAgentIngestJob(
 
 function isLegacyAgentIngestSource(sourceRecord: SourceRecord): boolean {
   return sourceRecord.semanticOrchestration === "legacy_agent_ingest";
+}
+
+function dependencyRepairProof(
+  job: JobRecord
+): Extract<JobExecutionResumeProof, { kind: "dependency_repaired" }> | undefined {
+  if (job.state !== "waiting_dependency" || !job.waitingDependency) return undefined;
+  return {
+    kind: "dependency_repaired",
+    dependency: job.waitingDependency
+  };
+}
+
+function localToolWaitingDependency(
+  dependencyId: string
+): NonNullable<JobRecord["waitingDependency"]> {
+  return {
+    dependencyKind: "local_tool",
+    dependencyId,
+    requiredAction: "repair_tool",
+    messageKey: "errors.agent_runtime.tool_dependency_waiting"
+  };
+}
+
+function modelProviderWaitingDependency(): NonNullable<JobRecord["waitingDependency"]> {
+  return {
+    dependencyKind: "model_provider",
+    requiredAction: "configure_model",
+    messageKey: "errors.model_provider.default_model_missing"
+  };
 }
 
 function ensureRequiredChildJob(
@@ -6726,11 +6793,15 @@ function ensureRequiredChildJob(
       parentJobId: existing.job.parentJobId ?? parentJob.id
     });
     if (existing.job.state === "waiting_dependency" && child.state === "queued") {
-      child = coordinator.queue(existing, {
-        reason: "dependency_repaired",
-        message: child.message,
-        ...(child.inputRefs ? { facts: { inputRefs: child.inputRefs } } : {})
-      }).job;
+      const proof = dependencyRepairProof(existing.job);
+      child = proof
+        ? coordinator.queue(existing, {
+            reason: "dependency_repaired",
+            proof,
+            message: child.message,
+            ...(child.inputRefs ? { facts: { inputRefs: child.inputRefs } } : {})
+          }).job
+        : existing.job;
     } else if (JSON.stringify(child) !== JSON.stringify(existing.job)) {
       child = store.compareAndSwap(existing, child).job;
     }
