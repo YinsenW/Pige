@@ -25,6 +25,9 @@ import type {
   PermissionResolveResult,
   SpeechAvailabilityRequest,
   SpeechAvailabilityResult,
+  SpeechAssetInstallEvent,
+  SpeechAssetInstallRequest,
+  SpeechAssetInstallResult,
   SpeechCancelRequest,
   SpeechSessionEvent,
   SpeechSessionRequest,
@@ -60,48 +63,6 @@ const homeLocaleCases = [
   { locale: "fr", messages: frMessages },
   { locale: "de", messages: deMessages }
 ] as const;
-
-type TestSpeechAssetInstallRequest = {
-  readonly requestId: string;
-  readonly languageTag: string;
-};
-
-type TestSpeechAssetInstallResult =
-  | {
-      readonly status: "started";
-      readonly requestId: string;
-      readonly installationId: string;
-      readonly languageTag: string;
-      readonly metering: "available" | "unavailable";
-    }
-  | {
-      readonly status: "blocked";
-      readonly requestId: string;
-      readonly error: { readonly code: string };
-    };
-
-type TestSpeechAssetInstallEvent =
-  | {
-      readonly apiVersion: 1;
-      readonly kind: "progress";
-      readonly installationId: string;
-      readonly sequence: number;
-      readonly completedFraction: number;
-    }
-  | {
-      readonly apiVersion: 1;
-      readonly kind: "installed";
-      readonly installationId: string;
-      readonly sequence: number;
-      readonly languageTag: string;
-    }
-  | {
-      readonly apiVersion: 1;
-      readonly kind: "failed";
-      readonly installationId: string;
-      readonly sequence: number;
-      readonly error: { readonly code: string };
-    };
 
 afterEach(() => {
   for (const key of globalKeys) {
@@ -217,7 +178,7 @@ describe("Home durable Agent conversation UI", () => {
     const dom = createDom(420);
     const harness = createHarness(undefined);
     const installationId = `speechinstall_${"c".repeat(16)}`;
-    let resolveInstall: ((result: TestSpeechAssetInstallResult) => void) | undefined;
+    let resolveInstall: ((result: SpeechAssetInstallResult) => void) | undefined;
     harness.speechAvailability = {
       status: "unsupported",
       reason: "assets_unavailable",
@@ -265,7 +226,7 @@ describe("Home durable Agent conversation UI", () => {
         kind: "failed",
         installationId,
         sequence: 1,
-        error: { code: "speech.asset_install_failed" }
+        error: speechAssetInstallError()
       });
       await settle(dom);
     });
@@ -2212,8 +2173,8 @@ interface ConversationHarness {
   readonly speechStopRequests: SpeechSessionRequest[];
   readonly speechCancelRequests: SpeechCancelRequest[];
   readonly speechListeners: Set<(event: SpeechSessionEvent) => void>;
-  readonly speechAssetInstallRequests: TestSpeechAssetInstallRequest[];
-  readonly speechAssetListeners: Set<(event: TestSpeechAssetInstallEvent) => void>;
+  readonly speechAssetInstallRequests: SpeechAssetInstallRequest[];
+  readonly speechAssetListeners: Set<(event: SpeechAssetInstallEvent) => void>;
   readonly undoOperationIds: string[];
   readonly draftListeners: Set<(event: AgentTurnDraftEvent) => void>;
   activityUndoMode: "success" | "post_commit_reject" | "retryable_reject" | "unknown_reject";
@@ -2242,12 +2203,12 @@ interface ConversationHarness {
   speechStartResult: SpeechStartResult;
   speechStopResult: SpeechStopResult;
   startSpeech: (request: SpeechStartRequest) => Promise<SpeechStartResult>;
-  installSpeechAsset: (request: TestSpeechAssetInstallRequest) => Promise<TestSpeechAssetInstallResult>;
+  installSpeechAsset: (request: SpeechAssetInstallRequest) => Promise<SpeechAssetInstallResult>;
   loadConversation: () => Promise<AgentConversationTimeline | undefined>;
   submitTurn: (request: AgentSubmitTurnRequest) => Promise<AgentSubmitTurnResult>;
   emitDraft: (event: AgentTurnDraftEvent) => void;
   emitSpeech: (event: SpeechSessionEvent) => void;
-  emitSpeechAsset: (event: TestSpeechAssetInstallEvent) => void;
+  emitSpeechAsset: (event: SpeechAssetInstallEvent) => void;
 }
 
 function createHarness(timeline: AgentConversationTimeline | undefined): ConversationHarness {
@@ -2502,7 +2463,7 @@ function makePigeApi(harness: ConversationHarness): object {
           ? { status: "canceled" as const, sessionId: request.sessionId }
           : { status: "canceled" as const, requestId: request.requestId };
       },
-      installLanguageAsset: async (request: TestSpeechAssetInstallRequest) => {
+      installLanguageAsset: async (request: SpeechAssetInstallRequest) => {
         harness.speechAssetInstallRequests.push(request);
         return harness.installSpeechAsset(request);
       },
@@ -2511,7 +2472,7 @@ function makePigeApi(harness: ConversationHarness): object {
         harness.speechListeners.add(listener);
         return () => harness.speechListeners.delete(listener);
       },
-      onAssetInstallEvent: (listener: (event: TestSpeechAssetInstallEvent) => void) => {
+      onAssetInstallEvent: (listener: (event: SpeechAssetInstallEvent) => void) => {
         harness.speechAssetListeners.add(listener);
         return () => harness.speechAssetListeners.delete(listener);
       }
@@ -3250,6 +3211,17 @@ function safeCallError() {
     code: "model_provider.call_failed",
     domain: "model_provider" as const,
     messageKey: "errors.model_provider.call_failed",
+    retryable: true,
+    severity: "error" as const,
+    userAction: "retry" as const
+  };
+}
+
+function speechAssetInstallError() {
+  return {
+    code: "speech.asset_install_failed",
+    domain: "speech" as const,
+    messageKey: "errors.speech.asset_install_failed",
     retryable: true,
     severity: "error" as const,
     userAction: "retry" as const

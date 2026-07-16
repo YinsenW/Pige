@@ -57,6 +57,9 @@ import type {
   RestoreMode,
   RestorePreviewWarning,
   RestorePreviewResult,
+  SpeechAssetInstallEvent,
+  SpeechAssetInstallRequest,
+  SpeechAssetInstallResult,
   SupportBundlePreview,
   ToolchainHealth,
   VaultRevealTarget,
@@ -2758,7 +2761,7 @@ function HomeComposer(props: {
   const voiceAssetPendingRequestIdRef = useRef<string | null>(null);
   const voiceAssetInstallationIdRef = useRef<string | null>(null);
   const voiceAssetEventSequenceRef = useRef(0);
-  const voiceAssetBufferedEventsRef = useRef<HomeSpeechAssetInstallEvent[]>([]);
+  const voiceAssetBufferedEventsRef = useRef<SpeechAssetInstallEvent[]>([]);
   const voiceRequestSequenceRef = useRef(0);
   const voiceMeteringAvailableRef = useRef(false);
   const voiceLanguageTagRef = useRef(props.locale);
@@ -2786,7 +2789,7 @@ function HomeComposer(props: {
   const homeModelProviders = new Map(
     (props.modelSummary?.providers ?? []).map((provider) => [provider.id, provider.displayName] as const)
   );
-  const speechAssetApi = resolveHomeSpeechAssetApi();
+  const speechAssetApi = window.pige.speech;
 
   const voiceAssetInstallActive = (): boolean =>
     voiceAssetPendingRequestIdRef.current !== null || voiceAssetInstallationIdRef.current !== null;
@@ -2863,7 +2866,7 @@ function HomeComposer(props: {
     else if (requestId) void window.pige.speech.cancel({ requestId }).catch(() => undefined);
   };
 
-  const applyVoiceAssetInstallEvent = (event: HomeSpeechAssetInstallEvent): void => {
+  const applyVoiceAssetInstallEvent = (event: SpeechAssetInstallEvent): void => {
     if (
       event.installationId !== voiceAssetInstallationIdRef.current ||
       event.sequence <= voiceAssetEventSequenceRef.current
@@ -2909,7 +2912,7 @@ function HomeComposer(props: {
   };
 
   const beginVoiceAssetInstall = async (): Promise<void> => {
-    if (!speechAssetApi || voiceAssetPendingRequestIdRef.current || voiceAssetInstallationIdRef.current) return;
+    if (voiceAssetPendingRequestIdRef.current || voiceAssetInstallationIdRef.current) return;
     const requestSequence = voiceRequestSequenceRef.current + 1;
     voiceRequestSequenceRef.current = requestSequence;
     const requestId = createSpeechAssetRequestId();
@@ -2921,7 +2924,8 @@ function HomeComposer(props: {
     setVoiceState("installing_asset");
     props.onVoiceAssetInstallActiveChange(true);
     try {
-      const result = await speechAssetApi.installLanguageAsset({ requestId, languageTag });
+      const request: SpeechAssetInstallRequest = { requestId, languageTag };
+      const result: SpeechAssetInstallResult = await speechAssetApi.installLanguageAsset(request);
       if (voiceAssetPendingRequestIdRef.current === requestId) {
         voiceAssetPendingRequestIdRef.current = null;
       }
@@ -3074,7 +3078,7 @@ function HomeComposer(props: {
     setVoiceLevels([]);
   }) ?? (() => undefined), []);
 
-  useEffect(() => speechAssetApi?.onAssetInstallEvent((event) => {
+  useEffect(() => speechAssetApi.onAssetInstallEvent((event) => {
     if (!voiceAssetInstallationIdRef.current && voiceAssetPendingRequestIdRef.current) {
       voiceAssetBufferedEventsRef.current.push(event);
       return;
@@ -4183,7 +4187,7 @@ function HomeComposer(props: {
                 ? { onComplete: () => useVoiceTranscript(voiceTranscript) }
                 : {})}
             {...(voiceState === "failed" ? { onRetry: () => void beginVoice() } : {})}
-            {...((voiceState === "assets_unavailable" || voiceState === "asset_install_failed") && speechAssetApi
+            {...(voiceState === "assets_unavailable" || voiceState === "asset_install_failed"
               ? { onInstallLanguageAsset: () => void beginVoiceAssetInstall() }
               : {})}
             {...(voiceState === "asset_ready" ? { onStartAfterAssetInstall: () => void beginVoice() } : {})}
@@ -4612,58 +4616,6 @@ function createSpeechRequestId(): string {
 
 function createSpeechAssetRequestId(): string {
   return `speechasset_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
-}
-
-type HomeSpeechAssetInstallEvent =
-  | {
-      readonly apiVersion: 1;
-      readonly kind: "progress";
-      readonly installationId: string;
-      readonly sequence: number;
-      readonly completedFraction: number;
-    }
-  | {
-      readonly apiVersion: 1;
-      readonly kind: "installed";
-      readonly installationId: string;
-      readonly sequence: number;
-      readonly languageTag: string;
-    }
-  | {
-      readonly apiVersion: 1;
-      readonly kind: "failed";
-      readonly installationId: string;
-      readonly sequence: number;
-      readonly error: PigeErrorSummary;
-    };
-
-interface HomeSpeechAssetApi {
-  installLanguageAsset(request: {
-    readonly requestId: string;
-    readonly languageTag: string;
-  }): Promise<
-    | {
-        readonly status: "started";
-        readonly requestId: string;
-        readonly installationId: string;
-        readonly languageTag: string;
-        readonly metering: "available" | "unavailable";
-      }
-    | {
-        readonly status: "blocked";
-        readonly requestId: string;
-        readonly error: PigeErrorSummary;
-      }
-  >;
-  onAssetInstallEvent(listener: (event: HomeSpeechAssetInstallEvent) => void): () => void;
-}
-
-function resolveHomeSpeechAssetApi(): HomeSpeechAssetApi | null {
-  const speech = window.pige.speech as typeof window.pige.speech & Partial<HomeSpeechAssetApi>;
-  return typeof speech.installLanguageAsset === "function" &&
-    typeof speech.onAssetInstallEvent === "function"
-    ? speech as HomeSpeechAssetApi
-    : null;
 }
 
 function voiceStateForError(code: string): HomeVoicePanelState {
