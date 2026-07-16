@@ -21,7 +21,8 @@ Pige may store these on your machine:
 - Jobs, proposals, operation records, and recovery summaries.
 - Rebuildable local databases, search indexes, graph indexes, chunks, embeddings, thumbnails, and caches.
 - Machine-local settings, recent vaults, permission grants, local tool status, provider metadata, and diagnostics.
-- Downloaded local model files or OCR model files after explicit user action.
+- Local model/OCR files and Apple-managed speech resources after explicit user action;
+  Pige stores no speech asset bytes, URL, path or installation record.
 
 ## Secrets
 
@@ -40,7 +41,8 @@ reason to reapprove normal Agent work or connected model calls.
 - BYOK: one disclosure grants routine bounded calls to the exact Profile/endpoint with
   selected context and quiet status. Drift reconnects; sensitive confirms; restricted blocks.
 - URL capture fetches a pasted link and stores the result locally as a source.
-- Model/tool assets download only through explicit flows.
+- Model/tool/Apple speech assets download only through explicit flows. Apple speech
+  install may contact Apple; Pige receives only bounded progress/completion, never assets.
 - Public alpha may check GitHub Releases or configured update metadata.
 - Skills/packages use network access only through declared, brokered capabilities.
 

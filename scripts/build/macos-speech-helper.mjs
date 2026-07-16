@@ -8,7 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 const buildScriptPath = fileURLToPath(import.meta.url);
 const sourcePath = path.join(root, "apps/desktop/native/macos-speech/PigeSpeech.swift");
 const infoPlistPath = path.join(root, "apps/desktop/native/macos-speech/Info.plist");
-const helperVersion = "1.0.0";
+const helperVersion = "1.1.0";
 const protocolVersion = 1;
 
 if (process.platform !== "darwin") {
@@ -108,7 +108,9 @@ writeJsonAtomic(manifestPath, {
   binarySize: stat.size,
   swiftVersion,
   hiddenDownloads: false,
-  networkAccess: false
+  networkAccess: true,
+  networkAccessScope: "apple_speech_language_assets",
+  downloadTrigger: "explicit_user_action"
 });
 console.log(`Built macOS Speech helper: ${path.relative(root, binaryPath)}`);
 

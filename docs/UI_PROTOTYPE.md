@@ -350,9 +350,9 @@ Behavior:
 - Recording starts only after explicit user action.
 - Recording shows Attach, neutral-or-metered waveform, timer, Stop and Done. Session
   replacement text becomes editable without overwriting existing composer text.
-- Stop/Done never auto-submit or create Job/source/model work. States are localized and
-  body-free; denial may open fixed macOS Microphone Settings, while missing assets stay
-  unavailable until a typed inventory owner exists.
+- Stop/Done never submit or create Job/source/model work. Localized body-free denial may
+  open fixed Microphone Settings. Missing Apple language resources expose explicit install;
+  its focus-owned UI locks dismissal/route/locale. Success re-probes and still needs Start.
 - On unsupported platforms, the microphone button is hidden or disabled with a short tooltip.
 
 ### 5.2 URL Present

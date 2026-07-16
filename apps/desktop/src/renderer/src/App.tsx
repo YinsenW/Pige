@@ -57,6 +57,9 @@ import type {
   RestoreMode,
   RestorePreviewWarning,
   RestorePreviewResult,
+  SpeechAssetInstallEvent,
+  SpeechAssetInstallRequest,
+  SpeechAssetInstallResult,
   SupportBundlePreview,
   ToolchainHealth,
   VaultRevealTarget,
@@ -210,6 +213,7 @@ export function App(): React.JSX.Element {
   const [toolchainHealth, setToolchainHealth] = useState<ToolchainHealth | null>(null);
   const [dropActive, setDropActive] = useState(false);
   const [homeDraftText, setHomeDraftText] = useState("");
+  const [voiceAssetInstallActive, setVoiceAssetInstallActive] = useState(false);
   const [homeFileDropRequest, setHomeFileDropRequest] = useState<HomeFileDropRequest | null>(null);
   const [captureToast, setCaptureToast] = useState<CaptureToast | null>(null);
   const [recentJobs, setRecentJobs] = useState<readonly JobSummary[]>([]);
@@ -239,8 +243,23 @@ export function App(): React.JSX.Element {
   const modelRefreshSequence = useRef(0);
   const agentRuntimeRefreshSequence = useRef(0);
   const vaultRefreshSequence = useRef(0);
+  const voiceAssetInstallActiveRef = useRef(false);
+  const deferredAppearanceRef = useRef<{
+    readonly locale: Locale;
+    readonly availableLocales: readonly Locale[];
+  } | null>(null);
   const activeVaultIdRef = useRef<string | undefined>(onboarding?.activeVault?.vaultId);
   activeVaultIdRef.current = onboarding?.activeVault?.vaultId;
+
+  const updateVoiceAssetInstallOwnership = (active: boolean): void => {
+    voiceAssetInstallActiveRef.current = active;
+    setVoiceAssetInstallActive(active);
+    if (active || !deferredAppearanceRef.current) return;
+    const appearance = deferredAppearanceRef.current;
+    deferredAppearanceRef.current = null;
+    setLocale(appearance.locale);
+    setAvailableLocales(appearance.availableLocales);
+  };
 
   const refreshAgentRuntimeStatus = async (): Promise<void> => {
     const refreshId = ++agentRuntimeRefreshSequence.current;
@@ -265,6 +284,10 @@ export function App(): React.JSX.Element {
     void window.pige.getHealth().then(setHealth);
     void window.pige.window.current().then(setWindowState);
     void window.pige.settings.appearance().then((appearance) => {
+      if (voiceAssetInstallActiveRef.current) {
+        deferredAppearanceRef.current = appearance;
+        return;
+      }
       setLocale(appearance.locale);
       setAvailableLocales(appearance.availableLocales);
     });
@@ -412,6 +435,7 @@ export function App(): React.JSX.Element {
   };
 
   const openModelsFromHome = async (opener: HTMLButtonElement): Promise<void> => {
+    if (voiceAssetInstallActiveRef.current) return;
     settingsOpenerRef.current = opener;
     await dismissFirstHomeGuide();
     setSettingsSection("models");
@@ -420,6 +444,7 @@ export function App(): React.JSX.Element {
   };
 
   const openSettings = (section: SettingsSection, opener: HTMLButtonElement): void => {
+    if (voiceAssetInstallActiveRef.current) return;
     settingsOpenerRef.current = opener;
     setSettingsSection(section);
     setDevelopmentNotice(null);
@@ -538,6 +563,7 @@ export function App(): React.JSX.Element {
   };
 
   const navigateLibrarySearch = async (): Promise<void> => {
+    if (voiceAssetInstallActiveRef.current) return;
     noteOpenSequence.current += 1;
     knowledgeTreeReturnFocusKey.current = null;
     setSelectedNote(null);
@@ -561,6 +587,7 @@ export function App(): React.JSX.Element {
   };
 
   const updateLocale = async (nextLocale: Locale): Promise<void> => {
+    if (voiceAssetInstallActiveRef.current) return;
     const appearance = await window.pige.settings.setLocale({ locale: nextLocale });
     setLocale(appearance.locale);
     setAvailableLocales(appearance.availableLocales);
@@ -842,8 +869,10 @@ export function App(): React.JSX.Element {
             <button
               className={view === "knowledgeTree" ? "nav-item active" : "nav-item"}
               type="button"
+              disabled={voiceAssetInstallActive}
               aria-current={view === "knowledgeTree" ? "page" : undefined}
               onClick={() => {
+                if (voiceAssetInstallActive) return;
                 noteOpenSequence.current += 1;
                 knowledgeTreeReturnFocusKey.current = null;
                 setSelectedNote(null);
@@ -870,6 +899,7 @@ export function App(): React.JSX.Element {
                   });
                 }}
                 onOpenNote={async (pageId) => {
+                  if (voiceAssetInstallActive) return;
                   setView("library");
                   await openNote(pageId);
                 }}
@@ -881,6 +911,7 @@ export function App(): React.JSX.Element {
               className="sidebar-settings-control"
               type="button"
               aria-haspopup="dialog"
+              disabled={voiceAssetInstallActive}
               onClick={(event) => openSettings("general", event.currentTarget)}
             >
               <PigeIcon name="settings" size={16} />
@@ -1009,6 +1040,7 @@ export function App(): React.JSX.Element {
             onHomeStateChanged={refreshVaultState}
             onProposalChanged={refreshVaultState}
             onSetDefaultModel={setHomeDefaultModel}
+            onVoiceAssetInstallActiveChange={updateVoiceAssetInstallOwnership}
             onOpenModels={openModelsFromHome}
             onDismissFirstHome={dismissFirstHomeGuide}
             developmentNotice={developmentNotice?.surface === "home" ? developmentNotice : null}
@@ -2656,6 +2688,7 @@ function HomeComposer(props: {
   readonly onHomeStateChanged: () => Promise<void>;
   readonly onProposalChanged: () => Promise<void>;
   readonly onSetDefaultModel: (modelProfileId: string) => Promise<boolean>;
+  readonly onVoiceAssetInstallActiveChange: (active: boolean) => void;
   readonly onOpenModels: (opener: HTMLButtonElement) => Promise<void>;
   readonly onDismissFirstHome: () => Promise<void>;
   readonly developmentNotice: DevelopmentNotice | null;
@@ -2689,6 +2722,7 @@ function HomeComposer(props: {
   const [voiceElapsedMs, setVoiceElapsedMs] = useState<number | undefined>(undefined);
   const [voiceLevels, setVoiceLevels] = useState<readonly number[]>([]);
   const [voiceCanOpenSystemSettings, setVoiceCanOpenSystemSettings] = useState(false);
+  const [voiceAssetInstallProgress, setVoiceAssetInstallProgress] = useState<number | undefined>(undefined);
   const [proposalOutcome, setProposalOutcome] = useState<ProposalDecisionResult["status"] | null>(null);
   const [proposalDecisionStateUnknown, setProposalDecisionStateUnknown] = useState(false);
   const [proposalErrorMessageKey, setProposalErrorMessageKey] = useState<string | null>(null);
@@ -2724,14 +2758,20 @@ function HomeComposer(props: {
   const voicePendingRequestIdRef = useRef<string | null>(null);
   const voiceSessionIdRef = useRef<string | null>(null);
   const voiceEventSequenceRef = useRef(0);
+  const voiceAssetPendingRequestIdRef = useRef<string | null>(null);
+  const voiceAssetInstallationIdRef = useRef<string | null>(null);
+  const voiceAssetEventSequenceRef = useRef(0);
+  const voiceAssetBufferedEventsRef = useRef<SpeechAssetInstallEvent[]>([]);
   const voiceRequestSequenceRef = useRef(0);
   const voiceMeteringAvailableRef = useRef(false);
+  const voiceLanguageTagRef = useRef(props.locale);
   const draftTextRef = useRef(text);
   const conversationLoadSequence = useRef(0);
   const handledFileDropClientTurnIdRef = useRef<string | null>(null);
   const activeVaultIdRef = useRef<string | undefined>(props.activeVault?.vaultId);
   const activeAgentDraftRef = useRef<ActiveAgentDraftBinding | null>(null);
   activeVaultIdRef.current = props.activeVault?.vaultId;
+  voiceLanguageTagRef.current = props.locale;
   draftTextRef.current = text;
   const agentStatusLabel = props.agentRuntimeStatus?.state === "ready" ? props.t("home.agentReady") : props.t("home.captureOnly");
   const enabledHomeModels = props.modelSummary?.models.filter((model) => model.enabled) ?? [];
@@ -2749,6 +2789,10 @@ function HomeComposer(props: {
   const homeModelProviders = new Map(
     (props.modelSummary?.providers ?? []).map((provider) => [provider.id, provider.displayName] as const)
   );
+  const speechAssetApi = window.pige.speech;
+
+  const voiceAssetInstallActive = (): boolean =>
+    voiceAssetPendingRequestIdRef.current !== null || voiceAssetInstallationIdRef.current !== null;
 
   const closeModelMenu = (restoreFocus = false): void => {
     setModelMenuOpen(false);
@@ -2796,24 +2840,119 @@ function HomeComposer(props: {
     voicePendingRequestIdRef.current = null;
     voiceSessionIdRef.current = null;
     voiceEventSequenceRef.current = 0;
+    voiceAssetPendingRequestIdRef.current = null;
+    voiceAssetInstallationIdRef.current = null;
+    voiceAssetEventSequenceRef.current = 0;
+    voiceAssetBufferedEventsRef.current = [];
     voiceMeteringAvailableRef.current = false;
     setVoiceState(null);
     setVoiceTranscript("");
     setVoiceElapsedMs(undefined);
     setVoiceLevels([]);
     setVoiceCanOpenSystemSettings(false);
+    setVoiceAssetInstallProgress(undefined);
     if (restoreFocus) {
       window.requestAnimationFrame(() => voiceTriggerRef.current?.focus());
     }
   };
 
   const cancelVoice = (restoreFocus = true): void => {
+    if (voiceAssetInstallActive()) return;
     voiceRequestSequenceRef.current += 1;
     const requestId = voicePendingRequestIdRef.current;
     const sessionId = voiceSessionIdRef.current;
     clearVoiceState(restoreFocus);
     if (sessionId) void window.pige.speech.cancel({ sessionId }).catch(() => undefined);
     else if (requestId) void window.pige.speech.cancel({ requestId }).catch(() => undefined);
+  };
+
+  const applyVoiceAssetInstallEvent = (event: SpeechAssetInstallEvent): void => {
+    if (
+      event.installationId !== voiceAssetInstallationIdRef.current ||
+      event.sequence <= voiceAssetEventSequenceRef.current
+    ) return;
+    voiceAssetEventSequenceRef.current = event.sequence;
+    if (event.kind === "progress") {
+      setVoiceAssetInstallProgress(Math.round(event.completedFraction * 100));
+      return;
+    }
+    voiceAssetInstallationIdRef.current = null;
+    if (event.kind === "failed") {
+      setVoiceAssetInstallProgress(undefined);
+      setVoiceState("asset_install_failed");
+      props.onVoiceAssetInstallActiveChange(false);
+      return;
+    }
+    setVoiceAssetInstallProgress(100);
+    const requestSequence = voiceRequestSequenceRef.current;
+    const languageTag = voiceLanguageTagRef.current;
+    void window.pige.speech.availability({ languageTag }).then((availability) => {
+      if (
+        voiceRequestSequenceRef.current !== requestSequence ||
+        voiceLanguageTagRef.current !== languageTag
+      ) return;
+      if (availability.status === "supported" && availability.languageTag === languageTag) {
+        setVoiceCanOpenSystemSettings(availability.canOpenSystemSettings);
+        setVoiceState("asset_ready");
+      } else {
+        setVoiceAssetInstallProgress(undefined);
+        setVoiceState("asset_install_failed");
+      }
+      props.onVoiceAssetInstallActiveChange(false);
+    }).catch(() => {
+      if (
+        voiceRequestSequenceRef.current === requestSequence &&
+        voiceLanguageTagRef.current === languageTag
+      ) {
+        setVoiceAssetInstallProgress(undefined);
+        setVoiceState("asset_install_failed");
+        props.onVoiceAssetInstallActiveChange(false);
+      }
+    });
+  };
+
+  const beginVoiceAssetInstall = async (): Promise<void> => {
+    if (voiceAssetPendingRequestIdRef.current || voiceAssetInstallationIdRef.current) return;
+    const requestSequence = voiceRequestSequenceRef.current + 1;
+    voiceRequestSequenceRef.current = requestSequence;
+    const requestId = createSpeechAssetRequestId();
+    const languageTag = props.locale;
+    voiceAssetPendingRequestIdRef.current = requestId;
+    voiceAssetEventSequenceRef.current = 0;
+    voiceAssetBufferedEventsRef.current = [];
+    setVoiceAssetInstallProgress(undefined);
+    setVoiceState("installing_asset");
+    props.onVoiceAssetInstallActiveChange(true);
+    try {
+      const request: SpeechAssetInstallRequest = { requestId, languageTag };
+      const result: SpeechAssetInstallResult = await speechAssetApi.installLanguageAsset(request);
+      if (voiceAssetPendingRequestIdRef.current === requestId) {
+        voiceAssetPendingRequestIdRef.current = null;
+      }
+      if (
+        voiceRequestSequenceRef.current !== requestSequence ||
+        voiceLanguageTagRef.current !== languageTag
+      ) {
+        return;
+      }
+      if (result.status === "blocked") {
+        setVoiceState("asset_install_failed");
+        props.onVoiceAssetInstallActiveChange(false);
+        return;
+      }
+      voiceAssetInstallationIdRef.current = result.installationId;
+      for (const event of voiceAssetBufferedEventsRef.current) applyVoiceAssetInstallEvent(event);
+      voiceAssetBufferedEventsRef.current = [];
+    } catch {
+      if (
+        voiceRequestSequenceRef.current === requestSequence &&
+        voiceLanguageTagRef.current === languageTag
+      ) {
+        voiceAssetPendingRequestIdRef.current = null;
+        setVoiceState("asset_install_failed");
+        props.onVoiceAssetInstallActiveChange(false);
+      }
+    }
   };
 
   const beginVoice = async (): Promise<void> => {
@@ -2939,6 +3078,14 @@ function HomeComposer(props: {
     setVoiceLevels([]);
   }) ?? (() => undefined), []);
 
+  useEffect(() => speechAssetApi.onAssetInstallEvent((event) => {
+    if (!voiceAssetInstallationIdRef.current && voiceAssetPendingRequestIdRef.current) {
+      voiceAssetBufferedEventsRef.current.push(event);
+      return;
+    }
+    applyVoiceAssetInstallEvent(event);
+  }) ?? (() => undefined), []);
+
   useEffect(() => {
     clearVoiceState(false);
     return () => {
@@ -2947,10 +3094,12 @@ function HomeComposer(props: {
       const sessionId = voiceSessionIdRef.current;
       voicePendingRequestIdRef.current = null;
       voiceSessionIdRef.current = null;
+      voiceAssetPendingRequestIdRef.current = null;
+      voiceAssetInstallationIdRef.current = null;
       if (sessionId) void window.pige.speech.cancel({ sessionId }).catch(() => undefined);
       else if (requestId) void window.pige.speech.cancel({ requestId }).catch(() => undefined);
     };
-  }, [props.activeVault?.vaultId]);
+  }, [props.activeVault?.vaultId, props.locale]);
 
   useEffect(() => {
     if (!modelMenuOpen) return;
@@ -4025,6 +4174,7 @@ function HomeComposer(props: {
             state={voiceState}
             transcript={voiceTranscript}
             levels={voiceLevels}
+            {...(voiceAssetInstallProgress === undefined ? {} : { assetInstallProgress: voiceAssetInstallProgress })}
             onDismiss={() => cancelVoice(true)}
             {...(voiceElapsedMs === undefined ? {} : { elapsedMs: voiceElapsedMs })}
             {...(voiceState === "stopped" || voiceState === "ready"
@@ -4037,6 +4187,10 @@ function HomeComposer(props: {
                 ? { onComplete: () => useVoiceTranscript(voiceTranscript) }
                 : {})}
             {...(voiceState === "failed" ? { onRetry: () => void beginVoice() } : {})}
+            {...(voiceState === "assets_unavailable" || voiceState === "asset_install_failed"
+              ? { onInstallLanguageAsset: () => void beginVoiceAssetInstall() }
+              : {})}
+            {...(voiceState === "asset_ready" ? { onStartAfterAssetInstall: () => void beginVoice() } : {})}
             {...(voiceCanOpenSystemSettings
               ? { onOpenSystemSettings: () => void window.pige.speech.openSystemSettings() }
               : {})}
@@ -4458,6 +4612,10 @@ function createAgentClientTurnId(now = new Date()): string {
 
 function createSpeechRequestId(): string {
   return `speechreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
+}
+
+function createSpeechAssetRequestId(): string {
+  return `speechasset_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
 }
 
 function voiceStateForError(code: string): HomeVoicePanelState {

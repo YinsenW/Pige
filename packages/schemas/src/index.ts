@@ -1669,6 +1669,8 @@ export const VaultRevealResultSchema = z.discriminatedUnion("status", [
 
 export const SpeechRequestIdSchema = z.string().regex(/^speechreq_[a-z0-9]{16,64}$/);
 export const SpeechSessionIdSchema = z.string().regex(/^speech_[a-z0-9]{16,64}$/);
+export const SpeechAssetRequestIdSchema = z.string().regex(/^speechasset_[a-z0-9]{16,64}$/);
+export const SpeechAssetInstallationIdSchema = z.string().regex(/^speechinstall_[a-z0-9]{16,64}$/);
 export const SpeechLanguageTagSchema = z.string()
   .min(2)
   .max(64)
@@ -1722,6 +1724,47 @@ export const SpeechStartRequestSchema = z.object({
   requestId: SpeechRequestIdSchema,
   languageTag: SpeechLanguageTagSchema
 }).strict();
+
+export const SpeechAssetInstallRequestSchema = z.object({
+  requestId: SpeechAssetRequestIdSchema,
+  languageTag: SpeechLanguageTagSchema
+}).strict();
+
+export const SpeechAssetInstallResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("started"),
+    requestId: SpeechAssetRequestIdSchema,
+    installationId: SpeechAssetInstallationIdSchema,
+    languageTag: SpeechLanguageTagSchema,
+    metering: z.enum(["available", "unavailable"])
+  }).strict(),
+  z.object({
+    status: z.literal("blocked"),
+    requestId: SpeechAssetRequestIdSchema,
+    error: SpeechErrorSummarySchema
+  }).strict()
+]);
+
+const SpeechAssetInstallEventIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  installationId: SpeechAssetInstallationIdSchema,
+  sequence: z.number().int().positive()
+}).strict();
+
+export const SpeechAssetInstallEventSchema = z.discriminatedUnion("kind", [
+  SpeechAssetInstallEventIdentitySchema.extend({
+    kind: z.literal("progress"),
+    completedFraction: z.number().min(0).max(1)
+  }).strict(),
+  SpeechAssetInstallEventIdentitySchema.extend({
+    kind: z.literal("installed"),
+    languageTag: SpeechLanguageTagSchema
+  }).strict(),
+  SpeechAssetInstallEventIdentitySchema.extend({
+    kind: z.literal("failed"),
+    error: SpeechErrorSummarySchema
+  }).strict()
+]);
 
 export const SpeechStartResultSchema = z.discriminatedUnion("status", [
   z.object({
@@ -2576,6 +2619,11 @@ export type RetrievalSearchResultItem = z.infer<typeof RetrievalSearchResultItem
 export type RetrievalSearchScope = z.infer<typeof RetrievalSearchScopeSchema>;
 export type SpeechAvailabilityRequest = z.infer<typeof SpeechAvailabilityRequestSchema>;
 export type SpeechAvailabilityResult = z.infer<typeof SpeechAvailabilityResultSchema>;
+export type SpeechAssetInstallationId = z.infer<typeof SpeechAssetInstallationIdSchema>;
+export type SpeechAssetInstallEvent = z.infer<typeof SpeechAssetInstallEventSchema>;
+export type SpeechAssetInstallRequest = z.infer<typeof SpeechAssetInstallRequestSchema>;
+export type SpeechAssetInstallResult = z.infer<typeof SpeechAssetInstallResultSchema>;
+export type SpeechAssetRequestId = z.infer<typeof SpeechAssetRequestIdSchema>;
 export type SpeechCancelRequest = z.infer<typeof SpeechCancelRequestSchema>;
 export type SpeechCancelResult = z.infer<typeof SpeechCancelResultSchema>;
 export type SpeechOpenSystemSettingsResult = z.infer<typeof SpeechOpenSystemSettingsResultSchema>;

@@ -203,11 +203,11 @@ Mitigations:
 - Parser-owned provenance fields cannot be overwritten by adapter metadata. Checksummed source, sidecar, and text artifacts are verified before reuse and before Agent cloud handoff.
 - macOS OCR uses a verified app-owned, reduced/no-network helper with bounded protocol,
   no renderer/shell/path exposure, adjacent binary manifest and nested package signing.
-- Verified `pige-speech` keeps one sender-bound bounded NDJSON session; malformed
-  framing/UTF-8/size/sequence/identity fails body-free. Native audio never crosses
-  preload or enters files, logs, diagnostics, conversations, Jobs, vault/backup or
-  models; only later user-submitted text can. Explicit start alone requests permission,
-  fixed main-owned Settings is the only recovery, and asset probes never install.
+- `pige-speech` is sender-bound bounded NDJSON; malformed framing/UTF-8/size/sequence/
+  identity fails body-free. Audio never crosses preload or enters storage/diagnostics/
+  models; explicit start alone requests permission and fixed Settings is the recovery.
+  Probes never install; explicit exact-language `AssetInventory` emits only monotonic safe
+  events, and teardown detaches without claiming cancellation of Apple-owned work.
 - ImageIO/UTType and source revalidation fence format/frame/dimension/pixel/decode/path/
   symlink/checksum/protocol/time/output limits around Vision. TypeScript validates text/
   geometry; Operations and metadata never duplicate the OCR body.

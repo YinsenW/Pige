@@ -13,6 +13,7 @@ private struct HelperEvent: Encodable {
     let protocolVersion: Int
     let kind: String
     let sessionId: String?
+    let installationId: String?
     let status: String?
     let reason: String?
     let permission: String?
@@ -20,6 +21,7 @@ private struct HelperEvent: Encodable {
     let metering: String?
     let elapsedMs: Int?
     let level: Double?
+    let completedFraction: Double?
 }
 
 private struct SessionCommand: Decodable {
@@ -229,6 +231,10 @@ private enum PigeSpeech {
             await probe(languageTag: arguments[1])
             return
         }
+        if arguments.count == 3, arguments[0] == "--install" {
+            await installLanguageAsset(installationId: arguments[1], languageTag: arguments[2])
+            return
+        }
         guard arguments.count == 3, arguments[0] == "--session" else {
             Foundation.exit(2)
         }
@@ -329,13 +335,15 @@ private enum PigeSpeech {
             protocolVersion: protocolVersion,
             kind: "self_test",
             sessionId: nil,
+            installationId: nil,
             status: passed ? "passed" : "failed",
             reason: nil,
             permission: nil,
             transcript: nil,
             metering: nil,
             elapsedMs: nil,
-            level: nil
+            level: nil,
+            completedFraction: nil
         ))
     }
 
@@ -357,6 +365,83 @@ private enum PigeSpeech {
             return
         }
         await writeProbe(status: "supported", reason: nil, permission: permission)
+    }
+
+    @available(macOS 26.0, *)
+    private static func installLanguageAsset(installationId: String, languageTag: String) async {
+        let writer = EventWriter()
+        guard SpeechTranscriber.isAvailable,
+              let locale = await SpeechTranscriber.supportedLocale(
+                  equivalentTo: Locale(identifier: languageTag)
+              ) else {
+            await writer.write(assetEvent(kind: "asset_install_failed", installationId: installationId))
+            return
+        }
+        let transcriber = SpeechTranscriber(locale: locale, preset: .progressiveTranscription)
+        let modules: [any SpeechModule] = [transcriber]
+        if await AssetInventory.status(forModules: modules) == .installed {
+            await writer.write(assetEvent(
+                kind: "asset_install_progress",
+                installationId: installationId,
+                completedFraction: 1
+            ))
+            await writer.write(assetEvent(kind: "asset_installed", installationId: installationId))
+            return
+        }
+        do {
+            guard let installation = try await AssetInventory.assetInstallationRequest(supporting: modules) else {
+                if await AssetInventory.status(forModules: modules) == .installed {
+                    await writer.write(assetEvent(
+                        kind: "asset_install_progress",
+                        installationId: installationId,
+                        completedFraction: 1
+                    ))
+                    await writer.write(assetEvent(kind: "asset_installed", installationId: installationId))
+                } else {
+                    await writer.write(assetEvent(kind: "asset_install_failed", installationId: installationId))
+                }
+                return
+            }
+            let progressTask = Task {
+                var lastCompletedFraction = -1.0
+                while !Task.isCancelled {
+                    let fraction = installation.progress.fractionCompleted
+                    if fraction.isFinite {
+                        let completedFraction = min(1, max(0, fraction))
+                        if completedFraction > lastCompletedFraction {
+                            lastCompletedFraction = completedFraction
+                            await writer.write(assetEvent(
+                                kind: "asset_install_progress",
+                                installationId: installationId,
+                                completedFraction: completedFraction
+                            ))
+                        }
+                    }
+                    try? await Task.sleep(for: .milliseconds(200))
+                }
+            }
+            do {
+                try await installation.downloadAndInstall()
+                progressTask.cancel()
+                _ = await progressTask.result
+            } catch {
+                progressTask.cancel()
+                _ = await progressTask.result
+                throw error
+            }
+            guard await AssetInventory.status(forModules: modules) == .installed else {
+                await writer.write(assetEvent(kind: "asset_install_failed", installationId: installationId))
+                return
+            }
+            await writer.write(assetEvent(
+                kind: "asset_install_progress",
+                installationId: installationId,
+                completedFraction: 1
+            ))
+            await writer.write(assetEvent(kind: "asset_installed", installationId: installationId))
+        } catch {
+            await writer.write(assetEvent(kind: "asset_install_failed", installationId: installationId))
+        }
     }
 
     @available(macOS 26.0, *)
@@ -491,14 +576,37 @@ private enum PigeSpeech {
             protocolVersion: protocolVersion,
             kind: "probe",
             sessionId: nil,
+            installationId: nil,
             status: status,
             reason: reason,
             permission: permission,
             transcript: nil,
             metering: nil,
             elapsedMs: nil,
-            level: nil
+            level: nil,
+            completedFraction: nil
         ))
+    }
+
+    private static func assetEvent(
+        kind: String,
+        installationId: String,
+        completedFraction: Double? = nil
+    ) -> HelperEvent {
+        HelperEvent(
+            protocolVersion: protocolVersion,
+            kind: kind,
+            sessionId: nil,
+            installationId: installationId,
+            status: nil,
+            reason: nil,
+            permission: nil,
+            transcript: nil,
+            metering: nil,
+            elapsedMs: nil,
+            level: nil,
+            completedFraction: completedFraction
+        )
     }
 
     private static func event(
@@ -514,13 +622,15 @@ private enum PigeSpeech {
             protocolVersion: protocolVersion,
             kind: kind,
             sessionId: sessionId,
+            installationId: nil,
             status: nil,
             reason: reason,
             permission: nil,
             transcript: transcript.map(bounded),
             metering: metering,
             elapsedMs: elapsedMs,
-            level: level
+            level: level,
+            completedFraction: nil
         )
     }
 }

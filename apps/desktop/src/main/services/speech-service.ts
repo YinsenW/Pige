@@ -2,6 +2,9 @@ import { randomUUID } from "node:crypto";
 import type {
   SpeechAvailabilityRequest,
   SpeechAvailabilityResult,
+  SpeechAssetInstallEvent,
+  SpeechAssetInstallRequest,
+  SpeechAssetInstallResult,
   SpeechCancelRequest,
   SpeechCancelResult,
   SpeechOpenSystemSettingsResult,
@@ -25,6 +28,12 @@ export type SpeechNativeStartResult =
 
 export interface SpeechNativePort {
   probe(languageTag: string): Promise<SpeechNativeProbeResult>;
+  installLanguageAsset(input: {
+    readonly installationId: string;
+    readonly languageTag: string;
+    readonly onProgress: (completedFraction: number) => void;
+  }): Promise<void>;
+  abandonLanguageAssetInstall(installationId: string): Promise<void>;
   start(input: {
     readonly sessionId: string;
     readonly languageTag: string;
@@ -59,6 +68,23 @@ interface PendingSpeechStart {
   canceled: boolean;
 }
 
+interface PendingSpeechAssetInstall {
+  readonly ownerId: number;
+  readonly requestId: string;
+  canceled: boolean;
+}
+
+interface ActiveSpeechAssetInstall {
+  readonly ownerId: number;
+  readonly requestId: string;
+  readonly installationId: string;
+  readonly languageTag: string;
+  readonly publish: (event: SpeechAssetInstallEvent) => void;
+  sequence: number;
+  lastCompletedFraction: number;
+  detached: boolean;
+}
+
 type SpeechErrorSummary = Extract<SpeechAvailabilityResult, { readonly status: "failed" }>["error"];
 
 export interface SpeechServiceOptions {
@@ -75,6 +101,8 @@ export class SpeechService {
   readonly #systemVersion: string;
   #active: ActiveSpeechSession | undefined;
   #pendingStart: PendingSpeechStart | undefined;
+  #pendingAssetInstall: PendingSpeechAssetInstall | undefined;
+  #assetInstall: ActiveSpeechAssetInstall | undefined;
 
   constructor(options: SpeechServiceOptions) {
     this.#native = options.native;
@@ -113,7 +141,7 @@ export class SpeechService {
     request: SpeechStartRequest,
     publish: (event: SpeechSessionEvent) => void
   ): Promise<SpeechStartResult> {
-    if (this.#active || this.#pendingStart) {
+    if (this.#active || this.#pendingStart || this.#pendingAssetInstall || this.#assetInstall) {
       return {
         status: "blocked",
         requestId: request.requestId,
@@ -214,6 +242,87 @@ export class SpeechService {
     }
   }
 
+  async installLanguageAsset(
+    ownerId: number,
+    request: SpeechAssetInstallRequest,
+    publish: (event: SpeechAssetInstallEvent) => void
+  ): Promise<SpeechAssetInstallResult> {
+    const platformReason = this.#platformReason();
+    if (platformReason) {
+      return {
+        status: "blocked",
+        requestId: request.requestId,
+        error: speechError(`speech.${platformReason}`, false, "none")
+      };
+    }
+    if (this.#active || this.#pendingStart || this.#pendingAssetInstall || this.#assetInstall) {
+      return {
+        status: "blocked",
+        requestId: request.requestId,
+        error: speechError("speech.asset_install_busy", true, "retry")
+      };
+    }
+
+    const pending: PendingSpeechAssetInstall = { ownerId, requestId: request.requestId, canceled: false };
+    this.#pendingAssetInstall = pending;
+    try {
+      let probe: SpeechNativeProbeResult;
+      try {
+        probe = await this.#native.probe(request.languageTag);
+      } catch {
+        return {
+          status: "blocked",
+          requestId: request.requestId,
+          error: speechError("speech.availability_failed", true, "retry")
+        };
+      }
+      if (pending.canceled || this.#pendingAssetInstall !== pending) {
+        return {
+          status: "blocked",
+          requestId: request.requestId,
+          error: speechError("speech.asset_install_canceled", false, "none")
+        };
+      }
+      if (probe.status === "supported") {
+        return {
+          status: "blocked",
+          requestId: request.requestId,
+          error: speechError("speech.asset_already_installed", false, "none")
+        };
+      }
+      if (probe.reason !== "assets_unavailable") {
+        return {
+          status: "blocked",
+          requestId: request.requestId,
+          error: speechError(`speech.${probe.reason ?? "service_unavailable"}`, false, "none")
+        };
+      }
+
+      const installationId = `speechinstall_${randomUUID().replaceAll("-", "")}`;
+      const install: ActiveSpeechAssetInstall = {
+        ownerId,
+        requestId: request.requestId,
+        installationId,
+        languageTag: request.languageTag,
+        publish,
+        sequence: 0,
+        lastCompletedFraction: -1,
+        detached: false
+      };
+      this.#assetInstall = install;
+      void this.#runAssetInstall(install);
+      return {
+        status: "started",
+        requestId: request.requestId,
+        installationId,
+        languageTag: request.languageTag,
+        metering: "available"
+      };
+    } finally {
+      if (this.#pendingAssetInstall === pending) this.#pendingAssetInstall = undefined;
+    }
+  }
+
   async stop(ownerId: number, request: SpeechSessionRequest): Promise<SpeechStopResult> {
     const session = this.#ownedSession(ownerId, request.sessionId);
     if (!session) return { status: "stale_session", sessionId: request.sessionId };
@@ -272,10 +381,20 @@ export class SpeechService {
     if (this.#pendingStart?.ownerId === ownerId) {
       this.#pendingStart.canceled = true;
     }
+    if (this.#pendingAssetInstall?.ownerId === ownerId) {
+      this.#pendingAssetInstall.canceled = true;
+    }
+    const install = this.#assetInstall;
+    if (install?.ownerId === ownerId) {
+      install.detached = true;
+      await this.#native.abandonLanguageAssetInstall(install.installationId).catch(() => undefined);
+      if (this.#assetInstall === install) this.#assetInstall = undefined;
+    }
     const session = this.#active;
-    if (!session || session.ownerId !== ownerId) return;
-    this.#active = undefined;
-    await this.#native.cancel(session.sessionId).catch(() => undefined);
+    if (session?.ownerId === ownerId) {
+      this.#active = undefined;
+      await this.#native.cancel(session.sessionId).catch(() => undefined);
+    }
   }
 
   async openSystemSettings(): Promise<SpeechOpenSystemSettingsResult> {
@@ -331,6 +450,52 @@ export class SpeechService {
       sequence: session.sequence,
       elapsedMs: normalizedElapsedMs,
       level: Math.max(0, Math.min(1, level))
+    });
+  }
+
+  async #runAssetInstall(install: ActiveSpeechAssetInstall): Promise<void> {
+    try {
+      await this.#native.installLanguageAsset({
+        installationId: install.installationId,
+        languageTag: install.languageTag,
+        onProgress: (completedFraction) => this.#publishAssetInstallProgress(install, completedFraction)
+      });
+      if (this.#assetInstall !== install || install.detached) return;
+      install.sequence += 1;
+      install.publish({
+        apiVersion: 1,
+        kind: "installed",
+        installationId: install.installationId,
+        sequence: install.sequence,
+        languageTag: install.languageTag
+      });
+    } catch {
+      if (this.#assetInstall !== install || install.detached) return;
+      install.sequence += 1;
+      install.publish({
+        apiVersion: 1,
+        kind: "failed",
+        installationId: install.installationId,
+        sequence: install.sequence,
+        error: speechError("speech.asset_install_failed", true, "retry")
+      });
+    } finally {
+      if (this.#assetInstall === install) this.#assetInstall = undefined;
+    }
+  }
+
+  #publishAssetInstallProgress(install: ActiveSpeechAssetInstall, completedFraction: number): void {
+    if (this.#assetInstall !== install || install.detached || !Number.isFinite(completedFraction)) return;
+    const normalized = Math.max(0, Math.min(1, completedFraction));
+    if (normalized <= install.lastCompletedFraction) return;
+    install.lastCompletedFraction = normalized;
+    install.sequence += 1;
+    install.publish({
+      apiVersion: 1,
+      kind: "progress",
+      installationId: install.installationId,
+      sequence: install.sequence,
+      completedFraction: normalized
     });
   }
 

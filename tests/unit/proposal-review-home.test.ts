@@ -290,6 +290,9 @@ function makePigeApi(readCurrentProposal: () => ConfirmationProposal, overrides:
     backup: {
       status: async () => null
     },
+    speech: {
+      onAssetInstallEvent: () => () => undefined
+    },
     agent: {
       runtimeStatus: async () => null
     },

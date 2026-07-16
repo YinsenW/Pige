@@ -152,8 +152,8 @@ Speech:
 
 - Each macOS SpeechAnalyzer session receives an explicit BCP 47 tag, currently defaulted
   from app locale; persisted dictation-language selection remains open.
-- Availability distinguishes installed assets; missing assets stay unavailable and are
-  never installed by speech. Localized state may show the active language compactly.
+- Availability never downloads. Missing assets require explicit exact-language Apple
+  install; completion is re-probed and still needs Start. UI may show language compactly.
 - Unsupported dictation languages should show a clear disabled or unavailable state.
 - Voice input language is not necessarily the same as UI language.
 

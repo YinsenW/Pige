@@ -882,12 +882,11 @@ Voice input is a capture-input convenience, not a separate audio-note feature in
 
 macOS requirements:
 
-- Use the supported high-quality on-device speech capability on macOS 26 or later.
-- Prefer the highest-accuracy supported on-device transcription configuration.
-- Show live transcription in the input box when available.
-- Keep finalized transcription as editable text before submission.
-- Ask for microphone permission only when the user first starts voice input.
-- Do not send microphone audio to cloud model providers for dictation.
+- On macOS 26+, use the highest-accuracy supported on-device speech capability, showing
+  live text and keeping the final transcript editable before submission.
+- First explicit start requests microphone permission; audio never reaches model providers.
+- Availability/start never download. Missing Apple language resources expose one explicit
+  install; completion re-probes and still requires a separate Start.
 
 Unsupported platforms:
 

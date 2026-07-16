@@ -163,7 +163,9 @@ describe("release packageability platforms", () => {
     expect(macosHelperBuild).toContain('"com.yinsenw.pige.vision-ocr"');
     expect(macosSpeechBuild).toContain('"com.yinsenw.pige.speech"');
     expect(macosSpeechBuild).toContain("hiddenDownloads: false");
-    expect(macosSpeechBuild).toContain("networkAccess: false");
+    expect(macosSpeechBuild).toContain("networkAccess: true");
+    expect(macosSpeechBuild).toContain('networkAccessScope: "apple_speech_language_assets"');
+    expect(macosSpeechBuild).toContain('downloadTrigger: "explicit_user_action"');
     expect(macosAdHocSigner).toContain('"Contents/Resources/native/macos/arm64/pige-speech"');
     expect(macosAdHocSigner).toContain('"Contents/Resources/native/macos/arm64/pige-vision-ocr"');
     expect(macosAdHocSigner).toContain("content: fs.readFileSync(helperPath)");

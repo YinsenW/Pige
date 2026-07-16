@@ -485,9 +485,9 @@ Tests must verify:
 - Main workflows are keyboard reachable.
 - Focus states are visible.
 - Icon-only buttons have labels/tooltips.
-- Skills/update surfaces invoke no fake state. Voice tests cover explicit one-sender
-  sessions, monotonic replacement/meter, non-submitting Stop/Done, safe insertion,
-  teardown/recovery/assets, framing bounds and no audio egress.
+- Skills/update surfaces invoke no fake state. Voice tests cover sender/sequence, editable
+  Stop/Done, teardown, framing and no audio egress. Asset tests cover explicit exact-language
+  preflight, API v1 events, focus ownership, detach/re-probe and no auto-record/cancel claim.
 - macOS speech package evidence binds helper manifest, usage copy, nested seal, real UI,
   distribution smoke and zero post-seal Bundle writes.
 - Reduced motion is respected.

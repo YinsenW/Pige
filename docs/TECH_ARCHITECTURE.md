@@ -392,22 +392,14 @@ Packaging notes:
 
 ### 5.1.6 Native Speech Input Service
 
-Voice input is a platform-native capture convenience, not a separate audio-note feature in v0.1.
-
-User-visible behavior, supported-platform fallback, local-only privacy, and transcript
-editing are owned by [`PRD.md`](PRD.md#1011-voice-input); dictation-language behavior is
-owned by `I18N_DESIGN.md`.
-
-Implemented macOS boundary:
-
-- Renderer owns explicit start/Stop/Done, editable replacement text and stale events;
-  preload exposes only API-owned strict schemas, never audio/native handles.
-- Main owns one sender-bound session, on-demand permission, fixed Settings recovery and
-  teardown. Verified `pige-speech` runs SpeechAnalyzer in a reduced, bounded NDJSON
-  helper with no asset download or cloud speech.
-
-The executable vocabulary in `packages/schemas/src/index.ts` is authoritative; this
-architecture does not carry a second event enum.
+Voice is capture input, not an audio-note feature. PRD owns behavior/privacy and I18N owns
+language. On macOS, renderer owns Start/Stop/Done/editable text; main owns one sender,
+permission, fixed Settings and teardown through bounded NDJSON `pige-speech`. Strict preload
+schemas expose no audio/handles. Availability/start never download; explicit exact-language
+install may call `AssetInventory.downloadAndInstall` only for missing assets and projects
+opaque monotonic safe events. It creates no Job/Broker/Skill/model/vault/persistence, re-probes
+before a separate Start, and has no cancel claim; teardown only detaches events. Executable
+vocabulary remains solely in `packages/schemas/src/index.ts`.
 
 ### 5.1.7 Vault Runtime And File Watcher Service
 
@@ -1865,7 +1857,7 @@ Waiver rules:
 
 | Dependency | Status | Pige usage | Upstream source | Pin/update policy | Data boundary and notes |
 | --- | --- | --- | --- | --- | --- |
-| Apple SpeechAnalyzer/SpeechTranscriber | required | Local voice dictation through the app-owned `pige-speech` helper on macOS 26 or later when supported. | https://developer.apple.com/documentation/speech/speechanalyzer | Pin through the macOS 26 SDK/helper protocol and adjacent binary manifest; rerun helper, permission, transcript, package and seal smokes on update. | Native audio never crosses into Electron/TypeScript or cloud providers; missing language assets remain unavailable and are not installed by speech. |
+| Apple SpeechAnalyzer/SpeechTranscriber/AssetInventory (`speech.apple-speech`) | required | macOS 26+ local dictation and explicit exact-language asset install through `pige-speech`. | https://developer.apple.com/documentation/speech/assetinventory | Pin SDK/helper protocol/manifest; rerun probe/install/session/package smokes. | Audio/assets stay native; availability/start never download; no Pige cancel or durable record. |
 | Apple Vision framework (`ocr.apple-vision`) | required | `RecognizeDocumentsRequest` revision 1 with `RecognizeTextRequest` revision 3 fallback for local image OCR on macOS 26+. | https://developer.apple.com/documentation/vision/recognizedocumentsrequest | Pin request revisions in the helper manifest; re-run source and packaged native smoke before changing SDK/Xcode. | Runtime-provided local platform OCR; no source text leaves the device. |
 | Apple Vision text recognition | required | Simpler image OCR fallback on supported macOS versions. | https://developer.apple.com/documentation/vision | Runtime capability detection. | Local platform OCR. |
 | Apple ImageIO/CoreGraphics/UniformTypeIdentifiers (`ocr.apple-media-frameworks`) | required | Validate and bounded-decode raster image inputs before Vision recognition. | https://developer.apple.com/documentation/imageio | Pin through the macOS 26 SDK used for the helper build; rerun invalid-format, frame, dimension, and decode fixtures on update. | Runtime-provided platform APIs in the isolated native helper. |

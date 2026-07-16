@@ -77,6 +77,9 @@ import type {
   SettingsRegistrySummary,
   SpeechAvailabilityRequest,
   SpeechAvailabilityResult,
+  SpeechAssetInstallEvent,
+  SpeechAssetInstallRequest,
+  SpeechAssetInstallResult,
   SpeechCancelRequest,
   SpeechCancelResult,
   SpeechOpenSystemSettingsResult,
@@ -100,6 +103,9 @@ import {
   RetrievalSearchResultSchema,
   SpeechAvailabilityRequestSchema,
   SpeechAvailabilityResultSchema,
+  SpeechAssetInstallEventSchema,
+  SpeechAssetInstallRequestSchema,
+  SpeechAssetInstallResultSchema,
   SpeechCancelRequestSchema,
   SpeechCancelResultSchema,
   SpeechOpenSystemSettingsResultSchema,
@@ -415,6 +421,12 @@ const api: PigeDesktopApi = {
       const parsedRequest = SpeechAvailabilityRequestSchema.parse(request);
       return SpeechAvailabilityResultSchema.parse(await ipcRenderer.invoke("speech.availability", parsedRequest));
     },
+    installLanguageAsset: async (request: SpeechAssetInstallRequest): Promise<SpeechAssetInstallResult> => {
+      const parsedRequest = SpeechAssetInstallRequestSchema.parse(request);
+      return SpeechAssetInstallResultSchema.parse(
+        await ipcRenderer.invoke("speech.installLanguageAsset", parsedRequest)
+      );
+    },
     start: async (request: SpeechStartRequest): Promise<SpeechStartResult> => {
       const parsedRequest = SpeechStartRequestSchema.parse(request);
       return SpeechStartResultSchema.parse(await ipcRenderer.invoke("speech.start", parsedRequest));
@@ -429,6 +441,14 @@ const api: PigeDesktopApi = {
     },
     openSystemSettings: async (): Promise<SpeechOpenSystemSettingsResult> =>
       SpeechOpenSystemSettingsResultSchema.parse(await ipcRenderer.invoke("speech.openSystemSettings")),
+    onAssetInstallEvent: (listener: (event: SpeechAssetInstallEvent) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, value: unknown): void => {
+        const parsed = SpeechAssetInstallEventSchema.safeParse(value);
+        if (parsed.success) listener(parsed.data);
+      };
+      ipcRenderer.on("speech.assetInstallEvent", handler);
+      return () => ipcRenderer.removeListener("speech.assetInstallEvent", handler);
+    },
     onSessionEvent: (listener: (event: SpeechSessionEvent) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, value: unknown): void => {
         const parsed = SpeechSessionEventSchema.safeParse(value);

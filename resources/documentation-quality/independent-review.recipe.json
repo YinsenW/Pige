@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-16T07:44:00Z",
+  "reviewedAt": "2026-07-16T10:09:25Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -31,12 +31,12 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "64507fd5fb171a6087e2edb48b3c435a1963c095216e139b773e3636d1e39771"
+    "reviewedSha256": "5ec020cdd7933f530ce57a04e883caa72ec8e7a5c5bf187aeb5a36af55d5f0ec"
   },
   "reviewers": [
     {
-      "reviewerId": "home-voice-e2-04-independent-review",
-      "task": "macOS Home Voice E2.04 and native titlebar exact-candidate review",
+      "reviewerId": "voice-language-assets-independent-review",
+      "task": "Explicit Apple speech language-asset install exact-candidate review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -44,44 +44,44 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Development froze the exact 35-path H candidate after full, helper and package evidence; UI Design reproduced the identity and accepted the exact UI/macOS screenshots. Planning changed only existing owner, acceptance, semantic and review artifacts."
+      "independence": "Development and UI Design froze and independently accepted the exact 25-path candidate after service, helper, package, distribution and real macOS UI evidence. Planning changed only existing owner, dependency, privacy, acceptance, semantic and review artifacts."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "home-voice-e2-04-independent-review",
+      "reviewerId": "voice-language-assets-independent-review",
       "blockerCount": 0,
-      "summary": "Owners locate the exact Home microphone session, body-free recovery, native helper/package evidence and macOS titlebar geometry without mixing the separate onboarding request."
+      "summary": "Owners locate the explicit exact-language Apple install request, sender-bound progress lifecycle, native helper/package boundary and separate Start action without mixing onboarding or other Planning work."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "home-voice-e2-04-independent-review",
+      "reviewerId": "voice-language-assets-independent-review",
       "blockerCount": 0,
-      "summary": "PRD, API, architecture, settings, I18N, security and release owners agree on one sender-bound typed speech session, no durable/audio boundary and fixed permission recovery."
+      "summary": "PRD, API, architecture, I18N, security, privacy, dependency, quality and release owners agree that availability/start never download and only explicit install may invoke Apple system ownership."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "home-voice-e2-04-independent-review",
+      "reviewerId": "voice-language-assets-independent-review",
       "blockerCount": 0,
-      "summary": "PIGE-CAP-003/E2.04 planned targets now name the exact macOS evidence and open platform/signing work; semantic lock v3/1,228 preserves every status."
+      "summary": "PIGE-CAP-003/E2.04 planned targets distinguish protocol/UI evidence from an unexecuted real system install; semantic lock v3/1,228 preserves every Requirement, Exit and Phase status."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.7,
-      "reviewerId": "home-voice-e2-04-independent-review",
+      "reviewerId": "voice-language-assets-independent-review",
       "blockerCount": 0,
-      "summary": "The exact candidate has focused 8/133, full 119 passed/1 skipped files and 1,375 passed/1 skipped tests, typecheck/build/helper smoke and arm64 package/distribution evidence."
+      "summary": "The exact candidate has focused 8/145, independent 7/138, full 119 passed/1 skipped files and 1,384 passed/1 skipped tests, typecheck/build/helper/integrity and arm64 package/distribution evidence."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "home-voice-e2-04-independent-review",
+      "reviewerId": "voice-language-assets-independent-review",
       "blockerCount": 0,
-      "summary": "No document or status is added; owner updates reuse existing paths and semantic-neutral compression keeps all five fixed leanness budgets green."
+      "summary": "No document or status is added; the Apple Speech platform API is registered once and existing owners hold the API, network, privacy and evidence deltas."
     }
   ],
   "verification": [
@@ -91,14 +91,14 @@
       "evidence": "The exact combined candidate passes docs, decisions, UI visual, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all quality dimensions."
     },
     {
-      "command": "Exact Home Voice E2.04 evidence",
+      "command": "Exact Apple language-asset install evidence",
       "status": "passed",
-      "evidence": "Focus 8/133, full 119 passed/1 skipped files and 1,375 passed/1 skipped tests, typecheck/build/native helper smoke and macOS arm64 package plus fresh-distribution smoke pass; exact 05b31b62/a296cfea identities are independently accepted."
+      "evidence": "Focus 8/145, independent 7/138, full 119 passed/1 skipped files and 1,384 passed/1 skipped tests, typecheck/build/native helper/integrity and macOS arm64 package plus downloaded-distribution smoke pass; exact ff9106b5/ee4c2473 identities are independently accepted."
     },
     {
       "command": "npm run verify:ui-visual && npm run verify:traceability && npm run verify:contracts",
       "status": "passed",
-      "evidence": "The visual contract covers the integrated 58px macOS titlebar; semantic lock v3/1,228 and CON-001 through CON-004 pass with every status unchanged."
+      "evidence": "The approved assets-unavailable UI exposes one explicit install action without starting it; semantic lock v3/1,228 and CON-001 through CON-004 pass with every status unchanged."
     },
     {
       "command": "npm run verify:documentation-leanness",
@@ -107,18 +107,19 @@
     }
   ],
   "coordination": {
-    "taskId": "home-voice-e2-04-20260716",
-    "taskTitle": "Home Voice E2.04 and macOS titlebar alignment",
+    "taskId": "voice-language-assets-20260716",
+    "taskTitle": "Explicit Apple speech language-asset installation",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The candidate adds one strict local macOS speech session/helper and exact titlebar alignment without Job, source, model, vault, backup, Broker, hidden-download or durable transcript authority.",
-    "acknowledgement": "Development froze exact 05b31b62/a296cfea bytes after independent/UI Design review. Planning bound only existing owner, acceptance, semantic and review paths without changing the 35 paths."
+    "compatibility": "The candidate adds one explicit Apple-managed exact-language install request and body-free sender event stream without implicit download, public cancel, Job, Broker, Skill, model, vault, persistence or recording authority.",
+    "acknowledgement": "Development/UI Design froze exact ff9106b5/ee4c2473 bytes after independent review. Planning bound only existing owner, dependency, privacy, acceptance, semantic and review paths without changing the 25 paths."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
     "PIGE-CAP-003/E2.04 remain planned until publication/full exit acceptance; candidate evidence does not promote a Requirement, Exit or Phase.",
-    "Persisted dictation-language selection and explicit language-asset installation remain open; speech never installs assets implicitly.",
+    "The exact real macOS UI proves the enabled install action but deliberately does not execute Apple-owned non-cancelable download; real installation remains open evidence.",
+    "Persisted dictation-language selection remains open; availability/start never install assets implicitly and installed never auto-records.",
     "macOS x64, Windows/Linux speech, Developer ID, hardened runtime, entitlements, notarization/staple and public trust remain unclaimed.",
     "The separate Welcome/system-locale/Models/Vault onboarding request is excluded."
   ]
