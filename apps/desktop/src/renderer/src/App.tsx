@@ -261,15 +261,27 @@ export function App(): React.JSX.Element {
   };
 
   useEffect(() => {
-    void window.pige.getHealth().then(setHealth);
-    void window.pige.window.current().then(setWindowState);
+    void window.pige.getHealth().then(setHealth).catch((error) => {
+      console.error("Failed to get health status:", error);
+    });
+    void window.pige.window.current().then(setWindowState).catch((error) => {
+      console.error("Failed to get window state:", error);
+    });
     void window.pige.settings.appearance().then((appearance) => {
       setLocale(appearance.locale);
       setAvailableLocales(appearance.availableLocales);
+    }).catch((error) => {
+      console.error("Failed to load appearance settings:", error);
     });
-    void window.pige.system.toolchainHealth().then(setToolchainHealth);
-    void refreshVaultState();
-    void refreshModels().catch(() => undefined);
+    void window.pige.system.toolchainHealth().then(setToolchainHealth).catch((error) => {
+      console.error("Failed to get toolchain health:", error);
+    });
+    void refreshVaultState().catch((error) => {
+      console.error("Failed to refresh vault state:", error);
+    });
+    void refreshModels().catch((error) => {
+      console.error("Failed to refresh models:", error);
+    });
   }, []);
 
   useEffect(() => {
@@ -741,7 +753,11 @@ export function App(): React.JSX.Element {
   const toggleNoteAgent = (): void => {
     const nextOpen = !noteAgentOpen;
     if (nextOpen && sidebarOverlayLayout && sidebarOpen) {
-      void toggleSidebar().then(() => setNoteAgentOpen(true));
+      void toggleSidebar()
+        .then(() => setNoteAgentOpen(true))
+        .catch((error) => {
+          console.error("Failed to toggle sidebar:", error);
+        });
       return;
     }
     setNoteAgentOpen(nextOpen);

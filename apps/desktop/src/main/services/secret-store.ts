@@ -93,7 +93,11 @@ export class JsonSecretStore {
     if (!fs.existsSync(this.#secretsPath)) {
       return { schemaVersion: 1, secrets: [] };
     }
-    const parsed = JSON.parse(fs.readFileSync(this.#secretsPath, "utf8")) as SecretStoreFile;
+    const raw = JSON.parse(fs.readFileSync(this.#secretsPath, "utf8"));
+    if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+      throw new PigeDomainError("secret_store_invalid", "Secret store is invalid.");
+    }
+    const parsed = raw as SecretStoreFile;
     if (parsed.schemaVersion !== 1 || !Array.isArray(parsed.secrets)) {
       throw new PigeDomainError("secret_store_invalid", "Secret store is invalid.");
     }

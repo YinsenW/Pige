@@ -279,7 +279,11 @@ export function CurrentNoteAgent(props: {
 
   const cancel = async (): Promise<void> => {
     if (!latestTurn || (latestTurn.state !== "running" && latestTurn.state !== "cancel_requested")) return;
-    await window.pige.jobs.cancel({ jobId: latestTurn.jobId }).catch(() => undefined);
+    try {
+      await window.pige.jobs.cancel({ jobId: latestTurn.jobId });
+    } catch (error) {
+      console.error("Failed to cancel job:", error);
+    }
     await refreshTimeline();
   };
 
@@ -287,7 +291,11 @@ export function CurrentNoteAgent(props: {
     if (effectiveError?.retryable !== true || effectiveError.userAction !== "retry") return;
     setError(null);
     if (currentJobId) {
-      await window.pige.jobs.retry({ jobId: currentJobId }).catch(() => undefined);
+      try {
+        await window.pige.jobs.retry({ jobId: currentJobId });
+      } catch (error) {
+        console.error("Failed to retry job:", error);
+      }
     }
     await refreshTimeline();
   };
