@@ -9,8 +9,8 @@
   "type": "module",
   "main": "./out/main/index.js",
   "scripts": {
-    "dev": "node ../../scripts/build/macos-vision-ocr-helper.mjs && electron-vite dev",
-    "build": "node ../../scripts/build/macos-vision-ocr-helper.mjs && electron-vite build",
+    "dev": "node ../../scripts/build/macos-vision-ocr-helper.mjs && node ../../scripts/build/macos-speech-helper.mjs && electron-vite dev",
+    "build": "node ../../scripts/build/macos-vision-ocr-helper.mjs && node ../../scripts/build/macos-speech-helper.mjs && electron-vite build",
     "package:dir:mac:arm64": "node ../../scripts/release/run-electron-builder.mjs --platform=macos --arch=arm64",
     "package:dir:win:x64": "node ../../scripts/release/run-electron-builder.mjs --platform=windows --arch=x64",
     "smoke:electron-undici-transport": "electron scripts/electron-undici-transport-smoke.mjs",

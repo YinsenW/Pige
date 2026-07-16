@@ -150,8 +150,10 @@ OCR:
 
 Speech:
 
-- macOS SpeechAnalyzer/SpeechTranscriber should use the selected dictation language when supported.
-- The microphone button should expose current dictation language in a compact way.
+- Each macOS SpeechAnalyzer session receives an explicit BCP 47 tag, currently defaulted
+  from app locale; persisted dictation-language selection remains open.
+- Availability distinguishes installed assets; missing assets stay unavailable and are
+  never installed by speech. Localized state may show the active language compactly.
 - Unsupported dictation languages should show a clear disabled or unavailable state.
 - Voice input language is not necessarily the same as UI language.
 

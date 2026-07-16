@@ -485,7 +485,11 @@ Tests must verify:
 - Main workflows are keyboard reachable.
 - Focus states are visible.
 - Icon-only buttons have labels/tooltips.
-- Skills/Voice/update development surfaces invoke no fake IPC/state; diagnostics stays typed and redacted.
+- Skills/update surfaces invoke no fake state. Voice tests cover explicit one-sender
+  sessions, monotonic replacement/meter, non-submitting Stop/Done, safe insertion,
+  teardown/recovery/assets, framing bounds and no audio egress.
+- macOS speech package evidence binds helper manifest, usage copy, nested seal, real UI,
+  distribution smoke and zero post-seal Bundle writes.
 - Reduced motion is respected.
 - Long French/German labels do not overflow critical controls.
 - CJK text renders cleanly.

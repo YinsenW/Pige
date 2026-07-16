@@ -22,7 +22,15 @@ import type {
   OnboardingStatus,
   PermissionPendingRequest,
   PermissionResolveRequest,
-  PermissionResolveResult
+  PermissionResolveResult,
+  SpeechAvailabilityRequest,
+  SpeechAvailabilityResult,
+  SpeechCancelRequest,
+  SpeechSessionEvent,
+  SpeechSessionRequest,
+  SpeechStartRequest,
+  SpeechStartResult,
+  SpeechStopResult
 } from "@pige/contracts";
 import deMessages from "../../apps/desktop/src/renderer/src/locales/de/messages.json";
 import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.json";
@@ -64,21 +72,183 @@ afterEach(() => {
 });
 
 describe("Home durable Agent conversation UI", () => {
-  it("keeps the unsupported production voice trigger disabled with an accessible explanation", async () => {
+  it("probes unsupported voice on demand without starting a session", async () => {
     const dom = createDom(420);
     const harness = createHarness(undefined);
     const { container, root } = await mountHome(dom, makePigeApi(harness));
-    const voiceButton = buttonsByAriaLabel(container, enMessages["home.voice.unsupportedTitle"])[0]!;
+    const voiceButton = buttonsByAriaLabel(container, enMessages["home.voice.start"])[0]!;
 
-    expect(voiceButton.disabled).toBe(true);
-    expect(voiceButton.title).toBe(enMessages["home.voice.unsupportedTitle"]);
-    expect(voiceButton.getAttribute("aria-describedby")).toBe("home-voice-unavailable-description");
-    expect(container.querySelector("#home-voice-unavailable-description")?.textContent)
-      .toBe(enMessages["home.voice.unsupportedDescription"]);
+    expect(voiceButton.disabled).toBe(false);
+    expect(voiceButton.title).toBe(enMessages["home.voice.start"]);
     expect(container.querySelector(".home-voice-panel")).toBeNull();
+    await clickButtonByAriaLabel(dom, container, enMessages["home.voice.start"]);
+    await waitFor(dom, () => container.textContent?.includes(enMessages["home.voice.unsupportedTitle"]) === true);
+    expect(harness.speechAvailabilityRequests).toEqual([{ languageTag: "en" }]);
+    expect(harness.speechStartRequests).toEqual([]);
+    expect(harness.submitRequests).toEqual([]);
 
     await act(async () => root.unmount());
     dom.window.close();
+  });
+
+  it("keeps metering local and appends the final transcript without auto-send", async () => {
+    const dom = createDom(420);
+    const harness = createHarness(undefined);
+    const sessionId = "speech_1234567890abcdef";
+    harness.speechAvailability = {
+      status: "supported",
+      languageTag: "en",
+      permission: "granted",
+      canOpenSystemSettings: true
+    };
+    harness.speechStartResult = {
+      status: "started",
+      requestId: "speechreq_1234567890abcdef",
+      sessionId,
+      languageTag: "en",
+      metering: "available"
+    };
+    harness.speechStopResult = {
+      status: "stopped",
+      sessionId,
+      sequence: 4,
+      transcript: "dictated locally"
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    await setTextareaValue(dom, container, "Existing draft");
+
+    await clickButtonByAriaLabel(dom, container, enMessages["home.voice.start"]);
+    await waitFor(dom, () => container.querySelector(".home-voice-recording-row") !== null);
+    await act(async () => {
+      harness.emitSpeech({
+        apiVersion: 1,
+        kind: "meter",
+        sessionId,
+        sequence: 1,
+        elapsedMs: 1_200,
+        level: 0.4
+      });
+      harness.emitSpeech({
+        apiVersion: 1,
+        kind: "transcript_replace",
+        sessionId,
+        sequence: 2,
+        transcript: "dictated",
+        final: false
+      });
+      await settle(dom);
+    });
+    expect(container.querySelector(".home-voice-timer")?.textContent).toBe("0:01");
+    expect(container.querySelector(".home-voice-wave.has-levels")?.children).toHaveLength(1);
+
+    await clickButtonByAriaLabel(dom, container, enMessages["home.voice.complete"]);
+    await waitFor(dom, () => homeComposer(container).value === "Existing draft dictated locally");
+    expect(harness.speechStopRequests).toEqual([{ sessionId }]);
+    expect(harness.submitRequests).toEqual([]);
+    expect(harness.jobs).toEqual([]);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("cancels a pending start by request identity and joins CJK without an invented space", async () => {
+    const dom = createDom(420);
+    const harness = createHarness(undefined);
+    const sessionId = "speech_abcdef1234567890";
+    let releaseStart: (() => void) | undefined;
+    harness.speechAvailability = {
+      status: "supported",
+      languageTag: "en",
+      permission: "not-determined",
+      canOpenSystemSettings: true
+    };
+    harness.startSpeech = (request) => new Promise<SpeechStartResult>((resolve) => {
+      releaseStart = () => resolve({
+        status: "started",
+        requestId: request.requestId,
+        sessionId,
+        languageTag: request.languageTag,
+        metering: "unavailable"
+      });
+    });
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    await setTextareaValue(dom, container, "你好");
+    await clickButtonByAriaLabel(dom, container, enMessages["home.voice.start"]);
+    await waitFor(dom, () => harness.speechStartRequests.length === 1);
+    await clickButton(dom, container, enMessages["home.voice.cancel"]);
+    const pendingRequestId = harness.speechStartRequests[0]!.requestId;
+    expect(harness.speechCancelRequests).toEqual([{ requestId: pendingRequestId }]);
+    await act(async () => {
+      releaseStart?.();
+      await settle(dom);
+    });
+    expect(container.querySelector(".home-voice-panel")).toBeNull();
+
+    harness.startSpeech = async (request) => ({
+      status: "started",
+      requestId: request.requestId,
+      sessionId,
+      languageTag: request.languageTag,
+      metering: "unavailable"
+    });
+    harness.speechStopResult = {
+      status: "stopped",
+      sessionId,
+      sequence: 1,
+      transcript: "世界"
+    };
+    await clickButtonByAriaLabel(dom, container, enMessages["home.voice.start"]);
+    await waitFor(dom, () => container.querySelector(".home-voice-recording-row") !== null);
+    await clickButtonByAriaLabel(dom, container, enMessages["home.voice.complete"]);
+    await waitFor(dom, () => homeComposer(container).value === "你好世界");
+    expect(harness.submitRequests).toEqual([]);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("preserves word boundaries after English punctuation and between Korean segments", async () => {
+    const scenarios = [
+      { draft: "Hello.", transcript: "Next sentence", expected: "Hello. Next sentence" },
+      { draft: "안녕하세요", transcript: "반갑습니다", expected: "안녕하세요 반갑습니다" },
+      { draft: "你好。", transcript: "世界", expected: "你好。世界" },
+      { draft: "こんにちは。", transcript: "次です", expected: "こんにちは。次です" }
+    ];
+
+    for (const [index, scenario] of scenarios.entries()) {
+      const dom = createDom(420);
+      const harness = createHarness(undefined);
+      const sessionId = `speech_boundary_${index}_abcdef123456`;
+      harness.speechAvailability = {
+        status: "supported",
+        languageTag: index === 0 ? "en" : "ko",
+        permission: "granted",
+        canOpenSystemSettings: true
+      };
+      harness.speechStartResult = {
+        status: "started",
+        requestId: `speechreq_boundary_${index}_abcdef`,
+        sessionId,
+        languageTag: index === 0 ? "en" : "ko",
+        metering: "unavailable"
+      };
+      harness.speechStopResult = {
+        status: "stopped",
+        sessionId,
+        sequence: 1,
+        transcript: scenario.transcript
+      };
+      const { container, root } = await mountHome(dom, makePigeApi(harness));
+      await setTextareaValue(dom, container, scenario.draft);
+      await clickButtonByAriaLabel(dom, container, enMessages["home.voice.start"]);
+      await waitFor(dom, () => container.querySelector(".home-voice-recording-row") !== null);
+      await clickButtonByAriaLabel(dom, container, enMessages["home.voice.complete"]);
+      await waitFor(dom, () => homeComposer(container).value === scenario.expected);
+      expect(harness.submitRequests).toEqual([]);
+
+      await act(async () => root.unmount());
+      dom.window.close();
+    }
   });
 
   it("lets the Models panel solely own its scoped summary failure after Home loads", async () => {
@@ -1817,6 +1987,11 @@ interface ConversationHarness {
   readonly retryJobIds: string[];
   readonly cancelJobIds: string[];
   readonly setDefaultModelIds: string[];
+  readonly speechAvailabilityRequests: SpeechAvailabilityRequest[];
+  readonly speechStartRequests: SpeechStartRequest[];
+  readonly speechStopRequests: SpeechSessionRequest[];
+  readonly speechCancelRequests: SpeechCancelRequest[];
+  readonly speechListeners: Set<(event: SpeechSessionEvent) => void>;
   readonly undoOperationIds: string[];
   readonly draftListeners: Set<(event: AgentTurnDraftEvent) => void>;
   activityUndoMode: "success" | "post_commit_reject" | "retryable_reject" | "unknown_reject";
@@ -1837,9 +2012,14 @@ interface ConversationHarness {
   loadModelSummary: () => Promise<ModelProviderSettingsSummary>;
   loadAgentRuntimeStatus: () => Promise<AgentRuntimeStatus | null>;
   setDefaultModel: (modelProfileId: string) => Promise<void>;
+  speechAvailability: SpeechAvailabilityResult;
+  speechStartResult: SpeechStartResult;
+  speechStopResult: SpeechStopResult;
+  startSpeech: (request: SpeechStartRequest) => Promise<SpeechStartResult>;
   loadConversation: () => Promise<AgentConversationTimeline | undefined>;
   submitTurn: (request: AgentSubmitTurnRequest) => Promise<AgentSubmitTurnResult>;
   emitDraft: (event: AgentTurnDraftEvent) => void;
+  emitSpeech: (event: SpeechSessionEvent) => void;
 }
 
 function createHarness(timeline: AgentConversationTimeline | undefined): ConversationHarness {
@@ -1854,6 +2034,11 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     retryJobIds: [],
     cancelJobIds: [],
     setDefaultModelIds: [],
+    speechAvailabilityRequests: [],
+    speechStartRequests: [],
+    speechStopRequests: [],
+    speechCancelRequests: [],
+    speechListeners: new Set(),
     undoOperationIds: [],
     draftListeners: new Set(),
     activityUndoMode: "success",
@@ -1880,6 +2065,30 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     setDefaultModel: async (modelProfileId) => {
       harness.setDefaultModelIds.push(modelProfileId);
     },
+    speechAvailability: {
+      status: "unsupported",
+      reason: "unsupported_platform",
+      canOpenSystemSettings: false
+    },
+    speechStartResult: {
+      status: "blocked",
+      requestId: "speechreq_1234567890abcdef",
+      error: {
+        code: "speech.unsupported_platform",
+        domain: "speech",
+        messageKey: "errors.speech.unsupported_platform",
+        retryable: false,
+        severity: "warning",
+        userAction: "none"
+      }
+    },
+    speechStopResult: {
+      status: "stale_session",
+      sessionId: "speech_1234567890abcdef"
+    },
+    startSpeech: async (speechRequest) => harness.speechStartResult.status === "started"
+      ? { ...harness.speechStartResult, requestId: speechRequest.requestId }
+      : { ...harness.speechStartResult, requestId: speechRequest.requestId },
     loadConversation: async () => harness.timeline,
     submitTurn: async (request) => {
       harness.submitRequests.push(request);
@@ -1887,6 +2096,9 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     },
     emitDraft: (event) => {
       for (const listener of harness.draftListeners) listener(event);
+    },
+    emitSpeech: (event) => {
+      for (const listener of harness.speechListeners) listener(event);
     }
   };
   return harness;
@@ -2029,6 +2241,31 @@ function makePigeApi(harness: ConversationHarness): object {
       summary: () => harness.loadModelSummary(),
       setDefaultModel: ({ modelProfileId }: { readonly modelProfileId: string }) =>
         harness.setDefaultModel(modelProfileId)
+    },
+    speech: {
+      availability: async (request: SpeechAvailabilityRequest) => {
+        harness.speechAvailabilityRequests.push(request);
+        return harness.speechAvailability;
+      },
+      start: async (request: SpeechStartRequest) => {
+        harness.speechStartRequests.push(request);
+        return harness.startSpeech(request);
+      },
+      stop: async (request: SpeechSessionRequest) => {
+        harness.speechStopRequests.push(request);
+        return harness.speechStopResult;
+      },
+      cancel: async (request: SpeechCancelRequest) => {
+        harness.speechCancelRequests.push(request);
+        return "sessionId" in request
+          ? { status: "canceled" as const, sessionId: request.sessionId }
+          : { status: "canceled" as const, requestId: request.requestId };
+      },
+      openSystemSettings: async () => ({ status: "opened" as const }),
+      onSessionEvent: (listener: (event: SpeechSessionEvent) => void) => {
+        harness.speechListeners.add(listener);
+        return () => harness.speechListeners.delete(listener);
+      }
     },
     agent: {
       runtimeStatus: () => harness.loadAgentRuntimeStatus(),

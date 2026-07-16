@@ -23,6 +23,8 @@ extraResources:
     to: release
 mac:
   category: public.app-category.productivity
+  extendInfo:
+    NSMicrophoneUsageDescription: Pige uses the microphone only while you explicitly dictate text.
   icon: ../../resources/brand/pige-icon/macos/Pige.icns
   artifactName: Pige-${version}-${arch}.${ext}
   extraResources:

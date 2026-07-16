@@ -398,15 +398,16 @@ User-visible behavior, supported-platform fallback, local-only privacy, and tran
 editing are owned by [`PRD.md`](PRD.md#1011-voice-input); dictation-language behavior is
 owned by `I18N_DESIGN.md`.
 
-Suggested implementation boundary:
+Implemented macOS boundary:
 
-- Renderer shows microphone, listening, partial transcript, and unsupported states.
-- Preload exposes typed start/stop APIs and transcription events.
-- Main process owns permission checks and native bridge calls.
-- A Swift helper, native Node module, or Electron native addon can host SpeechAnalyzer integration.
+- Renderer owns explicit start/Stop/Done, editable replacement text and stale events;
+  preload exposes only API-owned strict schemas, never audio/native handles.
+- Main owns one sender-bound session, on-demand permission, fixed Settings recovery and
+  teardown. Verified `pige-speech` runs SpeechAnalyzer in a reduced, bounded NDJSON
+  helper with no asset download or cloud speech.
 
-The eventual event vocabulary must be a shared executable schema exposed through the
-API Owner; architecture prose must not become a second event enum.
+The executable vocabulary in `packages/schemas/src/index.ts` is authoritative; this
+architecture does not carry a second event enum.
 
 ### 5.1.7 Vault Runtime And File Watcher Service
 
@@ -1126,6 +1127,8 @@ Electron main process responsibilities:
   `#00000000` overlay, `#6f6f6f` symbols and `58px` height; leave Linux defaults intact.
   Never use `frame:false`. If Windows transparency is unstable, only main may fall back
   to approved `#f7f7f7`; renderer layout does not change.
+- macOS uses traffic lights at `17,17`, an `84px` renderer inset and `-5px`
+  navigation/pin offset so one 58px titlebar stays aligned.
 - macOS is the early assembled/package acceptance path. Windows/Linux native-shell
   qualification is deferred unless targeted; adapters stay portable and unverified
   platforms are not claimed.
@@ -1862,7 +1865,7 @@ Waiver rules:
 
 | Dependency | Status | Pige usage | Upstream source | Pin/update policy | Data boundary and notes |
 | --- | --- | --- | --- | --- | --- |
-| Apple SpeechAnalyzer/SpeechTranscriber | required | Local voice dictation in capture input on macOS 26 or later when supported. | https://developer.apple.com/documentation/speech/speechanalyzer | Runtime capability detection; no app-level version pin. | Do not send microphone audio to cloud providers for dictation. |
+| Apple SpeechAnalyzer/SpeechTranscriber | required | Local voice dictation through the app-owned `pige-speech` helper on macOS 26 or later when supported. | https://developer.apple.com/documentation/speech/speechanalyzer | Pin through the macOS 26 SDK/helper protocol and adjacent binary manifest; rerun helper, permission, transcript, package and seal smokes on update. | Native audio never crosses into Electron/TypeScript or cloud providers; missing language assets remain unavailable and are not installed by speech. |
 | Apple Vision framework (`ocr.apple-vision`) | required | `RecognizeDocumentsRequest` revision 1 with `RecognizeTextRequest` revision 3 fallback for local image OCR on macOS 26+. | https://developer.apple.com/documentation/vision/recognizedocumentsrequest | Pin request revisions in the helper manifest; re-run source and packaged native smoke before changing SDK/Xcode. | Runtime-provided local platform OCR; no source text leaves the device. |
 | Apple Vision text recognition | required | Simpler image OCR fallback on supported macOS versions. | https://developer.apple.com/documentation/vision | Runtime capability detection. | Local platform OCR. |
 | Apple ImageIO/CoreGraphics/UniformTypeIdentifiers (`ocr.apple-media-frameworks`) | required | Validate and bounded-decode raster image inputs before Vision recognition. | https://developer.apple.com/documentation/imageio | Pin through the macOS 26 SDK used for the helper build; rerun invalid-format, frame, dimension, and decode fixtures on update. | Runtime-provided platform APIs in the isolated native helper. |

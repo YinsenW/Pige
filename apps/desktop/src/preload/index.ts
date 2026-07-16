@@ -75,6 +75,16 @@ import type {
   SetSidebarOpenRequest,
   SetWindowModeRequest,
   SettingsRegistrySummary,
+  SpeechAvailabilityRequest,
+  SpeechAvailabilityResult,
+  SpeechCancelRequest,
+  SpeechCancelResult,
+  SpeechOpenSystemSettingsResult,
+  SpeechSessionEvent,
+  SpeechSessionRequest,
+  SpeechStartRequest,
+  SpeechStartResult,
+  SpeechStopResult,
   SupportBundleExportResult,
   SupportBundlePreview,
   ToolchainHealth,
@@ -87,7 +97,17 @@ import type {
 } from "@pige/contracts";
 import {
   RetrievalSearchRequestSchema,
-  RetrievalSearchResultSchema
+  RetrievalSearchResultSchema,
+  SpeechAvailabilityRequestSchema,
+  SpeechAvailabilityResultSchema,
+  SpeechCancelRequestSchema,
+  SpeechCancelResultSchema,
+  SpeechOpenSystemSettingsResultSchema,
+  SpeechSessionEventSchema,
+  SpeechSessionRequestSchema,
+  SpeechStartRequestSchema,
+  SpeechStartResultSchema,
+  SpeechStopResultSchema
 } from "@pige/schemas";
 
 function isRestoreMode(value: unknown): value is RestoreMode {
@@ -389,6 +409,34 @@ const api: PigeDesktopApi = {
       ipcRenderer.invoke("settings.setLocale", request) as Promise<AppearanceSettingsSummary>,
     registry: async (): Promise<SettingsRegistrySummary> =>
       ipcRenderer.invoke("settings.registry") as Promise<SettingsRegistrySummary>
+  },
+  speech: {
+    availability: async (request: SpeechAvailabilityRequest): Promise<SpeechAvailabilityResult> => {
+      const parsedRequest = SpeechAvailabilityRequestSchema.parse(request);
+      return SpeechAvailabilityResultSchema.parse(await ipcRenderer.invoke("speech.availability", parsedRequest));
+    },
+    start: async (request: SpeechStartRequest): Promise<SpeechStartResult> => {
+      const parsedRequest = SpeechStartRequestSchema.parse(request);
+      return SpeechStartResultSchema.parse(await ipcRenderer.invoke("speech.start", parsedRequest));
+    },
+    stop: async (request: SpeechSessionRequest): Promise<SpeechStopResult> => {
+      const parsedRequest = SpeechSessionRequestSchema.parse(request);
+      return SpeechStopResultSchema.parse(await ipcRenderer.invoke("speech.stop", parsedRequest));
+    },
+    cancel: async (request: SpeechCancelRequest): Promise<SpeechCancelResult> => {
+      const parsedRequest = SpeechCancelRequestSchema.parse(request);
+      return SpeechCancelResultSchema.parse(await ipcRenderer.invoke("speech.cancel", parsedRequest));
+    },
+    openSystemSettings: async (): Promise<SpeechOpenSystemSettingsResult> =>
+      SpeechOpenSystemSettingsResultSchema.parse(await ipcRenderer.invoke("speech.openSystemSettings")),
+    onSessionEvent: (listener: (event: SpeechSessionEvent) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, value: unknown): void => {
+        const parsed = SpeechSessionEventSchema.safeParse(value);
+        if (parsed.success) listener(parsed.data);
+      };
+      ipcRenderer.on("speech.sessionEvent", handler);
+      return () => ipcRenderer.removeListener("speech.sessionEvent", handler);
+    }
   },
   backup: {
     status: async (): Promise<BackupRestoreStatus> =>

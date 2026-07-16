@@ -582,97 +582,207 @@ button.ghost {
 
 .home-voice-panel {
   width: 100%;
-  margin-bottom: 10px;
-  border: .5px solid var(--border-default);
-  border-radius: 16px;
-  padding: 14px;
-  background: var(--surface);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 4%);
-}
-
-.home-voice-eyebrow {
-  color: var(--text-tertiary);
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: .04em;
-  text-transform: uppercase;
-}
-
-.home-voice-panel h2 {
-  margin: 5px 0;
+  min-width: 0;
   color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.45;
-}
-
-.home-voice-panel h2:focus-visible { outline: none; }
-
-.home-voice-panel p {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 11px;
-  line-height: 1.55;
 }
 
 .home-voice-wave {
-  height: 24px;
+  min-width: 0;
+  height: 34px;
   display: flex;
+  flex: 1;
   align-items: center;
-  gap: 3px;
-  margin: 12px 0;
+  gap: 2px;
+  overflow: hidden;
 }
 
 .home-voice-wave span {
-  width: 3px;
+  width: 2px;
+  min-width: 2px;
   border-radius: 999px;
-  background: var(--accent);
-  animation: home-voice-level 900ms ease-in-out infinite alternate;
+  background: currentColor;
 }
 
-.home-voice-wave span:nth-child(1) { height: 8px; animation-delay: -720ms; }
-.home-voice-wave span:nth-child(2) { height: 17px; animation-delay: -540ms; }
-.home-voice-wave span:nth-child(3) { height: 23px; animation-delay: -360ms; }
-.home-voice-wave span:nth-child(4) { height: 12px; animation-delay: -180ms; }
-.home-voice-wave span:nth-child(5) { height: 19px; animation-delay: -90ms; }
-.home-voice-wave span:nth-child(6) { height: 7px; }
-
-@keyframes home-voice-level {
-  from { transform: scaleY(.65); opacity: .55; }
-  to { transform: scaleY(1); opacity: 1; }
+.home-voice-wave.is-neutral {
+  color: var(--text-tertiary);
+  opacity: .72;
 }
 
-.home-voice-actions {
+.home-voice-recording-row {
+  min-height: 58px;
   display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 2px 4px;
+}
+
+.home-voice-timer {
+  flex: none;
+  min-width: 3ch;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.home-voice-add {
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  display: inline-grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.home-voice-add svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.5;
+}
+
+.home-voice-add:disabled { opacity: .42; }
+
+.home-voice-icon-action {
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
+  display: inline-grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  background: var(--surface-muted);
+  color: var(--text-primary);
+}
+
+.home-voice-icon-action.stop span {
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.home-voice-icon-action.complete {
+  background: var(--text-primary);
+  color: var(--surface);
+}
+
+.home-voice-icon-action.complete svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.home-voice-icon-action:disabled { opacity: .42; }
+
+.home-voice-transcript-state,
+.home-voice-inline-notice {
+  display: grid;
+  gap: 10px;
+}
+
+.home-voice-transcript {
+  width: 100%;
+  min-height: 62px;
+  resize: none;
+  border: 0;
+  outline: none;
+  padding: 4px 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  line-height: 1.55;
+}
+
+.home-voice-inline-footer,
+.home-voice-inline-actions {
+  display: flex;
+  align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: 7px;
-  margin-top: 14px;
 }
 
-.home-voice-actions button {
-  min-height: 32px;
+.home-voice-inline-footer > span {
+  flex: 1;
+  min-width: 150px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.home-voice-inline-copy {
+  display: grid;
+  gap: 3px;
+  padding: 3px 0;
+}
+
+.home-voice-inline-copy strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.home-voice-inline-copy span {
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.home-voice-asset-progress {
+  width: 100%;
+  height: 3px;
+  margin-top: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-muted);
+}
+
+.home-voice-asset-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+.home-voice-inline-footer button,
+.home-voice-inline-actions button {
+  min-height: 30px;
   border: .5px solid var(--border-default);
   border-radius: 9px;
-  padding: 6px 12px;
-  background: var(--surface);
+  padding: 5px 10px;
+  background: transparent;
   color: var(--text-primary);
   font-size: 12px;
   font-weight: 500;
 }
 
-.home-voice-actions button:hover:not(:disabled) { background: var(--surface-muted); }
+.home-voice-inline-footer button:hover:not(:disabled),
+.home-voice-inline-actions button:hover:not(:disabled) { background: var(--surface-muted); }
 
-.home-voice-actions .primary {
+.home-voice-inline-footer .primary,
+.home-voice-inline-actions .primary {
   border-color: var(--text-primary);
   background: var(--text-primary);
   color: var(--surface);
 }
 
-.home-voice-actions button:disabled { opacity: .45; }
+.home-voice-inline-footer button:disabled,
+.home-voice-inline-actions button:disabled { opacity: .45; }
 
-@media (prefers-reduced-motion: reduce) {
-  .home-voice-wave span { animation: none; }
+@media (max-width: 420px) {
+  .home-voice-recording-row { gap: 8px; }
+  .home-voice-wave span { width: 1.5px; min-width: 1.5px; }
+  .home-voice-icon-action { width: 36px; min-width: 36px; height: 36px; }
 }
 
 .job-strip {
@@ -3064,10 +3174,14 @@ dd {
 
 .topbar-actions { margin-left: auto; }
 
-/* hiddenInset keeps macOS traffic lights near the top edge of the 58px drag region. */
+/* Match the native traffic-light center after the main-owned hiddenInset position. */
+.app-window.platform-macos .titlebar {
+  padding-left: 84px;
+}
+
 .app-window.platform-macos .titlebar-navigation,
 .app-window.platform-macos .topbar-actions {
-  transform: translateY(-11px);
+  transform: translateY(-5px);
 }
 
 .icon-button {

@@ -171,7 +171,7 @@ This table is the v0.1 baseline. Implementation can split storage files differen
 | Local embedding model status | Local Capabilities | `derived_status` plus machine asset | Local RAG Engine, Local Tool Service | OS app data | No | `permission_and_confirmation` | After download/remove job |
 | OCR engine preference | Local Capabilities | `machine_local` | OCR Service | OS app data | No | `none` | New OCR jobs |
 | OCR language hints | Local Capabilities | `machine_local` | OCR Service, I18N Service | OS app data | No | `none` | New OCR jobs |
-| Speech input enabled | Local Capabilities | `machine_local` | Speech Service | OS app data | No | `os_permission` | Immediate |
+| Speech input availability | Local Capabilities | `derived_status` | Speech Service | None | No | `os_permission` on start | Re-probe per language; not persisted |
 | Parser/toolchain health | Local Capabilities/System | `derived_status` | Runtime Capability Service, Local Tool Service | `resources/toolchain-manifest/` plus resolved bundled paths | No | `none` | Recomputed/repair job |
 | `PIGE.md` policy | Agent & Memory | `vault_portable` | Vault Service, Agent Orchestrator | `PIGE.md` | Yes | `explicit_confirmation` | Requires validation and proposal |
 | Agent behavior preferences | Agent & Memory | `vault_portable` or `machine_local` by item | Agent Orchestrator | `.pige/config.json` or OS app data | Depends | `none` | Usually new jobs; exceptional boundary changes use their own guarded setting |
@@ -243,7 +243,7 @@ Agent-affecting settings are not free-form prompt snippets. They compile into ty
 | Exceptional intervention compatibility | `confirmation.*` | Yes | Agent Orchestrator, Change Proposal Service | New jobs |
 | Local embedding model status | `retrieval.vectorSearchAvailable` | Maybe | Local RAG Engine | New retrieval/index jobs |
 | Parser/toolchain health | `localCapabilities.parserToolchainReady` | Maybe | Local Tool Service, Parser Service | New parser jobs |
-| Speech input enabled | `localCapabilities.speechInputAvailable` | No for Agent | Speech Service | New dictation sessions |
+| Speech input availability | `localCapabilities.speechInputAvailable` | No for Agent | Speech Service | Per session; defaults to app locale, persisted dictation language open |
 | Vault-scoped Skill enablement | Tool availability and capability scope | Yes, scoped | Skill Registry Service, Permission Broker | New Agent runs |
 | Pi package install records | Tool availability and capability scope | Yes, scoped | Pi Package Registry Service, Permission Broker | New Agent runs |
 

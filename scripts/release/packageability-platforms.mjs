@@ -16,10 +16,15 @@ const definitions = {
     packagedRuntimeSmokeTimeoutMs: 60_000,
     requiredResourceFiles: [
       "native/macos/arm64/pige-vision-ocr",
-      "native/macos/arm64/pige-vision-ocr.manifest.json"
+      "native/macos/arm64/pige-vision-ocr.manifest.json",
+      "native/macos/arm64/pige-speech",
+      "native/macos/arm64/pige-speech.manifest.json"
     ],
-    requiredSbomComponents: ["pige-vision-ocr"],
-    nativeSmokeScript: "scripts/verify/macos-vision-ocr-helper-smoke.mjs"
+    requiredSbomComponents: ["pige-speech", "pige-vision-ocr"],
+    nativeSmokeScripts: [
+      "scripts/verify/macos-vision-ocr-helper-smoke.mjs",
+      "scripts/verify/macos-speech-helper-smoke.mjs"
+    ]
   },
   "windows-x64": {
     platform: "windows",
@@ -35,7 +40,8 @@ const definitions = {
     builderPlatformFlag: "--win",
     packagedRuntimeSmokeTimeoutMs: 120_000,
     requiredResourceFiles: [],
-    requiredSbomComponents: []
+    requiredSbomComponents: [],
+    nativeSmokeScripts: []
   }
 };
 

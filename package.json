@@ -18,6 +18,7 @@
     "dev": "tsc -b tsconfig.packages.json --pretty false && install-electron --no && npm run dev --workspace @pige/desktop",
     "build": "npm run build --workspaces --if-present",
     "build:native:macos-ocr": "node scripts/build/macos-vision-ocr-helper.mjs",
+    "build:native:macos-speech": "node scripts/build/macos-speech-helper.mjs",
     "typecheck": "tsc -b tsconfig.packages.json --pretty false && npm run typecheck --workspace @pige/desktop",
     "test": "vitest run",
     "test:eval": "vitest run tests/evals",
@@ -58,7 +59,8 @@
     "smoke:parser-workers": "node scripts/verify/parser-worker-smoke.mjs",
     "smoke:index-rebuild-worker": "node scripts/verify/local-database-rebuild-worker-smoke.mjs",
     "evidence:local-scale": "node scripts/release/local-database-scale-evidence.mjs",
-    "smoke:macos-vision-ocr": "node scripts/build/macos-vision-ocr-helper.mjs && node scripts/verify/macos-vision-ocr-helper-smoke.mjs && vitest run tests/unit/macos-vision-ocr-adapter-smoke.test.ts"
+    "smoke:macos-vision-ocr": "node scripts/build/macos-vision-ocr-helper.mjs && node scripts/verify/macos-vision-ocr-helper-smoke.mjs && vitest run tests/unit/macos-vision-ocr-adapter-smoke.test.ts",
+    "smoke:macos-speech": "node scripts/build/macos-speech-helper.mjs && node scripts/verify/macos-speech-helper-smoke.mjs"
   },
   "dependencies": {
     "react": "19.2.7",

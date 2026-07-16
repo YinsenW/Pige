@@ -64,6 +64,9 @@ describe("Home voice UI", () => {
       root.render(createElement(HomeVoicePanel, {
         state: "recording",
         transcript: "Editable local transcript",
+        elapsedMs: 19_000,
+        levels: [0, 0.2, 0.65, 1, 0.4, 0.1],
+        onAttach: () => undefined,
         onDismiss: () => undefined,
         onStop: () => undefined,
         onComplete: () => undefined,
@@ -71,8 +74,11 @@ describe("Home voice UI", () => {
       }));
     });
     expect(container.querySelector(".home-voice-wave")).not.toBeNull();
+    expect(container.querySelector(".home-voice-recording-row")).not.toBeNull();
+    expect(container.querySelector(".home-voice-timer")?.textContent).toBe("0:19");
+    expect(container.querySelector(".home-voice-wave.has-levels")?.children).toHaveLength(6);
     expect(container.textContent).toContain("Editable local transcript");
-    expect(container.querySelectorAll("button")).toHaveLength(2);
+    expect(container.querySelectorAll("button")).toHaveLength(3);
 
     await act(async () => {
       root.render(createElement(HomeVoicePanel, {
@@ -88,23 +94,215 @@ describe("Home voice UI", () => {
     dom.window.close();
   });
 
+  it("keeps language asset installation explicit and driven only by typed progress", async () => {
+    const dom = createDom();
+    const container = dom.window.document.getElementById("root")!;
+    const root = createRoot(container);
+    let installed = 0;
+
+    await act(async () => {
+      root.render(createElement(HomeVoicePanel, {
+        state: "assets_unavailable",
+        onInstallLanguageAsset: () => { installed += 1; },
+        onDismiss: () => undefined,
+        t: translate(enMessages)
+      }));
+    });
+    expect(container.textContent).toContain(enMessages["home.voice.assetsUnavailableTitle"]);
+    expect(container.querySelector('[role="progressbar"]')).toBeNull();
+    await act(async () => {
+      Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
+        .find((button) => button.textContent === enMessages["home.voice.installLanguageAsset"])!
+        .click();
+    });
+    expect(installed).toBe(1);
+
+    await act(async () => {
+      root.render(createElement(HomeVoicePanel, {
+        state: "installing_asset",
+        assetInstallProgress: 42,
+        onDismiss: () => undefined,
+        t: translate(enMessages)
+      }));
+    });
+    const progress = container.querySelector<HTMLElement>('[role="progressbar"]')!;
+    expect(progress.getAttribute("aria-valuenow")).toBe("42");
+    expect(container.querySelector<HTMLButtonElement>("button.primary")?.disabled).toBe(true);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("covers permission, stopped, on-device transcription, ready and generic failure states", async () => {
+    const dom = createDom();
+    const container = dom.window.document.getElementById("root")!;
+    const root = createRoot(container);
+    let completed = 0;
+    let retried = 0;
+
+    await act(async () => {
+      root.render(createElement(HomeVoicePanel, {
+        state: "requesting_permission",
+        onDismiss: () => undefined,
+        t: translate(enMessages)
+      }));
+    });
+    expect(container.querySelector('[role="status"]')?.getAttribute("aria-busy")).toBe("true");
+    expect(container.textContent).toContain(enMessages["home.voice.requestingPermissionTitle"]);
+    expect(container.textContent).toContain(enMessages["home.voice.cancel"]);
+
+    await act(async () => {
+      root.render(createElement(HomeVoicePanel, {
+        state: "stopped",
+        transcript: "A local retained transcript",
+        onComplete: () => { completed += 1; },
+        onDismiss: () => undefined,
+        t: translate(enMessages)
+      }));
+    });
+    expect(container.textContent).toContain("A local retained transcript");
+    expect(container.querySelector(".home-voice-wave")).toBeNull();
+    await act(async () => {
+      Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
+        .find((button) => button.textContent === enMessages["home.voice.useTranscript"])!
+        .click();
+    });
+    expect(completed).toBe(1);
+
+    await act(async () => {
+      root.render(createElement(HomeVoicePanel, {
+        state: "transcribing",
+        transcript: "Monotonic partial transcript",
+        onDismiss: () => undefined,
+        t: translate(enMessages)
+      }));
+    });
+    expect(container.querySelector('[aria-busy="true"]')?.textContent).toContain("Monotonic partial transcript");
+    expect(container.textContent).toContain(enMessages["home.voice.transcribingDescription"]);
+
+    await act(async () => {
+      root.render(createElement(HomeVoicePanel, {
+        state: "ready",
+        transcript: "Authoritative final transcript",
+        onComplete: () => { completed += 1; },
+        onDismiss: () => undefined,
+        t: translate(enMessages)
+      }));
+    });
+    expect(container.querySelector('[role="status"]')?.getAttribute("aria-busy")).toBe("false");
+    expect(container.textContent).toContain(enMessages["home.voice.readyDescription"]);
+
+    await act(async () => {
+      root.render(createElement(HomeVoicePanel, {
+        state: "failed",
+        onRetry: () => { retried += 1; },
+        onDismiss: () => undefined,
+        t: translate(enMessages)
+      }));
+    });
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(enMessages["home.voice.failedTitle"]);
+    expect(container.textContent).toContain(enMessages["home.voice.failedDescription"]);
+    await act(async () => {
+      Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
+        .find((button) => button.textContent === enMessages["home.voice.retry"])!
+        .click();
+    });
+    expect(retried).toBe(1);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("fails closed when the adapter has not supplied recording or transcript actions", async () => {
+    const dom = createDom();
+    const container = dom.window.document.getElementById("root")!;
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(createElement(HomeVoicePanel, {
+        state: "recording",
+        transcript: "Local partial text",
+        onDismiss: () => undefined,
+        t: translate(enMessages)
+      }));
+    });
+    expect(Array.from(container.querySelectorAll<HTMLButtonElement>("button")).every((button) => button.disabled)).toBe(true);
+    expect(container.querySelector(".home-voice-wave.is-neutral")).not.toBeNull();
+    expect(container.querySelector(".home-voice-timer")).toBeNull();
+
+    await act(async () => {
+      root.render(createElement(HomeVoicePanel, {
+        state: "ready",
+        transcript: "",
+        onComplete: () => undefined,
+        onDismiss: () => undefined,
+        t: translate(enMessages)
+      }));
+    });
+    expect(Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent === enMessages["home.voice.useTranscript"])?.disabled).toBe(true);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps retained transcript editing and dismissal inside the composer-owned voice mode", async () => {
+    const dom = createDom();
+    const container = dom.window.document.getElementById("root")!;
+    const root = createRoot(container);
+    const transcript = "Initial local transcript";
+    let dismissed = 0;
+
+    await act(async () => {
+      root.render(createElement(HomeVoicePanel, {
+        state: "stopped",
+        transcript,
+        onTranscriptChange: () => undefined,
+        onComplete: () => undefined,
+        onDismiss: () => { dismissed += 1; },
+        t: translate(enMessages)
+      }));
+    });
+
+    const editor = container.querySelector<HTMLTextAreaElement>(".home-voice-transcript")!;
+    expect(editor.readOnly).toBe(false);
+    expect(editor.value).toBe("Initial local transcript");
+    await act(async () => {
+      Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
+        .find((button) => button.textContent === enMessages["home.voice.cancel"])!
+        .click();
+    });
+    expect(dismissed).toBe(1);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("keeps all voice copy aligned across six locale catalogs", () => {
     const localeCatalogs = [deMessages, enMessages, frMessages, jaMessages, koMessages, zhHansMessages];
     const voiceKeys = Object.keys(enMessages).filter((key) => key.startsWith("home.voice."));
-    expect(voiceKeys.length).toBeGreaterThanOrEqual(14);
+    expect(voiceKeys.length).toBeGreaterThanOrEqual(32);
     for (const catalog of localeCatalogs) {
       expect(voiceKeys.every((key) => typeof catalog[key as keyof typeof catalog] === "string")).toBe(true);
     }
   });
 
-  it("binds production to unsupported state without a speech or permission bridge", () => {
+  it("keeps the component service-free while the App owns the typed speech adapter", () => {
     const appSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
     const voiceSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/components/HomeVoicePanel.tsx"), "utf8");
-    expect(appSource).not.toContain('setVoicePanelState("unsupported")');
-    expect(appSource).toContain('aria-describedby="home-voice-unavailable-description"');
-    expect(appSource).toContain('title={props.t("home.voice.unsupportedTitle")}');
-    expect(appSource).not.toContain("window.pige.speech");
+    const cssSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/styles/app.css"), "utf8");
+    expect(appSource).toContain("window.pige.speech.availability");
+    expect(appSource).toContain("window.pige.speech.start");
+    expect(appSource).toContain("window.pige.speech?.onSessionEvent");
+    expect(appSource).toContain("draftTextRef.current");
+    expect(appSource).not.toContain("navigator.mediaDevices");
     expect(voiceSource).not.toContain("window.pige");
+    expect(voiceSource).toContain("home-voice-recording-row");
+    expect(voiceSource).toContain("home-voice-transcript");
+    expect(voiceSource).toContain("onInput={(event) => onTranscriptChange?.(event.currentTarget.value)}");
+    expect(voiceSource).toContain("event.nativeEvent.isComposing");
+    expect(cssSource).toContain(".home-voice-recording-row");
+    expect(cssSource).not.toContain(".home-voice-panel {\n  width: 100%;\n  margin-bottom");
   });
 });
 

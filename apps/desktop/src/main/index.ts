@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, safeStorage, type WebContents } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell, type WebContents } from "electron";
 import { existsSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -47,6 +47,10 @@ import type {
   SubmitTextCaptureRequest,
   SubmitUrlCaptureRequest,
   SetWindowModeRequest,
+  SpeechAvailabilityRequest,
+  SpeechCancelRequest,
+  SpeechSessionRequest,
+  SpeechStartRequest,
   SupportBundlePreview,
   UpdateSourceStoragePolicyRequest
 } from "@pige/contracts";
@@ -65,7 +69,12 @@ import {
   PermissionResolveResultSchema,
   type Locale,
   UpdateModelRequestSchema,
-  SetDefaultModelRequestSchema
+  SetDefaultModelRequestSchema,
+  SpeechAvailabilityRequestSchema,
+  SpeechCancelRequestSchema,
+  SpeechSessionEventSchema,
+  SpeechSessionRequestSchema,
+  SpeechStartRequestSchema
 } from "@pige/schemas";
 import { PRELOAD_ENTRY_FILENAME } from "../shared/preload-entry";
 import {
@@ -114,6 +123,7 @@ import {
 } from "./services/permissioned-external-capability-service";
 import { NotesService } from "./services/notes-service";
 import { OcrService } from "./services/ocr-service";
+import { MacOSSpeechAdapter } from "./services/macos-speech-adapter";
 import { ProposalService } from "./services/proposal-service";
 import { installRendererNavigationGuard } from "./services/renderer-navigation-guard";
 import { RestorePreviewRegistry } from "./services/restore-preview-registry";
@@ -125,6 +135,7 @@ import { JsonSecretStore } from "./services/secret-store";
 import { guardSettingAction, type SettingActionConfirmation } from "./services/setting-action-guard";
 import { getSettingsRegistry } from "./services/settings-registry";
 import { ToolchainService } from "./services/toolchain-service";
+import { SpeechService } from "./services/speech-service";
 import { VaultService } from "./services/vault-service";
 import { WindowModeService } from "./services/window-mode-service";
 import { getWindowShellOptions } from "./window-shell-options";
@@ -158,6 +169,7 @@ let documentParserService: DocumentParserService | undefined;
 let datasetQueryService: DatasetQueryService | undefined;
 let datasetService: DatasetService | undefined;
 let ocrService: OcrService | undefined;
+let speechService: SpeechService | undefined;
 let latestSupportBundlePreview: SupportBundlePreview | undefined;
 const activeSupportBundleExports = new Map<string, {
   readonly senderId: number;
@@ -165,6 +177,7 @@ const activeSupportBundleExports = new Map<string, {
 }>();
 const restorePreviewRegistry = new RestorePreviewRegistry();
 const restorePreviewTrackedSenders = new Set<number>();
+const speechTrackedSenders = new Set<number>();
 const PACKAGED_RUNTIME_SMOKE_ARGUMENT = "--pige-packaged-runtime-smoke-report=";
 
 const RESTORE_NATIVE_COPY = {
@@ -504,6 +517,27 @@ const getToolchainService = (): ToolchainService => {
     toolchainService = new ToolchainService(resolveToolchainManifestPath());
   }
   return toolchainService;
+};
+
+const getSpeechService = (): SpeechService => {
+  if (!speechService) {
+    speechService = new SpeechService({
+      native: new MacOSSpeechAdapter(),
+      permission: {
+        canOpenSystemSettings: () => process.platform === "darwin",
+        openSystemSettings: async () => {
+          if (process.platform !== "darwin") return false;
+          await shell.openExternal(
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+          );
+          return true;
+        }
+      },
+      platform: process.platform,
+      systemVersion: process.getSystemVersion()
+    });
+  }
+  return speechService;
 };
 
 const getCaptureService = (): CaptureService => {
@@ -1036,6 +1070,36 @@ ipcMain.handle("window.setAlwaysOnTop", (event, request: SetAlwaysOnTopRequest) 
 ipcMain.handle("window.setSidebarOpen", (event, request: SetSidebarOpenRequest) =>
   getWindowModeService().setSidebarOpen(requireWindow(event.sender), request)
 );
+ipcMain.handle("speech.availability", (_event, request: SpeechAvailabilityRequest) =>
+  getSpeechService().availability(SpeechAvailabilityRequestSchema.parse(request))
+);
+ipcMain.handle("speech.start", async (event, request: SpeechStartRequest) => {
+  const sender = event.sender;
+  if (!speechTrackedSenders.has(sender.id)) {
+    speechTrackedSenders.add(sender.id);
+    sender.once("destroyed", () => {
+      speechTrackedSenders.delete(sender.id);
+      void getSpeechService().cancelOwner(sender.id);
+    });
+  }
+  const parsed = SpeechStartRequestSchema.parse(request);
+  const result = await getSpeechService().start(sender.id, parsed, (sessionEvent) => {
+    if (!sender.isDestroyed()) {
+      sender.send("speech.sessionEvent", SpeechSessionEventSchema.parse(sessionEvent));
+    }
+  });
+  if (result.status === "started" && sender.isDestroyed()) {
+    await getSpeechService().cancelOwner(sender.id);
+  }
+  return result;
+});
+ipcMain.handle("speech.stop", (event, request: SpeechSessionRequest) =>
+  getSpeechService().stop(event.sender.id, SpeechSessionRequestSchema.parse(request))
+);
+ipcMain.handle("speech.cancel", (event, request: SpeechCancelRequest) =>
+  getSpeechService().cancel(event.sender.id, SpeechCancelRequestSchema.parse(request))
+);
+ipcMain.handle("speech.openSystemSettings", () => getSpeechService().openSystemSettings());
 ipcMain.handle("agent.runtimeStatus", () => getAgentRuntimeService().runtimeStatus());
 ipcMain.handle("agent.ask", (_event, request: HomeAgentAskRequest) => getHomeAgentService().ask(request));
 ipcMain.handle("agent.conversation", (_event, request?: AgentConversationRequest) =>

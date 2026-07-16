@@ -33,7 +33,11 @@ describe("release packageability platforms", () => {
       packageKind: "unsigned_zip_preflight",
       packagedRuntimeSmokeTimeoutMs: 60_000
     });
-    expect(target.requiredSbomComponents).toEqual(["pige-vision-ocr"]);
+    expect(target.requiredSbomComponents).toEqual(["pige-speech", "pige-vision-ocr"]);
+    expect(target.nativeSmokeScripts).toEqual([
+      "scripts/verify/macos-vision-ocr-helper-smoke.mjs",
+      "scripts/verify/macos-speech-helper-smoke.mjs"
+    ]);
     expect(findDistributableNames(["Pige-0.0.0-arm64.zip", "latest-mac.yml"], target)).toEqual([
       "Pige-0.0.0-arm64.zip"
     ]);
@@ -54,6 +58,7 @@ describe("release packageability platforms", () => {
     });
     expect(target.requiredResourceFiles).toEqual([]);
     expect(target.requiredSbomComponents).toEqual([]);
+    expect(target.nativeSmokeScripts).toEqual([]);
     expect(findDistributableNames([
       "Pige-0.0.0-x64-setup.exe",
       "Pige-0.0.0-x64-setup.exe.blockmap",
@@ -116,6 +121,7 @@ describe("release packageability platforms", () => {
     const builderRunner = fs.readFileSync(path.join(root, "scripts/release/run-electron-builder.mjs"), "utf8");
     const packagedSmoke = fs.readFileSync(path.join(root, "scripts/release/packaged-electron-smoke.mjs"), "utf8");
     const macosHelperBuild = fs.readFileSync(path.join(root, "scripts/build/macos-vision-ocr-helper.mjs"), "utf8");
+    const macosSpeechBuild = fs.readFileSync(path.join(root, "scripts/build/macos-speech-helper.mjs"), "utf8");
     const macosAdHocSigner = fs.readFileSync(path.join(root, "scripts/release/sign-macos-ad-hoc.mjs"), "utf8");
     const installedMacPackager = fs.readFileSync(
       path.join(root, "node_modules/app-builder-lib/out/macPackager.js"),
@@ -149,18 +155,24 @@ describe("release packageability platforms", () => {
     expect(packagedSmoke).toContain('["--verify", "--deep", "--strict", "--verbose=2"');
     expect(packagedSmoke).toContain('"com.apple.quarantine"');
     expect(packagedSmoke).toContain("nested_helper_codesign_verify");
+    expect(packagedSmoke).toContain("platformNativeSpeech: target.platform === \"macos\"");
     expect(packagedSmoke).toContain("quarantineGatekeeperExpectedUntrustedRejection");
     expect(macosHelperBuild).toContain("stable-identifier ad-hoc build output");
     expect(macosHelperBuild).toContain("only public distribution requires a Developer ID signature and notarization");
     expect(macosHelperBuild).not.toContain("release pipeline must apply a Developer ID signature");
     expect(macosHelperBuild).toContain('"com.yinsenw.pige.vision-ocr"');
-    expect(macosAdHocSigner).toContain("const helperContent = fs.readFileSync(helperPath)");
-    expect(macosAdHocSigner).toContain("fs.writeFileSync(helperPath, helperContent");
+    expect(macosSpeechBuild).toContain('"com.yinsenw.pige.speech"');
+    expect(macosSpeechBuild).toContain("hiddenDownloads: false");
+    expect(macosSpeechBuild).toContain("networkAccess: false");
+    expect(macosAdHocSigner).toContain('"Contents/Resources/native/macos/arm64/pige-speech"');
+    expect(macosAdHocSigner).toContain('"Contents/Resources/native/macos/arm64/pige-vision-ocr"');
+    expect(macosAdHocSigner).toContain("content: fs.readFileSync(helperPath)");
+    expect(macosAdHocSigner).toContain("fs.writeFileSync(helper.path, helper.content");
     expect(macosAdHocSigner).toContain('["--force", "--deep", "--sign", "-", "--timestamp=none", options.app]');
     expect(macosAdHocSigner).toContain('["--force", "--sign", "-", "--timestamp=none", options.app]');
     expect(macosAdHocSigner).not.toMatch(/(?:Developer ID|notary|staple|entitlements)/u);
     const deepSeal = macosAdHocSigner.indexOf('["--force", "--deep", "--sign", "-", "--timestamp=none", options.app]');
-    const restoreHelper = macosAdHocSigner.indexOf("fs.writeFileSync(helperPath, helperContent");
+    const restoreHelper = macosAdHocSigner.indexOf("fs.writeFileSync(helper.path, helper.content");
     const finalOuterSeal = macosAdHocSigner.indexOf('["--force", "--sign", "-", "--timestamp=none", options.app]');
     const finalDeepVerify = macosAdHocSigner.lastIndexOf('["--verify", "--deep", "--strict", "--verbose=2", options.app]');
     expect(deepSeal).toBeGreaterThan(-1);

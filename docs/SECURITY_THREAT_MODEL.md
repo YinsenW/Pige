@@ -201,10 +201,16 @@ Mitigations:
   and inaccessible to renderer/model code as file handles. Analytical engines run with
   networking and extension loading disabled and cannot attach arbitrary paths.
 - Parser-owned provenance fields cannot be overwritten by adapter metadata. Checksummed source, sidecar, and text artifacts are verified before reuse and before Agent cloud handoff.
-- Direct macOS image OCR runs in an app-owned native helper process, not the renderer or a shell. The helper receives one bounded schema-versioned stdin request, emits one bounded stdout response, has a reduced environment, performs no network access or downloads, and exposes no source path in argv or user-visible errors.
-- Runtime verifies the helper as a regular executable against an adjacent architecture/version/size/SHA-256 manifest before declaring OCR ready. Public packaging must also sign the nested helper and verify it inside the signed application.
-- ImageIO/UTType preflight validates true format, frame count, dimensions, pixel count, and bounded thumbnail decode before Vision. Direct-image OCR rejects path escape, symlink/non-file sources, changed checksums, multi-frame inputs, malformed images, unsafe dimensions, oversized files, protocol mismatch, timeout, and oversized/invalid output.
-- Source integrity is checked before and after Vision execution. OCR text and geometry are validated at the TypeScript boundary; Operation Records and metadata sidecars do not duplicate the OCR body.
+- macOS OCR uses a verified app-owned, reduced/no-network helper with bounded protocol,
+  no renderer/shell/path exposure, adjacent binary manifest and nested package signing.
+- Verified `pige-speech` keeps one sender-bound bounded NDJSON session; malformed
+  framing/UTF-8/size/sequence/identity fails body-free. Native audio never crosses
+  preload or enters files, logs, diagnostics, conversations, Jobs, vault/backup or
+  models; only later user-submitted text can. Explicit start alone requests permission,
+  fixed main-owned Settings is the only recovery, and asset probes never install.
+- ImageIO/UTType and source revalidation fence format/frame/dimension/pixel/decode/path/
+  symlink/checksum/protocol/time/output limits around Vision. TypeScript validates text/
+  geometry; Operations and metadata never duplicate the OCR body.
 - Enforce size, file count, and path traversal checks for archives.
 - Preserve the source record and available source asset even when parsing fails.
 - Keep bundled parser tools updated through release process.

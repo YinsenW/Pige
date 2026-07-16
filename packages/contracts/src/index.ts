@@ -30,6 +30,16 @@ import type {
   RetrievalSearchResult,
   RetrievalSearchResultItem,
   RetrievalSearchScope,
+  SpeechAvailabilityRequest,
+  SpeechAvailabilityResult,
+  SpeechCancelRequest,
+  SpeechCancelResult,
+  SpeechOpenSystemSettingsResult,
+  SpeechSessionEvent,
+  SpeechSessionRequest,
+  SpeechStartRequest,
+  SpeechStartResult,
+  SpeechStopResult,
   SettingApplyBehavior,
   SettingPermissionRequirement,
   SettingScope,
@@ -61,7 +71,17 @@ export type {
   RetrievalSearchRequest,
   RetrievalSearchResult,
   RetrievalSearchResultItem,
-  RetrievalSearchScope
+  RetrievalSearchScope,
+  SpeechAvailabilityRequest,
+  SpeechAvailabilityResult,
+  SpeechCancelRequest,
+  SpeechCancelResult,
+  SpeechOpenSystemSettingsResult,
+  SpeechSessionEvent,
+  SpeechSessionRequest,
+  SpeechStartRequest,
+  SpeechStartResult,
+  SpeechStopResult
 } from "@pige/schemas";
 
 export interface AppHealth {
@@ -1224,6 +1244,14 @@ export interface PigeDesktopApi {
   };
   readonly system: {
     readonly toolchainHealth: () => Promise<ToolchainHealth>;
+  };
+  readonly speech: {
+    readonly availability: (request: SpeechAvailabilityRequest) => Promise<SpeechAvailabilityResult>;
+    readonly start: (request: SpeechStartRequest) => Promise<SpeechStartResult>;
+    readonly stop: (request: SpeechSessionRequest) => Promise<SpeechStopResult>;
+    readonly cancel: (request: SpeechCancelRequest) => Promise<SpeechCancelResult>;
+    readonly openSystemSettings: () => Promise<SpeechOpenSystemSettingsResult>;
+    readonly onSessionEvent: (listener: (event: SpeechSessionEvent) => void) => () => void;
   };
 }
 

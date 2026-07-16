@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-16T03:19:30Z",
+  "reviewedAt": "2026-07-16T07:44:00Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -31,12 +31,12 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "6c62b1ab78912d0cea71feda816f9d8889ee20ffb9cfb06b045b7d924da1e5f7"
+    "reviewedSha256": "64507fd5fb171a6087e2edb48b3c435a1963c095216e139b773e3636d1e39771"
   },
   "reviewers": [
     {
-      "reviewerId": "ui-slices-integration-independent-review",
-      "task": "macOS-first Reader, Activity, Voice, Skills and diagnostics UI integration review",
+      "reviewerId": "home-voice-e2-04-independent-review",
+      "task": "macOS Home Voice E2.04 and native titlebar exact-candidate review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -44,44 +44,44 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Development froze the exact 18-path integration after independent review; UI Design reproduced both hashes and accepted the exact candidate. Planning changed only existing owner, evidence, semantic and review artifacts, never those frozen bytes."
+      "independence": "Development froze the exact 35-path H candidate after full, helper and package evidence; UI Design reproduced the identity and accepted the exact UI/macOS screenshots. Planning changed only existing owner, acceptance, semantic and review artifacts."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "ui-slices-integration-independent-review",
+      "reviewerId": "home-voice-e2-04-independent-review",
       "blockerCount": 0,
-      "summary": "The UI owner now locates real Reader copy, composer processing, compact Activity/Undo and typed diagnostics while Voice, Skills, updates and unowned mutations remain honest unavailable surfaces."
+      "summary": "Owners locate the exact Home microphone session, body-free recovery, native helper/package evidence and macOS titlebar geometry without mixing the separate onboarding request."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "ui-slices-integration-independent-review",
+      "reviewerId": "home-voice-e2-04-independent-review",
       "blockerCount": 0,
-      "summary": "Renderer behavior stays on existing activity, diagnostics, support-bundle, Job and clipboard ownership; no service, IPC, schema, permission, storage, dependency or update contract changes."
+      "summary": "PRD, API, architecture, settings, I18N, security and release owners agree on one sender-bound typed speech session, no durable/audio boundary and fixed permission recovery."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "ui-slices-integration-independent-review",
+      "reviewerId": "home-voice-e2-04-independent-review",
       "blockerCount": 0,
-      "summary": "Five exact UI selectors project only to existing partial Settings, diagnostics, Job, Reader and Activity rows; semantic lock v3 has 1,228 claims and every Requirement, Exit and Phase status remains unchanged."
+      "summary": "PIGE-CAP-003/E2.04 planned targets now name the exact macOS evidence and open platform/signing work; semantic lock v3/1,228 preserves every status."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.7,
-      "reviewerId": "ui-slices-integration-independent-review",
+      "reviewerId": "home-voice-e2-04-independent-review",
       "blockerCount": 0,
-      "summary": "The exact integration has focused UI/diagnostics evidence, authoritative 116-file/1,352-test coverage, typecheck, build, development launch, unified Agent smoke and UI Design exact-hash acceptance."
+      "summary": "The exact candidate has focused 8/133, full 119 passed/1 skipped files and 1,375 passed/1 skipped tests, typecheck/build/helper smoke and arm64 package/distribution evidence."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "ui-slices-integration-independent-review",
+      "reviewerId": "home-voice-e2-04-independent-review",
       "blockerCount": 0,
-      "summary": "No document or decision is added; three concise owner updates, five selectors and semantic-neutral compression keep every fixed budget green."
+      "summary": "No document or status is added; owner updates reuse existing paths and semantic-neutral compression keeps all five fixed leanness budgets green."
     }
   ],
   "verification": [
@@ -91,14 +91,14 @@
       "evidence": "The exact combined candidate passes docs, decisions, UI visual, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all quality dimensions."
     },
     {
-      "command": "Exact UI slices integration evidence",
+      "command": "Exact Home Voice E2.04 evidence",
       "status": "passed",
-      "evidence": "UI focus 9 files/116 tests, delegated UI 9/124, diagnostics 5/77, full 116 passed/1 skipped files and 1,352 passed/1 skipped tests, typecheck, build, development launch and unified Agent smoke pass; exact 232464d5/00205d7c identities are independently accepted."
+      "evidence": "Focus 8/133, full 119 passed/1 skipped files and 1,375 passed/1 skipped tests, typecheck/build/native helper smoke and macOS arm64 package plus fresh-distribution smoke pass; exact 05b31b62/a296cfea identities are independently accepted."
     },
     {
       "command": "npm run verify:ui-visual && npm run verify:traceability && npm run verify:contracts",
       "status": "passed",
-      "evidence": "The visual contract passes unchanged; semantic lock v3/1,228 and CON-001 through CON-004 pass with Requirement, Exit and Phase states unchanged."
+      "evidence": "The visual contract covers the integrated 58px macOS titlebar; semantic lock v3/1,228 and CON-001 through CON-004 pass with every status unchanged."
     },
     {
       "command": "npm run verify:documentation-leanness",
@@ -107,18 +107,19 @@
     }
   ],
   "coordination": {
-    "taskId": "ui-slices-integration-20260716",
-    "taskTitle": "Reader, Activity, Voice, Skills and diagnostics UI integration",
+    "taskId": "home-voice-e2-04-20260716",
+    "taskTitle": "Home Voice E2.04 and macOS titlebar alignment",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The candidate binds approved Reader, Activity, processing and diagnostics presentation to existing typed owners while keeping Voice, Skills, updates and mutation capabilities unavailable; no service, IPC, schema, dependency, permission or storage change.",
-    "acknowledgement": "Development froze exact 232464d5/00205d7c bytes after independent and UI Design review. Planning bound only existing UI/quality/playbook owners, evidence, semantic lock and this recipe without changing the 18 paths."
+    "compatibility": "The candidate adds one strict local macOS speech session/helper and exact titlebar alignment without Job, source, model, vault, backup, Broker, hidden-download or durable transcript authority.",
+    "acknowledgement": "Development froze exact 05b31b62/a296cfea bytes after independent/UI Design review. Planning bound only existing owner, acceptance, semantic and review paths without changing the 35 paths."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Voice speech service/permission/transcript and E2.04 remain planned; Skills inventory/lifecycle and updates remain unavailable with no capability credit.",
-    "Reader edit/reveal/transforms, broader Activity/progress and other mutation/exception breadth remain open despite local copy and compact Undo.",
-    "Windows/Linux qualification remains deferred under macOS-first sequencing with no platform claim."
+    "PIGE-CAP-003/E2.04 remain planned until publication/full exit acceptance; candidate evidence does not promote a Requirement, Exit or Phase.",
+    "Persisted dictation-language selection and explicit language-asset installation remain open; speech never installs assets implicitly.",
+    "macOS x64, Windows/Linux speech, Developer ID, hardened runtime, entitlements, notarization/staple and public trust remain unclaimed.",
+    "The separate Welcome/system-locale/Models/Vault onboarding request is excluded."
   ]
 }
