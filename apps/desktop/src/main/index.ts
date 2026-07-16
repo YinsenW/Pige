@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell, type WebContents } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, safeStorage, screen, shell, type WebContents } from "electron";
 import { existsSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -47,7 +47,8 @@ import type {
   SpeechSessionRequest,
   SpeechStartRequest,
   SupportBundlePreview,
-  UpdateSourceStoragePolicyRequest
+  UpdateSourceStoragePolicyRequest,
+  WindowLayoutRequest
 } from "@pige/contracts";
 import {
   AddManualProviderRequestSchema,
@@ -71,7 +72,9 @@ import {
   SpeechCancelRequestSchema,
   SpeechSessionEventSchema,
   SpeechSessionRequestSchema,
-  SpeechStartRequestSchema
+  SpeechStartRequestSchema,
+  WindowLayoutRequestSchema,
+  WindowLayoutStateSchema
 } from "@pige/schemas";
 import { PRELOAD_ENTRY_FILENAME } from "../shared/preload-entry";
 import {
@@ -318,6 +321,30 @@ const createMainWindow = (loadRenderer = true): BrowserWindow => {
   browserWindow.once("closed", () => mainWindows.delete(browserWindow));
 
   getWindowModeService().applyStoredState(browserWindow);
+  const publishLayoutChange = (): void => {
+    const state = getWindowModeService().handleNativeLayoutChanged(browserWindow);
+    if (state && !browserWindow.webContents.isDestroyed()) {
+      browserWindow.webContents.send("window.layoutChanged", WindowLayoutStateSchema.parse(state));
+    }
+  };
+  const publishDisplayLayoutChange = (): void => {
+    const state = getWindowModeService().handleNativeLayoutChanged(browserWindow, "display");
+    if (state && !browserWindow.webContents.isDestroyed()) {
+      browserWindow.webContents.send("window.layoutChanged", WindowLayoutStateSchema.parse(state));
+    }
+  };
+  browserWindow.on("resize", publishLayoutChange);
+  browserWindow.on("move", publishLayoutChange);
+  browserWindow.on("maximize", publishLayoutChange);
+  browserWindow.on("unmaximize", publishLayoutChange);
+  browserWindow.on("enter-full-screen", publishLayoutChange);
+  browserWindow.on("leave-full-screen", publishLayoutChange);
+  screen.on("display-metrics-changed", publishDisplayLayoutChange);
+  screen.on("display-removed", publishDisplayLayoutChange);
+  browserWindow.once("closed", () => {
+    screen.removeListener("display-metrics-changed", publishDisplayLayoutChange);
+    screen.removeListener("display-removed", publishDisplayLayoutChange);
+  });
 
   if (!loadRenderer) return browserWindow;
 
@@ -437,7 +464,10 @@ const getVaultService = (): VaultService => {
 
 const getWindowModeService = (): WindowModeService => {
   if (!windowModeService) {
-    windowModeService = new WindowModeService(getLocalSettingsStore());
+    windowModeService = new WindowModeService(
+      getLocalSettingsStore(),
+      (bounds) => screen.getDisplayMatching(bounds).workArea
+    );
   }
   return windowModeService;
 };
@@ -1058,6 +1088,17 @@ ipcMain.handle("pige:getHealth", (): AppHealth => ({
 }));
 
 ipcMain.handle("window.current", (event) => getWindowModeService().current(requireWindow(event.sender)));
+ipcMain.handle("window.currentLayout", (event) =>
+  WindowLayoutStateSchema.parse(getWindowModeService().currentLayout(requireWindow(event.sender)))
+);
+ipcMain.handle("window.setLayout", (event, request: WindowLayoutRequest) => {
+  const browserWindow = requireWindow(event.sender);
+  const state = WindowLayoutStateSchema.parse(
+    getWindowModeService().setLayout(browserWindow, WindowLayoutRequestSchema.parse(request))
+  );
+  if (!event.sender.isDestroyed()) event.sender.send("window.layoutChanged", state);
+  return state;
+});
 ipcMain.handle("window.setMode", (event, request: SetWindowModeRequest) =>
   getWindowModeService().setMode(requireWindow(event.sender), request)
 );
@@ -1743,7 +1784,10 @@ app.whenReady().then(async () => {
     getLocalSettingsStore(),
     () => getModelProviderRegistry().hasDefaultRuntimeBinding()
   );
-  windowModeService = new WindowModeService(getLocalSettingsStore());
+  windowModeService = new WindowModeService(
+    getLocalSettingsStore(),
+    (bounds) => screen.getDisplayMatching(bounds).workArea
+  );
   localDatabaseService = new LocalDatabaseService(undefined, new LocalDatabaseRebuildWorkerService());
   backupRestoreService = new BackupRestoreService();
   agentRuntimeService = new AgentRuntimeService(

@@ -817,6 +817,86 @@ export const ModelEgressApprovalRequestRecordSchema = z.object({
 
 export const WindowLayoutModeSchema = z.enum(["compact", "expanded", "fullscreen"]);
 
+export const WindowLayoutSurfaceSchema = z.enum(["home", "reader"]);
+
+export const WindowPanePresentationSchema = z.enum(["closed", "resident", "overlay"]);
+
+export const WindowLayoutRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  surface: WindowLayoutSurfaceSchema,
+  sidebarOpen: z.boolean(),
+  noteAgentOpen: z.boolean()
+}).strict().superRefine((request, context) => {
+  if (request.surface === "home" && request.noteAgentOpen) {
+    context.addIssue({
+      code: "custom",
+      path: ["noteAgentOpen"],
+      message: "The current-note Agent pane requires the reader surface."
+    });
+  }
+});
+
+export const WindowLayoutStateSchema = z.object({
+  apiVersion: z.literal(1),
+  revision: z.number().int().nonnegative(),
+  surface: WindowLayoutSurfaceSchema,
+  sidebarOpen: z.boolean(),
+  noteAgentOpen: z.boolean(),
+  sidebarPresentation: WindowPanePresentationSchema,
+  noteAgentPresentation: WindowPanePresentationSchema,
+  autoExpanded: z.boolean(),
+  isMaximized: z.boolean(),
+  isFullScreen: z.boolean()
+}).strict().superRefine((state, context) => {
+  if (state.surface === "home" && state.noteAgentOpen) {
+    context.addIssue({
+      code: "custom",
+      path: ["noteAgentOpen"],
+      message: "The current-note Agent pane requires the reader surface."
+    });
+  }
+  if (!state.sidebarOpen && state.sidebarPresentation !== "closed") {
+    context.addIssue({
+      code: "custom",
+      path: ["sidebarPresentation"],
+      message: "A closed Library pane cannot have a resident or overlay presentation."
+    });
+  }
+  if (state.sidebarOpen && state.sidebarPresentation === "closed") {
+    context.addIssue({
+      code: "custom",
+      path: ["sidebarPresentation"],
+      message: "An open Library pane requires a resident or overlay presentation."
+    });
+  }
+  if (!state.noteAgentOpen && state.noteAgentPresentation !== "closed") {
+    context.addIssue({
+      code: "custom",
+      path: ["noteAgentPresentation"],
+      message: "A closed Note Agent pane cannot have a resident or overlay presentation."
+    });
+  }
+  if (state.noteAgentOpen && state.noteAgentPresentation === "closed") {
+    context.addIssue({
+      code: "custom",
+      path: ["noteAgentPresentation"],
+      message: "An open Note Agent pane requires a resident or overlay presentation."
+    });
+  }
+  if (
+    state.sidebarOpen &&
+    state.noteAgentOpen &&
+    state.sidebarPresentation === "overlay" &&
+    state.noteAgentPresentation === "resident"
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["noteAgentPresentation"],
+      message: "A constrained layout must fall back the Note Agent before the Library."
+    });
+  }
+});
+
 export const WindowSizeSchema = z.object({
   width: z.number().int().min(320).max(4096),
   height: z.number().int().min(420).max(4096)
@@ -826,6 +906,7 @@ export const WindowPreferencesSchema = z.object({
   mode: WindowLayoutModeSchema,
   alwaysOnTop: z.boolean(),
   sidebarOpen: z.boolean(),
+  noteAgentOpen: z.boolean().optional(),
   compactSize: WindowSizeSchema.optional(),
   expandedSize: WindowSizeSchema.optional()
 });
@@ -2680,5 +2761,9 @@ export type ToolchainManifest = z.infer<typeof ToolchainManifestSchema>;
 export type VaultConfig = z.infer<typeof VaultConfigSchema>;
 export type VaultManifest = z.infer<typeof VaultManifestSchema>;
 export type WindowLayoutMode = z.infer<typeof WindowLayoutModeSchema>;
+export type WindowLayoutRequest = z.infer<typeof WindowLayoutRequestSchema>;
+export type WindowLayoutState = z.infer<typeof WindowLayoutStateSchema>;
+export type WindowLayoutSurface = z.infer<typeof WindowLayoutSurfaceSchema>;
+export type WindowPanePresentation = z.infer<typeof WindowPanePresentationSchema>;
 export type WindowPreferences = z.infer<typeof WindowPreferencesSchema>;
 export type WindowSize = z.infer<typeof WindowSizeSchema>;

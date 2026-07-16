@@ -52,6 +52,26 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain('browserWindow.once("closed", () => mainWindows.delete(browserWindow));');
   });
 
+  it("keeps resident pane dimensions and presentation under one validated main-process owner", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+
+    expect(contractsSource).toContain("readonly currentLayout: () => Promise<WindowLayoutState>");
+    expect(contractsSource).toContain("readonly setLayout: (request: WindowLayoutRequest)");
+    expect(contractsSource).toContain("readonly onLayoutChanged:");
+    expect(mainSource).toContain('ipcMain.handle("window.currentLayout"');
+    expect(mainSource).toContain('ipcMain.handle("window.setLayout"');
+    expect(mainSource).toContain("WindowLayoutRequestSchema.parse(request)");
+    expect(mainSource).toContain('browserWindow.webContents.send("window.layoutChanged"');
+    expect(mainSource).toContain('(bounds) => screen.getDisplayMatching(bounds).workArea');
+    expect(preloadSource).toContain("WindowLayoutRequestSchema.parse(request)");
+    expect(preloadSource).toContain("WindowLayoutStateSchema.parse(await ipcRenderer.invoke");
+    expect(preloadSource).toContain("WindowLayoutStateSchema.safeParse(value)");
+    expect(preloadSource).not.toContain("workArea:");
+    expect(preloadSource).not.toContain("targetContentWidth:");
+  });
+
   it("uses one integrated title bar while preserving native platform controls", () => {
     expect(getWindowShellOptions("darwin")).toEqual({
       titleBarStyle: "hiddenInset",

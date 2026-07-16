@@ -92,6 +92,8 @@ import type {
   SupportBundlePreview,
   ToolchainHealth,
   UpdateSourceStoragePolicyRequest,
+  WindowLayoutRequest,
+  WindowLayoutState,
   WindowState,
   VaultActionResult,
   VaultRevealResult,
@@ -113,7 +115,9 @@ import {
   SpeechSessionRequestSchema,
   SpeechStartRequestSchema,
   SpeechStartResultSchema,
-  SpeechStopResultSchema
+  SpeechStopResultSchema,
+  WindowLayoutRequestSchema,
+  WindowLayoutStateSchema
 } from "@pige/schemas";
 
 function isRestoreMode(value: unknown): value is RestoreMode {
@@ -257,6 +261,20 @@ const api: PigeDesktopApi = {
   getHealth: async (): Promise<AppHealth> => ipcRenderer.invoke("pige:getHealth") as Promise<AppHealth>,
   window: {
     current: async (): Promise<WindowState> => ipcRenderer.invoke("window.current") as Promise<WindowState>,
+    currentLayout: async (): Promise<WindowLayoutState> =>
+      WindowLayoutStateSchema.parse(await ipcRenderer.invoke("window.currentLayout")),
+    setLayout: async (request: WindowLayoutRequest): Promise<WindowLayoutState> =>
+      WindowLayoutStateSchema.parse(
+        await ipcRenderer.invoke("window.setLayout", WindowLayoutRequestSchema.parse(request))
+      ),
+    onLayoutChanged: (listener: (state: WindowLayoutState) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, value: unknown): void => {
+        const parsed = WindowLayoutStateSchema.safeParse(value);
+        if (parsed.success) listener(parsed.data);
+      };
+      ipcRenderer.on("window.layoutChanged", handler);
+      return () => ipcRenderer.removeListener("window.layoutChanged", handler);
+    },
     setMode: async (request: SetWindowModeRequest): Promise<WindowState> =>
       ipcRenderer.invoke("window.setMode", request) as Promise<WindowState>,
     setAlwaysOnTop: async (request: SetAlwaysOnTopRequest): Promise<WindowState> =>
