@@ -577,7 +577,8 @@ describe("desktop shell build contract", () => {
     expect(rendererSource).toContain("...homeJobStateFilter");
     expect(rendererSource).toContain("limit: 100");
     expect(homeComposer).toContain(".slice(0, 5)");
-    expect(homeComposer).toContain("Boolean(job.sourceDisplayName || job.sourceId)");
+    expect(homeComposer).toContain("isActiveProcessingFileJob(job)");
+    expect(rendererSource).toContain("if (!job.sourceDisplayName && !job.sourceId) return false;");
     expect(rendererSource).toContain('window.pige.proposals.list({ limit: 100, states: ["ready"] })');
     expect(homeComposer).toContain("window.pige.proposals.get({ proposalId })");
     expect(homeComposer).toContain('window.pige.proposals[decision]({ proposalId })');
