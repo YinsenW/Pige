@@ -64,33 +64,17 @@ afterEach(() => {
 });
 
 describe("Home durable Agent conversation UI", () => {
-  it("shows the honest voice-unavailable state and returns focus to its exact trigger", async () => {
+  it("keeps the unsupported production voice trigger disabled with an accessible explanation", async () => {
     const dom = createDom(420);
     const harness = createHarness(undefined);
     const { container, root } = await mountHome(dom, makePigeApi(harness));
-    const voiceButton = buttonsByAriaLabel(container, enMessages["home.voice.start"])[0]!;
+    const voiceButton = buttonsByAriaLabel(container, enMessages["home.voice.unsupportedTitle"])[0]!;
 
-    await act(async () => {
-      voiceButton.click();
-      await settle(dom);
-    });
-    expect(container.querySelector('[role="status"]')?.textContent).toContain(enMessages["home.voice.unsupportedTitle"]);
-    expect(container.querySelector(".home-voice-wave")).toBeNull();
-    expect(container.querySelector(".development-status")).toBeNull();
-
-    await clickButton(dom, container, enMessages["home.voice.continueTyping"]);
-    await waitFor(dom, () => dom.window.document.activeElement === voiceButton);
-    expect(container.querySelector(".home-voice-panel")).toBeNull();
-
-    await act(async () => {
-      voiceButton.click();
-      await settle(dom);
-      container.querySelector(".home-voice-panel")?.dispatchEvent(
-        new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true })
-      );
-      await settle(dom);
-    });
-    await waitFor(dom, () => dom.window.document.activeElement === voiceButton);
+    expect(voiceButton.disabled).toBe(true);
+    expect(voiceButton.title).toBe(enMessages["home.voice.unsupportedTitle"]);
+    expect(voiceButton.getAttribute("aria-describedby")).toBe("home-voice-unavailable-description");
+    expect(container.querySelector("#home-voice-unavailable-description")?.textContent)
+      .toBe(enMessages["home.voice.unsupportedDescription"]);
     expect(container.querySelector(".home-voice-panel")).toBeNull();
 
     await act(async () => root.unmount());

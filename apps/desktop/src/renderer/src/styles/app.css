@@ -3064,6 +3064,12 @@ dd {
 
 .topbar-actions { margin-left: auto; }
 
+/* hiddenInset keeps macOS traffic lights near the top edge of the 58px drag region. */
+.app-window.platform-macos .titlebar-navigation,
+.app-window.platform-macos .topbar-actions {
+  transform: translateY(-11px);
+}
+
 .icon-button {
   width: 34px;
   min-width: 34px;
@@ -4656,10 +4662,52 @@ dd {
   background: #c98a22;
 }
 
+.settings-status.unavailable::before {
+  background: var(--text-tertiary);
+}
+
 .system-support-preview {
   margin-top: 12px;
   padding: 14px;
   background: var(--surface-elevated);
+}
+
+.support-preview-section {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.support-preview-section h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.support-preview-list {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.support-preview-list li {
+  display: grid;
+  gap: 2px;
+  border-left: 2px solid var(--border-strong);
+  padding-left: 9px;
+}
+
+.support-preview-list li > strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.support-preview-list.warnings li {
+  display: block;
+  border-left-color: var(--warning);
 }
 
 .settings-inline-actions {

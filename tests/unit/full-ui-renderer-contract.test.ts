@@ -36,6 +36,9 @@ describe("full production UI renderer contract", () => {
     expect(cssSource).toContain("grid-template-columns: minmax(0, 1fr);");
     expect(cssSource).toContain("env(titlebar-area-x, 0px)");
     expect(cssSource).toContain("env(titlebar-area-width, 100vw)");
+    expect(appSource).toContain('macosWindowShell ? " platform-macos" : ""');
+    expect(cssSource).toContain(".app-window.platform-macos .titlebar-navigation");
+    expect(cssSource).toContain("transform: translateY(-11px);");
     expect(cssSource).toContain("padding-right: max(10px, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)))");
     expect(cssSource).not.toContain(".app-window .titlebar { padding-right: 10px; }");
     const homeComposer = cssSource.match(/\.home > \.composer \{[\s\S]*?\n\}/)?.[0] ?? "";

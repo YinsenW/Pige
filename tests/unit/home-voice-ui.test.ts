@@ -100,7 +100,9 @@ describe("Home voice UI", () => {
   it("binds production to unsupported state without a speech or permission bridge", () => {
     const appSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
     const voiceSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/components/HomeVoicePanel.tsx"), "utf8");
-    expect(appSource).toContain('setVoicePanelState("unsupported")');
+    expect(appSource).not.toContain('setVoicePanelState("unsupported")');
+    expect(appSource).toContain('aria-describedby="home-voice-unavailable-description"');
+    expect(appSource).toContain('title={props.t("home.voice.unsupportedTitle")}');
     expect(appSource).not.toContain("window.pige.speech");
     expect(voiceSource).not.toContain("window.pige");
   });
