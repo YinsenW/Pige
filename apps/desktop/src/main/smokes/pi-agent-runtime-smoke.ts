@@ -5,7 +5,11 @@ import type { ModelProfileSummary, ProviderProfileSummary, RetrievalSearchResult
 import { HomeAgentService } from "../services/home-agent-service";
 import { JobsService } from "../services/jobs-service";
 import type { ModelProviderRuntimeConfig } from "../services/model-provider-registry";
-import { PiAgentRuntimeAdapter, type PigeAgentToolDescriptor } from "../services/pi-agent-runtime-adapter";
+import {
+  createPigeTextToolResult,
+  PiAgentRuntimeAdapter,
+  type PigeAgentToolDescriptor
+} from "../services/pi-agent-runtime-adapter";
 import { buildLocalExtractiveAskResult } from "../services/retrieval-service";
 import { createVaultOnDisk, loadVaultSummary } from "../services/vault-layout";
 
@@ -23,7 +27,10 @@ export async function runPiAgentRuntimeSmoke(): Promise<{
       label: "Inspect",
       description: "Inspect synthetic evidence.",
       parameters: { type: "object", properties: {}, additionalProperties: false },
-      execute: async () => ({ modelText: "Synthetic verified evidence.", details: { fragmentCount: 1 } })
+      execute: async () => createPigeTextToolResult(
+        "Synthetic verified evidence.",
+        { fragmentCount: 1 }
+      )
     },
     {
       ...SMOKE_TOOL_DESCRIPTOR,
@@ -41,7 +48,7 @@ export async function runPiAgentRuntimeSmoke(): Promise<{
       },
       execute: async () => {
         publicationCount += 1;
-        return { modelText: "Published.", details: {}, terminate: true };
+        return createPigeTextToolResult("Published.", {}, { terminate: true });
       }
     }
   ];

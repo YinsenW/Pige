@@ -3,11 +3,22 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ADAPTER_PATH = "apps/desktop/src/main/services/pi-agent-runtime-adapter.ts";
+const PROVIDER_BINDING_PATH = "apps/desktop/src/main/services/pi-agent-provider-binding.ts";
+const TOOL_BOUNDARY_PATH = "apps/desktop/src/main/services/pi-agent-tool-boundary.ts";
+const SAFE_PROJECTION_PATH = "apps/desktop/src/main/services/pi-agent-safe-projection.ts";
+const MODEL_CAPABILITY_PATH = "apps/desktop/src/main/services/model-capability-registry.ts";
+const PI_RUNTIME_PATHS = new Set([
+  ADAPTER_PATH,
+  PROVIDER_BINDING_PATH,
+  TOOL_BOUNDARY_PATH,
+  SAFE_PROJECTION_PATH,
+  MODEL_CAPABILITY_PATH
+]);
 const PI_PACKAGE_PATTERN = /["'](@earendil-works\/pi-(?:agent-core|ai)(?:\/[^"']*)?)["']/gu;
 const FORBIDDEN_PI_SPECIFIER = /(?:\/compat$|\/providers\/all$|pi-coding-agent|pi-orchestrator)/u;
 const PI_DEPENDENCIES = new Map([
-  ["@earendil-works/pi-agent-core", "sha512-Lvn89ko42h5ETUb6Z0Ku6ldskEqXaTdQBYvSa0+7bdG9V6rUEpXptv5e0OVZ1HDcvi8s6/2lGCQWsxKX+DFHNw=="],
-  ["@earendil-works/pi-ai", "sha512-7xfLk8sANBp+bpPEbjoOZTbPxsa+++b1JXAoSJsNa3vbs9AHHEclmvg54XLQcxH+fuwaeti/g2jeIfJ+mVYLpA=="]
+  ["@earendil-works/pi-agent-core", "sha512-EFjyAuoz2kn24sR9Q5A86sZCG6mD+nz58DCsA2I2wxgmS50cF1tSLCBOZaHKI5U9Y3pJs4BefeK3LRkB5TdJag=="],
+  ["@earendil-works/pi-ai", "sha512-8RLKLwe5TFM9kKFMNu/lTzveduq4GxZbnlG6ba8FAhLeb5wJP4zbj1eBumKBRvggpFQnW5R/Vo2a8zTlHsV9SQ=="]
 ]);
 
 export function auditPiRuntimeBoundary(repositoryRoot) {
@@ -20,8 +31,8 @@ export function auditPiRuntimeBoundary(repositoryRoot) {
     for (const match of text.matchAll(PI_PACKAGE_PATTERN)) {
       const specifier = match[1];
       if (!specifier) continue;
-      if (relativePath !== ADAPTER_PATH) {
-        failures.push(`${relativePath} imports Pi outside the sole Pige runtime adapter`);
+      if (!PI_RUNTIME_PATHS.has(relativePath)) {
+        failures.push(`${relativePath} imports Pi outside the reviewed Pige runtime boundary modules`);
       }
       if (FORBIDDEN_PI_SPECIFIER.test(specifier)) {
         failures.push(`${relativePath} imports forbidden Pi surface ${specifier}`);
@@ -35,19 +46,50 @@ export function auditPiRuntimeBoundary(repositoryRoot) {
   } else {
     const adapter = fs.readFileSync(adapterPath, "utf8");
     for (const required of [
-      "createModels({ credentials, authContext: denyAmbientAuthContext })",
-      "streamFn:",
-      "toolExecution: \"sequential\"",
+      "new Agent({",
       "beforeToolCall:",
-      "fileExists: async () => false",
-      "env: async () => undefined"
+      "prepareNextTurnWithContext:",
+      "createPiBinding(",
+      "toPiTool("
     ]) {
       if (!adapter.includes(required)) failures.push(`${ADAPTER_PATH} is missing ${required}`);
     }
-    for (const forbidden of ["process.env", "providers/all", "/compat", "getApiKey:", "new ProviderModelJsonClient"] ) {
+    for (const forbidden of [
+      "process.env",
+      "agent.followUp(",
+      "toolExecution: \"sequential\"",
+      "event.type === \"turn_end\"",
+      "agent.clearAllQueues()"
+    ]) {
       if (adapter.includes(forbidden)) failures.push(`${ADAPTER_PATH} contains forbidden ${forbidden}`);
     }
   }
+
+  inspectBoundaryModule(root, PROVIDER_BINDING_PATH, failures, {
+    required: [
+      "createModels({ credentials, authContext: denyAmbientAuthContext })",
+      "streamSimple:",
+      "fileExists: async () => false",
+      "env: async () => undefined"
+    ],
+    forbidden: ["process.env", "getApiKey:", "new ProviderModelJsonClient"]
+  });
+  inspectBoundaryModule(root, TOOL_BOUNDARY_PATH, failures, {
+    required: [
+      "executionMode: tool.execution === \"parallel_read_only\" ? \"parallel\" : \"sequential\"",
+      "assertAddedToolNames(partialResult, catalog)",
+      "onUpdate?.(partialResult)"
+    ],
+    forbidden: ["toolExecution:"]
+  });
+  inspectBoundaryModule(root, SAFE_PROJECTION_PATH, failures, {
+    required: ["containsRestrictedModelContent(text)", "MAX_HISTORY_UTF8_BYTES"],
+    forbidden: ["new Agent(", "agent.followUp(", "streamFn:"]
+  });
+  inspectBoundaryModule(root, MODEL_CAPABILITY_PATH, failures, {
+    required: ["conservative_unknown", "findReviewedPiModel"],
+    forbidden: ["process.env", "CredentialStore"]
+  });
 
   const directBridgePath = path.join(root, "apps", "desktop", "src", "main", "services", "model-json-client.ts");
   if (fs.existsSync(directBridgePath)) failures.push("transitional direct JSON provider bridge still exists in the production service tree");
@@ -68,16 +110,16 @@ function inspectPiDependencies(root, failures) {
   const lockfile = JSON.parse(fs.readFileSync(path.join(root, "package-lock.json"), "utf8"));
   const workspace = lockfile.packages?.["apps/desktop"];
   for (const [packageName, integrity] of PI_DEPENDENCIES) {
-    if (manifest.dependencies?.[packageName] !== "0.80.6") {
-      failures.push(`apps/desktop/package.json must pin ${packageName} exactly to 0.80.6`);
+    if (manifest.dependencies?.[packageName] !== "0.80.7") {
+      failures.push(`apps/desktop/package.json must pin ${packageName} exactly to 0.80.7`);
     }
-    if (workspace?.dependencies?.[packageName] !== "0.80.6") {
-      failures.push(`package-lock workspace edge must pin ${packageName} exactly to 0.80.6`);
+    if (workspace?.dependencies?.[packageName] !== "0.80.7") {
+      failures.push(`package-lock workspace edge must pin ${packageName} exactly to 0.80.7`);
     }
     const installed = lockfile.packages?.[`apps/desktop/node_modules/${packageName}`] ??
       lockfile.packages?.[`node_modules/${packageName}`];
-    if (installed?.version !== "0.80.6" || installed?.integrity !== integrity) {
-      failures.push(`package-lock installed entry for ${packageName} does not match reviewed 0.80.6 integrity`);
+    if (installed?.version !== "0.80.7" || installed?.integrity !== integrity) {
+      failures.push(`package-lock installed entry for ${packageName} does not match reviewed 0.80.7 integrity`);
     }
   }
 }
@@ -109,5 +151,20 @@ if (isMainModule()) {
     for (const failure of failures) console.error(`- ${failure}`);
     process.exit(1);
   }
-  console.log("Pi runtime boundary OK: one contained adapter owns official Pi imports, isolated auth/models, and sequential Pige tools.");
+  console.log("Pi runtime boundary OK: thin Agent assembly, isolated provider binding, per-tool policy, safe projection, and model capability registry are contained.");
+}
+
+function inspectBoundaryModule(root, relativePath, failures, expectations) {
+  const filePath = path.join(root, relativePath);
+  if (!fs.existsSync(filePath)) {
+    failures.push(`${relativePath} is missing`);
+    return;
+  }
+  const text = fs.readFileSync(filePath, "utf8");
+  for (const required of expectations.required) {
+    if (!text.includes(required)) failures.push(`${relativePath} is missing ${required}`);
+  }
+  for (const forbidden of expectations.forbidden) {
+    if (text.includes(forbidden)) failures.push(`${relativePath} contains forbidden ${forbidden}`);
+  }
 }

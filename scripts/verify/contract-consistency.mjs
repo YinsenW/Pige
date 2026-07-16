@@ -275,7 +275,7 @@ requireText("docs/JOB_OPERATION_AND_RECOVERY.md", [
   "canonical `permreq_` request IDs or `permdec_` decision IDs"
 ]);
 requireText("apps/desktop/src/main/services/model-provider-connection.ts", ["normalizeProviderBaseUrl"]);
-requireText("apps/desktop/src/main/services/pi-agent-runtime-adapter.ts", ["normalizeProviderBaseUrl"]);
+requireText("apps/desktop/src/main/services/pi-agent-provider-binding.ts", ["normalizeProviderBaseUrl"]);
 requireText("apps/desktop/src/main/services/model-provider-registry.ts", [
   "normalizeProviderBaseUrl",
   "isProviderLoopbackHostname"

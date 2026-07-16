@@ -1,5 +1,6 @@
 import { PigeDomainError } from "@pige/domain";
 import {
+  createPigeTextToolResult,
   PiAgentRuntimeAdapter,
   type PiAgentRunRequest,
   type PiAgentRunResult,
@@ -67,10 +68,7 @@ export class ModelProviderGenerationProbe implements ModelProviderGenerationProb
       execute: async () => {
         executionCount += 1;
         if (executionCount > 1) throw generationProbeError();
-        return {
-          modelText: JSON.stringify({ ready: true }),
-          details: { ready: true }
-        };
+        return createPigeTextToolResult(JSON.stringify({ ready: true }), { ready: true });
       }
     };
 

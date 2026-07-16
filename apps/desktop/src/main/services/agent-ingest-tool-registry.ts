@@ -5,6 +5,7 @@ import type {
   PigeAgentToolDescriptor,
   PigeAgentToolResult
 } from "./pi-agent-runtime-adapter";
+import { createPigeTextToolResult } from "./pi-agent-runtime-adapter";
 
 export const INSPECT_SOURCE_TOOL_NAME = "pige_inspect_source";
 export const PARSE_SOURCE_TOOL_NAME = "pige_parse_source";
@@ -210,7 +211,7 @@ export function createAgentIngestToolRegistry(input: {
           );
         }
         const result = await input.host.stageProposal(args as AgentIngestToolOutput, context);
-        return { ...result, terminate: true };
+        return toPiToolResult(result, true);
       }
     } satisfies PigeAgentToolDescriptor] : []),
     {
@@ -225,7 +226,7 @@ export function createAgentIngestToolRegistry(input: {
       inputTrust: "model_generated",
       outputTrust: "untrusted_source",
       dataBoundary: CURRENT_SOURCE_DATA_BOUNDARY,
-      execution: "sequential",
+      execution: "parallel_read_only",
       idempotency: CURRENT_SOURCE_IDEMPOTENCY,
       limits: {
         maxInputBytes: 2,
@@ -240,7 +241,8 @@ export function createAgentIngestToolRegistry(input: {
         sourceId: input.sourceId,
         toolCallId: context.toolCallId
       }),
-      execute: async (_args, signal): Promise<PigeAgentToolResult> => input.host.inspect(signal)
+      execute: async (_args, signal): Promise<PigeAgentToolResult> =>
+        input.host.inspect(signal).then((result) => toPiToolResult(result))
     },
     ...(input.host.materializeDataset ? [{
       name: INSPECT_DATASET_TOOL_NAME,
@@ -276,7 +278,7 @@ export function createAgentIngestToolRegistry(input: {
             "The current-source Dataset tool is unavailable."
           );
         }
-        return input.host.materializeDataset(context).then((result) => ({ ...result, terminate: true }));
+        return input.host.materializeDataset(context).then((result) => toPiToolResult(result, true));
       }
     } satisfies PigeAgentToolDescriptor] : []),
     {
@@ -313,7 +315,7 @@ export function createAgentIngestToolRegistry(input: {
             "The current-source parser tool is unavailable."
           );
         }
-        return input.host.parse(context);
+        return input.host.parse(context).then((result) => toPiToolResult(result));
       }
     },
     {
@@ -350,7 +352,7 @@ export function createAgentIngestToolRegistry(input: {
             "The current-source OCR tool is unavailable."
           );
         }
-        return input.host.ocr(context);
+        return input.host.ocr(context).then((result) => toPiToolResult(result));
       }
     },
     ...(input.host.search ? [{
@@ -365,7 +367,7 @@ export function createAgentIngestToolRegistry(input: {
       inputTrust: "model_generated",
       outputTrust: "untrusted_source",
       dataBoundary: CURRENT_VAULT_DATA_BOUNDARY,
-      execution: "sequential",
+      execution: "parallel_read_only",
       idempotency: CURRENT_VAULT_IDEMPOTENCY,
       limits: {
         maxInputBytes: 2_048,
@@ -394,7 +396,8 @@ export function createAgentIngestToolRegistry(input: {
             "The current-vault retrieval tool is unavailable."
           );
         }
-        return input.host.search({ query: (args as { readonly query: string }).query }, context);
+        return input.host.search({ query: (args as { readonly query: string }).query }, context)
+          .then((result) => toPiToolResult(result));
       }
     } satisfies PigeAgentToolDescriptor] : []),
     ...(input.host.respond ? [{
@@ -428,10 +431,8 @@ export function createAgentIngestToolRegistry(input: {
         if (!input.host.respond) {
           throw new PigeDomainError("agent_runtime.response_tool_unavailable", "The source response tool is unavailable.");
         }
-        return input.host.respond(args as AgentIngestRespondToolInput, context).then((result) => ({
-          ...result,
-          terminate: true
-        }));
+        return input.host.respond(args as AgentIngestRespondToolInput, context)
+          .then((result) => toPiToolResult(result, true));
       }
     } satisfies PigeAgentToolDescriptor] : []),
     ...(input.host.addTags ? [{
@@ -468,10 +469,8 @@ export function createAgentIngestToolRegistry(input: {
             "The knowledge-tag tool is unavailable."
           );
         }
-        return input.host.addTags(args as AgentIngestAddTagsToolInput, context).then((result) => ({
-          ...result,
-          terminate: true
-        }));
+        return input.host.addTags(args as AgentIngestAddTagsToolInput, context)
+          .then((result) => toPiToolResult(result, true));
       }
     } satisfies PigeAgentToolDescriptor] : []),
     ...(input.host.link ? [{
@@ -508,10 +507,8 @@ export function createAgentIngestToolRegistry(input: {
             "The knowledge-note link tool is unavailable."
           );
         }
-        return input.host.link(args as AgentIngestLinkToolInput, context).then((result) => ({
-          ...result,
-          terminate: true
-        }));
+        return input.host.link(args as AgentIngestLinkToolInput, context)
+          .then((result) => toPiToolResult(result, true));
       }
     } satisfies PigeAgentToolDescriptor] : []),
     ...(input.host.update ? [{
@@ -548,10 +545,8 @@ export function createAgentIngestToolRegistry(input: {
             "The existing-note update tool is unavailable."
           );
         }
-        return input.host.update(args as AgentIngestUpdateToolInput, context).then((result) => ({
-          ...result,
-          terminate: true
-        }));
+        return input.host.update(args as AgentIngestUpdateToolInput, context)
+          .then((result) => toPiToolResult(result, true));
       }
     } satisfies PigeAgentToolDescriptor] : []),
     {
@@ -584,9 +579,16 @@ export function createAgentIngestToolRegistry(input: {
       execute: async (args, signal): Promise<PigeAgentToolResult> => input.host.publish(
         args as AgentIngestToolOutput,
         signal
-      ).then((result) => ({ ...result, terminate: true }))
+      ).then((result) => toPiToolResult(result, true))
     }
   ];
+}
+
+function toPiToolResult(
+  result: { readonly modelText: string; readonly details: Readonly<Record<string, unknown>> },
+  terminate = result && "terminate" in result && result.terminate === true
+): PigeAgentToolResult {
+  return createPigeTextToolResult(result.modelText, result.details, { terminate });
 }
 
 export const allowCurrentAgentIngestTools: AgentIngestToolAuthorizationPort = {

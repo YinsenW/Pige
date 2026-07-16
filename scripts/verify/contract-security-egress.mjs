@@ -18,7 +18,7 @@ requireAll("packages/schemas/src/index.ts", [
 for (const service of [
   "apps/desktop/src/main/services/model-provider-connection.ts",
   "apps/desktop/src/main/services/model-provider-registry.ts",
-  "apps/desktop/src/main/services/pi-agent-runtime-adapter.ts"
+  "apps/desktop/src/main/services/pi-agent-provider-binding.ts"
 ]) requireAll(service, ["normalizeProviderBaseUrl"]);
 requireAll("packages/contracts/src/index.ts", [
   "readonly permissionRequirement: SettingPermissionRequirement", "readonly defaultMode:", "readonly yoloEnabled:",

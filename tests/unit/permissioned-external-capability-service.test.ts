@@ -21,7 +21,7 @@ const VAULT_ID = "vault_20260714_external01";
 const JOB_ID = "job_20260714_external01";
 const PRIVATE_BODY = "SYNTHETIC_EXTERNAL_PRIVATE_BODY_DO_NOT_PERSIST";
 const TOOL_RESULT: PigeAgentToolResult = {
-  modelText: "Synthetic external result.",
+  content: [{ type: "text", text: "Synthetic external result." }],
   details: { status: "ok", receipt: "synthetic-receipt" }
 };
 const roots: string[] = [];

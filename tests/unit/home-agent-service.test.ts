@@ -39,7 +39,8 @@ import {
   PiAgentRuntimeAdapter,
   type PiFauxResponse,
   type PiAgentRunRequest,
-  type PiAgentRunResult
+  type PiAgentRunResult,
+  type PigeAgentToolResult
 } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
 import { buildLocalExtractiveAskResult } from "../../apps/desktop/src/main/services/retrieval-service";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
@@ -1347,7 +1348,7 @@ describe("Home Pi Agent service", () => {
         const context = { toolCallId: "pi_tool_hostile_evidence", signal };
         expect(await tool.authorize?.({}, context)).not.toBe(false);
         const toolResult = await tool.execute({}, signal, context);
-        observedToolOutput = toolResult.modelText;
+        observedToolOutput = readPiToolText(toolResult);
         await request.beforeModelTurn?.();
         return makeRuntimeResult(request, tool.name, {
           answer: "The bounded evidence is treated only as data. [1]",
@@ -1875,7 +1876,7 @@ SYNTHETIC_DISTRACTOR_BODY
           const context = { toolCallId: "pi_tool_current_note", signal };
           const result = await currentNoteTool?.execute({}, signal, context);
           observedToolDetails = result?.details;
-          observedModelText = result?.modelText ?? "";
+          observedModelText = result ? readPiToolText(result) : "";
           await request.beforeModelTurn?.();
           return makeRuntimeResult(request, "pige_read_current_note", {
             answer: "This note says the launch date is July 18. [1]",
@@ -1957,9 +1958,10 @@ SYNTHETIC_DISTRACTOR_BODY
           if (!readTool) throw new Error("Missing current-note tool.");
           const signal = new AbortController().signal;
           const result = await readTool.execute({}, signal, { toolCallId: "pi_tool_empty_note", signal });
-          expect(result.modelText).toContain('"status":"insufficient_evidence"');
-          expect(result.modelText).toContain('"endExclusive":0');
-          expect(result.modelText).toContain('"total":0');
+          const modelText = readPiToolText(result);
+          expect(modelText).toContain('"status":"insufficient_evidence"');
+          expect(modelText).toContain('"endExclusive":0');
+          expect(modelText).toContain('"total":0');
           await request.beforeModelTurn?.();
           return makeRuntimeResult(request, "pige_read_current_note", {
             answer: "There is no readable content in this note.",
@@ -2008,9 +2010,10 @@ SYNTHETIC_DISTRACTOR_BODY
           const signal = new AbortController().signal;
           const context = { toolCallId: "pi_tool_truncated_note", signal };
           const result = await readTool.execute({}, signal, context);
-          expect(result.modelText).toContain('"endExclusive":8192');
-          expect(result.modelText).toContain('"truncated":true');
-          expect(result.modelText).not.toContain(hiddenTail);
+          const modelText = readPiToolText(result);
+          expect(modelText).toContain('"endExclusive":8192');
+          expect(modelText).toContain('"truncated":true');
+          expect(modelText).not.toContain(hiddenTail);
           await request.beforeModelTurn?.();
           try {
             await finishTool.execute({
@@ -2061,10 +2064,11 @@ SYNTHETIC_DISTRACTOR_BODY
           if (!readTool) throw new Error("Missing current-note tool.");
           const signal = new AbortController().signal;
           const result = await readTool.execute({}, signal, { toolCallId: "pi_tool_multibyte_note", signal });
-          expect(result.modelText).toContain('"endExclusive":8190');
-          expect(result.modelText).toContain('"total":9001');
-          expect(result.modelText).toContain('"truncated":true');
-          expect(result.modelText).not.toContain("�");
+          const modelText = readPiToolText(result);
+          expect(modelText).toContain('"endExclusive":8190');
+          expect(modelText).toContain('"total":9001');
+          expect(modelText).toContain('"truncated":true');
+          expect(modelText).not.toContain("�");
           await request.beforeModelTurn?.();
           return makeRuntimeResult(request, "pige_read_current_note", {
             answer: "The supplied range contains the repeated character. [1]",
@@ -3142,4 +3146,11 @@ async function waitForValue<T>(read: () => T | undefined): Promise<T> {
     await new Promise<void>((resolve) => setTimeout(resolve, 5));
   }
   throw new Error("Timed out waiting for the test state.");
+}
+
+function readPiToolText(result: PigeAgentToolResult): string {
+  return result.content
+    .filter((entry): entry is Extract<typeof entry, { type: "text" }> => entry.type === "text")
+    .map((entry) => entry.text)
+    .join("\n");
 }

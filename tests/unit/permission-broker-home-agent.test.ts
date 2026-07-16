@@ -300,7 +300,7 @@ function makeExternalAdapter(
   onNormalize: () => void = () => undefined
 ): PermissionedExternalCapabilityAdapter {
   const result = {
-    modelText: JSON.stringify({ status: "available", channel: "stable" }),
+    content: [{ type: "text" as const, text: JSON.stringify({ status: "available", channel: "stable" }) }],
     details: { status: "available" }
   } as const;
   return {

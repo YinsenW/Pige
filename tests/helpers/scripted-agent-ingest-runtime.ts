@@ -31,7 +31,7 @@ export class ScriptedAgentIngestRuntime implements AgentIngestRuntimePort {
     const inspectContext = Object.freeze({ toolCallId: "scripted_inspect_1", signal });
     if (inspect.authorize && !(await inspect.authorize({}, inspectContext))) throw permissionDenied();
     const inspection = await inspect.execute({}, signal, inspectContext);
-    this.userPrompt = `${request.userPrompt}\n${inspection.modelText}`;
+    this.userPrompt = `${request.userPrompt}\n${readToolText(inspection.content)}`;
     await this.onInspectionReady(request);
     await this.onModelTurn?.();
     throwIfAborted(signal);
@@ -52,6 +52,15 @@ export class ScriptedAgentIngestRuntime implements AgentIngestRuntimePort {
   }
 
   protected async onInspectionReady(_request: PiAgentRunRequest): Promise<void> {}
+}
+
+function readToolText(
+  content: readonly ({ readonly type: "text"; readonly text: string } | { readonly type: "image" })[]
+): string {
+  return content
+    .filter((entry): entry is { readonly type: "text"; readonly text: string } => entry.type === "text")
+    .map((entry) => entry.text)
+    .join("\n");
 }
 
 function requireTool(request: PiAgentRunRequest, name: string) {

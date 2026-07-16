@@ -244,7 +244,7 @@ describe("Pi AI provider binding", () => {
       limits: { maxInputBytes: 64, maxOutputBytes: 256, timeoutMs: 1_000 },
       ownerService: "PiAgentProviderBindingTest",
       execute: async () => ({
-        modelText: JSON.stringify({ status: "ready" }),
+        content: [{ type: "text", text: JSON.stringify({ status: "ready" }) }],
         details: { status: "ready" }
       })
     };

@@ -128,12 +128,6 @@ const AGENT_INGEST_TERMINAL_TOOL_NAMES: ReadonlySet<string> = new Set([
   STAGE_KNOWLEDGE_NOTE_PROPOSAL_TOOL_NAME
 ]);
 
-const AGENT_INGEST_TERMINAL_RECOVERY_PROMPT = [
-  "The prior response stopped without completing a registered terminal Pige action.",
-  "Re-evaluate the existing typed tool results and call exactly one registered terminal tool now.",
-  "Do not answer as prose and do not invent evidence, tools, or authority."
-].join(" ");
-
 export interface AgentIngestRetrievalPort {
   search(vaultPath: string, request: RetrievalSearchRequest): RetrievalSearchResult;
   listTags?(vaultPath: string): readonly string[];
@@ -2139,11 +2133,14 @@ export class AgentIngestService {
         userPrompt,
         tools,
         beforeModelTurn: () => authorizeCurrentModelTurn(true),
-        terminalActionRecovery: {
-          requiredToolNames: tools
+        completionPolicy: {
+          terminalToolNames: tools
             .map((tool) => tool.name)
             .filter((name) => AGENT_INGEST_TERMINAL_TOOL_NAMES.has(name)),
-          prompt: AGENT_INGEST_TERMINAL_RECOVERY_PROMPT
+          maxWallTimeMs: 600_000,
+          maxToolCalls: 256,
+          maxWorkBytes: 1_048_576,
+          maxRepeatedFailureFingerprints: 3
         },
         ...(hooks.signal ? { signal: hooks.signal } : {})
       });
