@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-16T10:09:25Z",
+  "reviewedAt": "2026-07-16T12:00:00Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -31,12 +31,12 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "5ec020cdd7933f530ce57a04e883caa72ec8e7a5c5bf187aeb5a36af55d5f0ec"
+    "reviewedSha256": "40505e83b893abc22a3cf7ddd94f4f071f029e0f68ab4e4ea98833d09cc97aaa"
   },
   "reviewers": [
     {
-      "reviewerId": "voice-language-assets-independent-review",
-      "task": "Explicit Apple speech language-asset install exact-candidate review",
+      "reviewerId": "pi-0-80-7-h1-independent-review",
+      "task": "Pi v0.80.7 H1 semantic-kernel ownership and responsibility review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -44,83 +44,83 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Development and UI Design froze and independently accepted the exact 25-path candidate after service, helper, package, distribution and real macOS UI evidence. Planning changed only existing owner, dependency, privacy, acceptance, semantic and review artifacts."
+      "independence": "Development froze the exact 33-path H1 code/evidence candidate after upstream-source, runtime, responsibility, full service-inventory and package/distribution review. Planning changed only the existing 13 owner, dependency, acceptance, semantic and independent-review artifacts."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "voice-language-assets-independent-review",
+      "reviewerId": "pi-0-80-7-h1-independent-review",
       "blockerCount": 0,
-      "summary": "Owners locate the explicit exact-language Apple install request, sender-bound progress lifecycle, native helper/package boundary and separate Start action without mixing onboarding or other Planning work."
+      "summary": "The Pi owner, Host reliability boundary, H1-H4 migration, service inventory and exact dependency source are discoverable from the existing architecture, Pi, Job, retrieval, quality, release and playbook owners."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "voice-language-assets-independent-review",
+      "reviewerId": "pi-0-80-7-h1-independent-review",
       "blockerCount": 0,
-      "summary": "PRD, API, architecture, I18N, security, privacy, dependency, quality and release owners agree that availability/start never download and only explicit install may invoke Apple system ownership."
+      "summary": "All owners agree that Pi selects semantic work while Host enforces typed capability, authority, resources, durability, recovery, safe projection and deterministic commit; H1 removes only adapter shadow-kernel control and leaves H2-H4 open."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "voice-language-assets-independent-review",
+      "reviewerId": "pi-0-80-7-h1-independent-review",
       "blockerCount": 0,
-      "summary": "PIGE-CAP-003/E2.04 planned targets distinguish protocol/UI evidence from an unexecuted real system install; semantic lock v3/1,228 preserves every Requirement, Exit and Phase status."
+      "summary": "PIGE-PI-001 and E3.08 remain partial, bind exact upstream-source, no-Host-correction, native-result, parallel-read and responsibility evidence, and identify H2-H4 without promoting any Requirement, Exit or Phase."
     },
     {
       "id": "ongoing_development_support",
-      "score": 9.7,
-      "reviewerId": "voice-language-assets-independent-review",
+      "score": 9.8,
+      "reviewerId": "pi-0-80-7-h1-independent-review",
       "blockerCount": 0,
-      "summary": "The exact candidate has focused 8/145, independent 7/138, full 119 passed/1 skipped files and 1,384 passed/1 skipped tests, typecheck/build/helper/integrity and arm64 package/distribution evidence."
+      "summary": "The machine inventory covers 104 services and freezes five no-growth migration owners, responsibility deltas, custom-control metrics and duplicate-primitive review baselines without treating LOC as a compression target."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "voice-language-assets-independent-review",
+      "reviewerId": "pi-0-80-7-h1-independent-review",
       "blockerCount": 0,
-      "summary": "No document or status is added; the Apple Speech platform API is registered once and existing owners hold the API, network, privacy and evidence deltas."
+      "summary": "No new document is added: the invariant is defined in architecture/Pi owners and other documents carry only their Job, retrieval, quality, release, implementation and decision projections."
     }
   ],
   "verification": [
     {
       "command": "npm run verify",
       "status": "passed",
-      "evidence": "The exact combined candidate passes docs, decisions, UI visual, independent review, TRC-001 through TRC-005, CON-001 through CON-004, dependencies, fixtures, boundaries, no telemetry, source artifacts, LEN-001 through LEN-005 and all quality dimensions."
+      "evidence": "The exact combined candidate passes documentation, decisions, independent review, traceability, contracts, dependencies, boundaries, no-telemetry, source-artifacts and documentation-leanness gates."
     },
     {
-      "command": "Exact Apple language-asset install evidence",
+      "command": "Exact H1 Development evidence",
       "status": "passed",
-      "evidence": "Focus 8/145, independent 7/138, full 119 passed/1 skipped files and 1,384 passed/1 skipped tests, typecheck/build/native helper/integrity and macOS arm64 package plus downloaded-distribution smoke pass; exact ff9106b5/ee4c2473 identities are independently accepted."
+      "evidence": "Focused 8 files/187 tests; full serial 121 passed/1 skipped files and 1,406 passed/1 skipped tests; root/desktop typecheck, build, contracts, runtime-boundary/responsibility/negative/import checks, real Electron, unified roundtrip, macOS arm64 package and copied distribution pass."
     },
     {
-      "command": "npm run verify:ui-visual && npm run verify:traceability && npm run verify:contracts",
+      "command": "npm run verify:dependencies && npm run verify:boundaries && npm run verify:traceability",
       "status": "passed",
-      "evidence": "The approved assets-unavailable UI exposes one explicit install action without starting it; semantic lock v3/1,228 and CON-001 through CON-004 pass with every status unchanged."
+      "evidence": "Exact Pi 0.80.7 pins/integrities, reviewed upstream fixture, sole semantic kernel, responsibility/no-growth inventory and semantic lock v3/1,229 pass with statuses unchanged."
     },
     {
       "command": "npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 pass within the fixed entry, trace and governed Markdown budgets."
+      "evidence": "LEN-001 through LEN-005 pass within the existing entry, trace and governed Markdown budgets."
     }
   ],
   "coordination": {
-    "taskId": "voice-language-assets-20260716",
-    "taskTitle": "Explicit Apple speech language-asset installation",
+    "taskId": "pi-0-80-7-h1-20260716",
+    "taskTitle": "Pi v0.80.7 upstream alignment and shadow-kernel removal",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The candidate adds one explicit Apple-managed exact-language install request and body-free sender event stream without implicit download, public cancel, Job, Broker, Skill, model, vault, persistence or recording authority.",
-    "acknowledgement": "Development/UI Design froze exact ff9106b5/ee4c2473 bytes after independent review. Planning bound only existing owner, dependency, privacy, acceptance, semantic and review paths without changing the 25 paths."
+    "compatibility": "H1 preserves product capability/authority/durability boundaries while delegating Agent loop, follow-up, tool lifecycle, parallel read-only execution and native result shape to exact upstream Pi 0.80.7.",
+    "acknowledgement": "Planning bound only the existing 13 governed paths to Development identity 63bd9a4d/f6a5f80b/edd6d614; the 33 Development paths remain frozen and H2-H4 stay serialized open work."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "PIGE-CAP-003/E2.04 remain planned until publication/full exit acceptance; candidate evidence does not promote a Requirement, Exit or Phase.",
-    "The exact real macOS UI proves the enabled install action but deliberately does not execute Apple-owned non-cancelable download; real installation remains open evidence.",
-    "Persisted dictation-language selection remains open; availability/start never install assets implicitly and installed never auto-records.",
-    "macOS x64, Windows/Linux speech, Developer ID, hardened runtime, entitlements, notarization/staple and public trust remain unclaimed.",
-    "The separate Welcome/system-locale/Models/Vault onboarding request is excluded."
+    "H2 still owns AgentIngest/Home semantic-orchestrator removal; H3 owns unique Job reliability coordination; H4 owns retrieval.ask/retrieval_query retirement and threat-model-reviewed durable primitive convergence.",
+    "Legacy agent_ingest and retrieval_query remain recovery compatibility until their assigned migration phase and must receive no new records afterward.",
+    "The persisted-provider canary was not run because PIGE_MANUAL_ACCEPTANCE_USER_DATA was absent; no credential canary evidence is inferred.",
+    "Windows/Linux qualification remains deferred and unclaimed; Requirement, Exit and Phase statuses are unchanged.",
+    "Queued resident-first UI identity b699482 is excluded from this H1 bind."
   ]
 }

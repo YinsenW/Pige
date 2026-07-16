@@ -109,7 +109,7 @@ Forbidden context inputs:
 
 This deterministic pipeline executes inside a scoped retrieval tool after Pi asks for
 retrieval, or from an explicit no-model search action. It ranks and
-packages evidence; it does not decide the wider Agent workflow or automatically trigger
+packages evidence; Pi chooses semantic work while Host bounds/validates it. The tool does not decide the wider Agent workflow or automatically trigger
 a knowledge write.
 
 Home retrieval and Agent retrieval should follow this local-first pipeline:

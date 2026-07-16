@@ -635,7 +635,7 @@ call, but never classify a turn into a fixed route or choose a replacement step.
 
 The boundary has three planes:
 
-- **Agent control plane:** Pi Agent owns semantic tool selection and replanning.
+- **Agent control plane:** Pi decides semantic work; Host never shadows selection/replanning.
 - **Tool execution plane:** the Pige Tool Registry exposes narrow typed capabilities
   backed by deterministic services and bounded results.
 - **Host policy and commit plane:** Pige owns preservation, permissions, egress, limits,
@@ -670,6 +670,10 @@ Responsibilities:
   file. Pi may request arbitrary path/filesystem/commit actions through registered tools,
   but receives no ambient Node handle and no effect occurs outside standing authority
   until Permission Broker authorizes the exact action.
+
+The executable 104-service inventory freezes five no-growth owners and responsibility
+deltas; budgets trigger review, not compression. H1 aligns Pi `0.80.7`; H2-H4 converge
+Home/Ingest, Job reliability and legacy retrieval without status promotion.
 
 `docs/PROMPT_DESIGN.md` is the detailed contract for prompt hierarchy, context packaging, untrusted source blocks, structured outputs, and prompt tests.
 
@@ -1830,17 +1834,17 @@ Waiver rules:
 
 | Dependency | Status | Pige usage | Upstream source | Pin/update policy | Data boundary and notes |
 | --- | --- | --- | --- | --- | --- |
-| `@earendil-works/pi-agent-core` (`runtime.pi-agent-core`) | required | Official Pi Agent loop, events, queues, and tool lifecycle behind the sole Pige adapter. | https://github.com/earendil-works/pi/tree/v0.80.6/packages/agent | Exact `0.80.6`; move in lockstep with `runtime.pi-ai` only after import/API/license/runtime review. | Bundled MIT runtime. Its unavoidable `/compat` initialization is contained; no deep import, fork, patch, parallel loop, ambient authority, Pi CLI/RPC/orchestrator, or Pi-owned permissions. |
-| `@earendil-works/pi-ai` (`runtime.pi-ai`) | required | Official provider/model factories and streaming for the embedded Pi Agent. | https://github.com/earendil-works/pi/tree/v0.80.6/packages/ai | Exact `0.80.6`; remove the temporary exception when an official compat-free Agent entry is reviewed. | Bundled MIT runtime. Pige creates one isolated model collection with scoped credentials; transitive `@opentelemetry/api` is inert because Pige installs no provider/exporter and selects no observability module. |
+| `@earendil-works/pi-agent-core` (`runtime.pi-agent-core`) | required | Official Agent loop, events, queues, abort/follow-up, tools and native results behind one adapter. | https://github.com/earendil-works/pi/tree/v0.80.7/packages/agent | Exact `0.80.7`; lockstep with `runtime.pi-ai`. | MIT; `/compat` contained; no fork/deep import/shadow loop/ambient authority; native results reach Pige gates. |
+| `@earendil-works/pi-ai` (`runtime.pi-ai`) | required | Official model metadata/provider streaming. | https://github.com/earendil-works/pi/tree/v0.80.7/packages/ai | Exact `0.80.7`; source transition `e8442dda88e28e116b1d6fdd18973c5c7f787929a90f1f6cabb7de56fa6fba77`. | MIT; isolated scoped credentials, conservative metadata merge, inert transitive telemetry API. |
 | Pi Custom Models docs | reference | Source for Pi provider/model configuration behavior, supported APIs, model fields, and thinking-level metadata. | https://pi.dev/docs/latest/models | Re-check during provider integration updates. | Supports model registration/selection, not a product-level Advanced/Fast routing UI by itself. |
-| OpenAI provider | required | BYOK generation through reviewed Pi AI APIs. | https://github.com/earendil-works/pi/blob/v0.80.6/packages/ai/src/providers/openai.ts | Pin with the Pi runtime. | Cloud boundary unless user points to local compatible service. |
+| OpenAI provider | required | BYOK generation through reviewed Pi AI APIs. | https://github.com/earendil-works/pi/blob/v0.80.7/packages/ai/src/providers/openai.ts | Pin with the Pi runtime. | Cloud boundary unless user points to local compatible service. |
 | OpenAI Models API (`provider.openai-models-api`) | required | Low-cost provider connection test and model-list discovery for OpenAI-format providers. | https://platform.openai.com/docs/api-reference/models/list | Re-check endpoint/auth behavior when updating provider integration. | User-supplied API key is sent only from the main process; no source content is sent during this test. |
 | OpenAI Responses API (`provider.openai-responses-api`) | required | Embedded Pi Agent turns for built-in OpenAI profiles. | https://platform.openai.com/docs/api-reference/responses | Re-check protocol, tool-call, retention, and error behavior with each Pi update. | Sends only selected bounded evidence through the configured BYOK profile from main process. |
 | OpenAI Chat Completions API (`provider.openai-chat-completions-api`) | required | Embedded Pi Agent turns for OpenAI-compatible/custom profiles. | https://platform.openai.com/docs/api-reference/chat/create | Re-check tool-call and compatible-endpoint behavior when updating Pi. | Sends only selected bounded evidence to the user-configured endpoint from main process. |
-| Anthropic provider | required | BYOK generation through reviewed Pi AI APIs. | https://github.com/earendil-works/pi/blob/v0.80.6/packages/ai/src/providers/anthropic.ts | Pin with the Pi runtime. | Cloud boundary. |
+| Anthropic provider | required | BYOK generation through reviewed Pi AI APIs. | https://github.com/earendil-works/pi/blob/v0.80.7/packages/ai/src/providers/anthropic.ts | Pin with the Pi runtime. | Cloud boundary. |
 | Anthropic Models API (`provider.anthropic-models-api`) | required | Low-cost provider connection test and model-list discovery for Anthropic-format providers. | https://docs.anthropic.com/en/api/models-list | Re-check endpoint/auth headers when updating provider integration. | User-supplied API key is sent only from the main process with `anthropic-version`; no source content is sent during this test. |
 | Anthropic Messages API (`provider.anthropic-messages-api`) | required | Embedded Pi Agent turns for Anthropic and Anthropic-compatible profiles. | https://docs.anthropic.com/en/api/messages | Re-check tool-call behavior and required version headers when updating Pi. | Sends only selected bounded evidence to the configured BYOK endpoint from main process. |
-| OpenAI-compatible provider | required | Custom BYOK endpoint through reviewed Pi AI APIs. | https://github.com/earendil-works/pi/tree/v0.80.6/packages/ai/src/providers | Pin with the Pi runtime. | Endpoint location depends on user configuration; show simple cloud-use status inline, not a model-page configuration matrix. |
+| OpenAI-compatible provider | required | Custom BYOK endpoint through reviewed Pi AI APIs. | https://github.com/earendil-works/pi/tree/v0.80.7/packages/ai/src/providers | Pin with the Pi runtime. | Endpoint location depends on user configuration; show simple cloud-use status inline, not a model-page configuration matrix. |
 | Anthropic-compatible provider | required | Custom BYOK endpoint through reviewed Pi AI APIs. | https://docs.anthropic.com | Pin with the Pi runtime. | Endpoint location depends on user configuration; show simple cloud-use status inline, not a model-page configuration matrix. |
 
 ### 16.4 Local RAG And Model Assets

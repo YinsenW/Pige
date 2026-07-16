@@ -102,6 +102,7 @@ If any field is unclear, inspect the design docs first. Ask the user only when t
 `docs/TECH_ARCHITECTURE.md` owns service/process boundaries; `docs/REPOSITORY_STRUCTURE.md` owns package paths and import direction. Before implementation, confirm that the change:
 
 - uses the named owning service for durable state and side effects;
+- leaves semantic work to Pi;
 - keeps renderer, preload, main, worker, and adapter responsibilities separated;
 - places cross-runtime DTOs and schemas in their shared package owner; and
 - does not bypass Permission Broker or a runtime adapter.

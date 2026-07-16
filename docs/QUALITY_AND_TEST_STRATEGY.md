@@ -250,8 +250,9 @@ Tests must verify:
 - Streaming stress tests prove high-frequency provider deltas still reach the safe draft
   controller, cannot exhaust the smaller structural event budget, and stop at the
   independent raw-update hard cap.
-- `v0.80.6` tests keep transitive compat globals/catalog/default dispatch inert and use
+- `v0.80.7` tests keep transitive compat globals/catalog/default dispatch inert and use
   only isolated `Models` through the sole adapter.
+- Source/responsibility gates reject Pi shadow ownership and no-growth violations.
 - Provider binding tests prove an exact reviewed DeepSeek preset/model can reuse matching
   public Pi model metadata without changing the Pige endpoint, Profile/model identity,
   scoped credential adapter, or Custom/unknown fallback.

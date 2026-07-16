@@ -83,6 +83,7 @@ Documentation-control improvements must not force active implementation threads 
 - Preserve existing test and artifact paths when they are still valid. Add aliases or mapping notes rather than renumbering active phase work.
 - A planning thread should record only the delta it must absorb: newly assigned P0 work, changed owner contract, changed exit evidence, or a real blocker. It should not replay the full documentation audit.
 - If concurrent edits touch this playbook or the requirement register, merge by stable Build, Exit, and `PIGE-*` IDs; never resolve by silently dropping another thread's evidence or open work.
+- Agent slices follow the architecture's H1-H4 responsibility/no-growth sequence without status promotion.
 
 Recommended coordination notice:
 

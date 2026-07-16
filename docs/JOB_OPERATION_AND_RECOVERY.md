@@ -493,6 +493,7 @@ Rules:
 - Retry must not duplicate large source bodies.
 - Retry must not re-run a cloud model call unnecessarily if a durable proposal/output already exists.
 - Retry must explain whether it continues from a checkpoint or restarts a phase.
+- Job coordination never selects Pi's next semantic action.
 
 ## 9. Cancellation
 
