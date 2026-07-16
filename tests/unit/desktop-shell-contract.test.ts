@@ -405,7 +405,7 @@ describe("desktop shell build contract", () => {
     expect(rendererSource).toContain('classes: ["capture", "parse", "ocr", "agent_ingest", "agent_turn", "index_rebuild"]');
     const submitHomeInput = homeComposer.slice(
       homeComposer.indexOf("const submitHomeInput"),
-      homeComposer.indexOf("const openProposal")
+      homeComposer.indexOf("const openResult")
     );
     expect(submitHomeInput).not.toContain("caught instanceof Error ? caught.message");
     const retryHandler = mainSource.slice(
@@ -597,16 +597,13 @@ describe("desktop shell build contract", () => {
     expect(knowledgeMapSource).not.toContain("window.pige.filesystem");
   });
 
-  it("fails closed every legacy renderer proposal method while durable review remains Main-owned", () => {
+  it("fails closed on awaiting-review Jobs until a bounded renderer-safe proposal preview exists", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
+    const styles = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/styles/app.css"), "utf8");
     const homeComposer = rendererSource.slice(
       rendererSource.indexOf("function HomeComposer"),
       rendererSource.indexOf("function jobStateMessageKey")
-    );
-    const openProposal = homeComposer.slice(
-      homeComposer.indexOf("const openProposal"),
-      homeComposer.indexOf("const openResult")
     );
 
     expect(rendererSource).toContain(
@@ -618,7 +615,6 @@ describe("desktop shell build contract", () => {
     expect(homeComposer).toContain(".slice(0, 5)");
     expect(homeComposer).toContain("isActiveProcessingFileJob(job)");
     expect(rendererSource).toContain("if (!job.sourceDisplayName && !job.sourceId) return false;");
-    expect(rendererSource).toContain('window.pige.proposals.list({ limit: 100, states: ["ready"] })');
     expect(mainSource).toContain('ipcMain.handle("proposals.list", proposalRendererBoundaryUnavailable)');
     expect(mainSource).toContain('ipcMain.handle("proposals.get", proposalRendererBoundaryUnavailable)');
     expect(mainSource).toContain('ipcMain.handle("proposals.approve", proposalRendererBoundaryUnavailable)');
@@ -627,17 +623,22 @@ describe("desktop shell build contract", () => {
     expect(mainSource).not.toContain('getProposalService().get(request)');
     expect(mainSource).not.toContain('getJobsService().approveProposal(getProposalService(), request)');
     expect(mainSource).not.toContain('getJobsService().rejectProposal(getProposalService(), request)');
-    expect(homeComposer).toContain("window.pige.proposals.get({ proposalId })");
-    expect(homeComposer).toContain('window.pige.proposals[decision]({ proposalId })');
-    expect(homeComposer).toContain("proposalOutcomeForDurableState(current.proposal.state)");
-    expect(homeComposer).toContain("setProposalDecisionStateUnknown(true)");
-    expect(homeComposer).toContain("proposalReviewTriggerRefs.current.get(proposalFocusReturnId.current)");
-    expect(homeComposer).toContain("aria-expanded={proposalListExpanded}");
-    expect(homeComposer).toContain('aria-controls="home-proposal-summary-list"');
-    expect(homeComposer).toContain('aria-label={`${props.t("proposal.review")}: ${accessibleProposalLabel}`}');
-    expect(homeComposer).toContain("<ProposalReviewPanel");
-    expect(openProposal).not.toContain("caught instanceof Error ? caught.message");
-    expect(openProposal).toContain('setProposalErrorMessageKey("proposal.error.load")');
+    expect(rendererSource).not.toContain("window.pige.proposals");
+    expect(homeComposer).toContain('job.state === "awaiting_review"');
+    expect(homeComposer).toContain('props.t("proposal.safePreviewTitle")');
+    expect(homeComposer).toContain('props.t("proposal.safePreviewDescription")');
+    expect(homeComposer).toContain('aria-describedby="proposal-safe-preview-description"');
+    expect(homeComposer).toContain('props.t("proposal.reviewUnavailable")');
+    expect(homeComposer).toContain("disabled");
+    expect(fs.existsSync(
+      path.resolve("apps/desktop/src/renderer/src/components/ProposalReviewPanel.tsx")
+    )).toBe(false);
+    const proposalStyles = styles.slice(
+      styles.indexOf(".proposal-strip"),
+      styles.indexOf(".retrieval-results")
+    );
+    expect(proposalStyles).toContain("min-width: 0;");
+    expect(proposalStyles).toContain("overflow-wrap: anywhere;");
     expect(rendererSource).toContain('type View = "home" | "library" | "knowledgeTree";');
     expect(rendererSource).toContain("export type SettingsSection =");
     expect(rendererSource).not.toContain('type View = "review"');
