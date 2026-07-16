@@ -247,13 +247,11 @@ Exit criteria:
 - [E2.10] Retry is idempotent; cancellation preserves sources and leaves no half-enabled UI or ambiguous durable state.
 - [E2.11] Missing model, tool, path, or runtime dependencies enter visible retryable `waiting_dependency` with a structured repair/retry action and no source loss.
 
-Current B2.08/B2.11 evidence covers first-wins cancellation, Home recovery, index
-progress, note races, per-vault lease, exact Job CAS, independent keys, failed-sentinel
-recovery and same-name successor-safe cleanup. Other Job classes, conflict repair,
-cross-file atomicity, final-syscall TOCTOU and Windows proof remain open. B2.02 has exact
-macOS 26 helper/session/UI, permission, editable transcript, no-audio, teardown and arm64
-package/distribution candidate evidence. E2.04/statuses stay planned; publication,
-macOS x64, Windows/Linux speech and public signing remain open.
+B2.08/B2.11 cover fenced cancellation/recovery/CAS; other classes, atomicity, final-syscall
+TOCTOU and Windows remain open. B2.02 covers macOS 26 session/UI/helper, permission,
+editable text, no audio, teardown and arm64 package/distribution. Apple asset install is
+explicit/non-durable; UI evidence did not run it. E2.04 stays planned pending publication,
+macOS x64, other platforms and public signing.
 
 ## 8. Phase 3: BYOK And Basic Agent Ingest
 

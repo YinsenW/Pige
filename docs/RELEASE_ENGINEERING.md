@@ -132,11 +132,10 @@ macOS native OCR build order:
 
 macOS native speech build order:
 
-- Compile `PigeSpeech.swift` with macOS 26, emit/embed its exact architecture/version/
-  size/SHA-256 manifest, and package `NSMicrophoneUsageDescription` (not
-  `NSSpeechRecognitionUsageDescription` unless a new reviewed API requires it).
-- Preserve/sign both native helpers inside-out; verify protocol/permission/transcript
-  bounds, discovery, deep seal, staging/ZIP equality and fresh-distribution runtime.
+- Compile `PigeSpeech.swift` with macOS 26; embed architecture/version/size/SHA-256 and
+  `NSMicrophoneUsageDescription` (not Speech Recognition usage without a new API).
+- Sign helpers inside-out; verify bounded session/install protocol, deep seal, staging/ZIP
+  equality and fresh distribution. Availability/start never download; success still needs Start.
 
 Secrets:
 
@@ -383,8 +382,8 @@ Test categories:
 - Packaged web-extractor worker startup with Mozilla Readability, jsdom, and Undici resolvable from the installed application; a source-tree-only success is insufficient release evidence.
 - OCR capability detection.
 - Packaged macOS Vision OCR helper integrity/probe plus direct-image recognition and invalid-image rejection on arm64 and x64.
-- Packaged macOS speech helper explicit-start, permission, transcript, teardown,
-  unsupported-language and no-audio-egress checks.
+- Packaged macOS speech: session/permission/teardown, unsupported language, explicit Apple
+  asset boundary and no egress; record real non-cancelable install versus truthful UI only.
 - SQLite migration and FTS.
 - Local RAG model manifest without model installed.
 - Backup/restore.

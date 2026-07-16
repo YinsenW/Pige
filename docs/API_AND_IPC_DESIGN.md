@@ -366,30 +366,19 @@ Rules:
 
 #### 6.2.1 Native Speech Session
 
-Channels:
-
-- `speech.availability`
-- `speech.start`
-- `speech.stop`
-- `speech.cancel`
-- `speech.openSystemSettings`
-- event `speech.sessionEvent`
-
-Strict schemas own requests/results/errors and `transcript_replace | meter |
-session_failed`; each event binds one session/positive sequence and carries only bounded
-replacement text or elapsed time/normalized level.
+Channels: `speech.availability`, `speech.installLanguageAsset`, `speech.start`,
+`speech.stop`, `speech.cancel`, `speech.openSystemSettings`; strict event channels:
+`speech.sessionEvent`, `speech.assetInstallEvent`.
 
 Rules:
 
-- Main permits one WebContents-owned session; stale identity/sequence and teardown fail
-  closed. Stop returns editable text but never submits or creates Job/source/model work.
-- Native audio/handles never cross preload or enter files, logs, diagnostics, vault,
-  backup, conversation or models; IPC is body-free except bounded transcript/meter data.
-- Explicit start alone requests permission; recovery opens only the fixed macOS
-  Microphone Privacy pane. Language is explicit and defaults to app locale; persisted
-  dictation language remains open.
-- Missing assets/platform support are typed unavailable; no install, Broker grant or
-  cloud fallback occurs.
+- One sender session fails stale identity/sequence/teardown closed; Stop yields editable
+  text without submit/Job/source/model. Audio/handles never cross preload or enter storage,
+  diagnostics, backup or models; explicit start alone requests microphone permission.
+- Availability/start never download. Explicit exact-language Apple install emits API v1
+  monotonic `progress | installed | failed` without asset/audio/path/URL/raw error; success
+  re-probes and still needs Start. No reliable cancel exists: UI locks focus/route/locale,
+  while teardown only detaches events. Persisted dictation language remains open.
 
 ### 6.3 Jobs
 
