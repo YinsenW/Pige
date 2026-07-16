@@ -181,7 +181,10 @@ export class JsonOcrHelperRunner implements OcrHelperRunner {
       child.once("close", (code, signal) => {
         if (settled) return;
         if (timedOut) {
-          finish(() => reject(new PigeDomainError("ocr.helper_timeout", "The local OCR helper exceeded its time limit.")));
+          const error = stdoutBytes > this.#maxOutputBytes
+            ? new PigeDomainError("ocr.helper_output_too_large", "The OCR helper response exceeded its protocol limit.")
+            : new PigeDomainError("ocr.helper_timeout", "The local OCR helper exceeded its time limit.");
+          finish(() => reject(error));
           return;
         }
         if (code !== 0 || signal) {
