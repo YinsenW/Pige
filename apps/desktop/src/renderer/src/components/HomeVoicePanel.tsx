@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 
 export type HomeVoicePanelState =
   | "requesting_permission"
@@ -28,7 +28,6 @@ interface HomeVoicePanelProps {
   readonly onDismiss: () => void;
   readonly onOpenSystemSettings?: () => void;
   readonly onInstallLanguageAsset?: () => void;
-  readonly onCancelAssetInstall?: () => void;
   readonly onStartAfterAssetInstall?: () => void;
   readonly t: (key: string) => string;
 }
@@ -47,7 +46,6 @@ export function HomeVoicePanel({
   onDismiss,
   onOpenSystemSettings,
   onInstallLanguageAsset,
-  onCancelAssetInstall,
   onStartAfterAssetInstall,
   t
 }: HomeVoicePanelProps): React.JSX.Element {
@@ -69,6 +67,10 @@ export function HomeVoicePanel({
   const transcriptReady = Boolean(transcript?.trim()) && (stopped || ready);
   const waveform = normalizeLevels(levels);
 
+  useEffect(() => {
+    if (installingAsset) panelRef.current?.focus();
+  }, [installingAsset]);
+
   return (
     <section
       ref={panelRef}
@@ -79,10 +81,12 @@ export function HomeVoicePanel({
       aria-atomic={alert ? "true" : undefined}
       aria-busy={busy}
       aria-label={t(stateTitleKey(state))}
+      tabIndex={installingAsset ? -1 : undefined}
       onKeyDown={(event) => {
         if (event.key !== "Escape" || event.nativeEvent.isComposing) return;
         event.preventDefault();
         event.stopPropagation();
+        if (installingAsset) return;
         onDismiss();
       }}
     >
@@ -183,9 +187,11 @@ export function HomeVoicePanel({
             ) : null}
           </div>
           <div className="home-voice-inline-actions">
-            <button className="quiet" type="button" onClick={onDismiss}>
-              {t(requestingPermission || transcribing ? "home.voice.cancel" : "home.voice.continueTyping")}
-            </button>
+            {installingAsset ? null : (
+              <button className="quiet" type="button" onClick={onDismiss}>
+                {t(requestingPermission || transcribing ? "home.voice.cancel" : "home.voice.continueTyping")}
+              </button>
+            )}
             {permissionDenied ? (
               <button className="primary" type="button" disabled={!onOpenSystemSettings} onClick={onOpenSystemSettings}>
                 {t("home.voice.openSystemSettings")}
@@ -204,16 +210,6 @@ export function HomeVoicePanel({
                 onClick={onInstallLanguageAsset}
               >
                 {t("home.voice.installLanguageAsset")}
-              </button>
-            ) : null}
-            {installingAsset ? (
-              <button
-                className="primary"
-                type="button"
-                disabled={!onCancelAssetInstall}
-                onClick={onCancelAssetInstall}
-              >
-                {t("home.voice.cancelAssetInstall")}
               </button>
             ) : null}
             {assetReady ? (

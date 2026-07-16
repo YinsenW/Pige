@@ -99,6 +99,7 @@ describe("Home voice UI", () => {
     const container = dom.window.document.getElementById("root")!;
     const root = createRoot(container);
     let installed = 0;
+    let dismissed = 0;
 
     await act(async () => {
       root.render(createElement(HomeVoicePanel, {
@@ -121,7 +122,7 @@ describe("Home voice UI", () => {
       root.render(createElement(HomeVoicePanel, {
         state: "installing_asset",
         assetInstallProgress: 42,
-        onDismiss: () => undefined,
+        onDismiss: () => { dismissed += 1; },
         t: translate(enMessages)
       }));
     });
@@ -129,7 +130,15 @@ describe("Home voice UI", () => {
     expect(progress.getAttribute("aria-valuenow")).toBe("42");
     expect(progress.getAttribute("aria-valuetext")).toContain("42%");
     expect(container.textContent).toContain("42%");
-    expect(container.querySelector<HTMLButtonElement>("button.primary")?.disabled).toBe(true);
+    expect(container.querySelectorAll("button")).toHaveLength(0);
+    expect(dom.window.document.activeElement).toBe(container.querySelector(".home-voice-panel"));
+    expect(container.textContent).not.toContain(enMessages["home.voice.continueTyping"]);
+    await act(async () => {
+      container.querySelector<HTMLElement>(".home-voice-panel")!.dispatchEvent(
+        new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true })
+      );
+    });
+    expect(dismissed).toBe(0);
 
     let started = 0;
     await act(async () => {

@@ -175,7 +175,6 @@
   "home.voice.installingAssetTitle": "음성 언어 리소스 설치 중…",
   "home.voice.installingAssetDescription": "macOS가 선택한 온디바이스 언어 리소스를 설치하고 있습니다. 완료될 때까지 Pige를 열어 두세요.",
   "home.voice.assetInstallProgress": "언어 리소스 설치",
-  "home.voice.cancelAssetInstall": "설치 취소",
   "home.voice.assetReadyTitle": "언어 리소스 설치 완료",
   "home.voice.assetReadyDescription": "이 언어의 음성 입력을 사용할 준비가 되었습니다. 준비되면 시작하세요.",
   "home.voice.startAfterAssetInstall": "음성 입력 시작",

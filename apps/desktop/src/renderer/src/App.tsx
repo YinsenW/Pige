@@ -210,6 +210,7 @@ export function App(): React.JSX.Element {
   const [toolchainHealth, setToolchainHealth] = useState<ToolchainHealth | null>(null);
   const [dropActive, setDropActive] = useState(false);
   const [homeDraftText, setHomeDraftText] = useState("");
+  const [voiceAssetInstallActive, setVoiceAssetInstallActive] = useState(false);
   const [homeFileDropRequest, setHomeFileDropRequest] = useState<HomeFileDropRequest | null>(null);
   const [captureToast, setCaptureToast] = useState<CaptureToast | null>(null);
   const [recentJobs, setRecentJobs] = useState<readonly JobSummary[]>([]);
@@ -239,8 +240,23 @@ export function App(): React.JSX.Element {
   const modelRefreshSequence = useRef(0);
   const agentRuntimeRefreshSequence = useRef(0);
   const vaultRefreshSequence = useRef(0);
+  const voiceAssetInstallActiveRef = useRef(false);
+  const deferredAppearanceRef = useRef<{
+    readonly locale: Locale;
+    readonly availableLocales: readonly Locale[];
+  } | null>(null);
   const activeVaultIdRef = useRef<string | undefined>(onboarding?.activeVault?.vaultId);
   activeVaultIdRef.current = onboarding?.activeVault?.vaultId;
+
+  const updateVoiceAssetInstallOwnership = (active: boolean): void => {
+    voiceAssetInstallActiveRef.current = active;
+    setVoiceAssetInstallActive(active);
+    if (active || !deferredAppearanceRef.current) return;
+    const appearance = deferredAppearanceRef.current;
+    deferredAppearanceRef.current = null;
+    setLocale(appearance.locale);
+    setAvailableLocales(appearance.availableLocales);
+  };
 
   const refreshAgentRuntimeStatus = async (): Promise<void> => {
     const refreshId = ++agentRuntimeRefreshSequence.current;
@@ -265,6 +281,10 @@ export function App(): React.JSX.Element {
     void window.pige.getHealth().then(setHealth);
     void window.pige.window.current().then(setWindowState);
     void window.pige.settings.appearance().then((appearance) => {
+      if (voiceAssetInstallActiveRef.current) {
+        deferredAppearanceRef.current = appearance;
+        return;
+      }
       setLocale(appearance.locale);
       setAvailableLocales(appearance.availableLocales);
     });
@@ -412,6 +432,7 @@ export function App(): React.JSX.Element {
   };
 
   const openModelsFromHome = async (opener: HTMLButtonElement): Promise<void> => {
+    if (voiceAssetInstallActiveRef.current) return;
     settingsOpenerRef.current = opener;
     await dismissFirstHomeGuide();
     setSettingsSection("models");
@@ -420,6 +441,7 @@ export function App(): React.JSX.Element {
   };
 
   const openSettings = (section: SettingsSection, opener: HTMLButtonElement): void => {
+    if (voiceAssetInstallActiveRef.current) return;
     settingsOpenerRef.current = opener;
     setSettingsSection(section);
     setDevelopmentNotice(null);
@@ -538,6 +560,7 @@ export function App(): React.JSX.Element {
   };
 
   const navigateLibrarySearch = async (): Promise<void> => {
+    if (voiceAssetInstallActiveRef.current) return;
     noteOpenSequence.current += 1;
     knowledgeTreeReturnFocusKey.current = null;
     setSelectedNote(null);
@@ -561,6 +584,7 @@ export function App(): React.JSX.Element {
   };
 
   const updateLocale = async (nextLocale: Locale): Promise<void> => {
+    if (voiceAssetInstallActiveRef.current) return;
     const appearance = await window.pige.settings.setLocale({ locale: nextLocale });
     setLocale(appearance.locale);
     setAvailableLocales(appearance.availableLocales);
@@ -842,8 +866,10 @@ export function App(): React.JSX.Element {
             <button
               className={view === "knowledgeTree" ? "nav-item active" : "nav-item"}
               type="button"
+              disabled={voiceAssetInstallActive}
               aria-current={view === "knowledgeTree" ? "page" : undefined}
               onClick={() => {
+                if (voiceAssetInstallActive) return;
                 noteOpenSequence.current += 1;
                 knowledgeTreeReturnFocusKey.current = null;
                 setSelectedNote(null);
@@ -870,6 +896,7 @@ export function App(): React.JSX.Element {
                   });
                 }}
                 onOpenNote={async (pageId) => {
+                  if (voiceAssetInstallActive) return;
                   setView("library");
                   await openNote(pageId);
                 }}
@@ -881,6 +908,7 @@ export function App(): React.JSX.Element {
               className="sidebar-settings-control"
               type="button"
               aria-haspopup="dialog"
+              disabled={voiceAssetInstallActive}
               onClick={(event) => openSettings("general", event.currentTarget)}
             >
               <PigeIcon name="settings" size={16} />
@@ -1009,6 +1037,7 @@ export function App(): React.JSX.Element {
             onHomeStateChanged={refreshVaultState}
             onProposalChanged={refreshVaultState}
             onSetDefaultModel={setHomeDefaultModel}
+            onVoiceAssetInstallActiveChange={updateVoiceAssetInstallOwnership}
             onOpenModels={openModelsFromHome}
             onDismissFirstHome={dismissFirstHomeGuide}
             developmentNotice={developmentNotice?.surface === "home" ? developmentNotice : null}
@@ -2656,6 +2685,7 @@ function HomeComposer(props: {
   readonly onHomeStateChanged: () => Promise<void>;
   readonly onProposalChanged: () => Promise<void>;
   readonly onSetDefaultModel: (modelProfileId: string) => Promise<boolean>;
+  readonly onVoiceAssetInstallActiveChange: (active: boolean) => void;
   readonly onOpenModels: (opener: HTMLButtonElement) => Promise<void>;
   readonly onDismissFirstHome: () => Promise<void>;
   readonly developmentNotice: DevelopmentNotice | null;
@@ -2758,6 +2788,9 @@ function HomeComposer(props: {
   );
   const speechAssetApi = resolveHomeSpeechAssetApi();
 
+  const voiceAssetInstallActive = (): boolean =>
+    voiceAssetPendingRequestIdRef.current !== null || voiceAssetInstallationIdRef.current !== null;
+
   const closeModelMenu = (restoreFocus = false): void => {
     setModelMenuOpen(false);
     if (restoreFocus) {
@@ -2821,14 +2854,12 @@ function HomeComposer(props: {
   };
 
   const cancelVoice = (restoreFocus = true): void => {
+    if (voiceAssetInstallActive()) return;
     voiceRequestSequenceRef.current += 1;
     const requestId = voicePendingRequestIdRef.current;
     const sessionId = voiceSessionIdRef.current;
-    const installationId = voiceAssetInstallationIdRef.current;
     clearVoiceState(restoreFocus);
-    if (installationId && speechAssetApi) {
-      void speechAssetApi.cancelLanguageAssetInstall({ installationId }).catch(() => undefined);
-    } else if (sessionId) void window.pige.speech.cancel({ sessionId }).catch(() => undefined);
+    if (sessionId) void window.pige.speech.cancel({ sessionId }).catch(() => undefined);
     else if (requestId) void window.pige.speech.cancel({ requestId }).catch(() => undefined);
   };
 
@@ -2843,14 +2874,10 @@ function HomeComposer(props: {
       return;
     }
     voiceAssetInstallationIdRef.current = null;
-    if (event.kind === "canceled") {
-      setVoiceAssetInstallProgress(undefined);
-      setVoiceState("assets_unavailable");
-      return;
-    }
     if (event.kind === "failed") {
       setVoiceAssetInstallProgress(undefined);
       setVoiceState("asset_install_failed");
+      props.onVoiceAssetInstallActiveChange(false);
       return;
     }
     setVoiceAssetInstallProgress(100);
@@ -2868,6 +2895,7 @@ function HomeComposer(props: {
         setVoiceAssetInstallProgress(undefined);
         setVoiceState("asset_install_failed");
       }
+      props.onVoiceAssetInstallActiveChange(false);
     }).catch(() => {
       if (
         voiceRequestSequenceRef.current === requestSequence &&
@@ -2875,6 +2903,7 @@ function HomeComposer(props: {
       ) {
         setVoiceAssetInstallProgress(undefined);
         setVoiceState("asset_install_failed");
+        props.onVoiceAssetInstallActiveChange(false);
       }
     });
   };
@@ -2890,6 +2919,7 @@ function HomeComposer(props: {
     voiceAssetBufferedEventsRef.current = [];
     setVoiceAssetInstallProgress(undefined);
     setVoiceState("installing_asset");
+    props.onVoiceAssetInstallActiveChange(true);
     try {
       const result = await speechAssetApi.installLanguageAsset({ requestId, languageTag });
       if (voiceAssetPendingRequestIdRef.current === requestId) {
@@ -2899,14 +2929,11 @@ function HomeComposer(props: {
         voiceRequestSequenceRef.current !== requestSequence ||
         voiceLanguageTagRef.current !== languageTag
       ) {
-        if (result.status === "started") {
-          void speechAssetApi.cancelLanguageAssetInstall({ installationId: result.installationId })
-            .catch(() => undefined);
-        }
         return;
       }
       if (result.status === "blocked") {
         setVoiceState("asset_install_failed");
+        props.onVoiceAssetInstallActiveChange(false);
         return;
       }
       voiceAssetInstallationIdRef.current = result.installationId;
@@ -2919,24 +2946,8 @@ function HomeComposer(props: {
       ) {
         voiceAssetPendingRequestIdRef.current = null;
         setVoiceState("asset_install_failed");
+        props.onVoiceAssetInstallActiveChange(false);
       }
-    }
-  };
-
-  const cancelVoiceAssetInstall = (): void => {
-    const requestSequence = voiceRequestSequenceRef.current + 1;
-    voiceRequestSequenceRef.current = requestSequence;
-    const installationId = voiceAssetInstallationIdRef.current;
-    voiceAssetPendingRequestIdRef.current = null;
-    voiceAssetInstallationIdRef.current = null;
-    voiceAssetEventSequenceRef.current = 0;
-    voiceAssetBufferedEventsRef.current = [];
-    setVoiceAssetInstallProgress(undefined);
-    setVoiceState("assets_unavailable");
-    if (installationId && speechAssetApi) {
-      void speechAssetApi.cancelLanguageAssetInstall({ installationId }).catch(() => {
-        if (voiceRequestSequenceRef.current === requestSequence) setVoiceState("asset_install_failed");
-      });
     }
   };
 
@@ -3077,14 +3088,11 @@ function HomeComposer(props: {
       voiceRequestSequenceRef.current += 1;
       const requestId = voicePendingRequestIdRef.current;
       const sessionId = voiceSessionIdRef.current;
-      const installationId = voiceAssetInstallationIdRef.current;
       voicePendingRequestIdRef.current = null;
       voiceSessionIdRef.current = null;
       voiceAssetPendingRequestIdRef.current = null;
       voiceAssetInstallationIdRef.current = null;
-      if (installationId && speechAssetApi) {
-        void speechAssetApi.cancelLanguageAssetInstall({ installationId }).catch(() => undefined);
-      } else if (sessionId) void window.pige.speech.cancel({ sessionId }).catch(() => undefined);
+      if (sessionId) void window.pige.speech.cancel({ sessionId }).catch(() => undefined);
       else if (requestId) void window.pige.speech.cancel({ requestId }).catch(() => undefined);
     };
   }, [props.activeVault?.vaultId, props.locale]);
@@ -4178,9 +4186,6 @@ function HomeComposer(props: {
             {...((voiceState === "assets_unavailable" || voiceState === "asset_install_failed") && speechAssetApi
               ? { onInstallLanguageAsset: () => void beginVoiceAssetInstall() }
               : {})}
-            {...(voiceState === "installing_asset" && speechAssetApi
-              ? { onCancelAssetInstall: cancelVoiceAssetInstall }
-              : {})}
             {...(voiceState === "asset_ready" ? { onStartAfterAssetInstall: () => void beginVoice() } : {})}
             {...(voiceCanOpenSystemSettings
               ? { onOpenSystemSettings: () => void window.pige.speech.openSystemSettings() }
@@ -4626,12 +4631,6 @@ type HomeSpeechAssetInstallEvent =
     }
   | {
       readonly apiVersion: 1;
-      readonly kind: "canceled";
-      readonly installationId: string;
-      readonly sequence: number;
-    }
-  | {
-      readonly apiVersion: 1;
       readonly kind: "failed";
       readonly installationId: string;
       readonly sequence: number;
@@ -4656,20 +4655,12 @@ interface HomeSpeechAssetApi {
         readonly error: PigeErrorSummary;
       }
   >;
-  cancelLanguageAssetInstall(request: {
-    readonly installationId: string;
-  }): Promise<
-    | { readonly status: "canceled"; readonly installationId: string }
-    | { readonly status: "not_active"; readonly installationId: string }
-    | { readonly status: "failed"; readonly installationId: string; readonly error: PigeErrorSummary }
-  >;
   onAssetInstallEvent(listener: (event: HomeSpeechAssetInstallEvent) => void): () => void;
 }
 
 function resolveHomeSpeechAssetApi(): HomeSpeechAssetApi | null {
   const speech = window.pige.speech as typeof window.pige.speech & Partial<HomeSpeechAssetApi>;
   return typeof speech.installLanguageAsset === "function" &&
-    typeof speech.cancelLanguageAssetInstall === "function" &&
     typeof speech.onAssetInstallEvent === "function"
     ? speech as HomeSpeechAssetApi
     : null;
