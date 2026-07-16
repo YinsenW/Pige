@@ -685,6 +685,53 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("docks processing files to the composer and removes terminal or non-source Jobs", async () => {
+    const dom = createDom(420);
+    const harness = createHarness(undefined);
+    harness.onboarding = captureOnlyOnboarding(true);
+    harness.jobs = [
+      sourceWaitingForModelJob(),
+      {
+        ...sourceWaitingForModelJob(),
+        id: "job_20260716_completedsource",
+        state: "completed",
+        sourceDisplayName: "completed-source.csv"
+      },
+      {
+        ...sourceWaitingForModelJob(),
+        id: "job_20260716_failedsource",
+        state: "failed_final",
+        sourceDisplayName: "failed-source.csv"
+      },
+      runningAgentJob()
+    ];
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await waitFor(dom, () => container.querySelector(".task-panel") !== null);
+    expect(container.textContent).toContain("public-alpha.csv");
+    expect(container.textContent).not.toContain("completed-source.csv");
+    expect(container.textContent).not.toContain("failed-source.csv");
+    await clickButtonByAriaLabel(dom, container, "Expand processing files");
+    expect(container.querySelectorAll(".task-row")).toHaveLength(1);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+
+    const terminalDom = createDom(420);
+    const terminalHarness = createHarness(undefined);
+    terminalHarness.onboarding = captureOnlyOnboarding(true);
+    terminalHarness.jobs = [{
+      ...sourceWaitingForModelJob(),
+      state: "completed",
+      sourceDisplayName: "completed-source.csv"
+    }];
+    const terminalMount = await mountHome(terminalDom, makePigeApi(terminalHarness));
+    expect(terminalMount.container.querySelector(".task-panel")).toBeNull();
+
+    await act(async () => terminalMount.root.unmount());
+    terminalDom.window.close();
+  });
+
   it("filters conversation-owned model waits before capping Recent Work", async () => {
     const dom = createDom();
     const harness = createHarness(modelWaitingTimeline());

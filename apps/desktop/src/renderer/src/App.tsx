@@ -2825,7 +2825,7 @@ function HomeComposer(props: {
   currentModelEgressRequestIdRef.current = modelEgressRequestId;
   const visibleRecentJobs = props.recentJobs
     .filter((job) =>
-      Boolean(job.sourceDisplayName || job.sourceId) &&
+      isActiveProcessingFileJob(job) &&
       (!permissionRequestId || job.permissionRequestId !== permissionRequestId) &&
       (!modelEgressRequestId || job.modelEgressApprovalRequestId !== modelEgressRequestId) &&
       !(
@@ -4157,6 +4157,18 @@ function isSourceWaitingForModel(job: JobSummary): boolean {
     job.state === "waiting_dependency" &&
     job.stage === "waiting_for_model" &&
     Boolean(job.sourceId);
+}
+
+function isActiveProcessingFileJob(job: JobSummary): boolean {
+  if (!job.sourceDisplayName && !job.sourceId) return false;
+  return job.state === "queued" ||
+    job.state === "running" ||
+    job.state === "waiting_dependency" ||
+    job.state === "waiting_permission" ||
+    job.state === "waiting_model_egress" ||
+    job.state === "awaiting_review" ||
+    job.state === "cancel_requested" ||
+    job.state === "failed_retryable";
 }
 
 function jobStateMessageKey(job: JobSummary): string {

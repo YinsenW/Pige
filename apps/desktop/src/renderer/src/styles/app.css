@@ -3337,6 +3337,7 @@ dd {
 .home > .composer {
   position: relative;
   z-index: 12;
+  anchor-name: --home-composer;
   width: 100%;
   flex: 0 0 auto;
   margin-top: auto;
@@ -3544,9 +3545,14 @@ dd {
 .job-strip-title { color: var(--text-primary); font-weight: 600; }
 
 .task-panel {
-  width: 100%;
-  max-width: 100%;
-  margin: 0 10px -14px;
+  position: fixed;
+  position-anchor: --home-composer;
+  z-index: 11;
+  left: anchor(left);
+  bottom: calc(anchor(top) - 14px);
+  width: anchor-size(width);
+  max-width: none;
+  margin: 0;
   padding: 12px 12px 26px;
   border: 1px solid var(--border-default);
   border-radius: 18px 18px 10px 10px;
@@ -3641,7 +3647,7 @@ dd {
 .task-row .job-action:not(:has(svg)) { width: auto; padding-inline: 7px; }
 
 @media (max-width: 420px) {
-  .task-panel { margin-inline: 7px; padding-inline: 10px; }
+  .task-panel { padding-inline: 10px; }
   .task-row { grid-template-columns: minmax(0, 1fr) auto; }
   .task-row .progress-track { display: none; }
   .task-current-file { max-width: 92px; }

@@ -43,6 +43,23 @@ describe("full production UI renderer contract", () => {
     expect(cssSource).not.toContain(".app-window .titlebar { padding-right: 10px; }");
     const homeComposer = cssSource.match(/\.home > \.composer \{[\s\S]*?\n\}/)?.[0] ?? "";
     expect(homeComposer).toContain("border-radius: 22px;");
+    expect(homeComposer).toContain("anchor-name: --home-composer;");
+    const processingPanel = cssSource.match(/\.task-panel \{[\s\S]*?\n\}/)?.[0] ?? "";
+    expect(processingPanel).toContain("position: fixed;");
+    expect(processingPanel).toContain("position-anchor: --home-composer;");
+    expect(processingPanel).toContain("left: anchor(left);");
+    expect(processingPanel).toContain("width: anchor-size(width);");
+    expect(processingPanel).toContain("bottom: calc(anchor(top) - 14px);");
+    expect(processingPanel).toContain("margin: 0;");
+    const processingProjection = appSource.slice(
+      appSource.indexOf("function isActiveProcessingFileJob"),
+      appSource.indexOf("function jobStateMessageKey")
+    );
+    expect(processingProjection).toContain('job.state === "running"');
+    expect(processingProjection).toContain('job.state === "failed_retryable"');
+    expect(processingProjection).not.toContain('job.state === "completed"');
+    expect(processingProjection).not.toContain('job.state === "failed_final"');
+    expect(processingProjection).not.toContain('job.state === "cancelled"');
   });
 
   it("keeps Home-only navigation hidden and exposes one controlled Library tree", () => {
