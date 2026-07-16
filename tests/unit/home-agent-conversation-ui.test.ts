@@ -61,6 +61,47 @@ const homeLocaleCases = [
   { locale: "de", messages: deMessages }
 ] as const;
 
+type TestSpeechAssetInstallRequest = {
+  readonly requestId: string;
+  readonly languageTag: string;
+};
+
+type TestSpeechAssetInstallResult =
+  | {
+      readonly status: "started";
+      readonly requestId: string;
+      readonly installationId: string;
+      readonly languageTag: string;
+      readonly metering: "available" | "unavailable";
+    }
+  | {
+      readonly status: "blocked";
+      readonly requestId: string;
+      readonly error: { readonly code: string };
+    };
+
+type TestSpeechAssetInstallEvent =
+  | {
+      readonly apiVersion: 1;
+      readonly kind: "progress";
+      readonly installationId: string;
+      readonly sequence: number;
+      readonly completedFraction: number;
+    }
+  | {
+      readonly apiVersion: 1;
+      readonly kind: "installed";
+      readonly installationId: string;
+      readonly sequence: number;
+      readonly languageTag: string;
+    }
+  | {
+      readonly apiVersion: 1;
+      readonly kind: "canceled";
+      readonly installationId: string;
+      readonly sequence: number;
+    };
+
 afterEach(() => {
   for (const key of globalKeys) {
     const descriptor = originalDescriptors.get(key);
@@ -86,6 +127,144 @@ describe("Home durable Agent conversation UI", () => {
     expect(harness.speechAvailabilityRequests).toEqual([{ languageTag: "en" }]);
     expect(harness.speechStartRequests).toEqual([]);
     expect(harness.submitRequests).toEqual([]);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("installs an explicitly requested language asset and requires a second Start action", async () => {
+    const dom = createDom(420);
+    const harness = createHarness(undefined);
+    const installationId = `speechinstall_${"b".repeat(16)}`;
+    harness.speechAvailability = {
+      status: "unsupported",
+      reason: "assets_unavailable",
+      canOpenSystemSettings: false
+    };
+    harness.installSpeechAsset = async (request) => {
+      harness.emitSpeechAsset({
+        apiVersion: 1,
+        kind: "progress",
+        installationId,
+        sequence: 1,
+        completedFraction: 0.25
+      });
+      return {
+        status: "started",
+        requestId: request.requestId,
+        installationId,
+        languageTag: request.languageTag,
+        metering: "available"
+      };
+    };
+    harness.speechStartResult = {
+      status: "started",
+      requestId: "speechreq_1234567890abcdef",
+      sessionId: "speech_1234567890abcdef",
+      languageTag: "en",
+      metering: "available"
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await clickButtonByAriaLabel(dom, container, enMessages["home.voice.start"]);
+    await waitFor(dom, () => container.textContent?.includes(enMessages["home.voice.assetsUnavailableTitle"]) === true);
+    await clickButton(dom, container, enMessages["home.voice.installLanguageAsset"]);
+    await waitFor(dom, () => harness.speechAssetInstallRequests.length === 1);
+    await waitFor(dom, () => container.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow") === "25");
+    expect(harness.speechAssetInstallRequests[0]).toMatchObject({
+      requestId: expect.stringMatching(/^speechasset_[a-z0-9]{16,64}$/u),
+      languageTag: "en"
+    });
+    expect(harness.speechStartRequests).toEqual([]);
+
+    await act(async () => {
+      harness.speechAvailability = {
+        status: "supported",
+        languageTag: "en",
+        permission: "granted",
+        canOpenSystemSettings: true
+      };
+      harness.emitSpeechAsset({
+        apiVersion: 1,
+        kind: "progress",
+        installationId,
+        sequence: 1,
+        completedFraction: 0.9
+      });
+      harness.emitSpeechAsset({
+        apiVersion: 1,
+        kind: "installed",
+        installationId,
+        sequence: 2,
+        languageTag: "en"
+      });
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.textContent?.includes(enMessages["home.voice.assetReadyTitle"]) === true);
+    expect(harness.speechAvailabilityRequests).toEqual([{ languageTag: "en" }, { languageTag: "en" }]);
+    expect(harness.speechStartRequests).toEqual([]);
+
+    await clickButton(dom, container, enMessages["home.voice.startAfterAssetInstall"]);
+    await waitFor(dom, () => container.querySelector(".home-voice-recording-row") !== null);
+    expect(harness.speechStartRequests).toHaveLength(1);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("cancels only the active language asset install and rejects a late start result", async () => {
+    const dom = createDom(420);
+    const harness = createHarness(undefined);
+    const installationId = `speechinstall_${"c".repeat(16)}`;
+    let resolveInstall: ((result: TestSpeechAssetInstallResult) => void) | undefined;
+    harness.speechAvailability = {
+      status: "unsupported",
+      reason: "assets_unavailable",
+      canOpenSystemSettings: false
+    };
+    harness.installSpeechAsset = (request) => new Promise((resolve) => {
+      resolveInstall = resolve;
+      expect(request.languageTag).toBe("en");
+    });
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await clickButtonByAriaLabel(dom, container, enMessages["home.voice.start"]);
+    await waitFor(dom, () => container.textContent?.includes(enMessages["home.voice.assetsUnavailableTitle"]) === true);
+    await clickButton(dom, container, enMessages["home.voice.installLanguageAsset"]);
+    await waitFor(dom, () => harness.speechAssetInstallRequests.length === 1);
+    await clickButton(dom, container, enMessages["home.voice.continueTyping"]);
+    expect(container.querySelector(".home-voice-panel")).toBeNull();
+
+    await act(async () => {
+      resolveInstall?.({
+        status: "started",
+        requestId: harness.speechAssetInstallRequests[0]!.requestId,
+        installationId,
+        languageTag: "en",
+        metering: "available"
+      });
+      await settle(dom);
+    });
+    await waitFor(dom, () => harness.speechAssetCancelRequests.length === 1);
+    expect(harness.speechAssetCancelRequests).toEqual([{ installationId }]);
+    expect(harness.speechStartRequests).toEqual([]);
+
+    const secondInstallationId = `speechinstall_${"d".repeat(16)}`;
+    harness.installSpeechAsset = async (request) => ({
+      status: "started",
+      requestId: request.requestId,
+      installationId: secondInstallationId,
+      languageTag: request.languageTag,
+      metering: "available"
+    });
+    await clickButtonByAriaLabel(dom, container, enMessages["home.voice.start"]);
+    await waitFor(dom, () => container.textContent?.includes(enMessages["home.voice.assetsUnavailableTitle"]) === true);
+    await clickButton(dom, container, enMessages["home.voice.installLanguageAsset"]);
+    await waitFor(dom, () => harness.speechAssetInstallRequests.length === 2);
+    await clickButton(dom, container, enMessages["home.voice.cancelAssetInstall"]);
+    await waitFor(dom, () => harness.speechAssetCancelRequests.length === 2);
+    expect(harness.speechAssetCancelRequests[1]).toEqual({ installationId: secondInstallationId });
+    expect(container.textContent).toContain(enMessages["home.voice.assetsUnavailableTitle"]);
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -1992,6 +2171,9 @@ interface ConversationHarness {
   readonly speechStopRequests: SpeechSessionRequest[];
   readonly speechCancelRequests: SpeechCancelRequest[];
   readonly speechListeners: Set<(event: SpeechSessionEvent) => void>;
+  readonly speechAssetInstallRequests: TestSpeechAssetInstallRequest[];
+  readonly speechAssetCancelRequests: { readonly installationId: string }[];
+  readonly speechAssetListeners: Set<(event: TestSpeechAssetInstallEvent) => void>;
   readonly undoOperationIds: string[];
   readonly draftListeners: Set<(event: AgentTurnDraftEvent) => void>;
   activityUndoMode: "success" | "post_commit_reject" | "retryable_reject" | "unknown_reject";
@@ -2016,10 +2198,12 @@ interface ConversationHarness {
   speechStartResult: SpeechStartResult;
   speechStopResult: SpeechStopResult;
   startSpeech: (request: SpeechStartRequest) => Promise<SpeechStartResult>;
+  installSpeechAsset: (request: TestSpeechAssetInstallRequest) => Promise<TestSpeechAssetInstallResult>;
   loadConversation: () => Promise<AgentConversationTimeline | undefined>;
   submitTurn: (request: AgentSubmitTurnRequest) => Promise<AgentSubmitTurnResult>;
   emitDraft: (event: AgentTurnDraftEvent) => void;
   emitSpeech: (event: SpeechSessionEvent) => void;
+  emitSpeechAsset: (event: TestSpeechAssetInstallEvent) => void;
 }
 
 function createHarness(timeline: AgentConversationTimeline | undefined): ConversationHarness {
@@ -2039,6 +2223,9 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     speechStopRequests: [],
     speechCancelRequests: [],
     speechListeners: new Set(),
+    speechAssetInstallRequests: [],
+    speechAssetCancelRequests: [],
+    speechAssetListeners: new Set(),
     undoOperationIds: [],
     draftListeners: new Set(),
     activityUndoMode: "success",
@@ -2089,6 +2276,13 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     startSpeech: async (speechRequest) => harness.speechStartResult.status === "started"
       ? { ...harness.speechStartResult, requestId: speechRequest.requestId }
       : { ...harness.speechStartResult, requestId: speechRequest.requestId },
+    installSpeechAsset: async (request) => ({
+      status: "started",
+      requestId: request.requestId,
+      installationId: `speechinstall_${"a".repeat(16)}`,
+      languageTag: request.languageTag,
+      metering: "available"
+    }),
     loadConversation: async () => harness.timeline,
     submitTurn: async (request) => {
       harness.submitRequests.push(request);
@@ -2099,6 +2293,9 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     },
     emitSpeech: (event) => {
       for (const listener of harness.speechListeners) listener(event);
+    },
+    emitSpeechAsset: (event) => {
+      for (const listener of harness.speechAssetListeners) listener(event);
     }
   };
   return harness;
@@ -2261,10 +2458,22 @@ function makePigeApi(harness: ConversationHarness): object {
           ? { status: "canceled" as const, sessionId: request.sessionId }
           : { status: "canceled" as const, requestId: request.requestId };
       },
+      installLanguageAsset: async (request: TestSpeechAssetInstallRequest) => {
+        harness.speechAssetInstallRequests.push(request);
+        return harness.installSpeechAsset(request);
+      },
+      cancelLanguageAssetInstall: async (request: { readonly installationId: string }) => {
+        harness.speechAssetCancelRequests.push(request);
+        return { status: "canceled" as const, installationId: request.installationId };
+      },
       openSystemSettings: async () => ({ status: "opened" as const }),
       onSessionEvent: (listener: (event: SpeechSessionEvent) => void) => {
         harness.speechListeners.add(listener);
         return () => harness.speechListeners.delete(listener);
+      },
+      onAssetInstallEvent: (listener: (event: TestSpeechAssetInstallEvent) => void) => {
+        harness.speechAssetListeners.add(listener);
+        return () => harness.speechAssetListeners.delete(listener);
       }
     },
     agent: {
