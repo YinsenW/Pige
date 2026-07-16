@@ -221,6 +221,7 @@ export function App(): React.JSX.Element {
   const [knowledgeTree, setKnowledgeTree] = useState<KnowledgeTreeResult | null>(null);
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [selectedNote, setSelectedNote] = useState<NoteRenderResult | null>(null);
+  const [selectedNoteVaultId, setSelectedNoteVaultId] = useState<string | null>(null);
   const [selectedNoteRelated, setSelectedNoteRelated] = useState<NoteRelatedState>(null);
   const [noteLoadingPageId, setNoteLoadingPageId] = useState<string | null>(null);
   const noteOpenSequence = useRef(0);
@@ -234,6 +235,8 @@ export function App(): React.JSX.Element {
   const modelRefreshSequence = useRef(0);
   const agentRuntimeRefreshSequence = useRef(0);
   const vaultRefreshSequence = useRef(0);
+  const activeVaultIdRef = useRef<string | undefined>(onboarding?.activeVault?.vaultId);
+  activeVaultIdRef.current = onboarding?.activeVault?.vaultId;
 
   const refreshAgentRuntimeStatus = async (): Promise<void> => {
     const refreshId = ++agentRuntimeRefreshSequence.current;
@@ -312,6 +315,14 @@ export function App(): React.JSX.Element {
         ])
         : [undefined, undefined, undefined, undefined];
       if (refreshId !== vaultRefreshSequence.current) return;
+      if (activeVaultIdRef.current !== nextOnboarding.activeVault?.vaultId) {
+        noteOpenSequence.current += 1;
+        setSelectedNote(null);
+        setSelectedNoteRelated(null);
+        setSelectedNoteVaultId(null);
+        setNoteLoadingPageId(null);
+        setNoteAgentOpen(false);
+      }
       setOnboarding(nextOnboarding);
       setRecentVaults(nextRecentVaults);
       setBackupStatus(nextBackupStatus);
@@ -453,6 +464,8 @@ export function App(): React.JSX.Element {
   };
 
   const openNote = async (pageId: string): Promise<void> => {
+    const vaultId = activeVaultIdRef.current;
+    if (!vaultId) return;
     const requestId = noteOpenSequence.current + 1;
     noteOpenSequence.current = requestId;
     setLibraryError(null);
@@ -460,11 +473,12 @@ export function App(): React.JSX.Element {
     setNoteLoadingPageId(pageId);
     try {
       const note = await window.pige.notes.render({ pageId });
-      if (requestId !== noteOpenSequence.current) return;
+      if (requestId !== noteOpenSequence.current || activeVaultIdRef.current !== vaultId) return;
       if (!noteAgentDisclosureInitialized.current) {
         noteAgentDisclosureInitialized.current = true;
         setNoteAgentOpen(!agentOverlayLayout);
       }
+      setSelectedNoteVaultId(vaultId);
       setSelectedNote(note);
       void loadNoteRelated(pageId, requestId, noteOpenSequence, setSelectedNoteRelated);
     } catch {
@@ -685,6 +699,15 @@ export function App(): React.JSX.Element {
     if (!sidebarOpen || !activeVault || libraryList) return;
     void refreshLibrary();
   }, [activeVault?.vaultId, libraryList, sidebarOpen]);
+
+  useEffect(() => {
+    if (!selectedNote || selectedNoteVaultId === activeVault?.vaultId) return;
+    noteOpenSequence.current += 1;
+    setSelectedNote(null);
+    setSelectedNoteRelated(null);
+    setNoteLoadingPageId(null);
+    setNoteAgentOpen(false);
+  }, [activeVault?.vaultId, selectedNote?.summary.pageId, selectedNoteVaultId]);
 
   useEffect(() => {
     if (!sidebarModal) return;
@@ -968,10 +991,11 @@ export function App(): React.JSX.Element {
           />
         )}
         </main>
-        {selectedNote && noteAgentOpen ? (
+        {selectedNote && noteAgentOpen && activeVault && selectedNoteVaultId === activeVault.vaultId ? (
           <CurrentNoteAgent
-            key={selectedNote.summary.pageId}
+            key={`${activeVault.vaultId}:${selectedNote.summary.pageId}`}
             modal={agentModal}
+            vaultId={activeVault.vaultId}
             pageId={selectedNote.summary.pageId}
             noteTitle={selectedNote.summary.title}
             locale={locale}
@@ -988,7 +1012,6 @@ export function App(): React.JSX.Element {
                   agentRuntimeStatus.defaultModelProfileId === model.id
               };
             })}
-            switchingModel={false}
             onClose={() => {
               setNoteAgentOpen(false);
               window.requestAnimationFrame(() => noteAgentToggleRef.current?.focus());

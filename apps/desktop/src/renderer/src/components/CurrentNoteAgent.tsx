@@ -35,11 +35,11 @@ type EgressState =
 
 export function CurrentNoteAgent(props: {
   readonly modal: boolean;
+  readonly vaultId: string;
   readonly pageId: string;
   readonly noteTitle: string;
   readonly locale: Locale;
   readonly models: readonly NoteAgentModelOption[];
-  readonly switchingModel: boolean;
   readonly onClose: () => void;
   readonly onOpenModels: (opener: HTMLButtonElement) => void;
   readonly onSelectModel: (modelId: string) => Promise<boolean>;
@@ -47,6 +47,7 @@ export function CurrentNoteAgent(props: {
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const [timeline, setTimeline] = useState<AgentConversationTimeline | undefined>();
+  const [timelineReadState, setTimelineReadState] = useState<"loading" | "ready" | "failed">("loading");
   const [draft, setDraft] = useState("");
   const [liveDraft, setLiveDraft] = useState<AgentTurnDraftEvent | null>(null);
   const [currentOutcome, setCurrentOutcome] = useState<AgentSubmitTurnResult | null>(null);
@@ -54,14 +55,18 @@ export function CurrentNoteAgent(props: {
   const [error, setError] = useState<PigeErrorSummary | null>(null);
   const [egress, setEgress] = useState<EgressState | null>(null);
   const [resolvedEgressRequestId, setResolvedEgressRequestId] = useState<string | null>(null);
+  const [switchingModel, setSwitchingModel] = useState(false);
   const loadSequenceRef = useRef(0);
   const activePageIdRef = useRef<string | null>(props.pageId);
+  const activeVaultIdRef = useRef<string | null>(props.vaultId);
   const activeDraftRef = useRef<ActiveDraftBinding | null>(null);
   const currentOutcomeRef = useRef<AgentSubmitTurnResult | null>(null);
   const submitInFlightRef = useRef(false);
   const egressReadSequenceRef = useRef(0);
   const egressDecisionRef = useRef(false);
+  const modelSwitchInFlightRef = useRef(false);
   activePageIdRef.current = props.pageId;
+  activeVaultIdRef.current = props.vaultId;
   currentOutcomeRef.current = currentOutcome;
 
   const timelineLatestTurn = timeline?.latestTurn;
@@ -75,14 +80,20 @@ export function CurrentNoteAgent(props: {
 
   const refreshTimeline = async (): Promise<AgentConversationTimeline | undefined> => {
     const pageId = props.pageId;
+    const vaultId = props.vaultId;
     const sequence = ++loadSequenceRef.current;
     try {
       const next = await window.pige.agent.conversation({
         scope: { kind: "current_note", pageId },
         limit: 24
       });
-      if (sequence === loadSequenceRef.current && activePageIdRef.current === pageId) {
+      if (
+        sequence === loadSequenceRef.current &&
+        activePageIdRef.current === pageId &&
+        activeVaultIdRef.current === vaultId
+      ) {
         setTimeline(next);
+        setTimelineReadState("ready");
         const activeOutcome = currentOutcomeRef.current;
         if (!activeOutcome?.jobId || next?.latestTurn?.jobId === activeOutcome.jobId) {
           setError(next?.latestTurn?.error ?? (activeOutcome?.state === "completed" ? null : activeOutcome?.error ?? null));
@@ -94,7 +105,12 @@ export function CurrentNoteAgent(props: {
       }
       return next;
     } catch {
-      if (sequence === loadSequenceRef.current && activePageIdRef.current === pageId) {
+      if (
+        sequence === loadSequenceRef.current &&
+        activePageIdRef.current === pageId &&
+        activeVaultIdRef.current === vaultId
+      ) {
+        setTimelineReadState("failed");
         setError(genericAgentError());
       }
       return undefined;
@@ -105,6 +121,7 @@ export function CurrentNoteAgent(props: {
     loadSequenceRef.current += 1;
     activeDraftRef.current = null;
     setTimeline(undefined);
+    setTimelineReadState("loading");
     setDraft("");
     setLiveDraft(null);
     setCurrentOutcome(null);
@@ -112,13 +129,16 @@ export function CurrentNoteAgent(props: {
     setError(null);
     setEgress(null);
     setResolvedEgressRequestId(null);
+    setSwitchingModel(false);
+    modelSwitchInFlightRef.current = false;
     void refreshTimeline();
     return () => {
       loadSequenceRef.current += 1;
       activePageIdRef.current = null;
+      activeVaultIdRef.current = null;
       activeDraftRef.current = null;
     };
-  }, [props.pageId]);
+  }, [props.pageId, props.vaultId]);
 
   useEffect(() => window.pige.agent.onTurnDraft((event) => {
     const active = activeDraftRef.current;
@@ -174,11 +194,27 @@ export function CurrentNoteAgent(props: {
   const availability = noteAgentAvailability(
     latestTurn?.state,
     submitting,
+    timelineReadState,
     effectiveError,
     activeEgressRequestId,
     currentOutcome?.state
   );
   const egressPrompt = noteAgentEgressPrompt(egress);
+  const modelSwitchBlocked = isModelSwitchBlocked(latestTurn?.state, activeEgressRequestId, submitting);
+
+  const selectModel = async (modelId: string): Promise<boolean> => {
+    if (modelSwitchInFlightRef.current || modelSwitchBlocked) return false;
+    modelSwitchInFlightRef.current = true;
+    setSwitchingModel(true);
+    try {
+      return await props.onSelectModel(modelId);
+    } finally {
+      modelSwitchInFlightRef.current = false;
+      if (activePageIdRef.current === props.pageId && activeVaultIdRef.current === props.vaultId) {
+        setSwitchingModel(false);
+      }
+    }
+  };
 
   const submit = async (): Promise<void> => {
     const text = draft.trim();
@@ -189,6 +225,7 @@ export function CurrentNoteAgent(props: {
     currentOutcomeRef.current = null;
     setCurrentOutcome(null);
     const pageId = props.pageId;
+    const vaultId = props.vaultId;
     const clientTurnId = createClientTurnId();
     activeDraftRef.current = { clientTurnId, sequence: 0 };
     setLiveDraft(null);
@@ -207,7 +244,7 @@ export function CurrentNoteAgent(props: {
           expectedTailEventId: followUp.tailEventId
         } : {})
       });
-      if (activePageIdRef.current !== pageId) return;
+      if (activePageIdRef.current !== pageId || activeVaultIdRef.current !== vaultId) return;
       currentOutcomeRef.current = outcome;
       setCurrentOutcome(outcome);
       if (outcome.state !== "failed") {
@@ -228,9 +265,9 @@ export function CurrentNoteAgent(props: {
       }
       await refreshTimeline();
     } catch {
-      if (activePageIdRef.current === pageId) setError(genericAgentError());
+      if (activePageIdRef.current === pageId && activeVaultIdRef.current === vaultId) setError(genericAgentError());
     } finally {
-      if (activePageIdRef.current === pageId) setSubmitting(false);
+      if (activePageIdRef.current === pageId && activeVaultIdRef.current === vaultId) setSubmitting(false);
       submitInFlightRef.current = false;
     }
   };
@@ -291,11 +328,12 @@ export function CurrentNoteAgent(props: {
       modal={props.modal}
       noteTitle={props.noteTitle}
       availability={availability}
+      composerDisabled={timelineReadState !== "ready"}
       messages={messages}
       proposal={null}
       draft={draft}
       models={props.models}
-      switchingModel={props.switchingModel}
+      switchingModel={switchingModel || modelSwitchBlocked}
       modelEgressPrompt={egressPrompt}
       onClose={props.onClose}
       onDraftChange={setDraft}
@@ -306,7 +344,7 @@ export function CurrentNoteAgent(props: {
         : {})}
       {...(effectiveError?.retryable === true && effectiveError.userAction === "retry" ? { onRetry: () => void retry() } : {})}
       onOpenModels={props.onOpenModels}
-      onSelectModel={props.onSelectModel}
+      onSelectModel={selectModel}
       onModelEgressDecision={(decision) => void decideEgress(decision)}
       onOpenCitation={props.onOpenCitation}
       onCopyMessage={(messageId) => {
@@ -342,7 +380,8 @@ function timelineMessages(
     messages.push({
       id: `draft:${liveDraft.jobId}`,
       role: "assistant",
-      body: liveDraft.text
+      body: liveDraft.text,
+      provisional: true
     });
   } else if (
     currentOutcome?.state === "completed" &&
@@ -366,10 +405,13 @@ function timelineMessages(
 function noteAgentAvailability(
   state: JobState | undefined,
   submitting: boolean,
+  timelineReadState: "loading" | "ready" | "failed",
   error: PigeErrorSummary | null,
   egressRequestId: string | undefined,
   outcomeState: AgentSubmitTurnResult["state"] | undefined
 ): NoteAgentAvailability {
+  if (timelineReadState === "loading") return "running";
+  if (timelineReadState === "failed") return "failed";
   if (
     submitting ||
     state === "queued" ||
@@ -387,6 +429,19 @@ function noteAgentAvailability(
     state === "cancelled"
   ) return "failed";
   return "ready";
+}
+
+function isModelSwitchBlocked(
+  state: JobState | undefined,
+  egressRequestId: string | undefined,
+  submitting: boolean
+): boolean {
+  return submitting ||
+    Boolean(egressRequestId) ||
+    state === "queued" ||
+    state === "running" ||
+    state === "cancel_requested" ||
+    state === "waiting_model_egress";
 }
 
 function noteAgentEgressPrompt(state: EgressState | null): NoteAgentModelEgressPrompt | null {
@@ -407,7 +462,11 @@ function egressReasonMessageKey(reasonCode: ModelEgressPendingRequest["reasonCod
 }
 
 function isPollingState(state: JobState | undefined): boolean {
-  return state === "queued" || state === "running" || state === "cancel_requested" || state === "waiting_model_egress";
+  return state === "queued" ||
+    state === "running" ||
+    state === "cancel_requested" ||
+    state === "waiting_dependency" ||
+    state === "waiting_model_egress";
 }
 
 function isDraftState(state: JobState | undefined): boolean {

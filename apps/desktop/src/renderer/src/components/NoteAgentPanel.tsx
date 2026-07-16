@@ -14,6 +14,7 @@ export type NoteAgentMessage = {
   readonly role: "user" | "assistant";
   readonly body: string;
   readonly timestamp?: string;
+  readonly provisional?: boolean;
   readonly citations?: readonly {
     readonly pageId: string;
     readonly label: string;
@@ -49,6 +50,7 @@ export function NoteAgentPanel(props: {
   readonly modal: boolean;
   readonly noteTitle: string;
   readonly availability: NoteAgentAvailability;
+  readonly composerDisabled?: boolean;
   readonly messages: readonly NoteAgentMessage[];
   readonly proposal: NoteAgentProposal | null;
   readonly draft: string;
@@ -82,7 +84,7 @@ export function NoteAgentPanel(props: {
 
   const selectedModel = props.models.find((model) => model.selected);
   const modelName = selectedModel?.name ?? props.t("note.agentOpenModels");
-  const composerReady = props.availability === "ready" && selectedModel?.ready === true;
+  const composerReady = props.composerDisabled !== true && props.availability === "ready" && selectedModel?.ready === true;
   const submitReady = composerReady && props.draft.trim().length > 0 && props.onSubmit !== undefined;
 
   useEffect(() => {
@@ -187,22 +189,29 @@ export function NoteAgentPanel(props: {
               <p>{props.t("development.state.unavailable")}</p>
             </section>
           ) : props.messages.length === 0 && !props.proposal ? (
-            <section className="note-agent-state note-agent-empty" role="status">
-              <img src={pigeMarkUrl} alt="" />
-              <strong>{props.t("note.agentTitle")}</strong>
-              <p>{props.t("note.agentEmpty")}</p>
-            </section>
+            props.availability === "ready" ? (
+              <section className="note-agent-state note-agent-empty" role="status">
+                <img src={pigeMarkUrl} alt="" />
+                <strong>{props.t("note.agentTitle")}</strong>
+                <p>{props.t("note.agentEmpty")}</p>
+              </section>
+            ) : null
           ) : (
             <div className="note-agent-messages" aria-label={props.t("note.agentTitle")}>
               {props.messages.map((message) => (
-                <article className={`agent-message-card role-${message.role}`} key={message.id}>
+                <article
+                  className={`agent-message-card role-${message.role}${message.provisional ? " provisional" : ""}`}
+                  key={message.id}
+                  data-provisional={message.provisional ? "true" : undefined}
+                  aria-busy={message.provisional ? "true" : undefined}
+                >
                   <div className="agent-message-author">
                     {message.role === "assistant" ? <img src={pigeMarkUrl} alt="" /> : null}
                     <span>{props.t(message.role === "assistant" ? "note.agentAssistant" : "note.agentUser")}</span>
                     {message.timestamp ? <time>{message.timestamp}</time> : null}
                   </div>
                   <p className="agent-message-body">{message.body}</p>
-                  {message.citations?.length ? (
+                  {!message.provisional && message.citations?.length ? (
                     <div className="note-agent-citations" aria-label={props.t("note.agentCitations")}>
                       {message.citations.map((citation) => (
                         <button
@@ -216,7 +225,7 @@ export function NoteAgentPanel(props: {
                       ))}
                     </div>
                   ) : null}
-                  {message.role === "assistant" ? (
+                  {message.role === "assistant" && !message.provisional ? (
                     <div className="message-actions" aria-label={props.t("note.agentMessageActions")}>
                       <button
                         type="button"
@@ -327,7 +336,7 @@ export function NoteAgentPanel(props: {
               aria-label={props.t("note.agentComposer")}
               placeholder={props.t("note.agentPlaceholder")}
               value={props.draft}
-              disabled={props.availability === "unavailable" || props.availability === "running"}
+              disabled={props.composerDisabled === true || props.availability === "unavailable" || props.availability === "running"}
               onChange={(event) => props.onDraftChange(event.target.value)}
               onCompositionStart={() => {
                 composingRef.current = true;
@@ -403,6 +412,7 @@ export function NoteAgentPanel(props: {
                     onKeyDown={(event) => {
                       if (event.key === "Escape") {
                         event.preventDefault();
+                        event.stopPropagation();
                         closeModelMenu(true);
                       } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
                         event.preventDefault();
@@ -472,6 +482,7 @@ function containFocus(
   onClose: () => void
 ): void {
   if (event.key === "Escape") {
+    if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
     event.preventDefault();
     onClose();
     return;

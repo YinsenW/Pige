@@ -91,7 +91,10 @@ describe("Note Agent production UI", () => {
   it("uses the approved model listbox keyboard and exact focus-return behavior", async () => {
     const dom = createDom();
     const selected: string[] = [];
+    let closes = 0;
     const mount = await mountPanel(dom, {
+      modal: true,
+      onClose: () => { closes += 1; },
       availability: "ready",
       onSelectModel: async (id) => {
         selected.push(id);
@@ -115,6 +118,7 @@ describe("Note Agent production UI", () => {
     await keydown(dom, options[1]!, { key: "Escape" });
     await waitFor(dom, () => dom.window.document.activeElement === switcher);
     expect(mount.container.querySelector('[role="listbox"]')).toBeNull();
+    expect(closes).toBe(0);
 
     await unmount(dom, mount.root);
   });
@@ -122,7 +126,10 @@ describe("Note Agent production UI", () => {
   it("keeps Enter-to-send IME-safe and preserves Shift+Enter", async () => {
     const dom = createDom();
     let submits = 0;
+    let closes = 0;
     const mount = await mountPanel(dom, {
+      modal: true,
+      onClose: () => { closes += 1; },
       availability: "ready",
       onSubmit: () => { submits += 1; }
     });
@@ -132,7 +139,10 @@ describe("Note Agent production UI", () => {
     await keydown(dom, textarea, { key: "Enter", shiftKey: true });
     await keydown(dom, textarea, { key: "Enter", isComposing: true });
     await keydown(dom, textarea, { key: "Enter", keyCode: 229 });
+    await keydown(dom, textarea, { key: "Escape", isComposing: true });
+    await keydown(dom, textarea, { key: "Escape", keyCode: 229 });
     expect(submits).toBe(0);
+    expect(closes).toBe(0);
 
     await act(async () => {
       textarea.dispatchEvent(new dom.window.CompositionEvent("compositionstart", { bubbles: true }));
@@ -251,11 +261,11 @@ describe("Note Agent production UI", () => {
     await act(async () => {
       root.render(createElement(CurrentNoteAgent, {
         modal: false,
+        vaultId: "vault_current_note_1",
         pageId: "page_current_note_1",
         noteTitle: "Current note.md",
         locale: "en",
         models: modelFixtures(),
-        switchingModel: false,
         onClose: () => undefined,
         onOpenModels: () => undefined,
         onSelectModel: async () => true,
@@ -319,6 +329,10 @@ describe("Note Agent production UI", () => {
     });
     expect(container.querySelectorAll(".agent-message-card")).toHaveLength(1);
     expect(container.querySelector(".agent-message-card")?.textContent).toContain("Latest safe draft");
+    expect(container.querySelector(".agent-message-card")?.getAttribute("data-provisional")).toBe("true");
+    expect(container.querySelector(".agent-message-card")?.getAttribute("aria-busy")).toBe("true");
+    expect(container.querySelector(".agent-message-card .message-actions")).toBeNull();
+    expect(container.querySelector(".agent-message-card .note-agent-citations")).toBeNull();
     expect(container.textContent).not.toContain("Stale draft");
 
     await act(async () => {
@@ -327,6 +341,7 @@ describe("Note Agent production UI", () => {
     });
     await waitFor(dom, () => container.textContent?.includes("Grounded in this note.") === true);
     expect(container.textContent).not.toContain("Latest safe draft");
+    expect(container.querySelector('[data-provisional="true"]')).toBeNull();
     expect(buttonNamed(container, "Current note · quote")).toBeDefined();
     expect(container.querySelector(".proposal-panel")).toBeNull();
     expect(container.querySelector(".attach-button")?.hasAttribute("disabled")).toBe(true);
@@ -376,11 +391,11 @@ describe("Note Agent production UI", () => {
     await act(async () => {
       root.render(createElement(CurrentNoteAgent, {
         modal: false,
+        vaultId: "vault_current_note_1",
         pageId: "page_current_note_1",
         noteTitle: "Current note.md",
         locale: "en",
         models: modelFixtures(),
-        switchingModel: false,
         onClose: () => undefined,
         onOpenModels: () => undefined,
         onSelectModel: async () => true,
@@ -392,6 +407,7 @@ describe("Note Agent production UI", () => {
     await waitFor(dom, () => buttonNamed(container, t("home.modelEgress.deny")) !== undefined);
     expect(container.querySelectorAll(".note-agent-egress-prompt")).toHaveLength(1);
     expect(container.querySelector(".note-agent-run-state")).toBeNull();
+    expect(required(container.querySelector<HTMLButtonElement>(".note-agent-model-switcher")).disabled).toBe(true);
 
     await click(dom, required(buttonNamed(container, t("home.modelEgress.deny"))));
     await waitFor(dom, () => container.querySelector(".note-agent-egress-prompt") === null);
@@ -407,11 +423,333 @@ describe("Note Agent production UI", () => {
     await unmount(dom, root);
   });
 
+  it("refreshes one waiting current-note Job through model recovery and stops at terminal truth", async () => {
+    const dom = createDom();
+    const timelines = [
+      noteRecoveryTimeline("waiting_dependency"),
+      noteRecoveryTimeline("queued"),
+      noteRecoveryTimeline("running"),
+      noteRecoveryTimeline("completed")
+    ];
+    const conversation = vi.fn().mockImplementation(async () => timelines.shift() ?? noteRecoveryTimeline("completed"));
+    const intervalCallbacks = new Map<number, () => void>();
+    let nextIntervalId = 1;
+    vi.spyOn(dom.window, "setInterval").mockImplementation(((handler: TimerHandler) => {
+      const id = nextIntervalId++;
+      intervalCallbacks.set(id, () => {
+        if (typeof handler === "function") handler();
+      });
+      return id;
+    }) as typeof dom.window.setInterval);
+    vi.spyOn(dom.window, "clearInterval").mockImplementation(((id: number | undefined) => {
+      if (id !== undefined) intervalCallbacks.delete(Number(id));
+    }) as typeof dom.window.clearInterval);
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: noteAgentApi(conversation)
+    });
+    const container = dom.window.document.createElement("div");
+    dom.window.document.body.append(container);
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(createElement(CurrentNoteAgent, currentNoteAgentProps("page_current_note_recovery")));
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.textContent?.includes(t("errors.model_provider.default_model_missing")) === true);
+    expect(required(container.querySelector<HTMLButtonElement>(".send-button")).disabled).toBe(true);
+    expect(intervalCallbacks.size).toBe(1);
+
+    await runOnlyInterval(dom, intervalCallbacks);
+    await waitFor(dom, () => container.textContent?.includes(t("errors.model_provider.default_model_missing")) === false);
+    expect(container.querySelectorAll(".note-agent-run-state")).toHaveLength(1);
+    expect(required(container.querySelector<HTMLButtonElement>(".note-agent-model-switcher")).disabled).toBe(true);
+    expect(intervalCallbacks.size).toBe(1);
+
+    await runOnlyInterval(dom, intervalCallbacks);
+    expect(container.querySelectorAll(".note-agent-run-state")).toHaveLength(1);
+    expect(intervalCallbacks.size).toBe(1);
+
+    await runOnlyInterval(dom, intervalCallbacks);
+    await waitFor(dom, () => container.textContent?.includes("Recovered from the same note Job.") === true);
+    expect(container.textContent).not.toContain(t("errors.model_provider.default_model_missing"));
+    expect(container.querySelector(".note-agent-run-state")).toBeNull();
+    expect(intervalCallbacks.size).toBe(0);
+    const textarea = required(container.querySelector<HTMLTextAreaElement>("textarea"));
+    await input(dom, textarea, "Continue from the recovered answer");
+    expect(required(container.querySelector<HTMLButtonElement>(".send-button")).disabled).toBe(false);
+    expect(conversation).toHaveBeenCalledTimes(4);
+    for (const [request] of conversation.mock.calls) {
+      expect(request).toEqual({
+        scope: { kind: "current_note", pageId: "page_current_note_recovery" },
+        limit: 24
+      });
+    }
+
+    await unmount(dom, root);
+  });
+
+  it("does not apply a late timeline result from the previously selected note", async () => {
+    const dom = createDom();
+    let resolveOldPage!: (value: unknown) => void;
+    const oldPageTimeline = new Promise((resolve) => { resolveOldPage = resolve; });
+    const conversation = vi.fn().mockImplementation(({ scope }: { scope: { pageId: string } }) =>
+      scope.pageId === "page_old" ? oldPageTimeline : Promise.resolve(notePageTimeline("page_new", "New page answer"))
+    );
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: noteAgentApi(conversation)
+    });
+    const container = dom.window.document.createElement("div");
+    dom.window.document.body.append(container);
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(createElement(CurrentNoteAgent, { key: "page_old", ...currentNoteAgentProps("page_old") }));
+      await settle(dom);
+    });
+    await waitFor(dom, () => conversation.mock.calls.some(([request]) => request.scope.pageId === "page_old"));
+    await act(async () => {
+      root.render(createElement(CurrentNoteAgent, { key: "page_new", ...currentNoteAgentProps("page_new") }));
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.textContent?.includes("New page answer") === true);
+    await act(async () => {
+      resolveOldPage(notePageTimeline("page_old", "Stale old page answer"));
+      await settle(dom);
+    });
+    expect(container.textContent).toContain("New page answer");
+    expect(container.textContent).not.toContain("Stale old page answer");
+    expect(conversation).toHaveBeenCalledWith({ scope: { kind: "current_note", pageId: "page_old" }, limit: 24 });
+    expect(conversation).toHaveBeenCalledWith({ scope: { kind: "current_note", pageId: "page_new" }, limit: 24 });
+
+    await unmount(dom, root);
+  });
+
+  it("keeps the composer gated until the first scoped timeline read completes and fails closed", async () => {
+    const dom = createDom();
+    let resolveTimeline!: (value: unknown) => void;
+    const conversation = vi.fn().mockReturnValue(new Promise((resolve) => { resolveTimeline = resolve; }));
+    Object.defineProperty(dom.window, "pige", { configurable: true, value: noteAgentApi(conversation) });
+    const container = dom.window.document.createElement("div");
+    dom.window.document.body.append(container);
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(CurrentNoteAgent, currentNoteAgentProps("page_initial_read")));
+      await settle(dom);
+    });
+    expect(required(container.querySelector<HTMLTextAreaElement>("textarea")).disabled).toBe(true);
+    expect(required(container.querySelector<HTMLButtonElement>(".send-button")).disabled).toBe(true);
+    expect(container.querySelector(".note-agent-state")).toBeNull();
+    expect(container.querySelectorAll(".note-agent-run-state")).toHaveLength(1);
+
+    await act(async () => {
+      resolveTimeline(undefined);
+      await settle(dom);
+    });
+    await waitFor(dom, () => required(container.querySelector<HTMLTextAreaElement>("textarea")).disabled === false);
+    await unmount(dom, root);
+
+    const failedDom = createDom();
+    const failedConversation = vi.fn().mockRejectedValue(new Error("private detail must not render"));
+    Object.defineProperty(failedDom.window, "pige", { configurable: true, value: noteAgentApi(failedConversation) });
+    const failedContainer = failedDom.window.document.createElement("div");
+    failedDom.window.document.body.append(failedContainer);
+    const failedRoot = createRoot(failedContainer);
+    await act(async () => {
+      failedRoot.render(createElement(CurrentNoteAgent, currentNoteAgentProps("page_failed_read")));
+      await settle(failedDom);
+    });
+    await waitFor(failedDom, () => failedContainer.querySelector('[role="alert"]') !== null);
+    expect(failedContainer.textContent).toContain(t("errors.model_provider.call_failed"));
+    expect(failedContainer.textContent).not.toContain("private detail");
+    expect(failedContainer.querySelector(".note-agent-state")).toBeNull();
+    expect(failedContainer.querySelectorAll(".note-agent-run-state")).toHaveLength(1);
+    expect(required(failedContainer.querySelector<HTMLTextAreaElement>("textarea")).disabled).toBe(true);
+    expect(required(failedContainer.querySelector<HTMLButtonElement>(".send-button")).disabled).toBe(true);
+    await unmount(failedDom, failedRoot);
+  });
+
+  it("invalidates a pending submit when the active vault changes for the same page ID", async () => {
+    const dom = createDom();
+    const pageId = "page_shared_between_vaults";
+    const conversation = vi.fn()
+      .mockResolvedValueOnce(notePageTimeline(pageId, "Old vault timeline"))
+      .mockResolvedValue(notePageTimeline(pageId, "New vault timeline"));
+    let resolveOldSubmit!: (value: unknown) => void;
+    const submitTurn = vi.fn().mockReturnValue(new Promise((resolve) => { resolveOldSubmit = resolve; }));
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: { ...noteAgentApi(conversation), agent: {
+        conversation,
+        submitTurn,
+        onTurnDraft: () => () => undefined
+      } }
+    });
+    const container = dom.window.document.createElement("div");
+    dom.window.document.body.append(container);
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(CurrentNoteAgent, {
+        key: `vault_old:${pageId}`,
+        ...currentNoteAgentProps(pageId, "vault_old")
+      }));
+      await settle(dom);
+    });
+    await waitFor(dom, () => required(container.querySelector<HTMLTextAreaElement>("textarea")).disabled === false);
+    const textarea = required(container.querySelector<HTMLTextAreaElement>("textarea"));
+    await input(dom, textarea, "Old vault question");
+    await keydown(dom, textarea, { key: "Enter" });
+    await waitFor(dom, () => submitTurn.mock.calls.length === 1);
+
+    await act(async () => {
+      root.render(createElement(CurrentNoteAgent, {
+        key: `vault_new:${pageId}`,
+        ...currentNoteAgentProps(pageId, "vault_new")
+      }));
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.textContent?.includes("New vault timeline") === true);
+    await act(async () => {
+      resolveOldSubmit(completedNoteOutcome(pageId, "Old vault answer must stay stale"));
+      await settle(dom);
+    });
+    expect(container.textContent).toContain("New vault timeline");
+    expect(container.textContent).not.toContain("Old vault timeline");
+    expect(container.textContent).not.toContain("Old vault answer must stay stale");
+    expect(conversation).toHaveBeenCalledTimes(2);
+    await unmount(dom, root);
+  });
+
+  it("serializes model changes, permits waiting-model recovery, and blocks active turns", async () => {
+    const dom = createDom();
+    const conversation = vi.fn().mockResolvedValue(noteRecoveryTimeline("waiting_dependency"));
+    let resolveSwitch!: (value: boolean) => void;
+    const onSelectModel = vi.fn().mockReturnValue(new Promise<boolean>((resolve) => { resolveSwitch = resolve; }));
+    Object.defineProperty(dom.window, "pige", { configurable: true, value: noteAgentApi(conversation) });
+    const container = dom.window.document.createElement("div");
+    dom.window.document.body.append(container);
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(CurrentNoteAgent, {
+        ...currentNoteAgentProps("page_current_note_recovery"),
+        onSelectModel
+      }));
+      await settle(dom);
+    });
+    const switcher = required(container.querySelector<HTMLButtonElement>(".note-agent-model-switcher"));
+    await waitFor(dom, () => switcher.disabled === false);
+    await click(dom, switcher);
+    const secondOption = required(Array.from(container.querySelectorAll<HTMLButtonElement>('[role="option"]'))[1]);
+    await click(dom, secondOption);
+    await waitFor(dom, () => onSelectModel.mock.calls.length === 1);
+    expect(switcher.disabled).toBe(true);
+    await click(dom, secondOption);
+    expect(onSelectModel).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      resolveSwitch(true);
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.querySelector('[role="listbox"]') === null);
+    await unmount(dom, root);
+
+    const runningDom = createDom();
+    Object.defineProperty(runningDom.window, "pige", {
+      configurable: true,
+      value: noteAgentApi(vi.fn().mockResolvedValue(noteRecoveryTimeline("running")))
+    });
+    const runningContainer = runningDom.window.document.createElement("div");
+    runningDom.window.document.body.append(runningContainer);
+    const runningRoot = createRoot(runningContainer);
+    await act(async () => {
+      runningRoot.render(createElement(CurrentNoteAgent, currentNoteAgentProps("page_current_note_recovery")));
+      await settle(runningDom);
+    });
+    await waitFor(runningDom, () => runningContainer.querySelector(".note-agent-run-state") !== null);
+    expect(required(runningContainer.querySelector<HTMLButtonElement>(".note-agent-model-switcher")).disabled).toBe(true);
+    await unmount(runningDom, runningRoot);
+  });
+
+  it.each(["failed_final", "cancelled"] as const)(
+    "removes a provisional draft when the exact turn becomes %s",
+    async (terminalState) => {
+      const dom = createDom();
+      const draftListeners: Array<(event: Record<string, unknown>) => void> = [];
+      const conversation = vi.fn()
+        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce(noteDraftTimeline("running"))
+        .mockResolvedValue(noteDraftTimeline(terminalState));
+      const submitTurn = vi.fn().mockResolvedValue(waitingNoteOutcome());
+      const intervalCallbacks = new Map<number, () => void>();
+      let nextIntervalId = 1;
+      vi.spyOn(dom.window, "setInterval").mockImplementation(((handler: TimerHandler) => {
+        const id = nextIntervalId++;
+        intervalCallbacks.set(id, () => { if (typeof handler === "function") handler(); });
+        return id;
+      }) as typeof dom.window.setInterval);
+      vi.spyOn(dom.window, "clearInterval").mockImplementation(((id: number | undefined) => {
+        if (id !== undefined) intervalCallbacks.delete(Number(id));
+      }) as typeof dom.window.clearInterval);
+      Object.defineProperty(dom.window, "pige", {
+        configurable: true,
+        value: { ...noteAgentApi(conversation), agent: {
+          conversation,
+          submitTurn,
+          onTurnDraft: (listener: (event: Record<string, unknown>) => void) => {
+            draftListeners.push(listener);
+            return () => undefined;
+          }
+        } }
+      });
+      const container = dom.window.document.createElement("div");
+      dom.window.document.body.append(container);
+      const { createRoot } = await import("react-dom/client");
+      const root = createRoot(container);
+      await act(async () => {
+        root.render(createElement(CurrentNoteAgent, currentNoteAgentProps("page_draft_cleanup")));
+        await settle(dom);
+      });
+      await waitFor(dom, () => required(container.querySelector<HTMLTextAreaElement>("textarea")).disabled === false);
+      const textarea = required(container.querySelector<HTMLTextAreaElement>("textarea"));
+      await input(dom, textarea, "Start one scoped turn");
+      await keydown(dom, textarea, { key: "Enter" });
+      await waitFor(dom, () => intervalCallbacks.size === 1);
+      await act(async () => {
+        draftListeners[0]?.({
+          apiVersion: 1,
+          kind: "draft_replace",
+          requestId: "request_note_draft_1",
+          clientTurnId: submitTurn.mock.calls[0]?.[0]?.clientTurnId,
+          jobId: "job_note_draft_1",
+          conversationId: "conversation_note_draft_1",
+          conversationEventId: "event_note_user_draft_1",
+          sequence: 1,
+          text: "Provisional text that must clear"
+        });
+        await settle(dom);
+      });
+      expect(container.querySelector('[data-provisional="true"]')?.textContent).toContain("Provisional text that must clear");
+      await runOnlyInterval(dom, intervalCallbacks);
+      await waitFor(dom, () => container.querySelector('[data-provisional="true"]') === null);
+      expect(container.textContent).not.toContain("Provisional text that must clear");
+      expect(intervalCallbacks.size).toBe(0);
+      await unmount(dom, root);
+    }
+  );
+
   it("keeps the UI adapter service-free, responsive, and localized in all six catalogs", () => {
     expect(componentSource).not.toContain("window.pige");
     expect(componentSource).not.toContain("errorMessage?:");
     expect(componentSource).toContain("errorMessageKey?: string");
     expect(appSource).toContain("<CurrentNoteAgent");
+    expect(appSource).toContain('key={`${activeVault.vaultId}:${selectedNote.summary.pageId}`}');
+    expect(appSource).toContain("vaultId={activeVault.vaultId}");
+    expect(appSource).toContain("selectedNoteVaultId === activeVault.vaultId");
     expect(appSource).toContain("pageId={selectedNote.summary.pageId}");
     expect(appSource).toContain("onSelectModel={setHomeDefaultModel}");
     expect(adapterSource).toContain('scope: { kind: "current_note", pageId }');
@@ -419,6 +757,7 @@ describe("Note Agent production UI", () => {
     expect(adapterSource).not.toContain("window.pige.proposals");
     expect(adapterSource).not.toContain("window.pige.activity");
     expect(cssSource).toContain(".agent-message-card {");
+    expect(cssSource).toContain(".agent-message-card.provisional {");
     expect(cssSource).toContain(".proposal-panel {");
     expect(cssSource).toMatch(/\.note-agent-header\s*\{[\s\S]*?padding:\s*0 20px;/);
     expect(cssSource).toMatch(/\.note-agent-thread\s*\{[\s\S]*?padding:\s*22px 20px;/);
@@ -530,6 +869,172 @@ function noteEgressTimeline(state: "waiting_model_egress" | "failed_final"): Rec
       }
     }
   };
+}
+
+function noteRecoveryTimeline(state: "waiting_dependency" | "queued" | "running" | "completed"): Record<string, unknown> {
+  const pageId = "page_current_note_recovery";
+  const jobId = "job_note_recovery_1";
+  if (state === "completed") return notePageTimeline(pageId, "Recovered from the same note Job.", jobId);
+  return {
+    conversationId: "conversation_note_recovery_1",
+    tailEventId: "event_note_user_recovery_1",
+    canFollowUp: false,
+    messages: [{
+      id: "event_note_user_recovery_1",
+      role: "user",
+      createdAt: "2026-07-16T01:00:00.000Z",
+      text: "Explain the current note.",
+      jobId
+    }],
+    latestTurn: {
+      jobId,
+      userEventId: "event_note_user_recovery_1",
+      state,
+      ...(state === "waiting_dependency" ? {
+        error: {
+          code: "model_provider.default_model_missing",
+          domain: "model_provider",
+          messageKey: "errors.model_provider.default_model_missing",
+          retryable: false,
+          severity: "warning",
+          userAction: "configure_models"
+        }
+      } : {})
+    }
+  };
+}
+
+function notePageTimeline(pageId: string, answer: string, jobId = `job_${pageId}`): Record<string, unknown> {
+  return {
+    conversationId: `conversation_${pageId}`,
+    tailEventId: `event_assistant_${pageId}`,
+    canFollowUp: true,
+    messages: [
+      {
+        id: `event_user_${pageId}`,
+        role: "user",
+        createdAt: "2026-07-16T01:00:00.000Z",
+        text: "Explain the current note.",
+        jobId
+      },
+      {
+        id: `event_assistant_${pageId}`,
+        role: "assistant",
+        createdAt: "2026-07-16T01:00:01.000Z",
+        text: answer,
+        answer: { answer, grounding: "local_knowledge", citations: [] }
+      }
+    ],
+    latestTurn: {
+      jobId,
+      userEventId: `event_user_${pageId}`,
+      state: "completed"
+    }
+  };
+}
+
+function noteDraftTimeline(state: "running" | "failed_final" | "cancelled"): Record<string, unknown> {
+  return {
+    conversationId: "conversation_note_draft_1",
+    tailEventId: "event_note_user_draft_1",
+    canFollowUp: false,
+    messages: [{
+      id: "event_note_user_draft_1",
+      role: "user",
+      createdAt: "2026-07-16T01:00:00.000Z",
+      text: "Start one scoped turn",
+      jobId: "job_note_draft_1"
+    }],
+    latestTurn: {
+      jobId: "job_note_draft_1",
+      userEventId: "event_note_user_draft_1",
+      state,
+      ...(state === "failed_final" ? {
+        error: {
+          code: "agent.internal_error",
+          domain: "agent",
+          messageKey: "error.generic",
+          retryable: false,
+          severity: "error",
+          userAction: "none"
+        }
+      } : {})
+    }
+  };
+}
+
+function waitingNoteOutcome(): Record<string, unknown> {
+  return {
+    requestId: "request_note_draft_1",
+    jobId: "job_note_draft_1",
+    conversationEventId: "event_note_user_draft_1",
+    conversationId: "conversation_note_draft_1",
+    tailEventId: "event_note_user_draft_1",
+    state: "waiting",
+    modelUsage: "none",
+    sourceIds: [],
+    error: {
+      code: "model_provider.default_model_missing",
+      domain: "model_provider",
+      messageKey: "errors.model_provider.default_model_missing",
+      retryable: false,
+      severity: "warning",
+      userAction: "configure_models"
+    }
+  };
+}
+
+function completedNoteOutcome(pageId: string, answer: string): Record<string, unknown> {
+  return {
+    requestId: `request_${pageId}`,
+    jobId: `job_${pageId}`,
+    conversationEventId: `event_user_${pageId}`,
+    conversationId: `conversation_${pageId}`,
+    tailEventId: `event_assistant_${pageId}`,
+    state: "completed",
+    modelUsage: "local",
+    sourceIds: [],
+    answer: { answer, grounding: "local_knowledge", citations: [] }
+  };
+}
+
+function noteAgentApi(conversation: ReturnType<typeof vi.fn>): Record<string, unknown> {
+  return {
+    agent: {
+      conversation,
+      submitTurn: vi.fn(),
+      onTurnDraft: () => () => undefined
+    },
+    jobs: { cancel: vi.fn(), retry: vi.fn() },
+    modelEgress: { pending: vi.fn(), resolve: vi.fn() }
+  };
+}
+
+function currentNoteAgentProps(
+  pageId: string,
+  vaultId = "vault_current_note_1"
+): Parameters<typeof CurrentNoteAgent>[0] {
+  return {
+    modal: false,
+    vaultId,
+    pageId,
+    noteTitle: `${pageId}.md`,
+    locale: "en",
+    models: modelFixtures(),
+    onClose: () => undefined,
+    onOpenModels: () => undefined,
+    onSelectModel: async () => true,
+    onOpenCitation: () => undefined,
+    t
+  };
+}
+
+async function runOnlyInterval(dom: JSDOM, callbacks: Map<number, () => void>): Promise<void> {
+  const callback = required(Array.from(callbacks.values())[0]);
+  await act(async () => {
+    callback();
+    await settle(dom);
+  });
 }
 
 function t(key: string): string {

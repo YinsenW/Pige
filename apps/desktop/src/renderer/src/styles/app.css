@@ -3881,6 +3881,17 @@ dd {
 
 .agent-message-card.role-user { background: var(--surface-subtle); }
 
+.agent-message-card.provisional {
+  border-style: dashed;
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+}
+
+.agent-message-card.provisional .agent-message-author::after {
+  content: "\2026";
+  color: var(--text-tertiary);
+}
+
 .agent-message-author {
   display: flex;
   align-items: center;
