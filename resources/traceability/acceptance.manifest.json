@@ -553,36 +553,9 @@
         "E1.13"
       ]
     },
-    "ui.tree-visual-semantics": {
-      "requirement": "PIGE-UI-004",
-      "builds": [
-        "B6.14"
-      ],
-      "exits": [
-        "E6.09"
-      ]
-    },
-    "ui.note-agent-actions": {
-      "requirement": "PIGE-UI-005",
-      "builds": [
-        "B6.10",
-        "B6.11"
-      ],
-      "exits": [
-        "E6.06"
-      ]
-    },
-    "ui.reader-related-metadata": {
-      "requirement": "PIGE-UI-006",
-      "builds": [
-        "B6.08",
-        "B6.09"
-      ],
-      "exits": [
-        "E6.05",
-        "E6.07"
-      ]
-    },
+    "ui.tree-visual-semantics":{"requirement":"PIGE-UI-004","builds":["B6.14"],"exits":["E6.09"]},
+    "ui.note-agent-actions":{"requirement":"PIGE-UI-005","builds":["B6.10","B6.11"],"exits":["E6.06"]},
+    "ui.reader-related-metadata":{"requirement":"PIGE-UI-006","builds":["B6.08","B6.09"],"exits":["E6.05","E6.07"]},
     "skill.lifecycle": {
       "requirement": "PIGE-SKILL-001",
       "builds": [
@@ -739,7 +712,7 @@
     "PIGE-JOB-004":{"status":"partial","evidence":["EV-JOB-WAIT","EV-SOURCE-WAIT-STATUS","EV-PI-PDF-PARSE-TOOL","EV-PI-PDF-OCR-TOOL","EV-PI-OFFICE-PARSE-OCR-TOOL","EV-PI-IMAGE-OCR-TOOL","EV-WAITING-AGENT-REQUEUE","EV-OCR-NATIVE-FALLBACK","EV-PI-DATASET-INGEST","EV-DATASET-CONTINUATION"],"open":{"id":"OPEN-REQ-PIGE-JOB-004","description":"Preserved-source model wait now has one truthful repair path; tool, path, and runtime dependency classes remain open.","targetBuilds":["B2.13"],"targetExits":["E2.11"]}},
     "PIGE-JOB-005":{"status":"partial","evidence":["EV-AGENT-INGEST","EV-PROPOSAL-REVIEW-LIFECYCLE","EV-ACTIVITY-UNDO","EV-CREATE-RECOVERY","EV-PI-INGEST-UPDATE","EV-UPDATE-RECOVERY"],"open":{"id":"OPEN-REQ-PIGE-JOB-005","description":"Legacy hashless create recovery and Agent writes beyond exact create/additive update remain.","targetBuilds":["B7.04"],"targetExits":["E7.01"]}},
     "PIGE-JOB-006":{"status":"partial","evidence":["EV-CAPTURE","EV-HOME-AGENT","EV-HOME-FOLLOWUP","EV-DATASET-QUERY-DURABILITY","EV-DATASET-QUERY-INTEGRITY","EV-DATASET-TIMELINE-RESTORE"],"open":{"id":"OPEN-REQ-PIGE-JOB-006","description":"Dataset result restart and checksum rejection work; compaction, cross-process kill/reopen, and packaged history proof remain.","targetBuilds":["B7.08","B7.09"],"targetExits":["E7.03","E7.04"]}},
-    "PIGE-JOB-007":{"status":"partial","evidence":["EV-JOB-STATUS","EV-JOB-WAIT","EV-JOB-CANCEL","EV-HOME-UI","EV-HOME-FOLLOWUP","EV-SOURCE-WAIT-STATUS","EV-SOURCE-WAIT-RACE","EV-ACTIVITY-UNDO","EV-MODEL-EGRESS-HOME-UI"],"open":{"id":"OPEN-REQ-PIGE-JOB-007","description":"Preserved-source model wait and exact model-egress confirmation each have one status owner/action; broader Activity, progress, non-Agent cancel, and Permission Broker UI remain.","targetBuilds":["B2.10","B2.12"],"targetExits":["E2.09"]}},
+    "PIGE-JOB-007":{"status":"partial","evidence":["EV-JOB-STATUS","EV-JOB-WAIT","EV-JOB-CANCEL","EV-HOME-UI","EV-HOME-FOLLOWUP","EV-SOURCE-WAIT-STATUS","EV-SOURCE-WAIT-RACE","EV-ACTIVITY-UNDO","EV-MODEL-EGRESS-HOME-UI","EV-NOTE-AGENT-UI"],"open":{"id":"OPEN-REQ-PIGE-JOB-007","description":"Preserved-source model wait and exact model-egress confirmation each have one status owner/action; broader Activity, progress, non-Agent cancel, and Permission Broker UI remain.","targetBuilds":["B2.10","B2.12"],"targetExits":["E2.09"]}},
     "PIGE-JOB-008":{"status":"verified","evidence":["EV-DURABLE-VOCAB"]},
     "PIGE-API-001":{"status":"verified","evidence":["EV-BOUNDARY","EV-LIBRARY-SEARCH-IPC","EV-NOTE-AGENT-IPC"]},
     "PIGE-API-002":{"status":"partial","evidence":["EV-ERROR","EV-PI-TERMINAL-MISSING","EV-MODEL-EGRESS-IPC","EV-MODEL-EGRESS-SCHEMA","EV-BACKUP-SAFE-JOB-SUMMARY","EV-LIBRARY-SEARCH-IPC","EV-NOTE-AGENT-IPC"],"open":{"id":"OPEN-REQ-PIGE-API-002","description":"Model-egress, Backup, Library Search and current-note Agent use strict typed errors; complete service, diagnostics and UI adoption remains.","targetBuilds":["B1.20"],"targetExits":["E1.16"]}},
@@ -758,7 +731,7 @@
     "PIGE-SEC-005":{"status":"partial","evidence":["EV-EGRESS","EV-MODEL-EGRESS-POLICY","EV-POLICY","EV-DESKTOP-SETTING-GUARD","EV-EGRESS-SERVICE","EV-EGRESS-PROFILE-BINDING","EV-EGRESS-RUNTIME-BINDING","EV-RUNTIME-NONSECRET-BINDING","EV-JOB-NONSECRET-READINESS","EV-HOME-AGENT","EV-PI-INGEST-RETRIEVAL","EV-DATASET-QUERY-DRIFT-AUDIT","EV-NOTE-AGENT-EGRESS","EV-MODEL-EGRESS-SCHEMA","EV-MODEL-EGRESS-APPROVAL-STORE","EV-MODEL-EGRESS-JOB-RECOVERY","EV-MODEL-EGRESS-HOME","EV-MODEL-EGRESS-INGEST","EV-MODEL-EGRESS-HOME-UI"],"open":{"id":"OPEN-REQ-PIGE-SEC-005","description":"Ordinary default, disclosure, Home/ingest/Dataset/current-note drift gates and one-use restart-safe confirmation work. Persisted stricter-policy UI, in-flight no-duplicate Pi continuation, remaining providers and signed platforms stay open.","targetBuilds":["B3.05"],"targetExits":["E3.03"]}},
     "PIGE-SEC-006":{"status":"partial","evidence":["EV-PROVIDER"],"open":{"id":"OPEN-REQ-PIGE-SEC-006","description":"OS-keychain integration and explicit portable-mode warning remain open.","targetBuilds":["B1.19"],"targetExits":["E1.15"]}},
     "PIGE-PRIV-001":{"status":"partial","evidence":["EV-PRIVACY-POLICY"],"open":{"id":"OPEN-REQ-PIGE-PRIV-001","description":"Release-time data-flow verification against public privacy copy remains open.","targetBuilds":["B9.17"],"targetExits":["E9.11"]}},
-    "PIGE-PI-001":{"status":"partial","evidence":["EV-RUNTIME","EV-RUNTIME-NONSECRET-BINDING","EV-JOB-NONSECRET-READINESS","EV-AGENT-INGEST","EV-HOME-AGENT","EV-NOTE-AGENT-SERVICE","EV-BOUNDARY","EV-WAITING-AGENT-REQUEUE","EV-PI-AGENT-SPINE","EV-PI-PDF-PARSE-TOOL","EV-PI-PDF-OCR-TOOL","EV-PI-OFFICE-PARSE-OCR-TOOL","EV-PI-IMAGE-OCR-TOOL","EV-PI-INGEST-RETRIEVAL","EV-PI-INGEST-UPDATE","EV-UPDATE-RECOVERY","EV-PI-INGEST-PROPOSAL","EV-PI-URL-INGRESS","EV-PI-TOOL-CALL-ID","EV-PI-RUNTIME-BOUNDARY","EV-PI-RUNTIME-MUTATIONS","EV-PI-IMPORT-SNAPSHOT","EV-PI-PROVIDER-BINDING","EV-PI-ELECTRON-SMOKE","EV-PI-STREAM-STRUCTURAL-BUDGET","EV-PI-TERMINAL-RECOVERY","EV-PI-TERMINAL-MISSING","EV-ACTIVITY-UNDO","EV-CREATE-RECOVERY","EV-PI-DATASET-INGEST","EV-DATASET-CONTINUATION","EV-PI-DATASET-QUERY","EV-DATASET-QUERY-CORE","EV-DATASET-QUERY-WORKER-SMOKE","EV-BUNDLED-WORKER-AVAILABILITY","EV-ASSEMBLED-RUNTIME-COMPOSITION"],"open":{"id":"OPEN-REQ-PIGE-PI-001","description":"Create/update recovery, Home terminal repair, Dataset query and exact read-only current-note tools work. Legacy ingest repair, mid-repair restart, broader Note Agent/retrieval/eligibility, production Broker callers and signed BYOK remain open.","targetBuilds":["B3.06","B3.13"],"targetExits":["E3.04","E3.08"]}},
+    "PIGE-PI-001":{"status":"partial","evidence":["EV-RUNTIME","EV-RUNTIME-NONSECRET-BINDING","EV-JOB-NONSECRET-READINESS","EV-AGENT-INGEST","EV-HOME-AGENT","EV-NOTE-AGENT-SERVICE","EV-NOTE-AGENT-UI","EV-BOUNDARY","EV-WAITING-AGENT-REQUEUE","EV-PI-AGENT-SPINE","EV-PI-PDF-PARSE-TOOL","EV-PI-PDF-OCR-TOOL","EV-PI-OFFICE-PARSE-OCR-TOOL","EV-PI-IMAGE-OCR-TOOL","EV-PI-INGEST-RETRIEVAL","EV-PI-INGEST-UPDATE","EV-UPDATE-RECOVERY","EV-PI-INGEST-PROPOSAL","EV-PI-URL-INGRESS","EV-PI-TOOL-CALL-ID","EV-PI-RUNTIME-BOUNDARY","EV-PI-RUNTIME-MUTATIONS","EV-PI-IMPORT-SNAPSHOT","EV-PI-PROVIDER-BINDING","EV-PI-ELECTRON-SMOKE","EV-PI-STREAM-STRUCTURAL-BUDGET","EV-PI-TERMINAL-RECOVERY","EV-PI-TERMINAL-MISSING","EV-ACTIVITY-UNDO","EV-CREATE-RECOVERY","EV-PI-DATASET-INGEST","EV-DATASET-CONTINUATION","EV-PI-DATASET-QUERY","EV-DATASET-QUERY-CORE","EV-DATASET-QUERY-WORKER-SMOKE","EV-BUNDLED-WORKER-AVAILABILITY","EV-ASSEMBLED-RUNTIME-COMPOSITION"],"open":{"id":"OPEN-REQ-PIGE-PI-001","description":"Create/update recovery, Home terminal repair, Dataset query and exact read-only current-note tools work. Legacy ingest repair, mid-repair restart, broader Note Agent/retrieval/eligibility, production Broker callers and signed BYOK remain open.","targetBuilds":["B3.06","B3.13"],"targetExits":["E3.04","E3.08"]}},
     "PIGE-PI-002":{"status":"partial","evidence":["EV-PROVIDER","EV-PI-PROVIDER-BINDING","EV-HOME-MODEL-SWITCHER"],"open":{"id":"OPEN-REQ-PIGE-PI-002","description":"Full catalog/help, Provider delete, DeepSeek Anthropic, and packaged model matrix remain; Advanced/Fast stays hidden.","targetBuilds":["B3.04"],"targetExits":["E3.01"]}},
     "PIGE-PI-003": {
       "status": "planned",
@@ -973,7 +946,7 @@
     "PIGE-UI-002":{"status":"planned","plannedTarget":"Complete accessibility, final UI Design review and real macOS/Windows visual equivalence."},
     "PIGE-UI-003":{"status":"partial","evidence":["EV-APP-SHELL","EV-FIRST-HOME-GUIDE","EV-HOME-MODEL-OWNER","EV-HOME-MODEL-SWITCHER","EV-HOME-DURABLE-REFRESH","EV-HOME-ENTER","EV-DATASET-QUERY-UI","EV-DATASET-TIMELINE-RESTORE","EV-KNOWLEDGE-TREE-IPC","EV-KNOWLEDGE-TREE-UI","EV-FULL-UI-RESPONSIVE","EV-FULL-UI-NAVIGATION","EV-FULL-UI-LIBRARY","EV-FULL-UI-SETTINGS","EV-UI-WINDOW-SHELL","EV-LIBRARY-SEARCH-UI"],"open":{"id":"OPEN-REQ-PIGE-UI-003","description":"Production shell/macOS review work; unavailable UI proves no capability; capability and Windows qualification remain.","targetBuilds":["B1.03","B1.07","B1.08","B1.09","B1.17"],"targetExits":["E1.02","E1.11","E1.13"]}},
     "PIGE-UI-004":{"status":"planned","plannedTarget":"Remaining Knowledge Tree density/scale, compact-platform, assistive-technology, and signed packaged visual acceptance."},
-    "PIGE-UI-005":{"status":"planned","plannedTarget":"Note Agent local-copy, auto-apply, Activity/Undo, and exception tests."},
+    "PIGE-UI-005":{"status":"planned","plannedTarget":"Read-only current-note UI works; selection, mutation, Activity/Undo and exception tests remain."},
     "PIGE-UI-006":{"status":"partial","evidence":["EV-READER-RELATED","EV-READER-UI","EV-FULL-UI-LIBRARY","EV-FULL-UI-RESPONSIVE"],"open":{"id":"OPEN-REQ-PIGE-UI-006","description":"Library opens Reader and related context in governed panes; source metadata, typed edit/copy/reveal and unavailable-graph degradation remain open.","targetBuilds":["B6.08","B6.09"],"targetExits":["E6.05","E6.07"]}},
     "PIGE-SKILL-001":{"status":"planned","plannedTarget":"Settings/chat staging, URL/Markdown/ZIP, update, lifecycle, export, path-safety, and permission tests."},
     "PIGE-SKILL-002":{"status":"planned","plannedTarget":"Catalog, install, update, version-pin, rollback, uninstall, disclosure, and no-hidden-install tests."}
@@ -1212,10 +1185,10 @@
     },
     "E6.01":{"status":"partial","evidence":["EV-RETRIEVAL","EV-HOME-AGENT","EV-HOME-UI","EV-HOME-DRAFT-ADAPTER","EV-HOME-DRAFT-FAIL-CLOSED","EV-HOME-DRAFT-PUBLISHER","EV-HOME-DRAFT-UI","EV-HOME-ENTER","EV-PI-ELECTRON-SMOKE","EV-PI-DATASET-QUERY","EV-DATASET-QUERY-UI","EV-DATASET-TIMELINE-RESTORE"],"open":{"id":"OPEN-EXIT-E6.01","description":"Ranked retrieval, safe drafts, Home repair and one Dataset table work; mid-repair recovery, 10k, mixed-source/query breadth and signed installed UI remain.","targetBuilds":["B6.01","B6.02"],"targetExits":["E6.01"]}},
     "E6.02":{"status":"partial","evidence":["EV-RAG-CHUNKS","EV-DB-CHUNKS","EV-LOCAL-SCALE"],"open":{"id":"OPEN-EXIT-E6.02","description":"Metadata-only chunk/rebuild and 10k lexical scale work; embedding model lifecycle, vectors, semantic retrieval/reranking and packaged platforms remain.","targetBuilds":["B6.05","B6.06","B6.07"],"targetExits":["E6.02"]}},
-    "E6.03":{"status":"partial","evidence":["EV-CONTEXT","EV-AGENT-EVIDENCE-REVISION","EV-HOME-AGENT","EV-PI-INGEST-RETRIEVAL","EV-DATASET-QUERY-SERVICE","EV-DATASET-QUERY-DRIFT-AUDIT","EV-DATASET-QUERY-DURABILITY","EV-NOTE-AGENT-SERVICE","EV-NOTE-AGENT-EGRESS"],"open":{"id":"OPEN-EXIT-E6.03","description":"Home, ingest, Dataset and exact read-only current-note selection/privacy work; related/mixed selection, memory, compaction and remote packs remain.","targetBuilds":["B6.04"],"targetExits":["E6.03"]}},
+    "E6.03":{"status":"partial","evidence":["EV-CONTEXT","EV-AGENT-EVIDENCE-REVISION","EV-HOME-AGENT","EV-PI-INGEST-RETRIEVAL","EV-DATASET-QUERY-SERVICE","EV-DATASET-QUERY-DRIFT-AUDIT","EV-DATASET-QUERY-DURABILITY","EV-NOTE-AGENT-SERVICE","EV-NOTE-AGENT-EGRESS","EV-NOTE-AGENT-UI"],"open":{"id":"OPEN-EXIT-E6.03","description":"Home, ingest, Dataset and exact read-only current-note selection/privacy work; related/mixed selection, memory, compaction and remote packs remain.","targetBuilds":["B6.04"],"targetExits":["E6.03"]}},
     "E6.04":{"status":"partial","evidence":["EV-RETRIEVAL"],"open":{"id":"OPEN-EXIT-E6.04","description":"Full executable acceptance remains open for Exit E6.04: Retrieval fixtures pass expected top-result, grounded-summary, citation-coverage, and insufficient-evidence checks.","targetBuilds":["B6.03"],"targetExits":["E6.04"]}},
     "E6.05":{"status":"partial","evidence":["EV-RENDERER","EV-READER-RESOURCE-SAFETY","EV-RENDERER-NAVIGATION-GUARD","EV-FULL-UI-RESPONSIVE"],"open":{"id":"OPEN-EXIT-E6.05","description":"Reader responsive ownership works; typed edit/copy/reveal actions, complete keyboard reachability and long-page rendering-budget evidence remain open.","targetBuilds":["B6.08"],"targetExits":["E6.05"]}},
-    "E6.06":{"status":"planned","plannedTarget":"Note Agent proves scoped auto-apply, Activity/Undo, and exceptional review."},
+    "E6.06":{"status":"planned","plannedTarget":"Read-only current-note UI works; mutation, Activity/Undo and exceptional review remain."},
     "E6.07":{"status":"partial","evidence":["EV-DB-LINKS","EV-KNOWLEDGE-TREE-AGGREGATE","EV-KNOWLEDGE-TREE-SERVICE","EV-KNOWLEDGE-TREE-IPC","EV-KNOWLEDGE-TREE-UI"],"open":{"id":"OPEN-EXIT-E6.07","description":"Public source-backed Knowledge Tree navigation works; broader relationship/branch semantics, 10k worker-backed and incremental rebuild performance, and packaged-platform aggregate parity remain open.","targetBuilds":["B6.09","B6.12"],"targetExits":["E6.07"]}},
     "E6.08":{"status":"planned","plannedTarget":"Source-preserving Markdown editing, IME, and external-edit conflict tests."},
     "E6.09":{"status":"planned","plannedTarget":"Complete Knowledge Tree density/weight accessibility and signed compact/desktop platform report."},
@@ -1608,6 +1581,7 @@
     "EV-NOTE-AGENT-SERVICE":{"kind":"test","path":"tests/unit/home-agent-service.test.ts","selector":"answers through only the exact current-note read and terminal tools"},
     "EV-NOTE-AGENT-EGRESS":{"kind":"test","path":"tests/unit/home-agent-service.test.ts","selector":"makes the first current-note model turn query-only"},
     "EV-NOTE-AGENT-RECOVERY":{"kind":"test","path":"tests/unit/home-agent-service.test.ts","selector":"binds the current note before a model wait"},
+    "EV-NOTE-AGENT-UI":{"kind":"test","path":"tests/unit/note-agent-ui.test.ts","selector":"Note Agent production UI"},
     "EV-HOME-DRAFT-ADAPTER": { "kind": "test", "path": "tests/unit/pi-agent-runtime-adapter.test.ts", "selector": "emits only parsed safe answer snapshots from the exact terminal Home tool" },
     "EV-HOME-DRAFT-FAIL-CLOSED": { "kind": "test", "path": "tests/unit/pi-agent-runtime-adapter.test.ts", "selector": "does not expose generic Pi text as a Home draft" },
     "EV-HOME-DRAFT-PUBLISHER": { "kind": "test", "path": "tests/unit/agent-turn-draft-publisher.test.ts", "selector": "Agent turn draft publisher" },

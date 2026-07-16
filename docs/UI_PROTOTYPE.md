@@ -578,10 +578,10 @@ Phase 2/3 bridge:
 
 Current Phase 4 reader context foundation:
 
-- Opening a Library row or Home retrieval result can show resolved outgoing links and backlinks from `library.related`.
-- Wide readers use a right-side related context rail; narrow readers stack the related context below the Markdown body.
-- Related rows open notes through stable page IDs only. The renderer never receives arbitrary filesystem paths or note bodies from related-page APIs.
-- Editing, code-copy controls, selection actions, right-side Note Agent, source references, and reveal-source/open-folder actions remain later reader slices.
+- Library/Home results expose outgoing links and backlinks through `library.related`.
+- Related pages open by stable ID; the renderer gets neither arbitrary paths nor note bodies.
+- The context rail is right-side when wide and below Markdown when narrow.
+- Current-note Agent is read-only; edit/copy/selection/reveal remain later.
 
 ### 8.2 Note Agent Panel
 
@@ -605,13 +605,12 @@ Prototype:
 └───────────────┴────────────────────────────┴─────────────────────┘
 ```
 
-Note Agent behavior:
+Current production boundary:
 
-- Uses current note as primary context.
-- Can answer questions about the note, its sources, and related notes.
-- Can suggest backlinks and related pages.
-- Applies eligible evidence-backed edits with Activity/Undo; exceptional conflicts open review.
-- Read-only answers stay in the panel and do not automatically become notes.
+- Exact current-note owns timeline/follow-up, provisional/final cited answers, wait recovery and egress.
+- Unknown/stale ownership, model switches and failed/cancelled drafts fail closed.
+- Attachments, selection, related/backlinks, memory and mutations stay honestly unavailable.
+- Read-only answers never mutate notes
 
 ### 8.3 Selection Actions
 

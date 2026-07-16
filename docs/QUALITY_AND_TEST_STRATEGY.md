@@ -336,7 +336,7 @@ Tests and evaluation fixtures must verify:
 - Grounded summaries answer only from selected snippets and cite the evidence used.
 - Grounded/vault-only answers expose missing or contradictory evidence; general answers
   use no fabricated vault citations.
-- Note Agent and selection actions preserve selected spans and do not rewrite unrelated frontmatter or managed blocks.
+- Note Agent UI tests cover scope, stale isolation, draft revocation, recovery, egress and model switching; mutation/selection remains open.
 - Multilingual fixtures preserve source language metadata and answer Home queries in the query language where required.
 
 Recommended v0.1 eval metrics:
