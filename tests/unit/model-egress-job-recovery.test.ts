@@ -147,7 +147,7 @@ describe("model egress Job recovery", () => {
     );
     const current = requireValue(jobs.readAgentTurnJob(fixture.jobId));
     const { error: _error, stage: _stage, ...rest } = current;
-    jobs.writeAgentTurnJob(current, JobRecordSchema.parse({
+    jobs.testOnlyWriteAgentTurnJob(current, JobRecordSchema.parse({
       ...rest,
       state: "queued",
       updatedAt: "2026-07-14T08:02:00.000Z",
@@ -260,7 +260,7 @@ describe("model egress Job recovery", () => {
     );
     const current = requireValue(jobs.readAgentTurnJob(fixture.jobId));
     const { error: _error, stage: _stage, ...rest } = current;
-    jobs.writeAgentTurnJob(current, JobRecordSchema.parse({
+    jobs.testOnlyWriteAgentTurnJob(current, JobRecordSchema.parse({
       ...rest,
       state: "completed",
       updatedAt: "2026-07-14T08:03:00.000Z",
@@ -282,7 +282,7 @@ describe("model egress Job recovery", () => {
       "op_20260714_laterdenialaudit",
       digest("later denial decision")
     );
-    jobs.writeAgentTurnJob(deniedJob, JobRecordSchema.parse({
+    jobs.testOnlyWriteAgentTurnJob(deniedJob, JobRecordSchema.parse({
       ...deniedJob,
       state: "waiting_model_egress",
       stage: "waiting_for_model",
@@ -361,7 +361,7 @@ function createFixture(suffix: string): {
     `op_20260714_${identitySuffix}audit`,
     digest(`decision ${suffix}`)
   );
-  const waiting = jobs.writeAgentTurnJob(created, JobRecordSchema.parse({
+  const waiting = jobs.testOnlyWriteAgentTurnJob(created, JobRecordSchema.parse({
     ...created,
     state: "waiting_model_egress",
     stage: "waiting_for_model",

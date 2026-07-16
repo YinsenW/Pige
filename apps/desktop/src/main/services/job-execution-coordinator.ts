@@ -28,7 +28,35 @@ const RESUME_STATES = new Set<JobState>([
   "awaiting_review"
 ]);
 
+const PENDING_CANCELLATION_STATES = new Set<JobState>([
+  "queued",
+  "failed_retryable",
+  "waiting_dependency",
+  "waiting_permission",
+  "waiting_model_egress",
+  "awaiting_review"
+]);
+
+const EXPLICIT_RETRY_STATES = new Set<JobState>([
+  "failed_retryable",
+  "waiting_dependency",
+  "cancelled"
+]);
+
 const OUTCOME_SOURCE_STATES = new Set<JobState>(["running", "cancel_requested"]);
+const PRE_EXECUTION_OUTCOME_STATES = new Set<JobState>([
+  "waiting_dependency",
+  "waiting_permission",
+  "waiting_model_egress",
+  "awaiting_review",
+  "failed_retryable",
+  "failed_final"
+]);
+const WAITING_RESOLUTION_STATES = new Set<JobState>([
+  "failed_retryable",
+  "failed_final",
+  "cancelled"
+]);
 const OUTCOME_STATES = new Set<JobState>([
   "waiting_dependency",
   "waiting_permission",
@@ -56,6 +84,7 @@ const FACT_KEYS = new Set([
   "permissionRequestIds",
   "proposalIds",
   "operationIds",
+  "childJobIds",
   "checkpoints",
   "progress",
   "warnings",
@@ -72,6 +101,7 @@ export interface JobExecutionFactsPatch {
   readonly permissionRequestIds?: readonly string[];
   readonly proposalIds?: readonly string[];
   readonly operationIds?: readonly string[];
+  readonly childJobIds?: readonly string[];
   readonly checkpoints?: readonly JobCheckpoint[];
   readonly progress?: JobProgress;
   readonly warnings?: readonly PigeWarning[];
@@ -178,6 +208,60 @@ export interface RequestCancellationInput {
   readonly message: string;
 }
 
+export interface CancelPendingJobInput extends RequestCancellationInput {
+  readonly safeCheckpointId: string;
+}
+
+export interface PrepareJobRetryInput {
+  readonly message: string;
+}
+
+export type QueueJobReason =
+  | "dependency_repaired"
+  | "idempotent_recovery"
+  | "agent_continuation"
+  | "source_changed"
+  | "permission_decided"
+  | "model_egress_decided"
+  | "review_resolved";
+
+export interface QueueJobInput {
+  readonly reason: QueueJobReason;
+  readonly message: string;
+  readonly stage?: JobStage;
+  readonly clearStage?: boolean;
+  readonly proof?: JobExecutionResumeProof;
+  readonly facts?: JobExecutionFactsPatch;
+}
+
+export interface RecoverInterruptedJobInput {
+  readonly canResumeIdempotently: boolean;
+  readonly queuedMessage: string;
+  readonly retryableMessage: string;
+}
+
+export interface TerminalizeUncertainEffectInput {
+  readonly checkpointId: string;
+  readonly error: PigeErrorSummary;
+  readonly reason: string;
+  readonly message: string;
+  readonly facts?: JobExecutionFactsPatch;
+}
+
+export interface AdoptDurableCompletionInput {
+  readonly checkpointId: string;
+  readonly message: string;
+  readonly facts: JobExecutionFactsPatch;
+}
+
+export interface ResolveJobReviewInput {
+  readonly proposalId: string;
+  readonly result: "completed" | "completed_with_warnings" | "failed_final";
+  readonly message: string;
+  readonly error?: PigeErrorSummary;
+  readonly facts?: JobExecutionFactsPatch;
+}
+
 export interface MarkDurableBoundaryInput {
   readonly checkpointId: string;
   readonly message?: string;
@@ -187,6 +271,9 @@ export interface MarkDurableBoundaryInput {
 export interface CancellationOutcomeInput {
   readonly cancelledMessage: string;
   readonly preservedResultMessage: string;
+  readonly partialResultMessage?: string;
+  readonly safeCheckpointId?: string;
+  readonly durableResultComplete?: boolean;
   readonly facts?: JobExecutionFactsPatch;
 }
 
@@ -201,8 +288,10 @@ export function isTerminalJobState(state: JobState): boolean {
 export function isLegalJobStateTransition(from: JobState, to: JobState): boolean {
   if (isTerminalJobState(from)) return false;
   if (BEGIN_STATES.has(from) && to === "running") return true;
-  if (RESUME_STATES.has(from) && to === "running") return true;
+  if (RESUME_STATES.has(from) && (to === "running" || WAITING_RESOLUTION_STATES.has(to))) return true;
+  if (PENDING_CANCELLATION_STATES.has(from) && to === "cancelled") return true;
   if (from === "running" && to === "cancel_requested") return true;
+  if (from === "queued" && PRE_EXECUTION_OUTCOME_STATES.has(to)) return true;
   return OUTCOME_SOURCE_STATES.has(from) && OUTCOME_STATES.has(to);
 }
 
@@ -233,6 +322,7 @@ export class JobExecutionCoordinator {
       stage: input.stage,
       startedAt: timestamp,
       updatedAt: timestamp,
+      progress: undefined,
       message: input.message,
       ...(retry ? { retry } : {}),
       cancellation,
@@ -355,6 +445,7 @@ export class JobExecutionCoordinator {
       return this.cancellationOutcome(snapshot, {
         cancelledMessage: input.message,
         preservedResultMessage: input.message,
+        durableResultComplete: true,
         ...(input.facts ? { facts: input.facts } : {})
       });
     }
@@ -440,12 +531,262 @@ export class JobExecutionCoordinator {
     });
   }
 
+  cancelPending(snapshot: JobRecordSnapshot, input: CancelPendingJobInput): JobRecordSnapshot {
+    assertKeys(input, ["requestedBy", "message", "safeCheckpointId"]);
+    if (isTerminalJobState(snapshot.job.state)) throw terminalImmutable(snapshot.job.state);
+    if (!PENDING_CANCELLATION_STATES.has(snapshot.job.state)) {
+      throw invalidTransition(snapshot.job.state, "cancelled");
+    }
+    if (snapshot.job.cancellation?.durableWritesApplied === true) {
+      throw new PigeDomainError(
+        "job.cancellation_unsafe",
+        "A Job with durable effects cannot be represented as cleanly cancelled."
+      );
+    }
+    if (input.safeCheckpointId.trim() === "") {
+      throw new PigeDomainError("job.cancellation_invalid", "A clean cancellation requires a safe checkpoint ID.");
+    }
+    const timestamp = this.#timestamp(snapshot.job);
+    return this.#commit(snapshot, {
+      ...snapshot.job,
+      state: "cancelled",
+      updatedAt: timestamp,
+      finishedAt: timestamp,
+      message: input.message,
+      waitingDependency: undefined,
+      error: undefined,
+      cancellation: {
+        requestedAt: timestamp,
+        requestedBy: input.requestedBy,
+        safeCheckpointId: input.safeCheckpointId,
+        durableWritesApplied: false
+      }
+    });
+  }
+
+  prepareRetry(snapshot: JobRecordSnapshot, input: PrepareJobRetryInput): JobRecordSnapshot {
+    assertKeys(input, ["message"]);
+    if (!EXPLICIT_RETRY_STATES.has(snapshot.job.state)) {
+      if (isTerminalJobState(snapshot.job.state)) throw terminalImmutable(snapshot.job.state);
+      throw invalidTransition(snapshot.job.state, "queued");
+    }
+    const preserveDurableWrites = snapshot.job.cancellation?.durableWritesApplied === true;
+    const {
+      stage: _stage,
+      startedAt: _startedAt,
+      finishedAt: _finishedAt,
+      progress: _progress,
+      cancellation: _cancellation,
+      error: _error,
+      waitingDependency: _waitingDependency,
+      ...base
+    } = snapshot.job;
+    return this.#commit(snapshot, {
+      ...base,
+      state: "queued",
+      updatedAt: this.#timestamp(snapshot.job),
+      ...(preserveDurableWrites ? { cancellation: { durableWritesApplied: true } } : {}),
+      message: input.message
+    });
+  }
+
+  queue(snapshot: JobRecordSnapshot, input: QueueJobInput): JobRecordSnapshot {
+    assertKeys(input, ["reason", "message", "stage", "clearStage", "proof", "facts"]);
+    if (input.facts) assertFacts(input.facts);
+    const decisionReason = input.reason === "permission_decided" ||
+      input.reason === "model_egress_decided" ||
+      input.reason === "review_resolved";
+    const proofFacts = decisionReason
+      ? validateQueueDecisionProof(snapshot.job, input.reason, input.proof)
+      : undefined;
+    if (!decisionReason && input.proof) {
+      throw new PigeDomainError("job.command_invalid", "This queue reason does not accept a decision proof.");
+    }
+    const allowed = decisionReason
+      ? RESUME_STATES.has(snapshot.job.state) ||
+        (input.reason === "model_egress_decided" && snapshot.job.state === "failed_retryable")
+      : input.reason === "dependency_repaired"
+        ? snapshot.job.state === "waiting_dependency"
+        : input.reason === "idempotent_recovery"
+          ? snapshot.job.state === "running"
+          : snapshot.job.state === "running" || snapshot.job.state === "cancel_requested";
+    if (!allowed) {
+      if (isTerminalJobState(snapshot.job.state)) throw terminalImmutable(snapshot.job.state);
+      throw invalidTransition(snapshot.job.state, "queued");
+    }
+    if (snapshot.job.state === "cancel_requested") {
+      throw new PigeDomainError(
+        "job.cancellation_pending",
+        "A Job with pending cancellation cannot be queued for more semantic work."
+      );
+    }
+    const projected = applyFacts(applyFacts(snapshot.job, input.facts), proofFacts);
+    const {
+      stage: projectedStage,
+      finishedAt: _finishedAt,
+      waitingDependency: _waitingDependency,
+      error: _error,
+      ...current
+    } = projected;
+    return this.#commit(snapshot, {
+      ...current,
+      state: "queued",
+      ...(input.stage
+        ? { stage: input.stage }
+        : input.clearStage !== true && projectedStage ? { stage: projectedStage } : {}),
+      updatedAt: this.#timestamp(snapshot.job),
+      ...(decisionReason
+        ? {
+            retry: {
+              retryCount: snapshot.job.retry?.retryCount ?? 0,
+              maxAutomaticRetries: 0,
+              requiresUserAction: false
+            }
+          }
+        : {}),
+      message: input.message
+    });
+  }
+
+  recoverInterrupted(
+    snapshot: JobRecordSnapshot,
+    input: RecoverInterruptedJobInput
+  ): JobRecordSnapshot {
+    assertKeys(input, ["canResumeIdempotently", "queuedMessage", "retryableMessage"]);
+    if (snapshot.job.state !== "running" && snapshot.job.state !== "cancel_requested") {
+      if (isTerminalJobState(snapshot.job.state)) throw terminalImmutable(snapshot.job.state);
+      throw invalidTransition(snapshot.job.state, input.canResumeIdempotently ? "queued" : "failed_retryable");
+    }
+    if (input.canResumeIdempotently && snapshot.job.state === "running") {
+      return this.queue(snapshot, {
+        reason: "idempotent_recovery",
+        message: input.queuedMessage,
+        clearStage: true
+      });
+    }
+    return this.#requeue(snapshot, {
+      kind: "requeue",
+      error: {
+        code: "unknown.execution_failed",
+        domain: "unknown",
+        messageKey: "error.generic",
+        retryable: true,
+        severity: "error",
+        userAction: "retry"
+      },
+      reason: "job.interrupted_without_safe_completion",
+      maxAutomaticRetries: 0,
+      requiresUserAction: true,
+      message: input.retryableMessage
+    });
+  }
+
+  terminalizeUncertainEffect(
+    snapshot: JobRecordSnapshot,
+    input: TerminalizeUncertainEffectInput
+  ): JobRecordSnapshot {
+    assertKeys(input, ["checkpointId", "error", "reason", "message", "facts"]);
+    if (isTerminalJobState(snapshot.job.state)) throw terminalImmutable(snapshot.job.state);
+    if (input.checkpointId.trim() === "") {
+      throw new PigeDomainError("job.cancellation_invalid", "An uncertain external effect requires a checkpoint ID.");
+    }
+    const error = parseError(input.error);
+    if (error.retryable) {
+      throw new PigeDomainError("job.failure_invalid", "An uncertain external effect must fail closed without replay.");
+    }
+    const timestamp = this.#timestamp(snapshot.job);
+    const next = applyFacts(snapshot.job, input.facts);
+    return this.#commit(snapshot, {
+      ...next,
+      state: "failed_final",
+      updatedAt: timestamp,
+      finishedAt: timestamp,
+      waitingDependency: undefined,
+      error,
+      retry: {
+        retryCount: snapshot.job.retry?.retryCount ?? 0,
+        maxAutomaticRetries: 0,
+        requiresUserAction: false,
+        lastRetryReason: input.reason
+      },
+      cancellation: {
+        ...snapshot.job.cancellation,
+        safeCheckpointId: input.checkpointId,
+        durableWritesApplied: true
+      },
+      message: input.message
+    });
+  }
+
+  adoptDurableCompletion(
+    snapshot: JobRecordSnapshot,
+    input: AdoptDurableCompletionInput
+  ): JobRecordSnapshot {
+    assertKeys(input, ["checkpointId", "message", "facts"]);
+    assertFacts(input.facts);
+    if (isTerminalJobState(snapshot.job.state)) throw terminalImmutable(snapshot.job.state);
+    if (snapshot.job.state !== "queued" && snapshot.job.state !== "running" && snapshot.job.state !== "cancel_requested") {
+      throw invalidTransition(snapshot.job.state, "completed");
+    }
+    if (input.checkpointId.trim() === "" || (input.facts.outputRefs?.length ?? 0) === 0) {
+      throw new PigeDomainError(
+        "job.recovery_proof_invalid",
+        "Adopting a durable completion requires its checkpoint and output reference."
+      );
+    }
+    const timestamp = this.#timestamp(snapshot.job);
+    const next = applyFacts(snapshot.job, input.facts);
+    return this.#commit(snapshot, {
+      ...next,
+      state: "completed",
+      updatedAt: timestamp,
+      finishedAt: timestamp,
+      waitingDependency: undefined,
+      error: undefined,
+      cancellation: {
+        ...snapshot.job.cancellation,
+        safeCheckpointId: input.checkpointId,
+        durableWritesApplied: true
+      },
+      message: input.message
+    });
+  }
+
+  resolveReview(snapshot: JobRecordSnapshot, input: ResolveJobReviewInput): JobRecordSnapshot {
+    assertKeys(input, ["proposalId", "result", "message", "error", "facts"]);
+    if (
+      snapshot.job.state !== "awaiting_review" ||
+      !snapshot.job.proposalIds?.includes(input.proposalId)
+    ) {
+      if (isTerminalJobState(snapshot.job.state)) throw terminalImmutable(snapshot.job.state);
+      throw new PigeDomainError("job.resume_proof_invalid", "The reviewed proposal is not bound to this Job.");
+    }
+    const error = input.error ? parseError(input.error) : undefined;
+    if (input.result === "failed_final" && (!error || error.retryable)) {
+      throw new PigeDomainError("job.failure_invalid", "A conflicted review requires a final body-free error.");
+    }
+    if (input.result !== "failed_final" && error) {
+      throw new PigeDomainError("job.failure_invalid", "A completed review must not retain an error owner.");
+    }
+    const timestamp = this.#timestamp(snapshot.job);
+    const next = applyFacts(snapshot.job, input.facts);
+    return this.#commit(snapshot, {
+      ...next,
+      state: input.result,
+      updatedAt: timestamp,
+      finishedAt: timestamp,
+      waitingDependency: undefined,
+      ...(error ? { error } : { error: undefined }),
+      message: input.message
+    });
+  }
+
   markDurableBoundary(
     snapshot: JobRecordSnapshot,
     input: MarkDurableBoundaryInput
   ): JobRecordSnapshot {
     assertKeys(input, ["checkpointId", "message", "facts"]);
-    if (snapshot.job.state !== "running") {
+    if (snapshot.job.state !== "running" && snapshot.job.state !== "cancel_requested") {
       throw invalidTransition(snapshot.job.state, snapshot.job.state);
     }
     if (input.checkpointId.trim() === "") {
@@ -468,19 +809,63 @@ export class JobExecutionCoordinator {
     snapshot: JobRecordSnapshot,
     input: CancellationOutcomeInput
   ): JobRecordSnapshot {
-    assertKeys(input, ["cancelledMessage", "preservedResultMessage", "facts"]);
+    assertKeys(input, [
+      "cancelledMessage",
+      "preservedResultMessage",
+      "partialResultMessage",
+      "safeCheckpointId",
+      "durableResultComplete",
+      "facts"
+    ]);
     if (snapshot.job.state !== "cancel_requested") {
       throw invalidTransition(snapshot.job.state, "cancelled");
     }
     const durableWritesApplied = snapshot.job.cancellation?.durableWritesApplied === true;
-    const state = durableWritesApplied ? "completed_with_warnings" : "cancelled";
+    const state = durableWritesApplied
+      ? input.durableResultComplete === true ? "completed_with_warnings" : "failed_retryable"
+      : "cancelled";
     this.#assertTransition(snapshot.job, state);
-    return this.#finish(
-      snapshot,
+    const timestamp = this.#timestamp(snapshot.job);
+    const next = applyFacts(snapshot.job, input.facts);
+    const safeCheckpointId = input.safeCheckpointId ??
+      snapshot.job.cancellation?.safeCheckpointId ??
+      (durableWritesApplied ? undefined : "before_durable_write");
+    const message = durableWritesApplied
+      ? input.durableResultComplete === true
+        ? input.preservedResultMessage
+        : input.partialResultMessage ?? input.preservedResultMessage
+      : input.cancelledMessage;
+    return this.#commit(snapshot, {
+      ...next,
       state,
-      durableWritesApplied ? input.preservedResultMessage : input.cancelledMessage,
-      input.facts
-    );
+      updatedAt: timestamp,
+      message,
+      waitingDependency: undefined,
+      cancellation: {
+        ...snapshot.job.cancellation,
+        ...(safeCheckpointId ? { safeCheckpointId } : {}),
+        durableWritesApplied
+      },
+      ...(state === "failed_retryable"
+        ? {
+            finishedAt: undefined,
+            error: {
+              code: "unknown.execution_failed",
+              domain: "unknown",
+              messageKey: "error.generic",
+              retryable: true,
+              severity: "error",
+              userAction: "retry"
+            },
+            retry: {
+              retryCount: snapshot.job.retry?.retryCount ?? 0,
+              maxAutomaticRetries: 0,
+              requiresUserAction: true,
+              lastRetryReason: "job.cancelled_after_durable_output"
+            }
+          }
+        : { finishedAt: timestamp, error: undefined })
+    });
   }
 
   #wait(
@@ -544,7 +929,7 @@ export class JobExecutionCoordinator {
       throw new PigeDomainError("job.clock_invalid", "The Job coordinator clock returned an invalid timestamp.");
     }
     const currentTime = Date.parse(current.updatedAt);
-    return new Date(Math.max(now.getTime(), currentTime)).toISOString();
+    return new Date(Math.max(now.getTime(), currentTime + 1)).toISOString();
   }
 
   #commit(snapshot: JobRecordSnapshot, candidate: unknown): JobRecordSnapshot {
@@ -565,6 +950,7 @@ function applyFacts(job: JobRecord, facts?: JobExecutionFactsPatch): JobRecord {
       : {}),
     ...(facts.proposalIds ? { proposalIds: mergeStrings(job.proposalIds, facts.proposalIds) } : {}),
     ...(facts.operationIds ? { operationIds: mergeStrings(job.operationIds, facts.operationIds) } : {}),
+    ...(facts.childJobIds ? { childJobIds: mergeStrings(job.childJobIds, facts.childJobIds) } : {}),
     ...(facts.checkpoints ? { checkpoints: mergeCheckpoints(job.checkpoints, facts.checkpoints) } : {}),
     ...(facts.progress ? { progress: { ...facts.progress } } : {}),
     ...(facts.warnings ? { warnings: mergeValues(job.warnings, facts.warnings) } : {}),
@@ -617,6 +1003,22 @@ function assertOutcomeKeys(outcome: JobExecutionOutcome): void {
   }
 }
 
+function validateQueueDecisionProof(
+  job: JobRecord,
+  reason: Extract<QueueJobReason, "permission_decided" | "model_egress_decided" | "review_resolved">,
+  proof: JobExecutionResumeProof | undefined
+): JobExecutionFactsPatch {
+  const expectedKind = reason === "permission_decided"
+    ? "permission_decided"
+    : reason === "model_egress_decided"
+      ? "model_egress_decided"
+      : "review_resolved";
+  if (!proof || proof.kind !== expectedKind) {
+    throw new PigeDomainError("job.resume_proof_invalid", "The queued Job decision proof does not match its owner.");
+  }
+  return validateResumeProof(job, proof);
+}
+
 function validateResumeProof(job: JobRecord, proof: JobExecutionResumeProof): JobExecutionFactsPatch {
   switch (proof.kind) {
     case "dependency_repaired":
@@ -650,7 +1052,7 @@ function validateResumeProof(job: JobRecord, proof: JobExecutionResumeProof): Jo
     case "model_egress_decided":
       assertKeys(proof, ["kind", "approvalRequestId", "operationId"]);
       if (
-        job.state !== "waiting_model_egress" ||
+        (job.state !== "waiting_model_egress" && job.state !== "failed_retryable") ||
         job.error?.modelEgressApprovalRequestId !== proof.approvalRequestId
       ) {
         throw invalidResumeProof();

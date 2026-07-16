@@ -46,6 +46,12 @@ const modules = [
     owner: "Home evidence projection",
     classification: "product_boundary",
     upstreamGap: "Pi owns tool sequencing, while Pige must prove that cited durable evidence crossed the reviewed model boundary before publication."
+  },
+  {
+    path: "apps/desktop/src/main/services/job-execution-coordinator.ts",
+    owner: "JobExecutionCoordinator",
+    classification: "authority_reliability",
+    upstreamGap: "Pi owns Agent turn execution, while Pige must single-own durable Job claim, CAS, cancellation, retry, checkpoint, review, recovery, and terminal transitions."
   }
 ];
 
@@ -259,10 +265,42 @@ const h2Jobs = h2Sources["apps/desktop/src/main/services/jobs-service.ts"];
 const h2AgentIngest = h2Sources["apps/desktop/src/main/services/agent-ingest-service.ts"];
 const h2Home = h2Sources["apps/desktop/src/main/services/home-agent-service.ts"];
 const h2LineBudget = {
-  "agent-ingest-service.ts": [4_645, lineCount(h2AgentIngest)],
-  "home-agent-service.ts": [3_722, lineCount(h2Home)],
-  "jobs-service.ts": [6_956, lineCount(h2Jobs)]
+  "agent-ingest-service.ts": [4_645, 4_630],
+  "home-agent-service.ts": [3_722, 3_708],
+  "jobs-service.ts": [6_956, 6_952]
 };
+const h3Coordinator = fs.readFileSync(path.join(
+  root,
+  "apps/desktop/src/main/services/job-execution-coordinator.ts"
+), "utf8");
+const h3DirectLifecycleStatePattern = /state:\s*"(?:waiting_permission|waiting_model_egress|awaiting_review|cancel_requested|cancelled|completed|completed_with_warnings|failed_retryable|failed_final)"/gu;
+const h3DirectLifecycleStateWriters = h2Jobs.match(h3DirectLifecycleStatePattern) ?? [];
+const h3JobsCompareAndSwapCount = h2Jobs.match(/compareAndSwap\(/gu)?.length ?? 0;
+const h3ResidualClosedLoops = [
+  "apps/desktop/src/main/services/backup-coordinator-service.ts",
+  "apps/desktop/src/main/services/restore-coordinator-service.ts",
+  "apps/desktop/src/main/services/local-tool-manager-service.ts"
+].map((relativePath) => {
+  const source = fs.readFileSync(path.join(root, relativePath), "utf8");
+  return {
+    path: relativePath,
+    directLifecycleStateLiterals: source.match(h3DirectLifecycleStatePattern)?.length ?? 0
+  };
+});
+if (h3DirectLifecycleStateWriters.length !== 0) {
+  failures.push("H3 JobsService still writes coordinator-owned lifecycle states directly");
+}
+if (h3JobsCompareAndSwapCount !== 2) {
+  failures.push(`H3 JobsService must retain only two non-lifecycle CAS boundaries, found ${h3JobsCompareAndSwapCount}`);
+}
+for (const removedWriter of [
+  "#mutateJob(",
+  "#replaceExpectedJob(",
+  "createJobCancellationOutcome(",
+  "withDurableWriteState("
+]) {
+  if (h2Jobs.includes(removedWriter)) failures.push(`H3 JobsService still contains removed lifecycle writer ${removedWriter}`);
+}
 if (/ipcMain\.handle\("capture\.submit(?:Text|Url|Files)"/u.test(h2Main)) {
   failures.push("H2 must not expose legacy capture.submit* semantic ingress through Main IPC");
 }
@@ -349,6 +387,38 @@ console.log(`Pi runtime responsibility OK: ${JSON.stringify({
     legacyAgentIngestAdmission: "SourceRecord semanticOrchestration=legacy_agent_ingest only; current writes exclude it",
     newSemanticIngress: "agent.submitTurn",
     proposalRendererBoundary: "all legacy renderer proposal methods fail closed; durable records remain Main-internal"
+  },
+  h3ResponsibilityDelta: {
+    baseline: "b9b624df9ea13b17ac869e1193b88095f0ba3806",
+    candidateScope: "coordinator_core_and_jobs_home_migration",
+    lineBudget: {
+      "job-execution-coordinator.ts": { before: 0, after: lineCount(h3Coordinator), delta: lineCount(h3Coordinator) },
+      "jobs-service.ts": { before: 6_952, after: lineCount(h2Jobs), delta: lineCount(h2Jobs) - 6_952 },
+      "home-agent-service.ts": { before: 3_708, after: lineCount(h2Home), delta: lineCount(h2Home) - 3_708 }
+    },
+    coordinatorOwnedTransitions: [
+      "begin_and_resume",
+      "bounded_fact_patch",
+      "waiting_and_terminal_settlement",
+      "explicit_retry_and_requeue",
+      "cancellation_and_durable_boundary",
+      "interrupted_recovery_and_uncertain_effect_terminalization",
+      "durable_completion_adoption",
+      "proposal_review_resolution"
+    ],
+    jobsServiceDirectLifecycleStateWriters: h3DirectLifecycleStateWriters.length,
+    jobsServiceRemainingCompareAndSwapBoundaries: h3JobsCompareAndSwapCount,
+    remainingCompareAndSwapOwners: [
+      "legacy_retrieval_and_test_fixture_whole_record_compatibility",
+      "deterministic_parent_child_binding_reconciliation"
+    ],
+    homeDurableAssistantRecovery: "adopt_durable_completion_without_provider_replay",
+    retryConvergence: "same_job_requeue_acknowledgement_yields_to_next_authoritative_state",
+    remainingClosedLoops: h3ResidualClosedLoops,
+    serializedNextSteps: [
+      "H3b_migrate_backup_restore_and_local_tool_transition_adapters",
+      "H3c_register_per_class_executors_and_remove_jobs_service_dispatch_ownership"
+    ]
   },
   continuousRefactorSequence: serviceInventory.phaseSequence,
   serviceResponsibilityInventory: {

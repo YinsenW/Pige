@@ -104,6 +104,13 @@ import type {
   ReadHomeAgentUrlRequest
 } from "./home-agent-url-service";
 import { HomeAgentEvidenceLedger } from "./home-agent-evidence-ledger";
+import type {
+  AdoptDurableCompletionInput,
+  BeginJobInput,
+  JobExecutionFactsPatch,
+  JobExecutionOutcome,
+  ResumeJobInput
+} from "./job-execution-coordinator";
 
 export interface HomeAgentVaultPort {
   current(): VaultSummary | undefined;
@@ -188,7 +195,11 @@ export interface HomeAgentJobPort {
   ): Promise<T>;
   attachAgentTurnSource(jobId: string, sourceId: string): JobRecord;
   failAgentTurnSourcePreservation(jobId: string): JobRecord | undefined;
-  writeAgentTurnJob(expected: JobRecord, job: JobRecord): JobRecord;
+  beginAgentTurnJob(expected: JobRecord, input: BeginJobInput): JobRecord;
+  resumeAgentTurnJob(expected: JobRecord, input: ResumeJobInput): JobRecord;
+  patchAgentTurnJob(expected: JobRecord, facts: JobExecutionFactsPatch): JobRecord;
+  settleAgentTurnJob(expected: JobRecord, outcome: JobExecutionOutcome): JobRecord;
+  adoptAgentTurnCompletion(expected: JobRecord, input: AdoptDurableCompletionInput): JobRecord;
   readAgentTurnJob(jobId: string): JobRecord | undefined;
   processAgentTurnSource(jobId: string): Promise<JobRecord>;
   requeueWaitingTextAgentTurns(): { readonly requeued: number };
@@ -655,19 +666,18 @@ export class HomeAgentService {
             grounding: "source",
             citations: []
           };
-          session.current = this.#jobs.writeAgentTurnJob(sourceJob, JobRecordSchema.parse({
-            ...sourceJob,
-            outputRefs: Array.from(new Map([
-              ...(sourceJob.outputRefs ?? []).map((ref) => [`${ref.kind}:${ref.id}:${ref.role ?? ""}`, ref] as const),
-              [`conversation:${assistantEvent.id}:agent_turn_assistant_event`, {
-                kind: "conversation" as const,
-                id: assistantEvent.id,
-                role: "agent_turn_assistant_event",
-                ...(assistantEvent.contentHash ? { checksum: assistantEvent.contentHash } : {})
-              }]
-            ]).values()),
-            updatedAt: new Date().toISOString()
-          }));
+          const assistantRef = sourceJob.outputRefs?.find(
+            (ref) => ref.kind === "conversation" &&
+              ref.id === assistantEvent.id &&
+              ref.role === "agent_turn_assistant_event"
+          );
+          if (!assistantRef) {
+            throw new PigeDomainError(
+              "agent_runtime.turn_output_invalid",
+              "The terminal source Agent turn is missing its durable assistant reference."
+            );
+          }
+          session.current = sourceJob;
           return {
             requestId,
             jobId: sourceJob.id,
@@ -1053,32 +1063,19 @@ export class HomeAgentService {
         const durableAssistant = this.#conversations.findAssistantTurn(vaultPath, preserved.locator, job.id);
         if (durableAssistant) {
           session.modelInvocationStarted = true;
-          const finishedAt = new Date().toISOString();
-          const {
-            error: _error,
-            waitingDependency: _waitingDependency,
-            finishedAt: _priorFinishedAt,
-            ...current
-          } = session.current;
-          session.current = this.#jobs.writeAgentTurnJob(session.current, JobRecordSchema.parse({
-            ...current,
-            state: "completed",
-            updatedAt: finishedAt,
-            finishedAt,
-            outputRefs: [
-              ...(current.outputRefs ?? []).filter((ref) =>
-                !(ref.kind === "conversation" && ref.role === "agent_turn_assistant_event")
-              ),
-              {
+          session.current = this.#jobs.adoptAgentTurnCompletion(session.current, {
+            checkpointId: "agent_turn_assistant_event_persisted",
+            message: "Recovered the durable assistant result without another model call.",
+            facts: {
+              outputRefs: [{
                 kind: "conversation",
                 id: durableAssistant.id,
                 role: "agent_turn_assistant_event",
                 ...(durableAssistant.contentHash ? { checksum: durableAssistant.contentHash } : {})
-              }
-            ],
-            privacy: modelInvocationPrivacy(session),
-            message: "Recovered the durable assistant result without another model call."
-          }));
+              }],
+              privacy: modelInvocationPrivacy(session)
+            }
+          });
           completed += 1;
           continue;
         }
@@ -1208,14 +1205,12 @@ export class HomeAgentService {
       decisionHash: createModelEgressDecisionHash(decision),
       decision
     });
-    session.current = this.#jobs.writeAgentTurnJob(session.current, JobRecordSchema.parse({
-      ...session.current,
+    session.current = this.#jobs.patchAgentTurnJob(session.current, {
       policyContextId: policy.policyContextId,
       policyHash: policy.policyHash,
-      operationIds: Array.from(new Set([...(session.current.operationIds ?? []), operation.id])),
-      updatedAt: new Date().toISOString(),
+      operationIds: [operation.id],
       message: "Restricted content was blocked before Agent ingress."
-    }));
+    });
   }
 
   async #run(
@@ -1255,16 +1250,12 @@ export class HomeAgentService {
       defaultProvider,
       ...(this.#capabilities?.snapshot() ?? {})
     });
-    session.current = this.#jobs.writeAgentTurnJob(session.current, JobRecordSchema.parse({
-      ...session.current,
-      state: "running",
+    session.current = this.#jobs.patchAgentTurnJob(session.current, {
       stage: "planning",
-      startedAt: session.current.startedAt ?? new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
       policyContextId: policy.policyContextId,
       policyHash: policy.policyHash,
       message: "Pi Agent is interpreting the preserved Home turn."
-    }));
+    });
     const currentNoteRef = currentNoteScope
       ? (session.current.inputRefs ?? []).find(
         (ref) => ref.kind === "page" && ref.role === "agent_turn_current_note_scope"
@@ -1485,10 +1476,8 @@ export class HomeAgentService {
           decisionHash
         );
       }
-      session.current = this.#jobs.writeAgentTurnJob(session.current, JobRecordSchema.parse({
-        ...session.current,
-        operationIds: Array.from(new Set([...(session.current.operationIds ?? []), operation.id])),
-        updatedAt: new Date().toISOString(),
+      session.current = this.#jobs.patchAgentTurnJob(session.current, {
+        operationIds: [operation.id],
         privacy: {
           usedCloudModel: session.current.privacy?.usedCloudModel ?? false,
           usedNetwork: session.current.privacy?.usedNetwork ?? false,
@@ -1496,7 +1485,7 @@ export class HomeAgentService {
           accessedExternalFiles: false,
           permissionDecisionIds: session.current.privacy?.permissionDecisionIds ?? []
         }
-      }));
+      });
       if (evidenceBindingDrifted) {
         throw new PigeDomainError(
           "model_egress.privacy_drift",
@@ -1509,25 +1498,26 @@ export class HomeAgentService {
       if (auditedDecision.outcome === "confirm") {
         if (approvalRequest && approvalBinding && this.#modelEgressApprovals) {
           if (approvalRequest.state === "pending") {
-            const now = new Date().toISOString();
-            const { waitingDependency: _waiting, finishedAt: _finished, ...current } = session.current;
-            session.current = this.#jobs.writeAgentTurnJob(session.current, JobRecordSchema.parse({
-              ...current,
-              state: "waiting_model_egress",
-              stage: "waiting_for_model",
-              updatedAt: now,
-              error: PigeErrorSummarySchema.parse({
-                ...createErrorSummary(
-                  "model_provider.egress_confirmation_required",
-                  "errors.model_provider.egress_confirmation_required",
-                  false,
-                  "confirm_model_egress",
-                  "warning"
-                ),
-                modelEgressApprovalRequestId: approvalRequest.id
-              }),
-              message: "Agent turn is waiting for one exact model egress decision."
-            }));
+            const egressError = PigeErrorSummarySchema.parse({
+              ...createErrorSummary(
+                "model_provider.egress_confirmation_required",
+                "errors.model_provider.egress_confirmation_required",
+                false,
+                "confirm_model_egress",
+                "warning"
+              ),
+              modelEgressApprovalRequestId: approvalRequest.id
+            });
+            session.current = this.#jobs.settleAgentTurnJob(session.current, {
+              kind: "waiting",
+              reason: "model_egress",
+              approvalRequestId: approvalRequest.id,
+              error: egressError,
+              message: "Agent turn is waiting for one exact model egress decision.",
+              facts: {
+                stage: "waiting_for_model"
+              }
+            });
             try {
               await this.#modelEgressApprovals.waitForDecision(
                 vaultPath,
@@ -2119,38 +2109,33 @@ export class HomeAgentService {
     sourceIds: readonly string[] = [],
     assistantContentHash?: string
   ): void {
-    const finishedAt = new Date().toISOString();
-    const { error: _error, waitingDependency: _waitingDependency, ...current } = session.current;
-    session.current = this.#jobs.writeAgentTurnJob(session.current, JobRecordSchema.parse({
-      ...current,
-      state: "completed",
-      stage: "planning",
-      updatedAt: finishedAt,
-      finishedAt,
-      outputRefs: mergeAgentTurnOutputRefs(
-        current,
-        assistantEventId,
-        sourceIds,
-        result,
-        assistantContentHash
-      ),
-      privacy: modelInvocationPrivacy(session),
+    session.current = this.#jobs.settleAgentTurnJob(session.current, {
+      kind: "completed",
       message: result.grounding === "insufficient_evidence"
         ? "Agent turn completed with a contract-owned insufficient-evidence result."
         : result.grounding === "local_knowledge"
           ? "Agent turn completed with validated local citations."
           : result.grounding === "source"
             ? "Agent turn completed from one Agent-selected preserved URL source."
-          : "Agent turn completed with a validated general response."
-    }));
+          : "Agent turn completed with a validated general response.",
+      facts: {
+        stage: "planning",
+        outputRefs: mergeAgentTurnOutputRefs(
+          session.current,
+          assistantEventId,
+          sourceIds,
+          result,
+          assistantContentHash
+        ),
+        privacy: modelInvocationPrivacy(session)
+      }
+    });
   }
 
   #failJob(
     session: HomeAgentJobSession,
     failure: ReturnType<typeof toHomeAgentFailure>
   ): void {
-    const now = new Date().toISOString();
-    const { waitingDependency: _waitingDependency, finishedAt: _finishedAt, ...current } = session.current;
     if (failure.error.permissionRequestId) {
       const durable = this.#jobs.readAgentTurnJob(session.current.id);
       if (
@@ -2163,56 +2148,66 @@ export class HomeAgentService {
       return;
     }
     if (failure.error.modelEgressApprovalRequestId) {
-      session.current = this.#jobs.writeAgentTurnJob(session.current, JobRecordSchema.parse({
-        ...current,
-        state: "waiting_model_egress",
-        stage: "waiting_for_model",
-        updatedAt: now,
+      const durable = this.#jobs.readAgentTurnJob(session.current.id);
+      if (
+        durable?.state === "waiting_model_egress" &&
+        durable.error?.modelEgressApprovalRequestId === failure.error.modelEgressApprovalRequestId
+      ) {
+        session.current = durable;
+        return;
+      }
+      session.current = this.#jobs.settleAgentTurnJob(session.current, {
+        kind: "waiting",
+        reason: "model_egress",
+        approvalRequestId: failure.error.modelEgressApprovalRequestId,
         error: failure.error,
-        privacy: modelInvocationPrivacy(session),
-        message: "Agent turn is waiting for one exact model egress decision."
-      }));
+        message: "Agent turn is waiting for one exact model egress decision.",
+        facts: {
+          stage: "waiting_for_model",
+          privacy: modelInvocationPrivacy(session)
+        }
+      });
       return;
     }
     if (
       failure.error.code === "model_provider.default_model_missing" ||
       failure.error.code === "model_provider.binding_unusable"
     ) {
-      session.current = this.#jobs.writeAgentTurnJob(session.current, JobRecordSchema.parse({
-        ...current,
-        state: "waiting_dependency",
-        stage: "waiting_for_model",
-        updatedAt: now,
+      session.current = this.#jobs.settleAgentTurnJob(session.current, {
+        kind: "waiting",
+        reason: "dependency",
         error: failure.error,
-        waitingDependency: {
+        dependency: {
           dependencyKind: "model_provider",
           requiredAction: "configure_model",
           messageKey: failure.error.messageKey
         },
-        privacy: modelInvocationPrivacy(session),
-        message: "Agent turn is waiting for a ready default model binding."
-      }));
+        message: "Agent turn is waiting for a ready default model binding.",
+        facts: {
+          stage: "waiting_for_model",
+          privacy: modelInvocationPrivacy(session)
+        }
+      });
       return;
     }
 
     const retryable = failure.error.retryable || failure.state === "waiting";
-    session.current = this.#jobs.writeAgentTurnJob(session.current, JobRecordSchema.parse({
-      ...current,
-      state: retryable ? "failed_retryable" : "failed_final",
-      updatedAt: now,
-      finishedAt: now,
+    session.current = this.#jobs.settleAgentTurnJob(session.current, retryable ? {
+      kind: "requeue",
       error: failure.error,
-      retry: {
-        retryCount: current.retry?.retryCount ?? 0,
-        maxAutomaticRetries: 0,
-        requiresUserAction: true,
-        lastRetryReason: failure.error.code
-      },
-      privacy: modelInvocationPrivacy(session),
+      reason: failure.error.code,
+      maxAutomaticRetries: 0,
+      requiresUserAction: true,
       message: failure.state === "waiting"
         ? "Agent turn requires an explicit user action before a new attempt."
-        : "Agent turn did not produce a validated answer; the preserved turn remains unchanged."
-    }));
+        : "Agent turn did not produce a validated answer; the preserved turn remains unchanged.",
+      facts: { privacy: modelInvocationPrivacy(session) }
+    } : {
+      kind: "failed",
+      error: failure.error,
+      message: "Agent turn did not produce a validated answer; the preserved turn remains unchanged.",
+      facts: { privacy: modelInvocationPrivacy(session) }
+    });
   }
 }
 

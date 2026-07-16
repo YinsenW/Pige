@@ -242,7 +242,7 @@ describe("Agent-selected URL ingress", () => {
       conversationLocator: ".pige/conversations/2026/07/conv_20260712.jsonl",
       inputHash: hashText("preserved URL recovery turn")
     });
-    jobs.writeAgentTurnJob(created, {
+    jobs.testOnlyWriteAgentTurnJob(created, {
       ...created,
       state: "running",
       stage: "planning",
@@ -295,7 +295,7 @@ describe("Agent-selected URL ingress", () => {
     const sourceOperation = readRecords<OperationRecord>(path.join(fixture.vaultPath, ".pige", "operations"))
       .find((operation) => operation.kind === "create_source_record");
     if (!sourceOperation) throw new Error("Expected durable URL source Operation.");
-    jobs.writeAgentTurnJob(linkedParent, {
+    jobs.testOnlyWriteAgentTurnJob(linkedParent, {
       ...linkedParent,
       outputRefs: linkedParent.outputRefs?.filter((ref) => ![
         "agent_turn_url_source",
@@ -388,7 +388,7 @@ describe("Agent-selected URL ingress", () => {
       conversationLocator: ".pige/conversations/2026/07/conv_20260712.jsonl",
       inputHash: hashText("URL provenance turn")
     });
-    jobs.writeAgentTurnJob(created, {
+    jobs.testOnlyWriteAgentTurnJob(created, {
       ...created,
       state: "running",
       stage: "planning",

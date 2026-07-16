@@ -45,6 +45,13 @@ describe("JobExecutionCoordinator", () => {
 
     for (const state of beginStates) expect(isLegalJobStateTransition(state, "running")).toBe(true);
     expect(isLegalJobStateTransition("running", "cancel_requested")).toBe(true);
+    expect(isLegalJobStateTransition("queued", "cancelled")).toBe(true);
+    expect(isLegalJobStateTransition("waiting_dependency", "cancelled")).toBe(true);
+    expect(isLegalJobStateTransition("waiting_permission", "failed_final")).toBe(true);
+    expect(isLegalJobStateTransition("waiting_model_egress", "failed_retryable")).toBe(true);
+    expect(isLegalJobStateTransition("queued", "waiting_dependency")).toBe(true);
+    expect(isLegalJobStateTransition("queued", "failed_final")).toBe(true);
+    expect(isLegalJobStateTransition("queued", "completed")).toBe(false);
     for (const from of ["running", "cancel_requested"] satisfies JobState[]) {
       for (const state of outcomeStates) expect(isLegalJobStateTransition(from, state)).toBe(true);
     }
@@ -325,10 +332,10 @@ describe("JobExecutionCoordinator", () => {
     ).job;
     expect(completed).toMatchObject({
       state: "completed_with_warnings",
-      finishedAt: CLOCK_AT,
-      updatedAt: CLOCK_AT,
       warnings: [{ code: "agent_runtime.output_partial" }]
     });
+    expect(Date.parse(completed.updatedAt)).toBeGreaterThan(Date.parse(CLOCK_AT));
+    expect(completed.finishedAt).toBe(completed.updatedAt);
 
     const retryFixture = makeFixture(1);
     const retryable = retryFixture.coordinator.settle(
@@ -367,7 +374,9 @@ describe("JobExecutionCoordinator", () => {
         message: "The input cannot be processed."
       }
     ).job;
-    expect(final).toMatchObject({ state: "failed_final", finishedAt: CLOCK_AT });
+    expect(final.state).toBe("failed_final");
+    expect(Date.parse(final.updatedAt)).toBeGreaterThan(Date.parse(CLOCK_AT));
+    expect(final.finishedAt).toBe(final.updatedAt);
   });
 
   it("keeps terminal records byte-for-byte immutable", () => {
@@ -392,6 +401,215 @@ describe("JobExecutionCoordinator", () => {
     expect(fs.readFileSync(fixture.jobPath)).toEqual(before);
   });
 
+  it("prepares explicit same-Job retries with a strictly newer revision", () => {
+    const fixture = makeFixture();
+    const retryable = fixture.coordinator.settle(
+      fixture.coordinator.begin(fixture.create(), { stage: "planning", message: "Planning." }),
+      {
+        kind: "requeue",
+        error: retryableError(),
+        reason: "provider timeout",
+        maxAutomaticRetries: 0,
+        requiresUserAction: true,
+        message: "Retry explicitly."
+      }
+    );
+    const queued = fixture.coordinator.prepareRetry(retryable, { message: "Retry queued." });
+    expect(queued.job).toMatchObject({ id: retryable.job.id, state: "queued", message: "Retry queued." });
+    expect(Date.parse(queued.job.updatedAt)).toBeGreaterThan(Date.parse(retryable.job.updatedAt));
+    expect(queued.job.error).toBeUndefined();
+    expect(queued.job.progress).toBeUndefined();
+  });
+
+  it("queues only explicit dependency, recovery, and Agent continuation commands", () => {
+    const dependencyFixture = makeFixture();
+    const waiting = dependencyFixture.coordinator.settle(
+      dependencyFixture.coordinator.begin(dependencyFixture.create(), {
+        stage: "waiting_for_model",
+        message: "Waiting."
+      }),
+      {
+        kind: "waiting",
+        reason: "dependency",
+        dependency: dependency(),
+        message: "Configure a model."
+      }
+    );
+    const queued = dependencyFixture.coordinator.queue(waiting, {
+      reason: "dependency_repaired",
+      clearStage: true,
+      message: "Dependency repaired."
+    }).job;
+    expect(queued).toMatchObject({ state: "queued", message: "Dependency repaired." });
+    expect(queued.stage).toBeUndefined();
+    expect(queued.waitingDependency).toBeUndefined();
+    expect(Date.parse(queued.updatedAt)).toBeGreaterThan(Date.parse(waiting.job.updatedAt));
+
+    const continuationFixture = makeFixture(1);
+    const running = continuationFixture.coordinator.begin(continuationFixture.create(), {
+      stage: "writing",
+      message: "Writing."
+    });
+    const continued = continuationFixture.coordinator.queue(running, {
+      reason: "agent_continuation",
+      stage: "planning",
+      message: "Continue the same Agent turn."
+    }).job;
+    expect(continued).toMatchObject({ state: "queued", stage: "planning" });
+
+    const cancelledFixture = makeFixture(2);
+    const cancellationRequested = cancelledFixture.coordinator.requestCancellation(
+      cancelledFixture.coordinator.begin(cancelledFixture.create(), {
+        stage: "planning",
+        message: "Planning."
+      }),
+      { requestedBy: "user", message: "Cancel." }
+    );
+    expect(() => cancelledFixture.coordinator.queue(cancellationRequested, {
+      reason: "agent_continuation",
+      message: "Must not continue."
+    })).toThrowError(expect.objectContaining({ code: "job.cancellation_pending" }));
+  });
+
+  it("recovers interrupted jobs through one queued-or-retryable owner", () => {
+    const idempotentFixture = makeFixture();
+    const running = idempotentFixture.coordinator.begin(idempotentFixture.create(), {
+      stage: "parsing",
+      message: "Parsing."
+    });
+    const queued = idempotentFixture.coordinator.recoverInterrupted(running, {
+      canResumeIdempotently: true,
+      queuedMessage: "Requeued after restart.",
+      retryableMessage: "Retry explicitly."
+    }).job;
+    expect(queued).toMatchObject({ state: "queued", message: "Requeued after restart." });
+    expect(queued.stage).toBeUndefined();
+
+    const uncertainFixture = makeFixture(1);
+    const requested = uncertainFixture.coordinator.requestCancellation(
+      uncertainFixture.coordinator.begin(uncertainFixture.create(), {
+        stage: "writing",
+        message: "Writing."
+      }),
+      { requestedBy: "user", message: "Cancellation requested." }
+    );
+    const retryable = uncertainFixture.coordinator.recoverInterrupted(requested, {
+      canResumeIdempotently: false,
+      queuedMessage: "Do not queue.",
+      retryableMessage: "Retry explicitly after restart."
+    }).job;
+    expect(retryable).toMatchObject({
+      state: "failed_retryable",
+      error: { retryable: true },
+      retry: { requiresUserAction: true }
+    });
+  });
+
+  it("fails closed after an uncertain durable effect without permitting replay", () => {
+    const fixture = makeFixture();
+    const running = fixture.coordinator.begin(fixture.create(), {
+      stage: "writing",
+      message: "Publishing output."
+    });
+    const failed = fixture.coordinator.terminalizeUncertainEffect(running, {
+      checkpointId: "publication_started",
+      error: finalError(),
+      reason: "publication_acknowledgement_missing",
+      message: "The durable result could not be verified.",
+      facts: { operationIds: ["op_20260716_abcdef12"] }
+    });
+
+    expect(failed.job).toMatchObject({
+      state: "failed_final",
+      operationIds: ["op_20260716_abcdef12"],
+      cancellation: {
+        safeCheckpointId: "publication_started",
+        durableWritesApplied: true
+      },
+      retry: {
+        maxAutomaticRetries: 0,
+        requiresUserAction: false,
+        lastRetryReason: "publication_acknowledgement_missing"
+      }
+    });
+    expect(() => fixture.coordinator.prepareRetry(failed, {
+      message: "Must not replay an uncertain effect."
+    })).toThrowError(expect.objectContaining({ code: "job.terminal_immutable" }));
+  });
+
+  it("adopts a proven durable completion without beginning another execution", () => {
+    const fixture = makeFixture();
+    const queued = fixture.create();
+
+    expect(() => fixture.coordinator.adoptDurableCompletion(queued, {
+      checkpointId: "assistant_event_committed",
+      message: "Recovered.",
+      facts: { operationIds: ["op_20260716_abcdef12"] }
+    })).toThrowError(expect.objectContaining({ code: "job.recovery_proof_invalid" }));
+
+    const completed = fixture.coordinator.adoptDurableCompletion(queued, {
+      checkpointId: "assistant_event_committed",
+      message: "Recovered from the durable assistant event.",
+      facts: {
+        outputRefs: [{ kind: "conversation", id: "conversation_20260716_abcdef12" }],
+        operationIds: ["op_20260716_abcdef12"]
+      }
+    });
+
+    expect(completed.job).toMatchObject({
+      state: "completed",
+      outputRefs: [{ kind: "conversation", id: "conversation_20260716_abcdef12" }],
+      cancellation: {
+        safeCheckpointId: "assistant_event_committed",
+        durableWritesApplied: true
+      }
+    });
+    expect(completed.job.startedAt).toBeUndefined();
+    expect(completed.job.finishedAt).toBe(completed.job.updatedAt);
+  });
+
+  it("resolves only the exact bound review and leaves the terminal result immutable", () => {
+    const fixture = makeFixture();
+    const awaitingReview = fixture.coordinator.settle(
+      fixture.coordinator.begin(fixture.create(), {
+        stage: "writing",
+        message: "Preparing proposal."
+      }),
+      {
+        kind: "waiting",
+        reason: "review",
+        proposalId: "proposal_20260716_abcdef12",
+        message: "Review the proposal."
+      }
+    );
+
+    expect(() => fixture.coordinator.resolveReview(awaitingReview, {
+      proposalId: "proposal_20260716_other000",
+      result: "completed",
+      message: "Wrong proposal."
+    })).toThrowError(expect.objectContaining({ code: "job.resume_proof_invalid" }));
+
+    const completed = fixture.coordinator.resolveReview(awaitingReview, {
+      proposalId: "proposal_20260716_abcdef12",
+      result: "completed_with_warnings",
+      message: "Proposal applied with a warning.",
+      facts: {
+        operationIds: ["op_20260716_review0001"],
+        warnings: [warning()]
+      }
+    });
+    expect(completed.job).toMatchObject({
+      state: "completed_with_warnings",
+      operationIds: ["op_20260716_review0001"],
+      warnings: [{ code: "agent_runtime.output_partial" }]
+    });
+    expect(() => fixture.coordinator.resolveReview(completed, {
+      proposalId: "proposal_20260716_abcdef12",
+      result: "completed",
+      message: "Must remain terminal."
+    })).toThrowError(expect.objectContaining({ code: "job.terminal_immutable" }));
+  });
+
   it("allows exactly one CAS winner under stale-snapshot contention", () => {
     const fixture = makeFixture();
     const queued = fixture.create();
@@ -409,6 +627,21 @@ describe("JobExecutionCoordinator", () => {
   });
 
   it("projects cancellation before and after the durable boundary without false clean cancellation", () => {
+    const pendingFixture = makeFixture(2);
+    const pendingOutcome = pendingFixture.coordinator.cancelPending(pendingFixture.create(), {
+      requestedBy: "user",
+      safeCheckpointId: "before_execution",
+      message: "Cancelled before execution."
+    }).job;
+    expect(pendingOutcome).toMatchObject({
+      state: "cancelled",
+      cancellation: {
+        requestedBy: "user",
+        safeCheckpointId: "before_execution",
+        durableWritesApplied: false
+      }
+    });
+
     const cleanFixture = makeFixture();
     const cleanRequested = cleanFixture.coordinator.requestCancellation(
       cleanFixture.coordinator.begin(cleanFixture.create(), {
@@ -423,9 +656,9 @@ describe("JobExecutionCoordinator", () => {
     }).job;
     expect(cleanOutcome).toMatchObject({
       state: "cancelled",
-      cancellation: { requestedBy: "user", durableWritesApplied: false },
-      finishedAt: CLOCK_AT
+      cancellation: { requestedBy: "user", durableWritesApplied: false }
     });
+    expect(cleanOutcome.finishedAt).toBe(cleanOutcome.updatedAt);
 
     const durableFixture = makeFixture(1);
     const guarded = durableFixture.coordinator.markDurableBoundary(
@@ -442,6 +675,7 @@ describe("JobExecutionCoordinator", () => {
     const durableOutcome = durableFixture.coordinator.cancellationOutcome(lateRequested, {
       cancelledMessage: "Cancelled.",
       preservedResultMessage: "Durable output committed before cancellation; result preserved.",
+      durableResultComplete: true,
       facts: { operationIds: ["op_20260716_abcdef12"] }
     }).job;
     expect(durableOutcome).toMatchObject({
@@ -454,6 +688,20 @@ describe("JobExecutionCoordinator", () => {
       operationIds: ["op_20260716_abcdef12"],
       message: "Durable output committed before cancellation; result preserved."
     });
+
+    const guardedPendingFixture = makeFixture(3);
+    const guardedPending = guardedPendingFixture.create(makeJob(guardedPendingFixture.jobId, {
+      state: "failed_retryable",
+      cancellation: {
+        safeCheckpointId: "publication_started",
+        durableWritesApplied: true
+      }
+    }));
+    expect(() => guardedPendingFixture.coordinator.cancelPending(guardedPending, {
+      requestedBy: "user",
+      safeCheckpointId: "before_execution",
+      message: "Cancelled."
+    })).toThrowError(expect.objectContaining({ code: "job.cancellation_unsafe" }));
   });
 
   it("rejects body-bearing or retry-inconsistent failure summaries without changing the record", () => {
@@ -478,6 +726,20 @@ describe("JobExecutionCoordinator", () => {
     })).toThrowError(expect.objectContaining({ code: "job.failure_invalid" }));
     expect(fs.readFileSync(fixture.jobPath)).toEqual(before);
     expect(JSON.stringify(fixture.store.read(fixture.jobPath).job)).not.toContain("raw provider response");
+  });
+
+  it("keeps JobsService free of direct lifecycle-state writers", () => {
+    const source = fs.readFileSync(path.resolve(
+      "apps/desktop/src/main/services/jobs-service.ts"
+    ), "utf8");
+    expect(source).not.toMatch(
+      /state:\s*"(?:waiting_permission|waiting_model_egress|awaiting_review|cancel_requested|cancelled|completed|completed_with_warnings|failed_retryable|failed_final)"/u
+    );
+    expect(source).not.toContain("#mutateJob(");
+    expect(source).not.toContain("#replaceExpectedJob(");
+    expect(source).not.toContain("createJobCancellationOutcome(");
+    expect(source).not.toContain("withDurableWriteState(");
+    expect(source.match(/compareAndSwap\(/gu)).toHaveLength(2);
   });
 });
 

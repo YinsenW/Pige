@@ -413,13 +413,13 @@ describe("jobs service", () => {
       conversationLocator: ".pige/conversations/2026/07/conv_20260714.jsonl",
       inputHash: `sha256:${"b".repeat(64)}`
     });
-    const committed = jobs.writeAgentTurnJob(created, JobRecordSchema.parse({
+    const committed = jobs.testOnlyWriteAgentTurnJob(created, JobRecordSchema.parse({
       ...created,
       operationIds: ["op_20260714_staleturn1"],
       message: "A concurrent durable reference was committed."
     }));
 
-    expect(() => jobs.writeAgentTurnJob(created, JobRecordSchema.parse({
+    expect(() => jobs.testOnlyWriteAgentTurnJob(created, JobRecordSchema.parse({
       ...created,
       state: "running",
       stage: "planning",
@@ -469,7 +469,7 @@ describe("jobs service", () => {
       inputHash: `sha256:${"f".repeat(64)}`
     };
     const started = jobs.createAgentTurnJob(startedRequest);
-    jobs.writeAgentTurnJob(started, JobRecordSchema.parse({
+    jobs.testOnlyWriteAgentTurnJob(started, JobRecordSchema.parse({
       ...started,
       state: "running",
       stage: "planning",
@@ -1448,7 +1448,7 @@ describe("jobs service", () => {
       failed: 1,
       ocrWaitingSourceIds: [sourceId]
     });
-    expect(terminalObservation.wasObserved()).toBe(true);
+    expect(terminalObservation.wasObserved()).toBe(false);
     const parseJob = requireValue(jobs.list({ classes: ["parse"], states: ["failed_retryable"] }).jobs[0]);
     const ocrJob = requireValue(jobs.list({ classes: ["ocr"], states: ["queued"] }).jobs[0]);
     expect(parseJob.sourceId).toBe(sourceId);
@@ -1511,7 +1511,7 @@ describe("jobs service", () => {
       failed: 1,
       agentReadySourceIds: [sourceId]
     });
-    expect(terminalObservation.wasObserved()).toBe(true);
+    expect(terminalObservation.wasObserved()).toBe(false);
     const ocrJob = requireValue(jobs.list({ classes: ["ocr"], states: ["failed_retryable"] }).jobs[0]);
     const agentJob = requireValue(jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]);
     expect(ocrJob.sourceId).toBe(sourceId);
@@ -2592,6 +2592,50 @@ describe("jobs service", () => {
     expect(retryResult.status).toBe("requeued");
     expect(listedJob?.id).toBe(captureResult.jobId);
     expect(listedJob?.state).toBe("queued");
+  });
+
+  it("converges repeated same-Job retries to a newer retryable terminal state each time", () => {
+    const { vaultPath, vault } = makeVault();
+    const jobs = new JobsService({ current: () => vault, activeVaultPath: () => vaultPath });
+    const created = jobs.createAgentTurnJob({
+      conversationEventId: "evt_20260716_retrysettles1",
+      conversationLocator: ".pige/conversations/2026/07/conv_20260716_retrysettles1.jsonl",
+      inputHash: `sha256:${"c".repeat(64)}`
+    });
+    const fail = (job: JobRecord): JobRecord => jobs.settleAgentTurnJob(
+      jobs.beginAgentTurnJob(job, { stage: "planning", message: "Retry attempt started." }),
+      {
+        kind: "requeue",
+        error: {
+          code: "model_provider.call_failed",
+          domain: "model_provider",
+          messageKey: "errors.model_provider.call_failed",
+          retryable: true,
+          severity: "error",
+          userAction: "retry"
+        },
+        reason: "model_provider.call_failed",
+        maxAutomaticRetries: 0,
+        requiresUserAction: true,
+        message: "The provider call failed retryably."
+      }
+    );
+
+    const firstFailure = fail(created);
+    expect(jobs.retry({ jobId: created.id }).status).toBe("requeued");
+    const firstQueued = requireValue(jobs.readAgentTurnJob(created.id));
+    const secondFailure = fail(firstQueued);
+    expect(jobs.retry({ jobId: created.id }).status).toBe("requeued");
+    const secondQueued = requireValue(jobs.readAgentTurnJob(created.id));
+
+    expect(firstFailure.state).toBe("failed_retryable");
+    expect(secondFailure.state).toBe("failed_retryable");
+    expect(secondQueued.state).toBe("queued");
+    expect(Date.parse(firstQueued.updatedAt)).toBeGreaterThan(Date.parse(firstFailure.updatedAt));
+    expect(Date.parse(secondFailure.updatedAt)).toBeGreaterThan(Date.parse(firstQueued.updatedAt));
+    expect(Date.parse(secondQueued.updatedAt)).toBeGreaterThan(Date.parse(secondFailure.updatedAt));
+    expect(secondFailure.id).toBe(firstFailure.id);
+    expect(secondFailure.error?.code).toBe("model_provider.call_failed");
   });
 
   it("records worker-backed index progress before completing SQLite search rebuild", async () => {

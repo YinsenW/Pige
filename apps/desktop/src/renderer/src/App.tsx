@@ -87,7 +87,11 @@ export type SettingsSection =
   | "skills"
   | "packages"
   | "system";
-type CaptureToast = { readonly kind: "success" | "error"; readonly message: string };
+type CaptureToast = {
+  readonly kind: "success" | "error";
+  readonly message: string;
+  readonly queuedJobId?: string;
+};
 type DevelopmentSurface = "home" | "reader" | "knowledge" | "settings";
 export type DevelopmentCapability =
   | "voice_input"
@@ -357,6 +361,13 @@ export function App(): React.JSX.Element {
         setAgentRuntimeStatus(nextAgentRuntimeStatus);
       }
       setRecentJobs(nextJobs?.jobs ?? []);
+      if (nextJobs) {
+        setCaptureToast((current) => {
+          if (!current?.queuedJobId) return current;
+          const exactJob = nextJobs.jobs.find((job) => job.id === current.queuedJobId);
+          return exactJob?.state === "queued" ? current : null;
+        });
+      }
       setBackupJobs(nextBackupJobs?.jobs.filter((job) => job.backupKind === "user_backup") ?? []);
       setReadyProposals(nextProposals?.proposals ?? []);
       setRecentActivities(nextActivities?.activities ?? []);
@@ -652,7 +663,7 @@ export function App(): React.JSX.Element {
   const retryJob = async (jobId: string): Promise<void> => {
     const result = await window.pige.jobs.retry({ jobId });
     if (result.status === "requeued") {
-      setCaptureToast({ kind: "success", message: t("home.jobRequeued") });
+      setCaptureToast({ kind: "success", message: t("home.jobRequeued"), queuedJobId: jobId });
       await refreshVaultState();
       return;
     }
