@@ -318,7 +318,7 @@ describe("Dataset Query Service", () => {
             toolName: "pige_finish_home_turn",
             args: {
               answer: "The bounded Dataset contains two rows; the largest amount is 7. [D1]",
-              citationRefs: ["citation_1"],
+              citationRefs: ["citation_9"],
               grounding: "local_knowledge"
             }
           }
@@ -344,7 +344,7 @@ describe("Dataset Query Service", () => {
       sourceIds: [fixture.sourceId],
       answer: {
         grounding: "local_knowledge",
-        citations: [{ kind: "dataset", refId: "citation_1" }],
+        citations: [{ kind: "dataset", refId: "citation_9" }],
         datasetResult: {
           datasetId: fixture.manifest.datasetId,
           revisionId: fixture.manifest.activeRevision,

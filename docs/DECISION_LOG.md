@@ -2766,6 +2766,31 @@ References:
 - `docs/JOB_OPERATION_AND_RECOVERY.md`
 - `docs/QUALITY_AND_TEST_STRATEGY.md`
 
+### D-20260716-H2-Unified-Agent-Ingress-And-Proposal-Containment
+
+Status: Accepted
+Date: 2026-07-16
+
+Decision:
+
+New work uses `agent_turn`; sources require `agent_turn | capture_only`, while absent old
+fields normalize to `legacy_agent_ingest`. Pi chooses tools; Host owns validation, not
+route/repair. Proposals stay main-only; new turns omit staging and raw review fails closed.
+Renderer list/get/approve/reject all remain unavailable pending a bounded projection.
+
+Rationale:
+
+Typed migration and renderer containment preserve recovery without reviving unsafe owners.
+
+Consequences:
+
+- Pi owns evidence order; deterministic children/history remain; H3/H4 and statuses do not change.
+
+References:
+
+- `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-16T12:00:00Z",
+  "reviewedAt": "2026-07-16T14:44:05Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -26,17 +26,17 @@
       "packages/schemas/src/index.ts",
       "package.json"
     ],
-    "scope": "Manual review binds public/documentation surfaces, control manifests, verifier code and shared executable schemas; automated gates execute current implementation evidence separately.",
+    "scope": "Manual H2 review binds public and owner documentation, traceability controls, verifier code and the executable SourceRecord schema to the exact production boundary review; automated gates cover implementation evidence separately.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "40505e83b893abc22a3cf7ddd94f4f071f029e0f68ab4e4ea98833d09cc97aaa"
+    "reviewedSha256": "adec5bef1ffc44f286732c864ffa7549a2dcfade9f2f7a3861ceac048ec3a568"
   },
   "reviewers": [
     {
-      "reviewerId": "pi-0-80-7-h1-independent-review",
-      "task": "Pi v0.80.7 H1 semantic-kernel ownership and responsibility review",
+      "reviewerId": "h2-agent-ingress-proposal-security-independent-review",
+      "task": "H2 unified Agent ingress, legacy ingest compatibility and renderer proposal containment review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -44,83 +44,83 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Development froze the exact 33-path H1 code/evidence candidate after upstream-source, runtime, responsibility, full service-inventory and package/distribution review. Planning changed only the existing 13 owner, dependency, acceptance, semantic and independent-review artifacts."
+      "independence": "The reviewer did not author the H2 code or Planning corrections, edited only this review recipe after independently comparing the uncommitted candidate with baseline 2636ea6639e6e4fc08aa0c27a352a7ee2252baa1, and first rejected the candidate until three documentation and traceability blockers were corrected."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "pi-0-80-7-h1-independent-review",
+      "reviewerId": "h2-agent-ingress-proposal-security-independent-review",
       "blockerCount": 0,
-      "summary": "The Pi owner, Host reliability boundary, H1-H4 migration, service inventory and exact dependency source are discoverable from the existing architecture, Pi, Job, retrieval, quality, release and playbook owners."
+      "summary": "README and the existing architecture, Pi, Job, IPC, prompt, domain, playbook and decision owners now expose one coherent H2 route: agent.submitTurn for new semantics, typed legacy compatibility, Main-only proposal recovery and a future bounded renderer projection."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "pi-0-80-7-h1-independent-review",
+      "reviewerId": "h2-agent-ingress-proposal-security-independent-review",
       "blockerCount": 0,
-      "summary": "All owners agree that Pi selects semantic work while Host enforces typed capability, authority, resources, durability, recovery, safe projection and deterministic commit; H1 removes only adapter shadow-kernel control and leaves H2-H4 open."
+      "summary": "The documents match production code: current SourceRecord writes require agent_turn or capture_only, absent historical fields normalize to legacy_agent_ingest, Pi selects source tools, legacy auto-chain is exact-marker-only, capture handlers are absent, and all four proposal renderer methods fail closed."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "pi-0-80-7-h1-independent-review",
+      "reviewerId": "h2-agent-ingress-proposal-security-independent-review",
       "blockerCount": 0,
-      "summary": "PIGE-PI-001 and E3.08 remain partial, bind exact upstream-source, no-Host-correction, native-result, parallel-read and responsibility evidence, and identify H2-H4 without promoting any Requirement, Exit or Phase."
+      "summary": "EV-PROPOSAL-UI and the unsafe safe-summary claim are retired; PIGE-JOB-003 and E7.01 remain partial with bounded preview and decision explicitly open, while E3.09 remains incomplete and no Requirement, Exit or Phase status is promoted."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "pi-0-80-7-h1-independent-review",
+      "reviewerId": "h2-agent-ingress-proposal-security-independent-review",
       "blockerCount": 0,
-      "summary": "The machine inventory covers 104 services and freezes five no-growth migration owners, responsibility deltas, custom-control metrics and duplicate-primitive review baselines without treating LOC as a compression target."
+      "summary": "The migration boundary is executable and reviewable: Main preserves historical proposal and agent_ingest recovery, new Agent turns cannot stage the legacy proposal, deterministic capability children cannot choose successors, and H3/H4 remain named open work."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "pi-0-80-7-h1-independent-review",
+      "reviewerId": "h2-agent-ingress-proposal-security-independent-review",
       "blockerCount": 0,
-      "summary": "No new document is added: the invariant is defined in architecture/Pi owners and other documents carry only their Job, retrieval, quality, release, implementation and decision projections."
+      "summary": "No new owner document was added. Planning corrected the existing public, domain, Job and traceability owners, semantic hashes were refreshed mechanically, and the seven H2 owner documents retain subject-specific detail without duplicating raw proposal DTOs."
     }
   ],
   "verification": [
     {
-      "command": "npm run verify",
+      "command": "npm test -- tests/unit/durable-contract-schemas.test.ts tests/unit/desktop-shell-contract.test.ts tests/unit/jobs-service.test.ts tests/unit/home-agent-service.test.ts tests/unit/agent-led-ingest-proposal.test.ts tests/unit/macos-vision-ocr-adapter-smoke.test.ts",
       "status": "passed",
-      "evidence": "The exact combined candidate passes documentation, decisions, independent review, traceability, contracts, dependencies, boundaries, no-telemetry, source-artifacts and documentation-leanness gates."
+      "evidence": "Independent focused review passed 6 files and 168 tests covering typed SourceRecord migration, removed capture handlers, all-four proposal fail-closed behavior, legacy/new Job routing, Pi-owned evidence ordering and current source OCR flow."
     },
     {
-      "command": "Exact H1 Development evidence",
+      "command": "node scripts/verify/pi-runtime-responsibility.mjs",
       "status": "passed",
-      "evidence": "Focused 8 files/187 tests; full serial 121 passed/1 skipped files and 1,406 passed/1 skipped tests; root/desktop typecheck, build, contracts, runtime-boundary/responsibility/negative/import checks, real Electron, unified roundtrip, macOS arm64 package and copied distribution pass."
+      "evidence": "The responsibility gate reports H2 removal or containment of renderer capture submission, new legacy auto-chain, terminal repair and poison, Home modality and Host order controls, plus all legacy renderer proposal methods."
     },
     {
-      "command": "npm run verify:dependencies && npm run verify:boundaries && npm run verify:traceability",
+      "command": "npm run verify:docs && npm run verify:decisions",
       "status": "passed",
-      "evidence": "Exact Pi 0.80.7 pins/integrities, reviewed upstream fixture, sole semantic kernel, responsibility/no-growth inventory and semantic lock v3/1,229 pass with statuses unchanged."
+      "evidence": "Links, whitespace, document map, parser manifests, PRD contract and 91-entry Decision Log checks pass on the corrected current H2 documentation snapshot."
     },
     {
-      "command": "npm run verify:documentation-leanness",
+      "command": "Independent code and traceability review against 2636ea6639e6e4fc08aa0c27a352a7ee2252baa1",
       "status": "passed",
-      "evidence": "LEN-001 through LEN-005 pass within the existing entry, trace and governed Markdown budgets."
+      "evidence": "Production and governed-resource diffs confirm no Requirement, Exit or Phase promotion; proposal UI evidence is removed, raw model summary/reason/path claims are Main-only, and the renderer boundary remains body-free and unavailable."
     }
   ],
   "coordination": {
-    "taskId": "pi-0-80-7-h1-20260716",
-    "taskTitle": "Pi v0.80.7 upstream alignment and shadow-kernel removal",
+    "taskId": "h2-agent-turn-ingest-convergence-20260716",
+    "taskTitle": "H2 unified AgentTurn and ingest capability convergence",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "H1 preserves product capability/authority/durability boundaries while delegating Agent loop, follow-up, tool lifecycle, parallel read-only execution and native result shape to exact upstream Pi 0.80.7.",
-    "acknowledgement": "Planning bound only the existing 13 governed paths to Development identity 63bd9a4d/f6a5f80b/edd6d614; the 33 Development paths remain frozen and H2-H4 stay serialized open work."
+    "compatibility": "H2 stops new legacy ingest orchestration and unsafe renderer proposal access while retaining exact historical SourceRecord, Job, proposal, Operation and recovery compatibility inside Main.",
+    "acknowledgement": "Planning corrected the existing public, domain, Job, acceptance and semantic-claim owners after independent review; Development code remains uncommitted, H3/H4 stay serialized open work, and status projections remain unchanged."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "H2 still owns AgentIngest/Home semantic-orchestrator removal; H3 owns unique Job reliability coordination; H4 owns retrieval.ask/retrieval_query retirement and threat-model-reviewed durable primitive convergence.",
-    "Legacy agent_ingest and retrieval_query remain recovery compatibility until their assigned migration phase and must receive no new records afterward.",
-    "The persisted-provider canary was not run because PIGE_MANUAL_ACCEPTANCE_USER_DATA was absent; no credential canary evidence is inferred.",
-    "Windows/Linux qualification remains deferred and unclaimed; Requirement, Exit and Phase statuses are unchanged.",
-    "Queued resident-first UI identity b699482 is excluded from this H1 bind."
+    "Historical legacy_agent_ingest Jobs and durable proposals remain Main-internal compatibility state for a bounded migration window; H3/H4 must retire or migrate them without creating new records.",
+    "The preload type surface still names legacy proposal methods, but Main rejects list/get/approve/reject before any durable DTO crosses to renderer; removal or replacement awaits the bounded safe contract.",
+    "A future proposal UI requires localized summary and warning keys, bounded diff lines and opaque identities; it must not revive ConfirmationProposal, model summary/reason, paths, content, base hashes or Operation internals.",
+    "H3 still owns the unique JobExecutionCoordinator and H4 owns legacy retrieval answer retirement plus threat-model-reviewed durable primitive convergence.",
+    "Windows/Linux qualification remains deferred and unclaimed; Requirement, Exit and Phase statuses are unchanged."
   ]
 }

@@ -2180,19 +2180,7 @@ export class JobsService implements PermissionedExternalJobPort {
             )
           }
         );
-        if (
-          supportsAgentSelectedParser(sourceRecordFile.sourceRecord.kind) ||
-          supportsAgentSelectedOcr(sourceRecordFile.sourceRecord.kind)
-        ) {
-          ensureAgentIngestJob(
-            this.#jobRecordStore(vaultPath),
-            vaultPath,
-            captureExecution.job,
-            sourceRecordFile.sourceRecord.id,
-            canRunAgentIngest(this.#agentIngest),
-            this.#requireActiveVaultId(vaultPath)
-          );
-        } else {
+        if (isLegacyAgentIngestSource(sourceRecordFile.sourceRecord)) {
           ensureAgentIngestJob(
             this.#jobRecordStore(vaultPath),
             vaultPath,
@@ -2288,7 +2276,8 @@ export class JobsService implements PermissionedExternalJobPort {
         );
         const refreshedSource = readSourceRecord(vaultPath, sourceRecordFile.sourceRecord.id) ?? sourceRecordFile.sourceRecord;
         let ocrCapability: OcrSourceCapability | undefined;
-        if (!agentSelected && result.needsOcr) {
+        const legacyAgentIngestSource = isLegacyAgentIngestSource(refreshedSource);
+        if (!agentSelected && legacyAgentIngestSource && result.needsOcr) {
           ocrCapability = inspectOcrSource(this.#ocr, refreshedSource);
           ensureOcrWaitingJob(
             this.#jobRecordStore(vaultPath),
@@ -2301,6 +2290,7 @@ export class JobsService implements PermissionedExternalJobPort {
         }
         if (
           !agentSelected &&
+          legacyAgentIngestSource &&
           result.extractedTextArtifactPath &&
           result.agentTextReady &&
           (!result.needsOcr || ocrCapability?.ready !== true)
@@ -2490,10 +2480,11 @@ export class JobsService implements PermissionedExternalJobPort {
         continue;
       }
       const agentSelected = isAgentSelectedOcrJob(jobFile.job);
+      const legacyAgentIngestSource = isLegacyAgentIngestSource(sourceRecordFile.sourceRecord);
       const ocr = this.#ocr;
       const capability = inspectOcrSource(ocr, sourceRecordFile.sourceRecord);
       if (!ocr || !capability.ready) {
-        if (!agentSelected && sourceRecordFile.sourceRecord.metadata.agentTextReady === true) {
+        if (!agentSelected && legacyAgentIngestSource && sourceRecordFile.sourceRecord.metadata.agentTextReady === true) {
           ensureAgentIngestJob(
             this.#jobRecordStore(vaultPath),
             vaultPath,
@@ -2534,7 +2525,7 @@ export class JobsService implements PermissionedExternalJobPort {
           runningJob,
           execution.control
         );
-        if (!agentSelected && result.agentTextReady) {
+        if (!agentSelected && legacyAgentIngestSource && result.agentTextReady) {
           ensureAgentIngestJob(
             this.#jobRecordStore(vaultPath),
             vaultPath,
@@ -2574,6 +2565,7 @@ export class JobsService implements PermissionedExternalJobPort {
           if (failure.waiting) {
             if (
               !agentSelected &&
+              legacyAgentIngestSource &&
               sourceRecordFile.sourceRecord.metadata.agentTextReady === true &&
               isOcrCapabilityUnavailableError(caught)
             ) {
@@ -6782,6 +6774,10 @@ function ensureAgentIngestJob(
         })
       : existing
   );
+}
+
+function isLegacyAgentIngestSource(sourceRecord: SourceRecord): boolean {
+  return sourceRecord.semanticOrchestration === "legacy_agent_ingest";
 }
 
 function ensureRequiredChildJob(

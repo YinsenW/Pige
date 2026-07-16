@@ -29,9 +29,6 @@ import type {
   PermissionResolveRequest,
   NoteGetRequest,
   NoteRenderRequest,
-  ProposalDecisionRequest,
-  ProposalGetRequest,
-  ProposalsListRequest,
   ProviderConnectResult,
   RetrievalAskRequest,
   RestoreApplyRequest,
@@ -43,9 +40,6 @@ import type {
   UpdateModelRequest,
   SetLocaleRequest,
   SetSidebarOpenRequest,
-  SubmitFilesCaptureRequest,
-  SubmitTextCaptureRequest,
-  SubmitUrlCaptureRequest,
   SetWindowModeRequest,
   SpeechAvailabilityRequest,
   SpeechAssetInstallRequest,
@@ -1195,21 +1189,6 @@ ipcMain.handle("agent.submitTurn", async (event, payload: {
     draftPublisher.close();
   }
 });
-ipcMain.handle("capture.submitText", (_event, request: SubmitTextCaptureRequest) => {
-  const result = getCaptureService().submitText(request);
-  scheduleCaptureProcessing();
-  return result;
-});
-ipcMain.handle("capture.submitUrl", async (_event, request: SubmitUrlCaptureRequest) => {
-  const result = await getCaptureService().submitUrl(request);
-  scheduleCaptureProcessing();
-  return result;
-});
-ipcMain.handle("capture.submitFiles", async (_event, request: SubmitFilesCaptureRequest) => {
-  const result = await getCaptureService().submitFiles(request);
-  scheduleCaptureProcessing();
-  return result;
-});
 ipcMain.handle("jobs.list", (_event, request?: JobsListRequest) => getJobsService().list(request));
 ipcMain.handle("jobs.cancel", async (_event, request: JobActionRequest): Promise<JobActionResult> => {
   const backup = await getBackupCoordinatorService().cancel(request);
@@ -1326,14 +1305,18 @@ ipcMain.handle("library.tree", () => getLibraryService().tree());
 ipcMain.handle("library.related", (_event, request: LibraryRelatedRequest) => getLibraryService().related(request));
 ipcMain.handle("notes.get", (_event, request: NoteGetRequest) => getNotesService().get(request));
 ipcMain.handle("notes.render", (_event, request: NoteRenderRequest) => getNotesService().render(request));
-ipcMain.handle("proposals.list", (_event, request?: ProposalsListRequest) => getProposalService().list(request));
-ipcMain.handle("proposals.get", (_event, request: ProposalGetRequest) => getProposalService().get(request));
-ipcMain.handle("proposals.approve", (_event, request: ProposalDecisionRequest) =>
-  getJobsService().approveProposal(getProposalService(), request)
-);
-ipcMain.handle("proposals.reject", (_event, request: ProposalDecisionRequest) =>
-  getJobsService().rejectProposal(getProposalService(), request)
-);
+
+function proposalRendererBoundaryUnavailable(): never {
+  throw new PigeDomainError(
+    "proposal.renderer_preview_unavailable",
+    "Proposal review is unavailable until a bounded renderer preview can be verified."
+  );
+}
+
+ipcMain.handle("proposals.list", proposalRendererBoundaryUnavailable);
+ipcMain.handle("proposals.get", proposalRendererBoundaryUnavailable);
+ipcMain.handle("proposals.approve", proposalRendererBoundaryUnavailable);
+ipcMain.handle("proposals.reject", proposalRendererBoundaryUnavailable);
 ipcMain.handle("retrieval.search", (_event, request: unknown) =>
   handleRetrievalSearchIpc(request, getRetrievalService())
 );

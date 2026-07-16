@@ -4,6 +4,7 @@ import {
   BackupManifestSchema,
   ConversationEventSchema,
   ConversationEventIdSchema,
+  CurrentSourceRecordSchema,
   DatasetAnswerCitationSchema,
   DatasetEvidenceRefSchema,
   DatasetManifestSchema,
@@ -80,6 +81,34 @@ function datasetAnswerFixture() {
 }
 
 describe("durable contract schemas", () => {
+  it("makes current SourceRecord orchestration explicit while normalizing historical records", () => {
+    const common = {
+      id: "src_20260710_abcdef12",
+      kind: "text" as const,
+      storageStrategy: "reference_original" as const,
+      original: { uri: "pige:text:src_20260710_abcdef12" },
+      artifacts: [],
+      metadata: {},
+      createdAt: timestamp,
+      updatedAt: timestamp
+    };
+
+    expect(SourceRecordSchema.parse(common).semanticOrchestration).toBe("legacy_agent_ingest");
+    expect(CurrentSourceRecordSchema.parse({
+      ...common,
+      semanticOrchestration: "agent_turn"
+    }).semanticOrchestration).toBe("agent_turn");
+    expect(() => CurrentSourceRecordSchema.parse(common)).toThrow();
+    expect(() => CurrentSourceRecordSchema.parse({
+      ...common,
+      semanticOrchestration: "legacy_agent_ingest"
+    })).toThrow();
+    expect(() => SourceRecordSchema.parse({
+      ...common,
+      semanticOrchestration: "unknown"
+    })).toThrow();
+  });
+
   it("uses one stable ID vocabulary and rejects retired aliases", () => {
     expect(PageIdSchema.parse("page_20260710_abcdef12")).toBe("page_20260710_abcdef12");
     expect(ConversationEventIdSchema.parse("evt_20260710_abcdef12")).toBe("evt_20260710_abcdef12");

@@ -107,7 +107,7 @@ Required v0.1 job classes:
 | `parse` | PDF/DOCX/PPTX/text extraction | extracted artifact, parser metadata | Yes where tool supports | Yes |
 | `ocr` | screenshot or rendered PDF page OCR | OCR artifact, confidence metadata | Yes where tool supports | Yes |
 | `dataset_import` | Pi-selected CSV/XLSX/SQLite materialization | Dataset manifest/schema/revision/payload and operation | Yes before bundle commit | Yes |
-| `agent_ingest` | summarize, tag, link, compile pages | source page, wiki pages, proposal/operation | During model/tool stages | Yes |
+| `agent_ingest` | typed `legacy_agent_ingest` compatibility/recovery only | source page, wiki pages, proposal/operation | During model/tool stages | Yes |
 | `agent_turn` | unified Home text or one preserved attachment | conversation events, answer/source/proposal refs | During model/tool stages | Yes |
 | `retrieval_query` | legacy Home grounded-answer record | conversation event, optional saved page | Yes | Usually yes |
 | `index_rebuild` | FTS/vector/graph rebuild | SQLite/index files | Yes | Yes |
@@ -143,8 +143,10 @@ output never enter Job/conversation records.
 Jobs may have parent-child structure:
 
 - A multi-file drop creates one parent `capture_batch` job and one child job per source.
-- Capture preserves the source and wakes one `agent_ingest` parent; Agent tool calls may
-  create child Jobs with `parentJobId` and Pi run/call provenance.
+- New sources require top-level `agent_turn | capture_only`. Missing-field old records
+  normalize to `legacy_agent_ingest`, the sole compatibility parent; unknown values fail.
+- Pi-selected parse/OCR/Dataset children bind parent plus Pi run/call provenance and
+  return one deterministic outcome; they never choose a successor tool.
 - Recovery may resume that child, not invent another call. Its mechanical index/log
   projection may finish inside the approved write recovery boundary.
 - Backup/restore may create child jobs for scan, manifest, compression, extraction, and rebuild.
@@ -434,11 +436,9 @@ Retry can be automatic only for safe, bounded failures.
 
 ### 8.1 Agent-Internal Completion Recovery Is Not A Job Retry
 
-A durable `agent_turn` or `agent_ingest` Job may contain multiple upstream Pi model turns
-and registered tool calls before it has an accepted result. Recoverable schema, citation,
-grounding, evidence, terminal-action, or tool-input rejection returns bounded typed repair
-feedback to Pi and leaves the Job `running`; it is not written as `failed_retryable` and
-does not require `jobs.retry`.
+A durable `agent_turn` or historical `agent_ingest` may contain multiple Pi turns/tools.
+Recoverable schema/citation/evidence/input rejection returns typed feedback while the Job
+stays `running`; no AgentIngest terminal prompt, retrieval poison, or Host fallback exists.
 
 - Pi may gather more evidence, revisit a read-only/idempotent tool, correct a tool call,
   narrow its claim, or return a grounded abstention.
@@ -577,32 +577,14 @@ expired
 applied
 ```
 
-Proposal record:
-
-```ts
-type ConfirmationProposal = {
-  id: string;
-  schemaVersion: number;
-  jobId: string;
-  createdAt: string;
-  updatedAt: string;
-  state: ProposalState;
-  trustLevel: "review_required" | "explicit_confirmation";
-  summary: string;
-  reason: string;
-  sourceRefs: JobRef[];
-  targetRefs: JobRef[];
-  proposedOperations: ChangeOperation[];
-  diffRefs: JobRef[];
-  warnings: string[];
-  baseHashes: Record<string, string>;
-  requiredPermissionIds: string[];
-};
-```
+Executable `ConfirmationProposalSchema` owns the durable record: identity/state/trust,
+Job/source/target/diff refs, operations, warnings, base hashes and permission refs.
 
 Rules:
 
 - Proposals are durable before the UI displays them.
+- Full records and decisions are Main-only. Renderer methods fail closed until a localized,
+  bounded-diff DTO exists. Historical ingest may recover; new `agent_turn` cannot stage one.
 - Applying a proposal rechecks base hashes immediately before write.
 - If a target changed, mark proposal `conflicted` and create a conflict proposal.
 - Rejection should record enough reason to avoid repeated suggestions when possible.
@@ -738,7 +720,7 @@ Recovery decisions:
 | Generated-page create/update Undo is interrupted | Adopt page/private-image/trash/index/quarantine/Operation only when IDs/hashes agree; else preserve/fail closed, then rebuild. |
 | Source copied, source record missing | Create repair proposal or source record if checksum/path proves source. |
 | Parse artifact exists, source page missing | Resume source page creation. |
-| Proposal ready, app crashed before display | Show proposal in Home status. |
+| Proposal ready, app crashed before display | Reconcile in Main; renderer review stays unavailable pending a bounded projection. |
 | Operation record says page updated, index missing | Rebuild index. |
 | Action-safety guard is true after restart | Keep it monotonic; use provenance/checksums to retry, adopt same-job output, or repair a missing derived index. Missing output never proves clean cancellation. |
 | Temp file exists without operation | Validate and delete or quarantine temp file. |
@@ -778,7 +760,9 @@ Home:
 
 Reader:
 
-- Shows current-note proposals and recent operations when relevant.
+- Shows current-note proposals only after a bounded preview/decision DTO is available;
+  the current raw proposal surface is unavailable rather than exposing full records.
+- Shows recent safe operation summaries when relevant.
 - Note Agent can explain what changed using operation records.
 
 Settings:

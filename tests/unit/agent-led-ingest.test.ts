@@ -13,6 +13,7 @@ import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
 import { PiAgentRuntimeAdapter } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
+import { markSourceAsLegacyAgentIngestFixture } from "../helpers/legacy-agent-ingest-fixture";
 
 const roots: string[] = [];
 
@@ -74,6 +75,7 @@ describe("Agent-led knowledge spine", () => {
         userIntent: "capture",
         locale: "en"
       });
+      markSourceAsLegacyAgentIngestFixture(fixture.vaultPath, capture.sourceId);
 
       expect(jobs.processQueuedCaptures({ jobIds: [capture.jobId] })).toEqual({
         processed: 1,

@@ -104,7 +104,7 @@ describe("Unified Agent ingress", () => {
           toolName: "pige_finish_home_turn",
           args: {
             answer: "Grace has the largest count in the attached Dataset. [D1]",
-            citationRefs: ["citation_1"],
+            citationRefs: ["citation_9"],
             grounding: "local_knowledge"
           }
         }
@@ -169,7 +169,7 @@ describe("Unified Agent ingress", () => {
       answer: {
         answer: "Grace has the largest count in the attached Dataset. [D1]",
         grounding: "local_knowledge",
-        citations: [expect.objectContaining({ kind: "dataset", refId: "citation_1" })],
+        citations: [expect.objectContaining({ kind: "dataset", refId: "citation_9" })],
         datasetResult: expect.objectContaining({ returnedRowCount: 2, matchedRowCount: 2 })
       }
     });
@@ -297,7 +297,7 @@ describe("Unified Agent ingress", () => {
             toolName: "pige_finish_home_turn",
             args: {
               answer: "Grace remains the largest count after restart. [D1]",
-              citationRefs: ["citation_1"],
+              citationRefs: ["citation_9"],
               grounding: "local_knowledge"
             }
           }

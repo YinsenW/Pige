@@ -351,6 +351,9 @@ describe("desktop shell build contract", () => {
     );
 
     expect(mainSource).toContain('ipcMain.handle("agent.submitTurn"');
+    expect(mainSource).not.toContain('ipcMain.handle("capture.submitText"');
+    expect(mainSource).not.toContain('ipcMain.handle("capture.submitUrl"');
+    expect(mainSource).not.toContain('ipcMain.handle("capture.submitFiles"');
     expect(mainSource).toContain('event.sender.send("agent.turnDraft", draft)');
     expect(mainSource).toContain("return await getHomeAgentService().submitTurn(normalizedRequest, draftContext)");
     expect(mainSource).toContain("...(request.scope === undefined ? {} : { scope: request.scope })");
@@ -507,7 +510,7 @@ describe("desktop shell build contract", () => {
       .toBeLessThan(mainSource.indexOf("recoverInterruptedJobs()"));
   });
 
-  it("routes proposal decisions through durable Job apply and startup recovery", () => {
+  it("keeps durable proposal recovery internal while renderer decisions fail closed", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const approveHandler = mainSource.slice(
       mainSource.indexOf('ipcMain.handle("proposals.approve"'),
@@ -518,9 +521,12 @@ describe("desktop shell build contract", () => {
       mainSource.indexOf('ipcMain.handle("retrieval.search"')
     );
 
-    expect(approveHandler).toContain("getJobsService().approveProposal(getProposalService(), request)");
-    expect(approveHandler).not.toContain("getProposalService().approve(request)");
-    expect(rejectHandler).toContain("getJobsService().rejectProposal(getProposalService(), request)");
+    expect(approveHandler).toContain("proposalRendererBoundaryUnavailable");
+    expect(approveHandler).not.toContain("getJobsService().approveProposal");
+    expect(approveHandler).not.toContain("getProposalService().approve");
+    expect(rejectHandler).toContain("proposalRendererBoundaryUnavailable");
+    expect(rejectHandler).not.toContain("getJobsService().rejectProposal");
+    expect(rejectHandler).not.toContain("getProposalService().reject");
     expect(mainSource).toContain("recoverProposalDecisions(getProposalService())");
   });
 
@@ -591,13 +597,9 @@ describe("desktop shell build contract", () => {
     expect(knowledgeMapSource).not.toContain("window.pige.filesystem");
   });
 
-  it("surfaces ready proposals in Home with a focused escaped preview before durable decisions", () => {
+  it("fails closed every legacy renderer proposal method while durable review remains Main-owned", () => {
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
-    const panelSource = fs.readFileSync(
-      path.resolve("apps/desktop/src/renderer/src/components/ProposalReviewPanel.tsx"),
-      "utf8"
-    );
-    const styles = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/styles/app.css"), "utf8");
     const homeComposer = rendererSource.slice(
       rendererSource.indexOf("function HomeComposer"),
       rendererSource.indexOf("function jobStateMessageKey")
@@ -617,6 +619,14 @@ describe("desktop shell build contract", () => {
     expect(homeComposer).toContain("isActiveProcessingFileJob(job)");
     expect(rendererSource).toContain("if (!job.sourceDisplayName && !job.sourceId) return false;");
     expect(rendererSource).toContain('window.pige.proposals.list({ limit: 100, states: ["ready"] })');
+    expect(mainSource).toContain('ipcMain.handle("proposals.list", proposalRendererBoundaryUnavailable)');
+    expect(mainSource).toContain('ipcMain.handle("proposals.get", proposalRendererBoundaryUnavailable)');
+    expect(mainSource).toContain('ipcMain.handle("proposals.approve", proposalRendererBoundaryUnavailable)');
+    expect(mainSource).toContain('ipcMain.handle("proposals.reject", proposalRendererBoundaryUnavailable)');
+    expect(mainSource).toContain('"proposal.renderer_preview_unavailable"');
+    expect(mainSource).not.toContain('getProposalService().get(request)');
+    expect(mainSource).not.toContain('getJobsService().approveProposal(getProposalService(), request)');
+    expect(mainSource).not.toContain('getJobsService().rejectProposal(getProposalService(), request)');
     expect(homeComposer).toContain("window.pige.proposals.get({ proposalId })");
     expect(homeComposer).toContain('window.pige.proposals[decision]({ proposalId })');
     expect(homeComposer).toContain("proposalOutcomeForDurableState(current.proposal.state)");
@@ -627,16 +637,7 @@ describe("desktop shell build contract", () => {
     expect(homeComposer).toContain('aria-label={`${props.t("proposal.review")}: ${accessibleProposalLabel}`}');
     expect(homeComposer).toContain("<ProposalReviewPanel");
     expect(openProposal).not.toContain("caught instanceof Error ? caught.message");
-    expect(panelSource).toContain("<pre aria-label={t(\"proposal.markdownPreview\")}>{operation.content}</pre>");
-    expect(panelSource).not.toContain("dangerouslySetInnerHTML");
-    const proposalStyles = styles.slice(
-      styles.indexOf(".proposal-strip"),
-      styles.indexOf(".retrieval-results")
-    );
-    expect(proposalStyles).toContain("min-width: 0;");
-    expect(proposalStyles).toContain("overflow-wrap: anywhere;");
-    expect(proposalStyles).toContain("max-height: min(46vh, 30rem);");
-    expect(proposalStyles).toContain("position: sticky;");
+    expect(openProposal).toContain('setProposalErrorMessageKey("proposal.error.load")');
     expect(rendererSource).toContain('type View = "home" | "library" | "knowledgeTree";');
     expect(rendererSource).toContain("export type SettingsSection =");
     expect(rendererSource).not.toContain('type View = "review"');

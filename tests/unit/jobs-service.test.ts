@@ -50,6 +50,7 @@ import {
 import type { NativeOcrResult } from "../../apps/desktop/src/main/services/ocr-types";
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
 import type { PiAgentRunRequest, PiAgentRunResult } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
+import { markSourceAsLegacyAgentIngestFixture } from "../helpers/legacy-agent-ingest-fixture";
 import { ScriptedAgentIngestRuntime } from "../helpers/scripted-agent-ingest-runtime";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
 import type { VaultSummary } from "@pige/contracts";
@@ -127,9 +128,37 @@ function makeServices(
     activeVaultPath: () => vaultPath
   };
   return {
-    capture: new CaptureService(vaultPort, sourceFetch),
+    capture: new LegacyCaptureFixture(vaultPort, vaultPath, sourceFetch),
     jobs: new JobsService(vaultPort, agentIngest, database, documentParser, ocr, undefined, modelEgressApprovals)
   };
+}
+
+class LegacyCaptureFixture extends CaptureService {
+  constructor(
+    vaults: ConstructorParameters<typeof CaptureService>[0],
+    readonly fixtureVaultPath: string,
+    sourceFetch?: SourceFetchPort
+  ) {
+    super(vaults, sourceFetch);
+  }
+
+  override submitText(request: Parameters<CaptureService["submitText"]>[0]): ReturnType<CaptureService["submitText"]> {
+    const result = super.submitText(request);
+    markSourceAsLegacyAgentIngestFixture(this.fixtureVaultPath, result.sourceId);
+    return result;
+  }
+
+  override async submitUrl(request: Parameters<CaptureService["submitUrl"]>[0]): ReturnType<CaptureService["submitUrl"]> {
+    const result = await super.submitUrl(request);
+    markSourceAsLegacyAgentIngestFixture(this.fixtureVaultPath, result.sourceId);
+    return result;
+  }
+
+  override async submitFiles(request: Parameters<CaptureService["submitFiles"]>[0]): ReturnType<CaptureService["submitFiles"]> {
+    const result = await super.submitFiles(request);
+    for (const sourceId of result.sourceIds) markSourceAsLegacyAgentIngestFixture(this.fixtureVaultPath, sourceId);
+    return result;
+  }
 }
 
 afterEach(() => {
@@ -167,6 +196,49 @@ describe("jobs service", () => {
     expect(result.jobs.some((job) => job.sourceDisplayName === "drop.md")).toBe(true);
     expect(JSON.stringify(result.jobs)).not.toContain(sourcePath);
     expect(JSON.stringify(result.jobs)).not.toContain("raw/files");
+  });
+
+  it("keeps new text, URL, and file captures out of the legacy Agent ingest lane across restart", async () => {
+    const { vaultPath, vault } = makeVault();
+    const vaultPort = { current: () => vault, activeVaultPath: () => vaultPath };
+    const capture = new CaptureService(vaultPort, {
+      fetchSnapshot: async () => ({
+        originalUrl: "https://example.com/current",
+        finalUrl: "https://example.com/current",
+        contentType: "text/html",
+        title: "Current source",
+        rawContent: "<p>Current URL source</p>",
+        extractedText: "Current URL source",
+        warnings: []
+      })
+    });
+    const jobs = new JobsService(vaultPort);
+    const filePath = path.join(path.dirname(vaultPath), "current.md");
+    fs.writeFileSync(filePath, "# Current file\n", "utf8");
+    capture.submitText({
+      text: "Preserve this without starting a second semantic Agent workflow.",
+      inputKind: "typed_text",
+      userIntent: "capture",
+      locale: "en"
+    });
+    await capture.submitUrl({
+      url: "https://example.com/current",
+      inputKind: "pasted_url",
+      userIntent: "capture",
+      locale: "en"
+    });
+    await capture.submitFiles({
+      filePaths: [filePath],
+      inputKind: "file_drop",
+      userIntent: "capture",
+      locale: "en"
+    });
+
+    expect(jobs.processQueuedCaptures()).toMatchObject({ processed: 3, completed: 3, failed: 0 });
+    expect(jobs.list({ classes: ["agent_ingest"] }).jobs).toEqual([]);
+    const restartedJobs = new JobsService(vaultPort);
+    expect(restartedJobs.processQueuedCaptures()).toMatchObject({ processed: 0, completed: 0, failed: 0 });
+    expect(restartedJobs.list({ classes: ["agent_ingest"] }).jobs).toEqual([]);
   });
 
   it("counts invalid job records without failing the whole list", () => {

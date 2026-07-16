@@ -24,6 +24,7 @@ import {
 } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
 import { ProposalService } from "../../apps/desktop/src/main/services/proposal-service";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
+import { markSourceAsLegacyAgentIngestFixture } from "../helpers/legacy-agent-ingest-fixture";
 
 const roots: string[] = [];
 const SOURCE_BODY_CANARY = "SOURCE_BODY_CANARY_PROPOSAL_REVIEW_42";
@@ -766,6 +767,7 @@ async function stageReviewProposal(
     userIntent: "capture",
     locale: "en"
   });
+  markSourceAsLegacyAgentIngestFixture(fixture.vaultPath, capture.sourceId);
   const captureResult = jobs.processQueuedCaptures({ jobIds: [capture.jobId] });
   if (captureResult.completed !== 1) throw new Error("Test capture did not create its Agent parent.");
   const parent = requireValue(readJobs(fixture.vaultPath).find((job) =>

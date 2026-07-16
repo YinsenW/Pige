@@ -998,11 +998,20 @@ export const ToolchainManifestSchema = z.object({
   )
 });
 
-export const SourceRecordSchema = z.object({
+export const SourceSemanticOrchestrationSchema = z.enum([
+  "legacy_agent_ingest",
+  "capture_only",
+  "agent_turn"
+]);
+
+const CurrentSourceSemanticOrchestrationSchema = z.enum(["capture_only", "agent_turn"]);
+
+const SourceRecordObjectSchema = z.object({
   schemaVersion: z.literal(1).default(1),
   id: SourceIdSchema,
   kind: SourceKindSchema,
   storageStrategy: SourceStorageStrategySchema,
+  semanticOrchestration: SourceSemanticOrchestrationSchema,
   knowledgePageId: PageIdSchema.optional(),
   knowledgePagePath: z.string().min(1).optional(),
   original: z.object({
@@ -1032,7 +1041,12 @@ export const SourceRecordSchema = z.object({
   metadata: z.record(z.string(), z.unknown()),
   createdAt: z.string().datetime({ offset: true }),
   updatedAt: z.string().datetime({ offset: true })
-}).passthrough().superRefine((record, context) => {
+}).passthrough();
+
+function refineSourceRecord(
+  record: z.infer<typeof SourceRecordObjectSchema>,
+  context: z.RefinementCtx
+): void {
   const managedCopy = record.managedCopy;
   if (managedCopy && Boolean(managedCopy.rootId) !== Boolean(managedCopy.pathBasis)) {
     context.addIssue({
@@ -1068,7 +1082,25 @@ export const SourceRecordSchema = z.object({
   if (record.storageStrategy === "reference_original" && !record.original) {
     context.addIssue({ code: "custom", path: ["original"], message: "Referenced storage requires original metadata." });
   }
-});
+}
+
+const ParsedSourceRecordSchema = SourceRecordObjectSchema.superRefine(refineSourceRecord);
+
+/**
+ * Reads durable v1 SourceRecords. Records created before semantic-orchestration
+ * ownership was explicit are normalized to the historical compatibility lane.
+ */
+export const SourceRecordSchema = z.preprocess((value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const record = value as Record<string, unknown>;
+  if (record.semanticOrchestration !== undefined) return value;
+  return { ...record, semanticOrchestration: "legacy_agent_ingest" };
+}, ParsedSourceRecordSchema);
+
+/** New SourceRecord writes must never enter the historical compatibility lane. */
+export const CurrentSourceRecordSchema = SourceRecordObjectSchema.extend({
+  semanticOrchestration: CurrentSourceSemanticOrchestrationSchema
+}).superRefine(refineSourceRecord);
 
 export const DatasetLogicalTypeSchema = z.enum([
   "string",

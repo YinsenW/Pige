@@ -130,6 +130,7 @@ describe("Agent-selected URL ingress", () => {
       expect(sources).toHaveLength(1);
       expect(sources[0]).toMatchObject({
         kind: "url",
+        semanticOrchestration: "agent_turn",
         knowledgePageId: expect.any(String),
         knowledgePagePath: expect.any(String),
         metadata: {

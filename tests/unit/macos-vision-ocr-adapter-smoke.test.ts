@@ -9,6 +9,11 @@ import {
 } from "../../apps/desktop/src/main/services/agent-ingest-service";
 import { CaptureService } from "../../apps/desktop/src/main/services/capture-service";
 import { DocumentParserService } from "../../apps/desktop/src/main/services/document-parser-service";
+import {
+  HomeAgentService,
+  type HomeAgentModelPort,
+  type HomeAgentRetrievalPort
+} from "../../apps/desktop/src/main/services/home-agent-service";
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
 import { MacOSVisionOcrAdapter } from "../../apps/desktop/src/main/services/macos-vision-ocr-adapter";
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
@@ -68,7 +73,19 @@ const runtimeConfig: ModelProviderRuntimeConfig = {
   apiKey: "synthetic-pptx-vision-smoke-key"
 };
 
-const modelPort: AgentIngestModelConfigPort = {
+const modelPort: AgentIngestModelConfigPort & HomeAgentModelPort = {
+  summary: () => ({
+    presets: [],
+    providers: [runtimeConfig.provider],
+    models: [{ ...runtimeConfig.model, isDefault: true }],
+    defaultModelProfileId: runtimeConfig.model.id,
+    hasDefaultModel: true,
+    defaultBinding: {
+      state: "ready",
+      providerProfileId: runtimeConfig.provider.id,
+      modelProfileId: runtimeConfig.model.id
+    }
+  }),
   getDefaultModel: () => ({ ...runtimeConfig.model, isDefault: true }),
   getDefaultProvider: () => runtimeConfig.provider,
   hasDefaultRuntimeBinding: () => true,
@@ -173,18 +190,25 @@ describe.runIf(hasBuiltHelper)("macOS Vision OCR production adapter smoke", () =
         undefined,
         new OcrService(new MacOSVisionOcrAdapter())
       );
-      const captured = await new CaptureService(vaultPort).submitFiles({
-        filePaths: [imagePath],
+      const home = new HomeAgentService(vaultPort, modelPort, noRetrieval, jobs);
+      const prepared = home.prepareSourceTurn({
+        text: "Recognize this image and save the useful result.",
         inputKind: "file_drop",
-        userIntent: "capture",
+        objective: "auto",
         locale: "en"
       });
-      const sourceId = captured.sourceIds[0];
+      const preserved = await new CaptureService(vaultPort).preserveFilesForAgentTurn({
+        filePaths: [imagePath],
+        inputKind: "file_drop",
+        userIntent: "unknown",
+        locale: "en"
+      }, { jobId: prepared.jobId, sourceId: prepared.sourceId });
+      const sourceId = preserved.sourceIds[0];
       expect(sourceId).toBeTruthy();
-      jobs.processQueuedCaptures({ jobIds: captured.jobIds });
+      expect(preserved.jobIds).toEqual([]);
       expect(jobs.list({ classes: ["ocr"] }).jobs).toEqual([]);
 
-      const result = await jobs.processQueuedAgentIngest({ sourceIds: captured.sourceIds });
+      const result = await home.submitPreparedSourceTurn(prepared);
       const sourceRecordPath = findFile(path.join(vaultPath, ".pige", "source-records"), `${sourceId}.json`);
       const sourceRecord = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as {
         artifacts: Array<{ kind: string; path: string }>;
@@ -196,7 +220,12 @@ describe.runIf(hasBuiltHelper)("macOS Vision OCR production adapter smoke", () =
         .toLocaleUpperCase();
       const ocrJobs = jobs.list({ classes: ["ocr"] }).jobs;
 
-      expect(result).toMatchObject({ processed: 1, completed: 1, failed: 0 });
+      expect(result).toMatchObject({ state: "completed", jobId: prepared.jobId });
+      const agentTurnJobs = jobs.list({ classes: ["agent_turn"] }).jobs;
+      expect(agentTurnJobs).toHaveLength(1);
+      expect(agentTurnJobs[0]?.id).toBe(prepared.jobId);
+      expect(["completed", "completed_with_warnings"]).toContain(agentTurnJobs[0]?.state);
+      expect(jobs.list({ classes: ["capture", "agent_ingest"] }).jobs).toEqual([]);
       expect(ocrJobs).toHaveLength(1);
       expect(["completed", "completed_with_warnings"]).toContain(ocrJobs[0]?.state);
       expect(text).toContain("PIGE");
@@ -281,16 +310,23 @@ describe.runIf(hasBuiltHelper)("macOS Vision OCR production adapter smoke", () =
         })
       });
       const jobs = new JobsService(vaultPort, agentIngest, undefined, parser, ocr);
-      const captured = await capture.submitFiles({
-        filePaths: [pptxPath],
+      const home = new HomeAgentService(vaultPort, modelPort, noRetrieval, jobs);
+      const prepared = home.prepareSourceTurn({
+        text: "Recognize the embedded presentation media and save the result.",
         inputKind: "file_drop",
-        userIntent: "capture",
+        objective: "auto",
         locale: "en"
       });
-      const sourceId = captured.sourceIds[0];
+      const preserved = await capture.preserveFilesForAgentTurn({
+        filePaths: [pptxPath],
+        inputKind: "file_drop",
+        userIntent: "unknown",
+        locale: "en"
+      }, { jobId: prepared.jobId, sourceId: prepared.sourceId });
+      const sourceId = preserved.sourceIds[0];
       expect(sourceId).toBeTruthy();
-      jobs.processQueuedCaptures({ jobIds: captured.jobIds });
-      const result = await jobs.processQueuedAgentIngest({ sourceIds: captured.sourceIds });
+      expect(preserved.jobIds).toEqual([]);
+      const result = await home.submitPreparedSourceTurn(prepared);
       const sourceRecordPath = findFile(path.join(vaultPath, ".pige", "source-records"), `${sourceId}.json`);
       const sourceRecord = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as {
         artifacts: Array<{ id: string; kind: string; path: string }>;
@@ -299,7 +335,12 @@ describe.runIf(hasBuiltHelper)("macOS Vision OCR production adapter smoke", () =
       expect(textArtifact).toBeTruthy();
       const text = fs.readFileSync(path.join(vaultPath, textArtifact!.path), "utf8").replace(/\s+/gu, " ").toLocaleUpperCase();
 
-      expect(result).toMatchObject({ processed: 1, completed: 1, failed: 0 });
+      expect(result).toMatchObject({ state: "completed", jobId: prepared.jobId });
+      const agentTurnJobs = jobs.list({ classes: ["agent_turn"] }).jobs;
+      expect(agentTurnJobs).toHaveLength(1);
+      expect(agentTurnJobs[0]?.id).toBe(prepared.jobId);
+      expect(["completed", "completed_with_warnings"]).toContain(agentTurnJobs[0]?.state);
+      expect(jobs.list({ classes: ["capture", "agent_ingest"] }).jobs).toEqual([]);
       expect(text).toContain("PIGE");
       expect(text).toContain("OCR");
     } finally {
@@ -307,6 +348,15 @@ describe.runIf(hasBuiltHelper)("macOS Vision OCR production adapter smoke", () =
     }
   });
 });
+
+const noRetrieval: HomeAgentRetrievalPort = {
+  search: () => {
+    throw new Error("Source-backed Vision smoke must not use Home retrieval.");
+  },
+  ask: () => {
+    throw new Error("Source-backed Vision smoke must not use legacy retrieval ask.");
+  }
+};
 
 class InlineOfficeMediaMaterializer implements OfficeMediaMaterializerPort {
   isAvailable(): boolean {

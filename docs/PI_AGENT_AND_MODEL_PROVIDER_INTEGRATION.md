@@ -297,6 +297,10 @@ Rules:
 - Tool-specific byte/time/resource bounds protect the Host. They must not encode a fixed
   semantic route such as exactly one correction, one retrieval, or one query when Pi can
   make useful progress safely.
+- Home local search and Dataset query are independent read-only capabilities. Pi may
+  select either or both in either order; the Host requires exact result visibility before
+  dependent use or citation and keeps their citation identities disjoint, but does not
+  enforce modality exclusivity or a model-turn ordering epoch.
 - Final assistant text never causes a durable knowledge write. A write occurs only from
   a validated registered tool call in which Pi authors the intended Markdown. The Host
   may add/validate stable IDs, timestamps, provenance and commit metadata, but cannot
@@ -317,48 +321,21 @@ external adapter, current-action Deny/Allow once, same-Job pause/resume and rest
 one-use execution. The production external adapter registry remains empty; arbitrary-path
 tools, real Skill/package/local-tool callers, saved grants and YOLO remain Phase 8 work.
 
-The current structured-ingest foundation registers `pige_inspect_dataset@1` only for the
-preserved current CSV, XLSX, or SQLite source. Its input is `{}`: Pi receives no path,
-SQL, table-selection, source-ID, or destination authority. The Host binds the exact
-source revision and deterministic `dataset_import` child; a bounded worker produces an
-untrusted plan, Dataset Service independently validates it and commits one versioned
-Bundle plus `create_dataset_revision` Operation. The typed result terminates that ingest
-turn without a hidden parse, query, or note workflow.
+Pi-selected Dataset tools bind the exact source or Dataset revision. A deterministic
+`dataset_import` child may materialize one validated Bundle/Operation; read-only Home
+queries return bounded opaque results and citations. Pi receives no SQL, path, handle,
+extension, payload, or destination authority. These results return to Pi rather than
+terminating or prescribing its next semantic action; editing, joins, and arbitrary SQL
+remain outside the current tools.
 
-Home also registers `pige_query_dataset@1` as an optional read-only tool. Pi may request
-one bounded opaque catalog, then one strict typed query, then a validated terminal answer.
-The Host owns vault/Dataset/revision/schema/payload/privacy bindings, query limits, worker
-execution, result hashes, and citations; Pi receives no SQL, path, handle, extension, or
-whole-payload authority. Readable drift supplies only a neutral stale marker for current
-body-free audit classification and stops before another model turn. Dataset editing,
-derived views, joins, multi-Dataset composition, and other structured tools remain later
-registry work.
+Calls bind run/call, catalog/policy/source, tool/input hashes and typed provenance; large
+bodies remain Artifacts. Host validates before each effect, cancellation preserves no
+partial response, and accepted create/append/tag/link writes emit Activity/Undo.
 
-That one-query sequence is current foundation evidence, not the permanent Agent
-contract. The target registry permits Pi to refine or repeat bounded read-only Dataset
-queries under the same exact Dataset/revision/privacy binding when prior typed results do
-not yet support a valid answer; joins, arbitrary SQL, paths, handles, and writes remain
-outside this tool.
-
-The model sees only bounded descriptors. Calls bind run/call, catalog/policy/source,
-tool-version, and input hashes; results carry typed refs, warnings, and provenance while
-large bodies remain Artifacts. Host validation precedes every result or effect.
-Job cancellation aborts Pi/active tools without persisting partial response.
-
-Exact create, cited append, `pige_add_knowledge_tags@1`, and directed link emit Activity/
-Undo. After inspect/retrieval, tagging supplies one opaque target, 1–6 candidates, cited
-reason, and high confidence; Host owns catalog/normalization/eligibility/limits/bytes/
-Operation. Other organization, Broker, CAS, redo, and platforms remain open.
-
-Source inspection, extraction, OCR, retrieval, and knowledge publication remain
-separate tools. Recommendations cannot invoke another tool. Runtime may keep only a
-bounded objective/evidence-gap/next-intent/stop-condition `PlanSummary`, never private
-chain of thought; it is ephemeral and restart requires replanning. Stale, denied,
-partial, or unavailable results require revision before another side effect.
-
-Registration controls what Pi may call, not what it must call. A general answer may use
-zero tools and no local citations. Empty retrieval returns a typed result for replanning;
-only explicit vault/source-only grounding turns missing evidence into insufficiency.
+Inspect/parse/OCR/retrieval/write remain separate tools. Registration says what Pi may
+call, never what it must call; zero-tool answers and typed empty-result replanning remain
+valid. Ephemeral `PlanSummary` excludes chain of thought, and stale/denied/unavailable
+results require revision before another effect.
 
 ### 11.1 Autonomous Completion And Repair
 
@@ -463,6 +440,17 @@ The [Settings, Providers, and Tools API domain](API_AND_IPC_DESIGN.md#68-setting
 owns model DTOs; the [Jobs API domain](API_AND_IPC_DESIGN.md#63-jobs) owns retry/cancel;
 [Retrieval](API_AND_IPC_DESIGN.md#66-retrieval) owns `agent.submitTurn`/`agent.conversation`.
 This integration contract defines behavior, not a second IPC vocabulary.
+
+`agent.submitTurn` is the sole production semantic ingress. Main no longer registers
+`capture.submitText`, `capture.submitFiles`, or `capture.submitUrl`; preservation invoked
+inside an Agent turn is checkpoint work, while explicit non-Agent preservation is marked
+`capture_only`. Legacy missing-field records normalize to `legacy_agent_ingest`; current
+records accept only `capture_only | agent_turn`, and unknown values fail validation.
+
+Durable proposal list/get/decision remains Main-internal for recovery/tests. Renderer
+list/get/approve/reject all fail closed pending a projection that excludes model-generated
+summary/reason and raw record fields. Historical reconciliation/staging remains; new
+`agent_turn` registers no legacy staging tool until that bounded owner exists.
 
 Any future connection test, model-list refresh, or Agent-run entry point must first be added to the API owner and executable contracts. It must not be introduced here as a speculative alias.
 
