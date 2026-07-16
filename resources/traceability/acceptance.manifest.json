@@ -108,66 +108,18 @@
         "E2.01"
       ]
     },
-    "job.idempotent-recovery": {
-      "requirement": "PIGE-JOB-002",
-      "builds": ["B2.08", "B2.11"],
-      "exits": ["E2.01", "E2.10"]
-    },
-    "job.risky-proposals": {
-      "requirement": "PIGE-JOB-003",
-      "builds": ["B7.01", "B7.02", "B7.03", "B7.04"],
-      "exits": ["E7.01"]
-    },
-    "job.waiting-dependency": {
-      "requirement": "PIGE-JOB-004",
-      "builds": ["B2.13"],
-      "exits": ["E2.11"]
-    },
-    "job.agent-write-operation": {
-      "requirement": "PIGE-JOB-005",
-      "builds": ["B7.04"],
-      "exits": ["E7.01"]
-    },
-    "job.conversation-history": {
-      "requirement": "PIGE-JOB-006",
-      "builds": ["B7.08", "B7.09"],
-      "exits": ["E7.03", "E7.04"]
-    },
-    "job.visible-status": {
-      "requirement": "PIGE-JOB-007",
-      "builds": ["B2.10", "B2.12"],
-      "exits": ["E2.09"]
-    },
-    "job.durable-vocabulary": {
-      "requirement": "PIGE-JOB-008",
-      "builds": ["B1.26"],
-      "exits": ["E1.22"]
-    },
-    "api.renderer-boundary": {
-      "requirement": "PIGE-API-001",
-      "builds": ["B1.01"],
-      "exits": ["E1.10"]
-    },
-    "api.shared-error-taxonomy": {
-      "requirement": "PIGE-API-002",
-      "builds": ["B1.20"],
-      "exits": ["E1.16"]
-    },
-    "database.rebuildable": {
-      "requirement": "PIGE-DB-001",
-      "builds": ["B4.01", "B4.04", "B4.05"],
-      "exits": ["E4.02", "E4.03", "E4.05"]
-    },
-    "database.driver-domains": {
-      "requirement": "PIGE-DB-002",
-      "builds": ["B4.01"],
-      "exits": ["E4.05"]
-    },
-    "security.secret-storage": {
-      "requirement": "PIGE-SEC-001",
-      "builds": ["B3.02"],
-      "exits": ["E3.02"]
-    },
+    "job.idempotent-recovery":{"requirement":"PIGE-JOB-002","builds":["B2.08","B2.11"],"exits":["E2.01","E2.10"]},
+    "job.risky-proposals":{"requirement":"PIGE-JOB-003","builds":["B7.01","B7.02","B7.03","B7.04"],"exits":["E7.01"]},
+    "job.waiting-dependency":{"requirement":"PIGE-JOB-004","builds":["B2.13"],"exits":["E2.11"]},
+    "job.agent-write-operation":{"requirement":"PIGE-JOB-005","builds":["B7.04"],"exits":["E7.01"]},
+    "job.conversation-history":{"requirement":"PIGE-JOB-006","builds":["B7.08","B7.09"],"exits":["E7.03","E7.04"]},
+    "job.visible-status":{"requirement":"PIGE-JOB-007","builds":["B2.10","B2.12"],"exits":["E2.09"]},
+    "job.durable-vocabulary":{"requirement":"PIGE-JOB-008","builds":["B1.26"],"exits":["E1.22"]},
+    "api.renderer-boundary":{"requirement":"PIGE-API-001","builds":["B1.01"],"exits":["E1.10"]},
+    "api.shared-error-taxonomy":{"requirement":"PIGE-API-002","builds":["B1.20"],"exits":["E1.16"]},
+    "database.rebuildable":{"requirement":"PIGE-DB-001","builds":["B4.01","B4.04","B4.05"],"exits":["E4.02","E4.03","E4.05"]},
+    "database.driver-domains":{"requirement":"PIGE-DB-002","builds":["B4.01"],"exits":["E4.05"]},
+    "security.secret-storage":{"requirement":"PIGE-SEC-001","builds":["B3.02"],"exits":["E3.02"]},
     "security.permission-broker": {
       "requirement": "PIGE-SEC-002",
       "builds": ["B8.01", "B8.02", "B8.08"],
@@ -219,73 +171,14 @@
     "search.home-grounded": { "requirement": "PIGE-SEARCH-001", "builds": ["B6.01", "B6.02", "B6.03"], "exits": ["E6.01", "E6.04"] },
     "search.lexical-before-model": { "requirement": "PIGE-SEARCH-002", "builds": ["B4.02", "B4.03", "B4.06"], "exits": ["E4.01"] },
     "search.local-rag": { "requirement": "PIGE-SEARCH-003", "builds": ["B6.05", "B6.06", "B6.07"], "exits": ["E6.02"] },
-    "memory.inspectable-lifecycle": {
-      "requirement": "PIGE-MEM-001",
-      "builds": [
-        "B7.05",
-        "B7.06",
-        "B7.07"
-      ],
-      "exits": [
-        "E7.02",
-        "E7.05"
-      ]
-    },
-    "data.structured-ingest": {
-      "requirement": "PIGE-DATA-001",
-      "builds": ["B5.13"],
-      "exits": ["E5.06"]
-    },
-    "data.local-query": {
-      "requirement": "PIGE-DATA-002",
-      "builds": ["B6.16"],
-      "exits": ["E6.11"]
-    },
-    "data.managed-collections": {
-      "requirement": "PIGE-DATA-003",
-      "builds": ["B7.10"],
-      "exits": ["E7.06"]
-    },
-    "backup.default-inclusions": {
-      "requirement": "PIGE-BACKUP-001",
-      "builds": [
-        "B9.02"
-      ],
-      "exits": [
-        "E9.01"
-      ]
-    },
-    "backup.default-exclusions": {
-      "requirement": "PIGE-BACKUP-002",
-      "builds": [
-        "B9.02"
-      ],
-      "exits": [
-        "E9.01"
-      ]
-    },
-    "backup.versioned-export": {
-      "requirement": "PIGE-BACKUP-003",
-      "builds": [
-        "B9.01",
-        "B9.02"
-      ],
-      "exits": [
-        "E9.01"
-      ]
-    },
-    "backup.validated-restore": {
-      "requirement": "PIGE-BACKUP-004",
-      "builds": [
-        "B9.03",
-        "B9.04",
-        "B9.05",
-        "B9.06"
-      ],
-      "exits": [
-        "E9.02"
-      ]
-    },
+    "memory.inspectable-lifecycle":{"requirement":"PIGE-MEM-001","builds":["B7.05","B7.06","B7.07"],"exits":["E7.02","E7.05"]},
+    "data.structured-ingest":{"requirement":"PIGE-DATA-001","builds":["B5.13"],"exits":["E5.06"]},
+    "data.local-query":{"requirement":"PIGE-DATA-002","builds":["B6.16"],"exits":["E6.11"]},
+    "data.managed-collections":{"requirement":"PIGE-DATA-003","builds":["B7.10"],"exits":["E7.06"]},
+    "backup.default-inclusions":{"requirement":"PIGE-BACKUP-001","builds":["B9.02"],"exits":["E9.01"]},
+    "backup.default-exclusions":{"requirement":"PIGE-BACKUP-002","builds":["B9.02"],"exits":["E9.01"]},
+    "backup.versioned-export":{"requirement":"PIGE-BACKUP-003","builds":["B9.01","B9.02"],"exits":["E9.01"]},
+    "backup.validated-restore":{"requirement":"PIGE-BACKUP-004","builds":["B9.03","B9.04","B9.05","B9.06"],"exits":["E9.02"]},
     "release.platform-update": {
       "requirement": "PIGE-REL-001",
       "builds": [
@@ -428,15 +321,7 @@
         "E1.19"
       ]
     },
-    "diagnostics.user-export": {
-      "requirement": "PIGE-DIAG-002",
-      "builds": [
-        "B1.14"
-      ],
-      "exits": [
-        "E1.07"
-      ]
-    },
+    "diagnostics.user-export":{"requirement":"PIGE-DIAG-002","builds":["B1.14"],"exits":["E1.07"]},
     "diagnostics.bounded-redacted-logs": {
       "requirement": "PIGE-DIAG-003",
       "builds": [
@@ -518,65 +403,14 @@
         "E0.11"
       ]
     },
-    "ui.reader-editor": {
-      "requirement": "PIGE-UI-001",
-      "builds": [
-        "B6.08",
-        "B6.13"
-      ],
-      "exits": [
-        "E6.05",
-        "E6.08"
-      ]
-    },
-    "ui.accessibility-baseline": {
-      "requirement": "PIGE-UI-002",
-      "builds": [
-        "B9.11"
-      ],
-      "exits": [
-        "E9.07"
-      ]
-    },
-    "ui.home-navigation-shell": {
-      "requirement": "PIGE-UI-003",
-      "builds": [
-        "B1.03",
-        "B1.07",
-        "B1.08",
-        "B1.09",
-        "B1.17"
-      ],
-      "exits": [
-        "E1.02",
-        "E1.11",
-        "E1.13"
-      ]
-    },
+    "ui.reader-editor":{"requirement":"PIGE-UI-001","builds":["B6.08","B6.13"],"exits":["E6.05","E6.08"]},
+    "ui.accessibility-baseline":{"requirement":"PIGE-UI-002","builds":["B9.11"],"exits":["E9.07"]},
+    "ui.home-navigation-shell":{"requirement":"PIGE-UI-003","builds":["B1.03","B1.07","B1.08","B1.09","B1.17"],"exits":["E1.02","E1.11","E1.13"]},
     "ui.tree-visual-semantics":{"requirement":"PIGE-UI-004","builds":["B6.14"],"exits":["E6.09"]},
     "ui.note-agent-actions":{"requirement":"PIGE-UI-005","builds":["B6.10","B6.11"],"exits":["E6.06"]},
     "ui.reader-related-metadata":{"requirement":"PIGE-UI-006","builds":["B6.08","B6.09"],"exits":["E6.05","E6.07"]},
-    "skill.lifecycle": {
-      "requirement": "PIGE-SKILL-001",
-      "builds": [
-        "B8.05",
-        "B8.06",
-        "B8.07"
-      ],
-      "exits": [
-        "E8.01"
-      ]
-    },
-    "package.curated-lifecycle": {
-      "requirement": "PIGE-SKILL-002",
-      "builds": [
-        "B8.09",
-        "B8.10"
-      ],
-      "exits": [
-        "E8.04"
-      ]
-    }
+    "skill.lifecycle":{"requirement":"PIGE-SKILL-001","builds":["B8.05","B8.06","B8.07"],"exits":["E8.01"]},
+    "package.curated-lifecycle":{"requirement":"PIGE-SKILL-002","builds":["B8.09","B8.10"],"exits":["E8.04"]}
   },
   "requirements": {
     "PIGE-CAP-001": {
@@ -712,7 +546,7 @@
     "PIGE-JOB-004":{"status":"partial","evidence":["EV-JOB-WAIT","EV-SOURCE-WAIT-STATUS","EV-PI-PDF-PARSE-TOOL","EV-PI-PDF-OCR-TOOL","EV-PI-OFFICE-PARSE-OCR-TOOL","EV-PI-IMAGE-OCR-TOOL","EV-WAITING-AGENT-REQUEUE","EV-OCR-NATIVE-FALLBACK","EV-PI-DATASET-INGEST","EV-DATASET-CONTINUATION"],"open":{"id":"OPEN-REQ-PIGE-JOB-004","description":"Preserved-source model wait now has one truthful repair path; tool, path, and runtime dependency classes remain open.","targetBuilds":["B2.13"],"targetExits":["E2.11"]}},
     "PIGE-JOB-005":{"status":"partial","evidence":["EV-AGENT-INGEST","EV-PROPOSAL-REVIEW-LIFECYCLE","EV-ACTIVITY-UNDO","EV-CREATE-RECOVERY","EV-PI-INGEST-UPDATE","EV-UPDATE-RECOVERY"],"open":{"id":"OPEN-REQ-PIGE-JOB-005","description":"Legacy hashless create recovery and Agent writes beyond exact create/additive update remain.","targetBuilds":["B7.04"],"targetExits":["E7.01"]}},
     "PIGE-JOB-006":{"status":"partial","evidence":["EV-CAPTURE","EV-HOME-AGENT","EV-HOME-FOLLOWUP","EV-DATASET-QUERY-DURABILITY","EV-DATASET-QUERY-INTEGRITY","EV-DATASET-TIMELINE-RESTORE"],"open":{"id":"OPEN-REQ-PIGE-JOB-006","description":"Dataset result restart and checksum rejection work; compaction, cross-process kill/reopen, and packaged history proof remain.","targetBuilds":["B7.08","B7.09"],"targetExits":["E7.03","E7.04"]}},
-    "PIGE-JOB-007":{"status":"partial","evidence":["EV-JOB-STATUS","EV-JOB-WAIT","EV-JOB-CANCEL","EV-HOME-UI","EV-HOME-FOLLOWUP","EV-SOURCE-WAIT-STATUS","EV-SOURCE-WAIT-RACE","EV-ACTIVITY-UNDO","EV-MODEL-EGRESS-HOME-UI","EV-NOTE-AGENT-UI"],"open":{"id":"OPEN-REQ-PIGE-JOB-007","description":"Preserved-source model wait and exact model-egress confirmation each have one status owner/action; broader Activity, progress, non-Agent cancel, and Permission Broker UI remain.","targetBuilds":["B2.10","B2.12"],"targetExits":["E2.09"]}},
+    "PIGE-JOB-007":{"status":"partial","evidence":["EV-JOB-STATUS","EV-JOB-WAIT","EV-JOB-CANCEL","EV-HOME-UI","EV-HOME-FOLLOWUP","EV-SOURCE-WAIT-STATUS","EV-SOURCE-WAIT-RACE","EV-ACTIVITY-UNDO","EV-MODEL-EGRESS-HOME-UI","EV-NOTE-AGENT-UI","EV-PROCESSING-FILES-UI","EV-ACTIVITY-UI"],"open":{"id":"OPEN-REQ-PIGE-JOB-007","description":"Source processing, Activity/Undo, model wait and egress have one owner; broader progress, non-Agent cancel and Permission UI remain.","targetBuilds":["B2.10","B2.12"],"targetExits":["E2.09"]}},
     "PIGE-JOB-008":{"status":"verified","evidence":["EV-DURABLE-VOCAB"]},
     "PIGE-API-001":{"status":"verified","evidence":["EV-BOUNDARY","EV-LIBRARY-SEARCH-IPC","EV-NOTE-AGENT-IPC"]},
     "PIGE-API-002":{"status":"partial","evidence":["EV-ERROR","EV-PI-TERMINAL-MISSING","EV-MODEL-EGRESS-IPC","EV-MODEL-EGRESS-SCHEMA","EV-BACKUP-SAFE-JOB-SUMMARY","EV-LIBRARY-SEARCH-IPC","EV-NOTE-AGENT-IPC"],"open":{"id":"OPEN-REQ-PIGE-API-002","description":"Model-egress, Backup, Library Search and current-note Agent use strict typed errors; complete service, diagnostics and UI adoption remains.","targetBuilds":["B1.20"],"targetExits":["E1.16"]}},
@@ -742,7 +576,7 @@
       "status": "planned",
       "plannedTarget": "Every submission enters one Pi-owned Job with source preservation as its first checkpoint; Pi owns iterative tools, Pi-authored Markdown and validation repair, with safe drafts, no presentation-only provider call, distinct hard-block outcomes, and signed packaged macOS/Windows BYOK proof."
     },
-    "PIGE-SETTINGS-001":{"status":"partial","evidence":["EV-SETTINGS","EV-LOCAL-SETTINGS","EV-FIRST-HOME-PREFERENCE","EV-BACKUP-SETTINGS-UI","EV-RESTORE-BINDING-CAS","EV-FULL-UI-SETTINGS"],"open":{"id":"OPEN-REQ-PIGE-SETTINGS-001","description":"The shell separates real, partial and unavailable destinations; capability-owned registries, policies and unimplemented effects remain open.","targetBuilds":["B1.10","B1.11"],"targetExits":["E1.05"]}},
+    "PIGE-SETTINGS-001":{"status":"partial","evidence":["EV-SETTINGS","EV-LOCAL-SETTINGS","EV-FIRST-HOME-PREFERENCE","EV-BACKUP-SETTINGS-UI","EV-RESTORE-BINDING-CAS","EV-FULL-UI-SETTINGS","EV-SKILLS-SHELL-UI","EV-DIAGNOSTICS-SETTINGS-UI"],"open":{"id":"OPEN-REQ-PIGE-SETTINGS-001","description":"The shell separates real, partial and unavailable destinations; capability-owned registries, policies and unimplemented effects remain open.","targetBuilds":["B1.10","B1.11"],"targetExits":["E1.05"]}},
     "PIGE-SETTINGS-002":{"status":"partial","evidence":["EV-SETTINGS","EV-LOCAL-SETTINGS","EV-FIRST-HOME-PREFERENCE","EV-RESTORE-BINDING-CAS"],"open":{"id":"OPEN-REQ-PIGE-SETTINGS-002","description":"The full release-visible settings census and restore behavior for every scope remain open.","targetBuilds":["B1.10","B1.11"],"targetExits":["E1.05"]}},
     "PIGE-SETTINGS-003": {
       "status": "partial",
@@ -932,7 +766,7 @@
     "PIGE-REPO-003":{"status":"verified","evidence":["EV-FIXTURE","EV-ARTIFACT-LAYOUT","EV-REPO-FOUNDATION"]},
     "PIGE-REPO-004":{"status":"verified","evidence":["EV-PHASE-PREFLIGHT"]},
     "PIGE-DIAG-001":{"status":"partial","evidence":["EV-DIAGNOSTICS","EV-NO-TELEMETRY","EV-PRIVACY-POLICY"],"open":{"id":"OPEN-REQ-PIGE-DIAG-001","description":"Static no-telemetry/no-auto-upload enforcement is executable; crash-hook review and future unknown SDKs, computed endpoints, indirect transports, and generated configuration remain open.","targetBuilds":["B1.23"],"targetExits":["E1.19"]}},
-    "PIGE-DIAG-002":{"status":"partial","evidence":["EV-DIAGNOSTICS","EV-DIAG-EXPORT-CORE","EV-DIAG-EXPORT-WORKER","EV-DIAG-EXPORT-CANCEL-IPC","EV-DIAG-EXPORT-CANCEL-UI","EV-DIAG-EXPORT-WORKER-SMOKE"],"open":{"id":"OPEN-REQ-PIGE-DIAG-002","description":"Bounded preview/export/cancel and selected local destination are executable; optional reviewed content, progress/restart semantics, and broader platform/path evidence remain open.","targetBuilds":["B1.14"],"targetExits":["E1.07"]}},
+    "PIGE-DIAG-002":{"status":"partial","evidence":["EV-DIAGNOSTICS","EV-DIAG-EXPORT-CORE","EV-DIAG-EXPORT-WORKER","EV-DIAG-EXPORT-CANCEL-IPC","EV-DIAG-EXPORT-CANCEL-UI","EV-DIAG-EXPORT-WORKER-SMOKE","EV-DIAGNOSTICS-SETTINGS-UI"],"open":{"id":"OPEN-REQ-PIGE-DIAG-002","description":"Typed Settings preview/export/cancel works; optional content, progress/restart and broader platform/path evidence remain open.","targetBuilds":["B1.14"],"targetExits":["E1.07"]}},
     "PIGE-DIAG-003":{"status":"partial","evidence":["EV-DIAGNOSTICS","EV-DIAG-ROTATION","EV-DIAG-RETENTION","EV-DIAG-PERSISTENCE-SAFETY"],"open":{"id":"OPEN-REQ-PIGE-DIAG-003","description":"Broader diagnostic stores, crash-recovery correlation, and user-clear semantics remain open.","targetBuilds":["B1.23"],"targetExits":["E1.19"]}},
     "PIGE-SUPPORT-001":{"status":"partial","evidence":["EV-SUPPORT-POLICY"],"open":{"id":"OPEN-REQ-PIGE-SUPPORT-001","description":"Release-time public issue/support template review and maintainer workflow acceptance remain open.","targetBuilds":["B9.17"],"targetExits":["E9.11"]}},
     "PIGE-GOV-001":{"status":"partial","evidence":["EV-PUBLIC-WORKFLOW","EV-PUBLIC-CONDUCT","EV-PUBLIC-BUG","EV-PUBLIC-SECURITY"],"open":{"id":"OPEN-REQ-PIGE-GOV-001","description":"Automated schema validation for every public issue template and live private-reporting availability remain open.","targetBuilds":["B0.15"],"targetExits":["E0.12"]}},
@@ -942,12 +776,12 @@
     "PIGE-DOC-003":{"status":"verified","evidence":["EV-TRACE"]},
     "PIGE-DOC-004":{"status":"verified","evidence":["EV-PHASE-PREFLIGHT"]},
     "PIGE-DOC-005":{"status":"verified","evidence":["EV-DOCQUALITY","EV-DOCQUALITY-INDEPENDENT"]},
-    "PIGE-UI-001":{"status":"partial","evidence":["EV-RENDERER","EV-READER-RESOURCE-SAFETY","EV-RENDERER-NAVIGATION-GUARD","EV-FULL-UI-RESPONSIVE"],"open":{"id":"OPEN-REQ-PIGE-UI-001","description":"Source-preserving editing, IME, long-page budget and external-conflict UI tests remain open.","targetBuilds":["B6.08","B6.13"],"targetExits":["E6.05","E6.08"]}},
+    "PIGE-UI-001":{"status":"partial","evidence":["EV-RENDERER","EV-READER-RESOURCE-SAFETY","EV-RENDERER-NAVIGATION-GUARD","EV-FULL-UI-RESPONSIVE","EV-READER-ACTIONS-UI"],"open":{"id":"OPEN-REQ-PIGE-UI-001","description":"Source-preserving editing, IME, long-page budget and external-conflict UI tests remain open.","targetBuilds":["B6.08","B6.13"],"targetExits":["E6.05","E6.08"]}},
     "PIGE-UI-002":{"status":"planned","plannedTarget":"Complete accessibility, final UI Design review and real macOS/Windows visual equivalence."},
     "PIGE-UI-003":{"status":"partial","evidence":["EV-APP-SHELL","EV-FIRST-HOME-GUIDE","EV-HOME-MODEL-OWNER","EV-HOME-MODEL-SWITCHER","EV-HOME-DURABLE-REFRESH","EV-HOME-ENTER","EV-DATASET-QUERY-UI","EV-DATASET-TIMELINE-RESTORE","EV-KNOWLEDGE-TREE-IPC","EV-KNOWLEDGE-TREE-UI","EV-FULL-UI-RESPONSIVE","EV-FULL-UI-NAVIGATION","EV-FULL-UI-LIBRARY","EV-FULL-UI-SETTINGS","EV-UI-WINDOW-SHELL","EV-LIBRARY-SEARCH-UI"],"open":{"id":"OPEN-REQ-PIGE-UI-003","description":"Production shell/macOS review work; unavailable UI proves no capability; capability and Windows qualification remain.","targetBuilds":["B1.03","B1.07","B1.08","B1.09","B1.17"],"targetExits":["E1.02","E1.11","E1.13"]}},
     "PIGE-UI-004":{"status":"planned","plannedTarget":"Remaining Knowledge Tree density/scale, compact-platform, assistive-technology, and signed packaged visual acceptance."},
     "PIGE-UI-005":{"status":"planned","plannedTarget":"Read-only current-note UI works; selection, mutation, Activity/Undo and exception tests remain."},
-    "PIGE-UI-006":{"status":"partial","evidence":["EV-READER-RELATED","EV-READER-UI","EV-FULL-UI-LIBRARY","EV-FULL-UI-RESPONSIVE"],"open":{"id":"OPEN-REQ-PIGE-UI-006","description":"Library opens Reader and related context in governed panes; source metadata, typed edit/copy/reveal and unavailable-graph degradation remain open.","targetBuilds":["B6.08","B6.09"],"targetExits":["E6.05","E6.07"]}},
+    "PIGE-UI-006":{"status":"partial","evidence":["EV-READER-RELATED","EV-READER-UI","EV-FULL-UI-LIBRARY","EV-FULL-UI-RESPONSIVE","EV-READER-ACTIONS-UI"],"open":{"id":"OPEN-REQ-PIGE-UI-006","description":"Reader/related panes and local copy work; source metadata, edit/reveal and unavailable-graph degradation remain open.","targetBuilds":["B6.08","B6.09"],"targetExits":["E6.05","E6.07"]}},
     "PIGE-SKILL-001":{"status":"planned","plannedTarget":"Settings/chat staging, URL/Markdown/ZIP, update, lifecycle, export, path-safety, and permission tests."},
     "PIGE-SKILL-002":{"status":"planned","plannedTarget":"Catalog, install, update, version-pin, rollback, uninstall, disclosure, and no-hidden-install tests."}
   },
@@ -985,9 +819,9 @@
       }
     },
     "E1.04":{"status":"partial","evidence":["EV-VAULT-POLICY","EV-BACKUP-SETTINGS-UI","EV-VAULT-REVEAL-SCHEMA","EV-VAULT-REVEAL-IPC","EV-VAULT-REVEAL-FENCE","EV-VAULT-REVEAL-UI"],"open":{"id":"OPEN-EXIT-E1.04","description":"Backup/restore, user Backup status, and safe storage reveal are covered; switching, external binding setup, and broader create acceptance remain.","targetBuilds":["B1.04"],"targetExits":["E1.04"]}},
-    "E1.05":{"status":"partial","evidence":["EV-SETTINGS","EV-LOCAL-SETTINGS","EV-FIRST-HOME-PREFERENCE","EV-BACKUP-SETTINGS-UI","EV-FULL-UI-SETTINGS"],"open":{"id":"OPEN-EXIT-E1.05","description":"The visible Settings census and real/unavailable ownership work; capability-backed policies, unimplemented effects and backup-input exclusion breadth remain open.","targetBuilds":["B1.10","B1.11"],"targetExits":["E1.05"]}},
+    "E1.05":{"status":"partial","evidence":["EV-SETTINGS","EV-LOCAL-SETTINGS","EV-FIRST-HOME-PREFERENCE","EV-BACKUP-SETTINGS-UI","EV-FULL-UI-SETTINGS","EV-SKILLS-SHELL-UI","EV-DIAGNOSTICS-SETTINGS-UI"],"open":{"id":"OPEN-EXIT-E1.05","description":"The visible Settings census and real/unavailable ownership work; capability-backed policies, unimplemented effects and backup-input exclusion breadth remain open.","targetBuilds":["B1.10","B1.11"],"targetExits":["E1.05"]}},
     "E1.06":{"status":"partial","evidence":["EV-POLICY"],"open":{"id":"OPEN-EXIT-E1.06","description":"Full executable acceptance remains open for Exit E1.06: Agent-affecting settings have typed policy effects and owning-service enforcement rather than prompt-only behavior.","targetBuilds":["B1.12"],"targetExits":["E1.06"]}},
-    "E1.07":{"status":"partial","evidence":["EV-DIAGNOSTICS","EV-DIAG-EXPORT-CORE","EV-DIAG-EXPORT-WORKER","EV-DIAG-EXPORT-CANCEL-IPC","EV-DIAG-EXPORT-CANCEL-UI","EV-DIAG-EXPORT-WORKER-SMOKE"],"open":{"id":"OPEN-EXIT-E1.07","description":"Bounded redacted local preview/export/cancel is executable; optional reviewed content, progress/restart semantics, and broader platform/path proof remain open.","targetBuilds":["B1.14"],"targetExits":["E1.07"]}},
+    "E1.07":{"status":"partial","evidence":["EV-DIAGNOSTICS","EV-DIAG-EXPORT-CORE","EV-DIAG-EXPORT-WORKER","EV-DIAG-EXPORT-CANCEL-IPC","EV-DIAG-EXPORT-CANCEL-UI","EV-DIAG-EXPORT-WORKER-SMOKE","EV-DIAGNOSTICS-SETTINGS-UI"],"open":{"id":"OPEN-EXIT-E1.07","description":"Typed Settings preview/export/cancel works; optional content, progress/restart and broader platform/path proof remain open.","targetBuilds":["B1.14"],"targetExits":["E1.07"]}},
     "E1.08":{"status":"partial","evidence":["EV-VAULT-RESET","EV-DB-REBUILD"],"open":{"id":"OPEN-EXIT-E1.08","description":"Full executable acceptance remains open for Exit E1.08: Deleting `.pige/db/` does not delete user-owned files, and the empty migration/rebuild path succeeds.","targetBuilds":["B1.15"],"targetExits":["E1.08"]}},
     "E1.09":{"status":"partial","evidence":["EV-VAULT-RESET","EV-DB-REBUILD"],"open":{"id":"OPEN-EXIT-E1.09","description":"Full executable acceptance remains open for Exit E1.09: Reset Local Database cannot delete Markdown knowledge, source records/assets, memory, conversations, proposals, operations, or trash.","targetBuilds":["B1.16"],"targetExits":["E1.09"]}},
     "E1.10":{"status":"verified","evidence":["EV-BOUNDARY","EV-LIBRARY-SEARCH-IPC","EV-NOTE-AGENT-IPC"]},
@@ -1039,16 +873,7 @@
     "E2.06":{"status":"partial","evidence":["EV-PI-PDF-PARSE-TOOL","EV-PI-OFFICE-PARSE-OCR-TOOL","EV-PI-IMAGE-OCR-TOOL","EV-DOCUMENT-CAPTURE"],"open":{"id":"OPEN-EXIT-E2.06","description":"PDF, DOCX, PPTX, and a representative image prove preservation, a visible Agent Job, and no parse/OCR child before a Pi tool call. Complete common-image format, storage-strategy, and supported-platform acceptance remains open for E2.06.","targetBuilds":["B2.04"],"targetExits":["E2.06"]}},
     "E2.07":{"status":"partial","evidence":["EV-DROP-ZONE","EV-FILE-CAPTURE"],"open":{"id":"OPEN-EXIT-E2.07","description":"Full executable acceptance remains open for Exit E2.07: Whole-window drop validates files, preserves accepted items, and reports rejected display names without exposing private paths.","targetBuilds":["B2.05"],"targetExits":["E2.07"]}},
     "E2.08":{"status":"partial","evidence":["EV-VAULT-POLICY","EV-CAPTURE","EV-VERIFIED-INPUT-SNAPSHOT","EV-PDF-REFERENCE-ORIGINAL"],"open":{"id":"OPEN-EXIT-E2.08","description":"Full executable acceptance remains open for Exit E2.08: Source IDs remain stable across retry, and the selected copy/reference strategy affects new captures through the Source Storage Service.","targetBuilds":["B2.06","B2.07"],"targetExits":["E2.08"]}},
-    "E2.09": {
-      "status": "partial",
-      "evidence": ["EV-JOB-STATUS", "EV-JOB-WAIT", "EV-JOB-CANCEL", "EV-HOME-UI", "EV-HOME-FOLLOWUP", "EV-SOURCE-WAIT-STATUS", "EV-SOURCE-WAIT-RACE", "EV-ACTIVITY-UNDO", "EV-MODEL-EGRESS-HOME-UI"],
-      "open": {
-        "id": "OPEN-EXIT-E2.09",
-        "description": "Preserved-source model wait and exact model-egress confirmation each have one status owner/action; broader Activity, progress, non-Agent cancel, and Permission Broker UI remain.",
-        "targetBuilds": ["B2.10", "B2.12"],
-        "targetExits": ["E2.09"]
-      }
-    },
+    "E2.09":{"status":"partial","evidence":["EV-JOB-STATUS","EV-JOB-WAIT","EV-JOB-CANCEL","EV-HOME-UI","EV-HOME-FOLLOWUP","EV-SOURCE-WAIT-STATUS","EV-SOURCE-WAIT-RACE","EV-ACTIVITY-UNDO","EV-MODEL-EGRESS-HOME-UI","EV-PROCESSING-FILES-UI","EV-ACTIVITY-UI"],"open":{"id":"OPEN-EXIT-E2.09","description":"Source processing, Activity/Undo, model wait and egress have one owner; broader progress, non-Agent cancel and Permission UI remain.","targetBuilds":["B2.10","B2.12"],"targetExits":["E2.09"]}},
     "E2.10":{"status":"partial","evidence":["EV-JOB-RECOVERY","EV-HOME-AGENT","EV-HOME-FOLLOWUP","EV-NOTE-AGENT-RECOVERY","EV-PI-PDF-PARSE-TOOL","EV-PI-PDF-OCR-TOOL","EV-PI-OFFICE-PARSE-OCR-TOOL","EV-PI-IMAGE-OCR-TOOL","EV-PI-INGEST-PROPOSAL","EV-PROPOSAL-REVIEW-LIFECYCLE","EV-CREATE-RECOVERY","EV-UPDATE-RECOVERY","EV-JOB-CANCEL","EV-JOB-DURABLE-CANCEL","EV-CAPTURE-PUBLICATION-GUARD","EV-AGENT-PUBLICATION-CANCEL","EV-PDF-OCR-SOURCE-REVISION","EV-PDF-RENDER-GENERATION","EV-INDEX-REBUILD-WORKER","EV-JOB-RECORD-CAS","EV-JOB-CLAIM-RECOVERY","EV-JOB-CLAIM-INDEPENDENCE","EV-MODEL-EGRESS-APPROVAL-STORE","EV-MODEL-EGRESS-JOB-RECOVERY","EV-BACKUP-JOB-LIFECYCLE","EV-RESTORE-ROLLBACK-RECOVERY","EV-RESTORE-JOB-RECOVERY","EV-RESTORE-STARTUP-ADOPTION"],"open":{"id":"OPEN-EXIT-E2.10","description":"Adopted paths cover fenced CAS plus current-note, egress, Backup and Restore recovery; remaining classes, Pi transcript, atomicity, syscall TOCTOU and Windows multi-process proof stay open.","targetBuilds":["B2.11"],"targetExits":["E2.10"]}},
     "E2.11": {
       "status": "partial",
@@ -1187,23 +1012,14 @@
     "E6.02":{"status":"partial","evidence":["EV-RAG-CHUNKS","EV-DB-CHUNKS","EV-LOCAL-SCALE"],"open":{"id":"OPEN-EXIT-E6.02","description":"Metadata-only chunk/rebuild and 10k lexical scale work; embedding model lifecycle, vectors, semantic retrieval/reranking and packaged platforms remain.","targetBuilds":["B6.05","B6.06","B6.07"],"targetExits":["E6.02"]}},
     "E6.03":{"status":"partial","evidence":["EV-CONTEXT","EV-AGENT-EVIDENCE-REVISION","EV-HOME-AGENT","EV-PI-INGEST-RETRIEVAL","EV-DATASET-QUERY-SERVICE","EV-DATASET-QUERY-DRIFT-AUDIT","EV-DATASET-QUERY-DURABILITY","EV-NOTE-AGENT-SERVICE","EV-NOTE-AGENT-EGRESS","EV-NOTE-AGENT-UI"],"open":{"id":"OPEN-EXIT-E6.03","description":"Home, ingest, Dataset and exact read-only current-note selection/privacy work; related/mixed selection, memory, compaction and remote packs remain.","targetBuilds":["B6.04"],"targetExits":["E6.03"]}},
     "E6.04":{"status":"partial","evidence":["EV-RETRIEVAL"],"open":{"id":"OPEN-EXIT-E6.04","description":"Full executable acceptance remains open for Exit E6.04: Retrieval fixtures pass expected top-result, grounded-summary, citation-coverage, and insufficient-evidence checks.","targetBuilds":["B6.03"],"targetExits":["E6.04"]}},
-    "E6.05":{"status":"partial","evidence":["EV-RENDERER","EV-READER-RESOURCE-SAFETY","EV-RENDERER-NAVIGATION-GUARD","EV-FULL-UI-RESPONSIVE"],"open":{"id":"OPEN-EXIT-E6.05","description":"Reader responsive ownership works; typed edit/copy/reveal actions, complete keyboard reachability and long-page rendering-budget evidence remain open.","targetBuilds":["B6.08"],"targetExits":["E6.05"]}},
+    "E6.05":{"status":"partial","evidence":["EV-RENDERER","EV-READER-RESOURCE-SAFETY","EV-RENDERER-NAVIGATION-GUARD","EV-FULL-UI-RESPONSIVE","EV-READER-ACTIONS-UI"],"open":{"id":"OPEN-EXIT-E6.05","description":"Reader responsive/local copy works; edit/reveal, complete keyboard reachability and long-page budget remain open.","targetBuilds":["B6.08"],"targetExits":["E6.05"]}},
     "E6.06":{"status":"planned","plannedTarget":"Read-only current-note UI works; mutation, Activity/Undo and exceptional review remain."},
     "E6.07":{"status":"partial","evidence":["EV-DB-LINKS","EV-KNOWLEDGE-TREE-AGGREGATE","EV-KNOWLEDGE-TREE-SERVICE","EV-KNOWLEDGE-TREE-IPC","EV-KNOWLEDGE-TREE-UI"],"open":{"id":"OPEN-EXIT-E6.07","description":"Public source-backed Knowledge Tree navigation works; broader relationship/branch semantics, 10k worker-backed and incremental rebuild performance, and packaged-platform aggregate parity remain open.","targetBuilds":["B6.09","B6.12"],"targetExits":["E6.07"]}},
     "E6.08":{"status":"planned","plannedTarget":"Source-preserving Markdown editing, IME, and external-edit conflict tests."},
     "E6.09":{"status":"planned","plannedTarget":"Complete Knowledge Tree density/weight accessibility and signed compact/desktop platform report."},
     "E6.10":{"status":"partial","evidence":["EV-RETRIEVAL","EV-DB-LINKS","EV-RETRIEVAL-REGRESSION-GOLDEN","EV-RETRIEVAL-REGRESSION-REPORT"],"open":{"id":"OPEN-EXIT-E6.10","description":"The deterministic foundation still lacks model-grounded summary/citation validation and cloud-send/Permission enforcement, linking metrics beyond wiki links/backlinks, vector/reranker coverage, large-scale and packaged/UI proof, and broader locales and Knowledge Tree cases.","targetBuilds":["B6.15"],"targetExits":["E6.10"]}},
     "E6.11":{"status":"planned","plannedTarget":"Dataset table-view and typed-query report proving bounds, deterministic hashes, exact citations, stale-revision rejection, and zero whole-payload/model/renderer authority."},
-    "E7.01": {
-      "status": "partial",
-      "evidence": ["EV-PROPOSAL", "EV-AGENT-INGEST", "EV-PI-INGEST-PROPOSAL", "EV-PROPOSAL-REVIEW-LIFECYCLE", "EV-PROPOSAL-UI", "EV-ACTIVITY-UNDO", "EV-CREATE-RECOVERY", "EV-PI-INGEST-UPDATE", "EV-UPDATE-RECOVERY", "EV-PI-INGEST-LINK", "EV-LINK-RECOVERY", "EV-PI-INGEST-TAGS", "EV-TAG-RECOVERY"],
-      "open": {
-        "id": "OPEN-EXIT-E7.01",
-        "description": "Exact create/append, bounded tags, and one directed link have Undo; removal/replacement/synonyms, other pages/mutations, restore/redo, exceptions, CAS, and platforms remain.",
-        "targetBuilds": ["B7.01", "B7.02", "B7.03", "B7.04"],
-        "targetExits": ["E7.01"]
-      }
-    },
+    "E7.01":{"status":"partial","evidence":["EV-PROPOSAL","EV-AGENT-INGEST","EV-PI-INGEST-PROPOSAL","EV-PROPOSAL-REVIEW-LIFECYCLE","EV-PROPOSAL-UI","EV-ACTIVITY-UNDO","EV-ACTIVITY-UI","EV-CREATE-RECOVERY","EV-PI-INGEST-UPDATE","EV-UPDATE-RECOVERY","EV-PI-INGEST-LINK","EV-LINK-RECOVERY","EV-PI-INGEST-TAGS","EV-TAG-RECOVERY"],"open":{"id":"OPEN-EXIT-E7.01","description":"Exact create/append, bounded tags and one link have compact Undo; other mutations, restore/redo, exceptions, CAS and platforms remain.","targetBuilds":["B7.01","B7.02","B7.03","B7.04"],"targetExits":["E7.01"]}},
     "E7.02":{"status":"planned","plannedTarget":"Autonomous memory provenance/Undo, backup, secret scan, and exception report."},
     "E7.03": {
       "status": "partial",
@@ -1398,6 +1214,11 @@
     "EV-FULL-UI-NAVIGATION": { "kind": "test", "path": "tests/unit/full-ui-renderer-contract.test.ts", "selector": "keeps Home-only navigation hidden and exposes one controlled Library tree" },
     "EV-FULL-UI-LIBRARY": { "kind": "test", "path": "tests/unit/full-ui-library.test.ts", "selector": "filters real page summaries by title and durable page type" },
     "EV-FULL-UI-SETTINGS": { "kind": "test", "path": "tests/unit/full-ui-settings-surface.test.ts", "selector": "traps focus, closes with Escape, and keeps development activation local" },
+    "EV-READER-ACTIONS-UI":{"kind":"test","path":"tests/unit/full-ui-library.test.ts","selector":"binds the approved Reader toolbar to real copy and keeps unowned actions honest"},
+    "EV-SKILLS-SHELL-UI":{"kind":"test","path":"tests/unit/full-ui-settings-surface.test.ts","selector":"renders the complete Skills shell without inventing installed Skills or service work"},
+    "EV-DIAGNOSTICS-SETTINGS-UI":{"kind":"test","path":"tests/unit/full-ui-settings-surface.test.ts","selector":"keeps Updates local while binding real redacted diagnostics and support preview"},
+    "EV-PROCESSING-FILES-UI":{"kind":"test","path":"tests/unit/home-agent-conversation-ui.test.ts","selector":"docks processing files to the composer and removes terminal or non-source Jobs"},
+    "EV-ACTIVITY-UI":{"kind":"test","path":"tests/unit/home-agent-conversation-ui.test.ts","selector":"shows compact Activity and disables repeated Undo after the durable change moves to trash"},
     "EV-UI-WINDOW-SHELL": { "kind": "test", "path": "tests/unit/desktop-shell-contract.test.ts", "selector": "uses one integrated title bar while preserving native platform controls" },
     "EV-SETTINGS": { "kind": "test", "path": "tests/unit/settings-registry.test.ts", "selector": "classifies implemented user-visible and agent-affecting settings" },
     "EV-LOCAL-SETTINGS": { "kind": "test", "path": "tests/unit/local-settings.test.ts", "selector": "preserves machine-local window preferences when activating a vault" },

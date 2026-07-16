@@ -247,15 +247,11 @@ Exit criteria:
 - [E2.10] Retry is idempotent; cancellation preserves sources and leaves no half-enabled UI or ambiguous durable state.
 - [E2.11] Missing model, tool, path, or runtime dependencies enter visible retryable `waiting_dependency` with a structured repair/retry action and no source loss.
 
-Current B2.08/B2.11 evidence covers first-wins guards, process-local parse/OCR/
-agent_ingest/agent_turn/index cancellation, exact Home retry/restart, index progress,
-verified note races, a fenced per-vault writer lease, and exact-record Job claim/CAS
-across the adopted capture, Agent, Dataset, retry/cancel, proposal/publication, and
-startup-recovery paths. Exact evidence includes independent Job keys, failed-sentinel
-recovery, random-generation/content identity under same-name inode reuse, and
-heartbeat/successor-safe normal, stale, and process-exit cleanup. Other
-Job classes, user-visible conflict repair, guard-to-domain/cross-file atomicity, the
-final filesystem-syscall TOCTOU interval, and Windows packaged proof remain open.
+Current B2.08/B2.11 evidence covers first-wins cancellation, Home recovery, index
+progress, note races, per-vault lease, exact Job CAS, independent keys, failed-sentinel
+recovery and same-name successor-safe cleanup. Other Job classes, conflict repair,
+cross-file atomicity, final-syscall TOCTOU and Windows proof remain open. B2.02 UI is
+disabled/unsupported with no speech bridge, Job, transcript or success; E2.04 stays planned.
 
 ## 8. Phase 3: BYOK And Basic Agent Ingest
 
@@ -505,7 +501,7 @@ Build:
 - [B6.05 -> E6.02] Explicit Qwen3 embedding-model download, verification, disable/remove, and status flow.
 - [B6.06 -> E6.02] Local RAG engine integration.
 - [B6.07 -> E6.02] Chunk indexing and rebuild status.
-- [B6.08 -> E6.05] Reader strips remote/traversal resources and blocks Electron navigation; keyboard/long-page proof remains.
+- [B6.08 -> E6.05] Safe Reader, local Markdown copy and focus-safe unavailable selection controls; edit/reveal and keyboard/long-page proof remain.
 - [B6.09 -> E6.07] Backlinks and related pages beyond the current basic Reader rail.
 - [B6.10 -> E6.06] Note Agent side panel with note-scoped context.
 - [B6.11 -> E6.06] Note Agent and selection actions with reversible autonomous mutations, Activity/Undo, and exception-only review.
@@ -524,8 +520,8 @@ retrieval/reranking, model lifecycle, full RAG, mid-repair recovery, Note Agent 
 production Broker callers and packaged cross-platform proof remain open; E6.02 is partial.
 
 B6.10 integrates current-note read-only UI: timeline/follow-up, cited answers, wait recovery
-and egress are real. B6.11 selection, mutation, Activity/Undo and
-exception review remain open; E6.06 stays planned.
+and egress are real. B6.11 selection, mutation, Activity/Undo and exception review remain
+open; E6.06 stays planned.
 
 B6.16 foundation evidence covers one Pi-selected `pige_query_dataset@1` catalog/query,
 opaque refs and strict typed plans, exact managed-collection revision/privacy binding,
@@ -640,11 +636,10 @@ Exit criteria:
 - [E8.03] External-capability grants and YOLO honor scope, provenance, visibility, revocation, and Operations; no source/model/package input can enable them or expand core authority.
 - [E8.04] Curated Pi packages can be searched, inspected, explicitly installed, enabled/disabled, updated, version-pinned, rolled back, and uninstalled; ordinary Agent jobs never install them implicitly.
 
-Current evidence implements the body-free current-action Broker, safe Deny/Allow once
-Home surface, one-use Job claim/CAS and restart reconciliation with one injected
-read-only adapter. Phase 8 remains planned because the production external registry is
-empty and real Skill/package/local-tool callers, grants, YOLO, capacity and signed
-platform proof are not delivered.
+Current evidence has the body-free Broker, safe Deny/Allow once, one-use Job CAS/restart
+reconciliation and one read-only adapter. The complete Skills shell is unavailable and
+earns no E8.01 credit; real registries/callers, grants, YOLO, capacity and signed platforms
+remain open, so Phase 8 stays planned.
 
 ## 14. Phase 9: Backup, Restore, Knowledge Health, Migration, And Release Hardening
 

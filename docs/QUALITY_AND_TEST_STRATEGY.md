@@ -474,27 +474,24 @@ Tests must verify:
   tokens/geometry.
 - Real Electron side-by-side screenshots cover changed states at representative compact,
   resident and wide widths; thresholded comparison triggers review, never auto-approval.
-- Sidecars bind build, platform, viewport/scale, locale/theme, fixture and font readiness;
-  baseline changes require rationale and UI Design review of the exact integrated bytes.
-- Synthetic contract fixtures prove state/behavior only and never represent real product
-  state or substitute for rendered equivalence.
-- macOS is the foreground real-Electron visual gate. Windows native chrome remains a
-  deferred qualification item unless targeted; no evidence may imply support early.
+- Sidecars bind build/platform/viewport/scale/locale/theme/fixture/font readiness;
+  baseline changes need rationale and exact-byte UI Design review.
+- Synthetic fixtures prove behavior only, never real state or rendered equivalence.
+- macOS is the foreground visual gate; Windows chrome is deferred unless targeted.
 
-- Compact capture layout works at narrow width.
-- Expanded workspace and full-screen reader preserve context.
+- Compact Home keeps active source processing at the composer and separates Activity/Undo.
+- Reader copy, selection focus and unavailable transforms preserve compact/wide context.
 - Whole-window file drop works in compact and expanded modes.
 - Main workflows are keyboard reachable.
 - Focus states are visible.
 - Icon-only buttons have labels/tooltips.
-- Permission dialogs are keyboard usable.
+- Skills/Voice/update development surfaces invoke no fake IPC/state; diagnostics stays typed and redacted.
 - Reduced motion is respected.
 - Long French/German labels do not overflow critical controls.
 - CJK text renders cleanly.
 
-Renderer tests prove behavior/accessibility; screenshots prove geometry/style; final UI
-Design review proves approved composition. These evidence layers never substitute for one
-another.
+Renderer tests prove behavior/accessibility, screenshots geometry/style, and final UI
+Design review approved composition; these layers never substitute for one another.
 
 ## 11. Performance Gates
 
