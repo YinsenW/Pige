@@ -5294,7 +5294,7 @@ dd {
   .note-agent-inner { width: min(var(--agent-pane-width), 100vw); }
 }
 
-@media (min-width: 960px) and (max-width: 1159px) {
+@media (min-width: 960px) and (max-width: 1239px) {
   .main-layout.note-open.sidebar-open.agent-open {
     grid-template-columns: var(--sidebar-pane-width) minmax(0, 1fr);
   }
@@ -5333,6 +5333,33 @@ dd {
       var(--surface-subtle) 0,
       var(--surface-subtle) min(var(--sidebar-pane-width), calc(100vw - 24px)),
       var(--surface-elevated) min(var(--sidebar-pane-width), calc(100vw - 24px)),
+      var(--surface-elevated) 100%
+    );
+  }
+}
+
+@media (min-width: 720px) and (max-width: 839px) {
+  .app-window.home-surface .main-layout.sidebar-open {
+    grid-template-columns: var(--sidebar-pane-width) minmax(0, 1fr);
+  }
+
+  .app-window.home-surface .main-layout > .sidebar {
+    position: relative;
+    inset: auto;
+    width: auto;
+    box-shadow: none;
+  }
+
+  .app-window.home-surface .sidebar-inner {
+    width: var(--sidebar-pane-width);
+  }
+
+  .app-window.home-surface.sidebar-expanded .titlebar {
+    background: linear-gradient(
+      to right,
+      var(--surface-subtle) 0,
+      var(--surface-subtle) var(--sidebar-pane-width),
+      var(--surface-elevated) var(--sidebar-pane-width),
       var(--surface-elevated) 100%
     );
   }
@@ -5468,7 +5495,7 @@ dd {
   .selection-toolbar button { flex: 1 1 calc(50% - 2px); }
 }
 
-@media (min-width: 1160px) {
+@media (min-width: 1240px) {
   .main-layout.note-open.sidebar-open.agent-open {
     grid-template-columns:
       clamp(var(--library-pane-min), 20vw, var(--library-pane-default))

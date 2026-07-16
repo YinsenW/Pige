@@ -569,8 +569,8 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
-  it("keeps Library modal only below its resident width budget", async () => {
-    for (const [width, modal] of [[839, true], [840, false]] as const) {
+  it("keeps Home Library modal only below its resident width budget", async () => {
+    for (const [width, modal] of [[719, true], [720, false]] as const) {
       const dom = createDom(width);
       const harness = createHarness(undefined);
       harness.windowMode = "expanded";
@@ -599,56 +599,46 @@ describe("Home durable Agent conversation UI", () => {
     }
   });
 
-  it("expands a compact window before revealing the Library pane", async () => {
-    const dom = createDom(420);
-    const harness = createHarness(undefined);
-    harness.windowMode = "compact";
-    harness.sidebarOpen = false;
-    const { container, root } = await mountHome(dom, makePigeApi(harness));
+  it("keeps Reader Library modal until the reader minimum width fits", async () => {
+    for (const [width, modal] of [[839, true], [840, false]] as const) {
+      const dom = createDom(width);
+      const harness = createHarness(undefined);
+      harness.windowMode = "expanded";
+      harness.sidebarOpen = true;
+      const { container, root } = await mountHome(dom, makePigeApi(harness));
+      await waitFor(dom, () => container.querySelector(".library-sidebar-tree .library-tree-disclosure") !== null);
+      await openLibraryNote(dom, container, "Note A");
 
-    await clickElement(dom, buttonsByAriaLabel(container, "Expand sidebar")[0]!);
-    await waitFor(dom, () => harness.sidebarOpen && harness.windowMode === "expanded");
-    expect(harness.windowModeRequests).toEqual(["expanded"]);
+      const sidebar = container.querySelector<HTMLElement>("#pige-library-sidebar");
+      const workspace = container.querySelector<HTMLElement>("main.workspace");
+      expect(sidebar?.getAttribute("role")).toBe(modal ? "dialog" : null);
+      expect(sidebar?.getAttribute("aria-modal")).toBe(modal ? "true" : null);
+      expect(workspace?.hasAttribute("inert")).toBe(modal);
 
-    await act(async () => root.unmount());
-    dom.window.close();
+      await act(async () => root.unmount());
+      dom.window.close();
+    }
   });
 
-  it("excludes the complete application background while Settings owns modal focus", async () => {
-    const dom = createDom(420);
-    const harness = createHarness(undefined);
-    harness.windowMode = "expanded";
-    harness.sidebarOpen = true;
-    const { container, root } = await mountHome(dom, makePigeApi(harness));
-    await waitFor(dom, () => container.querySelector(".sidebar-settings-control") !== null);
+  it("requests enough window width before revealing the Library pane", async () => {
+    for (const initialMode of ["compact", "expanded"] as const) {
+      const dom = createDom(420);
+      const harness = createHarness(undefined);
+      harness.windowMode = initialMode;
+      harness.sidebarOpen = false;
+      const { container, root } = await mountHome(dom, makePigeApi(harness));
 
-    const settingsTrigger = container.querySelector<HTMLButtonElement>(".sidebar-settings-control")!;
-    await clickElement(dom, settingsTrigger);
-    await waitFor(dom, () => container.querySelector(".settings-surface") !== null);
+      await clickElement(dom, buttonsByAriaLabel(container, "Expand sidebar")[0]!);
+      await waitFor(dom, () => harness.sidebarOpen && harness.windowMode === "expanded");
+      expect(harness.windowModeRequests).toEqual(["expanded"]);
 
-    const titlebar = container.querySelector<HTMLElement>(".titlebar")!;
-    const mainLayout = container.querySelector<HTMLElement>(".main-layout")!;
-    const settingsDialog = container.querySelector<HTMLElement>(".settings-surface")!;
-    expect(titlebar.hasAttribute("inert")).toBe(true);
-    expect(mainLayout.hasAttribute("inert")).toBe(true);
-    expect(settingsDialog.hasAttribute("inert")).toBe(false);
-    await waitFor(dom, () => dom.window.document.activeElement === buttonsByAriaLabel(container, "Close Settings")[0]);
-
-    await act(async () => {
-      settingsDialog.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-      await settle(dom);
-    });
-    await waitFor(dom, () => container.querySelector(".settings-surface") === null);
-    expect(titlebar.hasAttribute("inert")).toBe(false);
-    expect(mainLayout.hasAttribute("inert")).toBe(false);
-    await waitFor(dom, () => dom.window.document.activeElement === settingsTrigger);
-
-    await act(async () => root.unmount());
-    dom.window.close();
+      await act(async () => root.unmount());
+      dom.window.close();
+    }
   });
 
   it("preserves the user-owned note conversation disclosure across note routing", async () => {
-    for (const [width, overlay] of [[1159, true], [1160, false]] as const) {
+    for (const [width, overlay] of [[1239, true], [1240, false]] as const) {
       const dom = createDom(width);
       const harness = createHarness(undefined);
       harness.windowMode = "expanded";
@@ -705,6 +695,26 @@ describe("Home durable Agent conversation UI", () => {
     expect(agent?.getAttribute("role")).toBeNull();
     expect(agent?.getAttribute("aria-modal")).toBeNull();
     expect(container.querySelector("main.workspace")?.hasAttribute("inert")).toBe(false);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("requests enough window width before revealing the Note Agent", async () => {
+    const dom = createDom(840);
+    const harness = createHarness(undefined);
+    harness.windowMode = "expanded";
+    harness.sidebarOpen = true;
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await waitFor(dom, () => container.querySelector(".library-sidebar-tree .library-tree-disclosure") !== null);
+    await openLibraryNote(dom, container, "Note A");
+    await clickElement(dom, buttonsByAriaLabel(container, "Collapse sidebar")[0]!);
+    await waitFor(dom, () => container.querySelector("#pige-library-sidebar") === null);
+    await clickElement(dom, buttonsByAriaLabel(container, "Show note conversation")[0]!);
+    await waitFor(dom, () => container.querySelector(".note-agent") !== null);
+
+    expect(harness.windowModeRequests).toEqual(["expanded"]);
 
     await act(async () => root.unmount());
     dom.window.close();

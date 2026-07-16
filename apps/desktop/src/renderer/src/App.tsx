@@ -187,9 +187,10 @@ function useMediaQuery(query: string): boolean {
 
 export function App(): React.JSX.Element {
   const macosWindowShell = /Macintosh|Mac OS X/.test(window.navigator.userAgent);
-  const sidebarOverlayViewport = useMediaQuery("(max-width: 839px)");
+  const sidebarHomeOverlayViewport = useMediaQuery("(max-width: 719px)");
+  const sidebarReaderOverlayViewport = useMediaQuery("(max-width: 839px)");
   const agentSoloOverlayViewport = useMediaQuery("(max-width: 959px)");
-  const agentThreePaneOverlayViewport = useMediaQuery("(max-width: 1159px)");
+  const agentThreePaneOverlayViewport = useMediaQuery("(max-width: 1239px)");
   const [health, setHealth] = useState<AppHealth | null>(null);
   const [onboarding, setOnboarding] = useState<OnboardingStatus | null>(null);
   const [recentVaults, setRecentVaults] = useState<readonly RecentVaultSummary[]>([]);
@@ -252,7 +253,8 @@ export function App(): React.JSX.Element {
   const activeVaultIdRef = useRef<string | undefined>(onboarding?.activeVault?.vaultId);
   activeVaultIdRef.current = onboarding?.activeVault?.vaultId;
   const sidebarOpen = windowState?.sidebarOpen ?? false;
-  const sidebarOverlayLayout = sidebarOverlayViewport;
+  const homeSurface = view === "home" && !selectedNote;
+  const sidebarOverlayLayout = homeSurface ? sidebarHomeOverlayViewport : sidebarReaderOverlayViewport;
   const agentOverlayLayout = agentSoloOverlayViewport || (sidebarOpen && agentThreePaneOverlayViewport);
 
   const updateVoiceAssetInstallOwnership = (active: boolean): void => {
@@ -547,7 +549,7 @@ export function App(): React.JSX.Element {
 
   const toggleSidebar = async (): Promise<void> => {
     const nextSidebarOpen = !sidebarOpen;
-    if (nextSidebarOpen && windowState?.mode === "compact") {
+    if (nextSidebarOpen && sidebarOverlayLayout) {
       paneAutoExpandedWindowRef.current = true;
       setWindowState(await window.pige.window.setMode({ mode: "expanded" }));
     } else if (
@@ -783,7 +785,7 @@ export function App(): React.JSX.Element {
 
   const toggleNoteAgent = async (): Promise<void> => {
     const nextOpen = !noteAgentOpen;
-    if (nextOpen && windowState?.mode === "compact") {
+    if (nextOpen && agentOverlayLayout) {
       paneAutoExpandedWindowRef.current = true;
       setWindowState(await window.pige.window.setMode({ mode: "expanded" }));
       setNoteAgentOpen(true);
@@ -804,7 +806,7 @@ export function App(): React.JSX.Element {
 
   return (
     <div
-      className={`shell app-window mode-${windowState?.mode ?? "compact"}${macosWindowShell ? " platform-macos" : ""}${sidebarOpen ? " sidebar-expanded" : ""}${selectedNote ? " note-mode" : ""}${dropActive ? " drop-active" : ""}`}
+      className={`shell app-window mode-${windowState?.mode ?? "compact"}${macosWindowShell ? " platform-macos" : ""}${homeSurface ? " home-surface" : ""}${sidebarOpen ? " sidebar-expanded" : ""}${selectedNote ? " note-mode" : ""}${dropActive ? " drop-active" : ""}`}
       aria-label="Pige"
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}

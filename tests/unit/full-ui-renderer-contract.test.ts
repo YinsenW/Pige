@@ -35,8 +35,9 @@ describe("full production UI renderer contract", () => {
     expect(cssSource).toContain("@media (min-width: 840px) and (max-width: 1199px)");
     expect(cssSource).toContain("@media (min-width: 720px)");
     expect(cssSource).toContain("@media (max-width: 959px)");
-    expect(cssSource).toContain("@media (min-width: 960px) and (max-width: 1159px)");
-    expect(cssSource).toContain("@media (min-width: 1160px)");
+    expect(cssSource).toContain("@media (min-width: 960px) and (max-width: 1239px)");
+    expect(cssSource).toContain("@media (min-width: 1240px)");
+    expect(cssSource).toContain("@media (min-width: 720px) and (max-width: 839px)");
     expect(cssSource).toContain("@media (min-width: 1440px)");
     expect(cssSource).toContain("width: min(100%, var(--home-pane-max));");
     expect(cssSource).toContain("grid-template-columns: minmax(0, 1fr);");
