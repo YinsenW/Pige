@@ -127,7 +127,38 @@ describe("Home voice UI", () => {
     });
     const progress = container.querySelector<HTMLElement>('[role="progressbar"]')!;
     expect(progress.getAttribute("aria-valuenow")).toBe("42");
+    expect(progress.getAttribute("aria-valuetext")).toContain("42%");
+    expect(container.textContent).toContain("42%");
     expect(container.querySelector<HTMLButtonElement>("button.primary")?.disabled).toBe(true);
+
+    let started = 0;
+    await act(async () => {
+      root.render(createElement(HomeVoicePanel, {
+        state: "asset_ready",
+        onStartAfterAssetInstall: () => { started += 1; },
+        onDismiss: () => undefined,
+        t: translate(enMessages)
+      }));
+    });
+    expect(container.textContent).toContain(enMessages["home.voice.assetReadyTitle"]);
+    expect(container.textContent).toContain(enMessages["home.voice.assetReadyDescription"]);
+    await act(async () => {
+      Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
+        .find((button) => button.textContent === enMessages["home.voice.startAfterAssetInstall"])!
+        .click();
+    });
+    expect(started).toBe(1);
+
+    await act(async () => {
+      root.render(createElement(HomeVoicePanel, {
+        state: "asset_install_failed",
+        onInstallLanguageAsset: () => undefined,
+        onDismiss: () => undefined,
+        t: translate(enMessages)
+      }));
+    });
+    expect(container.querySelector('[role="alert"]')?.textContent)
+      .toContain(enMessages["home.voice.assetInstallFailedTitle"]);
 
     await act(async () => root.unmount());
     dom.window.close();

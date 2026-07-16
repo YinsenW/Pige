@@ -739,9 +739,9 @@ button.ghost {
 }
 
 .home-voice-asset-progress {
-  width: 100%;
+  min-width: 0;
+  flex: 1;
   height: 3px;
-  margin-top: 5px;
   overflow: hidden;
   border-radius: 999px;
   background: var(--surface-muted);
@@ -752,6 +752,17 @@ button.ghost {
   height: 100%;
   border-radius: inherit;
   background: var(--accent);
+}
+
+.home-voice-asset-progress-wrap {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 5px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
 }
 
 .home-voice-inline-footer button,

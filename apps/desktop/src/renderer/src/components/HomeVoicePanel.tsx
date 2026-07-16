@@ -8,6 +8,7 @@ export type HomeVoicePanelState =
   | "ready"
   | "assets_unavailable"
   | "installing_asset"
+  | "asset_ready"
   | "asset_install_failed"
   | "unsupported"
   | "permission_denied"
@@ -28,6 +29,7 @@ interface HomeVoicePanelProps {
   readonly onOpenSystemSettings?: () => void;
   readonly onInstallLanguageAsset?: () => void;
   readonly onCancelAssetInstall?: () => void;
+  readonly onStartAfterAssetInstall?: () => void;
   readonly t: (key: string) => string;
 }
 
@@ -46,6 +48,7 @@ export function HomeVoicePanel({
   onOpenSystemSettings,
   onInstallLanguageAsset,
   onCancelAssetInstall,
+  onStartAfterAssetInstall,
   t
 }: HomeVoicePanelProps): React.JSX.Element {
   const panelRef = useRef<HTMLElement>(null);
@@ -59,8 +62,10 @@ export function HomeVoicePanel({
   const unsupported = state === "unsupported";
   const assetsUnavailable = state === "assets_unavailable";
   const installingAsset = state === "installing_asset";
+  const assetReady = state === "asset_ready";
   const assetInstallFailed = state === "asset_install_failed";
   const busy = requestingPermission || transcribing || installingAsset;
+  const alert = permissionDenied || failed || assetInstallFailed;
   const transcriptReady = Boolean(transcript?.trim()) && (stopped || ready);
   const waveform = normalizeLevels(levels);
 
@@ -69,9 +74,9 @@ export function HomeVoicePanel({
       ref={panelRef}
       id="home-voice-panel"
       className={`home-voice-panel home-voice-inline state-${state}`}
-      role={permissionDenied || failed ? "alert" : "status"}
-      aria-live={permissionDenied || failed ? "assertive" : "polite"}
-      aria-atomic={permissionDenied || failed ? "true" : undefined}
+      role={alert ? "alert" : "status"}
+      aria-live={alert ? "assertive" : "polite"}
+      aria-atomic={alert ? "true" : undefined}
       aria-busy={busy}
       aria-label={t(stateTitleKey(state))}
       onKeyDown={(event) => {
@@ -161,15 +166,19 @@ export function HomeVoicePanel({
             <strong>{transcribing && transcript ? transcript : t(stateTitleKey(state))}</strong>
             <span>{t(stateDescriptionKey(state))}</span>
             {installingAsset && assetInstallProgress !== undefined ? (
-              <div
-                className="home-voice-asset-progress"
-                role="progressbar"
-                aria-label={t("home.voice.assetInstallProgress")}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={normalizeProgress(assetInstallProgress)}
-              >
-                <span style={{ width: `${normalizeProgress(assetInstallProgress)}%` }} />
+              <div className="home-voice-asset-progress-wrap">
+                <div
+                  className="home-voice-asset-progress"
+                  role="progressbar"
+                  aria-label={t("home.voice.assetInstallProgress")}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={normalizeProgress(assetInstallProgress)}
+                  aria-valuetext={`${t("home.voice.assetInstallProgress")}: ${normalizeProgress(assetInstallProgress)}%`}
+                >
+                  <span style={{ width: `${normalizeProgress(assetInstallProgress)}%` }} />
+                </div>
+                <span aria-hidden="true">{normalizeProgress(assetInstallProgress)}%</span>
               </div>
             ) : null}
           </div>
@@ -207,6 +216,16 @@ export function HomeVoicePanel({
                 {t("home.voice.cancelAssetInstall")}
               </button>
             ) : null}
+            {assetReady ? (
+              <button
+                className="primary"
+                type="button"
+                disabled={!onStartAfterAssetInstall}
+                onClick={onStartAfterAssetInstall}
+              >
+                {t("home.voice.startAfterAssetInstall")}
+              </button>
+            ) : null}
           </div>
           {unsupported ? <span className="visually-hidden">{t("home.voice.unsupportedEyebrow")}</span> : null}
         </div>
@@ -237,6 +256,7 @@ function stateTitleKey(state: HomeVoicePanelState): string {
     case "ready": return "home.voice.readyTitle";
     case "assets_unavailable": return "home.voice.assetsUnavailableTitle";
     case "installing_asset": return "home.voice.installingAssetTitle";
+    case "asset_ready": return "home.voice.assetReadyTitle";
     case "asset_install_failed": return "home.voice.assetInstallFailedTitle";
     case "permission_denied": return "home.voice.permissionTitle";
     case "failed": return "home.voice.failedTitle";
@@ -253,6 +273,7 @@ function stateDescriptionKey(state: HomeVoicePanelState): string {
     case "ready": return "home.voice.readyDescription";
     case "assets_unavailable": return "home.voice.assetsUnavailableDescription";
     case "installing_asset": return "home.voice.installingAssetDescription";
+    case "asset_ready": return "home.voice.assetReadyDescription";
     case "asset_install_failed": return "home.voice.assetInstallFailedDescription";
     case "permission_denied": return "home.voice.permissionDescription";
     case "failed": return "home.voice.failedDescription";
