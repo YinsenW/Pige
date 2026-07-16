@@ -3812,8 +3812,8 @@ dd {
   min-width: 0;
   height: 100%;
   overflow: hidden;
-  border-left: 1px solid var(--border-default);
-  background: var(--surface-subtle);
+  border-left: 1px solid var(--border-subtle);
+  background: #fdfdfd;
 }
 
 .note-agent-inner {
@@ -3828,17 +3828,24 @@ dd {
   align-items: center;
   gap: 8px;
   min-width: 0;
-  padding: 0 18px;
-  border-bottom: 1px solid var(--border-default);
-  font-size: 12px;
-  font-weight: 550;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .note-agent-header > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .note-agent-header .icon-button { margin-left: auto; }
-.note-agent-thread { padding: 20px; overflow: auto; }
+.note-agent-thread {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 12px;
+  padding: 22px 20px;
+  overflow: auto;
+}
 
-.note-agent-unavailable {
+.note-agent-state {
   display: grid;
   justify-items: start;
   gap: 8px;
@@ -3850,26 +3857,139 @@ dd {
   font-size: 12px;
 }
 
-.note-agent-unavailable img { width: 28px; height: 28px; border-radius: 8px; }
-.note-agent-unavailable strong { color: var(--text-primary); }
-.note-agent-unavailable p { margin: 0; }
+.note-agent-state img { width: 28px; height: 28px; border-radius: 8px; }
+.note-agent-state strong { color: var(--text-primary); }
+.note-agent-state p { margin: 0; line-height: 1.55; }
 
-.note-composer-wrap { padding: 0 18px 18px; }
+.note-agent-empty { align-content: start; }
+
+.note-agent-messages {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.agent-message-card {
+  padding: 15px 16px;
+  border: 1px solid var(--border-default);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.agent-message-card.role-user { background: var(--surface-subtle); }
+
+.agent-message-card.provisional {
+  border-style: dashed;
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+}
+
+.agent-message-card.provisional .agent-message-author::after {
+  content: "\2026";
+  color: var(--text-tertiary);
+}
+
+.agent-message-author {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+
+.agent-message-author img { width: 28px; height: 28px; border-radius: 8px; }
+.agent-message-author time { margin-left: auto; color: var(--text-tertiary); font-size: 11px; font-weight: 400; }
+.agent-message-body { margin: 0; white-space: pre-wrap; }
+
+.note-agent-citations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.note-agent-citations button {
+  min-height: 27px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 4px 8px;
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+.message-actions { display: flex; gap: 8px; margin-top: 14px; color: var(--text-tertiary); }
+.message-actions button { width: 28px; height: 28px; border: 0; border-radius: 7px; padding: 0; background: transparent; color: inherit; }
+.message-actions button:hover:not(:disabled) { background: var(--surface-hover); color: var(--text-primary); }
+
+.proposal-panel {
+  padding: 15px 16px;
+  border: 1px solid var(--border-default);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.proposal-panel h2 { margin: 0 0 5px; font-size: 13px; font-weight: 600; }
+.proposal-panel > p { margin: 0 0 12px; color: var(--text-secondary); font-size: 11px; line-height: 1.55; }
+.diff-preview { overflow: hidden; border: 1px solid var(--border-default); border-radius: 10px; font: 10px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.diff-line { padding: 5px 8px; }
+.diff-line.remove { background: rgb(224 46 42 / 8%); color: #8d2926; }
+.diff-line.add { background: rgb(0 162 64 / 8%); color: #176a35; }
+.proposal-actions { display: flex; justify-content: flex-end; gap: 7px; margin-top: 12px; }
+
+.note-agent-run-state {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0;
+  border-radius: 10px;
+  padding: 9px 10px;
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.note-agent-run-state .quiet-button {
+  min-height: 28px;
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  font-size: 10px;
+}
+
+.note-agent-egress-prompt {
+  margin: 0;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.note-agent-run-state.error,
+.note-agent-model-error { color: var(--danger); }
+
+.note-composer-wrap { padding: 0 20px 18px; }
 
 .note-composer {
-  min-height: 128px;
-  padding: 13px 14px 11px;
+  min-height: 132px;
+  padding: 14px 14px 12px;
   border: 1px solid var(--border-heavy);
   border-radius: 20px;
   background: var(--surface);
   box-shadow: 0 12px 30px rgb(29 42 38 / 8%), 0 2px 7px rgb(29 42 38 / 5%);
 }
 
-.note-composer textarea { min-height: 62px; resize: none; padding: 0; }
+.note-composer textarea { width: 100%; min-height: 64px; resize: none; border: 0; padding: 0; background: transparent; color: var(--text-primary); font-size: 14px; line-height: 1.5; }
+.note-composer textarea::placeholder { color: #b5b9b7; }
 .note-composer textarea:focus-visible { outline: none; }
-.note-composer-toolbar { display: flex; align-items: center; gap: 6px; }
-.note-agent-model { min-width: 0; margin-left: auto; display: flex; align-items: center; gap: 6px; color: var(--text-secondary); font-size: 11px; }
-.note-agent-model > span:nth-child(2) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note-composer-toolbar { display: flex; align-items: center; gap: 8px; }
+.note-agent-model-switcher-wrap { position: relative; min-width: 0; max-width: 58%; margin-left: auto; }
+.note-agent-model-switcher { max-width: 100%; min-height: 30px; border: 0; border-radius: 8px; padding: 4px 6px; background: transparent; color: var(--text-secondary); font-size: 11px; }
+.note-agent-model-switcher:hover:not(:disabled),
+.note-agent-model-switcher[aria-expanded="true"] { background: var(--surface-hover); color: var(--text-primary); }
+.note-agent-model-menu { right: 0; bottom: calc(100% + 7px); }
+.note-agent-model-error { margin: 7px 2px 0; font-size: 10px; line-height: 1.4; }
 .note-composer .attach-button { width: 30px; min-width: 30px; min-height: 30px; height: 30px; border: 0; padding: 0; background: transparent; }
 .note-composer .send-button { width: 32px; min-width: 32px; min-height: 32px; height: 32px; border: 0; border-radius: 50%; padding: 0; background: var(--accent); color: white; }
 

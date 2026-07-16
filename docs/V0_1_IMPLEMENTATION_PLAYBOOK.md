@@ -520,8 +520,12 @@ Current Home has durable chat, optional cited retrieval, wait/resume, bounded tr
 follow-up/retry/cancel, IME-safe Enter and safe draft replacement. Terminal/citation repair
 stays inside its Job. B6.07 now has deterministic metadata-only chunking, worker rebuild
 and 10,000-page/100,000-chunk warm lexical evidence. Embeddings, vectors, semantic
-retrieval/reranking, model lifecycle, full RAG, mid-repair recovery, Note Agent, production
-Broker callers and packaged cross-platform proof remain open; E6.02 is partial.
+retrieval/reranking, model lifecycle, full RAG, mid-repair recovery, Note Agent mutation,
+production Broker callers and packaged cross-platform proof remain open; E6.02 is partial.
+
+B6.10 integrates current-note read-only UI: timeline/follow-up, cited answers, wait recovery
+and egress are real. B6.11 selection, mutation, Activity/Undo and
+exception review remain open; E6.06 stays planned.
 
 B6.16 foundation evidence covers one Pi-selected `pige_query_dataset@1` catalog/query,
 opaque refs and strict typed plans, exact managed-collection revision/privacy binding,

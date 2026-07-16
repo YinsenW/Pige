@@ -10,6 +10,7 @@ import {
 } from "react";
 import { PigeIcon, type PigeIconName } from "./components/PigeIcon";
 import { KnowledgeTreeMap } from "./components/KnowledgeTreeMap";
+import { CurrentNoteAgent } from "./components/CurrentNoteAgent";
 import { ProposalReviewPanel } from "./components/ProposalReviewPanel";
 import pigeMarkUrl from "../../../../../resources/brand/pige-icon/master/pige-icon-1024.png";
 import deMessages from "./locales/de/messages.json";
@@ -220,6 +221,7 @@ export function App(): React.JSX.Element {
   const [knowledgeTree, setKnowledgeTree] = useState<KnowledgeTreeResult | null>(null);
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [selectedNote, setSelectedNote] = useState<NoteRenderResult | null>(null);
+  const [selectedNoteVaultId, setSelectedNoteVaultId] = useState<string | null>(null);
   const [selectedNoteRelated, setSelectedNoteRelated] = useState<NoteRelatedState>(null);
   const [noteLoadingPageId, setNoteLoadingPageId] = useState<string | null>(null);
   const noteOpenSequence = useRef(0);
@@ -233,6 +235,8 @@ export function App(): React.JSX.Element {
   const modelRefreshSequence = useRef(0);
   const agentRuntimeRefreshSequence = useRef(0);
   const vaultRefreshSequence = useRef(0);
+  const activeVaultIdRef = useRef<string | undefined>(onboarding?.activeVault?.vaultId);
+  activeVaultIdRef.current = onboarding?.activeVault?.vaultId;
 
   const refreshAgentRuntimeStatus = async (): Promise<void> => {
     const refreshId = ++agentRuntimeRefreshSequence.current;
@@ -311,6 +315,14 @@ export function App(): React.JSX.Element {
         ])
         : [undefined, undefined, undefined, undefined];
       if (refreshId !== vaultRefreshSequence.current) return;
+      if (activeVaultIdRef.current !== nextOnboarding.activeVault?.vaultId) {
+        noteOpenSequence.current += 1;
+        setSelectedNote(null);
+        setSelectedNoteRelated(null);
+        setSelectedNoteVaultId(null);
+        setNoteLoadingPageId(null);
+        setNoteAgentOpen(false);
+      }
       setOnboarding(nextOnboarding);
       setRecentVaults(nextRecentVaults);
       setBackupStatus(nextBackupStatus);
@@ -452,6 +464,8 @@ export function App(): React.JSX.Element {
   };
 
   const openNote = async (pageId: string): Promise<void> => {
+    const vaultId = activeVaultIdRef.current;
+    if (!vaultId) return;
     const requestId = noteOpenSequence.current + 1;
     noteOpenSequence.current = requestId;
     setLibraryError(null);
@@ -459,11 +473,12 @@ export function App(): React.JSX.Element {
     setNoteLoadingPageId(pageId);
     try {
       const note = await window.pige.notes.render({ pageId });
-      if (requestId !== noteOpenSequence.current) return;
+      if (requestId !== noteOpenSequence.current || activeVaultIdRef.current !== vaultId) return;
       if (!noteAgentDisclosureInitialized.current) {
         noteAgentDisclosureInitialized.current = true;
         setNoteAgentOpen(!agentOverlayLayout);
       }
+      setSelectedNoteVaultId(vaultId);
       setSelectedNote(note);
       void loadNoteRelated(pageId, requestId, noteOpenSequence, setSelectedNoteRelated);
     } catch {
@@ -684,6 +699,15 @@ export function App(): React.JSX.Element {
     if (!sidebarOpen || !activeVault || libraryList) return;
     void refreshLibrary();
   }, [activeVault?.vaultId, libraryList, sidebarOpen]);
+
+  useEffect(() => {
+    if (!selectedNote || selectedNoteVaultId === activeVault?.vaultId) return;
+    noteOpenSequence.current += 1;
+    setSelectedNote(null);
+    setSelectedNoteRelated(null);
+    setNoteLoadingPageId(null);
+    setNoteAgentOpen(false);
+  }, [activeVault?.vaultId, selectedNote?.summary.pageId, selectedNoteVaultId]);
 
   useEffect(() => {
     if (!sidebarModal) return;
@@ -967,14 +991,36 @@ export function App(): React.JSX.Element {
           />
         )}
         </main>
-        {selectedNote ? (
-          <NoteAgentUnavailable
-            open={noteAgentOpen}
+        {selectedNote && noteAgentOpen && activeVault && selectedNoteVaultId === activeVault.vaultId ? (
+          <CurrentNoteAgent
+            key={`${activeVault.vaultId}:${selectedNote.summary.pageId}`}
             modal={agentModal}
+            vaultId={activeVault.vaultId}
+            pageId={selectedNote.summary.pageId}
             noteTitle={selectedNote.summary.title}
+            locale={locale}
+            models={(modelSummary?.models ?? []).filter((model) => model.enabled).map((model) => {
+              const providerName = modelSummary?.providers.find((provider) => provider.id === model.providerProfileId)?.displayName;
+              return {
+                id: model.id,
+                name: model.displayName ?? model.modelId,
+                ...(providerName ? { providerName } : {}),
+                selected: model.id === modelSummary?.defaultModelProfileId,
+                ready: model.id === modelSummary?.defaultModelProfileId &&
+                  agentRuntimeStatus?.state === "ready" &&
+                  agentRuntimeStatus.canRunModelJobs &&
+                  agentRuntimeStatus.defaultModelProfileId === model.id
+              };
+            })}
             onClose={() => {
               setNoteAgentOpen(false);
               window.requestAnimationFrame(() => noteAgentToggleRef.current?.focus());
+            }}
+            onOpenModels={(opener) => openSettings("models", opener)}
+            onSelectModel={setHomeDefaultModel}
+            onOpenCitation={(pageId) => {
+              if (pageId !== selectedNote.summary.pageId) return;
+              void openNote(pageId);
             }}
             t={t}
           />
@@ -1810,81 +1856,6 @@ function NoteRelatedPanel(props: {
         onOpen={props.onOpen}
         t={props.t}
       />
-    </aside>
-  );
-}
-
-function NoteAgentUnavailable(props: {
-  readonly open: boolean;
-  readonly modal: boolean;
-  readonly noteTitle: string;
-  readonly onClose: () => void;
-  readonly t: (key: string) => string;
-}): React.JSX.Element {
-  const paneRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    if (!props.open || !props.modal) return;
-    const frame = window.requestAnimationFrame(() => focusFirstOverlayControl(paneRef.current));
-    return () => window.cancelAnimationFrame(frame);
-  }, [props.modal, props.open]);
-
-  if (!props.open) return <></>;
-
-  return (
-    <aside
-      ref={paneRef}
-      className="note-agent"
-      id="note-agent-pane"
-      aria-label={props.t("development.capability.note_agent")}
-      aria-modal={props.modal ? "true" : undefined}
-      role={props.modal ? "dialog" : undefined}
-      onKeyDown={(event) => {
-        if (!props.modal) return;
-        containOverlayFocus(event, event.currentTarget, props.onClose);
-      }}
-    >
-      <div className="note-agent-inner">
-        <header className="note-agent-header">
-          <PigeIcon name="file" size={16} />
-          <span title={props.noteTitle}>{props.noteTitle}</span>
-          <PigeIcon name="collapse" size={14} />
-          <button
-            className="icon-button"
-            type="button"
-            aria-label={props.t("noteAgent.hide")}
-            title={props.t("noteAgent.hide")}
-            onClick={props.onClose}
-          >
-            <PigeIcon name="close" size={17} />
-          </button>
-        </header>
-        <div className="note-agent-thread">
-          <section className="note-agent-unavailable" role="status" aria-live="polite" aria-atomic="true">
-            <img src={pigeMarkUrl} alt="" />
-            <strong>{props.t("development.capability.note_agent")}</strong>
-            <p>{props.t("development.state.unavailable")}</p>
-          </section>
-        </div>
-        <div className="note-composer-wrap">
-          <section className="note-composer" aria-label={props.t("development.capability.note_agent")}>
-            <textarea aria-label={props.t("noteAgent.placeholder")} placeholder={props.t("noteAgent.placeholder")} disabled />
-            <div className="note-composer-toolbar">
-              <button className="attach-button" type="button" aria-label={props.t("home.attachFile")} disabled>
-                <PigeIcon name="attach" size={18} />
-              </button>
-              <div className="note-agent-model" aria-label={props.t("noteAgent.modelUnavailable")}>
-                <span className="model-status-dot unavailable" aria-hidden="true" />
-                <span>{props.t("noteAgent.modelUnavailable")}</span>
-                <PigeIcon name="collapse" size={14} />
-              </div>
-              <button className="send-button" type="button" aria-label={props.t("home.send")} disabled>
-                <PigeIcon name="send" size={16} />
-              </button>
-            </div>
-          </section>
-        </div>
-      </div>
     </aside>
   );
 }
