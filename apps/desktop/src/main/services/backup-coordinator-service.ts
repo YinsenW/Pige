@@ -16,6 +16,7 @@ import {
 import {
   captureBackupDestinationFence,
   canonicalizeBackupDestinationPath,
+  BackupManagedCopyDependencyError,
   type BackupCreateCheckpointEvent,
   type BackupCreateOptions,
   type BackupDestinationFence,
@@ -99,6 +100,7 @@ const MAX_RECOVERABLE_JOBS = 10_000;
 const RECOVERABLE_STATES = new Set<JobRecord["state"]>([
   "queued",
   "running",
+  "waiting_dependency",
   "cancel_requested",
   "failed_retryable"
 ]);
@@ -198,9 +200,14 @@ export class BackupCoordinatorService {
     if (!snapshot || snapshot.job.class !== "backup") return undefined;
     const binding = readBackupBinding(snapshot.job, active.vaultPath);
     assertActiveBinding(active, binding);
-    if (snapshot.job.state === "failed_retryable") {
+    if (snapshot.job.state === "failed_retryable" || snapshot.job.state === "waiting_dependency") {
       const now = this.#now().toISOString();
-      const { error: _error, finishedAt: _finishedAt, ...rest } = snapshot.job;
+      const {
+        error: _error,
+        finishedAt: _finishedAt,
+        waitingDependency: _waitingDependency,
+        ...rest
+      } = snapshot.job;
       snapshot = store.compareAndSwap(snapshot, JobRecordSchema.parse({
         ...rest,
         state: "queued",
@@ -541,11 +548,20 @@ function readBackupBinding(job: JobRecord, vaultPath: string): BackupBinding {
 
 function startJob(store: JobRecordStore, snapshot: JobRecordSnapshot, nowSource: Date): JobRecordSnapshot {
   if (snapshot.job.state === "running") return snapshot;
-  if (snapshot.job.state !== "queued" && snapshot.job.state !== "failed_retryable") {
+  if (
+    snapshot.job.state !== "queued" &&
+    snapshot.job.state !== "failed_retryable" &&
+    snapshot.job.state !== "waiting_dependency"
+  ) {
     throw new PigeDomainError("backup.job_conflict", "The Backup Job cannot start from its durable state.");
   }
   const now = nowSource.toISOString();
-  const { error: _error, finishedAt: _finishedAt, ...rest } = snapshot.job;
+  const {
+    error: _error,
+    finishedAt: _finishedAt,
+    waitingDependency: _waitingDependency,
+    ...rest
+  } = snapshot.job;
   return store.compareAndSwap(snapshot, JobRecordSchema.parse({
     ...rest,
     state: "running",
@@ -677,6 +693,28 @@ function markFailed(
 ): JobRecordSnapshot {
   const snapshot = refreshSnapshot(store, initialSnapshot);
   if (isCompleted(snapshot.job)) return snapshot;
+  if (caught instanceof BackupManagedCopyDependencyError) {
+    const now = nowSource.toISOString();
+    const { error: _error, finishedAt: _finishedAt, ...rest } = snapshot.job;
+    return store.compareAndSwap(snapshot, JobRecordSchema.parse({
+      ...rest,
+      state: "waiting_dependency",
+      updatedAt: now,
+      waitingDependency: {
+        dependencyKind: caught.dependencyKind,
+        dependencyId: caught.dependencyId,
+        requiredAction: "reconnect_path",
+        messageKey: `errors.${caught.code}`
+      },
+      retry: {
+        retryCount: snapshot.job.retry?.retryCount ?? 0,
+        maxAutomaticRetries: 0,
+        requiresUserAction: true,
+        lastRetryReason: caught.code
+      },
+      message: "Backup is waiting for a required managed source location."
+    }));
+  }
   const retryable = isRetryableFailure(caught);
   const code = safeErrorCode(caught);
   const now = nowSource.toISOString();

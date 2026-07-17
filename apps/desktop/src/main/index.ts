@@ -482,7 +482,7 @@ const getWindowModeService = (): WindowModeService => {
 
 const getBackupRestoreService = (): BackupRestoreService => {
   if (!backupRestoreService) {
-    backupRestoreService = new BackupRestoreService();
+    backupRestoreService = new BackupRestoreService({ userDataPath: app.getPath("userData") });
   }
   return backupRestoreService;
 };
@@ -1882,7 +1882,7 @@ app.whenReady().then(async () => {
     (bounds) => screen.getDisplayMatching(bounds).workArea
   );
   localDatabaseService = new LocalDatabaseService(undefined, new LocalDatabaseRebuildWorkerService());
-  backupRestoreService = new BackupRestoreService();
+  backupRestoreService = new BackupRestoreService({ userDataPath: app.getPath("userData") });
   agentRuntimeService = new AgentRuntimeService(
     getVaultService(),
     getModelProviderRegistry(),

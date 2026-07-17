@@ -2399,6 +2399,20 @@ export const BackupExternalDependencySchema = z.object({
   displayName: z.string().min(1).optional()
 }).passthrough();
 
+export const BackupExternalManagedCopyMappingSchema = z.object({
+  sourceId: SourceIdSchema,
+  rootId: RootBindingIdSchema.refine((rootId) => rootId !== "root_vault_managed", {
+    message: "An external managed-copy mapping requires an external root ID."
+  }),
+  sourceRecordPath: z.string().min(1),
+  archivePath: z.string().min(1),
+  restorePath: z.string().min(1),
+  checksum: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  size: z.number().int().nonnegative(),
+  restoredSourceRecordChecksum: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  restoredSourceRecordSize: z.number().int().nonnegative()
+}).strict();
+
 export const BackupManifestSchema = z.object({
   format: z.literal("pige-backup"),
   formatVersion: z.literal(1),
@@ -2428,6 +2442,7 @@ export const BackupManifestSchema = z.object({
   domainSchemaVersions: BackupDomainSchemaVersionsSchema.optional(),
   excludedRoots: z.array(z.string().min(1)),
   externalDependencies: z.array(z.union([z.string().min(1), BackupExternalDependencySchema])),
+  externalManagedCopies: z.array(BackupExternalManagedCopyMappingSchema).optional(),
   files: z.array(z.object({
     path: z.string().min(1),
     size: z.number().int().nonnegative(),
