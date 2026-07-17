@@ -94,6 +94,10 @@ describe("full UI Settings surface", () => {
   });
 
   it("keeps compact localized Settings navigation labels readable", () => {
+    const appSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/renderer/src/App.tsx"),
+      "utf8"
+    );
     const styles = fs.readFileSync(
       path.resolve("apps/desktop/src/renderer/src/styles/app.css"),
       "utf8"
@@ -108,8 +112,10 @@ describe("full UI Settings surface", () => {
     );
 
     expect(styles).toContain(".settings-nav-scroll {\n  min-height: 0;\n  flex: 1 1 auto;");
-    expect(styles).toContain(".app-window.platform-macos + .settings-overlay .settings-return");
-    expect(styles).toContain("margin-left: 64px;");
+    expect(appSource).toContain("macosWindowShell={macosWindowShell}");
+    expect(appSource).toContain('settings-overlay${props.macosWindowShell ? " platform-macos" : ""}');
+    expect(styles).toContain(".settings-overlay.platform-macos .settings-return");
+    expect(styles).toContain("margin-left: 84px;");
     expect(residentCompactSettings).toContain(".settings-navigation {");
     expect(residentCompactSettings).toContain("display: block;");
     expect(residentCompactSettings).toContain("max-height: none;");
@@ -121,13 +127,19 @@ describe("full UI Settings surface", () => {
     expect(compactSettings).toContain("grid-template-columns: minmax(0, 1fr);");
     expect(compactSettings).toContain("width: min(320px, calc(100% - 48px));");
     expect(compactSettings).toContain('.settings-surface[data-compact-navigation-open="true"] .settings-sidebar');
-    expect(compactSettings).toContain(".app-window.platform-macos + .settings-overlay .settings-compact-header");
-    expect(compactSettings).toContain("padding-left: 84px;");
+    expect(compactSettings).toContain(".settings-overlay.platform-macos .settings-compact-header");
+    expect(compactSettings).toContain("padding-left: 100px;");
+    expect(styles).toContain("width: calc(100% - 84px);");
+    expect(styles).toContain("margin-left: 84px;");
     expect(styles).toContain(".settings-summary-grid {");
     expect(styles).toContain("grid-template-columns: repeat(4, minmax(0, 1fr));");
     expect(styles).toContain("@media (max-width: 560px) {");
     expect(styles).toContain("grid-template-columns: repeat(2, minmax(0, 1fr));");
     expect(styles).toContain(".settings-vault-page .settings-row-control .settings-button");
+    expect(styles).toContain(".settings-restore-page.restore-preview");
+    expect(styles).toContain(".restore-settings-summary .settings-row");
+    expect(styles).toContain(".restore-settings-actions .settings-button");
+    expect(styles).toContain("width: 100%;");
   });
 
   it("uses a focus-owned navigation drawer instead of squeezing compact Settings content", async () => {
@@ -189,7 +201,7 @@ describe("full UI Settings surface", () => {
     expect(content.hasAttribute("inert")).toBe(true);
     const closeButton = buttonNamed(drawer, "Close Settings");
     expect(dom.window.document.activeElement).toBe(closeButton);
-    const lastDrawerControl = buttonNamed(drawer, "Updates & DiagnosticsPartially available");
+    const lastDrawerControl = buttonNamed(drawer, "DiagnosticsAvailable");
     await act(async () => {
       closeButton.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true }));
     });
@@ -383,7 +395,7 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
-  it("keeps Updates local while binding real redacted diagnostics and support preview", async () => {
+  it("binds real redacted diagnostics and support preview on its own page", async () => {
     const dom = createDom();
     const refreshDiagnostics = vi.fn(async () => undefined);
     const previewSupportBundle = vi.fn(async () => ({
@@ -414,6 +426,7 @@ describe("full UI Settings surface", () => {
     function Harness(): React.JSX.Element {
       const [preview, setPreview] = useState<Awaited<ReturnType<typeof previewSupportBundle>> | null>(null);
       return createElement(SystemSettingsPanel, {
+        surface: "diagnostics",
         diagnosticsHealth: {
           status: "ok",
           checkedAt: "2026-07-16T00:00:00.000Z",
@@ -433,17 +446,9 @@ describe("full UI Settings surface", () => {
       await settle(dom);
     });
     const panel = dom.window.document.querySelector<HTMLElement>(".settings-system-page")!;
-    expect(panel.querySelector('select[aria-label="Update channel"]')).toBeNull();
-    expect(panel.querySelector('[role="switch"][aria-label="Automatically download updates"]')).toBeNull();
-    expect(buttonNamed(panel, "Temporarily unavailable. Nothing was changed.").disabled).toBe(true);
+    expect(panel.querySelector("h1")?.textContent).toBe("Diagnostics");
+    expect(panel.textContent).not.toContain("Check for updates");
     expect(buttonNamed(panel, "Clear…").disabled).toBe(true);
-
-    await act(async () => {
-      buttonNamed(panel, "Check for updates").click();
-      await settle(dom);
-    });
-    expect(panel.textContent).toContain("Update Service is in development");
-    expect(previewSupportBundle).not.toHaveBeenCalled();
 
     await act(async () => {
       buttonNamed(panel, "Refresh").click();
@@ -469,6 +474,42 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
+  it("keeps Updates separate and unavailable without reading diagnostics", async () => {
+    const dom = createDom();
+    let ipcRead = false;
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      get() {
+        ipcRead = true;
+        throw new Error("Updates must stay local until Update Service exists.");
+      }
+    });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(SystemSettingsPanel, {
+        surface: "updates",
+        diagnosticsHealth: null,
+        supportBundlePreview: null,
+        onRefreshDiagnostics: async () => undefined,
+        onSupportBundlePreviewChange: vi.fn(),
+        t
+      }));
+      await settle(dom);
+    });
+    const panel = dom.window.document.querySelector<HTMLElement>(".settings-updates-page")!;
+    expect(panel.querySelector("h1")?.textContent).toBe("Updates");
+    expect(panel.textContent).not.toContain("Support bundle");
+    expect(buttonNamed(panel, "Temporarily unavailable. Nothing was changed.").disabled).toBe(true);
+    await act(async () => {
+      buttonNamed(panel, "Check for updates").click();
+      await settle(dom);
+    });
+    expect(panel.textContent).toContain("Update Service is in development");
+    expect(ipcRead).toBe(false);
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("fails closed when a support preview contains an unreviewed projection", async () => {
     const dom = createDom();
     const root = createRoot(dom.window.document.querySelector("#root")!);
@@ -485,6 +526,7 @@ describe("full UI Settings surface", () => {
 
     await act(async () => {
       root.render(createElement(SystemSettingsPanel, {
+        surface: "diagnostics",
         diagnosticsHealth: null,
         supportBundlePreview: {
           previewId: "support_unknown",

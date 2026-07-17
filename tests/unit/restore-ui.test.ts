@@ -205,6 +205,14 @@ describe("Restore identity UI", () => {
     await click(dom, button(container, "Restore Backup"));
     await waitFor(dom, () => container.textContent?.includes("Restore preview") ?? false);
 
+    expect(container.querySelector(".settings-restore-page.restore-preview")).not.toBeNull();
+    expect(container.querySelector(".settings-vault-page")).toBeNull();
+    expect(container.querySelector(".settings-restore-page h1")?.textContent).toBe("Restore Pige Backup");
+    expect(container.querySelectorAll(".settings-restore-page .settings-section")).toHaveLength(2);
+    expect(container.querySelectorAll(".restore-settings-summary .settings-row")).toHaveLength(3);
+    expect(container.textContent).toContain("Version 1 · Notes 2 · Sources 1 · Memories 1");
+    expect(container.textContent).toContain("Restore does not import API keys");
+    expect(container.textContent).not.toContain("/private/");
     expect(radio(container, "clone_as_new").checked).toBe(true);
     const replace = radio(container, "replace_existing");
     replace.focus();
@@ -224,6 +232,11 @@ describe("Restore identity UI", () => {
     }]);
     await waitFor(dom, () => dom.window.document.activeElement === apply);
     expect(container.textContent).toContain("Restore preview");
+
+    await click(dom, button(container, "← Back to Vault & Note Storage"));
+    await waitFor(dom, () => container.querySelector(".settings-vault-page") !== null);
+    await waitFor(dom, () => dom.window.document.activeElement === button(container, "Restore Backup"));
+    expect(container.querySelector(".settings-restore-page")).toBeNull();
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -333,7 +346,7 @@ describe("Restore identity UI", () => {
     };
     const { container, root } = await mountApp(dom, api);
 
-    await openSettingsSection(dom, container, "Updates & Diagnostics");
+    await openSettingsSection(dom, container, "Diagnostics");
     await click(dom, button(container, "Preview and export…"));
     await waitFor(dom, () => container.textContent?.includes("Preview ready") ?? false);
     await click(dom, button(container, "Export Support Bundle"));
@@ -378,7 +391,7 @@ describe("Restore identity UI", () => {
     };
     const { container, root } = await mountApp(dom, api);
 
-    await openSettingsSection(dom, container, "Updates & Diagnostics");
+    await openSettingsSection(dom, container, "Diagnostics");
     await click(dom, button(container, "Preview and export…"));
     await waitFor(dom, () => container.textContent?.includes("Preview ready") ?? false);
     await click(dom, button(container, "Export Support Bundle"));

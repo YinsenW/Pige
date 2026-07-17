@@ -6,6 +6,7 @@ import {
   type CSSProperties,
   type DragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
   type RefObject
 } from "react";
@@ -90,7 +91,9 @@ export type SettingsSection =
   | "privacy"
   | "skills"
   | "packages"
-  | "system";
+  | "history"
+  | "updates"
+  | "diagnostics";
 type CaptureToast = {
   readonly kind: "success" | "error";
   readonly message: string;
@@ -412,7 +415,7 @@ export function App(): React.JSX.Element {
             classes: ["backup"],
             states: ["queued", "running", "cancel_requested", "waiting_dependency", "failed_retryable", "failed_final"]
           }).catch(() => undefined),
-          window.pige.activity.list({ limit: 5 }).catch(() => undefined)
+          window.pige.activity.list({ limit: 20 }).catch(() => undefined)
         ])
         : [undefined, undefined, undefined];
       if (refreshId !== vaultRefreshSequence.current) return;
@@ -1211,9 +1214,6 @@ export function App(): React.JSX.Element {
             agentRuntimeStatus={agentRuntimeStatus}
             modelSummary={modelSummary}
             recentJobs={recentJobs}
-            recentActivities={recentActivities}
-            activityUndoingId={activityUndoingId}
-            activityBlockedIds={activityBlockedIds}
             locale={locale}
             draftText={homeDraftText}
             onDraftChange={setHomeDraftText}
@@ -1226,7 +1226,6 @@ export function App(): React.JSX.Element {
               submitFiles(files, "file_picker", text, clientTurnId, "home")}
             onCancelJob={cancelJob}
             onRetryJob={retryJob}
-            onUndoActivity={undoActivity}
             onHomeStateChanged={refreshVaultState}
             onSetDefaultModel={setHomeDefaultModel}
             onVoiceAssetInstallActiveChange={updateVoiceAssetInstallOwnership}
@@ -1273,6 +1272,7 @@ export function App(): React.JSX.Element {
       {settingsOpen ? (
         <SettingsSurface
           section={settingsSection}
+          macosWindowShell={macosWindowShell}
           locale={locale}
           availableLocales={availableLocales}
           alwaysOnTop={windowState?.alwaysOnTop ?? false}
@@ -1368,8 +1368,19 @@ export function App(): React.JSX.Element {
               onDevelopment={() => showDevelopmentCapability("settings", "packages")}
               t={t}
             />
-          ) : settingsSection === "system" ? (
+          ) : settingsSection === "history" ? (
+            <ActivityHistorySettingsPanel
+              activities={recentActivities}
+              undoingId={activityUndoingId}
+              blockedIds={activityBlockedIds}
+              locale={locale}
+              onOpen={() => showDevelopmentCapability("settings", "activity_open")}
+              onUndo={undoActivity}
+              t={t}
+            />
+          ) : settingsSection === "updates" || settingsSection === "diagnostics" ? (
             <SystemSettingsPanel
+              surface={settingsSection}
               diagnosticsHealth={diagnosticsHealth}
               supportBundlePreview={supportBundlePreview}
               onRefreshDiagnostics={refreshDiagnostics}
@@ -2687,6 +2698,8 @@ function useRestoreFlow(onRestored: () => Promise<void>, onRestoreStart: () => v
 
 function RestorePreviewPanel(props: {
   readonly idPrefix: string;
+  readonly variant?: "first-run" | "settings";
+  readonly locale?: Locale;
   readonly preview: ReadyRestorePreview;
   readonly mode: RestoreMode | null;
   readonly phase: RestorePhase;
@@ -2698,127 +2711,223 @@ function RestorePreviewPanel(props: {
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const applying = props.phase === "applying";
+  const settingsVariant = props.variant === "settings";
   const applyDisabled =
     props.phase !== "idle" ||
     props.mode === null ||
     props.preview.invalidFileCount > 0 ||
     !props.preview.permittedModes.includes(props.mode);
+  const locale = props.locale === "zh-Hans" ? "zh-CN" : props.locale;
+  const createdAt = (() => {
+    if (!settingsVariant || !locale) return props.preview.manifest.createdAt;
+    const parsed = new Date(props.preview.manifest.createdAt);
+    return Number.isNaN(parsed.getTime())
+      ? props.preview.manifest.createdAt
+      : new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(parsed);
+  })();
+  const formatCount = (value: number): string => settingsVariant && locale
+    ? value.toLocaleString(locale)
+    : String(value);
+  const warningCategoryCount = props.preview.warnings.length + (props.preview.invalidFileCount > 0 ? 1 : 0);
 
-  return (
-    <section className="restore-preview" aria-label={props.t("backup.restorePreview")}>
-      <strong>{props.t("backup.restorePreview")}</strong>
-      <dl className="restore-summary">
-        <div className="info-row">
-          <dt>{props.t("backup.vault")}</dt>
-          <dd>{props.preview.manifest.vaultName}</dd>
-        </div>
-        <div className="info-row">
-          <dt>{props.t("backup.createdAt")}</dt>
-          <dd>{props.preview.manifest.createdAt}</dd>
-        </div>
-        <div className="info-row">
-          <dt>{props.t("backup.appVersion")}</dt>
-          <dd>{props.preview.manifest.appVersion}</dd>
-        </div>
-        <div className="info-row">
-          <dt>{props.t("backup.vaultSchemaVersion")}</dt>
-          <dd>{props.preview.manifest.vaultSchemaVersion}</dd>
-        </div>
-        <div className="info-row">
-          <dt>{props.t("counts.notes")}</dt>
-          <dd>{props.preview.manifest.noteCount}</dd>
-        </div>
-        <div className="info-row">
-          <dt>{props.t("counts.sources")}</dt>
-          <dd>{props.preview.manifest.sourceCount}</dd>
-        </div>
-        <div className="info-row">
-          <dt>{props.t("backup.conversations")}</dt>
-          <dd>{props.preview.manifest.conversationCount}</dd>
-        </div>
-        <div className="info-row">
-          <dt>{props.t("backup.memories")}</dt>
-          <dd>{props.preview.manifest.memoryCount}</dd>
-        </div>
-        <div className="info-row">
-          <dt>{props.t("backup.invalidFiles")}</dt>
-          <dd>{props.preview.invalidFileCount}</dd>
-        </div>
-        <div className="info-row">
-          <dt>{props.t("backup.warnings")}</dt>
-          <dd>
-            {props.preview.warnings.length === 0 ? props.t("backup.noWarnings") : (
-              <ul className="restore-warning-list">
-                {props.preview.warnings.map((warning) => (
-                  <li key={warning.code}>
-                    <span>{props.t(restoreWarningMessageKey(warning.code))}</span>
-                    <strong>{warning.count}</strong>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </dd>
-        </div>
-      </dl>
-
-      <fieldset className="restore-mode-options">
-        <legend>{props.t("backup.restoreMode")}</legend>
-        {props.preview.permittedModes.includes("clone_as_new") ? (
-          <label htmlFor={`${props.idPrefix}-restore-clone`}>
-            <input
-              id={`${props.idPrefix}-restore-clone`}
-              type="radio"
-              name={`${props.idPrefix}-restore-mode`}
-              value="clone_as_new"
-              checked={props.mode === "clone_as_new"}
-              disabled={props.phase !== "idle"}
-              onChange={() => props.onModeChange("clone_as_new")}
-            />
-            <span>
-              <strong>{props.t("backup.modeClone")}</strong>
-              <small>{props.t("backup.modeCloneDescription")}</small>
+  const summary = (
+    <dl className={settingsVariant ? "restore-settings-summary" : "restore-summary"}>
+      {settingsVariant ? (
+        <>
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <dt>{props.t("backup.createdAt")}</dt>
+              <dd>{createdAt}</dd>
+            </div>
+            <span className="settings-badge">{props.preview.manifest.appVersion}</span>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <dt>{props.t("backup.vaultSchema")}</dt>
+              <dd>
+                {props.t("backup.vaultSchemaSummary")
+                  .replace("{version}", String(props.preview.manifest.vaultSchemaVersion))
+                  .replace("{notes}", formatCount(props.preview.manifest.noteCount))
+                  .replace("{sources}", formatCount(props.preview.manifest.sourceCount))
+                  .replace("{memories}", formatCount(props.preview.manifest.memoryCount))}
+              </dd>
+            </div>
+            <span className={`settings-status${props.preview.invalidFileCount > 0 ? " warning" : ""}`}>
+              {props.t(props.preview.invalidFileCount > 0 ? "backup.restoreBlocked" : "backup.restoreReady")}
             </span>
-          </label>
-        ) : null}
-        {props.preview.permittedModes.includes("replace_existing") ? (
-          <label htmlFor={`${props.idPrefix}-restore-replace`}>
-            <input
-              id={`${props.idPrefix}-restore-replace`}
-              type="radio"
-              name={`${props.idPrefix}-restore-mode`}
-              value="replace_existing"
-              checked={props.mode === "replace_existing"}
-              disabled={props.phase !== "idle"}
-              onChange={() => props.onModeChange("replace_existing")}
-            />
-            <span>
-              <strong>{props.t("backup.modeReplace")}</strong>
-              <small>{props.t("backup.modeReplaceDescription")}</small>
+          </div>
+          <div className="settings-row tall">
+            <div className="settings-row-copy">
+              <dt>{props.t("backup.warnings")}</dt>
+              <dd>
+                {warningCategoryCount === 0 ? props.t("backup.noWarnings") : (
+                  <ul className="restore-warning-list">
+                    {props.preview.invalidFileCount > 0 ? (
+                      <li>
+                        <span>{props.t("backup.invalidFiles")}</span>
+                        <strong>{formatCount(props.preview.invalidFileCount)}</strong>
+                      </li>
+                    ) : null}
+                    {props.preview.warnings.map((warning) => (
+                      <li key={warning.code}>
+                        <span>{props.t(restoreWarningMessageKey(warning.code))}</span>
+                        <strong>{formatCount(warning.count)}</strong>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </dd>
+            </div>
+            <span className="settings-badge">
+              {props.t("backup.warningCategoryCount").replace("{count}", formatCount(warningCategoryCount))}
             </span>
-          </label>
-        ) : null}
-      </fieldset>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="info-row">
+            <dt>{props.t("backup.vault")}</dt>
+            <dd>{props.preview.manifest.vaultName}</dd>
+          </div>
+          <div className="info-row">
+            <dt>{props.t("backup.createdAt")}</dt>
+            <dd>{createdAt}</dd>
+          </div>
+          <div className="info-row">
+            <dt>{props.t("backup.appVersion")}</dt>
+            <dd>{props.preview.manifest.appVersion}</dd>
+          </div>
+          <div className="info-row">
+            <dt>{props.t("backup.vaultSchemaVersion")}</dt>
+            <dd>{props.preview.manifest.vaultSchemaVersion}</dd>
+          </div>
+          <div className="info-row">
+            <dt>{props.t("counts.notes")}</dt>
+            <dd>{props.preview.manifest.noteCount}</dd>
+          </div>
+          <div className="info-row">
+            <dt>{props.t("counts.sources")}</dt>
+            <dd>{props.preview.manifest.sourceCount}</dd>
+          </div>
+          <div className="info-row">
+            <dt>{props.t("backup.conversations")}</dt>
+            <dd>{props.preview.manifest.conversationCount}</dd>
+          </div>
+          <div className="info-row">
+            <dt>{props.t("backup.memories")}</dt>
+            <dd>{props.preview.manifest.memoryCount}</dd>
+          </div>
+          <div className="info-row">
+            <dt>{props.t("backup.invalidFiles")}</dt>
+            <dd>{props.preview.invalidFileCount}</dd>
+          </div>
+          <div className="info-row">
+            <dt>{props.t("backup.warnings")}</dt>
+            <dd>
+              {props.preview.warnings.length === 0 ? props.t("backup.noWarnings") : (
+                <ul className="restore-warning-list">
+                  {props.preview.warnings.map((warning) => (
+                    <li key={warning.code}>
+                      <span>{props.t(restoreWarningMessageKey(warning.code))}</span>
+                      <strong>{warning.count}</strong>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </dd>
+          </div>
+        </>
+      )}
+    </dl>
+  );
 
-      {props.mode === "replace_existing" ? (
-        <p className="restore-warning" role="note">{props.t("backup.replaceWarning")}</p>
+  const modeOptions = (
+    <fieldset className={settingsVariant ? "restore-mode-options settings-restore-modes" : "restore-mode-options"}>
+      <legend className={settingsVariant ? "visually-hidden" : undefined}>{props.t("backup.restoreMode")}</legend>
+      {props.preview.permittedModes.includes("clone_as_new") ? (
+        <label
+          className={settingsVariant ? `settings-radio${props.mode === "clone_as_new" ? " active" : ""}` : undefined}
+          htmlFor={`${props.idPrefix}-restore-clone`}
+        >
+          <input
+            id={`${props.idPrefix}-restore-clone`}
+            type="radio"
+            name={`${props.idPrefix}-restore-mode`}
+            value="clone_as_new"
+            checked={props.mode === "clone_as_new"}
+            disabled={props.phase !== "idle"}
+            onChange={() => props.onModeChange("clone_as_new")}
+          />
+          {settingsVariant ? <span className="settings-radio-mark" aria-hidden="true" /> : null}
+          <span className={settingsVariant ? "settings-radio-copy" : undefined}>
+            <strong>{props.t("backup.modeClone")}</strong>
+            <small>{props.t("backup.modeCloneDescription")}</small>
+          </span>
+        </label>
       ) : null}
+      {props.preview.permittedModes.includes("replace_existing") ? (
+        <label
+          className={settingsVariant ? `settings-radio${props.mode === "replace_existing" ? " active" : ""}` : undefined}
+          htmlFor={`${props.idPrefix}-restore-replace`}
+        >
+          <input
+            id={`${props.idPrefix}-restore-replace`}
+            type="radio"
+            name={`${props.idPrefix}-restore-mode`}
+            value="replace_existing"
+            checked={props.mode === "replace_existing"}
+            disabled={props.phase !== "idle"}
+            onChange={() => props.onModeChange("replace_existing")}
+          />
+          {settingsVariant ? <span className="settings-radio-mark" aria-hidden="true" /> : null}
+          <span className={settingsVariant ? "settings-radio-copy" : undefined}>
+            <strong>{props.t("backup.modeReplace")}</strong>
+            <small>{props.t("backup.modeReplaceDescription")}</small>
+          </span>
+        </label>
+      ) : null}
+    </fieldset>
+  );
+
+  const feedback = (
+    <>
+      {props.mode === "replace_existing" ? (
+        <p className={settingsVariant ? "settings-warning" : "restore-warning"} role="note">
+          {props.t("backup.replaceWarning")}
+        </p>
+      ) : settingsVariant ? <p className="settings-warning" role="note">{props.t("backup.restorePrivacyWarning")}</p> : null}
       {props.preview.invalidFileCount > 0 ? (
         <p className="error" role="alert">{props.t("backup.restoreInvalid")}</p>
       ) : null}
       {props.errorKey ? <p className="error" role="alert">{props.t(props.errorKey)}</p> : null}
       {applying ? <p className="muted" role="status">{props.t("backup.restoreProgress")}</p> : null}
+    </>
+  );
 
-      <div className="settings-actions">
+  const actions = (
+    <div className={settingsVariant ? "settings-inline-actions restore-settings-actions" : "settings-actions"}>
+      {settingsVariant ? (
         <button
-          ref={props.applyButtonRef}
           type="button"
-          disabled={applyDisabled}
-          onClick={() => void props.onApply()}
+          className="settings-button"
+          disabled={props.phase !== "idle"}
+          onClick={props.onCancel}
         >
-          {applying
-            ? props.t("backup.restoring")
-            : props.t(props.mode === "replace_existing" ? "backup.applyReplace" : "backup.applyClone")}
+          {props.t("backup.restoreCancel")}
         </button>
+      ) : null}
+      <button
+        ref={props.applyButtonRef}
+        type="button"
+        className={settingsVariant ? "settings-button primary" : undefined}
+        disabled={applyDisabled}
+        onClick={() => void props.onApply()}
+      >
+        {applying
+          ? props.t("backup.restoring")
+          : props.t(props.mode === "replace_existing" ? "backup.applyReplace" : "backup.applyClone")}
+      </button>
+      {!settingsVariant ? (
         <button
           type="button"
           className="secondary"
@@ -2827,7 +2936,41 @@ function RestorePreviewPanel(props: {
         >
           {props.t("backup.restoreCancel")}
         </button>
-      </div>
+      ) : null}
+    </div>
+  );
+
+  if (settingsVariant) {
+    return (
+      <section className="settings-page settings-restore-page restore-preview" aria-labelledby={`${props.idPrefix}-restore-title`}>
+        <header className="settings-panel-header">
+          <button className="settings-button restore-back-button" type="button" disabled={props.phase !== "idle"} onClick={props.onCancel}>
+            {props.t("backup.backToVault")}
+          </button>
+          <h1 id={`${props.idPrefix}-restore-title`}>{props.t("backup.restorePageTitle")}</h1>
+          <p>{props.t("backup.restorePageSubtitle")}</p>
+        </header>
+        <section className="settings-section" aria-labelledby={`${props.idPrefix}-preview-title`}>
+          <h2 className="settings-section-title" id={`${props.idPrefix}-preview-title`}>{props.t("backup.restorePreview")}</h2>
+          <div className="settings-card">{summary}</div>
+        </section>
+        <section className="settings-section" aria-labelledby={`${props.idPrefix}-identity-title`}>
+          <h2 className="settings-section-title" id={`${props.idPrefix}-identity-title`}>{props.t("backup.identityMode")}</h2>
+          {modeOptions}
+          {feedback}
+        </section>
+        {actions}
+      </section>
+    );
+  }
+
+  return (
+    <section className="restore-preview" aria-label={props.t("backup.restorePreview")}>
+      <strong>{props.t("backup.restorePreview")}</strong>
+      {summary}
+      {modeOptions}
+      {feedback}
+      {actions}
     </section>
   );
 }
@@ -3051,9 +3194,6 @@ function HomeComposer(props: {
   readonly agentRuntimeStatus: AgentRuntimeStatus | null;
   readonly modelSummary: ModelProviderSettingsSummary | null;
   readonly recentJobs: readonly JobSummary[];
-  readonly recentActivities: readonly KnowledgeActivitySummary[];
-  readonly activityUndoingId: string | null;
-  readonly activityBlockedIds: readonly string[];
   readonly locale: Locale;
   readonly draftText: string;
   readonly onDraftChange: (text: string) => void;
@@ -3067,7 +3207,6 @@ function HomeComposer(props: {
   ) => Promise<AgentSubmitTurnResult | undefined>;
   readonly onCancelJob: (jobId: string) => Promise<void>;
   readonly onRetryJob: (jobId: string) => Promise<void>;
-  readonly onUndoActivity: (operationId: string) => Promise<void>;
   readonly onHomeStateChanged: () => Promise<void>;
   readonly onSetDefaultModel: (modelProfileId: string) => Promise<boolean>;
   readonly onVoiceAssetInstallActiveChange: (active: boolean) => void;
@@ -3485,10 +3624,6 @@ function HomeComposer(props: {
     return () => document.removeEventListener("pointerdown", dismissOnPointerDown);
   }, [modelMenuOpen]);
 
-  const plannedModelUsage = homeRuntimeModelUsage(props.agentRuntimeStatus);
-  const cloudUsageMessageKey = agentRunState === "accepted" || agentRunState === "running"
-    ? plannedModelUsage === "cloud" ? "home.cloudSend" : null
-    : agentModelUsage === "cloud" ? "home.cloudCallAttempted" : null;
   const latestTurn = conversationTimeline?.latestTurn;
   const latestPermissionJob = props.recentJobs.find((job) =>
     job.state === "waiting_permission" &&
@@ -3564,9 +3699,6 @@ function HomeComposer(props: {
   const effectiveAgentError = noSourceCurrentTurn
     ? noSourceCurrentTurn.error ?? agentError
     : agentError;
-  const effectiveCloudUsageMessageKey = cloudUsageMessageKey ?? (
-    effectiveAgentRunState === "running" && plannedModelUsage === "cloud" ? "home.cloudSend" : null
-  );
   const retryableLatestTurn = latestTurn && (
     latestTurn.state === "cancelled" ||
     (
@@ -3594,6 +3726,11 @@ function HomeComposer(props: {
   const showFirstHomeGuide = props.showFirstHomeGuide &&
     effectiveAgentRunState === "idle" &&
     sourceWaitingForModelJobs.length === 0;
+  const showConversationRunMessage = !permissionRequestId &&
+    !modelEgressRequestId &&
+    !sourceWaitOwnsAgentState &&
+    effectiveAgentRunState !== "idle" &&
+    effectiveAgentRunState !== "completed";
   const visibleConversationMessages = (conversationTimeline?.messages ?? []).filter((message) =>
     !(agentAnswer && message.role === "assistant" && message.id === liveAnswerEventId)
   );
@@ -4318,65 +4455,6 @@ function HomeComposer(props: {
           ) : null}
         </section>
       ) : null}
-      {props.recentActivities.length > 0 ? (
-        <section className="activity-strip" aria-label={props.t("activity.title")}>
-          <h2>{props.t("activity.title")}</h2>
-          <div className="activity-list">
-            {props.recentActivities.slice(0, 3).map((activity, index) => {
-              const activityMessageKey = activity.kind === "update_page"
-                ? "activity.updatedPage"
-                : "activity.createdPage";
-              const activityLabel = `${props.t(activityMessageKey)}${activity.targetLabel ? `: ${activity.targetLabel}` : ""} (${index + 1})`;
-              return (
-                <article
-                  className="activity-row"
-                  key={activity.operationId}
-                  aria-label={activityLabel}
-                  data-activity-row-id={activity.operationId}
-                  tabIndex={-1}
-                >
-                  <span
-                    className={`activity-row-dot${activity.status === "undone" ? " is-undone" : ""}`}
-                    aria-hidden="true"
-                  />
-                  <div className="activity-row-copy">
-                    <strong>
-                      {props.t(activityMessageKey)}
-                      {activity.targetLabel ? `: ${activity.targetLabel}` : ""}
-                    </strong>
-                    <span>{props.t(activity.status === "undone" ? "activity.statusUndone" : "activity.statusApplied")}</span>
-                  </div>
-                  <div className="activity-row-actions">
-                    {activity.status === "applied" ? (
-                      <button
-                        type="button"
-                        className="ghost"
-                        aria-label={`${props.t("activity.open")}: ${activityLabel}`}
-                        data-activity-open-id={activity.operationId}
-                        onClick={() => props.onDevelopment("activity_open")}
-                      >
-                        {props.t("activity.open")}
-                      </button>
-                    ) : null}
-                    {activity.canUndo ? (
-                      <button
-                        type="button"
-                        className="ghost"
-                        aria-label={`${props.t("activity.undo")}: ${activityLabel}`}
-                        data-activity-undo-id={activity.operationId}
-                        disabled={props.activityUndoingId !== null || props.activityBlockedIds.includes(activity.operationId)}
-                        onClick={() => void props.onUndoActivity(activity.operationId)}
-                      >
-                        {props.t(props.activityUndoingId === activity.operationId ? "activity.undoing" : "activity.undo")}
-                      </button>
-                    ) : null}
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        </section>
-      ) : null}
       {proposalReviewPending ? (
         <section className="proposal-strip" aria-label={props.t("proposal.queueTitle")}>
           <header className="proposal-strip-header">
@@ -4400,11 +4478,11 @@ function HomeComposer(props: {
           </div>
         </section>
       ) : null}
-      {visibleConversationMessages.length > 0 || agentDraft ? (
+      {visibleConversationMessages.length > 0 || agentDraft || showConversationRunMessage ? (
         <section
           className="conversation-timeline"
           aria-label={props.t("home.conversation")}
-          aria-busy={agentDraft !== null}
+          aria-busy={agentDraft !== null || effectiveAgentRunState === "accepted" || effectiveAgentRunState === "running"}
         >
           {visibleConversationMessages.map((message) => (
             <article
@@ -4418,7 +4496,7 @@ function HomeComposer(props: {
               {message.answer?.datasetResult ? (
                 <DatasetAnswerResult answer={message.answer} modelUsage="none" t={props.t} />
               ) : (
-                <p>{message.text}</p>
+                <ConversationMarkdown markdown={message.text} />
               )}
             </article>
           ))}
@@ -4431,7 +4509,52 @@ function HomeComposer(props: {
               <span className="conversation-message-role">
                 {props.t("home.assistantMessage")}
               </span>
-              <p>{agentDraft.text}</p>
+              <ConversationMarkdown markdown={agentDraft.text} provisional />
+            </article>
+          ) : showConversationRunMessage ? (
+            <article
+              className={`conversation-message role-assistant conversation-status-message state-${effectiveAgentRunState}`}
+              data-agent-conversation-state={effectiveAgentRunState}
+              role="status"
+              aria-live="polite"
+            >
+              <span className="conversation-message-role">{props.t("home.assistantMessage")}</span>
+              <div className="conversation-status-content">
+                {effectiveAgentRunState === "accepted" || effectiveAgentRunState === "running" ? (
+                  <>
+                    <span className="conversation-loading-dots" aria-hidden="true"><i /><i /><i /></span>
+                    <span className="visually-hidden">{props.t("home.agentState.running")}</span>
+                  </>
+                ) : (
+                  <p>
+                    {effectiveAgentError
+                      ? props.t(effectiveAgentError.messageKey)
+                      : noSourceCurrentTurn
+                        ? props.t(jobStateMessageKey(noSourceCurrentTurn))
+                        : props.t(`home.agentState.${effectiveAgentRunState}`)}
+                  </p>
+                )}
+                {agentError?.userAction === "configure_model" ? (
+                  <button type="button" className="ghost" onClick={(event) => void props.onOpenModels(event.currentTarget)}>{props.t("home.openModels")}</button>
+                ) : null}
+                {retryableLatestTurn ? (
+                  <button type="button" className="ghost" onClick={() => void retryLatestConversationTurn()}>
+                    {props.t("home.retryAnswer")}
+                  </button>
+                ) : null}
+                {noSourceCancellableLatestTurn ? (
+                  <button
+                    type="button"
+                    className="ghost"
+                    title={props.t("home.cancelJob")}
+                    aria-label={props.t("home.cancelJob")}
+                    disabled={noSourceCancellableLatestTurn.state === "cancel_requested"}
+                    onClick={() => void props.onCancelJob(noSourceCancellableLatestTurn.id)}
+                  >
+                    {props.t("home.cancelJob")}
+                  </button>
+                ) : null}
+              </div>
             </article>
           ) : null}
         </section>
@@ -4773,40 +4896,6 @@ function HomeComposer(props: {
               </div>
             ) : null}
           </div>
-        ) : effectiveAgentRunState !== "idle" && !sourceWaitOwnsAgentState ? (
-          <div className={`agent-run-state state-${effectiveAgentRunState}`} role="status" aria-live="polite">
-            <span className="agent-run-dot" aria-hidden="true" />
-            <span>
-              {effectiveAgentError
-                ? props.t(effectiveAgentError.messageKey)
-                : noSourceCurrentTurn
-                  ? props.t(jobStateMessageKey(noSourceCurrentTurn))
-                  : props.t(`home.agentState.${effectiveAgentRunState}`)}
-            </span>
-            {effectiveCloudUsageMessageKey ? (
-              <span className="agent-cloud-boundary">{props.t(effectiveCloudUsageMessageKey)}</span>
-            ) : null}
-            {agentError?.userAction === "configure_model" ? (
-              <button type="button" className="ghost" onClick={(event) => void props.onOpenModels(event.currentTarget)}>{props.t("home.openModels")}</button>
-            ) : null}
-            {retryableLatestTurn ? (
-              <button type="button" className="ghost" onClick={() => void retryLatestConversationTurn()}>
-                {props.t("home.retryAnswer")}
-              </button>
-            ) : null}
-            {noSourceCancellableLatestTurn ? (
-              <button
-                type="button"
-                className="ghost"
-                title={props.t("home.cancelJob")}
-                aria-label={props.t("home.cancelJob")}
-                disabled={noSourceCancellableLatestTurn.state === "cancel_requested"}
-                onClick={() => void props.onCancelJob(noSourceCancellableLatestTurn.id)}
-              >
-                {props.t("home.cancelJob")}
-              </button>
-            ) : null}
-          </div>
         ) : null}
         {captureError ? <p className="error">{captureError}</p> : null}
       </section>
@@ -4909,6 +4998,50 @@ function isAgentTurnDraftEvent(value: unknown): value is AgentTurnDraftEvent {
     Array.from(event.text).length > 0 &&
     Array.from(event.text).length <= 8_000 &&
     !/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/u.test(event.text);
+}
+
+export function ConversationMarkdown(props: {
+  readonly markdown: string;
+  readonly provisional?: boolean;
+}): React.JSX.Element {
+  const [html, setHtml] = useState<string | null>(null);
+
+  useEffect(() => {
+    let current = true;
+    setHtml(null);
+    void import("@pige/markdown")
+      .then(({ renderPigeMarkdownToHtml }) => renderPigeMarkdownToHtml(props.markdown))
+      .then((rendered) => {
+        if (current) setHtml(rendered.html);
+      })
+      .catch(() => {
+        if (current) setHtml(null);
+      });
+    return () => {
+      current = false;
+    };
+  }, [props.markdown]);
+
+  const preventConversationNavigation = (event: ReactMouseEvent<HTMLDivElement>): void => {
+    if ((event.target as Element).closest("a")) event.preventDefault();
+  };
+
+  if (html === null) {
+    return (
+      <div className="conversation-markdown" data-markdown-ready="false">
+        <p>{props.markdown}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`conversation-markdown${props.provisional ? " provisional-markdown" : ""}`}
+      data-markdown-ready="true"
+      onClick={preventConversationNavigation}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
 }
 
 function createAgentClientTurnId(now = new Date()): string {
@@ -5163,14 +5296,6 @@ function RetrievalResultRow(props: {
   );
 }
 
-function homeRuntimeModelUsage(status: AgentRuntimeStatus | null): HomeAgentModelUsage {
-  if (status?.state !== "ready") return "none";
-  return status.policySnapshot?.cloudBoundary === "local" &&
-    status.policySnapshot.boundaryVerification === "loopback_verified"
-    ? "local"
-    : "cloud";
-}
-
 function classifyTextTransportKind(text: string): "typed_text" | "typed_url" {
   try {
     const parsed = new URL(text);
@@ -5210,7 +5335,9 @@ const settingsSections: readonly {
   { id: "privacy", icon: "shield", status: "partial" },
   { id: "skills", icon: "skill", status: "development", capability: "skills" },
   { id: "packages", icon: "package", status: "development", capability: "packages" },
-  { id: "system", icon: "activity", status: "partial" }
+  { id: "history", icon: "activity", status: "real" },
+  { id: "updates", icon: "package", status: "development", capability: "updates" },
+  { id: "diagnostics", icon: "wrench", status: "real" }
 ];
 
 const settingsGroups: readonly {
@@ -5222,7 +5349,7 @@ const settingsGroups: readonly {
   { id: "ai", sections: ["models", "capabilities", "memory"] },
   { id: "security", sections: ["privacy"] },
   { id: "extensions", sections: ["skills", "packages"] },
-  { id: "system", sections: ["system"] }
+  { id: "system", sections: ["history", "updates", "diagnostics"] }
 ];
 
 export function DevelopmentStatus(props: {
@@ -5240,6 +5367,7 @@ export function DevelopmentStatus(props: {
 
 export function SettingsSurface(props: {
   readonly section: SettingsSection;
+  readonly macosWindowShell?: boolean;
   readonly locale: Locale;
   readonly availableLocales: readonly Locale[];
   readonly alwaysOnTop: boolean;
@@ -5304,7 +5432,10 @@ export function SettingsSurface(props: {
   };
 
   return (
-    <div className="settings-overlay" data-settings-overlay="true">
+    <div
+      className={`settings-overlay${props.macosWindowShell ? " platform-macos" : ""}`}
+      data-settings-overlay="true"
+    >
       <div
         ref={dialogRef}
         className="settings-surface"
@@ -6285,7 +6416,91 @@ function supportBundlePreviewIsFullyProjected(preview: SupportBundlePreview): bo
     preview.privacyWarnings.every((warning) => projectSupportBundlePrivacyWarning(warning) !== null);
 }
 
+export function ActivityHistorySettingsPanel(props: {
+  readonly activities: readonly KnowledgeActivitySummary[];
+  readonly undoingId: string | null;
+  readonly blockedIds: readonly string[];
+  readonly locale: Locale;
+  readonly onOpen: () => void;
+  readonly onUndo: (operationId: string) => Promise<void>;
+  readonly t: (key: string) => string;
+}): React.JSX.Element {
+  const locale = props.locale === "zh-Hans" ? "zh-CN" : props.locale;
+  return (
+    <section className="settings-page settings-history-page" aria-labelledby="settings-history-title">
+      <header className="settings-panel-header">
+        <h1 id="settings-history-title">{props.t("activity.historyTitle")}</h1>
+        <p>{props.t("activity.historySubtitle")}</p>
+      </header>
+      <section className="settings-section" aria-labelledby="activity-recent-title">
+        <h2 className="settings-section-title" id="activity-recent-title">{props.t("activity.recent")}</h2>
+        {props.activities.length === 0 ? (
+          <div className="settings-state-copy">
+            <strong>{props.t("activity.empty")}</strong>
+            <span>{props.t("activity.emptyDescription")}</span>
+          </div>
+        ) : (
+          <div className="settings-card activity-history-list">
+            {props.activities.map((activity, index) => {
+              const activityMessageKey = activity.kind === "update_page"
+                ? "activity.updatedPage"
+                : "activity.createdPage";
+              const activityLabel = `${props.t(activityMessageKey)}${activity.targetLabel ? `: ${activity.targetLabel}` : ""} (${index + 1})`;
+              const createdAt = new Date(activity.createdAt);
+              const createdAtLabel = Number.isNaN(createdAt.getTime())
+                ? props.t("activity.timeUnavailable")
+                : new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(createdAt);
+              return (
+                <article
+                  className="settings-row tall activity-history-row"
+                  key={activity.operationId}
+                  aria-label={activityLabel}
+                  data-activity-row-id={activity.operationId}
+                  tabIndex={-1}
+                >
+                  <span className={`activity-row-dot${activity.status === "undone" ? " is-undone" : ""}`} aria-hidden="true" />
+                  <div className="settings-row-copy">
+                    <strong>{props.t(activityMessageKey)}{activity.targetLabel ? `: ${activity.targetLabel}` : ""}</strong>
+                    <span>{createdAtLabel} · {props.t(activity.status === "undone" ? "activity.statusUndone" : "activity.statusApplied")}</span>
+                  </div>
+                  <div className="settings-row-control">
+                    {activity.status === "applied" ? (
+                      <button
+                        type="button"
+                        className="settings-button"
+                        aria-label={`${props.t("activity.open")}: ${activityLabel}`}
+                        data-activity-open-id={activity.operationId}
+                        onClick={props.onOpen}
+                      >
+                        {props.t("activity.open")}
+                      </button>
+                    ) : null}
+                    {activity.canUndo ? (
+                      <button
+                        type="button"
+                        className="settings-button"
+                        aria-label={`${props.t("activity.undo")}: ${activityLabel}`}
+                        data-activity-undo-id={activity.operationId}
+                        disabled={props.undoingId !== null || props.blockedIds.includes(activity.operationId)}
+                        onClick={() => void props.onUndo(activity.operationId)}
+                      >
+                        {props.t(props.undoingId === activity.operationId ? "activity.undoing" : "activity.undo")}
+                      </button>
+                    ) : null}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+        <p className="settings-note">{props.t("activity.historyNote")}</p>
+      </section>
+    </section>
+  );
+}
+
 export function SystemSettingsPanel(props: {
+  readonly surface: "updates" | "diagnostics";
   readonly diagnosticsHealth: DiagnosticsHealth | null;
   readonly supportBundlePreview: SupportBundlePreview | null;
   readonly onRefreshDiagnostics: () => Promise<void>;
@@ -6400,12 +6615,15 @@ export function SystemSettingsPanel(props: {
     : null;
 
   return (
-    <section className="settings-page settings-system-page" aria-labelledby="settings-system-title">
+    <section className={`settings-page settings-system-page settings-${props.surface}-page`} aria-labelledby={`settings-${props.surface}-title`}>
       <header className="settings-panel-header">
-        <h1 id="settings-system-title">{props.t("system.title")}</h1>
-        <p>{props.t("system.subtitle")}</p>
+        <h1 id={`settings-${props.surface}-title`}>
+          {props.t(props.surface === "updates" ? "system.updatesTitle" : "system.diagnosticsTitle")}
+        </h1>
+        <p>{props.t(props.surface === "updates" ? "system.updatesSubtitle" : "system.diagnosticsSubtitle")}</p>
       </header>
 
+      {props.surface === "updates" ? (
       <section className="settings-section" aria-labelledby="system-update-title">
         <h2 className="settings-section-title" id="system-update-title">{props.t("system.updateSection")}</h2>
         <div className="settings-card">
@@ -6435,7 +6653,14 @@ export function SystemSettingsPanel(props: {
             </button>
           </div>
         </div>
+        {notice ? (
+          <p className={notice.kind === "error" ? "error" : "muted"} role={notice.kind === "error" ? "alert" : "status"} aria-live="polite">
+            {props.t(notice.key)}
+          </p>
+        ) : null}
+        <p className="settings-note">{props.t("system.updatesUnavailableNote")}</p>
       </section>
+      ) : (
 
       <section className="settings-section" aria-labelledby="system-health-title">
         <h2 className="settings-section-title" id="system-health-title">{props.t("system.localHealth")}</h2>
@@ -6546,6 +6771,7 @@ export function SystemSettingsPanel(props: {
         ) : null}
         <p className="settings-note">{props.t("system.localOnlyNote")}</p>
       </section>
+      )}
     </section>
   );
 }
@@ -6708,6 +6934,25 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
       props.onError(caught instanceof Error ? caught.message : "Something went wrong.");
     }
   };
+
+  if (props.surface === "vault" && restore.restorePreview) {
+    return (
+      <RestorePreviewPanel
+        idPrefix="vault-settings"
+        variant="settings"
+        locale={props.locale}
+        preview={restore.restorePreview}
+        mode={restore.restoreMode}
+        phase={restore.restorePhase}
+        errorKey={restore.restoreErrorKey}
+        applyButtonRef={restore.applyButtonRef}
+        onModeChange={restore.selectRestoreMode}
+        onApply={restore.applyRestore}
+        onCancel={restore.cancelRestore}
+        t={props.t}
+      />
+    );
+  }
 
   return (
     <section
@@ -6890,20 +7135,6 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
         ) : null}
         </div>
         {backupNotice ? <p className="muted">{backupNotice}</p> : null}
-        {restore.restorePreview ? (
-          <RestorePreviewPanel
-            idPrefix="vault-settings"
-            preview={restore.restorePreview}
-            mode={restore.restoreMode}
-            phase={restore.restorePhase}
-            errorKey={restore.restoreErrorKey}
-            applyButtonRef={restore.applyButtonRef}
-            onModeChange={restore.selectRestoreMode}
-            onApply={restore.applyRestore}
-            onCancel={restore.cancelRestore}
-            t={props.t}
-          />
-        ) : null}
         {!restore.restorePreview && restore.restoreErrorKey ? (
           <p className="error" role="alert">{props.t(restore.restoreErrorKey)}</p>
         ) : null}
