@@ -278,6 +278,8 @@ Behavior:
 - Activity is secondary to the home composer.
 - Recent rows summarize durable changes. Unchanged generated pages offer direct Undo;
   reread announces truth, restores focus, keeps eligible retry, or fails closed.
+- Activity `Open` never treats its label as authority and stays development-only until
+  bound to a stable active-vault target.
 - The user can ignore the activity area and keep adding sources or asking questions.
 
 ### 4.4 Sidebar Expanded
@@ -583,6 +585,9 @@ Current Phase 4 reader context foundation:
 - Library/Home results expose outgoing links and backlinks through `library.related`.
 - Related pages open by stable ID; the renderer gets neither arbitrary paths nor note bodies.
 - The context rail is right-side when wide and below Markdown when narrow.
+- The metadata title is the sole primary H1; hide only an equal normalized leading body H1.
+- Unbound internal wiki/source links stay focusable but fail closed without navigation or
+  guessed identity.
 - Current-note Agent and Reader copy are real; edit/selection/reveal remain unavailable.
 
 ### 8.2 Note Agent Panel
@@ -766,8 +771,9 @@ Visual encoding:
 Current bounded slice:
 
 - Knowledge Tree is a separate sidebar destination, not a folder browser or graph editor.
-- A compact heading, Refresh action, totals, and nested disclosures expose domains,
-  concepts, source evidence, and supporting notes.
+- A compact heading, Refresh action, totals, and Tree/Network/List views expose the same
+  body-free aggregate; views, search, focus, and camera are renderer-local and create no
+  data owner.
 - Native meters and adjacent text state exact weight, fragment, source, and leaf counts;
   color or thickness is never the only explanation.
 - Navigable nodes open the existing confined Note Reader. Back restores focus to the
@@ -858,9 +864,12 @@ Restore; Index & Maintenance owns index/diagnostics/support. Real surfaces inclu
 Library/Reader, Knowledge Tree, Models, Vault, Backup/Restore, maintenance, current-note
 Agent, Reader copy, composer processing, compact Activity/Undo, locale/window pin and
 current-action prompts. Settings framing and Reader related context remain partial.
+Compact Settings owns focus/inert state; Escape closes its navigator before the dialog
+and restores trigger focus.
 Appearance, local capabilities, Agent/memory, reusable permission policy, Skills, Pi
-Packages, updates/voice, Reader mutations and unbound Knowledge controls remain localized
-unavailable without IPC, Job, persistence, fake result/progress or status credit. Until a
+Packages, updates/voice, Reader mutations and unbound Knowledge evidence/backlink/
+relationship actions remain localized unavailable without IPC, Job, persistence, fake
+result/progress or status credit. Until a
 separate `BrowserWindow` owner exists, Settings remains an in-app focus-trapped dialog
 with Escape/exact-invoker restoration and no outer-window resize.
 
@@ -1311,29 +1320,8 @@ Language settings:
 
 ## 14. First-Run Flow
 
-Detailed first-run, capture-only, and missing-model behavior is governed by `docs/ONBOARDING_AND_FIRST_RUN.md`.
-
-Step 1: Welcome.
-
-- Choose or create local vault.
-- Explain local-first briefly.
-
-Step 2: Model setup.
-
-- Show reviewed Provider templates; selection asks only for required credentials.
-- Before `Connect Provider`, explain once that ordinary, private, and bounded large
-  selected context may go to this exact Profile/endpoint; sensitive content still asks
-  and restricted content never sends.
-- Connect, auto-sync, run one Provider check, and establish Global Default; manual ID is fallback.
-- Allow skip into capture-only mode: Pige preserves source records/source assets and queues Agent processing until a model is configured.
-
-Step 3: Start capture.
-
-- Land directly in Home.
-- If setup was skipped, show the compact Connect/continue choice once; the choice stays
-  dismissed for that vault on this machine and never blocks capture.
-
-First-run should be short. The app should not become a marketing landing page.
+`ONBOARDING_AND_FIRST_RUN.md` owns the short sequence: Welcome language truth, skippable
+Models, mandatory Vault, then Home.
 
 ## 15. Empty States
 

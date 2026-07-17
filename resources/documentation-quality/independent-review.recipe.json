@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-17T04:30:41Z",
+  "reviewedAt": "2026-07-17T06:31:53Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -34,32 +34,40 @@
       "apps/desktop/src/main/services/secret-store.ts",
       "apps/desktop/src/preload/index.ts",
       "apps/desktop/src/renderer/src/App.tsx",
+      "apps/desktop/src/renderer/src/components/KnowledgeTreeMap.tsx",
       "apps/desktop/src/renderer/src/locales/de/messages.json",
       "apps/desktop/src/renderer/src/locales/en/messages.json",
       "apps/desktop/src/renderer/src/locales/fr/messages.json",
       "apps/desktop/src/renderer/src/locales/ja/messages.json",
       "apps/desktop/src/renderer/src/locales/ko/messages.json",
       "apps/desktop/src/renderer/src/locales/zh-Hans/messages.json",
+      "apps/desktop/src/renderer/src/styles/app.css",
       "tests/unit/desktop-shell-contract.test.ts",
+      "tests/unit/full-ui-library.test.ts",
+      "tests/unit/full-ui-renderer-contract.test.ts",
+      "tests/unit/full-ui-settings-surface.test.ts",
       "tests/unit/home-agent-service.test.ts",
+      "tests/unit/home-agent-conversation-ui.test.ts",
+      "tests/unit/knowledge-tree-ui.test.ts",
       "tests/unit/model-egress-approval-service.test.ts",
       "tests/unit/model-provider-registry.test.ts",
       "tests/unit/model-settings-error-ui.test.ts",
       "tests/unit/pi-agent-runtime-adapter.test.ts",
+      "tests/unit/restore-ui.test.ts",
       "tests/unit/security-contract-schemas.test.ts",
       "package.json"
     ],
-    "scope": "Independent DeepSeek/provider-management review binds the governed owner documents and exact current Home/Pi, Provider/Secret, IPC, renderer, contract and focused-test bytes on base 37b4cd1.",
+    "scope": "Independent Planning review binds the governed Settings/Onboarding and Activity/Knowledge/Reader owner documents, trace projections, and exact cumulative UI bytes at ac7513e on origin/main 0f023f9.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 130,
-    "reviewedSha256": "219dd54b58b1d0f5056266a5142342c2f1d21b28c19781ca91b5dd46195d424a"
+    "reviewedSha256": "0d3b223cece2219b450c86484734f441ba4f09ea10b36846d98884622ecfddc8"
   },
   "reviewers": [
     {
-      "reviewerId": "deepseek-provider-management-independent-review",
-      "task": "DeepSeek native completion, Provider credential lifecycle and truthful runtime-status review",
+      "reviewerId": "settings-visible-ui-main0f-independent-review",
+      "task": "Settings, onboarding, Activity, Knowledge Tree and Reader contract-impact review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -67,78 +75,78 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "The reviewer did not author the candidate and independently compared its exact implementation, contracts, tests and four owner-document edits before binding this snapshot."
+      "independence": "Product Planning did not author the frozen UI candidate and independently compared its exact 15-path delta, owner contracts, trace evidence and unchanged delivery statuses before binding this snapshot."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "deepseek-provider-management-independent-review",
+      "reviewerId": "settings-visible-ui-main0f-independent-review",
       "blockerCount": 0,
-      "summary": "Existing Models and Home owners carry credential replacement, Provider deletion, secret cleanup, default rebinding and native completion without adding a competing settings or Agent owner."
+      "summary": "Existing Onboarding, Settings and UI Prototype owners now carry the guided sequence, compact navigation and visible Reader/Knowledge boundaries without introducing a duplicate owner document."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "deepseek-provider-management-independent-review",
+      "reviewerId": "settings-visible-ui-main0f-independent-review",
       "blockerCount": 0,
-      "summary": "Code and four owner documents agree that only zero-tool, no-current-note Home auto turns may finish natively; tool-backed turns retain Host finish validation and Host-policy errors remain distinct from Provider call failure."
+      "summary": "Owner text and exact UI agree on language then optional Models then mandatory Vault, focus-owned compact Settings, renderer-local Knowledge views, single Reader title and fail-closed unresolved links."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "deepseek-provider-management-independent-review",
+      "reviewerId": "settings-visible-ui-main0f-independent-review",
       "blockerCount": 0,
-      "summary": "The candidate revises existing accepted decisions and owner contracts without changing any Requirement, Exit, Phase, acceptance-manifest or semantic-claim status."
+      "summary": "Existing evidence selectors already cover the changed focused test files; every Requirement, Exit, Phase, open item, planned target and semantic-claim projection remains unchanged."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "deepseek-provider-management-independent-review",
+      "reviewerId": "settings-visible-ui-main0f-independent-review",
       "blockerCount": 0,
-      "summary": "Revision and active-reference fences, real generation probes, rollback/restart tests, body-free errors, session-only discovery/generation truth and focused UI regressions provide executable maintenance boundaries."
+      "summary": "Focused regressions identify the guided first-run order, compact Settings focus ownership and Reader presentation while existing Knowledge Tree and Activity evidence retain their original service boundaries."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "deepseek-provider-management-independent-review",
+      "reviewerId": "settings-visible-ui-main0f-independent-review",
       "blockerCount": 0,
-      "summary": "No new owner document was introduced; four existing owners were consolidated while all five documentation-leanness checks remain green."
+      "summary": "No new document, decision or trace projection was introduced; two existing owner documents and the review recipe carry the complete delta with no duplicated normative section."
     }
   ],
   "verification": [
     {
-      "command": "npm test -- --run tests/unit/model-provider-registry.test.ts tests/unit/model-egress-approval-service.test.ts tests/unit/security-contract-schemas.test.ts tests/unit/desktop-shell-contract.test.ts tests/unit/pi-agent-runtime-adapter.test.ts tests/unit/home-agent-service.test.ts tests/unit/model-settings-error-ui.test.ts --maxWorkers=2",
+      "command": "Independent exact-byte and owner-contract review of ac7513e based on origin/main 0f023f9",
       "status": "passed",
-      "evidence": "Seven focused files and 209 tests pass, including zero-tool completion, tool-backed finish, Host-versus-Provider errors, credential replacement/deletion, restart recovery and Models status truth."
+      "evidence": "The 15 candidate paths contain renderer, locale, style and UI-test bytes only; no main, preload, package, schema, service or durable-data owner changes are present."
     },
     {
-      "command": "npm run verify:contracts && npm run verify:decisions && npm run verify:docs && npm run verify:documentation-leanness",
+      "command": "npm run verify:docs && npm run verify:decisions && npm run verify:traceability",
       "status": "passed",
-      "evidence": "Contract checks CON-001 through CON-004, 93 decision records, all documentation checks and all five leanness dimensions pass on the current candidate."
+      "evidence": "Links, whitespace, document map, PRD structure, 93 decision records and unchanged requirement/evidence mappings pass after the bounded owner synchronization."
     },
     {
-      "command": "Independent exact-byte review of DeepSeek/provider-management candidate based on 37b4cd1",
+      "command": "npm run verify:contracts && npm run verify:independent-documentation-review && npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "Review confirms explicit Provider-call failure, preserved typed Host errors, binding repair, secret-safe revision/reference fencing, discovery/generation separation and no status promotion."
+      "evidence": "CON-001 through CON-004 remain green and the current recipe binds all governed roots plus every changed UI path without status promotion."
     }
   ],
   "coordination": {
-    "taskId": "deepseek-provider-management-20260717",
-    "taskTitle": "DeepSeek conversation and Provider management repair",
+    "taskId": "settings-visible-ui-main0f-20260717",
+    "taskTitle": "Settings and visible UI contract synchronization",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The candidate extends the existing Models IPC and Home completion boundary without changing vault schemas, release scope, Requirement status, Exit status or Phase status.",
-    "acknowledgement": "Product Planning synchronized four existing owners; this independent review binds their current bytes to the implementation and focused evidence without promoting delivery status."
+    "compatibility": "The candidate changes presentation and localized unavailable states only; no IPC, schema, service, durable storage, release scope, Requirement, Exit or Phase status changes.",
+    "acknowledgement": "Product Planning synchronized the two existing UI/workflow owners and confirmed existing trace coverage; this review binds current bytes without promoting delivery status or claiming unavailable capabilities."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Real saved-credential DeepSeek generation remains a separate macOS acceptance claim; this recipe records only independently rerun code, contract and documentation evidence.",
-    "Credential replacement and Provider deletion are destructive or secret-bearing actions and still require explicit user/native confirmation for final real-account acceptance; tests use synthetic credentials.",
-    "Provider discovery and generation health are intentionally session-local and reset after restart; Refresh never proves chat usability.",
-    "Unknown typed Host failures preserve their stable code but currently share one body-free Agent completion message until a dedicated localized repair surface is justified.",
-    "Windows/Linux provider-management qualification remains unclaimed; no Requirement, Exit or Phase status is promoted by this repair."
+    "Activity Open remains a localized development affordance until a stable active-vault target projection exists; display labels never authorize navigation.",
+    "Unresolved Reader wiki/source links remain fail closed until the separately owned typed resolver is integrated; renderer hash mutation and heuristic identity matching stay forbidden.",
+    "Knowledge Tree Network/List and camera controls are renderer-local projections of the same body-free aggregate and do not prove force-graph analytics, new evidence, persistence or broader semantics.",
+    "Appearance, Local Capabilities, Agent Memory, Permissions, Skills, Packages and other unavailable Settings actions remain development-only unless an existing typed owner is bound.",
+    "Windows qualification, complete assistive-technology coverage, long-page Reader budgets and signed packaged visual acceptance remain open; no Requirement, Exit or Phase status is promoted."
   ]
 }
