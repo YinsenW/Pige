@@ -61,6 +61,8 @@ import type {
   ToolchainHealth,
   VaultRevealTarget,
   VaultSummary,
+  WindowLayoutRequest,
+  WindowLayoutState,
   WindowState
 } from "@pige/contracts";
 import type {
@@ -187,13 +189,16 @@ function useMediaQuery(query: string): boolean {
 
 export function App(): React.JSX.Element {
   const macosWindowShell = /Macintosh|Mac OS X/.test(window.navigator.userAgent);
-  const sidebarOverlayLayout = useMediaQuery("(max-width: 831px)");
-  const agentOverlayLayout = useMediaQuery("(max-width: 1199px)");
+  const sidebarHomeOverlayViewport = useMediaQuery("(max-width: 719px)");
+  const sidebarReaderOverlayViewport = useMediaQuery("(max-width: 839px)");
+  const agentSoloOverlayViewport = useMediaQuery("(max-width: 959px)");
+  const agentThreePaneOverlayViewport = useMediaQuery("(max-width: 1239px)");
   const [health, setHealth] = useState<AppHealth | null>(null);
   const [onboarding, setOnboarding] = useState<OnboardingStatus | null>(null);
   const [recentVaults, setRecentVaults] = useState<readonly RecentVaultSummary[]>([]);
   const [vaultName, setVaultName] = useState(initialVaultName);
   const [windowState, setWindowState] = useState<WindowState | null>(null);
+  const [windowLayoutState, setWindowLayoutState] = useState<WindowLayoutState | null>(null);
   const [view, setView] = useState<View>("home");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
@@ -238,6 +243,7 @@ export function App(): React.JSX.Element {
   const sidebarRef = useRef<HTMLElement | null>(null);
   const sidebarToggleRef = useRef<HTMLButtonElement | null>(null);
   const noteAgentToggleRef = useRef<HTMLButtonElement | null>(null);
+  const windowLayoutRevisionRef = useRef(-1);
   const knowledgeTreeReturnFocusKey = useRef<string | null>(null);
   const modelRefreshSequence = useRef(0);
   const agentRuntimeRefreshSequence = useRef(0);
@@ -249,6 +255,37 @@ export function App(): React.JSX.Element {
   } | null>(null);
   const activeVaultIdRef = useRef<string | undefined>(onboarding?.activeVault?.vaultId);
   activeVaultIdRef.current = onboarding?.activeVault?.vaultId;
+  const sidebarOpen = windowLayoutState?.sidebarOpen ?? windowState?.sidebarOpen ?? false;
+  const homeSurface = view === "home" && !selectedNote;
+  const windowLayoutSurface = homeSurface ? "home" : "reader";
+  const layoutSurfaceCurrent = windowLayoutState?.surface === windowLayoutSurface;
+  const sidebarOverlayLayout = layoutSurfaceCurrent && windowLayoutState?.sidebarOpen
+    ? windowLayoutState.sidebarPresentation === "overlay"
+    : homeSurface
+      ? sidebarHomeOverlayViewport
+      : sidebarReaderOverlayViewport;
+  const agentOverlayLayout = layoutSurfaceCurrent && windowLayoutState?.noteAgentOpen
+    ? windowLayoutState.noteAgentPresentation === "overlay"
+    : agentSoloOverlayViewport || (sidebarOpen && agentThreePaneOverlayViewport);
+
+  const applyWindowLayoutState = (nextState: WindowLayoutState): boolean => {
+    if (nextState.revision < windowLayoutRevisionRef.current) return false;
+    windowLayoutRevisionRef.current = nextState.revision;
+    setWindowLayoutState(nextState);
+    setNoteAgentOpen(nextState.noteAgentOpen);
+    return true;
+  };
+
+  const requestWindowLayout = async (request: WindowLayoutRequest): Promise<WindowLayoutState | null> => {
+    try {
+      const nextState = await window.pige.window.setLayout(request);
+      applyWindowLayoutState(nextState);
+      return nextState;
+    } catch {
+      setCaptureToast({ kind: "error", message: t("error.generic") });
+      return null;
+    }
+  };
 
   const updateVoiceAssetInstallOwnership = (active: boolean): void => {
     voiceAssetInstallActiveRef.current = active;
@@ -280,8 +317,15 @@ export function App(): React.JSX.Element {
   };
 
   useEffect(() => {
+    let active = true;
+    const unsubscribeLayout = window.pige.window.onLayoutChanged((nextState) => {
+      if (active) applyWindowLayoutState(nextState);
+    });
     void window.pige.getHealth().then(setHealth);
     void window.pige.window.current().then(setWindowState);
+    void window.pige.window.currentLayout().then((nextState) => {
+      if (active) applyWindowLayoutState(nextState);
+    });
     void window.pige.settings.appearance().then((appearance) => {
       if (voiceAssetInstallActiveRef.current) {
         deferredAppearanceRef.current = appearance;
@@ -293,6 +337,10 @@ export function App(): React.JSX.Element {
     void window.pige.system.toolchainHealth().then(setToolchainHealth);
     void refreshVaultState();
     void refreshModels().catch(() => undefined);
+    return () => {
+      active = false;
+      unsubscribeLayout();
+    };
   }, []);
 
   useEffect(() => {
@@ -508,12 +556,20 @@ export function App(): React.JSX.Element {
     try {
       const note = await window.pige.notes.render({ pageId });
       if (requestId !== noteOpenSequence.current || activeVaultIdRef.current !== vaultId) return;
+      let requestedNoteAgentOpen = noteAgentOpen;
       if (!noteAgentDisclosureInitialized.current) {
         noteAgentDisclosureInitialized.current = true;
-        setNoteAgentOpen(!agentOverlayLayout);
+        requestedNoteAgentOpen = !agentOverlayLayout;
       }
       setSelectedNoteVaultId(vaultId);
       setSelectedNote(note);
+      await requestWindowLayout({
+        apiVersion: 1,
+        surface: "reader",
+        sidebarOpen,
+        noteAgentOpen: requestedNoteAgentOpen
+      });
+      if (requestId !== noteOpenSequence.current || activeVaultIdRef.current !== vaultId) return;
       void loadNoteRelated(pageId, requestId, noteOpenSequence, setSelectedNoteRelated);
     } catch {
       if (requestId !== noteOpenSequence.current) return;
@@ -541,16 +597,17 @@ export function App(): React.JSX.Element {
   };
 
   const toggleSidebar = async (): Promise<void> => {
-    const nextSidebarOpen = !(windowState?.sidebarOpen ?? false);
-    if (nextSidebarOpen && sidebarOverlayLayout && noteAgentOpen) setNoteAgentOpen(false);
-    if (nextSidebarOpen && windowState?.mode === "compact") {
-      setWindowState(await window.pige.window.setMode({ mode: "expanded" }));
-    } else if (!nextSidebarOpen && view === "home" && windowState?.mode === "expanded") {
-      setWindowState(await window.pige.window.setMode({ mode: "compact" }));
-    }
-    setWindowState(await window.pige.window.setSidebarOpen({ sidebarOpen: nextSidebarOpen }));
+    const nextSidebarOpen = !sidebarOpen;
+    const wasOverlay = sidebarOpen && sidebarOverlayLayout;
+    const nextLayout = await requestWindowLayout({
+      apiVersion: 1,
+      surface: windowLayoutSurface,
+      sidebarOpen: nextSidebarOpen,
+      noteAgentOpen: windowLayoutSurface === "reader" && Boolean(selectedNote) && noteAgentOpen
+    });
+    if (!nextLayout) return;
     if (nextSidebarOpen && activeVault) void refreshLibrary();
-    if (!nextSidebarOpen && sidebarOverlayLayout) {
+    if (!nextSidebarOpen && wasOverlay) {
       window.requestAnimationFrame(() => sidebarToggleRef.current?.focus());
     }
   };
@@ -560,7 +617,14 @@ export function App(): React.JSX.Element {
     knowledgeTreeReturnFocusKey.current = null;
     setSelectedNote(null);
     setSelectedNoteRelated(null);
+    setNoteAgentOpen(false);
     setView("home");
+    void requestWindowLayout({
+      apiVersion: 1,
+      surface: "home",
+      sidebarOpen,
+      noteAgentOpen: false
+    });
     void refreshVaultState().catch(() => {
       setCaptureToast({ kind: "error", message: t("error.generic") });
     });
@@ -572,17 +636,16 @@ export function App(): React.JSX.Element {
     knowledgeTreeReturnFocusKey.current = null;
     setSelectedNote(null);
     setSelectedNoteRelated(null);
+    setNoteAgentOpen(false);
     setDevelopmentNotice(null);
     setView("library");
     void refreshLibrary();
-    if (sidebarOverlayLayout && (windowState?.sidebarOpen ?? false)) {
-      try {
-        setWindowState(await window.pige.window.setSidebarOpen({ sidebarOpen: false }));
-      } finally {
-        setLibrarySearchFocusRequest((current) => current + 1);
-      }
-      return;
-    }
+    await requestWindowLayout({
+      apiVersion: 1,
+      surface: "reader",
+      sidebarOpen: sidebarOverlayLayout ? false : sidebarOpen,
+      noteAgentOpen: false
+    });
     setLibrarySearchFocusRequest((current) => current + 1);
   };
 
@@ -739,7 +802,6 @@ export function App(): React.JSX.Element {
 
   const activeVault = onboarding?.activeVault;
   const blocked = !onboarding || onboarding.state === "blocked_no_vault";
-  const sidebarOpen = windowState?.sidebarOpen ?? false;
   const sidebarModal = sidebarOverlayLayout && sidebarOpen;
   const agentModal = agentOverlayLayout && Boolean(selectedNote && noteAgentOpen);
   const currentTitle = view === "home"
@@ -763,6 +825,22 @@ export function App(): React.JSX.Element {
   }, [activeVault?.vaultId, selectedNote?.summary.pageId, selectedNoteVaultId]);
 
   useEffect(() => {
+    if (!windowLayoutState) return;
+    const desiredNoteAgentOpen = windowLayoutSurface === "reader" && Boolean(selectedNote) && noteAgentOpen;
+    if (
+      windowLayoutState.surface === windowLayoutSurface &&
+      windowLayoutState.sidebarOpen === sidebarOpen &&
+      windowLayoutState.noteAgentOpen === desiredNoteAgentOpen
+    ) return;
+    void requestWindowLayout({
+      apiVersion: 1,
+      surface: windowLayoutSurface,
+      sidebarOpen,
+      noteAgentOpen: desiredNoteAgentOpen
+    });
+  }, [windowLayoutState?.revision, windowLayoutSurface, sidebarOpen, selectedNote?.summary.pageId, noteAgentOpen]);
+
+  useEffect(() => {
     if (!sidebarModal) return;
     const frame = window.requestAnimationFrame(() => {
       focusFirstOverlayControl(sidebarRef.current);
@@ -770,18 +848,32 @@ export function App(): React.JSX.Element {
     return () => window.cancelAnimationFrame(frame);
   }, [sidebarModal]);
 
-  const toggleNoteAgent = (): void => {
+  const toggleNoteAgent = async (): Promise<void> => {
+    if (!selectedNote) return;
     const nextOpen = !noteAgentOpen;
-    if (nextOpen && sidebarOverlayLayout && sidebarOpen) {
-      void toggleSidebar().then(() => setNoteAgentOpen(true));
-      return;
-    }
-    setNoteAgentOpen(nextOpen);
+    await requestWindowLayout({
+      apiVersion: 1,
+      surface: "reader",
+      sidebarOpen,
+      noteAgentOpen: nextOpen
+    });
+  };
+
+  const closeNoteAgent = async (): Promise<void> => {
+    if (!selectedNote || !noteAgentOpen) return;
+    const nextLayout = await requestWindowLayout({
+      apiVersion: 1,
+      surface: "reader",
+      sidebarOpen,
+      noteAgentOpen: false
+    });
+    if (!nextLayout) return;
+    window.requestAnimationFrame(() => noteAgentToggleRef.current?.focus());
   };
 
   return (
     <div
-      className={`shell app-window mode-${windowState?.mode ?? "compact"}${macosWindowShell ? " platform-macos" : ""}${sidebarOpen ? " sidebar-expanded" : ""}${selectedNote ? " note-mode" : ""}${dropActive ? " drop-active" : ""}`}
+      className={`shell app-window mode-${windowState?.mode ?? "compact"}${macosWindowShell ? " platform-macos" : ""}${homeSurface ? " home-surface" : ""}${sidebarOpen ? " sidebar-expanded" : ""}${selectedNote ? " note-mode" : ""}${dropActive ? " drop-active" : ""}`}
       aria-label="Pige"
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
@@ -1072,10 +1164,7 @@ export function App(): React.JSX.Element {
                   agentRuntimeStatus.defaultModelProfileId === model.id
               };
             })}
-            onClose={() => {
-              setNoteAgentOpen(false);
-              window.requestAnimationFrame(() => noteAgentToggleRef.current?.focus());
-            }}
+            onClose={() => void closeNoteAgent()}
             onOpenModels={(opener) => openSettings("models", opener)}
             onSelectModel={setHomeDefaultModel}
             onOpenCitation={(pageId) => {

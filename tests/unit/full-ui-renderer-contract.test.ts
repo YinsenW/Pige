@@ -13,6 +13,9 @@ describe("full production UI renderer contract", () => {
       "--home-pane-min: 360px;",
       "--home-pane-default: 420px;",
       "--home-pane-max: 420px;",
+      "--home-pane-wide-max: 1120px;",
+      "--home-conversation-max: 960px;",
+      "--home-composer-max: 840px;",
       "--library-pane-min: 240px;",
       "--library-pane-default: 280px;",
       "--library-pane-max: 320px;",
@@ -28,9 +31,13 @@ describe("full production UI renderer contract", () => {
       expect(cssSource).toContain(declaration);
     }
 
-    expect(cssSource).toContain("@media (max-width: 831px)");
-    expect(cssSource).toContain("@media (min-width: 832px) and (max-width: 1199px)");
-    expect(cssSource).toContain("@media (min-width: 1200px) and (max-width: 1439px)");
+    expect(cssSource).toContain("@media (max-width: 839px)");
+    expect(cssSource).toContain("@media (min-width: 840px) and (max-width: 1199px)");
+    expect(cssSource).toContain("@media (min-width: 720px)");
+    expect(cssSource).toContain("@media (max-width: 959px)");
+    expect(cssSource).toContain("@media (min-width: 960px) and (max-width: 1239px)");
+    expect(cssSource).toContain("@media (min-width: 1240px)");
+    expect(cssSource).toContain("@media (min-width: 720px) and (max-width: 839px)");
     expect(cssSource).toContain("@media (min-width: 1440px)");
     expect(cssSource).toContain("width: min(100%, var(--home-pane-max));");
     expect(cssSource).toContain("grid-template-columns: minmax(0, 1fr);");
@@ -53,6 +60,10 @@ describe("full production UI renderer contract", () => {
     expect(processingPanel).toContain("width: anchor-size(width);");
     expect(processingPanel).toContain("bottom: calc(anchor(top) - 14px);");
     expect(processingPanel).toContain("margin: 0;");
+    const wideHome = cssSource.slice(cssSource.indexOf("@media (min-width: 720px)"));
+    expect(wideHome).toContain("--home-pane-max: var(--home-pane-wide-max)");
+    expect(wideHome).toContain("width: min(100%, var(--home-composer-max));");
+    expect(wideHome).toContain("max-width: var(--home-conversation-max);");
     const processingProjection = appSource.slice(
       appSource.indexOf("function isActiveProcessingFileJob"),
       appSource.indexOf("function jobStateMessageKey")
@@ -71,8 +82,19 @@ describe("full production UI renderer contract", () => {
     expect(appSource).toContain("<LibrarySidebarTree");
     expect(appSource).toContain('aria-expanded={familyExpanded}');
     expect(appSource).toContain('aria-expanded={typeExpanded}');
-    expect(appSource).toContain('!nextSidebarOpen && view === "home" && windowState?.mode === "expanded"');
-    expect(appSource).toContain('setMode({ mode: "compact" })');
+    expect(appSource).toContain("window.pige.window.currentLayout()");
+    expect(appSource).toContain("window.pige.window.onLayoutChanged");
+    expect(appSource).toContain("window.pige.window.setLayout(request)");
+    expect(appSource).toContain("windowLayoutRevisionRef.current");
+    expect(appSource).toContain('surface: "home"');
+    expect(appSource).toContain('surface: "reader"');
+    expect(appSource).not.toContain("window.pige.window.setMode(");
+    expect(appSource).not.toContain("window.pige.window.setSidebarOpen(");
+    const layoutAdapter = appSource.slice(
+      appSource.indexOf("const requestWindowLayout"),
+      appSource.indexOf("const updateVoiceAssetInstallOwnership")
+    );
+    expect(layoutAdapter).not.toMatch(/\b(width|height|workArea|presentation)\s*:/);
     const primaryNavigationStart = appSource.indexOf('<nav className="primary-navigation nav-list"');
     const primaryNavigation = appSource.slice(
       primaryNavigationStart,

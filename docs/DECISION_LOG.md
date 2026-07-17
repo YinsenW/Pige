@@ -1,7 +1,7 @@
 # Decision Log
 
 Status: Active decision ledger
-Last reviewed: 2026-07-14
+Last reviewed: 2026-07-17
 
 ## 1. Purpose
 
@@ -2811,6 +2811,29 @@ Consequences:
 References:
 
 - `docs/JOB_OPERATION_AND_RECOVERY.md`
+
+### D-20260717-Main-Owned-Resident-Window-Layout
+
+Status: Accepted
+Date: 2026-07-17
+
+Decision:
+
+Renderer sends disclosure intent only; Main owns bounds, revision, expansion, and
+presentation at `720/840/960/1240px`.
+
+Rationale:
+
+Native resizing needs one authority.
+
+Consequences:
+
+- Main preserves base, never remembers expansion, restores in either order, and overlays
+  Agent first. Renderer consumes validated layout state; requests contain no geometry.
+
+References:
+
+- `docs/API_AND_IPC_DESIGN.md`
 
 ## 4. Deferred Decisions
 

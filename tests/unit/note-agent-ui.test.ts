@@ -904,13 +904,16 @@ describe("Note Agent production UI", () => {
     expect(cssSource).toContain(".agent-message-card {");
     expect(cssSource).toContain(".agent-message-card.provisional {");
     expect(cssSource).toContain(".proposal-panel {");
+    expect(cssSource).toMatch(/\.note-agent\s*\{[\s\S]*?background:\s*var\(--surface\);/);
+    expect(cssSource).not.toMatch(/\.note-agent\s*\{[\s\S]*?background:\s*#fdfdfd;/);
     expect(cssSource).toMatch(/\.note-agent-header\s*\{[\s\S]*?padding:\s*0 20px;/);
     expect(cssSource).toMatch(/\.note-agent-thread\s*\{[\s\S]*?padding:\s*22px 20px;/);
     expect(cssSource).toMatch(/\.note-composer\s*\{[\s\S]*?min-height:\s*132px;[\s\S]*?border-radius:\s*20px;/);
     expect(cssSource).toMatch(/\.note-composer textarea\s*\{[\s\S]*?min-height:\s*64px;[\s\S]*?font-size:\s*14px;[\s\S]*?line-height:\s*1\.5;/);
     expect(cssSource).toContain(".note-composer-toolbar { display: flex; align-items: center; gap: 8px; }");
-    expect(cssSource).toContain("@media (max-width: 1199px)");
-    expect(cssSource).toContain("@media (min-width: 1200px)");
+    expect(cssSource).toContain("@media (max-width: 959px)");
+    expect(cssSource).toContain("@media (min-width: 960px) and (max-width: 1239px)");
+    expect(cssSource).toContain("@media (min-width: 1240px)");
 
     const keys = [
       "note.agentTitle",

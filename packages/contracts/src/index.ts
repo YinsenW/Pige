@@ -53,7 +53,9 @@ import type {
   SourceStorageStrategy,
   VaultRevealResult,
   VaultRevealTarget,
-  WindowLayoutMode
+  WindowLayoutMode,
+  WindowLayoutRequest,
+  WindowLayoutState
 } from "@pige/schemas";
 
 export type {
@@ -91,7 +93,9 @@ export type {
   SpeechSessionRequest,
   SpeechStartRequest,
   SpeechStartResult,
-  SpeechStopResult
+  SpeechStopResult,
+  WindowLayoutRequest,
+  WindowLayoutState
 } from "@pige/schemas";
 
 export interface AppHealth {
@@ -1152,6 +1156,9 @@ export interface PigeDesktopApi {
   readonly getHealth: () => Promise<AppHealth>;
   readonly window: {
     readonly current: () => Promise<WindowState>;
+    readonly currentLayout: () => Promise<WindowLayoutState>;
+    readonly setLayout: (request: WindowLayoutRequest) => Promise<WindowLayoutState>;
+    readonly onLayoutChanged: (listener: (state: WindowLayoutState) => void) => () => void;
     readonly setMode: (request: SetWindowModeRequest) => Promise<WindowState>;
     readonly setAlwaysOnTop: (request: SetAlwaysOnTopRequest) => Promise<WindowState>;
     readonly setSidebarOpen: (request: SetSidebarOpenRequest) => Promise<WindowState>;

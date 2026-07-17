@@ -11,10 +11,88 @@ import {
   ToolchainManifestSchema,
   VaultConfigSchema,
   VaultManifestSchema,
-  VaultRevealResultSchema
+  VaultRevealResultSchema,
+  WindowLayoutRequestSchema,
+  WindowLayoutStateSchema
 } from "@pige/schemas";
 
 describe("schemas", () => {
+  it("validates the renderer-safe resident pane layout boundary", () => {
+    expect(
+      WindowLayoutRequestSchema.parse({
+        apiVersion: 1,
+        surface: "reader",
+        sidebarOpen: true,
+        noteAgentOpen: true
+      })
+    ).toEqual({
+      apiVersion: 1,
+      surface: "reader",
+      sidebarOpen: true,
+      noteAgentOpen: true
+    });
+    expect(() =>
+      WindowLayoutRequestSchema.parse({
+        apiVersion: 1,
+        surface: "home",
+        sidebarOpen: false,
+        noteAgentOpen: true
+      })
+    ).toThrow();
+    expect(() =>
+      WindowLayoutRequestSchema.parse({
+        apiVersion: 1,
+        surface: "reader",
+        sidebarOpen: true,
+        noteAgentOpen: false,
+        width: 1240
+      })
+    ).toThrow();
+
+    expect(
+      WindowLayoutStateSchema.parse({
+        apiVersion: 1,
+        revision: 4,
+        surface: "reader",
+        sidebarOpen: true,
+        noteAgentOpen: true,
+        sidebarPresentation: "resident",
+        noteAgentPresentation: "overlay",
+        autoExpanded: true,
+        isMaximized: false,
+        isFullScreen: false
+      })
+    ).toMatchObject({ revision: 4, sidebarPresentation: "resident", noteAgentPresentation: "overlay" });
+    expect(() =>
+      WindowLayoutStateSchema.parse({
+        apiVersion: 1,
+        revision: 4,
+        surface: "reader",
+        sidebarOpen: false,
+        noteAgentOpen: false,
+        sidebarPresentation: "resident",
+        noteAgentPresentation: "closed",
+        autoExpanded: false,
+        isMaximized: false,
+        isFullScreen: false
+      })
+    ).toThrow();
+    expect(() =>
+      WindowLayoutStateSchema.parse({
+        apiVersion: 1,
+        revision: 5,
+        surface: "reader",
+        sidebarOpen: true,
+        noteAgentOpen: true,
+        sidebarPresentation: "overlay",
+        noteAgentPresentation: "resident",
+        autoExpanded: false,
+        isMaximized: false,
+        isFullScreen: false
+      })
+    ).toThrow();
+  });
+
   it("validates requirement IDs", () => {
     expect(RequirementIdSchema.parse("PIGE-REPO-004")).toBe("PIGE-REPO-004");
   });

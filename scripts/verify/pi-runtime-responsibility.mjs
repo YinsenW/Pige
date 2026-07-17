@@ -52,6 +52,12 @@ const modules = [
     owner: "JobExecutionCoordinator",
     classification: "authority_reliability",
     upstreamGap: "Pi owns Agent turn execution, while Pige must single-own durable Job claim, CAS, cancellation, retry, checkpoint, review, recovery, and terminal transitions."
+  },
+  {
+    path: "apps/desktop/src/main/services/window-layout-policy.ts",
+    owner: "Window layout policy",
+    classification: "product_boundary",
+    upstreamGap: "Pi does not own native window geometry, display work-area constraints, or resident-versus-overlay presentation."
   }
 ];
 

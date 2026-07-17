@@ -39,6 +39,7 @@ describe("local settings store", () => {
       mode: "expanded",
       alwaysOnTop: true,
       sidebarOpen: true,
+      noteAgentOpen: true,
       expandedSize: { width: 960, height: 760 }
     });
     store.setActiveVault("/tmp/Pige Vault", vault);
@@ -48,7 +49,8 @@ describe("local settings store", () => {
     expect(store.read().window).toMatchObject({
       mode: "expanded",
       alwaysOnTop: true,
-      sidebarOpen: true
+      sidebarOpen: true,
+      noteAgentOpen: true
     });
   });
 

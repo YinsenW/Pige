@@ -439,6 +439,29 @@ function makePigeApi(harness: RestoreHarness, sidebarOpen = false): object {
         isFullScreen: false,
         size: { width: 1280, height: 800 }
       }),
+      currentLayout: async () => ({
+        apiVersion: 1,
+        revision: 0,
+        surface: "home",
+        sidebarOpen,
+        noteAgentOpen: false,
+        sidebarPresentation: sidebarOpen ? "resident" : "closed",
+        noteAgentPresentation: "closed",
+        autoExpanded: false,
+        isMaximized: false,
+        isFullScreen: false
+      }),
+      setLayout: async (request: { readonly surface: "home" | "reader"; readonly sidebarOpen: boolean; readonly noteAgentOpen: boolean }) => ({
+        apiVersion: 1,
+        revision: 1,
+        ...request,
+        sidebarPresentation: request.sidebarOpen ? "resident" : "closed",
+        noteAgentPresentation: request.noteAgentOpen ? "resident" : "closed",
+        autoExpanded: false,
+        isMaximized: false,
+        isFullScreen: false
+      }),
+      onLayoutChanged: () => () => undefined,
       setMode: async ({ mode }: { readonly mode: string }) => ({
         mode,
         alwaysOnTop: false,

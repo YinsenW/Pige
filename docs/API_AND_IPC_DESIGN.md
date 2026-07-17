@@ -834,19 +834,18 @@ Rules:
 
 ### 6.11 Window And Layout
 
-Commands and queries:
-
-- `window.current`
-- `window.setMode`
-- `window.setAlwaysOnTop`
-- `window.setSidebarOpen`
-
-Rules:
-
-- Main process owns native window flags, size changes, and full-screen state.
-- Renderer receives only serializable `WindowState` DTOs through preload.
-- Window layout mode, remembered compact/expanded sizes, sidebar preference, and always-on-top preference are machine-local settings and are excluded from vault backup.
-- First-run default is compact capture.
+- Bridge: `window.current`, `window.currentLayout`, `window.setMode`, `window.setLayout`,
+  `window.setAlwaysOnTop`, `window.setSidebarOpen`; event `window.layoutChanged`.
+- `WindowLayoutRequest` allows only `apiVersion: 1`, `surface: "home" | "reader"`,
+  `sidebarOpen`, `noteAgentOpen`; Home cannot request Agent. Renderer sends no geometry or
+  presentation and renders validated `WindowState`/`WindowLayoutState` DTOs only.
+- Main owns work area, frame delta, bounds, revision, expansion, native flags, and
+  `closed | resident | overlay`. Budgets are Home + Library `720px`, Reader + Library
+  `840px`, Reader + Agent `960px`, all `1240px`; Agent overlays first. Main preserves base,
+  never remembers expansion, restores in either close order, and reconciles display/frame
+  changes before revision.
+- Mode/sizes/sidebar/always-on-top are machine-local and backup-excluded; first run is
+  compact capture.
 
 ## 7. Worker Contracts
 

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-17T02:06:46Z",
+  "reviewedAt": "2026-07-17T03:14:05Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -26,17 +26,17 @@
       "packages/schemas/src/index.ts",
       "package.json"
     ],
-    "scope": "Manual H3 review binds the Job, API, architecture, quality, playbook, decision and traceability owners to the exact 89d7ee9 coordinator candidate plus its current Planning bind and bounded Decision Log structure/leanness repair; automated gates cover implementation evidence separately.",
+    "scope": "Manual WindowLayout review binds the UI, API, architecture, decision and traceability owners to the exact 3ddc4d0 candidate, its current Planning synchronization and bounded verification-owner classification.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "c62c7a14dfabb44e6d53d62213b845398da062388c530771ff2829b622ac824d"
+    "reviewedSha256": "5c6d12e3bfb38c2c6f293e4a402922b52fe40771e1c9a47c81039d9e80ce1da5"
   },
   "reviewers": [
     {
-      "reviewerId": "h3-job-execution-coordinator-independent-review",
-      "task": "H3 JobExecutionCoordinator cancellation, resume proof, lifecycle ownership and renderer proposal containment review",
+      "reviewerId": "window-layout-after-h3-independent-review",
+      "task": "WindowLayout Main ownership, resident policy, base-size preservation, constrained fallback and H3 safety review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -44,84 +44,82 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "The reviewer did not author the H3 code, Planning bind, or bounded Decision Log repair and compared the current documentation bytes and exact 89d7ee961d799c4710545b08980a4d8c71a874da implementation with H2 baseline b9b624df9ea13b17ac869e1193b88095f0ba3806 before issuing CLEAR."
+      "independence": "The reviewer did not author the WindowLayout code or Planning bind and compared the exact current documentation bytes, contracts, implementation, tests and trace projections before issuing CLEAR."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "h3-job-execution-coordinator-independent-review",
+      "reviewerId": "window-layout-after-h3-independent-review",
       "blockerCount": 0,
-      "summary": "Existing Job, API, architecture, quality, playbook and decision owners now expose one coherent H3 core without adding a competing document or changing the public product scope."
+      "summary": "Existing UI, API, architecture and decision owners carry one WindowLayout contract without adding a competing owner or changing public release scope."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "h3-job-execution-coordinator-independent-review",
+      "reviewerId": "window-layout-after-h3-independent-review",
       "blockerCount": 0,
-      "summary": "The documents match code: one coordinator owns migrated Jobs/Home lifecycle, cancellation has three proof-dependent terminal projections, resume proofs are exact, and raw proposal renderer access remains fail closed."
+      "summary": "Owners and code agree on renderer intent only, Main-owned geometry and presentation, 720/840/960/1240 budgets, base restoration and Agent-first overlay fallback."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "h3-job-execution-coordinator-independent-review",
+      "reviewerId": "window-layout-after-h3-independent-review",
       "blockerCount": 0,
-      "summary": "Three exact H3 evidence selectors bind lifecycle, cancellation and resume-proof claims while PIGE-JOB-002, PIGE-JOB-004 and E2.10/E2.11 remain partial and every Requirement, Exit and Phase status is unchanged."
+      "summary": "One exact WindowLayout IPC selector augments existing API, UI and exit evidence while every Requirement, Exit and Phase status remains unchanged."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "h3-job-execution-coordinator-independent-review",
+      "reviewerId": "window-layout-after-h3-independent-review",
       "blockerCount": 0,
-      "summary": "The migration is executable and reviewable: JobsService has zero direct lifecycle-state writers, two named CAS compatibility boundaries remain, Home adopts durable completion, and H3b/H3c stay explicit."
+      "summary": "The typed boundary is executable and testable; Main owns native layout, its 118-line policy is classified outside Pi, and renderer preserves H3 safety."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "h3-job-execution-coordinator-independent-review",
+      "reviewerId": "window-layout-after-h3-independent-review",
       "blockerCount": 0,
-      "summary": "No new owner document was added. Existing Job and decision owners carry the H3 contract; trace and review locks remain machine-bound."
+      "summary": "No new owner document was added; concise edits synchronize existing owners, one decision and one trace evidence projection on the exact governed snapshot."
     }
   ],
   "verification": [
     {
-      "command": "npm test -- tests/unit/job-execution-coordinator.test.ts tests/unit/jobs-service.test.ts tests/unit/home-agent-conversation-ui.test.ts tests/unit/model-egress-job-recovery.test.ts tests/unit/permission-broker-job-recovery.test.ts",
+      "command": "npm run verify:docs && npm run verify:decisions && npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "Exact focused review passed coordinator, Jobs, Home retry, permission and model-egress recovery coverage, including all cancellation outcomes and exact resume proofs."
+      "evidence": "Links, whitespace, document map, parser manifests, PRD contract, 93 decision records and all five leanness checks pass on the current Planning bind."
     },
     {
-      "command": "node scripts/verify/pi-runtime-responsibility.mjs",
+      "command": "npm run verify:boundaries",
       "status": "passed",
-      "evidence": "The responsibility gate reports zero direct JobsService lifecycle-state writers, exactly two named CAS compatibility boundaries and explicit H3b/H3c residual loops."
+      "evidence": "Boundary verification reports 112 current service files and classifies the 118-line Window layout policy as a non-Agent product boundary."
     },
     {
-      "command": "npm run verify:docs && npm run verify:decisions",
+      "command": "npm run verify:traceability",
       "status": "passed",
-      "evidence": "Links, whitespace, document map, parser manifests, PRD contract and Decision Log checks pass on the current H3 governed snapshot."
+      "evidence": "TRC-001 through TRC-004 pass before lock generation; the final run binds TRC-005 to this exact independent report and current evidence selector."
     },
     {
-      "command": "Independent code, decision and traceability review of current H3 documentation bytes and 89d7ee961d799c4710545b08980a4d8c71a874da against b9b624df9ea13b17ac869e1193b88095f0ba3806",
+      "command": "Independent code, contract and supplied functional-evidence review of WindowLayout candidate 3ddc4d08e6b872516e419cf068168435ac532c03 against origin/main 26e18e15a8d083aaab2caea71b29fcb4b70d1013",
       "status": "passed",
-      "evidence": "Exact hashes and code review confirm three cancellation projections, exact repair/source proofs, raw proposal removal, unchanged Development bytes and no Requirement, Exit or Phase promotion."
+      "evidence": "Review confirms Main ownership, intent-only renderer requests, resident-first budgets, exact base restoration, constrained Agent overlay, H3 retry/proposal safety and no status promotion."
     }
   ],
   "coordination": {
-    "taskId": "h3-job-execution-coordinator-core-20260717",
-    "taskTitle": "H3 JobExecutionCoordinator core and Jobs/Home migration",
+    "taskId": "window-layout-after-h3-20260717",
+    "taskTitle": "Main-owned resident WindowLayout after H3",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "H3 centralizes migrated Jobs/Home lifecycle without changing Pi semantic ownership, durable schema, renderer authority or non-migrated Job-class behavior.",
-    "acknowledgement": "Planning synchronized only existing H3 owner and traceability resources after independent CLEAR; Development/UI bytes remain unchanged, H3b/H3c stay serialized open work, and status projections remain unchanged."
+    "compatibility": "WindowLayout adds a versioned Main-owned geometry contract without changing durable vault data, H3 Job semantics, renderer proposal authority or release status.",
+    "acknowledgement": "Product Planning synchronized the existing owners; verification now classifies native WindowLayout outside Pi, with all Requirement, Exit and Phase statuses unchanged."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Backup, Restore and Local Tool lifecycle loops remain outside the coordinator core and must move in H3b without creating a second transition owner.",
-    "JobsService still owns dispatch; H3c must introduce a per-class executor registry while preserving exact Job and durable-effect proofs.",
-    "The preload type surface still names legacy proposal methods, but Main rejects them and renderer no longer calls or renders the raw DTO; a bounded preview and decision owner remains open.",
-    "Coordinator, JobsService and Home remain large; the current ownership change is not evidence of global service convergence or completion.",
-    "Cross-file atomicity, final-syscall TOCTOU, Pi transcript continuation and remaining Job-class recovery are open.",
-    "Windows/Linux qualification remains deferred and unclaimed; Requirement, Exit and Phase statuses are unchanged."
+    "Windows/Linux native-shell qualification remains deferred and unclaimed; the current real Electron geometry proof is macOS-only.",
+    "The legacy window.setSidebarOpen compatibility surface remains available, while the production renderer uses the versioned WindowLayout request/state/event path.",
+    "The candidate preserves H3 retry/proposal safety but does not close H3b/H3c, remaining Job-class recovery, atomicity, TOCTOU or signed-platform work.",
+    "Accessibility and final cross-platform visual equivalence remain governed open acceptance work; no Requirement, Exit or Phase status is promoted."
   ]
 }

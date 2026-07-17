@@ -44,8 +44,8 @@
     "@media (prefers-color-scheme: dark)",
     "@media (prefers-reduced-transparency: reduce)",
     "@media (prefers-reduced-motion: reduce)",
-    "@media (max-width: 831px)",
-    "@media (min-width: 832px) and (max-width: 1199px)",
+    "@media (max-width: 839px)",
+    "@media (min-width: 840px) and (max-width: 1199px)",
     "@media (min-width: 1200px) and (max-width: 1439px)",
     "@media (min-width: 1440px)"
   ],

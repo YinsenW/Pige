@@ -33,7 +33,9 @@ import type {
   SpeechSessionRequest,
   SpeechStartRequest,
   SpeechStartResult,
-  SpeechStopResult
+  SpeechStopResult,
+  WindowLayoutRequest,
+  WindowLayoutState
 } from "@pige/contracts";
 import deMessages from "../../apps/desktop/src/renderer/src/locales/de/messages.json";
 import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.json";
@@ -569,12 +571,14 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
-  it("keeps the compact Library overlay modal at 831 and resident at 832", async () => {
-    for (const [width, modal] of [[831, true], [832, false]] as const) {
+  it("keeps Home Library modal only below its resident width budget", async () => {
+    for (const [width, modal] of [[719, true], [720, false]] as const) {
       const dom = createDom(width);
       const harness = createHarness(undefined);
       harness.windowMode = "expanded";
       harness.sidebarOpen = true;
+      harness.windowLayoutWidth = width;
+      harness.windowLayoutAvailableWidth = width;
       const { container, root } = await mountHome(dom, makePigeApi(harness));
       await waitFor(dom, () => container.querySelector(".library-sidebar-tree .library-tree-disclosure") !== null);
 
@@ -599,12 +603,189 @@ describe("Home durable Agent conversation UI", () => {
     }
   });
 
-  it("preserves the user-owned note conversation disclosure across note routing", async () => {
-    for (const [width, overlay] of [[1199, true], [1200, false]] as const) {
+  it("ignores a stale WindowLayout event after a newer resident disclosure revision", async () => {
+    const dom = createDom(720);
+    const harness = createHarness(undefined);
+    harness.windowLayoutWidth = 720;
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    await waitFor(dom, () => harness.windowLayoutListeners.size === 1);
+
+    const newer: WindowLayoutState = {
+      apiVersion: 1,
+      revision: 5,
+      surface: "home",
+      sidebarOpen: true,
+      noteAgentOpen: false,
+      sidebarPresentation: "resident",
+      noteAgentPresentation: "closed",
+      autoExpanded: true,
+      isMaximized: false,
+      isFullScreen: false
+    };
+    const stale: WindowLayoutState = {
+      ...newer,
+      revision: 4,
+      sidebarOpen: false,
+      sidebarPresentation: "closed",
+      autoExpanded: false
+    };
+    await act(async () => {
+      for (const listener of harness.windowLayoutListeners) listener(newer);
+      for (const listener of harness.windowLayoutListeners) listener(stale);
+      await settle(dom);
+    });
+
+    expect(container.querySelector("#pige-library-sidebar")).not.toBeNull();
+    expect(buttonsByAriaLabel(container, "Collapse sidebar")).toHaveLength(1);
+
+    await act(async () => root.unmount());
+    expect(harness.windowLayoutListeners.size).toBe(0);
+    dom.window.close();
+  });
+
+  it("keeps Reader Library modal until the reader minimum width fits", async () => {
+    for (const [width, modal] of [[839, true], [840, false]] as const) {
       const dom = createDom(width);
       const harness = createHarness(undefined);
       harness.windowMode = "expanded";
       harness.sidebarOpen = true;
+      harness.windowLayoutWidth = width;
+      harness.windowLayoutAvailableWidth = width;
+      const { container, root } = await mountHome(dom, makePigeApi(harness));
+      await waitFor(dom, () => container.querySelector(".library-sidebar-tree .library-tree-disclosure") !== null);
+      await openLibraryNote(dom, container, "Note A");
+
+      const sidebar = container.querySelector<HTMLElement>("#pige-library-sidebar");
+      const workspace = container.querySelector<HTMLElement>("main.workspace");
+      expect(sidebar?.getAttribute("role")).toBe(modal ? "dialog" : null);
+      expect(sidebar?.getAttribute("aria-modal")).toBe(modal ? "true" : null);
+      expect(workspace?.hasAttribute("inert")).toBe(modal);
+
+      await act(async () => root.unmount());
+      dom.window.close();
+    }
+  });
+
+  it("requests enough window width before revealing the Library pane", async () => {
+    for (const initialMode of ["compact", "expanded"] as const) {
+      const dom = createDom(420);
+      const harness = createHarness(undefined);
+      harness.windowMode = initialMode;
+      harness.sidebarOpen = false;
+      harness.windowLayoutWidth = 420;
+      harness.windowLayoutAvailableWidth = 1600;
+      const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+      await clickElement(dom, buttonsByAriaLabel(container, "Expand sidebar")[0]!);
+      await waitFor(dom, () => harness.sidebarOpen && harness.windowLayoutWidth === 720);
+      expect(harness.windowModeRequests).toEqual([]);
+      expect(harness.windowLayoutRequests.at(-1)).toEqual({
+        apiVersion: 1,
+        surface: "home",
+        sidebarOpen: true,
+        noteAgentOpen: false
+      });
+      expect(currentWindowLayout(harness).sidebarPresentation).toBe("resident");
+
+      await act(async () => root.unmount());
+      dom.window.close();
+    }
+  });
+
+  it("expands resident panes through 720, 840, and 1240 then restores the exact user base", async () => {
+    const dom = createDom(420);
+    const harness = createHarness(undefined);
+    harness.windowLayoutWidth = 420;
+    harness.windowLayoutAvailableWidth = 1600;
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await clickElement(dom, buttonsByAriaLabel(container, "Expand sidebar")[0]!);
+    await waitFor(dom, () => harness.windowLayoutWidth === 720);
+    await waitFor(dom, () => container.querySelector(".library-sidebar-tree .library-tree-disclosure") !== null);
+
+    await openLibraryNote(dom, container, "Note A");
+    await waitFor(dom, () => harness.windowLayoutWidth === 840);
+    expect(currentWindowLayout(harness).sidebarPresentation).toBe("resident");
+
+    await clickElement(dom, buttonsByAriaLabel(container, "Show note conversation")[0]!);
+    await waitFor(dom, () => harness.windowLayoutWidth === 1240);
+    expect(currentWindowLayout(harness)).toMatchObject({
+      surface: "reader",
+      sidebarPresentation: "resident",
+      noteAgentPresentation: "resident",
+      autoExpanded: true
+    });
+
+    await clickButtonByAriaLabel(dom, container, "Hide note conversation");
+    await waitFor(dom, () => harness.windowLayoutWidth === 840);
+    await clickElement(dom, buttonsByAriaLabel(container, "Collapse sidebar")[0]!);
+    await waitFor(dom, () => harness.windowLayoutWidth === 420);
+    expect(currentWindowLayout(harness)).toMatchObject({
+      sidebarPresentation: "closed",
+      noteAgentPresentation: "closed",
+      autoExpanded: false
+    });
+
+    await clickElement(dom, buttonsByAriaLabel(container, "Expand sidebar")[0]!);
+    await waitFor(dom, () => harness.windowLayoutWidth === 840);
+    await clickElement(dom, buttonsByAriaLabel(container, "Show note conversation")[0]!);
+    await waitFor(dom, () => harness.windowLayoutWidth === 1240);
+    await clickElement(dom, buttonsByAriaLabel(container, "Collapse sidebar")[0]!);
+    await waitFor(dom, () => harness.windowLayoutWidth === 960);
+    expect(currentWindowLayout(harness)).toMatchObject({
+      sidebarPresentation: "closed",
+      noteAgentPresentation: "resident",
+      autoExpanded: true
+    });
+    await clickButtonByAriaLabel(dom, container, "Hide note conversation");
+    await waitFor(dom, () => harness.windowLayoutWidth === 420);
+    expect(currentWindowLayout(harness)).toMatchObject({
+      sidebarPresentation: "closed",
+      noteAgentPresentation: "closed",
+      autoExpanded: false
+    });
+    expect(harness.windowModeRequests).toEqual([]);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps overlay state and focus fail closed when the layout owner rejects close", async () => {
+    const dom = createDom(719);
+    const harness = createHarness(undefined);
+    harness.sidebarOpen = true;
+    harness.windowLayoutWidth = 719;
+    harness.windowLayoutAvailableWidth = 719;
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    await waitFor(dom, () => container.querySelector("#pige-library-sidebar") !== null);
+
+    const sidebar = container.querySelector<HTMLElement>("#pige-library-sidebar")!;
+    const firstControl = sidebar.querySelector<HTMLElement>("button");
+    firstControl?.focus();
+    harness.failNextWindowLayout = true;
+    await act(async () => {
+      sidebar.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await settle(dom);
+    });
+
+    await waitFor(dom, () => container.textContent?.includes(enMessages["error.generic"]) === true);
+    expect(container.querySelector("#pige-library-sidebar")).not.toBeNull();
+    expect(harness.sidebarOpen).toBe(true);
+    expect(dom.window.document.activeElement).toBe(firstControl);
+    expect(container.textContent).not.toContain("raw window layout failure");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("preserves the user-owned note conversation disclosure across note routing", async () => {
+    for (const [width, overlay] of [[1239, true], [1240, false]] as const) {
+      const dom = createDom(width);
+      const harness = createHarness(undefined);
+      harness.windowMode = "expanded";
+      harness.sidebarOpen = true;
+      harness.windowLayoutWidth = width;
+      harness.windowLayoutAvailableWidth = width;
       const { container, root } = await mountHome(dom, makePigeApi(harness));
       await waitFor(dom, () => container.querySelector(".library-sidebar-tree .library-tree-disclosure") !== null);
       await openLibraryNote(dom, container, "Note A");
@@ -624,9 +805,16 @@ describe("Home durable Agent conversation UI", () => {
         await waitFor(dom, () => container.querySelector(".note-agent") === null);
         await waitFor(dom, () => dom.window.document.activeElement === opener);
       } else {
+        expect(harness.windowLayoutRequests.at(-1)).toEqual({
+          apiVersion: 1,
+          surface: "reader",
+          sidebarOpen: true,
+          noteAgentOpen: true
+        });
+        await waitFor(dom, () => container.querySelector(".note-agent") !== null);
         expect(container.querySelector(".note-agent")?.getAttribute("aria-modal")).toBeNull();
         await clickButtonByAriaLabel(dom, container, "Hide note conversation");
-        expect(container.querySelector(".note-agent")).toBeNull();
+        await waitFor(dom, () => container.querySelector(".note-agent") === null);
       }
 
       await openLibraryNote(dom, container, "Note B");
@@ -636,6 +824,62 @@ describe("Home durable Agent conversation UI", () => {
       await act(async () => root.unmount());
       dom.window.close();
     }
+  });
+
+  it("uses a resident Note Agent when reader and agent minimum widths fit", async () => {
+    const dom = createDom(960);
+    const harness = createHarness(undefined);
+    harness.windowMode = "expanded";
+    harness.sidebarOpen = false;
+    harness.windowLayoutWidth = 960;
+    harness.windowLayoutAvailableWidth = 1600;
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await clickElement(dom, buttonsByAriaLabel(container, "Expand sidebar")[0]!);
+    await waitFor(dom, () => container.querySelector(".library-sidebar-tree .library-tree-disclosure") !== null);
+    await openLibraryNote(dom, container, "Note A");
+    await clickElement(dom, buttonsByAriaLabel(container, "Collapse sidebar")[0]!);
+    await waitFor(dom, () => container.querySelector("#pige-library-sidebar") === null);
+    await clickElement(dom, buttonsByAriaLabel(container, "Show note conversation")[0]!);
+
+    const agent = container.querySelector<HTMLElement>(".note-agent");
+    expect(agent).not.toBeNull();
+    expect(agent?.getAttribute("role")).toBeNull();
+    expect(agent?.getAttribute("aria-modal")).toBeNull();
+    expect(container.querySelector("main.workspace")?.hasAttribute("inert")).toBe(false);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("requests enough window width before revealing the Note Agent", async () => {
+    const dom = createDom(840);
+    const harness = createHarness(undefined);
+    harness.windowMode = "expanded";
+    harness.sidebarOpen = true;
+    harness.windowLayoutWidth = 840;
+    harness.windowLayoutAvailableWidth = 1600;
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await waitFor(dom, () => container.querySelector(".library-sidebar-tree .library-tree-disclosure") !== null);
+    await openLibraryNote(dom, container, "Note A");
+    await clickElement(dom, buttonsByAriaLabel(container, "Collapse sidebar")[0]!);
+    await waitFor(dom, () => container.querySelector("#pige-library-sidebar") === null);
+    await clickElement(dom, buttonsByAriaLabel(container, "Show note conversation")[0]!);
+    await waitFor(dom, () => container.querySelector(".note-agent") !== null);
+
+    expect(harness.windowModeRequests).toEqual([]);
+    expect(harness.windowLayoutWidth).toBe(960);
+    expect(harness.windowLayoutRequests.at(-1)).toEqual({
+      apiVersion: 1,
+      surface: "reader",
+      sidebarOpen: false,
+      noteAgentOpen: true
+    });
+    expect(currentWindowLayout(harness).noteAgentPresentation).toBe("resident");
+
+    await act(async () => root.unmount());
+    dom.window.close();
   });
 
   it("refreshes durable Home state when returning from Models", async () => {
@@ -2238,7 +2482,17 @@ interface ConversationHarness {
   permissionResolveMode: "success" | "reject_pending" | "reject_unknown" | "post_commit_reject" | "success_switch_vault";
   locale: "zh-Hans" | "en" | "ja" | "ko" | "fr" | "de";
   windowMode: "compact" | "expanded";
+  readonly windowModeRequests: ("compact" | "expanded")[];
   sidebarOpen: boolean;
+  noteAgentOpen: boolean;
+  windowLayoutRevision: number;
+  windowLayoutWidth: number | null;
+  windowLayoutAvailableWidth: number;
+  windowLayoutBaseWidth: number | null;
+  windowLayoutRequest: WindowLayoutRequest;
+  readonly windowLayoutRequests: WindowLayoutRequest[];
+  readonly windowLayoutListeners: Set<(state: WindowLayoutState) => void>;
+  failNextWindowLayout: boolean;
   loadAppearance: () => Promise<{
     readonly locale: "zh-Hans" | "en" | "ja" | "ko" | "fr" | "de";
     readonly availableLocales: readonly ("zh-Hans" | "en" | "ja" | "ko" | "fr" | "de")[];
@@ -2294,7 +2548,22 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     permissionResolveMode: "success",
     locale: "en",
     windowMode: "compact",
+    windowModeRequests: [],
     sidebarOpen: false,
+    noteAgentOpen: false,
+    windowLayoutRevision: 0,
+    windowLayoutWidth: null,
+    windowLayoutAvailableWidth: Number.POSITIVE_INFINITY,
+    windowLayoutBaseWidth: null,
+    windowLayoutRequest: {
+      apiVersion: 1,
+      surface: "home",
+      sidebarOpen: false,
+      noteAgentOpen: false
+    },
+    windowLayoutRequests: [],
+    windowLayoutListeners: new Set(),
+    failNextWindowLayout: false,
     loadAppearance: async () => ({ locale: harness.locale, availableLocales: [harness.locale] }),
     loadOnboarding: async () => harness.onboarding,
     loadModelSummary: async () => harness.onboarding.state === "ready"
@@ -2460,7 +2729,20 @@ function makePigeApi(harness: ConversationHarness): object {
     getHealth: async () => ({ status: "ok" }),
     window: {
       current: async () => windowState(harness),
+      currentLayout: async () => currentWindowLayout(harness),
+      setLayout: async (request: WindowLayoutRequest) => {
+        if (harness.failNextWindowLayout) {
+          harness.failNextWindowLayout = false;
+          throw new Error("raw window layout failure");
+        }
+        return setHarnessWindowLayout(harness, request);
+      },
+      onLayoutChanged: (listener: (state: WindowLayoutState) => void) => {
+        harness.windowLayoutListeners.add(listener);
+        return () => harness.windowLayoutListeners.delete(listener);
+      },
       setMode: async ({ mode }: { readonly mode: "compact" | "expanded" }) => {
+        harness.windowModeRequests.push(mode);
         harness.windowMode = mode;
         return windowState(harness);
       },
@@ -2759,6 +3041,78 @@ function windowState(harness: ConversationHarness) {
     isFullScreen: false,
     size: { width: harness.windowMode === "compact" ? 420 : 1200, height: 800 }
   };
+}
+
+function currentWindowLayout(harness: ConversationHarness): WindowLayoutState {
+  if (harness.windowLayoutWidth === null) harness.windowLayoutWidth = window.innerWidth;
+  harness.windowLayoutRequest = {
+    ...harness.windowLayoutRequest,
+    sidebarOpen: harness.sidebarOpen,
+    noteAgentOpen: harness.noteAgentOpen
+  };
+  return windowLayoutState(harness);
+}
+
+function setHarnessWindowLayout(
+  harness: ConversationHarness,
+  request: WindowLayoutRequest
+): WindowLayoutState {
+  const currentWidth = harness.windowLayoutWidth ?? window.innerWidth;
+  const hadOpenPane = harness.windowLayoutRequest.sidebarOpen || harness.windowLayoutRequest.noteAgentOpen;
+  const hasOpenPane = request.sidebarOpen || request.noteAgentOpen;
+  if (!hadOpenPane && hasOpenPane) harness.windowLayoutBaseWidth = currentWidth;
+  harness.windowLayoutRequest = request;
+  harness.windowLayoutRequests.push(request);
+  harness.sidebarOpen = request.sidebarOpen;
+  harness.noteAgentOpen = request.noteAgentOpen;
+  if (!hasOpenPane) {
+    harness.windowLayoutWidth = harness.windowLayoutBaseWidth ?? currentWidth;
+    harness.windowLayoutBaseWidth = null;
+  } else {
+    const baseWidth = harness.windowLayoutBaseWidth ?? currentWidth;
+    const requiredWidth = requiredWindowLayoutWidth(request);
+    harness.windowLayoutWidth = Math.min(
+      Math.max(baseWidth, requiredWidth),
+      harness.windowLayoutAvailableWidth
+    );
+  }
+  harness.windowLayoutRevision += 1;
+  const state = windowLayoutState(harness);
+  for (const listener of harness.windowLayoutListeners) listener(state);
+  return state;
+}
+
+function windowLayoutState(harness: ConversationHarness): WindowLayoutState {
+  const request = harness.windowLayoutRequest;
+  const width = harness.windowLayoutWidth ?? window.innerWidth;
+  const bothReaderPanes = request.surface === "reader" && request.sidebarOpen && request.noteAgentOpen;
+  const sidebarPresentation = !request.sidebarOpen
+    ? "closed"
+    : request.surface === "home"
+      ? width >= 720 ? "resident" : "overlay"
+      : width >= 840 ? "resident" : "overlay";
+  const noteAgentPresentation = !request.noteAgentOpen
+    ? "closed"
+    : width >= (bothReaderPanes ? 1240 : 960) ? "resident" : "overlay";
+  return {
+    apiVersion: 1,
+    revision: harness.windowLayoutRevision,
+    surface: request.surface,
+    sidebarOpen: request.sidebarOpen,
+    noteAgentOpen: request.noteAgentOpen,
+    sidebarPresentation,
+    noteAgentPresentation,
+    autoExpanded: harness.windowLayoutBaseWidth !== null && width > harness.windowLayoutBaseWidth,
+    isMaximized: false,
+    isFullScreen: false
+  };
+}
+
+function requiredWindowLayoutWidth(request: WindowLayoutRequest): number {
+  if (request.surface === "home") return request.sidebarOpen ? 720 : 0;
+  if (request.sidebarOpen && request.noteAgentOpen) return 1240;
+  if (request.sidebarOpen) return 840;
+  return request.noteAgentOpen ? 960 : 0;
 }
 
 function testLibraryList(): LibraryListResult {
