@@ -255,21 +255,19 @@ consequences below.
 External managed-copy rule:
 
 - An external managed-copy root contains Pige-owned evidence, not merely a reference to user-owned originals. Backup preflight therefore attempts to include every reachable managed copy selected by the source records.
-- Backup includes every reachable selected copy by default. Stable `rootId`/`sourceId`,
-  checksum, size, archive/restore mapping, and restored-record checksum bind each payload;
-  binding, ancestry, file identity, and streamed checksum are revalidated before publish.
+- Backup includes every reachable selected copy. Stable IDs, checksum, size, archive mapping,
+  binding, ancestry, file identity, and streamed checksum fence each payload before publish.
 - Missing, blocked, or rebound roots put the same Job in `waiting_dependency` with
   `reconnect_path`. An explicitly incomplete backup remains unimplemented.
-- Archive/UI projections exclude raw bindings and carry only stable IDs, checksums,
-  sizes, inclusion/completeness facts, and redacted labels.
+- Archive/UI projections exclude raw bindings and carry stable IDs plus redacted facts.
 - Externally referenced originals remain excluded by default and are listed separately from external managed-copy roots.
 
 Restore behavior:
 
 - Restored Markdown knowledge works without external originals.
 - In-vault managed source copies restore under their portable managed-copy root.
-- Included external copies restore under vault `raw/`; validated SourceRecords become
-  vault-relative `root_vault_managed`, inherit no binding, and require no reconnect.
+- Included external copies restore under `raw/` as validated, binding-free
+  `root_vault_managed` SourceRecords.
 - Future reconnect/migration preserves IDs and never infers authority from labels/paths.
 - Referenced originals are marked available, missing, or changed after restore scan.
 - The user can relink missing originals later.

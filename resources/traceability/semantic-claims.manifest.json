@@ -2,7 +2,7 @@
   "schemaVersion": 3,
   "normalization": "NFKC + trim + collapse-whitespace; structured anchors use canonical JSON field order",
   "algorithm": "sha256-base64url(canonical claim JSON)",
-  "claimCount": 1230,
+  "claimCount": 1231,
   "claims": {
     "prdContracts": {
       "CLM-PRD-CONTRACT-AUTHORITY": "b64u:hXfFXkCbVZiIV0Ma-psmA41hHZ2LUOsdUC8ftAMdTbo",
@@ -1044,10 +1044,10 @@
     "requirementAcceptance": {
       "CLM-REQ-ACCEPT-PIGE-API-001": "b64u:cOw2q7atXORfatJ-7R0llC2uu1f13q2xvGBvUmzAgMs",
       "CLM-REQ-ACCEPT-PIGE-API-002": "b64u:OULWCj-Y4OTLK5ztXO2dpUaExy-WnOcjRJ80Wh393Cg",
-      "CLM-REQ-ACCEPT-PIGE-BACKUP-001": "b64u:yyeBqSJ8mfN2L6zzI0CAfxKPUOnKEkkIKZ9av0vpWVE",
+      "CLM-REQ-ACCEPT-PIGE-BACKUP-001": "b64u:dGT9zwteu1E_jaVNThoS0c92DSof3YEkSHePrm4lL0s",
       "CLM-REQ-ACCEPT-PIGE-BACKUP-002": "b64u:mMn8Bdj-YF7haagj4b5kQgxRF0qiXL7BlLWqc87QOrg",
-      "CLM-REQ-ACCEPT-PIGE-BACKUP-003": "b64u:Qodm9e6Ru3tvoOA_087CGB0S9rhbz_FQjgV5i4rW7iA",
-      "CLM-REQ-ACCEPT-PIGE-BACKUP-004": "b64u:HOPnglluzBWzjcJLjl7mVD6nODM-6Q8mConAnpA6qW4",
+      "CLM-REQ-ACCEPT-PIGE-BACKUP-003": "b64u:lCTTAgbSbjGXV5L1CXrg4iCykMBnMtMiQUbdER1wLkY",
+      "CLM-REQ-ACCEPT-PIGE-BACKUP-004": "b64u:McXcHddZY1np0OVNr3VirZXK9wpB80o7XQtl8MILSj8",
       "CLM-REQ-ACCEPT-PIGE-CAP-001": "b64u:JQYTENior1KLzPhRgrXU950pXdj6706wRUomaEyGOic",
       "CLM-REQ-ACCEPT-PIGE-CAP-002": "b64u:fOfvalipOZ0vRWaUDVFZgApEqBvFRltLNH2rwIPpajM",
       "CLM-REQ-ACCEPT-PIGE-CAP-003": "b64u:mS3cVsE-RLrU2VwD9G-uZA0SuTyGhXVm0o8miyJ9XCg",

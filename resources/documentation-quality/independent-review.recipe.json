@@ -61,12 +61,12 @@
       "tests/unit/security-contract-schemas.test.ts",
       "package.json"
     ],
-    "scope": "Independent Planning review binds the External Managed Copy Backup implementation and safety repairs to the backup, source-storage, Job, settings, architecture, reliability and trace owners on origin/main 2932f33.",
+    "scope": "Independent Planning review binds the External Managed Copy Backup implementation and safety repairs to the backup, source-storage, Job, settings, architecture, reliability and trace owners on origin/main 95b62cb.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 130,
-    "reviewedSha256": "b6e00c06341dc2791c8936dcc3c86d4067e71d2b83f35e99f7c83db4a3e05092"
+    "reviewedSha256": "970f00629f6521c29652ec3737cbed298af8c83e8cef7ef21859c93a1a560e48"
   },
   "reviewers": [
     {
@@ -121,7 +121,7 @@
   ],
   "verification": [
     {
-      "command": "Independent implementation and owner-contract review of External Managed Copy Backup based on origin/main 2932f33",
+      "command": "Independent implementation and owner-contract review of External Managed Copy Backup based on origin/main 95b62cb",
       "status": "passed",
       "evidence": "Review covers Main backup/coordinator implementation, executable schema, focused tests and every affected owner/trace projection; raw machine bindings and referenced-original payloads remain excluded."
     },

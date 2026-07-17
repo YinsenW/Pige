@@ -629,8 +629,7 @@ Rules:
 Default backup includes:
 
 - In-vault `raw/` managed source copies.
-- Reachable external managed copies selected by canonical source records; missing,
-  blocked, or rebound roots wait durably for reconnect. Continue-incomplete is unavailable.
+- Reachable external managed copies; unavailable roots wait durably for reconnect.
 - `artifacts/`.
 - `datasets/`, including manifests, schemas, payloads, revisions, changes, and views.
 - `.pige/source-records/`.
@@ -659,7 +658,7 @@ Default backup excludes:
 - Bundled tool binaries.
 - Machine-local settings.
 - Externally referenced original files, unless the user explicitly includes accessible referenced originals in the backup.
-- Raw absolute external-root bindings; only stable IDs, checksums, inclusion facts, and redacted labels cross the boundary.
+- Raw external-root bindings; only stable IDs and redacted facts cross the boundary.
 
 Visible backup options:
 
@@ -718,8 +717,7 @@ Restore flow:
 
 Restore must work without `.pige/db/`, `.pige/indexes/`, local model files, or machine-local settings.
 
-Included external copies restore below `raw/` as checksum-bound `root_vault_managed`,
-without bindings or false warnings. Reconnect and continue-incomplete UI remain absent.
+Included external copies restore below `raw/` as `root_vault_managed`, without bindings.
 
 Current restore evidence and residual migration/restart/platform work live in the
 Playbook and acceptance manifest. Preview/apply must still bind exact archive bytes,

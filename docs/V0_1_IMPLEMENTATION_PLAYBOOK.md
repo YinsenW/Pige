@@ -677,9 +677,8 @@ installed/update, Windows OCR, scale/recovery, release notes and missing tools.
 
 Current Backup foundation covers bounded B9.01/B9.02: one pre-scan durable Job resumes five
 identity/checksum checkpoints, no-replace publishes a validated archive, links one
-`backup_created`, includes reachable external copies without bindings, waits on missing
-roots, and restores into `raw/` without false warnings. E9.01 stays partial for UI
-controls, fixtures, Operations, atomicity, platforms, and coordinator migration.
+`backup_created`, includes reachable external copies, waits on missing roots, and restores
+them into `raw/`. E9.01 stays partial for UI, Operations, atomicity, and platforms.
 
 Current restore foundation covers bounded B9.03–B9.06: bound preview; owned fresh clone/
 replace publication; verified rollback; binding CAS; eight-checkpoint machine Job; linked
