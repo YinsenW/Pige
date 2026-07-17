@@ -82,10 +82,19 @@ describe("full production UI renderer contract", () => {
     expect(appSource).toContain("<LibrarySidebarTree");
     expect(appSource).toContain('aria-expanded={familyExpanded}');
     expect(appSource).toContain('aria-expanded={typeExpanded}');
-    expect(appSource).toContain("paneAutoExpandedWindowRef.current");
-    expect(appSource).toContain('!nextSidebarOpen &&');
-    expect(appSource).toContain('view === "home" &&');
-    expect(appSource).toContain('setMode({ mode: "compact" })');
+    expect(appSource).toContain("window.pige.window.currentLayout()");
+    expect(appSource).toContain("window.pige.window.onLayoutChanged");
+    expect(appSource).toContain("window.pige.window.setLayout(request)");
+    expect(appSource).toContain("windowLayoutRevisionRef.current");
+    expect(appSource).toContain('surface: "home"');
+    expect(appSource).toContain('surface: "reader"');
+    expect(appSource).not.toContain("window.pige.window.setMode(");
+    expect(appSource).not.toContain("window.pige.window.setSidebarOpen(");
+    const layoutAdapter = appSource.slice(
+      appSource.indexOf("const requestWindowLayout"),
+      appSource.indexOf("const updateVoiceAssetInstallOwnership")
+    );
+    expect(layoutAdapter).not.toMatch(/\b(width|height|workArea|presentation)\s*:/);
     const primaryNavigationStart = appSource.indexOf('<nav className="primary-navigation nav-list"');
     const primaryNavigation = appSource.slice(
       primaryNavigationStart,

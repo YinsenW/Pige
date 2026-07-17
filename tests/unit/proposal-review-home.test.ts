@@ -72,7 +72,30 @@ function makePigeApi(awaitingReview: boolean, calls: ProposalApiCalls): object {
   return {
     getHealth: async () => ({ status: "ok" }),
     window: {
-      current: async () => ({ mode: "compact", sidebarOpen: false, alwaysOnTop: false })
+      current: async () => ({ mode: "compact", sidebarOpen: false, alwaysOnTop: false }),
+      currentLayout: async () => ({
+        apiVersion: 1,
+        revision: 0,
+        surface: "home",
+        sidebarOpen: false,
+        noteAgentOpen: false,
+        sidebarPresentation: "closed",
+        noteAgentPresentation: "closed",
+        autoExpanded: false,
+        isMaximized: false,
+        isFullScreen: false
+      }),
+      setLayout: async (request: { readonly surface: "home" | "reader"; readonly sidebarOpen: boolean; readonly noteAgentOpen: boolean }) => ({
+        apiVersion: 1,
+        revision: 1,
+        ...request,
+        sidebarPresentation: request.sidebarOpen ? "resident" : "closed",
+        noteAgentPresentation: request.noteAgentOpen ? "resident" : "closed",
+        autoExpanded: false,
+        isMaximized: false,
+        isFullScreen: false
+      }),
+      onLayoutChanged: () => () => undefined
     },
     settings: {
       appearance: async () => ({ locale: "en", availableLocales: ["en"] })
