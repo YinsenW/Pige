@@ -208,6 +208,52 @@ describe("Home Pi Agent service", () => {
     expect(JSON.stringify({ jobs, operations })).not.toContain(answer);
   });
 
+  it("binds native assistant draft snapshots to the exact non-durable Home turn identity", async () => {
+    const fixture = makeFixture();
+    const drafts: Array<{
+      readonly requestId: string;
+      readonly clientTurnId: string;
+      readonly jobId: string;
+      readonly conversationId: string;
+      readonly conversationEventId: string;
+      readonly text: string;
+    }> = [];
+    const answer = "This native assistant answer streams before the durable Home result is committed.";
+    const service = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      new PiAgentRuntimeAdapter({
+        fauxResponses: [{ kind: "text", text: answer }]
+      })
+    );
+
+    const outcome = await service.submitTurn({
+      text: "Give me a direct bounded answer without knowledge tools.",
+      inputKind: "typed_text",
+      objective: "auto",
+      locale: "en",
+      clientTurnId: "turn_20260717_nativestream1"
+    }, {
+      onDraft: (draft) => drafts.push(draft)
+    });
+
+    expect(outcome.state).toBe("completed");
+    if (outcome.state !== "completed") throw new Error("Expected a completed native Home turn.");
+    expect(drafts.at(-1)).toEqual({
+      requestId: outcome.requestId,
+      clientTurnId: "turn_20260717_nativestream1",
+      jobId: outcome.jobId,
+      conversationId: outcome.conversationId,
+      conversationEventId: outcome.conversationEventId,
+      text: answer
+    });
+    const jobs = readRecords<JobRecord>(path.join(fixture.vaultPath, ".pige", "jobs"));
+    const operations = readRecords<OperationRecord>(path.join(fixture.vaultPath, ".pige", "operations"));
+    expect(JSON.stringify({ jobs, operations })).not.toContain(answer);
+  });
+
   it("preserves one Agent turn and waits without retrieval when no runtime binding exists", async () => {
     const fixture = makeFixture();
     let runtimeConfigReads = 0;

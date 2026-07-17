@@ -104,21 +104,43 @@ export function appendEventRecord(
 
 export class SafeTerminalDraftController {
   readonly #boundary: PiAgentTerminalDraftBoundary | undefined;
+  readonly #allowNativeAssistantDraft: boolean;
   #lastToolSnapshot: string | undefined;
+  #lastNativeSnapshot: string | undefined;
   #lastPresentedText: string | undefined;
+  #toolCallObserved = false;
   #presentationEmitted = false;
   #presentationNeedsSettle = false;
 
-  constructor(boundary: PiAgentTerminalDraftBoundary | undefined) {
+  constructor(
+    boundary: PiAgentTerminalDraftBoundary | undefined,
+    allowNativeAssistantDraft = false
+  ) {
     this.#boundary = boundary;
+    this.#allowNativeAssistantDraft = allowNativeAssistantDraft;
   }
 
   observe(event: AgentEvent): void {
     if (!this.#boundary || event.type !== "message_update") return;
-    const snapshot = readSafeTerminalDraft(event, this.#boundary);
-    if (!snapshot || snapshot === this.#lastToolSnapshot) return;
-    this.#lastToolSnapshot = snapshot;
-    this.#emit(snapshot);
+    const updateType = event.assistantMessageEvent.type;
+    if (
+      updateType === "toolcall_start" ||
+      updateType === "toolcall_delta" ||
+      updateType === "toolcall_end"
+    ) {
+      this.#toolCallObserved = true;
+    }
+    const terminalSnapshot = readSafeTerminalDraft(event, this.#boundary);
+    if (terminalSnapshot && terminalSnapshot !== this.#lastToolSnapshot) {
+      this.#lastToolSnapshot = terminalSnapshot;
+      this.#emit(terminalSnapshot);
+      return;
+    }
+    if (!this.#allowNativeAssistantDraft || this.#toolCallObserved) return;
+    const nativeSnapshot = readSafeNativeAssistantDraft(event, this.#boundary);
+    if (!nativeSnapshot || nativeSnapshot === this.#lastNativeSnapshot) return;
+    this.#lastNativeSnapshot = nativeSnapshot;
+    this.#emit(nativeSnapshot);
   }
 
   rejectAttempt(toolName: string): void {
@@ -201,6 +223,26 @@ function readSafeTerminalDraft(
     return undefined;
   }
   return readSafeTerminalAnswer(content.arguments[boundary.argumentName], boundary);
+}
+
+function readSafeNativeAssistantDraft(
+  event: AgentEvent,
+  boundary: PiAgentTerminalDraftBoundary
+): string | undefined {
+  if (event.type !== "message_update") return undefined;
+  const update = event.assistantMessageEvent;
+  if (
+    update.type !== "text_start" &&
+    update.type !== "text_delta" &&
+    update.type !== "text_end"
+  ) {
+    return undefined;
+  }
+  const text = update.partial.content
+    .filter((content) => content.type === "text")
+    .map((content) => content.text)
+    .join("\n");
+  return readSafeTerminalAnswer(text, boundary);
 }
 
 function readSafeTerminalAnswer(

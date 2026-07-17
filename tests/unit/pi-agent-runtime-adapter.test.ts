@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import { PigeDomainError } from "@pige/domain";
 import {
   AgentRepairRequiredError,
@@ -15,6 +16,7 @@ import {
   toPiTool,
   type PigeAgentToolResult
 } from "../../apps/desktop/src/main/services/pi-agent-tool-boundary";
+import { SafeTerminalDraftController } from "../../apps/desktop/src/main/services/pi-agent-safe-projection";
 
 const runtimeConfig: ModelProviderRuntimeConfig = {
   provider: {
@@ -587,6 +589,106 @@ describe("Pi Agent runtime adapter", () => {
     expect(drafts).toEqual([]);
   });
 
+  it("emits safe native assistant snapshots only for an explicitly allowed zero-tool completion", async () => {
+    const drafts: string[] = [];
+    const answer = "Native assistant text is a provisional Home answer before durable completion.";
+    const adapter = new PiAgentRuntimeAdapter({
+      fauxResponses: [{ kind: "text", text: answer }]
+    });
+
+    const result = await adapter.run({
+      ...makeRequest([makeFinishHomeTool()]),
+      completionPolicy: {
+        ...makeCompletionBoundary(),
+        nativeAssistantCompletion: "allow_without_tool_calls"
+      },
+      terminalDraft: {
+        toolName: "pige_finish_home_turn",
+        argumentName: "answer",
+        maxCharacters: 8_000,
+        onSnapshot: (text) => drafts.push(text)
+      }
+    });
+
+    expect(result.invokedTools).toEqual([]);
+    expect(result.assistantText).toBe(answer);
+    expect(drafts.length).toBeGreaterThan(0);
+    expect(drafts.at(-1)).toBe(answer);
+    expect(drafts.every((draft) => answer.startsWith(draft))).toBe(true);
+  });
+
+  it.each([
+    "path=/Users/alice/private/notes.md",
+    '{"apiKey":"opaque-value-123456"}',
+    "Safe words followed by a control\u0000character"
+  ])("does not emit a restricted or control-bearing native assistant draft: %s", async (answer) => {
+    const drafts: string[] = [];
+    const adapter = new PiAgentRuntimeAdapter({
+      fauxResponses: [{ kind: "text", text: answer }]
+    });
+
+    await adapter.run({
+      ...makeRequest([makeFinishHomeTool()]),
+      completionPolicy: {
+        ...makeCompletionBoundary(),
+        nativeAssistantCompletion: "allow_without_tool_calls"
+      },
+      terminalDraft: {
+        toolName: "pige_finish_home_turn",
+        argumentName: "answer",
+        maxCharacters: 8_000,
+        onSnapshot: (text) => drafts.push(text)
+      }
+    });
+
+    expect(drafts).toEqual([]);
+  });
+
+  it("replaces a mixed-response native preamble with the validated terminal-tool snapshot", async () => {
+    const drafts: string[] = [];
+    const preamble = "I will inspect the available evidence before answering.";
+    const terminalAnswer = "The validated terminal answer is the sole remaining provisional owner.";
+    const controller = new SafeTerminalDraftController({
+      toolName: "pige_finish_home_turn",
+      argumentName: "answer",
+      maxCharacters: 8_000,
+      onSnapshot: (text) => drafts.push(text)
+    }, true);
+
+    controller.observe(messageUpdate({
+      type: "text_delta",
+      contentIndex: 0,
+      delta: preamble,
+      partial: assistantMessage([{ type: "text", text: preamble }])
+    }));
+    controller.observe(messageUpdate({
+      type: "toolcall_start",
+      contentIndex: 1,
+      partial: assistantMessage([
+        { type: "text", text: preamble },
+        { type: "toolCall", id: "pi_tool_mixed_1", name: "pige_finish_home_turn", arguments: {} }
+      ])
+    }));
+    controller.observe(messageUpdate({
+      type: "toolcall_delta",
+      contentIndex: 1,
+      delta: JSON.stringify({ answer: terminalAnswer }),
+      partial: assistantMessage([
+        { type: "text", text: preamble },
+        {
+          type: "toolCall",
+          id: "pi_tool_mixed_1",
+          name: "pige_finish_home_turn",
+          arguments: { answer: terminalAnswer }
+        }
+      ])
+    }));
+    await controller.assertCompleteAndSettle();
+
+    expect(drafts).toEqual([preamble, terminalAnswer]);
+    expect(drafts.at(-1)).toBe(terminalAnswer);
+  });
+
   it.each([
     "path=/Users/alice/private/notes.md",
     '{"apiKey":"opaque-value-123456"}',
@@ -960,6 +1062,35 @@ function makeRequest(tools: readonly PigeAgentToolDefinition[]) {
     systemPrompt: "Use only Pige-owned tools.",
     userPrompt: "Inspect the current source and publish grounded knowledge.",
     tools
+  };
+}
+
+function messageUpdate(assistantMessageEvent: unknown): AgentEvent {
+  const partial = (assistantMessageEvent as { partial: unknown }).partial;
+  return {
+    type: "message_update",
+    message: partial,
+    assistantMessageEvent
+  } as AgentEvent;
+}
+
+function assistantMessage(content: readonly unknown[]): unknown {
+  return {
+    role: "assistant",
+    content,
+    api: "openai-completions",
+    provider: "pige-faux:provider_pi_test",
+    model: "pi-selected-model",
+    usage: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }
+    },
+    stopReason: "toolUse",
+    timestamp: Date.parse("2026-07-17T00:00:00.000Z")
   };
 }
 
