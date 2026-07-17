@@ -1,13 +1,11 @@
 import {
   useEffect,
-  useId,
   useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
   type DragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
-  type MouseEvent as ReactMouseEvent,
   type ReactNode,
   type RefObject
 } from "react";
@@ -15,6 +13,10 @@ import { PigeIcon, type PigeIconName } from "./components/PigeIcon";
 import { KnowledgeTreeMap } from "./components/KnowledgeTreeMap";
 import { CurrentNoteAgent } from "./components/CurrentNoteAgent";
 import { HomeVoicePanel, type HomeVoicePanelState } from "./components/HomeVoicePanel";
+import {
+  ReaderInlineReferenceSurface,
+  type ReaderInlineReferenceActivation
+} from "./components/ReaderInlineReferenceSurface";
 import pigeMarkUrl from "../../../../../resources/brand/pige-icon/master/pige-icon-1024.png";
 import deMessages from "./locales/de/messages.json";
 import enMessages from "./locales/en/messages.json";
@@ -2064,11 +2066,11 @@ export function NoteReader(props: {
   readonly related: NoteRelatedState;
   readonly relatedLoadingPageId: string | null;
   readonly onOpenRelated: (pageId: string) => Promise<void>;
+  readonly onActivateInlineReference?: (href: string) => Promise<ReaderInlineReferenceActivation>;
   readonly onDevelopment: (capability: DevelopmentCapability) => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const summary = props.note.summary;
-  const readerLinkDescriptionId = useId();
   const readerRef = useRef<HTMLElement | null>(null);
   const markdownBodyRef = useRef<HTMLDivElement | null>(null);
   const selectionToolbarRef = useRef<HTMLDivElement | null>(null);
@@ -2100,28 +2102,6 @@ export function NoteReader(props: {
       normalizeTitle(firstBlock.textContent ?? "") === normalizeTitle(summary.title)
     );
   });
-
-  useLayoutEffect(() => {
-    const internalLinks = markdownBodyRef.current?.querySelectorAll<HTMLAnchorElement>(
-      'a[href^="#wiki:"], a[href^="#source:"]'
-    );
-    internalLinks?.forEach((link) => {
-      link.dataset.readerLinkState = "unavailable";
-      link.setAttribute("aria-describedby", readerLinkDescriptionId);
-    });
-  }, [props.note.html, readerLinkDescriptionId]);
-
-  const handleInternalReaderLink = (event: ReactMouseEvent<HTMLDivElement>): void => {
-    const target = event.target;
-    if (!(target instanceof HTMLElement)) return;
-    const link = target.closest<HTMLAnchorElement>("a[href]");
-    if (!link || !event.currentTarget.contains(link)) return;
-    const href = link.getAttribute("href") ?? "";
-    if (!href.startsWith("#wiki:") && !href.startsWith("#source:")) return;
-    event.preventDefault();
-    event.stopPropagation();
-    props.onDevelopment("reader_link");
-  };
 
   const closeSelectionToolbar = (restoreFocus: boolean): void => {
     selectionFocusTransition.current = false;
@@ -2296,16 +2276,13 @@ export function NoteReader(props: {
           ) : null}
         </div>
       </header>
-      <p id={readerLinkDescriptionId} hidden>
-        {props.t("note.readerLinkUnavailable")}
-      </p>
-      <div
+      <ReaderInlineReferenceSurface
         ref={markdownBodyRef}
-        className="markdown-body"
-        onClickCapture={handleInternalReaderLink}
-        onAuxClickCapture={handleInternalReaderLink}
-        // HTML is produced by the main-process Markdown renderer after sanitization.
-        dangerouslySetInnerHTML={{ __html: props.note.html }}
+        pageIdentity={summary.pageId}
+        html={props.note.html}
+        onUnavailable={() => props.onDevelopment("reader_link")}
+        t={props.t}
+        {...(props.onActivateInlineReference ? { onActivate: props.onActivateInlineReference } : {})}
       />
       {summary.sourceIds.length > 0 ? (
         <section className="reader-sources" aria-label={props.t("note.sources")}>

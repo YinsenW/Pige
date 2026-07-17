@@ -2295,6 +2295,49 @@ h2 {
   color: #7a4f15;
 }
 
+.reader-inline-reference-surface { min-width: 0; }
+
+.markdown-body a[data-reader-link-state="ready"] { cursor: pointer; }
+
+.markdown-body a[data-reader-link-state="unavailable"] {
+  cursor: not-allowed;
+  text-decoration-style: dotted;
+}
+
+.markdown-body a[data-reader-link-state="resolving"] {
+  cursor: wait;
+  opacity: .64;
+  text-decoration-style: dotted;
+}
+
+.markdown-body a[data-reader-link-state="not_found"],
+.markdown-body a[data-reader-link-state="ambiguous"],
+.markdown-body a[data-reader-link-state="stale"] {
+  color: var(--warning);
+  text-decoration-style: dotted;
+}
+
+.markdown-body a[data-reader-link-state="failed"] {
+  color: var(--danger);
+  text-decoration-style: dotted;
+}
+
+.reader-inline-reference-feedback {
+  margin: 0 0 14px;
+  border: .5px solid var(--border-subtle);
+  border-radius: 9px;
+  padding: 8px 10px;
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.reader-inline-reference-feedback.ambiguous,
+.reader-inline-reference-feedback.not_found,
+.reader-inline-reference-feedback.stale { color: var(--warning); }
+.reader-inline-reference-feedback.failed { color: var(--danger); }
+
 .markdown-body blockquote {
   border-left: 2px solid var(--border-heavy);
   padding-left: 12px;
