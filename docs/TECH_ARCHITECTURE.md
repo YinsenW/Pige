@@ -1100,28 +1100,24 @@ Rules:
 
 Responsibilities:
 
-- Manage compact, expanded and full-screen modes, machine-local geometry/rail/pin state,
-  typed layout IPC, whole-window drop and first-run compact restoration.
+- Manage window modes, machine-local geometry/rail/pin state, typed layout IPC,
+  whole-window drop/restoration, and resident/overlay presentation without replacing base size.
 - Give surplus reading width to navigation/context/Agent panes rather than prose.
 
 Electron main process responsibilities:
 
-- Own native flags and keep machine state outside portable vault data.
-- Use `hiddenInset` on macOS; on Windows use `hidden` plus a transparent
-  `#00000000` overlay, `#6f6f6f` symbols and `58px` height; leave Linux defaults intact.
-  Never use `frame:false`. If Windows transparency is unstable, only main may fall back
-  to approved `#f7f7f7`; renderer layout does not change.
-- macOS uses traffic lights at `17,17`, an `84px` renderer inset and `-5px`
-  navigation/pin offset so one 58px titlebar stays aligned.
-- macOS is the early assembled/package acceptance path. Windows/Linux native-shell
-  qualification is deferred unless targeted; adapters stay portable and unverified
-  platforms are not claimed.
+- Own native flags/work area/frame delta/bounds/revision/presentation outside vault data;
+  expand within work area without remembering it, restore base after either close order,
+  and overlay Agent before Library under constraint.
+- macOS uses `hiddenInset`, traffic lights at `17,17`, `84px` renderer inset, and `-5px`
+  navigation/pin offset. Windows uses `hidden`, transparent `#00000000`, `#6f6f6f` symbols,
+  and `58px` height; only Main may fall back to `#f7f7f7`. Never use `frame:false`; Linux
+  keeps defaults. macOS is the early package path; untested Windows/Linux are not claimed.
 
 React renderer responsibilities:
 
-- Render the approved single `58px` titlebar without duplicating/overlapping native
-  caption controls; apply governed breakpoints, preserve task context and independent
-  rails, and keep selection popovers inside the note viewport.
+- Render one `58px` titlebar; send only versioned surface/disclosure intent, render Main's
+  state, preserve context/rails, and contain selection popovers in the note viewport.
 
 ### 5.7 Settings And Secrets Service
 

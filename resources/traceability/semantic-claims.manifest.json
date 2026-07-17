@@ -2,7 +2,7 @@
   "schemaVersion": 3,
   "normalization": "NFKC + trim + collapse-whitespace; structured anchors use canonical JSON field order",
   "algorithm": "sha256-base64url(canonical claim JSON)",
-  "claimCount": 1228,
+  "claimCount": 1229,
   "claims": {
     "prdContracts": {
       "CLM-PRD-CONTRACT-AUTHORITY": "b64u:hXfFXkCbVZiIV0Ma-psmA41hHZ2LUOsdUC8ftAMdTbo",
@@ -1036,10 +1036,11 @@
       "CLM-EV-EV-VAULT-STALE-REFRESH": "b64u:C7OJboI2k8WpAaZctfidUPGpgfSOom1rhpHJYgxHeOM",
       "CLM-EV-EV-VAULT-WRITER-LEASE": "b64u:3gZ1qu9py5FdY4Ge2Q-_wvo9dzLXimdfR5o9nxIRyJU",
       "CLM-EV-EV-VERIFIED-INPUT-SNAPSHOT": "b64u:8v-uD4gI5kw7Ic9-gE8KqMK0_swZIDZZ70M-ctZOXZ8",
-      "CLM-EV-EV-WAITING-AGENT-REQUEUE": "b64u:GagExqoTJI74z676JMC9BZK6MmLoYFFvS4vSAJ4Ac0E"
+      "CLM-EV-EV-WAITING-AGENT-REQUEUE": "b64u:GagExqoTJI74z676JMC9BZK6MmLoYFFvS4vSAJ4Ac0E",
+      "CLM-EV-EV-WINDOW-LAYOUT-IPC": "b64u:KY2edZadtB9A7Lt5W3Wwkj4zO9JfLNgWpBBn7ka10XQ"
     },
     "requirementAcceptance": {
-      "CLM-REQ-ACCEPT-PIGE-API-001": "b64u:AvsQhwJB7dyxHOb7fOy198ZnMDbWu7LurDbE8s-TErA",
+      "CLM-REQ-ACCEPT-PIGE-API-001": "b64u:cOw2q7atXORfatJ-7R0llC2uu1f13q2xvGBvUmzAgMs",
       "CLM-REQ-ACCEPT-PIGE-API-002": "b64u:OULWCj-Y4OTLK5ztXO2dpUaExy-WnOcjRJ80Wh393Cg",
       "CLM-REQ-ACCEPT-PIGE-BACKUP-001": "b64u:hCyjYm8e26rlz4JrRvoPtX755eL7gKBj-7PCksd6NZA",
       "CLM-REQ-ACCEPT-PIGE-BACKUP-002": "b64u:mMn8Bdj-YF7haagj4b5kQgxRF0qiXL7BlLWqc87QOrg",
@@ -1130,7 +1131,7 @@
       "CLM-REQ-ACCEPT-PIGE-SUPPORT-001": "b64u:tC5dW9e2mnT02rGY7akbzznjUSkP7rnbWBNqQ1BGzdw",
       "CLM-REQ-ACCEPT-PIGE-UI-001": "b64u:sNFQMQOM7TiPWsK8xaqRT4UawGDMEeC5ntxEkikuYMk",
       "CLM-REQ-ACCEPT-PIGE-UI-002": "b64u:04BhbGVi4Z0_CQwktrh9wIhGtwc6IvIDbwenjZyTLl0",
-      "CLM-REQ-ACCEPT-PIGE-UI-003": "b64u:Lx9XVLMf4wLEs9jFGPyyL_Pm7BXaGHwk0MPdsyLnHGY",
+      "CLM-REQ-ACCEPT-PIGE-UI-003": "b64u:_46UuyTX8vyIdOhpMFaxn6w2WaOA9lmIw2uxSjw9V8I",
       "CLM-REQ-ACCEPT-PIGE-UI-004": "b64u:mv3FDyMXsvHIOlId8t8gIGIODMGMGOCAfWBCGCefvR0",
       "CLM-REQ-ACCEPT-PIGE-UI-005": "b64u:Zyqfe4o46C4w6d2TvSQbVHS6Kj9tjH9u_-T6DCAyMwE",
       "CLM-REQ-ACCEPT-PIGE-UI-006": "b64u:utqqiEzFoLJgaS3HVYnDQamZ09oCX-PSg8zG9xEylqY",
@@ -1165,8 +1166,8 @@
       "CLM-EXT-ACCEPT-E1-07": "b64u:hPxgpDrY02Ghy0QZyxqNn69CNeDN7FvaFl0_HaUkwLU",
       "CLM-EXT-ACCEPT-E1-08": "b64u:KPsBCSflueCoOo1TK8taqR4zOnZoNKdtlHEFZPwi4cU",
       "CLM-EXT-ACCEPT-E1-09": "b64u:lhgaoiEY14RVdbyFG0UqRY2jI0FxiEun1v8XEcCrfnQ",
-      "CLM-EXT-ACCEPT-E1-10": "b64u:m_Ny5pVQ13kz0A3kLOqLIUsLd2wRlxYt4be-FEgVyA8",
-      "CLM-EXT-ACCEPT-E1-11": "b64u:3u8rjUY_NA6gNWwsxXQMXx7eiSzSKUXPoS-wElAvCOY",
+      "CLM-EXT-ACCEPT-E1-10": "b64u:LnpTbhHw6DLfvuA1JgpX8LQy-fk6pTyzWnwyvfr0j7Q",
+      "CLM-EXT-ACCEPT-E1-11": "b64u:XmJAe4wlKsJ0YvBYL8ipVCW3XcOAfUhUdYqbqRlOHcA",
       "CLM-EXT-ACCEPT-E1-12": "b64u:WHr894Iyy_VdNffw_9ExLUEIDGWn5yZzOyr3BnG6oeM",
       "CLM-EXT-ACCEPT-E1-13": "b64u:IxqUTFdg4qF3JrpFuUnb_qltTVySkYFjoNiT6f6GRCU",
       "CLM-EXT-ACCEPT-E1-14": "b64u:SrwavZM7-hwgOhdSwcjPHlqz_qulDEsKnQ-sbIiImeg",

@@ -1,7 +1,7 @@
 # Pige Interface Prototype
 
 Status: Active product interaction and visual-system contract; static screens remain low fidelity
-Last reviewed: 2026-07-10
+Last reviewed: 2026-07-17
 
 Rendered prototype board:
 
@@ -1509,30 +1509,19 @@ differ. `resources/ui-visual-contract.manifest.json` projects the machine subset
 
 ### Layout metrics
 
-- Primary toolbar height is `46px`; compact toolbars are `36px`; pane toolbars are
-  `40px`. Icon-button hit targets should normally be at least `32px`, and never below
-  `28px` in dense desktop contexts.
-- The app uses one integrated `58px` renderer titlebar while retaining native macOS and
-  Windows caption controls; never add a second title row or overlap their safe area.
-- macOS traffic lights use `17px,17px`, with `84px` inset and `-5px` titlebar controls.
-- Expanded navigation starts at `240px`, prefers `280px`, and may grow to
-  `320px` for localized labels or tree depth. It must leave at least `320px` for the
-  active content pane and must be hidden, not squeezed into noise, in Compact Home.
-- At `680–831px`, Library and Note Agent are independent overlays. At `832–1199px`,
-  Library is resident with Reader while Note Agent remains an overlay. At `1200px` all
-  three panes may be resident; from `1440px`, only Reader absorbs bounded surplus.
-- Navigation and settings rows normally occupy `32` to `36px`; settings rows containing
-  descriptions may grow to `64px`. Do not force explanatory text into a compact row.
-- Pane padding is `16px` in narrow windows and `20` to `24px` in expanded workspaces.
-  The composer sits `12` to `16px` from the safe window edge and retains that inset
-  during scrolling.
-- Home answer content, results, and composer share the same center line and outer width.
-  Adjacent content may overhang the text measure by `24px`; the Composer itself keeps an
-  internal `12px` inset and uses `28px` circular action targets inside a larger accessible
-  hit area.
-- Use container- or pane-width adaptation rather than viewport typography. At narrow
-  widths, hide secondary rails, move contextual actions into drawers, and preserve the
-  composer before reducing readable text or hit targets.
+- Toolbars are `46px` primary/`36px` compact/`40px` pane; icon targets are normally
+  `32px`, minimum `28px`. The single native-control titlebar is `58px`; macOS uses traffic
+  lights at `17px,17px`, `84px` inset, and `-5px` offset.
+- Navigation is `240/280/320px`, leaves `320px` content, and hides in Compact Home;
+  descriptive rows may grow from `32–36px` to `64px`. Frame-compensated resident budgets:
+  Home + Library `720px`, Reader + Library `840px`, Reader + Agent `960px`, all `1240px`.
+  Agent overlays before Library, both below `840px`; only Reader grows from `1440px`.
+- Main may expand to the smallest work-area-eligible width, preserves the user base, never
+  persists expansion, and restores after either close order. Padding is `16px` narrow/
+  `20–24px` expanded; composer insets are `12–16px` edge/`12px` internal, with `28px`
+  actions in larger targets.
+- Home content/results/composer share center/width; adjacent content may overhang `24px`.
+  Adapt by pane width; hide rails/move actions before shrinking text, targets, or composer.
 
 ### Color roles
 
