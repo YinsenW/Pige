@@ -252,6 +252,58 @@ status: "active"
     });
   });
 
+  it("decodes rendered href entities exactly once when binding a render context", async () => {
+    const { vaultPath, vault } = makeVault();
+    writePage({
+      vaultPath,
+      fileName: "current.md",
+      pageId: "page_20260709_current1234",
+      title: "Current"
+    });
+    writePage({
+      vaultPath,
+      fileName: "target.md",
+      pageId: "page_20260709_target1234",
+      title: "Target"
+    });
+    const database = new LocalDatabaseService();
+    database.rebuild(vaultPath);
+    const notes = new NotesService({
+      current: () => vault,
+      activeVaultPath: () => vaultPath
+    }, database, async () => ({
+      html: '<a href="#wiki:Target">Target</a><a href="#wiki:Target&amp;quot;Suffix">Nested entity</a>'
+    }));
+
+    const rendered = await notes.render({ pageId: "page_20260709_current1234" }, OWNER_ID);
+    expect(rendered.renderContextId).toBeDefined();
+    expect(notes.resolveInlineReference(OWNER_ID, {
+      apiVersion: 1,
+      requestId: `${REQUEST_ID}1`,
+      activeVaultId: vault.vaultId,
+      currentPageId: "page_20260709_current1234",
+      renderContextId: rendered.renderContextId!,
+      href: "#wiki:Target"
+    })).toEqual({
+      apiVersion: 1,
+      requestId: `${REQUEST_ID}1`,
+      status: "resolved",
+      target: { kind: "page", pageId: "page_20260709_target1234" }
+    });
+    expect(notes.resolveInlineReference(OWNER_ID, {
+      apiVersion: 1,
+      requestId: `${REQUEST_ID}2`,
+      activeVaultId: vault.vaultId,
+      currentPageId: "page_20260709_current1234",
+      renderContextId: rendered.renderContextId!,
+      href: "#wiki:Target&quot;Suffix"
+    })).toEqual({
+      apiVersion: 1,
+      requestId: `${REQUEST_ID}2`,
+      status: "failed"
+    });
+  });
+
   it("rejects an in-flight render after its owner is released or active vault changes", async () => {
     const first = makeVault();
     const second = makeVault();

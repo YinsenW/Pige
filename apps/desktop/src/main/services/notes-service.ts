@@ -391,12 +391,16 @@ function extractRenderedInternalHrefs(html: string): ReadonlySet<string> | undef
 }
 
 function decodeHtmlAttribute(value: string): string {
-  return value
-    .replace(/&amp;/gu, "&")
-    .replace(/&quot;/gu, "\"")
-    .replace(/&#x27;/giu, "'")
-    .replace(/&lt;/gu, "<")
-    .replace(/&gt;/gu, ">");
+  return value.replace(/&(amp|quot|#x27|lt|gt);/giu, (entity) => {
+    switch (entity.toLocaleLowerCase("en-US")) {
+      case "&amp;": return "&";
+      case "&quot;": return "\"";
+      case "&#x27;": return "'";
+      case "&lt;": return "<";
+      case "&gt;": return ">";
+      default: return entity;
+    }
+  });
 }
 
 function parseInlineReferenceHref(href: string):
