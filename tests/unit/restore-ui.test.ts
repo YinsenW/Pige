@@ -8,9 +8,12 @@ import type {
   Locale,
   ModelProviderSettingsSummary,
   OnboardingStatus,
+  OpenRecentVaultRequest,
+  RecentVaultSummary,
   RestoreApplyRequest,
   RestoreApplyResult,
   RestorePreviewResult,
+  VaultActionResult,
   VaultRevealResult,
   VaultRevealTarget,
   VaultSummary
@@ -90,6 +93,73 @@ describe("First-run onboarding UI", () => {
 
     await click(dom, requireElement(container.querySelector<HTMLButtonElement>(".first-run-step.vault .first-run-back")) as HTMLButtonElement);
     await waitFor(dom, () => container.querySelector(".first-run-step.models") !== null);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("opens a recent vault by stable ID once without treating its display path as authority", async () => {
+    const dom = createDom();
+    const harness = createHarness(blockedOnboarding(), cloneOnlyPreview());
+    const recent = recentVaultSummary();
+    harness.recentVaults = [recent];
+    let resolveOpen: ((result: VaultActionResult) => void) | undefined;
+    harness.openRecent = (request) => {
+      harness.openRecentRequests.push(request);
+      return new Promise((resolve) => { resolveOpen = resolve; });
+    };
+    const { container, root } = await mountApp(dom, makePigeApi(harness));
+
+    await advanceToVault(dom, container);
+    const open = buttonByAriaLabel(container, `Open: ${recent.name}`);
+    const remove = buttonByAriaLabel(container, `Remove: ${recent.name}`);
+    open.focus();
+    await act(async () => {
+      open.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      open.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      await settle(dom);
+    });
+
+    expect(harness.openRecentRequests).toEqual([{ vaultId: recent.vaultId }]);
+    expect(Object.keys(harness.openRecentRequests[0] ?? {})).toEqual(["vaultId"]);
+    expect(open.textContent).toBe("Opening…");
+    expect(open.disabled).toBe(true);
+    expect(remove.disabled).toBe(true);
+
+    await act(async () => {
+      harness.onboarding = readyOnboarding();
+      resolveOpen?.({ status: "completed", vault: vaultSummary(), onboarding: harness.onboarding });
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.querySelector('textarea[aria-label="Capture or ask"]') !== null);
+    expect(container.textContent).not.toContain(recent.pathDisplay);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps a failed recent-vault open body-free and restores focus to the exact action", async () => {
+    const dom = createDom();
+    const harness = createHarness(blockedOnboarding(), cloneOnlyPreview());
+    const recent = recentVaultSummary();
+    harness.recentVaults = [recent];
+    harness.openRecent = async (request) => {
+      harness.openRecentRequests.push(request);
+      throw new Error("RAW_RECENT_VAULT_ERROR /Users/private-vault");
+    };
+    const { container, root } = await mountApp(dom, makePigeApi(harness));
+
+    await advanceToVault(dom, container);
+    const open = buttonByAriaLabel(container, `Open: ${recent.name}`);
+    open.focus();
+    await click(dom, open);
+
+    await waitFor(dom, () => container.textContent?.includes("Pige could not open this recent vault.") ?? false);
+    expect(container.querySelector('.recent-vault-error[role="alert"]')).not.toBeNull();
+    expect(container.textContent).not.toContain("RAW_RECENT_VAULT_ERROR");
+    expect(container.textContent).not.toContain("/Users/private-vault");
+    expect(container.querySelector('textarea[aria-label="Capture or ask"]')).toBeNull();
+    await waitFor(dom, () => dom.window.document.activeElement === open);
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -513,6 +583,8 @@ interface RestoreHarness {
   readonly localeRequests: Locale[];
   modelSummary: ModelProviderSettingsSummary;
   modelSummaryReads: number;
+  recentVaults: RecentVaultSummary[];
+  readonly openRecentRequests: OpenRecentVaultRequest[];
   readonly preview: RestorePreviewResult;
   readonly applyRequests: RestoreApplyRequest[];
   jobs: JobSummary[];
@@ -521,6 +593,7 @@ interface RestoreHarness {
   readonly revealRequests: VaultRevealTarget[];
   lastBackupAt?: string;
   applyRestore: (request: RestoreApplyRequest) => Promise<RestoreApplyResult>;
+  openRecent: (request: OpenRecentVaultRequest) => Promise<VaultActionResult>;
   revealStorageRoot: (target: VaultRevealTarget) => Promise<VaultRevealResult>;
 }
 
@@ -531,6 +604,8 @@ function createHarness(onboarding: OnboardingStatus, preview: RestorePreviewResu
     localeRequests: [],
     modelSummary: emptyModelSummary(),
     modelSummaryReads: 0,
+    recentVaults: [],
+    openRecentRequests: [],
     preview,
     applyRequests: [],
     jobs: [],
@@ -539,6 +614,10 @@ function createHarness(onboarding: OnboardingStatus, preview: RestorePreviewResu
     revealRequests: [],
     applyRestore: async (request) => {
       harness.applyRequests.push(request);
+      return { status: "canceled" };
+    },
+    openRecent: async (request) => {
+      harness.openRecentRequests.push(request);
       return { status: "canceled" };
     },
     revealStorageRoot: async (target) => {
@@ -628,7 +707,8 @@ function makePigeApi(harness: RestoreHarness, sidebarOpen = false): object {
     },
     vault: {
       onboardingStatus: async () => harness.onboarding,
-      recent: async () => [],
+      recent: async () => harness.recentVaults,
+      openRecent: (request: OpenRecentVaultRequest) => harness.openRecent(request),
       removeRecent: async () => [],
       dismissFirstHomeGuide: async () => harness.onboarding,
       revealKnowledgeRoot: async () => harness.revealStorageRoot("knowledge_root"),
@@ -774,6 +854,16 @@ function vaultSummary(): VaultSummary {
     defaultSourceStorageStrategy: "copy_to_source_library",
     schemaVersion: 1,
     counts: { notes: 2, sources: 1, managedSourceCopies: 1, referencedOriginals: 0 }
+  };
+}
+
+function recentVaultSummary(): RecentVaultSummary {
+  return {
+    vaultId: "vault_restore_ui",
+    name: "Restore UI Vault",
+    pathDisplay: "~/Documents/Pige Vault",
+    schemaVersion: 1,
+    lastOpenedAt: "2026-07-14T08:00:00.000Z"
   };
 }
 
