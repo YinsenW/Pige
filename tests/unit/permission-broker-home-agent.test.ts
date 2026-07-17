@@ -283,15 +283,19 @@ describe("Permission Broker Home Agent integration", () => {
     expect(consumed.state).toBe("consumed");
     expect("completionMarkerHash" in consumed).toBe(false);
     expect(jobs.readAgentTurnJob(first.jobId)).toMatchObject({
-      state: "failed_final",
+      state: "failed_retryable",
       cancellation: { durableWritesApplied: true },
       error: {
-        code: "permission.completion_uncertain",
-        retryable: false,
-        permissionRequestId: requestId
+        code: "unknown.execution_failed",
+        retryable: true
+      },
+      retry: {
+        maxAutomaticRetries: 0,
+        requiresUserAction: true,
+        lastRetryReason: "job.cancelled_after_durable_output"
       }
     });
-    expect(jobs.retry({ jobId: first.jobId }).status).toBe("not_allowed");
+    expect(executeCalls).toBe(1);
   });
 });
 
