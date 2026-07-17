@@ -3245,6 +3245,8 @@ function HomeComposer(props: {
   const [noteLoadingPageId, setNoteLoadingPageId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const conversationTimelineRef = useRef<HTMLElement | null>(null);
+  const followConversationRef = useRef(true);
   const composerSubmitInFlightRef = useRef(false);
   const composerCompositionActiveRef = useRef(false);
   const composerCompositionRaceRef = useRef(false);
@@ -3734,6 +3736,32 @@ function HomeComposer(props: {
   const visibleConversationMessages = (conversationTimeline?.messages ?? []).filter((message) =>
     !(agentAnswer && message.role === "assistant" && message.id === liveAnswerEventId)
   );
+  const liveConversationAnswer = agentAnswer && !agentAnswer.datasetResult && !agentAnswer.retrieval
+    ? agentAnswer
+    : null;
+  const conversationFollowKey = [
+    visibleConversationMessages.at(-1)?.id ?? "none",
+    agentDraft?.sequence ?? 0,
+    agentDraft?.text.length ?? 0,
+    liveConversationAnswer?.answer.length ?? 0,
+    effectiveAgentRunState
+  ].join(":");
+
+  useLayoutEffect(() => {
+    const timeline = conversationTimelineRef.current;
+    if (!timeline || !followConversationRef.current) return;
+    timeline.scrollTop = timeline.scrollHeight;
+  }, [conversationFollowKey]);
+
+  useEffect(() => {
+    const timeline = conversationTimelineRef.current;
+    if (!timeline) return;
+    const observer = new window.MutationObserver(() => {
+      if (followConversationRef.current) timeline.scrollTop = timeline.scrollHeight;
+    });
+    observer.observe(timeline, { childList: true, subtree: true, characterData: true });
+    return () => observer.disconnect();
+  }, [visibleConversationMessages.length > 0 || agentDraft !== null || showConversationRunMessage || liveConversationAnswer !== null]);
   const showHomeHero = visibleConversationMessages.length === 0 &&
     agentDraft === null &&
     agentAnswer === null &&
@@ -3922,6 +3950,7 @@ function HomeComposer(props: {
 
   const submitHomeInput = async (): Promise<void> => {
     if (!text.trim() || !homeModelSendAvailable || modelSwitching || composerSubmitInFlightRef.current) return;
+    followConversationRef.current = true;
     composerSubmitInFlightRef.current = true;
     setCaptureError(null);
     setAgentError(null);
@@ -4478,11 +4507,16 @@ function HomeComposer(props: {
           </div>
         </section>
       ) : null}
-      {visibleConversationMessages.length > 0 || agentDraft || showConversationRunMessage ? (
+      {visibleConversationMessages.length > 0 || agentDraft || showConversationRunMessage || liveConversationAnswer ? (
         <section
+          ref={conversationTimelineRef}
           className="conversation-timeline"
           aria-label={props.t("home.conversation")}
           aria-busy={agentDraft !== null || effectiveAgentRunState === "accepted" || effectiveAgentRunState === "running"}
+          onScroll={(event) => {
+            const timeline = event.currentTarget;
+            followConversationRef.current = timeline.scrollHeight - timeline.scrollTop - timeline.clientHeight <= 48;
+          }}
         >
           {visibleConversationMessages.map((message) => (
             <article
@@ -4490,7 +4524,7 @@ function HomeComposer(props: {
               data-message-id={message.id}
               key={message.id}
             >
-              <span className="conversation-message-role">
+              <span className="conversation-message-role visually-hidden">
                 {props.t(message.role === "user" ? "home.userMessage" : "home.assistantMessage")}
               </span>
               {message.answer?.datasetResult ? (
@@ -4506,7 +4540,7 @@ function HomeComposer(props: {
               data-agent-draft="true"
               data-draft-sequence={agentDraft.sequence}
             >
-              <span className="conversation-message-role">
+              <span className="conversation-message-role visually-hidden">
                 {props.t("home.assistantMessage")}
               </span>
               <ConversationMarkdown markdown={agentDraft.text} provisional />
@@ -4518,7 +4552,7 @@ function HomeComposer(props: {
               role="status"
               aria-live="polite"
             >
-              <span className="conversation-message-role">{props.t("home.assistantMessage")}</span>
+              <span className="conversation-message-role visually-hidden">{props.t("home.assistantMessage")}</span>
               <div className="conversation-status-content">
                 {effectiveAgentRunState === "accepted" || effectiveAgentRunState === "running" ? (
                   <>
@@ -4555,6 +4589,17 @@ function HomeComposer(props: {
                   </button>
                 ) : null}
               </div>
+            </article>
+          ) : liveConversationAnswer ? (
+            <article
+              className="conversation-message role-assistant"
+              data-live-agent-answer="true"
+              aria-live="polite"
+            >
+              <span className="conversation-message-role visually-hidden">
+                {props.t("home.assistantMessage")}
+              </span>
+              <ConversationMarkdown markdown={liveConversationAnswer.answer} />
             </article>
           ) : null}
         </section>
@@ -4597,10 +4642,6 @@ function HomeComposer(props: {
           onOpen={openResult}
           t={props.t}
         />
-      ) : agentAnswer ? (
-        <section className="retrieval-answer" aria-live="polite">
-          <p>{agentAnswer.answer}</p>
-        </section>
       ) : null}
       <section className="composer">
         {voiceState ? (

@@ -1164,18 +1164,9 @@ button.ghost {
 
 .conversation-message {
   min-width: 0;
-  display: grid;
-  grid-template-columns: 3.5rem minmax(0, 1fr);
-  align-items: start;
-  gap: 12px;
+  display: block;
   border: 0;
   padding: 2px 0;
-}
-
-.conversation-message-role {
-  color: var(--text-tertiary);
-  font-size: 11px;
-  line-height: 1.55;
 }
 
 .conversation-message p {
@@ -1289,7 +1280,6 @@ button.ghost {
 .conversation-message.role-user {
   width: fit-content;
   max-width: min(82%, 42rem);
-  grid-template-columns: auto minmax(0, 1fr);
   justify-self: end;
   border-radius: 18px;
   padding: 11px 14px;

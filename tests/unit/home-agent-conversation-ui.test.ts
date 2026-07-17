@@ -2309,6 +2309,9 @@ describe("Home durable Agent conversation UI", () => {
 
     await waitFor(dom, () => mount.container.querySelector('[data-markdown-ready="true"]') !== null);
     const assistant = requireElement(mount.container.querySelector<HTMLElement>(".conversation-message.role-assistant"));
+    const user = requireElement(mount.container.querySelector<HTMLElement>(".conversation-message.role-user"));
+    expect(assistant.querySelector(".conversation-message-role")?.classList.contains("visually-hidden")).toBe(true);
+    expect(user.querySelector(".conversation-message-role")?.classList.contains("visually-hidden")).toBe(true);
     expect(assistant.querySelector("h2")?.textContent).toBe("Summary");
     expect(Array.from(assistant.querySelectorAll("li")).map((item) => item.textContent))
       .toEqual(["Local-first", "Private"]);
@@ -2316,6 +2319,36 @@ describe("Home durable Agent conversation UI", () => {
     expect(assistant.querySelector("table")?.textContent).toContain("Ready");
     expect(assistant.querySelector("script")).toBeNull();
     expect(assistant.querySelector("a")?.getAttribute("href")).toBeNull();
+
+    await act(async () => mount.root.unmount());
+    dom.window.close();
+  });
+
+  it("renders the just-completed answer as the same role-free Markdown message", async () => {
+    const dom = createDom();
+    const harness = createHarness(completedTimeline());
+    const completed = completedResult();
+    if (completed.state !== "completed") throw new Error("Expected completed result fixture.");
+    harness.submitTurn = async (request) => {
+      harness.submitRequests.push(request);
+      return {
+        ...completed,
+        answer: {
+          ...completed.answer,
+          answer: "## Live answer\n\n- First\n- Second"
+        }
+      };
+    };
+    const mount = await mountHome(dom, makePigeApi(harness));
+
+    await setTextareaValue(dom, mount.container, "Return Markdown now.");
+    await clickButton(dom, mount.container, "Send");
+    await waitFor(dom, () => mount.container.querySelector('[data-live-agent-answer="true"] [data-markdown-ready="true"]') !== null);
+    const live = requireElement(mount.container.querySelector<HTMLElement>('[data-live-agent-answer="true"]'));
+    expect(live.querySelector(".conversation-message-role")?.classList.contains("visually-hidden")).toBe(true);
+    expect(live.querySelector("h2")?.textContent).toBe("Live answer");
+    expect(Array.from(live.querySelectorAll("li")).map((item) => item.textContent)).toEqual(["First", "Second"]);
+    expect(mount.container.querySelector(".retrieval-answer")).toBeNull();
 
     await act(async () => mount.root.unmount());
     dom.window.close();
