@@ -69,7 +69,7 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 130,
-    "reviewedSha256": "ef335777b037b968bf8064564146be6ce16bbfd88b6cd346444a963e02e69d52"
+    "reviewedSha256": "d2e8cacf34c60e845052db3e23a02ae4b1f0419527c4af72bdf4ecab9c9b8271"
   },
   "reviewers": [
     {
