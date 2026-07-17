@@ -204,6 +204,7 @@ Examples:
 - `.pige/db/vault.sqlite`.
 - SQLite FTS tables.
 - Link graph tables.
+- Normalized page-reference keys and their index rebuild generation.
 - Chunk metadata tables.
 - Vector index files.
 - Memory indexes.
@@ -227,6 +228,8 @@ Examples:
 - Per-vault writer leases and per-Job claim files under `.pige/runtime/`.
 - Streaming model response buffers.
 - Uncommitted editor draft buffers.
+- Sender-owned Reader render contexts, including rendered internal href membership and
+  page/index freshness snapshots.
 
 Rule:
 
@@ -597,17 +600,18 @@ Detailed job checkpoint, retry, cancellation, proposal, and operation recovery r
 
 Phase 2/3 bridge Library query:
 
-- `library.list` can rebuild a safe read model directly from `sources/` and `wiki/` frontmatter.
-- The returned summaries are rebuildable state, not new durable truth.
-- Bad or incomplete Markdown frontmatter is counted and skipped; the Markdown file remains user-owned data and is not rewritten by the query.
-- Library summaries expose relative page paths only and do not expose source record paths, managed copy paths, original absolute paths, page bodies, prompts, model responses, or secrets.
+- `library.list` may derive rebuildable summaries from `sources/`/`wiki/` frontmatter,
+  counting/skipping bad files without rewriting them. It exposes relative page paths, never
+  source-record/managed-copy/original paths, bodies, prompts, responses, or secrets.
 
 Phase 2/3 bridge Note Reader query:
 
-- `notes.get` and `notes.render` resolve a stable page ID to a Markdown file under `sources/` or `wiki/`.
-- `notes.get` returns the Markdown body without frontmatter; frontmatter remains durable metadata on disk.
-- `notes.render` returns sanitized HTML as rebuildable view output, not durable state.
-- The renderer does not receive direct filesystem handles and cannot request arbitrary paths.
+- `notes.get` resolves stable page ID under `sources/`/`wiki/` and returns frontmatter-free
+  Markdown. `notes.render` returns sanitized rebuildable HTML plus an optional opaque
+  process-memory `renderContextId`; it has no backup/restore/sync/migration/recovery role.
+- `notes.resolveInlineReference` projects a body-free stable page/source target from that
+  context and index generation. Discarding keys/watch state changes no durable record or
+  ID, and renderer receives no handles or arbitrary-path query.
 
 ### 10.4 Delete
 

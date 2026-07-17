@@ -273,6 +273,11 @@ active generated notes: source adds `related_page_ids` plus a canonical
 `#wiki:<encoded-id>` managed link; target stays unchanged. Undo restores source and
 rebuild derives/removes backlink. Other link shapes/pages/types remain open.
 
+Reader activation preserves those identities: exact page ID wins; otherwise one normalized
+title/alias/governed path/slug may resolve, while ambiguity chooses nothing. Source links
+require the Source Record's verified `knowledgePageId`; ordinary `source_ids` grant no
+ownership. Rebuildable indexes cannot mint targets; API/Technical owners define DTO/fences.
+
 ### 7.3 Citations
 
 Use source citations for factual grounding:
@@ -426,37 +431,18 @@ Ranking rules:
 
 SQLite graph tables are rebuildable indexes.
 
-Recommended schema areas:
-
-- `pages`: page ID, path, type, title, aliases, status, language.
-- `tags`: canonical tag, display label, language, usage count.
-- `page_tags`: page ID to tag.
-- `topics`: topic page ID, canonical name, parent topic ID when confirmed.
-- `entities`: entity page ID, canonical name, entity type, aliases.
-- `relation_edges`: normalized `KnowledgeRelation` rows.
-- `citations`: page ID to source ID and locator.
-- `aliases`: alias to page ID candidates.
-- `backlinks`: rebuilt reverse link view.
-
-Rebuild order:
-
-1. Scan vault files and frontmatter.
-2. Resolve page IDs, titles, aliases, and paths.
-3. Parse body wiki links and citations.
-4. Resolve links to page IDs when possible.
-5. Parse managed related/evidence sections.
-6. Build relation edges and backlinks.
-7. Build tag/topic/entity indexes.
-8. Recompute Knowledge Tree aggregates.
-9. Report broken links, unresolved aliases, duplicate topics, and weak claims to Knowledge Health.
+Schema areas cover pages, tags/page-tags, topics, entities, normalized relation edges,
+citations, aliases, and backlinks. Rebuild scans frontmatter/bodies/managed evidence;
+resolves IDs, titles, aliases, paths, links, and citations; derives edges/facets/Tree; then
+reports broken links, unresolved aliases, duplicate topics, and weak claims.
 
 Current Phase 4 foundation:
 
-- Markdown body links are the durable source of truth for explicit note-to-note edges.
-- The Local Database rebuild parses `[[Wiki Link]]`, `[[Wiki Link|label]]`, local `.md` Markdown links, and renderer-style `#wiki:` links.
-- Resolved links populate rebuildable `links`, `backlinks`, and `relation_edges` rows for Library related-page queries.
-- Repeated links from one page to the same target are shown as one related page in Library-facing APIs.
-- Unresolved targets stay rebuildable and can later power Knowledge Health; they do not authorize arbitrary renderer filesystem access.
+- Markdown body links remain durable truth. Rebuild parses wiki/local Markdown/`#wiki:`
+  links into deduplicated `links`, `backlinks`, and `relation_edges`; unresolved targets
+  may inform Knowledge Health but grant no renderer file access.
+- Reader binds the render-time index generation and returns one stable target or body-free
+  ambiguous/not-found/stale/failed, never candidates or a guessed relationship.
 
 B6.12: rev2 rebuilds on first query. Body-free tree resolves ID/title/alias; root topic→domain; `has_topic`>`links_to`; primary=stable, others=related, cycles=cut, depth=iterative; Unassigned. weight=structural+fragment+unique-source; leaf=fragment-ref+source-leaf; sourcePages≠fragments. No public DTO/IPC/UI.
 

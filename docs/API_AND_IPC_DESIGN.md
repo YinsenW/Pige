@@ -456,6 +456,7 @@ Queries:
 - `library.related`
 - `notes.get`
 - `notes.render`
+- `notes.resolveInlineReference`
 
 Later commands:
 
@@ -465,23 +466,32 @@ Later commands:
 
 Current bridge queries:
 
-- `library.list({ limit?, pageTypes? })` uses the Local Database Service's page index when ready.
-- When database indexes are not available, it scans the active vault's `sources/` and `wiki/` Markdown frontmatter as a fallback.
-- It returns safe summaries only: page ID, title, type, status, relative Markdown page path, timestamps, language, and source IDs.
-- It counts invalid or incomplete frontmatter and skips those files so one malformed page does not block the Library.
-- It must not return source record paths, managed copy paths, original absolute paths, source bodies, note bodies, prompts, model responses, or secrets.
-- `library.tree()` returns one typed body-free semantic aggregate from the rebuildable
-  Local Database index: nodes, stable refs, deterministic metrics, and safe page
-  navigation. If the index is unavailable it returns a typed degraded empty result; it
-  never grants renderer filesystem access or fabricates hierarchy.
-- `library.related({ pageId, limit? })` returns safe outgoing-link and backlink summaries from the rebuildable Local Database graph index when ready.
-- If the graph index is unavailable or the page cannot be resolved, `library.related` returns an empty degraded result instead of falling back to renderer filesystem access.
-- `library.related` returns only resolved page summaries and the visible link target text; unresolved targets stay in the database for future Knowledge Health but are not exposed as arbitrary files.
-- Renderer code still cannot read Markdown files directly; the main-process Library Service owns filesystem access.
-- `notes.get({ pageId })` opens a page by stable Markdown page ID only. It returns frontmatter-derived summary, Markdown body without frontmatter, and byte size.
-- `notes.render({ pageId })` returns the same summary plus sanitized rendered HTML for the Note Reader.
-- Notes APIs do not accept arbitrary renderer-provided filesystem paths. They resolve page IDs by scanning `sources/` and `wiki/` with the same page-index rules as Library.
-- Raw HTML is disabled or sanitized before reaching the renderer. Scripts, event handlers, `javascript:` links, prompts, secrets, raw frontmatter, and arbitrary filesystem handles must not be returned.
+- `library.list({ limit?, pageTypes? })` reads the Local Database index or scans active-vault
+  `sources/`/`wiki/` frontmatter when unavailable. It skips/counts invalid files and returns
+  only page ID, title, type, status, relative page path, timestamps, language, and source IDs.
+- `library.tree()` returns one body-free rebuildable aggregate with stable refs and metrics,
+  or a typed degraded empty result. `library.related({ pageId, limit? })` returns resolved
+  outgoing/backlink summaries plus visible target text, or an empty degraded result; neither
+  query fabricates hierarchy, exposes unresolved files, or falls back to renderer file access.
+- `notes.get({ pageId })` returns a stable-ID-resolved summary, frontmatter-free Markdown
+  body, and byte size. `notes.render({ pageId })` substitutes sanitized HTML and may add an
+  opaque sender-owned `renderContextId` when href extraction is bounded. The token authorizes
+  only hrefs in that render and is neither durable state nor filesystem authority.
+- Library/Notes never accept arbitrary paths or return source-record/managed-copy/original
+  paths, bodies, prompts, model responses, secrets, raw frontmatter, handles, executable raw
+  HTML, scripts, event handlers, or unsafe links. Main owns all Markdown/filesystem access.
+
+Reader inline-reference query contract:
+
+- Request is strict `apiVersion: 1`, `requestId`, `activeVaultId`, `currentPageId`,
+  `renderContextId`, and a 1,024-byte internal `#wiki:`/`#source:` `href`.
+- Result echoes version/request ID. `resolved` adds either `{ kind: "page", pageId }` or
+  `{ kind: "source", sourceId, pageId, locator? }`; `ambiguous`, `not_found`, and `failed`
+  add nothing; `stale` adds only `scope: "vault" | "page" | "render_context"`. Paths,
+  bodies, candidates, prompts, secrets, and raw errors are forbidden.
+- This query emits no event. Renderer correlates `requestId` and consumes only
+  `target.pageId`; `sourceId`/`locator` grant no separate action. Technical Architecture
+  owns sender, context, page, index/watcher, and post-lookup fences; uncertainty fails closed.
 
 Current Home Dataset read boundary:
 

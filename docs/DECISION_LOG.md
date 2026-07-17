@@ -168,6 +168,25 @@ Critical accepted decisions below are bound to an owner statement, executable co
           "markers": ["requires typed body-free audit identity for model-egress operations"]
         }
       ]
+    },
+    {
+      "decisionId": "D-20260717-Reader-Inline-Reference-Resolution",
+      "owner": {
+        "path": "docs/API_AND_IPC_DESIGN.md",
+        "markers": ["Reader inline-reference query contract:", "`ambiguous`, `not_found`, and `failed`", "add nothing; `stale` adds only"]
+      },
+      "code": [
+        {
+          "path": "packages/schemas/src/index.ts",
+          "markers": ["export const NoteResolveInlineReferenceRequestSchema", "export const NoteResolveInlineReferenceResultSchema"]
+        }
+      ],
+      "tests": [
+        {
+          "path": "tests/unit/security-contract-schemas.test.ts",
+          "markers": ["keeps inline note reference requests bounded and results pathless"]
+        }
+      ]
     }
   ]
 }
@@ -1822,18 +1841,17 @@ Revised: 2026-07-10
 
 Decision:
 
-Phase 4 indexes explicit Markdown links as rebuildable graph metadata. The Local Database rebuild parses wiki links, local Markdown `.md` links, and renderer-style `#wiki:` links into `links`, `backlinks`, and resolved `relation_edges` rows. `library.related` exposes resolved outgoing links and backlinks as safe page summaries.
+Local Database derives links/backlinks/relations from explicit Markdown wiki, local `.md`,
+and `#wiki:` links; `library.related` exposes resolved body-free page summaries.
 
 Rationale:
 
-Users need a natural way to move from one note to related knowledge without manually maintaining folders or categories. Markdown remains the durable truth, while SQLite provides fast related-page lookup and can be rebuilt after deletion, restore, or external edits.
+Markdown stays durable truth while rebuildable SQLite makes related navigation fast.
 
 Consequences:
 
-- Repeated links from one page to the same target are shown as one related page in Library APIs.
-- Unresolved targets remain rebuildable index metadata for future Knowledge Health, but they do not authorize renderer filesystem access.
-- Renderer APIs continue to use stable page IDs and safe summaries rather than arbitrary paths or note bodies.
-- Knowledge Tree aggregation is outside this link-index decision and may build on the same resolved graph foundation.
+- Library deduplicates repeated targets; unresolved targets grant no file access.
+- Renderer uses stable IDs/summaries only; Knowledge Tree may reuse the graph foundation.
 
 References:
 
@@ -1850,18 +1868,18 @@ Revised: 2026-07-10
 
 Decision:
 
-The Note Reader can show outgoing links and backlinks through a lightweight related-context rail backed by `library.related`. The rail is a safe navigation surface over resolved page summaries, not a filesystem browser or a graph editor.
+Reader shows `library.related` outgoing/backlinks as a safe context rail over resolved
+summaries, never a filesystem browser or graph editor.
 
 Rationale:
 
-Retrieving knowledge should feel like enhanced search and reading, not only manual Library browsing. Showing related notes while reading makes captured knowledge easier to reuse without adding a separate mode or forcing users to understand graph internals.
+Related reading should reuse knowledge without adding a graph-management mode.
 
 Consequences:
 
-- Library rows and Home retrieval results use the same Reader behavior.
-- Wide layouts may place related context beside the Markdown body; narrow layouts stack it below the body.
-- Related rows open notes by stable page ID and do not expose arbitrary local paths, source bodies, prompts, or raw note bodies.
-- Note Agent, edit mode, source reveal/open-folder actions, and Knowledge Tree visualization are outside this related-context decision.
+- Library/Home share Reader; wide layout places context beside prose and narrow stacks it.
+- Rows open stable page IDs without paths/bodies/prompts. Agent, edit/reveal, and Tree
+  visualization are separate contracts.
 
 References:
 
@@ -2836,6 +2854,40 @@ Consequences:
 References:
 
 - `docs/API_AND_IPC_DESIGN.md`
+
+### D-20260717-Reader-Inline-Reference-Resolution
+
+Status: Accepted
+Date: 2026-07-17
+
+Decision:
+
+Reader wiki/source activation uses one typed Main-owned `notes.resolveInlineReference`
+query bound to the active vault, current page, opaque render context, rendered href, and
+request ID. It returns one stable page/source target or body-free `ambiguous`, `not_found`,
+`stale`, or `failed`; no event exists and renderer uses only `target.pageId`.
+
+Rationale:
+
+Rendered href text cannot authorize guessed files or identity. A sender-owned snapshot
+and stable IDs enable links without renderer file access or candidate/path/body/error leaks.
+
+Consequences:
+
+- Main/Notes own sender context, href, page/vault, and pre/post fences; Local Database owns
+  rebuildable keys, generation, and watcher freshness. Uncertainty fails closed.
+- Source targets require durable Source Record knowledge-page ownership; ordinary
+  `source_ids` do not authorize navigation.
+- Requirement, Exit, and Phase status remain unchanged; evidence is projected separately.
+
+References:
+
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/TECH_ARCHITECTURE.md`
+- `docs/DATA_ARCHITECTURE.md`
+- `docs/LOCAL_DATABASE_DESIGN.md`
+- `docs/KNOWLEDGE_MODEL_AND_LINKING.md`
+- `docs/UI_PROTOTYPE.md`
 
 ## 4. Deferred Decisions
 

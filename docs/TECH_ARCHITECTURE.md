@@ -810,25 +810,34 @@ Activity/Undo evidence, and remaining mutation/recovery work.
 
 Responsibilities:
 
-- Render vault Markdown into the Note Reader.
-- Provide a source-preserving Markdown editor.
-- Parse Markdown with a structured pipeline rather than ad hoc string handling.
-- v0.1 required Markdown support: frontmatter, GitHub-Flavored Markdown paragraphs/headings/lists, wiki links, source citations, heading anchors, fenced code blocks, task lists, tables, local images, and footnotes. Unsupported Markdown extensions must render as escaped text or a visible unsupported-block warning.
-- Sanitize or disable raw HTML by default. Scripts, event handlers, remote active content, and unsafe styles must not execute in the renderer.
-- Keep raw captured HTML isolated from app rendering. Web snapshots are source artifacts, not trusted UI.
-- Map rendered selections back to Markdown source spans for paragraphs, headings, list items, blockquotes, and table cells. For unsupported spans, disable mutating selection actions and keep read-only copy available.
-- Validate frontmatter, links, citations, and Pige-managed metadata on save.
-- Preserve plain Markdown files on disk. The editor must not require a proprietary rich-text representation.
-- Degrade gracefully when Markdown is malformed. A broken page should show recoverable text, not a blank reader.
+- Structured rendering/edit preserves plain Markdown and supports frontmatter, GFM, Pige
+  links/citations, anchors, fences, tasks, tables, local images, and footnotes; unsupported
+  input escapes/warns and malformed input stays readable.
+- Raw/captured HTML, scripts, handlers, remote content, and unsafe styles never execute.
+  Supported selections map to source spans; others allow copy only. Save validates schema.
 
 Candidate implementation:
 
-- A React renderer can use a unified-style Markdown AST pipeline or equivalent.
-- A source editor can start with a Markdown text editor plus rendered read/preview mode.
-- Syntax highlighting, table overflow handling, code copy buttons, and citation badges should live in the renderer layer, not in generated Markdown source.
+- React may use a unified-style AST/editor-preview; display affordances stay renderer-only.
 
 Reader delivery evidence and open interaction work live in acceptance; this owner keeps
 the renderer, sanitization, source-preservation, and process boundary stable.
+
+Reader inline-reference ownership:
+
+- `notes.render` binds context to Main sender/epoch, vault ID/path, page ID/file identity,
+  rendered hrefs, and index revision; newer render or sender destruction invalidates it.
+- Main validates both DTOs and maps no owner to stale. Notes checks membership/expiry,
+  owner/vault/page before lookup and vault/page after. Confined page targets are reread;
+  source targets require stable Source Record knowledge-page ownership, never `source_ids`.
+- Local Database owns normalized candidates, rebuild generation, and `wiki/`/`sources/`
+  watcher freshness. Event/error/signature/revision uncertainty makes lookup unavailable;
+  a maximum-two ambiguity lookup binds the render revision before and after query.
+- Renderer owns sequence, Reader identity, fixed body-free status, and `target.pageId`
+  navigation. Scope drift rejects delay; no path/body/candidates/error/event/file authority.
+
+API/IPC owns the exact union. Render contexts are process memory; revision/reference keys
+are rebuildable SQLite, never durable knowledge or backup content.
 
 ### 5.6 Search And Retrieval Service
 
