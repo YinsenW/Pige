@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-17T00:46:53Z",
+  "reviewedAt": "2026-07-17T02:06:46Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -26,12 +26,12 @@
       "packages/schemas/src/index.ts",
       "package.json"
     ],
-    "scope": "Manual H3 review binds the Job, API, architecture, quality, playbook, decision and traceability owners to the exact 89d7ee9 coordinator candidate; automated gates cover implementation evidence separately.",
+    "scope": "Manual H3 review binds the Job, API, architecture, quality, playbook, decision and traceability owners to the exact 89d7ee9 coordinator candidate plus its current Planning bind and bounded Decision Log structure/leanness repair; automated gates cover implementation evidence separately.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "17044936629d5f205fa503c913d2a08a0ed1e6d108e815fe229b8c061a59427f"
+    "reviewedSha256": "c62c7a14dfabb44e6d53d62213b845398da062388c530771ff2829b622ac824d"
   },
   "reviewers": [
     {
@@ -44,7 +44,7 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "The reviewer did not author the H3 code or Planning bind and compared the exact 89d7ee961d799c4710545b08980a4d8c71a874da candidate with H2 baseline b9b624df9ea13b17ac869e1193b88095f0ba3806 before issuing CLEAR."
+      "independence": "The reviewer did not author the H3 code, Planning bind, or bounded Decision Log repair and compared the current documentation bytes and exact 89d7ee961d799c4710545b08980a4d8c71a874da implementation with H2 baseline b9b624df9ea13b17ac869e1193b88095f0ba3806 before issuing CLEAR."
     }
   ],
   "dimensions": [
@@ -101,7 +101,7 @@
       "evidence": "Links, whitespace, document map, parser manifests, PRD contract and Decision Log checks pass on the current H3 governed snapshot."
     },
     {
-      "command": "Independent code and traceability review of 89d7ee961d799c4710545b08980a4d8c71a874da against b9b624df9ea13b17ac869e1193b88095f0ba3806",
+      "command": "Independent code, decision and traceability review of current H3 documentation bytes and 89d7ee961d799c4710545b08980a4d8c71a874da against b9b624df9ea13b17ac869e1193b88095f0ba3806",
       "status": "passed",
       "evidence": "Exact hashes and code review confirm three cancellation projections, exact repair/source proofs, raw proposal removal, unchanged Development bytes and no Requirement, Exit or Phase promotion."
     }
