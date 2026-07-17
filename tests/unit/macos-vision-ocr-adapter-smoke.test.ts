@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -17,6 +18,7 @@ import {
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
 import { MacOSVisionOcrAdapter } from "../../apps/desktop/src/main/services/macos-vision-ocr-adapter";
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
+import { OCR_HELPER_TIMEOUT_MS } from "../../apps/desktop/src/main/services/ocr-types";
 import { materializeOfficeMedia } from "../../apps/desktop/src/main/services/office-media-materializer-core";
 import type { OfficeMediaMaterializerPort } from "../../apps/desktop/src/main/services/office-media-materializer-service";
 import { OcrService } from "../../apps/desktop/src/main/services/ocr-service";
@@ -46,6 +48,12 @@ const helperPath = path.join(
   "pige-vision-ocr"
 );
 const hasBuiltHelper = process.platform === "darwin" && fs.existsSync(helperPath);
+const MACOS_VISION_OCR_SMOKE_TIMEOUT_MS = OCR_HELPER_TIMEOUT_MS;
+
+assert(
+  Number.isFinite(MACOS_VISION_OCR_SMOKE_TIMEOUT_MS) && MACOS_VISION_OCR_SMOKE_TIMEOUT_MS > 0,
+  "macOS Vision OCR smoke timeout must remain finite and positive."
+);
 
 const runtimeConfig: ModelProviderRuntimeConfig = {
   provider: {
@@ -93,7 +101,9 @@ const modelPort: AgentIngestModelConfigPort & HomeAgentModelPort = {
 };
 
 describe.runIf(hasBuiltHelper)("macOS Vision OCR production adapter smoke", () => {
-  it("locates the verified helper and recognizes generated text through the production adapter", async () => {
+  it("locates the verified helper and recognizes generated text through the production adapter", {
+    timeout: MACOS_VISION_OCR_SMOKE_TIMEOUT_MS
+  }, async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-ocr-adapter-smoke-"));
     try {
       const imagePath = path.join(root, "adapter-smoke.png");
@@ -127,7 +137,9 @@ describe.runIf(hasBuiltHelper)("macOS Vision OCR production adapter smoke", () =
     }
   });
 
-  it("recognizes a preserved image through the Agent-selected production OCR tool", async () => {
+  it("recognizes a preserved image through the Agent-selected production OCR tool", {
+    timeout: MACOS_VISION_OCR_SMOKE_TIMEOUT_MS
+  }, async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-image-agent-vision-smoke-"));
     try {
       const canvas = createCanvas(1600, 500);
@@ -235,7 +247,9 @@ describe.runIf(hasBuiltHelper)("macOS Vision OCR production adapter smoke", () =
     }
   });
 
-  it("recognizes parser-selected embedded PPTX media through the source-to-artifact pipeline", async () => {
+  it("recognizes parser-selected embedded PPTX media through the source-to-artifact pipeline", {
+    timeout: MACOS_VISION_OCR_SMOKE_TIMEOUT_MS
+  }, async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-pptx-vision-smoke-"));
     try {
       const canvas = createCanvas(1600, 500);
