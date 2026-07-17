@@ -528,6 +528,88 @@ describe("BackupCoordinatorService", () => {
     expect(result?.job.error?.code).toBe("backup.result_conflict");
     expect(fixture.operations.records.size).toBe(0);
   });
+
+  it("persists a body-free external-root wait and resumes the same Backup Job after reconnect", async () => {
+    const fixture = makeRealCoordinatorFixture("externalwait01");
+    const canonicalRoot = fs.realpathSync.native(fixture.root);
+    const userDataPathInput = path.join(canonicalRoot, "app-data");
+    const externalRoot = path.join(canonicalRoot, "external-managed-root");
+    const externalPath = path.join(externalRoot, "private", "source.pdf");
+    const externalBody = "external wait body must not enter the Job";
+    fs.mkdirSync(userDataPathInput, { recursive: true, mode: 0o700 });
+    const userDataPath = fs.realpathSync.native(userDataPathInput);
+    fs.mkdirSync(path.dirname(externalPath), { recursive: true });
+    fs.writeFileSync(externalPath, externalBody, "utf8");
+    const sourceId = "src_20260714_externalwait01";
+    fs.writeFileSync(
+      path.join(fixture.vaultPath, ".pige", "source-records", `${sourceId}.json`),
+      `${JSON.stringify({
+        schemaVersion: 1,
+        id: sourceId,
+        kind: "pdf_file",
+        storageStrategy: "copy_to_source_library",
+        semanticOrchestration: "capture_only",
+        managedCopy: {
+          rootId: "root_externalwait01",
+          pathBasis: "root_relative",
+          path: "private/source.pdf",
+          checksum: digestFor(externalBody),
+          size: Buffer.byteLength(externalBody)
+        },
+        artifacts: [],
+        metadata: {},
+        createdAt: FIXED_NOW,
+        updatedAt: FIXED_NOW
+      }, null, 2)}\n`,
+      "utf8"
+    );
+    const core = new BackupRestoreService({ userDataPath });
+    const options = { ...fixture.options, backupService: core as BackupServicePort };
+    const waiting = await new BackupCoordinatorService(options).create(fixture.destination);
+
+    expect(waiting.error).toBeUndefined();
+    expect(waiting).toMatchObject({
+      state: "waiting_dependency",
+      waitingDependency: {
+        dependencyKind: "vault_binding",
+        dependencyId: "root_externalwait01",
+        requiredAction: "reconnect_path",
+        messageKey: "errors.backup.external_managed_copy_root_missing"
+      }
+    });
+    expect(JSON.stringify(waiting)).not.toContain(externalRoot);
+    expect(JSON.stringify(waiting)).not.toContain(externalBody);
+
+    const restarted = new BackupCoordinatorService(options);
+    expect(await restarted.recoverInterrupted()).toEqual({ recovered: 0, failed: 1 });
+    expect(readJob(fixture.vaultPath, waiting.id)).toMatchObject({
+      id: waiting.id,
+      state: "waiting_dependency"
+    });
+
+    const vaultId = loadVaultSummary(fixture.vaultPath).vaultId;
+    fs.writeFileSync(path.join(userDataPath, "vault-bindings.json"), `${JSON.stringify({
+      schemaVersion: 1,
+      roots: [{
+        rootId: "root_externalwait01",
+        vaultId,
+        purpose: "managed_copy",
+        absolutePath: externalRoot,
+        availability: "available",
+        createdAt: FIXED_NOW,
+        updatedAt: FIXED_NOW
+      }],
+      defaults: [{ vaultId, rootId: "root_externalwait01" }]
+    }, null, 2)}\n`, "utf8");
+
+    expect(await restarted.recoverInterrupted()).toEqual({ recovered: 1, failed: 0 });
+    const completed = readJob(fixture.vaultPath, waiting.id);
+    expect(completed).toMatchObject({ id: waiting.id, state: "completed" });
+    expect(completed.waitingDependency).toBeUndefined();
+    expect(completed.operationIds).toHaveLength(1);
+    expect(await restarted.recoverInterrupted()).toEqual({ recovered: 0, failed: 0 });
+    expect(listOperationFiles(fixture.vaultPath)).toHaveLength(1);
+  });
 });
 
 function makeRealCoordinatorFixture(suffix: string) {

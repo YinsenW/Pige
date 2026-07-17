@@ -27,10 +27,12 @@ import {
   BackupManifestSchema,
   JobIdSchema,
   SourceRecordSchema,
+  VaultBindingsFileSchema,
   VaultIdSchema,
   VaultManifestSchema,
   type BackupDomainSchemaVersions,
   type BackupManifest,
+  type ExternalManagedCopyRootBinding,
   type SourceRecord,
   type VaultManifest
 } from "@pige/schemas";
@@ -44,6 +46,266 @@ import {
   readVaultManifest,
   type VaultPathSafetyOptions
 } from "./vault-layout";
+
+interface ExternalManagedCopyRootIdentity {
+  readonly path: string;
+  readonly device: number;
+  readonly inode: number;
+}
+
+interface VerifiedExternalManagedCopyRoot {
+  readonly rootId: string;
+  readonly vaultId: string;
+  readonly absolutePath: string;
+  readonly identities: readonly ExternalManagedCopyRootIdentity[];
+  readonly registryPath: string;
+  readonly bindingFingerprint: `sha256:${string}`;
+}
+
+export class BackupManagedCopyDependencyError extends PigeDomainError {
+  readonly dependencyKind: "vault_binding" | "external_source";
+  readonly dependencyId: string;
+
+  constructor(
+    code: string,
+    message: string,
+    dependencyKind: "vault_binding" | "external_source",
+    dependencyId: string
+  ) {
+    super(code, message);
+    this.name = "BackupManagedCopyDependencyError";
+    this.dependencyKind = dependencyKind;
+    this.dependencyId = dependencyId;
+  }
+}
+
+function readExternalManagedCopyRoots(
+  userDataPathInput: string | undefined,
+  vaultId: string,
+  requestedRootIds: ReadonlySet<string>
+): ReadonlyMap<string, VerifiedExternalManagedCopyRoot> {
+  if (requestedRootIds.size === 0) return new Map();
+  if (!userDataPathInput) {
+    throw missingExternalManagedCopyRoot([...requestedRootIds].sort()[0]!);
+  }
+
+  const userDataPath = captureCanonicalBindingDirectory(userDataPathInput);
+  const bindingsPath = path.join(userDataPath, "vault-bindings.json");
+  const bindings = readBindingsFile(bindingsPath);
+  const vaultRoots = bindings.roots.filter((root) => root.vaultId === vaultId);
+  assertDistinctBindingPaths(vaultRoots);
+  const rootsById = new Map(vaultRoots.map((root) => [root.rootId, root]));
+  const resolved = new Map<string, VerifiedExternalManagedCopyRoot>();
+
+  for (const rootId of [...requestedRootIds].sort()) {
+    const binding = rootsById.get(rootId);
+    if (!binding || binding.availability !== "available") {
+      throw missingExternalManagedCopyRoot(rootId);
+    }
+    resolved.set(rootId, captureExternalManagedCopyRoot(binding, bindingsPath));
+  }
+  return resolved;
+}
+
+function assertExternalManagedCopyRootIdentity(root: VerifiedExternalManagedCopyRoot): void {
+  assertExternalManagedCopyRootBinding(root);
+  for (const expected of root.identities) {
+    let current: fs.Stats;
+    try {
+      current = fs.lstatSync(expected.path);
+    } catch {
+      throw missingExternalManagedCopyRoot(root.rootId);
+    }
+    if (
+      !current.isDirectory() ||
+      current.isSymbolicLink() ||
+      current.dev !== expected.device ||
+      current.ino !== expected.inode
+    ) {
+      throw new PigeDomainError(
+        "backup.external_managed_copy_root_changed",
+        "An external managed-copy root changed during backup."
+      );
+    }
+  }
+  let canonicalRoot: string;
+  try {
+    canonicalRoot = fs.realpathSync.native(root.absolutePath);
+  } catch {
+    throw missingExternalManagedCopyRoot(root.rootId);
+  }
+  if (canonicalRoot !== root.absolutePath) {
+    throw new PigeDomainError(
+      "backup.external_managed_copy_root_changed",
+      "An external managed-copy root changed during backup."
+    );
+  }
+  assertExternalManagedCopyRootBinding(root);
+}
+
+function assertExternalManagedCopyRootBinding(root: VerifiedExternalManagedCopyRoot): void {
+  const current = readBindingsFile(root.registryPath).roots.find((binding) =>
+    binding.rootId === root.rootId && binding.vaultId === root.vaultId
+  );
+  if (
+    !current ||
+    current.availability !== "available" ||
+    current.absolutePath !== root.absolutePath ||
+    fingerprintExternalManagedCopyRootBinding(current) !== root.bindingFingerprint
+  ) {
+    throw new BackupManagedCopyDependencyError(
+      "backup.external_managed_copy_binding_changed",
+      "An external managed-copy root binding changed during backup.",
+      "vault_binding",
+      root.rootId
+    );
+  }
+}
+
+function readBindingsFile(bindingsPath: string) {
+  let descriptor: number | undefined;
+  try {
+    descriptor = fs.openSync(bindingsPath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+    const before = fs.fstatSync(descriptor);
+    const pathBefore = fs.lstatSync(bindingsPath);
+    if (
+      !before.isFile() ||
+      pathBefore.isSymbolicLink() ||
+      before.nlink !== 1 ||
+      pathBefore.nlink !== 1 ||
+      !sameFileRevision(before, pathBefore) ||
+      before.size > 4 * 1024 * 1024
+    ) {
+      throw new Error("The root registry is unsafe.");
+    }
+    const bytes = fs.readFileSync(descriptor);
+    const after = fs.fstatSync(descriptor);
+    const pathAfter = fs.lstatSync(bindingsPath);
+    if (!sameFileRevision(before, after) || !sameFileRevision(after, pathAfter)) {
+      throw new Error("The root registry changed while it was read.");
+    }
+    return VaultBindingsFileSchema.parse(JSON.parse(bytes.toString("utf8")) as unknown);
+  } catch (caught) {
+    if (isErrno(caught, "ENOENT")) {
+      return VaultBindingsFileSchema.parse({ schemaVersion: 1, roots: [], defaults: [] });
+    }
+    if (caught instanceof PigeDomainError) throw caught;
+    throw new PigeDomainError(
+      "backup.root_binding_registry_invalid",
+      "The external managed-copy root registry is unavailable or invalid."
+    );
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
+  }
+}
+
+function captureExternalManagedCopyRoot(
+  binding: ExternalManagedCopyRootBinding,
+  registryPath: string
+): VerifiedExternalManagedCopyRoot {
+  if (!path.isAbsolute(binding.absolutePath) || path.resolve(binding.absolutePath) !== binding.absolutePath) {
+    throw new PigeDomainError(
+      "backup.root_binding_invalid",
+      "An external managed-copy root binding is not canonical."
+    );
+  }
+  const identities = captureExternalDirectoryChain(binding.absolutePath, binding.rootId);
+  let canonicalRoot: string;
+  try {
+    canonicalRoot = fs.realpathSync.native(binding.absolutePath);
+  } catch {
+    throw missingExternalManagedCopyRoot(binding.rootId);
+  }
+  if (canonicalRoot !== binding.absolutePath) {
+    throw new PigeDomainError(
+      "backup.root_binding_invalid",
+      "An external managed-copy root binding contains a symbolic link."
+    );
+  }
+  return {
+    rootId: binding.rootId,
+    vaultId: binding.vaultId,
+    absolutePath: binding.absolutePath,
+    identities,
+    registryPath,
+    bindingFingerprint: fingerprintExternalManagedCopyRootBinding(binding)
+  };
+}
+
+function fingerprintExternalManagedCopyRootBinding(
+  binding: ExternalManagedCopyRootBinding
+): `sha256:${string}` {
+  return checksumBuffer(Buffer.from(JSON.stringify(binding), "utf8"));
+}
+
+function captureExternalDirectoryChain(
+  directoryPath: string,
+  rootId: string
+): readonly ExternalManagedCopyRootIdentity[] {
+  const filesystemRoot = path.parse(directoryPath).root;
+  const relative = path.relative(filesystemRoot, directoryPath);
+  const paths = [filesystemRoot];
+  let current = filesystemRoot;
+  for (const segment of relative.split(path.sep).filter(Boolean)) {
+    current = path.join(current, segment);
+    paths.push(current);
+  }
+  return paths.map((entryPath) => {
+    let identity: fs.Stats;
+    try {
+      identity = fs.lstatSync(entryPath);
+    } catch {
+      throw missingExternalManagedCopyRoot(rootId);
+    }
+    if (!identity.isDirectory() || identity.isSymbolicLink()) {
+      throw new PigeDomainError(
+        "backup.root_binding_invalid",
+        "An external managed-copy root binding contains a non-directory or symbolic-link component."
+      );
+    }
+    return { path: entryPath, device: identity.dev, inode: identity.ino };
+  });
+}
+
+function assertDistinctBindingPaths(roots: readonly ExternalManagedCopyRootBinding[]): void {
+  const seen = new Set<string>();
+  for (const root of roots) {
+    if (!path.isAbsolute(root.absolutePath)) {
+      throw new PigeDomainError("backup.root_binding_invalid", "An external root binding path is not absolute.");
+    }
+    const normalized = path.resolve(root.absolutePath);
+    const key = process.platform === "win32" ? normalized.toLocaleLowerCase("en-US") : normalized;
+    if (seen.has(key)) {
+      throw new PigeDomainError(
+        "backup.root_binding_conflict",
+        "Multiple external managed-copy root IDs resolve to the same machine path."
+      );
+    }
+    seen.add(key);
+  }
+}
+
+function captureCanonicalBindingDirectory(directoryPathInput: string): string {
+  const directoryPath = path.resolve(directoryPathInput);
+  const identity = fs.lstatSync(directoryPath);
+  if (!identity.isDirectory() || identity.isSymbolicLink()) {
+    throw new PigeDomainError("backup.root_binding_registry_invalid", "Machine app-data storage is unsafe.");
+  }
+  const canonical = fs.realpathSync.native(directoryPath);
+  if (canonical !== directoryPath) {
+    throw new PigeDomainError("backup.root_binding_registry_invalid", "Machine app-data storage is not canonical.");
+  }
+  return canonical;
+}
+
+function missingExternalManagedCopyRoot(rootId: string): BackupManagedCopyDependencyError {
+  return new BackupManagedCopyDependencyError(
+    "backup.external_managed_copy_root_missing",
+    "A required external managed-copy root must be reconnected before backup.",
+    "vault_binding",
+    rootId
+  );
+}
 
 type BackupManifestFile = BackupManifest["files"][number];
 
@@ -135,6 +397,10 @@ export interface BackupCreateOptions {
   readonly onPhase?: BackupCreatePhaseReporter;
 }
 
+export interface BackupRestoreServiceOptions {
+  readonly userDataPath?: string;
+}
+
 export interface BackupDestinationFence {
   readonly destinationPath: string;
   readonly ancestorPath: string;
@@ -170,9 +436,32 @@ interface BackupCreateIdentity {
 
 interface BackupPreflightResult {
   readonly relativePaths: readonly string[];
+  readonly archiveSources: ReadonlyMap<string, BackupArchiveSource>;
   readonly sourceRecordChecksums: ReadonlyMap<string, string>;
   readonly domainSchemaVersions: BackupDomainSchemaVersions;
   readonly externalDependencies: BackupManifest["externalDependencies"];
+  readonly externalManagedCopies: NonNullable<BackupManifest["externalManagedCopies"]>;
+}
+
+interface BackupArchiveSource {
+  readonly absolutePath: string;
+  readonly kind: "vault" | "external_managed_copy";
+  readonly expectedChecksum?: string;
+  readonly expectedSize?: number;
+  readonly sourceId?: string;
+  readonly root?: VerifiedExternalManagedCopyRoot;
+  readonly parentIdentities?: readonly ExternalManagedCopyRootIdentity[];
+}
+
+interface PreparedBackupFile extends BackupManifestFile {
+  readonly absolutePath: string;
+  readonly identity: fs.Stats;
+  readonly source: BackupArchiveSource;
+}
+
+interface PreparedBackupManifest {
+  readonly manifest: BackupManifest;
+  readonly files: readonly PreparedBackupFile[];
 }
 
 interface AdoptedBackupArchive {
@@ -276,6 +565,12 @@ const DEFAULT_INCLUDES = {
 const ROOT_FILES = ["PIGE.md", "index.md", "log.md", ".pige/manifest.json", ".pige/config.json"] as const;
 
 export class BackupRestoreService {
+  readonly #userDataPath: string | undefined;
+
+  constructor(options: BackupRestoreServiceOptions = {}) {
+    this.#userDataPath = options.userDataPath;
+  }
+
   status(activeVault: VaultSummary | undefined): BackupRestoreStatus {
     return {
       phase: "available",
@@ -365,10 +660,11 @@ export class BackupRestoreService {
       };
     }
     throwIfBackupAborted(options.signal);
-    const preflight = inspectBackupPreflight(vaultPath, options);
+    const preflight = inspectBackupPreflight(vaultPath, options, this.#userDataPath);
     await reportBackupCreatePhase(options.onPhase, checkpointContext, "preflight");
     throwIfBackupAborted(options.signal);
-    const manifest = createBackupManifest(vaultPath, appVersion, identity, preflight, options.signal);
+    const prepared = createBackupManifest(vaultPath, appVersion, identity, preflight, options.signal);
+    const manifest = prepared.manifest;
     const manifestText = `${JSON.stringify(manifest, null, 2)}\n`;
     const manifestChecksum = checksumBuffer(Buffer.from(manifestText, "utf8"));
     await reportBackupCreatePhase(options.onPhase, checkpointContext, "manifest_written", { manifestChecksum });
@@ -444,21 +740,38 @@ export class BackupRestoreService {
           BACKUP_MANIFEST_FILE,
           { mtime: new Date(manifest.createdAt) }
         );
-        for (const file of manifest.files) {
+        for (const file of prepared.files) {
           throwIfBackupAborted(options.signal);
-          const sourcePath = path.join(vaultPath, ...file.path.split("/"));
-          zipFile.addFile(sourcePath, `${BACKUP_VAULT_DIR}/${file.path}`, {
-            mtime: fs.statSync(sourcePath).mtime
-          });
+          zipFile.addReadStreamLazy(
+            `${BACKUP_VAULT_DIR}/${file.path}`,
+            {
+              size: file.size,
+              mtime: file.identity.mtime,
+              mode: file.identity.mode
+            },
+            (callback) => {
+              try {
+                callback(null, createVerifiedBackupReadStream(file, options.signal));
+              } catch (caught) {
+                callback(caught, undefined as never);
+              }
+            }
+          );
         }
         zipFile.end();
 
         const output = fs.createWriteStream(stagingPath, { fd: descriptor, autoClose: false });
+        zipFile.on("error", (caught) => {
+          (zipFile.outputStream as Readable).destroy(
+            caught instanceof Error ? caught : new Error("Backup archive source failed.")
+          );
+        });
         if (options.signal) {
           await pipeline(zipFile.outputStream, output, { signal: options.signal });
         } else {
           await pipeline(zipFile.outputStream, output);
         }
+        for (const file of prepared.files) assertPreparedBackupFile(file);
         fs.fsyncSync(descriptor);
         const writtenStat = fs.fstatSync(descriptor);
         const writtenPathStat = fs.lstatSync(stagingPath);
@@ -586,6 +899,7 @@ export class BackupRestoreService {
       const manifest = await readBackupManifest(archive.descriptor);
       const validation = await validateBackupZip(archive.descriptor, manifest);
       await readAndAssertArchivedVaultManifest(archive.descriptor, manifest);
+      await readAndAssertArchivedExternalManagedCopies(archive.descriptor, manifest);
       const snapshotAfterValidation = snapshotRestoreArchive(archive);
       assertSameRestoreArchive(
         archive.initialSnapshot,
@@ -628,6 +942,7 @@ export class BackupRestoreService {
       const sourceManifest = await readBackupManifest(archive.descriptor);
       const validation = await validateBackupZip(archive.descriptor, sourceManifest);
       await readAndAssertArchivedVaultManifest(archive.descriptor, sourceManifest);
+      await readAndAssertArchivedExternalManagedCopies(archive.descriptor, sourceManifest);
       const snapshotAfterValidation = snapshotRestoreArchive(archive);
       assertSameRestoreArchive(
         archive.initialSnapshot,
@@ -647,7 +962,7 @@ export class BackupRestoreService {
       const checkpointContext = createRestoreCheckpointContext(
         binding,
         backupIdentity,
-        sourceManifest.externalDependencies.length
+        countUnresolvedExternalDependencies(sourceManifest)
       );
       await reportRestoreCorePhase(input.onPhase, checkpointContext, "manifest_validated");
       assertCurrentRestoreDestinationCoordinates(destinationCoordinates, input.pathSafety);
@@ -680,6 +995,7 @@ export class BackupRestoreService {
       validateExtractedRestore(staging.path, sourceManifest, [RESTORE_STAGING_MARKER]);
       await reportRestoreCorePhase(input.onPhase, checkpointContext, "archive_extracted");
 
+      materializeExternalManagedCopies(staging, sourceManifest);
       const materializedManifest = materializeRestoreIdentity(
         staging,
         sourceManifest,
@@ -742,6 +1058,7 @@ export class BackupRestoreService {
         archive.descriptor,
         sourceManifest
       );
+      await readAndAssertArchivedExternalManagedCopies(archive.descriptor, sourceManifest);
       const snapshotAfterValidation = snapshotRestoreArchive(archive);
       assertSameRestoreArchive(
         archive.initialSnapshot,
@@ -799,12 +1116,15 @@ function createBackupManifest(
   identity: BackupCreateIdentity,
   preflight: BackupPreflightResult,
   signal?: AbortSignal
-): BackupManifest {
+): PreparedBackupManifest {
   const vaultManifest = readVaultManifest(vaultPath);
-  const files = preflight.relativePaths.map((relativePath) => {
+  const preparedFiles = [...preflight.archiveSources.entries()].sort(([left], [right]) =>
+    left.localeCompare(right)
+  ).map(([relativePath, source]) => {
     throwIfBackupAborted(signal);
-    const absolutePath = path.join(vaultPath, ...relativePath.split("/"));
-    const snapshot = snapshotBackupSourceFile(absolutePath, signal);
+    assertBackupArchiveSourceFence(source);
+    const snapshot = snapshotBackupArchiveSource(source, signal);
+    assertBackupArchiveSourceFence(source);
     const preflightChecksum = preflight.sourceRecordChecksums.get(relativePath);
     if (preflightChecksum && snapshot.checksum !== preflightChecksum) {
       throw new PigeDomainError(
@@ -812,15 +1132,28 @@ function createBackupManifest(
         "A source record changed after backup preflight."
       );
     }
+    if (
+      source.expectedChecksum !== undefined &&
+      (snapshot.checksum !== source.expectedChecksum || snapshot.size !== source.expectedSize)
+    ) {
+      throw new PigeDomainError(
+        "backup.external_managed_copy_changed",
+        "A required external managed source copy changed after capture."
+      );
+    }
     return {
       path: relativePath,
       size: snapshot.size,
-      checksum: snapshot.checksum
+      checksum: snapshot.checksum,
+      absolutePath: source.absolutePath,
+      identity: snapshot.identity,
+      source
     };
   });
+  const files = preparedFiles.map(({ absolutePath: _absolutePath, identity: _identity, source: _source, ...file }) => file);
   const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
 
-  return BackupManifestSchema.parse({
+  const manifest = BackupManifestSchema.parse({
     format: BACKUP_FORMAT,
     formatVersion: BACKUP_FORMAT_VERSION,
     backupId: identity.backupId,
@@ -840,8 +1173,12 @@ function createBackupManifest(
     domainSchemaVersions: preflight.domainSchemaVersions,
     excludedRoots: [...PIGE_REBUILDABLE_ROOTS, ...PIGE_TRANSIENT_RUNTIME_ROOTS],
     externalDependencies: preflight.externalDependencies,
+    ...(preflight.externalManagedCopies.length > 0
+      ? { externalManagedCopies: preflight.externalManagedCopies }
+      : {}),
     files
   });
+  return { manifest, files: preparedFiles };
 }
 
 function createBackupIdentity(options: BackupCreateOptions): BackupCreateIdentity {
@@ -867,13 +1204,26 @@ function createBackupIdentity(options: BackupCreateOptions): BackupCreateIdentit
 
 function inspectBackupPreflight(
   vaultPath: string,
-  options: BackupCreateOptions
+  options: BackupCreateOptions,
+  userDataPath: string | undefined
 ): BackupPreflightResult {
   const relativePaths = collectBackupFiles(vaultPath, options);
   const includedPaths = new Set(relativePaths);
+  const archiveSources = new Map<string, BackupArchiveSource>(relativePaths.map((relativePath) => [
+    relativePath,
+    { absolutePath: path.join(vaultPath, ...relativePath.split("/")), kind: "vault" }
+  ]));
   const sourceRecordChecksums = new Map<string, string>();
   const externalDependencies: BackupManifest["externalDependencies"] = [];
+  const externalManagedCopies: NonNullable<BackupManifest["externalManagedCopies"]> = [];
   const sourceRecordPrefix = ".pige/source-records/";
+  const sourceRecords: Array<{
+    readonly relativePath: string;
+    readonly record: SourceRecord;
+    readonly checksum: string;
+  }> = [];
+  const sourceIds = new Set<string>();
+  const requestedRootIds = new Set<string>();
 
   for (const relativePath of relativePaths) {
     if (!relativePath.startsWith(sourceRecordPrefix) || !relativePath.endsWith(".json")) continue;
@@ -881,7 +1231,23 @@ function inspectBackupPreflight(
     const absolutePath = path.join(vaultPath, ...relativePath.split("/"));
     const inspected = readValidatedBackupSourceRecord(absolutePath);
     const record = inspected.record;
+    if (sourceIds.has(record.id)) {
+      throw new PigeDomainError("backup.source_record_conflict", "Backup contains duplicate SourceRecord IDs.");
+    }
+    sourceIds.add(record.id);
+    sourceRecords.push({ relativePath, record, checksum: inspected.checksum });
     sourceRecordChecksums.set(relativePath, inspected.checksum);
+
+    const rootId = record.managedCopy?.rootId;
+    if (rootId && rootId !== "root_vault_managed") requestedRootIds.add(rootId);
+  }
+
+  const roots = readExternalManagedCopyRoots(userDataPath, readVaultManifest(vaultPath).vault_id, requestedRootIds);
+  const externalLocators = new Set<string>();
+  const includedRootIds = new Set<string>();
+
+  for (const inspected of sourceRecords) {
+    const { relativePath, record } = inspected;
 
     if (record.storageStrategy === "reference_original") {
       externalDependencies.push({
@@ -898,10 +1264,55 @@ function inspectBackupPreflight(
       throw new PigeDomainError("backup.source_record_invalid", "A managed source record has no managed copy.");
     }
     if (managedCopy.rootId && managedCopy.rootId !== "root_vault_managed") {
-      throw new PigeDomainError(
-        "backup.external_managed_copy_unsupported",
-        "External managed-copy roots require a validated machine-local binding before backup."
-      );
+      assertSafeVaultRelativePath(managedCopy.path);
+      const root = roots.get(managedCopy.rootId);
+      if (!root) {
+        throw new BackupManagedCopyDependencyError(
+          "backup.external_managed_copy_root_missing",
+          "A required external managed-copy root must be reconnected before backup.",
+          "vault_binding",
+          managedCopy.rootId
+        );
+      }
+      const locatorKey = `${managedCopy.rootId}\0${managedCopy.path}`;
+      if (externalLocators.has(locatorKey)) {
+        throw new PigeDomainError(
+          "backup.external_managed_copy_conflict",
+          "Multiple SourceRecords resolve to the same external managed-copy locator."
+        );
+      }
+      externalLocators.add(locatorKey);
+      const externalSource = captureExternalManagedCopySource(root, managedCopy.path, record.id);
+      const archivePath = externalManagedCopyArchivePath(record.id, managedCopy.rootId, managedCopy.checksum);
+      const restorePath = externalManagedCopyRestorePath(record.id, managedCopy.rootId, managedCopy.checksum);
+      if (archiveSources.has(archivePath) || archiveSources.has(restorePath) || includedPaths.has(restorePath)) {
+        throw new PigeDomainError(
+          "backup.external_managed_copy_mapping_collision",
+          "An external managed-copy archive mapping collides with durable vault data."
+        );
+      }
+      const restoredRecord = createRestoredExternalSourceRecord(record, restorePath);
+      const restoredRecordBytes = Buffer.from(`${JSON.stringify(restoredRecord, null, 2)}\n`, "utf8");
+      archiveSources.set(archivePath, {
+        ...externalSource,
+        kind: "external_managed_copy",
+        expectedChecksum: managedCopy.checksum,
+        expectedSize: managedCopy.size,
+        sourceId: record.id
+      });
+      externalManagedCopies.push({
+        sourceId: record.id,
+        rootId: managedCopy.rootId,
+        sourceRecordPath: relativePath,
+        archivePath,
+        restorePath,
+        checksum: managedCopy.checksum,
+        size: managedCopy.size,
+        restoredSourceRecordChecksum: checksumBuffer(restoredRecordBytes),
+        restoredSourceRecordSize: restoredRecordBytes.byteLength
+      });
+      includedRootIds.add(managedCopy.rootId);
+      continue;
     }
     assertSafeVaultRelativePath(managedCopy.path);
     if (!includedPaths.has(managedCopy.path)) {
@@ -912,6 +1323,15 @@ function inspectBackupPreflight(
     }
   }
 
+  for (const rootId of [...includedRootIds].sort()) {
+    externalDependencies.push({
+      kind: "external_managed_copy_root",
+      rootId,
+      included: true,
+      requiredForCompleteRestore: false
+    });
+  }
+
   externalDependencies.sort((left, right) => {
     const leftId = typeof left === "string" ? left : `${left.kind}:${left.sourceId ?? left.rootId ?? ""}`;
     const rightId = typeof right === "string" ? right : `${right.kind}:${right.sourceId ?? right.rootId ?? ""}`;
@@ -920,10 +1340,307 @@ function inspectBackupPreflight(
 
   return {
     relativePaths,
+    archiveSources,
     sourceRecordChecksums,
     domainSchemaVersions: deriveBackupDomainSchemaVersions(vaultPath, relativePaths),
-    externalDependencies
+    externalDependencies,
+    externalManagedCopies: externalManagedCopies.sort((left, right) => left.sourceId.localeCompare(right.sourceId))
   };
+}
+
+function captureExternalManagedCopySource(
+  root: VerifiedExternalManagedCopyRoot,
+  relativePath: string,
+  sourceId: string
+): BackupArchiveSource {
+  assertExternalManagedCopyRootIdentity(root);
+  assertSafeVaultRelativePath(relativePath);
+  const absolutePath = path.resolve(root.absolutePath, ...relativePath.split("/"));
+  if (!isSameOrInside(absolutePath, root.absolutePath) || absolutePath === root.absolutePath) {
+    throw new PigeDomainError(
+      "backup.external_managed_copy_path_invalid",
+      "An external managed-copy locator escapes its bound root."
+    );
+  }
+
+  const parentIdentities: ExternalManagedCopyRootIdentity[] = [];
+  let current = root.absolutePath;
+  const segments = relativePath.split("/");
+  for (const segment of segments.slice(0, -1)) {
+    current = path.join(current, segment);
+    let identity: fs.Stats;
+    try {
+      identity = fs.lstatSync(current);
+    } catch {
+      throw new BackupManagedCopyDependencyError(
+        "backup.external_managed_copy_missing",
+        "A required external managed source copy is unavailable.",
+        "external_source",
+        sourceId
+      );
+    }
+    if (!identity.isDirectory() || identity.isSymbolicLink()) {
+      throw new PigeDomainError(
+        "backup.external_managed_copy_path_invalid",
+        "An external managed-copy locator contains a symbolic-link or non-directory parent."
+      );
+    }
+    parentIdentities.push({ path: current, device: identity.dev, inode: identity.ino });
+  }
+
+  let fileIdentity: fs.Stats;
+  try {
+    fileIdentity = fs.lstatSync(absolutePath);
+  } catch {
+    throw new BackupManagedCopyDependencyError(
+      "backup.external_managed_copy_missing",
+      "A required external managed source copy is unavailable.",
+      "external_source",
+      sourceId
+    );
+  }
+  if (!fileIdentity.isFile() || fileIdentity.isSymbolicLink() || fileIdentity.nlink !== 1) {
+    throw new PigeDomainError(
+      "backup.external_managed_copy_path_invalid",
+      "An external managed-copy locator is not a private regular file."
+    );
+  }
+  let canonicalFile: string;
+  try {
+    canonicalFile = fs.realpathSync.native(absolutePath);
+  } catch {
+    throw new BackupManagedCopyDependencyError(
+      "backup.external_managed_copy_missing",
+      "A required external managed source copy is unavailable.",
+      "external_source",
+      sourceId
+    );
+  }
+  if (canonicalFile !== absolutePath) {
+    throw new PigeDomainError(
+      "backup.external_managed_copy_path_invalid",
+      "An external managed-copy locator resolves through a symbolic link."
+    );
+  }
+  assertExternalManagedCopyRootIdentity(root);
+  return { absolutePath, kind: "external_managed_copy", sourceId, root, parentIdentities };
+}
+
+function assertBackupArchiveSourceFence(source: BackupArchiveSource): void {
+  if (source.kind !== "external_managed_copy") return;
+  if (!source.root || !source.parentIdentities) {
+    throw new PigeDomainError("backup.root_binding_invalid", "An external managed-copy fence is incomplete.");
+  }
+  assertExternalManagedCopyRootIdentity(source.root);
+  for (const expected of source.parentIdentities) {
+    let current: fs.Stats;
+    try {
+      current = fs.lstatSync(expected.path);
+    } catch {
+      throw new PigeDomainError(
+        "backup.external_managed_copy_root_changed",
+        "An external managed-copy parent changed during backup."
+      );
+    }
+    if (
+      !current.isDirectory() ||
+      current.isSymbolicLink() ||
+      current.dev !== expected.device ||
+      current.ino !== expected.inode
+    ) {
+      throw new PigeDomainError(
+        "backup.external_managed_copy_root_changed",
+        "An external managed-copy parent changed during backup."
+      );
+    }
+  }
+}
+
+function assertPreparedBackupFile(file: PreparedBackupFile): void {
+  assertBackupArchiveSourceFence(file.source);
+  let current: fs.Stats;
+  try {
+    current = fs.lstatSync(file.absolutePath);
+  } catch {
+    if (file.source.kind === "external_managed_copy" && file.source.sourceId) {
+      throw new BackupManagedCopyDependencyError(
+        "backup.external_managed_copy_missing",
+        "A required external managed source copy is unavailable.",
+        "external_source",
+        file.source.sourceId
+      );
+    }
+    throw new PigeDomainError("backup.source_changed", "A backup source file became unavailable.");
+  }
+  if (
+    !current.isFile() ||
+    current.isSymbolicLink() ||
+    current.nlink !== 1 ||
+    !sameFileRevision(file.identity, current)
+  ) {
+    throw new PigeDomainError("backup.source_changed", "A backup source file changed before archive finalization.");
+  }
+}
+
+function createVerifiedBackupReadStream(
+  file: PreparedBackupFile,
+  signal?: AbortSignal
+): Readable {
+  assertPreparedBackupFile(file);
+  throwIfBackupAborted(signal);
+  const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0);
+  const descriptor = fs.openSync(file.absolutePath, flags);
+  let closed = false;
+  let reading = false;
+  let bytesRead = 0;
+  const hash = createHash("sha256");
+
+  const closeDescriptor = (): void => {
+    if (closed) return;
+    closed = true;
+    fs.closeSync(descriptor);
+  };
+
+  try {
+    const opened = fs.fstatSync(descriptor);
+    const pathIdentity = fs.lstatSync(file.absolutePath);
+    if (
+      opened.nlink !== 1 ||
+      pathIdentity.nlink !== 1 ||
+      !sameFileRevision(file.identity, opened) ||
+      !sameFileRevision(opened, pathIdentity)
+    ) {
+      throw new PigeDomainError(
+        "backup.source_changed",
+        "A backup source file changed before archive streaming began."
+      );
+    }
+    assertBackupArchiveSourceFence(file.source);
+  } catch (caught) {
+    closeDescriptor();
+    throw caught;
+  }
+
+  const stream = new Readable({
+    read(requestedSize) {
+      if (reading || closed) return;
+      try {
+        throwIfBackupAborted(signal);
+      } catch (caught) {
+        this.destroy(caught instanceof Error ? caught : new Error("Backup creation was cancelled."));
+        return;
+      }
+      reading = true;
+      const buffer = Buffer.alloc(Math.min(Math.max(requestedSize, 64 * 1024), 1024 * 1024));
+      fs.read(descriptor, buffer, 0, buffer.length, null, (caught, count) => {
+        reading = false;
+        if (caught) {
+          this.destroy(caught);
+          return;
+        }
+        if (count > 0) {
+          bytesRead += count;
+          hash.update(buffer.subarray(0, count));
+          this.push(buffer.subarray(0, count));
+          return;
+        }
+        try {
+          const after = fs.fstatSync(descriptor);
+          const pathAfter = fs.lstatSync(file.absolutePath);
+          const checksum = `sha256:${hash.digest("hex")}`;
+          if (
+            after.nlink !== 1 ||
+            pathAfter.nlink !== 1 ||
+            !sameFileRevision(file.identity, after) ||
+            !sameFileRevision(after, pathAfter) ||
+            bytesRead !== file.size ||
+            checksum !== file.checksum
+          ) {
+            throw new PigeDomainError(
+              "backup.source_changed",
+              "A backup source file changed while it was archived."
+            );
+          }
+          assertBackupArchiveSourceFence(file.source);
+          closeDescriptor();
+          this.push(null);
+        } catch (verificationError) {
+          this.destroy(
+            verificationError instanceof Error
+              ? verificationError
+              : new Error("Backup source verification failed.")
+          );
+        }
+      });
+    },
+    destroy(caught, callback) {
+      try {
+        closeDescriptor();
+        callback(caught);
+      } catch (closeError) {
+        callback(closeError instanceof Error ? closeError : new Error("Backup source close failed."));
+      }
+    }
+  });
+
+  if (signal) {
+    const abort = (): void => {
+      try {
+        throwIfBackupAborted(signal);
+      } catch (caught) {
+        stream.destroy(caught instanceof Error ? caught : new Error("Backup creation was cancelled."));
+      }
+    };
+    signal.addEventListener("abort", abort, { once: true });
+    stream.once("close", () => signal.removeEventListener("abort", abort));
+  }
+  return stream;
+}
+
+function snapshotBackupArchiveSource(
+  source: BackupArchiveSource,
+  signal?: AbortSignal
+): { readonly size: number; readonly checksum: string; readonly identity: fs.Stats } {
+  try {
+    return snapshotBackupSourceFile(source.absolutePath, signal);
+  } catch (caught) {
+    if (
+      source.kind === "external_managed_copy" &&
+      source.sourceId &&
+      !(caught instanceof PigeDomainError)
+    ) {
+      throw new BackupManagedCopyDependencyError(
+        "backup.external_managed_copy_missing",
+        "A required external managed source copy is unavailable.",
+        "external_source",
+        source.sourceId
+      );
+    }
+    throw caught;
+  }
+}
+
+function externalManagedCopyArchivePath(sourceId: string, rootId: string, checksum: string): string {
+  return `.pige/backup-managed-copies/${rootId}/${sourceId}/${checksum.slice("sha256:".length)}.bin`;
+}
+
+function externalManagedCopyRestorePath(sourceId: string, rootId: string, checksum: string): string {
+  return `raw/restored-managed-copies/${rootId}/${sourceId}/${checksum.slice("sha256:".length)}.bin`;
+}
+
+function createRestoredExternalSourceRecord(record: SourceRecord, restorePath: string): SourceRecord {
+  if (!record.managedCopy) {
+    throw new PigeDomainError("backup.source_record_invalid", "A managed source record has no managed copy.");
+  }
+  return SourceRecordSchema.parse({
+    ...record,
+    managedCopy: {
+      ...record.managedCopy,
+      rootId: "root_vault_managed",
+      pathBasis: "vault_relative",
+      path: restorePath
+    }
+  });
 }
 
 type BackupDomainName = keyof BackupDomainSchemaVersions;
@@ -1172,11 +1889,85 @@ function parseBackupManifest(value: unknown): BackupManifest {
     }
     manifestPaths.add(file.path);
   }
+  assertExternalManagedCopyManifestShape(manifest, manifestPaths);
   const totalBytes = manifest.files.reduce((sum, file) => sum + file.size, 0);
   if (manifest.fileCount !== manifest.files.length || manifest.totalBytes !== totalBytes) {
     throw new PigeDomainError("restore.manifest_invalid", "Backup manifest file totals are inconsistent.");
   }
   return manifest;
+}
+
+function assertExternalManagedCopyManifestShape(
+  manifest: BackupManifest,
+  manifestPaths: ReadonlySet<string>
+): void {
+  const mappings = manifest.externalManagedCopies ?? [];
+  const sourceIds = new Set<string>();
+  const sourceRecordPaths = new Set<string>();
+  const archivePaths = new Set<string>();
+  const restorePaths = new Set<string>();
+  const dependencyRootIds = new Set<string>();
+  const includedRootIds = new Set<string>();
+
+  for (const dependency of manifest.externalDependencies) {
+    if (typeof dependency === "string" || dependency.kind !== "external_managed_copy_root") continue;
+    if (!dependency.rootId || dependencyRootIds.has(dependency.rootId)) {
+      throw new PigeDomainError("restore.manifest_invalid", "Backup contains conflicting external root dependencies.");
+    }
+    dependencyRootIds.add(dependency.rootId);
+    if (dependency.included) {
+      if (dependency.requiredForCompleteRestore) {
+        throw new PigeDomainError(
+          "restore.manifest_invalid",
+          "An included external root cannot remain required for complete restore."
+        );
+      }
+      includedRootIds.add(dependency.rootId);
+    }
+  }
+
+  for (const mapping of mappings) {
+    assertSafeVaultRelativePath(mapping.sourceRecordPath);
+    assertSafeVaultRelativePath(mapping.archivePath);
+    assertSafeVaultRelativePath(mapping.restorePath);
+    if (
+      mapping.sourceRecordPath === mapping.archivePath ||
+      mapping.sourceRecordPath === mapping.restorePath ||
+      mapping.archivePath === mapping.restorePath ||
+      sourceIds.has(mapping.sourceId) ||
+      sourceRecordPaths.has(mapping.sourceRecordPath) ||
+      archivePaths.has(mapping.archivePath) ||
+      restorePaths.has(mapping.restorePath)
+    ) {
+      throw new PigeDomainError("restore.manifest_invalid", "Backup contains duplicate managed-copy mappings.");
+    }
+    if (
+      !mapping.sourceRecordPath.startsWith(".pige/source-records/") ||
+      !mapping.sourceRecordPath.endsWith(".json") ||
+      mapping.archivePath !== externalManagedCopyArchivePath(mapping.sourceId, mapping.rootId, mapping.checksum) ||
+      mapping.restorePath !== externalManagedCopyRestorePath(mapping.sourceId, mapping.rootId, mapping.checksum) ||
+      !manifestPaths.has(mapping.sourceRecordPath) ||
+      !manifestPaths.has(mapping.archivePath) ||
+      manifestPaths.has(mapping.restorePath) ||
+      !includedRootIds.has(mapping.rootId)
+    ) {
+      throw new PigeDomainError("restore.manifest_invalid", "Backup managed-copy mapping is incomplete or unsafe.");
+    }
+    const archiveFile = manifest.files.find((file) => file.path === mapping.archivePath);
+    if (!archiveFile || archiveFile.checksum !== mapping.checksum || archiveFile.size !== mapping.size) {
+      throw new PigeDomainError("restore.manifest_invalid", "Backup managed-copy payload metadata is inconsistent.");
+    }
+    sourceIds.add(mapping.sourceId);
+    sourceRecordPaths.add(mapping.sourceRecordPath);
+    archivePaths.add(mapping.archivePath);
+    restorePaths.add(mapping.restorePath);
+  }
+
+  for (const rootId of includedRootIds) {
+    if (!mappings.some((mapping) => mapping.rootId === rootId)) {
+      throw new PigeDomainError("restore.manifest_invalid", "An included external root has no managed-copy mapping.");
+    }
+  }
 }
 
 async function readAndAssertArchivedVaultManifest(
@@ -1201,6 +1992,65 @@ async function readAndAssertArchivedVaultManifest(
     throw new PigeDomainError("restore.backup_invalid", "Backup manifest identity does not match the archived vault.");
   }
   return vaultManifest;
+}
+
+async function readAndAssertArchivedExternalManagedCopies(
+  source: string | number,
+  manifest: BackupManifest
+): Promise<void> {
+  const mappings = manifest.externalManagedCopies ?? [];
+  if (mappings.length === 0) return;
+  const pending = new Map(mappings.map((mapping) => [
+    `${BACKUP_VAULT_DIR}/${mapping.sourceRecordPath}`,
+    mapping
+  ]));
+  const zipFile = await openBackupZip(source);
+  try {
+    for await (const entry of zipFile.eachEntry()) {
+      assertSafeZipEntryName(entry.fileName);
+      const mapping = pending.get(entry.fileName);
+      if (!mapping) continue;
+      const sourceRecordBytes = await readZipEntryBuffer(zipFile, entry);
+      assertArchivedExternalManagedCopySourceRecord(sourceRecordBytes, mapping);
+      pending.delete(entry.fileName);
+    }
+  } finally {
+    zipFile.close();
+  }
+  if (pending.size > 0) {
+    throw new PigeDomainError("restore.backup_invalid", "A mapped SourceRecord is missing from backup.");
+  }
+}
+
+function assertArchivedExternalManagedCopySourceRecord(
+  sourceRecordBytes: Buffer,
+  mapping: NonNullable<BackupManifest["externalManagedCopies"]>[number]
+): void {
+  let record: SourceRecord;
+  try {
+    record = SourceRecordSchema.parse(JSON.parse(sourceRecordBytes.toString("utf8")) as unknown);
+  } catch {
+    throw new PigeDomainError("restore.backup_invalid", "A mapped SourceRecord is incompatible.");
+  }
+  if (
+    record.id !== mapping.sourceId ||
+    record.storageStrategy !== "copy_to_source_library" ||
+    record.managedCopy?.rootId !== mapping.rootId ||
+    record.managedCopy.pathBasis !== "root_relative" ||
+    record.managedCopy.checksum !== mapping.checksum ||
+    record.managedCopy.size !== mapping.size
+  ) {
+    throw new PigeDomainError("restore.backup_invalid", "A managed-copy mapping conflicts with its SourceRecord.");
+  }
+  assertSafeVaultRelativePath(record.managedCopy.path);
+  const restoredRecord = createRestoredExternalSourceRecord(record, mapping.restorePath);
+  const restoredBytes = Buffer.from(`${JSON.stringify(restoredRecord, null, 2)}\n`, "utf8");
+  if (
+    restoredBytes.byteLength !== mapping.restoredSourceRecordSize ||
+    checksumBuffer(restoredBytes) !== mapping.restoredSourceRecordChecksum
+  ) {
+    throw new PigeDomainError("restore.backup_invalid", "A restored SourceRecord mapping is not deterministic.");
+  }
 }
 
 function createBackupId(createdAt: string): string {
@@ -1318,6 +2168,7 @@ async function assertExactBackupArchive(
       throw new Error("Backup archive files do not match the expected manifest.");
     }
     await readAndAssertArchivedVaultManifest(archivePath, parsedManifest);
+    await readAndAssertArchivedExternalManagedCopies(archivePath, parsedManifest);
     throwIfBackupAborted(signal);
     const after = fs.lstatSync(archivePath);
     if (!sameFileRevision(before, after)) {
@@ -1380,6 +2231,7 @@ async function inspectAdoptableBackupArchive(
       throw new Error("Backup archive files do not match its manifest.");
     }
     await readAndAssertArchivedVaultManifest(archivePath, manifest);
+    await readAndAssertArchivedExternalManagedCopies(archivePath, manifest);
     const archiveDigest = checksumFile(archivePath) as `sha256:${string}`;
     if (
       options.expectedArchiveDigest !== undefined &&
@@ -2097,7 +2949,16 @@ function createMaterializedRestoreManifest(
   mode: RestoreIdentityMode,
   resultVaultId: string
 ): BackupManifest {
-  if (mode === "replace_existing") return { ...sourceManifest, backupId };
+  let files = materializeExternalManagedCopyManifestFiles(sourceManifest);
+  if (mode === "replace_existing") {
+    return {
+      ...sourceManifest,
+      backupId,
+      fileCount: files.length,
+      totalBytes: files.reduce((sum, file) => sum + file.size, 0),
+      files
+    };
+  }
   const restoredVaultManifest = VaultManifestSchema.parse({
     ...sourceVaultManifest,
     vault_id: resultVaultId,
@@ -2110,16 +2971,119 @@ function createMaterializedRestoreManifest(
     size: body.byteLength,
     checksum: `sha256:${createHash("sha256").update(body).digest("hex")}`
   };
-  const files = sourceManifest.files.map((file) => file.path === RESTORE_COMMIT_ENTRY
+  files = files.map((file) => file.path === RESTORE_COMMIT_ENTRY
     ? restoredManifestFile
     : file);
   return {
     ...sourceManifest,
     backupId,
     vaultId: resultVaultId,
+    fileCount: files.length,
     totalBytes: files.reduce((sum, file) => sum + file.size, 0),
     files
   };
+}
+
+function materializeExternalManagedCopies(
+  staging: RestoreStagingHandle,
+  sourceManifest: BackupManifest
+): void {
+  const mappings = sourceManifest.externalManagedCopies ?? [];
+  for (const mapping of mappings) {
+    assertRestoreStagingIdentity(staging);
+    const archivePath = resolveRestoreTarget(staging.path, mapping.archivePath);
+    const restorePath = resolveRestoreTarget(staging.path, mapping.restorePath);
+    ensureRestoreStagingDirectory(path.dirname(restorePath), staging);
+    if (fs.existsSync(restorePath)) {
+      throw new PigeDomainError("restore.result_invalid", "A managed-copy restore mapping collided with durable data.");
+    }
+    const archiveParentIdentity = captureRestoreDirectoryIdentity(path.dirname(archivePath));
+    const restoreParentIdentity = captureRestoreDirectoryIdentity(path.dirname(restorePath));
+    assertRestoreStagingIdentity(staging);
+    assertRestoreDirectoryIdentity(path.dirname(archivePath), archiveParentIdentity);
+    assertRestoreDirectoryIdentity(path.dirname(restorePath), restoreParentIdentity);
+    fs.renameSync(archivePath, restorePath);
+    assertRestoreDirectoryIdentity(path.dirname(archivePath), archiveParentIdentity);
+    assertRestoreDirectoryIdentity(path.dirname(restorePath), restoreParentIdentity);
+    fsyncDirectoryBestEffort(path.dirname(archivePath));
+    fsyncDirectoryBestEffort(path.dirname(restorePath));
+    const restoredCopy = snapshotRestoredFile(restorePath);
+    if (restoredCopy.size !== mapping.size || restoredCopy.checksum !== mapping.checksum) {
+      throw new PigeDomainError("restore.result_invalid", "A restored managed copy failed exact readback.");
+    }
+
+    const sourceRecordPath = resolveRestoreTarget(staging.path, mapping.sourceRecordPath);
+    let record: SourceRecord;
+    try {
+      record = SourceRecordSchema.parse(JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as unknown);
+    } catch {
+      throw new PigeDomainError("restore.result_invalid", "A mapped SourceRecord could not be materialized.");
+    }
+    if (record.id !== mapping.sourceId || record.managedCopy?.rootId !== mapping.rootId) {
+      throw new PigeDomainError("restore.result_invalid", "A mapped SourceRecord changed before materialization.");
+    }
+    writeOwnedStagingJson(
+      sourceRecordPath,
+      createRestoredExternalSourceRecord(record, mapping.restorePath),
+      staging
+    );
+    const restoredRecord = snapshotRestoredFile(sourceRecordPath);
+    if (
+      restoredRecord.size !== mapping.restoredSourceRecordSize ||
+      restoredRecord.checksum !== mapping.restoredSourceRecordChecksum
+    ) {
+      throw new PigeDomainError("restore.result_invalid", "A restored SourceRecord failed exact readback.");
+    }
+  }
+  removeEmptyExternalManagedCopyArchiveDirectories(staging, mappings);
+}
+
+function materializeExternalManagedCopyManifestFiles(
+  sourceManifest: BackupManifest
+): BackupManifestFile[] {
+  const mappings = sourceManifest.externalManagedCopies ?? [];
+  const byArchivePath = new Map(mappings.map((mapping) => [mapping.archivePath, mapping]));
+  const bySourceRecordPath = new Map(mappings.map((mapping) => [mapping.sourceRecordPath, mapping]));
+  return sourceManifest.files.map((file) => {
+    const payload = byArchivePath.get(file.path);
+    if (payload) {
+      return { path: payload.restorePath, size: payload.size, checksum: payload.checksum };
+    }
+    const sourceRecord = bySourceRecordPath.get(file.path);
+    if (sourceRecord) {
+      return {
+        path: sourceRecord.sourceRecordPath,
+        size: sourceRecord.restoredSourceRecordSize,
+        checksum: sourceRecord.restoredSourceRecordChecksum
+      };
+    }
+    return file;
+  });
+}
+
+function removeEmptyExternalManagedCopyArchiveDirectories(
+  staging: RestoreStagingHandle,
+  mappings: readonly NonNullable<BackupManifest["externalManagedCopies"]>[number][]
+): void {
+  const rootPath = resolveRestoreTarget(staging.path, ".pige/backup-managed-copies");
+  const candidates = new Set<string>();
+  for (const mapping of mappings) {
+    let current = path.dirname(resolveRestoreTarget(staging.path, mapping.archivePath));
+    while (current !== path.dirname(rootPath) && isSameOrInside(current, rootPath)) {
+      candidates.add(current);
+      if (current === rootPath) break;
+      current = path.dirname(current);
+    }
+  }
+  for (const directoryPath of [...candidates].sort((left, right) => right.length - left.length)) {
+    assertRestoreStagingIdentity(staging);
+    const identity = fs.lstatSync(directoryPath);
+    if (!identity.isDirectory() || identity.isSymbolicLink() || fs.readdirSync(directoryPath).length !== 0) {
+      throw new PigeDomainError("restore.result_invalid", "Managed-copy archive staging was not empty after migration.");
+    }
+    fs.rmdirSync(directoryPath);
+  }
+  if (mappings.length > 0) fsyncDirectoryBestEffort(path.join(staging.path, ".pige"));
 }
 
 function writeOwnedStagingJson(
@@ -2745,7 +3709,7 @@ function fsyncFile(filePath: string): void {
 function snapshotBackupSourceFile(
   filePath: string,
   signal?: AbortSignal
-): { readonly size: number; readonly checksum: string } {
+): { readonly size: number; readonly checksum: string; readonly identity: fs.Stats } {
   const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0);
   const descriptor = fs.openSync(filePath, flags);
   try {
@@ -2778,7 +3742,7 @@ function snapshotBackupSourceFile(
     ) {
       throw new PigeDomainError("backup.source_changed", "A backup source file changed while it was read.");
     }
-    return { size: after.size, checksum: `sha256:${hash.digest("hex")}` };
+    return { size: after.size, checksum: `sha256:${hash.digest("hex")}`, identity: after };
   } finally {
     fs.closeSync(descriptor);
   }
@@ -2803,6 +3767,7 @@ function createPreviewWarnings(
   manifest: BackupManifest,
   invalidFiles: readonly string[]
 ): readonly RestorePreviewWarning[] {
+  const omittedExternalDependencyCount = countUnresolvedExternalDependencies(manifest);
   return [
     ...(invalidFiles.length > 0 ? [{
       code: "invalid_archive_entries" as const,
@@ -2812,13 +3777,19 @@ function createPreviewWarnings(
       code: "excluded_rebuildable_roots" as const,
       count: manifest.excludedRoots.length
     }] : []),
-    ...(manifest.externalDependencies.length > 0
+    ...(omittedExternalDependencyCount > 0
       ? [{
           code: "external_originals_not_included" as const,
-          count: manifest.externalDependencies.length
+          count: omittedExternalDependencyCount
         }]
       : [])
   ];
+}
+
+function countUnresolvedExternalDependencies(manifest: BackupManifest): number {
+  return manifest.externalDependencies.filter((dependency) =>
+    typeof dependency === "string" || !dependency.included || dependency.requiredForCompleteRestore
+  ).length;
 }
 
 export function canonicalizeBackupDestinationPath(filePathInput: string): string {
@@ -3163,6 +4134,7 @@ function assertSafeVaultRelativePath(relativePath: string): void {
   if (
     !relativePath ||
     relativePath.includes("\0") ||
+    relativePath.includes("\\") ||
     relativePath.startsWith("/") ||
     relativePath.startsWith("\\") ||
     /^[A-Za-z]:/u.test(relativePath) ||

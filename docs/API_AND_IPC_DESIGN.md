@@ -822,6 +822,7 @@ Rules:
 
 - `backup.create` uses a trusted main-process save dialog, persists one durable Backup Job
   before scan, and returns only after cancellation or exact terminal completion.
+- Missing/rebound roots return body-free `backup.dependency_waiting`; no path is exposed.
 - `backup.status` derives `lastBackupAt` from the newest completed user Backup Job, never
   from rollback children or ephemeral renderer state.
 - Main-picker preview validates manifest/entries, paths/sizes/checksums, schema ranges,

@@ -221,7 +221,8 @@ Rules:
   their owning-service authority and do not prompt merely because they are core tools.
 - `waiting_model_egress` pauses one exact provider invocation for a stricter
   model-egress decision; it is not a Permission Broker wait or reusable grant.
-- `waiting_dependency` pauses execution until a missing model provider, local tool, local model, runtime capability, vault binding, or external source path is configured or repaired.
+- `waiting_dependency` pauses for a missing model, tool, capability, binding, or source;
+  Backup resumes the same Job after root repair.
 - `awaiting_review` holds an irreversible/security/destination/conflict or stricter-policy
   proposal only.
 - `cancel_requested` is transitional; duplicate requests are idempotent and the active worker exits at a safe checkpoint.
@@ -240,6 +241,7 @@ Invalid shortcuts:
 - Do not move from `awaiting_review` to `completed` without an approved proposal or explicit rejection result.
 - `JobExecutionCoordinator` projects late cancellation from durable-effect proof;
   H3b/H3c still own remaining loops and dispatch. Abandon/archive is separate.
+- Backup transitions remain specialized pending coordinator migration.
 
 ## 6. Job Record Contract
 

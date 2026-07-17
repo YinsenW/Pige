@@ -616,7 +616,124 @@ describe("backup restore service", () => {
     expect(fs.readFileSync(unrelatedPath, "utf8")).toBe("unrelated");
   });
 
-  it("projects referenced originals without paths and fails closed for external managed roots", async () => {
+  it("backs up a reachable external managed copy and restores it in-vault with restart-safe identities", async () => {
+    const { root, vaultPath } = makeVault();
+    const userDataPath = path.join(root, "app-data");
+    const externalRoot = path.join(root, "external-managed-root");
+    const externalRelativePath = "private/customer-record.pdf";
+    const externalPath = path.join(externalRoot, ...externalRelativePath.split("/"));
+    const externalBody = Buffer.from("external-managed-copy-body-canary api-key-not-a-real-secret", "utf8");
+    const externalChecksum = checksumBuffer(externalBody);
+    fs.mkdirSync(path.dirname(externalPath), { recursive: true });
+    fs.writeFileSync(externalPath, externalBody);
+    writeRootBindings(userDataPath, vaultPath, [{
+      rootId: "root_external01",
+      absolutePath: externalRoot,
+      extraPrivateValue: "binding-secret-canary"
+    }]);
+    writeSourceRecord(vaultPath, {
+      id: "src_20260714_externalmanaged01",
+      kind: "pdf_file",
+      storageStrategy: "copy_to_source_library",
+      managedCopy: {
+        rootId: "root_external01",
+        pathBasis: "root_relative",
+        path: externalRelativePath,
+        checksum: externalChecksum,
+        size: externalBody.byteLength
+      },
+      artifacts: [],
+      metadata: {},
+      createdAt: "2026-07-14T00:00:00.000Z",
+      updatedAt: "2026-07-14T00:00:00.000Z"
+    });
+    const backupPath = path.join(root, "external-complete.pige-backup.zip");
+    const service = new BackupRestoreService({ userDataPath });
+    let manifestChecksum: `sha256:${string}` | undefined;
+    let archiveDigest: `sha256:${string}` | undefined;
+    const identity = {
+      backupId: "backup_20260714_externalcomplete01",
+      createdAt: "2026-07-14T10:30:00.000Z",
+      stagingOwnerKey: "job_20260714_externalcomplete01",
+      onPhase(event: BackupCreateCheckpointEvent) {
+        manifestChecksum = event.manifestChecksum ?? manifestChecksum;
+        archiveDigest = event.archiveDigest ?? archiveDigest;
+      }
+    };
+
+    await service.createBackup(vaultPath, backupPath, "0.1.0-test", identity);
+    await expect(service.createBackup(vaultPath, backupPath, "0.1.0-test", {
+      ...identity,
+      expectedManifestChecksum: manifestChecksum,
+      expectedArchiveDigest: archiveDigest
+    })).resolves.toMatchObject({ status: "created" });
+
+    const archive = await readGeneratedBackup(backupPath);
+    const mapping = archive.manifest.externalManagedCopies?.[0];
+    expect(mapping).toMatchObject({
+      sourceId: "src_20260714_externalmanaged01",
+      rootId: "root_external01",
+      sourceRecordPath: ".pige/source-records/src_20260714_externalmanaged01.json",
+      checksum: externalChecksum,
+      size: externalBody.byteLength
+    });
+    expect(archive.manifest.externalDependencies).toEqual([{
+      kind: "external_managed_copy_root",
+      rootId: "root_external01",
+      included: true,
+      requiredForCompleteRestore: false
+    }]);
+    expect(archive.entries.get(`vault/${mapping!.archivePath}`)).toEqual(externalBody);
+    expect(archive.manifestText).not.toContain(root);
+    expect(archive.manifestText).not.toContain(externalRelativePath);
+    expect(archive.manifestText).not.toContain("binding-secret-canary");
+    expect(archive.manifestText).not.toContain(externalBody.toString("utf8"));
+    const completeArchiveProjection = Buffer.concat([...archive.entries.values()]).toString("utf8");
+    expect(completeArchiveProjection).not.toContain(root);
+    expect(completeArchiveProjection).not.toContain(externalRoot);
+    expect(completeArchiveProjection).not.toContain("binding-secret-canary");
+
+    const preview = await service.inspectRestoreArchive(backupPath);
+    expect(preview.warnings).not.toContainEqual(expect.objectContaining({
+      code: "external_originals_not_included"
+    }));
+    let reconciledExternalDependencyCount: number | undefined;
+    const restoreInput = createTestRestoreInput(
+      backupPath,
+      path.join(root, "external-restore-targets"),
+      preview,
+      {
+        onPhase(event) {
+          if (event.phase === "external_dependencies_reconciled") {
+            reconciledExternalDependencyCount = event.externalDependencyCount;
+          }
+        }
+      }
+    );
+    const restored = await service.applyRestore(restoreInput);
+    await expect(service.adoptCommittedRestore(restoreInput)).resolves.toMatchObject({
+      status: "restored",
+      restoredVaultPath: restored.restoredVaultPath
+    });
+    const restoredRecord = SourceRecordSchema.parse(JSON.parse(fs.readFileSync(
+      path.join(restored.restoredVaultPath, mapping!.sourceRecordPath),
+      "utf8"
+    )) as unknown);
+    expect(restoredRecord.managedCopy).toMatchObject({
+      rootId: "root_vault_managed",
+      pathBasis: "vault_relative",
+      path: mapping!.restorePath,
+      checksum: externalChecksum,
+      size: externalBody.byteLength
+    });
+    expect(fs.readFileSync(path.join(restored.restoredVaultPath, ...mapping!.restorePath.split("/"))))
+      .toEqual(externalBody);
+    expect(fs.readFileSync(externalPath)).toEqual(externalBody);
+    expect(fs.existsSync(path.join(restored.restoredVaultPath, ".pige", "backup-managed-copies"))).toBe(false);
+    expect(reconciledExternalDependencyCount).toBe(0);
+  });
+
+  it("projects referenced originals without paths and waits for a missing external managed root", async () => {
     const referenced = makeVault();
     const referencedBackup = path.join(referenced.root, "referenced-original.pige-backup.zip");
     writeSourceRecord(referenced.vaultPath, {
@@ -668,9 +785,266 @@ describe("backup restore service", () => {
       managed.vaultPath,
       managedBackup,
       "0.1.0-test"
-    )).rejects.toMatchObject({ code: "backup.external_managed_copy_unsupported" });
+    )).rejects.toMatchObject({
+      code: "backup.external_managed_copy_root_missing",
+      dependencyKind: "vault_binding",
+      dependencyId: "root_external01"
+    });
     expect(fs.existsSync(managedBackup)).toBe(false);
     expect(listBackupStagingFiles(managedBackup)).toEqual([]);
+  });
+
+  it("rejects duplicate external root IDs and duplicate machine paths", async () => {
+    const duplicateId = makeVault();
+    const duplicateIdUserData = path.join(duplicateId.root, "app-data");
+    const firstRoot = path.join(duplicateId.root, "first-root");
+    const secondRoot = path.join(duplicateId.root, "second-root");
+    writeExternalManagedCopySource(duplicateId.vaultPath, firstRoot, {
+      sourceId: "src_20260714_duplicateid01",
+      rootId: "root_duplicate01",
+      relativePath: "source.pdf",
+      body: "duplicate root id source"
+    });
+    fs.mkdirSync(secondRoot, { recursive: true });
+    writeRootBindings(duplicateIdUserData, duplicateId.vaultPath, [
+      { rootId: "root_duplicate01", absolutePath: firstRoot },
+      { rootId: "root_duplicate01", absolutePath: secondRoot }
+    ]);
+
+    await expect(new BackupRestoreService({ userDataPath: duplicateIdUserData }).createBackup(
+      duplicateId.vaultPath,
+      path.join(duplicateId.root, "duplicate-id.pige-backup.zip"),
+      "0.1.0-test"
+    )).rejects.toMatchObject({ code: "backup.root_binding_registry_invalid" });
+
+    const duplicatePath = makeVault();
+    const duplicatePathUserData = path.join(duplicatePath.root, "app-data");
+    const sharedRoot = path.join(duplicatePath.root, "shared-root");
+    writeExternalManagedCopySource(duplicatePath.vaultPath, sharedRoot, {
+      sourceId: "src_20260714_duplicatepath01",
+      rootId: "root_duplicatepath01",
+      relativePath: "source.pdf",
+      body: "duplicate root path source"
+    });
+    writeRootBindings(duplicatePathUserData, duplicatePath.vaultPath, [
+      { rootId: "root_duplicatepath01", absolutePath: sharedRoot },
+      { rootId: "root_duplicatepath02", absolutePath: sharedRoot }
+    ]);
+
+    await expect(new BackupRestoreService({ userDataPath: duplicatePathUserData }).createBackup(
+      duplicatePath.vaultPath,
+      path.join(duplicatePath.root, "duplicate-path.pige-backup.zip"),
+      "0.1.0-test"
+    )).rejects.toMatchObject({ code: "backup.root_binding_conflict" });
+  });
+
+  it("rejects symbolic-link parents and parent identity swaps for external managed copies", async () => {
+    const linked = makeVault();
+    const linkedUserData = path.join(linked.root, "app-data");
+    const linkedRoot = path.join(linked.root, "linked-root");
+    const realParent = path.join(linked.root, "real-parent");
+    fs.mkdirSync(realParent, { recursive: true });
+    fs.mkdirSync(linkedRoot, { recursive: true });
+    fs.writeFileSync(path.join(realParent, "source.pdf"), "linked external body", "utf8");
+    fs.symlinkSync(realParent, path.join(linkedRoot, "linked-parent"), "dir");
+    const linkedBody = Buffer.from("linked external body", "utf8");
+    writeSourceRecord(linked.vaultPath, {
+      id: "src_20260714_linkedparent01",
+      kind: "pdf_file",
+      storageStrategy: "copy_to_source_library",
+      managedCopy: {
+        rootId: "root_linkedparent01",
+        pathBasis: "root_relative",
+        path: "linked-parent/source.pdf",
+        checksum: checksumBuffer(linkedBody),
+        size: linkedBody.byteLength
+      },
+      artifacts: [],
+      metadata: {},
+      createdAt: "2026-07-14T00:00:00.000Z",
+      updatedAt: "2026-07-14T00:00:00.000Z"
+    });
+    writeRootBindings(linkedUserData, linked.vaultPath, [{
+      rootId: "root_linkedparent01",
+      absolutePath: linkedRoot
+    }]);
+
+    await expect(new BackupRestoreService({ userDataPath: linkedUserData }).createBackup(
+      linked.vaultPath,
+      path.join(linked.root, "linked-parent.pige-backup.zip"),
+      "0.1.0-test"
+    )).rejects.toMatchObject({ code: "backup.external_managed_copy_path_invalid" });
+
+    const swapped = makeVault();
+    const swappedUserData = path.join(swapped.root, "app-data");
+    const swappedRoot = path.join(swapped.root, "swapped-root");
+    const source = writeExternalManagedCopySource(swapped.vaultPath, swappedRoot, {
+      sourceId: "src_20260714_swappedparent01",
+      rootId: "root_swappedparent01",
+      relativePath: "parent/source.pdf",
+      body: "same bytes across parent identity swap"
+    });
+    writeRootBindings(swappedUserData, swapped.vaultPath, [{
+      rootId: "root_swappedparent01",
+      absolutePath: swappedRoot
+    }]);
+    const sourceParent = path.dirname(source.absolutePath);
+    const displacedParent = `${sourceParent}-displaced`;
+    const originalOpenSync = fs.openSync.bind(fs);
+    let parentSwapped = false;
+    vi.spyOn(fs, "openSync").mockImplementation((filePath, flags, mode) => {
+      if (!parentSwapped && path.resolve(filePath.toString()) === source.absolutePath) {
+        parentSwapped = true;
+        fs.renameSync(sourceParent, displacedParent);
+        fs.mkdirSync(sourceParent);
+        fs.writeFileSync(source.absolutePath, "same bytes across parent identity swap", "utf8");
+      }
+      return originalOpenSync(filePath, flags, mode);
+    });
+
+    await expect(new BackupRestoreService({ userDataPath: swappedUserData }).createBackup(
+      swapped.vaultPath,
+      path.join(swapped.root, "swapped-parent.pige-backup.zip"),
+      "0.1.0-test"
+    )).rejects.toMatchObject({ code: "backup.external_managed_copy_root_changed" });
+    expect(parentSwapped).toBe(true);
+  });
+
+  it("rejects a managed-copy file replaced only while the ZIP stream opens it", async () => {
+    const { root, vaultPath } = makeVault();
+    const userDataPath = path.join(root, "app-data");
+    const externalRoot = path.join(root, "stream-race-root");
+    const source = writeExternalManagedCopySource(vaultPath, externalRoot, {
+      sourceId: "src_20260714_streamrace01",
+      rootId: "root_streamrace01",
+      relativePath: "source.pdf",
+      body: "trusted external payload"
+    });
+    writeRootBindings(userDataPath, vaultPath, [{
+      rootId: "root_streamrace01",
+      absolutePath: externalRoot
+    }]);
+    const displacedPath = `${source.absolutePath}.displaced`;
+    const originalOpenSync = fs.openSync.bind(fs);
+    let sourceOpenCount = 0;
+    let streamSwapAttempted = false;
+    vi.spyOn(fs, "openSync").mockImplementation((filePath, flags, mode) => {
+      if (path.resolve(filePath.toString()) === source.absolutePath) {
+        sourceOpenCount += 1;
+        if (sourceOpenCount === 2) {
+          streamSwapAttempted = true;
+          fs.renameSync(source.absolutePath, displacedPath);
+          fs.writeFileSync(source.absolutePath, "untrusted replacement!!!", "utf8");
+          const descriptor = originalOpenSync(filePath, flags, mode);
+          fs.unlinkSync(source.absolutePath);
+          fs.renameSync(displacedPath, source.absolutePath);
+          return descriptor;
+        }
+      }
+      return originalOpenSync(filePath, flags, mode);
+    });
+
+    await expect(new BackupRestoreService({ userDataPath }).createBackup(
+      vaultPath,
+      path.join(root, "stream-race.pige-backup.zip"),
+      "0.1.0-test"
+    )).rejects.toMatchObject({ code: "backup.source_changed" });
+    expect(streamSwapAttempted).toBe(true);
+    expect(fs.readFileSync(source.absolutePath, "utf8")).toBe("trusted external payload");
+  });
+
+  it("rejects a root ID rebound after preflight even when the successor has identical bytes", async () => {
+    const { root, vaultPath } = makeVault();
+    const userDataPath = path.join(root, "app-data");
+    const firstRoot = path.join(root, "binding-root-one");
+    const secondRoot = path.join(root, "binding-root-two");
+    const source = writeExternalManagedCopySource(vaultPath, firstRoot, {
+      sourceId: "src_20260714_bindingrace01",
+      rootId: "root_bindingrace01",
+      relativePath: "source.pdf",
+      body: "same bytes in both bound roots"
+    });
+    fs.mkdirSync(secondRoot, { recursive: true });
+    fs.writeFileSync(path.join(secondRoot, "source.pdf"), "same bytes in both bound roots", "utf8");
+    writeRootBindings(userDataPath, vaultPath, [{
+      rootId: "root_bindingrace01",
+      absolutePath: firstRoot
+    }]);
+    const originalOpenSync = fs.openSync.bind(fs);
+    let rebound = false;
+    vi.spyOn(fs, "openSync").mockImplementation((filePath, flags, mode) => {
+      if (!rebound && path.resolve(filePath.toString()) === source.absolutePath) {
+        rebound = true;
+        writeRootBindings(userDataPath, vaultPath, [{
+          rootId: "root_bindingrace01",
+          absolutePath: secondRoot
+        }]);
+      }
+      return originalOpenSync(filePath, flags, mode);
+    });
+
+    await expect(new BackupRestoreService({ userDataPath }).createBackup(
+      vaultPath,
+      path.join(root, "binding-race.pige-backup.zip"),
+      "0.1.0-test"
+    )).rejects.toMatchObject({
+      code: "backup.external_managed_copy_binding_changed",
+      dependencyKind: "vault_binding",
+      dependencyId: "root_bindingrace01"
+    });
+    expect(rebound).toBe(true);
+  });
+
+  it("rejects traversal and collision in external managed-copy restore mappings", async () => {
+    const { root, vaultPath } = makeVault();
+    const userDataPath = path.join(root, "app-data");
+    const externalRoot = path.join(root, "mapping-root");
+    writeExternalManagedCopySource(vaultPath, externalRoot, {
+      sourceId: "src_20260714_mappingattack01",
+      rootId: "root_mappingattack01",
+      relativePath: "source.pdf",
+      body: "mapping attack source"
+    });
+    writeRootBindings(userDataPath, vaultPath, [{
+      rootId: "root_mappingattack01",
+      absolutePath: externalRoot
+    }]);
+    const service = new BackupRestoreService({ userDataPath });
+    const traversalBackup = path.join(root, "mapping-traversal.pige-backup.zip");
+    await service.createBackup(vaultPath, traversalBackup, "0.1.0-test");
+    await rewriteBackupArchive(traversalBackup, (manifest) => ({
+      ...manifest,
+      externalManagedCopies: manifest.externalManagedCopies?.map((mapping) => ({
+        ...mapping,
+        restorePath: "../escaped.bin"
+      }))
+    }));
+    await expect(service.inspectRestoreArchive(traversalBackup)).rejects.toMatchObject({
+      code: "restore.entry_invalid"
+    });
+
+    const collisionBackup = path.join(root, "mapping-collision.pige-backup.zip");
+    await service.createBackup(vaultPath, collisionBackup, "0.1.0-test");
+    const collisionArchive = await readGeneratedBackup(collisionBackup);
+    const mapping = collisionArchive.manifest.externalManagedCopies![0]!;
+    const collisionBody = Buffer.from("preexisting durable collision", "utf8");
+    const collisionPath = mapping.restorePath;
+    await rewriteBackupArchive(collisionBackup, (manifest, entries) => {
+      entries.set(`vault/${collisionPath}`, collisionBody);
+      return {
+        ...manifest,
+        fileCount: manifest.fileCount + 1,
+        totalBytes: manifest.totalBytes + collisionBody.byteLength,
+        files: [...manifest.files, {
+          path: collisionPath,
+          size: collisionBody.byteLength,
+          checksum: checksumBuffer(collisionBody)
+        }]
+      };
+    });
+    await expect(service.inspectRestoreArchive(collisionBackup)).rejects.toMatchObject({
+      code: "restore.manifest_invalid"
+    });
   });
 
   it("derives one exact legacy lineage ID from archive bytes and createdAt", async () => {
@@ -1173,7 +1547,7 @@ describe("backup restore service", () => {
 
     await expect(
       new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test")
-    ).rejects.toMatchObject({ code: "backup.validation_failed" });
+    ).rejects.toMatchObject({ code: "backup.source_changed" });
 
     expect(mutatedAfterHash).toBe(true);
     expect(Buffer.byteLength(changedBody)).toBe(Buffer.byteLength(originalBody));
@@ -1863,6 +2237,68 @@ function writeSourceRecord(vaultPath: string, input: unknown): void {
   const targetPath = path.join(vaultPath, ".pige", "source-records", `${record.id}.json`);
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });
   fs.writeFileSync(targetPath, `${JSON.stringify(record, null, 2)}\n`, "utf8");
+}
+
+function writeExternalManagedCopySource(
+  vaultPath: string,
+  externalRoot: string,
+  input: {
+    readonly sourceId: string;
+    readonly rootId: string;
+    readonly relativePath: string;
+    readonly body: string;
+  }
+): { readonly absolutePath: string; readonly checksum: string; readonly size: number } {
+  const bytes = Buffer.from(input.body, "utf8");
+  const absolutePath = path.join(externalRoot, ...input.relativePath.split("/"));
+  fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
+  fs.writeFileSync(absolutePath, bytes);
+  const checksum = checksumBuffer(bytes);
+  writeSourceRecord(vaultPath, {
+    id: input.sourceId,
+    kind: "pdf_file",
+    storageStrategy: "copy_to_source_library",
+    managedCopy: {
+      rootId: input.rootId,
+      pathBasis: "root_relative",
+      path: input.relativePath,
+      checksum,
+      size: bytes.byteLength
+    },
+    artifacts: [],
+    metadata: {},
+    createdAt: "2026-07-14T00:00:00.000Z",
+    updatedAt: "2026-07-14T00:00:00.000Z"
+  });
+  return { absolutePath, checksum, size: bytes.byteLength };
+}
+
+function writeRootBindings(
+  userDataPath: string,
+  vaultPath: string,
+  roots: ReadonlyArray<{
+    readonly rootId: string;
+    readonly absolutePath: string;
+    readonly availability?: "available" | "missing" | "permission_needed";
+    readonly extraPrivateValue?: string;
+  }>
+): void {
+  const vaultId = String(readVaultManifestFixture(vaultPath).vault_id);
+  fs.mkdirSync(userDataPath, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(path.join(userDataPath, "vault-bindings.json"), `${JSON.stringify({
+    schemaVersion: 1,
+    roots: roots.map((root) => ({
+      rootId: root.rootId,
+      vaultId,
+      purpose: "managed_copy",
+      absolutePath: root.absolutePath,
+      availability: root.availability ?? "available",
+      createdAt: "2026-07-14T00:00:00.000Z",
+      updatedAt: "2026-07-14T00:00:00.000Z",
+      ...(root.extraPrivateValue ? { extraPrivateValue: root.extraPrivateValue } : {})
+    })),
+    defaults: roots.length > 0 ? [{ vaultId, rootId: roots[0]!.rootId }] : []
+  }, null, 2)}\n`, "utf8");
 }
 
 function writeVaultFixture(vaultPath: string): readonly FixtureFile[] {

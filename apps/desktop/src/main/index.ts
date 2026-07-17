@@ -482,7 +482,7 @@ const getWindowModeService = (): WindowModeService => {
 
 const getBackupRestoreService = (): BackupRestoreService => {
   if (!backupRestoreService) {
-    backupRestoreService = new BackupRestoreService();
+    backupRestoreService = new BackupRestoreService({ userDataPath: app.getPath("userData") });
   }
   return backupRestoreService;
 };
@@ -1661,6 +1661,12 @@ ipcMain.handle("backup.create", async (event): Promise<BackupCreateResult> => {
   }
   const job = await getBackupCoordinatorService().create(selection.filePath);
   if (job.state === "cancelled") return { status: "canceled" };
+  if (job.state === "waiting_dependency") {
+    throw new PigeDomainError(
+      "backup.dependency_waiting",
+      "The durable Backup Job is waiting for a required managed source location."
+    );
+  }
   if (job.state !== "completed" && job.state !== "completed_with_warnings") {
     throw new PigeDomainError(
       job.error?.code ?? "backup.execution_failed",
@@ -1882,7 +1888,7 @@ app.whenReady().then(async () => {
     (bounds) => screen.getDisplayMatching(bounds).workArea
   );
   localDatabaseService = new LocalDatabaseService(undefined, new LocalDatabaseRebuildWorkerService());
-  backupRestoreService = new BackupRestoreService();
+  backupRestoreService = new BackupRestoreService({ userDataPath: app.getPath("userData") });
   agentRuntimeService = new AgentRuntimeService(
     getVaultService(),
     getModelProviderRegistry(),
