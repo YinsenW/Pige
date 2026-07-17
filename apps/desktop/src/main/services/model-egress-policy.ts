@@ -33,7 +33,10 @@ export function createModelEgressDecision(
   } else if (policy.model.cloudSendPolicy === "local_only") {
     outcome = "block";
     reasonCode = "local_only_block";
-  } else if (provider.cloudBoundary === "unknown" || provider.cloudBoundary === "local") {
+  } else if (
+    provider.cloudBoundary === "local" ||
+    (provider.cloudBoundary === "unknown" && provider.boundaryVerification !== "user_asserted")
+  ) {
     outcome = "confirm";
     reasonCode = "unknown_boundary_confirmation";
   } else if (policy.model.cloudSendPolicy === "confirm_all") {

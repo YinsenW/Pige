@@ -181,12 +181,12 @@ Decision matrix:
 | Effective boundary | `ordinary_allowed` | `confirm_private_or_large` | `confirm_all` | `local_only` |
 | --- | --- | --- | --- | --- |
 | `local` + `loopback_verified` | Allow non-restricted content | Allow non-restricted content | Allow non-restricted content | Allow non-restricted content |
-| `cloud` or `self_hosted` | Allow ordinary/private/large; confirm sensitive | Allow ordinary; confirm private/large/sensitive | Confirm every non-restricted payload | Block |
-| `unknown`, or `local` without loopback verification | Confirm every non-restricted payload | Confirm every non-restricted payload | Confirm every non-restricted payload | Block |
+| `cloud`, `self_hosted`, or exact connected `unknown` + `user_asserted` endpoint | Allow ordinary/private/large; confirm sensitive | Allow ordinary; confirm private/large/sensitive | Confirm every non-restricted payload | Block |
+| `unknown` + `unknown`, or `local` without loopback verification | No runtime binding; reconnect | No runtime binding; reconnect | No runtime binding; reconnect | Block |
 
-Exact connected, verified Profile/endpoint is standing authority; unknown or changed
-boundaries reconnect once. Labels do not prompt. Only verified loopback is local; stricter
-policy outranks YOLO.
+Settings Connect/Save records `user_asserted` standing authority for its exact
+non-loopback endpoint without another native dialog. `unknown` + `unknown` or binding
+drift reconnects. Only verified loopback is local; stricter policy outranks YOLO.
 
 A `confirm` result creates one body-free, machine-local `model_egress` request for the
 exact pending provider invocation. It binds the vault, Job, Profile, canonical endpoint,

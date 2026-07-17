@@ -201,7 +201,7 @@ describe("desktop shell build contract", () => {
     );
     const providerHandler = mainSource.slice(
       mainSource.indexOf('ipcMain.handle("models.addManualProvider"'),
-      mainSource.indexOf('ipcMain.handle("models.setDefaultModel"')
+      mainSource.indexOf('ipcMain.handle("models.refreshProviderModels"')
     );
     const presetHandler = mainSource.slice(
       mainSource.indexOf('ipcMain.handle("models.addPresetProvider"'),
@@ -216,10 +216,14 @@ describe("desktop shell build contract", () => {
       mainSource.indexOf('ipcMain.handle("models.addManualModel"')
     );
     expect(resetHandler.indexOf("confirmSettingAction")).toBeLessThan(resetHandler.indexOf("getVaultService().resetLocalDatabase()"));
-    expect(providerHandler.indexOf("AddManualProviderRequestSchema.parse(request)")).toBeLessThan(providerHandler.indexOf("confirmSettingAction"));
-    expect(providerHandler.indexOf("confirmSettingAction")).toBeLessThan(providerHandler.indexOf("getModelProviderRegistry().addManualProvider(validatedRequest)"));
-    expect(presetHandler.indexOf("AddPresetProviderRequestSchema.parse(request)")).toBeLessThan(presetHandler.indexOf("confirmSettingAction"));
-    expect(presetHandler.indexOf("confirmSettingAction")).toBeLessThan(presetHandler.indexOf("getModelProviderRegistry().addPresetProvider(validatedRequest)"));
+    expect(providerHandler.indexOf("AddManualProviderRequestSchema.parse(request)"))
+      .toBeLessThan(providerHandler.indexOf("getModelProviderRegistry().addManualProvider(validatedRequest)"));
+    expect(presetHandler.indexOf("AddPresetProviderRequestSchema.parse(request)"))
+      .toBeLessThan(presetHandler.indexOf("getModelProviderRegistry().addPresetProvider(validatedRequest)"));
+    expect(providerHandler).not.toContain("confirmSettingAction");
+    expect(presetHandler).not.toContain("confirmSettingAction");
+    expect(providerHandler).not.toContain("Connect this model service?");
+    expect(presetHandler).not.toContain("Connect this model service?");
     expect(credentialHandler.indexOf("UpdateProviderCredentialRequestSchema.parse(request)"))
       .toBeLessThan(credentialHandler.indexOf("confirmSettingAction"));
     expect(credentialHandler.indexOf("confirmSettingAction"))
@@ -233,11 +237,7 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain("getModelEgressApprovalService().assertProviderInactive(activeVaultPath, providerProfileId)");
     expect(credentialHandler).not.toContain("oldApiKey");
     expect(deleteProviderHandler).not.toContain("authSecretRef");
-    for (const handler of [presetHandler, providerHandler]) {
-      expect(handler).toContain("ordinary, private, and bounded large content");
-      expect(handler).toContain("Sensitive content still asks each time; restricted content is never sent.");
-      expect(handler).toContain("endpoint or trust boundary changes or becomes unknown");
-    }
+    expect(mainSource).not.toContain('title: "Connect this model service?"');
     for (const channel of ["models.updateProviderCredential", "models.deleteProvider"]) {
       expect(mainSource).toContain(`ipcMain.handle("${channel}"`);
       expect(preloadSource).toContain(`ipcRenderer.invoke("${channel}"`);
