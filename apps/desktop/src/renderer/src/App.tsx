@@ -1,10 +1,13 @@
 import {
   useEffect,
+  useId,
+  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
   type DragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
   type RefObject
 } from "react";
@@ -92,6 +95,7 @@ type CaptureToast = {
 };
 type DevelopmentSurface = "home" | "reader" | "knowledge" | "settings";
 export type DevelopmentCapability =
+  | "activity_open"
   | "voice_input"
   | "knowledge_search"
   | "knowledge_filter"
@@ -99,6 +103,7 @@ export type DevelopmentCapability =
   | "note_agent"
   | "document_actions"
   | "selection_actions"
+  | "reader_link"
   | "source_reference"
   | "window_preferences"
   | "appearance"
@@ -2063,7 +2068,9 @@ export function NoteReader(props: {
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const summary = props.note.summary;
+  const readerLinkDescriptionId = useId();
   const readerRef = useRef<HTMLElement | null>(null);
+  const markdownBodyRef = useRef<HTMLDivElement | null>(null);
   const selectionToolbarRef = useRef<HTMLDivElement | null>(null);
   const selectionActionRefs = useRef(new Map<number, HTMLButtonElement>());
   const selectionFocusTransition = useRef(false);
@@ -2083,6 +2090,38 @@ export function NoteReader(props: {
   } | null>(null);
   const [selectionPosition, setSelectionPosition] = useState<{ readonly left: number; readonly top: number } | null>(null);
   const [selectionActionIndex, setSelectionActionIndex] = useState(0);
+
+  useLayoutEffect(() => {
+    const firstBlock = markdownBodyRef.current?.firstElementChild;
+    if (!firstBlock || firstBlock.tagName !== "H1") return;
+    const normalizeTitle = (value: string): string => value.normalize("NFKC").replace(/\s+/gu, " ").trim();
+    firstBlock.classList.toggle(
+      "reader-duplicate-title",
+      normalizeTitle(firstBlock.textContent ?? "") === normalizeTitle(summary.title)
+    );
+  });
+
+  useLayoutEffect(() => {
+    const internalLinks = markdownBodyRef.current?.querySelectorAll<HTMLAnchorElement>(
+      'a[href^="#wiki:"], a[href^="#source:"]'
+    );
+    internalLinks?.forEach((link) => {
+      link.dataset.readerLinkState = "unavailable";
+      link.setAttribute("aria-describedby", readerLinkDescriptionId);
+    });
+  }, [props.note.html, readerLinkDescriptionId]);
+
+  const handleInternalReaderLink = (event: ReactMouseEvent<HTMLDivElement>): void => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const link = target.closest<HTMLAnchorElement>("a[href]");
+    if (!link || !event.currentTarget.contains(link)) return;
+    const href = link.getAttribute("href") ?? "";
+    if (!href.startsWith("#wiki:") && !href.startsWith("#source:")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    props.onDevelopment("reader_link");
+  };
 
   const closeSelectionToolbar = (restoreFocus: boolean): void => {
     selectionFocusTransition.current = false;
@@ -2257,8 +2296,14 @@ export function NoteReader(props: {
           ) : null}
         </div>
       </header>
+      <p id={readerLinkDescriptionId} hidden>
+        {props.t("note.readerLinkUnavailable")}
+      </p>
       <div
+        ref={markdownBodyRef}
         className="markdown-body"
+        onClickCapture={handleInternalReaderLink}
+        onAuxClickCapture={handleInternalReaderLink}
         // HTML is produced by the main-process Markdown renderer after sanitization.
         dangerouslySetInnerHTML={{ __html: props.note.html }}
       />
@@ -4204,18 +4249,31 @@ function HomeComposer(props: {
                     </strong>
                     <span>{props.t(activity.status === "undone" ? "activity.statusUndone" : "activity.statusApplied")}</span>
                   </div>
-                  {activity.canUndo ? (
-                    <button
-                      type="button"
-                      className="ghost"
-                      aria-label={`${props.t("activity.undo")}: ${activityLabel}`}
-                      data-activity-undo-id={activity.operationId}
-                      disabled={props.activityUndoingId !== null || props.activityBlockedIds.includes(activity.operationId)}
-                      onClick={() => void props.onUndoActivity(activity.operationId)}
-                    >
-                      {props.t(props.activityUndoingId === activity.operationId ? "activity.undoing" : "activity.undo")}
-                    </button>
-                  ) : null}
+                  <div className="activity-row-actions">
+                    {activity.status === "applied" ? (
+                      <button
+                        type="button"
+                        className="ghost"
+                        aria-label={`${props.t("activity.open")}: ${activityLabel}`}
+                        data-activity-open-id={activity.operationId}
+                        onClick={() => props.onDevelopment("activity_open")}
+                      >
+                        {props.t("activity.open")}
+                      </button>
+                    ) : null}
+                    {activity.canUndo ? (
+                      <button
+                        type="button"
+                        className="ghost"
+                        aria-label={`${props.t("activity.undo")}: ${activityLabel}`}
+                        data-activity-undo-id={activity.operationId}
+                        disabled={props.activityUndoingId !== null || props.activityBlockedIds.includes(activity.operationId)}
+                        onClick={() => void props.onUndoActivity(activity.operationId)}
+                      >
+                        {props.t(props.activityUndoingId === activity.operationId ? "activity.undoing" : "activity.undo")}
+                      </button>
+                    ) : null}
+                  </div>
                 </article>
               );
             })}
