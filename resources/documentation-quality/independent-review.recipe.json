@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-16T14:44:05Z",
+  "reviewedAt": "2026-07-17T00:46:53Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -26,17 +26,17 @@
       "packages/schemas/src/index.ts",
       "package.json"
     ],
-    "scope": "Manual H2 review binds public and owner documentation, traceability controls, verifier code and the executable SourceRecord schema to the exact production boundary review; automated gates cover implementation evidence separately.",
+    "scope": "Manual H3 review binds the Job, API, architecture, quality, playbook, decision and traceability owners to the exact 89d7ee9 coordinator candidate; automated gates cover implementation evidence separately.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 100,
-    "reviewedSha256": "adec5bef1ffc44f286732c864ffa7549a2dcfade9f2f7a3861ceac048ec3a568"
+    "reviewedSha256": "17044936629d5f205fa503c913d2a08a0ed1e6d108e815fe229b8c061a59427f"
   },
   "reviewers": [
     {
-      "reviewerId": "h2-agent-ingress-proposal-security-independent-review",
-      "task": "H2 unified Agent ingress, legacy ingest compatibility and renderer proposal containment review",
+      "reviewerId": "h3-job-execution-coordinator-independent-review",
+      "task": "H3 JobExecutionCoordinator cancellation, resume proof, lifecycle ownership and renderer proposal containment review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -44,83 +44,84 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "The reviewer did not author the H2 code or Planning corrections, edited only this review recipe after independently comparing the uncommitted candidate with baseline 2636ea6639e6e4fc08aa0c27a352a7ee2252baa1, and first rejected the candidate until three documentation and traceability blockers were corrected."
+      "independence": "The reviewer did not author the H3 code or Planning bind and compared the exact 89d7ee961d799c4710545b08980a4d8c71a874da candidate with H2 baseline b9b624df9ea13b17ac869e1193b88095f0ba3806 before issuing CLEAR."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "h2-agent-ingress-proposal-security-independent-review",
+      "reviewerId": "h3-job-execution-coordinator-independent-review",
       "blockerCount": 0,
-      "summary": "README and the existing architecture, Pi, Job, IPC, prompt, domain, playbook and decision owners now expose one coherent H2 route: agent.submitTurn for new semantics, typed legacy compatibility, Main-only proposal recovery and a future bounded renderer projection."
+      "summary": "Existing Job, API, architecture, quality, playbook and decision owners now expose one coherent H3 core without adding a competing document or changing the public product scope."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "h2-agent-ingress-proposal-security-independent-review",
+      "reviewerId": "h3-job-execution-coordinator-independent-review",
       "blockerCount": 0,
-      "summary": "The documents match production code: current SourceRecord writes require agent_turn or capture_only, absent historical fields normalize to legacy_agent_ingest, Pi selects source tools, legacy auto-chain is exact-marker-only, capture handlers are absent, and all four proposal renderer methods fail closed."
+      "summary": "The documents match code: one coordinator owns migrated Jobs/Home lifecycle, cancellation has three proof-dependent terminal projections, resume proofs are exact, and raw proposal renderer access remains fail closed."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "h2-agent-ingress-proposal-security-independent-review",
+      "reviewerId": "h3-job-execution-coordinator-independent-review",
       "blockerCount": 0,
-      "summary": "EV-PROPOSAL-UI and the unsafe safe-summary claim are retired; PIGE-JOB-003 and E7.01 remain partial with bounded preview and decision explicitly open, while E3.09 remains incomplete and no Requirement, Exit or Phase status is promoted."
+      "summary": "Three exact H3 evidence selectors bind lifecycle, cancellation and resume-proof claims while PIGE-JOB-002, PIGE-JOB-004 and E2.10/E2.11 remain partial and every Requirement, Exit and Phase status is unchanged."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "h2-agent-ingress-proposal-security-independent-review",
+      "reviewerId": "h3-job-execution-coordinator-independent-review",
       "blockerCount": 0,
-      "summary": "The migration boundary is executable and reviewable: Main preserves historical proposal and agent_ingest recovery, new Agent turns cannot stage the legacy proposal, deterministic capability children cannot choose successors, and H3/H4 remain named open work."
+      "summary": "The migration is executable and reviewable: JobsService has zero direct lifecycle-state writers, two named CAS compatibility boundaries remain, Home adopts durable completion, and H3b/H3c stay explicit."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "h2-agent-ingress-proposal-security-independent-review",
+      "reviewerId": "h3-job-execution-coordinator-independent-review",
       "blockerCount": 0,
-      "summary": "No new owner document was added. Planning corrected the existing public, domain, Job and traceability owners, semantic hashes were refreshed mechanically, and the seven H2 owner documents retain subject-specific detail without duplicating raw proposal DTOs."
+      "summary": "No new owner document was added. Existing Job and decision owners carry the H3 contract; trace and review locks remain machine-bound."
     }
   ],
   "verification": [
     {
-      "command": "npm test -- tests/unit/durable-contract-schemas.test.ts tests/unit/desktop-shell-contract.test.ts tests/unit/jobs-service.test.ts tests/unit/home-agent-service.test.ts tests/unit/agent-led-ingest-proposal.test.ts tests/unit/macos-vision-ocr-adapter-smoke.test.ts",
+      "command": "npm test -- tests/unit/job-execution-coordinator.test.ts tests/unit/jobs-service.test.ts tests/unit/home-agent-conversation-ui.test.ts tests/unit/model-egress-job-recovery.test.ts tests/unit/permission-broker-job-recovery.test.ts",
       "status": "passed",
-      "evidence": "Independent focused review passed 6 files and 168 tests covering typed SourceRecord migration, removed capture handlers, all-four proposal fail-closed behavior, legacy/new Job routing, Pi-owned evidence ordering and current source OCR flow."
+      "evidence": "Exact focused review passed coordinator, Jobs, Home retry, permission and model-egress recovery coverage, including all cancellation outcomes and exact resume proofs."
     },
     {
       "command": "node scripts/verify/pi-runtime-responsibility.mjs",
       "status": "passed",
-      "evidence": "The responsibility gate reports H2 removal or containment of renderer capture submission, new legacy auto-chain, terminal repair and poison, Home modality and Host order controls, plus all legacy renderer proposal methods."
+      "evidence": "The responsibility gate reports zero direct JobsService lifecycle-state writers, exactly two named CAS compatibility boundaries and explicit H3b/H3c residual loops."
     },
     {
       "command": "npm run verify:docs && npm run verify:decisions",
       "status": "passed",
-      "evidence": "Links, whitespace, document map, parser manifests, PRD contract and 91-entry Decision Log checks pass on the corrected current H2 documentation snapshot."
+      "evidence": "Links, whitespace, document map, parser manifests, PRD contract and Decision Log checks pass on the current H3 governed snapshot."
     },
     {
-      "command": "Independent code and traceability review against 2636ea6639e6e4fc08aa0c27a352a7ee2252baa1",
+      "command": "Independent code and traceability review of 89d7ee961d799c4710545b08980a4d8c71a874da against b9b624df9ea13b17ac869e1193b88095f0ba3806",
       "status": "passed",
-      "evidence": "Production and governed-resource diffs confirm no Requirement, Exit or Phase promotion; proposal UI evidence is removed, raw model summary/reason/path claims are Main-only, and the renderer boundary remains body-free and unavailable."
+      "evidence": "Exact hashes and code review confirm three cancellation projections, exact repair/source proofs, raw proposal removal, unchanged Development bytes and no Requirement, Exit or Phase promotion."
     }
   ],
   "coordination": {
-    "taskId": "h2-agent-turn-ingest-convergence-20260716",
-    "taskTitle": "H2 unified AgentTurn and ingest capability convergence",
+    "taskId": "h3-job-execution-coordinator-core-20260717",
+    "taskTitle": "H3 JobExecutionCoordinator core and Jobs/Home migration",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "H2 stops new legacy ingest orchestration and unsafe renderer proposal access while retaining exact historical SourceRecord, Job, proposal, Operation and recovery compatibility inside Main.",
-    "acknowledgement": "Planning corrected the existing public, domain, Job, acceptance and semantic-claim owners after independent review; Development code remains uncommitted, H3/H4 stay serialized open work, and status projections remain unchanged."
+    "compatibility": "H3 centralizes migrated Jobs/Home lifecycle without changing Pi semantic ownership, durable schema, renderer authority or non-migrated Job-class behavior.",
+    "acknowledgement": "Planning synchronized only existing H3 owner and traceability resources after independent CLEAR; Development/UI bytes remain unchanged, H3b/H3c stay serialized open work, and status projections remain unchanged."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Historical legacy_agent_ingest Jobs and durable proposals remain Main-internal compatibility state for a bounded migration window; H3/H4 must retire or migrate them without creating new records.",
-    "The preload type surface still names legacy proposal methods, but Main rejects list/get/approve/reject before any durable DTO crosses to renderer; removal or replacement awaits the bounded safe contract.",
-    "A future proposal UI requires localized summary and warning keys, bounded diff lines and opaque identities; it must not revive ConfirmationProposal, model summary/reason, paths, content, base hashes or Operation internals.",
-    "H3 still owns the unique JobExecutionCoordinator and H4 owns legacy retrieval answer retirement plus threat-model-reviewed durable primitive convergence.",
+    "Backup, Restore and Local Tool lifecycle loops remain outside the coordinator core and must move in H3b without creating a second transition owner.",
+    "JobsService still owns dispatch; H3c must introduce a per-class executor registry while preserving exact Job and durable-effect proofs.",
+    "The preload type surface still names legacy proposal methods, but Main rejects them and renderer no longer calls or renders the raw DTO; a bounded preview and decision owner remains open.",
+    "Coordinator, JobsService and Home remain large; the current ownership change is not evidence of global service convergence or completion.",
+    "Cross-file atomicity, final-syscall TOCTOU, Pi transcript continuation and remaining Job-class recovery are open.",
     "Windows/Linux qualification remains deferred and unclaimed; Requirement, Exit and Phase statuses are unchanged."
   ]
 }

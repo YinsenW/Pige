@@ -2791,6 +2791,20 @@ References:
 - `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`
 - `docs/JOB_OPERATION_AND_RECOVERY.md`
 
+### D-20260717-H3-Job-Execution-Coordinator-Core
+
+Status: Accepted
+Date: 2026-07-17
+
+Decision:
+
+One proof-checked coordinator owns migrated Jobs/Home lifecycle; raw proposals stay
+Main-only.
+
+Consequences:
+
+- H3b/H3c still migrate remaining loops and dispatch; statuses stay unchanged.
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

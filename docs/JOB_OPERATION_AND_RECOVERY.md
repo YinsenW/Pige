@@ -236,11 +236,10 @@ Invalid shortcuts:
 - Do not move from `waiting_permission` to `running` without recording the permission decision.
 - Do not move from `waiting_model_egress` to `running` without a durable one-use
   model-egress decision, exact Job CAS, and current binding revalidation.
-- Do not move from `waiting_dependency` to `running` without recording the dependency repair/configuration event or requeue reason.
+- Migrated Jobs/Home waits resume only through exact typed proof.
 - Do not move from `awaiting_review` to `completed` without an approved proposal or explicit rejection result.
-- Direct transition to `cancelled` requires `durableWritesApplied !== true`; active
-  parse/OCR/Agent ingest may still accept `cancel_requested` and stop in a non-`cancelled` state.
-  Abandon/archive is separate.
+- `JobExecutionCoordinator` projects late cancellation from durable-effect proof;
+  H3b/H3c still own remaining loops and dispatch. Abandon/archive is separate.
 
 ## 6. Job Record Contract
 
