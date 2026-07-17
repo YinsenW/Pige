@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ModelProviderConnectionTester, type FetchLike } from "../../apps/desktop/src/main/services/model-provider-connection";
 import {
   ModelProviderRegistry,
+  type ModelProviderActiveReferencePort,
   type ModelProviderRuntimeConfig
 } from "../../apps/desktop/src/main/services/model-provider-registry";
 import type { ModelProviderGenerationProbePort } from "../../apps/desktop/src/main/services/model-provider-generation-probe";
@@ -25,7 +26,8 @@ const passingProbe: ModelProviderGenerationProbePort = {
 function makeRegistry(
   fetchImpl: FetchLike = okModelListFetch(["gpt-4.1"]),
   crypto: SecretCryptoAdapter = fakeCrypto,
-  probe: ModelProviderGenerationProbePort = passingProbe
+  probe: ModelProviderGenerationProbePort = passingProbe,
+  activeReferences?: ModelProviderActiveReferencePort
 ): { root: string; registry: ModelProviderRegistry; secrets: JsonSecretStore } {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-model-registry-test-"));
   tempRoots.push(root);
@@ -37,7 +39,8 @@ function makeRegistry(
       root,
       secrets,
       new ModelProviderConnectionTester(fetchImpl),
-      probe
+      probe,
+      activeReferences
     )
   };
 }
@@ -545,7 +548,10 @@ describe("model provider registry", () => {
     );
     const summary = reopened.summary();
 
-    expect(summary).toEqual(connected);
+    expect(summary).toEqual({
+      ...connected,
+      providers: connected.providers.map(({ runtimeStatus: _runtimeStatus, ...provider }) => provider)
+    });
     expect(summary.providers[0]?.endpointProtocol).toBe("openai_responses");
     expect(summary.defaultBinding).toMatchObject({
       state: "ready",
@@ -1021,6 +1027,351 @@ describe("model provider registry", () => {
     expect(updated.defaultModelProfileId).toBe(nextDefault?.id);
     expect(updated.defaultModelProfileId).not.toBe(first.defaultModelProfileId);
     expect(probe.configs).toHaveLength(2);
+  });
+
+  it("replaces one existing credential only after a successful generation probe", async () => {
+    const probe = new RecordingProbe();
+    const { root, registry } = makeRegistry(okModelListFetch(["model-a"]), fakeCrypto, probe);
+    const connected = await registry.addManualProvider({
+      displayName: "Credential update",
+      providerKind: "custom",
+      endpointProtocol: "openai_chat_completions",
+      baseUrl: "https://credential.example/v1",
+      apiKey: "old-secret",
+      manualModelId: "model-a",
+      cloudBoundary: "unknown"
+    });
+    if ("status" in connected) throw new Error("Credential update Provider did not connect.");
+    const providerId = connected.providers[0]?.id ?? "";
+    const secretRefs = registrySecretRefs(root);
+
+    const updated = await registry.updateProviderCredential({
+      providerProfileId: providerId,
+      expectedRevision: registry.summary().revision ?? "",
+      apiKey: "new-secret"
+    });
+
+    expect(updated.providers.map(({ runtimeStatus: _runtimeStatus, ...provider }) => provider))
+      .toEqual(connected.providers.map(({ runtimeStatus: _runtimeStatus, ...provider }) => provider));
+    expect(updated.providers[0]?.runtimeStatus?.generation).toBe("verified");
+    expect(registry.getDefaultRuntimeConfig()?.apiKey).toBe("new-secret");
+    expect(registrySecretRefs(root)).toEqual(secretRefs);
+    expect(probe.configs.at(-1)).toMatchObject({ apiKey: "new-secret" });
+    expect(JSON.stringify(updated)).not.toContain("old-secret");
+    expect(JSON.stringify(updated)).not.toContain("new-secret");
+    expect(fs.readFileSync(path.join(root, "provider-profiles.json"), "utf8")).not.toContain("new-secret");
+    expect(fs.readFileSync(path.join(root, "model-profiles.json"), "utf8")).not.toContain("new-secret");
+  });
+
+  it("keeps the prior credential when replacement validation or persistence fails", async () => {
+    const probe = new RecordingProbe();
+    const { root, registry } = makeRegistry(okModelListFetch(["model-a"]), fakeCrypto, probe);
+    const connected = await registry.addManualProvider({
+      displayName: "Stable credential",
+      providerKind: "custom",
+      endpointProtocol: "openai_chat_completions",
+      baseUrl: "https://stable-credential.example/v1",
+      apiKey: "stable-secret",
+      manualModelId: "model-a",
+      cloudBoundary: "unknown"
+    });
+    if ("status" in connected) throw new Error("Stable credential Provider did not connect.");
+    const providerProfileId = connected.providers[0]?.id ?? "";
+
+    probe.failNext = true;
+    await expect(registry.updateProviderCredential({
+      providerProfileId,
+      expectedRevision: registry.summary().revision ?? "",
+      apiKey: "rejected-secret"
+    }))
+      .rejects.toThrow("synthetic probe failure");
+    expect(registry.getDefaultRuntimeConfig()?.apiKey).toBe("stable-secret");
+
+    const secretsPath = path.join(root, "secrets.json");
+    const originalRename = fs.renameSync;
+    let failedWrite = false;
+    vi.spyOn(fs, "renameSync").mockImplementation((from, to) => {
+      if (String(to) === secretsPath && !failedWrite) {
+        failedWrite = true;
+        throw new Error("injected secret replacement failure");
+      }
+      return originalRename(from, to);
+    });
+    await expect(registry.updateProviderCredential({
+      providerProfileId,
+      expectedRevision: registry.summary().revision ?? "",
+      apiKey: "unsaved-secret"
+    }))
+      .rejects.toMatchObject({ code: "secret_update_failed" });
+    vi.restoreAllMocks();
+    expect(registry.getDefaultRuntimeConfig()?.apiKey).toBe("stable-secret");
+    expect(registrySecretRefs(root)).toHaveLength(1);
+  });
+
+  it("rejects stale credential and delete mutations before probing or persistence", async () => {
+    const probe = new RecordingProbe();
+    const { registry } = makeRegistry(okModelListFetch(["model-a"]), fakeCrypto, probe);
+    const connected = await registry.addManualProvider({
+      displayName: "Revision fenced",
+      providerKind: "custom",
+      endpointProtocol: "openai_chat_completions",
+      baseUrl: "https://revision.example/v1",
+      apiKey: "stable-secret",
+      manualModelId: "model-a",
+      cloudBoundary: "unknown"
+    });
+    if ("status" in connected) throw new Error("Revision fixture did not connect.");
+    const providerProfileId = connected.providers[0]?.id ?? "";
+    const probeCount = probe.configs.length;
+    const staleRevision = `sha256:${"0".repeat(64)}`;
+
+    await expect(registry.updateProviderCredential({
+      providerProfileId,
+      expectedRevision: staleRevision,
+      apiKey: "must-not-probe"
+    })).rejects.toMatchObject({ code: "model_provider.profile_stale" });
+    await expect(registry.deleteProvider({ providerProfileId, expectedRevision: staleRevision }))
+      .rejects.toMatchObject({ code: "model_provider.profile_stale" });
+
+    expect(probe.configs).toHaveLength(probeCount);
+    expect(registry.getDefaultRuntimeConfig()?.apiKey).toBe("stable-secret");
+    expect(registry.summary().providers).toHaveLength(1);
+  });
+
+  it("blocks credential replacement while an active owner references the Provider", async () => {
+    const activeReferences: ModelProviderActiveReferencePort = {
+      assertProviderInactive: () => {
+        throw Object.assign(new Error("active reference"), { code: "model_provider.active_reference" });
+      }
+    };
+    const probe = new RecordingProbe();
+    const { registry } = makeRegistry(
+      okModelListFetch(["model-a"]),
+      fakeCrypto,
+      probe,
+      activeReferences
+    );
+    const connected = await registry.addManualProvider({
+      displayName: "Active credential",
+      providerKind: "custom",
+      endpointProtocol: "openai_chat_completions",
+      baseUrl: "https://active-credential.example/v1",
+      apiKey: "stable-secret",
+      manualModelId: "model-a",
+      cloudBoundary: "unknown"
+    });
+    if ("status" in connected) throw new Error("Active credential fixture did not connect.");
+    const probeCount = probe.configs.length;
+
+    await expect(registry.updateProviderCredential({
+      providerProfileId: connected.providers[0]?.id ?? "",
+      expectedRevision: registry.summary().revision ?? "",
+      apiKey: "must-not-probe"
+    })).rejects.toMatchObject({ code: "model_provider.active_reference" });
+    expect(probe.configs).toHaveLength(probeCount);
+    expect(registry.getDefaultRuntimeConfig()?.apiKey).toBe("stable-secret");
+  });
+
+  it("projects discovery and generation truth without persisting transient runtime state", async () => {
+    const { root, registry } = makeRegistry(okModelListFetch(["model-a"]));
+    const connected = await registry.addManualProvider({
+      displayName: "Runtime truth",
+      providerKind: "custom",
+      endpointProtocol: "openai_chat_completions",
+      baseUrl: "https://runtime-truth.example/v1",
+      apiKey: "runtime-secret",
+      manualModelId: "model-a",
+      cloudBoundary: "unknown"
+    });
+    if ("status" in connected) throw new Error("Runtime truth fixture did not connect.");
+    const providerProfileId = connected.providers[0]?.id ?? "";
+    expect(connected.providers[0]?.runtimeStatus).toMatchObject({ generation: "verified" });
+
+    registry.recordGenerationOutcome(providerProfileId, "failed");
+    expect(registry.summary().providers[0]?.runtimeStatus).toMatchObject({ generation: "failed" });
+    await registry.refreshProviderModels({ providerProfileId });
+    expect(registry.summary().providers[0]?.runtimeStatus).toMatchObject({
+      discovery: "verified",
+      generation: "failed"
+    });
+
+    const reopened = new ModelProviderRegistry(
+      root,
+      new JsonSecretStore(root, fakeCrypto),
+      new ModelProviderConnectionTester(okModelListFetch(["model-a"])),
+      passingProbe
+    );
+    expect(reopened.summary().providers[0]?.runtimeStatus).toBeUndefined();
+  });
+
+  it("deletes owned profiles and secret while deterministically rebinding the default", async () => {
+    const { root, registry } = makeRegistry(okModelListFetch(["model-a", "model-b"]));
+    const first = await registry.addManualProvider({
+      displayName: "Provider A",
+      providerKind: "custom",
+      endpointProtocol: "openai_chat_completions",
+      baseUrl: "https://provider-a.example/v1",
+      apiKey: "secret-a",
+      manualModelId: "model-a",
+      cloudBoundary: "unknown"
+    });
+    const second = await registry.addManualProvider({
+      displayName: "Provider B",
+      providerKind: "custom",
+      endpointProtocol: "openai_chat_completions",
+      baseUrl: "https://provider-b.example/v1",
+      apiKey: "secret-b",
+      manualModelId: "model-b",
+      cloudBoundary: "unknown"
+    });
+    if ("status" in first || "status" in second) throw new Error("Delete fixtures did not connect.");
+    const firstProviderId = first.providers.find((provider) => provider.displayName === "Provider A")?.id ?? "";
+    const secondModel = second.models.find((model) => model.modelId === "model-b");
+
+    const deleted = await registry.deleteProvider({
+      providerProfileId: firstProviderId,
+      expectedRevision: registry.summary().revision ?? ""
+    });
+
+    expect(deleted.providers.map((provider) => provider.displayName)).toEqual(["Provider B"]);
+    expect(deleted.models).not.toEqual([]);
+    expect(deleted.models.every((model) => model.providerProfileId === deleted.providers[0]?.id)).toBe(true);
+    expect(deleted.defaultModelProfileId).toBe(secondModel?.id);
+    expect(deleted.defaultBinding.state).toBe("ready");
+    expect(registry.getDefaultRuntimeConfig()?.apiKey).toBe("secret-b");
+    expect(registrySecretRefs(root)).toHaveLength(1);
+  });
+
+  it("clears the default and leaves no orphan after deleting the final Provider", async () => {
+    const { root, registry } = makeRegistry(okModelListFetch(["model-a"]));
+    const connected = await registry.addManualProvider({
+      displayName: "Only Provider",
+      providerKind: "custom",
+      endpointProtocol: "openai_chat_completions",
+      baseUrl: "https://only.example/v1",
+      apiKey: "only-secret",
+      manualModelId: "model-a",
+      cloudBoundary: "unknown"
+    });
+    if ("status" in connected) throw new Error("Only Provider did not connect.");
+
+    const deleted = await registry.deleteProvider({
+      providerProfileId: connected.providers[0]?.id ?? "",
+      expectedRevision: registry.summary().revision ?? ""
+    });
+
+    expect(deleted).toMatchObject({ providers: [], models: [], hasDefaultModel: false });
+    expect(deleted.defaultBinding).toEqual({ state: "not_configured" });
+    expect(registrySecretRefs(root)).toEqual([]);
+  });
+
+  it("blocks deletion while an active owner references the Provider", async () => {
+    const activeReferences: ModelProviderActiveReferencePort = {
+      assertProviderInactive: () => {
+        throw Object.assign(new Error("active reference"), { code: "model_provider.active_reference" });
+      }
+    };
+    const { root, registry } = makeRegistry(
+      okModelListFetch(["model-a"]),
+      fakeCrypto,
+      passingProbe,
+      activeReferences
+    );
+    const connected = await registry.addManualProvider({
+      displayName: "Active Provider",
+      providerKind: "custom",
+      endpointProtocol: "openai_chat_completions",
+      baseUrl: "https://active.example/v1",
+      apiKey: "active-secret",
+      manualModelId: "model-a",
+      cloudBoundary: "unknown"
+    });
+    if ("status" in connected) throw new Error("Active Provider did not connect.");
+
+    await expect(registry.deleteProvider({
+      providerProfileId: connected.providers[0]?.id ?? "",
+      expectedRevision: registry.summary().revision ?? ""
+    }))
+      .rejects.toMatchObject({ code: "model_provider.active_reference" });
+    expect(registry.summary().providers).toHaveLength(1);
+    expect(registrySecretRefs(root)).toHaveLength(1);
+  });
+
+  it("finishes committed secret cleanup after restart without restoring deleted profiles", async () => {
+    const { root, registry } = makeRegistry(okModelListFetch(["model-a"]));
+    const connected = await registry.addManualProvider({
+      displayName: "Crash cleanup",
+      providerKind: "custom",
+      endpointProtocol: "openai_chat_completions",
+      baseUrl: "https://cleanup.example/v1",
+      apiKey: "cleanup-secret",
+      manualModelId: "model-a",
+      cloudBoundary: "unknown"
+    });
+    if ("status" in connected) throw new Error("Crash cleanup Provider did not connect.");
+    const secretsPath = path.join(root, "secrets.json");
+    const originalRename = fs.renameSync;
+    vi.spyOn(fs, "renameSync").mockImplementation((from, to) => {
+      if (String(to) === secretsPath) throw new Error("injected cleanup interruption");
+      return originalRename(from, to);
+    });
+
+    await expect(registry.deleteProvider({
+      providerProfileId: connected.providers[0]?.id ?? "",
+      expectedRevision: registry.summary().revision ?? ""
+    }))
+      .rejects.toMatchObject({ code: "model_provider.persistence_repair_required" });
+    expect(fs.existsSync(path.join(root, "provider-connect-transaction.json"))).toBe(true);
+    expect(registry.summary().providers).toEqual([]);
+    vi.restoreAllMocks();
+
+    const reopened = new ModelProviderRegistry(
+      root,
+      new JsonSecretStore(root, fakeCrypto),
+      new ModelProviderConnectionTester(okModelListFetch(["model-a"])),
+      passingProbe
+    );
+    expect(reopened.summary()).toMatchObject({ providers: [], models: [], hasDefaultModel: false });
+    expect(registrySecretRefs(root)).toEqual([]);
+    expect(fs.existsSync(path.join(root, "provider-connect-transaction.json"))).toBe(false);
+  });
+
+  it("restores Provider, models, default, and secret when deletion fails before commit", async () => {
+    const { root, registry } = makeRegistry(okModelListFetch(["model-a"]));
+    const connected = await registry.addManualProvider({
+      displayName: "Rollback delete",
+      providerKind: "custom",
+      endpointProtocol: "openai_chat_completions",
+      baseUrl: "https://rollback-delete.example/v1",
+      apiKey: "rollback-secret",
+      manualModelId: "model-a",
+      cloudBoundary: "unknown"
+    });
+    if ("status" in connected) throw new Error("Rollback delete Provider did not connect.");
+    const providersPath = path.join(root, "provider-profiles.json");
+    const modelsPath = path.join(root, "model-profiles.json");
+    const beforeProviders = fs.readFileSync(providersPath, "utf8");
+    const beforeModels = fs.readFileSync(modelsPath, "utf8");
+    const originalRename = fs.renameSync;
+    let failedModelCommit = false;
+    vi.spyOn(fs, "renameSync").mockImplementation((from, to) => {
+      if (String(to) === modelsPath && !failedModelCommit) {
+        failedModelCommit = true;
+        throw new Error("injected delete model commit failure");
+      }
+      return originalRename(from, to);
+    });
+
+    await expect(registry.deleteProvider({
+      providerProfileId: connected.providers[0]?.id ?? "",
+      expectedRevision: registry.summary().revision ?? ""
+    }))
+      .rejects.toMatchObject({ code: "model_provider.persistence_failed" });
+    expect(fs.readFileSync(providersPath, "utf8")).toBe(beforeProviders);
+    expect(fs.readFileSync(modelsPath, "utf8")).toBe(beforeModels);
+    expect(registry.getDefaultRuntimeConfig()?.apiKey).toBe("rollback-secret");
+    expect(registrySecretRefs(root)).toHaveLength(1);
+    expect(fs.existsSync(path.join(root, "provider-connect-transaction.json"))).toBe(false);
   });
 
   it("restores and reopens the prior global default when the default-model write fails", async () => {

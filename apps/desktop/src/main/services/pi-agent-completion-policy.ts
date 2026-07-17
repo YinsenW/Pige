@@ -22,6 +22,7 @@ export interface AgentRepairFeedback {
 
 export interface PiAgentCompletionBoundary {
   readonly terminalToolNames: readonly string[];
+  readonly nativeAssistantCompletion?: "allow_without_tool_calls";
   readonly maxWallTimeMs: number;
   readonly maxToolCalls: number;
   readonly maxWorkBytes: number;
@@ -119,15 +120,19 @@ export class PiCompletionPolicy {
     if (this.#fatalFailure) throw this.#fatalFailure;
   }
 
-  assertCompleted(): void {
+  assertCompleted(assistantText = ""): void {
     if (!this.#boundary) return;
     this.assertCanContinue();
-    if (!this.terminalSettled()) {
-      throw new PigeDomainError(
-        "agent_runtime.knowledge_action_missing",
-        "The Pi Agent turn ended without a validated terminal action."
-      );
-    }
+    if (this.terminalSettled()) return;
+    if (
+      this.#boundary.nativeAssistantCompletion === "allow_without_tool_calls" &&
+      this.#toolCalls === 0 &&
+      assistantText.trim().length > 0
+    ) return;
+    throw new PigeDomainError(
+      "agent_runtime.knowledge_action_missing",
+      "The Pi Agent turn ended without a validated completion."
+    );
   }
 
   repairAttempted(): boolean {
@@ -181,6 +186,15 @@ function validateBoundary(
     !boundedInteger(boundary.maxToolCalls, 1, 256) ||
     !boundedInteger(boundary.maxWorkBytes, 4_096, 1_048_576) ||
     !boundedInteger(boundary.maxRepeatedFailureFingerprints, 1, 16)
+  ) {
+    throw new PigeDomainError(
+      "agent_runtime.completion_repair_invalid",
+      "The bounded autonomous completion repair contract is invalid."
+    );
+  }
+  if (
+    boundary.nativeAssistantCompletion !== undefined &&
+    boundary.nativeAssistantCompletion !== "allow_without_tool_calls"
   ) {
     throw new PigeDomainError(
       "agent_runtime.completion_repair_invalid",

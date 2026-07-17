@@ -5771,6 +5771,21 @@ type ModelSettingsFailure =
   | { readonly kind: "post_commit_refresh" }
   | { readonly kind: "model_change" };
 
+type ProviderMutationStatus =
+  | { readonly kind: "credential_updated"; readonly providerId: string }
+  | { readonly kind: "credential_update_failed"; readonly providerId: string }
+  | { readonly kind: "provider_deleted" }
+  | { readonly kind: "provider_delete_failed"; readonly providerId: string };
+
+function providerRuntimeStatusKey(
+  provider: ModelProviderSettingsSummary["providers"][number]
+): string {
+  if (provider.runtimeStatus?.generation === "failed") return "models.statusGenerationFailed";
+  if (provider.runtimeStatus?.generation === "verified") return "models.statusGenerationVerified";
+  if (provider.runtimeStatus?.discovery === "verified") return "models.statusDiscoveryVerified";
+  return "models.statusConfigured";
+}
+
 interface ModelSettingsPanelProps {
   readonly busy: boolean;
   readonly modelSummary: ModelProviderSettingsSummary | null;
@@ -5798,7 +5813,30 @@ export function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.El
   const [manualBootstrap, setManualBootstrap] = useState<ProviderConnectNeedsManualModel | null>(null);
   const [providerSyncFailures, setProviderSyncFailures] = useState<ReadonlySet<string>>(new Set());
   const [failure, setFailure] = useState<ModelSettingsFailure | null>(null);
+  const [providerCredentialDraft, setProviderCredentialDraft] = useState("");
+  const [providerMutationStatus, setProviderMutationStatus] = useState<ProviderMutationStatus | null>(null);
+  const [deleteConfirmationProviderId, setDeleteConfirmationProviderId] = useState<string | null>(null);
+  const [providerMutationInFlight, setProviderMutationInFlight] = useState(false);
   const refreshRequestSequence = useRef(0);
+  const providerMutationSequence = useRef(0);
+  const deleteProviderButtonRef = useRef<HTMLButtonElement | null>(null);
+  const keepProviderButtonRef = useRef<HTMLButtonElement | null>(null);
+  const providerDeletedStatusRef = useRef<HTMLDivElement | null>(null);
+  const pendingDeleteFocusRef = useRef<"keep" | "delete" | "status" | null>(null);
+
+  useEffect(() => {
+    const pendingFocus = pendingDeleteFocusRef.current;
+    const target = pendingFocus === "keep"
+      ? keepProviderButtonRef.current
+      : pendingFocus === "delete"
+        ? deleteProviderButtonRef.current
+        : pendingFocus === "status"
+          ? providerDeletedStatusRef.current
+          : null;
+    if (!target) return;
+    pendingDeleteFocusRef.current = null;
+    target.focus();
+  }, [deleteConfirmationProviderId, providerMutationStatus, view.kind]);
 
   const refreshModelSummary = async (): Promise<void> => {
     const refreshId = ++refreshRequestSequence.current;
@@ -5999,6 +6037,64 @@ export function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.El
     }
   };
 
+  const updateProviderCredential = async (providerProfileId: string): Promise<void> => {
+    const expectedRevision = props.modelSummary?.revision;
+    const nextApiKey = providerCredentialDraft;
+    if (!expectedRevision || !nextApiKey.trim() || providerMutationInFlight) return;
+
+    const requestSequence = ++providerMutationSequence.current;
+    setProviderMutationInFlight(true);
+    setProviderMutationStatus(null);
+    setFailure(null);
+    props.onBusy(true);
+    try {
+      await window.pige.models.updateProviderCredential({
+        providerProfileId,
+        expectedRevision,
+        apiKey: nextApiKey
+      });
+      if (requestSequence !== providerMutationSequence.current) return;
+      setProviderCredentialDraft("");
+      setProviderMutationStatus({ kind: "credential_updated", providerId: providerProfileId });
+      await refreshCommittedSettings();
+    } catch {
+      if (requestSequence === providerMutationSequence.current) {
+        setProviderMutationStatus({ kind: "credential_update_failed", providerId: providerProfileId });
+      }
+    } finally {
+      if (requestSequence === providerMutationSequence.current) setProviderMutationInFlight(false);
+      props.onBusy(false);
+    }
+  };
+
+  const deleteProvider = async (providerProfileId: string): Promise<void> => {
+    const expectedRevision = props.modelSummary?.revision;
+    if (!expectedRevision || providerMutationInFlight) return;
+
+    const requestSequence = ++providerMutationSequence.current;
+    setProviderMutationInFlight(true);
+    setProviderMutationStatus(null);
+    setFailure(null);
+    props.onBusy(true);
+    try {
+      await window.pige.models.deleteProvider({ providerProfileId, expectedRevision });
+      if (requestSequence !== providerMutationSequence.current) return;
+      setProviderCredentialDraft("");
+      setDeleteConfirmationProviderId(null);
+      setView({ kind: "overview" });
+      pendingDeleteFocusRef.current = "status";
+      setProviderMutationStatus({ kind: "provider_deleted" });
+      await refreshCommittedSettings();
+    } catch {
+      if (requestSequence === providerMutationSequence.current) {
+        setProviderMutationStatus({ kind: "provider_delete_failed", providerId: providerProfileId });
+      }
+    } finally {
+      if (requestSequence === providerMutationSequence.current) setProviderMutationInFlight(false);
+      props.onBusy(false);
+    }
+  };
+
   const summary = props.modelSummary;
   const selectedPreset = view.kind === "preset"
     ? summary?.presets.find((preset) => preset.presetId === view.presetId)
@@ -6008,8 +6104,13 @@ export function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.El
     : undefined;
 
   const navigate = (nextView: ModelSettingsView): void => {
+    providerMutationSequence.current += 1;
     setFailure(null);
     setManualBootstrap(null);
+    setProviderCredentialDraft("");
+    setProviderMutationStatus(null);
+    setDeleteConfirmationProviderId(null);
+    setProviderMutationInFlight(false);
     setView(nextView);
   };
 
@@ -6023,6 +6124,7 @@ export function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.El
         <button
           type="button"
           className="settings-button model-settings-back"
+          disabled={props.busy || providerMutationInFlight}
           onClick={() => navigate(back.target)}
         >
           <PigeIcon name="arrowLeft" size={15} />
@@ -6309,6 +6411,14 @@ export function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.El
 
   if (view.kind === "provider" && selectedProvider) {
     const providerModels = summary?.models.filter((model) => model.providerProfileId === selectedProvider.id) ?? [];
+    const revisionUnavailable = !summary?.revision;
+    const credentialStatus = providerMutationStatus?.kind === "credential_updated"
+      && providerMutationStatus.providerId === selectedProvider.id;
+    const credentialFailure = providerMutationStatus?.kind === "credential_update_failed"
+      && providerMutationStatus.providerId === selectedProvider.id;
+    const deleteFailure = providerMutationStatus?.kind === "provider_delete_failed"
+      && providerMutationStatus.providerId === selectedProvider.id;
+    const confirmingDelete = deleteConfirmationProviderId === selectedProvider.id;
     return (
       <section className="settings-page model-settings-page" aria-label={props.t("nav.models")}>
         {heading(selectedProvider.displayName, props.t("models.providerDetailsDescription"), {
@@ -6334,6 +6444,115 @@ export function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.El
             />
           </div>
         </section>
+        <section className="settings-section">
+          <h2 className="settings-section-title">{props.t("models.credentials")}</h2>
+          <div className="settings-card">
+            {selectedProvider.authRequirement === "none" ? (
+              <div className="settings-row">
+                <span className="settings-row-copy">
+                  <strong>{props.t("models.noCredentialRequired")}</strong>
+                  <span>{props.t("models.noCredentialDescription")}</span>
+                </span>
+              </div>
+            ) : (
+              <label className="settings-row" htmlFor={`provider-credential-${selectedProvider.id}`}>
+                <span className="settings-row-copy">
+                  <strong>{props.t("models.replaceCredential")}</strong>
+                  <span>{props.t("models.replaceCredentialDescription")}</span>
+                </span>
+                <span className="settings-row-control">
+                  <input
+                    className="settings-input"
+                    id={`provider-credential-${selectedProvider.id}`}
+                    type="password"
+                    autoComplete="new-password"
+                    value={providerCredentialDraft}
+                    placeholder={props.t("models.newApiKey")}
+                    disabled={props.busy || providerMutationInFlight}
+                    onChange={(event) => {
+                      setProviderCredentialDraft(event.target.value);
+                      setProviderMutationStatus(null);
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="settings-button"
+                    disabled={props.busy || providerMutationInFlight || revisionUnavailable || !providerCredentialDraft.trim()}
+                    onClick={() => void updateProviderCredential(selectedProvider.id)}
+                  >
+                    {props.t("models.updateCredential")}
+                  </button>
+                </span>
+              </label>
+            )}
+          </div>
+          {revisionUnavailable ? (
+            <div className="settings-warning model-settings-error" role="status">{props.t("models.revisionUnavailable")}</div>
+          ) : credentialStatus ? (
+            <div className="settings-warning" role="status">{props.t("models.credentialUpdated")}</div>
+          ) : credentialFailure ? (
+            <div className="settings-warning model-settings-error" role="alert">{props.t("models.credentialUpdateFailed")}</div>
+          ) : null}
+        </section>
+        <section className="settings-section">
+          <h2 className="settings-section-title">{props.t("models.removeProvider")}</h2>
+          <div className="settings-card">
+            <div className="settings-row">
+              <span className="settings-row-copy">
+                <strong>{props.t("models.removeProvider")}</strong>
+                <span>{props.t("models.removeProviderDescription")}</span>
+              </span>
+              {!confirmingDelete ? (
+                <button
+                  ref={deleteProviderButtonRef}
+                  type="button"
+                  className="settings-button"
+                  disabled={props.busy || providerMutationInFlight || revisionUnavailable}
+                  onClick={() => {
+                    setProviderMutationStatus(null);
+                    pendingDeleteFocusRef.current = "keep";
+                    setDeleteConfirmationProviderId(selectedProvider.id);
+                  }}
+                >
+                  {props.t("models.deleteProvider")}
+                </button>
+              ) : null}
+            </div>
+            {confirmingDelete ? (
+              <div className="settings-row" role="group" aria-label={props.t("models.confirmDeleteProvider")}>
+                <span className="settings-row-copy">
+                  <strong>{props.t("models.confirmDeleteProvider")}</strong>
+                  <span>{props.t("models.confirmDeleteProviderDescription")}</span>
+                </span>
+                <span className="settings-row-control">
+                  <button
+                    ref={keepProviderButtonRef}
+                    type="button"
+                    className="settings-button"
+                    disabled={props.busy || providerMutationInFlight}
+                    onClick={() => {
+                      pendingDeleteFocusRef.current = "delete";
+                      setDeleteConfirmationProviderId(null);
+                    }}
+                  >
+                    {props.t("models.keepProvider")}
+                  </button>
+                  <button
+                    type="button"
+                    className="settings-button"
+                    disabled={props.busy || providerMutationInFlight || revisionUnavailable}
+                    onClick={() => void deleteProvider(selectedProvider.id)}
+                  >
+                    {props.t("models.confirmDelete")}
+                  </button>
+                </span>
+              </div>
+            ) : null}
+          </div>
+          {deleteFailure ? (
+            <div className="settings-warning model-settings-error" role="alert">{props.t("models.providerDeleteFailed")}</div>
+          ) : null}
+        </section>
       </section>
     );
   }
@@ -6342,6 +6561,16 @@ export function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.El
     <section className="settings-page model-settings-page" aria-label={props.t("nav.models")}>
       {heading(props.t("models.title"), props.t("models.subtitle"))}
       {summaryFailure}
+      {providerMutationStatus?.kind === "provider_deleted" ? (
+        <div
+          ref={providerDeletedStatusRef}
+          className="settings-warning"
+          role="status"
+          tabIndex={-1}
+        >
+          {props.t("models.providerDeleted")}
+        </div>
+      ) : null}
       <section className="settings-section">
         <h2 className="settings-section-title">{props.t("models.globalDefault")}</h2>
         <div className="settings-card">
@@ -6379,7 +6608,6 @@ export function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.El
         {summary && summary.providers.length > 0 ? summary.providers.map((provider) => {
           const providerModels = summary.models.filter((model) => model.providerProfileId === provider.id);
           const enabledModels = providerModels.filter((model) => model.enabled);
-          const syncFailed = providerSyncFailures.has(provider.id);
           return (
             <div className="settings-card model-provider-card" key={provider.id}>
               <div className="settings-row tall">
@@ -6390,26 +6618,7 @@ export function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.El
                     {providerModels.length} {props.t("models.modelsCountLabel")} · {enabledModels.length} {props.t("models.enabledCountLabel")}
                   </span>
                 </span>
-                <span className="settings-status">{props.t("models.connected")}</span>
-              </div>
-              <div className="settings-row">
-                <span className="settings-row-copy">
-                  <strong>{props.t("models.modelList")}</strong>
-                  <span>{props.t("models.modelListDescription")}</span>
-                </span>
-                <span className="settings-row-control">
-                  <button
-                    type="button"
-                    className="settings-button"
-                    disabled={props.busy}
-                    onClick={() => void refreshProviderModels(provider.id)}
-                  >
-                    {props.t(syncFailed ? "models.retry" : "library.refresh")}
-                  </button>
-                  <button type="button" className="settings-button" onClick={() => navigate({ kind: "provider", providerId: provider.id })}>
-                    {props.t("models.addCustomModel")}
-                  </button>
-                </span>
+                <span className="settings-status">{props.t(providerRuntimeStatusKey(provider))}</span>
               </div>
               <div className="settings-row">
                 <span className="settings-row-copy">
@@ -6420,9 +6629,6 @@ export function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.El
                   {props.t("models.manage")}
                 </button>
               </div>
-              {syncFailed ? (
-                <div className="settings-warning model-settings-error" role="alert">{props.t("models.discoveryFailed")}</div>
-              ) : null}
             </div>
           );
         }) : (

@@ -134,20 +134,17 @@ type ProviderProfile = {
 
 Rules:
 
-- Presets are reviewed Pige metadata over Pi AI: stable ID, kind, protocol, Endpoint,
-  auth, discovery, help URL, and bootstrap model. UI asks service plus credentials only;
-  Custom alone asks one of the three protocols, Base URL, and credentials.
-- `endpointProtocol`, never URL/kind, dispatches calls. Migration maps `openai` to
-  Responses, `anthropic` kinds to Messages, and compatible/legacy `custom` to Chat
-  Completions without reinterpretation.
-- Keys live only in the secret store. Required auth needs a reference, optional auth
-  stores one only when supplied, and `none` forbids one. Pi AI 0.80.7 gets an in-memory
-  non-secret token sentinel for `none`; adapters strip auth headers.
-- `ProviderProfileSchema` rejects missing or non-`builtin_verified` boundary metadata;
-  custom URLs are canonical HTTPS or loopback HTTP without userinfo/query/fragment. Profiles stay out of backup;
-  cloud/self-hosted/local is internal egress metadata, not setup taxonomy.
-- `Connect` authorizes only the disclosed Profile/Endpoint. Changed/unknown boundaries
-  reconfirm; auth/network/timeout/payload/list failures return typed repair, never empty success.
+- Presets own reviewed kind/protocol/Endpoint/auth/discovery/bootstrap metadata; only
+  Custom asks protocol, Base URL, and credentials. `endpointProtocol` dispatches calls.
+- Keys are secret-store-only; required/optional/none auth controls references. `none` uses
+  an in-memory sentinel stripped before headers. Profiles stay out of backup.
+- Schema rejects missing or non-`builtin_verified` boundary metadata and requires canonical
+  HTTPS or loopback HTTP without userinfo/query/fragment. Taxonomy stays internal.
+- Connect authorizes one Profile/Endpoint; every failure returns typed repair, not success.
+- Credential replacement and Provider deletion are revision-fenced, confirmed, and block
+  active Agent/egress references. Replacement probes before atomic same-ref commit and
+  preserves the old key on failure; deletion removes owned models/secret, rebinds or
+  clears default, and journal-recovers without orphan state. Secrets never return.
 
 `ProviderProfileSchema` in `packages/schemas/src/index.ts` is the executable profile contract. Built-ins use their fixed built-in endpoints, do not persist `baseUrl`; `ProviderBaseUrlSchema` is the single persisted and runtime-call URL contract and rejects both directions of a mismatch. Profiles cannot persist arbitrary `defaultHeaders`. Authentication, network, timeout, invalid payload, and official-provider list failures remain failures and return typed repair.
 
@@ -166,24 +163,20 @@ type ModelProfile = {
 
 Rules:
 
-- One inventory keys `(providerProfileId, modelId)`; discovery/manual records merge while
-  preserving alias, enabled state, and Global Default. Missing/new refresh IDs are retained/
-  disabled; failed discovery preserves inventory with typed Retry/manual fallback.
+- One `(providerProfileId, modelId)` inventory merges discovery/manual records and preserves
+  alias/enabled/default. Refresh retains missing IDs disabled; failure preserves inventory.
 - First Connect enables its validated bootstrap model and sets it as Global Default only
   when none exists. Default selects an enabled model across Providers; disabling it needs
   an atomic replacement, and unusable bindings stay visible without auto-switch/free text.
-- Connect discovers non-durably, selects/requests a bootstrap ID, probes with Pi, then
-  readback-commits all or restores all. Sequencing ignores stale outcomes. Post-commit
-  refresh retries only Models truth; runtime readiness is best-effort and cannot repeat
-  provider effects. UI receives typed safe repair, never raw provider data.
+- Connect discovers non-durably, probes a bootstrap ID, then readback-commits or restores.
+  Sequencing drops stale outcomes; post-commit refresh cannot repeat provider effects.
 - Pi AI remains the provider runtime; Pige neither copies its catalog nor adds a parallel SDK.
 - An exact reviewed preset/model may overlay Pi's matching public model metadata when
   protocol mechanics require it, while retaining the Pige Profile ID, endpoint, model ID,
   and scoped credential adapter. Unknown and Custom models keep the conservative explicit
   protocol fallback; an upstream catalog match never changes Pige-owned authority.
-- Redacted summaries distinguish `not_configured`, `ready`, and
-  `configured_unusable`; the last carries a typed repair action rather than looking
-  unconfigured or exposing endpoint, secret ref, or raw failure.
+- Redacted summaries distinguish `not_configured`, `ready`, `configured_unusable` with
+  repair. Session status separates discovery/generation; only exact call failure marks failed.
 - Ignore upstream-only thinking levels until schema, migration, and compatibility tests
   change together; `max` adds no visible setting.
 - Embedding and reranking models are not user BYOK provider roles in v0.1; they belong to Local Capabilities and local RAG.
@@ -343,28 +336,27 @@ One user submission owns one durable Pige Agent Job and may contain multiple ups
 model turns and tool calls. The completion target is one accepted result, not one attempt
 at a terminal tool.
 
-- A terminal action such as `pige_finish_home_turn` or a knowledge-publication tool is a
-  repeatable validation boundary. Only an accepted call terminates the semantic loop or
-  publishes an effect. Rejected arguments, grounding, citations, evidence refs, stale
-  bindings, or recoverable tool results return bounded typed repair feedback to Pi.
-- Repair feedback contains stable categories, safe field pointers/counts, opaque allowed
-  refs, and fixed Host-authored hints only. It contains no source body, prompt, raw model
-  output, path, credential, endpoint, policy secret, or private diagnostic detail.
-- Pi may correct the call, retrieve or inspect more evidence, choose another registered
-  tool, narrow the claim, or return a grounded abstention. Pige does not replace that
-  decision with a fixed prompt loop, a Host-selected fallback, or an arbitrary one-repair
-  limit.
+- Terminal tools are repeatable validation boundaries; only accepted calls publish.
+  Rejected arguments/evidence/bindings return bounded typed repair to Pi.
+- A no-current-note Home `auto` turn may accept one validated native assistant final only
+  when Pi invoked zero tools. After any tool, `pige_finish_home_turn` remains mandatory
+  for grounding, citation, evidence, egress, and publication validation.
+- Repair carries stable categories, safe pointers/counts/opaque refs, and fixed hints; no
+  body, prompt, output, path, credential, endpoint, policy secret, or private diagnostic.
+- Pi may repair, gather evidence, choose another tool, narrow, or abstain; Pige imposes no
+  fixed prompt loop, Host fallback, or one-repair limit.
 - Denied authority, restricted egress, cancellation, unavailable required runtime, and
   irreconcilable conflict or evidence drift remain hard Host boundaries. Pi may choose a
   different already-authorized route, but it cannot reinterpret or override the denial.
-- Progress-aware resource controls cap wall time, model/tool work, bytes, and repeated
-  identical failure fingerprints. Reaching an internal slice limit checkpoints and
-  autonomously resumes/replans the same Job when safe; persistent non-progress must become
-  a truthful abstention or typed provider/capability incompatibility, not the generic
-  first-attempt `model_provider.output_invalid` retry surface.
+- Resource controls cap time/work/bytes/repeated failure; safe limits checkpoint/resume.
+  Persistent non-progress becomes abstention or typed incompatibility, not output-invalid.
 - No intermediate repair attempt creates a durable assistant event, Job result, proposal,
   or Operation. Accepted effects keep their deterministic identity, so repair/restart
   cannot duplicate a write.
+- Only exact `model_provider.call_failed` projects as provider-call failure.
+  `model_provider.binding_changed` requests binding repair; other typed Host errors keep
+  their safe code with body-free Agent repair. Unknown non-domain exceptions alone use
+  the provider fallback. `knowledge_action_missing` uses `completion_invalid`.
 
 This is upstream Pi continuation, not a Pige-authored parallel Agent loop. Pige supplies
 typed feedback and durable Job/checkpoint ownership through the sole adapter; Pi retains

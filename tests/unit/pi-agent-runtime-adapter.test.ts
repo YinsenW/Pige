@@ -458,28 +458,51 @@ describe("Pi Agent runtime adapter", () => {
     expect(drafts.join(" ")).not.toContain("citationRefs");
   });
 
-  it("does not inject a Host follow-up after a prose-only stop", async () => {
+  it("accepts one native assistant completion without injecting a Host follow-up", async () => {
     let modelTurnChecks = 0;
     const adapter = new PiAgentRuntimeAdapter({
-      fauxResponses: [
-        { kind: "text", text: "First incomplete prose response." },
-        {
-          kind: "tool_call",
-          toolName: "pige_finish_home_turn",
-          args: { answer: "Terminal completion", citationRefs: [], grounding: "general" }
-        }
-      ]
+      fauxResponses: [{ kind: "text", text: "Native assistant completion." }]
     });
 
-    await expect(adapter.run({
+    const result = await adapter.run({
       ...makeRequest([makeFinishHomeTool()]),
       beforeModelTurn: () => {
         modelTurnChecks += 1;
       },
-      completionPolicy: makeCompletionBoundary()
-    })).rejects.toMatchObject({ code: "agent_runtime.knowledge_action_missing" });
+      completionPolicy: {
+        ...makeCompletionBoundary(),
+        nativeAssistantCompletion: "allow_without_tool_calls"
+      }
+    });
 
     expect(modelTurnChecks).toBe(1);
+    expect(result.assistantText).toBe("Native assistant completion.");
+    expect(result.invokedTools).toEqual([]);
+  });
+
+  it("requires a validated terminal boundary after any tool call", async () => {
+    const readTool: PigeAgentToolDefinition = {
+      ...BASE_TOOL_DESCRIPTOR,
+      name: "pige_search_knowledge",
+      label: "Search",
+      description: "Read current bounded evidence.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+      execute: async () => createPigeTextToolResult("citation_1")
+    };
+    const adapter = new PiAgentRuntimeAdapter({
+      fauxResponses: [
+        { kind: "tool_call", toolName: readTool.name, args: {} },
+        { kind: "text", text: "Unvalidated grounded prose." }
+      ]
+    });
+
+    await expect(adapter.run({
+      ...makeRequest([readTool, makeFinishHomeTool()]),
+      completionPolicy: {
+        ...makeCompletionBoundary(),
+        nativeAssistantCompletion: "allow_without_tool_calls"
+      }
+    })).rejects.toMatchObject({ code: "agent_runtime.knowledge_action_missing" });
   });
 
   it("allows a safe read revisit after rejected terminal evidence and then completes", async () => {

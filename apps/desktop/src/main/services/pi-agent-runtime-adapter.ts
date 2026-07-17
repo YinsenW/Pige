@@ -225,14 +225,15 @@ export class PiAgentRuntimeAdapter {
       if (agent.state.errorMessage) {
         throw new PigeDomainError("model_provider.call_failed", "The embedded Pi Agent turn failed.");
       }
-      completionPolicy.assertCompleted();
+      const assistantText = collectAssistantText(agent.state.messages.slice(history.length));
+      completionPolicy.assertCompleted(assistantText);
       return {
         adapterMode: "embedded_pi_sdk",
         providerProfileId: request.runtimeConfig.provider.id,
         modelProfileId: request.runtimeConfig.model.id,
         modelId: binding.model.id,
         events,
-        assistantText: collectAssistantText(agent.state.messages.slice(history.length)),
+        assistantText,
         invokedTools
       };
     } finally {

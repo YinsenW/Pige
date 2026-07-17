@@ -171,6 +171,20 @@ export class ModelEgressApprovalService {
     );
   }
 
+  assertProviderInactive(vaultPath: string, providerProfileId: string): void {
+    const { root, vaultId } = this.#rootForVault(vaultPath);
+    const active = readApprovalRecords(root, vaultId).some((record) =>
+      record.providerProfileId === providerProfileId &&
+      (record.state === "pending" || record.state === "approved" || this.#waiters.has(record.id))
+    );
+    if (active) {
+      throw new PigeDomainError(
+        "model_provider.active_reference",
+        "This Provider Profile still owns an active model egress request."
+      );
+    }
+  }
+
   resolve(
     vaultPath: string,
     requestId: string,

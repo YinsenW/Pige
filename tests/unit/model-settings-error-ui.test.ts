@@ -3,7 +3,11 @@ import { act } from "react";
 import type { Root } from "react-dom/client";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it } from "vitest";
-import type { ModelProviderSettingsSummary, ProviderConnectResult } from "@pige/contracts";
+import type {
+  ModelProviderSettingsSummary,
+  ProviderConnectResult,
+  ProviderProfileSummary
+} from "@pige/contracts";
 import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.json";
 
 const globalKeys = [
@@ -67,6 +71,7 @@ describe("Models error ownership", () => {
       }
     });
 
+    await openProviderDetails(dom, mount.container);
     await click(dom, buttonNamed(mount.container, "Refresh"));
     await waitFor(dom, () => summaryReads === 2);
     await act(async () => {
@@ -181,6 +186,7 @@ describe("Models error ownership", () => {
     });
     const mount = await mountPanel(dom, summary, api);
 
+    await openProviderDetails(dom, mount.container);
     await click(dom, buttonNamed(mount.container, "Refresh"));
     await waitFor(dom, () => buttonsNamed(mount.container, "Retry").length === 1);
     expect(mount.container.textContent).toContain("Model refresh failed. Retry or add a custom model.");
@@ -213,6 +219,7 @@ describe("Models error ownership", () => {
       }
     });
 
+    await openProviderDetails(dom, mount.container);
     await click(dom, buttonNamed(mount.container, "Refresh"));
     await waitFor(dom, () => mount.container.textContent?.includes(enMessages["models.refreshAfterSaveFailed"]) === true);
     expect(discoveryWrites).toBe(1);
@@ -284,7 +291,7 @@ describe("Models error ownership", () => {
     });
     const mount = await mountPanel(dom, summary, api);
 
-    await click(dom, buttonNamed(mount.container, enMessages["models.addCustomModel"]));
+    await openProviderDetails(dom, mount.container);
     await click(dom, summaryNamed(mount.container, enMessages["models.addCustomModel"]));
     await setInput(dom, mount.container, "custom-model-id-provider_fixture", "synthetic-model");
     await setInput(dom, mount.container, "custom-model-name-provider_fixture", "Synthetic model");
@@ -334,6 +341,167 @@ describe("Models error ownership", () => {
 
     await unmount(dom, mount.root);
   });
+
+  it("shows configured, discovery, generation, and failed generation as distinct provider truth", async () => {
+    const cases = [
+      [undefined, enMessages["models.statusConfigured"]],
+      [{ discovery: "verified", generation: "not_checked" } as const, enMessages["models.statusDiscoveryVerified"]],
+      [{ discovery: "verified", generation: "verified" } as const, enMessages["models.statusGenerationVerified"]],
+      [{ discovery: "verified", generation: "failed" } as const, enMessages["models.statusGenerationFailed"]]
+    ] as const;
+
+    for (const [runtimeStatus, expectedStatus] of cases) {
+      const dom = createDom();
+      const mount = await mountPanel(dom, connectedSummary(runtimeStatus), modelApi({}));
+      const status = mount.container.querySelector<HTMLElement>(".model-provider-card .settings-status");
+      expect(status?.textContent).toBe(expectedStatus);
+      expect(status?.textContent).not.toBe(enMessages["models.connected"]);
+      if (runtimeStatus?.generation === "not_checked") {
+        expect(mount.container.textContent).not.toContain(enMessages["models.statusGenerationVerified"]);
+      }
+      await unmount(dom, mount.root);
+    }
+  });
+
+  it("removes the redundant overview model-list controls and keeps management progressive", async () => {
+    const dom = createDom();
+    const mount = await mountPanel(dom, connectedSummary(), modelApi({}));
+
+    expect(buttonsNamed(mount.container, enMessages["library.refresh"])).toHaveLength(0);
+    expect(buttonsNamed(mount.container, enMessages["models.addCustomModel"])).toHaveLength(0);
+    expect(buttonsNamed(mount.container, enMessages["models.manage"])).toHaveLength(1);
+
+    await openProviderDetails(dom, mount.container);
+    expect(buttonsNamed(mount.container, enMessages["library.refresh"])).toHaveLength(1);
+    expect(mount.container.textContent).toContain(enMessages["models.replaceCredential"]);
+
+    await unmount(dom, mount.root);
+  });
+
+  it("replaces a provider credential using the latest revision without displaying a saved key", async () => {
+    const dom = createDom();
+    const summary = connectedSummary();
+    let request: { providerProfileId: string; expectedRevision: string; apiKey: string } | undefined;
+    const api = modelApi({
+      updateProviderCredential: async (nextRequest) => {
+        request = nextRequest;
+        return summary;
+      }
+    });
+    const mount = await mountPanel(dom, summary, api);
+
+    await openProviderDetails(dom, mount.container);
+    const input = inputNamed(mount.container, "provider-credential-provider_fixture");
+    expect(input.type).toBe("password");
+    expect(input.value).toBe("");
+    await setInput(dom, mount.container, input.id, "synthetic-replacement-key");
+    await click(dom, buttonNamed(mount.container, enMessages["models.updateCredential"]));
+    await waitFor(dom, () => mount.container.textContent?.includes(enMessages["models.credentialUpdated"]) === true);
+
+    expect(request).toEqual({
+      providerProfileId: "provider_fixture",
+      expectedRevision: summary.revision,
+      apiKey: "synthetic-replacement-key"
+    });
+    expect(inputNamed(mount.container, input.id).value).toBe("");
+    expect(mount.container.textContent).not.toContain("synthetic-replacement-key");
+
+    await unmount(dom, mount.root);
+  });
+
+  it("keeps the replacement draft and body-free failure when credential validation fails", async () => {
+    const dom = createDom();
+    const summary = connectedSummary();
+    const api = modelApi({
+      updateProviderCredential: async () => {
+        throw new Error("raw provider credential response");
+      }
+    });
+    const mount = await mountPanel(dom, summary, api);
+
+    await openProviderDetails(dom, mount.container);
+    await setInput(dom, mount.container, "provider-credential-provider_fixture", "synthetic-replacement-key");
+    await click(dom, buttonNamed(mount.container, enMessages["models.updateCredential"]));
+    await waitFor(dom, () => mount.container.querySelector('[role="alert"]') !== null);
+
+    expect(inputNamed(mount.container, "provider-credential-provider_fixture").value).toBe("synthetic-replacement-key");
+    expect(mount.container.textContent).toContain(enMessages["models.credentialUpdateFailed"]);
+    expect(mount.container.textContent).not.toContain("raw provider credential response");
+
+    await unmount(dom, mount.root);
+  });
+
+  it("requires inline confirmation and the latest revision before deleting a provider", async () => {
+    const dom = createDom();
+    const summary = connectedSummary();
+    let request: { providerProfileId: string; expectedRevision: string } | undefined;
+    const api = modelApi({
+      deleteProvider: async (nextRequest) => {
+        request = nextRequest;
+        return presetSummary();
+      }
+    });
+    const mount = await mountPanel(dom, summary, api);
+
+    await openProviderDetails(dom, mount.container);
+    const deleteButton = buttonNamed(mount.container, enMessages["models.deleteProvider"]);
+    deleteButton.focus();
+    await click(dom, deleteButton);
+    expect(request).toBeUndefined();
+    expect(mount.container.textContent).toContain(enMessages["models.confirmDeleteProviderDescription"]);
+    const keepButton = buttonNamed(mount.container, enMessages["models.keepProvider"]);
+    await waitFor(dom, () => dom.window.document.activeElement === keepButton);
+
+    await click(dom, keepButton);
+    const restoredDeleteButton = buttonNamed(mount.container, enMessages["models.deleteProvider"]);
+    await waitFor(dom, () => dom.window.document.activeElement === restoredDeleteButton);
+
+    await click(dom, restoredDeleteButton);
+    await waitFor(dom, () => dom.window.document.activeElement === buttonNamed(
+      mount.container,
+      enMessages["models.keepProvider"]
+    ));
+
+    await click(dom, buttonNamed(mount.container, enMessages["models.confirmDelete"]));
+    await waitFor(dom, () => mount.container.textContent?.includes(enMessages["models.providerDeleted"]) === true);
+    expect(request).toEqual({
+      providerProfileId: "provider_fixture",
+      expectedRevision: summary.revision
+    });
+    expect(mount.container.textContent).toContain(enMessages["models.globalDefault"]);
+    const deletedStatus = [...mount.container.querySelectorAll<HTMLElement>('[role="status"]')]
+      .find((element) => element.textContent === enMessages["models.providerDeleted"]);
+    expect(deletedStatus).toBeDefined();
+    expect(dom.window.document.activeElement).toBe(deletedStatus);
+
+    await unmount(dom, mount.root);
+  });
+
+  it("fails closed for credential and delete mutations when the settings revision is absent", async () => {
+    const dom = createDom();
+    const summary = { ...connectedSummary(), revision: undefined };
+    let mutations = 0;
+    const api = modelApi({
+      updateProviderCredential: async () => {
+        mutations += 1;
+        return summary;
+      },
+      deleteProvider: async () => {
+        mutations += 1;
+        return summary;
+      }
+    });
+    const mount = await mountPanel(dom, summary, api);
+
+    await openProviderDetails(dom, mount.container);
+    await setInput(dom, mount.container, "provider-credential-provider_fixture", "synthetic-replacement-key");
+    expect(buttonNamed(mount.container, enMessages["models.updateCredential"]).disabled).toBe(true);
+    expect(buttonNamed(mount.container, enMessages["models.deleteProvider"]).disabled).toBe(true);
+    expect(mount.container.textContent).toContain(enMessages["models.revisionUnavailable"]);
+    expect(mutations).toBe(0);
+
+    await unmount(dom, mount.root);
+  });
 });
 
 function presetSummary(
@@ -357,9 +525,10 @@ function presetSummary(
   };
 }
 
-function connectedSummary(): ModelProviderSettingsSummary {
+function connectedSummary(runtimeStatus?: ProviderProfileSummary["runtimeStatus"]): ModelProviderSettingsSummary {
   return {
     ...presetSummary(),
+    revision: `sha256:${"a".repeat(64)}`,
     providers: [{
       id: "provider_fixture",
       displayName: "Connected provider",
@@ -368,6 +537,7 @@ function connectedSummary(): ModelProviderSettingsSummary {
       authRequirement: "api_key",
       modelListStrategy: "provider_api",
       cloudBoundary: "cloud",
+      ...(runtimeStatus ? { runtimeStatus } : {}),
       createdAt: "2026-07-14T08:00:00.000Z",
       updatedAt: "2026-07-14T08:00:00.000Z"
     }]
@@ -379,6 +549,15 @@ function modelApi(overrides: {
   readonly addManualProvider?: () => Promise<ProviderConnectResult>;
   readonly refreshProviderModels?: () => Promise<ModelProviderSettingsSummary>;
   readonly addManualModel?: () => Promise<ModelProviderSettingsSummary>;
+  readonly updateProviderCredential?: (request: {
+    readonly providerProfileId: string;
+    readonly expectedRevision: string;
+    readonly apiKey: string;
+  }) => Promise<ModelProviderSettingsSummary>;
+  readonly deleteProvider?: (request: {
+    readonly providerProfileId: string;
+    readonly expectedRevision: string;
+  }) => Promise<ModelProviderSettingsSummary>;
 }): object {
   const summary = presetSummary();
   return {
@@ -388,6 +567,8 @@ function modelApi(overrides: {
       addManualProvider: overrides.addManualProvider ?? (async () => summary),
       setDefaultModel: async () => summary,
       refreshProviderModels: overrides.refreshProviderModels ?? (async () => summary),
+      updateProviderCredential: overrides.updateProviderCredential ?? (async () => summary),
+      deleteProvider: overrides.deleteProvider ?? (async () => summary),
       addManualModel: overrides.addManualModel ?? (async () => summary),
       updateModel: async () => summary
     }
@@ -482,6 +663,10 @@ async function openPreset(dom: JSDOM, container: HTMLElement, name: string): Pro
 async function openCustomProvider(dom: JSDOM, container: HTMLElement): Promise<void> {
   await click(dom, buttonNamed(container, enMessages["models.addProvider"]));
   await click(dom, buttonContaining(container, enMessages["models.customProvider"]));
+}
+
+async function openProviderDetails(dom: JSDOM, container: HTMLElement): Promise<void> {
+  await click(dom, buttonNamed(container, enMessages["models.manage"]));
 }
 
 function buttonNamed(container: HTMLElement, name: string): HTMLButtonElement {

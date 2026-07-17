@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   AddManualProviderRequestSchema,
   AddPresetProviderRequestSchema,
+  DeleteProviderRequestSchema,
   ModelEgressApprovalRequestRecordSchema,
   ModelEgressDecisionSchema,
   ModelEgressPendingRequestQuerySchema,
@@ -17,7 +18,8 @@ import {
   PermissionResolveRequestSchema,
   PermissionResolveResultSchema,
   PigeErrorSummarySchema,
-  ProviderProfileSchema
+  ProviderProfileSchema,
+  UpdateProviderCredentialRequestSchema
 } from "@pige/schemas";
 
 const timestamp = "2026-07-10T00:00:00.000Z";
@@ -517,6 +519,33 @@ describe("security-sensitive shared contracts", () => {
       apiKey: "x".repeat(16_385),
       manualModelId: "model",
       cloudBoundary: "unknown"
+    })).toThrow();
+    expect(UpdateProviderCredentialRequestSchema.parse({
+      providerProfileId: "provider_existing",
+      expectedRevision: `sha256:${"a".repeat(64)}`,
+      apiKey: "replacement-key"
+    })).toEqual({
+      providerProfileId: "provider_existing",
+      expectedRevision: `sha256:${"a".repeat(64)}`,
+      apiKey: "replacement-key"
+    });
+    expect(() => UpdateProviderCredentialRequestSchema.parse({
+      providerProfileId: "provider_existing",
+      expectedRevision: `sha256:${"a".repeat(64)}`,
+      apiKey: "replacement-key",
+      oldApiKey: "must-never-cross-preload"
+    })).toThrow();
+    expect(DeleteProviderRequestSchema.parse({
+      providerProfileId: "provider_existing",
+      expectedRevision: `sha256:${"b".repeat(64)}`
+    })).toEqual({
+      providerProfileId: "provider_existing",
+      expectedRevision: `sha256:${"b".repeat(64)}`
+    });
+    expect(() => DeleteProviderRequestSchema.parse({
+      providerProfileId: "provider_existing",
+      expectedRevision: `sha256:${"b".repeat(64)}`,
+      credential: "must-never-cross-preload"
     })).toThrow();
   });
 

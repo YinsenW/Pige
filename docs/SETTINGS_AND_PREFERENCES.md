@@ -163,9 +163,9 @@ This table is the v0.1 baseline. Implementation can split storage files differen
 | Index rebuild requested | Index & Maintenance | `runtime_transient` job | Local Database Service | job record | Job backup policy | `none` | Starts a rebuildable `index_rebuild` job; unlike Reset Local Database, this does not delete derived state first |
 | Index/chunk health status | Index & Maintenance | `derived_status` | Local Database Service | SQLite/app data | No | `none` | Recomputed |
 | Provider template/profile metadata, preset identity, protocol, and Endpoint binding | Models | `machine_local` | Model Provider Registry | OS app data | No by default | `explicit_confirmation` | Journaled Connect/reconnect; startup rollback |
-| Provider credential when required | Models | `secret` | Settings and Secrets Service | OS keychain/encrypted store | No | `explicit_warning` | After validated Connect |
+| Provider credential when required | Models | `secret` | Settings and Secrets Service | OS keychain/encrypted store | No | `explicit_warning` | After validated Connect or confirmed, revision-fenced replacement |
 | Provider model inventory: exact ID, source, enabled state, optional alias/capabilities | Models | `machine_local` | Model Provider Registry | OS app data | No by default | `none` | Journaled Refresh; atomic manual/alias/enabled updates |
-| Provider model-sync health | Models | `runtime_transient` | Model Provider Registry, Renderer | None | No | `none` | Session-local; failure preserves last inventory |
+| Provider discovery/generation health | Models | `runtime_transient` | Model Provider Registry, Renderer | None | No | `none` | Session-local; discovery and generation truth remain separate |
 | Global Default Pi Agent model | Models | `machine_local` | Model Provider Registry, Agent Orchestrator | OS app data | No by default | `none` | New calls; must reference an enabled model |
 | Cloud-send policy (`ordinary_allowed` default) | Permissions & Privacy | `machine_local` | Settings Service, Model Egress Policy | OS app data | No | `explicit_confirmation` | New model calls |
 | Local embedding model status | Local Capabilities | `derived_status` plus machine asset | Local RAG Engine, Local Tool Service | OS app data | No | `permission_and_confirmation` | After download/remove job |
@@ -207,8 +207,8 @@ This compact index mirrors every entry currently returned by `settings.registry`
 | `vault.id` | `explicit_confirmation` | Main-process create/open vault workflow; immutable after creation |
 | `sourceStorage.defaultStrategy` | `none` | Capture Service reads the active vault value for every new file capture |
 | `backup.entryPoints` | `none` | Derived read-only status |
-| `models.providerProfiles` | `explicit_confirmation` | `guardSettingAction` before provider network validation |
-| `models.providerApiKeys` | `explicit_warning` | Same native guard before secret-store or network access |
+| `models.providerProfiles` | `explicit_confirmation` | `guardSettingAction` plus native confirmation before provider create/delete network or durable effects |
+| `models.providerApiKeys` | `explicit_warning` | Same native guard before connect or revision-fenced credential replacement |
 | `models.manualModelIds` | `none` | Validated as part of the confirmed provider workflow |
 | `models.defaultPiAgentModel` | `none` | Validated enabled-model selection |
 | `maintenance.localDatabaseReset` | `explicit_confirmation` | `guardSettingAction` before rebuildable-state deletion |
@@ -396,11 +396,13 @@ Required tests:
 - `.pige/config.json` contains only portable non-secret vault preferences.
 - External managed-copy root binding is machine-local, has a stable `root_` ID, appears as an external dependency in backup/restore preview, and never retargets existing sidecars when the default root changes.
 - Agent-affecting settings appear in the Agent Policy Effect Registry and compile into Agent Runtime Policy Context.
-- Provider refresh preserves list/alias/enabled/default on failure and never exposes keys
-  or duplicates manual/discovered IDs.
-- Provider Connect performs the exact-protocol Pi generation/tool probe before writes;
-  failure persists nothing, and staged rollback/readback cannot delete a still-referenced secret.
-- Provider setup uses one inventory; typed Retry/manual ID covers incomplete discovery.
+- Provider refresh preserves inventory/default on failure and never exposes keys or
+  duplicates IDs; Retry/manual ID covers incomplete discovery.
+- Connect probes before writes. Credential replacement is revision/reference-fenced,
+  confirmed, probed, and atomic; failure preserves the old key.
+- Deletion is renderer/native-confirmed and fenced; it removes owned models/credential,
+  rebinds or clears default, and restart-recovers orphan-free.
+- Session status separates configured/discovery/generation; Refresh is not chat proof.
 - The next profile revision stores an explicit Responses, Chat Completions, or Anthropic
   Messages protocol. New custom setup requires a choice; legacy compatible/custom
   records migrate by the Pi Owner mapping and are never inferred from URL.

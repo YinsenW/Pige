@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-17T03:14:05Z",
+  "reviewedAt": "2026-07-17T04:30:41Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -24,19 +24,42 @@
       "resources/ui-visual-contract.manifest.json",
       "scripts/verify",
       "packages/schemas/src/index.ts",
+      "packages/contracts/src/index.ts",
+      "apps/desktop/src/main/index.ts",
+      "apps/desktop/src/main/services/home-agent-service.ts",
+      "apps/desktop/src/main/services/model-egress-approval-service.ts",
+      "apps/desktop/src/main/services/model-provider-registry.ts",
+      "apps/desktop/src/main/services/pi-agent-completion-policy.ts",
+      "apps/desktop/src/main/services/pi-agent-runtime-adapter.ts",
+      "apps/desktop/src/main/services/secret-store.ts",
+      "apps/desktop/src/preload/index.ts",
+      "apps/desktop/src/renderer/src/App.tsx",
+      "apps/desktop/src/renderer/src/locales/de/messages.json",
+      "apps/desktop/src/renderer/src/locales/en/messages.json",
+      "apps/desktop/src/renderer/src/locales/fr/messages.json",
+      "apps/desktop/src/renderer/src/locales/ja/messages.json",
+      "apps/desktop/src/renderer/src/locales/ko/messages.json",
+      "apps/desktop/src/renderer/src/locales/zh-Hans/messages.json",
+      "tests/unit/desktop-shell-contract.test.ts",
+      "tests/unit/home-agent-service.test.ts",
+      "tests/unit/model-egress-approval-service.test.ts",
+      "tests/unit/model-provider-registry.test.ts",
+      "tests/unit/model-settings-error-ui.test.ts",
+      "tests/unit/pi-agent-runtime-adapter.test.ts",
+      "tests/unit/security-contract-schemas.test.ts",
       "package.json"
     ],
-    "scope": "Manual WindowLayout review binds the UI, API, architecture, decision and traceability owners to the exact 3ddc4d0 candidate, its current Planning synchronization and bounded verification-owner classification.",
+    "scope": "Independent DeepSeek/provider-management review binds the governed owner documents and exact current Home/Pi, Provider/Secret, IPC, renderer, contract and focused-test bytes on base 37b4cd1.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
-    "minimumFileCount": 100,
-    "reviewedSha256": "5c6d12e3bfb38c2c6f293e4a402922b52fe40771e1c9a47c81039d9e80ce1da5"
+    "minimumFileCount": 130,
+    "reviewedSha256": "74245b86dcd1adbeeebd7c8921d92091c91dc245d396f1f32d0c3b4012aa9bc3"
   },
   "reviewers": [
     {
-      "reviewerId": "window-layout-after-h3-independent-review",
-      "task": "WindowLayout Main ownership, resident policy, base-size preservation, constrained fallback and H3 safety review",
+      "reviewerId": "deepseek-provider-management-independent-review",
+      "task": "DeepSeek native completion, Provider credential lifecycle and truthful runtime-status review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -44,82 +67,78 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "The reviewer did not author the WindowLayout code or Planning bind and compared the exact current documentation bytes, contracts, implementation, tests and trace projections before issuing CLEAR."
+      "independence": "The reviewer did not author the candidate and independently compared its exact implementation, contracts, tests and four owner-document edits before binding this snapshot."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "window-layout-after-h3-independent-review",
+      "reviewerId": "deepseek-provider-management-independent-review",
       "blockerCount": 0,
-      "summary": "Existing UI, API, architecture and decision owners carry one WindowLayout contract without adding a competing owner or changing public release scope."
+      "summary": "Existing Models and Home owners carry credential replacement, Provider deletion, secret cleanup, default rebinding and native completion without adding a competing settings or Agent owner."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "window-layout-after-h3-independent-review",
+      "reviewerId": "deepseek-provider-management-independent-review",
       "blockerCount": 0,
-      "summary": "Owners and code agree on renderer intent only, Main-owned geometry and presentation, 720/840/960/1240 budgets, base restoration and Agent-first overlay fallback."
+      "summary": "Code and four owner documents agree that only zero-tool, no-current-note Home auto turns may finish natively; tool-backed turns retain Host finish validation and Host-policy errors remain distinct from Provider call failure."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "window-layout-after-h3-independent-review",
+      "reviewerId": "deepseek-provider-management-independent-review",
       "blockerCount": 0,
-      "summary": "One exact WindowLayout IPC selector augments existing API, UI and exit evidence while every Requirement, Exit and Phase status remains unchanged."
+      "summary": "The candidate revises existing accepted decisions and owner contracts without changing any Requirement, Exit, Phase, acceptance-manifest or semantic-claim status."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "window-layout-after-h3-independent-review",
+      "reviewerId": "deepseek-provider-management-independent-review",
       "blockerCount": 0,
-      "summary": "The typed boundary is executable and testable; Main owns native layout, its 118-line policy is classified outside Pi, and renderer preserves H3 safety."
+      "summary": "Revision and active-reference fences, real generation probes, rollback/restart tests, body-free errors, session-only discovery/generation truth and focused UI regressions provide executable maintenance boundaries."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "window-layout-after-h3-independent-review",
+      "reviewerId": "deepseek-provider-management-independent-review",
       "blockerCount": 0,
-      "summary": "No new owner document was added; concise edits synchronize existing owners, one decision and one trace evidence projection on the exact governed snapshot."
+      "summary": "No new owner document was introduced; four existing owners were consolidated while all five documentation-leanness checks remain green."
     }
   ],
   "verification": [
     {
-      "command": "npm run verify:docs && npm run verify:decisions && npm run verify:documentation-leanness",
+      "command": "npm test -- --run tests/unit/model-provider-registry.test.ts tests/unit/model-egress-approval-service.test.ts tests/unit/security-contract-schemas.test.ts tests/unit/desktop-shell-contract.test.ts tests/unit/pi-agent-runtime-adapter.test.ts tests/unit/home-agent-service.test.ts tests/unit/model-settings-error-ui.test.ts --maxWorkers=2",
       "status": "passed",
-      "evidence": "Links, whitespace, document map, parser manifests, PRD contract, 93 decision records and all five leanness checks pass on the current Planning bind."
+      "evidence": "Seven focused files and 209 tests pass, including zero-tool completion, tool-backed finish, Host-versus-Provider errors, credential replacement/deletion, restart recovery and Models status truth."
     },
     {
-      "command": "npm run verify:boundaries",
+      "command": "npm run verify:contracts && npm run verify:decisions && npm run verify:docs && npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "Boundary verification reports 112 current service files and classifies the 118-line Window layout policy as a non-Agent product boundary."
+      "evidence": "Contract checks CON-001 through CON-004, 93 decision records, all documentation checks and all five leanness dimensions pass on the current candidate."
     },
     {
-      "command": "npm run verify:traceability",
+      "command": "Independent exact-byte review of DeepSeek/provider-management candidate based on 37b4cd1",
       "status": "passed",
-      "evidence": "TRC-001 through TRC-004 pass before lock generation; the final run binds TRC-005 to this exact independent report and current evidence selector."
-    },
-    {
-      "command": "Independent code, contract and supplied functional-evidence review of WindowLayout candidate 3ddc4d08e6b872516e419cf068168435ac532c03 against origin/main 26e18e15a8d083aaab2caea71b29fcb4b70d1013",
-      "status": "passed",
-      "evidence": "Review confirms Main ownership, intent-only renderer requests, resident-first budgets, exact base restoration, constrained Agent overlay, H3 retry/proposal safety and no status promotion."
+      "evidence": "Review confirms explicit Provider-call failure, preserved typed Host errors, binding repair, secret-safe revision/reference fencing, discovery/generation separation and no status promotion."
     }
   ],
   "coordination": {
-    "taskId": "window-layout-after-h3-20260717",
-    "taskTitle": "Main-owned resident WindowLayout after H3",
+    "taskId": "deepseek-provider-management-20260717",
+    "taskTitle": "DeepSeek conversation and Provider management repair",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "WindowLayout adds a versioned Main-owned geometry contract without changing durable vault data, H3 Job semantics, renderer proposal authority or release status.",
-    "acknowledgement": "Product Planning synchronized the existing owners; verification now classifies native WindowLayout outside Pi, with all Requirement, Exit and Phase statuses unchanged."
+    "compatibility": "The candidate extends the existing Models IPC and Home completion boundary without changing vault schemas, release scope, Requirement status, Exit status or Phase status.",
+    "acknowledgement": "Product Planning synchronized four existing owners; this independent review binds their current bytes to the implementation and focused evidence without promoting delivery status."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Windows/Linux native-shell qualification remains deferred and unclaimed; the current real Electron geometry proof is macOS-only.",
-    "The legacy window.setSidebarOpen compatibility surface remains available, while the production renderer uses the versioned WindowLayout request/state/event path.",
-    "The candidate preserves H3 retry/proposal safety but does not close H3b/H3c, remaining Job-class recovery, atomicity, TOCTOU or signed-platform work.",
-    "Accessibility and final cross-platform visual equivalence remain governed open acceptance work; no Requirement, Exit or Phase status is promoted."
+    "Real saved-credential DeepSeek generation remains a separate macOS acceptance claim; this recipe records only independently rerun code, contract and documentation evidence.",
+    "Credential replacement and Provider deletion are destructive or secret-bearing actions and still require explicit user/native confirmation for final real-account acceptance; tests use synthetic credentials.",
+    "Provider discovery and generation health are intentionally session-local and reset after restart; Refresh never proves chat usability.",
+    "Unknown typed Host failures preserve their stable code but currently share one body-free Agent completion message until a dedicated localized repair surface is justified.",
+    "Windows/Linux provider-management qualification remains unclaimed; no Requirement, Exit or Phase status is promoted by this repair."
   ]
 }

@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
@@ -14,7 +14,10 @@ import type {
   ProviderConnectNeedsManualModel,
   ProviderConnectResult,
   ProviderProfileSummary,
+  ProviderRuntimeStatusSummary,
   RefreshProviderModelsRequest,
+  UpdateProviderCredentialRequest,
+  DeleteProviderRequest,
   UpdateModelRequest,
   SetDefaultModelRequest
 } from "@pige/contracts";
@@ -61,13 +64,17 @@ export class ModelProviderRegistry {
   readonly #secrets: JsonSecretStore;
   readonly #connectionTester: ModelProviderConnectionTester;
   readonly #generationProbe: ModelProviderGenerationProbePort;
+  readonly #activeReferences: ModelProviderActiveReferencePort;
+  readonly #runtimeStatuses = new Map<string, ProviderRuntimeStatusSummary>();
+  readonly #mutatingProviderIds = new Set<string>();
   #mutationTail: Promise<void> = Promise.resolve();
 
   constructor(
     userDataPath: string,
     secrets: JsonSecretStore,
     connectionTester: ModelProviderConnectionTester = new ModelProviderConnectionTester(),
-    generationProbe: ModelProviderGenerationProbePort = new ModelProviderGenerationProbe()
+    generationProbe: ModelProviderGenerationProbePort = new ModelProviderGenerationProbe(),
+    activeReferences: ModelProviderActiveReferencePort = NO_ACTIVE_PROVIDER_REFERENCES
   ) {
     this.#providersPath = path.join(userDataPath, "provider-profiles.json");
     this.#modelsPath = path.join(userDataPath, "model-profiles.json");
@@ -75,6 +82,7 @@ export class ModelProviderRegistry {
     this.#secrets = secrets;
     this.#connectionTester = connectionTester;
     this.#generationProbe = generationProbe;
+    this.#activeReferences = activeReferences;
     this.#recoverPendingConnection();
   }
 
@@ -90,8 +98,9 @@ export class ModelProviderRegistry {
       ? defaultBinding.modelProfileId
       : undefined;
     return {
+      revision: this.#revisionToken(),
       presets: listReviewedProviderPresets(),
-      providers: providers.map(toProviderSummary),
+      providers: providers.map((provider) => toProviderSummary(provider, this.#runtimeStatuses.get(provider.id))),
       models: modelFile.models.map((model) => toModelSummary(model, effectiveDefaultModelId)),
       ...(effectiveDefaultModelId ? { defaultModelProfileId: effectiveDefaultModelId } : {}),
       hasDefaultModel: Boolean(effectiveDefaultModelId),
@@ -146,6 +155,12 @@ export class ModelProviderRegistry {
     if (!defaultModel) return undefined;
     const provider = this.#readProviders().providers.find((profile) => profile.id === defaultModel.providerProfileId);
     if (!provider) return undefined;
+    if (this.#mutatingProviderIds.has(provider.id)) {
+      throw new PigeDomainError(
+        "model_provider.active_reference",
+        "The selected Provider Profile is changing and cannot start a new model turn."
+      );
+    }
     return {
       provider,
       model: defaultModel,
@@ -159,6 +174,97 @@ export class ModelProviderRegistry {
 
   refreshProviderModels(request: RefreshProviderModelsRequest): Promise<ModelProviderSettingsSummary> {
     return this.#queueMutation(() => this.#refreshProviderModels(request));
+  }
+
+  updateProviderCredential(request: UpdateProviderCredentialRequest): Promise<ModelProviderSettingsSummary> {
+    return this.#queueMutation(() => this.#updateProviderCredential(request));
+  }
+
+  async #updateProviderCredential(request: UpdateProviderCredentialRequest): Promise<ModelProviderSettingsSummary> {
+    this.#assertExpectedRevision(request.expectedRevision);
+    const provider = this.#readProviders().providers.find(
+      (candidate) => candidate.id === request.providerProfileId
+    );
+    if (!provider) {
+      throw new PigeDomainError("model_provider.profile_missing", "The selected Provider Profile is unavailable.");
+    }
+    this.#mutatingProviderIds.add(provider.id);
+    try {
+      this.#activeReferences.assertProviderInactive(provider.id);
+      if (provider.authRequirement === "none") {
+        throw new PigeDomainError(
+          "model_provider.credential_forbidden",
+          "This Provider Profile does not use a credential."
+        );
+      }
+      if (!provider.authSecretRef || !this.#secrets.hasProviderSecret(provider.authSecretRef)) {
+        throw new PigeDomainError(
+          "model_provider.binding_unusable",
+          "The selected Provider Profile has no replaceable protected credential."
+        );
+      }
+      const modelFile = this.#readModels();
+      const model = selectCredentialProbeModel(provider.id, modelFile);
+      if (!model) {
+        throw new PigeDomainError(
+          "model_provider.binding_unusable",
+          "The selected Provider Profile has no enabled model for credential validation."
+        );
+      }
+      const apiKey = request.apiKey.trim();
+      await this.#generationProbe.probe({ provider, model, apiKey });
+      this.#activeReferences.assertProviderInactive(provider.id);
+      this.#secrets.replaceProviderSecret(provider.authSecretRef, apiKey);
+      this.#recordRuntimeStatus(provider.id, { generation: "verified" });
+      return this.summary();
+    } finally {
+      this.#mutatingProviderIds.delete(provider.id);
+    }
+  }
+
+  deleteProvider(request: DeleteProviderRequest): Promise<ModelProviderSettingsSummary> {
+    return this.#queueMutation(() => this.#deleteProvider(request));
+  }
+
+  async #deleteProvider(request: DeleteProviderRequest): Promise<ModelProviderSettingsSummary> {
+    this.#assertExpectedRevision(request.expectedRevision);
+    const providers = this.#readProviders();
+    const provider = providers.providers.find((candidate) => candidate.id === request.providerProfileId);
+    if (!provider) {
+      throw new PigeDomainError("model_provider.profile_missing", "The selected Provider Profile is unavailable.");
+    }
+    this.#mutatingProviderIds.add(provider.id);
+    try {
+      this.#activeReferences.assertProviderInactive(provider.id);
+      const models = this.#readModels();
+      const retainedProviders = providers.providers.filter((candidate) => candidate.id !== provider.id);
+      const removedModelIds = new Set(
+        models.models.filter((model) => model.providerProfileId === provider.id).map((model) => model.id)
+      );
+      const retainedModels = models.models.filter((model) => model.providerProfileId !== provider.id);
+      const nextDefaultModelId = models.defaultModelProfileId && !removedModelIds.has(models.defaultModelProfileId)
+        ? models.defaultModelProfileId
+        : selectDeterministicDefaultModel(retainedProviders, retainedModels, this.#secrets)?.id;
+      const nextProviders = ProviderProfilesFileSchema.parse({
+        schemaVersion: 1,
+        providers: retainedProviders
+      });
+      const nextModels = ModelProfilesFileSchema.parse({
+        schemaVersion: 1,
+        ...(nextDefaultModelId ? { defaultModelProfileId: nextDefaultModelId } : {}),
+        models: retainedModels
+      });
+      this.#activeReferences.assertProviderInactive(provider.id);
+      this.#commitProviderDeletion(
+        nextProviders,
+        nextModels,
+        provider.authSecretRef ? [provider.authSecretRef] : []
+      );
+      this.#runtimeStatuses.delete(provider.id);
+      return this.summary();
+    } finally {
+      this.#mutatingProviderIds.delete(provider.id);
+    }
   }
 
   async #refreshProviderModels(request: RefreshProviderModelsRequest): Promise<ModelProviderSettingsSummary> {
@@ -223,6 +329,7 @@ export class ModelProviderRegistry {
       ]
     });
     this.#commitProfileFiles(nextProviders, nextModels);
+    this.#recordRuntimeStatus(provider.id, { discovery: "verified" });
     return this.summary();
   }
 
@@ -504,7 +611,20 @@ export class ModelProviderRegistry {
     for (const replaced of replacedProviders) {
       if (replaced.authSecretRef) this.#deleteSecretIfUnreferenced(replaced.authSecretRef);
     }
+    this.#recordRuntimeStatus(providerId, {
+      ...(connection.modelListStrategy === "list_models" ? { discovery: "verified" as const } : {}),
+      generation: "verified"
+    });
     return this.summary();
+  }
+
+  recordGenerationOutcome(providerProfileId: string, outcome: "verified" | "failed"): void {
+    try {
+      if (!this.#readProviders().providers.some((provider) => provider.id === providerProfileId)) return;
+      this.#recordRuntimeStatus(providerProfileId, { generation: outcome });
+    } catch {
+      // Runtime health reporting must never replace the owning turn outcome.
+    }
   }
 
   setDefaultModel(request: SetDefaultModelRequest): Promise<ModelProviderSettingsSummary> {
@@ -546,6 +666,42 @@ export class ModelProviderRegistry {
     const result = this.#mutationTail.then(operation);
     this.#mutationTail = result.then(() => undefined, () => undefined);
     return result;
+  }
+
+  #revisionToken(): string {
+    const providerContents = readRevisionBytes(this.#providersPath);
+    const modelContents = readRevisionBytes(this.#modelsPath);
+    return `sha256:${createHash("sha256")
+      .update(providerContents)
+      .update("\0")
+      .update(modelContents)
+      .update("\0")
+      .update(this.#secrets.revisionToken())
+      .digest("hex")}`;
+  }
+
+  #assertExpectedRevision(expectedRevision: string): void {
+    if (expectedRevision !== this.#revisionToken()) {
+      throw new PigeDomainError(
+        "model_provider.profile_stale",
+        "Model service settings changed before this action could be applied."
+      );
+    }
+  }
+
+  #recordRuntimeStatus(
+    providerProfileId: string,
+    patch: Partial<Pick<ProviderRuntimeStatusSummary, "discovery" | "generation">>
+  ): void {
+    const current = this.#runtimeStatuses.get(providerProfileId) ?? {
+      discovery: "not_checked" as const,
+      generation: "not_checked" as const
+    };
+    this.#runtimeStatuses.set(providerProfileId, {
+      ...current,
+      ...patch,
+      updatedAt: new Date().toISOString()
+    });
   }
 
   #readProviders(): ProviderProfilesFile {
@@ -601,6 +757,44 @@ export class ModelProviderRegistry {
       if (caught instanceof PigeDomainError) throw caught;
       throw persistenceFailedError();
     }
+  }
+
+  #commitProviderDeletion(
+    providers: ProviderProfilesFile,
+    models: ModelProfilesFile,
+    cleanupSecretRefs: readonly string[]
+  ): void {
+    let providerSnapshot: FileSnapshot;
+    let modelSnapshot: FileSnapshot;
+    try {
+      providerSnapshot = this.#snapshotFile(this.#providersPath);
+      modelSnapshot = this.#snapshotFile(this.#modelsPath);
+    } catch {
+      throw persistenceFailedError();
+    }
+    let transaction: ProviderDeletionTransaction = {
+      schemaVersion: 2,
+      phase: "prepared",
+      newSecretRef: null,
+      cleanupSecretRefs: [...cleanupSecretRefs],
+      providerSnapshot,
+      modelSnapshot,
+      providerCommit: jsonFileSnapshot(providers),
+      modelCommit: jsonFileSnapshot(models)
+    };
+    try {
+      this.#writeConnectTransaction(transaction);
+      this.#writeProviders(providers);
+      this.#writeModels(models);
+      this.#verifyDeletionCommittedState(transaction);
+      transaction = { ...transaction, phase: "committed" };
+      this.#writeConnectTransaction(transaction);
+    } catch (caught) {
+      if (!this.#rollbackConnectedState(transaction)) throw persistenceRepairRequiredError();
+      if (caught instanceof PigeDomainError) throw caught;
+      throw persistenceFailedError();
+    }
+    if (!this.#finishCommittedDeletion(transaction)) throw persistenceRepairRequiredError();
   }
 
   #tryReadProviders(): RegistryRead<ProviderProfilesFile> {
@@ -660,7 +854,7 @@ export class ModelProviderRegistry {
     }
   }
 
-  #rollbackConnectedState(transaction: ProviderConnectTransaction): boolean {
+  #rollbackConnectedState(transaction: ProviderTransaction): boolean {
     let failed = false;
     if (!this.#restoreAndVerify(this.#providersPath, transaction.providerSnapshot)) failed = true;
     if (!this.#restoreAndVerify(this.#modelsPath, transaction.modelSnapshot)) failed = true;
@@ -691,7 +885,7 @@ export class ModelProviderRegistry {
 
   #recoverPendingConnection(): void {
     if (!fs.existsSync(this.#connectTransactionPath)) return;
-    let transaction: ProviderConnectTransaction;
+    let transaction: ProviderTransaction;
     try {
       transaction = parseProviderConnectTransaction(
         JSON.parse(fs.readFileSync(this.#connectTransactionPath, "utf8"))
@@ -699,15 +893,44 @@ export class ModelProviderRegistry {
     } catch {
       throw persistenceRepairRequiredError();
     }
+    if (transaction.schemaVersion === 2 && transaction.phase === "committed") {
+      if (!this.#finishCommittedDeletion(transaction)) throw persistenceRepairRequiredError();
+      return;
+    }
     if (!this.#rollbackConnectedState(transaction)) throw persistenceRepairRequiredError();
   }
 
-  #writeConnectTransaction(transaction: ProviderConnectTransaction): void {
+  #writeConnectTransaction(transaction: ProviderTransaction): void {
     this.#writeJson(this.#connectTransactionPath, transaction);
     const persisted = parseProviderConnectTransaction(
       JSON.parse(fs.readFileSync(this.#connectTransactionPath, "utf8"))
     );
     if (!isDeepStrictEqual(persisted, transaction)) throw persistenceVerificationError();
+  }
+
+  #verifyDeletionCommittedState(transaction: ProviderDeletionTransaction): void {
+    if (
+      !fileMatchesSnapshot(this.#providersPath, transaction.providerCommit) ||
+      !fileMatchesSnapshot(this.#modelsPath, transaction.modelCommit)
+    ) throw persistenceVerificationError();
+    const providers = this.#readProviders().providers;
+    if (transaction.cleanupSecretRefs.some((ref) =>
+      providers.some((provider) => provider.authSecretRef === ref)
+    )) throw persistenceVerificationError();
+  }
+
+  #finishCommittedDeletion(transaction: ProviderDeletionTransaction): boolean {
+    try {
+      this.#verifyDeletionCommittedState(transaction);
+      for (const ref of transaction.cleanupSecretRefs) this.#secrets.deleteProviderSecret(ref);
+      if (transaction.cleanupSecretRefs.some((ref) => this.#secrets.listSecretRefs().includes(ref))) {
+        return false;
+      }
+      this.#removeConnectTransaction();
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   #removeConnectTransaction(): void {
@@ -788,7 +1011,21 @@ interface ProviderConnectTransaction {
   readonly modelSnapshot: FileSnapshot;
 }
 
-function parseProviderConnectTransaction(value: unknown): ProviderConnectTransaction {
+interface ProviderDeletionTransaction {
+  readonly schemaVersion: 2;
+  readonly phase: "prepared" | "committed";
+  readonly newSecretRef: null;
+  readonly cleanupSecretRefs: readonly string[];
+  readonly providerSnapshot: FileSnapshot;
+  readonly modelSnapshot: FileSnapshot;
+  readonly providerCommit: FileSnapshot;
+  readonly modelCommit: FileSnapshot;
+}
+
+type ProviderTransaction = ProviderConnectTransaction | ProviderDeletionTransaction;
+
+function parseProviderConnectTransaction(value: unknown): ProviderTransaction {
+  if (isRecord(value) && value.schemaVersion === 2) return parseProviderDeletionTransaction(value);
   if (
     !isRecord(value) ||
     value.schemaVersion !== 1 ||
@@ -806,6 +1043,29 @@ function parseProviderConnectTransaction(value: unknown): ProviderConnectTransac
   };
 }
 
+function parseProviderDeletionTransaction(value: Record<string, unknown>): ProviderDeletionTransaction {
+  if (
+    Object.keys(value).sort().join(",") !==
+      "cleanupSecretRefs,modelCommit,modelSnapshot,newSecretRef,phase,providerCommit,providerSnapshot,schemaVersion" ||
+    (value.phase !== "prepared" && value.phase !== "committed") ||
+    value.newSecretRef !== null ||
+    !Array.isArray(value.cleanupSecretRefs) ||
+    value.cleanupSecretRefs.length > 128 ||
+    value.cleanupSecretRefs.some((ref) => typeof ref !== "string" || !/^provider_secret_[a-z0-9_]+$/u.test(ref)) ||
+    new Set(value.cleanupSecretRefs).size !== value.cleanupSecretRefs.length
+  ) throw persistenceRepairRequiredError();
+  return {
+    schemaVersion: 2,
+    phase: value.phase,
+    newSecretRef: null,
+    cleanupSecretRefs: value.cleanupSecretRefs as string[],
+    providerSnapshot: parseFileSnapshot(value.providerSnapshot),
+    modelSnapshot: parseFileSnapshot(value.modelSnapshot),
+    providerCommit: parseFileSnapshot(value.providerCommit),
+    modelCommit: parseFileSnapshot(value.modelCommit)
+  };
+}
+
 function parseFileSnapshot(value: unknown): FileSnapshot {
   if (!isRecord(value) || typeof value.exists !== "boolean") throw persistenceRepairRequiredError();
   if (!value.exists && Object.keys(value).length === 1) return { exists: false };
@@ -816,6 +1076,24 @@ function parseFileSnapshot(value: unknown): FileSnapshot {
     Buffer.byteLength(value.contents, "utf8") <= 4 * 1_024 * 1_024
   ) return { exists: true, contents: value.contents };
   throw persistenceRepairRequiredError();
+}
+
+function jsonFileSnapshot(value: unknown): FileSnapshot {
+  return { exists: true, contents: `${JSON.stringify(value, null, 2)}\n` };
+}
+
+function fileMatchesSnapshot(filePath: string, snapshot: FileSnapshot): boolean {
+  return snapshot.exists
+    ? fs.existsSync(filePath) && fs.readFileSync(filePath, "utf8") === snapshot.contents
+    : !fs.existsSync(filePath);
+}
+
+function readRevisionBytes(filePath: string): Buffer {
+  try {
+    return fs.existsSync(filePath) ? fs.readFileSync(filePath) : Buffer.alloc(0);
+  } catch {
+    return Buffer.from("unavailable", "utf8");
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -913,6 +1191,14 @@ export interface ModelProviderRuntimeConfig {
   readonly apiKey?: string;
 }
 
+export interface ModelProviderActiveReferencePort {
+  readonly assertProviderInactive: (providerProfileId: string) => void;
+}
+
+const NO_ACTIVE_PROVIDER_REFERENCES: ModelProviderActiveReferencePort = {
+  assertProviderInactive: () => undefined
+};
+
 function resolveEffectiveDefaultModelId(
   providers: readonly ProviderProfile[],
   models: ModelProfilesFile,
@@ -920,6 +1206,32 @@ function resolveEffectiveDefaultModelId(
 ): string | undefined {
   const binding = resolveDefaultBinding(providers, models, secrets);
   return binding.state === "ready" ? binding.modelProfileId : undefined;
+}
+
+function selectCredentialProbeModel(providerProfileId: string, models: ModelProfilesFile): ModelProfile | undefined {
+  const owned = models.models.filter((model) => model.providerProfileId === providerProfileId);
+  return owned.find((model) => model.id === models.defaultModelProfileId && model.enabled) ??
+    owned.filter((model) => model.enabled).sort(compareModelProfiles)[0];
+}
+
+function selectDeterministicDefaultModel(
+  providers: readonly ProviderProfile[],
+  models: readonly ModelProfile[],
+  secrets: JsonSecretStore
+): ModelProfile | undefined {
+  const usableProviderIds = new Set(providers.filter((provider) => {
+    try {
+      return hasUsableProviderCredential(provider, secrets);
+    } catch {
+      return false;
+    }
+  }).map((provider) => provider.id));
+  return models.filter((model) => model.enabled && usableProviderIds.has(model.providerProfileId))
+    .sort(compareModelProfiles)[0];
+}
+
+function compareModelProfiles(left: ModelProfile, right: ModelProfile): number {
+  return left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id);
 }
 
 function resolveDefaultBinding(
@@ -1019,7 +1331,10 @@ function createModelProfiles(options: {
   ];
 }
 
-function toProviderSummary(provider: ProviderProfile): ProviderProfileSummary {
+function toProviderSummary(
+  provider: ProviderProfile,
+  runtimeStatus?: ProviderRuntimeStatusSummary
+): ProviderProfileSummary {
   return {
     id: provider.id,
     ...(provider.presetId ? { presetId: provider.presetId } : {}),
@@ -1031,6 +1346,7 @@ function toProviderSummary(provider: ProviderProfile): ProviderProfileSummary {
     modelListStrategy: provider.modelListStrategy,
     cloudBoundary: provider.cloudBoundary as CloudBoundary,
     ...(provider.boundaryVerification ? { boundaryVerification: provider.boundaryVerification } : {}),
+    ...(runtimeStatus ? { runtimeStatus } : {}),
     createdAt: provider.createdAt,
     updatedAt: provider.updatedAt
   };

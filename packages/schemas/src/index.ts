@@ -2440,6 +2440,17 @@ export const RefreshProviderModelsRequestSchema = z.object({
   providerProfileId: z.string().regex(/^provider_[a-z0-9_]+$/)
 }).strict();
 
+export const UpdateProviderCredentialRequestSchema = z.object({
+  providerProfileId: z.string().regex(/^provider_[a-z0-9_]+$/),
+  expectedRevision: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  apiKey: z.string().trim().min(1).max(16_384)
+}).strict();
+
+export const DeleteProviderRequestSchema = z.object({
+  providerProfileId: z.string().regex(/^provider_[a-z0-9_]+$/),
+  expectedRevision: z.string().regex(/^sha256:[a-f0-9]{64}$/)
+}).strict();
+
 export const AddManualModelRequestSchema = z.object({
   providerProfileId: z.string().regex(/^provider_[a-z0-9_]+$/),
   modelId: z.string().trim().min(1).max(200).regex(/^[A-Za-z0-9][A-Za-z0-9._:/-]*$/u),
@@ -2724,6 +2735,8 @@ export type ProposalTrustLevel = z.infer<typeof ProposalTrustLevelSchema>;
 export type ProviderKind = z.infer<typeof ProviderKindSchema>;
 export type ProviderEndpointProtocol = z.infer<typeof ProviderEndpointProtocolSchema>;
 export type ProviderAuthRequirement = z.infer<typeof ProviderAuthRequirementSchema>;
+export type UpdateProviderCredentialRequest = z.infer<typeof UpdateProviderCredentialRequestSchema>;
+export type DeleteProviderRequest = z.infer<typeof DeleteProviderRequestSchema>;
 export type ProviderProfile = z.infer<typeof ProviderProfileSchema>;
 export type ProviderProfilesFile = z.infer<typeof ProviderProfilesFileSchema>;
 export type RetrievalSearchRequest = z.infer<typeof RetrievalSearchRequestSchema>;

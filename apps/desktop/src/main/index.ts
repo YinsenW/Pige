@@ -35,6 +35,8 @@ import type {
   RestoreApplyResult,
   RestorePreviewResult,
   RefreshProviderModelsRequest,
+  UpdateProviderCredentialRequest,
+  DeleteProviderRequest,
   SetAlwaysOnTopRequest,
   SetDefaultModelRequest,
   UpdateModelRequest,
@@ -55,6 +57,8 @@ import {
   AddPresetProviderRequestSchema,
   AddManualModelRequestSchema,
   RefreshProviderModelsRequestSchema,
+  UpdateProviderCredentialRequestSchema,
+  DeleteProviderRequestSchema,
   ModelEgressPendingRequestQuerySchema,
   ModelEgressPendingRequestSchema,
   ModelEgressResolveRequestSchema,
@@ -809,7 +813,27 @@ const getModelProviderRegistry = (): ModelProviderRegistry => {
   if (!modelProviderRegistry) {
     modelProviderRegistry = new ModelProviderRegistry(
       app.getPath("userData"),
-      new JsonSecretStore(app.getPath("userData"), safeStorage)
+      new JsonSecretStore(app.getPath("userData"), safeStorage),
+      undefined,
+      undefined,
+      {
+        assertProviderInactive: (providerProfileId) => {
+          const activeVaultPath = getVaultService().activeVaultPath();
+          if (!activeVaultPath) return;
+          const activeAgentJob = getJobsService().list({
+            states: ["running", "cancel_requested"],
+            classes: ["agent_turn", "agent_ingest"],
+            limit: 1
+          }).jobs[0];
+          if (activeAgentJob) {
+            throw new PigeDomainError(
+              "model_provider.active_reference",
+              "A running Agent Job still owns an active model runtime reference."
+            );
+          }
+          getModelEgressApprovalService().assertProviderInactive(activeVaultPath, providerProfileId);
+        }
+      }
     );
   }
   return modelProviderRegistry;
@@ -1512,6 +1536,24 @@ ipcMain.handle("models.addManualProvider", async (event, request: AddManualProvi
 ipcMain.handle("models.refreshProviderModels", async (_event, request: RefreshProviderModelsRequest) =>
   getModelProviderRegistry().refreshProviderModels(RefreshProviderModelsRequestSchema.parse(request))
 );
+ipcMain.handle("models.updateProviderCredential", async (event, request: UpdateProviderCredentialRequest) => {
+  const validatedRequest = UpdateProviderCredentialRequestSchema.parse(request);
+  await confirmSettingAction(event.sender, ["models.providerProfiles", "models.providerApiKeys"], {
+    title: "Replace this model service credential?",
+    message: "Pige will test the replacement credential without displaying the existing credential. The current credential remains active unless the replacement is verified and saved successfully.",
+    confirmLabel: "Replace credential"
+  });
+  return getModelProviderRegistry().updateProviderCredential(validatedRequest);
+});
+ipcMain.handle("models.deleteProvider", async (event, request: DeleteProviderRequest) => {
+  const validatedRequest = DeleteProviderRequestSchema.parse(request);
+  await confirmSettingAction(event.sender, ["models.providerProfiles", "models.providerApiKeys"], {
+    title: "Delete this model service?",
+    message: "Pige will remove this Provider Profile, its protected credential reference, and its owned model profiles. If it owns the default model, Pige will select a usable remaining model or clear the default.",
+    confirmLabel: "Delete service"
+  });
+  return getModelProviderRegistry().deleteProvider(validatedRequest);
+});
 ipcMain.handle("models.addManualModel", async (_event, request: AddManualModelRequest) =>
   {
     const parsed = AddManualModelRequestSchema.parse(request);
