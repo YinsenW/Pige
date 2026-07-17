@@ -55,8 +55,11 @@ interface ExternalManagedCopyRootIdentity {
 
 interface VerifiedExternalManagedCopyRoot {
   readonly rootId: string;
+  readonly vaultId: string;
   readonly absolutePath: string;
   readonly identities: readonly ExternalManagedCopyRootIdentity[];
+  readonly registryPath: string;
+  readonly bindingFingerprint: `sha256:${string}`;
 }
 
 export class BackupManagedCopyDependencyError extends PigeDomainError {
@@ -99,12 +102,13 @@ function readExternalManagedCopyRoots(
     if (!binding || binding.availability !== "available") {
       throw missingExternalManagedCopyRoot(rootId);
     }
-    resolved.set(rootId, captureExternalManagedCopyRoot(binding));
+    resolved.set(rootId, captureExternalManagedCopyRoot(binding, bindingsPath));
   }
   return resolved;
 }
 
 function assertExternalManagedCopyRootIdentity(root: VerifiedExternalManagedCopyRoot): void {
+  assertExternalManagedCopyRootBinding(root);
   for (const expected of root.identities) {
     let current: fs.Stats;
     try {
@@ -134,6 +138,26 @@ function assertExternalManagedCopyRootIdentity(root: VerifiedExternalManagedCopy
     throw new PigeDomainError(
       "backup.external_managed_copy_root_changed",
       "An external managed-copy root changed during backup."
+    );
+  }
+  assertExternalManagedCopyRootBinding(root);
+}
+
+function assertExternalManagedCopyRootBinding(root: VerifiedExternalManagedCopyRoot): void {
+  const current = readBindingsFile(root.registryPath).roots.find((binding) =>
+    binding.rootId === root.rootId && binding.vaultId === root.vaultId
+  );
+  if (
+    !current ||
+    current.availability !== "available" ||
+    current.absolutePath !== root.absolutePath ||
+    fingerprintExternalManagedCopyRootBinding(current) !== root.bindingFingerprint
+  ) {
+    throw new BackupManagedCopyDependencyError(
+      "backup.external_managed_copy_binding_changed",
+      "An external managed-copy root binding changed during backup.",
+      "vault_binding",
+      root.rootId
     );
   }
 }
@@ -176,7 +200,8 @@ function readBindingsFile(bindingsPath: string) {
 }
 
 function captureExternalManagedCopyRoot(
-  binding: ExternalManagedCopyRootBinding
+  binding: ExternalManagedCopyRootBinding,
+  registryPath: string
 ): VerifiedExternalManagedCopyRoot {
   if (!path.isAbsolute(binding.absolutePath) || path.resolve(binding.absolutePath) !== binding.absolutePath) {
     throw new PigeDomainError(
@@ -197,7 +222,20 @@ function captureExternalManagedCopyRoot(
       "An external managed-copy root binding contains a symbolic link."
     );
   }
-  return { rootId: binding.rootId, absolutePath: binding.absolutePath, identities };
+  return {
+    rootId: binding.rootId,
+    vaultId: binding.vaultId,
+    absolutePath: binding.absolutePath,
+    identities,
+    registryPath,
+    bindingFingerprint: fingerprintExternalManagedCopyRootBinding(binding)
+  };
+}
+
+function fingerprintExternalManagedCopyRootBinding(
+  binding: ExternalManagedCopyRootBinding
+): `sha256:${string}` {
+  return checksumBuffer(Buffer.from(JSON.stringify(binding), "utf8"));
 }
 
 function captureExternalDirectoryChain(
@@ -696,7 +734,6 @@ export class BackupRestoreService {
         }
         stagingIdentity = openedStat;
 
-        for (const file of prepared.files) assertPreparedBackupFile(file);
         const zipFile = new ZipFile();
         zipFile.addBuffer(
           Buffer.from(manifestText, "utf8"),
@@ -705,13 +742,30 @@ export class BackupRestoreService {
         );
         for (const file of prepared.files) {
           throwIfBackupAborted(options.signal);
-          zipFile.addFile(file.absolutePath, `${BACKUP_VAULT_DIR}/${file.path}`, {
-            mtime: file.identity.mtime
-          });
+          zipFile.addReadStreamLazy(
+            `${BACKUP_VAULT_DIR}/${file.path}`,
+            {
+              size: file.size,
+              mtime: file.identity.mtime,
+              mode: file.identity.mode
+            },
+            (callback) => {
+              try {
+                callback(null, createVerifiedBackupReadStream(file, options.signal));
+              } catch (caught) {
+                callback(caught, undefined as never);
+              }
+            }
+          );
         }
         zipFile.end();
 
         const output = fs.createWriteStream(stagingPath, { fd: descriptor, autoClose: false });
+        zipFile.on("error", (caught) => {
+          (zipFile.outputStream as Readable).destroy(
+            caught instanceof Error ? caught : new Error("Backup archive source failed.")
+          );
+        });
         if (options.signal) {
           await pipeline(zipFile.outputStream, output, { signal: options.signal });
         } else {
@@ -908,7 +962,7 @@ export class BackupRestoreService {
       const checkpointContext = createRestoreCheckpointContext(
         binding,
         backupIdentity,
-        sourceManifest.externalDependencies.length
+        countUnresolvedExternalDependencies(sourceManifest)
       );
       await reportRestoreCorePhase(input.onPhase, checkpointContext, "manifest_validated");
       assertCurrentRestoreDestinationCoordinates(destinationCoordinates, input.pathSafety);
@@ -1426,6 +1480,121 @@ function assertPreparedBackupFile(file: PreparedBackupFile): void {
   ) {
     throw new PigeDomainError("backup.source_changed", "A backup source file changed before archive finalization.");
   }
+}
+
+function createVerifiedBackupReadStream(
+  file: PreparedBackupFile,
+  signal?: AbortSignal
+): Readable {
+  assertPreparedBackupFile(file);
+  throwIfBackupAborted(signal);
+  const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0);
+  const descriptor = fs.openSync(file.absolutePath, flags);
+  let closed = false;
+  let reading = false;
+  let bytesRead = 0;
+  const hash = createHash("sha256");
+
+  const closeDescriptor = (): void => {
+    if (closed) return;
+    closed = true;
+    fs.closeSync(descriptor);
+  };
+
+  try {
+    const opened = fs.fstatSync(descriptor);
+    const pathIdentity = fs.lstatSync(file.absolutePath);
+    if (
+      opened.nlink !== 1 ||
+      pathIdentity.nlink !== 1 ||
+      !sameFileRevision(file.identity, opened) ||
+      !sameFileRevision(opened, pathIdentity)
+    ) {
+      throw new PigeDomainError(
+        "backup.source_changed",
+        "A backup source file changed before archive streaming began."
+      );
+    }
+    assertBackupArchiveSourceFence(file.source);
+  } catch (caught) {
+    closeDescriptor();
+    throw caught;
+  }
+
+  const stream = new Readable({
+    read(requestedSize) {
+      if (reading || closed) return;
+      try {
+        throwIfBackupAborted(signal);
+      } catch (caught) {
+        this.destroy(caught instanceof Error ? caught : new Error("Backup creation was cancelled."));
+        return;
+      }
+      reading = true;
+      const buffer = Buffer.alloc(Math.min(Math.max(requestedSize, 64 * 1024), 1024 * 1024));
+      fs.read(descriptor, buffer, 0, buffer.length, null, (caught, count) => {
+        reading = false;
+        if (caught) {
+          this.destroy(caught);
+          return;
+        }
+        if (count > 0) {
+          bytesRead += count;
+          hash.update(buffer.subarray(0, count));
+          this.push(buffer.subarray(0, count));
+          return;
+        }
+        try {
+          const after = fs.fstatSync(descriptor);
+          const pathAfter = fs.lstatSync(file.absolutePath);
+          const checksum = `sha256:${hash.digest("hex")}`;
+          if (
+            after.nlink !== 1 ||
+            pathAfter.nlink !== 1 ||
+            !sameFileRevision(file.identity, after) ||
+            !sameFileRevision(after, pathAfter) ||
+            bytesRead !== file.size ||
+            checksum !== file.checksum
+          ) {
+            throw new PigeDomainError(
+              "backup.source_changed",
+              "A backup source file changed while it was archived."
+            );
+          }
+          assertBackupArchiveSourceFence(file.source);
+          closeDescriptor();
+          this.push(null);
+        } catch (verificationError) {
+          this.destroy(
+            verificationError instanceof Error
+              ? verificationError
+              : new Error("Backup source verification failed.")
+          );
+        }
+      });
+    },
+    destroy(caught, callback) {
+      try {
+        closeDescriptor();
+        callback(caught);
+      } catch (closeError) {
+        callback(closeError instanceof Error ? closeError : new Error("Backup source close failed."));
+      }
+    }
+  });
+
+  if (signal) {
+    const abort = (): void => {
+      try {
+        throwIfBackupAborted(signal);
+      } catch (caught) {
+        stream.destroy(caught instanceof Error ? caught : new Error("Backup creation was cancelled."));
+      }
+    };
+    signal.addEventListener("abort", abort, { once: true });
+    stream.once("close", () => signal.removeEventListener("abort", abort));
+  }
+  return stream;
 }
 
 function snapshotBackupArchiveSource(
@@ -3598,9 +3767,7 @@ function createPreviewWarnings(
   manifest: BackupManifest,
   invalidFiles: readonly string[]
 ): readonly RestorePreviewWarning[] {
-  const omittedExternalDependencies = manifest.externalDependencies.filter((dependency) =>
-    typeof dependency === "string" || !dependency.included
-  );
+  const omittedExternalDependencyCount = countUnresolvedExternalDependencies(manifest);
   return [
     ...(invalidFiles.length > 0 ? [{
       code: "invalid_archive_entries" as const,
@@ -3610,13 +3777,19 @@ function createPreviewWarnings(
       code: "excluded_rebuildable_roots" as const,
       count: manifest.excludedRoots.length
     }] : []),
-    ...(omittedExternalDependencies.length > 0
+    ...(omittedExternalDependencyCount > 0
       ? [{
           code: "external_originals_not_included" as const,
-          count: omittedExternalDependencies.length
+          count: omittedExternalDependencyCount
         }]
       : [])
   ];
+}
+
+function countUnresolvedExternalDependencies(manifest: BackupManifest): number {
+  return manifest.externalDependencies.filter((dependency) =>
+    typeof dependency === "string" || !dependency.included || dependency.requiredForCompleteRestore
+  ).length;
 }
 
 export function canonicalizeBackupDestinationPath(filePathInput: string): string {

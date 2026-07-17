@@ -580,6 +580,13 @@ describe("BackupCoordinatorService", () => {
     expect(JSON.stringify(waiting)).not.toContain(externalRoot);
     expect(JSON.stringify(waiting)).not.toContain(externalBody);
 
+    const restarted = new BackupCoordinatorService(options);
+    expect(await restarted.recoverInterrupted()).toEqual({ recovered: 0, failed: 1 });
+    expect(readJob(fixture.vaultPath, waiting.id)).toMatchObject({
+      id: waiting.id,
+      state: "waiting_dependency"
+    });
+
     const vaultId = loadVaultSummary(fixture.vaultPath).vaultId;
     fs.writeFileSync(path.join(userDataPath, "vault-bindings.json"), `${JSON.stringify({
       schemaVersion: 1,
@@ -595,7 +602,6 @@ describe("BackupCoordinatorService", () => {
       defaults: [{ vaultId, rootId: "root_externalwait01" }]
     }, null, 2)}\n`, "utf8");
 
-    const restarted = new BackupCoordinatorService(options);
     expect(await restarted.recoverInterrupted()).toEqual({ recovered: 1, failed: 0 });
     const completed = readJob(fixture.vaultPath, waiting.id);
     expect(completed).toMatchObject({ id: waiting.id, state: "completed" });

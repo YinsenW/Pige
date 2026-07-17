@@ -241,8 +241,12 @@ export class BackupCoordinatorService {
       try {
         const binding = readBackupBinding(snapshot.job, active.vaultPath);
         assertActiveBinding(active, binding);
-        await this.#run(store, snapshot, binding);
-        recovered += 1;
+        const result = await this.#run(store, snapshot, binding);
+        if (RECOVERABLE_STATES.has(result.job.state)) {
+          failed += 1;
+        } else {
+          recovered += 1;
+        }
       } catch {
         failed += 1;
       }
