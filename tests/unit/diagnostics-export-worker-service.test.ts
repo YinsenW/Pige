@@ -89,6 +89,16 @@ describe("DiagnosticsExportWorkerService", () => {
     expect(workerSource).toContain('hasExactKeys(value, ["kind"])');
     expect(workerSource).toContain('["kind", "descriptor", "device", "inode"]');
     expect(workerSource).toContain('"kind", "device", "inode", "size", "modifiedAtMs", "changedAtMs", "sha256"');
+    expect(workerSource).toContain(
+      "isNonNegativeInteger(value.parentDevice) && isNonNegativeInteger(value.parentInode)"
+    );
+    expect(workerSource).toContain(
+      "isNonNegativeInteger(value.temporaryDevice) && isNonNegativeInteger(value.temporaryInode)"
+    );
+    expect(workerSource).toContain(
+      "isNonNegativeSafeInteger(value.descriptor) &&\n      isNonNegativeInteger(value.device)"
+    );
+    expect(workerSource).toContain("Number.isInteger(value) && Number(value) >= 0");
     expect(workerSource).not.toContain("initialDestinationDescriptor");
   });
 

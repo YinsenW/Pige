@@ -277,6 +277,30 @@ describe("Restore identity UI", () => {
     dom.window.close();
   });
 
+  it("keeps a managed-source dependency body-free and does not invent a reconnect action", async () => {
+    const dom = createDom();
+    const harness = createHarness(readyOnboarding(), bothModesPreview());
+    harness.jobs = [backupJob("waiting_dependency")];
+    const { container, root } = await mountApp(dom, makePigeApi(harness, true));
+
+    await openVaultSettings(dom, container);
+    await waitFor(dom, () => container.textContent?.includes("A managed source location needs to be reconnected") ?? false);
+
+    expect(container.textContent).not.toContain("RAW_BACKUP_SENTINEL");
+    expect(container.textContent).not.toContain("root_external_private_20260717");
+    expect(container.textContent).not.toContain("The backup could not continue safely");
+    expect(container.querySelectorAll(".backup-job-status")).toHaveLength(1);
+    expect(button(container, "Reconnect source location").disabled).toBe(true);
+    expect(container.textContent).toContain("Reconnecting this managed source location is not available yet.");
+    expect(button(container, "Reconnect source location").getAttribute("aria-describedby"))
+      .toBe("backup-reconnect-managed-source-unavailable");
+    expect(Array.from(container.querySelectorAll("button")).some((item) => item.textContent === "Retry")).toBe(false);
+    expect(harness.retryJobIds).toEqual([]);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("offers one reachable cancel action while a support bundle export is in flight", async () => {
     const dom = createDom();
     const harness = createHarness(readyOnboarding(), cloneOnlyPreview());
@@ -730,7 +754,7 @@ function vaultSummary(): VaultSummary {
 }
 
 function backupJob(
-  state: "failed_retryable" | "failed_final" | "running",
+  state: "failed_retryable" | "failed_final" | "running" | "waiting_dependency",
   userAction: "retry" | "choose_path" = "choose_path"
 ): JobSummary {
   return {
@@ -739,6 +763,14 @@ function backupJob(
     state,
     stage: "backing_up",
     backupKind: "user_backup",
+    ...(state === "waiting_dependency" ? {
+      waitingDependency: {
+        dependencyKind: "external_source" as const,
+        dependencyId: "root_external_private_20260717",
+        requiredAction: "reconnect_path" as const,
+        messageKey: "errors.source.external_root_unavailable"
+      }
+    } : {}),
     ...(state.startsWith("failed") ? {
       error: {
         code: state === "failed_retryable" ? "backup.execution_failed" : "backup.destination_changed",

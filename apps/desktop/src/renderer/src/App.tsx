@@ -410,7 +410,7 @@ export function App(): React.JSX.Element {
           window.pige.jobs.list({
             limit: 20,
             classes: ["backup"],
-            states: ["queued", "running", "cancel_requested", "failed_retryable", "failed_final"]
+            states: ["queued", "running", "cancel_requested", "waiting_dependency", "failed_retryable", "failed_final"]
           }).catch(() => undefined),
           window.pige.activity.list({ limit: 5 }).catch(() => undefined)
         ])
@@ -5180,6 +5180,9 @@ function classifyTextTransportKind(text: string): "typed_text" | "typed_url" {
 function backupJobMessageKey(job: JobSummary): string {
   if (job.state === "queued" || job.state === "running") return "backup.running";
   if (job.state === "cancel_requested") return "backup.cancelRequested";
+  if (job.state === "waiting_dependency") {
+    return "backup.waitingManagedSourceReconnect";
+  }
   if (job.state === "failed_retryable" && job.error?.userAction === "retry") {
     return "backup.failedRetryable";
   }
@@ -6797,8 +6800,22 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
                 <button type="button" className="secondary" disabled={backupBusy} onClick={() => void retryBackup()}>
                   {props.t("home.retryJob")}
                 </button>
+              ) : activeBackupJob.state === "waiting_dependency" ? (
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled
+                  aria-describedby="backup-reconnect-managed-source-unavailable"
+                >
+                  {props.t("backup.reconnectManagedSource")}
+                </button>
               ) : null}
             </div>
+            {activeBackupJob.state === "waiting_dependency" ? (
+              <p className="muted" id="backup-reconnect-managed-source-unavailable">
+                {props.t("backup.reconnectManagedSourceUnavailable")}
+              </p>
+            ) : null}
           </div>
         ) : null}
         <div className="settings-actions">
