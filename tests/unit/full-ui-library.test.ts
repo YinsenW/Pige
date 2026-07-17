@@ -2,6 +2,8 @@ import { createElement } from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { JSDOM } from "jsdom";
+import fs from "node:fs";
+import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { LibraryListResult, NoteRenderResult, RetrievalSearchRequest, RetrievalSearchResult } from "@pige/contracts";
 import { filterLibraryPages, LibraryPanel, NoteReader } from "../../apps/desktop/src/renderer/src/App";
@@ -34,6 +36,20 @@ afterEach(() => {
 });
 
 describe("full UI Library", () => {
+  it("keeps inline-reference feedback out of the Reader document flow", () => {
+    const styles = fs.readFileSync(
+      path.resolve("apps/desktop/src/renderer/src/styles/app.css"),
+      "utf8"
+    );
+    const feedbackRule = styles.match(/\.reader-inline-reference-feedback\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
+    expect(feedbackRule).toContain("position: fixed");
+    expect(feedbackRule).toContain("top: calc(var(--titlebar-height) + 12px)");
+    expect(feedbackRule).toContain("transform: translateX(-50%)");
+    expect(feedbackRule).toContain("pointer-events: none");
+    expect(feedbackRule).toContain("margin: 0");
+    expect(feedbackRule).not.toContain("margin: 0 0");
+  });
+
   it("filters real page summaries by title", () => {
     const pages = libraryList().pages;
     expect(filterLibraryPages(pages, "all", " interface ").map((page) => page.title)).toEqual([

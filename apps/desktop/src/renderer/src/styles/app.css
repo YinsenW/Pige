@@ -2323,14 +2323,23 @@ h2 {
 }
 
 .reader-inline-reference-feedback {
-  margin: 0 0 14px;
+  position: fixed;
+  top: calc(var(--titlebar-height) + 12px);
+  left: 50%;
+  z-index: 40;
+  width: max-content;
+  max-width: min(440px, calc(100vw - 32px));
+  margin: 0;
   border: .5px solid var(--border-subtle);
-  border-radius: 9px;
-  padding: 8px 10px;
-  background: var(--surface-subtle);
+  border-radius: 9999px;
+  padding: 7px 11px;
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, .97);
+  box-shadow: var(--shadow-float);
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.45;
+  pointer-events: none;
 }
 
 .reader-inline-reference-feedback.ambiguous,
