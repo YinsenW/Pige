@@ -2306,6 +2306,8 @@ describe("Home durable Agent conversation UI", () => {
     harness.activities = [reversibleActivity(), reversibleUpdatedActivity()];
     const { container, root } = await mountHome(dom, makePigeApi(harness));
 
+    const createOpenLabel = "Open: Knowledge note created: Grounded boundary (1)";
+    const updateOpenLabel = "Open: Knowledge note updated: Refined boundary (2)";
     const updateUndoLabel = "Undo: Knowledge note updated: Refined boundary (2)";
     await waitFor(dom, () => buttonsByAriaLabel(container, updateUndoLabel).length === 1);
     const activityRegion = container.querySelector('[aria-label="Activity"]');
@@ -2315,6 +2317,18 @@ describe("Home durable Agent conversation UI", () => {
       .toBe("Knowledge note created: Grounded boundary (1)");
     expect(container.querySelector('[data-activity-row-id="op_20260712_updateactivity"]')?.getAttribute("aria-label"))
       .toBe("Knowledge note updated: Refined boundary (2)");
+    expect(buttonsByAriaLabel(container, createOpenLabel)).toHaveLength(1);
+    expect(buttonsByAriaLabel(container, updateOpenLabel)).toHaveLength(1);
+
+    const readsBeforeOpen = harness.activityListReads;
+    await clickElement(dom, buttonsByAriaLabel(container, createOpenLabel)[0]!);
+    await waitFor(dom, () => container.querySelector(".development-status")?.textContent?.includes("Activity target") === true);
+    const developmentStatus = container.querySelector<HTMLElement>(".development-status");
+    expect(developmentStatus?.getAttribute("role")).toBe("status");
+    expect(developmentStatus?.getAttribute("aria-live")).toBe("polite");
+    expect(developmentStatus?.textContent).toContain("In development. This action does not change your vault.");
+    expect(harness.activityListReads).toBe(readsBeforeOpen);
+    expect(harness.undoOperationIds).toHaveLength(0);
 
     await clickElement(dom, buttonsByAriaLabel(container, updateUndoLabel)[0]!);
     await waitFor(dom, () => harness.undoOperationIds.length === 1);
@@ -2322,6 +2336,8 @@ describe("Home durable Agent conversation UI", () => {
     expect(harness.undoOperationIds).toEqual(["op_20260712_updateactivity"]);
     expect(container.textContent).toContain("Change moved to recoverable trash.");
     expect(buttonsByAriaLabel(container, updateUndoLabel)).toHaveLength(0);
+    expect(buttonsByAriaLabel(container, updateOpenLabel)).toHaveLength(0);
+    expect(buttonsByAriaLabel(container, createOpenLabel)).toHaveLength(1);
     expect(buttonsByAriaLabel(container, "Undo: Knowledge note created: Grounded boundary (1)")).toHaveLength(1);
     const updatedRow = container.querySelector<HTMLElement>('[data-activity-row-id="op_20260712_updateactivity"]');
     expect(updatedRow?.textContent).toContain("Undone");
@@ -2406,6 +2422,8 @@ describe("Home durable Agent conversation UI", () => {
     );
     expect(styles).toMatch(/\.activity-row\s*\{[\s\S]*?grid-template-columns:\s*8px minmax\(0, 1fr\) auto;[\s\S]*?min-height:\s*32px;/);
     expect(styles).toMatch(/\.activity-row-dot\s*\{[\s\S]*?width:\s*6px;[\s\S]*?background:\s*var\(--success\);/);
+    expect(styles).toMatch(/\.activity-row-actions\s*\{[\s\S]*?display:\s*inline-flex;[\s\S]*?white-space:\s*nowrap;/);
+    expect(styles).toMatch(/@media \(max-width:\s*420px\)\s*\{[\s\S]*?\.activity-row-actions\s*\{[\s\S]*?gap:\s*2px;/);
     const submitFiles = appSource.slice(
       appSource.indexOf("const submitFiles"),
       appSource.indexOf("const cancelJob")

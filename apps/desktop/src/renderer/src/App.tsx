@@ -1,10 +1,13 @@
 import {
   useEffect,
+  useId,
+  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
   type DragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
   type RefObject
 } from "react";
@@ -92,6 +95,7 @@ type CaptureToast = {
 };
 type DevelopmentSurface = "home" | "reader" | "knowledge" | "settings";
 export type DevelopmentCapability =
+  | "activity_open"
   | "voice_input"
   | "knowledge_search"
   | "knowledge_filter"
@@ -99,7 +103,9 @@ export type DevelopmentCapability =
   | "note_agent"
   | "document_actions"
   | "selection_actions"
+  | "reader_link"
   | "source_reference"
+  | "window_preferences"
   | "appearance"
   | "local_capabilities"
   | "agent_memory"
@@ -149,6 +155,7 @@ type HomePermissionPromptState =
       readonly errorMessageKey?: string;
     }
   | { readonly kind: "unknown"; readonly requestId: string };
+type AppearanceLoadState = "loading" | "ready" | "failed";
 
 const initialVaultName = "Pige Vault";
 const localeLabels: Record<Locale, string> = {
@@ -215,6 +222,7 @@ export function App(): React.JSX.Element {
   const [agentRuntimeStatus, setAgentRuntimeStatus] = useState<AgentRuntimeStatus | null>(null);
   const [locale, setLocale] = useState<Locale>("zh-Hans");
   const [availableLocales, setAvailableLocales] = useState<readonly Locale[]>(["zh-Hans", "en", "ja", "ko", "fr", "de"]);
+  const [appearanceLoadState, setAppearanceLoadState] = useState<AppearanceLoadState>("loading");
   const [toolchainHealth, setToolchainHealth] = useState<ToolchainHealth | null>(null);
   const [dropActive, setDropActive] = useState(false);
   const [homeDraftText, setHomeDraftText] = useState("");
@@ -316,6 +324,25 @@ export function App(): React.JSX.Element {
     }
   };
 
+  const refreshAppearance = async (): Promise<boolean> => {
+    setAppearanceLoadState("loading");
+    try {
+      const appearance = await window.pige.settings.appearance();
+      if (voiceAssetInstallActiveRef.current) {
+        deferredAppearanceRef.current = appearance;
+        setAppearanceLoadState("ready");
+        return true;
+      }
+      setLocale(appearance.locale);
+      setAvailableLocales(appearance.availableLocales);
+      setAppearanceLoadState("ready");
+      return true;
+    } catch {
+      setAppearanceLoadState("failed");
+      return false;
+    }
+  };
+
   useEffect(() => {
     let active = true;
     const unsubscribeLayout = window.pige.window.onLayoutChanged((nextState) => {
@@ -326,14 +353,7 @@ export function App(): React.JSX.Element {
     void window.pige.window.currentLayout().then((nextState) => {
       if (active) applyWindowLayoutState(nextState);
     });
-    void window.pige.settings.appearance().then((appearance) => {
-      if (voiceAssetInstallActiveRef.current) {
-        deferredAppearanceRef.current = appearance;
-        return;
-      }
-      setLocale(appearance.locale);
-      setAvailableLocales(appearance.availableLocales);
-    });
+    void refreshAppearance();
     void window.pige.system.toolchainHealth().then(setToolchainHealth);
     void refreshVaultState();
     void refreshModels().catch(() => undefined);
@@ -658,6 +678,7 @@ export function App(): React.JSX.Element {
     const appearance = await window.pige.settings.setLocale({ locale: nextLocale });
     setLocale(appearance.locale);
     setAvailableLocales(appearance.availableLocales);
+    setAppearanceLoadState("ready");
   };
 
   const submitFiles = async (
@@ -1023,10 +1044,19 @@ export function App(): React.JSX.Element {
         <main className="workspace" inert={sidebarModal || agentModal}>
         {blocked ? (
           <FirstRunPanel
+            appearanceLoadState={appearanceLoadState}
+            locale={locale}
+            availableLocales={availableLocales}
             busy={busy}
             error={error}
+            modelSummary={modelSummary}
             recentVaults={recentVaults}
             vaultName={vaultName}
+            onLocaleChange={updateLocale}
+            onRetryAppearance={refreshAppearance}
+            onRefreshModels={refreshModels}
+            onRefreshAgentRuntimeStatus={refreshAgentRuntimeStatus}
+            onBusy={setBusy}
             onCreate={createVault}
             onOpen={openVault}
             onRemoveRecent={removeRecent}
@@ -1224,16 +1254,48 @@ export function App(): React.JSX.Element {
             ) : null
           ) : settingsSection === "general" ? (
             <GeneralSettingsPanel
+              alwaysOnTop={windowState?.alwaysOnTop ?? false}
+              onAlwaysOnTopChange={toggleAlwaysOnTop}
+              onOpenAppearance={() => {
+                setSettingsSection("appearance");
+                setDevelopmentNotice(null);
+              }}
+              onDevelopment={() => showDevelopmentCapability("settings", "window_preferences")}
+              t={t}
+            />
+          ) : settingsSection === "appearance" ? (
+            <AppearanceSettingsPanel
               locale={locale}
               availableLocales={availableLocales}
-              alwaysOnTop={windowState?.alwaysOnTop ?? false}
               onLocaleChange={updateLocale}
-              onAlwaysOnTopChange={toggleAlwaysOnTop}
+              onDevelopment={() => showDevelopmentCapability("settings", "appearance")}
+              t={t}
+            />
+          ) : settingsSection === "capabilities" ? (
+            <LocalCapabilitiesSettingsPanel
+              toolchainHealth={toolchainHealth}
+              onRefresh={refreshDiagnostics}
+              onDevelopment={() => showDevelopmentCapability("settings", "local_capabilities")}
+              t={t}
+            />
+          ) : settingsSection === "memory" ? (
+            <AgentMemorySettingsPanel
+              onDevelopment={() => showDevelopmentCapability("settings", "agent_memory")}
+              t={t}
+            />
+          ) : settingsSection === "privacy" ? (
+            <PermissionsPrivacySettingsPanel
+              onDevelopment={() => showDevelopmentCapability("settings", "permissions_privacy")}
               t={t}
             />
           ) : settingsSection === "skills" ? (
             <SkillsSettingsPanel
               onDevelopment={() => showDevelopmentCapability("settings", "skills")}
+              t={t}
+            />
+          ) : settingsSection === "packages" ? (
+            <PiPackagesSettingsPanel
+              onDevelopment={() => showDevelopmentCapability("settings", "packages")}
               t={t}
             />
           ) : settingsSection === "system" ? (
@@ -2006,7 +2068,9 @@ export function NoteReader(props: {
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const summary = props.note.summary;
+  const readerLinkDescriptionId = useId();
   const readerRef = useRef<HTMLElement | null>(null);
+  const markdownBodyRef = useRef<HTMLDivElement | null>(null);
   const selectionToolbarRef = useRef<HTMLDivElement | null>(null);
   const selectionActionRefs = useRef(new Map<number, HTMLButtonElement>());
   const selectionFocusTransition = useRef(false);
@@ -2026,6 +2090,38 @@ export function NoteReader(props: {
   } | null>(null);
   const [selectionPosition, setSelectionPosition] = useState<{ readonly left: number; readonly top: number } | null>(null);
   const [selectionActionIndex, setSelectionActionIndex] = useState(0);
+
+  useLayoutEffect(() => {
+    const firstBlock = markdownBodyRef.current?.firstElementChild;
+    if (!firstBlock || firstBlock.tagName !== "H1") return;
+    const normalizeTitle = (value: string): string => value.normalize("NFKC").replace(/\s+/gu, " ").trim();
+    firstBlock.classList.toggle(
+      "reader-duplicate-title",
+      normalizeTitle(firstBlock.textContent ?? "") === normalizeTitle(summary.title)
+    );
+  });
+
+  useLayoutEffect(() => {
+    const internalLinks = markdownBodyRef.current?.querySelectorAll<HTMLAnchorElement>(
+      'a[href^="#wiki:"], a[href^="#source:"]'
+    );
+    internalLinks?.forEach((link) => {
+      link.dataset.readerLinkState = "unavailable";
+      link.setAttribute("aria-describedby", readerLinkDescriptionId);
+    });
+  }, [props.note.html, readerLinkDescriptionId]);
+
+  const handleInternalReaderLink = (event: ReactMouseEvent<HTMLDivElement>): void => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const link = target.closest<HTMLAnchorElement>("a[href]");
+    if (!link || !event.currentTarget.contains(link)) return;
+    const href = link.getAttribute("href") ?? "";
+    if (!href.startsWith("#wiki:") && !href.startsWith("#source:")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    props.onDevelopment("reader_link");
+  };
 
   const closeSelectionToolbar = (restoreFocus: boolean): void => {
     selectionFocusTransition.current = false;
@@ -2200,8 +2296,14 @@ export function NoteReader(props: {
           ) : null}
         </div>
       </header>
+      <p id={readerLinkDescriptionId} hidden>
+        {props.t("note.readerLinkUnavailable")}
+      </p>
       <div
+        ref={markdownBodyRef}
         className="markdown-body"
+        onClickCapture={handleInternalReaderLink}
+        onAuxClickCapture={handleInternalReaderLink}
         // HTML is produced by the main-process Markdown renderer after sanitization.
         dangerouslySetInnerHTML={{ __html: props.note.html }}
       />
@@ -2377,10 +2479,19 @@ function dragEventHasFiles(event: DragEvent<HTMLElement>): boolean {
 }
 
 interface FirstRunPanelProps {
+  readonly appearanceLoadState: AppearanceLoadState;
+  readonly locale: Locale;
+  readonly availableLocales: readonly Locale[];
   readonly busy: boolean;
   readonly error: string | null;
+  readonly modelSummary: ModelProviderSettingsSummary | null;
   readonly recentVaults: readonly RecentVaultSummary[];
   readonly vaultName: string;
+  readonly onLocaleChange: (locale: Locale) => Promise<void>;
+  readonly onRetryAppearance: () => Promise<boolean>;
+  readonly onRefreshModels: () => Promise<ModelProviderSettingsSummary | null>;
+  readonly onRefreshAgentRuntimeStatus: () => Promise<void>;
+  readonly onBusy: (busy: boolean) => void;
   readonly onCreate: () => Promise<void>;
   readonly onOpen: () => Promise<void>;
   readonly onRemoveRecent: (vaultId: string) => Promise<void>;
@@ -2389,6 +2500,8 @@ interface FirstRunPanelProps {
   readonly onError: (error: string | null) => void;
   readonly t: (key: string) => string;
 }
+
+type FirstRunStep = "language" | "models" | "vault";
 
 type ReadyRestorePreview = Extract<RestorePreviewResult, { readonly status: "ready" }>;
 
@@ -2673,19 +2786,147 @@ function RestorePreviewPanel(props: {
 }
 
 function FirstRunPanel(props: FirstRunPanelProps): React.JSX.Element {
+  const [step, setStep] = useState<FirstRunStep>("language");
+  const [languageBusy, setLanguageBusy] = useState(false);
+  const [languageError, setLanguageError] = useState(false);
+  const stepRef = useRef<HTMLDivElement | null>(null);
   const restore = useRestoreFlow(props.onRestoreCompleted, () => props.onError(null));
   const showingRestore = Boolean(restore.restorePreview);
+  const hasUsableDefaultModel = Boolean(
+    props.modelSummary?.defaultModelProfileId &&
+    props.modelSummary.models.some((model) =>
+      model.id === props.modelSummary?.defaultModelProfileId && model.enabled
+    )
+  );
+
+  const moveTo = (nextStep: FirstRunStep): void => {
+    props.onError(null);
+    setStep(nextStep);
+  };
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => stepRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [step]);
+
+  const selectLocale = async (nextLocale: Locale): Promise<void> => {
+    if (languageBusy || nextLocale === props.locale) return;
+    setLanguageBusy(true);
+    setLanguageError(false);
+    try {
+      await props.onLocaleChange(nextLocale);
+    } catch {
+      setLanguageError(true);
+    } finally {
+      setLanguageBusy(false);
+    }
+  };
+
+  const retryAppearance = async (): Promise<void> => {
+    if (languageBusy) return;
+    setLanguageBusy(true);
+    setLanguageError(false);
+    try {
+      if (!(await props.onRetryAppearance())) setLanguageError(true);
+    } finally {
+      setLanguageBusy(false);
+    }
+  };
 
   return (
-    <section className="first-run" aria-label={props.t("firstRun.aria")}>
-      <div className="first-run-card">
+    <section className="first-run" aria-label={props.t("firstRun.setupAria")}>
+      <div className={`first-run-card step-${step}`}>
         <div className="first-run-brand">
           <img src={pigeMarkUrl} alt="" />
           <strong>Pige</strong>
         </div>
 
-        {!showingRestore ? (
-          <div className="first-run-step vault">
+        {step === "language" ? (
+          <div className="first-run-step language" ref={stepRef} tabIndex={-1}>
+            <span className="first-run-progress">{props.t("firstRun.progressLanguage")}</span>
+            <h1>{props.t("firstRun.welcomeTitle")}</h1>
+            <p>{props.t("firstRun.welcomeSubtitle")}</p>
+            {props.appearanceLoadState === "loading" ? (
+              <div className="first-run-language-loading" role="status">
+                <PigeIcon name="loading" size={16} />
+                <span>{props.t("firstRun.languageLoading")}</span>
+              </div>
+            ) : (
+              <label className="first-run-language" htmlFor="first-run-language">
+                <span>{props.t("appearance.appLanguage")}</span>
+                <select
+                  id="first-run-language"
+                  value={props.locale}
+                  disabled={languageBusy}
+                  aria-describedby="first-run-language-description"
+                  onChange={(event) => void selectLocale(event.target.value as Locale)}
+                >
+                  {props.availableLocales.map((availableLocale) => (
+                    <option key={availableLocale} value={availableLocale}>{localeLabels[availableLocale]}</option>
+                  ))}
+                </select>
+                <small id="first-run-language-description">
+                  {props.t(props.appearanceLoadState === "failed"
+                    ? "firstRun.languageFallbackDescription"
+                    : "firstRun.languageDescription")}
+                </small>
+              </label>
+            )}
+            {props.appearanceLoadState === "failed" || languageError ? (
+              <div className="first-run-inline-error" role="alert">
+                <span>{props.t("firstRun.languageLoadFailed")}</span>
+                <button type="button" className="secondary" disabled={languageBusy} onClick={() => void retryAppearance()}>
+                  {props.t("models.retry")}
+                </button>
+              </div>
+            ) : null}
+            <div className="first-run-local-note">
+              <PigeIcon name="folder" size={18} />
+              <span>
+                <strong>{props.t("firstRun.localFirstTitle")}</strong>
+                <small>{props.t("firstRun.localFirstDescription")}</small>
+              </span>
+            </div>
+            <div className="first-run-actions">
+              <button
+                type="button"
+                className="primary first-run-next"
+                disabled={languageBusy || props.appearanceLoadState === "loading"}
+                onClick={() => moveTo("models")}
+              >
+                {props.t("firstRun.continue")}
+              </button>
+            </div>
+          </div>
+        ) : step === "models" ? (
+          <div className="first-run-step models" ref={stepRef} tabIndex={-1}>
+            <span className="first-run-progress">{props.t("firstRun.progressModels")}</span>
+            <div className="first-run-model-note" role="note">
+              <strong>{props.t("firstRun.modelOptionalTitle")}</strong>
+              <span>{props.t("firstRun.modelOptionalDescription")}</span>
+            </div>
+            <div className="first-run-model-panel">
+              <ModelSettingsPanel
+                busy={props.busy}
+                modelSummary={props.modelSummary}
+                onRefreshModels={props.onRefreshModels}
+                onRefreshAgentRuntimeStatus={props.onRefreshAgentRuntimeStatus}
+                onBusy={props.onBusy}
+                t={props.t}
+              />
+            </div>
+            <div className="first-run-actions split">
+              <button type="button" className="secondary first-run-back" disabled={props.busy} onClick={() => moveTo("language")}>
+                {props.t("firstRun.back")}
+              </button>
+              <button type="button" className="primary first-run-next" disabled={props.busy} onClick={() => moveTo("vault")}>
+                {props.t(hasUsableDefaultModel ? "firstRun.continueWithModel" : "firstRun.skipModel")}
+              </button>
+            </div>
+          </div>
+        ) : !showingRestore ? (
+          <div className="first-run-step vault" ref={stepRef} tabIndex={-1}>
+            <span className="first-run-progress">{props.t("firstRun.progressVault")}</span>
             <h1>{props.t("firstRun.title")}</h1>
             <p>{props.t("firstRun.subtitle")}</p>
             <label className="first-run-vault-name" htmlFor="vault-name">
@@ -2729,9 +2970,14 @@ function FirstRunPanel(props: FirstRunPanelProps): React.JSX.Element {
               <p className="error" role="alert">{props.t(restore.restoreErrorKey)}</p>
             ) : null}
             <RecentVaults recentVaults={props.recentVaults} onRemoveRecent={props.onRemoveRecent} t={props.t} />
+            <div className="first-run-actions">
+              <button type="button" className="secondary first-run-back" disabled={props.busy} onClick={() => moveTo("models")}>
+                {props.t("firstRun.back")}
+              </button>
+            </div>
           </div>
         ) : (
-          <div className="first-run-step restore">
+          <div className="first-run-step restore" ref={stepRef} tabIndex={-1}>
             <RestorePreviewPanel
               idPrefix="first-run"
               preview={restore.restorePreview!}
@@ -4003,18 +4249,31 @@ function HomeComposer(props: {
                     </strong>
                     <span>{props.t(activity.status === "undone" ? "activity.statusUndone" : "activity.statusApplied")}</span>
                   </div>
-                  {activity.canUndo ? (
-                    <button
-                      type="button"
-                      className="ghost"
-                      aria-label={`${props.t("activity.undo")}: ${activityLabel}`}
-                      data-activity-undo-id={activity.operationId}
-                      disabled={props.activityUndoingId !== null || props.activityBlockedIds.includes(activity.operationId)}
-                      onClick={() => void props.onUndoActivity(activity.operationId)}
-                    >
-                      {props.t(props.activityUndoingId === activity.operationId ? "activity.undoing" : "activity.undo")}
-                    </button>
-                  ) : null}
+                  <div className="activity-row-actions">
+                    {activity.status === "applied" ? (
+                      <button
+                        type="button"
+                        className="ghost"
+                        aria-label={`${props.t("activity.open")}: ${activityLabel}`}
+                        data-activity-open-id={activity.operationId}
+                        onClick={() => props.onDevelopment("activity_open")}
+                      >
+                        {props.t("activity.open")}
+                      </button>
+                    ) : null}
+                    {activity.canUndo ? (
+                      <button
+                        type="button"
+                        className="ghost"
+                        aria-label={`${props.t("activity.undo")}: ${activityLabel}`}
+                        data-activity-undo-id={activity.operationId}
+                        disabled={props.activityUndoingId !== null || props.activityBlockedIds.includes(activity.operationId)}
+                        onClick={() => void props.onUndoActivity(activity.operationId)}
+                      >
+                        {props.t(props.activityUndoingId === activity.operationId ? "activity.undoing" : "activity.undo")}
+                      </button>
+                    ) : null}
+                  </div>
                 </article>
               );
             })}
@@ -4815,14 +5074,14 @@ const settingsSections: readonly {
   readonly status: "real" | "partial" | "development";
   readonly capability?: DevelopmentCapability;
 }[] = [
-  { id: "general", icon: "settings", status: "real" },
-  { id: "appearance", icon: "palette", status: "development", capability: "appearance" },
+  { id: "general", icon: "settings", status: "partial" },
+  { id: "appearance", icon: "palette", status: "partial" },
   { id: "vault", icon: "folder", status: "real" },
   { id: "maintenance", icon: "database", status: "real" },
   { id: "models", icon: "model", status: "real" },
-  { id: "capabilities", icon: "wrench", status: "development", capability: "local_capabilities" },
-  { id: "memory", icon: "memory", status: "development", capability: "agent_memory" },
-  { id: "privacy", icon: "shield", status: "development", capability: "permissions_privacy" },
+  { id: "capabilities", icon: "wrench", status: "partial" },
+  { id: "memory", icon: "memory", status: "development" },
+  { id: "privacy", icon: "shield", status: "partial" },
   { id: "skills", icon: "skill", status: "development", capability: "skills" },
   { id: "packages", icon: "package", status: "development", capability: "packages" },
   { id: "system", icon: "activity", status: "partial" }
@@ -4869,6 +5128,9 @@ export function SettingsSurface(props: {
 }): React.JSX.Element {
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const compactNavigationButtonRef = useRef<HTMLButtonElement>(null);
+  const compactSettings = useMediaQuery("(max-width: 520px)");
+  const [compactNavigationOpen, setCompactNavigationOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
   const sectionMatches = (section: SettingsSection): boolean =>
@@ -4876,19 +5138,30 @@ export function SettingsSurface(props: {
   const matchingSectionCount = settingsSections.filter((item) => sectionMatches(item.id)).length;
 
   useEffect(() => {
-    closeButtonRef.current?.focus();
-  }, []);
+    if (compactSettings) compactNavigationButtonRef.current?.focus();
+    else closeButtonRef.current?.focus();
+  }, [compactSettings]);
 
   const handleDialogKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
     if (event.key === "Escape") {
       event.preventDefault();
+      if (compactSettings && compactNavigationOpen) {
+        setCompactNavigationOpen(false);
+        window.requestAnimationFrame(() => compactNavigationButtonRef.current?.focus());
+        return;
+      }
       props.onClose();
       return;
     }
     if (event.key !== "Tab") return;
     const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
       'button:not([disabled]), select:not([disabled]), input:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
-    ) ?? []).filter((element) => !element.hidden && element.getAttribute("aria-hidden") !== "true");
+    ) ?? []).filter((element) =>
+      !element.hidden &&
+      element.tabIndex >= 0 &&
+      element.getAttribute("aria-hidden") !== "true" &&
+      element.closest('[inert], [aria-hidden="true"]') === null
+    );
     if (focusable.length === 0) {
       event.preventDefault();
       return;
@@ -4909,13 +5182,19 @@ export function SettingsSurface(props: {
       <div
         ref={dialogRef}
         className="settings-surface"
+        data-compact-navigation-open={compactSettings && compactNavigationOpen ? "true" : "false"}
         role="dialog"
         aria-modal="true"
         aria-labelledby="settings-surface-title"
         onKeyDown={handleDialogKeyDown}
       >
         <div className="settings-surface-body">
-          <aside className="settings-sidebar" aria-label={props.t("settings.navigation") }>
+          <aside
+            className="settings-sidebar"
+            aria-label={props.t("settings.navigation")}
+            aria-hidden={compactSettings && !compactNavigationOpen ? "true" : undefined}
+            inert={compactSettings && !compactNavigationOpen}
+          >
             <div className="settings-sidebar-top">
               <button
                 ref={closeButtonRef}
@@ -4963,6 +5242,10 @@ export function SettingsSurface(props: {
                           aria-current={props.section === item.id ? "page" : undefined}
                           onClick={() => {
                             props.onSectionChange(item.id);
+                            if (compactSettings) {
+                              setCompactNavigationOpen(false);
+                              window.requestAnimationFrame(() => compactNavigationButtonRef.current?.focus());
+                            }
                             if (item.capability) props.onDevelopment(item.capability);
                           }}
                         >
@@ -4980,8 +5263,36 @@ export function SettingsSurface(props: {
               ) : null}
             </div>
           </aside>
-          <div className="settings-content">
+          {compactSettings && compactNavigationOpen ? (
+            <button
+              type="button"
+              className="settings-compact-backdrop"
+              tabIndex={-1}
+              aria-label={props.t("settings.navigation")}
+              onClick={() => {
+                setCompactNavigationOpen(false);
+                window.requestAnimationFrame(() => compactNavigationButtonRef.current?.focus());
+              }}
+            />
+          ) : null}
+          <div className="settings-content" inert={compactSettings && compactNavigationOpen}>
             <h1 id="settings-surface-title" className="visually-hidden">{props.t("settings.title")}</h1>
+            <header className="settings-compact-header">
+              <button
+                ref={compactNavigationButtonRef}
+                type="button"
+                className="icon-button"
+                aria-label={props.t("settings.navigation")}
+                aria-expanded={compactNavigationOpen}
+                onClick={() => {
+                  setCompactNavigationOpen(true);
+                  window.requestAnimationFrame(() => closeButtonRef.current?.focus());
+                }}
+              >
+                <PigeIcon name="panel" size={17} />
+              </button>
+              <strong>{props.t(`settings.section.${props.section}`)}</strong>
+            </header>
             <DevelopmentStatus notice={props.developmentNotice} t={props.t} />
             {props.children}
           </div>
@@ -4991,47 +5302,668 @@ export function SettingsSurface(props: {
   );
 }
 
-function GeneralSettingsPanel(props: {
-  readonly locale: Locale;
-  readonly availableLocales: readonly Locale[];
+export function GeneralSettingsPanel(props: {
   readonly alwaysOnTop: boolean;
-  readonly onLocaleChange: (locale: Locale) => Promise<void>;
   readonly onAlwaysOnTopChange: () => Promise<void>;
+  readonly onOpenAppearance: () => void;
+  readonly onDevelopment: () => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   return (
     <section className="settings-page settings-general" aria-labelledby="settings-general-title">
-      <div>
+      <header className="settings-panel-header">
         <h1 id="settings-general-title">{props.t("settings.general.title")}</h1>
-        <p className="muted">{props.t("settings.general.subtitle")}</p>
-      </div>
-      <section className="settings-group">
-        <label htmlFor="settings-language">{props.t("language.label")}</label>
-        <select
-          id="settings-language"
-          value={props.locale}
-          onChange={(event) => void props.onLocaleChange(event.target.value as Locale)}
-        >
-          {props.availableLocales.map((availableLocale) => (
-            <option key={availableLocale} value={availableLocale}>{localeLabels[availableLocale]}</option>
-          ))}
-        </select>
-      </section>
-      <section className="settings-group settings-toggle-row">
-        <div>
-          <h2>{props.t("settings.general.alwaysOnTop")}</h2>
-          <p className="muted">{props.t("settings.general.alwaysOnTopDescription")}</p>
+        <p>{props.t("settings.general.subtitle")}</p>
+      </header>
+
+      <section className="settings-section" aria-labelledby="settings-general-window-title">
+        <h2 className="settings-section-title" id="settings-general-window-title">
+          {props.t("settings.general.windowSection")}
+        </h2>
+        <div className="settings-card">
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("settings.general.startupTitle")}</strong>
+              <span id="settings-general-startup-description">{props.t("settings.general.startupDescription")}</span>
+            </div>
+            <button
+              className="settings-button"
+              type="button"
+              aria-describedby="settings-general-startup-description"
+              onClick={props.onDevelopment}
+            >
+              {props.t("settings.status.development")}
+            </button>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("settings.general.defaultWindowTitle")}</strong>
+              <span>{props.t("settings.general.defaultWindowDescription")}</span>
+            </div>
+            <span className="settings-status">{props.t("settings.general.adaptive")}</span>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("settings.general.rememberWindowTitle")}</strong>
+              <span>{props.t("settings.general.rememberWindowDescription")}</span>
+            </div>
+            <span className="settings-status">{props.t("settings.general.automatic")}</span>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("settings.general.alwaysOnTop")}</strong>
+              <span id="settings-general-always-on-top-description">
+                {props.t("settings.general.alwaysOnTopDescription")}
+              </span>
+            </div>
+            <button
+              type="button"
+              className="settings-switch"
+              role="switch"
+              aria-label={props.t("settings.general.alwaysOnTop")}
+              aria-describedby="settings-general-always-on-top-description"
+              aria-checked={props.alwaysOnTop}
+              onClick={() => void props.onAlwaysOnTopChange()}
+            />
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("settings.general.sidebarOnLaunchTitle")}</strong>
+              <span id="settings-general-sidebar-on-launch-description">
+                {props.t("settings.general.sidebarOnLaunchDescription")}
+              </span>
+            </div>
+            <span className="settings-status">{props.t("settings.general.lastState")}</span>
+          </div>
         </div>
-        <button
-          type="button"
-          className={props.alwaysOnTop ? "toggle-button active" : "toggle-button"}
-          role="switch"
-          aria-checked={props.alwaysOnTop}
-          onClick={() => void props.onAlwaysOnTopChange()}
-        >
-          {props.t(props.alwaysOnTop ? "settings.enabled" : "settings.disabled")}
-        </button>
       </section>
+
+      <section className="settings-section" aria-labelledby="settings-general-pige-title">
+        <h2 className="settings-section-title" id="settings-general-pige-title">
+          {props.t("settings.general.pigeSection")}
+        </h2>
+        <div className="settings-card">
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("settings.general.productTitle")}</strong>
+              <span>{props.t("settings.general.productDescription")}</span>
+            </div>
+            <span className="settings-badge">{props.t("settings.general.preAlpha")}</span>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("settings.general.appearanceTitle")}</strong>
+              <span>{props.t("settings.general.appearanceDescription")}</span>
+            </div>
+            <button className="settings-button" type="button" onClick={props.onOpenAppearance}>
+              {props.t("settings.general.openAppearance")}
+            </button>
+          </div>
+        </div>
+      </section>
+    </section>
+  );
+}
+
+export function AppearanceSettingsPanel(props: {
+  readonly locale: Locale;
+  readonly availableLocales: readonly Locale[];
+  readonly onLocaleChange: (locale: Locale) => Promise<void>;
+  readonly onDevelopment: () => void;
+  readonly t: (key: string) => string;
+}): React.JSX.Element {
+  const themeOptionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const themeChoices = ["system", "light", "dark"] as const;
+  const activeTheme = "light";
+
+  const moveThemeFocus = (event: ReactKeyboardEvent<HTMLButtonElement>, index: number): void => {
+    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    let nextIndex = index;
+    if (event.key === "Home") nextIndex = 0;
+    else if (event.key === "End") nextIndex = themeChoices.length - 1;
+    else if (event.key === "ArrowRight" || event.key === "ArrowDown") nextIndex = (index + 1) % themeChoices.length;
+    else nextIndex = (index - 1 + themeChoices.length) % themeChoices.length;
+    themeOptionRefs.current[nextIndex]?.focus();
+    if (themeChoices[nextIndex] !== activeTheme) props.onDevelopment();
+  };
+
+  return (
+    <section className="settings-page appearance-settings-page" aria-labelledby="settings-appearance-title">
+      <header className="settings-panel-header">
+        <h1 id="settings-appearance-title">{props.t("appearance.title")}</h1>
+        <p>{props.t("appearance.subtitle")}</p>
+      </header>
+
+      <section className="settings-section" aria-labelledby="appearance-theme-title">
+        <h2 className="settings-section-title" id="appearance-theme-title">{props.t("appearance.theme")}</h2>
+        <div className="theme-grid" role="radiogroup" aria-labelledby="appearance-theme-title" aria-describedby="appearance-partial-note">
+          {themeChoices.map((choice, index) => (
+            <button
+              key={choice}
+              ref={(element) => { themeOptionRefs.current[index] = element; }}
+              className={choice === activeTheme ? "theme-option active" : "theme-option"}
+              type="button"
+              role="radio"
+              aria-checked={choice === activeTheme}
+              tabIndex={choice === activeTheme ? 0 : -1}
+              onClick={choice === activeTheme ? undefined : props.onDevelopment}
+              onKeyDown={(event) => moveThemeFocus(event, index)}
+            >
+              <span className={`theme-preview ${choice}`} aria-hidden="true" />
+              <span>{props.t(`appearance.theme.${choice}`)}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="settings-section" aria-labelledby="appearance-language-title">
+        <h2 className="settings-section-title" id="appearance-language-title">{props.t("appearance.language")}</h2>
+        <div className="settings-card">
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("appearance.appLanguage")}</strong>
+              <span>{props.t("appearance.appLanguageDescription")}</span>
+            </div>
+            <select
+              className="settings-select"
+              value={props.locale}
+              aria-label={props.t("appearance.appLanguage")}
+              onChange={(event) => void props.onLocaleChange(event.target.value as Locale)}
+            >
+              {props.availableLocales.map((availableLocale) => (
+                <option key={availableLocale} value={availableLocale}>{localeLabels[availableLocale]}</option>
+              ))}
+            </select>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("appearance.knowledgeLanguage")}</strong>
+              <span id="appearance-knowledge-language-description">{props.t("appearance.knowledgeLanguageDescription")}</span>
+            </div>
+            <button
+              className="settings-button"
+              type="button"
+              data-appearance-control="knowledge-language"
+              aria-label={`${props.t("appearance.knowledgeLanguage")}: ${props.t("settings.status.development")}`}
+              aria-describedby="appearance-knowledge-language-description appearance-partial-note"
+              onClick={props.onDevelopment}
+            >
+              {props.t("settings.status.development")}
+            </button>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("appearance.ocrLanguage")}</strong>
+              <span id="appearance-ocr-language-description">{props.t("appearance.ocrLanguageDescription")}</span>
+            </div>
+            <button
+              className="settings-button"
+              type="button"
+              data-appearance-control="ocr-language"
+              aria-label={`${props.t("appearance.ocrLanguage")}: ${props.t("settings.status.development")}`}
+              aria-describedby="appearance-ocr-language-description appearance-partial-note"
+              onClick={props.onDevelopment}
+            >
+              {props.t("settings.status.development")}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <p className="settings-note" id="appearance-partial-note">{props.t("appearance.partialNote")}</p>
+    </section>
+  );
+}
+
+export function PermissionsPrivacySettingsPanel(props: {
+  readonly onDevelopment: () => void;
+  readonly t: (key: string) => string;
+}): React.JSX.Element {
+  return (
+    <section className="settings-page privacy-settings-page" aria-labelledby="settings-privacy-title">
+      <header className="settings-panel-header">
+        <h1 id="settings-privacy-title">{props.t("privacy.title")}</h1>
+        <p>{props.t("privacy.subtitle")}</p>
+      </header>
+
+      <section className="settings-section" aria-labelledby="privacy-model-boundary-title">
+        <h2 className="settings-section-title" id="privacy-model-boundary-title">
+          {props.t("privacy.modelBoundary")}
+        </h2>
+        <div className="settings-card">
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("privacy.ordinaryTitle")}</strong>
+              <span>{props.t("privacy.ordinaryDescription")}</span>
+            </div>
+            <button
+              className="settings-button"
+              type="button"
+              data-privacy-control="ordinary-policy"
+              aria-describedby="privacy-partial-note"
+              onClick={props.onDevelopment}
+            >
+              {props.t("settings.status.development")}
+            </button>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("privacy.cloudPolicyTitle")}</strong>
+              <span id="privacy-cloud-policy-description">{props.t("privacy.cloudPolicyDescription")}</span>
+            </div>
+            <button
+              className="settings-button"
+              type="button"
+              data-privacy-control="cloud-policy"
+              aria-label={props.t("privacy.cloudPolicyTitle")}
+              aria-describedby="privacy-cloud-policy-description privacy-partial-note"
+              onClick={props.onDevelopment}
+            >
+              {props.t("settings.status.development")}
+            </button>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("privacy.redactionTitle")}</strong>
+              <span>{props.t("privacy.redactionDescription")}</span>
+            </div>
+            <button
+              className="settings-button"
+              type="button"
+              data-privacy-control="redaction-policy"
+              aria-label={props.t("privacy.redactionTitle")}
+              aria-describedby="privacy-partial-note"
+              onClick={props.onDevelopment}
+            >
+              {props.t("settings.status.development")}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="settings-section" aria-labelledby="privacy-permissions-title">
+        <h2 className="settings-section-title" id="privacy-permissions-title">
+          {props.t("privacy.permissions")}
+        </h2>
+        <div className="settings-card">
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("privacy.defaultModeTitle")}</strong>
+              <span id="privacy-default-mode-description">{props.t("privacy.defaultModeDescription")}</span>
+            </div>
+            <button
+              className="settings-button"
+              type="button"
+              data-privacy-control="default-mode"
+              aria-label={props.t("privacy.defaultModeTitle")}
+              aria-describedby="privacy-default-mode-description privacy-partial-note"
+              onClick={props.onDevelopment}
+            >
+              {props.t("settings.status.development")}
+            </button>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("privacy.savedGrantsTitle")}</strong>
+              <span>{props.t("privacy.savedGrantsDescription")}</span>
+            </div>
+            <button
+              className="settings-button"
+              type="button"
+              data-privacy-control="saved-grants"
+              aria-describedby="privacy-partial-note"
+              onClick={props.onDevelopment}
+            >
+              {props.t("settings.status.development")}
+            </button>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("privacy.yoloTitle")}</strong>
+              <span>{props.t("privacy.yoloDescription")}</span>
+            </div>
+            <button
+              className="settings-button"
+              type="button"
+              data-privacy-control="yolo"
+              aria-describedby="privacy-partial-note"
+              onClick={props.onDevelopment}
+            >
+              {props.t("settings.status.development")}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="settings-section" aria-labelledby="privacy-api-keys-title">
+        <h2 className="settings-section-title" id="privacy-api-keys-title">
+          {props.t("privacy.apiKeys")}
+        </h2>
+        <div className="settings-card">
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("privacy.apiKeyStorageTitle")}</strong>
+              <span>{props.t("privacy.apiKeyStorageDescription")}</span>
+            </div>
+            <span className="settings-status">{props.t("privacy.protected")}</span>
+          </div>
+        </div>
+      </section>
+
+      <p className="settings-note" id="privacy-partial-note">{props.t("privacy.partialNote")}</p>
+    </section>
+  );
+}
+
+export function LocalCapabilitiesSettingsPanel(props: {
+  readonly toolchainHealth: ToolchainHealth | null;
+  readonly onRefresh: () => Promise<void>;
+  readonly onDevelopment: () => void;
+  readonly t: (key: string) => string;
+}): React.JSX.Element {
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshFailed, setRefreshFailed] = useState(false);
+  const missingTools = props.toolchainHealth?.tools.filter((tool) => tool.status === "missing") ?? [];
+  const toolchainState = props.toolchainHealth?.status ?? "checking";
+
+  const refresh = async (): Promise<void> => {
+    if (refreshing) return;
+    setRefreshing(true);
+    setRefreshFailed(false);
+    try {
+      await props.onRefresh();
+    } catch {
+      setRefreshFailed(true);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  return (
+    <section className="settings-page capabilities-settings-page" aria-labelledby="settings-capabilities-title">
+      <header className="settings-panel-header">
+        <h1 id="settings-capabilities-title">{props.t("capabilities.title")}</h1>
+        <p>{props.t("capabilities.subtitle")}</p>
+      </header>
+
+      <section className="settings-section" aria-labelledby="capabilities-toolchain-title">
+        <h2 className="settings-section-title" id="capabilities-toolchain-title">
+          {props.t("capabilities.coreTools")}
+        </h2>
+        <div className="settings-card">
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("capabilities.toolchainTitle")}</strong>
+              <span>{props.t("capabilities.toolchainDescription")}</span>
+            </div>
+            <span className={`settings-status ${toolchainState === "needs_repair" ? "warning" : ""}`}>
+              {props.t(`capabilities.toolchain.${toolchainState}`)}
+            </span>
+          </div>
+          <div className="settings-row tall">
+            <div className="settings-row-copy">
+              <strong>{props.t("capabilities.detectedTools")}</strong>
+              {props.toolchainHealth ? (
+                <ul className="capability-tool-list" aria-label={props.t("capabilities.detectedTools")}>
+                  {props.toolchainHealth.tools.map((tool) => (
+                    <li key={tool.id}>
+                      <span>{tool.name}</span>
+                      <small className={tool.status === "missing" ? "missing" : "ready"}>
+                        {props.t(`capabilities.tool.${tool.status}`)}
+                      </small>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <span>{props.t("capabilities.checkingDescription")}</span>
+              )}
+            </div>
+            <button
+              className="settings-button"
+              type="button"
+              disabled={refreshing}
+              aria-describedby="capabilities-refresh-status"
+              onClick={() => void refresh()}
+            >
+              {props.t(refreshing ? "capabilities.checking" : "capabilities.checkAgain")}
+            </button>
+          </div>
+          {missingTools.length > 0 ? (
+            <div className="settings-row">
+              <div className="settings-row-copy">
+                <strong>{props.t("capabilities.repairTitle")}</strong>
+                <span>{props.t("capabilities.repairDescription")}</span>
+              </div>
+              <button className="settings-button" type="button" onClick={props.onDevelopment}>
+                {props.t("capabilities.repair")}
+              </button>
+            </div>
+          ) : null}
+        </div>
+        <p
+          className={refreshFailed ? "settings-inline-status error" : "settings-inline-status"}
+          id="capabilities-refresh-status"
+          role={refreshFailed ? "alert" : "status"}
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          {refreshFailed ? props.t("capabilities.refreshFailed") : ""}
+        </p>
+      </section>
+
+      <section className="settings-section" aria-labelledby="capabilities-retrieval-title">
+        <h2 className="settings-section-title" id="capabilities-retrieval-title">
+          {props.t("capabilities.localRetrieval")}
+        </h2>
+        <div className="settings-card">
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("capabilities.embeddingTitle")}</strong>
+              <span>{props.t("capabilities.embeddingDescription")}</span>
+            </div>
+            <span className="settings-status neutral">{props.t("capabilities.notReported")}</span>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("capabilities.rerankerTitle")}</strong>
+              <span>{props.t("capabilities.rerankerDescription")}</span>
+            </div>
+            <button className="settings-button" type="button" onClick={props.onDevelopment}>
+              {props.t("capabilities.manage")}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="settings-section" aria-labelledby="capabilities-input-title">
+        <h2 className="settings-section-title" id="capabilities-input-title">
+          {props.t("capabilities.ocrAndVoice")}
+        </h2>
+        <div className="settings-card">
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("capabilities.ocrEngineTitle")}</strong>
+              <span id="capabilities-ocr-description">{props.t("capabilities.ocrEngineDescription")}</span>
+            </div>
+            <button
+              className="settings-button"
+              type="button"
+              data-capability-control="ocr-engine"
+              aria-label={`${props.t("capabilities.ocrEngineTitle")}: ${props.t("settings.status.development")}`}
+              aria-describedby="capabilities-ocr-description capabilities-partial-note"
+              onClick={props.onDevelopment}
+            >
+              {props.t("settings.status.development")}
+            </button>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("capabilities.imageOcrTitle")}</strong>
+              <span>{props.t("capabilities.imageOcrDescription")}</span>
+            </div>
+            <button
+              className="settings-button"
+              type="button"
+              data-capability-control="image-ocr"
+              aria-label={`${props.t("capabilities.imageOcrTitle")}: ${props.t("settings.status.development")}`}
+              aria-describedby="capabilities-partial-note"
+              onClick={props.onDevelopment}
+            >
+              {props.t("settings.status.development")}
+            </button>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("capabilities.voiceTitle")}</strong>
+              <span>{props.t("capabilities.voiceDescription")}</span>
+            </div>
+            <button
+              className="settings-button"
+              type="button"
+              data-capability-control="voice-input"
+              aria-label={`${props.t("capabilities.voiceTitle")}: ${props.t("settings.status.development")}`}
+              aria-describedby="capabilities-partial-note"
+              onClick={props.onDevelopment}
+            >
+              {props.t("settings.status.development")}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <p className="settings-note" id="capabilities-partial-note">{props.t("capabilities.partialNote")}</p>
+    </section>
+  );
+}
+
+export function AgentMemorySettingsPanel(props: {
+  readonly onDevelopment: () => void;
+  readonly t: (key: string) => string;
+}): React.JSX.Element {
+  const memoryScopes = [
+    "summaries",
+    "naming",
+    "organization",
+    "mistakes"
+  ] as const;
+
+  return (
+    <section className="settings-page memory-settings-page" aria-labelledby="settings-memory-title">
+      <header className="settings-panel-header">
+        <h1 id="settings-memory-title">{props.t("memory.title")}</h1>
+        <p>{props.t("memory.subtitle")}</p>
+      </header>
+
+      <section className="settings-section" aria-labelledby="memory-policy-title">
+        <h2 className="settings-section-title" id="memory-policy-title">{props.t("memory.agentPolicy")}</h2>
+        <div className="settings-card">
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>PIGE.md</strong>
+              <span>{props.t("memory.pigeDescription")}</span>
+            </div>
+            <button
+              className="settings-button"
+              type="button"
+              data-memory-control="pige-policy"
+              aria-describedby="memory-partial-note"
+              onClick={props.onDevelopment}
+            >
+              {props.t("settings.status.development")}
+            </button>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("memory.highImpactTitle")}</strong>
+              <span id="memory-high-impact-description">{props.t("memory.highImpactDescription")}</span>
+            </div>
+            <button
+              className="settings-button"
+              type="button"
+              data-memory-control="high-impact-policy"
+              aria-label={props.t("memory.highImpactTitle")}
+              aria-describedby="memory-high-impact-description memory-partial-note"
+              onClick={props.onDevelopment}
+            >
+              {props.t("settings.status.development")}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="settings-section" aria-labelledby="memory-vault-title">
+        <h2 className="settings-section-title" id="memory-vault-title">{props.t("memory.memorySection")}</h2>
+        <div className="settings-card">
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("memory.vaultMemoryTitle")}</strong>
+              <span>{props.t("memory.vaultMemoryDescription")}</span>
+            </div>
+            <button
+              className="settings-button"
+              type="button"
+              data-memory-control="vault-memory"
+              aria-label={props.t("memory.vaultMemoryTitle")}
+              aria-describedby="memory-partial-note"
+              onClick={props.onDevelopment}
+            >
+              {props.t("settings.status.development")}
+            </button>
+          </div>
+          <div className="settings-row tall">
+            <div className="settings-row-copy">
+              <strong>{props.t("memory.useMemoryFor")}</strong>
+              <span>{props.t("memory.useMemoryDescription")}</span>
+              <div className="memory-scope-list" role="group" aria-label={props.t("memory.useMemoryFor") }>
+                {memoryScopes.map((scope) => (
+                  <button
+                    className="memory-scope-option"
+                    type="button"
+                    data-memory-scope={scope}
+                    aria-describedby="memory-partial-note"
+                    key={scope}
+                    onClick={props.onDevelopment}
+                  >
+                    <PigeIcon name="memory" size={14} aria-hidden="true" />
+                    {props.t(`memory.scope.${scope}`)}
+                    <small>{props.t("settings.status.development")}</small>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="settings-section" aria-labelledby="memory-records-title">
+        <h2 className="settings-section-title" id="memory-records-title">{props.t("memory.savedMemories")}</h2>
+        <div className="memory-empty-card">
+          <PigeIcon name="memory" size={22} />
+          <div>
+            <strong>{props.t("memory.emptyTitle")}</strong>
+            <span>{props.t("memory.emptyDescription")}</span>
+          </div>
+        </div>
+        <div className="settings-inline-actions">
+          <button className="settings-button" type="button" onClick={props.onDevelopment}>
+            {props.t("memory.inspect")}
+          </button>
+          <button className="settings-button" type="button" onClick={props.onDevelopment}>
+            {props.t("memory.export")}
+          </button>
+          <button
+            className="settings-button danger"
+            type="button"
+            disabled
+            title={props.t("memory.resetUnavailable")}
+          >
+            {props.t("memory.reset")}
+          </button>
+        </div>
+      </section>
+
+      <p className="settings-note" id="memory-partial-note">{props.t("memory.partialNote")}</p>
     </section>
   );
 }
@@ -5109,6 +6041,70 @@ export function SkillsSettingsPanel(props: {
           </div>
         </div>
       </section>
+    </section>
+  );
+}
+
+export function PiPackagesSettingsPanel(props: {
+  readonly onDevelopment: () => void;
+  readonly t: (key: string) => string;
+}): React.JSX.Element {
+  return (
+    <section className="settings-page settings-packages" aria-labelledby="settings-packages-title">
+      <header className="settings-panel-header">
+        <h1 id="settings-packages-title">{props.t("packages.title")}</h1>
+        <p>{props.t("packages.subtitle")}</p>
+      </header>
+
+      <section className="settings-section" role="group" aria-labelledby="packages-registry-title">
+        <h2 className="settings-section-title" id="packages-registry-title">{props.t("packages.registryTitle")}</h2>
+        <div className="settings-card skills-empty-card">
+          <span className="skills-empty-icon" aria-hidden="true"><PigeIcon name="package" size={19} /></span>
+          <div className="settings-row-copy">
+            <strong>{props.t("packages.unavailableTitle")}</strong>
+            <span>{props.t("packages.unavailableDescription")}</span>
+          </div>
+        </div>
+        <div className="settings-inline-actions">
+          <button className="settings-button primary settings-action" type="button" onClick={props.onDevelopment}>
+            <PigeIcon name="link" size={15} aria-hidden="true" />
+            {props.t("packages.installFromSource")}
+          </button>
+          <button className="settings-button settings-action" type="button" onClick={props.onDevelopment}>
+            <PigeIcon name="search" size={15} aria-hidden="true" />
+            {props.t("packages.searchCatalog")}
+          </button>
+        </div>
+      </section>
+
+      <section className="settings-section" role="group" aria-labelledby="packages-review-title">
+        <h2 className="settings-section-title" id="packages-review-title">{props.t("packages.reviewTitle")}</h2>
+        <div className="settings-card">
+          <div className="settings-row tall skills-information-row">
+            <span className="settings-list-icon neutral" aria-hidden="true"><PigeIcon name="shield" size={17} /></span>
+            <div className="settings-row-copy">
+              <strong>{props.t("packages.reviewIdentity")}</strong>
+              <span>{props.t("packages.reviewIdentityDescription")}</span>
+            </div>
+          </div>
+          <div className="settings-row tall skills-information-row">
+            <span className="settings-list-icon neutral" aria-hidden="true"><PigeIcon name="shield" size={17} /></span>
+            <div className="settings-row-copy">
+              <strong>{props.t("packages.reviewPermissions")}</strong>
+              <span>{props.t("packages.reviewPermissionsDescription")}</span>
+            </div>
+          </div>
+          <div className="settings-row tall skills-information-row">
+            <span className="settings-list-icon neutral" aria-hidden="true"><PigeIcon name="activity" size={17} /></span>
+            <div className="settings-row-copy">
+              <strong>{props.t("packages.lifecycleTitle")}</strong>
+              <span>{props.t("packages.lifecycleDescription")}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <p className="settings-note">{props.t("packages.partialNote")}</p>
     </section>
   );
 }

@@ -147,11 +147,15 @@ describe("full production UI renderer contract", () => {
     expect(appSource).toContain("const toolbarRect = toolbar.getBoundingClientRect()");
     expect(appSource).toContain('window.addEventListener("scroll", dismissOnScroll, true)');
     expect(appSource).toContain("priorOwner?.isConnected ? priorOwner : readerRef.current");
+    expect(appSource).toContain('!firstBlock || firstBlock.tagName !== "H1"');
+    expect(appSource).toContain('"reader-duplicate-title"');
     expect(appSource).not.toContain("const toolbarWidth = 244");
     expect(appSource).not.toContain("const toolbarHeight = 42");
     expect(appSource).not.toContain("sourceId}</");
     expect(cssSource).toContain("max-width: calc(100vw - 24px);");
     expect(cssSource).toContain("max-height: calc(100vh - 24px);");
+    expect(cssSource).toContain(".markdown-body > .reader-duplicate-title");
+    expect(cssSource).toContain("display: none;");
     expect(cssSource).toContain('.reader-toolbar-actions .prototype-action:not([data-reader-action="more"])');
   });
 

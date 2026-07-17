@@ -1,4 +1,13 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  type WheelEvent as ReactWheelEvent
+} from "react";
 import type { KnowledgeTreeNode, KnowledgeTreePageRef } from "@pige/contracts";
 import { PigeIcon } from "./PigeIcon";
 
@@ -26,6 +35,19 @@ type VisualTree = {
   readonly maxWeight: number;
 };
 
+type ViewportAnnouncement =
+  | { readonly kind: "focused"; readonly title: string }
+  | { readonly kind: "zoom"; readonly percent: number }
+  | { readonly kind: "secondary-unavailable" };
+
+type PointerDrag = {
+  readonly pointerId: number;
+  readonly clientX: number;
+  readonly clientY: number;
+  readonly panX: number;
+  readonly panY: number;
+};
+
 export function KnowledgeTreeMap(props: {
   readonly roots: readonly KnowledgeTreeNode[];
   readonly noteLoadingPageId: string | null;
@@ -39,12 +61,15 @@ export function KnowledgeTreeMap(props: {
   const [reviewOnly, setReviewOnly] = useState(false);
   const [activeId, setActiveId] = useState(() => visual.nodes[1]?.id ?? visual.nodes[0]?.id ?? "pige-root");
   const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
+  const [viewportAnnouncement, setViewportAnnouncement] = useState<ViewportAnnouncement | null>(null);
   const nodeRefs = useRef(new Map<string, SVGGElement>());
+  const pointerDragRef = useRef<PointerDrag | null>(null);
+  const searchOriginRef = useRef<string | null>(null);
   const active = visual.byId.get(activeId) ?? visual.nodes[0];
   const normalizedQuery = query.trim().toLocaleLowerCase();
-  const transform = active && zoom > 1
-    ? `translate(${450 - active.x * zoom} ${310 - active.y * zoom}) scale(${zoom})`
-    : "translate(0 0) scale(1)";
+  const transform = `translate(${pan.x} ${pan.y}) scale(${zoom})`;
 
   const nodeInteractive = (node: VisualNode): boolean => {
     if (mode === "list" && node.level >= 3) return false;
@@ -69,7 +94,11 @@ export function KnowledgeTreeMap(props: {
     if (!replacement || !nodeInteractive(replacement)) replacement = visual.nodes.find(nodeInteractive);
     if (!replacement || replacement.id === activeId) return;
     setActiveId(replacement.id);
-    setZoom(replacement.kind === "root" ? 1 : replacement.level <= 1 ? 1.24 : 1.5);
+    const nextZoom = replacement.kind === "root" ? 1 : replacement.level <= 1 ? 1.24 : 1.5;
+    setZoom(nextZoom);
+    setPan(replacement.kind === "root"
+      ? { x: 0, y: 0 }
+      : { x: 450 - replacement.x * nextZoom, y: 310 - replacement.y * nextZoom });
     if (shouldRestoreTreeFocus) {
       const move = (): void => nodeRefs.current.get(replacement!.id)?.focus();
       if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(move);
@@ -80,23 +109,139 @@ export function KnowledgeTreeMap(props: {
   const activateMode = (nextMode: TreeMode): void => {
     setMode(nextMode);
     setAnnouncedMode(nextMode);
+    setViewportAnnouncement(null);
+    if (nextMode === "tree") {
+      setZoom(1);
+      setPan({ x: 0, y: 0 });
+    }
     if (nextMode !== "list" || !active || active.level < 3) return;
     let visibleAncestor = active;
     while (visibleAncestor.level >= 3 && visibleAncestor.parentId) {
       visibleAncestor = visual.byId.get(visibleAncestor.parentId) ?? visual.nodes[0]!;
     }
     setActiveId(visibleAncestor.id);
-    setZoom(visibleAncestor.kind === "root" ? 1 : 1.24);
+    const nextZoom = visibleAncestor.kind === "root" ? 1 : 1.24;
+    setZoom(nextZoom);
+    setPan(visibleAncestor.kind === "root"
+      ? { x: 0, y: 0 }
+      : { x: 450 - visibleAncestor.x * nextZoom, y: 310 - visibleAncestor.y * nextZoom });
   };
 
-  const focusNode = (node: VisualNode, moveFocus = false): void => {
+  const focusNode = (node: VisualNode, moveFocus = false, announce = true): void => {
     setActiveId(node.id);
-    setZoom(node.kind === "root" ? 1 : node.level <= 1 ? 1.24 : 1.5);
+    const nextZoom = node.kind === "root" ? 1 : node.level <= 1 ? 1.24 : 1.5;
+    setZoom(nextZoom);
+    setPan(node.kind === "root"
+      ? { x: 0, y: 0 }
+      : { x: 450 - node.x * nextZoom, y: 310 - node.y * nextZoom });
+    setAnnouncedMode(null);
+    if (announce) setViewportAnnouncement({ kind: "focused", title: node.title });
     if (moveFocus) {
       const move = (): void => nodeRefs.current.get(node.id)?.focus();
       if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(move);
       else move();
     }
+  };
+
+  const changeZoom = (delta: number): void => {
+    const nextZoom = Math.max(.78, Math.min(2.2, zoom + delta));
+    const mapCenterX = (450 - pan.x) / zoom;
+    const mapCenterY = (310 - pan.y) / zoom;
+    setZoom(nextZoom);
+    setPan({
+      x: 450 - mapCenterX * nextZoom,
+      y: 310 - mapCenterY * nextZoom
+    });
+    setAnnouncedMode(null);
+    setViewportAnnouncement({ kind: "zoom", percent: Math.round(nextZoom * 100) });
+  };
+
+  const fitTree = (): void => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+    setAnnouncedMode(null);
+    setViewportAnnouncement({ kind: "zoom", percent: 100 });
+  };
+
+  const announceSecondaryUnavailable = (): void => {
+    setAnnouncedMode(null);
+    setViewportAnnouncement({ kind: "secondary-unavailable" });
+  };
+
+  const updateQuery = (nextQuery: string): void => {
+    if (!query && nextQuery) searchOriginRef.current = activeId;
+    if (query && !nextQuery) {
+      const origin = searchOriginRef.current ? visual.byId.get(searchOriginRef.current) : undefined;
+      searchOriginRef.current = null;
+      if (origin && nodeInteractive(origin)) focusNode(origin, false, false);
+    }
+    setAnnouncedMode(null);
+    setViewportAnnouncement(null);
+    setQuery(nextQuery);
+  };
+
+  const handleViewportKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
+    if ((event.target as Element).closest('[role="treeitem"]')) return;
+    if (event.key === "+" || event.key === "=") {
+      event.preventDefault();
+      changeZoom(.18);
+      return;
+    }
+    if (event.key === "-" || event.key === "_") {
+      event.preventDefault();
+      changeZoom(-.18);
+      return;
+    }
+    if (event.key === "0" || event.key === "Home") {
+      event.preventDefault();
+      fitTree();
+      return;
+    }
+    if (event.key.startsWith("Arrow") && active) {
+      event.preventDefault();
+      nodeRefs.current.get(active.id)?.focus();
+    }
+  };
+
+  const beginPointerDrag = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    if ((event.target as Element).closest('[role="treeitem"]')) return;
+    pointerDragRef.current = {
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      panX: pan.x,
+      panY: pan.y
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    setDragging(true);
+  };
+
+  const movePointerDrag = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    const drag = pointerDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const width = bounds.width || 900;
+    const height = bounds.height || 620;
+    setPan({
+      x: drag.panX + (event.clientX - drag.clientX) * (900 / width),
+      y: drag.panY + (event.clientY - drag.clientY) * (620 / height)
+    });
+    setViewportAnnouncement(null);
+  };
+
+  const endPointerDrag = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    const drag = pointerDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    pointerDragRef.current = null;
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+    }
+    setDragging(false);
+  };
+
+  const handleWheel = (event: ReactWheelEvent<HTMLDivElement>): void => {
+    event.preventDefault();
+    changeZoom(event.deltaY < 0 ? .12 : -.12);
   };
 
   const moveNodeFocus = (event: ReactKeyboardEvent<SVGGElement>, node: VisualNode): void => {
@@ -140,10 +285,16 @@ export function KnowledgeTreeMap(props: {
       </div>
 
       <div
-        className="knowledge-map-viewport"
+        className={dragging ? "knowledge-map-viewport is-dragging" : "knowledge-map-viewport"}
         role="region"
         tabIndex={0}
         aria-label={props.t("knowledgeTree.canvas")}
+        onKeyDown={handleViewportKeyDown}
+        onPointerDown={beginPointerDrag}
+        onPointerMove={movePointerDrag}
+        onPointerUp={endPointerDrag}
+        onPointerCancel={endPointerDrag}
+        onWheel={handleWheel}
       >
         <svg className="tree-svg" viewBox="0 0 900 620" role="tree" aria-label={props.t("knowledgeTree.title")}>
           <g className="knowledge-map-stage" transform={transform}>
@@ -234,34 +385,70 @@ export function KnowledgeTreeMap(props: {
             <button
               className="knowledge-inspector-open"
               type="button"
+              data-knowledge-action="open-page"
               data-knowledge-open-key={active.focusKey}
               disabled={props.noteLoadingPageId === active.pageId}
               onClick={() => void props.onOpenNote(active.pageId!, active.focusKey!)}
             >
               {props.t("knowledgeTree.open")}
             </button>
-          ) : null}
+          ) : (
+            <button
+              className="knowledge-inspector-open"
+              type="button"
+              data-knowledge-action="open-topic"
+              aria-describedby="knowledge-map-status"
+              onClick={announceSecondaryUnavailable}
+            >
+              {props.t("knowledgeTree.open")}
+            </button>
+          )}
         </aside>
       ) : null}
 
+      <div className="knowledge-minimap" aria-hidden="true">
+        <svg viewBox="0 0 900 620" preserveAspectRatio="xMidYMid meet">
+          {visual.nodes.filter((node) => node.parentId).map((node) => {
+            const parent = visual.byId.get(node.parentId!);
+            if (!parent) return null;
+            return (
+              <path
+                key={"minimap-" + node.id}
+                d={branchPath(parent, node)}
+                style={{
+                  "--minimap-width": Math.max(.5, branchWidth(node, visual.maxWeight) * .32),
+                  "--minimap-opacity": Math.min(.7, (node.level <= 1 ? .58 : Math.max(.16, .46 - node.level * .06)) + .08)
+                } as CSSProperties}
+              />
+            );
+          })}
+        </svg>
+      </div>
+
       <div className="knowledge-map-controls" role="group" aria-label={props.t("knowledgeTree.zoom") }>
-        <button type="button" className="knowledge-map-control" aria-label={props.t("knowledgeTree.zoomOut")} onClick={() => setZoom((value) => Math.max(.78, value - .18))}>
+        <button type="button" className="knowledge-map-control" aria-label={props.t("knowledgeTree.zoomOut")} onClick={() => changeZoom(-.18)}>
           <PigeIcon name="zoomOut" size={15} />
         </button>
-        <button type="button" className="knowledge-map-control" aria-label={props.t("knowledgeTree.zoomIn")} onClick={() => setZoom((value) => Math.min(2.2, value + .18))}>
+        <button type="button" className="knowledge-map-control" aria-label={props.t("knowledgeTree.zoomIn")} onClick={() => changeZoom(.18)}>
           <PigeIcon name="zoomIn" size={15} />
         </button>
-        <button type="button" className="knowledge-map-control" aria-label={props.t("knowledgeTree.fit")} onClick={() => setZoom(1)}>
+        <button type="button" className="knowledge-map-control" aria-label={props.t("knowledgeTree.fit")} onClick={fitTree}>
           <PigeIcon name="fit" size={15} />
         </button>
       </div>
 
-      <p className="knowledge-map-status" role="status">
-        {normalizedQuery
-          ? props.t("knowledgeTree.searching").replace("{count}", String(visual.nodes.filter((node) => nodeInteractive(node) && nodeSearchMatch(node)).length))
-          : announcedMode
-            ? props.t(`knowledgeTree.modeStatus.${announcedMode}`)
-          : props.t("knowledgeTree.showing").replace("{count}", String(visual.nodes.filter((node) => node.kind !== "root" && nodeInteractive(node)).length))}
+      <p id="knowledge-map-status" className="knowledge-map-status" role="status">
+        {viewportAnnouncement?.kind === "focused"
+          ? props.t("knowledgeTree.focused").replace("{title}", viewportAnnouncement.title)
+          : viewportAnnouncement?.kind === "zoom"
+            ? props.t("knowledgeTree.zoomStatus").replace("{percent}", String(viewportAnnouncement.percent))
+            : viewportAnnouncement?.kind === "secondary-unavailable"
+              ? props.t("knowledgeTree.secondaryUnavailable")
+              : normalizedQuery
+                ? props.t("knowledgeTree.searching").replace("{count}", String(visual.nodes.filter((node) => nodeInteractive(node) && nodeSearchMatch(node)).length))
+                : announcedMode
+                  ? props.t(`knowledgeTree.modeStatus.${announcedMode}`)
+                  : props.t("knowledgeTree.showing").replace("{count}", String(visual.nodes.filter((node) => node.kind !== "root" && nodeInteractive(node)).length))}
       </p>
 
       <div className="knowledge-map-local-tools">
@@ -273,22 +460,44 @@ export function KnowledgeTreeMap(props: {
             placeholder={props.t("knowledgeTree.search")}
             aria-label={props.t("knowledgeTree.search")}
             onInput={(event) => {
-              setAnnouncedMode(null);
-              setQuery(event.currentTarget.value);
+              updateQuery(event.currentTarget.value);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                updateQuery("");
+                return;
+              }
+              if (event.key !== "Enter" || !normalizedQuery) return;
+              const match = visual.nodes.find((node) => nodeInteractive(node) && nodeSearchMatch(node));
+              if (!match) return;
+              event.preventDefault();
+              focusNode(match, true);
             }}
           />
         </label>
         <button
           type="button"
-          className="icon-button knowledge-toolbar-action"
+          className="icon-button knowledge-toolbar-action filter"
           aria-label={props.t("knowledgeTree.filter")}
           aria-pressed={reviewOnly}
           onClick={() => {
             setAnnouncedMode(null);
+            setViewportAnnouncement(null);
             setReviewOnly((value) => !value);
           }}
         >
           <PigeIcon name="filter" size={15} />
+        </button>
+        <button
+          type="button"
+          className="icon-button knowledge-toolbar-action"
+          aria-label={props.t("knowledgeTree.more")}
+          data-knowledge-action="more"
+          aria-describedby="knowledge-map-status"
+          onClick={announceSecondaryUnavailable}
+        >
+          <PigeIcon name="more" size={15} />
         </button>
       </div>
     </div>

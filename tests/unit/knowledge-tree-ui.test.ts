@@ -2,6 +2,8 @@ import { createElement } from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { JSDOM } from "jsdom";
+import fs from "node:fs";
+import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { KnowledgeTreeResult } from "@pige/contracts";
 import { KnowledgeTreePanel } from "../../apps/desktop/src/renderer/src/App";
@@ -55,6 +57,22 @@ describe("Knowledge Tree renderer", () => {
     expect(meter?.getAttribute("aria-label")).toBe("Weight: 9");
     expect(mount.container.textContent).toContain("Weight: 9");
     expect(mount.container.textContent).toContain("Sources: 3");
+
+    const moreActions = buttonNamed(mount.container, "More Knowledge Tree actions");
+    expect(moreActions.dataset.knowledgeAction).toBe("more");
+    await click(dom, moreActions);
+    expect(mount.container.querySelector("#knowledge-map-status")?.textContent)
+      .toBe("Evidence, backlinks, and relationship suggestions are still in development.");
+    expect(opened).toEqual([]);
+
+    const personalKnowledge = treeItemNamed(mount.container, "Personal knowledge");
+    await click(dom, personalKnowledge);
+    const openUnavailableTopic = buttonNamed(mount.container, "Open");
+    expect(openUnavailableTopic.dataset.knowledgeAction).toBe("open-topic");
+    await click(dom, openUnavailableTopic);
+    expect(mount.container.querySelector("#knowledge-map-status")?.textContent)
+      .toBe("Evidence, backlinks, and relationship suggestions are still in development.");
+    expect(opened).toEqual([]);
 
     const topicNode = treeItemNamed(mount.container, "Local RAG");
     await click(dom, topicNode);
@@ -117,6 +135,63 @@ describe("Knowledge Tree renderer", () => {
     expect(treeItems.filter((item) => item.getAttribute("tabindex") === "0")).toHaveLength(1);
     expect(treeItems.every((item) => ["0", "-1"].includes(item.getAttribute("tabindex") ?? ""))).toBe(true);
     for (const button of mount.container.querySelectorAll<HTMLButtonElement>("button")) expect(button.tabIndex).toBeGreaterThanOrEqual(0);
+
+    await unmount(dom, mount.root);
+  });
+
+  it("preserves the approved local camera, search focus, minimap, and reset behavior", async () => {
+    const dom = createDom();
+    const mount = await mountTree(dom, readyTree(), async () => undefined);
+    const viewport = mount.container.querySelector<HTMLElement>(".knowledge-map-viewport");
+    const stage = mount.container.querySelector<SVGGElement>(".knowledge-map-stage");
+    const minimap = mount.container.querySelector<HTMLElement>(".knowledge-minimap");
+    if (!viewport || !stage || !minimap) throw new Error("Missing Knowledge Tree viewport structure.");
+
+    expect(viewport.getAttribute("aria-label")).toContain("plus or minus to zoom");
+    expect(minimap.getAttribute("aria-hidden")).toBe("true");
+    expect(minimap.querySelectorAll("path").length).toBeGreaterThan(0);
+
+    await click(dom, buttonNamed(mount.container, "Zoom in"));
+    expect(stage.getAttribute("transform")).not.toBe("translate(0 0) scale(1)");
+    expect(mount.container.querySelector(".knowledge-map-status")?.textContent).toBe("Knowledge Tree zoom 118%");
+
+    await keyDown(dom, viewport, "0");
+    expect(stage.getAttribute("transform")).toBe("translate(0 0) scale(1)");
+    expect(mount.container.querySelector(".knowledge-map-status")?.textContent).toBe("Knowledge Tree zoom 100%");
+
+    await wheel(dom, viewport, -100);
+    expect(mount.container.querySelector(".knowledge-map-status")?.textContent).toBe("Knowledge Tree zoom 112%");
+
+    await pointer(dom, viewport, "pointerdown", { pointerId: 7, clientX: 100, clientY: 100 });
+    expect(viewport.classList.contains("is-dragging")).toBe(true);
+    const beforePan = stage.getAttribute("transform");
+    await pointer(dom, viewport, "pointermove", { pointerId: 7, clientX: 190, clientY: 150 });
+    expect(stage.getAttribute("transform")).not.toBe(beforePan);
+    await pointer(dom, viewport, "pointerup", { pointerId: 7, clientX: 190, clientY: 150 });
+    expect(viewport.classList.contains("is-dragging")).toBe(false);
+
+    const original = treeItemNamed(mount.container, "Local-first");
+    const search = mount.container.querySelector<HTMLInputElement>('input[type="search"]');
+    if (!search) throw new Error("Missing Knowledge Tree search.");
+    await inputText(dom, search, "Lexical");
+    await keyDown(dom, search, "Enter");
+    const match = treeItemNamed(mount.container, "Lexical retrieval");
+    expect(match.getAttribute("aria-selected")).toBe("true");
+    expect(match.getAttribute("tabindex")).toBe("0");
+    expect(mount.container.querySelector(".knowledge-map-status")?.textContent).toBe("Lexical retrieval focused");
+
+    await keyDown(dom, search, "Escape");
+    expect(search.value).toBe("");
+    expect(original.getAttribute("aria-selected")).toBe("true");
+    expect(original.getAttribute("tabindex")).toBe("0");
+
+    const styles = fs.readFileSync(
+      path.resolve("apps/desktop/src/renderer/src/styles/app.css"),
+      "utf8"
+    );
+    expect(styles).toMatch(/\.knowledge-minimap\s*\{[\s\S]*?width:\s*62px;[\s\S]*?height:\s*74px;/);
+    expect(styles).toMatch(/@media \(max-width:\s*679px\)\s*\{[\s\S]*?\.knowledge-minimap\s*\{\s*display:\s*none;/);
+    expect(styles).toMatch(/@media \(max-width:\s*679px\)\s*\{[\s\S]*?\.knowledge-toolbar-action\.filter\s*\{\s*display:\s*none;/);
 
     await unmount(dom, mount.root);
   });
@@ -361,6 +436,41 @@ async function inputText(dom: JSDOM, input: HTMLInputElement, value: string): Pr
       inputType: "insertText"
     }));
     input.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    await settle(dom);
+  });
+}
+
+async function keyDown(dom: JSDOM, element: Element, key: string): Promise<void> {
+  await act(async () => {
+    if (element instanceof dom.window.HTMLElement) element.focus();
+    await settle(dom);
+    element.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+    await settle(dom);
+  });
+}
+
+async function wheel(dom: JSDOM, element: Element, deltaY: number): Promise<void> {
+  await act(async () => {
+    element.dispatchEvent(new dom.window.WheelEvent("wheel", { deltaY, bubbles: true, cancelable: true }));
+    await settle(dom);
+  });
+}
+
+async function pointer(
+  dom: JSDOM,
+  element: Element,
+  type: "pointerdown" | "pointermove" | "pointerup",
+  init: { readonly pointerId: number; readonly clientX: number; readonly clientY: number }
+): Promise<void> {
+  await act(async () => {
+    const event = new dom.window.MouseEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      clientX: init.clientX,
+      clientY: init.clientY
+    });
+    Object.defineProperty(event, "pointerId", { configurable: true, value: init.pointerId });
+    element.dispatchEvent(event);
     await settle(dom);
   });
 }

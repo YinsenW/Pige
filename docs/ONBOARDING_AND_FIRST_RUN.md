@@ -23,14 +23,15 @@ This document prevents three implementation mistakes:
 
 First run should be short, useful, and reversible.
 
-The ideal path:
+The production path:
 
 ```txt
-Choose or create local vault -> optionally connect model -> Home
+Resolve Settings/I18N language truth -> skippable Models -> mandatory create/open/restore Vault -> Home
 ```
 
 Rules:
 
+- Welcome shows no selected locale until `settings.appearance` resolves.
 - A local vault is required before entering Home.
 - A model provider is optional before entering Home.
 - Optional local model/OCR/RAG downloads are not part of first run.
@@ -54,7 +55,7 @@ Rules:
 - `capture_only` must be honest but not alarming.
 - `ready` should not show setup noise after landing in Home.
 
-## 4. Step 1: Vault Choice
+## 4. Vault Choice
 
 The vault step is mandatory.
 
@@ -91,7 +92,7 @@ Path validation:
 - Warn when the path appears to be a cloud-drive folder, but allow it if ordinary filesystem access is valid.
 - Do not write the active absolute path into `.pige/manifest.json`.
 
-## 5. Step 2: Optional Model Setup
+## 5. Optional Model Setup
 
 The model step is optional.
 
@@ -352,6 +353,7 @@ Rules:
 
 Required tests:
 
+- Welcome waits for `settings.appearance`; setup follows the governed sequence above.
 - Fresh install with no vault shows vault choice.
 - Create default vault creates required files and folders.
 - Open existing compatible vault sets machine-local active binding.

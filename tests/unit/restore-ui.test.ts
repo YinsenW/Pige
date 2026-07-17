@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import type {
   JobSummary,
   JobsListRequest,
+  Locale,
+  ModelProviderSettingsSummary,
   OnboardingStatus,
   RestoreApplyRequest,
   RestoreApplyResult,
@@ -37,6 +39,63 @@ afterEach(() => {
   Reflect.deleteProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT");
 });
 
+describe("First-run onboarding UI", () => {
+  it("keeps first paint language-neutral until the system-derived appearance owner resolves", async () => {
+    const dom = createDom();
+    const harness = createHarness(blockedOnboarding(), cloneOnlyPreview());
+    let resolveAppearance: ((value: { readonly locale: Locale; readonly availableLocales: readonly Locale[] }) => void) | undefined;
+    harness.appearance = () => new Promise((resolve) => { resolveAppearance = resolve; });
+
+    const { container, root } = await mountApp(dom, makePigeApi(harness));
+
+    expect(container.querySelector('.first-run-language-loading[role="status"]')).not.toBeNull();
+    expect(container.querySelector("#first-run-language")).toBeNull();
+    expect(container.textContent).not.toContain("中文");
+
+    await act(async () => {
+      resolveAppearance?.({ locale: "en", availableLocales: ["zh-Hans", "en", "ja", "ko", "fr", "de"] });
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.querySelector("#first-run-language") !== null);
+    expect(container.querySelector<HTMLSelectElement>("#first-run-language")?.value).toBe("en");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("orders language, optional Models, and mandatory Vault without inventing completion state", async () => {
+    const dom = createDom();
+    const harness = createHarness(blockedOnboarding(), cloneOnlyPreview());
+    const { container, root } = await mountApp(dom, makePigeApi(harness));
+
+    await waitFor(dom, () => container.querySelector(".first-run-step.language") !== null);
+    const language = container.querySelector<HTMLSelectElement>("#first-run-language");
+    if (!language) throw new Error("Language selector not found.");
+    await changeSelect(dom, language, "de");
+    expect(harness.localeRequests).toEqual(["de"]);
+
+    await click(dom, requireElement(container.querySelector<HTMLButtonElement>(".first-run-step.language .first-run-next")) as HTMLButtonElement);
+    await waitFor(dom, () => container.querySelector(".first-run-step.models") !== null);
+    expect(container.querySelector(".first-run-model-panel .model-settings-page")).not.toBeNull();
+    expect(container.textContent).not.toContain("Create Vault");
+    expect(container.querySelector('textarea[aria-label="Capture or ask"]')).toBeNull();
+    expect(harness.modelSummaryReads).toBeGreaterThan(0);
+    await waitFor(dom, () => dom.window.document.activeElement === container.querySelector(".first-run-step.models"));
+
+    await click(dom, requireElement(container.querySelector<HTMLButtonElement>(".first-run-step.models .first-run-next")) as HTMLButtonElement);
+    await waitFor(dom, () => container.querySelector(".first-run-step.vault") !== null);
+    expect(container.querySelectorAll(".first-run-step.vault .first-run-choice")).toHaveLength(3);
+    expect(container.querySelector('textarea[aria-label="Capture or ask"]')).toBeNull();
+    await waitFor(dom, () => dom.window.document.activeElement === container.querySelector(".first-run-step.vault"));
+
+    await click(dom, requireElement(container.querySelector<HTMLButtonElement>(".first-run-step.vault .first-run-back")) as HTMLButtonElement);
+    await waitFor(dom, () => container.querySelector(".first-run-step.models") !== null);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+});
+
 describe("Restore identity UI", () => {
   it("renders versioned manifest facts and localized typed warnings without archive details", async () => {
     const dom = createDom();
@@ -54,6 +113,8 @@ describe("Restore identity UI", () => {
       dom,
       makePigeApi(createHarness(blockedOnboarding(), preview))
     );
+
+    await advanceToVault(dom, container);
 
     expect(container.querySelector(".first-run-card")).not.toBeNull();
     expect(container.querySelector<HTMLImageElement>(".first-run-brand img")?.alt).toBe("");
@@ -91,6 +152,8 @@ describe("Restore identity UI", () => {
       return new Promise((_, reject) => { rejectApply = reject; });
     };
     const { container, root } = await mountApp(dom, makePigeApi(harness));
+
+    await advanceToVault(dom, container);
 
     const restoreTrigger = button(container, "Restore Backup");
     await click(dom, restoreTrigger);
@@ -175,6 +238,8 @@ describe("Restore identity UI", () => {
       return { status: "restored", jobId: "job_restore_20260714_success" };
     };
     const { container, root } = await mountApp(dom, makePigeApi(harness));
+
+    await advanceToVault(dom, container);
 
     await click(dom, button(container, "Restore Backup"));
     await waitFor(dom, () => container.textContent?.includes("Restore preview") ?? false);
@@ -396,6 +461,10 @@ describe("Restore identity UI", () => {
 
 interface RestoreHarness {
   onboarding: OnboardingStatus;
+  appearance: () => Promise<{ readonly locale: Locale; readonly availableLocales: readonly Locale[] }>;
+  readonly localeRequests: Locale[];
+  modelSummary: ModelProviderSettingsSummary;
+  modelSummaryReads: number;
   readonly preview: RestorePreviewResult;
   readonly applyRequests: RestoreApplyRequest[];
   jobs: JobSummary[];
@@ -410,6 +479,10 @@ interface RestoreHarness {
 function createHarness(onboarding: OnboardingStatus, preview: RestorePreviewResult): RestoreHarness {
   const harness: RestoreHarness = {
     onboarding,
+    appearance: async () => ({ locale: "en", availableLocales: ["zh-Hans", "en", "ja", "ko", "fr", "de"] }),
+    localeRequests: [],
+    modelSummary: emptyModelSummary(),
+    modelSummaryReads: 0,
     preview,
     applyRequests: [],
     jobs: [],
@@ -485,8 +558,11 @@ function makePigeApi(harness: RestoreHarness, sidebarOpen = false): object {
       })
     },
     settings: {
-      appearance: async () => ({ locale: "en", availableLocales: ["en"] }),
-      setLocale: async () => ({ locale: "en", availableLocales: ["en"] })
+      appearance: () => harness.appearance(),
+      setLocale: async ({ locale }: { readonly locale: Locale }) => {
+        harness.localeRequests.push(locale);
+        return { locale, availableLocales: ["zh-Hans", "en", "ja", "ko", "fr", "de"] };
+      }
     },
     system: {
       toolchainHealth: async () => null
@@ -539,6 +615,12 @@ function makePigeApi(harness: RestoreHarness, sidebarOpen = false): object {
       runtimeStatus: async () => null,
       conversation: async () => undefined,
       onTurnDraft: () => () => undefined
+    },
+    models: {
+      summary: async () => {
+        harness.modelSummaryReads += 1;
+        return harness.modelSummary;
+      }
     },
     modelEgress: {
       pending: async () => undefined
@@ -603,6 +685,16 @@ function supportBundlePreview() {
     includedCategories: [],
     excludedCategories: [],
     privacyWarnings: []
+  };
+}
+
+function emptyModelSummary(): ModelProviderSettingsSummary {
+  return {
+    presets: [],
+    providers: [],
+    models: [],
+    hasDefaultModel: false,
+    defaultBinding: { state: "not_configured" }
   };
 }
 
@@ -802,6 +894,18 @@ async function openSettingsSection(dom: JSDOM, container: HTMLElement, label: st
   await click(dom, section);
 }
 
+async function advanceToVault(dom: JSDOM, container: HTMLElement): Promise<void> {
+  await waitFor(dom, () => container.querySelector(".first-run-step.language .first-run-next") !== null);
+  await click(dom, requireElement(
+    container.querySelector<HTMLButtonElement>(".first-run-step.language .first-run-next")
+  ) as HTMLButtonElement);
+  await waitFor(dom, () => container.querySelector(".first-run-step.models .first-run-next") !== null);
+  await click(dom, requireElement(
+    container.querySelector<HTMLButtonElement>(".first-run-step.models .first-run-next")
+  ) as HTMLButtonElement);
+  await waitFor(dom, () => container.querySelector(".first-run-step.vault") !== null);
+}
+
 function radio(container: HTMLElement, value: string): HTMLInputElement {
   const match = container.querySelector<HTMLInputElement>(`input[type="radio"][value="${value}"]`);
   if (!match) throw new Error(`Radio not found: ${value}`);
@@ -818,6 +922,14 @@ async function click(dom: JSDOM, element: HTMLButtonElement): Promise<void> {
 async function clickInput(dom: JSDOM, element: HTMLInputElement): Promise<void> {
   await act(async () => {
     element.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+    await settle(dom);
+  });
+}
+
+async function changeSelect(dom: JSDOM, element: HTMLSelectElement, value: string): Promise<void> {
+  await act(async () => {
+    element.value = value;
+    element.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
     await settle(dom);
   });
 }

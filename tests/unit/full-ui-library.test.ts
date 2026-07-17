@@ -359,6 +359,138 @@ describe("full UI Library", () => {
     dom.window.close();
   });
 
+  it("renders one page title when Markdown repeats the exact frontmatter title", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const matchingTitleNote = {
+      ...readerNote(),
+      html: "<h1>  Reader <em>actions</em> </h1><p>Selected note body</p>"
+    };
+    await act(async () => {
+      root.render(createElement(NoteReader, {
+        note: matchingTitleNote,
+        related: null,
+        relatedLoadingPageId: null,
+        onOpenRelated: async () => undefined,
+        onDevelopment: () => undefined,
+        t
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    expect(container.querySelector(".note-header h1")?.textContent).toBe("Reader actions");
+    expect(container.querySelector(".markdown-body > h1")?.classList.contains("reader-duplicate-title")).toBe(true);
+
+    await act(async () => {
+      root.render(createElement(NoteReader, {
+        note: matchingTitleNote,
+        related: "unavailable",
+        relatedLoadingPageId: null,
+        onOpenRelated: async () => undefined,
+        onDevelopment: () => undefined,
+        t
+      }));
+      await settle(dom);
+    });
+    expect(container.querySelector(".markdown-body > h1")?.classList.contains("reader-duplicate-title")).toBe(true);
+
+    const distinctHeadingNote = {
+      ...matchingTitleNote,
+      html: "<h1>Implementation details</h1><p>Selected note body</p>"
+    };
+    await act(async () => {
+      root.render(createElement(NoteReader, {
+        note: distinctHeadingNote,
+        related: null,
+        relatedLoadingPageId: null,
+        onOpenRelated: async () => undefined,
+        onDevelopment: () => undefined,
+        t
+      }));
+      await settle(dom);
+    });
+    expect(container.querySelector(".markdown-body > h1")?.classList.contains("reader-duplicate-title")).toBe(false);
+    expect(container.querySelector(".markdown-body > h1")?.textContent).toBe("Implementation details");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("fails closed for unresolved internal Reader links without mutating the window hash", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const unavailable: string[] = [];
+    const linkedNote = {
+      ...readerNote(),
+      html: [
+        '<p><a href="#wiki:page_20260715_link1111"><em>Linked note</em></a></p>',
+        '<p><a href="#source:src_20260715_link2222#source">Saved source</a></p>',
+        '<p><a href="#section">Local section</a></p>'
+      ].join("")
+    };
+    await act(async () => {
+      root.render(createElement(NoteReader, {
+        note: linkedNote,
+        related: null,
+        relatedLoadingPageId: null,
+        onOpenRelated: async () => undefined,
+        onDevelopment: (capability) => unavailable.push(capability),
+        t
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    const internalLinks = Array.from(container.querySelectorAll<HTMLAnchorElement>(
+      '.markdown-body a[data-reader-link-state="unavailable"]'
+    ));
+    expect(internalLinks).toHaveLength(2);
+    const descriptionId = internalLinks[0]!.getAttribute("aria-describedby");
+    expect(descriptionId).toBeTruthy();
+    expect(internalLinks[1]!.getAttribute("aria-describedby")).toBe(descriptionId);
+    const description = dom.window.document.getElementById(descriptionId!);
+    expect(description?.hidden).toBe(true);
+    expect(description?.textContent).toContain(
+      "Opening linked notes and sources is temporarily unavailable"
+    );
+
+    const originalUrl = dom.window.location.href;
+    const wikiClick = new dom.window.MouseEvent("click", { bubbles: true, cancelable: true });
+    await act(async () => {
+      requireElement(internalLinks[0]!.querySelector("em")).dispatchEvent(wikiClick);
+      await settle(dom);
+    });
+    expect(wikiClick.defaultPrevented).toBe(true);
+    expect(dom.window.location.href).toBe(originalUrl);
+    expect(unavailable).toEqual(["reader_link"]);
+
+    internalLinks[1]!.focus();
+    const keyboardClick = new dom.window.MouseEvent("click", { bubbles: true, cancelable: true, detail: 0 });
+    await act(async () => {
+      internalLinks[1]!.dispatchEvent(keyboardClick);
+      await settle(dom);
+    });
+    expect(keyboardClick.defaultPrevented).toBe(true);
+    expect(dom.window.document.activeElement).toBe(internalLinks[1]);
+    expect(dom.window.location.href).toBe(originalUrl);
+    expect(unavailable).toEqual(["reader_link", "reader_link"]);
+
+    const sourceAuxClick = new dom.window.MouseEvent("auxclick", { bubbles: true, cancelable: true, button: 1 });
+    await act(async () => {
+      internalLinks[1]!.dispatchEvent(sourceAuxClick);
+      await settle(dom);
+    });
+    expect(sourceAuxClick.defaultPrevented).toBe(true);
+    expect(dom.window.location.href).toBe(originalUrl);
+    expect(unavailable).toEqual(["reader_link", "reader_link", "reader_link"]);
+
+    const localSection = requireElement(container.querySelector<HTMLAnchorElement>('a[href="#section"]'));
+    expect(localSection.hasAttribute("data-reader-link-state")).toBe(false);
+    expect(localSection.hasAttribute("aria-describedby")).toBe(false);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("measures compact selection actions, dismisses on scroll, and restores exact focus ownership", async () => {
     const dom = createDom();
     Object.defineProperty(dom.window, "innerWidth", { configurable: true, value: 360 });
