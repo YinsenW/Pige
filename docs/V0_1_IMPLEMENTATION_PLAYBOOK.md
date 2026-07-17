@@ -288,19 +288,18 @@ append, bounded tags/link, and transitional review. B3.13/E3.08 remains partial:
 tools/routes, legacy ingest repair, durable mid-repair recovery, real production Broker
 callers, and broader exceptions remain; no deep/forked loop.
 
-B3.14/E3.09 now proves direct/retrieved/file turns, waiting/resume, explicit protocol,
-no Host bypass, Pi-selected URL fetch/preserve, exact-tail follow-up, bounded history,
-result adoption, Pi cancellation, multiple safe terminal-answer replacements on both
-incremental parsed terminal arguments without a post-validation presentation-only model
-turn, plus IME-safe Enter-to-send through typed main/preload/renderer bindings. Current
-evidence also keeps high-frequency provider deltas outside the smaller structural event
-budget and proves same-Job repair of invalid terminal input/citations, more than one prose
-omission, a safe read revisit, bounded repeated non-progress, and a distinct typed
-provider-protocol incompatibility outcome. Legacy agent_ingest repair, durable mid-repair
-checkpoint/restart adoption, source-ingest terminal drafts, live Chat/Anthropic timing,
-multi-window proof,
-multi-source recovery, and signed packaged macOS/Windows BYOK remain open; E3.09 stays
-incomplete.
+H2 makes `agent.submitTurn` the sole new semantic ingress, marks new sources
+`agent_turn`/`capture_only`, and normalizes old missing fields to `legacy_agent_ingest`.
+Pi-selected children stay deterministic; fixed ingest repair/order and Home modality/order
+constraints are removed. New turns omit legacy proposal staging; raw review IPC fails
+closed for list/get/approve/reject pending a bounded DTO. No status change; H3/H4 remain unchanged.
+
+B3.14/E3.09 evidence covers direct/retrieved/file/URL turns, waiting/resume, exact-tail
+follow-up/history/adoption/cancellation, safe draft replacement, IME send, same-Job
+validation repair/read revisit/non-progress bounds, and typed protocol incompatibility.
+Migration-window ingest recovery, durable mid-repair adoption, source-ingest drafts, live
+provider timing, multi-window/source recovery, and signed packaged macOS/Windows BYOK
+remain open; E3.09 stays incomplete.
 
 B3.05 has the default, exact-destination disclosure, Home private allow/sensitive wait,
 matrix/profile-switch tests, per-turn audits/drift rejection, and one current-action

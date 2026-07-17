@@ -1964,6 +1964,53 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("hands a requeued acknowledgement back to the ordinary failure owner when the same Job fails again", async () => {
+    const jobId = "job_20260712_retryfixture";
+    const dom = createDom();
+    const harness = createHarness({
+      conversationId: "conv_20260712_retryfixture",
+      tailEventId: "event_20260712_retryuser",
+      canFollowUp: false,
+      messages: [{
+        id: "event_20260712_retryuser",
+        role: "user",
+        createdAt: "2026-07-12T09:00:00.000Z",
+        text: "Please retry this turn.",
+        jobId
+      }],
+      latestTurn: {
+        jobId,
+        userEventId: "event_20260712_retryuser",
+        state: "failed_retryable",
+        error: safeCallError()
+      }
+    });
+    harness.jobs = [{
+      id: jobId,
+      class: "agent_turn",
+      state: "failed_retryable",
+      error: safeCallError(),
+      message: "body-free retry failure",
+      createdAt: "2026-07-12T09:00:00.000Z",
+      updatedAt: "2026-07-12T09:00:02.000Z"
+    }];
+    harness.retryMode = "immediate_refail";
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await waitFor(dom, () => buttons(container, "Try again").length === 1);
+    await clickButton(dom, container, "Try again");
+    await waitFor(dom, () => harness.retryJobIds.length === 1);
+    await waitFor(dom, () => container.querySelector(".capture-toast") === null);
+
+    expect(container.querySelector(".agent-run-state")?.textContent)
+      .toContain("The model service did not complete this answer. Try again.");
+    expect(buttons(container, "Try again")).toHaveLength(1);
+    expect(harness.submitRequests).toHaveLength(0);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("offers cancellation for a running Agent turn and accepts cancel_requested as success", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
@@ -2166,6 +2213,7 @@ interface ConversationHarness {
   activities: KnowledgeActivitySummary[];
   readonly submitRequests: AgentSubmitTurnRequest[];
   readonly retryJobIds: string[];
+  retryMode: "queued" | "immediate_refail";
   readonly cancelJobIds: string[];
   readonly setDefaultModelIds: string[];
   readonly speechAvailabilityRequests: SpeechAvailabilityRequest[];
@@ -2221,6 +2269,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     activities: [],
     submitRequests: [],
     retryJobIds: [],
+    retryMode: "queued",
     cancelJobIds: [],
     setDefaultModelIds: [],
     speechAvailabilityRequests: [],
@@ -2509,7 +2558,7 @@ function makePigeApi(harness: ConversationHarness): object {
       },
       retry: async ({ jobId }: { readonly jobId: string }) => {
         harness.retryJobIds.push(jobId);
-        if (harness.timeline?.latestTurn?.jobId === jobId) {
+        if (harness.retryMode === "queued" && harness.timeline?.latestTurn?.jobId === jobId) {
           harness.timeline = {
             ...harness.timeline,
             latestTurn: {
@@ -2518,6 +2567,11 @@ function makePigeApi(harness: ConversationHarness): object {
               state: "queued"
             }
           };
+        }
+        if (harness.retryMode === "queued") {
+          harness.jobs = harness.jobs.map((job) => job.id === jobId
+            ? { ...job, state: "queued", error: undefined, updatedAt: "2026-07-12T10:00:01.000Z" }
+            : job);
         }
         return { status: "requeued" };
       },

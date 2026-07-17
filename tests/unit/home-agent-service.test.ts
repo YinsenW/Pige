@@ -359,7 +359,7 @@ describe("Home Pi Agent service", () => {
           },
           finishHome({
             answer: "North has the largest total sales in the bounded Dataset result. [D1]",
-            citationRefs: ["citation_1"],
+            citationRefs: ["citation_9"],
             grounding: "local_knowledge"
           })
         ]
@@ -381,7 +381,7 @@ describe("Home Pi Agent service", () => {
       sourceIds: [DATASET_SOURCE_ID],
       answer: {
         grounding: "local_knowledge",
-        citations: [{ kind: "dataset", refId: "citation_1" }],
+        citations: [{ kind: "dataset", refId: "citation_9" }],
         datasetResult: {
           tableName: "Sales",
           returnedRowCount: 2,
@@ -418,6 +418,91 @@ describe("Home Pi Agent service", () => {
     expect(durable).not.toContain(fixture.vaultPath);
     expect(durable).not.toContain("SELECT");
     expect(durable).not.toContain("North");
+  });
+
+  it.each([
+    {
+      label: "search before Dataset",
+      toolCalls: [
+        { kind: "tool_call" as const, toolName: "pige_search_knowledge", args: {} },
+        { kind: "tool_call" as const, toolName: "pige_query_dataset", args: { action: "catalog" } },
+        {
+          kind: "tool_call" as const,
+          toolName: "pige_query_dataset",
+          args: {
+            action: "query",
+            datasetRef: "dataset_1",
+            tableRef: "table_1",
+            select: ["column_1"],
+            limit: 10
+          }
+        }
+      ],
+      trace: ["search", "catalog", "query"]
+    },
+    {
+      label: "Dataset before search",
+      toolCalls: [
+        { kind: "tool_call" as const, toolName: "pige_query_dataset", args: { action: "catalog" } },
+        {
+          kind: "tool_call" as const,
+          toolName: "pige_query_dataset",
+          args: {
+            action: "query",
+            datasetRef: "dataset_1",
+            tableRef: "table_1",
+            select: ["column_1"],
+            limit: 10
+          }
+        },
+        { kind: "tool_call" as const, toolName: "pige_search_knowledge", args: {} }
+      ],
+      trace: ["catalog", "query", "search"]
+    }
+  ])("lets Pi combine bounded local evidence in either legal order: $label", async ({ toolCalls, trace }) => {
+    const fixture = makeFixture();
+    const observed: string[] = [];
+    const datasets = new StaticDatasetQueryPort(false, (call) => observed.push(call));
+    const outcome = await new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId, { onSearch: () => observed.push("search") }),
+      new JobsService(fixture.vaults),
+      new PiAgentRuntimeAdapter({
+        fauxResponses: [
+          ...toolCalls,
+          finishHome({
+            answer: "The launch note and bounded Dataset both support this answer. [1] [D1]",
+            citationRefs: ["citation_1", "citation_9"],
+            grounding: "local_knowledge"
+          })
+        ]
+      }),
+      undefined,
+      undefined,
+      undefined,
+      datasets
+    ).submitTurn({
+      text: "Compare the launch note with the bounded Dataset result.",
+      inputKind: "typed_text",
+      objective: "auto",
+      locale: "en"
+    });
+
+    expect(observed).toEqual(trace);
+    expect(outcome).toMatchObject({
+      state: "completed",
+      sourceIds: [DATASET_SOURCE_ID],
+      answer: {
+        grounding: "local_knowledge",
+        citations: [
+          expect.objectContaining({ refId: "citation_1", pageId: HOME_PAGE_ID }),
+          expect.objectContaining({ kind: "dataset", refId: "citation_9" })
+        ],
+        retrieval: expect.objectContaining({ activeVaultId: fixture.vault.vaultId }),
+        datasetResult: expect.objectContaining({ tableName: "Sales" })
+      }
+    });
   });
 
   it("writes a replacement egress audit and stops before another model turn when Dataset evidence drifts", async () => {
@@ -1373,7 +1458,7 @@ describe("Home Pi Agent service", () => {
     expect(observedToolOutput).toContain("&lt;/PIGE_UNTRUSTED_EVIDENCE_V1&gt;");
   });
 
-  it("suppresses model prose and returns the contract-owned insufficient-evidence result when retrieval is empty", async () => {
+  it("lets Pi decide how to answer after an optional empty search instead of substituting Host prose", async () => {
     const fixture = makeFixture();
     const empty = makeEmptySearchResult(fixture.vault.vaultId, "What is the secret launch plan?");
     let runtimeConfigReads = 0;
@@ -1392,18 +1477,15 @@ describe("Home Pi Agent service", () => {
     ).ask({ query: empty.query, locale: "en" });
 
     expect(outcome.state).toBe("completed");
-    if (outcome.state !== "completed") throw new Error("Expected insufficient-evidence completion.");
+    if (outcome.state !== "completed") throw new Error("Expected Pi-owned completion.");
     expect(outcome.modelUsage).toBe("cloud");
     expect(outcome.result).toMatchObject({
       answerMode: "model_grounded",
-      confidence: "insufficient",
+      confidence: "limited",
       citations: [],
-      warnings: expect.arrayContaining(["insufficient_evidence"])
+      warnings: []
     });
-    expect(outcome.result.answer).toBe(
-      "No relevant evidence was found in the selected local knowledge scope."
-    );
-    expect(outcome.result.answer).not.toContain("Fabricated confident answer");
+    expect(outcome.result.answer).toBe("Fabricated confident answer");
     expect(runtimeConfigReads).toBe(1);
     expect(runtimeCalls).toBe(0);
     expect(readRecords<JobRecord>(path.join(fixture.vaultPath, ".pige", "jobs"))).toEqual([
@@ -2704,12 +2786,12 @@ const DATASET_PREVIEW: DatasetQueryPreview = {
   matchedRowCount: 2,
   returnedRowCount: 2,
   truncated: false,
-  citationRefs: ["citation_1"]
+  citationRefs: ["citation_9"]
 };
 
 const DATASET_CITATION: DatasetAnswerCitation = {
   kind: "dataset",
-  refId: "citation_1",
+  refId: "citation_9",
   label: "D1",
   title: "Sales by region",
   locator: "Sales / grouped result",
@@ -2747,15 +2829,19 @@ class StaticDatasetQueryPort implements HomeAgentDatasetQueryPort {
       privateContent: false,
       sensitiveContent: false,
       restrictedContent: false,
-      modelText: "<PIGE_UNTRUSTED_EVIDENCE_V1>\n{\"citationRef\":\"citation_1\",\"rows\":2}\n</PIGE_UNTRUSTED_EVIDENCE_V1>",
+      modelText: "<PIGE_UNTRUSTED_EVIDENCE_V1>\n{\"citationRefs\":[\"citation_9\"],\"rows\":2}\n</PIGE_UNTRUSTED_EVIDENCE_V1>",
       sourceIds: [DATASET_SOURCE_ID]
     }
   };
 
-  constructor(private readonly driftResult = false) {}
+  constructor(
+    private readonly driftResult = false,
+    private readonly onCall: (call: "catalog" | "query") => void = () => undefined
+  ) {}
 
   async createCatalog(): Promise<DatasetQueryCatalog> {
     this.calls.push("catalog");
+    this.onCall("catalog");
     return this.#catalog;
   }
 
@@ -2769,6 +2855,7 @@ class StaticDatasetQueryPort implements HomeAgentDatasetQueryPort {
     request: DatasetQueryToolRequest
   ): Promise<DatasetQueryExecutionResult> {
     this.calls.push("query");
+    this.onCall("query");
     this.query = request;
     return this.#result;
   }

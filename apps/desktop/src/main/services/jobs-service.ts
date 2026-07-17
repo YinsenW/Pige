@@ -68,6 +68,15 @@ import {
   type JobRecordSnapshot
 } from "./job-record-store";
 import {
+  JobExecutionCoordinator,
+  type BeginJobInput,
+  type AdoptDurableCompletionInput,
+  type JobExecutionFactsPatch,
+  type JobExecutionOutcome,
+  type JobExecutionResumeProof,
+  type ResumeJobInput
+} from "./job-execution-coordinator";
+import {
   ModelEgressApprovalService,
   ModelEgressConfirmationRequiredError
 } from "./model-egress-approval-service";
@@ -230,6 +239,7 @@ export class JobsService implements PermissionedExternalJobPort {
   readonly #modelEgressApprovals: ModelEgressApprovalService | undefined;
   readonly #permissionBroker: PermissionBrokerService | undefined;
   readonly #jobRecordStores = new Map<string, JobRecordStore>();
+  readonly #jobExecutionCoordinators = new Map<string, JobExecutionCoordinator>();
   readonly #activeExecutions = new Map<string, AbortController>();
   #indexRebuildTail: Promise<void> = Promise.resolve();
 
@@ -499,17 +509,8 @@ export class JobsService implements PermissionedExternalJobPort {
       snapshot.job.error?.code === "permission.completion_uncertain" &&
       snapshot.job.error.permissionRequestId === record.id
     ) return false;
-    const now = new Date().toISOString();
-    const { waitingDependency: _waiting, stage: _stage, ...current } = snapshot.job;
-    this.#replaceJob(snapshot, JobRecordSchema.parse({
-      ...current,
-      state: "failed_final",
-      updatedAt: now,
-      finishedAt: now,
-      cancellation: {
-        ...snapshot.job.cancellation,
-        durableWritesApplied: true
-      },
+    this.#jobExecutionCoordinator(this.#requireActiveVaultPath()).terminalizeUncertainEffect(snapshot, {
+      checkpointId: permissionCheckpointId(record.id),
       error: {
         code: "permission.completion_uncertain",
         domain: "permission",
@@ -519,14 +520,9 @@ export class JobsService implements PermissionedExternalJobPort {
         userAction: "none",
         permissionRequestId: record.id
       },
-      retry: {
-        retryCount: snapshot.job.retry?.retryCount ?? 0,
-        maxAutomaticRetries: 0,
-        requiresUserAction: false,
-        lastRetryReason: "permission.completion_uncertain"
-      },
+      reason: "permission.completion_uncertain",
       message: "The external action completion is uncertain; Pige will not replay it."
-    }));
+    });
     return true;
   }
 
@@ -593,7 +589,6 @@ export class JobsService implements PermissionedExternalJobPort {
     ) throw new PigeDomainError("permission.request_stale", "The Job no longer waits for this permission request.");
     if (!record.decisionId) throw new PigeDomainError("permission.request_stale", "The permission decision is unavailable.");
 
-    const now = new Date().toISOString();
     const decisionRef = {
       kind: "tool" as const,
       id: record.decisionId,
@@ -607,17 +602,8 @@ export class JobsService implements PermissionedExternalJobPort {
       permissionDecisionIds: []
     };
     if (record.state === "denied") {
-      const { waitingDependency: _waiting, stage: _stage, ...rest } = current;
-      this.#replaceJob(snapshot, JobRecordSchema.parse({
-        ...rest,
-        state: "failed_final",
-        updatedAt: now,
-        finishedAt: now,
-        inputRefs: mergeJobRefs(current.inputRefs ?? [], [decisionRef]),
-        privacy: {
-          ...privacy,
-          permissionDecisionIds: Array.from(new Set([...privacy.permissionDecisionIds, record.decisionId]))
-        },
+      this.#jobExecutionCoordinator(vaultPath).settle(snapshot, {
+        kind: "failed",
         error: {
           code: "permission.denied",
           domain: "permission",
@@ -627,34 +613,29 @@ export class JobsService implements PermissionedExternalJobPort {
           userAction: "none",
           permissionRequestId: record.id
         },
-        retry: {
-          retryCount: current.retry?.retryCount ?? 0,
-          maxAutomaticRetries: 0,
-          requiresUserAction: false,
-          lastRetryReason: "permission.denied"
+        facts: {
+          inputRefs: [decisionRef],
+          privacy: {
+            ...privacy,
+            permissionDecisionIds: [record.decisionId]
+          }
         },
         message: "The exact external action was denied; prior safe output remains available."
-      }));
+      });
       return true;
     }
     if (record.state !== "approved") return false;
-    const { error: _error, waitingDependency: _waiting, stage: _stage, finishedAt: _finished, ...rest } = current;
-    this.#replaceJob(snapshot, JobRecordSchema.parse({
-      ...rest,
-      state: "queued",
-      updatedAt: now,
-      inputRefs: mergeJobRefs(current.inputRefs ?? [], [decisionRef]),
-      privacy: {
-        ...privacy,
-        permissionDecisionIds: Array.from(new Set([...privacy.permissionDecisionIds, record.decisionId]))
+    this.#jobExecutionCoordinator(vaultPath).queue(snapshot, {
+      reason: "permission_decided",
+      clearStage: true,
+      proof: {
+        kind: "permission_decided",
+        permissionRequestId: record.id,
+        permissionDecisionId: record.decisionId
       },
-      retry: {
-        retryCount: current.retry?.retryCount ?? 0,
-        maxAutomaticRetries: 0,
-        requiresUserAction: false
-      },
+      facts: { inputRefs: [decisionRef] },
       message: "One-use permission approved; the same Agent Job will revalidate before execution."
-    }));
+    });
     return true;
   }
 
@@ -676,23 +657,11 @@ export class JobsService implements PermissionedExternalJobPort {
     if (snapshot.job.state !== "running") {
       throw new PigeDomainError("permission.request_stale", "The permission request Job is not running.");
     }
-    const now = new Date().toISOString();
     const permissionRef = createPermissionBindingRef(input.requestId, input.bindingHash);
-    const next = JobRecordSchema.parse({
-      ...snapshot.job,
-      state: "waiting_permission",
-      stage: "waiting_for_tool",
-      updatedAt: now,
-      permissionRequestIds: Array.from(new Set([...(snapshot.job.permissionRequestIds ?? []), input.requestId])),
-      inputRefs: mergeJobRefs(snapshot.job.inputRefs ?? [], [permissionRef]),
-      checkpoints: upsertPermissionCheckpoint(snapshot.job.checkpoints ?? [], {
-        id: permissionCheckpointId(input.requestId),
-        step: "permission_authorization",
-        state: "not_started",
-        inputRefs: [permissionRef],
-        outputRefs: [],
-        resumeHint: "revalidate_exact_permission_action"
-      }),
+    this.#jobExecutionCoordinator(vaultPath).settle(snapshot, {
+      kind: "waiting",
+      reason: "permission",
+      permissionRequestId: input.requestId,
       error: {
         code: "permission.confirmation_required",
         domain: "permission",
@@ -702,9 +671,20 @@ export class JobsService implements PermissionedExternalJobPort {
         userAction: "grant_permission",
         permissionRequestId: input.requestId
       },
+      facts: {
+        stage: "waiting_for_tool",
+        inputRefs: [permissionRef],
+        checkpoints: [{
+          id: permissionCheckpointId(input.requestId),
+          step: "permission_authorization",
+          state: "not_started",
+          inputRefs: [permissionRef],
+          outputRefs: [],
+          resumeHint: "revalidate_exact_permission_action"
+        }]
+      },
       message: "Waiting for one exact current-action permission decision."
     });
-    this.#replaceJob(snapshot, next);
   }
 
   commitPermissionConsumption(input: {
@@ -736,32 +716,29 @@ export class JobsService implements PermissionedExternalJobPort {
       accessedExternalFiles: false,
       permissionDecisionIds: []
     };
-    this.#replaceJob(snapshot, JobRecordSchema.parse({
-      ...snapshot.job,
-      updatedAt: now,
-      inputRefs: mergeJobRefs(snapshot.job.inputRefs ?? [], [permissionRef, decisionRef]),
-      checkpoints: upsertPermissionCheckpoint(snapshot.job.checkpoints ?? [], {
-        id: permissionCheckpointId(input.requestId),
-        step: "permission_authorization",
-        state: "running",
-        startedAt: now,
+    this.#jobExecutionCoordinator(vaultPath).markDurableBoundary(snapshot, {
+      checkpointId: permissionCheckpointId(input.requestId),
+      facts: {
         inputRefs: [permissionRef, decisionRef],
-        outputRefs: [],
-        resumeHint: "do_not_replay_without_completion_marker"
-      }),
-      privacy: {
-        ...privacy,
-        usedNetwork: privacy.usedNetwork || permissionUsesNetwork(input.capability),
-        usedShell: privacy.usedShell || input.capability === "run_shell",
-        accessedExternalFiles: privacy.accessedExternalFiles || input.capability === "external_filesystem",
-        permissionDecisionIds: Array.from(new Set([...privacy.permissionDecisionIds, input.decisionId]))
-      },
-      cancellation: {
-        ...snapshot.job.cancellation,
-        durableWritesApplied: true
+        checkpoints: [{
+          id: permissionCheckpointId(input.requestId),
+          step: "permission_authorization",
+          state: "running",
+          startedAt: now,
+          inputRefs: [permissionRef, decisionRef],
+          outputRefs: [],
+          resumeHint: "do_not_replay_without_completion_marker"
+        }],
+        privacy: {
+          ...privacy,
+          usedNetwork: privacy.usedNetwork || permissionUsesNetwork(input.capability),
+          usedShell: privacy.usedShell || input.capability === "run_shell",
+          accessedExternalFiles: privacy.accessedExternalFiles || input.capability === "external_filesystem",
+          permissionDecisionIds: [input.decisionId]
+        }
       },
       message: "One-use permission was consumed before the external action."
-    }));
+    });
   }
 
   completePermissionAction(input: {
@@ -791,23 +768,21 @@ export class JobsService implements PermissionedExternalJobPort {
       checksum: input.completionMarkerHash,
       role: "permission_action_completion"
     };
-    this.#replaceJob(snapshot, JobRecordSchema.parse({
-      ...snapshot.job,
-      updatedAt: now,
-      outputRefs: mergeJobRefs(snapshot.job.outputRefs ?? [], [completionRef]),
-      checkpoints: upsertPermissionCheckpoint(snapshot.job.checkpoints ?? [], {
-        id: permissionCheckpointId(input.requestId),
-        step: "permission_authorization",
-        state: "done",
-        startedAt: permissionCheckpoint(snapshot.job, input.requestId)?.startedAt ?? now,
-        finishedAt: now,
-        inputRefs: [permissionRef],
-        outputRefs: [completionRef],
-        checksumAfter: input.completionMarkerHash,
-        resumeHint: "adopt_completed_permission_action"
-      }),
+    this.#jobExecutionCoordinator(vaultPath).patch(snapshot, {
+      outputRefs: [completionRef],
+      checkpoints: [{
+          id: permissionCheckpointId(input.requestId),
+          step: "permission_authorization",
+          state: "done",
+          startedAt: permissionCheckpoint(snapshot.job, input.requestId)?.startedAt ?? now,
+          finishedAt: now,
+          inputRefs: [permissionRef],
+          outputRefs: [completionRef],
+          checksumAfter: input.completionMarkerHash,
+          resumeHint: "adopt_completed_permission_action"
+        }],
       message: "The permissioned external action completed with a durable body-free marker."
-    }));
+    });
   }
 
   readPermissionCompletion(input: {
@@ -901,11 +876,7 @@ export class JobsService implements PermissionedExternalJobPort {
     if (record.state === "consumed" && current.state === "queued" && boundRequestId === undefined) {
       const message = "A consumed model send could not prove completion; the Job will request fresh one-use approval before replay.";
       if (current.message === message) return false;
-      this.#replaceJob(snapshot, JobRecordSchema.parse({
-        ...current,
-        updatedAt: new Date().toISOString(),
-        message
-      }));
+      this.#jobExecutionCoordinator(vaultPath).patch(snapshot, { message });
       return true;
     }
     if (
@@ -915,14 +886,9 @@ export class JobsService implements PermissionedExternalJobPort {
       throw new PigeDomainError("model_egress.approval_stale", "The Job no longer waits for this model egress approval.");
     }
 
-    const now = new Date().toISOString();
     if (record.state === "denied") {
-      const { waitingDependency: _waiting, stage: _stage, ...rest } = current;
-      this.#replaceJob(snapshot, JobRecordSchema.parse({
-        ...rest,
-        state: "failed_final",
-        updatedAt: now,
-        finishedAt: now,
+      this.#jobExecutionCoordinator(vaultPath).settle(snapshot, {
+        kind: "failed",
         error: {
           code: "model_provider.egress_denied",
           domain: "model_provider",
@@ -932,33 +898,35 @@ export class JobsService implements PermissionedExternalJobPort {
           userAction: "none",
           modelEgressApprovalRequestId: record.id
         },
-        retry: {
-          retryCount: current.retry?.retryCount ?? 0,
-          maxAutomaticRetries: 0,
-          requiresUserAction: false,
-          lastRetryReason: "model_provider.egress_denied"
-        },
         message: "The user denied this exact model send; preserved input and sources remain available."
-      }));
+      });
       return true;
     }
 
-    const { error: _error, waitingDependency: _waiting, stage: _stage, finishedAt: _finishedAt, ...rest } = current;
-    this.#replaceJob(snapshot, JobRecordSchema.parse({
-      ...rest,
-      state: resumesLiveInvocation ? "running" : "queued",
-      updatedAt: now,
-      retry: {
-        retryCount: current.retry?.retryCount ?? 0,
-        maxAutomaticRetries: 0,
-        requiresUserAction: false
-      },
-      message: resumesLiveInvocation
-        ? "The exact model send was approved once; the active Agent invocation is resuming."
-        : record.state === "consumed"
-        ? "A consumed model send could not prove completion; the Job will request fresh one-use approval before replay."
-        : "The exact model send was approved once; the same Job is ready to resume."
-    }));
+    if (!record.operationId) {
+      throw new PigeDomainError("model_egress.approval_stale", "The model egress decision operation is unavailable.");
+    }
+    const proof = {
+      kind: "model_egress_decided" as const,
+      approvalRequestId: record.id,
+      operationId: record.operationId
+    };
+    if (resumesLiveInvocation && current.state === "waiting_model_egress") {
+      this.#jobExecutionCoordinator(vaultPath).resume(snapshot, {
+        stage: current.stage ?? "planning",
+        proof,
+        message: "The exact model send was approved once; the active Agent invocation is resuming."
+      });
+    } else {
+      this.#jobExecutionCoordinator(vaultPath).queue(snapshot, {
+        reason: "model_egress_decided",
+        clearStage: true,
+        proof,
+        message: record.state === "consumed"
+          ? "A consumed model send could not prove completion; the Job will request fresh one-use approval before replay."
+          : "The exact model send was approved once; the same Job is ready to resume."
+      });
+    }
     return true;
   }
 
@@ -1085,19 +1053,10 @@ export class JobsService implements PermissionedExternalJobPort {
           job: toJobSummary(vaultPath, jobFile.job)
         };
       }
-      const requestedAt = new Date().toISOString();
-      const updatedJob = JobRecordSchema.parse({
-        ...jobFile.job,
-        state: "cancel_requested",
-        updatedAt: requestedAt,
-        cancellation: {
-          ...jobFile.job.cancellation,
-          requestedAt,
-          requestedBy: "user"
-        },
+      const committed = this.#jobExecutionCoordinator(vaultPath).requestCancellation(snapshot, {
+        requestedBy: "user",
         message: "Cancellation requested; waiting for a safe local checkpoint."
-      });
-      const committed = this.#replaceJob(snapshot, updatedJob).job;
+      }).job;
       controller.abort();
       return {
         status: "cancel_requested",
@@ -1124,21 +1083,6 @@ export class JobsService implements PermissionedExternalJobPort {
       };
     }
 
-    const cancelledAt = new Date().toISOString();
-    const updatedJob = JobRecordSchema.parse({
-      ...jobFile.job,
-      state: "cancelled",
-      updatedAt: cancelledAt,
-      finishedAt: cancelledAt,
-      cancellation: {
-        ...jobFile.job.cancellation,
-        requestedAt: cancelledAt,
-        requestedBy: "user",
-        safeCheckpointId: "before_durable_write",
-        durableWritesApplied: false
-      },
-      message: "Job cancelled. Preserved source data remains in the vault."
-    });
     const activeModelEgressApprovals = this.#modelEgressApprovals &&
       (jobFile.job.class === "agent_turn" || jobFile.job.class === "agent_ingest")
       ? this.#modelEgressApprovals.listForJob(vaultPath, jobFile.job.id).filter(
@@ -1151,7 +1095,11 @@ export class JobsService implements PermissionedExternalJobPort {
           (record) => record.state === "pending" || record.state === "approved"
         )
       : [];
-    const committed = this.#replaceJob(snapshot, updatedJob).job;
+    const committed = this.#jobExecutionCoordinator(vaultPath).cancelPending(snapshot, {
+      requestedBy: "user",
+      safeCheckpointId: "before_durable_write",
+      message: "Job cancelled. Preserved source data remains in the vault."
+    }).job;
     this.#activeExecutions.get(jobFile.job.id)?.abort();
     for (const approval of activeModelEgressApprovals) {
       this.#modelEgressApprovals?.invalidate(vaultPath, approval.id);
@@ -1189,25 +1137,9 @@ export class JobsService implements PermissionedExternalJobPort {
       };
     }
 
-    const preserveDurableWrites = jobFile.job.cancellation?.durableWritesApplied === true;
-    const {
-      stage: _stage,
-      startedAt: _startedAt,
-      finishedAt: _finishedAt,
-      progress: _progress,
-      cancellation: _cancellation,
-      error: _error,
-      waitingDependency: _waitingDependency,
-      ...retryableJob
-    } = jobFile.job;
-    const updatedJob = JobRecordSchema.parse({
-      ...retryableJob,
-      state: "queued",
-      updatedAt: new Date().toISOString(),
-      ...(preserveDurableWrites ? { cancellation: { durableWritesApplied: true } } : {}),
+    const committed = this.#jobExecutionCoordinator(vaultPath).prepareRetry(snapshot, {
       message: "Job requeued for later processing."
-    });
-    const committed = this.#replaceJob(snapshot, updatedJob).job;
+    }).job;
     return {
       status: "requeued",
       job: toJobSummary(vaultPath, committed)
@@ -1463,6 +1395,7 @@ export class JobsService implements PermissionedExternalJobPort {
       !jobFile ||
       jobFile.job.class !== "agent_turn" ||
       jobFile.job.sourceId !== sourceId ||
+      !jobFile.job.conversationEventId ||
       !sourceRecordFile ||
       sourceRecordFile.sourceRecord.metadata.agentTurnJobId !== jobId
     ) {
@@ -1481,20 +1414,16 @@ export class JobsService implements PermissionedExternalJobPort {
         "The unified Agent turn is not waiting for source preservation."
       );
     }
-    const {
-      stage: _stage,
-      waitingDependency: _waitingDependency,
-      error: _error,
-      finishedAt: _finishedAt,
-      ...current
-    } = jobFile.job;
-    const linked = JobRecordSchema.parse({
-      ...current,
-      state: "queued",
-      updatedAt: new Date().toISOString(),
+    return this.#jobExecutionCoordinator(vaultPath).queue(snapshot!, {
+      reason: "source_preserved",
+      proof: {
+        kind: "source_preserved",
+        sourceId,
+        conversationEventId: jobFile.job.conversationEventId
+      },
+      clearStage: true,
       message: "Agent turn source preservation completed; semantic processing is queued."
-    });
-    return this.#replaceJob(snapshot!, linked).job;
+    }).job;
   }
 
   failAgentTurnSourcePreservation(jobId: string): JobRecord | undefined {
@@ -1509,13 +1438,14 @@ export class JobsService implements PermissionedExternalJobPort {
     ) {
       return jobFile?.job.class === "agent_turn" ? jobFile.job : undefined;
     }
-    const failed = JobRecordSchema.parse({
-      ...jobFile.job,
-      state: "failed_retryable",
-      updatedAt: new Date().toISOString(),
+    return this.#jobExecutionCoordinator(vaultPath).settle(snapshot!, {
+      kind: "requeue",
+      error: createGenericJobExecutionError(true),
+      reason: "agent_turn.source_preservation_failed",
+      maxAutomaticRetries: 0,
+      requiresUserAction: true,
       message: "The attachment could not be preserved safely; the Agent turn remains available for an explicit retry."
-    });
-    return this.#replaceJob(snapshot!, failed).job;
+    }).job;
   }
 
   reconcilePendingAgentTurnSources(): ReconcilePendingAgentTurnSourcesResult {
@@ -1662,13 +1592,11 @@ export class JobsService implements PermissionedExternalJobPort {
         role: AGENT_TOOL_CATALOG_ROLE
       }
     ];
-    const reserved = JobRecordSchema.parse({
-      ...jobFile.job,
+    const reserved = this.#jobExecutionCoordinator(vaultPath).patch(snapshot!, {
       inputRefs: mergeAgentToolCallProvenance(baseRefs, provenanceHash),
-      updatedAt: new Date().toISOString(),
       message: "Pi selected the host-bound URL fetch tool; the submitted URL action is durably reserved."
-    });
-    return { job: this.#replaceJob(snapshot!, reserved).job, sourceId };
+    }).job;
+    return { job: reserved, sourceId };
   }
 
   markAgentTurnUrlSourcePublicationStarted(
@@ -1695,17 +1623,10 @@ export class JobsService implements PermissionedExternalJobPort {
         "The Agent-selected URL publication guard binding is invalid."
       );
     }
-    const guarded = JobRecordSchema.parse({
-      ...jobFile.job,
-      cancellation: {
-        ...jobFile.job.cancellation,
-        safeCheckpointId: "agent_turn_url_source_preserving",
-        durableWritesApplied: true
-      },
-      updatedAt: new Date().toISOString(),
+    return this.#jobExecutionCoordinator(vaultPath).markDurableBoundary(snapshot!, {
+      checkpointId: "agent_turn_url_source_preserving",
       message: "The Agent-selected URL source passed confinement checks; durable preservation is beginning."
-    });
-    return this.#replaceJob(snapshot!, guarded).job;
+    }).job;
   }
 
   linkAgentTurnUrlSource(jobId: string, sourceId: string): AgentTurnUrlSourceLink {
@@ -1775,37 +1696,22 @@ export class JobsService implements PermissionedExternalJobPort {
       id: operation.id,
       role: AGENT_TURN_URL_OPERATION_ROLE
     };
-    const linked = JobRecordSchema.parse({
-      ...jobFile.job,
-      outputRefs: [
-        ...(jobFile.job.outputRefs ?? []).filter((ref) =>
-          !(
-            (ref.kind === "source" && ref.role === AGENT_TURN_URL_SOURCE_ROLE) ||
-            (ref.kind === "page" && ref.role === AGENT_TURN_URL_PAGE_ROLE) ||
-            (ref.kind === "operation" && ref.role === AGENT_TURN_URL_OPERATION_ROLE)
-          )
-        ),
-        sourceRef,
-        pageRef,
-        operationRef
-      ],
-      operationIds: Array.from(new Set([...(jobFile.job.operationIds ?? []), operation.id])),
-      cancellation: {
-        ...jobFile.job.cancellation,
-        safeCheckpointId: "agent_turn_url_source_preserved",
-        durableWritesApplied: true
-      },
-      privacy: {
+    const linked = this.#jobExecutionCoordinator(vaultPath).markDurableBoundary(snapshot!, {
+      checkpointId: "agent_turn_url_source_preserved",
+      facts: {
+        outputRefs: [sourceRef, pageRef, operationRef],
+        operationIds: [operation.id],
+        privacy: {
         usedCloudModel: jobFile.job.privacy?.usedCloudModel ?? false,
         usedNetwork: true,
         usedShell: false,
         accessedExternalFiles: false,
         permissionDecisionIds: jobFile.job.privacy?.permissionDecisionIds ?? []
+        }
       },
-      updatedAt: new Date().toISOString(),
       message: "Agent-selected URL evidence was fetched, preserved, and projected without a Host-selected semantic continuation."
-    });
-    const committed = this.#replaceJob(snapshot!, linked).job;
+    }).job;
+    const committed = linked;
     return { job: committed, sourceId, pageId: page.pageId, pagePath: page.pagePath, title: page.title };
   }
 
@@ -1874,7 +1780,36 @@ export class JobsService implements PermissionedExternalJobPort {
     return this.#replaceJob(snapshot!, validated).job;
   }
 
-  writeAgentTurnJob(expected: JobRecord, job: JobRecord): JobRecord {
+  beginAgentTurnJob(expected: JobRecord, input: BeginJobInput): JobRecord {
+    const snapshot = this.#requireAgentTurnSnapshot(expected);
+    return this.#jobExecutionCoordinator(this.#requireActiveVaultPath()).begin(snapshot, input).job;
+  }
+
+  resumeAgentTurnJob(expected: JobRecord, input: ResumeJobInput): JobRecord {
+    const snapshot = this.#requireAgentTurnSnapshot(expected);
+    return this.#jobExecutionCoordinator(this.#requireActiveVaultPath()).resume(snapshot, input).job;
+  }
+
+  patchAgentTurnJob(expected: JobRecord, facts: JobExecutionFactsPatch): JobRecord {
+    const snapshot = this.#requireAgentTurnSnapshot(expected);
+    return this.#jobExecutionCoordinator(this.#requireActiveVaultPath()).patch(snapshot, facts).job;
+  }
+
+  settleAgentTurnJob(expected: JobRecord, outcome: JobExecutionOutcome): JobRecord {
+    const snapshot = this.#requireAgentTurnSnapshot(expected);
+    return this.#jobExecutionCoordinator(this.#requireActiveVaultPath()).settle(snapshot, outcome).job;
+  }
+
+  adoptAgentTurnCompletion(expected: JobRecord, input: AdoptDurableCompletionInput): JobRecord {
+    const snapshot = this.#requireAgentTurnSnapshot(expected);
+    return this.#jobExecutionCoordinator(this.#requireActiveVaultPath())
+      .adoptDurableCompletion(snapshot, input).job;
+  }
+
+  testOnlyWriteAgentTurnJob(expected: JobRecord, job: JobRecord): JobRecord {
+    if (process.env.NODE_ENV !== "test") {
+      throw new PigeDomainError("agent_runtime.turn_mutation_forbidden", "Raw Agent turn mutation is test-only.");
+    }
     const activeVault = this.#vaults.current();
     const vaultPath = this.#requireActiveVaultPath();
     const snapshot = this.#readJobSnapshot(vaultPath, job.id);
@@ -1947,20 +1882,16 @@ export class JobsService implements PermissionedExternalJobPort {
       ) {
         continue;
       }
-      const {
-        stage: _stage,
-        finishedAt: _finishedAt,
-        error: _error,
-        waitingDependency: _waitingDependency,
-        ...current
-      } = jobFile.job;
-      this.#replaceExpectedJob(jobFile, JobRecordSchema.parse({
-        ...current,
-        state: "queued",
+      const snapshot = this.#jobRecordStore(vaultPath).read(jobFile.path);
+      const proof = dependencyRepairProof(snapshot.job);
+      if (!proof) continue;
+      this.#jobExecutionCoordinator(vaultPath).queue(snapshot, {
+        reason: "dependency_repaired",
+        proof,
         ...(jobFile.job.sourceId === undefined ? {} : { stage: "planning" as const }),
-        updatedAt: new Date().toISOString(),
+        ...(jobFile.job.sourceId === undefined ? { clearStage: true } : {}),
         message: "The preserved Agent turn is queued after model setup became ready."
-      }));
+      });
       requeued += 1;
     }
     return { requeued };
@@ -1984,17 +1915,10 @@ export class JobsService implements PermissionedExternalJobPort {
       if (jobFile.job.class === "backup") continue;
       const uncertainPermissionRequestId = uncompletedConsumedPermissionRequestId(jobFile.job);
       if (uncertainPermissionRequestId) {
-        const now = new Date().toISOString();
-        const { waitingDependency: _waiting, stage: _stage, ...current } = jobFile.job;
-        this.#replaceExpectedJob(jobFile, JobRecordSchema.parse({
-          ...current,
-          state: "failed_final",
-          updatedAt: now,
-          finishedAt: now,
-          cancellation: {
-            ...jobFile.job.cancellation,
-            durableWritesApplied: true
-          },
+        this.#jobExecutionCoordinator(vaultPath).terminalizeUncertainEffect(
+          this.#jobRecordStore(vaultPath).read(jobFile.path),
+          {
+            checkpointId: permissionCheckpointId(uncertainPermissionRequestId),
           error: {
             code: "permission.completion_uncertain",
             domain: "permission",
@@ -2004,14 +1928,10 @@ export class JobsService implements PermissionedExternalJobPort {
             userAction: "none",
             permissionRequestId: uncertainPermissionRequestId
           },
-          retry: {
-            retryCount: jobFile.job.retry?.retryCount ?? 0,
-            maxAutomaticRetries: 0,
-            requiresUserAction: false,
-            lastRetryReason: "permission.completion_uncertain"
-          },
+            reason: "permission.completion_uncertain",
           message: "Pige restarted after one-use authority was consumed; the external action will not be replayed."
-        }));
+          }
+        );
         continue;
       }
       const canResumeIdempotently = jobFile.job.state === "running" &&
@@ -2022,18 +1942,19 @@ export class JobsService implements PermissionedExternalJobPort {
           jobFile.job.class === "agent_turn" ||
           jobFile.job.class === "agent_ingest" ||
           jobFile.job.class === "index_rebuild");
-      const state: JobState = canResumeIdempotently ? "queued" : "failed_retryable";
       const message = canResumeIdempotently
         ? "Pige restarted during this idempotent local job; validated outputs will be reused and processing has been requeued."
         : "Pige restarted before this job reached a safe completion point. Preserved inputs remain available for an explicit retry.";
-      this.#replaceExpectedJob(jobFile, JobRecordSchema.parse({
-        ...jobFile.job,
-        state,
-        updatedAt: new Date().toISOString(),
-        message
-      }));
-      if (canResumeIdempotently) requeued += 1;
-      else failedRetryable += 1;
+      const recovered = this.#jobExecutionCoordinator(vaultPath).recoverInterrupted(
+        this.#jobRecordStore(vaultPath).read(jobFile.path),
+        {
+          canResumeIdempotently,
+          queuedMessage: message,
+          retryableMessage: message
+        }
+      ).job;
+      if (recovered.state === "queued") requeued += 1;
+      else if (recovered.state === "failed_retryable") failedRetryable += 1;
     }
     return { requeued, failedRetryable };
   }
@@ -2080,12 +2001,14 @@ export class JobsService implements PermissionedExternalJobPort {
         hasWaitingAgentDatasetChild(store, vaultPath, jobFile.job) &&
         !this.#datasets?.canMaterialize(sourceRecord.kind)
       ) continue;
-      this.#replaceExpectedJob(jobFile, JobRecordSchema.parse({
-        ...jobFile.job,
-        state: "queued",
-        updatedAt: new Date().toISOString(),
+      const snapshot = this.#jobRecordStore(vaultPath).read(jobFile.path);
+      const proof = dependencyRepairProof(snapshot.job);
+      if (!proof) continue;
+      this.#jobExecutionCoordinator(vaultPath).queue(snapshot, {
+        reason: "dependency_repaired",
+        proof,
         message: "Default model is ready; Agent ingest requeued."
-      }));
+      });
       requeued += 1;
     }
 
@@ -2103,12 +2026,14 @@ export class JobsService implements PermissionedExternalJobPort {
       if (isAgentSelectedParseJob(jobFile.job)) continue;
       const sourceRecord = readSourceRecord(vaultPath, jobFile.job.sourceId);
       if (!sourceRecord || !parser.canParse(sourceRecord.kind)) continue;
-      this.#replaceExpectedJob(jobFile, JobRecordSchema.parse({
-        ...jobFile.job,
-        state: "queued",
-        updatedAt: new Date().toISOString(),
+      const snapshot = this.#jobRecordStore(vaultPath).read(jobFile.path);
+      const proof = dependencyRepairProof(snapshot.job);
+      if (!proof) continue;
+      this.#jobExecutionCoordinator(vaultPath).queue(snapshot, {
+        reason: "dependency_repaired",
+        proof,
         message: "Bundled document parser is ready; parse requeued."
-      }));
+      });
       requeued += 1;
     }
     return { requeued };
@@ -2125,12 +2050,14 @@ export class JobsService implements PermissionedExternalJobPort {
       if (isAgentSelectedOcrJob(jobFile.job)) continue;
       const sourceRecord = readSourceRecord(vaultPath, jobFile.job.sourceId);
       if (!sourceRecord || !inspectOcrSource(ocr, sourceRecord).ready) continue;
-      this.#replaceExpectedJob(jobFile, JobRecordSchema.parse({
-        ...jobFile.job,
-        state: "queued",
-        updatedAt: new Date().toISOString(),
+      const snapshot = this.#jobRecordStore(vaultPath).read(jobFile.path);
+      const proof = dependencyRepairProof(snapshot.job);
+      if (!proof) continue;
+      this.#jobExecutionCoordinator(vaultPath).queue(snapshot, {
+        reason: "dependency_repaired",
+        proof,
         message: "Local OCR capability is ready; OCR requeued."
-      }));
+      });
       requeued += 1;
     }
     return { requeued };
@@ -2180,19 +2107,7 @@ export class JobsService implements PermissionedExternalJobPort {
             )
           }
         );
-        if (
-          supportsAgentSelectedParser(sourceRecordFile.sourceRecord.kind) ||
-          supportsAgentSelectedOcr(sourceRecordFile.sourceRecord.kind)
-        ) {
-          ensureAgentIngestJob(
-            this.#jobRecordStore(vaultPath),
-            vaultPath,
-            captureExecution.job,
-            sourceRecordFile.sourceRecord.id,
-            canRunAgentIngest(this.#agentIngest),
-            this.#requireActiveVaultId(vaultPath)
-          );
-        } else {
+        if (isLegacyAgentIngestSource(sourceRecordFile.sourceRecord)) {
           ensureAgentIngestJob(
             this.#jobRecordStore(vaultPath),
             vaultPath,
@@ -2202,6 +2117,10 @@ export class JobsService implements PermissionedExternalJobPort {
             this.#requireActiveVaultId(vaultPath)
           );
         }
+        appendLog(
+          vaultPath,
+          `${new Date().toISOString()} Created source page [${page.title}](${page.pagePath}) for source \`${jobFile.job.sourceId}\`.`
+        );
         this.#completeCooperativeExecution(
           jobFile.path,
           captureExecution.job,
@@ -2212,7 +2131,6 @@ export class JobsService implements PermissionedExternalJobPort {
           "source",
           captureExecution.control.durableWriteState()
         );
-        appendLog(vaultPath, `${new Date().toISOString()} Created source page [${page.title}](${page.pagePath}) for source \`${jobFile.job.sourceId}\`.`);
         completed += 1;
       } catch (caught) {
         if (isJobMutationContention(caught)) {
@@ -2272,6 +2190,7 @@ export class JobsService implements PermissionedExternalJobPort {
       const agentSelected = isAgentSelectedParseJob(runningJob);
       const detachParentAbort = bridgeParentAbortToChild(
         this.#jobRecordStore(vaultPath),
+        this.#jobExecutionCoordinator(vaultPath),
         jobFile.path,
         execution.controller,
         request.abortSignal
@@ -2288,7 +2207,8 @@ export class JobsService implements PermissionedExternalJobPort {
         );
         const refreshedSource = readSourceRecord(vaultPath, sourceRecordFile.sourceRecord.id) ?? sourceRecordFile.sourceRecord;
         let ocrCapability: OcrSourceCapability | undefined;
-        if (!agentSelected && result.needsOcr) {
+        const legacyAgentIngestSource = isLegacyAgentIngestSource(refreshedSource);
+        if (!agentSelected && legacyAgentIngestSource && result.needsOcr) {
           ocrCapability = inspectOcrSource(this.#ocr, refreshedSource);
           ensureOcrWaitingJob(
             this.#jobRecordStore(vaultPath),
@@ -2301,6 +2221,7 @@ export class JobsService implements PermissionedExternalJobPort {
         }
         if (
           !agentSelected &&
+          legacyAgentIngestSource &&
           result.extractedTextArtifactPath &&
           result.agentTextReady &&
           (!result.needsOcr || ocrCapability?.ready !== true)
@@ -2316,6 +2237,10 @@ export class JobsService implements PermissionedExternalJobPort {
           agentReadySourceIds.push(refreshedSource.id);
         }
         const hasWarnings = result.needsOcr || result.sourcePageConflict || result.warnings.length > 0;
+        appendLog(
+          vaultPath,
+          `${new Date().toISOString()} Parsed ${documentLabel(refreshedSource.kind)} source \`${refreshedSource.id}\`: ${result.textCharacterCount} text characters, coverage ${result.textCoverage}.${result.needsOcr ? " OCR enrichment is waiting." : ""}`
+        );
         this.#completeCooperativeExecution(
           jobFile.path,
           runningJob,
@@ -2323,10 +2248,6 @@ export class JobsService implements PermissionedExternalJobPort {
           createParseCompletionMessage(result, sourceRecordFile.sourceRecord.kind),
           "document",
           execution.control.durableWriteState()
-        );
-        appendLog(
-          vaultPath,
-          `${new Date().toISOString()} Parsed ${documentLabel(refreshedSource.kind)} source \`${refreshedSource.id}\`: ${result.textCharacterCount} text characters, coverage ${result.textCoverage}.${result.needsOcr ? " OCR enrichment is waiting." : ""}`
         );
         completed += 1;
       } catch (caught) {
@@ -2401,6 +2322,7 @@ export class JobsService implements PermissionedExternalJobPort {
       const runningJob = execution.job;
       const detachParentAbort = bridgeParentAbortToChild(
         this.#jobRecordStore(vaultPath),
+        this.#jobExecutionCoordinator(vaultPath),
         jobFile.path,
         execution.controller,
         request.abortSignal
@@ -2414,23 +2336,24 @@ export class JobsService implements PermissionedExternalJobPort {
           runningJob,
           execution.control
         );
-        this.#mutateJob(jobFile.path, (current) => JobRecordSchema.parse({
-          ...current,
-          outputRefs: Array.from(new Map([
-            ...(current.outputRefs ?? []).map((ref) => [`${ref.kind}:${ref.id}:${ref.role ?? ""}`, ref] as const),
-            [`dataset:${result.datasetId}:dataset_bundle`, {
+        this.#jobExecutionCoordinator(vaultPath).patch(
+          this.#jobRecordStore(vaultPath).read(jobFile.path),
+          {
+            outputRefs: [{
               kind: "dataset" as const,
               id: result.datasetId,
               role: "dataset_bundle"
-            }],
-            [`dataset_revision:${result.revisionId}:dataset_active_revision`, {
+            }, {
               kind: "dataset_revision" as const,
               id: result.revisionId,
               role: "dataset_active_revision"
             }]
-          ]).values()),
-          updatedAt: new Date().toISOString()
-        }));
+          }
+        );
+        appendLog(
+          vaultPath,
+          `${new Date().toISOString()} Materialized Dataset \`${result.datasetId}\` revision \`${result.revisionId}\` from source \`${sourceRecordFile.sourceRecord.id}\`: ${result.tableCount} tables, ${result.rowCount} rows.`
+        );
         const completedJob = this.#completeCooperativeExecution(
           jobFile.path,
           runningJob,
@@ -2443,10 +2366,6 @@ export class JobsService implements PermissionedExternalJobPort {
         if (completedJob.state === "cancelled") {
           failed += 1;
         } else {
-          appendLog(
-            vaultPath,
-            `${new Date().toISOString()} Materialized Dataset \`${result.datasetId}\` revision \`${result.revisionId}\` from source \`${sourceRecordFile.sourceRecord.id}\`: ${result.tableCount} tables, ${result.rowCount} rows.`
-          );
           completed += 1;
         }
       } catch (caught) {
@@ -2490,10 +2409,11 @@ export class JobsService implements PermissionedExternalJobPort {
         continue;
       }
       const agentSelected = isAgentSelectedOcrJob(jobFile.job);
+      const legacyAgentIngestSource = isLegacyAgentIngestSource(sourceRecordFile.sourceRecord);
       const ocr = this.#ocr;
       const capability = inspectOcrSource(ocr, sourceRecordFile.sourceRecord);
       if (!ocr || !capability.ready) {
-        if (!agentSelected && sourceRecordFile.sourceRecord.metadata.agentTextReady === true) {
+        if (!agentSelected && legacyAgentIngestSource && sourceRecordFile.sourceRecord.metadata.agentTextReady === true) {
           ensureAgentIngestJob(
             this.#jobRecordStore(vaultPath),
             vaultPath,
@@ -2521,6 +2441,7 @@ export class JobsService implements PermissionedExternalJobPort {
       const runningJob = execution.job;
       const detachParentAbort = bridgeParentAbortToChild(
         this.#jobRecordStore(vaultPath),
+        this.#jobExecutionCoordinator(vaultPath),
         jobFile.path,
         execution.controller,
         request.abortSignal
@@ -2534,7 +2455,7 @@ export class JobsService implements PermissionedExternalJobPort {
           runningJob,
           execution.control
         );
-        if (!agentSelected && result.agentTextReady) {
+        if (!agentSelected && legacyAgentIngestSource && result.agentTextReady) {
           ensureAgentIngestJob(
             this.#jobRecordStore(vaultPath),
             vaultPath,
@@ -2546,6 +2467,10 @@ export class JobsService implements PermissionedExternalJobPort {
           agentReadySourceIds.push(sourceRecordFile.sourceRecord.id);
         }
         const hasWarnings = !result.agentTextReady || result.sourcePageConflict || result.warnings.length > 0;
+        appendLog(
+          vaultPath,
+          `${new Date().toISOString()} OCR processed ${documentLabel(sourceRecordFile.sourceRecord.kind)} source \`${sourceRecordFile.sourceRecord.id}\`: ${result.textCharacterCount} text characters.${result.confidence !== undefined ? ` confidence ${result.confidence.toFixed(3)}.` : ""}`
+        );
         this.#completeCooperativeExecution(
           jobFile.path,
           runningJob,
@@ -2557,10 +2482,6 @@ export class JobsService implements PermissionedExternalJobPort {
               ? "media"
               : "image",
           execution.control.durableWriteState()
-        );
-        appendLog(
-          vaultPath,
-          `${new Date().toISOString()} OCR processed ${documentLabel(sourceRecordFile.sourceRecord.kind)} source \`${sourceRecordFile.sourceRecord.id}\`: ${result.textCharacterCount} text characters.${result.confidence !== undefined ? ` confidence ${result.confidence.toFixed(3)}.` : ""}`
         );
         completed += 1;
       } catch (caught) {
@@ -2574,6 +2495,7 @@ export class JobsService implements PermissionedExternalJobPort {
           if (failure.waiting) {
             if (
               !agentSelected &&
+              legacyAgentIngestSource &&
               sourceRecordFile.sourceRecord.metadata.agentTextReady === true &&
               isOcrCapabilityUnavailableError(caught)
             ) {
@@ -2624,23 +2546,19 @@ export class JobsService implements PermissionedExternalJobPort {
             jobFile.job.id
           );
           if (existingAssistant) {
-            const finishedAt = new Date().toISOString();
-            this.#replaceExpectedJob(jobFile, JobRecordSchema.parse({
-              ...jobFile.job,
-              state: "completed",
-              updatedAt: finishedAt,
-              finishedAt,
-              outputRefs: Array.from(new Map([
-                ...(jobFile.job.outputRefs ?? []).map((ref) => [`${ref.kind}:${ref.id}:${ref.role ?? ""}`, ref] as const),
-                [`conversation:${existingAssistant.id}:agent_turn_assistant_event`, {
+            this.#jobExecutionCoordinator(vaultPath).adoptDurableCompletion(
+              this.#jobRecordStore(vaultPath).read(jobFile.path),
+              {
+                checkpointId: "agent_turn_assistant_event_persisted",
+                facts: { outputRefs: [{
                   kind: "conversation" as const,
                   id: existingAssistant.id,
                   role: "agent_turn_assistant_event",
                   ...(existingAssistant.contentHash ? { checksum: existingAssistant.contentHash } : {})
-                }]
-              ]).values()),
-              message: "Recovered the durable assistant result for this source Agent turn."
-            }));
+                }] },
+                message: "Recovered the durable assistant result for this source Agent turn."
+              }
+            );
             completed += 1;
             continue;
           }
@@ -2688,20 +2606,20 @@ export class JobsService implements PermissionedExternalJobPort {
       try {
         const result = await agentIngest.ingestSource(vaultPath, sourceRecordFile.sourceRecord, runningJob, {
           onPolicyResolved: (snapshot) => {
-            activeJob = this.#mutateJob(jobFile.path, (current) => JobRecordSchema.parse({
-              ...current,
+            activeJob = this.#jobExecutionCoordinator(vaultPath).patch(
+              this.#jobRecordStore(vaultPath).read(jobFile.path),
+              {
               policyContextId: snapshot.policyContextId,
               policyHash: snapshot.policyHash,
-              updatedAt: new Date().toISOString(),
               message: "Agent ingest policy and model-egress gates resolved before provider access."
-            }));
+              }
+            ).job;
           },
           onEgressRecorded: (operationId) => {
-            activeJob = this.#mutateJob(jobFile.path, (current) => JobRecordSchema.parse({
-              ...current,
-              operationIds: Array.from(new Set([...(current.operationIds ?? []), operationId])),
-              updatedAt: new Date().toISOString()
-            }));
+            activeJob = this.#jobExecutionCoordinator(vaultPath).patch(
+              this.#jobRecordStore(vaultPath).read(jobFile.path),
+              { operationIds: [operationId] }
+            ).job;
           },
           onModelEgressPending: (requestId) => {
             activeJob = this.#markJobWaitingModelEgress(
@@ -2752,6 +2670,7 @@ export class JobsService implements PermissionedExternalJobPort {
             if (publicationBinding) {
               recordAgentNotePublicationCheckpoint(
                 this.#jobRecordStore(vaultPath),
+                this.#jobExecutionCoordinator(vaultPath),
                 vaultPath,
                 jobFile.path,
                 checkpointId,
@@ -2763,8 +2682,8 @@ export class JobsService implements PermissionedExternalJobPort {
           onProposalStaged: (proposalResult) => {
             markAgentProposalAwaitingReview(
               this.#jobRecordStore(vaultPath),
+              this.#jobExecutionCoordinator(vaultPath),
               jobFile.path,
-              runningJob,
               proposalResult.proposalId,
               proposalResult.proposalBinding,
               proposalResult.operationIds,
@@ -2798,19 +2717,15 @@ export class JobsService implements PermissionedExternalJobPort {
             runningJob.id,
             result.answer
           );
-          activeJob = this.#mutateJob(jobFile.path, (current) => JobRecordSchema.parse({
-            ...current,
-            outputRefs: Array.from(new Map([
-              ...(current.outputRefs ?? []).map((ref) => [`${ref.kind}:${ref.id}:${ref.role ?? ""}`, ref] as const),
-              [`conversation:${assistantEvent.id}:agent_turn_assistant_event`, {
+          activeJob = this.#jobExecutionCoordinator(vaultPath).patch(
+            this.#jobRecordStore(vaultPath).read(jobFile.path),
+            { outputRefs: [{
                 kind: "conversation" as const,
                 id: assistantEvent.id,
                 role: "agent_turn_assistant_event",
                 ...(assistantEvent.contentHash ? { checksum: assistantEvent.contentHash } : {})
-              }]
-            ]).values()),
-            updatedAt: new Date().toISOString()
-          }));
+              }] }
+          ).job;
           const completedJob = this.#completeCooperativeExecution(
             jobFile.path,
             runningJob,
@@ -2825,24 +2740,20 @@ export class JobsService implements PermissionedExternalJobPort {
           continue;
         }
         if (result.outcome === "dataset_materialized") {
-          activeJob = this.#mutateJob(jobFile.path, (current) => JobRecordSchema.parse({
-            ...current,
-            outputRefs: Array.from(new Map([
-              ...(current.outputRefs ?? []).map((ref) => [`${ref.kind}:${ref.id}:${ref.role ?? ""}`, ref] as const),
-              [`dataset:${result.datasetId}:agent_dataset`, {
+          const datasetSnapshot = this.#requireExecutionSnapshot(jobFile.path, runningJob);
+          const patchedDataset = this.#jobExecutionCoordinator(vaultPath).patch(datasetSnapshot, {
+            outputRefs: [{
                 kind: "dataset" as const,
                 id: result.datasetId,
                 role: "agent_dataset"
-              }],
-              [`dataset_revision:${result.revisionId}:agent_dataset_revision`, {
+              }, {
                 kind: "dataset_revision" as const,
                 id: result.revisionId,
                 role: "agent_dataset_revision"
-              }]
-            ]).values()),
-            operationIds: Array.from(new Set([...(current.operationIds ?? []), ...result.operationIds])),
-            updatedAt: new Date().toISOString()
-          }));
+              }],
+            operationIds: result.operationIds
+          });
+          activeJob = patchedDataset.job;
           if (preservedAgentTurn) {
             const latest = activeJob;
             if (latest.state === "cancel_requested") {
@@ -2859,22 +2770,16 @@ export class JobsService implements PermissionedExternalJobPort {
               else completed += 1;
               continue;
             }
-            const {
-              error: _error,
-              waitingDependency: _waitingDependency,
-              finishedAt: _finishedAt,
-              ...continuation
-            } = latest;
-            activeJob = this.#mutateJob(jobFile.path, (current) => JobRecordSchema.parse({
-              ...withDurableWriteState(
-                current.id === continuation.id ? current : continuation,
-                execution.control.durableWriteState()
-              ),
-              state: "queued",
+            const durableSnapshot = this.#alignDurableExecutionState(
+              this.#jobExecutionCoordinator(vaultPath),
+              this.#jobRecordStore(vaultPath).read(jobFile.path),
+              execution.control.durableWriteState()
+            );
+            activeJob = this.#jobExecutionCoordinator(vaultPath).queue(durableSnapshot, {
+              reason: "agent_continuation",
               stage: "planning",
-              updatedAt: new Date().toISOString(),
               message: "Pi Agent materialized the selected Dataset and queued the same Home turn for its answer."
-            }));
+            }).job;
             completed += 1;
             continue;
           }
@@ -2894,8 +2799,8 @@ export class JobsService implements PermissionedExternalJobPort {
         if (result.outcome === "confirmation_needed") {
           markAgentProposalAwaitingReview(
             this.#jobRecordStore(vaultPath),
+            this.#jobExecutionCoordinator(vaultPath),
             jobFile.path,
-            runningJob,
             result.proposalId,
             result.proposalBinding,
             result.operationIds,
@@ -2905,7 +2810,12 @@ export class JobsService implements PermissionedExternalJobPort {
           completed += 1;
           continue;
         }
-        completeAgentNotePublicationCheckpoint(this.#jobRecordStore(vaultPath), jobFile.path, result);
+        completeAgentNotePublicationCheckpoint(
+          this.#jobRecordStore(vaultPath),
+          this.#jobExecutionCoordinator(vaultPath),
+          jobFile.path,
+          result
+        );
         if (preservedAgentTurn) {
           const conversations = new AgentTurnConversationStore();
           const assistantEvent = conversations.findAssistantTurn(
@@ -2920,20 +2830,21 @@ export class JobsService implements PermissionedExternalJobPort {
               ? "Pi Agent completed the selected knowledge action, and the saved note needs review."
               : "Pi Agent completed the selected knowledge action and saved the result to the knowledge base."
           );
-          activeJob = this.#mutateJob(jobFile.path, (current) => JobRecordSchema.parse({
-            ...current,
-            outputRefs: Array.from(new Map([
-              ...(current.outputRefs ?? []).map((ref) => [`${ref.kind}:${ref.id}:${ref.role ?? ""}`, ref] as const),
-              [`conversation:${assistantEvent.id}:agent_turn_assistant_event`, {
+          activeJob = this.#jobExecutionCoordinator(vaultPath).patch(
+            this.#jobRecordStore(vaultPath).read(jobFile.path),
+            { outputRefs: [{
                 kind: "conversation" as const,
                 id: assistantEvent.id,
                 role: "agent_turn_assistant_event",
                 ...(assistantEvent.contentHash ? { checksum: assistantEvent.contentHash } : {})
-              }]
-            ]).values()),
-            updatedAt: new Date().toISOString()
-          }));
+              }] }
+          ).job;
         }
+        const warningSuffix = result.reviewRequired ? " Review is needed before treating it as clean knowledge." : "";
+        appendLog(
+          vaultPath,
+          `${new Date().toISOString()} ${result.knowledgeAction === "linked" ? "Linked related knowledge from" : result.mutationKind === "update_page" ? "Updated" : "Created"} wiki note [${result.title}](${result.pagePath}) from source \`${sourceRecordFile.sourceRecord.id}\`.${warningSuffix}`
+        );
         const completedJob = this.#completeCooperativeExecution(
           jobFile.path,
           runningJob,
@@ -2952,11 +2863,6 @@ export class JobsService implements PermissionedExternalJobPort {
         if (completedJob.state === "cancelled") {
           failed += 1;
         } else {
-          const warningSuffix = result.reviewRequired ? " Review is needed before treating it as clean knowledge." : "";
-          appendLog(
-            vaultPath,
-            `${new Date().toISOString()} ${result.knowledgeAction === "linked" ? "Linked related knowledge from" : result.mutationKind === "update_page" ? "Updated" : "Created"} wiki note [${result.title}](${result.pagePath}) from source \`${sourceRecordFile.sourceRecord.id}\`.${warningSuffix}`
-          );
           completed += 1;
         }
       } catch (caught) {
@@ -3021,12 +2927,15 @@ export class JobsService implements PermissionedExternalJobPort {
               durableState
             );
           } else {
-            this.#mutateJob(jobFile.path, (currentJob) => JobRecordSchema.parse({
-              ...withDurableWriteState(currentJob.id === runningJob.id ? currentJob : runningJob, durableState),
-              state: "queued",
-              updatedAt: new Date().toISOString(),
+            const sourceChangedSnapshot = this.#alignDurableExecutionState(
+              this.#jobExecutionCoordinator(vaultPath),
+              this.#requireExecutionSnapshot(jobFile.path, runningJob),
+              durableState
+            );
+            this.#jobExecutionCoordinator(vaultPath).queue(sourceChangedSnapshot, {
+              reason: "source_changed",
               message: "Source evidence changed while Agent ingest was running; ingest requeued with the latest evidence."
-            }));
+            });
           }
         } else {
           this.#markJobFailedRetryable(
@@ -3116,6 +3025,7 @@ export class JobsService implements PermissionedExternalJobPort {
           onPublicationStart: (checkpointId) => {
             markProposalApplyStarted(
               this.#jobRecordStore(vaultPath),
+              this.#jobExecutionCoordinator(vaultPath),
               vaultPath,
               jobFile.job,
               proposal.id,
@@ -3136,7 +3046,13 @@ export class JobsService implements PermissionedExternalJobPort {
       if (!isProposalApplyConflict(caught)) throw caught;
       const conflicted = proposals.markConflicted(proposal.id);
       if (conflicted.proposal) {
-        markProposalJobConflicted(this.#jobRecordStore(vaultPath), vaultPath, jobFile.job, conflicted.proposal);
+        markProposalJobConflicted(
+          this.#jobRecordStore(vaultPath),
+          this.#jobExecutionCoordinator(vaultPath),
+          vaultPath,
+          jobFile.job,
+          conflicted.proposal
+        );
       }
       return conflicted;
     }
@@ -3184,7 +3100,13 @@ export class JobsService implements PermissionedExternalJobPort {
         "The conflicted proposal parent Job is no longer awaiting reconciliation."
       );
     }
-    markProposalJobConflicted(this.#jobRecordStore(vaultPath), vaultPath, jobFile.job, proposal);
+    markProposalJobConflicted(
+      this.#jobRecordStore(vaultPath),
+      this.#jobExecutionCoordinator(vaultPath),
+      vaultPath,
+      jobFile.job,
+      proposal
+    );
     const reconciled = readProposalParentJobRecord(this.#jobRecordStore(vaultPath), vaultPath, proposal.jobId);
     if (
       !reconciled ||
@@ -3289,23 +3211,25 @@ export class JobsService implements PermissionedExternalJobPort {
           }
         ]
       : jobFile.job.checkpoints;
-    const resolved = JobRecordSchema.parse({
-      ...jobFile.job,
-      state: desiredState,
-      stage: "writing",
-      updatedAt: now,
-      finishedAt: now,
-      outputRefs,
-      operationIds,
-      ...(checkpoints ? { checkpoints } : {}),
-      progress: {
-        completedUnits: 1,
-        totalUnits: 1,
-        unit: outcome === "applied" ? "page" : "proposal"
-      },
+    return this.#jobExecutionCoordinator(vaultPath).resolveReview(
+      this.#jobRecordStore(vaultPath).read(jobFile.path),
+      {
+        proposalId: proposal.id,
+        result: desiredState,
+        facts: {
+          stage: "writing",
+          outputRefs,
+          operationIds,
+          ...(checkpoints ? { checkpoints } : {}),
+          progress: {
+            completedUnits: 1,
+            totalUnits: 1,
+            unit: outcome === "applied" ? "page" : "proposal"
+          }
+        },
       message: proposalResolutionMessage(outcome, reviewRequired)
-    });
-    return this.#replaceExpectedJob(jobFile, resolved);
+      }
+    ).job;
   }
 
   async #runAgentSelectedParseTool(
@@ -3752,6 +3676,40 @@ export class JobsService implements PermissionedExternalJobPort {
     return store;
   }
 
+  #jobExecutionCoordinator(vaultPath: string): JobExecutionCoordinator {
+    const rootPath = path.join(vaultPath, ".pige", "jobs");
+    const existing = this.#jobExecutionCoordinators.get(rootPath);
+    if (existing) return existing;
+    const coordinator = new JobExecutionCoordinator(this.#jobRecordStore(vaultPath));
+    this.#jobExecutionCoordinators.set(rootPath, coordinator);
+    return coordinator;
+  }
+
+  #requireAgentTurnSnapshot(expected: JobRecord): JobRecordSnapshot {
+    const activeVault = this.#vaults.current();
+    const vaultPath = this.#requireActiveVaultPath();
+    const snapshot = this.#readJobSnapshot(vaultPath, expected.id);
+    if (
+      !activeVault ||
+      !snapshot ||
+      snapshot.job.class !== "agent_turn" ||
+      expected.class !== "agent_turn" ||
+      expected.createdAt !== snapshot.job.createdAt ||
+      expected.conversationEventId !== snapshot.job.conversationEventId ||
+      expected.activeVaultId !== activeVault.vaultId ||
+      snapshot.job.activeVaultId !== activeVault.vaultId
+    ) {
+      throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The unified Agent turn binding is invalid.");
+    }
+    if (!isDeepStrictEqual(snapshot.job, JobRecordSchema.parse(expected))) {
+      throw new PigeDomainError(
+        "job.revision_conflict",
+        "The Agent turn changed before the requested mutation could be committed."
+      );
+    }
+    return snapshot;
+  }
+
   #readJobSnapshot(vaultPath: string, jobId: string): JobRecordSnapshot | undefined {
     if (!/^job_\d{8}_[a-z0-9]{8,}$/.test(jobId)) return undefined;
     try {
@@ -3771,26 +3729,27 @@ export class JobsService implements PermissionedExternalJobPort {
     return this.#jobRecordStore(vaultPath).createIfAbsent(jobPath, job).job;
   }
 
-  #mutateJob(
-    jobPath: string,
-    transform: (current: JobRecord) => JobRecord
-  ): JobRecord {
-    const vaultPath = this.#requireActiveVaultPath();
-    const store = this.#jobRecordStore(vaultPath);
-    const snapshot = store.read(jobPath);
-    return store.compareAndSwap(snapshot, transform(snapshot.job)).job;
-  }
-
-  #replaceExpectedJob(snapshot: JobRecordSnapshot, next: JobRecord): JobRecord {
-    return this.#replaceJob(snapshot, next).job;
-  }
-
   #markJobCancellationOutcome(
     filePath: string,
     fallback: JobRecord,
     cancellation: JobCancellationError
   ): JobRecord {
-    return this.#mutateJob(filePath, (current) => createJobCancellationOutcome(current, fallback, cancellation));
+    const coordinator = this.#jobExecutionCoordinator(this.#requireActiveVaultPath());
+    let snapshot = this.#requireExecutionSnapshot(filePath, fallback);
+    if (snapshot.job.state === "cancelled") return snapshot.job;
+    snapshot = this.#alignDurableExecutionState(coordinator, snapshot, cancellation);
+    if (snapshot.job.state === "running") {
+      snapshot = coordinator.requestCancellation(snapshot, {
+        requestedBy: "system",
+        message: "Cancellation reached the active Job executor."
+      });
+    }
+    return coordinator.cancellationOutcome(snapshot, {
+      cancelledMessage: "Job cancelled at a safe checkpoint. Preserved source data remains in the vault.",
+      preservedResultMessage: "Durable output committed before cancellation could safely apply; the completed result was preserved.",
+      partialResultMessage: "A retained action-safety guard prevents clean cancellation; the job remains retryable.",
+      ...(cancellation.safeCheckpointId ? { safeCheckpointId: cancellation.safeCheckpointId } : {})
+    }).job;
   }
 
   #markJobFailedRetryable(
@@ -3800,13 +3759,21 @@ export class JobsService implements PermissionedExternalJobPort {
     durableState?: JobDurableWriteState,
     error?: PigeErrorSummary
   ): JobRecord {
-    return this.#mutateJob(filePath, (current) => JobRecordSchema.parse({
-      ...withDurableWriteState(current.id === fallback.id ? current : fallback, durableState),
-      state: "failed_retryable",
-      updatedAt: new Date().toISOString(),
-      message,
-      ...(error ? { error } : {})
-    }));
+    const coordinator = this.#jobExecutionCoordinator(this.#requireActiveVaultPath());
+    const snapshot = this.#alignDurableExecutionState(
+      coordinator,
+      this.#requireExecutionSnapshot(filePath, fallback),
+      durableState
+    );
+    const failure = error ?? createGenericJobExecutionError(true);
+    return coordinator.settle(snapshot, {
+      kind: "requeue",
+      error: failure,
+      reason: failure.code,
+      maxAutomaticRetries: snapshot.job.retry?.maxAutomaticRetries ?? 0,
+      requiresUserAction: true,
+      message
+    }).job;
   }
 
   #markJobWaitingDependency(
@@ -3815,12 +3782,22 @@ export class JobsService implements PermissionedExternalJobPort {
     message: string,
     durableState?: JobDurableWriteState
   ): JobRecord {
-    return this.#mutateJob(filePath, (current) => JobRecordSchema.parse({
-      ...withDurableWriteState(current.id === fallback.id ? current : fallback, durableState),
-      state: "waiting_dependency",
-      updatedAt: new Date().toISOString(),
+    const coordinator = this.#jobExecutionCoordinator(this.#requireActiveVaultPath());
+    const snapshot = this.#alignDurableExecutionState(
+      coordinator,
+      this.#requireExecutionSnapshot(filePath, fallback),
+      durableState
+    );
+    return coordinator.settle(snapshot, {
+      kind: "waiting",
+      reason: "dependency",
+      dependency: snapshot.job.waitingDependency ?? {
+        dependencyKind: "local_tool",
+        requiredAction: "repair_tool",
+        messageKey: "errors.agent_runtime.tool_dependency_waiting"
+      },
       message
-    }));
+    }).job;
   }
 
   #markJobWaitingModelEgress(
@@ -3830,11 +3807,16 @@ export class JobsService implements PermissionedExternalJobPort {
     message: string,
     durableState?: JobDurableWriteState
   ): JobRecord {
-    return this.#mutateJob(filePath, (current) => JobRecordSchema.parse({
-      ...withDurableWriteState(current.id === fallback.id ? current : fallback, durableState),
-      state: "waiting_model_egress",
-      stage: "waiting_for_model",
-      updatedAt: new Date().toISOString(),
+    const coordinator = this.#jobExecutionCoordinator(this.#requireActiveVaultPath());
+    const snapshot = this.#alignDurableExecutionState(
+      coordinator,
+      this.#requireExecutionSnapshot(filePath, fallback),
+      durableState
+    );
+    return coordinator.settle(snapshot, {
+      kind: "waiting",
+      reason: "model_egress",
+      approvalRequestId: requestId,
       error: {
         code: "model_provider.egress_confirmation_required",
         domain: "model_provider",
@@ -3844,8 +3826,9 @@ export class JobsService implements PermissionedExternalJobPort {
         userAction: "confirm_model_egress",
         modelEgressApprovalRequestId: requestId
       },
-      message
-    }));
+      message,
+      facts: { stage: "waiting_for_model" }
+    }).job;
   }
 
   #markJobFailedFinal(
@@ -3854,12 +3837,41 @@ export class JobsService implements PermissionedExternalJobPort {
     message: string,
     durableState?: JobDurableWriteState
   ): JobRecord {
-    return this.#mutateJob(filePath, (current) => JobRecordSchema.parse({
-      ...withDurableWriteState(current.id === fallback.id ? current : fallback, durableState),
-      state: "failed_final",
-      updatedAt: new Date().toISOString(),
+    const coordinator = this.#jobExecutionCoordinator(this.#requireActiveVaultPath());
+    const snapshot = this.#alignDurableExecutionState(
+      coordinator,
+      this.#requireExecutionSnapshot(filePath, fallback),
+      durableState
+    );
+    return coordinator.settle(snapshot, {
+      kind: "failed",
+      error: createGenericJobExecutionError(false),
       message
-    }));
+    }).job;
+  }
+
+  #requireExecutionSnapshot(filePath: string, fallback: JobRecord): JobRecordSnapshot {
+    const snapshot = this.#jobRecordStore(this.#requireActiveVaultPath()).read(filePath);
+    if (snapshot.job.id !== fallback.id) {
+      throw new PigeDomainError("job.revision_conflict", "The active Job identity changed before settlement.");
+    }
+    return snapshot;
+  }
+
+  #alignDurableExecutionState(
+    coordinator: JobExecutionCoordinator,
+    snapshot: JobRecordSnapshot,
+    durableState?: JobDurableWriteState
+  ): JobRecordSnapshot {
+    if (!durableState?.durableWritesApplied || snapshot.job.cancellation?.durableWritesApplied === true) {
+      return snapshot;
+    }
+    if (!durableState.safeCheckpointId) {
+      throw new PigeDomainError("job.cancellation_invalid", "A durable Job result requires its publication checkpoint.");
+    }
+    return coordinator.markDurableBoundary(snapshot, {
+      checkpointId: durableState.safeCheckpointId
+    });
   }
 
   #requireActiveVaultId(expectedVaultPath: string): string {
@@ -3915,29 +3927,11 @@ export class JobsService implements PermissionedExternalJobPort {
   ): { readonly job: JobRecord; readonly controller: AbortController; readonly control: JobExecutionControl } {
     const { path: jobPath, job } = snapshot;
     const controller = new AbortController();
-    const startedAt = new Date().toISOString();
-    const preserveDurableWrites = job.cancellation?.durableWritesApplied === true;
-    const {
-      stage: _previousStage,
-      startedAt: _previousStartedAt,
-      finishedAt: _previousFinishedAt,
-      progress: _previousProgress,
-      cancellation: _previousCancellation,
-      ...jobBase
-    } = job;
-    const runningJob = JobRecordSchema.parse({
-      ...jobBase,
-      state: "running",
-      stage,
-      startedAt,
-      updatedAt: startedAt,
-      ...(preserveDurableWrites ? { cancellation: { durableWritesApplied: true } } : {}),
-      message
-    });
+    const coordinator = this.#jobExecutionCoordinator(this.#requireActiveVaultPath());
     if (cooperative) this.#activeExecutions.set(job.id, controller);
     let committed: JobRecord;
     try {
-      committed = this.#replaceExpectedJob(snapshot, runningJob);
+      committed = coordinator.begin(snapshot, { stage, message }).job;
     } catch (caught) {
       if (cooperative) this.#activeExecutions.delete(job.id);
       throw caught;
@@ -3947,10 +3941,12 @@ export class JobsService implements PermissionedExternalJobPort {
       controller,
       control: new FileBackedJobExecutionControl(
         this.#jobRecordStore(this.#requireActiveVaultPath()),
+        coordinator,
         jobPath,
         controller,
         {
-        durableWritesApplied: preserveDurableWrites
+          durableWritesApplied: job.cancellation?.durableWritesApplied === true,
+          ...(job.cancellation?.safeCheckpointId ? { safeCheckpointId: job.cancellation.safeCheckpointId } : {})
         }
       )
     };
@@ -3965,43 +3961,27 @@ export class JobsService implements PermissionedExternalJobPort {
     durableState: JobDurableWriteState,
     operationIds: readonly string[] = []
   ): JobRecord {
-    return this.#mutateJob(jobPath, (current) => {
-      if (current.id !== fallback.id || !["running", "cancel_requested"].includes(current.state)) {
-        throw new PigeDomainError("job.revision_conflict", "The active Job cannot be completed from its current state.");
-      }
-      const cancellationArrived = current.state === "cancel_requested";
-      const durableWritesApplied = current.cancellation?.durableWritesApplied === true ||
-        durableState.durableWritesApplied;
-      const mergedOperationIds = Array.from(new Set([...(current.operationIds ?? []), ...operationIds]));
-      const progress = completedProgress(current.progress, defaultUnit);
-      const finishedAt = new Date().toISOString();
-      if (cancellationArrived && !durableWritesApplied) {
-        return JobRecordSchema.parse({
-          ...current,
-          state: "cancelled",
-          progress,
-          updatedAt: finishedAt,
-          finishedAt,
-          cancellation: {
-            ...current.cancellation,
-            durableWritesApplied: false
-          },
-          ...(mergedOperationIds.length > 0 ? { operationIds: mergedOperationIds } : {}),
-          message: "Job cancelled at a safe checkpoint. Preserved source data remains in the vault."
-        });
-      }
-      return JobRecordSchema.parse({
-        ...withDurableWriteState(current, durableState),
-        state: cancellationArrived ? "completed_with_warnings" : state,
-        progress,
-        updatedAt: finishedAt,
-        finishedAt,
-        ...(mergedOperationIds.length > 0 ? { operationIds: mergedOperationIds } : {}),
-        message: cancellationArrived
-          ? "Durable output committed before cancellation could safely apply; the completed result was preserved."
-          : message
-      });
-    });
+    const coordinator = this.#jobExecutionCoordinator(this.#requireActiveVaultPath());
+    let snapshot = this.#requireExecutionSnapshot(jobPath, fallback);
+    snapshot = this.#alignDurableExecutionState(coordinator, snapshot, durableState);
+    const facts: JobExecutionFactsPatch = {
+      progress: completedProgress(snapshot.job.progress, defaultUnit),
+      ...(operationIds.length > 0 ? { operationIds } : {})
+    };
+    if (snapshot.job.state === "cancel_requested") {
+      return coordinator.cancellationOutcome(snapshot, {
+        cancelledMessage: "Job cancelled at a safe checkpoint. Preserved source data remains in the vault.",
+        preservedResultMessage: "Durable output committed before cancellation could safely apply; the completed result was preserved.",
+        durableResultComplete: true,
+        facts
+      }).job;
+    }
+    return coordinator.settle(snapshot, {
+      kind: "completed",
+      result: state,
+      message,
+      facts
+    }).job;
   }
 
   #finishCooperativeExecution(jobId: string, controller: AbortController): void {
@@ -4018,17 +3998,20 @@ function markAgentDatasetOutputDurable(control: JobExecutionControl): void {
 class FileBackedJobExecutionControl implements JobExecutionControl {
   readonly signal: AbortSignal;
   readonly #store: JobRecordStore;
+  readonly #coordinator: JobExecutionCoordinator;
   readonly #jobPath: string;
   #durableWritesApplied: boolean;
   #durableCheckpointId: string | undefined;
 
   constructor(
     store: JobRecordStore,
+    coordinator: JobExecutionCoordinator,
     jobPath: string,
     controller: AbortController,
     initialState: JobDurableWriteState
   ) {
     this.#store = store;
+    this.#coordinator = coordinator;
     this.#jobPath = jobPath;
     this.signal = controller.signal;
     this.#durableWritesApplied = initialState.durableWritesApplied;
@@ -4057,11 +4040,7 @@ class FileBackedJobExecutionControl implements JobExecutionControl {
       throw new Error("Job progress can only be recorded for the active running job.");
     }
     const nextProgress = normalizeProgress(current.progress, progress);
-    this.#store.compareAndSwap(snapshot, JobRecordSchema.parse({
-      ...current,
-      progress: nextProgress,
-      updatedAt: new Date().toISOString()
-    }));
+    this.#coordinator.patch(snapshot, { progress: nextProgress });
   }
 
   markDurableCheckpoint(checkpointId: string): void {
@@ -4078,16 +4057,7 @@ class FileBackedJobExecutionControl implements JobExecutionControl {
     if (current.state !== "running") {
       throw new Error(`Job state ${current.state} cannot enter a durable publication boundary.`);
     }
-    const guardedJob = JobRecordSchema.parse({
-      ...current,
-      cancellation: {
-        ...current.cancellation,
-        safeCheckpointId: checkpointId,
-        durableWritesApplied: true
-      },
-      updatedAt: new Date().toISOString()
-    });
-    this.#store.compareAndSwap(snapshot, guardedJob);
+    this.#coordinator.markDurableBoundary(snapshot, { checkpointId });
     this.#durableWritesApplied = true;
     this.#durableCheckpointId = checkpointId;
     this.throwIfCancellationRequested({
@@ -4111,6 +4081,17 @@ class FileBackedJobExecutionControl implements JobExecutionControl {
       throw caught;
     }
   }
+}
+
+function createGenericJobExecutionError(retryable: boolean): PigeErrorSummary {
+  return {
+    code: "unknown.execution_failed",
+    domain: "unknown",
+    messageKey: "error.generic",
+    retryable,
+    severity: "error",
+    userAction: retryable ? "retry" : "none"
+  };
 }
 
 function normalizeProgress(
@@ -4174,35 +4155,6 @@ function resolveCancellation(
     if (cancellation instanceof JobCancellationError) return cancellation;
   }
   return caught instanceof JobCancellationError ? caught : undefined;
-}
-
-function createJobCancellationOutcome(
-  current: JobRecord,
-  fallback: JobRecord,
-  cancellation: JobCancellationError
-): JobRecord {
-  const authoritative = current.id === fallback.id ? current : fallback;
-  const finishedAt = new Date().toISOString();
-  const durableWritesApplied = authoritative.cancellation?.durableWritesApplied === true || cancellation.durableWritesApplied;
-  const safeCheckpointId = cancellation.safeCheckpointId ??
-    authoritative.cancellation?.safeCheckpointId ??
-    (durableWritesApplied ? undefined : "before_durable_write");
-  return JobRecordSchema.parse({
-    ...authoritative,
-    state: durableWritesApplied ? "failed_retryable" : "cancelled",
-    updatedAt: finishedAt,
-    finishedAt,
-    cancellation: {
-      ...authoritative.cancellation,
-      requestedAt: authoritative.cancellation?.requestedAt ?? finishedAt,
-      requestedBy: authoritative.cancellation?.requestedBy ?? "system",
-      ...(safeCheckpointId ? { safeCheckpointId } : {}),
-      durableWritesApplied
-    },
-    message: durableWritesApplied
-      ? "A retained action-safety guard prevents clean cancellation; the job remains retryable."
-      : "Job cancelled at a safe checkpoint. Preserved source data remains in the vault."
-  });
 }
 
 function canRunAgentIngest(agentIngest: AgentIngestService | undefined): boolean {
@@ -4859,13 +4811,14 @@ function assertProposalParentJob(
 
 function recordAgentNotePublicationCheckpoint(
   store: JobRecordStore,
+  coordinator: JobExecutionCoordinator,
   vaultPath: string,
   jobPath: string,
   checkpointId: string,
   binding: AgentIngestPublicationBinding
 ): void {
   if (binding.mutationKind === "update_page") {
-    recordAgentPageUpdateCheckpoint(store, vaultPath, jobPath, checkpointId, binding);
+    recordAgentPageUpdateCheckpoint(store, coordinator, vaultPath, jobPath, checkpointId, binding);
     return;
   }
   const snapshot = store.read(jobPath);
@@ -4951,18 +4904,15 @@ function recordAgentNotePublicationCheckpoint(
     checksumAfter: binding.contentHash,
     resumeHint: "Verify the exact generated-note bytes before adopting its create Operation."
   };
-  store.compareAndSwap(snapshot, JobRecordSchema.parse({
-    ...current,
-    checkpoints: [
-      ...(current.checkpoints ?? []).filter((candidate) => candidate.id !== checkpointId),
-      checkpoint
-    ],
-    updatedAt: now
-  }));
+  coordinator.markDurableBoundary(snapshot, {
+    checkpointId,
+    facts: { checkpoints: [checkpoint] }
+  });
 }
 
 function recordAgentPageUpdateCheckpoint(
   store: JobRecordStore,
+  coordinator: JobExecutionCoordinator,
   vaultPath: string,
   jobPath: string,
   checkpointId: string,
@@ -5111,14 +5061,10 @@ function recordAgentPageUpdateCheckpoint(
     checksumAfter: binding.contentHash,
     resumeHint: "Verify the exact target, before-image, staged result, and update Operation before adoption."
   };
-  store.compareAndSwap(snapshot, JobRecordSchema.parse({
-    ...current,
-    checkpoints: [
-      ...(current.checkpoints ?? []).filter((candidate) => candidate.id !== checkpointId),
-      checkpoint
-    ],
-    updatedAt: now
-  }));
+  coordinator.markDurableBoundary(snapshot, {
+    checkpointId,
+    facts: { checkpoints: [checkpoint] }
+  });
 }
 
 function readCheckpointFileHash(vaultPath: string, relativePath: string, maximumBytes: number): string | undefined {
@@ -5207,6 +5153,7 @@ function matchesAgentNotePublicationCheckpoint(
 
 function completeAgentNotePublicationCheckpoint(
   store: JobRecordStore,
+  coordinator: JobExecutionCoordinator,
   jobPath: string,
   publication: AgentIngestPublishedResult
 ): void {
@@ -5253,14 +5200,9 @@ function completeAgentNotePublicationCheckpoint(
   }
   if (checkpoint.state === "done") return;
   const now = new Date().toISOString();
-  store.compareAndSwap(snapshot, JobRecordSchema.parse({
-    ...current,
-    checkpoints: [
-      ...(current.checkpoints ?? []).filter((candidate) => candidate.id !== checkpoint.id),
-      { ...checkpoint, state: "done", finishedAt: now }
-    ],
-    updatedAt: now
-  }));
+  coordinator.patch(snapshot, {
+    checkpoints: [{ ...checkpoint, state: "done", finishedAt: now }]
+  });
 }
 
 function sameJobRef(
@@ -5291,6 +5233,7 @@ function sameJobRefIgnoringChecksum(
 
 function markProposalApplyStarted(
   store: JobRecordStore,
+  coordinator: JobExecutionCoordinator,
   vaultPath: string,
   fallback: JobRecord,
   proposalId: string,
@@ -5321,17 +5264,16 @@ function markProposalApplyStarted(
       outputRefs: []
     }
   ];
-  store.compareAndSwap(currentFile, JobRecordSchema.parse({
-    ...current,
+  coordinator.patch(currentFile, {
     stage: "writing",
-    updatedAt: new Date().toISOString(),
     checkpoints,
     message: "Applying the explicitly approved knowledge proposal through the confined vault writer."
-  }));
+  });
 }
 
 function markProposalJobConflicted(
   store: JobRecordStore,
+  coordinator: JobExecutionCoordinator,
   vaultPath: string,
   fallback: JobRecord,
   proposal: ConfirmationProposal
@@ -5355,16 +5297,24 @@ function markProposalJobConflicted(
       outputRefs: []
     }
   ];
-  store.compareAndSwap(currentFile, JobRecordSchema.parse({
-    ...current,
-    state: "failed_final",
-    stage: "planning",
-    updatedAt: new Date().toISOString(),
-    finishedAt: new Date().toISOString(),
-    checkpoints,
-    progress: { completedUnits: 0, totalUnits: 1, unit: "proposal" },
+  coordinator.resolveReview(currentFile, {
+    proposalId: proposal.id,
+    result: "failed_final",
+    error: {
+      code: "agent_runtime.proposal_conflicted",
+      domain: "agent_runtime",
+      messageKey: "error.generic",
+      retryable: false,
+      severity: "error",
+      userAction: "none"
+    },
+    facts: {
+      stage: "planning",
+      checkpoints,
+      progress: { completedUnits: 0, totalUnits: 1, unit: "proposal" }
+    },
     message: proposalConflictMessage()
-  }));
+  });
 }
 
 function proposalConflictMessage(): string {
@@ -5602,23 +5552,10 @@ function createAgentIngestRetryError(caught: unknown): PigeErrorSummary {
   };
 }
 
-function withDurableWriteState(job: JobRecord, state?: JobDurableWriteState): JobRecord {
-  const durableWritesApplied = job.cancellation?.durableWritesApplied === true || state?.durableWritesApplied === true;
-  if (!durableWritesApplied) return job;
-  return JobRecordSchema.parse({
-    ...job,
-    cancellation: {
-      ...job.cancellation,
-      ...(state?.safeCheckpointId ? { safeCheckpointId: state.safeCheckpointId } : {}),
-      durableWritesApplied: true
-    }
-  });
-}
-
 function markAgentProposalAwaitingReview(
   store: JobRecordStore,
+  coordinator: JobExecutionCoordinator,
   jobPath: string,
-  fallback: JobRecord,
   proposalId: string,
   binding: AgentIngestProposalBinding,
   operationIds: readonly string[],
@@ -5647,6 +5584,16 @@ function markAgentProposalAwaitingReview(
     throw new PigeDomainError(
       "agent_runtime.proposal_binding_invalid",
       "The active Agent parent state, source, or policy does not match the durable proposal."
+    );
+  }
+  if (current.state === "awaiting_review") {
+    if (
+      current.proposalIds?.includes(proposalId) === true &&
+      current.outputRefs?.some((ref) => ref.kind === "proposal" && ref.id === proposalId) === true
+    ) return current;
+    throw new PigeDomainError(
+      "agent_runtime.proposal_binding_changed",
+      "The active Agent parent already waits for a different durable proposal."
     );
   }
   const requiredRefs: NonNullable<JobRecord["inputRefs"]> = [
@@ -5697,33 +5644,26 @@ function markAgentProposalAwaitingReview(
   if (!outputRefs.some((ref) => ref.kind === "page" && ref.id === pageId && ref.path === pagePath)) {
     outputRefs.push({ kind: "page", id: pageId, path: pagePath, role: "proposed_target" });
   }
-  const durable = withDurableWriteState(current, {
-    durableWritesApplied: true,
-    safeCheckpointId: AGENT_PROPOSAL_STAGED_CHECKPOINT
+  const durable = coordinator.markDurableBoundary(snapshot, {
+    checkpointId: AGENT_PROPOSAL_STAGED_CHECKPOINT,
+    facts: {
+      stage: "planning",
+      inputRefs,
+      outputRefs,
+      operationIds,
+      progress: {
+        completedUnits: 1,
+        totalUnits: 1,
+        unit: "proposal"
+      }
+    }
   });
-  const {
-    finishedAt: _finishedAt,
-    error: _error,
-    waitingDependency: _waitingDependency,
-    ...jobBase
-  } = durable;
-  const awaitingReview = JobRecordSchema.parse({
-    ...jobBase,
-    state: "awaiting_review",
-    stage: "planning",
-    updatedAt: new Date().toISOString(),
-    inputRefs,
-    outputRefs,
-    proposalIds: Array.from(new Set([...(current.proposalIds ?? []), proposalId])),
-    operationIds: Array.from(new Set([...(current.operationIds ?? []), ...operationIds])),
-    progress: {
-      completedUnits: 1,
-      totalUnits: 1,
-      unit: "proposal"
-    },
+  return coordinator.settle(durable, {
+    kind: "waiting",
+    reason: "review",
+    proposalId,
     message: "Agent ingest staged a grounded knowledge proposal for explicit review. No proposed Markdown was applied."
-  });
-  return store.compareAndSwap(snapshot, awaitingReview).job;
+  }).job;
 }
 
 function writeAgentTurnUrlSourceOperation(
@@ -5996,6 +5936,9 @@ function ensureAgentParseToolJob(
     ...(parentJob.conversationEventId ? { conversationEventId: parentJob.conversationEventId } : {}),
     policyContextId: parentJob.policyContextId,
     policyHash: request.policyHash,
+    ...(state === "waiting_dependency"
+      ? { waitingDependency: localToolWaitingDependency(request.toolId) }
+      : {}),
     inputRefs: createAgentToolInputRefs({
       sourceRecord,
       sourceRevision,
@@ -6051,6 +5994,9 @@ function ensureAgentOcrToolJob(
     ...(parentJob.conversationEventId ? { conversationEventId: parentJob.conversationEventId } : {}),
     policyContextId: parentJob.policyContextId,
     policyHash: request.policyHash,
+    ...(state === "waiting_dependency"
+      ? { waitingDependency: localToolWaitingDependency(request.toolId) }
+      : {}),
     inputRefs: createAgentToolInputRefs({
       sourceRecord,
       sourceRevision,
@@ -6108,6 +6054,9 @@ function ensureAgentDatasetToolJob(
     ...(parentJob.conversationEventId ? { conversationEventId: parentJob.conversationEventId } : {}),
     policyContextId: parentJob.policyContextId,
     policyHash: request.policyHash,
+    ...(state === "waiting_dependency"
+      ? { waitingDependency: localToolWaitingDependency(request.toolId) }
+      : {}),
     inputRefs: createAgentToolInputRefs({
       sourceRecord,
       sourceRevision,
@@ -6324,6 +6273,7 @@ function hasCompletedEmptyAgentOcrChild(
 
 function bridgeParentAbortToChild(
   store: JobRecordStore,
+  coordinator: JobExecutionCoordinator,
   jobPath: string,
   controller: AbortController,
   parentSignal: AbortSignal | undefined
@@ -6337,22 +6287,14 @@ function bridgeParentAbortToChild(
       if (!(caught instanceof PigeDomainError) || caught.code !== "job.record_not_found") throw caught;
     }
     if (snapshot?.job.state === "running") {
-      const requestedAt = new Date().toISOString();
-      store.compareAndSwap(snapshot, JobRecordSchema.parse({
-        ...snapshot.job,
-        state: "cancel_requested",
-        updatedAt: requestedAt,
-        cancellation: {
-          ...snapshot.job.cancellation,
-          requestedAt,
-          requestedBy: "system"
-        },
+      coordinator.requestCancellation(snapshot, {
+        requestedBy: "system",
         message: snapshot.job.class === "ocr"
           ? "Parent Agent cancellation requested; stopping the active OCR child."
           : snapshot.job.class === "dataset_import"
             ? "Parent Agent cancellation requested; stopping the active Dataset child."
             : "Parent Agent cancellation requested; stopping the active parser child."
-      }));
+      });
     }
     controller.abort();
   };
@@ -6543,6 +6485,9 @@ function ensureParserOrOcrFollowUpJob(
     createdAt: now,
     updatedAt: now,
     sourceId: sourceRecord.id,
+    ...(state === "waiting_dependency"
+      ? { waitingDependency: localToolWaitingDependency(`${jobClass}:${sourceRecord.kind}`) }
+      : {}),
     ...(parentJob.captureId ? { captureId: parentJob.captureId } : {}),
     ...(parentJob.conversationEventId ? { conversationEventId: parentJob.conversationEventId } : {}),
     message
@@ -6764,6 +6709,9 @@ function ensureAgentIngestJob(
     updatedAt: now,
     sourceId,
     activeVaultId,
+    ...(nextState === "waiting_dependency"
+      ? { waitingDependency: modelProviderWaitingDependency() }
+      : {}),
     ...(parentJob.captureId ? { captureId: parentJob.captureId } : {}),
     ...(parentJob.conversationEventId ? { conversationEventId: parentJob.conversationEventId } : {}),
     message: nextMessage
@@ -6784,6 +6732,39 @@ function ensureAgentIngestJob(
   );
 }
 
+function isLegacyAgentIngestSource(sourceRecord: SourceRecord): boolean {
+  return sourceRecord.semanticOrchestration === "legacy_agent_ingest";
+}
+
+function dependencyRepairProof(
+  job: JobRecord
+): Extract<JobExecutionResumeProof, { kind: "dependency_repaired" }> | undefined {
+  if (job.state !== "waiting_dependency" || !job.waitingDependency) return undefined;
+  return {
+    kind: "dependency_repaired",
+    dependency: job.waitingDependency
+  };
+}
+
+function localToolWaitingDependency(
+  dependencyId: string
+): NonNullable<JobRecord["waitingDependency"]> {
+  return {
+    dependencyKind: "local_tool",
+    dependencyId,
+    requiredAction: "repair_tool",
+    messageKey: "errors.agent_runtime.tool_dependency_waiting"
+  };
+}
+
+function modelProviderWaitingDependency(): NonNullable<JobRecord["waitingDependency"]> {
+  return {
+    dependencyKind: "model_provider",
+    requiredAction: "configure_model",
+    messageKey: "errors.model_provider.default_model_missing"
+  };
+}
+
 function ensureRequiredChildJob(
   store: JobRecordStore,
   vaultPath: string,
@@ -6791,6 +6772,7 @@ function ensureRequiredChildJob(
   requestedChild: JobRecord,
   reconcileExisting: (existing: JobRecord) => JobRecord = (existing) => existing
 ): JobRecord {
+  const coordinator = new JobExecutionCoordinator(store);
   const childPath = createJobRecordPath(vaultPath, requestedChild.id);
   let existing: JobRecordSnapshot | undefined;
   try {
@@ -6810,7 +6792,17 @@ function ensureRequiredChildJob(
       ...reconcileExisting(existing.job),
       parentJobId: existing.job.parentJobId ?? parentJob.id
     });
-    if (JSON.stringify(child) !== JSON.stringify(existing.job)) {
+    if (existing.job.state === "waiting_dependency" && child.state === "queued") {
+      const proof = dependencyRepairProof(existing.job);
+      child = proof
+        ? coordinator.queue(existing, {
+            reason: "dependency_repaired",
+            proof,
+            message: child.message,
+            ...(child.inputRefs ? { facts: { inputRefs: child.inputRefs } } : {})
+          }).job
+        : existing.job;
+    } else if (JSON.stringify(child) !== JSON.stringify(existing.job)) {
       child = store.compareAndSwap(existing, child).job;
     }
   } else {
@@ -6835,11 +6827,9 @@ function ensureRequiredChildJob(
     throw new Error("The required child Job was persisted, but its parent Job is unavailable for linkage.");
   }
   if (!(parentSnapshot.job.childJobIds ?? []).includes(child.id)) {
-    store.compareAndSwap(parentSnapshot, JobRecordSchema.parse({
-      ...parentSnapshot.job,
-      childJobIds: Array.from(new Set([...(parentSnapshot.job.childJobIds ?? []), child.id])),
-      updatedAt: new Date().toISOString()
-    }));
+    coordinator.patch(parentSnapshot, {
+      childJobIds: [child.id]
+    });
   }
   return child;
 }

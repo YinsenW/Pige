@@ -25,6 +25,7 @@ const ACTIVITY_PROMPT = "Create a grounded knowledge note from this attachment."
 const ACTIVITY_TITLE = "Unified Agent activity note";
 const DATASET_PROMPT = "Which person has the largest count in this attached Dataset?";
 const DATASET_ANSWER = "Grace has the largest count in the attached Dataset. [D1]";
+const DATASET_CITATION_REF = "citation_9";
 const CONFIRM_ALLOW_PROMPT = "Complete the synthetic one-use approval check for [redacted-secret].";
 const CONFIRM_ALLOW_ANSWER = "The synthetic one-use model send was approved and completed.";
 const CONFIRM_LIVE_PROMPT = "Complete the synthetic same-process approval check for [redacted-secret].";
@@ -2032,7 +2033,7 @@ async function startProviderServer(requests, streamTiming) {
     if (serializedInput.includes('"call_id":"call_dataset_query"') && serializedInput.includes("function_call_output")) {
       writeToolCallResponse(response, "pige_finish_home_turn", "call_dataset_finish", "dataset-finish-1", {
         answer: DATASET_ANSWER,
-        citationRefs: ["citation_1"],
+        citationRefs: [DATASET_CITATION_REF],
         grounding: "local_knowledge"
       });
       return;

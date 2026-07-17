@@ -26,6 +26,7 @@ import {
   type PiFauxResponse
 } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
+import { markSourceAsLegacyAgentIngestFixture } from "../helpers/legacy-agent-ingest-fixture";
 
 const roots: string[] = [];
 
@@ -493,6 +494,7 @@ async function preserveImage(
     locale: "en"
   });
   const sourceId = requireValue(captured.sourceIds[0]);
+  markSourceAsLegacyAgentIngestFixture(fixture.vaultPath, sourceId);
   const source = readSource(fixture.vaultPath, sourceId);
   return {
     sourceId,

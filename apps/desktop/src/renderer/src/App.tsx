@@ -12,7 +12,6 @@ import { PigeIcon, type PigeIconName } from "./components/PigeIcon";
 import { KnowledgeTreeMap } from "./components/KnowledgeTreeMap";
 import { CurrentNoteAgent } from "./components/CurrentNoteAgent";
 import { HomeVoicePanel, type HomeVoicePanelState } from "./components/HomeVoicePanel";
-import { ProposalReviewPanel } from "./components/ProposalReviewPanel";
 import pigeMarkUrl from "../../../../../resources/brand/pige-icon/master/pige-icon-1024.png";
 import deMessages from "./locales/de/messages.json";
 import enMessages from "./locales/en/messages.json";
@@ -46,8 +45,6 @@ import type {
   PigeErrorSummary,
   PermissionPendingRequest,
   ProviderConnectNeedsManualModel,
-  ProposalDecisionResult,
-  ProposalSummary,
   RecentVaultSummary,
   RetrievalAnswerCitation,
   RetrievalAskResult,
@@ -67,7 +64,6 @@ import type {
   WindowState
 } from "@pige/contracts";
 import type {
-  ConfirmationProposal,
   JobState,
   Locale,
   ProviderEndpointProtocol,
@@ -87,7 +83,11 @@ export type SettingsSection =
   | "skills"
   | "packages"
   | "system";
-type CaptureToast = { readonly kind: "success" | "error"; readonly message: string };
+type CaptureToast = {
+  readonly kind: "success" | "error";
+  readonly message: string;
+  readonly queuedJobId?: string;
+};
 type DevelopmentSurface = "home" | "reader" | "knowledge" | "settings";
 export type DevelopmentCapability =
   | "voice_input"
@@ -220,7 +220,6 @@ export function App(): React.JSX.Element {
   const [recentActivities, setRecentActivities] = useState<readonly KnowledgeActivitySummary[]>([]);
   const [activityUndoingId, setActivityUndoingId] = useState<string | null>(null);
   const [activityBlockedIds, setActivityBlockedIds] = useState<readonly string[]>([]);
-  const [readyProposals, setReadyProposals] = useState<readonly ProposalSummary[]>([]);
   const [libraryList, setLibraryList] = useState<LibraryListResult | null>(null);
   const [librarySearchFocusRequest, setLibrarySearchFocusRequest] = useState(0);
   const [librarySidebarExpandedGroups, setLibrarySidebarExpandedGroups] = useState<ReadonlySet<string>>(
@@ -325,7 +324,7 @@ export function App(): React.JSX.Element {
       homeJobStateFilter.states.push("cancel_requested");
       homeJobStateFilter.states.push("waiting_permission");
       homeJobStateFilter.states.push("waiting_model_egress");
-      const [nextJobs, nextBackupJobs, nextProposals, nextActivities] = nextOnboarding.activeVault
+      const [nextJobs, nextBackupJobs, nextActivities] = nextOnboarding.activeVault
         ? await Promise.all([
           window.pige.jobs.list({
             limit: 100,
@@ -337,10 +336,9 @@ export function App(): React.JSX.Element {
             classes: ["backup"],
             states: ["queued", "running", "cancel_requested", "failed_retryable", "failed_final"]
           }).catch(() => undefined),
-          window.pige.proposals.list({ limit: 100, states: ["ready"] }).catch(() => undefined),
           window.pige.activity.list({ limit: 5 }).catch(() => undefined)
         ])
-        : [undefined, undefined, undefined, undefined];
+        : [undefined, undefined, undefined];
       if (refreshId !== vaultRefreshSequence.current) return;
       if (activeVaultIdRef.current !== nextOnboarding.activeVault?.vaultId) {
         noteOpenSequence.current += 1;
@@ -357,8 +355,14 @@ export function App(): React.JSX.Element {
         setAgentRuntimeStatus(nextAgentRuntimeStatus);
       }
       setRecentJobs(nextJobs?.jobs ?? []);
+      if (nextJobs) {
+        setCaptureToast((current) => {
+          if (!current?.queuedJobId) return current;
+          const exactJob = nextJobs.jobs.find((job) => job.id === current.queuedJobId);
+          return exactJob?.state === "queued" ? current : null;
+        });
+      }
       setBackupJobs(nextBackupJobs?.jobs.filter((job) => job.backupKind === "user_backup") ?? []);
-      setReadyProposals(nextProposals?.proposals ?? []);
       setRecentActivities(nextActivities?.activities ?? []);
     } catch (caught) {
       if (refreshId === vaultRefreshSequence.current) throw caught;
@@ -652,7 +656,7 @@ export function App(): React.JSX.Element {
   const retryJob = async (jobId: string): Promise<void> => {
     const result = await window.pige.jobs.retry({ jobId });
     if (result.status === "requeued") {
-      setCaptureToast({ kind: "success", message: t("home.jobRequeued") });
+      setCaptureToast({ kind: "success", message: t("home.jobRequeued"), queuedJobId: jobId });
       await refreshVaultState();
       return;
     }
@@ -1023,7 +1027,6 @@ export function App(): React.JSX.Element {
             recentActivities={recentActivities}
             activityUndoingId={activityUndoingId}
             activityBlockedIds={activityBlockedIds}
-            readyProposals={readyProposals}
             locale={locale}
             draftText={homeDraftText}
             onDraftChange={setHomeDraftText}
@@ -1038,7 +1041,6 @@ export function App(): React.JSX.Element {
             onRetryJob={retryJob}
             onUndoActivity={undoActivity}
             onHomeStateChanged={refreshVaultState}
-            onProposalChanged={refreshVaultState}
             onSetDefaultModel={setHomeDefaultModel}
             onVoiceAssetInstallActiveChange={updateVoiceAssetInstallOwnership}
             onOpenModels={openModelsFromHome}
@@ -2670,7 +2672,6 @@ function HomeComposer(props: {
   readonly recentActivities: readonly KnowledgeActivitySummary[];
   readonly activityUndoingId: string | null;
   readonly activityBlockedIds: readonly string[];
-  readonly readyProposals: readonly ProposalSummary[];
   readonly locale: Locale;
   readonly draftText: string;
   readonly onDraftChange: (text: string) => void;
@@ -2686,7 +2687,6 @@ function HomeComposer(props: {
   readonly onRetryJob: (jobId: string) => Promise<void>;
   readonly onUndoActivity: (operationId: string) => Promise<void>;
   readonly onHomeStateChanged: () => Promise<void>;
-  readonly onProposalChanged: () => Promise<void>;
   readonly onSetDefaultModel: (modelProfileId: string) => Promise<boolean>;
   readonly onVoiceAssetInstallActiveChange: (active: boolean) => void;
   readonly onOpenModels: (opener: HTMLButtonElement) => Promise<void>;
@@ -2709,10 +2709,6 @@ function HomeComposer(props: {
   const [activeSourceTurn, setActiveSourceTurn] = useState<ActiveSourceTurnBinding | null>(null);
   const [conversationTimeline, setConversationTimeline] = useState<AgentConversationTimeline | undefined>();
   const [liveAnswerEventId, setLiveAnswerEventId] = useState<string | null>(null);
-  const [selectedProposal, setSelectedProposal] = useState<ConfirmationProposal | null>(null);
-  const [proposalBusy, setProposalBusy] = useState(false);
-  const [openingProposalId, setOpeningProposalId] = useState<string | null>(null);
-  const [proposalListExpanded, setProposalListExpanded] = useState(false);
   const [processingListExpanded, setProcessingListExpanded] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [modelSwitching, setModelSwitching] = useState(false);
@@ -2723,9 +2719,6 @@ function HomeComposer(props: {
   const [voiceLevels, setVoiceLevels] = useState<readonly number[]>([]);
   const [voiceCanOpenSystemSettings, setVoiceCanOpenSystemSettings] = useState(false);
   const [voiceAssetInstallProgress, setVoiceAssetInstallProgress] = useState<number | undefined>(undefined);
-  const [proposalOutcome, setProposalOutcome] = useState<ProposalDecisionResult["status"] | null>(null);
-  const [proposalDecisionStateUnknown, setProposalDecisionStateUnknown] = useState(false);
-  const [proposalErrorMessageKey, setProposalErrorMessageKey] = useState<string | null>(null);
   const [selectedNote, setSelectedNote] = useState<NoteRenderResult | null>(null);
   const [selectedNoteRelated, setSelectedNoteRelated] = useState<NoteRelatedState>(null);
   const [noteLoadingPageId, setNoteLoadingPageId] = useState<string | null>(null);
@@ -2737,7 +2730,6 @@ function HomeComposer(props: {
   const composerCompositionTimerRef = useRef<number | undefined>(undefined);
   const draftRevisionRef = useRef(0);
   const noteOpenSequence = useRef(0);
-  const proposalDecisionInFlight = useRef(false);
   const permissionDecisionInFlight = useRef<string | null>(null);
   const permissionReadSequence = useRef(0);
   const currentPermissionRequestIdRef = useRef<string | undefined>(undefined);
@@ -2747,10 +2739,6 @@ function HomeComposer(props: {
   const modelEgressDecisionInFlight = useRef(false);
   const modelEgressReadSequence = useRef(0);
   const currentModelEgressRequestIdRef = useRef<string | undefined>(undefined);
-  const proposalReviewTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
-  const proposalFocusReturnId = useRef<string | null>(null);
-  const proposalFocusReturnPending = useRef(false);
-  const proposalQueueHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const modelSwitcherRef = useRef<HTMLButtonElement | null>(null);
   const modelMenuRef = useRef<HTMLDivElement | null>(null);
   const modelOptionRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -3159,6 +3147,7 @@ function HomeComposer(props: {
       )
     )
     .slice(0, 5);
+  const proposalReviewPending = props.recentJobs.some((job) => job.state === "awaiting_review");
   const latestTurnJob = latestTurn
     ? props.recentJobs.find((job) => job.id === latestTurn.jobId)
     : undefined;
@@ -3714,86 +3703,6 @@ function HomeComposer(props: {
     }
   };
 
-  const openProposal = async (proposalId: string): Promise<void> => {
-    proposalFocusReturnId.current = proposalId;
-    setOpeningProposalId(proposalId);
-    setProposalOutcome(null);
-    setProposalDecisionStateUnknown(false);
-    setProposalErrorMessageKey(null);
-    try {
-      const result = await window.pige.proposals.get({ proposalId });
-      setSelectedProposal(result.proposal);
-    } catch {
-      setProposalErrorMessageKey("proposal.error.load");
-    } finally {
-      setOpeningProposalId(null);
-    }
-  };
-
-  const decideProposal = async (decision: "approve" | "reject"): Promise<void> => {
-    if (!selectedProposal || proposalDecisionInFlight.current) return;
-    const proposalId = selectedProposal.id;
-    proposalDecisionInFlight.current = true;
-    setProposalBusy(true);
-    setProposalDecisionStateUnknown(false);
-    setProposalErrorMessageKey(null);
-    try {
-      const result = await window.pige.proposals[decision]({ proposalId });
-      setProposalOutcome(result.status);
-      if (result.proposal) setSelectedProposal(result.proposal);
-      await props.onProposalChanged().catch(() => undefined);
-    } catch {
-      try {
-        const current = await window.pige.proposals.get({ proposalId });
-        if (current.proposal.id !== proposalId) throw new Error("Proposal identity changed.");
-        const durableOutcome = proposalOutcomeForDurableState(current.proposal.state);
-        setSelectedProposal(current.proposal);
-        if (durableOutcome === null) {
-          setProposalOutcome(null);
-          setProposalErrorMessageKey("proposal.error.decision");
-        } else if (durableOutcome !== undefined) {
-          setProposalOutcome(durableOutcome);
-          setProposalErrorMessageKey(null);
-          await props.onProposalChanged().catch(() => undefined);
-        } else {
-          setProposalOutcome(null);
-          setProposalDecisionStateUnknown(true);
-          setProposalErrorMessageKey(null);
-        }
-      } catch {
-        setProposalOutcome(null);
-        setProposalDecisionStateUnknown(true);
-        setProposalErrorMessageKey(null);
-      }
-    } finally {
-      proposalDecisionInFlight.current = false;
-      setProposalBusy(false);
-    }
-  };
-
-  const closeProposal = (): void => {
-    if (proposalBusy) return;
-    proposalFocusReturnPending.current = true;
-    setSelectedProposal(null);
-    setProposalOutcome(null);
-    setProposalDecisionStateUnknown(false);
-    setProposalErrorMessageKey(null);
-  };
-
-  useEffect(() => {
-    if (selectedProposal !== null || !proposalFocusReturnPending.current) return;
-    proposalFocusReturnPending.current = false;
-    const exactTrigger = proposalFocusReturnId.current
-      ? proposalReviewTriggerRefs.current.get(proposalFocusReturnId.current)
-      : undefined;
-    const firstTrigger = Array.from(proposalReviewTriggerRefs.current.values())
-      .find((trigger) => trigger.isConnected && !trigger.disabled);
-    const focusTarget = exactTrigger?.isConnected
-      ? exactTrigger
-      : firstTrigger ?? proposalQueueHeadingRef.current ?? composerInputRef.current;
-    focusTarget?.focus();
-  }, [selectedProposal, props.readyProposals]);
-
   const openResult = async (pageId: string): Promise<void> => {
     const requestId = noteOpenSequence.current + 1;
     noteOpenSequence.current = requestId;
@@ -3812,24 +3721,6 @@ function HomeComposer(props: {
       if (requestId === noteOpenSequence.current) setNoteLoadingPageId(null);
     }
   };
-
-  if (selectedProposal) {
-    return (
-      <section className="home proposal-review-home" aria-label={props.t("nav.home")}>
-        <ProposalReviewPanel
-          proposal={selectedProposal}
-          busy={proposalBusy}
-          outcome={proposalOutcome}
-          decisionStateUnknown={proposalDecisionStateUnknown}
-          errorMessageKey={proposalErrorMessageKey}
-          onApprove={() => void decideProposal("approve")}
-          onReject={() => void decideProposal("reject")}
-          onClose={closeProposal}
-          t={props.t}
-        />
-      </section>
-    );
-  }
 
   return (
     <section className={`home${showHomeHero ? " home-empty" : " home-active"}`} aria-label={props.t("nav.home")}>
@@ -4041,54 +3932,27 @@ function HomeComposer(props: {
           </div>
         </section>
       ) : null}
-      {props.readyProposals.length > 0 ? (
+      {proposalReviewPending ? (
         <section className="proposal-strip" aria-label={props.t("proposal.queueTitle")}>
           <header className="proposal-strip-header">
-            <h2 ref={proposalQueueHeadingRef} tabIndex={-1}>{props.t("proposal.queueTitle")}</h2>
-            <div className="proposal-strip-meta">
-              <span>{props.readyProposals.length}</span>
-              {props.readyProposals.length > 3 ? (
-                <button
-                  type="button"
-                  className="ghost"
-                  aria-expanded={proposalListExpanded}
-                  aria-controls="home-proposal-summary-list"
-                  onClick={() => setProposalListExpanded((expanded) => !expanded)}
-                >
-                  {props.t(proposalListExpanded ? "proposal.showLess" : "proposal.showAll")}
-                </button>
-              ) : null}
-            </div>
+            <h2>{props.t("proposal.queueTitle")}</h2>
           </header>
-          <div className="proposal-summary-list" id="home-proposal-summary-list">
-            {props.readyProposals.slice(0, proposalListExpanded ? props.readyProposals.length : 3).map((proposal, index) => {
-              const accessibleProposalLabel = `${proposal.summary} (${index + 1})`;
-              return (
-                <article className="proposal-summary-card" key={proposal.id} aria-label={accessibleProposalLabel}>
-                  <div>
-                    <strong>{proposal.summary}</strong>
-                    <p>{proposal.reason}</p>
-                  </div>
-                  <button
-                    ref={(element) => {
-                      if (element) proposalReviewTriggerRefs.current.set(proposal.id, element);
-                      else proposalReviewTriggerRefs.current.delete(proposal.id);
-                    }}
-                    type="button"
-                    className="secondary"
-                    aria-label={`${props.t("proposal.review")}: ${accessibleProposalLabel}`}
-                    disabled={openingProposalId !== null}
-                    onClick={() => void openProposal(proposal.id)}
-                  >
-                    {props.t(openingProposalId === proposal.id ? "proposal.opening" : "proposal.review")}
-                  </button>
-                </article>
-              );
-            })}
+          <div className="proposal-summary-list">
+            <article className="proposal-summary-card">
+              <div>
+                <strong>{props.t("proposal.safePreviewTitle")}</strong>
+                <p id="proposal-safe-preview-description">{props.t("proposal.safePreviewDescription")}</p>
+              </div>
+              <button
+                type="button"
+                className="secondary"
+                aria-describedby="proposal-safe-preview-description"
+                disabled
+              >
+                {props.t("proposal.reviewUnavailable")}
+              </button>
+            </article>
           </div>
-          {proposalErrorMessageKey ? (
-            <p className="error" role="alert">{props.t(proposalErrorMessageKey)}</p>
-          ) : null}
         </section>
       ) : null}
       {visibleConversationMessages.length > 0 || agentDraft ? (
@@ -4648,14 +4512,6 @@ function joinVoiceTranscript(draft: string, transcript: string): string {
   return compactBoundary
     ? `${draft}${transcript}`
     : `${draft} ${transcript}`;
-}
-
-function proposalOutcomeForDurableState(
-  state: ConfirmationProposal["state"]
-): ProposalDecisionResult["status"] | null | undefined {
-  if (state === "ready") return null;
-  if (state === "approved" || state === "applied" || state === "rejected" || state === "conflicted") return state;
-  return undefined;
 }
 
 function DatasetAnswerResult(props: {

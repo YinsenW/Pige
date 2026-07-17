@@ -2766,6 +2766,52 @@ References:
 - `docs/JOB_OPERATION_AND_RECOVERY.md`
 - `docs/QUALITY_AND_TEST_STRATEGY.md`
 
+### D-20260716-H2-Unified-Agent-Ingress-And-Proposal-Containment
+
+Status: Accepted
+Date: 2026-07-16
+
+Decision:
+
+New semantics use `agent_turn`; current sources require `agent_turn | capture_only`, while
+absent legacy fields normalize to `legacy_agent_ingest`. Pi chooses tools; Host validates.
+New turns omit proposal staging and raw renderer review fails closed.
+
+Rationale:
+
+This preserves recovery without reviving Host orchestration or unsafe renderer authority.
+
+Consequences:
+
+- Pi owns evidence order; H3/H4 and statuses remain unchanged.
+
+References:
+
+- `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
+
+### D-20260717-H3-Job-Execution-Coordinator-Core
+
+Status: Accepted
+Date: 2026-07-17
+
+Decision:
+
+One proof-checked coordinator owns migrated Jobs/Home lifecycle; raw proposals stay
+Main-only.
+
+Rationale:
+
+One owner prevents conflicting durable transitions.
+
+Consequences:
+
+- H3b/H3c still migrate remaining loops and dispatch; statuses stay unchanged.
+
+References:
+
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

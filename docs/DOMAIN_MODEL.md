@@ -233,8 +233,8 @@ Rules:
 Change proposal:
 
 - Exceptional planned change, not the normal knowledge writer.
-- May include full proposed Markdown.
-- Must show paths, summaries, warnings, and diffs/previews.
+- Its Main-owned durable record may include raw recovery fields; a future renderer DTO
+  excludes them and exposes only localized bounded summaries, warnings, and diff lines.
 - Can be approved, rejected, or revised.
 
 Operation record:

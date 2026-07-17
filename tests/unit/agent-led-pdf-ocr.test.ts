@@ -37,6 +37,7 @@ import {
   type PiFauxResponse
 } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
+import { markSourceAsLegacyAgentIngestFixture } from "../helpers/legacy-agent-ingest-fixture";
 import { createJpegScanPdf } from "./helpers/pdf-image-fixture";
 import { createTestPdf } from "./helpers/pdf-fixture";
 
@@ -633,6 +634,7 @@ async function preservePdf(
     locale: "en"
   });
   const sourceId = requireValue(result.sourceIds[0]);
+  markSourceAsLegacyAgentIngestFixture(fixture.vaultPath, sourceId);
   const source = readSource(fixture.vaultPath, sourceId);
   return {
     sourceId,

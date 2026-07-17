@@ -30,6 +30,7 @@ import {
 import type { NativeOcrResult } from "../../apps/desktop/src/main/services/ocr-types";
 import { SourcePageService } from "../../apps/desktop/src/main/services/source-page-service";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
+import { markSourceAsLegacyAgentIngestFixture } from "../helpers/legacy-agent-ingest-fixture";
 import { createTestPdf } from "./helpers/pdf-fixture";
 
 const tempRoots: string[] = [];
@@ -56,6 +57,7 @@ describe("cooperative durable job cancellation", { timeout: 15_000 }, () => {
       locale: "en"
     });
     const sourceId = requireFirst(captured.sourceIds);
+    markSourceAsLegacyAgentIngestFixture(fixture.vaultPath, sourceId);
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
     seedExplicitImageOcrJob(fixture.vaultPath, requireFirst(captured.jobIds), sourceId);
 
@@ -108,6 +110,7 @@ describe("cooperative durable job cancellation", { timeout: 15_000 }, () => {
       locale: "en"
     });
     const sourceId = requireFirst(captured.sourceIds);
+    markSourceAsLegacyAgentIngestFixture(fixture.vaultPath, sourceId);
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
     seedExplicitPdfParseJob(fixture.vaultPath, requireFirst(captured.jobIds), sourceId);
 
@@ -193,6 +196,7 @@ describe("cooperative durable job cancellation", { timeout: 15_000 }, () => {
       locale: "en"
     });
     const sourceId = requireFirst(captured.sourceIds);
+    markSourceAsLegacyAgentIngestFixture(fixture.vaultPath, sourceId);
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
     seedExplicitPdfParseJob(fixture.vaultPath, requireFirst(captured.jobIds), sourceId);
     await jobs.processQueuedParses({ sourceIds: [sourceId] });
@@ -764,6 +768,7 @@ async function prepareParsedPdfOcr(
     locale: "en"
   });
   const sourceId = requireFirst(captured.sourceIds);
+  markSourceAsLegacyAgentIngestFixture(fixture.vaultPath, sourceId);
   services.jobs.processQueuedCaptures({ jobIds: captured.jobIds });
   seedExplicitPdfParseJob(fixture.vaultPath, requireFirst(captured.jobIds), sourceId);
   await services.jobs.processQueuedParses({ sourceIds: [sourceId] });

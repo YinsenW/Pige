@@ -40,6 +40,18 @@ const modules = [
     owner: "Model Provider Registry",
     classification: "product_boundary",
     upstreamGap: "Pi model metadata must be merged with explicit Pige profile facts and conservative unknown-model policy."
+  },
+  {
+    path: "apps/desktop/src/main/services/home-agent-evidence-ledger.ts",
+    owner: "Home evidence projection",
+    classification: "product_boundary",
+    upstreamGap: "Pi owns tool sequencing, while Pige must prove that cited durable evidence crossed the reviewed model boundary before publication."
+  },
+  {
+    path: "apps/desktop/src/main/services/job-execution-coordinator.ts",
+    owner: "JobExecutionCoordinator",
+    classification: "authority_reliability",
+    upstreamGap: "Pi owns Agent turn execution, while Pige must single-own durable Job claim, CAS, cancellation, retry, checkpoint, review, recovery, and terminal transitions."
   }
 ];
 
@@ -118,7 +130,7 @@ const affectedOversizedServices = [
     ownerProblem: "Pi tool choice is wrapped by a Host semantic ingest orchestrator",
     classification: "shadow_semantic_orchestrator",
     nextPhase: "H2_agent_turn_ingest_capability_convergence",
-    baselineLines: 4_648,
+    baselineLines: 4_645,
     branchProxyBaseline: 232,
     functionProxyBaseline: 135,
     growthPolicy: "no_new_semantic_branches"
@@ -128,7 +140,7 @@ const affectedOversizedServices = [
     ownerProblem: "Product entry, conversations, Jobs, tools, egress, evidence, and publication share one service",
     classification: "multi_owner_agent_entry",
     nextPhase: "H2_agent_turn_ingest_capability_convergence",
-    baselineLines: 3_736,
+    baselineLines: 3_722,
     branchProxyBaseline: 195,
     functionProxyBaseline: 82,
     growthPolicy: "no_new_semantic_branches"
@@ -240,6 +252,92 @@ const customAgentControlLines = inventory
   .filter((entry) => entry.classification === "assembly_and_control" || entry.classification === "product_control")
   .reduce((total, entry) => total + entry.lines, 0);
 
+const h2Sources = Object.fromEntries([
+  "apps/desktop/src/main/index.ts",
+  "apps/desktop/src/main/services/capture-service.ts",
+  "apps/desktop/src/main/services/jobs-service.ts",
+  "apps/desktop/src/main/services/agent-ingest-service.ts",
+  "apps/desktop/src/main/services/home-agent-service.ts"
+].map((relativePath) => [relativePath, fs.readFileSync(path.join(root, relativePath), "utf8")]));
+const h2Main = h2Sources["apps/desktop/src/main/index.ts"];
+const h2Capture = h2Sources["apps/desktop/src/main/services/capture-service.ts"];
+const h2Jobs = h2Sources["apps/desktop/src/main/services/jobs-service.ts"];
+const h2AgentIngest = h2Sources["apps/desktop/src/main/services/agent-ingest-service.ts"];
+const h2Home = h2Sources["apps/desktop/src/main/services/home-agent-service.ts"];
+const h2LineBudget = {
+  "agent-ingest-service.ts": [4_645, 4_630],
+  "home-agent-service.ts": [3_722, 3_708],
+  "jobs-service.ts": [6_956, 6_952]
+};
+const h3Coordinator = fs.readFileSync(path.join(
+  root,
+  "apps/desktop/src/main/services/job-execution-coordinator.ts"
+), "utf8");
+const h3DirectLifecycleStatePattern = /state:\s*"(?:waiting_permission|waiting_model_egress|awaiting_review|cancel_requested|cancelled|completed|completed_with_warnings|failed_retryable|failed_final)"/gu;
+const h3DirectLifecycleStateWriters = h2Jobs.match(h3DirectLifecycleStatePattern) ?? [];
+const h3JobsCompareAndSwapCount = h2Jobs.match(/compareAndSwap\(/gu)?.length ?? 0;
+const h3ResidualClosedLoops = [
+  "apps/desktop/src/main/services/backup-coordinator-service.ts",
+  "apps/desktop/src/main/services/restore-coordinator-service.ts",
+  "apps/desktop/src/main/services/local-tool-manager-service.ts"
+].map((relativePath) => {
+  const source = fs.readFileSync(path.join(root, relativePath), "utf8");
+  return {
+    path: relativePath,
+    directLifecycleStateLiterals: source.match(h3DirectLifecycleStatePattern)?.length ?? 0
+  };
+});
+if (h3DirectLifecycleStateWriters.length !== 0) {
+  failures.push("H3 JobsService still writes coordinator-owned lifecycle states directly");
+}
+if (h3JobsCompareAndSwapCount !== 2) {
+  failures.push(`H3 JobsService must retain only two non-lifecycle CAS boundaries, found ${h3JobsCompareAndSwapCount}`);
+}
+for (const removedWriter of [
+  "#mutateJob(",
+  "#replaceExpectedJob(",
+  "createJobCancellationOutcome(",
+  "withDurableWriteState("
+]) {
+  if (h2Jobs.includes(removedWriter)) failures.push(`H3 JobsService still contains removed lifecycle writer ${removedWriter}`);
+}
+if (/ipcMain\.handle\("capture\.submit(?:Text|Url|Files)"/u.test(h2Main)) {
+  failures.push("H2 must not expose legacy capture.submit* semantic ingress through Main IPC");
+}
+if (
+  !h2Capture.includes("CurrentSourceRecordSchema.parse") ||
+  !h2Capture.includes('semanticOrchestration: "capture_only"') ||
+  !h2Capture.includes('semanticOrchestration: agentTurnBinding ? "agent_turn" : "capture_only"') ||
+  !h2Capture.includes('semanticOrchestration: input.agentTurn ? "agent_turn" : "capture_only"')
+) {
+  failures.push("H2 CaptureService must durably classify every new source as capture_only or agent_turn");
+}
+if (!h2Jobs.includes('sourceRecord.semanticOrchestration === "legacy_agent_ingest"')) {
+  failures.push("H2 historical agent_ingest compatibility must require the normalized typed legacy marker");
+}
+for (const removedControl of [
+  "AGENT_INGEST_TERMINAL_RECOVERY_PROMPT",
+  "terminalActionRecovery",
+  "completionRepair",
+  "agent_runtime.tool_order_invalid"
+]) {
+  if (`${h2AgentIngest}\n${h2Home}`.includes(removedControl)) {
+    failures.push(`H2 still contains removed Host semantic control ${removedControl}`);
+  }
+}
+if (
+  !h2Main.includes('ipcMain.handle("proposals.list", proposalRendererBoundaryUnavailable)') ||
+  !h2Main.includes('ipcMain.handle("proposals.get", proposalRendererBoundaryUnavailable)') ||
+  !h2Main.includes('ipcMain.handle("proposals.approve", proposalRendererBoundaryUnavailable)') ||
+  !h2Main.includes('ipcMain.handle("proposals.reject", proposalRendererBoundaryUnavailable)')
+) {
+  failures.push("H2 must keep raw durable ConfirmationProposal records behind a fail-closed renderer boundary");
+}
+
+function lineCount(source) {
+  return source.endsWith("\n") ? source.split("\n").length - 1 : source.split("\n").length;
+}
+
 if (failures.length > 0) {
   console.error("Pi runtime responsibility errors:");
   for (const failure of failures) console.error(`- ${failure}`);
@@ -260,11 +358,74 @@ console.log(`Pi runtime responsibility OK: ${JSON.stringify({
     "adapter_embedded_model_capability_hardcodes"
   ],
   h1NewFirstPartyTools: [],
+  h2ResponsibilityDelta: {
+    baseline: "2636ea6639e6e4fc08aa0c27a352a7ee2252baa1",
+    lineBudget: Object.fromEntries(Object.entries(h2LineBudget).map(([file, [before, after]]) => [file, {
+      before,
+      after,
+      delta: after - before
+    }])),
+    deletedOrDisabledControls: [
+      "renderer_capture_submit_ipc",
+      "new_capture_to_agent_ingest_auto_chain",
+      "parse_or_ocr_to_agent_ingest_auto_chain_for_marked_sources",
+      "agent_ingest_terminal_recovery_prompt",
+      "retrieval_failure_terminal_poison",
+      "home_modality_exclusivity",
+      "home_host_tool_order_epoch",
+      "all_legacy_renderer_proposal_methods"
+    ],
+    retainedHostBoundaries: [
+      "source_preservation_and_revision",
+      "permission_and_model_egress",
+      "job_claim_cas_checkpoint_cancel_recovery",
+      "operation_proposal_and_publication_commit",
+      "citation_and_evidence_visibility",
+      "resource_limits_and_body_free_errors",
+      "terminal_durable_effect_one_winner"
+    ],
+    legacyAgentIngestAdmission: "SourceRecord semanticOrchestration=legacy_agent_ingest only; current writes exclude it",
+    newSemanticIngress: "agent.submitTurn",
+    proposalRendererBoundary: "all legacy renderer proposal methods fail closed; durable records remain Main-internal"
+  },
+  h3ResponsibilityDelta: {
+    baseline: "b9b624df9ea13b17ac869e1193b88095f0ba3806",
+    candidateScope: "coordinator_core_and_jobs_home_migration",
+    lineBudget: {
+      "job-execution-coordinator.ts": { before: 0, after: lineCount(h3Coordinator), delta: lineCount(h3Coordinator) },
+      "jobs-service.ts": { before: 6_952, after: lineCount(h2Jobs), delta: lineCount(h2Jobs) - 6_952 },
+      "home-agent-service.ts": { before: 3_708, after: lineCount(h2Home), delta: lineCount(h2Home) - 3_708 }
+    },
+    coordinatorOwnedTransitions: [
+      "begin_and_resume",
+      "bounded_fact_patch",
+      "waiting_and_terminal_settlement",
+      "explicit_retry_and_requeue",
+      "cancellation_and_durable_boundary",
+      "interrupted_recovery_and_uncertain_effect_terminalization",
+      "durable_completion_adoption",
+      "proposal_review_resolution"
+    ],
+    jobsServiceDirectLifecycleStateWriters: h3DirectLifecycleStateWriters.length,
+    jobsServiceRemainingCompareAndSwapBoundaries: h3JobsCompareAndSwapCount,
+    remainingCompareAndSwapOwners: [
+      "legacy_retrieval_and_test_fixture_whole_record_compatibility",
+      "deterministic_parent_child_binding_reconciliation"
+    ],
+    homeDurableAssistantRecovery: "adopt_durable_completion_without_provider_replay",
+    retryConvergence: "same_job_requeue_acknowledgement_yields_to_next_authoritative_state",
+    remainingClosedLoops: h3ResidualClosedLoops,
+    serializedNextSteps: [
+      "H3b_migrate_backup_restore_and_local_tool_transition_adapters",
+      "H3c_register_per_class_executors_and_remove_jobs_service_dispatch_ownership"
+    ]
+  },
   continuousRefactorSequence: serviceInventory.phaseSequence,
   serviceResponsibilityInventory: {
     baseline: serviceInventory.baseline,
-    files: inventoryEntries.length,
-    lines: baselineServiceLines,
+    baselineFiles: inventoryEntries.length,
+    currentFiles: actualServiceFiles.length,
+    baselineLines: baselineServiceLines,
     categories: Object.fromEntries(Object.entries(serviceInventory.categories).map(([name, entries]) => [name, entries.length])),
     noGrowth: serviceInventory.noGrowth,
     mappedSemanticOwners: Object.keys(serviceInventory.responsibilityRanges),

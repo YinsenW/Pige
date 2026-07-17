@@ -19,6 +19,7 @@ import { PigeDomainError } from "@pige/domain";
 import {
   ConversationEventSchema,
   JobRecordSchema,
+  CurrentSourceRecordSchema,
   SourceRecordSchema,
   type ConversationEvent,
   type JobRecord,
@@ -136,10 +137,11 @@ export class CaptureService {
 
     writeFileAtomic(resolveVaultPath(vaultPath, managedTextPath), text);
 
-    const sourceRecord: SourceRecord = SourceRecordSchema.parse({
+    const sourceRecord: SourceRecord = CurrentSourceRecordSchema.parse({
       id: sourceId,
       kind: "text",
       storageStrategy: "copy_to_source_library",
+      semanticOrchestration: "capture_only",
       managedCopy: {
         path: managedTextPath,
         checksum,
@@ -359,10 +361,11 @@ export class CaptureService {
         const preserved = storageStrategy === "copy_to_source_library"
           ? await copyFileAtomicWithChecksum(filePath, resolveVaultPath(vaultPath, managedCopyPath))
           : await checksumFileWithSize(filePath);
-        const sourceRecord: SourceRecord = SourceRecordSchema.parse({
+        const sourceRecord: SourceRecord = CurrentSourceRecordSchema.parse({
           id: sourceId,
           kind: sourceKind,
           storageStrategy,
+          semanticOrchestration: agentTurnBinding ? "agent_turn" : "capture_only",
           original: {
             uri: pathToFileURL(filePath).href,
             path: filePath,
@@ -522,10 +525,11 @@ function persistUrlSnapshot(input: {
   writeConfinedVaultFileAtomic(input.vaultPath, rawSnapshotTarget, input.snapshot.rawContent);
   writeConfinedVaultFileAtomic(input.vaultPath, extractedTextTarget, input.snapshot.extractedText);
 
-  const sourceRecord: SourceRecord = SourceRecordSchema.parse({
+  const sourceRecord: SourceRecord = CurrentSourceRecordSchema.parse({
     id: input.sourceId,
     kind: "url",
     storageStrategy: "copy_to_source_library",
+    semanticOrchestration: input.agentTurn ? "agent_turn" : "capture_only",
     original: {
       uri: safeOriginalUrl,
       displayName,

@@ -33,6 +33,7 @@ import {
 import { RESPOND_TO_USER_TOOL_NAME } from "../../apps/desktop/src/main/services/agent-ingest-tool-registry";
 import { ProposalService } from "../../apps/desktop/src/main/services/proposal-service";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
+import { markSourceAsLegacyAgentIngestFixture } from "../helpers/legacy-agent-ingest-fixture";
 
 const roots: string[] = [];
 
@@ -67,6 +68,39 @@ afterEach(() => {
 });
 
 describe("Agent-selected ingest proposal tool", () => {
+  it("does not offer the legacy raw-proposal tool to a current agent_turn", async () => {
+    const fixture = makeVault();
+    const proposals = new ProposalService(fixture.vaultPort);
+    const prepared = prepareAgentSource(fixture, "Current source turns require a bounded review projection.");
+    const currentTurn = JobRecordSchema.parse({
+      ...prepared.parent,
+      class: "agent_turn",
+      conversationEventId: "evt_20260712_abcdef12"
+    });
+    const runtime = new FunctionalRuntime(async (request) => {
+      expect(request.tools.map((tool) => tool.name)).not.toContain("pige_stage_knowledge_note_proposal");
+      await invokeTool(request, "pige_inspect_source", {}, "inspect_current_turn");
+      await invokeTool(request, RESPOND_TO_USER_TOOL_NAME, {
+        answer: "The current source is available without exposing a raw proposal.",
+        evidenceRefs: ["ev_01"]
+      }, "respond_current_turn");
+      return runtimeResult(request, ["pige_inspect_source", RESPOND_TO_USER_TOOL_NAME]);
+    });
+    const service = new AgentIngestService(
+      modelPort(),
+      runtime,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      bindProposalPort(proposals, fixture.vaultPath)
+    );
+
+    await expect(service.ingestSource(fixture.vaultPath, prepared.source, currentTurn))
+      .resolves.toMatchObject({ outcome: "responded" });
+    expect(proposals.list().total).toBe(0);
+  });
+
   it("runs real Pi inspect -> proposal and durably links one body-free awaiting-review parent", async () => {
     const fixture = makeVault();
     const proposals = new ProposalService(fixture.vaultPort);
@@ -895,12 +929,14 @@ function submitText(
   fixture: ReturnType<typeof makeVault>,
   text: string
 ): { readonly sourceId: string; readonly jobId: string } {
-  return new CaptureService(fixture.vaultPort).submitText({
+  const result = new CaptureService(fixture.vaultPort).submitText({
     text,
     inputKind: "typed_text",
     userIntent: "capture",
     locale: "en"
   });
+  markSourceAsLegacyAgentIngestFixture(fixture.vaultPath, result.sourceId);
+  return result;
 }
 
 function prepareAgentSource(

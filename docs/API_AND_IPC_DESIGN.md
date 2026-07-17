@@ -33,7 +33,6 @@ Example names:
 ```txt
 vault.open
 vault.create
-capture.submit
 jobs.cancel
 library.query
 agent.submitTurn
@@ -273,79 +272,13 @@ Rules:
 
 ### 6.2 Capture
 
-Commands:
+Production semantic command:
 
-- `capture.submitText`
-- `capture.submitFiles`
-- `capture.submitUrl`
+- `agent.submitTurn`
 
-Returns:
-
-- Source IDs.
-- Job IDs.
-- User-visible status.
-
-Phase 2 text capture DTO:
-
-All capture requests also use the shared executable `Locale` and the common
-`userIntent` vocabulary from `packages/contracts/src/index.ts`; the snippets below show
-only channel-specific fields.
-
-```ts
-type SubmitTextCaptureRequest = {
-  text: string;
-  inputKind: "typed_text" | "pasted_text";
-  userIntent: CaptureUserIntent;
-  locale: Locale;
-};
-
-type CaptureSubmitResult = {
-  status: "queued";
-  captureId: string;
-  sourceId: string;
-  jobId: string;
-  conversationEventId: string;
-  preservedAt: string;
-};
-```
-
-Phase 2 file capture DTO:
-
-```ts
-type SubmitDroppedFilesCaptureRequest = {
-  inputKind: "file_drop" | "file_picker";
-  userIntent: CaptureUserIntent;
-  locale: Locale;
-};
-
-type SubmitFilesCaptureRequest = SubmitDroppedFilesCaptureRequest & {
-  filePaths: string[];
-};
-
-type CaptureFilesSubmitResult = {
-  status: "queued" | "partially_queued" | "rejected";
-  captureId: string;
-  sourceIds: string[];
-  jobIds: string[];
-  conversationEventIds: string[];
-  rejectedFiles: Array<{
-    displayName: string;
-    reason: "empty_path" | "missing" | "not_regular_file" | "unsupported_type" | "copy_failed";
-  }>;
-  preservedAt: string;
-};
-```
-
-Phase 5 basic URL capture DTO:
-
-```ts
-type SubmitUrlCaptureRequest = {
-  url: string;
-  inputKind: "pasted_url" | "typed_url";
-  userIntent: CaptureUserIntent;
-  locale: Locale;
-};
-```
+Main does not register `capture.submitText`, `capture.submitFiles`, or
+`capture.submitUrl`. Capture request/result types remain internal preservation and
+historical-test contracts, not renderer IPC capability.
 
 Rules:
 
@@ -355,14 +288,20 @@ Rules:
   checksummed raw/extracted artifacts. Conversation/renderer receive only safe refs,
   IDs and status, never HTML/DOM/headers/dispatcher/credentials.
 - Preload resolves one selected file via `webUtils`; main preserves before linking the
-  draft/ref to one `agent_turn`. Historical capture handlers remain internal.
+  draft/ref to one `agent_turn`. Capture services and legacy request types remain
+  internal; the removed renderer/Main handlers do not.
+- `CurrentSourceRecordSchema` requires top-level `semanticOrchestration` as
+  `agent_turn | capture_only` for all new text/file/URL writes. `SourceRecordSchema`
+  normalizes a pre-field record to `legacy_agent_ingest`; unknown values reject.
 - Files allow Markdown/TXT/PDF/DOCX/PPTX/common images and obey the active copy/reference
   policy. Each accepted file has one Source/event/Job; rejections use display names only,
   and renderer/history receive no body, arbitrary path, or handle.
 - Preserved text/Markdown/TXT/URL may produce minimal pages; documents/images remain
   metadata-only until Pi selects parse/OCR. Home observes safe Job summaries.
-- OCR stays behind main-owned `OcrPort`; `agent_ingest` uses embedded Pi and waits without
-  semantic work when no model exists.
+- OCR stays behind main-owned `OcrPort`. New parser/OCR/Dataset children execute only an
+  exact Pi-selected capability effect or recover that effect; they do not wake a Host-
+  selected successor. Jobs admits legacy auto-chain only for exact
+  `legacy_agent_ingest`.
 
 #### 6.2.1 Native Speech Session
 
@@ -395,11 +334,14 @@ Queries:
 - `jobs.list`
 - `jobs.get`
 
-Phase 3 Agent ingest bridge:
+Historical Agent ingest compatibility:
 
-- `agent_ingest` jobs are durable job records created after source-page generation.
-- Background ingest is launched from main process only; renderer APIs still return preservation status and observe progress through `jobs.list`.
-- When a default model is configured later, waiting `agent_ingest` jobs may be requeued and processed without duplicating source pages.
+- `agent_ingest` remains only for typed `legacy_agent_ingest` records and exact recovery
+  during one migration window; current records cannot create one.
+- Background recovery is main-owned. Renderer observes safe progress through `jobs.list`.
+- When a default model is configured later, a waiting historical `agent_ingest` Job may
+  requeue with its exact source/checkpoint/proposal/Operation identity and without
+  duplicating source pages.
 - Low-confidence/warning output uses non-blocking `needs_review` quality metadata and
   `completed_with_warnings`; that marker is not permission or mandatory approval.
 - Job summaries never expose prompts, raw model responses, provider request headers, API keys, managed source paths, or source bodies.
@@ -473,56 +415,30 @@ Rules:
 
 ### 6.4 Exceptional Change Proposals
 
-Commands:
-
-- `proposals.approve`
-- `proposals.reject`
-
-Queries:
+All legacy renderer proposal channels currently fail closed with a body-free error:
 
 - `proposals.list`
 - `proposals.get`
+- `proposals.approve`
+- `proposals.reject`
 
-Current proposal DTO:
-
-```ts
-type ProposalSummary = {
-  id: string;
-  state: ProposalState;
-  trustLevel: "review_required" | "explicit_confirmation";
-  jobId?: string;
-  summary: string;
-  reason: string;
-  operationCount: number;
-  warningCount: number;
-  targetCount: number;
-  createdAt: string;
-  updatedAt: string;
-};
-
-type ProposalsListResult = {
-  scannedAt: string;
-  activeVaultId: string;
-  total: number;
-  invalidProposalCount: number;
-  proposals: ProposalSummary[];
-};
-
-type ProposalDecisionResult = {
-  status: "approved" | "applied" | "rejected" | "conflicted" | "not_found" | "not_allowed";
-  reason?: string;
-  proposal?: ConfirmationProposal;
-};
-```
+Legacy list/get/decision DTOs stay Main-internal. A future renderer projection must use
+localized keys and bounded diff lines, excluding model-generated summary/reason, paths,
+full content, base hashes, source bodies, and Operation internals.
 
 Rules:
 
-- Records live under `.pige/proposals/YYYY/MM/`; list omits bodies/secrets/paths, get returns full records, and invalid entries are skipped.
+- Records live under `.pige/proposals/YYYY/MM/`. Durable service list/get/decision stays
+  Main-internal for recovery/tests; invalid records are skipped.
 - Approve applies only the exact Job-scoped Pi create note under `wiki/generated/`:
   `approved` -> page/index/Operation -> `applied` -> idempotent log -> parent. Generic
   apply is `not_allowed`; generic reject remains state-only.
-- Home rereads rejected calls; exact proposal writes are ordered, not transactional.
+- Main-owned recovery rereads rejected calls; exact proposal writes are ordered, not transactional.
   Generic apply/replacement, CAS/TOCTOU, and platforms remain open.
+- Main-owned historical approval/rejection/reconciliation remains available to recovery
+  services even while renderer decision channels fail closed.
+- New `agent_turn` exposes no legacy proposal-stage tool until a bounded renderer preview
+  and decision owner exists; historical `agent_ingest` may still stage/recover old records.
 
 #### 6.4.1 Knowledge Activity And Undo
 
@@ -987,6 +903,9 @@ Do not hardcode:
 
 - IPC payload validation.
 - Renderer cannot call undeclared channels.
+- Legacy capture submission handlers are absent from Main; `agent.submitTurn` is the only
+  renderer semantic ingress.
+- Renderer proposal list/get/approve/reject all fail closed pending a bounded safe DTO.
 - Secret redaction.
 - Shared error schemas reject non-namespaced codes, unknown enum aliases, and non-scalar redacted metadata.
 - Permission-required command flow.

@@ -101,7 +101,7 @@ describe("Permission Broker Job recovery", () => {
       decision: "allow_once"
     });
     const queued = requireValue(fixture.jobs.readAgentTurnJob(fixture.jobId));
-    const running = fixture.jobs.writeAgentTurnJob(queued, JobRecordSchema.parse({
+    const running = fixture.jobs.testOnlyWriteAgentTurnJob(queued, JobRecordSchema.parse({
       ...queued,
       state: "running",
       stage: "planning",
@@ -147,7 +147,7 @@ describe("Permission Broker Job recovery", () => {
       decision: "allow_once"
     });
     const queued = requireValue(fixture.jobs.readAgentTurnJob(fixture.jobId));
-    fixture.jobs.writeAgentTurnJob(queued, JobRecordSchema.parse({
+    fixture.jobs.testOnlyWriteAgentTurnJob(queued, JobRecordSchema.parse({
       ...queued,
       state: "running",
       stage: "planning",
@@ -187,7 +187,7 @@ describe("Permission Broker Job recovery", () => {
   it("cancels an orphaned pending request when restart sees its terminal Job", () => {
     const fixture = createWaitingFixture("cancel-window");
     const waiting = requireValue(fixture.jobs.readAgentTurnJob(fixture.jobId));
-    fixture.jobs.writeAgentTurnJob(waiting, JobRecordSchema.parse({
+    fixture.jobs.testOnlyWriteAgentTurnJob(waiting, JobRecordSchema.parse({
       ...waiting,
       state: "cancelled",
       updatedAt: "2026-07-14T10:03:00.000Z",
@@ -276,7 +276,7 @@ function createWaitingFixture(suffix: string): Fixture {
     conversationLocator: `.pige/conversations/2026/07/conv_20260714_${safeSuffix}.jsonl`,
     inputHash: digest(`permission input ${suffix}`)
   });
-  const running = jobs.writeAgentTurnJob(created, JobRecordSchema.parse({
+  const running = jobs.testOnlyWriteAgentTurnJob(created, JobRecordSchema.parse({
     ...created,
     state: "running",
     stage: "planning",

@@ -26,6 +26,7 @@ import {
 } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
 import { RESPOND_TO_USER_TOOL_NAME } from "../../apps/desktop/src/main/services/agent-ingest-tool-registry";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
+import { markSourceAsLegacyAgentIngestFixture } from "../helpers/legacy-agent-ingest-fixture";
 import { createTestPdf } from "./helpers/pdf-fixture";
 
 const roots: string[] = [];
@@ -720,6 +721,7 @@ async function preservePdf(
     locale: "en"
   });
   const sourceId = requireValue(result.sourceIds[0]);
+  markSourceAsLegacyAgentIngestFixture(fixture.vaultPath, sourceId);
   const source = readSource(fixture.vaultPath, sourceId);
   const managedRelativePath = requireValue(source.managedCopy?.path);
   return {

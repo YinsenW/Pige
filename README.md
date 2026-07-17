@@ -48,7 +48,7 @@ Today, the pre-alpha can:
 - Run preserved text and supported PDF/DOCX/PPTX/images through embedded Pi, isolated BYOK binding,
   bounded inspect/parse/OCR tools, and validated knowledge publication.
 - Generate source-backed Markdown and run a bounded cited Home knowledge-answer path.
-- Review an exact staged create-note proposal from Home; this is a transitional exception path.
+- Recover staged proposals in Main; Home review fails closed pending a bounded projection.
 - Use persistent-job recovery and local-backup foundations.
 
 Unified text/one-file/static-URL Provider-to-Home plus exact durable follow-up now runs.

@@ -78,6 +78,10 @@ Goal:
 - Select minimal tools for a preserved source, replan from results, and produce cited knowledge.
 
 Ingest is source-backed behavior inside the unified Agent turn, not a pre-Pi route.
+Historical `agent_ingest` may reuse this neutral prompt for one migration window, never
+its former fixed route, terminal repair/poison, or Host fallback.
+Only that historical catalog may expose legacy proposal staging; new `agent_turn` omits it
+until bounded renderer preview/decision ownership exists.
 
 Required context:
 
@@ -95,29 +99,8 @@ Required output:
   brokered tool request, not an unvalidated field smuggled into that payload.
 - A final summary from verified results; final text cannot write durable knowledge.
 
-Embedded Pi terminal knowledge-tool input:
-
-The publish and proposal-stage tools accept this strict object:
-
-```ts
-type AgentIngestOutput = {
-  title: string;
-  summary: {
-    text: string;
-    evidenceRefs: string[];
-  };
-  keyPoints: Array<{
-    text: string;
-    evidenceRefs: string[];
-  }>;
-  tags: string[];
-  topics: string[];
-  entities: string[];
-  relatedPageRefs?: string[];
-  warnings: string[];
-  confidence: "low" | "medium" | "high";
-};
-```
+The executable terminal knowledge-tool schema owns title, cited summary/key points,
+tags/topics/entities, related refs, warnings and confidence; prompt prose cannot widen it.
 
 Rules:
 
@@ -197,6 +180,9 @@ return to Pi for a general answer unless the user required vault/source-only gro
 Current Home/Pi evidence lives in acceptance. Direct answers, optional bounded retrieval,
 strict Host-resolved citations, untrusted evidence, per-turn revalidation, typed waiting,
 and vault-only insufficiency remain the prompt/runtime contract.
+
+Pi may select local search and Dataset query in either order. Prompt text sets no
+exclusivity/turn epoch; runtime enforces prior visibility and disjoint citations.
 
 The model completes Home through an accepted `pige_finish_home_turn`, not by escaping the
 typed boundary with ordinary prose. A rejected finish call returns bounded repair feedback

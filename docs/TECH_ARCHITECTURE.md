@@ -675,6 +675,11 @@ The executable 104-service inventory freezes five no-growth owners and responsib
 deltas; budgets trigger review, not compression. H1 aligns Pi `0.80.7`; H2-H4 converge
 Home/Ingest, Job reliability and legacy retrieval without status promotion.
 
+H2 uses only `agent.submitTurn`/`agent_turn` for new semantics. Current sources require
+top-level `semanticOrchestration: agent_turn | capture_only`; old missing-field records
+normalize to `legacy_agent_ingest`, the only compatibility route. Pi-selected children
+stay deterministic; Home evidence order is Pi-owned and Host visibility-validated.
+
 `docs/PROMPT_DESIGN.md` is the detailed contract for prompt hierarchy, context packaging, untrusted source blocks, structured outputs, and prompt tests.
 
 `docs/AGENT_RUNTIME_POLICY_CONTEXT.md` is the detailed contract for settings-derived Agent policy, policy snapshots, prompt-visible policy summaries, and service-level enforcement.
@@ -783,26 +788,9 @@ Operation, while exceptional work stages a Proposal.
 
 Proposal and operation state transitions follow `docs/JOB_OPERATION_AND_RECOVERY.md`.
 
-Change set contract:
-
-```ts
-type ChangeSet = {
-  id: string;
-  jobId: string;
-  createdAt: string;
-  modelProfileId: string;
-  trustLevel: "auto_apply" | "auto_apply_with_summary" | "review_required" | "explicit_confirmation";
-  sourceIds: string[];
-  operations: ChangeOperation[];
-  warnings: string[];
-};
-
-type ChangeOperation =
-  | { kind: "create"; path: string; content: string }
-  | { kind: "update"; path: string; beforeSha256: string; content: string }
-  | { kind: "rename"; from: string; to: string }
-  | { kind: "delete"; path: string; beforeSha256: string };
-```
+Full proposals/change sets stay main-owned. New `agent_turn` omits legacy proposal staging;
+historical ingest may recover it. Renderer list/get/approve/reject all fail closed pending
+a projection that excludes model-generated summary/reason and other raw fields.
 
 Rules:
 
