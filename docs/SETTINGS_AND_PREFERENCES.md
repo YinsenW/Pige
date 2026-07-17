@@ -316,7 +316,8 @@ Default vault backup excludes:
 - Permission grants.
 - Local model/tool/package files.
 - Active vault path and recent vault list.
-- Raw external root bindings and externally referenced originals. Reachable Pige-managed copies are included by default even when their managed-copy root is external; incomplete omission requires an explicit backup decision.
+- Raw bindings and referenced originals. Reachable Pige-managed copies remain included;
+  missing roots wait for reconnect because incomplete override is unavailable.
 - User/rollback Backup Job records containing machine-local destination references.
 
 Restore rules:
@@ -325,7 +326,8 @@ Restore rules:
   warning/dependency counts without raw path/entry detail.
 - Restoring a vault into a new folder creates a new machine-local active vault binding.
 - Restored vault config must not assume old absolute paths are still valid.
-- External roots reconnect or restore in-vault; unresolved root IDs stay visible.
+- Included copies restore as `root_vault_managed` without bindings/false warnings;
+  missing roots remain dependencies without renderer reconnect.
 - Provider profiles and secrets can be imported only through an explicit, redacted settings import/export flow.
 - `replace_existing` preserves vault ID, confirms irreversibility, verifies rollback,
   publishes fresh, then CAS-swaps the active binding; old folder remains unregistered.
@@ -394,7 +396,7 @@ Required tests:
 - No secret setting is stored in Markdown, SQLite, logs, prompts, diagnostics, operation records, or default backups.
 - Active vault path and recent vault list never appear in `.pige/manifest.json`.
 - `.pige/config.json` contains only portable non-secret vault preferences.
-- External managed-copy root binding is machine-local, has a stable `root_` ID, appears as an external dependency in backup/restore preview, and never retargets existing sidecars when the default root changes.
+- External-root tests cover identity, disclosure, inclusion, waits, rewrite, and warnings.
 - Agent-affecting settings appear in the Agent Policy Effect Registry and compile into Agent Runtime Policy Context.
 - Provider refresh preserves inventory/default on failure and never exposes keys or
   duplicates IDs; Retry/manual ID covers incomplete discovery.

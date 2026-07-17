@@ -439,7 +439,8 @@ Before v0.1 public alpha:
 - OCR failure does not lose the source record or source asset.
 - Backup/restore succeeds without `.pige/db/` and `.pige/indexes/`.
 - Backup/restore crash tests resume or fail from durable staging checkpoints without exposing a partial archive/vault.
-- A missing external managed-copy root yields bounded `waiting_dependency` work and does not trigger repeated filesystem polling or path guessing.
+- Reachable external managed copies restore into vault `raw/` without binding disclosure
+  or false reconnect warnings; missing/rebound/symlinked roots fail bounded and publish nothing partial.
 - Reset Local Database does not delete durable truth.
 - Memory drops back after heavy OCR or indexing jobs complete.
 - Permission dialogs appear immediately when sensitive Skill/package actions request capabilities.

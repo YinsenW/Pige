@@ -255,15 +255,22 @@ consequences below.
 External managed-copy rule:
 
 - An external managed-copy root contains Pige-owned evidence, not merely a reference to user-owned originals. Backup preflight therefore attempts to include every reachable managed copy selected by the source records.
-- If a required external root is missing or permission-blocked, backup must not claim to be complete. It pauses for repair or asks the user to continue with an explicitly incomplete backup; the manifest records the `rootId`, dependency kind, inclusion result, and whether complete restore requires it.
-- Backup manifests do not store the machine's raw absolute binding by default. They store stable root/source IDs and a redacted display label.
+- Backup includes every reachable selected copy by default. Stable `rootId`/`sourceId`,
+  checksum, size, archive/restore mapping, and restored-record checksum bind each payload;
+  binding, ancestry, file identity, and streamed checksum are revalidated before publish.
+- Missing, blocked, or rebound roots put the same Job in `waiting_dependency` with
+  `reconnect_path`. An explicitly incomplete backup remains unimplemented.
+- Archive/UI projections exclude raw bindings and carry only stable IDs, checksums,
+  sizes, inclusion/completeness facts, and redacted labels.
 - Externally referenced originals remain excluded by default and are listed separately from external managed-copy roots.
 
 Restore behavior:
 
 - Restored Markdown knowledge works without external originals.
-- Managed source copies restore into the selected managed-copy root.
-- Restored external managed copies may be placed under the restored vault's `raw/` root or rebound to a user-selected external root; source records are rewritten only through a checkpointed restore/migration operation.
+- In-vault managed source copies restore under their portable managed-copy root.
+- Included external copies restore under vault `raw/`; validated SourceRecords become
+  vault-relative `root_vault_managed`, inherit no binding, and require no reconnect.
+- Future reconnect/migration preserves IDs and never infers authority from labels/paths.
 - Referenced originals are marked available, missing, or changed after restore scan.
 - The user can relink missing originals later.
 

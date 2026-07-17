@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-17T07:26:46Z",
+  "reviewedAt": "2026-07-17T09:20:00Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -26,19 +26,17 @@
       "packages/schemas/src/index.ts",
       "packages/contracts/src/index.ts",
       "apps/desktop/src/main/index.ts",
+      "apps/desktop/src/main/services/backup-coordinator-service.ts",
+      "apps/desktop/src/main/services/backup-service.ts",
       "apps/desktop/src/main/services/home-agent-service.ts",
-      "apps/desktop/src/main/services/local-database-service.ts",
-      "apps/desktop/src/main/services/markdown-page-index.ts",
       "apps/desktop/src/main/services/model-egress-approval-service.ts",
       "apps/desktop/src/main/services/model-provider-registry.ts",
-      "apps/desktop/src/main/services/notes-service.ts",
       "apps/desktop/src/main/services/pi-agent-completion-policy.ts",
       "apps/desktop/src/main/services/pi-agent-runtime-adapter.ts",
       "apps/desktop/src/main/services/secret-store.ts",
       "apps/desktop/src/preload/index.ts",
       "apps/desktop/src/renderer/src/App.tsx",
       "apps/desktop/src/renderer/src/components/KnowledgeTreeMap.tsx",
-      "apps/desktop/src/renderer/src/components/ReaderInlineReferenceSurface.tsx",
       "apps/desktop/src/renderer/src/locales/de/messages.json",
       "apps/desktop/src/renderer/src/locales/en/messages.json",
       "apps/desktop/src/renderer/src/locales/fr/messages.json",
@@ -47,34 +45,33 @@
       "apps/desktop/src/renderer/src/locales/zh-Hans/messages.json",
       "apps/desktop/src/renderer/src/styles/app.css",
       "tests/unit/desktop-shell-contract.test.ts",
+      "tests/unit/backup-coordinator-service.test.ts",
+      "tests/unit/backup-service.test.ts",
       "tests/unit/full-ui-library.test.ts",
       "tests/unit/full-ui-renderer-contract.test.ts",
       "tests/unit/full-ui-settings-surface.test.ts",
       "tests/unit/home-agent-service.test.ts",
       "tests/unit/home-agent-conversation-ui.test.ts",
       "tests/unit/knowledge-tree-ui.test.ts",
-      "tests/unit/local-database-scale.test.ts",
-      "tests/unit/local-database-service.test.ts",
       "tests/unit/model-egress-approval-service.test.ts",
       "tests/unit/model-provider-registry.test.ts",
       "tests/unit/model-settings-error-ui.test.ts",
-      "tests/unit/notes-service.test.ts",
       "tests/unit/pi-agent-runtime-adapter.test.ts",
       "tests/unit/restore-ui.test.ts",
       "tests/unit/security-contract-schemas.test.ts",
       "package.json"
     ],
-    "scope": "Independent Planning review binds the Reader inline-reference API, data/index, service-ownership, Knowledge and interaction owners, trace projections, and exact four-commit 23-path implementation candidate at d3af5b2 based on origin/main 2932f33.",
+    "scope": "Independent Planning review binds the External Managed Copy Backup implementation and safety repairs to the backup, source-storage, Job, settings, architecture, reliability and trace owners on origin/main 2932f33.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 130,
-    "reviewedSha256": "d2e8cacf34c60e845052db3e23a02ae4b1f0419527c4af72bdf4ecab9c9b8271"
+    "reviewedSha256": "726042975ffef932508b95d5add1302811baac17503aac80b86e410bed9e2ec6"
   },
   "reviewers": [
     {
-      "reviewerId": "reader-inline-reference-main2932-independent-review",
-      "task": "Reader inline-reference contract, ownership, trace and status-impact review",
+      "reviewerId": "external-managed-copy-backup-independent-review",
+      "task": "External managed-copy backup and restore contract-impact review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -82,82 +79,78 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Product Planning did not author the frozen four-commit implementation candidate and independently compared its exact 23-path delta, executable schemas, service/renderer boundaries, owner contracts, trace evidence, and unchanged delivery statuses before binding this snapshot."
+      "independence": "Product Planning did not author the Backup implementation and independently compared the exact stable-ID, binding, archive, restore, Job-recovery and disclosure behavior with owner contracts and trace evidence before binding this snapshot."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "reader-inline-reference-main2932-independent-review",
+      "reviewerId": "external-managed-copy-backup-independent-review",
       "blockerCount": 0,
-      "summary": "Existing API, Technical, Data, Local Database, Knowledge and Reader owners carry the query, stable-target, rebuildable-index and interaction facts without a new owner document or path-bearing renderer surface."
+      "summary": "Existing Data, Source Storage, Job, Settings, Architecture and Reliability owners carry the complete backup/restore behavior without introducing a duplicate owner document or speculative UI owner."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "reader-inline-reference-main2932-independent-review",
+      "reviewerId": "external-managed-copy-backup-independent-review",
       "blockerCount": 0,
-      "summary": "Owners and exact bytes agree on activeVaultId/currentPageId/renderContextId/href/requestId input, stable page/source targets, body-free terminal outcomes, no event, target.pageId-only navigation, and sender/page/index/watcher fences."
+      "summary": "Owner text agrees that reachable Pige-managed copies are included, absolute bindings stay machine-local, missing or rebound roots wait durably, and restore rewrites included copies into vault ownership without false reconnect warnings."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "reader-inline-reference-main2932-independent-review",
+      "reviewerId": "external-managed-copy-backup-independent-review",
       "blockerCount": 0,
-      "summary": "New exact selectors project schema, IPC, index, page/source resolution, stale fences and UI activation evidence while Requirement, Exit and Phase statuses and capability assignments remain unchanged."
+      "summary": "New exact test evidence narrows the Backup Requirement and E9.01 gaps without promotion; semantic claims retain partial status and enumerate reconnect, incomplete-control, platform and coordinator residuals."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "reader-inline-reference-main2932-independent-review",
+      "reviewerId": "external-managed-copy-backup-independent-review",
       "blockerCount": 0,
-      "summary": "Focused regressions identify strict DTOs, sender lifecycle, render-context invalidation, source ownership, index revision/watch freshness, ambiguity, delayed-result rejection and stable Reader opening."
+      "summary": "Focused regressions identify inclusion, archive disclosure, binding and file races, durable reconnect recovery, deterministic in-vault restore mapping and truthful dependency counts while preserving current service boundaries."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "reader-inline-reference-main2932-independent-review",
+      "reviewerId": "external-managed-copy-backup-independent-review",
       "blockerCount": 0,
-      "summary": "No new design document or phase narrative was introduced; one concise decision anchor, existing subject owners, exact evidence entries and this bounded recipe carry the complete semantic delta."
+      "summary": "No new owner document or durable Decision was introduced; existing subject owners, two bounded evidence entries and this review recipe carry the implementation delta without duplicating the backup policy."
     }
   ],
   "verification": [
     {
-      "command": "Independent exact-byte and owner-contract review of d3af5b2 based on origin/main 2932f33",
+      "command": "Independent implementation and owner-contract review of External Managed Copy Backup based on origin/main 2932f33",
       "status": "passed",
-      "evidence": "The 23 candidate paths contain the strict shared DTO, Main/Notes/Local Database ownership, preload adapter, renderer activation and focused tests described by the synchronized owners; no durable body, arbitrary path, event channel or unrelated product surface is introduced."
+      "evidence": "Review covers Main backup/coordinator implementation, executable schema, focused tests and every affected owner/trace projection; raw machine bindings and referenced-original payloads remain excluded."
     },
     {
-      "command": "npm run verify:docs && npm run verify:decisions",
+      "command": "npm run verify:docs && npm run verify:decisions && npm run verify:traceability",
       "status": "passed",
-      "evidence": "Links, whitespace, document map, PRD structure and the decision ledger pass with one machine-anchored Reader resolver decision and no new design file."
+      "evidence": "Links, whitespace, document map, PRD structure, decision records and narrowed Backup requirement/evidence mappings pass after the bounded owner synchronization."
     },
     {
-      "command": "npm run verify:traceability && npm run verify:contracts",
+      "command": "npm run verify:contracts && npm run verify:independent-documentation-review && npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "Exact Reader evidence selectors, semantic locks and strict schema/preload/Main/renderer contracts pass without changing Requirement, Exit or Phase status."
-    },
-    {
-      "command": "npm run verify:independent-documentation-review && npm run verify:documentation-leanness",
-      "status": "passed",
-      "evidence": "The current recipe binds all governed roots and every changed implementation path, and leanness rejects no duplicate owner structure, stale alias or unbounded projection."
+      "evidence": "CON-001 through CON-004 remain green and the current recipe binds all governed roots plus the changed Backup code/tests without Requirement, Exit or Phase promotion."
     }
   ],
   "coordination": {
-    "taskId": "reader-inline-reference-main2932-20260717",
-    "taskTitle": "Reader inline-reference typed contract synchronization",
+    "taskId": "external-managed-copy-backup-main2932-20260717",
+    "taskTitle": "External managed-copy backup contract synchronization",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The candidate adds one strict request/response IPC query, temporary render contexts, and rebuildable app-schema-v3/index-revision-5 reference keys; durable Markdown/Source Record ownership, backup, release scope, Requirement, Exit and Phase status remain unchanged.",
-    "acknowledgement": "Product Planning synchronized the existing API/data/service/Knowledge/Reader owners, decision anchor and exact evidence projections; this review binds current bytes without promoting delivery status or claiming remaining source metadata, edit/reveal, scale or packaged-platform work."
+    "compatibility": "The candidate implements the existing default-inclusion and portable-restore policy additively; legacy manifests remain readable, referenced originals stay excluded, and no release scope, Requirement, Exit or Phase status changes.",
+    "acknowledgement": "Product Planning synchronized existing data, source, Job, settings, architecture, reliability and trace owners; this review binds current implementation without claiming unavailable reconnect or incomplete-backup controls."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Render contexts are intentionally process-memory only; restart or sender destruction requires a fresh render and never recovers prior link authority.",
-    "A dirty or unavailable inline-reference index fails closed until a verified rebuild generation is current; this query does not invent a fallback filesystem scan in renderer.",
-    "Source metadata presentation, source reveal/open, editing and selection remain unavailable even though a verified source reference can open its stable knowledge page.",
-    "Incremental watcher-at-scale proof, Windows qualification, complete assistive-technology coverage, long-page Reader budgets and signed packaged visual acceptance remain open; no Requirement, Exit or Phase status is promoted."
+    "No renderer-safe external-root chooser/reconnect owner exists; the durable waiting_dependency is body-free but the current Settings surface cannot complete repair in place.",
+    "No explicit continue-incomplete flow exists; a required missing or rebound managed-copy root therefore blocks publication rather than silently omitting Pige-owned evidence.",
+    "BackupCoordinatorService retains its specialized Job transition/checkpoint owner pending continuous migration into the generic JobExecutionCoordinator.",
+    "Windows and signed packaged backup/restore evidence remain open, including cross-platform path identity and recovery behavior.",
+    "Broader complete memory/conversation fixtures, release-wide exclusion scans, richer Operation facts and final syscall/cross-file atomicity remain open; no Requirement, Exit or Phase status is promoted."
   ]
 }

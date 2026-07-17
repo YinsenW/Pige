@@ -1382,6 +1382,8 @@ Responsibilities:
   [`JOB_OPERATION_AND_RECOVERY.md`](JOB_OPERATION_AND_RECOVERY.md#16-backup-restore-and-migration).
 - Use the API Owner's request/response DTOs; do not create another manifest or IPC shape
   in architecture prose.
+- `BackupCoordinatorService` retains specialized transitions pending generic coordinator
+  convergence; archive code must not grow another Job loop.
 
 Backup/restore delivery and residual platform/recovery gaps are owned by the Playbook and
 acceptance manifest; this architecture keeps service placement and owner references only.
