@@ -267,7 +267,9 @@ describe("Restore identity UI", () => {
     expect(button(container, "Retry").disabled).toBe(false);
 
     await click(dom, button(container, "Retry"));
-    await waitFor(dom, () => container.textContent?.includes("2026-07-14T09:30:00.000Z") ?? false);
+    const expectedLastBackup = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" })
+      .format(new Date("2026-07-14T09:30:00.000Z"));
+    await waitFor(dom, () => container.textContent?.includes(expectedLastBackup) ?? false);
 
     expect(harness.retryJobIds).toEqual(["job_20260714_backupui1"]);
     expect(container.textContent).not.toContain("The backup stopped safely");
@@ -286,6 +288,11 @@ describe("Restore identity UI", () => {
     await openVaultSettings(dom, container);
     await waitFor(dom, () => container.textContent?.includes("A managed source location needs to be reconnected") ?? false);
 
+    const vaultPage = container.querySelector<HTMLElement>(".settings-vault-page");
+    expect(vaultPage).not.toBeNull();
+    expect(vaultPage?.querySelectorAll(".settings-summary")).toHaveLength(4);
+    expect(vaultPage?.querySelectorAll(".settings-card").length).toBeGreaterThanOrEqual(2);
+    expect(vaultPage?.querySelector(".settings-group")).toBeNull();
     expect(container.textContent).not.toContain("RAW_BACKUP_SENTINEL");
     expect(container.textContent).not.toContain("root_external_private_20260717");
     expect(container.textContent).not.toContain("The backup could not continue safely");
@@ -296,6 +303,10 @@ describe("Restore identity UI", () => {
       .toBe("backup-reconnect-managed-source-unavailable");
     expect(Array.from(container.querySelectorAll("button")).some((item) => item.textContent === "Retry")).toBe(false);
     expect(harness.retryJobIds).toEqual([]);
+
+    await click(dom, button(container, "View memory"));
+    await waitFor(dom, () => container.querySelector(".memory-settings-page") !== null);
+    expect(container.textContent).toContain("Agent & Memory");
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -457,7 +468,7 @@ describe("Restore identity UI", () => {
     expect(revealSources.disabled).toBe(true);
     expect(button(container, "Open another vault").disabled).toBe(true);
     expect(button(container, "Create new vault").disabled).toBe(true);
-    expect(revealNotes.closest(".settings-actions")?.getAttribute("aria-busy")).toBe("true");
+    expect(revealNotes.closest(".settings-card")?.getAttribute("aria-busy")).toBe("true");
 
     await act(async () => {
       rejectReveal?.(new Error("RAW_REVEAL_SENTINEL path-sentinel"));

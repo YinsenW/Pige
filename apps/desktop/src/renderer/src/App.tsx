@@ -1300,6 +1300,7 @@ export function App(): React.JSX.Element {
             activeVault ? (
               <VaultSettingsPanel
                 surface={settingsSection}
+                locale={locale}
                 busy={busy}
                 error={error}
                 vault={activeVault}
@@ -1313,6 +1314,10 @@ export function App(): React.JSX.Element {
                 onRefresh={refreshVaultState}
                 onRefreshDiagnostics={refreshDiagnostics}
                 onRemoveRecent={removeRecent}
+                onOpenMemory={() => {
+                  setSettingsSection("memory");
+                  setDevelopmentNotice(null);
+                }}
                 onError={setError}
                 t={t}
               />
@@ -6547,6 +6552,7 @@ export function SystemSettingsPanel(props: {
 
 interface VaultSettingsPanelProps {
   readonly surface: "vault" | "maintenance";
+  readonly locale: Locale;
   readonly busy: boolean;
   readonly error: string | null;
   readonly vault: VaultSummary;
@@ -6560,6 +6566,7 @@ interface VaultSettingsPanelProps {
   readonly onRefresh: () => Promise<void>;
   readonly onRefreshDiagnostics: () => Promise<void>;
   readonly onRemoveRecent: (vaultId: string) => Promise<void>;
+  readonly onOpenMemory: () => void;
   readonly onError: (error: string | null) => void;
   readonly t: (key: string) => string;
 }
@@ -6574,6 +6581,12 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
   const knowledgeRootButtonRef = useRef<HTMLButtonElement>(null);
   const sourceAssetRootButtonRef = useRef<HTMLButtonElement>(null);
   const activeBackupJob = props.backupJobs[0];
+  const lastBackupDisplay = props.backupStatus?.lastBackupAt
+    ? new Intl.DateTimeFormat(props.locale === "zh-Hans" ? "zh-CN" : props.locale, {
+      dateStyle: "medium",
+      timeStyle: "short"
+    }).format(new Date(props.backupStatus.lastBackupAt))
+    : props.t("backup.never");
   const restore = useRestoreFlow(async () => {
     setBackupNotice(props.t("backup.restored"));
     await props.onRefresh();
@@ -6697,113 +6710,175 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
   };
 
   return (
-    <section className="settings-page" aria-label={props.t(
-      props.surface === "maintenance" ? "maintenance.title" : "nav.vaultSettings"
-    )}>
-      <div>
-        <h1>{props.t(props.surface === "maintenance" ? "maintenance.title" : "vaultSettings.title")}</h1>
-        <p className="muted">{props.t(
+    <section
+      className={`settings-page ${props.surface === "vault" ? "settings-vault-page" : ""}`}
+      aria-labelledby={props.surface === "maintenance" ? "settings-maintenance-title" : "settings-vault-title"}
+    >
+      <header className="settings-panel-header">
+        <h1 id={props.surface === "maintenance" ? "settings-maintenance-title" : "settings-vault-title"}>
+          {props.t(props.surface === "maintenance" ? "maintenance.title" : "vaultSettings.title")}
+        </h1>
+        <p>{props.t(
           props.surface === "maintenance" ? "maintenance.resetCopy" : "vaultSettings.subtitle"
         )}</p>
-      </div>
+      </header>
 
       {props.surface === "vault" ? <>
-      <InfoGroup
-        title={props.t("vaultSettings.currentVault")}
-        rows={[
-          [props.t("field.name"), props.vault.name],
-          [props.t("field.vaultPath"), props.vault.activeVaultPathDisplay],
-          [props.t("field.noteStorage"), props.vault.knowledgeRootDisplay],
-          [
-            props.t("field.sourceAssets"),
-            props.vault.sourceAssetRootKind === "external_binding"
-              ? props.t("vaultSettings.externalRootUnavailable")
-              : props.vault.sourceAssetRootDisplay
-          ],
-          [props.t("field.schema"), String(props.vault.schemaVersion)]
-        ]}
-      />
-
-      <section className="settings-group">
-        <h2>{props.t("sourceStorage.title")}</h2>
-        <select
-          value={props.vault.defaultSourceStorageStrategy}
-          disabled={props.busy || Boolean(revealTarget)}
-          onChange={(event) => void updatePolicy(event.target.value as SourceStorageStrategy)}
-        >
-          <option value="copy_to_source_library">{props.t("sourceStorage.copy")}</option>
-          <option value="reference_original">{props.t("sourceStorage.reference")}</option>
-        </select>
-      </section>
-
-      <section className="settings-actions" aria-busy={revealTarget ? "true" : undefined}>
-        <button
-          ref={knowledgeRootButtonRef}
-          type="button"
-          disabled={props.busy || Boolean(revealTarget)}
-          onClick={() => void revealStorageRoot("knowledge_root")}
-        >
-          {props.t("vaultSettings.openInFinder")}
-        </button>
-        <button
-          ref={sourceAssetRootButtonRef}
-          type="button"
-          className="secondary"
-          disabled={props.busy || Boolean(revealTarget)}
-          onClick={() => void revealStorageRoot("source_asset_root")}
-        >
-          {props.t("vaultSettings.openSourceAssets")}
-        </button>
-        <button type="button" className="secondary" onClick={props.onOpen} disabled={props.busy || Boolean(revealTarget)}>
-          {props.t("vaultSettings.openAnother")}
-        </button>
-        <button type="button" className="secondary" onClick={props.onCreate} disabled={props.busy || Boolean(revealTarget)}>
-          {props.t("vaultSettings.createNew")}
-        </button>
-      </section>
-      {revealNotice ? (
-        <p className={revealNotice.kind === "error" ? "error" : "muted"} role="status" aria-live="polite">
-          {revealNotice.message}
-        </p>
-      ) : null}
-
-      <InfoGroup
-        title={props.t("counts.title")}
-        rows={[
-          [props.t("counts.notes"), String(props.vault.counts?.notes ?? 0)],
-          [props.t("counts.sources"), String(props.vault.counts?.sources ?? 0)],
-          [props.t("counts.managedCopies"), String(props.vault.counts?.managedSourceCopies ?? 0)],
-          [props.t("counts.referencedOriginals"), String(props.vault.counts?.referencedOriginals ?? 0)]
-        ]}
-      />
-
-      <section className="settings-group">
-        <h2>{props.t("backup.title")}</h2>
-        <dl>
-          <div className="info-row">
-            <dt>{props.t("backup.lastBackup")}</dt>
-            <dd>{props.backupStatus?.lastBackupAt ?? props.t("backup.never")}</dd>
+      <div className="settings-summary-grid" aria-label={props.t("counts.title")}>
+        {([
+          [props.t("counts.notes"), props.vault.counts?.notes ?? 0],
+          [props.t("counts.sources"), props.vault.counts?.sources ?? 0],
+          [props.t("counts.managedCopies"), props.vault.counts?.managedSourceCopies ?? 0],
+          [props.t("counts.referencedOriginals"), props.vault.counts?.referencedOriginals ?? 0]
+        ] as const).map(([label, value]) => (
+          <div className="settings-summary" key={label}>
+            <strong>{value.toLocaleString(props.locale === "zh-Hans" ? "zh-CN" : props.locale)}</strong>
+            <span>{label}</span>
           </div>
-        </dl>
-        <p className="muted">
-          {props.backupStatus?.messageKey ? props.t(props.backupStatus.messageKey) : props.t("backup.loading")}
-        </p>
+        ))}
+      </div>
+
+      <section className="settings-section" aria-labelledby="vault-current-title">
+        <h2 className="settings-section-title" id="vault-current-title">{props.t("vaultSettings.currentVault")}</h2>
+        <div className="settings-card" aria-busy={revealTarget ? "true" : undefined}>
+          <div className="settings-row tall">
+            <div className="settings-row-copy">
+              <strong>{props.vault.name}</strong>
+              <span>{props.vault.activeVaultPathDisplay}</span>
+            </div>
+            <span className="settings-status">{props.t("vaultSettings.connected")}</span>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("field.noteStorage")}</strong>
+              <span>{props.vault.knowledgeRootDisplay}</span>
+            </div>
+            <button
+              ref={knowledgeRootButtonRef}
+              className="settings-button settings-action"
+              type="button"
+              disabled={props.busy || Boolean(revealTarget)}
+              onClick={() => void revealStorageRoot("knowledge_root")}
+            >
+              {props.t("vaultSettings.openInFinder")}
+            </button>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("field.sourceAssets")}</strong>
+              <span>{props.vault.sourceAssetRootKind === "external_binding"
+                ? props.t("vaultSettings.externalRootUnavailable")
+                : props.vault.sourceAssetRootDisplay}</span>
+            </div>
+            <button
+              ref={sourceAssetRootButtonRef}
+              className="settings-button settings-action"
+              type="button"
+              disabled={props.busy || Boolean(revealTarget)}
+              onClick={() => void revealStorageRoot("source_asset_root")}
+            >
+              {props.t("vaultSettings.openSourceAssets")}
+            </button>
+          </div>
+          <label className="settings-row" htmlFor="vault-source-storage-strategy">
+            <span className="settings-row-copy">
+              <strong>{props.t("sourceStorage.title")}</strong>
+              <span>{props.t("sourceStorage.description")}</span>
+            </span>
+            <select
+              className="settings-select"
+              id="vault-source-storage-strategy"
+              value={props.vault.defaultSourceStorageStrategy}
+              disabled={props.busy || Boolean(revealTarget)}
+              onChange={(event) => void updatePolicy(event.target.value as SourceStorageStrategy)}
+            >
+              <option value="copy_to_source_library">{props.t("sourceStorage.copy")}</option>
+              <option value="reference_original">{props.t("sourceStorage.reference")}</option>
+            </select>
+          </label>
+        </div>
+        <div className="settings-inline-actions">
+          <button type="button" className="settings-button" onClick={props.onOpen} disabled={props.busy || Boolean(revealTarget)}>
+            {props.t("vaultSettings.openAnother")}
+          </button>
+          <button type="button" className="settings-button" onClick={props.onCreate} disabled={props.busy || Boolean(revealTarget)}>
+            {props.t("vaultSettings.createNew")}
+          </button>
+        </div>
+        {revealNotice ? (
+          <p className={revealNotice.kind === "error" ? "error" : "settings-note"} role="status" aria-live="polite">
+            {revealNotice.message}
+          </p>
+        ) : null}
+      </section>
+
+      <section className="settings-section" aria-labelledby="vault-backup-title">
+        <h2 className="settings-section-title" id="vault-backup-title">{props.t("backup.title")}</h2>
+        <div className="settings-card">
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("backup.lastBackup")}</strong>
+              <span>{lastBackupDisplay} · {props.t("backup.excludesSecrets")}</span>
+            </div>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("backup.contents")}</strong>
+              <span>{props.backupStatus?.messageKey ? props.t(props.backupStatus.messageKey) : props.t("backup.loading")}</span>
+            </div>
+            <button className="settings-button" type="button" onClick={props.onOpenMemory}>
+              {props.t("backup.viewMemory")}
+            </button>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("backup.protectKnowledge")}</strong>
+              <span>{props.t("backup.protectKnowledgeDescription")}</span>
+            </div>
+            <div className="settings-row-control">
+              <button
+                className="settings-button primary"
+                type="button"
+                disabled={backupBusy || !props.backupStatus?.createAvailable}
+                onClick={() => void createBackup()}
+              >
+                {props.t("backup.create")}
+              </button>
+              <button
+                ref={restore.previewButtonRef}
+                className="settings-button"
+                type="button"
+                disabled={backupBusy || restore.restorePhase !== "idle" || !props.backupStatus?.restoreAvailable}
+                onClick={() => void restore.previewRestore()}
+              >
+                {props.t(restore.restorePhase === "previewing" ? "backup.opening" : "backup.restore")}
+              </button>
+            </div>
+          </div>
         {activeBackupJob ? (
-          <div className="backup-job-status" role="status" aria-live="polite">
-            <p>{props.t(backupJobMessageKey(activeBackupJob))}</p>
-            <div className="settings-actions">
+          <div className="settings-row tall backup-job-status" role="status" aria-live="polite">
+            <div className="settings-row-copy">
+              <strong>{props.t("backup.currentJob")}</strong>
+              <span>{props.t(backupJobMessageKey(activeBackupJob))}</span>
+              {activeBackupJob.state === "waiting_dependency" ? (
+                <span id="backup-reconnect-managed-source-unavailable">
+                  {props.t("backup.reconnectManagedSourceUnavailable")}
+                </span>
+              ) : null}
+            </div>
+            <div className="settings-row-control">
               {activeBackupJob.state === "queued" || activeBackupJob.state === "running" ? (
-                <button type="button" className="secondary" disabled={backupBusy} onClick={() => void cancelBackup()}>
+                <button type="button" className="settings-button" disabled={backupBusy} onClick={() => void cancelBackup()}>
                   {props.t("home.cancelJob")}
                 </button>
               ) : activeBackupJob.state === "failed_retryable" && activeBackupJob.error?.userAction === "retry" ? (
-                <button type="button" className="secondary" disabled={backupBusy} onClick={() => void retryBackup()}>
+                <button type="button" className="settings-button" disabled={backupBusy} onClick={() => void retryBackup()}>
                   {props.t("home.retryJob")}
                 </button>
               ) : activeBackupJob.state === "waiting_dependency" ? (
                 <button
                   type="button"
-                  className="secondary"
+                  className="settings-button"
                   disabled
                   aria-describedby="backup-reconnect-managed-source-unavailable"
                 >
@@ -6811,34 +6886,8 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
                 </button>
               ) : null}
             </div>
-            {activeBackupJob.state === "waiting_dependency" ? (
-              <p className="muted" id="backup-reconnect-managed-source-unavailable">
-                {props.t("backup.reconnectManagedSourceUnavailable")}
-              </p>
-            ) : null}
           </div>
         ) : null}
-        <div className="settings-actions">
-          <button
-            type="button"
-            disabled={backupBusy || !props.backupStatus?.createAvailable}
-            onClick={() => void createBackup()}
-          >
-            {props.t("backup.create")}
-          </button>
-          <button
-            ref={restore.previewButtonRef}
-            type="button"
-            className="secondary"
-            disabled={
-              backupBusy ||
-              restore.restorePhase !== "idle" ||
-              !props.backupStatus?.restoreAvailable
-            }
-            onClick={() => void restore.previewRestore()}
-          >
-            {props.t(restore.restorePhase === "previewing" ? "backup.opening" : "backup.restore")}
-          </button>
         </div>
         {backupNotice ? <p className="muted">{backupNotice}</p> : null}
         {restore.restorePreview ? (
@@ -6858,6 +6907,7 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
         {!restore.restorePreview && restore.restoreErrorKey ? (
           <p className="error" role="alert">{props.t(restore.restoreErrorKey)}</p>
         ) : null}
+        <p className="settings-note">{props.t("backup.recentVaultNote")}</p>
       </section>
       </> : null}
 
@@ -7970,19 +8020,21 @@ function RecentVaults(props: {
   if (props.recentVaults.length === 0) return null;
 
   return (
-    <section className="settings-group recent-list">
-      <h2>{props.t("recent.title")}</h2>
-      {props.recentVaults.map((recent) => (
-        <div className="recent-item" key={recent.vaultId}>
-          <div>
-            <strong>{recent.name}</strong>
-            <span>{recent.pathDisplay}</span>
+    <section className="settings-section recent-list" aria-labelledby="recent-vaults-title">
+      <h2 className="settings-section-title" id="recent-vaults-title">{props.t("recent.title")}</h2>
+      <div className="settings-card">
+        {props.recentVaults.map((recent) => (
+          <div className="settings-row" key={recent.vaultId}>
+            <div className="settings-row-copy">
+              <strong>{recent.name}</strong>
+              <span>{recent.pathDisplay}</span>
+            </div>
+            <button className="settings-button" type="button" onClick={() => void props.onRemoveRecent(recent.vaultId)}>
+              {props.t("recent.remove")}
+            </button>
           </div>
-          <button type="button" className="ghost" onClick={() => void props.onRemoveRecent(recent.vaultId)}>
-            {props.t("recent.remove")}
-          </button>
-        </div>
-      ))}
+        ))}
+      </div>
     </section>
   );
 }

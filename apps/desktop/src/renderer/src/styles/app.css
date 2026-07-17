@@ -4690,6 +4690,65 @@ dd {
   font-weight: 600;
 }
 
+.settings-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: .5px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--border-default);
+}
+
+.settings-summary {
+  min-width: 0;
+  padding: 14px 10px;
+  background: var(--surface-elevated);
+  text-align: center;
+}
+
+.settings-summary strong {
+  display: block;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+}
+
+.settings-summary span {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.settings-vault-page .backup-job-status {
+  background: var(--surface-subtle);
+}
+
+@media (max-width: 560px) {
+  .settings-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .settings-vault-page .settings-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .settings-vault-page .settings-row > .settings-button,
+  .settings-vault-page .settings-row > .settings-select,
+  .settings-vault-page .settings-row > .settings-row-control {
+    width: 100%;
+  }
+
+  .settings-vault-page .settings-row-control .settings-button {
+    flex: 1 1 132px;
+  }
+}
+
 .settings-card {
   overflow: hidden;
   border: .5px solid var(--border-default);
