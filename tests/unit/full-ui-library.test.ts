@@ -626,7 +626,7 @@ describe("full UI Library", () => {
     dom.window.close();
   });
 
-  it("drops an old inline-reference result after the Reader page identity changes", async () => {
+  it("drops an old inline-reference result after the Reader render context changes", async () => {
     const dom = createDom();
     const root = createRoot(dom.window.document.querySelector("#root")!);
     const oldResult = deferred<ReaderInlineReferenceActivation>();
@@ -637,6 +637,7 @@ describe("full UI Library", () => {
     };
     const oldNote = {
       ...readerNote(),
+      renderContextId: `notectx_${"a".repeat(32)}`,
       html: '<p><a href="#wiki:page_20260715_old11111">Old note</a></p>'
     };
     await act(async () => {
@@ -663,7 +664,7 @@ describe("full UI Library", () => {
 
     const nextNote = {
       ...readerNote(),
-      summary: { ...readerNote().summary, pageId: "page_20260715_reader2222", title: "Next note" },
+      renderContextId: `notectx_${"b".repeat(32)}`,
       html: '<p><a href="#wiki:page_20260715_new22222">New note</a></p>'
     };
     await act(async () => {
