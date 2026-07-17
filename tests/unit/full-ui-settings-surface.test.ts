@@ -123,6 +123,11 @@ describe("full UI Settings surface", () => {
     expect(compactSettings).toContain('.settings-surface[data-compact-navigation-open="true"] .settings-sidebar');
     expect(compactSettings).toContain(".app-window.platform-macos + .settings-overlay .settings-compact-header");
     expect(compactSettings).toContain("padding-left: 84px;");
+    expect(styles).toContain(".settings-summary-grid {");
+    expect(styles).toContain("grid-template-columns: repeat(4, minmax(0, 1fr));");
+    expect(styles).toContain("@media (max-width: 560px) {");
+    expect(styles).toContain("grid-template-columns: repeat(2, minmax(0, 1fr));");
+    expect(styles).toContain(".settings-vault-page .settings-row-control .settings-button");
   });
 
   it("uses a focus-owned navigation drawer instead of squeezing compact Settings content", async () => {
