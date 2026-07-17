@@ -11,6 +11,75 @@ export const VaultIdSchema = z.string().regex(PIGE_VAULT_ID_PATTERN);
 // files, jobs, IPC DTOs, migrations, and documentation do not invent aliases.
 export const SourceIdSchema = z.string().regex(/^src_\d{8}_[a-z0-9]{8,}$/);
 export const PageIdSchema = z.string().regex(/^page_\d{8}_[a-z0-9]{8,}$/);
+export const NoteInlineReferenceRequestIdSchema = z.string().regex(/^noteref_[a-z0-9]{16,64}$/);
+export const NoteRenderContextIdSchema = z.string().regex(/^notectx_[a-z0-9]{32}$/);
+const UnsafeInlineReferenceCharacterSchema = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u;
+export const CitationLocatorSchema = z.string()
+  .min(1)
+  .max(512)
+  .refine(
+    (value) => !UnsafeInlineReferenceCharacterSchema.test(value),
+    "Citation locators must not contain control or bidirectional override characters."
+  );
+export const NoteInlineReferenceHrefSchema = z.string()
+  .min(1)
+  .max(1024)
+  .refine(
+    (value) =>
+      (value.startsWith("#wiki:") || value.startsWith("#source:")) &&
+      new TextEncoder().encode(value).byteLength <= 1024 &&
+      !UnsafeInlineReferenceCharacterSchema.test(value),
+    "Inline note references must use a 1024-byte internal href without control characters."
+  );
+export const NoteResolveInlineReferenceRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: NoteInlineReferenceRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  currentPageId: PageIdSchema,
+  renderContextId: NoteRenderContextIdSchema,
+  href: NoteInlineReferenceHrefSchema
+}).strict();
+export const NoteInlineReferenceTargetSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("page"),
+    pageId: PageIdSchema
+  }).strict(),
+  z.object({
+    kind: z.literal("source"),
+    sourceId: SourceIdSchema,
+    pageId: PageIdSchema,
+    locator: CitationLocatorSchema.max(256).optional()
+  }).strict()
+]);
+export const NoteResolveInlineReferenceResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    apiVersion: z.literal(1),
+    requestId: NoteInlineReferenceRequestIdSchema,
+    status: z.literal("resolved"),
+    target: NoteInlineReferenceTargetSchema
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    requestId: NoteInlineReferenceRequestIdSchema,
+    status: z.literal("ambiguous")
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    requestId: NoteInlineReferenceRequestIdSchema,
+    status: z.literal("not_found")
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    requestId: NoteInlineReferenceRequestIdSchema,
+    status: z.literal("stale"),
+    scope: z.enum(["vault", "page", "render_context"])
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    requestId: NoteInlineReferenceRequestIdSchema,
+    status: z.literal("failed")
+  }).strict()
+]);
 export const CaptureIdSchema = z.string().regex(/^cap_\d{8}_[a-z0-9]{8,}$/);
 export const ConversationIdSchema = z.string().regex(/^conv_\d{8}(?:_[a-z0-9]{4,})?$/);
 export const ConversationEventIdSchema = z.string().regex(/^evt_\d{8}_[a-z0-9]{8,}$/);
@@ -1443,7 +1512,7 @@ export const RetrievalAnswerCitationSchema = z.object({
   pageId: PageIdSchema,
   title: z.string().min(1).max(240),
   pageType: MarkdownPageTypeSchema,
-  locator: z.string().min(1).max(512)
+  locator: CitationLocatorSchema
 }).strict();
 
 export const DatasetAnswerCitationSchema = z.object({
@@ -1451,7 +1520,7 @@ export const DatasetAnswerCitationSchema = z.object({
   refId: DatasetCitationRefIdSchema,
   label: z.string().min(1).max(160),
   title: z.string().min(1).max(240),
-  locator: z.string().min(1).max(512),
+  locator: CitationLocatorSchema,
   evidence: DatasetEvidenceRefSchema
 }).strict();
 
@@ -2690,6 +2759,11 @@ export type JobState = z.infer<typeof JobStateSchema>;
 export type MachineLocalSettings = z.infer<typeof MachineLocalSettingsSchema>;
 export type MarkdownPageStatus = z.infer<typeof MarkdownPageStatusSchema>;
 export type MarkdownPageType = z.infer<typeof MarkdownPageTypeSchema>;
+export type NoteInlineReferenceTarget = z.infer<typeof NoteInlineReferenceTargetSchema>;
+export type NoteInlineReferenceRequestId = z.infer<typeof NoteInlineReferenceRequestIdSchema>;
+export type NoteRenderContextId = z.infer<typeof NoteRenderContextIdSchema>;
+export type NoteResolveInlineReferenceRequest = z.infer<typeof NoteResolveInlineReferenceRequestSchema>;
+export type NoteResolveInlineReferenceResult = z.infer<typeof NoteResolveInlineReferenceResultSchema>;
 export type ModelListStrategy = z.infer<typeof ModelListStrategySchema>;
 export type ModelEgressContentClass = z.infer<typeof ModelEgressContentClassSchema>;
 export type ModelEgressApprovalDecision = z.infer<typeof ModelEgressApprovalDecisionSchema>;

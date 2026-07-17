@@ -49,6 +49,8 @@ import type {
   ProviderConnectResult,
   NoteDocument,
   NoteGetRequest,
+  NoteResolveInlineReferenceRequest,
+  NoteResolveInlineReferenceResult,
   NoteRenderRequest,
   NoteRenderResult,
   OnboardingStatus,
@@ -105,6 +107,8 @@ import type {
 import {
   RetrievalSearchRequestSchema,
   RetrievalSearchResultSchema,
+  NoteResolveInlineReferenceRequestSchema,
+  NoteResolveInlineReferenceResultSchema,
   SpeechAvailabilityRequestSchema,
   SpeechAvailabilityResultSchema,
   SpeechAssetInstallEventSchema,
@@ -366,7 +370,16 @@ const api: PigeDesktopApi = {
     get: async (request: NoteGetRequest): Promise<NoteDocument> =>
       ipcRenderer.invoke("notes.get", request) as Promise<NoteDocument>,
     render: async (request: NoteRenderRequest): Promise<NoteRenderResult> =>
-      ipcRenderer.invoke("notes.render", request) as Promise<NoteRenderResult>
+      ipcRenderer.invoke("notes.render", request) as Promise<NoteRenderResult>,
+    resolveInlineReference: async (
+      request: NoteResolveInlineReferenceRequest
+    ): Promise<NoteResolveInlineReferenceResult> =>
+      NoteResolveInlineReferenceResultSchema.parse(
+        await ipcRenderer.invoke(
+          "notes.resolveInlineReference",
+          NoteResolveInlineReferenceRequestSchema.parse(request)
+        )
+      )
   },
   retrieval: {
     search: invokeRetrievalSearch

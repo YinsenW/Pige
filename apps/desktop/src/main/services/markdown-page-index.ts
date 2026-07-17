@@ -20,6 +20,11 @@ export interface MarkdownPageRecord {
   readonly knowledge: MarkdownPageKnowledgeFields;
 }
 
+export interface MarkdownPageRecordAtSignature {
+  readonly page: MarkdownPageRecord;
+  readonly signature: MarkdownFileSignatureRecord;
+}
+
 export interface MarkdownPageKnowledgeFields {
   readonly aliases: readonly string[];
   readonly tags: readonly string[];
@@ -42,8 +47,47 @@ export interface MarkdownFileSignatureRecord {
   readonly fileId: string;
 }
 
+export type MarkdownPageReferenceKeyKind = "stable_id" | "title" | "alias" | "path" | "slug";
+
+export interface MarkdownPageReferenceKey {
+  readonly key: string;
+  readonly kind: MarkdownPageReferenceKeyKind;
+}
+
 export const MARKDOWN_FRONTMATTER_READ_LIMIT_BYTES = 64 * 1024;
 const PAGE_ROOTS = ["sources", "wiki"] as const;
+const UNSAFE_REFERENCE_CHARACTER_PATTERN = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u;
+
+export function normalizeMarkdownPageReferenceKey(value: string): string {
+  const normalized = value.normalize("NFKC").replace(/\s+/gu, " ").trim();
+  if (
+    normalized.length === 0 ||
+    normalized.length > 256 ||
+    UNSAFE_REFERENCE_CHARACTER_PATTERN.test(normalized)
+  ) {
+    return "";
+  }
+  return normalized.toLocaleLowerCase("en-US");
+}
+
+export function createMarkdownPageReferenceKeys(page: MarkdownPageRecord): readonly MarkdownPageReferenceKey[] {
+  const pagePath = page.summary.pagePath.replace(/\\/gu, "/");
+  const candidates: readonly (readonly [MarkdownPageReferenceKeyKind, string])[] = [
+    ["stable_id", page.summary.pageId],
+    ["title", page.summary.title],
+    ...page.knowledge.aliases.map((alias) => ["alias", alias] as const),
+    ["path", pagePath],
+    ["path", pagePath.replace(/\.md$/iu, "")],
+    ["slug", path.posix.basename(pagePath)],
+    ["slug", path.posix.basename(pagePath).replace(/\.md$/iu, "")]
+  ];
+  const unique = new Map<string, MarkdownPageReferenceKey>();
+  for (const [kind, value] of candidates) {
+    const key = normalizeMarkdownPageReferenceKey(value);
+    if (key) unique.set(`${kind}\0${key}`, { key, kind });
+  }
+  return [...unique.values()];
+}
 
 export function scanMarkdownPages(vaultPath: string): MarkdownPageScanResult {
   const pages: MarkdownPageRecord[] = [];
@@ -100,11 +144,18 @@ export function assertMarkdownPagePathConfined(vaultPath: string, filePath: stri
 }
 
 export function findMarkdownPageById(vaultPath: string, pageId: string): MarkdownPageRecord | undefined {
+  return findMarkdownPageByIdAtSignature(vaultPath, pageId)?.page;
+}
+
+export function findMarkdownPageByIdAtSignature(
+  vaultPath: string,
+  pageId: string
+): MarkdownPageRecordAtSignature | undefined {
   if (!/^page_\d{8}_[a-z0-9]{8,}$/u.test(pageId)) return undefined;
   for (const file of scanMarkdownFileSignatures(vaultPath)) {
     assertMarkdownPagePathConfined(vaultPath, file.absolutePath);
     const record = readMarkdownPageRecord(vaultPath, file.absolutePath, file);
-    if (record?.summary.pageId === pageId) return record;
+    if (record?.summary.pageId === pageId) return { page: record, signature: file };
   }
   return undefined;
 }
@@ -152,7 +203,25 @@ export function readMarkdownPageByRelativePath(
     const realRoot = fs.realpathSync(pageRoot);
     const realFile = fs.realpathSync(filePath);
     if (!realFile.startsWith(`${realRoot}${path.sep}`)) return undefined;
-    return readMarkdownPageRecord(vaultPath, filePath);
+    const expected: MarkdownFileSignatureRecord = {
+      absolutePath: filePath,
+      pagePath,
+      sizeBytes: stat.size,
+      mtimeMs: stat.mtimeMs,
+      ctimeMs: stat.ctimeMs,
+      deviceId: String(stat.dev),
+      fileId: String(stat.ino)
+    };
+    const record = readMarkdownPageRecord(vaultPath, filePath, expected);
+    assertMarkdownPagePathConfined(vaultPath, filePath);
+    const named = fs.lstatSync(filePath);
+    if (
+      named.isSymbolicLink() ||
+      !named.isFile() ||
+      !matchesSignature(named, expected) ||
+      fs.realpathSync(filePath) !== realFile
+    ) return undefined;
+    return record;
   } catch {
     return undefined;
   }
