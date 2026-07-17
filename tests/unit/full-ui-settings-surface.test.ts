@@ -1,9 +1,17 @@
 import { createElement, useState } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import fs from "node:fs";
+import path from "node:path";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  AgentMemorySettingsPanel,
+  AppearanceSettingsPanel,
+  GeneralSettingsPanel,
+  LocalCapabilitiesSettingsPanel,
+  PiPackagesSettingsPanel,
+  PermissionsPrivacySettingsPanel,
   SettingsSurface,
   SkillsSettingsPanel,
   SystemSettingsPanel,
@@ -12,7 +20,7 @@ import {
 } from "../../apps/desktop/src/renderer/src/App";
 import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.json";
 
-const globalKeys = ["window", "document", "navigator", "Node", "HTMLElement", "Event", "KeyboardEvent", "MouseEvent"] as const;
+const globalKeys = ["window", "document", "navigator", "Node", "HTMLElement", "HTMLSelectElement", "Event", "KeyboardEvent", "MouseEvent"] as const;
 const originalDescriptors = new Map<PropertyKey, PropertyDescriptor | undefined>();
 
 afterEach(() => {
@@ -26,6 +34,175 @@ afterEach(() => {
 });
 
 describe("full UI Settings surface", () => {
+  it("reflects WindowLayout persistence without inventing a startup preference", async () => {
+    const dom = createDom();
+    const onAlwaysOnTopChange = vi.fn(async () => undefined);
+    const onDevelopment = vi.fn();
+    const onOpenAppearance = vi.fn();
+    let ipcRead = false;
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      get() {
+        ipcRead = true;
+        throw new Error("General must use only its provided adapters.");
+      }
+    });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+
+    await act(async () => {
+      root.render(createElement(GeneralSettingsPanel, {
+        alwaysOnTop: false,
+        onAlwaysOnTopChange,
+        onOpenAppearance,
+        onDevelopment,
+        t
+      }));
+      await settle(dom);
+    });
+
+    const page = dom.window.document.querySelector<HTMLElement>(".settings-general")!;
+    expect(page.querySelectorAll(".settings-section")).toHaveLength(2);
+    expect(page.querySelectorAll(".settings-row")).toHaveLength(7);
+    expect(page.textContent).toContain("Startup & Window");
+    expect(page.textContent).toContain("Pige");
+    expect(page.textContent).toContain("Adaptive");
+    expect(page.textContent).toContain("Automatic");
+    expect(page.textContent).toContain("Last state");
+    expect(page.textContent).toContain("Temporary pane expansion is never saved as the base size.");
+    expect(page.textContent).toContain("A constrained display may present Note Agent as an overlay.");
+    expect(page.querySelector("select")).toBeNull();
+    const alwaysOnTop = requireElement(page.querySelector<HTMLButtonElement>(
+      'button[role="switch"][aria-label="Keep Pige on top"]'
+    ));
+    expect(alwaysOnTop.getAttribute("aria-checked")).toBe("false");
+
+    await act(async () => {
+      for (const button of Array.from(page.querySelectorAll<HTMLButtonElement>(".settings-button"))) {
+        button.click();
+      }
+      alwaysOnTop.click();
+      await settle(dom);
+    });
+
+    expect(onDevelopment).toHaveBeenCalledOnce();
+    expect(onOpenAppearance).toHaveBeenCalledOnce();
+    expect(onAlwaysOnTopChange).toHaveBeenCalledOnce();
+    expect(ipcRead).toBe(false);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps compact localized Settings navigation labels readable", () => {
+    const styles = fs.readFileSync(
+      path.resolve("apps/desktop/src/renderer/src/styles/app.css"),
+      "utf8"
+    );
+    const compactSettings = styles.slice(
+      styles.indexOf("@media (max-width: 520px)"),
+      styles.indexOf("@media (min-width: 761px)")
+    );
+    const residentCompactSettings = styles.slice(
+      styles.indexOf("@media (max-width: 679px)"),
+      styles.indexOf("@media (min-width: 680px)")
+    );
+
+    expect(styles).toContain(".settings-nav-scroll {\n  min-height: 0;\n  flex: 1 1 auto;");
+    expect(styles).toContain(".app-window.platform-macos + .settings-overlay .settings-return");
+    expect(styles).toContain("margin-left: 64px;");
+    expect(residentCompactSettings).toContain(".settings-navigation {");
+    expect(residentCompactSettings).toContain("display: block;");
+    expect(residentCompactSettings).toContain("max-height: none;");
+    expect(residentCompactSettings).toContain("overflow: visible;");
+    expect(compactSettings).toContain(".settings-nav-item > span");
+    expect(compactSettings).toContain("white-space: normal;");
+    expect(compactSettings).toContain("overflow-wrap: anywhere;");
+    expect(compactSettings).toContain("text-overflow: clip;");
+    expect(compactSettings).toContain("grid-template-columns: minmax(0, 1fr);");
+    expect(compactSettings).toContain("width: min(320px, calc(100% - 48px));");
+    expect(compactSettings).toContain('.settings-surface[data-compact-navigation-open="true"] .settings-sidebar');
+    expect(compactSettings).toContain(".app-window.platform-macos + .settings-overlay .settings-compact-header");
+    expect(compactSettings).toContain("padding-left: 84px;");
+  });
+
+  it("uses a focus-owned navigation drawer instead of squeezing compact Settings content", async () => {
+    const dom = createDom();
+    installMatchMedia(dom, true);
+    const close = vi.fn();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+
+    function Harness(): React.JSX.Element {
+      const [section, setSection] = useState<SettingsSection>("general");
+      return createElement(SettingsSurface, {
+        section,
+        locale: "en",
+        availableLocales: ["en"],
+        alwaysOnTop: false,
+        developmentNotice: null,
+        onSectionChange: setSection,
+        onClose: close,
+        onLocaleChange: async () => undefined,
+        onAlwaysOnTopChange: async () => undefined,
+        onDevelopment: vi.fn(),
+        t
+      }, createElement("button", { type: "button" }, "Page control"));
+    }
+
+    await act(async () => {
+      root.render(createElement(Harness));
+      await settle(dom);
+    });
+
+    const dialog = requireElement(dom.window.document.querySelector<HTMLElement>('[role="dialog"]'));
+    const drawer = requireElement(dialog.querySelector<HTMLElement>(".settings-sidebar"));
+    const content = requireElement(dialog.querySelector<HTMLElement>(".settings-content"));
+    const trigger = buttonNamed(dialog, "Settings sections");
+    expect(dialog.dataset.compactNavigationOpen).toBe("false");
+    expect(drawer.getAttribute("aria-hidden")).toBe("true");
+    expect(drawer.hasAttribute("inert")).toBe(true);
+    expect(content.hasAttribute("inert")).toBe(false);
+    expect(dom.window.document.activeElement).toBe(trigger);
+
+    const pageControl = buttonNamed(content, "Page control");
+    await act(async () => {
+      trigger.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true }));
+    });
+    expect(dom.window.document.activeElement).toBe(pageControl);
+    await act(async () => {
+      pageControl.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+    });
+    expect(dom.window.document.activeElement).toBe(trigger);
+
+    await act(async () => {
+      trigger.click();
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(dialog.dataset.compactNavigationOpen).toBe("true");
+    expect(drawer.getAttribute("aria-hidden")).toBeNull();
+    expect(drawer.hasAttribute("inert")).toBe(false);
+    expect(content.hasAttribute("inert")).toBe(true);
+    const closeButton = buttonNamed(drawer, "Close Settings");
+    expect(dom.window.document.activeElement).toBe(closeButton);
+    const lastDrawerControl = buttonNamed(drawer, "Updates & DiagnosticsPartially available");
+    await act(async () => {
+      closeButton.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true }));
+    });
+    expect(dom.window.document.activeElement).toBe(lastDrawerControl);
+
+    await act(async () => {
+      dialog.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(dialog.dataset.compactNavigationOpen).toBe("false");
+    expect(close).not.toHaveBeenCalled();
+    expect(dom.window.document.activeElement).toBe(trigger);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("traps focus, closes with Escape, and keeps development activation local", async () => {
     const dom = createDom();
     const close = vi.fn();
@@ -81,11 +258,24 @@ describe("full UI Settings surface", () => {
     expect(ipcRead).toBe(false);
 
     await act(async () => {
-      buttonNamed(dialog, "AppearanceIn development").click();
+      buttonNamed(dialog, "Agent & MemoryIn development").click();
       await settle(dom);
     });
-    const status = dialog.querySelector<HTMLElement>('[role="status"]')!;
-    expect(status.textContent).toContain("In development");
+    expect(dialog.querySelector('[role="status"]')).toBeNull();
+    expect(ipcRead).toBe(false);
+
+    await act(async () => {
+      buttonNamed(dialog, "Local CapabilitiesPartially available").click();
+      await settle(dom);
+    });
+    expect(dialog.querySelector('[role="status"]')).toBeNull();
+    expect(ipcRead).toBe(false);
+
+    await act(async () => {
+      buttonNamed(dialog, "AppearancePartially available").click();
+      await settle(dom);
+    });
+    expect(dialog.querySelector('[role="status"]')).toBeNull();
     expect(ipcRead).toBe(false);
 
     const last = dom.window.document.querySelector<HTMLButtonElement>("#last-control")!;
@@ -139,6 +329,46 @@ describe("full UI Settings surface", () => {
     await act(async () => {
       buttonNamed(page, "Install from link").click();
       buttonNamed(page, "Choose Markdown or ZIP").click();
+      await settle(dom);
+    });
+    expect(onDevelopment).toHaveBeenCalledTimes(2);
+    expect(ipcRead).toBe(false);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("renders the complete Pi Packages shell without inventing registry data or service work", async () => {
+    const dom = createDom();
+    const onDevelopment = vi.fn();
+    let ipcRead = false;
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      get() {
+        ipcRead = true;
+        throw new Error("Pi Packages development actions must not access IPC.");
+      }
+    });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+
+    await act(async () => {
+      root.render(createElement(PiPackagesSettingsPanel, { onDevelopment, t }));
+      await settle(dom);
+    });
+
+    const page = dom.window.document.querySelector<HTMLElement>(".settings-packages")!;
+    expect(page.getAttribute("aria-labelledby")).toBe("settings-packages-title");
+    expect(page.querySelectorAll('[role="group"]')).toHaveLength(2);
+    expect(page.textContent).toContain("Package registry unavailable");
+    expect(page.textContent).toContain("Identity and trust stay visible");
+    expect(page.textContent).toContain("Capabilities and data boundary are reviewed");
+    expect(page.textContent).toContain("Lifecycle remains reversible");
+    expect(page.textContent).not.toContain("pi-obsidian-vault");
+    expect(page.querySelector("[data-package-id]")).toBeNull();
+
+    await act(async () => {
+      buttonNamed(page, "Install from source...").click();
+      buttonNamed(page, "Search Pi Catalog...").click();
       await settle(dom);
     });
     expect(onDevelopment).toHaveBeenCalledTimes(2);
@@ -277,6 +507,268 @@ describe("full UI Settings surface", () => {
     await act(async () => root.unmount());
     dom.window.close();
   });
+
+  it("keeps credential protection truthful without fabricating privacy preference values", async () => {
+    const dom = createDom();
+    let ipcRead = false;
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      get() {
+        ipcRead = true;
+        throw new Error("The partial privacy surface must not access IPC.");
+      }
+    });
+    const onDevelopment = vi.fn();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(PermissionsPrivacySettingsPanel, { onDevelopment, t }));
+      await settle(dom);
+    });
+
+    const container = dom.window.document.querySelector("#root")!;
+    expect(container.querySelector("h1")?.textContent).toBe("Permissions & Privacy");
+    expect(container.textContent).toContain("Ordinary selected context for connected services");
+    expect(container.textContent).toContain("Protected");
+    expect(container.textContent).toContain("Credential protection is real");
+    expect(container.textContent).not.toContain("Allowed");
+    expect(container.textContent).not.toContain("Ask every time");
+    expect(container.textContent).toContain("YOLO full accessCurrent status is unavailable");
+    expect(container.textContent).not.toContain("YOLO full accessOff");
+
+    expect(container.querySelector('select[aria-label="Cloud-send policy"]')).toBeNull();
+    expect(container.querySelector('select[aria-label="Default mode"]')).toBeNull();
+    expect(container.querySelector('button[role="switch"][aria-label="Hide obvious secrets before sending"]')).toBeNull();
+    const controls = Array.from(container.querySelectorAll<HTMLButtonElement>("[data-privacy-control]"));
+    expect(controls.map((control) => control.dataset.privacyControl)).toEqual([
+      "ordinary-policy",
+      "cloud-policy",
+      "redaction-policy",
+      "default-mode",
+      "saved-grants",
+      "yolo"
+    ]);
+    expect(controls.every((control) => control.textContent === "In development")).toBe(true);
+
+    await act(async () => {
+      for (const control of controls) control.click();
+      await settle(dom);
+    });
+    expect(onDevelopment).toHaveBeenCalledTimes(6);
+    expect(ipcRead).toBe(false);
+    expect(container.querySelector('[role="status"]')).toBeNull();
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("binds app language while keeping unfinished appearance choices honest and accessible", async () => {
+    const dom = createDom();
+    let ipcRead = false;
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      get() {
+        ipcRead = true;
+        throw new Error("The Appearance panel must use only its provided adapters.");
+      }
+    });
+    const onLocaleChange = vi.fn(async () => undefined);
+    const onDevelopment = vi.fn();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(AppearanceSettingsPanel, {
+        locale: "en",
+        availableLocales: ["en", "fr", "de"],
+        onLocaleChange,
+        onDevelopment,
+        t
+      }));
+      await settle(dom);
+    });
+
+    const container = dom.window.document.querySelector("#root")!;
+    expect(container.querySelector("h1")?.textContent).toBe("Appearance & Language");
+    const themeGroup = requireElement(container.querySelector<HTMLElement>('[role="radiogroup"]'));
+    const themes = Array.from(themeGroup.querySelectorAll<HTMLButtonElement>('[role="radio"]'));
+    expect(themes).toHaveLength(3);
+    expect(themes.map((theme) => theme.getAttribute("aria-checked"))).toEqual(["false", "true", "false"]);
+    expect(themes.map((theme) => theme.tabIndex)).toEqual([-1, 0, -1]);
+
+    await act(async () => {
+      themes[2]!.click();
+      themes[1]!.focus();
+      themes[1]!.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+      await settle(dom);
+    });
+    expect(dom.window.document.activeElement).toBe(themes[2]);
+    expect(themes.map((theme) => theme.getAttribute("aria-checked"))).toEqual(["false", "true", "false"]);
+
+    const appLanguage = requireElement(container.querySelector<HTMLSelectElement>('select[aria-label="App language"]'));
+    const knowledgeLanguage = requireElement(container.querySelector<HTMLButtonElement>('[data-appearance-control="knowledge-language"]'));
+    const ocrLanguage = requireElement(container.querySelector<HTMLButtonElement>('[data-appearance-control="ocr-language"]'));
+    expect(knowledgeLanguage.textContent).toBe("In development");
+    expect(ocrLanguage.textContent).toBe("In development");
+    expect(container.querySelector('select[aria-label="Knowledge language"]')).toBeNull();
+    expect(container.querySelector('select[aria-label="OCR language hint"]')).toBeNull();
+    await act(async () => {
+      selectValue(dom, appLanguage, "fr");
+      knowledgeLanguage.click();
+      ocrLanguage.click();
+      await settle(dom);
+    });
+    expect(onLocaleChange).toHaveBeenCalledWith("fr");
+    expect(onDevelopment).toHaveBeenCalledTimes(4);
+    expect(knowledgeLanguage.textContent).toBe("In development");
+    expect(ocrLanguage.textContent).toBe("In development");
+    expect(ipcRead).toBe(false);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("shows real toolchain health without exposing paths and keeps unfinished capability controls local", async () => {
+    const dom = createDom();
+    let ipcRead = false;
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      get() {
+        ipcRead = true;
+        throw new Error("The capabilities panel must use only its provided adapters.");
+      }
+    });
+    const onRefresh = vi.fn(async () => undefined);
+    const onDevelopment = vi.fn();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(LocalCapabilitiesSettingsPanel, {
+        toolchainHealth: {
+          status: "needs_repair",
+          checkedAt: "2026-07-16T01:00:00.000Z",
+          tools: [
+            {
+              id: "git",
+              name: "Git",
+              required: true,
+              status: "ready",
+              resolvedPath: "/private/hidden/bin/git"
+            },
+            {
+              id: "pdf-tools",
+              name: "PDF tools",
+              required: true,
+              status: "missing",
+              repairHint: "Install a private dependency from a private path."
+            }
+          ]
+        },
+        onRefresh,
+        onDevelopment,
+        t
+      }));
+      await settle(dom);
+    });
+
+    const container = dom.window.document.querySelector("#root")!;
+    expect(container.querySelector("h1")?.textContent).toBe("Local Capabilities");
+    expect(container.textContent).toContain("Needs repair");
+    expect(container.textContent).toContain("Git");
+    expect(container.textContent).toContain("PDF tools");
+    expect(container.textContent).toContain("Ready");
+    expect(container.textContent).toContain("Missing");
+    expect(container.textContent).not.toContain("/private/hidden/bin/git");
+    expect(container.textContent).not.toContain("Install a private dependency");
+    expect(container.textContent).toContain("Not reported");
+
+    const ocrEngine = requireElement(container.querySelector<HTMLButtonElement>('[data-capability-control="ocr-engine"]'));
+    const imageOcr = requireElement(container.querySelector<HTMLButtonElement>('[data-capability-control="image-ocr"]'));
+    const voice = requireElement(container.querySelector<HTMLButtonElement>('[data-capability-control="voice-input"]'));
+    expect(ocrEngine.textContent).toBe("In development");
+    expect(imageOcr.textContent).toBe("In development");
+    expect(voice.textContent).toBe("In development");
+    expect(container.querySelector('select[aria-label="OCR engine"]')).toBeNull();
+    expect(container.querySelector('button[role="switch"][aria-label="Image and scanned-page OCR"]')).toBeNull();
+    expect(container.querySelector('button[role="switch"][aria-label="Voice input"]')).toBeNull();
+
+    await act(async () => {
+      buttonNamed(container, "Check again").click();
+      buttonNamed(container, "Repair...").click();
+      buttonNamed(container, "Manage").click();
+      ocrEngine.click();
+      imageOcr.click();
+      voice.click();
+      await settle(dom);
+    });
+    expect(onRefresh).toHaveBeenCalledOnce();
+    expect(onDevelopment).toHaveBeenCalledTimes(5);
+    expect(ocrEngine.textContent).toBe("In development");
+    expect(imageOcr.textContent).toBe("In development");
+    expect(voice.textContent).toBe("In development");
+    expect(ipcRead).toBe(false);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("renders the complete memory surface without fabricating records or accessing an absent service", async () => {
+    const dom = createDom();
+    let ipcRead = false;
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      get() {
+        ipcRead = true;
+        throw new Error("The development memory surface must not access IPC.");
+      }
+    });
+    const onDevelopment = vi.fn();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(AgentMemorySettingsPanel, { onDevelopment, t }));
+      await settle(dom);
+    });
+
+    const container = dom.window.document.querySelector("#root")!;
+    expect(container.querySelector("h1")?.textContent).toBe("Agent & Memory");
+    expect(container.textContent).toContain("PIGE.md");
+    expect(container.textContent).toContain("Memory management is in development");
+    expect(container.textContent).toContain(
+      "Existing vault-scoped memory stays local and is included in backups by default. Management controls remain unavailable until the Agent Memory owner is connected."
+    );
+    expect(container.textContent).not.toContain("12 active memories");
+    expect(container.textContent).not.toContain("Prefers concise source summaries");
+
+    expect(container.querySelector('select[aria-label="High-impact changes"]')).toBeNull();
+    expect(container.querySelector('button[role="switch"][aria-label="Vault memory"]')).toBeNull();
+    expect(container.querySelector('button[role="checkbox"]')).toBeNull();
+    expect(container.textContent).not.toContain("Always confirm");
+    const controls = Array.from(container.querySelectorAll<HTMLButtonElement>("[data-memory-control]"));
+    expect(controls.map((control) => control.dataset.memoryControl)).toEqual([
+      "pige-policy",
+      "high-impact-policy",
+      "vault-memory"
+    ]);
+    expect(controls.every((control) => control.textContent === "In development")).toBe(true);
+    const scopes = Array.from(container.querySelectorAll<HTMLButtonElement>("[data-memory-scope]"));
+    expect(scopes).toHaveLength(4);
+    expect(scopes.every((scope) => scope.textContent?.includes("In development"))).toBe(true);
+
+    const reset = buttonNamed(container, "Reset memory...");
+    expect(reset.disabled).toBe(true);
+    expect(reset.title).toContain("unavailable");
+
+    await act(async () => {
+      for (const control of controls) control.click();
+      for (const scope of scopes) scope.click();
+      buttonNamed(container, "Inspect memory").click();
+      buttonNamed(container, "Export").click();
+      await settle(dom);
+    });
+    expect(onDevelopment).toHaveBeenCalledTimes(9);
+    expect(controls.every((control) => control.textContent === "In development")).toBe(true);
+    expect(scopes.every((scope) => scope.textContent?.includes("In development"))).toBe(true);
+    expect(ipcRead).toBe(false);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
 });
 
 function createDom(): JSDOM {
@@ -289,12 +781,43 @@ function createDom(): JSDOM {
   return dom;
 }
 
+function installMatchMedia(dom: JSDOM, matches: boolean): void {
+  Object.defineProperty(dom.window, "matchMedia", {
+    configurable: true,
+    value: () => ({
+      matches,
+      media: "(max-width: 520px)",
+      onchange: null,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      dispatchEvent: () => true
+    })
+  });
+  Object.defineProperty(dom.window, "requestAnimationFrame", {
+    configurable: true,
+    value: (callback: FrameRequestCallback) => dom.window.setTimeout(() => callback(0), 0)
+  });
+}
+
 function buttonNamed(container: ParentNode, name: string): HTMLButtonElement {
   const button = Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
     .find((candidate) => (candidate.getAttribute("aria-label") ?? candidate.textContent ?? "")
       .replace(/\s+/g, "").trim() === name.replace(/\s+/g, ""));
   if (!button) throw new Error(`Missing button: ${name}`);
   return button;
+}
+
+function requireElement<T>(value: T | null): T {
+  if (!value) throw new Error("Required element not found.");
+  return value;
+}
+
+function selectValue(dom: JSDOM, select: HTMLSelectElement, value: string): void {
+  const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLSelectElement.prototype, "value")?.set;
+  setter?.call(select, value);
+  select.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
 }
 
 async function settle(dom: JSDOM): Promise<void> {
