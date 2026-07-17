@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { PigeDomainError } from "@pige/domain";
 import type {
   DatasetAnswerCitation,
   DatasetQueryPreview,
@@ -274,11 +275,10 @@ describe("Home Pi Agent service", () => {
       makeRetrievalPort(directFixture.vault.vaultId, { onSearch: () => { directSearchCalls += 1; } }),
       new JobsService(directFixture.vaults),
       new PiAgentRuntimeAdapter({
-        fauxResponses: [finishHome({
-          answer: "你好，我可以直接和你聊，也可以在需要时查找本地知识。",
-          citationRefs: [],
-          grounding: "general"
-        })]
+        fauxResponses: [{
+          kind: "text",
+          text: "你好，我可以直接和你聊，也可以在需要时查找本地知识。"
+        }]
       })
     ).submitTurn({ text: "你好", inputKind: "typed_text", objective: "auto", locale: "zh-Hans" });
 
@@ -327,6 +327,88 @@ describe("Home Pi Agent service", () => {
     expect(readRecords<JobRecord>(path.join(retrievalFixture.vaultPath, ".pige", "jobs"))).toEqual([
       expect.objectContaining({ class: "agent_turn", state: "completed" })
     ]);
+  });
+
+  it("keeps evidence-backed prose behind the structured Home completion boundary", async () => {
+    const fixture = makeFixture();
+    const outcome = await new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      new PiAgentRuntimeAdapter({
+        fauxResponses: [
+          { kind: "tool_call", toolName: "pige_search_knowledge", args: {} },
+          { kind: "text", text: "This prose bypasses citation validation." }
+        ]
+      })
+    ).submitTurn({
+      text: "When is the launch?",
+      inputKind: "typed_text",
+      objective: "auto",
+      locale: "en"
+    });
+
+    expect(outcome).toMatchObject({
+      state: "failed",
+      error: {
+        code: "agent_runtime.knowledge_action_missing",
+        messageKey: "errors.agent_runtime.completion_invalid"
+      }
+    });
+  });
+
+  it("reports only real generation success or provider-call failure to the model owner", async () => {
+    const successFixture = makeFixture();
+    const outcomes: Array<"verified" | "failed"> = [];
+    const models: HomeAgentModelPort = {
+      ...makeModels(),
+      recordGenerationOutcome: (_providerProfileId, outcome) => outcomes.push(outcome)
+    };
+    const success = await new HomeAgentService(
+      successFixture.vaults,
+      models,
+      makeRetrievalPort(successFixture.vault.vaultId),
+      new JobsService(successFixture.vaults),
+      new PiAgentRuntimeAdapter({ fauxResponses: [{ kind: "text", text: "Generation works." }] })
+    ).submitTurn({ text: "Hello", inputKind: "typed_text", objective: "auto", locale: "en" });
+
+    const failureFixture = makeFixture();
+    const failure = await new HomeAgentService(
+      failureFixture.vaults,
+      models,
+      makeRetrievalPort(failureFixture.vault.vaultId),
+      new JobsService(failureFixture.vaults),
+      {
+        run: async () => {
+          throw new PigeDomainError("model_provider.call_failed", "Synthetic provider call failed.");
+        }
+      }
+    ).submitTurn({ text: "Hello again", inputKind: "typed_text", objective: "auto", locale: "en" });
+
+    const hostFailureFixture = makeFixture();
+    const hostFailure = await new HomeAgentService(
+      hostFailureFixture.vaults,
+      models,
+      makeRetrievalPort(hostFailureFixture.vault.vaultId),
+      new JobsService(hostFailureFixture.vaults),
+      {
+        run: async () => {
+          throw new PigeDomainError("model_provider.binding_changed", "Synthetic model binding drifted.");
+        }
+      }
+    ).submitTurn({ text: "One more", inputKind: "typed_text", objective: "auto", locale: "en" });
+
+    expect(success.state).toBe("completed");
+    expect(failure).toMatchObject({ state: "failed", error: { code: "model_provider.call_failed" } });
+    expect(hostFailure).toMatchObject({
+      state: "waiting",
+      error: {
+        code: "model_provider.binding_changed",
+        messageKey: "errors.model_provider.binding_unusable"
+      }
+    });
+    expect(outcomes).toEqual(["verified", "failed"]);
   });
 
   it("lets Pi catalog and query one bounded Dataset before returning exact Dataset citations", async () => {
@@ -985,7 +1067,14 @@ describe("Home Pi Agent service", () => {
 
     const outcome = await service.ask({ query: "When is the launch?" });
 
-    expect(outcome).toMatchObject({ state: "failed", modelUsage: "cloud", error: { code: "model_provider.call_failed" } });
+    expect(outcome).toMatchObject({
+      state: "failed",
+      modelUsage: "cloud",
+      error: {
+        code: "model_provider.runtime_config_changed",
+        messageKey: "errors.agent_runtime.completion_invalid"
+      }
+    });
   });
 
   it("reports a cloud attempt on provider failure only after the per-turn boundary passes", async () => {

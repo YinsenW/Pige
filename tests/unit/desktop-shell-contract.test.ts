@@ -178,6 +178,7 @@ describe("desktop shell build contract", () => {
 
   it("guards sensitive settings in the main process before mutation", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
     const resetHandler = mainSource.slice(
       mainSource.indexOf('ipcMain.handle("maintenance.resetLocalDatabase"'),
       mainSource.indexOf('ipcMain.handle("maintenance.localDatabaseStatus"')
@@ -190,15 +191,40 @@ describe("desktop shell build contract", () => {
       mainSource.indexOf('ipcMain.handle("models.addPresetProvider"'),
       mainSource.indexOf('ipcMain.handle("models.addManualProvider"')
     );
+    const credentialHandler = mainSource.slice(
+      mainSource.indexOf('ipcMain.handle("models.updateProviderCredential"'),
+      mainSource.indexOf('ipcMain.handle("models.deleteProvider"')
+    );
+    const deleteProviderHandler = mainSource.slice(
+      mainSource.indexOf('ipcMain.handle("models.deleteProvider"'),
+      mainSource.indexOf('ipcMain.handle("models.addManualModel"')
+    );
     expect(resetHandler.indexOf("confirmSettingAction")).toBeLessThan(resetHandler.indexOf("getVaultService().resetLocalDatabase()"));
     expect(providerHandler.indexOf("AddManualProviderRequestSchema.parse(request)")).toBeLessThan(providerHandler.indexOf("confirmSettingAction"));
     expect(providerHandler.indexOf("confirmSettingAction")).toBeLessThan(providerHandler.indexOf("getModelProviderRegistry().addManualProvider(validatedRequest)"));
     expect(presetHandler.indexOf("AddPresetProviderRequestSchema.parse(request)")).toBeLessThan(presetHandler.indexOf("confirmSettingAction"));
     expect(presetHandler.indexOf("confirmSettingAction")).toBeLessThan(presetHandler.indexOf("getModelProviderRegistry().addPresetProvider(validatedRequest)"));
+    expect(credentialHandler.indexOf("UpdateProviderCredentialRequestSchema.parse(request)"))
+      .toBeLessThan(credentialHandler.indexOf("confirmSettingAction"));
+    expect(credentialHandler.indexOf("confirmSettingAction"))
+      .toBeLessThan(credentialHandler.indexOf("getModelProviderRegistry().updateProviderCredential(validatedRequest)"));
+    expect(deleteProviderHandler.indexOf("DeleteProviderRequestSchema.parse(request)"))
+      .toBeLessThan(deleteProviderHandler.indexOf("confirmSettingAction"));
+    expect(deleteProviderHandler.indexOf("confirmSettingAction"))
+      .toBeLessThan(deleteProviderHandler.indexOf("getModelProviderRegistry().deleteProvider(validatedRequest)"));
+    expect(mainSource).toContain('states: ["running", "cancel_requested"]');
+    expect(mainSource).toContain('classes: ["agent_turn", "agent_ingest"]');
+    expect(mainSource).toContain("getModelEgressApprovalService().assertProviderInactive(activeVaultPath, providerProfileId)");
+    expect(credentialHandler).not.toContain("oldApiKey");
+    expect(deleteProviderHandler).not.toContain("authSecretRef");
     for (const handler of [presetHandler, providerHandler]) {
       expect(handler).toContain("ordinary, private, and bounded large content");
       expect(handler).toContain("Sensitive content still asks each time; restricted content is never sent.");
       expect(handler).toContain("endpoint or trust boundary changes or becomes unknown");
+    }
+    for (const channel of ["models.updateProviderCredential", "models.deleteProvider"]) {
+      expect(mainSource).toContain(`ipcMain.handle("${channel}"`);
+      expect(preloadSource).toContain(`ipcRenderer.invoke("${channel}"`);
     }
   });
 
@@ -691,7 +717,11 @@ describe("desktop shell build contract", () => {
     expect(panel).toContain("result.discoveredModels");
     expect(panel).toContain('id="global-default-model"');
     expect(panel).toContain("refreshProviderModels");
-    expect(panel).toContain("providerSyncFailures.has(provider.id)");
+    expect(panel).toContain("providerRuntimeStatusKey(provider)");
+    expect(panel).toContain('props.t("models.manage")');
+    expect(panel).toContain("providerSyncFailures.has(selectedProvider.id)");
+    expect(panel).toContain("onRefresh={() => refreshProviderModels(selectedProvider.id)}");
+    expect(panel).not.toContain("providerSyncFailures.has(provider.id)");
     expect(panel).toContain('role="alert"');
     expect(panel).toContain('setFailure({ kind: "preset", presetId })');
     expect(panel).not.toContain("props.onError");

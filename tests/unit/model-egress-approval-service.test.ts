@@ -94,6 +94,20 @@ describe("ModelEgressApprovalService", () => {
       .toThrowError(/no longer pending/u);
   });
 
+  it("blocks Provider deletion only while an exact egress reference is active", () => {
+    const fixture = createFixture();
+    const pending = fixture.service.prepare(fixture.vaultPath, binding());
+
+    expect(() => fixture.service.assertProviderInactive(fixture.vaultPath, "provider_egress"))
+      .toThrowError(/active model egress request/u);
+    expect(() => fixture.service.assertProviderInactive(fixture.vaultPath, "provider_other"))
+      .not.toThrow();
+
+    fixture.service.invalidate(fixture.vaultPath, pending.id);
+    expect(() => fixture.service.assertProviderInactive(fixture.vaultPath, "provider_egress"))
+      .not.toThrow();
+  });
+
   it("wakes one live invocation only after the durable decision commits", async () => {
     const fixture = createFixture();
     const pending = fixture.service.prepare(fixture.vaultPath, binding());

@@ -68,6 +68,8 @@ import type {
   RestorePreviewWarning,
   RestorePreviewResult,
   RefreshProviderModelsRequest,
+  UpdateProviderCredentialRequest,
+  DeleteProviderRequest,
   SetAlwaysOnTopRequest,
   SetDefaultModelRequest,
   UpdateModelRequest,
@@ -419,6 +421,12 @@ const api: PigeDesktopApi = {
       ipcRenderer.invoke("models.addManualProvider", request) as Promise<ProviderConnectResult>,
     refreshProviderModels: async (request: RefreshProviderModelsRequest): Promise<ModelProviderSettingsSummary> =>
       ipcRenderer.invoke("models.refreshProviderModels", request) as Promise<ModelProviderSettingsSummary>,
+    updateProviderCredential: async (
+      request: UpdateProviderCredentialRequest
+    ): Promise<ModelProviderSettingsSummary> =>
+      ipcRenderer.invoke("models.updateProviderCredential", request) as Promise<ModelProviderSettingsSummary>,
+    deleteProvider: async (request: DeleteProviderRequest): Promise<ModelProviderSettingsSummary> =>
+      ipcRenderer.invoke("models.deleteProvider", request) as Promise<ModelProviderSettingsSummary>,
     addManualModel: async (request: AddManualModelRequest): Promise<ModelProviderSettingsSummary> =>
       ipcRenderer.invoke("models.addManualModel", request) as Promise<ModelProviderSettingsSummary>,
     updateModel: async (request: UpdateModelRequest): Promise<ModelProviderSettingsSummary> =>

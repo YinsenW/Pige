@@ -1730,13 +1730,14 @@ References:
 
 Status: Accepted
 Date: 2026-07-12
+Revised: 2026-07-17
 Supersedes: D-20260709-Provider-Setup-Tests-Before-Save
 
 Decision:
 
-Provider setup is preset-first: templates own protocol/Endpoint, Custom alone exposes
-protocol, discovery/manual fallback share one Provider inventory, and enabled models feed
-one Provider-grouped Global Default.
+Provider setup is preset-first with one inventory/default. Credential replacement/deletion
+are confirmed, revision/reference-fenced, secret-safe, and recoverable; discovery and
+generation status stay distinct.
 
 Rationale:
 
@@ -2709,6 +2710,7 @@ References:
 
 Status: Accepted
 Date: 2026-07-14
+Revised: 2026-07-17
 Supersedes: D-20260713-Safe-Home-Draft-Replacement
 
 Decision:
@@ -2740,8 +2742,8 @@ Consequences:
   creates one Agent Job immediately; source preservation is its first checkpoint, not a
   separate semantic pipeline. Pi authors Markdown through scoped write tools, while the
   Host only validates authority/schema/conflict and performs atomic commit/recovery.
-- Terminal tools are repeatable validation boundaries; rejected calls cannot write and
-  accepted calls alone terminate/publish.
+- After any tool, terminal tools remain validation boundaries. A no-current-note Home
+  `auto` turn may accept one native assistant final only when Pi invoked zero tools.
 - The relevant Pige core tool catalog follows capability and authority, not Host intent.
   Read-only/idempotent tools may be revisited; side effects remain sequential,
   deterministic, revalidated, and idempotent.

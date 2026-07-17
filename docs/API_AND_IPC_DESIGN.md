@@ -131,14 +131,13 @@ Error code rules:
 - `messageParams` may contain safe counts, durations, display names, or redacted labels only.
 - Shared warning/error objects are strict: unknown fields such as raw prompts, response/source bodies, or private paths are rejected instead of being preserved beside `redactedDetails`.
 - Renderer UI chooses affordances from `severity`, `retryable`, and `userAction`; it must not parse localized text to decide behavior.
-- API errors, job error summaries, and diagnostic errors that describe the same failure should share the same `code`, `domain`, `messageKey`, and `retryable` value.
+- Home classifies only exact `model_provider.call_failed` as provider-call failure;
+  `model_provider.binding_changed` becomes binding repair. Other typed Host errors keep
+  their safe code with body-free Agent repair; only unknown non-domain exceptions fall back.
 - Recoverable Agent-output/tool validation is internal Pi progress, not an API/UI error.
-  It returns the bounded internal repair result below and keeps the same Job active.
-  `model_provider.output_invalid` and `agent_runtime.knowledge_action_missing` must not be
-  emitted merely because the first candidate/terminal attempt was invalid or omitted.
-  A terminal user-facing error is reserved for a true external block or demonstrated
-  provider/tool-protocol incompatibility after autonomous repair; its Job summary remains
-  body-free and redacted.
+  It keeps the same Job active; first invalid/omitted candidates alone do not emit
+  `model_provider.output_invalid` or `agent_runtime.knowledge_action_missing`. Terminal
+  external/incompatibility failures remain body-free.
 
 Internal Agent repair result; this never crosses renderer IPC directly:
 
@@ -640,6 +639,8 @@ Commands:
 - `models.addPresetProvider`
 - `models.addManualProvider`
 - `models.refreshProviderModels`
+- `models.updateProviderCredential`
+- `models.deleteProvider`
 - `models.addManualModel`
 - `models.updateModel`
 - `models.setDefaultModel`
@@ -661,25 +662,27 @@ type DefaultModelBindingSummary =
   | { state: "ready"; providerProfileId: string; modelProfileId: string }
   | { state: "configured_unusable"; providerProfileId?: string; modelProfileId?: string; error: PigeErrorSummary };
 
-type ModelProviderSettingsSummary = { presets: ProviderPresetSummary[]; providers: ProviderProfileSummary[]; models: ModelProfileSummary[]; defaultModelProfileId?: string; hasDefaultModel: boolean; defaultBinding: DefaultModelBindingSummary };
+type ModelProviderSettingsSummary = { revision?: string; presets: ProviderPresetSummary[]; providers: ProviderProfileSummary[]; models: ModelProfileSummary[]; defaultModelProfileId?: string; hasDefaultModel: boolean; defaultBinding: DefaultModelBindingSummary };
 
 type ProviderPresetSummary = { presetId: string; displayName: string; providerKind: ProviderKind; endpointProtocol: "openai_responses" | "openai_chat_completions" | "anthropic_messages"; fixedBaseUrl: string; authRequirement: "api_key" | "optional_api_key" | "none"; modelListStrategy: ModelListStrategy; cloudBoundary: CloudBoundary; apiKeyManagementUrl?: string };
 
-type ProviderProfileSummary = { id: string; presetId?: string; displayName: string; providerKind: ProviderKind; endpointProtocol: ProviderEndpointProtocol; authRequirement: ProviderAuthRequirement; baseUrl?: string; modelListStrategy: ModelListStrategy; cloudBoundary: CloudBoundary; boundaryVerification?: BoundaryVerification; createdAt: string; updatedAt: string };
+type ProviderProfileSummary = { id: string; presetId?: string; displayName: string; providerKind: ProviderKind; endpointProtocol: ProviderEndpointProtocol; authRequirement: ProviderAuthRequirement; baseUrl?: string; modelListStrategy: ModelListStrategy; cloudBoundary: CloudBoundary; boundaryVerification?: BoundaryVerification; runtimeStatus?: { discovery: "not_checked" | "verified"; generation: "not_checked" | "verified" | "failed"; updatedAt?: string }; createdAt: string; updatedAt: string };
 
 type ModelProfileSummary = { id: string; providerProfileId: string; modelId: string; displayName?: string; source: "provider_list" | "manual"; enabled: boolean; isDefault: boolean; createdAt: string; updatedAt: string };
 
 type ProviderConnectNeedsManualModel = { status: "needs_manual_model"; reason: "select_bootstrap_model" | "discovery_unavailable" | "discovery_failed"; discoveredModels: Array<{ modelId: string; displayName?: string }>; error?: PigeErrorSummary };
 
 type ProviderConnectResult = ModelProviderSettingsSummary | ProviderConnectNeedsManualModel;
+
+type UpdateProviderCredentialRequest = { providerProfileId: string; expectedRevision: string; apiKey: string };
+
+type DeleteProviderRequest = { providerProfileId: string; expectedRevision: string };
 ```
 
-Current profile/API revision persists explicit protocol/auth/preset identity and preserves
-the Pi Owner's legacy map. `defaultBinding.state` carries safe selected IDs and a typed
-redacted repair error. Connect runs a real Pi generation/tool probe with synthetic
-non-user content before journaled all-or-restore writes. Preset protocol/Endpoint are
-main-owned; Refresh failure preserves inventory and returns a typed command error. A
-durable `modelSync` status summary remains open; current UI repair state is session-local.
+Profiles persist protocol/auth/preset identity; `defaultBinding` carries safe IDs/repair.
+Opaque `sha256:` `revision` fences credential replacement/deletion. Connect probes before
+all-or-restore commit; Refresh preserves inventory. Body-free session status separates
+configured, discovery verified, generation verified/failed; discovery is not chat proof.
 
 Secrets are passed only to the Settings and Secrets Service and are never echoed back.
 
@@ -688,19 +691,15 @@ Rules:
 - Settings APIs return redacted page DTOs, not raw storage files.
 - `settings.appearance` returns the current app locale and supported locale list. `settings.setLocale` stores the user override in machine-local settings and applies it without writing to the vault.
 - Secret writes use dedicated secret handling and return secret references only.
-- `models.addPresetProvider({ presetId, apiKey? })` is write-only toward main; preset
-  metadata decides whether a key is required, optional, or absent and whether a help URL
-  exists. Validation precedes effects, no key returns, and one probe gates commit/restore.
-- `models.addManualProvider` confirms/tests before persistence, discovers models when
-  possible, writes keys only through the secret store, and returns redacted summaries.
-  Auth/validation failure or canceled main-process confirmation leaves state unchanged.
-- Successful discovery needing a bootstrap choice, or unavailable/failed discovery, returns typed
-  `needs_manual_model` with zero Provider/model/secret writes. Custom then resubmits the
-  same write-only request plus one transient bootstrap Model ID; main revalidates, runs
-  the real Pi probe, and commits all or restores all. No key or attempt secret returns.
-- `models.addManualModel` is the connected-Provider inventory fallback. One exact
-  Provider+Model array preserves alias/enabled/default across Refresh. The current default
-  cannot be disabled; select another enabled default first.
+- Provider create is write-only, confirmed/probed before commit, secret-store-only, and
+  returns redacted summaries; cancellation or validation failure changes nothing.
+- Discovery needing a bootstrap ID returns `needs_manual_model` with zero writes; Custom
+  may resubmit one transient ID. Manual IDs share the same inventory, which preserves
+  alias/enabled/default on Refresh; replace default before disabling it.
+- Credential update is write-only, native-confirmed, active-reference-guarded, and probes
+  before atomic same-ref replacement; failure preserves the old key and neither key returns.
+- Provider deletion is renderer/native-confirmed and active-reference-guarded; it removes
+  owned models/credential, rebinds or clears default, and journal-recovers orphan-free.
 - Setup never groups cloud/self-hosted/local; main retains boundary/egress enforcement.
 - `agent.runtimeStatus` reports embedded Pi readiness and non-secret policy IDs. It uses profile summaries and presence-only binding metadata, never credential resolution/decryption; production emits only `embedded_pi_sdk`.
 - v0.1 exposes one effective default Pi Agent model; Advanced/Fast model slots must not appear unless runtime routing support is real and tested.

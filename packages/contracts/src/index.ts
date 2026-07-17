@@ -307,8 +307,15 @@ export interface ProviderProfileSummary {
   readonly modelListStrategy: ModelListStrategy;
   readonly cloudBoundary: CloudBoundary;
   readonly boundaryVerification?: BoundaryVerification;
+  readonly runtimeStatus?: ProviderRuntimeStatusSummary;
   readonly createdAt: string;
   readonly updatedAt: string;
+}
+
+export interface ProviderRuntimeStatusSummary {
+  readonly discovery: "not_checked" | "verified";
+  readonly generation: "not_checked" | "verified" | "failed";
+  readonly updatedAt?: string;
 }
 
 export interface ProviderPresetSummary {
@@ -336,6 +343,7 @@ export interface ModelProfileSummary {
 }
 
 export interface ModelProviderSettingsSummary {
+  readonly revision?: string;
   readonly presets: readonly ProviderPresetSummary[];
   readonly providers: readonly ProviderProfileSummary[];
   readonly models: readonly ModelProfileSummary[];
@@ -391,6 +399,17 @@ export interface SetDefaultModelRequest {
 
 export interface RefreshProviderModelsRequest {
   readonly providerProfileId: string;
+}
+
+export interface UpdateProviderCredentialRequest {
+  readonly providerProfileId: string;
+  readonly expectedRevision: string;
+  readonly apiKey: string;
+}
+
+export interface DeleteProviderRequest {
+  readonly providerProfileId: string;
+  readonly expectedRevision: string;
 }
 
 export interface AddManualModelRequest {
@@ -1244,6 +1263,10 @@ export interface PigeDesktopApi {
     readonly addPresetProvider: (request: AddPresetProviderRequest) => Promise<ProviderConnectResult>;
     readonly addManualProvider: (request: AddManualProviderRequest) => Promise<ProviderConnectResult>;
     readonly refreshProviderModels: (request: RefreshProviderModelsRequest) => Promise<ModelProviderSettingsSummary>;
+    readonly updateProviderCredential: (
+      request: UpdateProviderCredentialRequest
+    ) => Promise<ModelProviderSettingsSummary>;
+    readonly deleteProvider: (request: DeleteProviderRequest) => Promise<ModelProviderSettingsSummary>;
     readonly addManualModel: (request: AddManualModelRequest) => Promise<ModelProviderSettingsSummary>;
     readonly updateModel: (request: UpdateModelRequest) => Promise<ModelProviderSettingsSummary>;
     readonly setDefaultModel: (request: SetDefaultModelRequest) => Promise<ModelProviderSettingsSummary>;
