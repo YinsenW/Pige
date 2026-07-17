@@ -42,11 +42,11 @@ describe("local database service", () => {
     };
 
     expect(status.driver).toBe("node_sqlite");
-    expect(status.status).toBe("ready");
-    expect(status.appSchemaVersion).toBe(2);
-    expect(status.appliedMigrationCount).toBe(2);
+    expect(status.status).toBe("needs_rebuild");
+    expect(status.appSchemaVersion).toBe(3);
+    expect(status.appliedMigrationCount).toBe(3);
     expect(state.driver).toBe("node_sqlite");
-    expect(state.appliedMigrations).toHaveLength(2);
+    expect(state.appliedMigrations).toHaveLength(3);
     expect(fs.existsSync(path.join(vaultPath, ".pige/db/vault.sqlite"))).toBe(true);
   });
 
@@ -75,6 +75,72 @@ describe("local database service", () => {
     expect(pages?.pages.map((page) => page.title)).toContain("Local RAG");
     expect(latin?.results[0]?.summary.title).toBe("Local RAG");
     expect(cjk?.results[0]?.summary.title).toBe("本地 OCR");
+  });
+
+  it("queries at most two ambiguity-aware candidates and invalidates them on Markdown changes", async () => {
+    const vaultPath = makeVaultRoot();
+    const service = new LocalDatabaseService();
+    writePage(vaultPath, "wiki/first.md", {
+      id: "page_20260709_first1234",
+      title: "Shared Title",
+      aliases: ["Collision"],
+      body: "First."
+    });
+    writePage(vaultPath, "wiki/second.md", {
+      id: "page_20260709_second1234",
+      title: "Shared Title",
+      aliases: ["Collision"],
+      body: "Second."
+    });
+    service.rebuild(vaultPath);
+    const revision = service.inlineReferenceRevision(vaultPath);
+    expect(revision).toMatch(/^5:/u);
+
+    expect(service.inlineReferenceCandidates(vaultPath, {
+      normalizedKey: "shared title",
+      expectedRevision: revision!
+    })?.map((page) => page.pageId)).toEqual([
+      "page_20260709_first1234",
+      "page_20260709_second1234"
+    ]);
+    expect(service.inlineReferenceCandidates(vaultPath, {
+      normalizedKey: "collision",
+      expectedRevision: revision!
+    })).toHaveLength(2);
+    expect(service.inlineReferenceCandidates(vaultPath, {
+      normalizedKey: "page_20260709_first1234",
+      expectedRevision: revision!,
+      exactPageId: "page_20260709_first1234"
+    })?.map((page) => page.pageId)).toEqual(["page_20260709_first1234"]);
+    expect(service.inlineReferenceCandidates(vaultPath, {
+      normalizedKey: "collision",
+      expectedRevision: "5:stale"
+    })).toBeUndefined();
+
+    writePage(vaultPath, "wiki/third.md", {
+      id: "page_20260709_third1234",
+      title: "Third",
+      aliases: ["Collision"],
+      body: "Third."
+    });
+    expect(service.inlineReferenceCandidates(vaultPath, {
+      normalizedKey: "collision",
+      expectedRevision: revision!
+    })).toBeUndefined();
+    expect(service.inlineReferenceRevision(vaultPath)).toBeUndefined();
+    expect(service.inlineReferenceCandidates(vaultPath, {
+      normalizedKey: "collision",
+      expectedRevision: revision!
+    })).toBeUndefined();
+
+    new LocalDatabaseService().rebuild(vaultPath);
+    const successorRevision = service.inlineReferenceRevision(vaultPath);
+    expect(successorRevision).toMatch(/^5:/u);
+    expect(successorRevision).not.toBe(revision);
+    expect(service.inlineReferenceCandidates(vaultPath, {
+      normalizedKey: "collision",
+      expectedRevision: successorRevision!
+    })).toHaveLength(2);
   });
 
   it("rebuilds exact-range chunk metadata without persisting chunk text", () => {
@@ -113,7 +179,7 @@ Beta conclusion.`
         indexedPageCount: 1,
         chunkCount: rows.length,
         chunkerVersion: "pige-markdown-v1",
-        indexRevision: 4
+        indexRevision: 5
       });
       expect(rows.length).toBeGreaterThan(2);
       expect(columns).not.toContain("body");
@@ -192,12 +258,12 @@ Beta conclusion.`
     const reader = openReadOnlyDatabase(vaultPath);
     try {
       const columns = reader.prepare("PRAGMA table_info(chunks)").all().map((row) => String(row.name));
-      expect(status).toMatchObject({ appSchemaVersion: 2, appliedMigrationCount: 2, status: "ready" });
+      expect(status).toMatchObject({ appSchemaVersion: 3, appliedMigrationCount: 3, status: "needs_rebuild" });
       expect(columns).toContain("heading_path_json");
       expect(columns).toContain("character_start");
       expect(columns).not.toContain("body");
       expect(reader.prepare("SELECT COUNT(*) AS count FROM chunks").get()?.count).toBe(0);
-      expect(reader.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get()?.count).toBe(2);
+      expect(reader.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get()?.count).toBe(3);
     } finally {
       reader.close();
     }
@@ -212,13 +278,13 @@ Beta conclusion.`
 
     expect(service.status(vaultPath)).toMatchObject({
       driver: "node_sqlite",
-      appSchemaVersion: 2,
-      appliedMigrationCount: 2,
-      status: "ready"
+      appSchemaVersion: 3,
+      appliedMigrationCount: 3,
+      status: "needs_rebuild"
     });
     expect(JSON.parse(fs.readFileSync(statePath, "utf8"))).toMatchObject({
       driver: "node_sqlite",
-      appSchemaVersion: 2
+      appSchemaVersion: 3
     });
     expect(fs.readdirSync(path.dirname(statePath)).filter((name) => name.endsWith(".tmp"))).toEqual([]);
   });
@@ -283,7 +349,7 @@ Beta conclusion.`
         { pageId: "page_20260709_tags1234", tag: "durable knowledge" },
         { pageId: "page_20260709_tags1234", tag: "research" }
       ],
-      revision: 4
+      revision: 5
     });
 
     fs.rmSync(path.join(vaultPath, ".pige/db/vault.sqlite"), { force: true });
@@ -294,7 +360,7 @@ Beta conclusion.`
         { pageId: "page_20260709_tags1234", tag: "durable knowledge" },
         { pageId: "page_20260709_tags1234", tag: "research" }
       ],
-      revision: 4
+      revision: 5
     });
   });
 
@@ -520,6 +586,7 @@ function writePage(vaultPath: string, relativePath: string, input: {
   readonly language?: string;
   readonly tags?: readonly string[];
   readonly sourceIds?: readonly string[];
+  readonly aliases?: readonly string[];
 }): void {
   const filePath = path.join(vaultPath, ...relativePath.split("/"));
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -533,6 +600,7 @@ updated_at: "2026-07-09T12:00:00.000Z"
 status: "active"
 language: "${input.language ?? "en"}"
 tags: ${JSON.stringify(input.tags ?? [])}
+aliases: ${JSON.stringify(input.aliases ?? [])}
 source_ids: ${JSON.stringify(input.sourceIds ?? [])}
 ---
 

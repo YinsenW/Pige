@@ -72,6 +72,22 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).not.toContain("targetContentWidth:");
   });
 
+  it("keeps Reader inline-reference resolution main-owned, validated, and pathless", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+
+    expect(contractsSource).toContain("readonly resolveInlineReference:");
+    expect(mainSource).toContain('ipcMain.handle("notes.resolveInlineReference"');
+    expect(mainSource).toContain("NoteResolveInlineReferenceRequestSchema.parse(request)");
+    expect(mainSource).toContain("NoteResolveInlineReferenceResultSchema.parse(");
+    expect(preloadSource).toContain('ipcRenderer.invoke(\n          "notes.resolveInlineReference"');
+    expect(preloadSource).toContain("NoteResolveInlineReferenceRequestSchema.parse(request)");
+    expect(preloadSource).toContain("NoteResolveInlineReferenceResultSchema.parse(");
+    expect(contractsSource).not.toContain("InlineReferencePath");
+    expect(contractsSource).not.toContain("candidatePageIds");
+  });
+
   it("uses one integrated title bar while preserving native platform controls", () => {
     expect(getWindowShellOptions("darwin")).toEqual({
       titleBarStyle: "hiddenInset",

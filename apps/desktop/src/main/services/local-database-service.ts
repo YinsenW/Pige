@@ -27,6 +27,7 @@ import {
 } from "./knowledge-tree-aggregate";
 import {
   assertMarkdownPagePathConfined,
+  createMarkdownPageReferenceKeys,
   MARKDOWN_FRONTMATTER_READ_LIMIT_BYTES,
   readMarkdownPageBody,
   scanMarkdownFileSignatures,
@@ -62,6 +63,11 @@ export interface LocalDatabaseDriver {
   readonly searchPages: (vaultPath: string, request: RetrievalSearchRequest) => LocalDatabaseSearchResult | undefined;
   readonly knowledgeTree: (vaultPath: string) => KnowledgeTreeSnapshot | undefined;
   readonly chunkIndexStatus: (vaultPath: string) => LocalDatabaseChunkIndexStatus | undefined;
+  readonly inlineReferenceRevision: (vaultPath: string) => string | undefined;
+  readonly inlineReferenceCandidates: (
+    vaultPath: string,
+    request: LocalDatabaseInlineReferenceLookup
+  ) => readonly LibraryPageSummary[] | undefined;
 }
 
 export interface LocalDatabaseRebuildCallbacks {
@@ -111,6 +117,14 @@ export class PendingSqliteDriver implements LocalDatabaseDriver {
   chunkIndexStatus(): undefined {
     return undefined;
   }
+
+  inlineReferenceRevision(): undefined {
+    return undefined;
+  }
+
+  inlineReferenceCandidates(): undefined {
+    return undefined;
+  }
 }
 
 export interface LocalDatabasePageList {
@@ -140,8 +154,15 @@ export interface LocalDatabaseChunkIndexStatus {
   readonly indexRevision: number;
 }
 
+export interface LocalDatabaseInlineReferenceLookup {
+  readonly normalizedKey: string;
+  readonly expectedRevision: string;
+  readonly exactPageId?: string;
+}
+
 export class NodeSqliteDriver implements LocalDatabaseDriver {
   readonly id = "node_sqlite";
+  readonly #inlineReferenceWatches = new Map<string, InlineReferenceWatchState>();
 
   initialize(vaultPath: string): LocalDatabaseSchemaState {
     const db = openVaultDatabase(vaultPath);
@@ -162,7 +183,10 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
         ? recordedState
         : this.initialize(vaultPath);
       const dbPath = getDatabasePath(vaultPath);
-      const ready = fs.existsSync(dbPath) && state.driver === this.id && hasInitialMigration(vaultPath);
+      const ready = fs.existsSync(dbPath) &&
+        state.driver === this.id &&
+        hasInitialMigration(vaultPath) &&
+        readInlineReferenceRevision(vaultPath) !== undefined;
       return {
         driver: state.driver,
         appSchemaVersion: state.appSchemaVersion,
@@ -182,9 +206,11 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
   }
 
   rebuild(vaultPath: string, callbacks: LocalDatabaseRebuildCallbacks = {}): LocalDatabaseRebuildResult {
+    this.#closeInlineReferenceWatch(vaultPath);
     this.initialize(vaultPath);
     const scanned = scanMarkdownPages(vaultPath);
     const rebuiltAt = new Date().toISOString();
+    const indexGeneration = `${rebuiltAt}#${randomUUID().replaceAll("-", "")}`;
     const totalUnits = Math.max(1, (scanned.pages.length * 2) + 1);
     let completedUnits = 0;
     reportRebuildProgress(callbacks, completedUnits, totalUnits);
@@ -206,6 +232,10 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
         const insertSource = db.prepare(`
           INSERT OR IGNORE INTO sources(source_id, page_id, created_at, updated_at)
           VALUES (?, ?, ?, ?)
+        `);
+        const insertReferenceKey = db.prepare(`
+          INSERT OR IGNORE INTO page_reference_keys(normalized_key, page_id, key_kind)
+          VALUES (?, ?, ?)
         `);
         const insertChunk = db.prepare(`
           INSERT INTO chunks(
@@ -261,6 +291,9 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
           for (const sourceId of page.summary.sourceIds) {
             insertSource.run(sourceId, page.summary.pageId, page.summary.createdAt, page.summary.updatedAt);
           }
+          for (const reference of createMarkdownPageReferenceKeys(page)) {
+            insertReferenceKey.run(reference.key, page.summary.pageId, reference.kind);
+          }
           signatures.set(page.summary.pageId, signature);
           completedUnits += 1;
           reportRebuildProgress(callbacks, completedUnits, totalUnits);
@@ -288,7 +321,7 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
         });
         db.prepare(
           "INSERT OR REPLACE INTO index_state(id, invalid_page_count, rebuilt_at) VALUES (1, ?, ?)"
-        ).run(scanned.invalidPageCount, rebuiltAt);
+        ).run(scanned.invalidPageCount, indexGeneration);
       });
       db.exec(`PRAGMA user_version = ${CURRENT_INDEX_REVISION}`);
     } finally {
@@ -296,6 +329,7 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
     }
     const state = createSchemaState("node_sqlite", CURRENT_APP_SCHEMA_VERSION, REQUIRED_MIGRATION_IDS);
     writeSchemaState(vaultPath, state);
+    this.#createInlineReferenceWatch(vaultPath, false);
     completedUnits = totalUnits;
     reportRebuildProgress(callbacks, completedUnits, totalUnits);
     return { rebuiltAt, pageCount: scanned.pages.length, invalidPageCount: scanned.invalidPageCount };
@@ -458,6 +492,41 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
     }
   }
 
+  inlineReferenceRevision(vaultPath: string): string | undefined {
+    if (!this.#ensureInlineReferenceWatchCurrent(vaultPath)) return undefined;
+    return readInlineReferenceRevision(vaultPath);
+  }
+
+  inlineReferenceCandidates(
+    vaultPath: string,
+    request: LocalDatabaseInlineReferenceLookup
+  ): readonly LibraryPageSummary[] | undefined {
+    const db = openVaultDatabase(vaultPath);
+    try {
+      if (readInlineReferenceRevisionFromDatabase(db) !== request.expectedRevision) return undefined;
+      const rows = request.exactPageId
+        ? db.prepare("SELECT * FROM pages WHERE page_id = ? LIMIT 1").all(request.exactPageId)
+        : db.prepare(`
+            SELECT DISTINCT p.*
+            FROM page_reference_keys r
+            JOIN pages p ON p.page_id = r.page_id
+            WHERE r.normalized_key = ?
+            ORDER BY p.page_id ASC
+            LIMIT 2
+          `).all(request.normalizedKey);
+      if (this.needsRebuild(vaultPath)) {
+        this.#markInlineReferenceDirty(vaultPath);
+        return undefined;
+      }
+      if (readInlineReferenceRevisionFromDatabase(db) !== request.expectedRevision) return undefined;
+      return rows.map(rowToSummary);
+    } catch {
+      return undefined;
+    } finally {
+      db.close();
+    }
+  }
+
   private ensureReady(vaultPath: string): boolean {
     try {
       const status = this.status(vaultPath);
@@ -504,6 +573,89 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
       db.close();
     }
   }
+
+  #ensureInlineReferenceWatchCurrent(vaultPath: string): boolean {
+    const resolvedVault = path.resolve(vaultPath);
+    const existing = this.#inlineReferenceWatches.get(resolvedVault);
+    if (existing) {
+      if (!existing.dirty) {
+        if (!this.needsRebuild(resolvedVault)) return true;
+        existing.dirty = true;
+      }
+      const currentRevision = readInlineReferenceRevision(resolvedVault);
+      if (currentRevision && currentRevision !== existing.revision) {
+        return this.#createInlineReferenceWatch(resolvedVault, true);
+      }
+      return false;
+    }
+    return this.#createInlineReferenceWatch(resolvedVault, true);
+  }
+
+  #markInlineReferenceDirty(vaultPath: string): void {
+    const existing = this.#inlineReferenceWatches.get(path.resolve(vaultPath));
+    if (existing) existing.dirty = true;
+  }
+
+  #createInlineReferenceWatch(vaultPath: string, verifyFreshness: boolean): boolean {
+    const resolvedVault = path.resolve(vaultPath);
+    this.#closeInlineReferenceWatch(resolvedVault);
+    const state: InlineReferenceWatchState = {
+      dirty: false,
+      revision: readInlineReferenceRevision(resolvedVault),
+      watchers: []
+    };
+    try {
+      for (const rootName of ["sources", "wiki"] as const) {
+        const root = path.join(resolvedVault, rootName);
+        if (!fs.existsSync(root)) continue;
+        const stat = fs.lstatSync(root);
+        if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error("Markdown roots must remain real directories.");
+        state.watchers.push(fs.watch(root, {
+          persistent: false,
+          recursive: true
+        }, () => {
+          state.dirty = true;
+        }));
+        state.watchers.at(-1)?.on("error", () => {
+          state.dirty = true;
+        });
+      }
+      state.watchers.push(fs.watch(resolvedVault, { persistent: false }, (_event, fileName) => {
+        const topLevelName = fileName?.toString().split(/[\\/]/u, 1)[0];
+        if (topLevelName === "sources" || topLevelName === "wiki" || topLevelName === undefined) {
+          state.dirty = true;
+        }
+      }));
+      state.watchers.at(-1)?.on("error", () => {
+        state.dirty = true;
+      });
+      if (!state.revision || (verifyFreshness && this.needsRebuild(resolvedVault))) state.dirty = true;
+      this.#inlineReferenceWatches.set(resolvedVault, state);
+      while (this.#inlineReferenceWatches.size > 4) {
+        const oldest = this.#inlineReferenceWatches.keys().next().value as string | undefined;
+        if (!oldest || oldest === resolvedVault) break;
+        this.#closeInlineReferenceWatch(oldest);
+      }
+      return !state.dirty;
+    } catch {
+      for (const watcher of state.watchers) watcher.close();
+      return false;
+    }
+  }
+
+  #closeInlineReferenceWatch(vaultPath: string): void {
+    const resolvedVault = path.resolve(vaultPath);
+    const existing = this.#inlineReferenceWatches.get(resolvedVault);
+    if (!existing) return;
+    this.#inlineReferenceWatches.delete(resolvedVault);
+    for (const watcher of existing.watchers) watcher.close();
+  }
+}
+
+interface InlineReferenceWatchState {
+  dirty: boolean;
+  readonly revision: string | undefined;
+  readonly watchers: fs.FSWatcher[];
 }
 
 export class LocalDatabaseService {
@@ -562,6 +714,17 @@ export class LocalDatabaseService {
 
   chunkIndexStatus(vaultPath: string): LocalDatabaseChunkIndexStatus | undefined {
     return this.#driver.chunkIndexStatus(vaultPath);
+  }
+
+  inlineReferenceRevision(vaultPath: string): string | undefined {
+    return this.#driver.inlineReferenceRevision(vaultPath);
+  }
+
+  inlineReferenceCandidates(
+    vaultPath: string,
+    request: LocalDatabaseInlineReferenceLookup
+  ): readonly LibraryPageSummary[] | undefined {
+    return this.#driver.inlineReferenceCandidates(vaultPath, request);
   }
 }
 
@@ -673,9 +836,14 @@ function getDatabasePath(vaultPath: string): string {
 
 const INITIAL_MIGRATION_ID = "001_node_sqlite_initial_index";
 const CHUNK_METADATA_MIGRATION_ID = "002_rebuildable_chunk_metadata";
-const REQUIRED_MIGRATION_IDS = [INITIAL_MIGRATION_ID, CHUNK_METADATA_MIGRATION_ID] as const;
-const CURRENT_APP_SCHEMA_VERSION = 2;
-const CURRENT_INDEX_REVISION = 4;
+const INLINE_REFERENCE_MIGRATION_ID = "003_inline_reference_keys";
+const REQUIRED_MIGRATION_IDS = [
+  INITIAL_MIGRATION_ID,
+  CHUNK_METADATA_MIGRATION_ID,
+  INLINE_REFERENCE_MIGRATION_ID
+] as const;
+const CURRENT_APP_SCHEMA_VERSION = 3;
+const CURRENT_INDEX_REVISION = 5;
 const DEFAULT_LIBRARY_LIMIT = 50;
 const MAX_LIBRARY_LIMIT = 200;
 const DEFAULT_SEARCH_LIMIT = 8;
@@ -878,6 +1046,25 @@ function migrate(db: DatabaseSync): void {
       new Date().toISOString()
     );
   });
+
+  const inlineReferenceApplied = db.prepare("SELECT id FROM schema_migrations WHERE id = ?")
+    .all(INLINE_REFERENCE_MIGRATION_ID);
+  if (inlineReferenceApplied.length === 0) transaction(db, () => {
+    db.exec(`
+      CREATE TABLE page_reference_keys (
+        normalized_key TEXT NOT NULL,
+        page_id TEXT NOT NULL REFERENCES pages(page_id) ON DELETE CASCADE,
+        key_kind TEXT NOT NULL CHECK(key_kind IN ('stable_id', 'title', 'alias', 'path', 'slug')),
+        PRIMARY KEY(normalized_key, page_id, key_kind)
+      );
+      CREATE INDEX page_reference_keys_lookup_idx
+        ON page_reference_keys(normalized_key, page_id);
+    `);
+    db.prepare("INSERT INTO schema_migrations(id, applied_at) VALUES (?, ?)").run(
+      INLINE_REFERENCE_MIGRATION_ID,
+      new Date().toISOString()
+    );
+  });
 }
 
 function transaction(db: DatabaseSync, work: () => void): void {
@@ -904,9 +1091,29 @@ function clearRebuildableRows(db: DatabaseSync): void {
     DELETE FROM citations;
     DELETE FROM chunks;
     DELETE FROM sources;
+    DELETE FROM page_reference_keys;
     DELETE FROM pages;
     DELETE FROM vault_files;
   `);
+}
+
+function readInlineReferenceRevision(vaultPath: string): string | undefined {
+  if (!fs.existsSync(getDatabasePath(vaultPath))) return undefined;
+  const db = openVaultDatabase(vaultPath);
+  try {
+    return readInlineReferenceRevisionFromDatabase(db);
+  } catch {
+    return undefined;
+  } finally {
+    db.close();
+  }
+}
+
+function readInlineReferenceRevisionFromDatabase(db: DatabaseSync): string | undefined {
+  if (readUserVersion(db) !== CURRENT_INDEX_REVISION) return undefined;
+  const row = db.prepare("SELECT rebuilt_at FROM index_state WHERE id = 1").get();
+  const rebuiltAt = typeof row?.rebuilt_at === "string" ? row.rebuilt_at : undefined;
+  return rebuiltAt ? `${CURRENT_INDEX_REVISION}:${rebuiltAt}` : undefined;
 }
 
 function indexPageKnowledge(db: DatabaseSync, pages: readonly MarkdownPageRecord[]): void {

@@ -213,29 +213,18 @@ The vector store is a derived cache. It can be rebuilt from Markdown, source pag
 
 ## 8. Schema Areas
 
-Initial schema areas:
+Initial areas are file/page/source metadata; tag/topic/entity/link/backlink/citation/relation
+indexes; FTS and body-free chunk metadata; Job/memory/Operation lookup acceleration; and
+migrations. `page_reference_keys` stores normalized stable ID, title, alias, governed path,
+and filename/slug candidates for the Main-owned Reader resolver.
 
-- `vault_files`: path, hash, mtime, type, page ID.
-- `pages`: page ID, type, title, aliases, tags, source refs.
-- `sources`: source ID, source asset path/reference, artifact paths, canonical URL, checksum.
-- `tags` and `page_tags`: canonical tags and page-to-tag joins.
-- `topics`: topic page references and confirmed parent/child links.
-- `entities`: entity records, aliases, identifiers, and page references.
-- `relation_edges`: normalized relationship edges from Markdown, citations, frontmatter, managed sections, and operation records.
-- `links` and `backlinks`: wiki link and reverse-link indexes.
-- `citations`: page-to-source locator references.
-- `chunks`: page/source/memory chunk metadata.
-- `fts_*`: full-text search virtual tables.
-- `jobs_index`: fast lookup over `.pige/jobs/`.
-- `memory_index`: fast lookup over `.pige/memory/`.
-- `operations_index`: fast lookup over `.pige/operations/`.
-- `schema_migrations`: local database migration state.
-
-Durable truth stays in files. App schema v2/index revision 4 replaces metadata-only
-`chunks` through `002_rebuildable_chunk_metadata`; ranges, headings, sources, digest/token
-and chunker persist, never body text. Warm file/directory generation signatures avoid
-frontmatter parsing; changes still rebuild. Held no-follow descriptors plus named checks
-reject successors. Revision 3 tags remain rebuildable; Markdown owns display.
+Durable truth stays in files. App schema v3/index revision 5 adds
+`003_inline_reference_keys` after v2 body-free chunks. Lookup checks revision+rebuild
+generation before/after a maximum-two query; exact page ID wins only in a current index.
+Main watches `wiki/`, `sources/`, and replacement, with signatures covering missed events.
+Dirty/missing/changed state is unavailable until rebuild; watcher state is never truth.
+No-follow/named checks reject successors. Keys/results persist no bodies, candidates, or
+renderer paths; tags/display remain Markdown-owned rebuildable projections.
 
 ## 9. User-Facing Behavior
 

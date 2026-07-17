@@ -2,9 +2,12 @@ import { createElement } from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { JSDOM } from "jsdom";
+import fs from "node:fs";
+import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { LibraryListResult, NoteRenderResult, RetrievalSearchRequest, RetrievalSearchResult } from "@pige/contracts";
 import { filterLibraryPages, LibraryPanel, NoteReader } from "../../apps/desktop/src/renderer/src/App";
+import type { ReaderInlineReferenceActivation } from "../../apps/desktop/src/renderer/src/components/ReaderInlineReferenceSurface";
 import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.json";
 
 const globalKeys = [
@@ -33,6 +36,20 @@ afterEach(() => {
 });
 
 describe("full UI Library", () => {
+  it("keeps inline-reference feedback out of the Reader document flow", () => {
+    const styles = fs.readFileSync(
+      path.resolve("apps/desktop/src/renderer/src/styles/app.css"),
+      "utf8"
+    );
+    const feedbackRule = styles.match(/\.reader-inline-reference-feedback\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
+    expect(feedbackRule).toContain("position: fixed");
+    expect(feedbackRule).toContain("top: calc(var(--titlebar-height) + 12px)");
+    expect(feedbackRule).toContain("transform: translateX(-50%)");
+    expect(feedbackRule).toContain("pointer-events: none");
+    expect(feedbackRule).toContain("margin: 0");
+    expect(feedbackRule).not.toContain("margin: 0 0");
+  });
+
   it("filters real page summaries by title", () => {
     const pages = libraryList().pages;
     expect(filterLibraryPages(pages, "all", " interface ").map((page) => page.title)).toEqual([
@@ -491,6 +508,233 @@ describe("full UI Library", () => {
     dom.window.close();
   });
 
+  it("serializes typed inline-reference activation and keeps one body-free status owner", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const linkedNote = {
+      ...readerNote(),
+      html: [
+        '<p><a href="#wiki:page_20260715_link1111"><em>Linked note</em></a></p>',
+        '<p><a href="#source:src_20260715_link2222#source">Saved source</a></p>',
+        '<p><a href="#section">Local section</a></p>'
+      ].join("")
+    };
+    const pending = deferred<ReaderInlineReferenceActivation>();
+    const calls: string[] = [];
+    let next: Promise<ReaderInlineReferenceActivation> = pending.promise;
+    const onActivate = (href: string): Promise<ReaderInlineReferenceActivation> => {
+      calls.push(href);
+      return next;
+    };
+    await act(async () => {
+      root.render(createElement(NoteReader, {
+        note: linkedNote,
+        related: null,
+        relatedLoadingPageId: null,
+        onOpenRelated: async () => undefined,
+        onDevelopment: () => undefined,
+        onActivateInlineReference: onActivate,
+        t
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    const links = Array.from(container.querySelectorAll<HTMLAnchorElement>(
+      '.markdown-body a[data-reader-link-state="ready"]'
+    ));
+    expect(links).toHaveLength(2);
+    expect(dom.window.document.getElementById(links[0]!.getAttribute("aria-describedby")!)?.textContent)
+      .toBe("Open this linked local note or source.");
+
+    links[0]!.focus();
+    const firstClick = new dom.window.MouseEvent("click", { bubbles: true, cancelable: true });
+    await act(async () => {
+      requireElement(links[0]!.querySelector("em")).dispatchEvent(firstClick);
+      await settle(dom);
+    });
+    expect(firstClick.defaultPrevented).toBe(true);
+    expect(calls).toEqual(["#wiki:page_20260715_link1111"]);
+    expect(links[0]!.dataset.readerLinkState).toBe("resolving");
+    expect(links[0]!.getAttribute("aria-busy")).toBe("true");
+    expect(links[0]!.getAttribute("aria-disabled")).toBe("true");
+    expect(container.querySelectorAll('[data-reader-reference-feedback="resolving"]')).toHaveLength(1);
+
+    await act(async () => {
+      links[0]!.click();
+      links[1]!.click();
+      await settle(dom);
+    });
+    expect(calls).toHaveLength(1);
+    expect(links[1]!.dataset.readerLinkState).toBe("resolving");
+    expect(links[1]!.getAttribute("aria-disabled")).toBe("true");
+    expect(links[1]!.hasAttribute("aria-busy")).toBe(false);
+
+    await act(async () => {
+      pending.resolve("ambiguous");
+      await pending.promise;
+      await settle(dom);
+    });
+    const ambiguous = requireElement(container.querySelector<HTMLElement>(
+      '[data-reader-reference-feedback="ambiguous"]'
+    ));
+    expect(ambiguous.textContent).toBe("More than one local item matches this reference. Nothing was opened.");
+    expect(ambiguous.textContent).not.toContain("page_20260715_link1111");
+    expect(ambiguous.textContent).not.toContain("#wiki:");
+    expect(container.querySelectorAll('[role="status"]')).toHaveLength(1);
+    expect(links[0]!.dataset.readerLinkState).toBe("ambiguous");
+    expect(links[0]!.hasAttribute("aria-busy")).toBe(false);
+    expect(dom.window.document.activeElement).toBe(links[0]);
+
+    for (const [outcome, message] of [
+      ["not_found", "The linked local item could not be found."],
+      ["stale", "The note changed while this reference was checked. Try again."],
+      ["failed", "This reference could not be opened. Try again."]
+    ] as const) {
+      next = Promise.resolve(outcome);
+      await act(async () => {
+        links[0]!.click();
+        await settle(dom);
+      });
+      const status = requireElement(container.querySelector<HTMLElement>(
+        `[data-reader-reference-feedback="${outcome}"]`
+      ));
+      expect(status.textContent).toBe(message);
+      expect(container.querySelectorAll('[role="status"]')).toHaveLength(1);
+      expect(links[0]!.dataset.readerLinkState).toBe(outcome);
+    }
+
+    next = Promise.reject(new Error("private resolver body"));
+    await act(async () => {
+      links[0]!.click();
+      await settle(dom);
+    });
+    expect(container.textContent).not.toContain("private resolver body");
+    expect(container.querySelectorAll('[data-reader-reference-feedback="failed"]')).toHaveLength(1);
+
+    next = Promise.resolve("opened_source");
+    await act(async () => {
+      links[1]!.click();
+      await settle(dom);
+    });
+    expect(calls.at(-1)).toBe("#source:src_20260715_link2222#source");
+    expect(container.querySelector('[data-reader-reference-feedback]')).toBeNull();
+    expect(links[0]!.dataset.readerLinkState).toBe("ready");
+    expect(links[1]!.dataset.readerLinkState).toBe("ready");
+    expect(container.querySelector<HTMLAnchorElement>('a[href="#section"]')?.dataset.readerLinkState).toBeUndefined();
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("drops an old inline-reference result after the Reader render context changes", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const oldResult = deferred<ReaderInlineReferenceActivation>();
+    const calls: string[] = [];
+    const onActivate = (href: string): Promise<ReaderInlineReferenceActivation> => {
+      calls.push(href);
+      return oldResult.promise;
+    };
+    const oldNote = {
+      ...readerNote(),
+      renderContextId: `notectx_${"a".repeat(32)}`,
+      html: '<p><a href="#wiki:page_20260715_old11111">Old note</a></p>'
+    };
+    await act(async () => {
+      root.render(createElement(NoteReader, {
+        note: oldNote,
+        related: null,
+        relatedLoadingPageId: null,
+        onOpenRelated: async () => undefined,
+        onDevelopment: () => undefined,
+        onActivateInlineReference: onActivate,
+        t
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    const oldLink = requireElement(container.querySelector<HTMLAnchorElement>('a[href="#wiki:page_20260715_old11111"]'));
+    await act(async () => {
+      oldLink.click();
+      await settle(dom);
+    });
+    expect(calls).toEqual(["#wiki:page_20260715_old11111"]);
+    expect(requireElement(container.querySelector<HTMLAnchorElement>('a[href="#wiki:page_20260715_old11111"]'))
+      .dataset.readerLinkState).toBe("resolving");
+
+    const nextNote = {
+      ...readerNote(),
+      renderContextId: `notectx_${"b".repeat(32)}`,
+      html: '<p><a href="#wiki:page_20260715_new22222">New note</a></p>'
+    };
+    await act(async () => {
+      root.render(createElement(NoteReader, {
+        note: nextNote,
+        related: null,
+        relatedLoadingPageId: null,
+        onOpenRelated: async () => undefined,
+        onDevelopment: () => undefined,
+        onActivateInlineReference: onActivate,
+        t
+      }));
+      await settle(dom);
+    });
+    const newLink = requireElement(container.querySelector<HTMLAnchorElement>('a[href="#wiki:page_20260715_new22222"]'));
+    expect(newLink.dataset.readerLinkState).toBe("ready");
+    expect(container.querySelector('[data-reader-reference-feedback]')).toBeNull();
+
+    await act(async () => {
+      oldResult.resolve("not_found");
+      await oldResult.promise;
+      await settle(dom);
+    });
+    expect(calls).toEqual(["#wiki:page_20260715_old11111"]);
+    expect(newLink.dataset.readerLinkState).toBe("ready");
+    expect(container.querySelector('[data-reader-reference-feedback]')).toBeNull();
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("rejects an invalid internal href locally without navigation or resolver IPC", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const href = `#wiki:${"x".repeat(1_024)}`;
+    const calls: string[] = [];
+    await act(async () => {
+      root.render(createElement(NoteReader, {
+        note: { ...readerNote(), html: `<p><a href="${href}">Invalid local reference</a></p>` },
+        related: null,
+        relatedLoadingPageId: null,
+        onOpenRelated: async () => undefined,
+        onDevelopment: () => undefined,
+        onActivateInlineReference: async (value) => {
+          calls.push(value);
+          return "opened_page";
+        },
+        t
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    const link = requireElement(container.querySelector<HTMLAnchorElement>('a[href^="#wiki:"]'));
+    const originalUrl = dom.window.location.href;
+    const click = new dom.window.MouseEvent("click", { bubbles: true, cancelable: true });
+    await act(async () => {
+      link.dispatchEvent(click);
+      await settle(dom);
+    });
+    expect(click.defaultPrevented).toBe(true);
+    expect(calls).toEqual([]);
+    expect(dom.window.location.href).toBe(originalUrl);
+    expect(link.dataset.readerLinkState).toBe("failed");
+    expect(container.textContent).toContain("This reference could not be opened. Try again.");
+    expect(container.textContent).not.toContain(href);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("measures compact selection actions, dismisses on scroll, and restores exact focus ownership", async () => {
     const dom = createDom();
     Object.defineProperty(dom.window, "innerWidth", { configurable: true, value: 360 });
@@ -787,6 +1031,15 @@ async function waitFor(dom: JSDOM, predicate: () => boolean, timeoutMs = 1_500):
 
 async function settle(dom: JSDOM): Promise<void> {
   await new Promise<void>((resolve) => dom.window.setTimeout(resolve, 0));
+}
+
+function deferred<T>(): {
+  readonly promise: Promise<T>;
+  readonly resolve: (value: T) => void;
+} {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => { resolve = next; });
+  return { promise, resolve };
 }
 
 function t(key: string): string {

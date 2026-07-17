@@ -16,6 +16,9 @@ import type {
   ModelListStrategy,
   ModelEgressContentClass,
   ModelEgressReasonCode,
+  NoteRenderContextId,
+  NoteResolveInlineReferenceRequest,
+  NoteResolveInlineReferenceResult,
   PigeErrorSummary,
   PermissionPendingRequest,
   PermissionPendingRequestQuery,
@@ -75,6 +78,11 @@ export type {
   PermissionPendingRequestQuery,
   PermissionResolveRequest,
   PermissionResolveResult,
+  NoteInlineReferenceTarget,
+  NoteInlineReferenceRequestId,
+  NoteRenderContextId,
+  NoteResolveInlineReferenceRequest,
+  NoteResolveInlineReferenceResult,
   RetrievalSearchRequest,
   RetrievalSearchResult,
   RetrievalSearchResultItem,
@@ -770,6 +778,7 @@ export interface NoteRenderResult {
   readonly summary: LibraryPageSummary;
   readonly html: string;
   readonly byteSize: number;
+  readonly renderContextId?: NoteRenderContextId;
 }
 
 export interface RetrievalAskRequest {
@@ -1229,6 +1238,9 @@ export interface PigeDesktopApi {
   readonly notes: {
     readonly get: (request: NoteGetRequest) => Promise<NoteDocument>;
     readonly render: (request: NoteRenderRequest) => Promise<NoteRenderResult>;
+    readonly resolveInlineReference: (
+      request: NoteResolveInlineReferenceRequest
+    ) => Promise<NoteResolveInlineReferenceResult>;
   };
   readonly retrieval: {
     readonly search: (request: RetrievalSearchRequest) => Promise<RetrievalSearchResult>;

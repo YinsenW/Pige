@@ -1,13 +1,11 @@
 import {
   useEffect,
-  useId,
   useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
   type DragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
-  type MouseEvent as ReactMouseEvent,
   type ReactNode,
   type RefObject
 } from "react";
@@ -15,6 +13,10 @@ import { PigeIcon, type PigeIconName } from "./components/PigeIcon";
 import { KnowledgeTreeMap } from "./components/KnowledgeTreeMap";
 import { CurrentNoteAgent } from "./components/CurrentNoteAgent";
 import { HomeVoicePanel, type HomeVoicePanelState } from "./components/HomeVoicePanel";
+import {
+  ReaderInlineReferenceSurface,
+  type ReaderInlineReferenceActivation
+} from "./components/ReaderInlineReferenceSurface";
 import pigeMarkUrl from "../../../../../resources/brand/pige-icon/master/pige-icon-1024.png";
 import deMessages from "./locales/de/messages.json";
 import enMessages from "./locales/en/messages.json";
@@ -44,6 +46,7 @@ import type {
   ModelProviderSettingsSummary,
   ModelProfileSummary,
   NoteRenderResult,
+  NoteResolveInlineReferenceRequest,
   OnboardingStatus,
   PigeErrorSummary,
   PermissionPendingRequest,
@@ -245,6 +248,9 @@ export function App(): React.JSX.Element {
   const [selectedNoteRelated, setSelectedNoteRelated] = useState<NoteRelatedState>(null);
   const [noteLoadingPageId, setNoteLoadingPageId] = useState<string | null>(null);
   const noteOpenSequence = useRef(0);
+  const inlineReferenceSequence = useRef(0);
+  const selectedNoteRef = useRef<NoteRenderResult | null>(selectedNote);
+  const selectedNoteVaultIdRef = useRef<string | null>(selectedNoteVaultId);
   const noteAgentDisclosureInitialized = useRef(false);
   const settingsTriggerRef = useRef<HTMLButtonElement | null>(null);
   const settingsOpenerRef = useRef<HTMLButtonElement | null>(null);
@@ -263,6 +269,8 @@ export function App(): React.JSX.Element {
   } | null>(null);
   const activeVaultIdRef = useRef<string | undefined>(onboarding?.activeVault?.vaultId);
   activeVaultIdRef.current = onboarding?.activeVault?.vaultId;
+  selectedNoteRef.current = selectedNote;
+  selectedNoteVaultIdRef.current = selectedNoteVaultId;
   const sidebarOpen = windowLayoutState?.sidebarOpen ?? windowState?.sidebarOpen ?? false;
   const homeSurface = view === "home" && !selectedNote;
   const windowLayoutSurface = homeSurface ? "home" : "reader";
@@ -410,6 +418,7 @@ export function App(): React.JSX.Element {
       if (refreshId !== vaultRefreshSequence.current) return;
       if (activeVaultIdRef.current !== nextOnboarding.activeVault?.vaultId) {
         noteOpenSequence.current += 1;
+        inlineReferenceSequence.current += 1;
         setSelectedNote(null);
         setSelectedNoteRelated(null);
         setSelectedNoteVaultId(null);
@@ -564,9 +573,10 @@ export function App(): React.JSX.Element {
     }
   };
 
-  const openNote = async (pageId: string): Promise<void> => {
+  const openNoteTarget = async (pageId: string, reportError = true): Promise<boolean> => {
     const vaultId = activeVaultIdRef.current;
-    if (!vaultId) return;
+    if (!vaultId) return false;
+    inlineReferenceSequence.current += 1;
     const requestId = noteOpenSequence.current + 1;
     noteOpenSequence.current = requestId;
     setDevelopmentNotice(null);
@@ -575,28 +585,71 @@ export function App(): React.JSX.Element {
     setNoteLoadingPageId(pageId);
     try {
       const note = await window.pige.notes.render({ pageId });
-      if (requestId !== noteOpenSequence.current || activeVaultIdRef.current !== vaultId) return;
+      if (
+        requestId !== noteOpenSequence.current ||
+        activeVaultIdRef.current !== vaultId ||
+        note.summary.pageId !== pageId
+      ) return false;
       let requestedNoteAgentOpen = noteAgentOpen;
       if (!noteAgentDisclosureInitialized.current) {
         noteAgentDisclosureInitialized.current = true;
         requestedNoteAgentOpen = !agentOverlayLayout;
       }
-      setSelectedNoteVaultId(vaultId);
-      setSelectedNote(note);
-      await requestWindowLayout({
+      const nextLayout = await requestWindowLayout({
         apiVersion: 1,
         surface: "reader",
         sidebarOpen,
         noteAgentOpen: requestedNoteAgentOpen
       });
-      if (requestId !== noteOpenSequence.current || activeVaultIdRef.current !== vaultId) return;
+      if (
+        !nextLayout ||
+        requestId !== noteOpenSequence.current ||
+        activeVaultIdRef.current !== vaultId
+      ) return false;
+      setSelectedNoteVaultId(vaultId);
+      setSelectedNote(note);
       void loadNoteRelated(pageId, requestId, noteOpenSequence, setSelectedNoteRelated);
+      return true;
     } catch {
-      if (requestId !== noteOpenSequence.current) return;
-      setLibraryError(t("error.generic"));
+      if (requestId !== noteOpenSequence.current) return false;
+      if (reportError) setLibraryError(t("error.generic"));
+      return false;
     } finally {
       if (requestId === noteOpenSequence.current) setNoteLoadingPageId(null);
     }
+  };
+
+  const openNote = async (pageId: string): Promise<void> => {
+    await openNoteTarget(pageId);
+  };
+
+  const activateInlineReference = async (href: string): Promise<ReaderInlineReferenceActivation> => {
+    const vaultId = activeVaultIdRef.current;
+    const note = selectedNoteRef.current;
+    const renderContextId = note?.renderContextId;
+    if (!vaultId || selectedNoteVaultIdRef.current !== vaultId || !note || !renderContextId) return "failed";
+    const pageId = note.summary.pageId;
+    const sequence = inlineReferenceSequence.current + 1;
+    inlineReferenceSequence.current = sequence;
+    const request: NoteResolveInlineReferenceRequest = {
+      apiVersion: 1,
+      requestId: createNoteReferenceRequestId(),
+      activeVaultId: vaultId,
+      currentPageId: pageId,
+      renderContextId,
+      href
+    };
+    return resolveAndOpenInlineReference(
+      request,
+      () => (
+        inlineReferenceSequence.current === sequence &&
+        activeVaultIdRef.current === vaultId &&
+        selectedNoteVaultIdRef.current === vaultId &&
+        selectedNoteRef.current?.summary.pageId === pageId &&
+        selectedNoteRef.current?.renderContextId === renderContextId
+      ),
+      (targetPageId) => openNoteTarget(targetPageId, false)
+    );
   };
 
   const copyNoteMarkdown = async (pageId: string): Promise<boolean> => {
@@ -634,6 +687,7 @@ export function App(): React.JSX.Element {
 
   const navigateHome = (): void => {
     noteOpenSequence.current += 1;
+    inlineReferenceSequence.current += 1;
     knowledgeTreeReturnFocusKey.current = null;
     setSelectedNote(null);
     setSelectedNoteRelated(null);
@@ -653,6 +707,7 @@ export function App(): React.JSX.Element {
   const navigateLibrarySearch = async (): Promise<void> => {
     if (voiceAssetInstallActiveRef.current) return;
     noteOpenSequence.current += 1;
+    inlineReferenceSequence.current += 1;
     knowledgeTreeReturnFocusKey.current = null;
     setSelectedNote(null);
     setSelectedNoteRelated(null);
@@ -839,6 +894,7 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     if (!selectedNote || selectedNoteVaultId === activeVault?.vaultId) return;
     noteOpenSequence.current += 1;
+    inlineReferenceSequence.current += 1;
     setSelectedNote(null);
     setSelectedNoteRelated(null);
     setNoteLoadingPageId(null);
@@ -991,6 +1047,7 @@ export function App(): React.JSX.Element {
               onClick={() => {
                 if (voiceAssetInstallActive) return;
                 noteOpenSequence.current += 1;
+                inlineReferenceSequence.current += 1;
                 knowledgeTreeReturnFocusKey.current = null;
                 setSelectedNote(null);
                 setSelectedNoteRelated(null);
@@ -1082,6 +1139,7 @@ export function App(): React.JSX.Element {
             onOpenNote={openNote}
             onCloseNote={() => {
               noteOpenSequence.current += 1;
+              inlineReferenceSequence.current += 1;
               setSelectedNote(null);
               setSelectedNoteRelated(null);
             }}
@@ -1091,6 +1149,9 @@ export function App(): React.JSX.Element {
             developmentNotice={developmentNotice?.surface === "reader" ? developmentNotice : null}
             onClearDevelopment={() => setDevelopmentNotice(null)}
             onCopyNote={copyNoteMarkdown}
+            {...(selectedNote?.renderContextId && selectedNoteVaultId === activeVault.vaultId
+              ? { onActivateInlineReference: activateInlineReference }
+              : {})}
             onDevelopment={(capability) => showDevelopmentCapability("reader", capability)}
             t={t}
           />
@@ -1110,6 +1171,7 @@ export function App(): React.JSX.Element {
               onOpenNote={openNote}
               onCloseNote={() => {
                 noteOpenSequence.current += 1;
+                inlineReferenceSequence.current += 1;
                 setSelectedNote(null);
                 setSelectedNoteRelated(null);
                 restoreKnowledgeTreeFocus(knowledgeTreeReturnFocusKey.current);
@@ -1120,6 +1182,9 @@ export function App(): React.JSX.Element {
               developmentNotice={developmentNotice?.surface === "reader" ? developmentNotice : null}
               onClearDevelopment={() => setDevelopmentNotice(null)}
               onCopyNote={copyNoteMarkdown}
+              {...(selectedNote?.renderContextId && selectedNoteVaultId === activeVault.vaultId
+                ? { onActivateInlineReference: activateInlineReference }
+                : {})}
               onDevelopment={(capability) => showDevelopmentCapability("reader", capability)}
               t={t}
             />
@@ -1476,6 +1541,7 @@ export function LibraryPanel(props: {
   readonly developmentNotice: DevelopmentNotice | null;
   readonly onClearDevelopment: () => void;
   readonly onCopyNote: (pageId: string) => Promise<boolean>;
+  readonly onActivateInlineReference?: (href: string) => Promise<ReaderInlineReferenceActivation>;
   readonly onDevelopment: (capability: DevelopmentCapability) => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
@@ -1655,6 +1721,7 @@ export function LibraryPanel(props: {
           related={props.selectedNoteRelated}
           relatedLoadingPageId={props.noteLoadingPageId}
           onOpenRelated={props.onOpenNote}
+          {...(props.onActivateInlineReference ? { onActivateInlineReference: props.onActivateInlineReference } : {})}
           onDevelopment={showReaderDevelopment}
           t={props.t}
         />
@@ -2064,11 +2131,11 @@ export function NoteReader(props: {
   readonly related: NoteRelatedState;
   readonly relatedLoadingPageId: string | null;
   readonly onOpenRelated: (pageId: string) => Promise<void>;
+  readonly onActivateInlineReference?: (href: string) => Promise<ReaderInlineReferenceActivation>;
   readonly onDevelopment: (capability: DevelopmentCapability) => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const summary = props.note.summary;
-  const readerLinkDescriptionId = useId();
   const readerRef = useRef<HTMLElement | null>(null);
   const markdownBodyRef = useRef<HTMLDivElement | null>(null);
   const selectionToolbarRef = useRef<HTMLDivElement | null>(null);
@@ -2100,28 +2167,6 @@ export function NoteReader(props: {
       normalizeTitle(firstBlock.textContent ?? "") === normalizeTitle(summary.title)
     );
   });
-
-  useLayoutEffect(() => {
-    const internalLinks = markdownBodyRef.current?.querySelectorAll<HTMLAnchorElement>(
-      'a[href^="#wiki:"], a[href^="#source:"]'
-    );
-    internalLinks?.forEach((link) => {
-      link.dataset.readerLinkState = "unavailable";
-      link.setAttribute("aria-describedby", readerLinkDescriptionId);
-    });
-  }, [props.note.html, readerLinkDescriptionId]);
-
-  const handleInternalReaderLink = (event: ReactMouseEvent<HTMLDivElement>): void => {
-    const target = event.target;
-    if (!(target instanceof HTMLElement)) return;
-    const link = target.closest<HTMLAnchorElement>("a[href]");
-    if (!link || !event.currentTarget.contains(link)) return;
-    const href = link.getAttribute("href") ?? "";
-    if (!href.startsWith("#wiki:") && !href.startsWith("#source:")) return;
-    event.preventDefault();
-    event.stopPropagation();
-    props.onDevelopment("reader_link");
-  };
 
   const closeSelectionToolbar = (restoreFocus: boolean): void => {
     selectionFocusTransition.current = false;
@@ -2296,16 +2341,13 @@ export function NoteReader(props: {
           ) : null}
         </div>
       </header>
-      <p id={readerLinkDescriptionId} hidden>
-        {props.t("note.readerLinkUnavailable")}
-      </p>
-      <div
+      <ReaderInlineReferenceSurface
         ref={markdownBodyRef}
-        className="markdown-body"
-        onClickCapture={handleInternalReaderLink}
-        onAuxClickCapture={handleInternalReaderLink}
-        // HTML is produced by the main-process Markdown renderer after sanitization.
-        dangerouslySetInnerHTML={{ __html: props.note.html }}
+        pageIdentity={`${summary.pageId}:${props.note.renderContextId ?? "unavailable"}`}
+        html={props.note.html}
+        onUnavailable={() => props.onDevelopment("reader_link")}
+        t={props.t}
+        {...(props.onActivateInlineReference ? { onActivate: props.onActivateInlineReference } : {})}
       />
       {summary.sourceIds.length > 0 ? (
         <section className="reader-sources" aria-label={props.t("note.sources")}>
@@ -3065,6 +3107,8 @@ function HomeComposer(props: {
   const composerCompositionTimerRef = useRef<number | undefined>(undefined);
   const draftRevisionRef = useRef(0);
   const noteOpenSequence = useRef(0);
+  const inlineReferenceSequence = useRef(0);
+  const selectedNoteRef = useRef<NoteRenderResult | null>(selectedNote);
   const permissionDecisionInFlight = useRef<string | null>(null);
   const permissionReadSequence = useRef(0);
   const currentPermissionRequestIdRef = useRef<string | undefined>(undefined);
@@ -3094,6 +3138,7 @@ function HomeComposer(props: {
   const activeVaultIdRef = useRef<string | undefined>(props.activeVault?.vaultId);
   const activeAgentDraftRef = useRef<ActiveAgentDraftBinding | null>(null);
   activeVaultIdRef.current = props.activeVault?.vaultId;
+  selectedNoteRef.current = selectedNote;
   voiceLanguageTagRef.current = props.locale;
   draftTextRef.current = text;
   const agentStatusLabel = props.agentRuntimeStatus?.state === "ready" ? props.t("home.agentReady") : props.t("home.captureOnly");
@@ -3614,6 +3659,11 @@ function HomeComposer(props: {
 
   useEffect(() => {
     conversationLoadSequence.current += 1;
+    noteOpenSequence.current += 1;
+    inlineReferenceSequence.current += 1;
+    setSelectedNote(null);
+    setSelectedNoteRelated(null);
+    setNoteLoadingPageId(null);
     setConversationTimeline(undefined);
     setLiveAnswerEventId(null);
     setAgentAnswer(null);
@@ -3737,6 +3787,7 @@ function HomeComposer(props: {
     setAgentModelUsage("none");
     setActiveSourceTurn(null);
     noteOpenSequence.current += 1;
+    inlineReferenceSequence.current += 1;
     setSelectedNote(null);
     setSelectedNoteRelated(null);
     const turnText = text.trim();
@@ -4038,7 +4089,10 @@ function HomeComposer(props: {
     }
   };
 
-  const openResult = async (pageId: string): Promise<void> => {
+  const openResultTarget = async (pageId: string, reportError = true): Promise<boolean> => {
+    const vaultId = activeVaultIdRef.current;
+    if (!vaultId) return false;
+    inlineReferenceSequence.current += 1;
     const requestId = noteOpenSequence.current + 1;
     noteOpenSequence.current = requestId;
     setCaptureError(null);
@@ -4046,15 +4100,53 @@ function HomeComposer(props: {
     setNoteLoadingPageId(pageId);
     try {
       const note = await window.pige.notes.render({ pageId });
-      if (requestId !== noteOpenSequence.current) return;
+      if (
+        requestId !== noteOpenSequence.current ||
+        activeVaultIdRef.current !== vaultId ||
+        note.summary.pageId !== pageId
+      ) return false;
       setSelectedNote(note);
       void loadNoteRelated(pageId, requestId, noteOpenSequence, setSelectedNoteRelated);
-    } catch (caught) {
-      if (requestId !== noteOpenSequence.current) return;
-      setCaptureError(caught instanceof Error ? caught.message : props.t("error.generic"));
+      return true;
+    } catch {
+      if (requestId !== noteOpenSequence.current) return false;
+      if (reportError) setCaptureError(props.t("error.generic"));
+      return false;
     } finally {
       if (requestId === noteOpenSequence.current) setNoteLoadingPageId(null);
     }
+  };
+
+  const openResult = async (pageId: string): Promise<void> => {
+    await openResultTarget(pageId);
+  };
+
+  const activateInlineReference = async (href: string): Promise<ReaderInlineReferenceActivation> => {
+    const vaultId = activeVaultIdRef.current;
+    const note = selectedNoteRef.current;
+    const renderContextId = note?.renderContextId;
+    if (!vaultId || !note || !renderContextId) return "failed";
+    const pageId = note.summary.pageId;
+    const sequence = inlineReferenceSequence.current + 1;
+    inlineReferenceSequence.current = sequence;
+    const request: NoteResolveInlineReferenceRequest = {
+      apiVersion: 1,
+      requestId: createNoteReferenceRequestId(),
+      activeVaultId: vaultId,
+      currentPageId: pageId,
+      renderContextId,
+      href
+    };
+    return resolveAndOpenInlineReference(
+      request,
+      () => (
+        inlineReferenceSequence.current === sequence &&
+        activeVaultIdRef.current === vaultId &&
+        selectedNoteRef.current?.summary.pageId === pageId &&
+        selectedNoteRef.current?.renderContextId === renderContextId
+      ),
+      (targetPageId) => openResultTarget(targetPageId, false)
+    );
   };
 
   return (
@@ -4346,6 +4438,7 @@ function HomeComposer(props: {
             className="ghost back-button"
             onClick={() => {
               noteOpenSequence.current += 1;
+              inlineReferenceSequence.current += 1;
               setSelectedNote(null);
               setSelectedNoteRelated(null);
             }}
@@ -4357,6 +4450,7 @@ function HomeComposer(props: {
             related={selectedNoteRelated}
             relatedLoadingPageId={noteLoadingPageId}
             onOpenRelated={openResult}
+            {...(selectedNote.renderContextId ? { onActivateInlineReference: activateInlineReference } : {})}
             onDevelopment={props.onDevelopment}
             t={props.t}
           />
@@ -4820,6 +4914,30 @@ function createAgentClientTurnId(now = new Date()): string {
   ].join("");
   const opaqueId = window.crypto.randomUUID().replaceAll("-", "").toLowerCase();
   return `turn_${date}_${opaqueId}`;
+}
+
+function createNoteReferenceRequestId(): string {
+  return `noteref_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
+}
+
+async function resolveAndOpenInlineReference(
+  request: NoteResolveInlineReferenceRequest,
+  isCurrent: () => boolean,
+  openPage: (pageId: string) => Promise<boolean>
+): Promise<ReaderInlineReferenceActivation> {
+  try {
+    const result = await window.pige.notes.resolveInlineReference(request);
+    if (!isCurrent()) return "stale";
+    if (result.requestId !== request.requestId) return "failed";
+    if (result.status !== "resolved") return result.status;
+    if (!await openPage(result.target.pageId)) return "failed";
+    window.requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>(".note-reader")?.focus({ preventScroll: true });
+    });
+    return result.target.kind === "source" ? "opened_source" : "opened_page";
+  } catch {
+    return isCurrent() ? "failed" : "stale";
+  }
 }
 
 function createSpeechRequestId(): string {

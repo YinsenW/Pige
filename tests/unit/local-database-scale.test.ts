@@ -25,6 +25,7 @@ const PAGE_COUNT = 10_000;
 const CHUNK_COUNT = 100_000;
 const LIBRARY_LIMIT_MS = 1_000;
 const SEARCH_LIMIT_MS = 2_000;
+const INLINE_REFERENCE_LIMIT_MS = 250;
 const RECIPE = "pige-local-database-scale-v1";
 const runScale = process.env.PIGE_RUN_SCALE_EVIDENCE === "1" ? it : it.skip;
 
@@ -77,8 +78,20 @@ describe("local database scale evidence", () => {
         indexedPageCount: PAGE_COUNT,
         chunkCount: CHUNK_COUNT,
         chunkerVersion: "pige-markdown-v1",
-        indexRevision: 4
+        indexRevision: 5
       });
+
+      const referenceRevision = database.inlineReferenceRevision(vaultPath);
+      expect(referenceRevision).toMatch(/^5:/u);
+      const referenceSamples = measureFive(() => database.inlineReferenceCandidates(vaultPath, {
+        normalizedKey: "scale page 09999",
+        expectedRevision: referenceRevision!
+      }));
+      expect(Math.max(...referenceSamples)).toBeLessThan(INLINE_REFERENCE_LIMIT_MS);
+      expect(database.inlineReferenceCandidates(vaultPath, {
+        normalizedKey: "scale page 09999",
+        expectedRevision: referenceRevision!
+      })?.map((page) => page.pageId)).toEqual(["page_20260715_000007pr"]);
 
       library.list({ limit: 50 });
       retrieval.search({ scope: retrievalScope, query: "bounded local retrieval", limit: 8 });

@@ -19,6 +19,8 @@ import type {
   ModelEgressPendingRequest,
   ModelEgressResolveRequest,
   NoteRenderResult,
+  NoteResolveInlineReferenceRequest,
+  NoteResolveInlineReferenceResult,
   OnboardingStatus,
   PermissionPendingRequest,
   PermissionResolveRequest,
@@ -664,6 +666,214 @@ describe("Home durable Agent conversation UI", () => {
       await act(async () => root.unmount());
       dom.window.close();
     }
+  });
+
+  it("resolves a Reader link with the exact current vault, page, and render context", async () => {
+    const dom = createDom(840);
+    const harness = createHarness(undefined);
+    harness.sidebarOpen = true;
+    harness.windowLayoutWidth = 840;
+    harness.windowLayoutAvailableWidth = 1600;
+    const targetPageId = "page_20260715_note0002";
+    harness.resolveInlineReference = async (request) => ({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "resolved",
+      target: { kind: "page", pageId: targetPageId }
+    });
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    await waitFor(dom, () => container.querySelector(".library-sidebar-tree .library-tree-disclosure") !== null);
+    await openLibraryNote(dom, container, "Note A");
+
+    const link = requireElement(container.querySelector<HTMLAnchorElement>('a[href="#wiki:note-b"]'));
+    expect(link.dataset.readerLinkState).toBe("ready");
+    await clickElement(dom, link);
+    await waitFor(dom, () => container.querySelector(".note-reader h1")?.textContent === "Note B");
+    await waitFor(dom, () => dom.window.document.activeElement === container.querySelector(".note-reader"));
+
+    expect(harness.inlineReferenceRequests).toHaveLength(1);
+    expect(harness.inlineReferenceRequests[0]).toMatchObject({
+      apiVersion: 1,
+      activeVaultId: "vault_home_conversation",
+      currentPageId: "page_20260715_note0001",
+      renderContextId: `notectx_${"a".repeat(32)}`,
+      href: "#wiki:note-b"
+    });
+    expect(harness.inlineReferenceRequests[0]?.requestId).toMatch(/^noteref_[a-z0-9]{16,64}$/u);
+    expect(harness.noteRenderRequests).toEqual(["page_20260715_note0001", targetPageId]);
+    expect(container.textContent).not.toContain("notectx_");
+    expect(container.textContent).not.toContain("page_20260715_note0002");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("uses the same typed resolver owner from a Home retrieval Reader", async () => {
+    const dom = createDom(720);
+    const harness = createHarness(undefined);
+    harness.submitTurn = async (request) => {
+      harness.submitRequests.push(request);
+      return retrievalCompletedResult();
+    };
+    harness.resolveInlineReference = async (request) => ({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "resolved",
+      target: { kind: "page", pageId: "page_20260715_note0002" }
+    });
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    await setTextareaValue(dom, container, "Find the approved Reader fixture.");
+    await clickButtonByAriaLabel(dom, container, "Send");
+    await waitFor(dom, () => container.textContent?.includes("Local Reader result") === true);
+    await clickElement(dom, buttons(container, "Open")[0]!);
+    await waitFor(dom, () => container.querySelector(".note-reader h1")?.textContent === "Note A");
+    await clickElement(dom, requireElement(container.querySelector<HTMLAnchorElement>('a[href="#wiki:note-b"]')));
+    await waitFor(dom, () => container.querySelector(".note-reader h1")?.textContent === "Note B");
+
+    expect(harness.inlineReferenceRequests).toHaveLength(1);
+    expect(harness.inlineReferenceRequests[0]).toMatchObject({
+      activeVaultId: "vault_home_conversation",
+      currentPageId: "page_20260715_note0001",
+      renderContextId: `notectx_${"a".repeat(32)}`,
+      href: "#wiki:note-b"
+    });
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("does not call the resolver without a current render context", async () => {
+    const dom = createDom(840);
+    const harness = createHarness(undefined);
+    harness.sidebarOpen = true;
+    harness.windowLayoutWidth = 840;
+    harness.renderNote = async (pageId) => {
+      const note = testRenderedNote(pageId);
+      return { summary: note.summary, html: note.html, byteSize: note.byteSize };
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    await waitFor(dom, () => container.querySelector(".library-sidebar-tree .library-tree-disclosure") !== null);
+    await openLibraryNote(dom, container, "Note A");
+
+    const link = requireElement(container.querySelector<HTMLAnchorElement>('a[href="#wiki:note-b"]'));
+    expect(link.dataset.readerLinkState).toBe("unavailable");
+    await clickElement(dom, link);
+    expect(harness.inlineReferenceRequests).toEqual([]);
+    expect(container.textContent).toContain(enMessages["note.readerLinkUnavailable"]);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("drops a delayed reference result after note routing changes the render identity", async () => {
+    const dom = createDom(840);
+    const harness = createHarness(undefined);
+    harness.sidebarOpen = true;
+    harness.windowLayoutWidth = 840;
+    const pending = deferred<NoteResolveInlineReferenceResult>();
+    harness.resolveInlineReference = async () => pending.promise;
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    await waitFor(dom, () => container.querySelector(".library-sidebar-tree .library-tree-disclosure") !== null);
+    await openLibraryNote(dom, container, "Note A");
+    const link = requireElement(container.querySelector<HTMLAnchorElement>('a[href="#wiki:note-b"]'));
+    await clickElement(dom, link);
+    await waitFor(dom, () => link.dataset.readerLinkState === "resolving");
+
+    await openLibraryNote(dom, container, "Note B");
+    const oldRequest = harness.inlineReferenceRequests[0]!;
+    await act(async () => {
+      pending.resolve({
+        apiVersion: 1,
+        requestId: oldRequest.requestId,
+        status: "resolved",
+        target: { kind: "page", pageId: "page_20260715_note0001" }
+      });
+      await pending.promise;
+      await settle(dom);
+    });
+
+    expect(container.querySelector(".note-reader h1")?.textContent).toBe("Note B");
+    expect(harness.noteRenderRequests).toEqual([
+      "page_20260715_note0001",
+      "page_20260715_note0002"
+    ]);
+    expect(container.querySelector("[data-reader-reference-feedback]")).toBeNull();
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("invalidates a pending Reader reference when Settings switches the active vault", async () => {
+    const dom = createDom(840);
+    const harness = createHarness(undefined);
+    harness.sidebarOpen = true;
+    harness.windowLayoutWidth = 840;
+    const pending = deferred<NoteResolveInlineReferenceResult>();
+    harness.resolveInlineReference = async () => pending.promise;
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    await waitFor(dom, () => container.querySelector(".sidebar-settings-control") !== null);
+    await openLibraryNote(dom, container, "Note A");
+    await clickElement(dom, requireElement(container.querySelector<HTMLAnchorElement>('a[href="#wiki:note-b"]')));
+    await waitFor(dom, () => harness.inlineReferenceRequests.length === 1);
+
+    await clickElement(dom, requireElement(container.querySelector<HTMLButtonElement>(".sidebar-settings-control")));
+    harness.onboarding = {
+      ...readyOnboarding(),
+      activeVault: {
+        ...homeVaultSummary(),
+        vaultId: "vault_second_reader",
+        name: "Second Reader Vault"
+      }
+    };
+    await clickButtonByAriaLabel(dom, container, "Close Settings");
+    await waitFor(dom, () => container.querySelector(".note-reader") === null);
+
+    const oldRequest = harness.inlineReferenceRequests[0]!;
+    await act(async () => {
+      pending.resolve({
+        apiVersion: 1,
+        requestId: oldRequest.requestId,
+        status: "resolved",
+        target: { kind: "page", pageId: "page_20260715_note0002" }
+      });
+      await pending.promise;
+      await settle(dom);
+    });
+    expect(harness.noteRenderRequests).toEqual(["page_20260715_note0001"]);
+    expect(container.querySelector("[data-reader-reference-feedback]")).toBeNull();
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps the current Reader and one body-free status when the resolved target cannot render", async () => {
+    const dom = createDom(840);
+    const harness = createHarness(undefined);
+    harness.sidebarOpen = true;
+    harness.windowLayoutWidth = 840;
+    harness.resolveInlineReference = async (request) => ({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "resolved",
+      target: { kind: "source", sourceId: "src_20260715_source001", pageId: "page_20260715_note0002" }
+    });
+    harness.renderNote = async (pageId) => {
+      if (pageId.endsWith("2")) throw new Error("raw private note path and resolver body");
+      return testRenderedNote(pageId);
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    await waitFor(dom, () => container.querySelector(".library-sidebar-tree .library-tree-disclosure") !== null);
+    await openLibraryNote(dom, container, "Note A");
+    await clickElement(dom, requireElement(container.querySelector<HTMLAnchorElement>('a[href="#wiki:note-b"]')));
+    await waitFor(dom, () => container.querySelector('[data-reader-reference-feedback="failed"]') !== null);
+
+    expect(container.querySelector(".note-reader h1")?.textContent).toBe("Note A");
+    expect(container.querySelectorAll('[data-reader-reference-feedback="failed"]')).toHaveLength(1);
+    expect(container.textContent).not.toContain("raw private note path and resolver body");
+    expect(container.textContent).not.toContain("src_20260715_source001");
+
+    await act(async () => root.unmount());
+    dom.window.close();
   });
 
   it("requests enough window width before revealing the Library pane", async () => {
@@ -2511,6 +2721,10 @@ interface ConversationHarness {
   readonly windowLayoutRequests: WindowLayoutRequest[];
   readonly windowLayoutListeners: Set<(state: WindowLayoutState) => void>;
   failNextWindowLayout: boolean;
+  readonly noteRenderRequests: string[];
+  readonly inlineReferenceRequests: NoteResolveInlineReferenceRequest[];
+  renderNote: (pageId: string) => Promise<NoteRenderResult>;
+  resolveInlineReference: (request: NoteResolveInlineReferenceRequest) => Promise<NoteResolveInlineReferenceResult>;
   loadAppearance: () => Promise<{
     readonly locale: "zh-Hans" | "en" | "ja" | "ko" | "fr" | "de";
     readonly availableLocales: readonly ("zh-Hans" | "en" | "ja" | "ko" | "fr" | "de")[];
@@ -2582,6 +2796,14 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     windowLayoutRequests: [],
     windowLayoutListeners: new Set(),
     failNextWindowLayout: false,
+    noteRenderRequests: [],
+    inlineReferenceRequests: [],
+    renderNote: async (pageId) => testRenderedNote(pageId),
+    resolveInlineReference: async (request) => ({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "not_found"
+    }),
     loadAppearance: async () => ({ locale: harness.locale, availableLocales: [harness.locale] }),
     loadOnboarding: async () => harness.onboarding,
     loadModelSummary: async () => harness.onboarding.state === "ready"
@@ -3046,7 +3268,14 @@ function makePigeApi(harness: ConversationHarness): object {
       related: async ({ pageId }: { readonly pageId: string }) => testRelatedPages(pageId)
     },
     notes: {
-      render: async ({ pageId }: { readonly pageId: string }) => testRenderedNote(pageId)
+      render: async ({ pageId }: { readonly pageId: string }) => {
+        harness.noteRenderRequests.push(pageId);
+        return harness.renderNote(pageId);
+      },
+      resolveInlineReference: async (request: NoteResolveInlineReferenceRequest) => {
+        harness.inlineReferenceRequests.push(request);
+        return harness.resolveInlineReference(request);
+      }
     }
   };
 }
@@ -3159,7 +3388,12 @@ function testRenderedNote(pageId: string): NoteRenderResult {
   if (!summary) throw new Error(`Unknown test note: ${pageId}`);
   return {
     summary,
-    html: `<h1>${summary.title}</h1><p>Approved reader fixture.</p>`,
+    renderContextId: pageId.endsWith("1")
+      ? `notectx_${"a".repeat(32)}`
+      : `notectx_${"b".repeat(32)}`,
+    html: pageId.endsWith("1")
+      ? `<h1>${summary.title}</h1><p>Approved reader fixture. <a href="#wiki:note-b">Open Note B</a></p>`
+      : `<h1>${summary.title}</h1><p>Approved reader fixture.</p>`,
     byteSize: 96
   };
 }
@@ -3296,6 +3530,34 @@ function completedResult(): AgentSubmitTurnResult {
       answer: "Here is the second answer.",
       grounding: "general",
       citations: []
+    }
+  };
+}
+
+function retrievalCompletedResult(): AgentSubmitTurnResult {
+  const result = completedResult();
+  if (result.state !== "completed") throw new Error("Expected a completed Agent result fixture.");
+  return {
+    ...result,
+    answer: {
+      answer: "The local Reader fixture matched.",
+      grounding: "local_knowledge",
+      citations: [],
+      retrieval: {
+        searchedAt: "2026-07-15T08:04:00.000Z",
+        activeVaultId: "vault_home_conversation",
+        query: "approved Reader fixture",
+        mode: "lexical_markdown_scan",
+        total: 1,
+        invalidPageCount: 0,
+        degraded: false,
+        results: [{
+          summary: testLibraryList().pages[0]!,
+          score: 1,
+          snippets: ["Local Reader result"],
+          matchReasons: ["body"]
+        }]
+      }
     }
   };
 }
@@ -3833,7 +4095,7 @@ async function openLibraryNote(dom: JSDOM, container: HTMLElement, title: string
   await waitFor(dom, () => container.querySelector(".note-reader h1")?.textContent === title);
 }
 
-async function clickElement(dom: JSDOM, element: HTMLButtonElement): Promise<void> {
+async function clickElement(dom: JSDOM, element: HTMLElement): Promise<void> {
   await act(async () => {
     element.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
     await settle(dom);
@@ -3871,6 +4133,17 @@ function escapeRegExp(value: string): string {
 function requireElement(element: HTMLElement | null): HTMLElement {
   if (!element) throw new Error("Expected test container.");
   return element;
+}
+
+function deferred<T>(): {
+  readonly promise: Promise<T>;
+  readonly resolve: (value: T) => void;
+} {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((settle) => {
+    resolve = settle;
+  });
+  return { promise, resolve };
 }
 
 async function waitFor(dom: JSDOM, predicate: () => boolean): Promise<void> {

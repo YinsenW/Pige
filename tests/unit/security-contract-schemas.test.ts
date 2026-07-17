@@ -9,6 +9,8 @@ import {
   ModelEgressPendingRequestSchema,
   ModelEgressResolveRequestSchema,
   ModelEgressResolveResultSchema,
+  NoteResolveInlineReferenceRequestSchema,
+  NoteResolveInlineReferenceResultSchema,
   PermissionActionBindingSchema,
   PermissionActionLifecycleRecordSchema,
   PermissionDecisionRecordSchema,
@@ -26,6 +28,40 @@ const timestamp = "2026-07-10T00:00:00.000Z";
 const policyHash = `sha256:${"a".repeat(64)}`;
 
 describe("security-sensitive shared contracts", () => {
+  it("keeps inline note reference requests bounded and results pathless", () => {
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "noteref_abcdefghijklmnop",
+      activeVaultId: "vault_20260710_abcdef12",
+      currentPageId: "page_20260710_abcdef12",
+      renderContextId: `notectx_${"a".repeat(32)}`,
+      href: "#wiki:Product%20Positioning"
+    };
+    expect(NoteResolveInlineReferenceRequestSchema.parse(request)).toEqual(request);
+    expect(() => NoteResolveInlineReferenceRequestSchema.parse({ ...request, href: "https://example.com" })).toThrow();
+    expect(() => NoteResolveInlineReferenceRequestSchema.parse({ ...request, href: `#wiki:${"a".repeat(1025)}` })).toThrow();
+    expect(() => NoteResolveInlineReferenceRequestSchema.parse({ ...request, href: `#wiki:${"界".repeat(340)}` })).toThrow();
+    expect(() => NoteResolveInlineReferenceRequestSchema.parse({ ...request, href: "#wiki:line\nbreak" })).toThrow();
+
+    const resolved = {
+      apiVersion: 1 as const,
+      requestId: request.requestId,
+      status: "resolved" as const,
+      target: { kind: "page" as const, pageId: "page_20260710_abcdef12" }
+    };
+    expect(NoteResolveInlineReferenceResultSchema.parse(resolved)).toEqual(resolved);
+    expect(() => NoteResolveInlineReferenceResultSchema.parse({
+      ...resolved,
+      target: { ...resolved.target, path: "/private/vault/wiki/page.md" }
+    })).toThrow();
+    expect(() => NoteResolveInlineReferenceResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "ambiguous",
+      candidates: ["page_20260710_abcdef12"]
+    })).toThrow();
+  });
+
   it("rejects raw-secret capabilities and YOLO eligibility for always-confirmed actions", () => {
     const request = {
       id: "permreq_20260710_abcdef12",

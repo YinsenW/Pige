@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, safeStorage, screen, shell, type WebContents } from "electron";
+import { randomUUID } from "node:crypto";
 import { existsSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -28,6 +29,7 @@ import type {
   PermissionPendingRequestQuery,
   PermissionResolveRequest,
   NoteGetRequest,
+  NoteResolveInlineReferenceRequest,
   NoteRenderRequest,
   ProviderConnectResult,
   RetrievalAskRequest,
@@ -67,6 +69,8 @@ import {
   PermissionPendingRequestSchema,
   PermissionResolveRequestSchema,
   PermissionResolveResultSchema,
+  NoteResolveInlineReferenceRequestSchema,
+  NoteResolveInlineReferenceResultSchema,
   type Locale,
   UpdateModelRequestSchema,
   SetDefaultModelRequestSchema,
@@ -769,7 +773,7 @@ const getLibraryService = (): LibraryService => {
 
 const getNotesService = (): NotesService => {
   if (!notesService) {
-    notesService = new NotesService(getVaultService());
+    notesService = new NotesService(getVaultService(), getLocalDatabaseService());
   }
   return notesService;
 };
@@ -809,6 +813,8 @@ const getLocalDatabaseService = (): LocalDatabaseService => {
   return localDatabaseService;
 };
 
+const databaseInitializationRebuilds = new Set<string>();
+
 const getModelProviderRegistry = (): ModelProviderRegistry => {
   if (!modelProviderRegistry) {
     modelProviderRegistry = new ModelProviderRegistry(
@@ -842,7 +848,19 @@ const getModelProviderRegistry = (): ModelProviderRegistry => {
 const initializeActiveDatabase = (): void => {
   const activeVaultPath = getVaultService().activeVaultPath();
   if (activeVaultPath) {
-    getLocalDatabaseService().initialize(activeVaultPath);
+    const status = getLocalDatabaseService().initialize(activeVaultPath);
+    if (status.status !== "ready" && !databaseInitializationRebuilds.has(activeVaultPath)) {
+      databaseInitializationRebuilds.add(activeVaultPath);
+      void getJobsService().requestIndexRebuild().catch(() => {
+        getDiagnosticsService().recordEvent({
+          level: "warning",
+          code: "database.index_rebuild.initialization_failed",
+          message: "The local index still requires a rebuild after initialization."
+        });
+      }).finally(() => {
+        databaseInitializationRebuilds.delete(activeVaultPath);
+      });
+    }
   }
 };
 
@@ -1368,8 +1386,41 @@ ipcMain.handle("activity.undo", (_event, request: KnowledgeActivityUndoRequest) 
 ipcMain.handle("library.list", (_event, request?: LibraryListRequest) => getLibraryService().list(request));
 ipcMain.handle("library.tree", () => getLibraryService().tree());
 ipcMain.handle("library.related", (_event, request: LibraryRelatedRequest) => getLibraryService().related(request));
+const notesTrackedSenders = new Map<number, string>();
+
+function trackNotesSender(sender: WebContents): string {
+  const existing = notesTrackedSenders.get(sender.id);
+  if (existing) return existing;
+  const ownerId = `notes_owner_${randomUUID()}`;
+  notesTrackedSenders.set(sender.id, ownerId);
+  sender.once("destroyed", () => {
+    notesTrackedSenders.delete(sender.id);
+    getNotesService().releaseOwner(ownerId);
+  });
+  return ownerId;
+}
+
 ipcMain.handle("notes.get", (_event, request: NoteGetRequest) => getNotesService().get(request));
-ipcMain.handle("notes.render", (_event, request: NoteRenderRequest) => getNotesService().render(request));
+ipcMain.handle("notes.render", (event, request: NoteRenderRequest) => {
+  const sender = event.sender;
+  const ownerId = trackNotesSender(sender);
+  return getNotesService().render(request, ownerId).then((result) => {
+    if (sender.isDestroyed() || notesTrackedSenders.get(sender.id) !== ownerId) {
+      getNotesService().releaseOwner(ownerId);
+      throw new PigeDomainError("note_render_stale", "The Reader owner changed while the page was rendered.");
+    }
+    return result;
+  });
+});
+ipcMain.handle("notes.resolveInlineReference", (event, request: NoteResolveInlineReferenceRequest) => {
+  const parsed = NoteResolveInlineReferenceRequestSchema.parse(request);
+  const ownerId = notesTrackedSenders.get(event.sender.id);
+  return NoteResolveInlineReferenceResultSchema.parse(
+    ownerId === undefined
+      ? { apiVersion: 1, requestId: parsed.requestId, status: "stale", scope: "render_context" }
+      : getNotesService().resolveInlineReference(ownerId, parsed)
+  );
+});
 
 function proposalRendererBoundaryUnavailable(): never {
   throw new PigeDomainError(
