@@ -2002,6 +2002,10 @@ export const ConversationEventSchema = z.object({
   parentEventId: ConversationEventIdSchema.optional(),
   inputHash: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional(),
   scope: AgentTurnCurrentNoteScopeSchema.optional(),
+  inputPresentation: z.object({
+    kind: z.literal("reader_selection_action"),
+    action: z.enum(["explain", "summarize"])
+  }).strict().optional(),
   contentHash: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional(),
   sourceId: SourceIdSchema.optional(),
   captureId: CaptureIdSchema.optional(),

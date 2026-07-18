@@ -48,6 +48,7 @@ describe("Reader selection action service", () => {
     expect((turn as AgentSubmitTurnRequest).text).toContain("Explain the selected passage");
     expect((turn as AgentSubmitTurnRequest).text).not.toContain("SELECTED_PRIVATE_PASSAGE");
     expect(context).toMatchObject({ currentNoteSelection: fixture.selection });
+    expect(context).toMatchObject({ currentNoteReadAction: "explain" });
     expect(JSON.stringify(result)).not.toContain("SELECTED_PRIVATE_PASSAGE");
   });
 

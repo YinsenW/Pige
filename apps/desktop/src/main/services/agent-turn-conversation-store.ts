@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type {
   AgentConversationMessage,
+  AgentConversationInputPresentation,
   AgentTurnAnswer,
   AgentTurnInputKind,
   AgentTurnObjective,
@@ -46,6 +47,7 @@ export interface AgentTurnConversationMetadata {
   readonly objective: AgentTurnObjective;
   readonly locale: Locale;
   readonly scope?: AgentTurnScope;
+  readonly inputPresentation?: AgentConversationInputPresentation;
 }
 
 export interface AgentTurnConversationBinding {
@@ -653,17 +655,30 @@ function readTurnMetadata(event: ConversationEvent): AgentTurnConversationMetada
     return undefined;
   }
   const scope = readTurnScope(value.scope);
+  const inputPresentation = readInputPresentation(value.inputPresentation);
   return {
     inputKind: value.inputKind as AgentTurnInputKind,
     objective: value.objective as AgentTurnObjective,
     locale: value.locale as Locale,
-    ...(scope ? { scope } : {})
+    ...(scope ? { scope } : {}),
+    ...(inputPresentation ? { inputPresentation } : {})
   };
 }
 
 function readTurnScope(value: unknown): AgentTurnScope | undefined {
   const parsed = AgentTurnCurrentNoteScopeSchema.safeParse(value);
   return parsed.success ? parsed.data : undefined;
+}
+
+function readInputPresentation(value: unknown): AgentConversationInputPresentation | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = value as Record<string, unknown>;
+  if (
+    candidate.kind !== "reader_selection_action" ||
+    (candidate.action !== "explain" && candidate.action !== "summarize") ||
+    Object.keys(candidate).some((key) => key !== "kind" && key !== "action")
+  ) return undefined;
+  return { kind: candidate.kind, action: candidate.action };
 }
 
 function assertStoredUserIntegrity(event: ConversationEvent): void {
@@ -695,12 +710,14 @@ function hasExactTurnMetadata(
     return value.inputKind === undefined &&
       value.objective === undefined &&
       value.locale === undefined &&
-      value.scope === undefined;
+      value.scope === undefined &&
+      value.inputPresentation === undefined;
   }
   return value.inputKind === metadata.inputKind &&
     value.objective === metadata.objective &&
     value.locale === metadata.locale &&
-    scopesEqual(readTurnScope(value.scope), metadata.scope);
+    scopesEqual(readTurnScope(value.scope), metadata.scope) &&
+    JSON.stringify(readInputPresentation(value.inputPresentation)) === JSON.stringify(metadata.inputPresentation);
 }
 
 function conversationHasScope(events: readonly ConversationEvent[], scope: AgentTurnScope | undefined): boolean {
@@ -786,12 +803,16 @@ function selectRecentMessages(
     }
     const bytes = Buffer.byteLength(event.text, "utf8");
     if (textBytes + bytes > maxTextBytes) break;
+    const inputPresentation = event.type === "user_message"
+      ? readInputPresentation(event.inputPresentation)
+      : undefined;
     selected.push({
       id: event.id,
       role: event.type === "user_message" ? "user" : "assistant",
       createdAt: event.createdAt,
       text: event.text,
       ...(event.jobId === undefined ? {} : { jobId: event.jobId }),
+      ...(inputPresentation ? { inputPresentation } : {}),
       ...(event.type === "assistant_message" && event.answerGrounding !== undefined ? {
         answer: {
           answer: event.text,
@@ -1082,7 +1103,8 @@ function createTurnInputHash(
     inputKind: metadata.inputKind,
     objective: metadata.objective,
     locale: metadata.locale,
-    ...(metadata.scope ? { scope: metadata.scope } : {})
+    ...(metadata.scope ? { scope: metadata.scope } : {}),
+    ...(metadata.inputPresentation ? { inputPresentation: metadata.inputPresentation } : {})
   } : null;
   if (!binding) {
     return hashValue(`pige.agent_turn.${kind}.v1\0${text}\0${JSON.stringify(stableMetadata)}`);

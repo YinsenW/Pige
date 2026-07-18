@@ -2287,7 +2287,10 @@ SYNTHETIC_DISTRACTOR_BODY
       scope: { kind: "current_note", pageId: HOME_PAGE_ID },
       locale: "en",
       clientTurnId: "turn_20260718_readersel001"
-    }, { currentNoteSelection: selection });
+    }, {
+      currentNoteSelection: selection,
+      currentNoteReadAction: "explain"
+    });
 
     expect(outcome.state).toBe("completed");
     expect(observedModelText).toContain(selected);
@@ -2304,6 +2307,10 @@ SYNTHETIC_DISTRACTOR_BODY
     ]));
     const timeline = service.conversation({ scope: { kind: "current_note", pageId: HOME_PAGE_ID } });
     expect(timeline?.messages[0]?.text).toBe("Explain the selected passage in the current note.");
+    expect(timeline?.messages[0]?.inputPresentation).toEqual({
+      kind: "reader_selection_action",
+      action: "explain"
+    });
     expect(JSON.stringify(timeline)).not.toContain(selected);
   });
 

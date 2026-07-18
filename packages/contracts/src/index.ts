@@ -37,6 +37,7 @@ import type {
   ProposalTrustLevel,
   ReaderSelectionActionRequest,
   ReaderSelectionActionResult,
+  ReaderSelectionReadAction,
   ReaderSelectionResolveRequest,
   ReaderSelectionResolveResult,
   ProviderAuthRequirement,
@@ -1033,7 +1034,13 @@ export interface AgentConversationMessage {
   readonly text: string;
   readonly jobId?: string;
   readonly answer?: AgentTurnAnswer;
+  readonly inputPresentation?: AgentConversationInputPresentation;
 }
+
+export type AgentConversationInputPresentation = {
+  readonly kind: "reader_selection_action";
+  readonly action: ReaderSelectionReadAction;
+};
 
 export interface AgentConversationTurnSummary {
   readonly jobId: string;
