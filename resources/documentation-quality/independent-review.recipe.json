@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-19T01:00:00Z",
+  "reviewedAt": "2026-07-19T04:00:00Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -87,17 +87,17 @@
       "tests/unit/local-settings.test.ts",
       "package.json"
     ],
-    "scope": "Independent Product Planning review retains the published check-only Update Service contract and binds the compact Settings modal ownership repair on sole main c365e9e, including inert background ownership, the 720-to-420 focus transition and exact Escape focus restoration without changing layout, copy, persistence, service or API behavior.",
+    "scope": "Independent Product Planning review binds the Reader transform body-free failure repair and responsive selection-toolbar geometry correction on sole main 2b2d5889. Unsupported internal error domains are normalized at the existing public failure boundary, unexpected transform submission failures return the strict failed projection, and the toolbar remeasures the selection and itself after Reader layout changes without changing action authority, copy, persistence or API behavior.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 130,
-    "reviewedSha256": "141d4799910a4a81df469183bb000370028040337a5ad9ec94f55c7fd8a93c27"
+    "reviewedSha256": "5823add6c56cf4dd2f06c99a7bae4be43dad6e32547e07e7781700cca10bb63d"
   },
   "reviewers": [
     {
-      "reviewerId": "update-service-planning-review",
-      "task": "Update Service continuity and compact Settings modal ownership review",
+      "reviewerId": "reader-transform-planning-review",
+      "task": "Reader transform failure and responsive toolbar review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -105,51 +105,51 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Product Planning did not author the compact Settings UI commit and independently compared its exact renderer and test bytes with the published Update Service baseline, Settings interaction contract and existing modal/focus owners on sole main c365e9e."
+      "independence": "Product Planning did not author the Development or UI commits and independently compared their exact service, renderer and test bytes with the published Reader selection contracts, shared error taxonomy and existing focus owners on sole main 2b2d5889."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "update-service-planning-review",
+      "reviewerId": "reader-transform-planning-review",
       "blockerCount": 0,
-      "summary": "Settings remains the existing surface owner and the repair uses the established dialog, compact navigator and opener focus references; no duplicate modal, navigation or service owner is added."
+      "summary": "ReaderSelectionActionService remains the transform owner and App retains the established toolbar and Reader focus owners; no duplicate action, navigation or error-taxonomy owner is added."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "update-service-planning-review",
+      "reviewerId": "reader-transform-planning-review",
       "blockerCount": 0,
-      "summary": "The published Update Service contract remains unchanged, while compact and resident Settings now agree on one modal boundary: background chrome/workspace is inert, compact transition focus enters Settings, and Escape restores the exact opener."
+      "summary": "The published Reader selection contract remains unchanged: internal errors are projected through an allowed body-free public domain, and responsive geometry remeasurement changes no selection identity, transform authority or proposal lifecycle."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "update-service-planning-review",
+      "reviewerId": "reader-transform-planning-review",
       "blockerCount": 0,
-      "summary": "Existing requirement, build, exit and phase statuses remain unchanged; the candidate adds focused interaction evidence only and does not promote Update Service or broader Settings completion."
+      "summary": "Existing requirement, build, exit and phase statuses remain unchanged; the candidate closes two bounded Reader defects and does not promote broader Reader mutation or release completion."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "update-service-planning-review",
+      "reviewerId": "reader-transform-planning-review",
       "blockerCount": 0,
-      "summary": "Focused Settings, Home conversation and renderer tests cover inert ownership, resident-to-compact focus transfer, Tab containment and exact Escape restoration; typecheck, build and UI visual gates remain directly runnable."
+      "summary": "Focused error-schema, Home Agent, Reader action and renderer tests cover normalization, strict failed projection, responsive remeasurement, keyboard behavior and focus restoration; typecheck, build and UI visual gates remain directly runnable."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "update-service-planning-review",
+      "reviewerId": "reader-transform-planning-review",
       "blockerCount": 0,
-      "summary": "The product delta remains confined to App.tsx and its focused UI regression; this excluded recipe records the independent publication review without adding or rewriting an owner document."
+      "summary": "The product delta remains confined to two existing services, App.tsx and focused regressions; this excluded recipe records the independent publication review without adding or rewriting an owner document."
     }
   ],
   "verification": [
     {
-      "command": "Independent review of compact Settings modal ownership on sole main c365e9e",
+      "command": "Independent review of Reader transform failure and toolbar geometry on sole main 2b2d5889",
       "status": "passed",
-      "evidence": "Review confirms titlebar, sidebar and workspace become inert only while Settings is open; crossing into compact mode moves focus to the Settings navigator; Escape removes inert and restores the exact opener without renderer restyling or service changes."
+      "evidence": "Review confirms unsupported internal domains cannot cross the public failure schema, unexpected transform failures return one strict body-free result, and 420, 840 and 1240 Reader layouts reposition the existing toolbar without changing action or focus ownership."
     },
     {
       "command": "npm run verify:docs && npm run verify:decisions && npm run verify:traceability",
@@ -159,22 +159,22 @@
     {
       "command": "npm run verify:contracts && npm run verify:independent-documentation-review && npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "CON-001 through CON-004 remain green; focused UI tests, typecheck, build and visual-contract verification bind the exact repair while the union recipe retains the published Reader, Update, release and security roots."
+      "evidence": "CON-001 through CON-004 remain green; focused service and UI tests, typecheck, build, boundary and visual-contract verification bind the exact repair while the union recipe retains the published Reader, Update, release and security roots."
     }
   ],
   "coordination": {
-    "taskId": "settings-modal-mainc365-20260719",
-    "taskTitle": "Compact Settings modal ownership repair",
+    "taskId": "reader-transform-toolbar-main2b2d-20260719",
+    "taskTitle": "Reader transform failure and responsive toolbar repair",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The candidate changes only modal inert/focus ownership in the existing Settings renderer and its regression test; it adds no API, persistence, Job, permission, layout, locale or service behavior.",
-    "acknowledgement": "Product Planning reviewed the exact UI bytes on sole main c365e9e and records this bounded accessibility repair without restyling Settings or claiming broader feature completion."
+    "compatibility": "The candidate changes only error normalization, strict transform failure projection and responsive toolbar geometry; it adds no API, persistence, Job, permission, locale or mutation authority.",
+    "acknowledgement": "Product Planning reviewed the exact Development and UI bytes on sole main 2b2d5889 and records these bounded Reader repairs without restyling the toolbar or claiming broader feature completion."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "The default adapter intentionally performs no network request; production signed-feed connectivity and its runtime dependency remain unselected and unimplemented.",
-    "No automatic schedule, download, install, restart, risky-job interlock or real packaged alpha-to-alpha update was produced; no Requirement, Build, Exit or Phase status is promoted.",
-    "The existing real macOS 720-to-420 Settings evidence covers the foreground modal transition; this repair makes no claim about unrelated Windows titlebar geometry."
+    "A model/provider failure may still prevent a transform from producing an applied result; this candidate guarantees only the strict body-free failure contract and does not claim provider availability.",
+    "No Reader mutation, proposal, Activity, Undo, Requirement, Build, Exit or Phase status is promoted by these repairs.",
+    "Real macOS evidence covers responsive Reader geometry at 420, 840 and 1240; this candidate makes no additional Windows geometry claim."
   ]
 }
