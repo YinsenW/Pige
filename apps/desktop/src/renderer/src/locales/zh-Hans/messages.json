@@ -673,6 +673,7 @@
   "capabilities.subtitle": "只展示能说明具体能力、隐私边界或修复动作的本地组件。",
   "capabilities.title": "本地能力",
   "capabilities.tool.missing": "缺失",
+  "capabilities.tool.optional_missing": "未安装",
   "capabilities.tool.ready": "就绪",
   "capabilities.toolchain.checking": "检查中",
   "capabilities.toolchain.needs_repair": "需要修复",

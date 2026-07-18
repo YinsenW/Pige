@@ -6284,7 +6284,8 @@ export function LocalCapabilitiesSettingsPanel(props: {
 }): React.JSX.Element {
   const [refreshing, setRefreshing] = useState(false);
   const [refreshFailed, setRefreshFailed] = useState(false);
-  const missingTools = props.toolchainHealth?.tools.filter((tool) => tool.status === "missing") ?? [];
+  const missingRequiredTools =
+    props.toolchainHealth?.tools.filter((tool) => tool.required && tool.status === "missing") ?? [];
   const toolchainState = props.toolchainHealth?.status ?? "checking";
 
   const refresh = async (): Promise<void> => {
@@ -6326,14 +6327,32 @@ export function LocalCapabilitiesSettingsPanel(props: {
               <strong>{props.t("capabilities.detectedTools")}</strong>
               {props.toolchainHealth ? (
                 <ul className="capability-tool-list" aria-label={props.t("capabilities.detectedTools")}>
-                  {props.toolchainHealth.tools.map((tool) => (
-                    <li key={tool.id}>
-                      <span>{tool.name}</span>
-                      <small className={tool.status === "missing" ? "missing" : "ready"}>
-                        {props.t(`capabilities.tool.${tool.status}`)}
-                      </small>
-                    </li>
-                  ))}
+                  {props.toolchainHealth.tools.map((tool) => {
+                    const statusKey =
+                      tool.status === "ready"
+                        ? "capabilities.tool.ready"
+                        : tool.required
+                          ? "capabilities.tool.missing"
+                          : "capabilities.tool.optional_missing";
+                    const statusLabel = props.t(statusKey);
+                    return (
+                      <li
+                        key={tool.id}
+                        aria-label={`${tool.name}: ${statusLabel}`}
+                        data-tool-required={tool.required ? "true" : "false"}
+                        data-tool-status={tool.status}
+                      >
+                        <span>{tool.name}</span>
+                        <small
+                          className={
+                            tool.status === "ready" ? "ready" : tool.required ? "missing" : "optional-missing"
+                          }
+                        >
+                          {statusLabel}
+                        </small>
+                      </li>
+                    );
+                  })}
                 </ul>
               ) : (
                 <span>{props.t("capabilities.checkingDescription")}</span>
@@ -6349,7 +6368,7 @@ export function LocalCapabilitiesSettingsPanel(props: {
               {props.t(refreshing ? "capabilities.checking" : "capabilities.checkAgain")}
             </button>
           </div>
-          {missingTools.length > 0 ? (
+          {missingRequiredTools.length > 0 ? (
             <div className="settings-row">
               <div className="settings-row-copy">
                 <strong>{props.t("capabilities.repairTitle")}</strong>

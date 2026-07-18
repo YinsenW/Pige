@@ -673,6 +673,7 @@
   "capabilities.subtitle": "Only local components that explain a capability, privacy boundary, or repair action appear here.",
   "capabilities.title": "Local Capabilities",
   "capabilities.tool.missing": "Missing",
+  "capabilities.tool.optional_missing": "Not installed",
   "capabilities.tool.ready": "Ready",
   "capabilities.toolchain.checking": "Checking",
   "capabilities.toolchain.needs_repair": "Needs repair",

@@ -5508,6 +5508,7 @@ dd {
 }
 
 .capability-tool-list small.missing::before { background: #d99424; }
+.capability-tool-list small.optional-missing::before { background: var(--text-tertiary); }
 
 .settings-inline-status {
   min-height: 0;

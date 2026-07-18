@@ -673,6 +673,7 @@
   "capabilities.subtitle": "Seuls les composants locaux expliquant une capacité, une limite de confidentialité ou une réparation apparaissent ici.",
   "capabilities.title": "Capacités locales",
   "capabilities.tool.missing": "Manquant",
+  "capabilities.tool.optional_missing": "Non installé",
   "capabilities.tool.ready": "Prêt",
   "capabilities.toolchain.checking": "Vérification",
   "capabilities.toolchain.needs_repair": "Réparation requise",

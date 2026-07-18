@@ -673,6 +673,7 @@
   "capabilities.subtitle": "具体的な機能、プライバシー境界、修復操作を説明するローカル要素だけを表示します。",
   "capabilities.title": "ローカル機能",
   "capabilities.tool.missing": "不足",
+  "capabilities.tool.optional_missing": "未インストール",
   "capabilities.tool.ready": "準備完了",
   "capabilities.toolchain.checking": "確認中",
   "capabilities.toolchain.needs_repair": "修復が必要",

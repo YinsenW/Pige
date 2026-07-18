@@ -673,6 +673,7 @@
   "capabilities.subtitle": "구체적인 기능, 개인정보 경계 또는 복구 작업을 설명하는 로컬 구성요소만 표시합니다.",
   "capabilities.title": "로컬 기능",
   "capabilities.tool.missing": "누락",
+  "capabilities.tool.optional_missing": "설치되지 않음",
   "capabilities.tool.ready": "준비됨",
   "capabilities.toolchain.checking": "확인 중",
   "capabilities.toolchain.needs_repair": "복구 필요",

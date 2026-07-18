@@ -902,6 +902,12 @@ describe("full UI Settings surface", () => {
               required: true,
               status: "missing",
               repairHint: "Install a private dependency from a private path."
+            },
+            {
+              id: "bun",
+              name: "Bun",
+              required: false,
+              status: "missing"
             }
           ]
         },
@@ -919,6 +925,9 @@ describe("full UI Settings surface", () => {
     expect(container.textContent).toContain("PDF tools");
     expect(container.textContent).toContain("Ready");
     expect(container.textContent).toContain("Missing");
+    expect(container.textContent).toContain("Not installed");
+    expect(container.querySelector('[aria-label="Bun: Not installed"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="PDF tools: Missing"]')).not.toBeNull();
     expect(container.textContent).not.toContain("/private/hidden/bin/git");
     expect(container.textContent).not.toContain("Install a private dependency");
     expect(container.textContent).toContain("Not reported");
@@ -947,6 +956,41 @@ describe("full UI Settings surface", () => {
     expect(ocrEngine.textContent).toBe("In development");
     expect(imageOcr.textContent).toBe("In development");
     expect(voice.textContent).toBe("In development");
+    expect(ipcRead).toBe(false);
+
+    await act(async () => {
+      root.render(createElement(LocalCapabilitiesSettingsPanel, {
+        toolchainHealth: {
+          status: "ready",
+          checkedAt: "2026-07-16T01:01:00.000Z",
+          tools: [
+            {
+              id: "git",
+              name: "Git",
+              required: true,
+              status: "ready"
+            },
+            {
+              id: "bun",
+              name: "Bun",
+              required: false,
+              status: "missing"
+            }
+          ]
+        },
+        onRefresh,
+        onDevelopment,
+        t
+      }));
+      await settle(dom);
+    });
+    expect(container.textContent).toContain("Ready");
+    expect(container.querySelector('[aria-label="Bun: Not installed"]')).not.toBeNull();
+    expect(container.textContent).not.toContain("Missing required tools");
+    expect(
+      Array.from(container.querySelectorAll("button")).some((button) => button.textContent === "Repair...")
+    ).toBe(false);
+    expect(onDevelopment).toHaveBeenCalledTimes(5);
     expect(ipcRead).toBe(false);
 
     await act(async () => root.unmount());

@@ -673,6 +673,7 @@
   "capabilities.subtitle": "Hier erscheinen nur lokale Komponenten, die eine Fähigkeit, Datenschutzgrenze oder Reparatur erklären.",
   "capabilities.title": "Lokale Fähigkeiten",
   "capabilities.tool.missing": "Fehlt",
+  "capabilities.tool.optional_missing": "Nicht installiert",
   "capabilities.tool.ready": "Bereit",
   "capabilities.toolchain.checking": "Prüfung läuft",
   "capabilities.toolchain.needs_repair": "Reparatur nötig",
