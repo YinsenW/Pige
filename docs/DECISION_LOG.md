@@ -3009,17 +3009,17 @@ Date: 2026-07-19
 
 Decision:
 
-Use a main-owned machine-local registry with checksum-bound confirmed summaries and
-revision-CAS disable; unsafe or mismatched records are never authority.
+Use a machine-local registry with checksum-bound summaries and CAS disable; mismatched
+records are never authority.
 
 Rationale:
 
-Inventory and authority reduction can precede lifecycle owners without making metadata a grant.
+Inventory and disable can precede lifecycle owners without granting authority.
 
 Consequences:
 
-- State is machine-local/backup-excluded; disable removes neither files nor grants.
-- Other lifecycle/runtime/grant actions remain unavailable; governed statuses stay planned.
+- State is backup-excluded; disable removes no files or grants.
+- Other lifecycle/runtime/grant actions remain unavailable and planned.
 
 References:
 

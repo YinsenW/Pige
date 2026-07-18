@@ -660,9 +660,8 @@ Queries:
 - `system.toolchainHealth`
 
 `skills.summary`, CAS `skills.disable({apiVersion:1,skillId,expectedRevision})`, and
-`skills.changed` use schemas. Main projects only confirmed machine-local
-non-package ID/version/checksum matches; invalid records expose only a count. Disable
-reduces authority; other lifecycle authority is absent.
+`skills.changed` are schema-validated. Main projects only checksum-confirmed
+machine-local non-package identity; invalid entries expose a count. Disable only reduces authority.
 
 Provider/model DTOs:
 
