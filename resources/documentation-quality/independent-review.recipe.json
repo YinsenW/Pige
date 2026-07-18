@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-18T08:30:00Z",
+  "reviewedAt": "2026-07-18T15:51:33Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -23,6 +23,8 @@
       "resources/traceability",
       "resources/ui-visual-contract.manifest.json",
       "scripts/verify",
+      "scripts/release",
+      "apps/desktop/electron-builder.release.yml",
       "packages/schemas/src/index.ts",
       "packages/contracts/src/index.ts",
       "apps/desktop/src/main/index.ts",
@@ -59,19 +61,21 @@
       "tests/unit/pi-agent-runtime-adapter.test.ts",
       "tests/unit/restore-ui.test.ts",
       "tests/unit/security-contract-schemas.test.ts",
+      "tests/unit/release-publication.test.ts",
+      "tests/unit/release-packageability-platforms.test.ts",
       "package.json"
     ],
-    "scope": "Independent Planning review binds the mechanically integrated Settings Index and Maintenance production surface to the existing Local Database typed owners on sole origin/main b17c659, without changing service, IPC, contract or governance semantics.",
+    "scope": "Independent Product Planning review binds the protected signed-alpha publication workflow mechanically replayed from Development onto sole origin/main af2c7ec, including immutable release-action pins and minimum release/security/trace owner synchronization without product, service or renderer changes.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 130,
-    "reviewedSha256": "423e307cad6a8f5d055b155aefc7bd89920b7b0a44bf42820becd13836e4427e"
+    "reviewedSha256": "619b6591f1b9a3194bc6a79a63a100f907aa261d315593b51378d88b152f62f3"
   },
   "reviewers": [
     {
-      "reviewerId": "settings-maintenance-independent-review",
-      "task": "Settings Index and Maintenance mechanical integration review",
+      "reviewerId": "release-publication-planning-review",
+      "task": "Protected signed-alpha publication contract and governance review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -79,75 +83,75 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Product Planning did not author the UI delta and independently compared the Settings Index and Maintenance surface with the existing Local Database status, check, rebuild and reset-preview owners, focused tests and exact UI Design handoff."
+      "independence": "Product Planning did not author the Development release workflow or security pin commits and independently compared their exact bytes with release, security, phase, trace, acceptance and decision owners."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "settings-maintenance-independent-review",
+      "reviewerId": "release-publication-planning-review",
       "blockerCount": 0,
-      "summary": "The existing Settings and Local Database owners carry the visible Index and Maintenance workflow without a duplicate owner document or a new service boundary."
+      "summary": "The existing Release Engineering owner remains the single publication contract; the candidate adds scripts and one workflow without a duplicate release owner or product-facing surface."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "settings-maintenance-independent-review",
+      "reviewerId": "release-publication-planning-review",
       "blockerCount": 0,
-      "summary": "The renderer uses only existing typed status, check, rebuild and reset-preview/apply owners; raw maintenance and filesystem failures remain body-free and localized."
+      "summary": "Release Engineering, Security Threat Model, Playbook, traceability and the accepted decision agree on protected alpha tags, protected environment, required platform signing and independent artifact verification."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "settings-maintenance-independent-review",
+      "reviewerId": "release-publication-planning-review",
       "blockerCount": 0,
-      "summary": "Exact focused, type, build and visual gates cover the production surface without changing Requirement, Exit or Phase status or claiming that destructive reset was executed."
+      "summary": "PIGE-REL-001, PIGE-REL-005 and E9.08 remain planned; the acceptance targets record implemented but unexecuted publication infrastructure and preserve every external release evidence gap."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "settings-maintenance-independent-review",
+      "reviewerId": "release-publication-planning-review",
       "blockerCount": 0,
-      "summary": "Focused regressions cover body-free failures, real status/check/rebuild binding, preview-first reset, Escape/cancel focus restoration and compact Settings navigation."
+      "summary": "Focused release tests cover protected invocation, exact tag/commit/version identity, immutable metadata, action pins and separation from unsigned packageability; repository gates remain directly runnable."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "settings-maintenance-independent-review",
+      "reviewerId": "release-publication-planning-review",
       "blockerCount": 0,
-      "summary": "The mechanical UI integration needs only this refreshed independent-review binding; no product, architecture, decision or trace owner requires a semantic edit."
+      "summary": "The synchronization is confined to existing release/security/governance owners plus their semantic lock and independent review recipe; no new owner document or duplicated release narrative was added."
     }
   ],
   "verification": [
     {
-      "command": "Independent implementation and owner-contract review of Settings Index and Maintenance on origin/main b17c659",
+      "command": "Independent review of Development release commits bd6d93b and 3a9b8eb on origin/main af2c7ec",
       "status": "passed",
-      "evidence": "Review covers the exact nine UI-owned paths, existing Local Database projections, body-free failures and reset-preview ownership; no main, preload, service, contract or governance byte changed."
+      "evidence": "Review confirms protected tag-push-only authority, production-release environment, required signing/notarization/Authenticode, exact tag/version/commit binding, immutable alpha metadata and action commit pins; product/service/renderer code is unchanged."
     },
     {
       "command": "npm run verify:docs && npm run verify:decisions && npm run verify:traceability",
       "status": "passed",
-      "evidence": "Links, whitespace, document map, PRD structure and decision records remain unchanged and pass for the mechanical UI integration."
+      "evidence": "Links, whitespace, document map, PRD structure, decisions and locked release claims pass with no Requirement, Exit or Phase promotion."
     },
     {
       "command": "npm run verify:contracts && npm run verify:independent-documentation-review && npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "CON-001 through CON-004 remain green and the recipe binds governed roots plus the changed Settings UI and tests without Requirement, Exit or Phase promotion."
+      "evidence": "CON-001 through CON-004 remain green; focused release tests, typecheck and build bind the exact workflow/scripts while this review covers all changed governed owners."
     }
   ],
   "coordination": {
-    "taskId": "settings-maintenance-mainb17-20260718",
-    "taskTitle": "Settings Index and Maintenance mechanical integration",
+    "taskId": "release-publication-mainaf2-20260718",
+    "taskTitle": "Protected signed-alpha publication foundation",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The candidate exposes existing Local Database maintenance owners through the approved Settings hierarchy; service behavior, IPC contracts, persistence and release scope remain unchanged.",
-    "acknowledgement": "Product Planning reviewed the exact mechanical UI delta and its evidence; reset remained preview-only during real macOS validation and this review does not claim new maintenance capability."
+    "compatibility": "The candidate adds a fail-closed release publication path and supply-chain pins without changing product, service, renderer, durable data or update-runtime behavior; unsigned packageability remains separate internal evidence.",
+    "acknowledgement": "Product Planning reviewed the exact Development bytes and synchronized only release/security/governance owners; this foundation does not claim credentials, signed artifacts, an actual release or Public Alpha readiness."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "The real macOS reset flow was not executed; preview, cancel and focus restoration are verified while destructive application remains covered by existing typed tests.",
-    "Windows visual evidence remains deferred; no Requirement, Exit or Phase status is promoted."
+    "Production signing certificates, Apple notarization credentials, protected-environment approval and Windows Authenticode material are external and were not available to this candidate.",
+    "No real signed/notarized macOS artifact, Authenticode Windows installer, independent release run, GitHub prerelease, release notes or alpha-to-alpha update was produced; no Requirement, Exit or Phase status is promoted."
   ]
 }

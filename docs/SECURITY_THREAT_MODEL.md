@@ -367,16 +367,18 @@ Threat:
 Mitigations:
 
 - Signed macOS and Windows release artifacts for public distribution.
-- GitHub Actions release workflow with protected tags.
-- Checksums for release artifacts.
-- Notarization on macOS.
-- Windows signing when available for v0.1 distribution.
+- Exact protected alpha tag plus `production-release`; no manual authority.
+- Commit-pinned setup before secrets; Developer ID/hardened/notarized/stapled macOS arm64
+  and Authenticode Windows x64.
+- Exact alpha metadata and identity-bound SHA-256/SHA-512 manifests, independently verified
+  from downloaded bytes before publisher revalidation.
 - Dependency registry updates before dependency upgrades.
 - License and security review for bundled binaries.
 
 Acceptance:
 
-- App verifies update metadata and does not install unsigned or unexpected-channel updates.
+- Missing authority, identity, credentials, expected metadata/file set, checksums, platform
+  trust or independent proof blocks publication; the app rejects unsigned/wrong-channel updates.
 
 ## 7. Permission Model
 
@@ -534,7 +536,8 @@ Before v0.1 public alpha:
 - YOLO Full Access suppresses covered prompts only after explicit user opt-in, remains visible, and records auto-allowed actions.
 - Denied permissions are respected.
 - Source record or managed source asset delete requires confirmation.
-- Update artifacts are signed or clearly marked as unsigned alpha artifacts.
+- Public alpha requires Developer ID/hardened/notarized/stapled macOS and Authenticode
+  Windows; unsigned/ad-hoc artifacts are internal-only.
 - Default diagnostics export contains no source text or secrets.
 
 ## 12. Security Implementation Choices
@@ -544,7 +547,9 @@ These v0.1 design choices are accepted. Implementation still must pin concrete v
 - Secret storage: Electron `safeStorage` encrypts API keys/tokens into machine-local app data. If encryption is unavailable, normal mode refuses to save secrets and offers explicit plaintext portable/developer mode with warning.
 - Skill/package runtime boundary: pure Skills are Markdown-only. Executable/package-backed Skills run only through reviewed adapters in worker/utility/child processes with scoped handles and Permission Broker mediation.
 - Shell policy: default deny. Pige-owned bundled tools use fixed argv and scoped working directories. Skill/package shell use requires declared capability, command preview, permission, timeout, output limits, and logging.
-- Update security: electron-builder/electron-updater with GitHub Releases alpha feed, protected tags, channel checks, version monotonicity checks, checksums, and signed/notarized artifacts when public.
+- Update security: electron-builder/electron-updater with GitHub alpha feed, protected exact
+  identity/environment, channel/monotonicity, signed platforms, immutable metadata/checksums,
+  and independent downloaded-byte verification before publication.
 - Dependency vulnerability scanning: Dependabot, CodeQL, and npm audit are required CI/release gates.
 - Package permission manifest: v0.1 uses Skill frontmatter for pure Skills and a JSON capability manifest for package-backed capabilities. Both map to the same Permission Broker capability vocabulary.
 
