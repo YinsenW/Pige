@@ -1082,6 +1082,56 @@ export const MachineLocalSettingsSchema = z.object({
   )
 });
 
+export const OpenRecentVaultRequestSchema = z.object({
+  vaultId: VaultIdSchema
+}).strict();
+
+const VaultCountsProjectionSchema = z.object({
+  notes: z.number().int().nonnegative(),
+  sources: z.number().int().nonnegative(),
+  managedSourceCopies: z.number().int().nonnegative(),
+  referencedOriginals: z.number().int().nonnegative()
+}).strict();
+
+export const VaultSummaryProjectionSchema = z.object({
+  vaultId: VaultIdSchema,
+  name: z.string().min(1),
+  activeVaultPathDisplay: z.string().min(1),
+  knowledgeRootDisplay: z.string().min(1),
+  sourceAssetRootDisplay: z.string().min(1),
+  sourceAssetRootKind: SourceAssetRootKindSchema,
+  defaultSourceStorageStrategy: SourceStorageStrategySchema,
+  schemaVersion: z.number().int().positive(),
+  counts: VaultCountsProjectionSchema.optional(),
+  lastBackupAt: z.string().datetime({ offset: true }).optional()
+}).strict();
+
+const WaitingDependencyCountsProjectionSchema = z.object({
+  modelProvider: z.number().int().nonnegative(),
+  localTool: z.number().int().nonnegative(),
+  localModel: z.number().int().nonnegative(),
+  runtimeCapability: z.number().int().nonnegative(),
+  vaultBinding: z.number().int().nonnegative(),
+  externalSource: z.number().int().nonnegative()
+}).strict();
+
+export const OnboardingStatusProjectionSchema = z.object({
+  state: z.enum(["blocked_no_vault", "capture_only", "ready"]),
+  activeVault: VaultSummaryProjectionSchema.optional(),
+  hasDefaultModel: z.boolean(),
+  showFirstHomeGuide: z.boolean(),
+  waitingDependencyCounts: WaitingDependencyCountsProjectionSchema.optional()
+}).strict();
+
+export const VaultActionResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("completed"),
+    vault: VaultSummaryProjectionSchema,
+    onboarding: OnboardingStatusProjectionSchema
+  }).strict(),
+  z.object({ status: z.literal("canceled") }).strict()
+]);
+
 export const ExternalManagedCopyRootBindingSchema = z.object({
   rootId: RootBindingIdSchema,
   vaultId: VaultIdSchema,

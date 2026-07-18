@@ -31,6 +31,7 @@ import type {
   NoteGetRequest,
   NoteResolveInlineReferenceRequest,
   NoteRenderRequest,
+  OpenRecentVaultRequest,
   ProviderConnectResult,
   RetrievalAskRequest,
   RestoreApplyRequest,
@@ -71,6 +72,7 @@ import {
   PermissionResolveResultSchema,
   NoteResolveInlineReferenceRequestSchema,
   NoteResolveInlineReferenceResultSchema,
+  OpenRecentVaultRequestSchema,
   type Locale,
   UpdateModelRequestSchema,
   SetDefaultModelRequestSchema,
@@ -82,7 +84,8 @@ import {
   SpeechSessionRequestSchema,
   SpeechStartRequestSchema,
   WindowLayoutRequestSchema,
-  WindowLayoutStateSchema
+  WindowLayoutStateSchema,
+  VaultActionResultSchema
 } from "@pige/schemas";
 import { PRELOAD_ENTRY_FILENAME } from "../shared/preload-entry";
 import {
@@ -1460,6 +1463,13 @@ ipcMain.handle("vault.open", async (event) => {
     resumeBackgroundJobs();
   }
   return result;
+});
+ipcMain.handle("vault.openRecent", (_event, request: OpenRecentVaultRequest) => {
+  const parsedRequest = OpenRecentVaultRequestSchema.parse(request);
+  const result = getVaultService().openRecent(parsedRequest);
+  initializeActiveDatabase();
+  resumeBackgroundJobs();
+  return VaultActionResultSchema.parse(result);
 });
 ipcMain.handle("vault.revealKnowledgeRoot", (event) => {
   requireWindow(event.sender);

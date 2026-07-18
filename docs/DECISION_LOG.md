@@ -2890,6 +2890,37 @@ References:
 - `docs/KNOWLEDGE_MODEL_AND_LINKING.md`
 - `docs/UI_PROTOTYPE.md`
 
+### D-20260717-Recent-Vault-Open-By-Stable-ID
+
+Status: Accepted
+Date: 2026-07-17
+
+Decision:
+
+Renderer recent-vault actions submit only the stable `vaultId`. Main resolves the unique
+machine-local binding and revalidates vault layout, manifest identity, canonical path, and
+writer lease before activation. Display paths are never opening authority.
+
+Rationale:
+
+Recent paths are useful presentation but granting renderer-selected paths would bypass the
+trusted picker and main-owned vault binding. Stable identity preserves direct resume without
+expanding renderer filesystem authority.
+
+Consequences:
+
+- Missing, duplicate, replaced, or incompatible bindings fail without returning raw paths.
+- The active database and durable background recovery resume only after successful activation.
+- Remove remains a separate recent-list mutation and never deletes vault files.
+- Requirement, Exit, and Phase status remain unchanged.
+
+References:
+
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/ONBOARDING_AND_FIRST_RUN.md`
+- `docs/SETTINGS_AND_PREFERENCES.md`
+- `docs/TECH_ARCHITECTURE.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

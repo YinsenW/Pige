@@ -233,6 +233,20 @@ type OnboardingStatus = {
 };
 ```
 
+Recent-vault opening is ID-only across the renderer boundary:
+
+```ts
+type OpenRecentVaultRequest = {
+  vaultId: string;
+};
+```
+
+`vault.openRecent` returns `VaultActionResult`. Preload and main parse the exact request and
+result schemas. Main resolves the machine-local path from the unique stored `vaultId`, then
+revalidates vault layout, manifest identity, canonical path, and writer lease before changing
+the active binding. `pathDisplay` is presentation only and is never accepted as authority.
+Missing, duplicate, replaced, or incompatible recent bindings fail without returning paths.
+
 Local database status DTO:
 
 ```ts

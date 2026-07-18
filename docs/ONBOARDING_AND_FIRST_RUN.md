@@ -240,6 +240,9 @@ Rules:
 
 - If the active vault opens cleanly, skip first run.
 - If the active vault path is missing, show recent vaults and open/create/restore actions.
+- A recent-vault row opens only through `vault.openRecent({ vaultId })`; main resolves the
+  machine-local path and revalidates the stored identity. Displayed names and paths never
+  authorize filesystem access, and missing or ambiguous entries fail closed.
 - If the vault schema is too new, show read-only/blocking compatibility UI according to `docs/SYNC_CONFLICT_AND_MIGRATION.md`.
 - If model credentials fail, enter Home with a quiet model status and mark model-dependent jobs `waiting_dependency`.
 
