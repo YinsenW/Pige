@@ -3389,7 +3389,11 @@ function HomeComposer(props: {
           disabled={state === "copying"}
           onClick={() => void copyConversationMessage(messageId, markdown)}
         >
-          <PigeIcon name="copy" size={15} />
+          <PigeIcon
+            name={state === "copied" ? "check" : state === "copying" ? "loading" : "copy"}
+            size={15}
+            className={state === "copying" ? "spinning" : undefined}
+          />
         </button>
         {state === "copied" || state === "failed" ? (
           <span className="visually-hidden" role="status" aria-live="polite">{label}</span>

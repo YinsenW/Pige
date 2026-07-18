@@ -1330,6 +1330,7 @@ button.ghost {
 }
 
 .conversation-message-actions button:disabled { opacity: .55; }
+.conversation-message-actions .spinning { animation: pige-spin 900ms linear infinite; }
 
 @media (hover: none) {
   .conversation-message-actions {
