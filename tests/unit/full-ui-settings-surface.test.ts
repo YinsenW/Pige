@@ -207,6 +207,20 @@ describe("full UI Settings surface", () => {
     const closeButton = buttonNamed(drawer, "Close Settings");
     expect(dom.window.document.activeElement).toBe(closeButton);
     const lastDrawerControl = buttonNamed(drawer, "DiagnosticsAvailable");
+    content.scrollTop = 128;
+    await act(async () => {
+      buttonNamed(drawer, "AppearancePartially available").click();
+      await settle(dom);
+    });
+    expect(content.scrollTop).toBe(0);
+    expect(dialog.dataset.compactNavigationOpen).toBe("false");
+    expect(dom.window.document.activeElement).toBe(trigger);
+
+    await act(async () => {
+      trigger.click();
+      await settle(dom);
+      await settle(dom);
+    });
     await act(async () => {
       closeButton.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true }));
     });
