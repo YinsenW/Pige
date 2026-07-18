@@ -2616,6 +2616,7 @@ export function NoteReader(props: {
   };
 
   useEffect(() => {
+    let selectionFrame: number | null = null;
     const updateSelection = (): void => {
       if (selectionFocusTransition.current || selectionMoreOpenRef.current) return;
       const selection = window.getSelection();
@@ -2718,6 +2719,13 @@ export function NoteReader(props: {
         if (resolveSequence === selectionResolveSequence.current) setSelectionResolution({ kind: "copy_only" });
       });
     };
+    const scheduleSelectionUpdate = (): void => {
+      if (selectionFrame !== null) window.cancelAnimationFrame(selectionFrame);
+      selectionFrame = window.requestAnimationFrame(() => {
+        selectionFrame = null;
+        updateSelection();
+      });
+    };
     const dismissOnScroll = (event: Event): void => {
       if (event.target instanceof Node && selectionToolbarRef.current?.contains(event.target)) return;
       selectionMoreOpenRef.current = false;
@@ -2733,14 +2741,21 @@ export function NoteReader(props: {
     };
     document.addEventListener("selectionchange", updateSelection);
     document.addEventListener("pointerdown", dismissMenuOutside, true);
-    window.addEventListener("resize", updateSelection);
+    window.addEventListener("resize", scheduleSelectionUpdate);
     window.addEventListener("scroll", dismissOnScroll, true);
+    const reader = readerRef.current;
+    const readerResizeObserver = reader && typeof window.ResizeObserver === "function"
+      ? new window.ResizeObserver(scheduleSelectionUpdate)
+      : null;
+    if (reader) readerResizeObserver?.observe(reader);
     return () => {
       selectionResolveSequence.current += 1;
+      if (selectionFrame !== null) window.cancelAnimationFrame(selectionFrame);
       document.removeEventListener("selectionchange", updateSelection);
       document.removeEventListener("pointerdown", dismissMenuOutside, true);
-      window.removeEventListener("resize", updateSelection);
+      window.removeEventListener("resize", scheduleSelectionUpdate);
       window.removeEventListener("scroll", dismissOnScroll, true);
+      readerResizeObserver?.disconnect();
     };
   }, [props.activeVaultId, props.note.renderContextId, props.onResolveSelection, summary.pageId]);
 
@@ -2748,7 +2763,9 @@ export function NoteReader(props: {
     if (!selectionAnchor) return;
     const ownerWindow = readerRef.current?.ownerDocument.defaultView;
     if (!ownerWindow) return;
-    const frame = ownerWindow.requestAnimationFrame(() => {
+    let frame: number | null = null;
+    const positionToolbar = (): void => {
+      frame = null;
       const toolbar = selectionToolbarRef.current;
       if (!toolbar) return;
       const toolbarRect = toolbar.getBoundingClientRect();
@@ -2765,8 +2782,21 @@ export function NoteReader(props: {
         top: Math.max(12, Math.min(maxTop, preferredTop))
       };
       setSelectionPosition((current) => current?.left === next.left && current.top === next.top ? current : next);
-    });
-    return () => ownerWindow.cancelAnimationFrame(frame);
+    };
+    const schedulePosition = (): void => {
+      if (frame !== null) ownerWindow.cancelAnimationFrame(frame);
+      frame = ownerWindow.requestAnimationFrame(positionToolbar);
+    };
+    schedulePosition();
+    const toolbar = selectionToolbarRef.current;
+    const resizeObserver = toolbar && typeof ownerWindow.ResizeObserver === "function"
+      ? new ownerWindow.ResizeObserver(schedulePosition)
+      : null;
+    if (toolbar) resizeObserver?.observe(toolbar);
+    return () => {
+      if (frame !== null) ownerWindow.cancelAnimationFrame(frame);
+      resizeObserver?.disconnect();
+    };
   }, [selectionAnchor]);
 
   useLayoutEffect(() => {
