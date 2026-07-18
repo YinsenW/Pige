@@ -839,17 +839,17 @@ describe("full UI Settings surface", () => {
     const themeGroup = requireElement(container.querySelector<HTMLElement>('[role="radiogroup"]'));
     const themes = Array.from(themeGroup.querySelectorAll<HTMLButtonElement>('[role="radio"]'));
     expect(themes).toHaveLength(3);
-    expect(themes.map((theme) => theme.getAttribute("aria-checked"))).toEqual(["false", "true", "false"]);
-    expect(themes.map((theme) => theme.tabIndex)).toEqual([-1, 0, -1]);
+    expect(themes.map((theme) => theme.getAttribute("aria-checked"))).toEqual(["false", "false", "false"]);
+    expect(themes.map((theme) => theme.tabIndex)).toEqual([0, -1, -1]);
 
     await act(async () => {
       themes[2]!.click();
-      themes[1]!.focus();
-      themes[1]!.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+      themes[0]!.focus();
+      themes[0]!.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
       await settle(dom);
     });
-    expect(dom.window.document.activeElement).toBe(themes[2]);
-    expect(themes.map((theme) => theme.getAttribute("aria-checked"))).toEqual(["false", "true", "false"]);
+    expect(dom.window.document.activeElement).toBe(themes[1]);
+    expect(themes.map((theme) => theme.getAttribute("aria-checked"))).toEqual(["false", "false", "false"]);
 
     const appLanguage = requireElement(container.querySelector<HTMLSelectElement>('select[aria-label="App language"]'));
     const knowledgeLanguage = requireElement(container.querySelector<HTMLButtonElement>('[data-appearance-control="knowledge-language"]'));

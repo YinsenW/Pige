@@ -5873,7 +5873,6 @@ export function AppearanceSettingsPanel(props: {
 }): React.JSX.Element {
   const themeOptionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const themeChoices = ["system", "light", "dark"] as const;
-  const activeTheme = "light";
 
   const moveThemeFocus = (event: ReactKeyboardEvent<HTMLButtonElement>, index: number): void => {
     if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
@@ -5884,7 +5883,7 @@ export function AppearanceSettingsPanel(props: {
     else if (event.key === "ArrowRight" || event.key === "ArrowDown") nextIndex = (index + 1) % themeChoices.length;
     else nextIndex = (index - 1 + themeChoices.length) % themeChoices.length;
     themeOptionRefs.current[nextIndex]?.focus();
-    if (themeChoices[nextIndex] !== activeTheme) props.onDevelopment();
+    props.onDevelopment();
   };
 
   return (
@@ -5901,12 +5900,12 @@ export function AppearanceSettingsPanel(props: {
             <button
               key={choice}
               ref={(element) => { themeOptionRefs.current[index] = element; }}
-              className={choice === activeTheme ? "theme-option active" : "theme-option"}
+              className="theme-option"
               type="button"
               role="radio"
-              aria-checked={choice === activeTheme}
-              tabIndex={choice === activeTheme ? 0 : -1}
-              onClick={choice === activeTheme ? undefined : props.onDevelopment}
+              aria-checked={false}
+              tabIndex={index === 0 ? 0 : -1}
+              onClick={props.onDevelopment}
               onKeyDown={(event) => moveThemeFocus(event, index)}
             >
               <span className={`theme-preview ${choice}`} aria-hidden="true" />
