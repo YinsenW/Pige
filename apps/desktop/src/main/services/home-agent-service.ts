@@ -437,8 +437,7 @@ export class HomeAgentService {
       ...(validatedRequest.objective === undefined ? {} : { objective: validatedRequest.objective }),
       ...(validatedRequest.clientTurnId === undefined ? {} : { clientTurnId: validatedRequest.clientTurnId })
     };
-    const query = validatedRequest.text?.trim() ??
-      "Inspect the attached preserved source and decide how to help with it.";
+    const query = validatedRequest.text?.trim() ?? defaultAttachmentUserIntent(validatedRequest.locale);
     const activeVault = this.#vaults.current();
     const vaultPath = this.#vaults.activeVaultPath();
     if (!activeVault || !vaultPath) {
@@ -512,8 +511,7 @@ export class HomeAgentService {
         throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The Agent input kind does not match its preserved source binding.");
       }
       const objective = validatedRequest.objective ?? "auto";
-      const query = validatedRequest.text?.trim() ??
-        "Inspect the attached preserved source and decide how to help with it.";
+      const query = validatedRequest.text?.trim() ?? defaultAttachmentUserIntent(validatedRequest.locale);
       const activeVault = this.#vaults.current();
       const vaultPath = this.#vaults.activeVaultPath();
       if (!activeVault || !vaultPath) {
@@ -3442,6 +3440,17 @@ function createConversationBinding(
     ...(request.conversationId ? { conversationId: request.conversationId } : {}),
     ...(request.expectedTailEventId ? { expectedTailEventId: request.expectedTailEventId } : {})
   };
+}
+
+function defaultAttachmentUserIntent(locale: AgentSubmitTurnRequest["locale"]): string {
+  switch (locale) {
+    case "zh-Hans": return "整理这些文件。";
+    case "ja": return "これらのファイルを整理してください。";
+    case "ko": return "이 파일들을 정리해 주세요.";
+    case "fr": return "Organisez ces fichiers.";
+    case "de": return "Organisiere diese Dateien.";
+    default: return "Organize these files.";
+  }
 }
 
 function toPiAgentHistory(
