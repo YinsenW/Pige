@@ -37,6 +37,7 @@ import type {
   DiagnosticsHealth,
   HomeAgentModelUsage,
   JobSummary,
+  KnowledgeActivityListResult,
   KnowledgeActivitySummary,
   KnowledgeTreeResult,
   LibraryListResult,
@@ -249,8 +250,9 @@ export function App(): React.JSX.Element {
   const [homeFileDropRequest, setHomeFileDropRequest] = useState<HomeFileDropRequest | null>(null);
   const [captureToast, setCaptureToast] = useState<CaptureToast | null>(null);
   const [recentJobs, setRecentJobs] = useState<readonly JobSummary[]>([]);
-  const [recentActivities, setRecentActivities] = useState<readonly KnowledgeActivitySummary[]>([]);
+  const [activityList, setActivityList] = useState<KnowledgeActivityListResult | null>(null);
   const [activityUndoingId, setActivityUndoingId] = useState<string | null>(null);
+  const [activityOpeningId, setActivityOpeningId] = useState<string | null>(null);
   const [activityBlockedIds, setActivityBlockedIds] = useState<readonly string[]>([]);
   const [libraryList, setLibraryList] = useState<LibraryListResult | null>(null);
   const [librarySearchFocusRequest, setLibrarySearchFocusRequest] = useState(0);
@@ -265,6 +267,8 @@ export function App(): React.JSX.Element {
   const [noteLoadingPageId, setNoteLoadingPageId] = useState<string | null>(null);
   const noteOpenSequence = useRef(0);
   const inlineReferenceSequence = useRef(0);
+  const activityOpenSequence = useRef(0);
+  const activityOpenInFlightRef = useRef<string | null>(null);
   const selectedNoteRef = useRef<NoteRenderResult | null>(selectedNote);
   const selectedNoteVaultIdRef = useRef<string | null>(selectedNoteVaultId);
   const noteAgentDisclosureInitialized = useRef(false);
@@ -442,11 +446,15 @@ export function App(): React.JSX.Element {
       if (activeVaultIdRef.current !== nextOnboarding.activeVault?.vaultId) {
         noteOpenSequence.current += 1;
         inlineReferenceSequence.current += 1;
+        activityOpenSequence.current += 1;
         setSelectedNote(null);
         setSelectedNoteRelated(null);
         setSelectedNoteVaultId(null);
         setNoteLoadingPageId(null);
         setNoteAgentOpen(false);
+        setActivityList(null);
+        setActivityOpeningId(null);
+        activityOpenInFlightRef.current = null;
       }
       setOnboarding(nextOnboarding);
       setRecentVaults(nextRecentVaults);
@@ -463,7 +471,11 @@ export function App(): React.JSX.Element {
         });
       }
       setBackupJobs(nextBackupJobs?.jobs.filter((job) => job.backupKind === "user_backup") ?? []);
-      setRecentActivities(nextActivities?.activities ?? []);
+      const nextActivityList = nextActivities &&
+        nextActivities.activeVaultId === nextOnboarding.activeVault?.vaultId
+        ? { ...nextActivities, activities: nextActivities.activities.slice(0, 5) }
+        : null;
+      setActivityList(nextActivityList);
     } catch (caught) {
       if (refreshId === vaultRefreshSequence.current) throw caught;
     }
@@ -881,7 +893,11 @@ export function App(): React.JSX.Element {
   };
 
   const undoActivity = async (operationId: string): Promise<void> => {
-    if (activityUndoingId) return;
+    if (
+      activityUndoingId ||
+      !activityList ||
+      activityList.activeVaultId !== activeVaultIdRef.current
+    ) return;
     setActivityUndoingId(operationId);
     try {
       const result = await window.pige.activity.undo({ operationId });
@@ -894,17 +910,18 @@ export function App(): React.JSX.Element {
     } catch {
       try {
         const current = await window.pige.activity.list({ limit: 20 });
+        if (current.activeVaultId !== activeVaultIdRef.current) return;
         const exact = current.activities.find((activity) => activity.operationId === operationId);
         if (exact?.status === "undone") {
-          setRecentActivities(current.activities.slice(0, 5));
+          setActivityList({ ...current, activities: current.activities.slice(0, 5) });
           setActivityBlockedIds((blocked) => blocked.filter((id) => id !== operationId));
           setCaptureToast({ kind: "success", message: t("activity.undoCompleted") });
         } else if (exact?.status === "applied" && exact.canUndo) {
-          setRecentActivities(current.activities.slice(0, 5));
+          setActivityList({ ...current, activities: current.activities.slice(0, 5) });
           setActivityBlockedIds((blocked) => blocked.filter((id) => id !== operationId));
           setCaptureToast({ kind: "error", message: t("activity.undoFailed") });
         } else {
-          if (exact) setRecentActivities(current.activities.slice(0, 5));
+          if (exact) setActivityList({ ...current, activities: current.activities.slice(0, 5) });
           setActivityBlockedIds((blocked) => Array.from(new Set([...blocked, operationId])));
           setCaptureToast({ kind: "error", message: t("activity.undoStateUnknown") });
         }
@@ -916,6 +933,38 @@ export function App(): React.JSX.Element {
       setActivityUndoingId(null);
       restoreActivityFocus(operationId);
     }
+  };
+
+  const openActivityTarget = async (activity: KnowledgeActivitySummary): Promise<void> => {
+    const originVaultId = activityList?.activeVaultId;
+    const target = activity.target;
+    if (
+      activityOpenInFlightRef.current ||
+      !originVaultId ||
+      originVaultId !== activeVaultIdRef.current ||
+      target?.kind !== "page"
+    ) return;
+    const requestId = activityOpenSequence.current + 1;
+    activityOpenSequence.current = requestId;
+    activityOpenInFlightRef.current = activity.operationId;
+    setActivityOpeningId(activity.operationId);
+    const opened = await openNoteTarget(target.pageId, false);
+    if (
+      !opened ||
+      requestId !== activityOpenSequence.current ||
+      originVaultId !== activeVaultIdRef.current
+    ) {
+      if (requestId === activityOpenSequence.current) {
+        setCaptureToast({ kind: "error", message: t("error.generic") });
+        activityOpenInFlightRef.current = null;
+        setActivityOpeningId(null);
+      }
+      return;
+    }
+    setView("library");
+    setSettingsOpen(false);
+    activityOpenInFlightRef.current = null;
+    setActivityOpeningId(null);
   };
 
   const handleDragEnter = (event: DragEvent<HTMLElement>): void => {
@@ -1454,11 +1503,12 @@ export function App(): React.JSX.Element {
             />
           ) : settingsSection === "history" ? (
             <ActivityHistorySettingsPanel
-              activities={recentActivities}
+              activities={activityList?.activities ?? []}
               undoingId={activityUndoingId}
+              openingId={activityOpeningId}
               blockedIds={activityBlockedIds}
               locale={locale}
-              onOpen={() => showDevelopmentCapability("settings", "activity_open")}
+              onOpen={openActivityTarget}
               onUndo={undoActivity}
               t={t}
             />
@@ -6878,9 +6928,10 @@ function supportBundlePreviewIsFullyProjected(preview: SupportBundlePreview): bo
 export function ActivityHistorySettingsPanel(props: {
   readonly activities: readonly KnowledgeActivitySummary[];
   readonly undoingId: string | null;
+  readonly openingId: string | null;
   readonly blockedIds: readonly string[];
   readonly locale: Locale;
-  readonly onOpen: () => void;
+  readonly onOpen: (activity: KnowledgeActivitySummary) => Promise<void>;
   readonly onUndo: (operationId: string) => Promise<void>;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
@@ -6923,13 +6974,14 @@ export function ActivityHistorySettingsPanel(props: {
                     <span>{createdAtLabel} · {props.t(activity.status === "undone" ? "activity.statusUndone" : "activity.statusApplied")}</span>
                   </div>
                   <div className="settings-row-control">
-                    {activity.status === "applied" ? (
+                    {activity.status === "applied" && activity.target?.kind === "page" ? (
                       <button
                         type="button"
                         className="settings-button"
                         aria-label={`${props.t("activity.open")}: ${activityLabel}`}
                         data-activity-open-id={activity.operationId}
-                        onClick={props.onOpen}
+                        disabled={props.openingId !== null}
+                        onClick={() => void props.onOpen(activity)}
                       >
                         {props.t("activity.open")}
                       </button>
