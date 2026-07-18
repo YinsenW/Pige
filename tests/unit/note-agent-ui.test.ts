@@ -79,14 +79,62 @@ describe("Note Agent production UI", () => {
     });
 
     expect(mount.container.querySelector(".agent-message-card")?.textContent).toContain("source evidence");
+    const proposalPanel = required(mount.container.querySelector<HTMLElement>(".proposal-panel"));
+    expect(proposalPanel.innerHTML).toContain("Old wording");
+    expect(mount.container.querySelector('[data-kind="removed"]')?.textContent).toContain("Old wording");
+    expect(mount.container.querySelector('[data-kind="added"]')?.textContent).toContain("Grounded wording");
+    expect(mount.container.querySelector(".diff-line.context")?.textContent).toContain("Nearby context");
+    expect(mount.container.querySelector(".proposal-panel")?.textContent).toContain(t("note.proposal.action.polish"));
+    expect(mount.container.querySelector(".proposal-panel")?.textContent).toContain(t("note.proposal.description"));
+    expect(mount.container.querySelector(".proposal-panel")?.textContent).not.toContain("proposal-fixture");
+    expect(mount.container.querySelector(".proposal-panel")?.textContent).not.toContain("7");
     await click(dom, required(buttonNamed(mount.container, "Current note · 1")));
     await click(dom, required(buttonNamed(mount.container, t("note.proposal.apply"))));
     expect(opened).toEqual(["page_fixture_current"]);
     expect(decisions).toEqual(["proposal-fixture:apply"]);
-    expect(mount.container.querySelector(".diff-line.remove")?.textContent).toContain("Old wording");
-    expect(mount.container.querySelector(".diff-line.add")?.textContent).toContain("Grounded wording");
 
     await unmount(dom, mount.root);
+  });
+
+  it("replaces exceptional review controls with one focused terminal result", async () => {
+    const dom = createDom();
+    const container = dom.window.document.createElement("div");
+    dom.window.document.body.append(container);
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(container);
+
+    function Harness(): React.JSX.Element {
+      const [proposal, setProposal] = useState<NoteAgentProposal>(proposalFixture());
+      return createElement(NoteAgentPanel, {
+        modal: false,
+        noteTitle: "Current note.md",
+        availability: "ready",
+        messages: [],
+        proposal,
+        draft: "",
+        models: modelFixtures(),
+        switchingModel: false,
+        onClose: () => undefined,
+        onDraftChange: () => undefined,
+        onProposalAction: (_proposalId, action) => {
+          if (action === "apply") setProposal((current) => ({ ...current, state: "applied" }));
+        },
+        t
+      });
+    }
+
+    await act(async () => {
+      root.render(createElement(Harness));
+      await settle(dom);
+    });
+    await click(dom, required(buttonNamed(container, t("note.proposal.apply"))));
+    const terminal = required(container.querySelector<HTMLElement>(".proposal-panel.state-applied"));
+    await waitFor(dom, () => dom.window.document.activeElement === terminal);
+    expect(terminal.querySelector('[role="status"]')?.textContent).toContain(t("note.proposal.status.applied"));
+    expect(buttonNamed(container, t("note.proposal.apply"))).toBeUndefined();
+    expect(terminal.textContent).not.toContain("proposal-fixture");
+
+    await unmount(dom, root);
   });
 
   it("renders role-free sanitized Markdown messages with one provisional streaming owner", async () => {
@@ -1091,7 +1139,15 @@ describe("Note Agent production UI", () => {
       "note.agentModelMenu",
       "note.agentModelSwitchFailed",
       "note.proposal.apply",
+      "note.proposal.action.expand",
+      "note.proposal.action.polish",
+      "note.proposal.action.translate",
+      "note.proposal.description",
       "note.proposal.later",
+      "note.proposal.line.added",
+      "note.proposal.line.context",
+      "note.proposal.line.removed",
+      "note.proposal.preview",
       "note.proposal.reject"
     ];
     for (const locale of ["de", "en", "fr", "ja", "ko", "zh-Hans"]) {
@@ -1144,10 +1200,13 @@ function modelFixtures(): readonly NoteAgentModelOption[] {
 function proposalFixture(): NoteAgentProposal {
   return {
     id: "proposal-fixture",
-    title: "Update core principle",
-    description: "A source provides clearer wording.",
-    removed: "Old wording",
-    added: "Grounded wording",
+    action: "polish",
+    revision: 7,
+    lines: [
+      { kind: "context", text: "Nearby context" },
+      { kind: "removed", text: "Old wording" },
+      { kind: "added", text: "Grounded wording" }
+    ],
     state: "ready"
   };
 }

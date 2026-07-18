@@ -4785,9 +4785,12 @@ dd {
 .proposal-panel > p { margin: 0 0 12px; color: var(--text-secondary); font-size: 11px; line-height: 1.55; }
 .diff-preview { overflow: hidden; border: 1px solid var(--border-default); border-radius: 10px; font: 10px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .diff-line { padding: 5px 8px; }
-.diff-line.remove { background: rgb(224 46 42 / 8%); color: #8d2926; }
-.diff-line.add { background: rgb(0 162 64 / 8%); color: #176a35; }
+.diff-line.context { background: var(--surface-subtle); color: var(--text-secondary); }
+.diff-line.removed { background: rgb(224 46 42 / 8%); color: #8d2926; }
+.diff-line.added { background: rgb(0 162 64 / 8%); color: #176a35; }
 .proposal-actions { display: flex; justify-content: flex-end; gap: 7px; margin-top: 12px; }
+.proposal-result { margin: 12px 0 0; border-radius: 8px; padding: 8px 10px; background: var(--surface-subtle); color: var(--text-secondary); }
+.proposal-result.conflicted { background: var(--danger-soft); color: var(--danger); }
 
 .note-agent-run-state {
   display: flex;

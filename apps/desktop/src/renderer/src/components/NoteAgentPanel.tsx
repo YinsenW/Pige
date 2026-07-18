@@ -25,11 +25,13 @@ export type NoteAgentMessage = {
 
 export type NoteAgentProposal = {
   readonly id: string;
-  readonly title: string;
-  readonly description: string;
-  readonly removed: string;
-  readonly added: string;
-  readonly state: "ready" | "resolving";
+  readonly action: "translate" | "polish" | "expand";
+  readonly revision: number;
+  readonly lines: readonly {
+    readonly kind: "context" | "removed" | "added";
+    readonly text: string;
+  }[];
+  readonly state: "ready" | "resolving" | "applied" | "rejected" | "conflicted";
 };
 
 export type NoteAgentModelOption = {
@@ -80,6 +82,8 @@ export function NoteAgentPanel(props: {
   const modelSwitcherRef = useRef<HTMLButtonElement | null>(null);
   const modelMenuRef = useRef<HTMLDivElement | null>(null);
   const modelOptionRefs = useRef(new Map<string, HTMLButtonElement>());
+  const proposalPanelRef = useRef<HTMLElement | null>(null);
+  const previousProposalStateRef = useRef<NoteAgentProposal["state"] | null>(null);
   const composingRef = useRef(false);
   const compositionRaceRef = useRef(false);
   const compositionTimerRef = useRef<number | undefined>(undefined);
@@ -121,6 +125,19 @@ export function NoteAgentPanel(props: {
       setCopyFeedback(null);
     }
   }, [copyFeedback, props.messages]);
+
+  useEffect(() => {
+    const previousState = previousProposalStateRef.current;
+    const nextState = props.proposal?.state ?? null;
+    previousProposalStateRef.current = nextState;
+    if (
+      previousState !== null &&
+      previousState !== nextState &&
+      (nextState === "applied" || nextState === "rejected" || nextState === "conflicted")
+    ) {
+      window.requestAnimationFrame(() => proposalPanelRef.current?.focus({ preventScroll: true }));
+    }
+  }, [props.proposal?.state]);
 
   useLayoutEffect(() => {
     const thread = threadRef.current;
@@ -336,26 +353,48 @@ export function NoteAgentPanel(props: {
                 );
               })}
               {props.proposal ? (
-                <section className="proposal-panel" aria-label={props.t("note.proposalTitle")} aria-busy={props.proposal.state === "resolving"}>
-                  <h2>{props.proposal.title}</h2>
-                  <p>{props.proposal.description}</p>
-                  <div className="diff-preview">
-                    <div className="diff-line remove">− {props.proposal.removed}</div>
-                    <div className="diff-line add">+ {props.proposal.added}</div>
-                  </div>
-                  <div className="proposal-actions">
-                    {(["reject", "later", "apply"] as const).map((action) => (
-                      <button
-                        key={action}
-                        className={action === "apply" ? "primary-button" : "quiet-button"}
-                        type="button"
-                        disabled={props.proposal?.state === "resolving" || !props.onProposalAction}
-                        onClick={() => props.proposal && props.onProposalAction?.(props.proposal.id, action)}
-                      >
-                        {props.t(`note.proposal.${action}`)}
-                      </button>
-                    ))}
-                  </div>
+                <section
+                  ref={proposalPanelRef}
+                  className={`proposal-panel state-${props.proposal.state}`}
+                  aria-labelledby="note-agent-proposal-title"
+                  aria-describedby="note-agent-proposal-description"
+                  aria-busy={props.proposal.state === "resolving"}
+                  tabIndex={-1}
+                >
+                  <h2 id="note-agent-proposal-title">{props.t(`note.proposal.action.${props.proposal.action}`)}</h2>
+                  <p id="note-agent-proposal-description">{props.t("note.proposal.description")}</p>
+                  {props.proposal.lines.length > 0 ? (
+                    <div className="diff-preview" aria-label={props.t("note.proposal.preview")}>
+                      {props.proposal.lines.map((line, index) => (
+                        <div className={`diff-line ${line.kind}`} data-kind={line.kind} key={`${line.kind}-${index}`}>
+                          <span className="visually-hidden">{props.t(`note.proposal.line.${line.kind}`)}</span>
+                          <span aria-hidden="true">{line.kind === "removed" ? "− " : line.kind === "added" ? "+ " : "  "}</span>
+                          <span>{line.text}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  {props.proposal.state === "ready" || props.proposal.state === "resolving" ? (
+                    <div className="proposal-actions">
+                      {(["reject", "later", "apply"] as const).map((action) => (
+                        <button
+                          key={action}
+                          className={action === "apply" ? "primary-button" : "quiet-button"}
+                          type="button"
+                          disabled={props.proposal?.state === "resolving" || !props.onProposalAction}
+                          onClick={() => props.proposal && props.onProposalAction?.(props.proposal.id, action)}
+                        >
+                          {props.t(props.proposal?.state === "resolving" && action === "apply"
+                            ? "note.proposal.resolving"
+                            : `note.proposal.${action}`)}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className={`proposal-result ${props.proposal.state}`} role={props.proposal.state === "conflicted" ? "alert" : "status"}>
+                      {props.t(`note.proposal.status.${props.proposal.state}`)}
+                    </p>
+                  )}
                 </section>
               ) : null}
             </div>
