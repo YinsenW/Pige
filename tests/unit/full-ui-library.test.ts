@@ -36,6 +36,17 @@ afterEach(() => {
 });
 
 describe("full UI Library", () => {
+  it("lets the selection menu escape its toolbar while the menu owns internal scrolling", () => {
+    const styles = fs.readFileSync(
+      path.resolve("apps/desktop/src/renderer/src/styles/app.css"),
+      "utf8"
+    );
+    const toolbarRule = styles.match(/\.selection-toolbar\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
+    const menuRule = styles.match(/\.selection-more-menu\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
+    expect(toolbarRule).toContain("overflow: visible");
+    expect(menuRule).toContain("overflow: auto");
+  });
+
   it("keeps inline-reference feedback out of the Reader document flow", () => {
     const styles = fs.readFileSync(
       path.resolve("apps/desktop/src/renderer/src/styles/app.css"),
@@ -865,6 +876,139 @@ describe("full UI Library", () => {
       await settle(dom);
     });
     await waitFor(dom, () => dom.window.document.activeElement === container.querySelector(".note-reader"));
+
+    await act(async () => root.unmount());
+    dom.window.HTMLElement.prototype.getBoundingClientRect = originalBoundingClientRect;
+    dom.window.close();
+  });
+
+  it("keeps Copy and quoted Copy local while More owns its keyboard and body-free status", async () => {
+    const dom = createDom();
+    const clipboardWrites: string[] = [];
+    Object.defineProperty(dom.window.navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (value: string) => {
+          clipboardWrites.push(value);
+        }
+      }
+    });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const unavailable: string[] = [];
+    await act(async () => {
+      root.render(createElement(NoteReader, {
+        note: readerNote(),
+        related: null,
+        relatedLoadingPageId: null,
+        onOpenRelated: async () => undefined,
+        onDevelopment: (capability) => unavailable.push(capability),
+        t
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    const paragraph = requireElement(container.querySelector(".markdown-body p"));
+    const originalBoundingClientRect = dom.window.HTMLElement.prototype.getBoundingClientRect;
+    dom.window.HTMLElement.prototype.getBoundingClientRect = function getBoundingClientRect(): DOMRect {
+      if ((this as HTMLElement).classList.contains("selection-toolbar")) {
+        return {
+          left: 40, top: 40, width: 220, height: 34, right: 260, bottom: 74,
+          x: 40, y: 40, toJSON: () => ({})
+        } as DOMRect;
+      }
+      if ((this as HTMLElement).classList.contains("selection-more-menu")) {
+        return {
+          left: 84, top: 80, width: 176, height: 172, right: 260, bottom: 252,
+          x: 84, y: 80, toJSON: () => ({})
+        } as DOMRect;
+      }
+      return originalBoundingClientRect.call(this);
+    };
+    let collapsed = false;
+    Object.defineProperty(dom.window, "getSelection", {
+      configurable: true,
+      value: () => ({
+        isCollapsed: collapsed,
+        rangeCount: collapsed ? 0 : 1,
+        toString: () => "Selected first line\nSelected second line",
+        getRangeAt: () => ({
+          commonAncestorContainer: paragraph,
+          getBoundingClientRect: () => ({ left: 90, top: 100, width: 120, height: 18, right: 210, bottom: 118 })
+        })
+      })
+    });
+
+    const showSelection = async (): Promise<void> => {
+      await act(async () => {
+        collapsed = true;
+        dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+        collapsed = false;
+        dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+        await settle(dom);
+      });
+      await waitFor(dom, () => container.querySelector('[role="toolbar"]') !== null);
+    };
+
+    await showSelection();
+    let more = requireElement(container.querySelector<HTMLButtonElement>('[data-selection-action="more"]'));
+    await act(async () => {
+      more.click();
+      collapsed = true;
+      dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+      collapsed = false;
+      await settle(dom);
+    });
+    let menu = requireElement(container.querySelector<HTMLElement>('[role="menu"]'));
+    const menuItems = Array.from(menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
+    expect(more.getAttribute("aria-expanded")).toBe("true");
+    expect(menuItems.map((item) => item.dataset.selectionMoreAction)).toEqual([
+      "copy", "copyAsQuote", "translate", "polish", "expand"
+    ]);
+    expect(dom.window.document.activeElement).toBe(menuItems[0]);
+    await act(async () => {
+      menu.dispatchEvent(new dom.window.Event("scroll"));
+      await settle(dom);
+    });
+    expect(container.querySelector('[role="menu"]')).toBe(menu);
+    await act(async () => {
+      menu.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+      await settle(dom);
+    });
+    expect(dom.window.document.activeElement).toBe(menuItems[1]);
+    await act(async () => {
+      menu.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await settle(dom);
+    });
+    expect(container.querySelector('[role="menu"]')).toBeNull();
+    await waitFor(dom, () => dom.window.document.activeElement === more);
+
+    await act(async () => {
+      more.click();
+      await settle(dom);
+    });
+    menu = requireElement(container.querySelector<HTMLElement>('[role="menu"]'));
+    await act(async () => {
+      requireElement(menu.querySelector<HTMLButtonElement>('[data-selection-more-action="copy"]')).click();
+      await settle(dom);
+    });
+    expect(clipboardWrites).toEqual(["Selected first line\nSelected second line"]);
+    expect(unavailable).toEqual([]);
+    expect(container.querySelector('[role="toolbar"]')).toBeNull();
+    expect(container.querySelector('[role="status"]')?.textContent).toBe("Copied.");
+
+    await showSelection();
+    more = requireElement(container.querySelector<HTMLButtonElement>('[data-selection-action="more"]'));
+    await act(async () => {
+      more.click();
+      await settle(dom);
+      requireElement(container.querySelector<HTMLButtonElement>('[data-selection-more-action="copyAsQuote"]')).click();
+      await settle(dom);
+    });
+    expect(clipboardWrites).toEqual([
+      "Selected first line\nSelected second line",
+      "> Selected first line\n> Selected second line"
+    ]);
+    expect(container.querySelector('[role="status"]')?.textContent).toBe("Quote copied.");
 
     await act(async () => root.unmount());
     dom.window.HTMLElement.prototype.getBoundingClientRect = originalBoundingClientRect;

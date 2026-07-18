@@ -2290,8 +2290,11 @@ export function NoteReader(props: {
   const markdownBodyRef = useRef<HTMLDivElement | null>(null);
   const selectionToolbarRef = useRef<HTMLDivElement | null>(null);
   const selectionActionRefs = useRef(new Map<number, HTMLButtonElement>());
+  const selectionMoreActionRefs = useRef(new Map<number, HTMLButtonElement>());
   const selectionFocusTransition = useRef(false);
+  const selectionMoreOpenRef = useRef(false);
   const selectionFocusOwnerRef = useRef<HTMLElement | null>(null);
+  const selectionTextRef = useRef("");
   const currentSelectionRef = useRef<{
     readonly left: number;
     readonly top: number;
@@ -2307,6 +2310,10 @@ export function NoteReader(props: {
   } | null>(null);
   const [selectionPosition, setSelectionPosition] = useState<{ readonly left: number; readonly top: number } | null>(null);
   const [selectionActionIndex, setSelectionActionIndex] = useState(0);
+  const [selectionMoreOpen, setSelectionMoreOpen] = useState(false);
+  const [selectionMoreActionIndex, setSelectionMoreActionIndex] = useState(0);
+  const [selectionMorePlacement, setSelectionMorePlacement] = useState<"above" | "below">("below");
+  const [selectionFeedback, setSelectionFeedback] = useState<string | null>(null);
 
   useLayoutEffect(() => {
     const firstBlock = markdownBodyRef.current?.firstElementChild;
@@ -2320,7 +2327,9 @@ export function NoteReader(props: {
 
   const closeSelectionToolbar = (restoreFocus: boolean): void => {
     selectionFocusTransition.current = false;
+    selectionMoreOpenRef.current = false;
     dismissedSelectionRef.current = currentSelectionRef.current;
+    setSelectionMoreOpen(false);
     setSelectionAnchor(null);
     setSelectionPosition(null);
     if (!restoreFocus) return;
@@ -2331,10 +2340,11 @@ export function NoteReader(props: {
 
   useEffect(() => {
     const updateSelection = (): void => {
-      if (selectionFocusTransition.current) return;
+      if (selectionFocusTransition.current || selectionMoreOpenRef.current) return;
       const selection = window.getSelection();
       if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
         currentSelectionRef.current = null;
+        selectionTextRef.current = "";
         dismissedSelectionRef.current = null;
         if (selectionToolbarRef.current?.contains(document.activeElement)) return;
         setSelectionAnchor(null);
@@ -2355,6 +2365,14 @@ export function NoteReader(props: {
         setSelectionPosition(null);
         return;
       }
+      const nextSelectionText = selection.toString();
+      const previousSelection = currentSelectionRef.current;
+      const selectionChanged = !previousSelection ||
+        previousSelection.left !== rect.left ||
+        previousSelection.top !== rect.top ||
+        previousSelection.right !== rect.right ||
+        previousSelection.bottom !== rect.bottom ||
+        selectionTextRef.current !== nextSelectionText;
       const nextSelection = {
         left: rect.left,
         top: rect.top,
@@ -2362,6 +2380,7 @@ export function NoteReader(props: {
         bottom: rect.bottom
       };
       currentSelectionRef.current = nextSelection;
+      selectionTextRef.current = nextSelectionText;
       const dismissed = dismissedSelectionRef.current;
       if (dismissed
         && dismissed.left === nextSelection.left
@@ -2381,18 +2400,33 @@ export function NoteReader(props: {
       };
       setSelectionAnchor(anchor);
       setSelectionActionIndex(0);
+      if (selectionChanged) {
+        selectionMoreOpenRef.current = false;
+        setSelectionMoreOpen(false);
+        setSelectionFeedback(null);
+      }
       setSelectionPosition({ left: Math.max(12, anchor.left), top: Math.max(12, anchor.top) });
     };
-    const dismissOnScroll = (): void => {
+    const dismissOnScroll = (event: Event): void => {
+      if (event.target instanceof Node && selectionToolbarRef.current?.contains(event.target)) return;
+      selectionMoreOpenRef.current = false;
       dismissedSelectionRef.current = currentSelectionRef.current;
+      setSelectionMoreOpen(false);
       setSelectionAnchor(null);
       setSelectionPosition(null);
     };
+    const dismissMenuOutside = (event: PointerEvent): void => {
+      if (!selectionMoreOpenRef.current) return;
+      if (event.target instanceof Node && selectionToolbarRef.current?.contains(event.target)) return;
+      closeSelectionToolbar(false);
+    };
     document.addEventListener("selectionchange", updateSelection);
+    document.addEventListener("pointerdown", dismissMenuOutside, true);
     window.addEventListener("resize", updateSelection);
     window.addEventListener("scroll", dismissOnScroll, true);
     return () => {
       document.removeEventListener("selectionchange", updateSelection);
+      document.removeEventListener("pointerdown", dismissMenuOutside, true);
       window.removeEventListener("resize", updateSelection);
       window.removeEventListener("scroll", dismissOnScroll, true);
     };
@@ -2400,15 +2434,17 @@ export function NoteReader(props: {
 
   useEffect(() => {
     if (!selectionAnchor) return;
-    const frame = window.requestAnimationFrame(() => {
+    const ownerWindow = readerRef.current?.ownerDocument.defaultView;
+    if (!ownerWindow) return;
+    const frame = ownerWindow.requestAnimationFrame(() => {
       const toolbar = selectionToolbarRef.current;
       if (!toolbar) return;
       const toolbarRect = toolbar.getBoundingClientRect();
       const width = Math.max(toolbarRect.width, toolbar.offsetWidth, toolbar.scrollWidth);
       const height = Math.max(toolbarRect.height, toolbar.offsetHeight, toolbar.scrollHeight);
       if (width <= 0 || height <= 0) return;
-      const maxLeft = Math.max(12, window.innerWidth - width - 12);
-      const maxTop = Math.max(12, window.innerHeight - height - 12);
+      const maxLeft = Math.max(12, ownerWindow.innerWidth - width - 12);
+      const maxTop = Math.max(12, ownerWindow.innerHeight - height - 12);
       const preferredLeft = selectionAnchor.left + (selectionAnchor.width / 2) - (width / 2);
       const above = selectionAnchor.top - height - 8;
       const preferredTop = above >= 12 ? above : selectionAnchor.bottom + 8;
@@ -2418,8 +2454,20 @@ export function NoteReader(props: {
       };
       setSelectionPosition((current) => current?.left === next.left && current.top === next.top ? current : next);
     });
-    return () => window.cancelAnimationFrame(frame);
+    return () => ownerWindow.cancelAnimationFrame(frame);
   }, [selectionAnchor]);
+
+  useLayoutEffect(() => {
+    if (!selectionMoreOpen) return;
+    const menu = selectionToolbarRef.current?.querySelector<HTMLElement>(".selection-more-menu");
+    const toolbar = selectionToolbarRef.current;
+    if (!menu || !toolbar) return;
+    const toolbarRect = toolbar.getBoundingClientRect();
+    const menuHeight = Math.max(menu.getBoundingClientRect().height, menu.offsetHeight, menu.scrollHeight);
+    const ownerWindow = toolbar.ownerDocument.defaultView;
+    if (!ownerWindow) return;
+    setSelectionMorePlacement(toolbarRect.bottom + menuHeight + 6 <= ownerWindow.innerHeight - 12 ? "below" : "above");
+  }, [selectionMoreOpen, selectionPosition]);
 
   const moveSelectionActionFocus = (index: number): void => {
     selectionFocusTransition.current = true;
@@ -2428,6 +2476,52 @@ export function NoteReader(props: {
       selectionActionRefs.current.get(index)?.focus();
       window.requestAnimationFrame(() => { selectionFocusTransition.current = false; });
     });
+  };
+
+  const moveSelectionMoreActionFocus = (index: number): void => {
+    setSelectionMoreActionIndex(index);
+    readerRef.current?.ownerDocument.defaultView?.requestAnimationFrame(() => {
+      selectionMoreActionRefs.current.get(index)?.focus({ preventScroll: true });
+    });
+  };
+
+  const toggleSelectionMore = (): void => {
+    const next = !selectionMoreOpen;
+    selectionMoreOpenRef.current = next;
+    if (next) selectionFocusTransition.current = true;
+    setSelectionMoreOpen(next);
+    if (next) {
+      setSelectionMoreActionIndex(0);
+      readerRef.current?.ownerDocument.defaultView?.requestAnimationFrame(() => {
+        selectionMoreActionRefs.current.get(0)?.focus({ preventScroll: true });
+        readerRef.current?.ownerDocument.defaultView?.requestAnimationFrame(() => {
+          selectionFocusTransition.current = false;
+        });
+      });
+    } else {
+      selectionFocusTransition.current = false;
+    }
+  };
+
+  const copySelection = async (asQuote: boolean): Promise<void> => {
+    const selectedText = selectionTextRef.current;
+    const clipboard = readerRef.current?.ownerDocument.defaultView?.navigator.clipboard;
+    if (!selectedText || !clipboard?.writeText) {
+      closeSelectionToolbar(true);
+      setSelectionFeedback(props.t("note.selection.copyFailed"));
+      return;
+    }
+    const clipboardText = asQuote
+      ? selectedText.split(/\r?\n/u).map((line) => `> ${line}`).join("\n")
+      : selectedText;
+    try {
+      await clipboard.writeText(clipboardText);
+      closeSelectionToolbar(true);
+      setSelectionFeedback(props.t(asQuote ? "note.selection.quoteCopied" : "note.selection.copied"));
+    } catch {
+      closeSelectionToolbar(true);
+      setSelectionFeedback(props.t("note.selection.copyFailed"));
+    }
   };
 
   return (
@@ -2465,8 +2559,14 @@ export function NoteReader(props: {
               type="button"
               tabIndex={selectionActionIndex === index ? 0 : -1}
               data-selection-action={action}
+              aria-expanded={action === "more" ? selectionMoreOpen : undefined}
+              aria-controls={action === "more" ? "reader-selection-more-menu" : undefined}
               onPointerDown={(event) => event.preventDefault()}
               onClick={() => {
+                if (action === "more") {
+                  toggleSelectionMore();
+                  return;
+                }
                 closeSelectionToolbar(true);
                 props.onDevelopment("selection_actions");
               }}
@@ -2474,7 +2574,66 @@ export function NoteReader(props: {
               {props.t(`note.selection.${action}`)}
             </button>
           ))}
+          {selectionMoreOpen ? (
+            <div
+              id="reader-selection-more-menu"
+              className={`selection-more-menu ${selectionMorePlacement}`}
+              role="menu"
+              aria-label={props.t("note.selection.moreActions")}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  selectionMoreOpenRef.current = false;
+                  setSelectionMoreOpen(false);
+                  readerRef.current?.ownerDocument.defaultView?.requestAnimationFrame(() => selectionActionRefs.current.get(3)?.focus());
+                  return;
+                }
+                let nextIndex: number | null = null;
+                if (event.key === "ArrowDown") nextIndex = (selectionMoreActionIndex + 1) % 5;
+                else if (event.key === "ArrowUp") nextIndex = (selectionMoreActionIndex + 4) % 5;
+                else if (event.key === "Home") nextIndex = 0;
+                else if (event.key === "End") nextIndex = 4;
+                if (nextIndex === null) return;
+                event.preventDefault();
+                moveSelectionMoreActionFocus(nextIndex);
+              }}
+            >
+              {(["copy", "copyAsQuote", "translate", "polish", "expand"] as const).map((action, index) => (
+                <button
+                  key={action}
+                  ref={(element) => {
+                    if (element) selectionMoreActionRefs.current.set(index, element);
+                    else selectionMoreActionRefs.current.delete(index);
+                  }}
+                  type="button"
+                  role="menuitem"
+                  tabIndex={selectionMoreActionIndex === index ? 0 : -1}
+                  data-selection-more-action={action}
+                  onPointerDown={(event) => event.preventDefault()}
+                  onClick={() => {
+                    if (action === "copy" || action === "copyAsQuote") {
+                      void copySelection(action === "copyAsQuote");
+                      return;
+                    }
+                    closeSelectionToolbar(true);
+                    props.onDevelopment("selection_actions");
+                  }}
+                >
+                  {props.t(`note.selection.${action}`)}
+                  {action === "translate" || action === "polish" || action === "expand" ? (
+                    <span>{props.t("note.selection.unavailable")}</span>
+                  ) : null}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
+      ) : null}
+      {selectionFeedback ? (
+        <p className="reader-selection-feedback" role="status" aria-live="polite" aria-atomic="true">
+          {selectionFeedback}
+        </p>
       ) : null}
       <header className="note-header">
         <h1>{summary.title}</h1>
