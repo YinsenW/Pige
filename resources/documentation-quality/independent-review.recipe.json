@@ -47,6 +47,7 @@
       "apps/desktop/src/main/services/reader-selection-proposal-service.ts",
       "apps/desktop/src/main/services/retrieval-evidence-boundary.ts",
       "apps/desktop/src/main/services/secret-store.ts",
+      "apps/desktop/src/main/services/skill-registry-service.ts",
       "apps/desktop/src/preload/index.ts",
       "apps/desktop/src/renderer/src/App.tsx",
       "apps/desktop/src/renderer/src/components/CurrentNoteAgent.tsx",
@@ -85,19 +86,22 @@
       "tests/unit/update-contract-schemas.test.ts",
       "tests/unit/update-service.test.ts",
       "tests/unit/local-settings.test.ts",
+      "tests/unit/skill-registry-service.test.ts",
+      "tests/unit/release-publication.test.ts",
+      "tests/unit/release-packageability-platforms.test.ts",
       "package.json"
     ],
-    "scope": "Independent Product Planning review retains the published Reader transform and toolbar repairs and binds the Home optimistic-send and streamed-turn convergence correction on sole main 885872e9. Send clears and projects one temporary user turn immediately, durable event and Job identities deduplicate it, authoritative completion wins over stale running summaries, and non-durable failure restores only the unchanged draft without altering Agent, attachment, persistence or API authority.",
+    "scope": "Independent Product Planning review retains the published Reader, Home conversation, Update, release, security and Settings contracts and binds the machine-local Skill Registry foundation on sole main a13c42e: checksum-bound pathless inventory, fail-closed manifests, revision-fenced disable and exact API/data/Skill/phase/trace ownership without renderer binding or lifecycle-status promotion.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
-    "minimumFileCount": 130,
-    "reviewedSha256": "628e1b61645d8a36b3ea5bfe76b79d35e1a3d475ffa5334a10323b3c062e6f86"
+    "minimumFileCount": 135,
+    "reviewedSha256": "cc97384e67bf1718913bcf2a69db0ebbeebddde0d78a1ea02075e17418bacca3"
   },
   "reviewers": [
     {
-      "reviewerId": "home-conversation-planning-review",
-      "task": "Home optimistic send and streaming convergence review",
+      "reviewerId": "skill-registry-planning-review",
+      "task": "Machine-local Skill Registry foundation contract and governance review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -105,76 +109,76 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Product Planning did not author the Home UI commit and independently compared its exact renderer and test bytes with the published Agent turn, draft-event, durable conversation and retry contracts on sole main 885872e9."
+      "independence": "Product Planning did not author the Development Skill Registry implementation and independently compared its exact bytes with Skill, API, settings, data, architecture, phase, trace, acceptance and permission owners on the latest published main."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "home-conversation-planning-review",
+      "reviewerId": "skill-registry-planning-review",
       "blockerCount": 0,
-      "summary": "HomeComposer remains the single transient conversation owner while Main retains durable Agent turn, Job and conversation ownership; no duplicate submit, persistence or streaming service is added."
+      "summary": "The existing Skill Extension owner remains the lifecycle contract; API, architecture, data and settings owners receive bounded current-state facts without a duplicate Skill or package specification."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "home-conversation-planning-review",
+      "reviewerId": "skill-registry-planning-review",
       "blockerCount": 0,
-      "summary": "The published Agent turn contract remains unchanged: renderer optimism is correlated by clientTurnId and adopted durable IDs, draft events remain non-durable, and the authoritative completed answer outranks only stale UI job projection."
+      "summary": "Skill, API, architecture, data and settings owners agree that only user-confirmed machine-local non-package manifests project, disable reduces authority, and absent lifecycle actions remain unavailable."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "home-conversation-planning-review",
+      "reviewerId": "skill-registry-planning-review",
       "blockerCount": 0,
-      "summary": "Existing requirement, build, exit and phase statuses remain unchanged; the candidate closes a bounded Home lifecycle defect and does not promote multi-source attachments or broader release completion."
+      "summary": "P8, PIGE-SKILL-001 and E8.01 remain planned; their targets record the bounded inventory/disable foundation while preserving staging, install, enable, update, uninstall, export, runtime, permissions and UI gaps."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "home-conversation-planning-review",
+      "reviewerId": "skill-registry-planning-review",
       "blockerCount": 0,
-      "summary": "Focused Home conversation tests cover same-frame optimism, durable deduplication, draft-to-final convergence, stale running summaries, retry restoration and vault switching; typecheck, build and UI visual gates remain directly runnable."
+      "summary": "Focused service/schema/shell tests cover checksum and identity binding, no-follow failures, strict pathless projections, atomic CAS disable and parsed main/preload IPC; repository gates remain directly runnable."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "home-conversation-planning-review",
+      "reviewerId": "skill-registry-planning-review",
       "blockerCount": 0,
-      "summary": "The product delta remains confined to App.tsx and its focused regression; this excluded recipe records the independent publication review without adding or rewriting an owner document."
+      "summary": "The synchronization is confined to existing Skill/API/architecture/data/settings/decision/phase/trace owners plus derived locks; no new owner document or duplicated lifecycle narrative was added."
     }
   ],
   "verification": [
     {
-      "command": "Independent review of Home optimistic send and streaming convergence on sole main 885872e9",
+      "command": "Independent review of the machine-local Skill Registry foundation mechanically replayed on sole main a13c42e",
       "status": "passed",
-      "evidence": "Review confirms one optimistic user turn appears in the send frame, draft events advance behind it, durable identities remove duplicates, final content does not regress to stale running UI, and a non-durable failure restores only the unchanged prompt."
+      "evidence": "Review confirms exact main-owned app-data layout, manifest checksum and identity binding, pathless/body-free summaries, invalid counting, atomic CAS disable and the absence of install, enable, uninstall, execution, network, process, package and grant authority."
     },
     {
       "command": "npm run verify:docs && npm run verify:decisions && npm run verify:traceability",
       "status": "passed",
-      "evidence": "Links, whitespace, document map, PRD structure, decisions and locked claims pass with no Requirement, Build, Exit or Phase promotion."
+      "evidence": "Links, whitespace, document map, PRD structure, decisions and locked Skill claims pass with no Requirement, Build, Exit or Phase promotion."
     },
     {
       "command": "npm run verify:contracts && npm run verify:independent-documentation-review && npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "CON-001 through CON-004 remain green; focused UI tests, typecheck, build and visual-contract verification bind the exact repair while the union recipe retains the published Reader, Update, release and security roots."
+      "evidence": "CON-001 through CON-004 remain green; focused Skill tests, typecheck and build bind the exact service/contracts/IPC while the union recipe retains published Reader, Update, release, security and Settings roots."
     }
   ],
   "coordination": {
-    "taskId": "home-conversation-main8858-20260719",
-    "taskTitle": "Home optimistic send and streaming convergence repair",
+    "taskId": "skill-registry-maina13c-20260719",
+    "taskTitle": "Machine-local Skill Registry foundation",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The candidate changes only transient Home conversation projection and convergence; it adds no API, persistence, Job, attachment, permission, locale or model authority.",
-    "acknowledgement": "Product Planning reviewed the exact Home UI bytes on sole main 885872e9 and records this bounded lifecycle repair without restyling messages or claiming broader feature completion."
+    "compatibility": "The candidate adds a fail-closed machine-local inventory and authority-reducing disable without renderer binding, Skill execution, package behavior, vault data, backup input, network access or permission-grant mutation.",
+    "acknowledgement": "Product Planning reviewed the exact Development bytes and synchronized only existing owners; this foundation does not claim staging, install, enable, update, uninstall, export, runtime use, Permission Broker integration or complete Skill lifecycle acceptance."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "The published single-file guards remain unchanged; ordered multi-source partial acceptance and mixed-result projection require a separate typed service vertical.",
-    "No attachment, Agent orchestration, Requirement, Build, Exit or Phase status is promoted by this repair.",
-    "Real macOS evidence covers the 420 Home send, stream and final sequence with synthetic prompts; this candidate makes no additional Windows timing claim."
+    "The renderer Settings surface is not bound to this API and must remain unavailable for absent actions.",
+    "Enable awaits Permission Broker authority; uninstall awaits explicit confirmation plus Skill-grant revocation; no Requirement, Exit or Phase status is promoted.",
+    "The published Update Service still has no production feed/download/install/restart path, and the Home conversation repair makes no unrelated Skill lifecycle claim."
   ]
 }

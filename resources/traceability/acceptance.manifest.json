@@ -782,7 +782,7 @@
     "PIGE-UI-004":{"status":"planned","plannedTarget":"Remaining Knowledge Tree density/scale, compact-platform, assistive-technology, and signed packaged visual acceptance."},
     "PIGE-UI-005":{"status":"planned","plannedTarget":"Reader selection works; broader mutation, Activity/Undo and platform proof remains."},
     "PIGE-UI-006":{"status":"partial","evidence":["EV-READER-RELATED","EV-READER-UI","EV-FULL-UI-LIBRARY","EV-FULL-UI-RESPONSIVE","EV-READER-ACTIONS-UI","EV-READER-INLINE"],"open":{"id":"OPEN-REQ-PIGE-UI-006","description":"Reader/related/copy/typed links work; source UI, edit/reveal and graph degradation open.","targetBuilds":["B6.08","B6.09"],"targetExits":["E6.05","E6.07"]}},
-    "PIGE-SKILL-001":{"status":"planned","plannedTarget":"Settings/chat staging, URL/Markdown/ZIP, update, lifecycle, export, path-safety, and permission tests."},
+    "PIGE-SKILL-001":{"status":"planned","plannedTarget":"Inventory/disable exists; complete Settings/chat lifecycle, path-safety, runtime, permissions and UI tests remain."},
     "PIGE-SKILL-002":{"status":"planned","plannedTarget":"Catalog, install, update, version-pin, rollback, uninstall, disclosure, and no-hidden-install tests."}
   },
   "exits": {
@@ -1040,7 +1040,7 @@
     "E7.06":{"status":"planned","plannedTarget":"Managed Collection typed fields, views, relations/formulas, revision conflict, Activity/Undo, and exception-boundary integration report."},
     "E8.01": {
       "status": "planned",
-      "plannedTarget": "Skill Settings/chat staging and complete lifecycle report."
+      "plannedTarget": "Inventory/disable exists; complete Skill lifecycle report remains."
     },
     "E8.02": {
       "status": "planned",

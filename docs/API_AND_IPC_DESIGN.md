@@ -642,6 +642,7 @@ Commands:
 - `models.addManualModel`
 - `models.updateModel`
 - `models.setDefaultModel`
+- `skills.disable`
 - `tools.install`
 - `tools.remove`
 
@@ -650,7 +651,13 @@ Queries:
 - `settings.registry`
 - `settings.appearance`
 - `models.summary`
+- `skills.summary`
 - `system.toolchainHealth`
+
+`skills.summary`, CAS `skills.disable({apiVersion:1,skillId,expectedRevision})`, and
+`skills.changed` use schemas. Main projects only confirmed machine-local
+non-package ID/version/checksum matches; invalid records expose only a count. Disable
+reduces authority; other lifecycle authority is absent.
 
 Provider/model DTOs:
 
@@ -707,6 +714,7 @@ Rules:
 - Settings updates include expected versions where concurrent edits or external vault changes are possible.
 - Agent policy preview returns redacted, typed policy summaries for debugging/settings UI; it never returns raw secrets, full settings files, or permission-store internals.
 - `system.toolchainHealth` reports bundled toolchain readiness or repair-needed status from `resources/toolchain-manifest/toolchain.manifest.json`; it does not trigger downloads.
+- Skill Settings cannot infer absent lifecycle authority from summaries or registry files.
 
 Agent policy DTOs must follow `docs/AGENT_RUNTIME_POLICY_CONTEXT.md`.
 

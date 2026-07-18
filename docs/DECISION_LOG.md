@@ -2952,6 +2952,31 @@ References:
 
 - `docs/SECURITY_THREAT_MODEL.md`
 
+### D-20260719-Machine-Local-Skill-Registry-Foundation
+
+Status: Accepted
+Date: 2026-07-19
+
+Decision:
+
+Use a main-owned machine-local registry with checksum-bound confirmed summaries and
+revision-CAS disable; unsafe or mismatched records are never authority.
+
+Rationale:
+
+Inventory and authority reduction can precede lifecycle owners without making metadata a grant.
+
+Consequences:
+
+- State is machine-local/backup-excluded; disable removes neither files nor grants.
+- Other lifecycle/runtime/grant actions remain unavailable; governed statuses stay planned.
+
+References:
+
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/SKILL_EXTENSION_DESIGN.md`
+- `docs/TECH_ARCHITECTURE.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation
