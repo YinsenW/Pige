@@ -13,6 +13,7 @@ import {
 import { PigeIcon, type PigeIconName } from "./components/PigeIcon";
 import { KnowledgeTreeMap } from "./components/KnowledgeTreeMap";
 import { CurrentNoteAgent } from "./components/CurrentNoteAgent";
+import { ConversationMarkdown } from "./components/ConversationMarkdown";
 import { HomeVoicePanel, type HomeVoicePanelState } from "./components/HomeVoicePanel";
 import {
   ReaderInlineReferenceSurface,
@@ -5097,50 +5098,6 @@ function isAgentTurnDraftEvent(value: unknown): value is AgentTurnDraftEvent {
     Array.from(event.text).length > 0 &&
     Array.from(event.text).length <= 8_000 &&
     !/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/u.test(event.text);
-}
-
-export function ConversationMarkdown(props: {
-  readonly markdown: string;
-  readonly provisional?: boolean;
-}): React.JSX.Element {
-  const [html, setHtml] = useState<string | null>(null);
-
-  useEffect(() => {
-    let current = true;
-    setHtml(null);
-    void import("@pige/markdown")
-      .then(({ renderPigeMarkdownToHtml }) => renderPigeMarkdownToHtml(props.markdown))
-      .then((rendered) => {
-        if (current) setHtml(rendered.html);
-      })
-      .catch(() => {
-        if (current) setHtml(null);
-      });
-    return () => {
-      current = false;
-    };
-  }, [props.markdown]);
-
-  const preventConversationNavigation = (event: ReactMouseEvent<HTMLDivElement>): void => {
-    if ((event.target as Element).closest("a")) event.preventDefault();
-  };
-
-  if (html === null) {
-    return (
-      <div className="conversation-markdown" data-markdown-ready="false">
-        <p>{props.markdown}</p>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className={`conversation-markdown${props.provisional ? " provisional-markdown" : ""}`}
-      data-markdown-ready="true"
-      onClick={preventConversationNavigation}
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
-  );
 }
 
 function createAgentClientTurnId(now = new Date()): string {
