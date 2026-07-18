@@ -1846,6 +1846,32 @@ export class JobsService implements PermissionedExternalJobPort {
     return this.#jobExecutionCoordinator(this.#requireActiveVaultPath()).settle(snapshot, outcome).job;
   }
 
+  resolveAgentTurnReview(input: {
+    readonly job: JobRecord;
+    readonly proposalId: string;
+    readonly result: "completed" | "failed_final";
+    readonly operationId?: string;
+    readonly error?: PigeErrorSummary;
+  }): JobRecord {
+    const snapshot = this.#requireAgentTurnSnapshot(input.job);
+    const outputRefs = input.operationId
+      ? [{ kind: "operation" as const, id: input.operationId, role: "reader_selection_transform_operation" }]
+      : [];
+    return this.#jobExecutionCoordinator(this.#requireActiveVaultPath()).resolveReview(snapshot, {
+      proposalId: input.proposalId,
+      result: input.result,
+      ...(input.error ? { error: input.error } : {}),
+      facts: {
+        stage: "planning",
+        outputRefs,
+        ...(input.operationId ? { operationIds: [input.operationId] } : {})
+      },
+      message: input.result === "completed"
+        ? "The Reader selection review was resolved."
+        : "The Reader selection review conflicted with current note state."
+    }).job;
+  }
+
   adoptAgentTurnCompletion(expected: JobRecord, input: AdoptDurableCompletionInput): JobRecord {
     const snapshot = this.#requireAgentTurnSnapshot(expected);
     return this.#jobExecutionCoordinator(this.#requireActiveVaultPath())

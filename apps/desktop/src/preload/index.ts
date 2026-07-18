@@ -64,6 +64,10 @@ import type {
   NoteRenderResult,
   ReaderSelectionActionRequest,
   ReaderSelectionActionResult,
+  ReaderSelectionProposalDecisionRequest,
+  ReaderSelectionProposalDecisionResult,
+  ReaderSelectionProposalGetRequest,
+  ReaderSelectionProposalGetResult,
   ReaderSelectionTransformRequest,
   ReaderSelectionTransformResult,
   ReaderSelectionResolveRequest,
@@ -127,6 +131,10 @@ import {
   NoteResolveInlineReferenceResultSchema,
   ReaderSelectionActionRequestSchema,
   ReaderSelectionActionResultSchema,
+  ReaderSelectionProposalDecisionRequestSchema,
+  ReaderSelectionProposalDecisionResultSchema,
+  ReaderSelectionProposalGetRequestSchema,
+  ReaderSelectionProposalGetResultSchema,
   ReaderSelectionTransformRequestSchema,
   ReaderSelectionTransformResultSchema,
   ReaderSelectionResolveRequestSchema,
@@ -512,6 +520,24 @@ const api: PigeDesktopApi = {
         await ipcRenderer.invoke(
           "readerSelection.submitTransform",
           ReaderSelectionTransformRequestSchema.parse(request)
+        )
+      ),
+    currentProposal: async (
+      request: ReaderSelectionProposalGetRequest
+    ): Promise<ReaderSelectionProposalGetResult> =>
+      ReaderSelectionProposalGetResultSchema.parse(
+        await ipcRenderer.invoke(
+          "readerSelection.currentProposal",
+          ReaderSelectionProposalGetRequestSchema.parse(request)
+        )
+      ),
+    decideProposal: async (
+      request: ReaderSelectionProposalDecisionRequest
+    ): Promise<ReaderSelectionProposalDecisionResult> =>
+      ReaderSelectionProposalDecisionResultSchema.parse(
+        await ipcRenderer.invoke(
+          "readerSelection.decideProposal",
+          ReaderSelectionProposalDecisionRequestSchema.parse(request)
         )
       )
   },

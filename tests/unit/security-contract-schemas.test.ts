@@ -26,6 +26,9 @@ import {
   ProviderProfileSchema,
   ReaderSelectionActionRequestSchema,
   ReaderSelectionActionResultSchema,
+  ReaderSelectionProposalDecisionRequestSchema,
+  ReaderSelectionProposalDecisionResultSchema,
+  ReaderSelectionProposalGetResultSchema,
   ReaderSelectionTransformRequestSchema,
   ReaderSelectionTransformResultSchema,
   ReaderSelectionResolveRequestSchema,
@@ -195,6 +198,43 @@ describe("security-sensitive shared contracts", () => {
       operationId: "op_20260710_abcdef12",
       replacement: "main-only model output"
     })).toThrow();
+
+    const proposal = {
+      proposalId: "proposal_20260710_readerreview",
+      action: "polish" as const,
+      state: "ready" as const,
+      revision: 1,
+      lines: [{ kind: "removed" as const, text: "bounded preview" }]
+    };
+    expect(ReaderSelectionProposalGetResultSchema.parse({
+      apiVersion: 1,
+      status: "available",
+      proposal
+    })).toMatchObject({ status: "available" });
+    expect(() => ReaderSelectionProposalGetResultSchema.parse({
+      apiVersion: 1,
+      status: "available",
+      proposal: { ...proposal, path: "/private/vault/wiki/page.md" }
+    })).toThrow();
+    expect(ReaderSelectionProposalDecisionRequestSchema.parse({
+      apiVersion: 1,
+      proposalId: proposal.proposalId,
+      expectedRevision: 1,
+      decision: "approve"
+    })).toMatchObject({ decision: "approve" });
+    expect(() => ReaderSelectionProposalDecisionRequestSchema.parse({
+      apiVersion: 1,
+      proposalId: proposal.proposalId,
+      expectedRevision: 1,
+      decision: "approve",
+      replacement: "renderer apply bytes"
+    })).toThrow();
+    expect(ReaderSelectionProposalDecisionResultSchema.parse({
+      apiVersion: 1,
+      status: "applied",
+      proposal: { ...proposal, state: "applied", revision: 3 },
+      operationId: "op_20260710_abcdef12"
+    })).toMatchObject({ status: "applied" });
   });
 
   it("rejects raw-secret capabilities and YOLO eligibility for always-confirmed actions", () => {

@@ -2251,6 +2251,25 @@ export const ReaderSelectionActionResultSchema = z.discriminatedUnion("status", 
 ]);
 
 export const ReaderSelectionTransformActionSchema = z.enum(["translate", "polish", "expand"]);
+export const ReaderSelectionProposalIdSchema = ProposalIdSchema;
+export const ReaderSelectionProposalStateSchema = z.enum([
+  "ready",
+  "resolving",
+  "applied",
+  "rejected",
+  "conflicted"
+]);
+export const ReaderSelectionProposalLineSchema = z.object({
+  kind: z.enum(["context", "removed", "added"]),
+  text: z.string().min(1).max(160)
+}).strict();
+export const ReaderSelectionProposalPreviewSchema = z.object({
+  proposalId: ReaderSelectionProposalIdSchema,
+  action: ReaderSelectionTransformActionSchema,
+  state: ReaderSelectionProposalStateSchema,
+  revision: z.number().int().min(1),
+  lines: z.array(ReaderSelectionProposalLineSchema).max(8)
+}).strict();
 export const ReaderSelectionTransformRequestSchema = z.object({
   apiVersion: z.literal(1),
   requestId: ReaderSelectionActionRequestIdSchema,
@@ -2269,6 +2288,16 @@ export const ReaderSelectionTransformResultSchema = z.discriminatedUnion("status
     conversationId: ConversationIdSchema,
     tailEventId: ConversationEventIdSchema,
     operationId: OperationIdSchema
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    requestId: ReaderSelectionActionRequestIdSchema,
+    status: z.literal("review_required"),
+    jobId: JobIdSchema,
+    conversationEventId: ConversationEventIdSchema,
+    conversationId: ConversationIdSchema,
+    tailEventId: ConversationEventIdSchema,
+    proposal: ReaderSelectionProposalPreviewSchema
   }).strict(),
   z.object({
     apiVersion: z.literal(1),
@@ -2302,6 +2331,57 @@ export const ReaderSelectionTransformResultSchema = z.discriminatedUnion("status
       "mutation_ineligible",
       "replacement_invalid"
     ])
+  }).strict()
+]);
+
+export const ReaderSelectionProposalGetRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  proposalId: ReaderSelectionProposalIdSchema
+}).strict();
+export const ReaderSelectionProposalGetResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("available"),
+    proposal: ReaderSelectionProposalPreviewSchema
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("unavailable"),
+    reason: z.enum(["not_found", "vault_changed", "record_invalid"])
+  }).strict()
+]);
+export const ReaderSelectionProposalDecisionRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  proposalId: ReaderSelectionProposalIdSchema,
+  expectedRevision: z.number().int().min(1),
+  decision: z.enum(["approve", "reject"])
+}).strict();
+export const ReaderSelectionProposalDecisionResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("applied"),
+    proposal: ReaderSelectionProposalPreviewSchema,
+    operationId: OperationIdSchema
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("rejected"),
+    proposal: ReaderSelectionProposalPreviewSchema
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("conflicted"),
+    proposal: ReaderSelectionProposalPreviewSchema
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("stale"),
+    proposal: ReaderSelectionProposalPreviewSchema.optional()
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("failed"),
+    error: PigeErrorSummarySchema
   }).strict()
 ]);
 
@@ -3297,6 +3377,14 @@ export type ReaderSelectionReadAction = z.infer<typeof ReaderSelectionReadAction
 export type ReaderSelectionTransformAction = z.infer<typeof ReaderSelectionTransformActionSchema>;
 export type ReaderSelectionTransformRequest = z.infer<typeof ReaderSelectionTransformRequestSchema>;
 export type ReaderSelectionTransformResult = z.infer<typeof ReaderSelectionTransformResultSchema>;
+export type ReaderSelectionProposalId = z.infer<typeof ReaderSelectionProposalIdSchema>;
+export type ReaderSelectionProposalState = z.infer<typeof ReaderSelectionProposalStateSchema>;
+export type ReaderSelectionProposalLine = z.infer<typeof ReaderSelectionProposalLineSchema>;
+export type ReaderSelectionProposalPreview = z.infer<typeof ReaderSelectionProposalPreviewSchema>;
+export type ReaderSelectionProposalGetRequest = z.infer<typeof ReaderSelectionProposalGetRequestSchema>;
+export type ReaderSelectionProposalGetResult = z.infer<typeof ReaderSelectionProposalGetResultSchema>;
+export type ReaderSelectionProposalDecisionRequest = z.infer<typeof ReaderSelectionProposalDecisionRequestSchema>;
+export type ReaderSelectionProposalDecisionResult = z.infer<typeof ReaderSelectionProposalDecisionResultSchema>;
 export type ReaderSelectionRequestId = z.infer<typeof ReaderSelectionRequestIdSchema>;
 export type ReaderSelectionResolveRequest = z.infer<typeof ReaderSelectionResolveRequestSchema>;
 export type ReaderSelectionResolveResult = z.infer<typeof ReaderSelectionResolveResultSchema>;

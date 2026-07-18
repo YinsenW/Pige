@@ -962,6 +962,7 @@ describe("Home Pi Agent service", () => {
       undefined,
       {
         apply: ({ vaultPath, job, selection: durableSelection, replacement, action }) => ({
+          status: "applied" as const,
           operationId: applyReaderSelectionPageUpdate({
             vaultPath,
             job,
@@ -2404,6 +2405,83 @@ SYNTHETIC_DISTRACTOR_BODY
       action: "explain"
     });
     expect(JSON.stringify(timeline)).not.toContain(selected);
+  });
+
+  it("settles an exceptional Reader transform at awaiting_review without applying note bytes", async () => {
+    const fixture = makeFixture();
+    const selected = "SELECTED_REVIEW_PASSAGE";
+    writeKnowledgePage(fixture.vaultPath, [], selected);
+    const pagePath = path.join(fixture.vaultPath, "wiki", "launch.md");
+    const markdown = fs.readFileSync(pagePath, "utf8");
+    const selectedCharacter = markdown.indexOf(selected);
+    const start = Buffer.byteLength(markdown.slice(0, selectedCharacter), "utf8");
+    const selectedBytes = Buffer.from(selected, "utf8");
+    const selection = {
+      pageId: HOME_PAGE_ID,
+      pageContentHash: `sha256:${createHash("sha256").update(markdown).digest("hex")}`,
+      span: { unit: "utf8_bytes" as const, start, endExclusive: start + selectedBytes.length },
+      selectedContentHash: `sha256:${createHash("sha256").update(selectedBytes).digest("hex")}`
+    };
+    const jobs = new JobsService(fixture.vaults);
+    const publish = vi.fn(() => ({
+      status: "review_required" as const,
+      proposalId: "proposal_20260718_abcdefgh12345678"
+    }));
+    const service = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      jobs,
+      {
+        run: async (request) => {
+          const readTool = request.tools.find((tool) => tool.name === "pige_read_current_note");
+          if (!readTool) throw new Error("Missing current-note tool.");
+          const signal = new AbortController().signal;
+          await request.beforeModelTurn?.();
+          await readTool.execute({}, signal, { toolCallId: "pi_tool_reader_review", signal });
+          await request.beforeModelTurn?.();
+          return makeRuntimeResult(request, "pige_read_current_note", {
+            answer: `${selected} [1]`,
+            citationRefs: ["citation_1"],
+            grounding: "local_knowledge",
+            evidenceQuotes: [{ citationRef: "citation_1", quote: selected }]
+          });
+        }
+      },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { apply: publish }
+    );
+
+    const outcome = await service.submitTurn({
+      text: "Explain the selected passage in the current note.",
+      inputKind: "typed_text",
+      scope: { kind: "current_note", pageId: HOME_PAGE_ID },
+      locale: "en",
+      clientTurnId: "turn_20260718_readerreview1"
+    }, {
+      currentNoteSelection: selection,
+      currentNoteTransformAction: "expand"
+    });
+
+    expect(outcome).toMatchObject({
+      state: "waiting",
+      error: { code: "agent_runtime.review_required" }
+    });
+    expect(fs.readFileSync(pagePath, "utf8")).toBe(markdown);
+    expect(publish).toHaveBeenCalledOnce();
+    expect(jobs.readAgentTurnJob(outcome.jobId!)).toMatchObject({
+      state: "awaiting_review",
+      proposalIds: ["proposal_20260718_abcdefgh12345678"]
+    });
+    expect(jobs.readAgentTurnJob(outcome.jobId!)?.outputRefs).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ role: "reader_selection_transform_operation" })
+    ]));
   });
 
   it("requires insufficient evidence for an empty current-note body", async () => {

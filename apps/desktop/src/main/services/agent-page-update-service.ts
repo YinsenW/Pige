@@ -303,7 +303,7 @@ export function applyReaderSelectionPageUpdate(input: {
   readonly action: "translate" | "polish" | "expand";
 }): ReaderSelectionPageUpdateResult {
   const job = JobRecordSchema.parse(input.job);
-  if (job.class !== "agent_turn" || !["queued", "running", "completed", "completed_with_warnings"].includes(job.state)) {
+  if (job.class !== "agent_turn" || !["queued", "running", "awaiting_review", "completed", "completed_with_warnings"].includes(job.state)) {
     throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The Reader transform Job is not at a publishable lifecycle state.");
   }
   assertReaderSelectionJobBinding(job, input.selection, input.action);

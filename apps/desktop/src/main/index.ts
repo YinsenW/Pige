@@ -39,6 +39,8 @@ import type {
   NoteResolveInlineReferenceRequest,
   NoteRenderRequest,
   ReaderSelectionActionRequest,
+  ReaderSelectionProposalDecisionRequest,
+  ReaderSelectionProposalGetRequest,
   ReaderSelectionTransformRequest,
   ReaderSelectionResolveRequest,
   OpenRecentVaultRequest,
@@ -93,6 +95,10 @@ import {
   NoteResolveInlineReferenceResultSchema,
   ReaderSelectionActionRequestSchema,
   ReaderSelectionActionResultSchema,
+  ReaderSelectionProposalDecisionRequestSchema,
+  ReaderSelectionProposalDecisionResultSchema,
+  ReaderSelectionProposalGetRequestSchema,
+  ReaderSelectionProposalGetResultSchema,
   ReaderSelectionTransformRequestSchema,
   ReaderSelectionTransformResultSchema,
   ReaderSelectionResolveRequestSchema,
@@ -160,7 +166,11 @@ import {
   createAgentPageUpdateOperationId
 } from "./services/agent-page-update-service";
 import { ReaderSelectionActionService } from "./services/reader-selection-action-service";
-import { readCurrentNotePageForMutation } from "./services/retrieval-evidence-boundary";
+import { ReaderSelectionProposalService } from "./services/reader-selection-proposal-service";
+import {
+  readCurrentNotePageForMutation,
+  readCurrentNoteSelectionEvidenceBinding
+} from "./services/retrieval-evidence-boundary";
 import {
   createPermissionedExternalCapabilityRegistry,
   PermissionedExternalCapabilityRegistry,
@@ -214,6 +224,7 @@ let knowledgeActivityService: KnowledgeActivityService | undefined;
 let libraryService: LibraryService | undefined;
 let notesService: NotesService | undefined;
 let readerSelectionActionService: ReaderSelectionActionService | undefined;
+let readerSelectionProposalService: ReaderSelectionProposalService | undefined;
 let proposalService: ProposalService | undefined;
 let retrievalService: RetrievalService | undefined;
 let documentParserService: DocumentParserService | undefined;
@@ -869,16 +880,31 @@ const getHomeAgentService = (): HomeAgentService => {
       getPermissionedExternalCapabilityRegistry(),
       getPermissionSettingsService(),
       {
-        apply: ({ vaultPath, job, selection, replacement, action }) => ({
-          operationId: applyReaderSelectionPageUpdate({
+        apply: ({ vaultPath, job, selection, replacement, action }) => {
+          const proposalService = getReaderSelectionProposalService();
+          if (proposalService.shouldRequireReview(selection, replacement)) {
+            const selected = readCurrentNoteSelectionEvidenceBinding(vaultPath, selection);
+            const proposal = proposalService.stage({
+              job,
+              action,
+              selection,
+              selectedText: selected.modelText,
+              replacement
+            });
+            return { status: "review_required" as const, proposalId: proposal.proposalId };
+          }
+          return {
+            status: "applied" as const,
+            operationId: applyReaderSelectionPageUpdate({
             vaultPath,
             job,
             target: readCurrentNotePageForMutation(vaultPath, selection.pageId),
             selection,
             replacement,
             action
-          }).operation.id
-        })
+            }).operation.id
+          };
+        }
       }
     );
   }
@@ -938,11 +964,38 @@ const getReaderSelectionActionService = (): ReaderSelectionActionService => {
         readAppliedOperationId: ({ job, selection }) => {
           const operationId = createAgentPageUpdateOperationId(job.id, selection.pageId);
           return job.operationIds?.includes(operationId) ? operationId : undefined;
+        },
+        readProposal: (proposalId) => {
+          const result = getReaderSelectionProposalService().get({ apiVersion: 1, proposalId });
+          return result.status === "available" ? result.proposal : undefined;
         }
       }
     );
   }
   return readerSelectionActionService;
+};
+
+const getReaderSelectionProposalService = (): ReaderSelectionProposalService => {
+  if (!readerSelectionProposalService) {
+    readerSelectionProposalService = new ReaderSelectionProposalService(
+      getVaultService(),
+      {
+        readAgentTurnJob: (jobId) => getJobsService().readAgentTurnJob(jobId),
+        resolveAgentTurnReview: (input) => getJobsService().resolveAgentTurnReview(input)
+      },
+      {
+        apply: ({ vaultPath, job, selection, replacement, action }) => applyReaderSelectionPageUpdate({
+          vaultPath,
+          job,
+          target: readCurrentNotePageForMutation(vaultPath, selection.pageId),
+          selection,
+          replacement,
+          action
+        }).operation
+      }
+    );
+  }
+  return readerSelectionProposalService;
 };
 
 const getProposalService = (): ProposalService => {
@@ -1714,6 +1767,26 @@ ipcMain.handle("readerSelection.submitTransform", async (event, request: ReaderS
   } finally {
     draftPublisher.close();
   }
+});
+
+ipcMain.handle("readerSelection.currentProposal", (event, request: ReaderSelectionProposalGetRequest) => {
+  const parsed = ReaderSelectionProposalGetRequestSchema.parse(request);
+  if (!notesTrackedSenders.has(event.sender.id)) {
+    throw new PigeDomainError("desktop.ipc_sender_invalid", "Reader proposal access requires the active renderer.");
+  }
+  return ReaderSelectionProposalGetResultSchema.parse(
+    getReaderSelectionProposalService().get(parsed)
+  );
+});
+
+ipcMain.handle("readerSelection.decideProposal", (event, request: ReaderSelectionProposalDecisionRequest) => {
+  const parsed = ReaderSelectionProposalDecisionRequestSchema.parse(request);
+  if (!notesTrackedSenders.has(event.sender.id)) {
+    throw new PigeDomainError("desktop.ipc_sender_invalid", "Reader proposal decisions require the active renderer.");
+  }
+  return ReaderSelectionProposalDecisionResultSchema.parse(
+    getReaderSelectionProposalService().decide(parsed)
+  );
 });
 
 function proposalRendererBoundaryUnavailable(): never {

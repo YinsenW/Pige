@@ -97,6 +97,8 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain("readonly resolve: (");
     expect(contractsSource).toContain("readonly submitAction: (");
     expect(contractsSource).toContain("readonly submitTransform: (");
+    expect(contractsSource).toContain("readonly currentProposal: (");
+    expect(contractsSource).toContain("readonly decideProposal: (");
     expect(mainSource).toContain('ipcMain.handle("readerSelection.resolve"');
     expect(mainSource).toContain("ReaderSelectionResolveRequestSchema.parse(request)");
     expect(mainSource).toContain("ReaderSelectionResolveResultSchema.parse(");
@@ -106,6 +108,8 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain('ipcMain.handle("readerSelection.submitTransform"');
     expect(mainSource).toContain("ReaderSelectionTransformRequestSchema.parse(request)");
     expect(mainSource).toContain("ReaderSelectionTransformResultSchema.parse(");
+    expect(mainSource).toContain('ipcMain.handle("readerSelection.currentProposal"');
+    expect(mainSource).toContain('ipcMain.handle("readerSelection.decideProposal"');
     expect(preloadSource).toContain('"readerSelection.resolve"');
     expect(preloadSource).toContain("ReaderSelectionResolveRequestSchema.parse(request)");
     expect(preloadSource).toContain("ReaderSelectionResolveResultSchema.parse(");
@@ -115,6 +119,8 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).toContain('"readerSelection.submitTransform"');
     expect(preloadSource).toContain("ReaderSelectionTransformRequestSchema.parse(request)");
     expect(preloadSource).toContain("ReaderSelectionTransformResultSchema.parse(");
+    expect(preloadSource).toContain('"readerSelection.currentProposal"');
+    expect(preloadSource).toContain('"readerSelection.decideProposal"');
     expect(contractsSource).not.toContain("ReaderSelectionText");
     expect(contractsSource).not.toContain("ReaderSelectionPath");
   });
