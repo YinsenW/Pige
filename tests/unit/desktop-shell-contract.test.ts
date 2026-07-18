@@ -88,6 +88,23 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).not.toContain("candidatePageIds");
   });
 
+  it("keeps Reader selection identity resolution main-owned and schema-validated", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+
+    expect(contractsSource).toContain("readonly readerSelection: {");
+    expect(contractsSource).toContain("readonly resolve: (");
+    expect(mainSource).toContain('ipcMain.handle("readerSelection.resolve"');
+    expect(mainSource).toContain("ReaderSelectionResolveRequestSchema.parse(request)");
+    expect(mainSource).toContain("ReaderSelectionResolveResultSchema.parse(");
+    expect(preloadSource).toContain('"readerSelection.resolve"');
+    expect(preloadSource).toContain("ReaderSelectionResolveRequestSchema.parse(request)");
+    expect(preloadSource).toContain("ReaderSelectionResolveResultSchema.parse(");
+    expect(contractsSource).not.toContain("ReaderSelectionText");
+    expect(contractsSource).not.toContain("ReaderSelectionPath");
+  });
+
   it("uses one integrated title bar while preserving native platform controls", () => {
     expect(getWindowShellOptions("darwin")).toEqual({
       titleBarStyle: "hiddenInset",

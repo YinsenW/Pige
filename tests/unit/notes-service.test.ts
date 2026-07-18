@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { createHash } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -105,6 +106,11 @@ function writeSourceRecord(input: {
 
 const OWNER_ID = "notes_owner_test";
 const REQUEST_ID = "noteref_abcdefghijklmnop";
+const SELECTION_REQUEST_ID = "readerselreq_abcdefgh";
+
+function sha256(value: string): string {
+  return `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
+}
 
 function deferred<T>(): {
   readonly promise: Promise<T>;
@@ -154,9 +160,99 @@ source_ids: ["src_20260709_abcd1234"]
     expect(document.summary.title).toBe("Reader Page");
     expect(document.summary.pagePath).toBe("wiki/reader.md");
     expect(document.markdownBody).not.toContain("schema_version");
-    expect(rendered.html).toContain("<h1>Reader Page</h1>");
+    expect(rendered.html).toContain(">Reader Page</span></h1>");
     expect(rendered.html).toContain('href="#wiki:Topic"');
     expect(rendered.html).not.toContain("<script");
+  });
+
+  it("resolves renderer segment endpoints to a body-free UTF-8 selection identity", async () => {
+    const { vaultPath, vault } = makeVault();
+    writePage({
+      vaultPath,
+      fileName: "selection.md",
+      pageId: "page_20260709_select1234",
+      title: "Selection",
+      body: "Alpha 产品😀 é omega"
+    });
+    const notes = makeNotes(vaultPath, vault);
+    const rendered = await notes.render({ pageId: "page_20260709_select1234" }, OWNER_ID);
+    const segmentId = /<p><span data-pige-selection-segment="(readerseg_[a-f0-9]{16})">Alpha/u
+      .exec(rendered.html)?.[1];
+    expect(segmentId).toBeDefined();
+
+    const result = notes.resolveSelection(OWNER_ID, {
+      apiVersion: 1,
+      requestId: SELECTION_REQUEST_ID,
+      activeVaultId: vault.vaultId,
+      currentPageId: "page_20260709_select1234",
+      renderContextId: rendered.renderContextId!,
+      anchor: { segmentId: segmentId!, utf16Offset: 10 },
+      focus: { segmentId: segmentId!, utf16Offset: 6 }
+    });
+    const markdown = fs.readFileSync(path.join(vaultPath, "wiki", "selection.md"), "utf8");
+    const selected = "产品😀";
+    const selectionStart = markdown.indexOf(selected);
+    expect(result).toEqual({
+      apiVersion: 1,
+      requestId: SELECTION_REQUEST_ID,
+      status: "resolved",
+      selection: {
+        pageId: "page_20260709_select1234",
+        pageContentHash: sha256(markdown),
+        span: {
+          unit: "utf8_bytes",
+          start: Buffer.byteLength(markdown.slice(0, selectionStart), "utf8"),
+          endExclusive: Buffer.byteLength(markdown.slice(0, selectionStart + selected.length), "utf8")
+        },
+        selectedContentHash: sha256(selected)
+      }
+    });
+    expect(JSON.stringify(result)).not.toContain(selected);
+    expect(JSON.stringify(result)).not.toContain("selection.md");
+  });
+
+  it("fails closed for unknown, split-surrogate, empty, and stale Reader selections", async () => {
+    const { vaultPath, vault } = makeVault();
+    writePage({
+      vaultPath,
+      fileName: "selection.md",
+      pageId: "page_20260709_select1234",
+      title: "Selection",
+      body: "Alpha 😀 omega"
+    });
+    const notes = makeNotes(vaultPath, vault);
+    const rendered = await notes.render({ pageId: "page_20260709_select1234" }, OWNER_ID);
+    const segmentId = /<p><span data-pige-selection-segment="(readerseg_[a-f0-9]{16})">Alpha/u
+      .exec(rendered.html)?.[1];
+    const base = {
+      apiVersion: 1 as const,
+      requestId: SELECTION_REQUEST_ID,
+      activeVaultId: vault.vaultId,
+      currentPageId: "page_20260709_select1234",
+      renderContextId: rendered.renderContextId!
+    };
+    expect(notes.resolveSelection(OWNER_ID, {
+      ...base,
+      anchor: { segmentId: "readerseg_ffffffffffffffff", utf16Offset: 0 },
+      focus: { segmentId: segmentId!, utf16Offset: 1 }
+    })).toMatchObject({ status: "invalid", reason: "endpoint_not_found" });
+    expect(notes.resolveSelection(OWNER_ID, {
+      ...base,
+      anchor: { segmentId: segmentId!, utf16Offset: 7 },
+      focus: { segmentId: segmentId!, utf16Offset: 9 }
+    })).toMatchObject({ status: "invalid", reason: "endpoint_offset_invalid" });
+    expect(notes.resolveSelection(OWNER_ID, {
+      ...base,
+      anchor: { segmentId: segmentId!, utf16Offset: 2 },
+      focus: { segmentId: segmentId!, utf16Offset: 2 }
+    })).toMatchObject({ status: "invalid", reason: "selection_empty" });
+
+    fs.appendFileSync(path.join(vaultPath, "wiki", "selection.md"), "changed", "utf8");
+    expect(notes.resolveSelection(OWNER_ID, {
+      ...base,
+      anchor: { segmentId: segmentId!, utf16Offset: 0 },
+      focus: { segmentId: segmentId!, utf16Offset: 5 }
+    })).toMatchObject({ status: "stale", scope: "page" });
   });
 
   it("does not open files outside the Library page roots", () => {

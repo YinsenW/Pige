@@ -24,6 +24,8 @@ import {
   PermissionEnableYoloRequestSchema,
   PigeErrorSummarySchema,
   ProviderProfileSchema,
+  ReaderSelectionResolveRequestSchema,
+  ReaderSelectionResolveResultSchema,
   UpdateProviderCredentialRequestSchema
 } from "@pige/schemas";
 
@@ -63,6 +65,60 @@ describe("security-sensitive shared contracts", () => {
       status: "ambiguous",
       candidates: ["page_20260710_abcdef12"]
     })).toThrow();
+  });
+
+  it("binds Reader selections to an opaque render context without renderer text authority", () => {
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "readerselreq_abcdefghijklmnop",
+      activeVaultId: "vault_20260710_abcdef12",
+      currentPageId: "page_20260710_abcdef12",
+      renderContextId: `notectx_${"a".repeat(32)}`,
+      anchor: { segmentId: `readerseg_${"b".repeat(16)}`, utf16Offset: 0 },
+      focus: { segmentId: `readerseg_${"c".repeat(16)}`, utf16Offset: 7 }
+    };
+    expect(ReaderSelectionResolveRequestSchema.parse(request)).toEqual(request);
+    expect(() => ReaderSelectionResolveRequestSchema.parse({
+      ...request,
+      selectedText: "renderer text must never become selection authority"
+    })).toThrow();
+    expect(() => ReaderSelectionResolveRequestSchema.parse({
+      ...request,
+      path: "/private/vault/wiki/page.md"
+    })).toThrow();
+    expect(() => ReaderSelectionResolveRequestSchema.parse({
+      ...request,
+      focus: { ...request.focus, utf16Offset: 4 * 1024 * 1024 + 1 }
+    })).toThrow();
+
+    const resolved = {
+      apiVersion: 1 as const,
+      requestId: request.requestId,
+      status: "resolved" as const,
+      selection: {
+        pageId: request.currentPageId,
+        pageContentHash: `sha256:${"d".repeat(64)}`,
+        span: { unit: "utf8_bytes" as const, start: 200, endExclusive: 212 },
+        selectedContentHash: `sha256:${"e".repeat(64)}`
+      }
+    };
+    expect(ReaderSelectionResolveResultSchema.parse(resolved)).toEqual(resolved);
+    expect(() => ReaderSelectionResolveResultSchema.parse({
+      ...resolved,
+      selection: { ...resolved.selection, text: "private selected body" }
+    })).toThrow();
+    expect(() => ReaderSelectionResolveResultSchema.parse({
+      ...resolved,
+      selection: {
+        ...resolved.selection,
+        span: { unit: "utf8_bytes", start: 0, endExclusive: 64 * 1024 + 1 }
+      }
+    })).toThrow();
+    expect(ReaderSelectionResolveResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "failed"
+    })).toEqual({ apiVersion: 1, requestId: request.requestId, status: "failed" });
   });
 
   it("rejects raw-secret capabilities and YOLO eligibility for always-confirmed actions", () => {

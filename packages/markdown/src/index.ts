@@ -38,6 +38,14 @@ export interface PigeFrontmatterParseResult {
 export interface PigeMarkdownRenderResult {
   readonly html: string;
   readonly markdownBody: string;
+  readonly selectionSegments: readonly PigeMarkdownSelectionSegment[];
+}
+
+export interface PigeMarkdownSelectionSegment {
+  readonly segmentId: string;
+  readonly text: string;
+  readonly sourceStartOffset: number;
+  readonly sourceEndOffset: number;
 }
 
 export interface PigeMarkdownLinkRef {
@@ -47,10 +55,20 @@ export interface PigeMarkdownLinkRef {
 }
 
 interface PigeHastNode {
-  readonly type: string;
+  type: string;
+  value?: string;
+  position?: {
+    readonly start?: { readonly offset?: number };
+    readonly end?: { readonly offset?: number };
+  };
   tagName?: string;
   properties?: Record<string, unknown>;
   children?: PigeHastNode[];
+}
+
+interface PreparedMarkdown {
+  readonly markdown: string;
+  readonly originalOffsetAtBoundary: readonly number[];
 }
 
 export function createCitationLabel(ref: MarkdownCitationRef): string {
@@ -59,12 +77,18 @@ export function createCitationLabel(ref: MarkdownCitationRef): string {
 
 export async function renderPigeMarkdownToHtml(markdown: string): Promise<PigeMarkdownRenderResult> {
   const markdownBody = stripPigeFrontmatter(markdown);
-  const preparedMarkdown = preparePigeInlineReferences(markdownBody);
+  const prepared = preparePigeInlineReferences(markdownBody);
+  const selectionSegments: PigeMarkdownSelectionSegment[] = [];
   const rendered = await unified()
     .use(remarkParse)
     .use(remarkFrontmatter, ["yaml"])
     .use(remarkGfm)
     .use(remarkRehype)
+    .use(rehypePigeSelectionSegments, {
+      markdownBody,
+      originalOffsetAtBoundary: prepared.originalOffsetAtBoundary,
+      selectionSegments
+    })
     .use(rehypePigeReaderResourcePolicy)
     .use(rehypeSanitize, {
       ...defaultSchema,
@@ -78,16 +102,91 @@ export async function renderPigeMarkdownToHtml(markdown: string): Promise<PigeMa
         code: [
           ...(defaultSchema.attributes?.code ?? []),
           ["className"]
+        ],
+        span: [
+          ...(defaultSchema.attributes?.span ?? []),
+          ["dataPigeSelectionSegment", /^readerseg_[a-f0-9]{16}$/u]
         ]
       }
     })
     .use(rehypeStringify)
-    .process(preparedMarkdown);
+    .process(prepared.markdown);
 
   return {
     html: String(rendered),
-    markdownBody
+    markdownBody,
+    selectionSegments
   };
+}
+
+function rehypePigeSelectionSegments(options: {
+  readonly markdownBody: string;
+  readonly originalOffsetAtBoundary: readonly number[];
+  readonly selectionSegments: PigeMarkdownSelectionSegment[];
+}): (tree: unknown) => void {
+  return (tree: unknown): void => {
+    let nextSegment = 0;
+    annotateSelectableText(tree as PigeHastNode, [], options, () => {
+      const id = `readerseg_${nextSegment.toString(16).padStart(16, "0")}`;
+      nextSegment += 1;
+      return id;
+    });
+  };
+}
+
+function annotateSelectableText(
+  node: PigeHastNode,
+  ancestors: readonly string[],
+  options: {
+    readonly markdownBody: string;
+    readonly originalOffsetAtBoundary: readonly number[];
+    readonly selectionSegments: PigeMarkdownSelectionSegment[];
+  },
+  createSegmentId: () => string
+): void {
+  const tagName = node.type === "element" ? node.tagName : undefined;
+  const nextAncestors = tagName ? [...ancestors, tagName] : ancestors;
+  if (node.type === "text" && !ancestors.some((tag) => tag === "code" || tag === "pre")) {
+    const value = node.value;
+    const preparedStart = node.position?.start?.offset;
+    const preparedEnd = node.position?.end?.offset;
+    if (
+      value &&
+      /\S/u.test(value) &&
+      preparedStart !== undefined &&
+      preparedEnd !== undefined &&
+      preparedStart >= 0 &&
+      preparedEnd > preparedStart &&
+      preparedEnd < options.originalOffsetAtBoundary.length
+    ) {
+      const sourceStartOffset = options.originalOffsetAtBoundary[preparedStart];
+      const sourceEndOffset = options.originalOffsetAtBoundary[preparedEnd];
+      if (
+        sourceStartOffset !== undefined &&
+        sourceEndOffset !== undefined &&
+        sourceEndOffset > sourceStartOffset &&
+        options.markdownBody.slice(sourceStartOffset, sourceEndOffset) === value
+      ) {
+        const segmentId = createSegmentId();
+        options.selectionSegments.push({
+          segmentId,
+          text: value,
+          sourceStartOffset,
+          sourceEndOffset
+        });
+        node.type = "element";
+        node.tagName = "span";
+        node.properties = { dataPigeSelectionSegment: segmentId };
+        node.children = [{ type: "text", value }];
+        delete node.value;
+        delete node.position;
+      }
+    }
+  }
+
+  for (const child of node.children ?? []) {
+    annotateSelectableText(child, nextAncestors, options, createSegmentId);
+  }
 }
 
 function rehypePigeReaderResourcePolicy(): (tree: unknown) => void {
@@ -349,18 +448,58 @@ function isStringArray(value: unknown): value is readonly string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
-function preparePigeInlineReferences(markdown: string): string {
-  return markdown
-    .replace(/\[\[([^\]\n]+)\]\]/gu, (_match, rawTarget: string) => {
+function preparePigeInlineReferences(markdown: string): PreparedMarkdown {
+  const identityMap = Array.from({ length: markdown.length + 1 }, (_value, index) => index);
+  const wikiPrepared = replaceMappedMarkdown(
+    { markdown, originalOffsetAtBoundary: identityMap },
+    /\[\[([^\]\n]+)\]\]/gu,
+    (_match, rawTarget: string) => {
       const [targetPart, labelPart] = rawTarget.split("|", 2);
       const target = normalizeInlineRef(targetPart ?? "");
       const label = normalizeInlineRef(labelPart ?? targetPart ?? "");
       if (!target || !label) return `[[${rawTarget}]]`;
       return `[${escapeMarkdownLinkText(label)}](#wiki:${encodeURIComponent(target)})`;
-    })
-    .replace(/\[(source:src_\d{8}_[a-z0-9]{8,}(?:#[^\]\s]+)?)\](?!\()/gu, (_match, citation: string) => {
+    }
+  );
+  return replaceMappedMarkdown(
+    wikiPrepared,
+    /\[(source:src_\d{8}_[a-z0-9]{8,}(?:#[^\]\s]+)?)\](?!\()/gu,
+    (_match, citation: string) => {
       return `[${escapeMarkdownLinkText(citation)}](#${citation})`;
-    });
+    }
+  );
+}
+
+function replaceMappedMarkdown(
+  input: PreparedMarkdown,
+  pattern: RegExp,
+  replace: (match: string, capture: string) => string
+): PreparedMarkdown {
+  let cursor = 0;
+  let markdown = "";
+  const originalOffsetAtBoundary: number[] = [input.originalOffsetAtBoundary[0] ?? 0];
+  for (const match of input.markdown.matchAll(pattern)) {
+    const start = match.index;
+    const end = start + match[0].length;
+    appendMappedSlice(start);
+    const replacement = replace(match[0], match[1] ?? "");
+    const originalStart = input.originalOffsetAtBoundary[start] ?? 0;
+    const originalEnd = input.originalOffsetAtBoundary[end] ?? originalStart;
+    markdown += replacement;
+    for (let index = 1; index <= replacement.length; index += 1) {
+      originalOffsetAtBoundary.push(index === replacement.length ? originalEnd : originalStart);
+    }
+    cursor = end;
+  }
+  appendMappedSlice(input.markdown.length);
+  return { markdown, originalOffsetAtBoundary };
+
+  function appendMappedSlice(end: number): void {
+    markdown += input.markdown.slice(cursor, end);
+    for (let index = cursor + 1; index <= end; index += 1) {
+      originalOffsetAtBoundary.push(input.originalOffsetAtBoundary[index] ?? 0);
+    }
+  }
 }
 
 function normalizeInlineRef(value: string): string {

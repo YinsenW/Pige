@@ -80,6 +80,79 @@ export const NoteResolveInlineReferenceResultSchema = z.discriminatedUnion("stat
     status: z.literal("failed")
   }).strict()
 ]);
+export const ReaderSelectionRequestIdSchema = z.string().regex(/^readerselreq_[a-z0-9]{8,64}$/);
+export const ReaderSelectionSegmentIdSchema = z.string().regex(/^readerseg_[a-f0-9]{16}$/);
+export const ReaderSelectionEndpointSchema = z.object({
+  segmentId: ReaderSelectionSegmentIdSchema,
+  utf16Offset: z.number().int().nonnegative().max(4 * 1024 * 1024)
+}).strict();
+export const ReaderSelectionResolveRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: ReaderSelectionRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  currentPageId: PageIdSchema,
+  renderContextId: NoteRenderContextIdSchema,
+  anchor: ReaderSelectionEndpointSchema,
+  focus: ReaderSelectionEndpointSchema
+}).strict();
+export const ReaderSelectionUtf8ByteSpanSchema = z.object({
+  unit: z.literal("utf8_bytes"),
+  start: z.number().int().nonnegative().max(4 * 1024 * 1024),
+  endExclusive: z.number().int().positive().max(4 * 1024 * 1024)
+}).strict().superRefine((span, context) => {
+  if (span.endExclusive <= span.start) {
+    context.addIssue({
+      code: "custom",
+      path: ["endExclusive"],
+      message: "A Reader selection must be non-empty."
+    });
+  }
+  if (span.endExclusive - span.start > 64 * 1024) {
+    context.addIssue({
+      code: "custom",
+      path: ["endExclusive"],
+      message: "A Reader selection cannot exceed 65536 UTF-8 bytes."
+    });
+  }
+});
+const ReaderSelectionHashSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/);
+export const ReaderSelectionIdentitySchema = z.object({
+  pageId: PageIdSchema,
+  pageContentHash: ReaderSelectionHashSchema,
+  span: ReaderSelectionUtf8ByteSpanSchema,
+  selectedContentHash: ReaderSelectionHashSchema
+}).strict();
+export const ReaderSelectionResolveResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    apiVersion: z.literal(1),
+    requestId: ReaderSelectionRequestIdSchema,
+    status: z.literal("resolved"),
+    selection: ReaderSelectionIdentitySchema
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    requestId: ReaderSelectionRequestIdSchema,
+    status: z.literal("invalid"),
+    reason: z.enum([
+      "selection_empty",
+      "selection_too_large",
+      "endpoint_not_found",
+      "endpoint_offset_invalid",
+      "unsupported_content"
+    ])
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    requestId: ReaderSelectionRequestIdSchema,
+    status: z.literal("stale"),
+    scope: z.enum(["vault", "page", "render_context"])
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    requestId: ReaderSelectionRequestIdSchema,
+    status: z.literal("failed")
+  }).strict()
+]);
 export const CaptureIdSchema = z.string().regex(/^cap_\d{8}_[a-z0-9]{8,}$/);
 export const ConversationIdSchema = z.string().regex(/^conv_\d{8}(?:_[a-z0-9]{4,})?$/);
 export const ConversationEventIdSchema = z.string().regex(/^evt_\d{8}_[a-z0-9]{8,}$/);
@@ -3102,6 +3175,13 @@ export type NoteInlineReferenceRequestId = z.infer<typeof NoteInlineReferenceReq
 export type NoteRenderContextId = z.infer<typeof NoteRenderContextIdSchema>;
 export type NoteResolveInlineReferenceRequest = z.infer<typeof NoteResolveInlineReferenceRequestSchema>;
 export type NoteResolveInlineReferenceResult = z.infer<typeof NoteResolveInlineReferenceResultSchema>;
+export type ReaderSelectionEndpoint = z.infer<typeof ReaderSelectionEndpointSchema>;
+export type ReaderSelectionIdentity = z.infer<typeof ReaderSelectionIdentitySchema>;
+export type ReaderSelectionRequestId = z.infer<typeof ReaderSelectionRequestIdSchema>;
+export type ReaderSelectionResolveRequest = z.infer<typeof ReaderSelectionResolveRequestSchema>;
+export type ReaderSelectionResolveResult = z.infer<typeof ReaderSelectionResolveResultSchema>;
+export type ReaderSelectionSegmentId = z.infer<typeof ReaderSelectionSegmentIdSchema>;
+export type ReaderSelectionUtf8ByteSpan = z.infer<typeof ReaderSelectionUtf8ByteSpanSchema>;
 export type ModelListStrategy = z.infer<typeof ModelListStrategySchema>;
 export type ModelEgressContentClass = z.infer<typeof ModelEgressContentClassSchema>;
 export type ModelEgressApprovalDecision = z.infer<typeof ModelEgressApprovalDecisionSchema>;

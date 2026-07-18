@@ -38,6 +38,7 @@ import type {
   NoteGetRequest,
   NoteResolveInlineReferenceRequest,
   NoteRenderRequest,
+  ReaderSelectionResolveRequest,
   OpenRecentVaultRequest,
   ProviderConnectResult,
   RetrievalAskRequest,
@@ -88,6 +89,8 @@ import {
   PermissionSettingsSummarySchema,
   NoteResolveInlineReferenceRequestSchema,
   NoteResolveInlineReferenceResultSchema,
+  ReaderSelectionResolveRequestSchema,
+  ReaderSelectionResolveResultSchema,
   OpenRecentVaultRequestSchema,
   type Locale,
   UpdateModelRequestSchema,
@@ -1623,6 +1626,15 @@ ipcMain.handle("notes.resolveInlineReference", (event, request: NoteResolveInlin
     ownerId === undefined
       ? { apiVersion: 1, requestId: parsed.requestId, status: "stale", scope: "render_context" }
       : getNotesService().resolveInlineReference(ownerId, parsed)
+  );
+});
+ipcMain.handle("readerSelection.resolve", (event, request: ReaderSelectionResolveRequest) => {
+  const parsed = ReaderSelectionResolveRequestSchema.parse(request);
+  const ownerId = notesTrackedSenders.get(event.sender.id);
+  return ReaderSelectionResolveResultSchema.parse(
+    ownerId === undefined
+      ? { apiVersion: 1, requestId: parsed.requestId, status: "stale", scope: "render_context" }
+      : getNotesService().resolveSelection(ownerId, parsed)
   );
 });
 

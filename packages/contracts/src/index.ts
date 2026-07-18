@@ -35,6 +35,8 @@ import type {
   PermissionSettingsMutationResult,
   ProposalState,
   ProposalTrustLevel,
+  ReaderSelectionResolveRequest,
+  ReaderSelectionResolveResult,
   ProviderAuthRequirement,
   ProviderEndpointProtocol,
   ProviderKind,
@@ -101,6 +103,13 @@ export type {
   NoteRenderContextId,
   NoteResolveInlineReferenceRequest,
   NoteResolveInlineReferenceResult,
+  ReaderSelectionEndpoint,
+  ReaderSelectionIdentity,
+  ReaderSelectionRequestId,
+  ReaderSelectionResolveRequest,
+  ReaderSelectionResolveResult,
+  ReaderSelectionSegmentId,
+  ReaderSelectionUtf8ByteSpan,
   RetrievalSearchRequest,
   RetrievalSearchResult,
   RetrievalSearchResultItem,
@@ -1272,6 +1281,11 @@ export interface PigeDesktopApi {
     readonly get: (request: ProposalGetRequest) => Promise<ProposalGetResult>;
     readonly approve: (request: ProposalDecisionRequest) => Promise<ProposalDecisionResult>;
     readonly reject: (request: ProposalDecisionRequest) => Promise<ProposalDecisionResult>;
+  };
+  readonly readerSelection: {
+    readonly resolve: (
+      request: ReaderSelectionResolveRequest
+    ) => Promise<ReaderSelectionResolveResult>;
   };
   readonly library: {
     readonly list: (request?: LibraryListRequest) => Promise<LibraryListResult>;
