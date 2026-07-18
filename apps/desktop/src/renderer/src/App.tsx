@@ -5583,6 +5583,7 @@ export function SettingsSurface(props: {
   readonly children: ReactNode;
 }): React.JSX.Element {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const compactNavigationButtonRef = useRef<HTMLButtonElement>(null);
   const compactSettings = useMediaQuery("(max-width: 520px)");
@@ -5597,6 +5598,10 @@ export function SettingsSurface(props: {
     if (compactSettings) compactNavigationButtonRef.current?.focus();
     else closeButtonRef.current?.focus();
   }, [compactSettings]);
+
+  useEffect(() => {
+    if (contentRef.current) contentRef.current.scrollTop = 0;
+  }, [props.section]);
 
   const handleDialogKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
     if (event.key === "Escape") {
@@ -5734,7 +5739,7 @@ export function SettingsSurface(props: {
               }}
             />
           ) : null}
-          <div className="settings-content" inert={compactSettings && compactNavigationOpen}>
+          <div ref={contentRef} className="settings-content" inert={compactSettings && compactNavigationOpen}>
             <h1 id="settings-surface-title" className="visually-hidden">{props.t("settings.title")}</h1>
             <header className="settings-compact-header">
               <button
