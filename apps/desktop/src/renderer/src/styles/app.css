@@ -4665,6 +4665,9 @@ dd {
 .message-actions { display: flex; gap: 8px; margin-top: 14px; color: var(--text-tertiary); }
 .message-actions button { width: 28px; height: 28px; border: 0; border-radius: 7px; padding: 0; background: transparent; color: inherit; }
 .message-actions button:hover:not(:disabled) { background: var(--surface-hover); color: var(--text-primary); }
+.message-actions .spinning { animation: pige-spin 900ms linear infinite; }
+.message-copy-feedback { align-self: center; font-size: 12px; line-height: 1; color: var(--text-secondary); }
+.message-copy-feedback.failed { color: var(--danger); }
 
 .proposal-panel {
   padding: 15px 16px;

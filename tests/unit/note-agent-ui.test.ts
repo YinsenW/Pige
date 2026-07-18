@@ -112,7 +112,7 @@ describe("Note Agent production UI", () => {
           citations: [{ pageId: "page_must_not_render", label: "Hidden draft citation" }]
         }
       ],
-      onCopyMessage: () => undefined
+      onCopyMessage: async () => true
     });
 
     await waitFor(dom, () => mount.container.querySelectorAll('[data-markdown-ready="true"]').length === 3);
@@ -127,6 +127,51 @@ describe("Note Agent production UI", () => {
     expect(mount.container.querySelector('[data-provisional="true"] .provisional-markdown strong')?.textContent).toBe("Draft");
     expect(mount.container.querySelector('[data-provisional="true"] .message-actions')).toBeNull();
     expect(mount.container.querySelector('[data-provisional="true"] .note-agent-citations')).toBeNull();
+
+    await unmount(dom, mount.root);
+  });
+
+  it("acknowledges final-message copy success and failure without exposing actions on provisional drafts", async () => {
+    const dom = createDom();
+    let finishCopy!: (copied: boolean) => void;
+    const onCopyMessage = vi.fn(() => new Promise<boolean>((resolve) => {
+      finishCopy = resolve;
+    }));
+    const mount = await mountPanel(dom, {
+      availability: "ready",
+      messages: [
+        { id: "answer-final", role: "assistant", body: "Final grounded answer" },
+        { id: "answer-draft", role: "assistant", body: "Provisional answer", provisional: true }
+      ],
+      onCopyMessage
+    });
+
+    const copyButton = required(buttonAriaNamed(mount.container, t("note.agentCopy")));
+    copyButton.focus();
+    await click(dom, copyButton);
+    expect(onCopyMessage).toHaveBeenCalledTimes(1);
+    expect(onCopyMessage).toHaveBeenCalledWith("answer-final");
+    expect(required(buttonAriaNamed(mount.container, t("note.agentCopying"))).disabled).toBe(true);
+    expect(dom.window.document.activeElement).toBe(copyButton);
+    expect(mount.container.querySelector('[data-provisional="true"] .message-actions')).toBeNull();
+
+    await act(async () => {
+      finishCopy(true);
+      await settle(dom);
+    });
+    expect(buttonAriaNamed(mount.container, t("note.agentCopied"))).toBe(copyButton);
+    expect(mount.container.querySelector(".message-copy-feedback.copied")?.textContent).toBe(t("note.agentCopied"));
+    expect(dom.window.document.activeElement).toBe(copyButton);
+
+    await click(dom, copyButton);
+    await act(async () => {
+      finishCopy(false);
+      await settle(dom);
+    });
+    const retryButton = required(buttonAriaNamed(mount.container, t("note.agentCopyFailed")));
+    expect(retryButton.disabled).toBe(false);
+    expect(mount.container.querySelector(".message-copy-feedback.failed")?.textContent).toBe(t("note.agentCopyFailed"));
+    expect(dom.window.document.activeElement).toBe(copyButton);
 
     await unmount(dom, mount.root);
   });
@@ -1374,6 +1419,10 @@ async function unmount(dom: JSDOM, root: Root): Promise<void> {
 
 function buttonNamed(container: HTMLElement, name: string): HTMLButtonElement | undefined {
   return Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent?.trim() === name);
+}
+
+function buttonAriaNamed(container: HTMLElement, name: string): HTMLButtonElement | undefined {
+  return Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.getAttribute("aria-label") === name);
 }
 
 function required<T>(value: T | null | undefined): T {

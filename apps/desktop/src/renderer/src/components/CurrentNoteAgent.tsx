@@ -352,9 +352,15 @@ export function CurrentNoteAgent(props: {
       onSelectModel={selectModel}
       onModelEgressDecision={(decision) => void decideEgress(decision)}
       onOpenCitation={props.onOpenCitation}
-      onCopyMessage={(messageId) => {
+      onCopyMessage={async (messageId) => {
         const message = messages.find((candidate) => candidate.id === messageId);
-        if (message) void navigator.clipboard?.writeText(message.body);
+        if (!message || !navigator.clipboard?.writeText) return false;
+        try {
+          await navigator.clipboard.writeText(message.body);
+          return true;
+        } catch {
+          return false;
+        }
       }}
       t={props.t}
     />
