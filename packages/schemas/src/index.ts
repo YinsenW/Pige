@@ -2192,6 +2192,60 @@ export const PigeErrorSummarySchema = PigeErrorCoreSchema.extend({
   diagnosticErrorId: z.string().min(1).max(120).optional()
 }).strict().superRefine(requireErrorDomainMatchesCode);
 
+export const ReaderSelectionActionRequestIdSchema = z.string()
+  .regex(/^readerselaction_[a-z0-9]{8,64}$/);
+export const ReaderSelectionReadActionSchema = z.enum(["explain", "summarize"]);
+export const ReaderSelectionActionRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: ReaderSelectionActionRequestIdSchema,
+  action: ReaderSelectionReadActionSchema,
+  selection: ReaderSelectionIdentitySchema,
+  locale: LocaleSchema,
+  clientTurnId: AgentClientTurnIdSchema
+}).strict();
+export const ReaderSelectionActionResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    apiVersion: z.literal(1),
+    requestId: ReaderSelectionActionRequestIdSchema,
+    status: z.literal("completed"),
+    jobId: JobIdSchema,
+    conversationEventId: ConversationEventIdSchema,
+    conversationId: ConversationIdSchema,
+    tailEventId: ConversationEventIdSchema
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    requestId: ReaderSelectionActionRequestIdSchema,
+    status: z.literal("waiting"),
+    jobId: JobIdSchema,
+    conversationEventId: ConversationEventIdSchema,
+    conversationId: ConversationIdSchema,
+    tailEventId: ConversationEventIdSchema,
+    error: PigeErrorSummarySchema
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    requestId: ReaderSelectionActionRequestIdSchema,
+    status: z.literal("failed"),
+    jobId: JobIdSchema.optional(),
+    conversationEventId: ConversationEventIdSchema.optional(),
+    conversationId: ConversationIdSchema.optional(),
+    tailEventId: ConversationEventIdSchema.optional(),
+    error: PigeErrorSummarySchema
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    requestId: ReaderSelectionActionRequestIdSchema,
+    status: z.literal("invalid"),
+    reason: z.enum([
+      "vault_unavailable",
+      "page_changed",
+      "selection_changed",
+      "selection_too_large"
+    ])
+  }).strict()
+]);
+
 export const VaultRevealResultSchema = z.discriminatedUnion("status", [
   z.object({
     status: z.literal("revealed"),
@@ -3176,7 +3230,11 @@ export type NoteRenderContextId = z.infer<typeof NoteRenderContextIdSchema>;
 export type NoteResolveInlineReferenceRequest = z.infer<typeof NoteResolveInlineReferenceRequestSchema>;
 export type NoteResolveInlineReferenceResult = z.infer<typeof NoteResolveInlineReferenceResultSchema>;
 export type ReaderSelectionEndpoint = z.infer<typeof ReaderSelectionEndpointSchema>;
+export type ReaderSelectionActionRequestId = z.infer<typeof ReaderSelectionActionRequestIdSchema>;
+export type ReaderSelectionActionRequest = z.infer<typeof ReaderSelectionActionRequestSchema>;
+export type ReaderSelectionActionResult = z.infer<typeof ReaderSelectionActionResultSchema>;
 export type ReaderSelectionIdentity = z.infer<typeof ReaderSelectionIdentitySchema>;
+export type ReaderSelectionReadAction = z.infer<typeof ReaderSelectionReadActionSchema>;
 export type ReaderSelectionRequestId = z.infer<typeof ReaderSelectionRequestIdSchema>;
 export type ReaderSelectionResolveRequest = z.infer<typeof ReaderSelectionResolveRequestSchema>;
 export type ReaderSelectionResolveResult = z.infer<typeof ReaderSelectionResolveResultSchema>;

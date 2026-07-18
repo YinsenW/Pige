@@ -24,6 +24,8 @@ import {
   PermissionEnableYoloRequestSchema,
   PigeErrorSummarySchema,
   ProviderProfileSchema,
+  ReaderSelectionActionRequestSchema,
+  ReaderSelectionActionResultSchema,
   ReaderSelectionResolveRequestSchema,
   ReaderSelectionResolveResultSchema,
   UpdateProviderCredentialRequestSchema
@@ -119,6 +121,50 @@ describe("security-sensitive shared contracts", () => {
       requestId: request.requestId,
       status: "failed"
     })).toEqual({ apiVersion: 1, requestId: request.requestId, status: "failed" });
+  });
+
+  it("accepts Reader read actions only by resolved identity and returns body-free state", () => {
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "readerselaction_abcdefghijklmnop",
+      action: "explain" as const,
+      selection: {
+        pageId: "page_20260710_abcdef12",
+        pageContentHash: `sha256:${"a".repeat(64)}`,
+        span: { unit: "utf8_bytes" as const, start: 200, endExclusive: 212 },
+        selectedContentHash: `sha256:${"b".repeat(64)}`
+      },
+      locale: "en" as const,
+      clientTurnId: "turn_20260710_abcdefghijkl"
+    };
+    expect(ReaderSelectionActionRequestSchema.parse(request)).toEqual(request);
+    expect(() => ReaderSelectionActionRequestSchema.parse({
+      ...request,
+      selectedText: "renderer-selected body"
+    })).toThrow();
+    expect(() => ReaderSelectionActionRequestSchema.parse({
+      ...request,
+      action: "polish"
+    })).toThrow();
+    expect(ReaderSelectionActionResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "completed",
+      jobId: "job_20260710_abcdef12",
+      conversationEventId: "evt_20260710_abcdef12",
+      conversationId: "conv_20260710_abcd",
+      tailEventId: "evt_20260710_bcdef123"
+    })).toMatchObject({ status: "completed" });
+    expect(() => ReaderSelectionActionResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "completed",
+      jobId: "job_20260710_abcdef12",
+      conversationEventId: "evt_20260710_abcdef12",
+      conversationId: "conv_20260710_abcd",
+      tailEventId: "evt_20260710_bcdef123",
+      answer: "raw provider body"
+    })).toThrow();
   });
 
   it("rejects raw-secret capabilities and YOLO eligibility for always-confirmed actions", () => {

@@ -95,12 +95,19 @@ describe("desktop shell build contract", () => {
 
     expect(contractsSource).toContain("readonly readerSelection: {");
     expect(contractsSource).toContain("readonly resolve: (");
+    expect(contractsSource).toContain("readonly submitAction: (");
     expect(mainSource).toContain('ipcMain.handle("readerSelection.resolve"');
     expect(mainSource).toContain("ReaderSelectionResolveRequestSchema.parse(request)");
     expect(mainSource).toContain("ReaderSelectionResolveResultSchema.parse(");
+    expect(mainSource).toContain('ipcMain.handle("readerSelection.submitAction"');
+    expect(mainSource).toContain("ReaderSelectionActionRequestSchema.parse(request)");
+    expect(mainSource).toContain("ReaderSelectionActionResultSchema.parse(");
     expect(preloadSource).toContain('"readerSelection.resolve"');
     expect(preloadSource).toContain("ReaderSelectionResolveRequestSchema.parse(request)");
     expect(preloadSource).toContain("ReaderSelectionResolveResultSchema.parse(");
+    expect(preloadSource).toContain('"readerSelection.submitAction"');
+    expect(preloadSource).toContain("ReaderSelectionActionRequestSchema.parse(request)");
+    expect(preloadSource).toContain("ReaderSelectionActionResultSchema.parse(");
     expect(contractsSource).not.toContain("ReaderSelectionText");
     expect(contractsSource).not.toContain("ReaderSelectionPath");
   });
