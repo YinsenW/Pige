@@ -2907,15 +2907,15 @@ Date: 2026-07-18
 
 Decision:
 
-Keep create-only journal/Operation code unregistered; external mutation/shell stay unavailable.
+Freeze create-only authority without registering external mutation or shell.
 
 Rationale:
 
-Permission cannot replace filesystem/process isolation.
+Permission is not isolation.
 
 Consequences:
 
-- Paths stay local, Operations path-free, and statuses unchanged pending platform proof.
+- Paths stay local, Operations path-free, and production awaits helpers.
 
 References:
 

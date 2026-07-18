@@ -3,6 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { PigeDomainError } from "@pige/domain";
+import { PermissionActionLifecycleRecordSchema } from "@pige/schemas";
 import { ExternalOperationRecordStore } from "../../apps/desktop/src/main/services/external-operation-record-store";
 import {
   ExternalTextFileCreateService,
@@ -12,6 +14,18 @@ import {
   type ExternalFilePublicationPort,
   type ExternalTextFileCreateAuthority
 } from "../../apps/desktop/src/main/services/external-text-file-create-service";
+import {
+  capturedExternalTarget,
+  EXTERNAL_TEXT_FILE_CREATE_ACTION_ID,
+  EXTERNAL_TEXT_FILE_CREATE_ACTION_VERSION,
+  hashExternalTarget,
+  hashExternalTargetPermissionIdentity,
+  hashExternalTextCreateActionInput,
+  type CapturedExternalTarget,
+  type ExternalFilePublicationFailureCode,
+  type ExternalFilePublicationReceipt
+} from "../../apps/desktop/src/main/services/external-file-publication-protocol";
+import { createPermissionActionBinding } from "../../apps/desktop/src/main/services/permission-broker-service";
 import {
   ExternalFilesystemPathGuard,
   assertExternalIdentity,
@@ -27,14 +41,15 @@ afterEach(() => {
 });
 
 describe("ExternalTextFileCreateService", () => {
-  it("publishes one new UTF-8 file without persisting its path in the vault Operation", () => {
+  it("publishes one new UTF-8 file without persisting its path in the vault Operation", async () => {
     const fixture = createFixture();
     const targetPath = path.join(fixture.externalRoot, "created.txt");
 
-    const result = fixture.service.create(
-      targetPath,
+    const prepared = await fixture.prepare(targetPath, "Pige external text: 中文");
+    const result = await fixture.service.create(
+      prepared.target,
       "Pige external text: 中文",
-      fixture.authority,
+      prepared.authority,
       new AbortController().signal
     );
 
@@ -55,83 +70,221 @@ describe("ExternalTextFileCreateService", () => {
     expect(operationText).not.toContain("Pige external text");
     expect(JSON.parse(operationText)).toMatchObject({
       kind: "create_external_file",
-      permissionDecisionIds: [fixture.authority.permissionDecisionId],
+      permissionDecisionIds: [prepared.authority.permission.decisionId],
       after: { kind: "external_resource", checksum: result.contentHash }
     });
 
-    expect(fixture.service.create(
-      targetPath,
+    expect(await fixture.service.create(
+      prepared.target,
       "Pige external text: 中文",
-      fixture.authority,
+      prepared.authority,
       liveSignal()
     )).toEqual(result);
 
-    fixture.service.finalize(result.intentId, fixture.authority);
+    await fixture.service.finalize(result.intentId, prepared.authority);
     expect(fs.readFileSync(targetPath, "utf8")).toBe("Pige external text: 中文");
     expect(fs.existsSync(intent.stagePath)).toBe(false);
     expect(readIntent(fixture.machineRoot).state).toBe("completed");
+    const markPermissionCompleted = vi.mocked(prepared.authority.markPermissionCompleted);
+    expect(markPermissionCompleted).toHaveBeenCalledTimes(1);
+    const completionMarkerHash = markPermissionCompleted.mock.calls[0]?.[1];
+    expect(completionMarkerHash).toMatch(/^sha256:[a-f0-9]{64}$/u);
+    expect(await fixture.service.create(
+      prepared.target,
+      "Pige external text: 中文",
+      prepared.authority,
+      liveSignal()
+    )).toEqual(result);
+    expect(markPermissionCompleted).toHaveBeenLastCalledWith(prepared.authority.permission, completionMarkerHash);
   });
 
-  it("never overwrites an existing target or follows protected and symlink paths", () => {
+  it("cannot mint a successor mutation by replaying one consumed decision with another tool call", async () => {
+    const fixture = createFixture();
+    const targetPath = path.join(fixture.externalRoot, "one-use.txt");
+    const prepared = await fixture.prepare(targetPath, "one use");
+    const result = await fixture.service.create(prepared.target, "one use", prepared.authority, liveSignal());
+    await fixture.service.finalize(result.intentId, prepared.authority);
+    fs.unlinkSync(targetPath);
+
+    expect(await fixture.service.create(prepared.target, "one use", prepared.authority, liveSignal())).toEqual(result);
+    expect(fs.existsSync(targetPath)).toBe(false);
+    await expect(fixture.service.create(prepared.target, "one use", {
+      ...prepared.authority,
+      toolCallId: "call_external_create_successor"
+    }, liveSignal())).rejects.toMatchObject(
+      expect.objectContaining({ code: "external_filesystem.authority_changed" })
+    );
+    expect(intentFiles(fixture.machineRoot)).toHaveLength(1);
+    expect(fs.existsSync(targetPath)).toBe(false);
+  });
+
+  it("never overwrites an existing target or follows protected and symlink paths", async () => {
     const fixture = createFixture();
     const existing = path.join(fixture.externalRoot, "existing.txt");
     fs.writeFileSync(existing, "keep", "utf8");
 
-    expect(() => fixture.service.create(existing, "replace", fixture.authority, liveSignal())).toThrowError(
+    const existingPrepared = await fixture.prepare(existing, "replace");
+    await expect(fixture.service.create(existingPrepared.target, "replace", existingPrepared.authority, liveSignal())).rejects.toMatchObject(
       expect.objectContaining({ code: "external_filesystem.target_exists" })
     );
     expect(fs.readFileSync(existing, "utf8")).toBe("keep");
-    expect(() => fixture.service.create(
-      path.join(fixture.vaultPath, "escape.txt"),
-      "blocked",
-      fixture.authority,
-      liveSignal()
-    )).toThrowError(expect.objectContaining({ code: "external_filesystem.protected_path" }));
+    expect(readIntent(fixture.machineRoot).state).toBe("failed_no_effect");
+    await expect(fixture.prepare(path.join(fixture.vaultPath, "escape.txt"), "blocked")).rejects.toMatchObject(
+      expect.objectContaining({ code: "external_filesystem.protected_path" })
+    );
 
     const alias = path.join(fixture.externalRoot, "alias");
     fs.symlinkSync(fixture.externalRoot, alias, process.platform === "win32" ? "junction" : "dir");
-    expect(() => fixture.service.create(
-      path.join(alias, "escape.txt"),
-      "blocked",
-      fixture.authority,
-      liveSignal()
-    )).toThrowError(expect.objectContaining({ code: "external_filesystem.symlink_not_allowed" }));
+    await expect(fixture.prepare(path.join(alias, "escape.txt"), "blocked")).rejects.toMatchObject(
+      expect.objectContaining({ code: "external_filesystem.symlink_not_allowed" })
+    );
   });
 
-  it("rejects oversized or non-round-tripping text before creating an intent", () => {
+  it("rejects a replaced parent directory and a permission authority for another captured target", async () => {
+    const fixture = createFixture();
+    const targetPath = path.join(fixture.externalRoot, "captured.txt");
+    const prepared = await fixture.prepare(targetPath, "blocked");
+
+    await expect(fixture.service.create(prepared.target, "blocked", {
+      ...prepared.authority,
+      permission: {
+        ...prepared.authority.permission,
+        binding: {
+          ...prepared.authority.permission.binding,
+          resourceIdentityHash: `sha256:${"f".repeat(64)}`
+        }
+      }
+    }, liveSignal())).rejects.toMatchObject(
+      expect.objectContaining({ code: "external_filesystem.authority_changed" })
+    );
+    const other = await fixture.prepare(path.join(fixture.externalRoot, "other.txt"), "other");
+    await expect(fixture.service.create(prepared.target, "blocked", other.authority, liveSignal())).rejects.toMatchObject(
+      expect.objectContaining({ code: "external_filesystem.authority_changed" })
+    );
+    await expect(fixture.service.create(prepared.target, "changed content", prepared.authority, liveSignal()))
+      .rejects.toMatchObject(expect.objectContaining({ code: "external_filesystem.authority_changed" }));
+
+    const displaced = `${fixture.externalRoot}-displaced`;
+    fs.renameSync(fixture.externalRoot, displaced);
+    fs.mkdirSync(fixture.externalRoot);
+    await expect(fixture.service.create(prepared.target, "blocked", prepared.authority, liveSignal())).rejects.toMatchObject(
+      expect.objectContaining({ code: "external_filesystem.changed" })
+    );
+    expect(fs.existsSync(targetPath)).toBe(false);
+  });
+
+  it("requires the current Permission Broker to accept the consumed action authority", async () => {
+    const fixture = createFixture();
+    const targetPath = path.join(fixture.externalRoot, "revoked.txt");
+    const prepared = await fixture.prepare(targetPath, "blocked");
+    const authority = {
+      ...prepared.authority,
+      assertPermissionAuthority: vi.fn(() => {
+        throw new PigeDomainError("permission.denied", "Permission authority is no longer valid.");
+      })
+    };
+
+    await expect(fixture.service.create(prepared.target, "blocked", authority, liveSignal())).rejects.toMatchObject(
+      expect.objectContaining({ code: "external_filesystem.authority_changed" })
+    );
+    expect(authority.assertPermissionAuthority).toHaveBeenCalledWith(prepared.authority.permission);
+    expect(intentFiles(fixture.machineRoot)).toEqual([]);
+    expect(fs.existsSync(targetPath)).toBe(false);
+  });
+
+  it("rechecks the consumed authority immediately before exclusive publication", async () => {
+    const fixture = createFixture();
+    const targetPath = path.join(fixture.externalRoot, "revoked-before-publish.txt");
+    const prepared = await fixture.prepare(targetPath, "blocked");
+    const assertPermissionAuthority = vi.fn()
+      .mockImplementationOnce(() => undefined)
+      .mockImplementationOnce(() => {
+        throw new PigeDomainError("permission.stale", "Permission authority expired.");
+      });
+    const authority = { ...prepared.authority, assertPermissionAuthority };
+
+    await expect(fixture.service.create(prepared.target, "blocked", authority, liveSignal())).rejects.toMatchObject(
+      expect.objectContaining({ code: "external_filesystem.authority_changed" })
+    );
+    expect(assertPermissionAuthority).toHaveBeenCalledTimes(2);
+    expect(fs.existsSync(targetPath)).toBe(false);
+    const intent = readIntent(fixture.machineRoot);
+    expect(intent.state).toBe("failed_no_effect");
+    expect(fs.existsSync(intent.stagePath)).toBe(false);
+  });
+
+  it("fails uncertain when the async platform receipt does not match the approved target", async () => {
+    const fixture = createFixture();
+    const platform = new TestOnlyNodePublicationPort([fixture.vaultPath, fixture.machineRoot]);
+    const service = new ExternalTextFileCreateService({ platform, machineRootPath: fixture.machineRoot });
+    const target = await service.captureTarget(path.join(fixture.externalRoot, "bad-receipt.txt"));
+    const authority = authorityFor(fixture.authority, target, "receipt");
+    vi.spyOn(platform, "publishExclusive").mockResolvedValue({
+      state: "published",
+      parentIdentityHash: target.parentIdentityHash,
+      targetResourceHash: `sha256:${"f".repeat(64)}`,
+      contentHash: `sha256:${"e".repeat(64)}`,
+      byteLength: 1
+    });
+
+    await expect(service.create(target, "receipt", authority, liveSignal())).rejects.toMatchObject(
+      expect.objectContaining({ code: "external_filesystem.publication_protocol_invalid" })
+    );
+    expect(readIntent(fixture.machineRoot).state).toBe("failed_uncertain");
+  });
+
+  it("treats an untyped platform publication failure as uncertain", async () => {
+    const fixture = createFixture();
+    const platform = new TestOnlyNodePublicationPort([fixture.vaultPath, fixture.machineRoot]);
+    const service = new ExternalTextFileCreateService({ platform, machineRootPath: fixture.machineRoot });
+    const target = await service.captureTarget(path.join(fixture.externalRoot, "transport-failure.txt"));
+    const authority = authorityFor(fixture.authority, target, "transport");
+    vi.spyOn(platform, "publishExclusive").mockRejectedValue(new Error("synthetic helper disconnect"));
+
+    await expect(service.create(target, "transport", authority, liveSignal())).rejects.toMatchObject(
+      expect.objectContaining({ code: "external_filesystem.write_uncertain" })
+    );
+    expect(readIntent(fixture.machineRoot).state).toBe("failed_uncertain");
+    expect(fs.existsSync(target.targetPath)).toBe(false);
+  });
+
+  it("rejects oversized or non-round-tripping text before creating an intent", async () => {
     const fixture = createFixture();
 
-    expect(() => fixture.service.create(
-      path.join(fixture.externalRoot, "large.txt"),
+    const large = await fixture.prepare(path.join(fixture.externalRoot, "large.txt"), "");
+    await expect(fixture.service.create(
+      large.target,
       "x".repeat(MAX_EXTERNAL_TEXT_CREATE_BYTES + 1),
-      fixture.authority,
+      large.authority,
       liveSignal()
-    )).toThrowError(expect.objectContaining({ code: "external_filesystem.invalid_text" }));
-    expect(() => fixture.service.create(
-      path.join(fixture.externalRoot, "surrogate.txt"),
+    )).rejects.toMatchObject(expect.objectContaining({ code: "external_filesystem.invalid_text" }));
+    const surrogate = await fixture.prepare(path.join(fixture.externalRoot, "surrogate.txt"), "");
+    await expect(fixture.service.create(
+      surrogate.target,
       "\ud800",
-      fixture.authority,
+      surrogate.authority,
       liveSignal()
-    )).toThrowError(expect.objectContaining({ code: "external_filesystem.invalid_text" }));
+    )).rejects.toMatchObject(expect.objectContaining({ code: "external_filesystem.invalid_text" }));
     expect(intentFiles(fixture.machineRoot)).toEqual([]);
   });
 
-  it("cleans its owned stage when cancellation wins before exclusive publication", () => {
+  it("cleans its owned stage when cancellation wins before exclusive publication", async () => {
     const fixture = createFixture();
     const controller = new AbortController();
-    const authority = { ...fixture.authority, assertWriterLease: () => controller.abort() };
     const targetPath = path.join(fixture.externalRoot, "cancelled.txt");
+    const prepared = await fixture.prepare(targetPath, "cancel");
+    const authority = { ...prepared.authority, assertWriterLease: () => controller.abort() };
 
-    expect(() => fixture.service.create(targetPath, "cancel", authority, controller.signal)).toThrowError(
+    await expect(fixture.service.create(prepared.target, "cancel", authority, controller.signal)).rejects.toMatchObject(
       expect.objectContaining({ code: "external_filesystem.cancelled" })
     );
     expect(fs.existsSync(targetPath)).toBe(false);
     const intent = readIntent(fixture.machineRoot);
-    expect(intent.state).toBe("failed_uncertain");
+    expect(intent.state).toBe("cancelled");
     expect(fs.existsSync(intent.stagePath)).toBe(false);
   });
 
-  it("adopts a published hard-link after an Operation-store crash without writing again", () => {
+  it("adopts a published hard-link after an Operation-store crash without writing again", async () => {
     const fixture = createFixture();
     const operationStore = new ExternalOperationRecordStore();
     const service = new ExternalTextFileCreateService({
@@ -143,8 +296,10 @@ describe("ExternalTextFileCreateService", () => {
       throw new Error("synthetic operation-store crash");
     });
     const targetPath = path.join(fixture.externalRoot, "recover.txt");
+    const target = await service.captureTarget(targetPath);
+    const authority = authorityFor(fixture.authority, target, "recover");
 
-    expect(() => service.create(targetPath, "recover", fixture.authority, liveSignal())).toThrowError(
+    await expect(service.create(target, "recover", authority, liveSignal())).rejects.toMatchObject(
       expect.objectContaining({ code: "external_filesystem.write_failed" })
     );
     expect(fs.readFileSync(targetPath, "utf8")).toBe("recover");
@@ -153,28 +308,90 @@ describe("ExternalTextFileCreateService", () => {
     const beforeIdentity = fs.statSync(targetPath);
 
     write.mockRestore();
-    const adopted = service.adopt(published.id, fixture.authority);
+    const adopted = await service.adopt(published.id, authority);
     const afterIdentity = fs.statSync(targetPath);
     expect([afterIdentity.dev, afterIdentity.ino]).toEqual([beforeIdentity.dev, beforeIdentity.ino]);
     expect(adopted.operationId).toBe(published.operationId);
     expect(readIntent(fixture.machineRoot).state).toBe("operation_committed");
   });
 
-  it("fails closed when authority or the staged bytes change during recovery", () => {
+  it("persists an invalid adoption receipt as uncertain instead of retrying", async () => {
+    const fixture = createFixture();
+    const platform = new TestOnlyNodePublicationPort([fixture.vaultPath, fixture.machineRoot]);
+    const operationStore = new ExternalOperationRecordStore();
+    const service = new ExternalTextFileCreateService({ platform, machineRootPath: fixture.machineRoot, operationStore });
+    vi.spyOn(operationStore, "write").mockImplementationOnce(() => {
+      throw new Error("synthetic operation-store crash");
+    });
+    const target = await service.captureTarget(path.join(fixture.externalRoot, "bad-adopt-receipt.txt"));
+    const authority = authorityFor(fixture.authority, target, "recover");
+
+    await expect(service.create(target, "recover", authority, liveSignal())).rejects.toMatchObject(
+      expect.objectContaining({ code: "external_filesystem.write_failed" })
+    );
+    const published = readIntent(fixture.machineRoot);
+    vi.spyOn(platform, "adoptExclusive").mockResolvedValue({
+      state: "published",
+      parentIdentityHash: published.parentIdentityHash as `sha256:${string}`,
+      targetResourceHash: `sha256:${"f".repeat(64)}`,
+      contentHash: published.contentHash as `sha256:${string}`,
+      byteLength: Number(published.byteLength)
+    });
+
+    await expect(service.adopt(published.id, authority)).rejects.toMatchObject(
+      expect.objectContaining({ code: "external_filesystem.write_uncertain" })
+    );
+    expect(readIntent(fixture.machineRoot).state).toBe("failed_uncertain");
+    await expect(service.adopt(published.id, authority)).rejects.toMatchObject(
+      expect.objectContaining({ code: "external_filesystem.write_uncertain" })
+    );
+  });
+
+  it("fails closed when authority or the staged bytes change during recovery", async () => {
     const fixture = createFixture();
     const targetPath = path.join(fixture.externalRoot, "tamper.txt");
-    const result = fixture.service.create(targetPath, "original", fixture.authority, liveSignal());
+    const prepared = await fixture.prepare(targetPath, "original");
+    const result = await fixture.service.create(prepared.target, "original", prepared.authority, liveSignal());
     const intent = readIntent(fixture.machineRoot);
 
-    expect(() => fixture.service.adopt(result.intentId, {
-      ...fixture.authority,
-      bindingHash: `sha256:${"2".repeat(64)}`
-    })).toThrowError(expect.objectContaining({ code: "external_filesystem.authority_changed" }));
+    await expect(fixture.service.adopt(result.intentId, {
+      ...prepared.authority,
+      permission: {
+        ...prepared.authority.permission,
+        binding: {
+          ...prepared.authority.permission.binding,
+          bindingHash: `sha256:${"2".repeat(64)}`
+        }
+      }
+    })).rejects.toMatchObject(expect.objectContaining({ code: "external_filesystem.authority_changed" }));
     fs.unlinkSync(intent.stagePath);
     fs.writeFileSync(intent.stagePath, "changed", { encoding: "utf8", mode: 0o600 });
-    expect(() => fixture.service.adopt(result.intentId, fixture.authority)).toThrowError(
-      expect.objectContaining({ code: "external_filesystem.changed" })
+    await expect(fixture.service.adopt(result.intentId, prepared.authority)).rejects.toMatchObject(
+      expect.objectContaining({ code: "external_filesystem.write_uncertain" })
     );
+    expect(readIntent(fixture.machineRoot).state).toBe("failed_uncertain");
+  });
+
+  it("does not finalize the owned stage after the writer lease is lost", async () => {
+    const fixture = createFixture();
+    const targetPath = path.join(fixture.externalRoot, "lease-finalize.txt");
+    const prepared = await fixture.prepare(targetPath, "lease");
+    const result = await fixture.service.create(prepared.target, "lease", prepared.authority, liveSignal());
+    const intent = readIntent(fixture.machineRoot);
+    let checks = 0;
+    const authority = {
+      ...prepared.authority,
+      assertWriterLease: () => {
+        checks += 1;
+        if (checks === 2) throw externalFilesystemError("external_filesystem.writer_lease_lost");
+      }
+    };
+
+    await expect(fixture.service.finalize(result.intentId, authority)).rejects.toMatchObject(
+      expect.objectContaining({ code: "external_filesystem.writer_lease_lost" })
+    );
+    expect(fs.existsSync(intent.stagePath)).toBe(true);
+    expect(readIntent(fixture.machineRoot).state).toBe("operation_committed");
   });
 });
 
@@ -187,28 +404,104 @@ function createFixture() {
   fs.mkdirSync(path.join(vaultPath, ".pige"), { recursive: true });
   fs.mkdirSync(machineRoot);
   fs.mkdirSync(externalRoot);
-  const authority: ExternalTextFileCreateAuthority = {
+  const authority: TestAuthorityBase = {
     vaultPath,
     vaultId: "vault_20260718_external01",
     jobId: "job_20260718_external01",
     toolCallId: "call_external_create_01",
     permissionRequestId: "permreq_20260718_external01",
     permissionDecisionId: "permdec_20260718_external01",
-    bindingHash: `sha256:${"a".repeat(64)}`,
     policyContextId: "policy_external_create_01",
     policyHash: `sha256:${"b".repeat(64)}`,
     assertWriterLease: vi.fn()
   };
+  const service = new ExternalTextFileCreateService({
+    platform: new TestOnlyNodePublicationPort([vaultPath, machineRoot]),
+    machineRootPath: machineRoot
+  });
   return {
     vaultPath,
     machineRoot,
     externalRoot,
     authority,
-    service: new ExternalTextFileCreateService({
-      platform: new TestOnlyNodePublicationPort([vaultPath, machineRoot]),
-      machineRootPath: machineRoot
-    })
+    service,
+    async prepare(targetPath: string, content: string) {
+      const target = await service.captureTarget(targetPath);
+      return { target, authority: authorityFor(authority, target, content) };
+    }
   };
+}
+
+function authorityFor(
+  authority: TestAuthorityBase,
+  target: CapturedExternalTarget,
+  content: string
+): ExternalTextFileCreateAuthority {
+  const contentBytes = Buffer.from(content, "utf8");
+  const contentHash = hashContent(contentBytes);
+  const permissionBinding = createPermissionActionBinding({
+    vaultId: authority.vaultId,
+    jobId: authority.jobId,
+    actorType: "local_tool",
+    actorId: "pige_external_text_file",
+    actorVersion: "1.0.0",
+    actorDigest: `sha256:${"d".repeat(64)}`,
+    actionId: EXTERNAL_TEXT_FILE_CREATE_ACTION_ID,
+    actionVersion: EXTERNAL_TEXT_FILE_CREATE_ACTION_VERSION,
+    actionInputHash: hashExternalTextCreateActionInput({
+      toolCallId: authority.toolCallId,
+      targetResourceHash: target.targetResourceHash,
+      contentHash,
+      byteLength: contentBytes.byteLength
+    }),
+    capability: "external_filesystem",
+    dataBoundary: "filesystem",
+    resourceScope: "current_file",
+    resourceIdentityHash: hashExternalTargetPermissionIdentity(target.targetResourceHash),
+    policyContextId: authority.policyContextId,
+    policyHash: authority.policyHash,
+    runtimeKind: "desktop_local",
+    clientCapabilityTier: "desktop_full"
+  });
+  const now = "2026-07-18T06:00:00.000Z";
+  const permission = PermissionActionLifecycleRecordSchema.parse({
+    schemaVersion: 1,
+    id: authority.permissionRequestId,
+    authorizationLayer: "permission_broker",
+    state: "consumed",
+    binding: permissionBinding,
+    actorDisplayName: "Pige External Text File",
+    actionLabelKey: "permission.external_text_file.create",
+    resourceKind: "file",
+    resourceCount: 1,
+    reasonCode: "external_text_file.create",
+    decision: "allow_once",
+    decisionId: authority.permissionDecisionId,
+    createdAt: now,
+    updatedAt: now,
+    decidedAt: now,
+    consumedAt: now
+  });
+  return Object.freeze({
+    vaultPath: authority.vaultPath,
+    toolCallId: authority.toolCallId,
+    permission,
+    assertPermissionAuthority: vi.fn(),
+    markPermissionCompleted: vi.fn(),
+    assertWriterLease: authority.assertWriterLease
+  });
+}
+
+interface TestAuthorityBase {
+  readonly vaultPath: string;
+  readonly vaultId: string;
+  readonly jobId: string;
+  readonly toolCallId: string;
+  readonly permissionRequestId: string;
+  readonly permissionDecisionId: string;
+  readonly policyContextId: string;
+  readonly policyHash: `sha256:${string}`;
+  readonly assertWriterLease: () => void;
 }
 
 function readIntent(machineRoot: string): Record<string, string> {
@@ -247,46 +540,139 @@ class TestOnlyNodePublicationPort implements ExternalFilePublicationPort {
     this.#guard = new ExternalFilesystemPathGuard(protectedRoots);
   }
 
-  captureTarget(targetPathInput: unknown): string {
+  async captureTarget(targetPathInput: unknown): Promise<CapturedExternalTarget> {
     const target = this.#guard.captureTargetParent(targetPathInput);
-    return target.path;
+    const parentIdentityHash = hashParentIdentity(target.parentStats);
+    return capturedExternalTarget({
+      targetPath: target.path,
+      targetLeafName: path.basename(target.path),
+      parentIdentityHash,
+      targetResourceHash: hashExternalTarget(parentIdentityHash, path.basename(target.path))
+    });
   }
 
-  publishExclusive(
+  async publishExclusive(
     plan: ExternalFilePublicationPlan,
     signal: AbortSignal,
     assertWriterLease: () => void
-  ): void {
-    signal.throwIfAborted();
-    const target = this.#guard.captureTargetParent(plan.targetPath);
-    assertAbsent(target.path);
-    writeStage(plan.stagePath, plan.content);
+  ): Promise<ExternalFilePublicationReceipt> {
+    let publicationAttempted = false;
     try {
+      signal.throwIfAborted();
+      const target = this.#guard.captureTargetParent(plan.targetPath);
+      assertParentIdentity(plan, target.parentStats);
+      assertAbsent(target.path);
+      writeStage(plan.stagePath, plan.content);
       signal.throwIfAborted();
       assertWriterLease();
       signal.throwIfAborted();
       this.#guard.assertParentCurrent(target);
+      publicationAttempted = true;
       fs.linkSync(plan.stagePath, target.path);
       verifyPlan(plan);
     } catch (caught) {
-      if (!fs.existsSync(plan.targetPath)) fs.rmSync(plan.stagePath, { force: true });
+      if (!publicationAttempted) {
+        fs.rmSync(plan.stagePath, { force: true });
+        const failure = noEffectReceiptFor(plan, caught, signal.aborted);
+        if (failure !== undefined) return failure;
+      }
       throw caught;
     }
+    return receiptFor(plan, "published");
   }
 
-  adoptExclusive(plan: ExternalFilePublicationIdentity, assertWriterLease: () => void): void {
+  async adoptExclusive(
+    plan: ExternalFilePublicationIdentity,
+    assertWriterLease: () => void
+  ): Promise<ExternalFilePublicationReceipt> {
+    const target = this.#guard.captureTargetParent(plan.targetPath);
+    assertParentIdentity(plan, target.parentStats);
     if (!fs.existsSync(plan.targetPath)) {
       verifyStage(plan);
       assertWriterLease();
       fs.linkSync(plan.stagePath, plan.targetPath);
     }
     verifyPlan(plan);
+    return receiptFor(plan, "published");
   }
 
-  finalize(plan: ExternalFilePublicationIdentity): void {
-    assertExternalIdentity(lstatExternal(plan.stagePath), lstatExternal(plan.targetPath));
-    fs.unlinkSync(plan.stagePath);
+  async finalize(
+    plan: ExternalFilePublicationIdentity,
+    assertWriterLease: () => void
+  ): Promise<ExternalFilePublicationReceipt> {
+    try {
+      const target = this.#guard.captureTargetParent(plan.targetPath);
+      assertParentIdentity(plan, target.parentStats);
+      assertExternalIdentity(lstatExternal(plan.stagePath), lstatExternal(plan.targetPath));
+      assertWriterLease();
+      fs.unlinkSync(plan.stagePath);
+    } catch (caught) {
+      const failure = noEffectReceiptFor(plan, caught, false);
+      if (failure !== undefined) return failure;
+      throw caught;
+    }
+    return receiptFor(plan, "finalized");
   }
+}
+
+function receiptFor(
+  plan: ExternalFilePublicationIdentity,
+  state: ExternalFilePublicationReceipt["state"]
+): ExternalFilePublicationReceipt {
+  return Object.freeze({
+    state,
+    parentIdentityHash: plan.parentIdentityHash,
+    targetResourceHash: plan.targetResourceHash,
+    contentHash: plan.contentHash,
+    byteLength: plan.byteLength
+  });
+}
+
+function noEffectReceiptFor(
+  plan: ExternalFilePublicationIdentity,
+  caught: unknown,
+  aborted: boolean
+): ExternalFilePublicationReceipt | undefined {
+  if (aborted || (caught instanceof Error && caught.name === "AbortError")) {
+    return Object.freeze({
+      ...receiptIdentityFor(plan),
+      state: "cancelled",
+      errorCode: "external_filesystem.cancelled"
+    });
+  }
+  if (!(caught instanceof PigeDomainError)) return undefined;
+  const errorCode = caught.code as ExternalFilePublicationFailureCode;
+  if (![
+    "external_filesystem.authority_changed",
+    "external_filesystem.changed",
+    "external_filesystem.target_exists",
+    "external_filesystem.writer_lease_lost",
+    "external_filesystem.write_failed"
+  ].includes(errorCode)) return undefined;
+  return Object.freeze({ ...receiptIdentityFor(plan), state: "failed_no_effect", errorCode });
+}
+
+function receiptIdentityFor(plan: ExternalFilePublicationIdentity) {
+  return {
+    parentIdentityHash: plan.parentIdentityHash,
+    targetResourceHash: plan.targetResourceHash,
+    contentHash: plan.contentHash,
+    byteLength: plan.byteLength
+  } as const;
+}
+
+function assertParentIdentity(plan: ExternalFilePublicationIdentity, stats: fs.BigIntStats): void {
+  if (hashParentIdentity(stats) !== plan.parentIdentityHash) {
+    throw externalFilesystemError("external_filesystem.changed");
+  }
+}
+
+function hashParentIdentity(stats: fs.BigIntStats): `sha256:${string}` {
+  return `sha256:${createHash("sha256")
+    .update("pige.external_parent_identity.test.v1", "utf8")
+    .update("\0", "utf8")
+    .update(`${stats.dev}:${stats.ino}:${stats.mode}`, "utf8")
+    .digest("hex")}`;
 }
 
 function writeStage(stagePath: string, content: Buffer): void {

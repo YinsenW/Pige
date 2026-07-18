@@ -671,7 +671,7 @@ Responsibilities:
   but receives no ambient Node handle and no effect occurs outside standing authority
   until Permission Broker authorizes the exact action.
 
-The executable 104-service inventory freezes five no-growth owners and responsibility
+The executable service inventory freezes five no-growth owners and responsibility
 deltas; budgets trigger review, not compression. H1 aligns Pi `0.80.7`; H2-H4 converge
 Home/Ingest, Job reliability and legacy retrieval without status promotion.
 
@@ -1198,8 +1198,8 @@ Service-level constraints:
 - A denial or revocation leaves prior safe durable outputs intact and produces an explainable job result.
 - Main registers only read-only folder/text/fetch external adapters.
 - The unregistered create foundation owns local revision intents, publication/recovery
-  sequencing and path-free Operations. Mutation needs a parent-handle adapter; shell needs
-  Windows Job Object and macOS XPC/sandbox containment. Permission admits neither.
+  sequencing and path-free Operations through an async identity/tool/content, receipt,
+  permission and lease protocol. No-follow/process helpers required.
 
 ### 5.7.2 Skill Registry Service
 

@@ -1,8 +1,8 @@
-import { createHash } from "node:crypto";
 import fs, { constants as fsConstants, type Stats } from "node:fs";
 import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
 import { ExternalMutationIntentSchema, type ExternalMutationIntent } from "@pige/schemas";
+import { hashExternalTarget } from "./external-file-publication-protocol";
 
 const DIRECTORY = "external-mutation-intents";
 const MAX_RECORD_BYTES = 64 * 1_024;
@@ -77,7 +77,7 @@ export class ExternalMutationIntentStore {
     return Object.freeze(fs.readdirSync(this.#rootPath, { withFileTypes: true })
       .filter((entry) => entry.isDirectory() && /^extmut_\d{8}_[a-z0-9]{12,}$/u.test(entry.name))
       .map((entry) => this.read(entry.name))
-      .filter((intent) => intent.state !== "completed" && intent.state !== "failed_uncertain")
+      .filter((intent) => !["completed", "failed_no_effect", "cancelled", "failed_uncertain"].includes(intent.state))
       .sort((left, right) => left.createdAt.localeCompare(right.createdAt)));
   }
 
@@ -112,22 +112,18 @@ function assertIntentPathBinding(intent: ExternalMutationIntent): void {
     !path.isAbsolute(intent.stagePath) ||
     path.resolve(intent.stagePath) !== intent.stagePath ||
     path.dirname(intent.targetPath) !== path.dirname(intent.stagePath) ||
+    path.basename(intent.targetPath) !== intent.targetLeafName ||
     intent.targetPath === intent.stagePath ||
     path.basename(intent.stagePath) !== `.pige-${intent.id}.stage` ||
-    hashResourcePath(intent.targetPath) !== intent.targetResourceHash
+    hashExternalTarget(
+      intent.parentIdentityHash as `sha256:${string}`,
+      intent.targetLeafName
+    ) !== intent.targetResourceHash
   ) throw intentInvalid();
 }
 
-function hashResourcePath(targetPath: string): `sha256:${string}` {
-  return `sha256:${createHash("sha256")
-    .update("pige.external_resource.v1", "utf8")
-    .update("\0", "utf8")
-    .update(targetPath, "utf8")
-    .digest("hex")}`;
-}
-
 function isAllowedTransition(from: ExternalMutationIntent["state"], to: ExternalMutationIntent["state"]): boolean {
-  return (from === "planned" && (to === "published" || to === "failed_uncertain")) ||
+  return (from === "planned" && ["published", "failed_no_effect", "cancelled", "failed_uncertain"].includes(to)) ||
     (from === "published" && (to === "operation_committed" || to === "failed_uncertain")) ||
     (from === "operation_committed" && (to === "completed" || to === "failed_uncertain"));
 }

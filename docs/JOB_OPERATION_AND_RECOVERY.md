@@ -682,7 +682,8 @@ Rules:
 - Operation records are included in backup by default.
 - Operation records must not contain API keys, raw prompts, full provider responses, or large source bodies.
 - `create_external_file` uses one opaque checksummed `external_resource`; paths stay in
-  the excluded machine-local intent journal. Vocabulary is not authority.
+  a machine-local journal binding parent/leaf and rejecting v1. Receipts prove no effect;
+  other effects are `failed_uncertain`; completion prevents replay.
 - An operation affected by Agent Runtime Policy Context records `policyAudit` with the context ID/hash and enforcing service names. Permissioned operations also retain permission decision IDs. Neither field contains full settings, grant bodies, paths, prompts, or secrets.
 - Before any provider credential lookup, a model-dependent Job writes an idempotent `model_egress_decision` operation containing only outcome, reason, content classes, bounded payload counts, model/source/job references, `policyAudit`, and a typed `modelEgressAudit`. Its `payloadHash` identifies the exact redacted bounded payload, `evidenceSummaryHash` identifies the source/artifact/locator summary without storing that summary body, and `decisionHash` fingerprints the complete typed decision including content classification, provider boundary, cloud policy, counts, policy hash, and permission decision. All three hashes participate in the operation identity. Reuse is allowed only when payload, evidence identity, and final decision are equivalent; changing private/privacy/sensitive metadata cannot reuse an ordinary-content audit. Confirmed or blocked attempts remain auditable even when no model call or page write occurs.
 - Source relink/root change, settings change, trash/restore, backup/restore, migration, Skill/package lifecycle, and memory trash/restore must not fall through to a generic page-update record.
