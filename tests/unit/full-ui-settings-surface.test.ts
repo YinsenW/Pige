@@ -907,7 +907,7 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
-  it("binds app language while keeping unfinished appearance choices honest and accessible", async () => {
+  it("binds the real theme and app language while keeping unfinished language choices honest", async () => {
     const dom = createDom();
     let ipcRead = false;
     Object.defineProperty(dom.window, "pige", {
@@ -918,13 +918,18 @@ describe("full UI Settings surface", () => {
       }
     });
     const onLocaleChange = vi.fn(async () => undefined);
+    const onThemeChange = vi.fn(async () => true);
     const onDevelopment = vi.fn();
     const root = createRoot(dom.window.document.querySelector("#root")!);
     await act(async () => {
       root.render(createElement(AppearanceSettingsPanel, {
         locale: "en",
         availableLocales: ["en", "fr", "de"],
+        themePreference: "system",
+        themeBusy: false,
+        themeError: null,
         onLocaleChange,
+        onThemeChange,
         onDevelopment,
         t
       }));
@@ -936,7 +941,7 @@ describe("full UI Settings surface", () => {
     const themeGroup = requireElement(container.querySelector<HTMLElement>('[role="radiogroup"]'));
     const themes = Array.from(themeGroup.querySelectorAll<HTMLButtonElement>('[role="radio"]'));
     expect(themes).toHaveLength(3);
-    expect(themes.map((theme) => theme.getAttribute("aria-checked"))).toEqual(["false", "false", "false"]);
+    expect(themes.map((theme) => theme.getAttribute("aria-checked"))).toEqual(["true", "false", "false"]);
     expect(themes.map((theme) => theme.tabIndex)).toEqual([0, -1, -1]);
 
     await act(async () => {
@@ -946,7 +951,8 @@ describe("full UI Settings surface", () => {
       await settle(dom);
     });
     expect(dom.window.document.activeElement).toBe(themes[1]);
-    expect(themes.map((theme) => theme.getAttribute("aria-checked"))).toEqual(["false", "false", "false"]);
+    expect(onThemeChange.mock.calls.map(([theme]) => theme)).toEqual(["dark", "light"]);
+    expect(themes.map((theme) => theme.getAttribute("aria-checked"))).toEqual(["true", "false", "false"]);
 
     const appLanguage = requireElement(container.querySelector<HTMLSelectElement>('select[aria-label="App language"]'));
     const knowledgeLanguage = requireElement(container.querySelector<HTMLButtonElement>('[data-appearance-control="knowledge-language"]'));
@@ -962,7 +968,7 @@ describe("full UI Settings surface", () => {
       await settle(dom);
     });
     expect(onLocaleChange).toHaveBeenCalledWith("fr");
-    expect(onDevelopment).toHaveBeenCalledTimes(4);
+    expect(onDevelopment).toHaveBeenCalledTimes(2);
     expect(knowledgeLanguage.textContent).toBe("In development");
     expect(ocrLanguage.textContent).toBe("In development");
     expect(ipcRead).toBe(false);

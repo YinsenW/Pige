@@ -98,7 +98,14 @@ function makePigeApi(awaitingReview: boolean, calls: ProposalApiCalls): object {
       onLayoutChanged: () => () => undefined
     },
     settings: {
-      appearance: async () => ({ locale: "en", availableLocales: ["en"] })
+      appearance: async () => ({
+        locale: "en",
+        availableLocales: ["en"],
+        themePreference: "system",
+        effectiveTheme: "light",
+        revision: 0
+      }),
+      onAppearanceChanged: () => () => undefined
     },
     system: {
       toolchainHealth: async () => ({ status: "ready" })
