@@ -108,7 +108,10 @@ describe("full production UI renderer contract", () => {
     expect(appSource).toContain('aria-haspopup="dialog"');
     expect(appSource).toContain('{ id: "maintenance", icon: "database", status: "real" }');
     expect(appSource).toContain('{ id: "history", icon: "activity", status: "real" }');
-    expect(appSource).toContain('{ id: "updates", icon: "package", status: "development", capability: "updates" }');
+    expect(appSource).toContain('{ id: "updates", icon: "package", status: "partial" }');
+    expect(appSource).toContain("window.pige.updates.onStatusChanged");
+    expect(appSource).toContain("window.pige.updates.summary()");
+    expect(appSource).toContain("window.pige.updates.check({ apiVersion: 1, requestId })");
     expect(appSource).toContain('{ id: "diagnostics", icon: "wrench", status: "real" }');
     expect(appSource).toContain('settingsSection === "vault" || settingsSection === "maintenance"');
     expect(appSource).toContain('settingsSection === "updates" || settingsSection === "diagnostics"');
