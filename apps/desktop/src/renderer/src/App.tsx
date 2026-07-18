@@ -1266,7 +1266,7 @@ export function App(): React.JSX.Element {
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <header className="topbar titlebar" inert={agentModal}>
+      <header className="topbar titlebar" inert={settingsOpen || agentModal}>
         <div className="topbar-leading titlebar-navigation">
           {view !== "home" ? (
             <button
@@ -1318,7 +1318,7 @@ export function App(): React.JSX.Element {
             role={sidebarModal ? "dialog" : undefined}
             aria-modal={sidebarModal ? "true" : undefined}
             aria-label={sidebarModal ? t("nav.library") : undefined}
-            inert={agentModal}
+            inert={settingsOpen || agentModal}
             onKeyDown={(event) => {
               if (!sidebarModal) return;
               containOverlayFocus(event, event.currentTarget, () => void toggleSidebar());
@@ -1407,7 +1407,7 @@ export function App(): React.JSX.Element {
             </div>
           </aside>
         ) : null}
-        <main className="workspace" inert={sidebarModal || agentModal}>
+        <main className="workspace" inert={settingsOpen || sidebarModal || agentModal}>
         {blocked ? (
           <FirstRunPanel
             appearanceLoadState={appearanceLoadState}

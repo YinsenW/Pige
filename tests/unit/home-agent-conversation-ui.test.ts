@@ -1627,6 +1627,53 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("keeps Settings as the sole focus surface when a wide window becomes compact", async () => {
+    const dom = createDom(720);
+    const resizeViewport = installResizableMatchMedia(dom, 720);
+    const harness = createHarness(undefined);
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await clickButtonByAriaLabel(dom, container, "Expand sidebar");
+    await waitFor(dom, () => container.querySelector(".sidebar-settings-control") !== null);
+    const settingsTrigger = requireElement(container.querySelector<HTMLButtonElement>(".sidebar-settings-control"));
+    settingsTrigger.focus();
+    await clickElement(dom, settingsTrigger);
+    await waitFor(dom, () => container.querySelector('[role="dialog"]') !== null);
+
+    const header = requireElement(container.querySelector<HTMLElement>(".topbar"));
+    const sidebar = requireElement(container.querySelector<HTMLElement>(".sidebar"));
+    const workspace = requireElement(container.querySelector<HTMLElement>(".workspace"));
+    expect(header.hasAttribute("inert")).toBe(true);
+    expect(sidebar.hasAttribute("inert")).toBe(true);
+    expect(workspace.hasAttribute("inert")).toBe(true);
+    expect(dom.window.document.activeElement?.getAttribute("aria-label")).toBe("Close Settings");
+
+    await resizeViewport(420);
+    const dialog = requireElement(container.querySelector<HTMLElement>('[role="dialog"]'));
+    const compactNavigation = requireElement(dialog.querySelector<HTMLButtonElement>(
+      'button[aria-label="Settings sections"]'
+    ));
+    await waitFor(dom, () => dom.window.document.activeElement === compactNavigation);
+    expect(dom.window.document.activeElement).toBe(compactNavigation);
+    expect(header.hasAttribute("inert")).toBe(true);
+    expect(sidebar.hasAttribute("inert")).toBe(true);
+    expect(workspace.hasAttribute("inert")).toBe(true);
+
+    await act(async () => {
+      dialog.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.querySelector('[role="dialog"]') === null);
+    await waitFor(dom, () => dom.window.document.activeElement === settingsTrigger);
+    expect(header.hasAttribute("inert")).toBe(false);
+    expect(sidebar.hasAttribute("inert")).toBe(false);
+    expect(workspace.hasAttribute("inert")).toBe(false);
+    expect(dom.window.document.activeElement).toBe(settingsTrigger);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("restores one safe Permission Broker card with sole status ownership and Deny focused by default", async () => {
     const dom = createDom();
     const harness = createHarness(permissionWaitingTimeline());
@@ -4288,6 +4335,68 @@ function createDom(width = 1200): JSDOM {
   dom.window.cancelAnimationFrame = (handle: number): void => dom.window.clearTimeout(handle);
   installDom(dom);
   return dom;
+}
+
+function installResizableMatchMedia(dom: JSDOM, initialWidth: number): (width: number) => Promise<void> {
+  let width = initialWidth;
+  const queries = new Map<string, {
+    readonly media: MediaQueryList;
+    readonly listeners: Set<(event: MediaQueryListEvent) => void>;
+    matches: boolean;
+  }>();
+  const queryMatches = (query: string): boolean => {
+    const max = query.match(/max-width:\s*(\d+)px/)?.[1];
+    const min = query.match(/min-width:\s*(\d+)px/)?.[1];
+    return (max === undefined || width <= Number(max)) && (min === undefined || width >= Number(min));
+  };
+
+  Object.defineProperty(dom.window, "innerWidth", { configurable: true, get: () => width });
+  Object.defineProperty(dom.window, "matchMedia", {
+    configurable: true,
+    value: (query: string): MediaQueryList => {
+      const existing = queries.get(query);
+      if (existing) return existing.media;
+      const listeners = new Set<(event: MediaQueryListEvent) => void>();
+      const record = { matches: queryMatches(query), listeners } as {
+        media: MediaQueryList;
+        listeners: Set<(event: MediaQueryListEvent) => void>;
+        matches: boolean;
+      };
+      const media = {
+        get matches() { return record.matches; },
+        media: query,
+        onchange: null,
+        addEventListener: (_type: string, listener: EventListenerOrEventListenerObject) => {
+          if (typeof listener === "function") listeners.add(listener as (event: MediaQueryListEvent) => void);
+        },
+        removeEventListener: (_type: string, listener: EventListenerOrEventListenerObject) => {
+          if (typeof listener === "function") listeners.delete(listener as (event: MediaQueryListEvent) => void);
+        },
+        addListener: (listener: (event: MediaQueryListEvent) => void) => listeners.add(listener),
+        removeListener: (listener: (event: MediaQueryListEvent) => void) => listeners.delete(listener),
+        dispatchEvent: () => true
+      } satisfies MediaQueryList;
+      record.media = media;
+      queries.set(query, record);
+      return media;
+    }
+  });
+
+  return async (nextWidth: number): Promise<void> => {
+    width = nextWidth;
+    await act(async () => {
+      for (const record of queries.values()) {
+        const nextMatches = queryMatches(record.media.media);
+        if (nextMatches === record.matches) continue;
+        record.matches = nextMatches;
+        const event = { matches: nextMatches, media: record.media.media } as MediaQueryListEvent;
+        for (const listener of record.listeners) listener(event);
+      }
+      dom.window.dispatchEvent(new dom.window.Event("resize"));
+      await settle(dom);
+      await settle(dom);
+    });
+  };
 }
 
 async function mountHome(dom: JSDOM, api: object): Promise<{
