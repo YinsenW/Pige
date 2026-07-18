@@ -924,4 +924,33 @@ describe("desktop shell build contract", () => {
     expect(mainSource).not.toContain("caught instanceof Error ? caught.message");
     expect(mainSource).not.toMatch(/recordEvent\([\s\S]{0,240}message:\s*caught\.message/);
   });
+
+  it("exposes only the parsed body-free Update Service check foundation", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const serviceSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/services/update-service.ts"),
+      "utf8"
+    );
+
+    expect(contractsSource).toContain("readonly updates:");
+    expect(contractsSource).toContain("readonly summary: () => Promise<UpdateSummary>");
+    expect(contractsSource).toContain("readonly check: (request: UpdateCheckRequest) => Promise<UpdateCheckResult>");
+    expect(contractsSource).toContain("readonly onStatusChanged:");
+    expect(schemasSource).toContain('export const UpdateCapabilitySchema = z.enum([');
+    expect(mainSource).toContain('ipcMain.handle("updates.summary"');
+    expect(mainSource).toContain('ipcMain.handle("updates.check"');
+    expect(mainSource).toContain('browserWindow.webContents.send("updates.statusChanged", parsed)');
+    expect(preloadSource).toContain('ipcRenderer.invoke("updates.summary")');
+    expect(preloadSource).toContain('ipcRenderer.invoke("updates.check", parsedRequest)');
+    expect(preloadSource).toContain('ipcRenderer.on("updates.statusChanged", handler)');
+    expect(serviceSource).toContain("class NoNetworkUpdateCheckAdapter");
+    expect(serviceSource).not.toContain("electron-updater");
+    expect(serviceSource).not.toContain("fetch(");
+    expect(serviceSource).not.toContain("https://");
+    expect(preloadSource).not.toContain("feedUrl");
+    expect(contractsSource).not.toContain("feedUrl");
+  });
 });

@@ -64,6 +64,8 @@ import type {
   SpeechSessionRequest,
   SpeechStartRequest,
   SupportBundlePreview,
+  UpdateCheckRequest,
+  UpdateStatusEvent,
   UpdateSourceStoragePolicyRequest,
   WindowLayoutRequest
 } from "@pige/contracts";
@@ -116,6 +118,10 @@ import {
   SpeechSessionEventSchema,
   SpeechSessionRequestSchema,
   SpeechStartRequestSchema,
+  UpdateCheckRequestSchema,
+  UpdateCheckResultSchema,
+  UpdateStatusEventSchema,
+  UpdateSummarySchema,
   WindowLayoutRequestSchema,
   WindowLayoutStateSchema,
   VaultActionResultSchema
@@ -194,6 +200,7 @@ import { guardSettingAction, type SettingActionConfirmation } from "./services/s
 import { getSettingsRegistry } from "./services/settings-registry";
 import { ToolchainService } from "./services/toolchain-service";
 import { SpeechService } from "./services/speech-service";
+import { NoNetworkUpdateCheckAdapter, UpdateService } from "./services/update-service";
 import { VaultService } from "./services/vault-service";
 import { WindowModeService } from "./services/window-mode-service";
 import { getWindowShellOptions } from "./window-shell-options";
@@ -234,6 +241,7 @@ let datasetQueryService: DatasetQueryService | undefined;
 let datasetService: DatasetService | undefined;
 let ocrService: OcrService | undefined;
 let speechService: SpeechService | undefined;
+let updateService: UpdateService | undefined;
 let latestSupportBundlePreview: SupportBundlePreview | undefined;
 const activeSupportBundleExports = new Map<string, {
   readonly senderId: number;
@@ -667,6 +675,27 @@ const getAppearanceService = (): AppearanceService => {
     appearanceService = new AppearanceService(getLocalSettingsStore(), app.getLocale());
   }
   return appearanceService;
+};
+
+const getUpdateService = (): UpdateService => {
+  if (!updateService) {
+    updateService = new UpdateService({
+      settings: getLocalSettingsStore(),
+      adapter: new NoNetworkUpdateCheckAdapter(),
+      currentVersion: app.getVersion(),
+      publish: publishUpdateStatus
+    });
+  }
+  return updateService;
+};
+
+const publishUpdateStatus = (event: UpdateStatusEvent): void => {
+  const parsed = UpdateStatusEventSchema.parse(event);
+  for (const browserWindow of mainWindows) {
+    if (!browserWindow.webContents.isDestroyed()) {
+      browserWindow.webContents.send("updates.statusChanged", parsed);
+    }
+  }
 };
 
 const getToolchainService = (): ToolchainService => {
@@ -1997,6 +2026,12 @@ ipcMain.handle("models.setDefaultModel", async (_event, request: SetDefaultModel
 ipcMain.handle("settings.appearance", () => getAppearanceService().summary());
 ipcMain.handle("settings.setLocale", (_event, request: SetLocaleRequest) => getAppearanceService().setLocale(request));
 ipcMain.handle("settings.registry", () => getSettingsRegistry());
+ipcMain.handle("updates.summary", () => UpdateSummarySchema.parse(getUpdateService().summary()));
+ipcMain.handle("updates.check", async (_event, request: UpdateCheckRequest) =>
+  UpdateCheckResultSchema.parse(
+    await getUpdateService().check(UpdateCheckRequestSchema.parse(request))
+  )
+);
 ipcMain.handle("backup.status", () => {
   const activeVault = getVaultService().current();
   if (!activeVault) return getBackupRestoreService().status(undefined);
@@ -2241,6 +2276,12 @@ app.whenReady().then(async () => {
   localSettingsStore = new LocalSettingsStore(app.getPath("userData"));
   permissionSettingsService = new PermissionSettingsService(getLocalSettingsStore());
   appearanceService = new AppearanceService(getLocalSettingsStore(), app.getLocale());
+  updateService = new UpdateService({
+    settings: getLocalSettingsStore(),
+    adapter: new NoNetworkUpdateCheckAdapter(),
+    currentVersion: app.getVersion(),
+    publish: publishUpdateStatus
+  });
   modelProviderRegistry = new ModelProviderRegistry(
     app.getPath("userData"),
     new JsonSecretStore(app.getPath("userData"), safeStorage)

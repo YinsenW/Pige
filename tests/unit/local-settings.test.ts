@@ -174,6 +174,31 @@ describe("local settings store", () => {
 
     expect(store.setAppLocale("fr").appLocale).toBe("fr");
   });
+
+  it("CAS-updates and preserves machine-local update status across unrelated settings writes", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-local-settings-test-"));
+    tempRoots.push(root);
+    const store = new LocalSettingsStore(root);
+
+    expect(store.getUpdateSettings()).toEqual({ revision: 0, channel: "alpha" });
+    expect(store.mutateUpdateSettings(0, (settings) => ({
+      ...settings,
+      lastCheck: { phase: "up_to_date", checkedAt: "2026-07-18T08:00:00.000Z" }
+    }))).toMatchObject({ status: "committed", settings: { revision: 1, channel: "alpha" } });
+    expect(store.mutateUpdateSettings(0, (settings) => settings)).toMatchObject({
+      status: "stale",
+      settings: { revision: 1 }
+    });
+
+    store.setAppLocale("ja");
+    store.setActiveVault(path.join(root, "Vault"), makeVaultSummary("vault_20260709_ab12cd", "Vault"));
+    store.clearActiveVault();
+    expect(store.getUpdateSettings()).toEqual({
+      revision: 1,
+      channel: "alpha",
+      lastCheck: { phase: "up_to_date", checkedAt: "2026-07-18T08:00:00.000Z" }
+    });
+  });
 });
 
 function makeVaultSummary(vaultId: string, name: string): VaultSummary {
