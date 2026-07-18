@@ -1188,8 +1188,7 @@ Service-level constraints:
 
 ### 5.7.2 Skill Registry Service
 
-Target responsibilities (current code has only checksum-bound machine-local summary,
-CAS disable and change events):
+Target responsibilities (current code has checksum-bound summary, CAS disable and events):
 
 - Manage built-in, vault-scoped, and machine-local Pige Skills.
 - Install Skills from explicit chat install requests, URL, Markdown file, or ZIP file.
