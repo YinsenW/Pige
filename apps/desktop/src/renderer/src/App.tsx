@@ -50,6 +50,10 @@ import type {
   ModelProfileSummary,
   NoteRenderResult,
   NoteResolveInlineReferenceRequest,
+  ReaderSelectionEndpoint,
+  ReaderSelectionIdentity,
+  ReaderSelectionResolveRequest,
+  ReaderSelectionResolveResult,
   OnboardingStatus,
   PigeErrorSummary,
   PermissionPendingRequest,
@@ -1258,6 +1262,8 @@ export function App(): React.JSX.Element {
         ) : view === "library" && activeVault ? (
           <LibraryPanel
             libraryList={libraryList}
+            activeVaultId={activeVault.vaultId}
+            onResolveReaderSelection={resolveReaderSelection}
             selectedNote={selectedNote}
             selectedNoteRelated={selectedNoteRelated}
             noteLoadingPageId={noteLoadingPageId}
@@ -1289,6 +1295,8 @@ export function App(): React.JSX.Element {
           selectedNote ? (
             <LibraryPanel
               libraryList={libraryList}
+              activeVaultId={activeVault.vaultId}
+              onResolveReaderSelection={resolveReaderSelection}
               selectedNote={selectedNote}
               selectedNoteRelated={selectedNoteRelated}
               noteLoadingPageId={noteLoadingPageId}
@@ -1691,6 +1699,8 @@ export function LibraryPanel(props: {
   readonly developmentNotice: DevelopmentNotice | null;
   readonly onClearDevelopment: () => void;
   readonly onCopyNote: (pageId: string) => Promise<boolean>;
+  readonly activeVaultId?: string;
+  readonly onResolveReaderSelection?: (request: ReaderSelectionResolveRequest) => Promise<ReaderSelectionResolveResult>;
   readonly onActivateInlineReference?: (href: string) => Promise<ReaderInlineReferenceActivation>;
   readonly onDevelopment: (capability: DevelopmentCapability) => void;
   readonly t: (key: string) => string;
@@ -1868,6 +1878,8 @@ export function LibraryPanel(props: {
         )}
         <NoteReader
           note={props.selectedNote}
+          {...(props.activeVaultId ? { activeVaultId: props.activeVaultId } : {})}
+          {...(props.onResolveReaderSelection ? { onResolveSelection: props.onResolveReaderSelection } : {})}
           related={props.selectedNoteRelated}
           relatedLoadingPageId={props.noteLoadingPageId}
           onOpenRelated={props.onOpenNote}
@@ -2276,8 +2288,39 @@ async function loadNoteRelated(
   }
 }
 
+function readerSelectionEndpoint(
+  reader: HTMLElement | null,
+  node: Node | null,
+  offset: number
+): ReaderSelectionEndpoint | null {
+  if (!reader || !node || !Number.isInteger(offset) || offset < 0) return null;
+  const element = node.nodeType === Node.ELEMENT_NODE ? node as Element : node.parentElement;
+  const segment = element?.closest<HTMLElement>("[data-pige-selection-segment]");
+  if (!segment || !reader.contains(segment)) return null;
+  const segmentId = segment.dataset.pigeSelectionSegment;
+  if (!segmentId || !/^readerseg_[a-f0-9]{16}$/u.test(segmentId)) return null;
+  try {
+    const range = reader.ownerDocument.createRange();
+    range.selectNodeContents(segment);
+    range.setEnd(node, offset);
+    return { segmentId, utf16Offset: range.toString().length };
+  } catch {
+    return null;
+  }
+}
+
+function createReaderSelectionRequestId(): string {
+  return `readerselreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
+}
+
+function resolveReaderSelection(request: ReaderSelectionResolveRequest): Promise<ReaderSelectionResolveResult> {
+  return window.pige.readerSelection.resolve(request);
+}
+
 export function NoteReader(props: {
   readonly note: NoteRenderResult;
+  readonly activeVaultId?: string;
+  readonly onResolveSelection?: (request: ReaderSelectionResolveRequest) => Promise<ReaderSelectionResolveResult>;
   readonly related: NoteRelatedState;
   readonly relatedLoadingPageId: string | null;
   readonly onOpenRelated: (pageId: string) => Promise<void>;
@@ -2295,6 +2338,7 @@ export function NoteReader(props: {
   const selectionMoreOpenRef = useRef(false);
   const selectionFocusOwnerRef = useRef<HTMLElement | null>(null);
   const selectionTextRef = useRef("");
+  const selectionResolveSequence = useRef(0);
   const currentSelectionRef = useRef<{
     readonly left: number;
     readonly top: number;
@@ -2314,6 +2358,11 @@ export function NoteReader(props: {
   const [selectionMoreActionIndex, setSelectionMoreActionIndex] = useState(0);
   const [selectionMorePlacement, setSelectionMorePlacement] = useState<"above" | "below">("below");
   const [selectionFeedback, setSelectionFeedback] = useState<string | null>(null);
+  const [selectionResolution, setSelectionResolution] = useState<
+    | { readonly kind: "copy_only" }
+    | { readonly kind: "checking" }
+    | { readonly kind: "resolved"; readonly selection: ReaderSelectionIdentity }
+  >({ kind: "copy_only" });
 
   useLayoutEffect(() => {
     const firstBlock = markdownBodyRef.current?.firstElementChild;
@@ -2343,12 +2392,14 @@ export function NoteReader(props: {
       if (selectionFocusTransition.current || selectionMoreOpenRef.current) return;
       const selection = window.getSelection();
       if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+        selectionResolveSequence.current += 1;
         currentSelectionRef.current = null;
         selectionTextRef.current = "";
         dismissedSelectionRef.current = null;
         if (selectionToolbarRef.current?.contains(document.activeElement)) return;
         setSelectionAnchor(null);
         setSelectionPosition(null);
+        setSelectionResolution({ kind: "copy_only" });
         return;
       }
       const range = selection.getRangeAt(0);
@@ -2406,6 +2457,38 @@ export function NoteReader(props: {
         setSelectionFeedback(null);
       }
       setSelectionPosition({ left: Math.max(12, anchor.left), top: Math.max(12, anchor.top) });
+      if (!selectionChanged) return;
+
+      const resolveSequence = ++selectionResolveSequence.current;
+      const renderContextId = props.note.renderContextId;
+      const activeVaultId = props.activeVaultId;
+      const resolveSelection = props.onResolveSelection;
+      const reader = readerRef.current;
+      const anchorEndpoint = readerSelectionEndpoint(reader, selection.anchorNode, selection.anchorOffset);
+      const focusEndpoint = readerSelectionEndpoint(reader, selection.focusNode, selection.focusOffset);
+      if (!renderContextId || !activeVaultId || !resolveSelection || !anchorEndpoint || !focusEndpoint) {
+        setSelectionResolution({ kind: "copy_only" });
+        return;
+      }
+      setSelectionResolution({ kind: "checking" });
+      const request: ReaderSelectionResolveRequest = {
+        apiVersion: 1,
+        requestId: createReaderSelectionRequestId(),
+        activeVaultId,
+        currentPageId: summary.pageId,
+        renderContextId,
+        anchor: anchorEndpoint,
+        focus: focusEndpoint
+      };
+      void resolveSelection(request).then((result) => {
+        if (resolveSequence !== selectionResolveSequence.current || result.requestId !== request.requestId) return;
+        if (props.note.renderContextId !== renderContextId || props.activeVaultId !== activeVaultId) return;
+        setSelectionResolution(result.status === "resolved"
+          ? { kind: "resolved", selection: result.selection }
+          : { kind: "copy_only" });
+      }).catch(() => {
+        if (resolveSequence === selectionResolveSequence.current) setSelectionResolution({ kind: "copy_only" });
+      });
     };
     const dismissOnScroll = (event: Event): void => {
       if (event.target instanceof Node && selectionToolbarRef.current?.contains(event.target)) return;
@@ -2425,12 +2508,13 @@ export function NoteReader(props: {
     window.addEventListener("resize", updateSelection);
     window.addEventListener("scroll", dismissOnScroll, true);
     return () => {
+      selectionResolveSequence.current += 1;
       document.removeEventListener("selectionchange", updateSelection);
       document.removeEventListener("pointerdown", dismissMenuOutside, true);
       window.removeEventListener("resize", updateSelection);
       window.removeEventListener("scroll", dismissOnScroll, true);
     };
-  }, [summary.pageId]);
+  }, [props.activeVaultId, props.note.renderContextId, props.onResolveSelection, summary.pageId]);
 
   useEffect(() => {
     if (!selectionAnchor) return;
@@ -2524,6 +2608,10 @@ export function NoteReader(props: {
     }
   };
 
+  const selectionActions = selectionResolution.kind === "resolved"
+    ? (["explain", "summarize", "link", "more"] as const)
+    : (["copy", "copyAsQuote"] as const);
+
   return (
     <article className="note-reader" ref={readerRef} tabIndex={-1}>
       {selectionAnchor && selectionPosition ? (
@@ -2540,16 +2628,16 @@ export function NoteReader(props: {
               return;
             }
             let nextIndex: number | null = null;
-            if (event.key === "ArrowRight") nextIndex = (selectionActionIndex + 1) % 4;
-            else if (event.key === "ArrowLeft") nextIndex = (selectionActionIndex + 3) % 4;
+            if (event.key === "ArrowRight") nextIndex = (selectionActionIndex + 1) % selectionActions.length;
+            else if (event.key === "ArrowLeft") nextIndex = (selectionActionIndex - 1 + selectionActions.length) % selectionActions.length;
             else if (event.key === "Home") nextIndex = 0;
-            else if (event.key === "End") nextIndex = 3;
+            else if (event.key === "End") nextIndex = selectionActions.length - 1;
             if (nextIndex === null) return;
             event.preventDefault();
             moveSelectionActionFocus(nextIndex);
           }}
         >
-          {(["explain", "summarize", "link", "more"] as const).map((action, index) => (
+          {selectionActions.map((action, index) => (
             <button
               key={action}
               ref={(element) => {
@@ -2563,6 +2651,10 @@ export function NoteReader(props: {
               aria-controls={action === "more" ? "reader-selection-more-menu" : undefined}
               onPointerDown={(event) => event.preventDefault()}
               onClick={() => {
+                if (action === "copy" || action === "copyAsQuote") {
+                  void copySelection(action === "copyAsQuote");
+                  return;
+                }
                 if (action === "more") {
                   toggleSelectionMore();
                   return;
@@ -2586,7 +2678,7 @@ export function NoteReader(props: {
                   event.stopPropagation();
                   selectionMoreOpenRef.current = false;
                   setSelectionMoreOpen(false);
-                  readerRef.current?.ownerDocument.defaultView?.requestAnimationFrame(() => selectionActionRefs.current.get(3)?.focus());
+                  readerRef.current?.ownerDocument.defaultView?.requestAnimationFrame(() => selectionActionRefs.current.get(selectionActions.length - 1)?.focus());
                   return;
                 }
                 let nextIndex: number | null = null;
@@ -5002,6 +5094,10 @@ function HomeComposer(props: {
           </button>
           <NoteReader
             note={selectedNote}
+            {...(props.activeVault && selectedNote.renderContextId ? {
+              activeVaultId: props.activeVault.vaultId,
+              onResolveSelection: resolveReaderSelection
+            } : {})}
             related={selectedNoteRelated}
             relatedLoadingPageId={noteLoadingPageId}
             onOpenRelated={openResult}

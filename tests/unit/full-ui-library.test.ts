@@ -5,7 +5,14 @@ import { JSDOM } from "jsdom";
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { LibraryListResult, NoteRenderResult, RetrievalSearchRequest, RetrievalSearchResult } from "@pige/contracts";
+import type {
+  LibraryListResult,
+  NoteRenderResult,
+  ReaderSelectionResolveRequest,
+  ReaderSelectionResolveResult,
+  RetrievalSearchRequest,
+  RetrievalSearchResult
+} from "@pige/contracts";
 import { filterLibraryPages, LibraryPanel, NoteReader } from "../../apps/desktop/src/renderer/src/App";
 import type { ReaderInlineReferenceActivation } from "../../apps/desktop/src/renderer/src/components/ReaderInlineReferenceSurface";
 import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.json";
@@ -746,6 +753,129 @@ describe("full UI Library", () => {
     dom.window.close();
   });
 
+  it("submits only exact render identity and keeps unresolved or stale selections copy-only", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const first = deferred<ReaderSelectionResolveResult>();
+    const requests: ReaderSelectionResolveRequest[] = [];
+    await act(async () => {
+      root.render(createElement(NoteReader, {
+        note: readerNote(),
+        activeVaultId: "vault_20260715_fullui01",
+        onResolveSelection: async (request) => {
+          requests.push(request);
+          if (requests.length === 1) return first.promise;
+          if (requests.length === 2) return {
+            apiVersion: 1,
+            requestId: request.requestId,
+            status: "invalid",
+            reason: "unsupported_content"
+          };
+          return {
+            apiVersion: 1,
+            requestId: request.requestId,
+            status: "resolved",
+            selection: {
+              pageId: request.currentPageId,
+              pageContentHash: `sha256:${"a".repeat(64)}`,
+              span: { unit: "utf8_bytes", start: 1, endExclusive: 9 },
+              selectedContentHash: `sha256:${"b".repeat(64)}`
+            }
+          };
+        },
+        related: null,
+        relatedLoadingPageId: null,
+        onOpenRelated: async () => undefined,
+        onDevelopment: () => undefined,
+        t
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    const paragraph = requireElement(container.querySelector(".markdown-body p"));
+    const selectionNode = requireElement(paragraph.querySelector("[data-pige-selection-segment]")).firstChild!;
+    let revision = 1;
+    Object.defineProperty(dom.window, "getSelection", {
+      configurable: true,
+      value: () => ({
+        isCollapsed: false,
+        rangeCount: 1,
+        anchorNode: selectionNode,
+        anchorOffset: revision - 1,
+        focusNode: selectionNode,
+        focusOffset: revision + 7,
+        toString: () => `private selected body ${revision}`,
+        getRangeAt: () => ({
+          commonAncestorContainer: paragraph,
+          startContainer: selectionNode,
+          startOffset: revision - 1,
+          endContainer: selectionNode,
+          endOffset: revision + 7,
+          getBoundingClientRect: () => ({
+            left: 80 + revision,
+            top: 90,
+            width: 120,
+            height: 18,
+            right: 200 + revision,
+            bottom: 108
+          })
+        })
+      })
+    });
+
+    await act(async () => {
+      dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+      await settle(dom);
+    });
+    await waitFor(dom, () => requests.length === 1);
+    expect(requests[0]).toMatchObject({
+      apiVersion: 1,
+      activeVaultId: "vault_20260715_fullui01",
+      currentPageId: "page_20260715_reader1111",
+      renderContextId: `notectx_${"c".repeat(32)}`,
+      anchor: { segmentId: "readerseg_aaaaaaaaaaaaaaaa", utf16Offset: 0 },
+      focus: { segmentId: "readerseg_aaaaaaaaaaaaaaaa", utf16Offset: 8 }
+    });
+    expect(JSON.stringify(requests[0])).not.toContain("private selected body");
+    expect(Array.from(container.querySelectorAll<HTMLButtonElement>('[role="toolbar"] > button')).map((button) => button.dataset.selectionAction))
+      .toEqual(["copy", "copyAsQuote"]);
+
+    revision = 2;
+    await act(async () => {
+      dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+      await settle(dom);
+    });
+    await waitFor(dom, () => requests.length === 2);
+    await waitFor(dom, () => container.querySelector('[data-selection-action="more"]') === null);
+    await act(async () => {
+      first.resolve({
+        apiVersion: 1,
+        requestId: requests[0]!.requestId,
+        status: "resolved",
+        selection: {
+          pageId: requests[0]!.currentPageId,
+          pageContentHash: `sha256:${"a".repeat(64)}`,
+          span: { unit: "utf8_bytes", start: 0, endExclusive: 8 },
+          selectedContentHash: `sha256:${"b".repeat(64)}`
+        }
+      });
+      await first.promise;
+      await settle(dom);
+    });
+    expect(container.querySelector('[data-selection-action="more"]')).toBeNull();
+
+    revision = 3;
+    await act(async () => {
+      dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+      await settle(dom);
+    });
+    await waitFor(dom, () => requests.length === 3);
+    await waitFor(dom, () => container.querySelector('[data-selection-action="more"]') !== null);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("measures compact selection actions, dismisses on scroll, and restores exact focus ownership", async () => {
     const dom = createDom();
     Object.defineProperty(dom.window, "innerWidth", { configurable: true, value: 360 });
@@ -759,6 +889,7 @@ describe("full UI Library", () => {
     await act(async () => {
       root.render(createElement(NoteReader, {
         note: readerNote(),
+        ...resolvedSelectionProps(),
         related: null,
         relatedLoadingPageId: null,
         onOpenRelated: async () => undefined,
@@ -768,7 +899,8 @@ describe("full UI Library", () => {
       await settle(dom);
     });
     const container = dom.window.document.querySelector("#root")!;
-    requireElement(container.querySelector(".markdown-body p"));
+    const paragraph = requireElement(container.querySelector(".markdown-body p"));
+    const selectionNode = requireElement(paragraph.querySelector("[data-pige-selection-segment]")).firstChild!;
     const originalBoundingClientRect = dom.window.HTMLElement.prototype.getBoundingClientRect;
     dom.window.HTMLElement.prototype.getBoundingClientRect = function getBoundingClientRect(): DOMRect {
       if ((this as HTMLElement).classList.contains("selection-toolbar")) {
@@ -792,8 +924,16 @@ describe("full UI Library", () => {
       value: () => ({
         isCollapsed: selectionCollapsed,
         rangeCount: selectionCollapsed ? 0 : 1,
+        anchorNode: selectionNode,
+        anchorOffset: 0,
+        focusNode: selectionNode,
+        focusOffset: 8,
         getRangeAt: () => ({
-          commonAncestorContainer: requireElement(container.querySelector(".markdown-body p")),
+          commonAncestorContainer: paragraph,
+          startContainer: selectionNode,
+          startOffset: 0,
+          endContainer: selectionNode,
+          endOffset: 8,
           getBoundingClientRect: () => ({ left: 330, top: 15, width: 20, height: 18, right: 350, bottom: 33 })
         })
       })
@@ -898,6 +1038,7 @@ describe("full UI Library", () => {
     await act(async () => {
       root.render(createElement(NoteReader, {
         note: readerNote(),
+        ...resolvedSelectionProps(),
         related: null,
         relatedLoadingPageId: null,
         onOpenRelated: async () => undefined,
@@ -908,6 +1049,7 @@ describe("full UI Library", () => {
     });
     const container = dom.window.document.querySelector("#root")!;
     const paragraph = requireElement(container.querySelector(".markdown-body p"));
+    const selectionNode = requireElement(paragraph.querySelector("[data-pige-selection-segment]")).firstChild!;
     const originalBoundingClientRect = dom.window.HTMLElement.prototype.getBoundingClientRect;
     dom.window.HTMLElement.prototype.getBoundingClientRect = function getBoundingClientRect(): DOMRect {
       if ((this as HTMLElement).classList.contains("selection-toolbar")) {
@@ -930,9 +1072,17 @@ describe("full UI Library", () => {
       value: () => ({
         isCollapsed: collapsed,
         rangeCount: collapsed ? 0 : 1,
+        anchorNode: selectionNode,
+        anchorOffset: 0,
+        focusNode: selectionNode,
+        focusOffset: 8,
         toString: () => "Selected first line\nSelected second line",
         getRangeAt: () => ({
           commonAncestorContainer: paragraph,
+          startContainer: selectionNode,
+          startOffset: 0,
+          endContainer: selectionNode,
+          endOffset: 8,
           getBoundingClientRect: () => ({ left: 90, top: 100, width: 120, height: 18, right: 210, bottom: 118 })
         })
       })
@@ -980,7 +1130,8 @@ describe("full UI Library", () => {
       await settle(dom);
     });
     expect(container.querySelector('[role="menu"]')).toBeNull();
-    await waitFor(dom, () => dom.window.document.activeElement === more);
+    await waitFor(dom, () => dom.window.document.activeElement === container.querySelector('[data-selection-action="more"]'));
+    more = requireElement(container.querySelector<HTMLButtonElement>('[data-selection-action="more"]'));
 
     await act(async () => {
       more.click();
@@ -1029,8 +1180,29 @@ function readerNote(): NoteRenderResult {
       language: "en",
       sourceIds: ["source_private_0001", "source_private_0002"]
     },
-    html: "<p>Selected note body</p>",
+    html: '<p><span data-pige-selection-segment="readerseg_aaaaaaaaaaaaaaaa">Selected note body</span></p>',
+    renderContextId: `notectx_${"c".repeat(32)}`,
     byteSize: 256
+  };
+}
+
+function resolvedSelectionProps(): {
+  readonly activeVaultId: string;
+  readonly onResolveSelection: (request: ReaderSelectionResolveRequest) => Promise<ReaderSelectionResolveResult>;
+} {
+  return {
+    activeVaultId: "vault_20260715_fullui01",
+    onResolveSelection: async (request) => ({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "resolved",
+      selection: {
+        pageId: request.currentPageId,
+        pageContentHash: `sha256:${"a".repeat(64)}`,
+        span: { unit: "utf8_bytes", start: 0, endExclusive: 8 },
+        selectedContentHash: `sha256:${"b".repeat(64)}`
+      }
+    })
   };
 }
 
