@@ -16,7 +16,7 @@
   ],
   "scripts": {
     "dev": "tsc -b tsconfig.packages.json --pretty false && install-electron --no && npm run dev --workspace @pige/desktop",
-    "build": "npm run build --workspaces --if-present",
+    "build": "tsc -b tsconfig.packages.json --pretty false --force && npm run build --workspace @pige/desktop",
     "build:native:macos-ocr": "node scripts/build/macos-vision-ocr-helper.mjs",
     "build:native:macos-speech": "node scripts/build/macos-speech-helper.mjs",
     "typecheck": "tsc -b tsconfig.packages.json --pretty false && npm run typecheck --workspace @pige/desktop",
