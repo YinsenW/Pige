@@ -306,15 +306,9 @@ suffix; external Markdown and user-owned originals remain outside it. Main execu
 the bound approved action and returns a bounded result to the same Job. Source/model/tool
 text cannot approve itself.
 
-The implemented current-action foundation binds exact vault, Job, actor/action identity,
-resource, policy/runtime and request digests; stores only body-free machine-local state;
-supports Deny/Allow once; and reconciles one-use consumption/restart fail closed. Its
-production external adapter registry is empty. An injected same-process read-only adapter
-proves the Broker core but not a shipped arbitrary-path, Skill, package or local-tool
-caller. Machine-local Ask/Remember/YOLO settings, bounded saved-grant inspection/revocation,
-and eligible desktop-local filesystem/network/shell YOLO auto-allow are implemented with
-revision fencing. Creating a new saved scoped grant and concrete Node/OS adapters are not
-claimed by this slice.
+Current-action authority is body-free, exact, one-use and recovery-safe. Main ships bounded
+no-follow folder/text reads and SSRF-safe fetch; protected roots stay denied and results
+face egress again. Mode/YOLO/revocation use CAS; grants and mutating Node tools remain open.
 
 ### 6.7 Arbitrary Shell Execution
 
@@ -451,12 +445,7 @@ YOLO Full Access rules:
 - Must require an explicit Settings action and a strong warning.
 - Must show a persistent visible status indicator while enabled.
 - Must be revocable immediately.
-- Enablement uses a main-owned strong warning followed by a short-lived, single-use token
-  bound to the exact renderer sender and machine-local permission revision. The token is
-  never durable and cannot be transferred between windows.
-- Each auto-allowed decision records that revision. Disable, mode change, grant revocation,
-  or any other permission-settings mutation invalidates it before consumption or adapter
-  execution.
+- A one-use sender/revision token follows the warning; settings changes revoke it.
 - Must still record permission decisions, operation records, command previews where available, affected paths, and data boundaries.
 - Must not bypass OS-level privacy prompts, app sandbox restrictions, update signature checks, malware protections, or filesystem errors.
 - Cannot be enabled by source content, prompt injection, a Skill, package, local tool, or model output.

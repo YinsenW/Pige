@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-17T09:20:00Z",
+  "reviewedAt": "2026-07-18T05:10:00Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -61,17 +61,17 @@
       "tests/unit/security-contract-schemas.test.ts",
       "package.json"
     ],
-    "scope": "Independent Planning review binds the External Managed Copy Backup implementation and safety repairs to the backup, source-storage, Job, settings, architecture, reliability and trace owners on origin/main 95b62cb.",
+    "scope": "Independent Planning review binds machine-local Permission Settings, revision-fenced YOLO, first-party read-only filesystem/network adapters, durable Job authority and model-egress reauthorization to the permission, settings, API, architecture, security and trace owners on origin/main aac6b47.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 130,
-    "reviewedSha256": "aa70dd2c09600dc8ee20dfa466a74bb2c29ec04c879a90d3727c8fb51f737488"
+    "reviewedSha256": "6ee5560034dac2634d1d9af290c6647ee5eb4fd907b2a577b342ac8385330771"
   },
   "reviewers": [
     {
-      "reviewerId": "external-managed-copy-backup-independent-review",
-      "task": "External managed-copy backup and restore contract-impact review",
+      "reviewerId": "permission-node-os-independent-review",
+      "task": "Permission Settings and read-only Node OS capability contract-impact review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -79,78 +79,78 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Product Planning did not author the Backup implementation and independently compared the exact stable-ID, binding, archive, restore, Job-recovery and disclosure behavior with owner contracts and trace evidence before binding this snapshot."
+      "independence": "Product Planning did not author the capability adapters and independently compared permission revision authority, protected resources, durable Job binding, model-egress reauthorization and renderer disclosure boundaries with owner contracts and trace evidence."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "external-managed-copy-backup-independent-review",
+      "reviewerId": "permission-node-os-independent-review",
       "blockerCount": 0,
-      "summary": "Existing Data, Source Storage, Job, Settings, Architecture and Reliability owners carry the complete backup/restore behavior without introducing a duplicate owner document or speculative UI owner."
+      "summary": "Existing Permission, Settings, API, Architecture and Security owners carry the capability behavior without introducing a duplicate owner document or granting renderer-side Node authority."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "external-managed-copy-backup-independent-review",
+      "reviewerId": "permission-node-os-independent-review",
       "blockerCount": 0,
-      "summary": "Owner text agrees that reachable Pige-managed copies are included, absolute bindings stay machine-local, missing or rebound roots wait durably, and restore rewrites included copies into vault ownership without false reconnect warnings."
+      "summary": "Owner text agrees that explicit YOLO is revision fenced, protected roots and raw credentials remain blocked, read-only tools bind to durable Jobs, and untrusted results face model-egress review."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "external-managed-copy-backup-independent-review",
+      "reviewerId": "permission-node-os-independent-review",
       "blockerCount": 0,
-      "summary": "New exact test evidence narrows the Backup Requirement and E9.01 gaps without promotion; semantic claims retain partial status and enumerate reconnect, incomplete-control, platform and coordinator residuals."
+      "summary": "Exact tests narrow the Permission and E8.03 gaps without promotion; semantic claims retain planned status and enumerate saved grants, mutating tools, UI, Operations and platform residuals."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "external-managed-copy-backup-independent-review",
+      "reviewerId": "permission-node-os-independent-review",
       "blockerCount": 0,
-      "summary": "Focused regressions identify inclusion, archive disclosure, binding and file races, durable reconnect recovery, deterministic in-vault restore mapping and truthful dependency counts while preserving current service boundaries."
+      "summary": "Focused regressions cover token replay, revision drift, protected roots, symlinks, SSRF, bounded output, cancellation, durable automatic decisions and restricted-result egress blocking."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "external-managed-copy-backup-independent-review",
+      "reviewerId": "permission-node-os-independent-review",
       "blockerCount": 0,
-      "summary": "No new owner document or durable Decision was introduced; existing subject owners, two bounded evidence entries and this review recipe carry the implementation delta without duplicating the backup policy."
+      "summary": "One bounded durable Decision plus existing subject owners and trace projections carry the implementation delta without a new owner document or duplicated permission policy."
     }
   ],
   "verification": [
     {
-      "command": "Independent implementation and owner-contract review of External Managed Copy Backup based on origin/main 95b62cb",
+      "command": "Independent implementation and owner-contract review of Permission Settings and read-only Node OS capabilities based on origin/main aac6b47",
       "status": "passed",
-      "evidence": "Review covers Main backup/coordinator implementation, executable schema, focused tests and every affected owner/trace projection; raw machine bindings and referenced-original payloads remain excluded."
+      "evidence": "Review covers Main permission/capability implementation, executable schemas, focused tests and affected owner/trace projections; raw paths, credentials and permission internals remain excluded from renderer IPC."
     },
     {
       "command": "npm run verify:docs && npm run verify:decisions && npm run verify:traceability",
       "status": "passed",
-      "evidence": "Links, whitespace, document map, PRD structure, decision records and narrowed Backup requirement/evidence mappings pass after the bounded owner synchronization."
+      "evidence": "Links, whitespace, document map, PRD structure, decision records and narrowed Permission requirement mappings pass after bounded owner synchronization."
     },
     {
       "command": "npm run verify:contracts && npm run verify:independent-documentation-review && npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "CON-001 through CON-004 remain green and the current recipe binds all governed roots plus the changed Backup code/tests without Requirement, Exit or Phase promotion."
+      "evidence": "CON-001 through CON-004 remain green and the recipe binds governed roots plus changed permission/capability code and tests without Requirement, Exit or Phase promotion."
     }
   ],
   "coordination": {
-    "taskId": "external-managed-copy-backup-main2932-20260717",
-    "taskTitle": "External managed-copy backup contract synchronization",
+    "taskId": "permission-node-os-mainaac6-20260718",
+    "taskTitle": "Permission Settings and read-only Node OS capability synchronization",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The candidate implements the existing default-inclusion and portable-restore policy additively; legacy manifests remain readable, referenced originals stay excluded, and no release scope, Requirement, Exit or Phase status changes.",
-    "acknowledgement": "Product Planning synchronized existing data, source, Job, settings, architecture, reliability and trace owners; this review binds current implementation without claiming unavailable reconnect or incomplete-backup controls."
+    "compatibility": "The candidate adds explicit machine-local authority and bounded read-only tools without ambient renderer access; existing vault tools, stronger confirmation layers and release scope remain unchanged.",
+    "acknowledgement": "Product Planning synchronized permission, settings, API, architecture, security and trace owners; this review does not claim saved-grant creation, write/delete/shell/package tools, visible UI or signed-platform acceptance."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "No renderer-safe external-root chooser/reconnect owner exists; the durable waiting_dependency is body-free but the current Settings surface cannot complete repair in place.",
-    "No explicit continue-incomplete flow exists; a required missing or rebound managed-copy root therefore blocks publication rather than silently omitting Pige-owned evidence.",
-    "BackupCoordinatorService retains its specialized Job transition/checkpoint owner pending continuous migration into the generic JobExecutionCoordinator.",
-    "Windows and signed packaged backup/restore evidence remain open, including cross-platform path identity and recovery behavior.",
-    "Broader complete memory/conversation fixtures, release-wide exclusion scans, richer Operation facts and final syscall/cross-file atomicity remain open; no Requirement, Exit or Phase status is promoted."
+    "Saved scoped grants can be inspected and revoked but are not yet created by a production authorization flow.",
+    "External write, delete, shell, package and arbitrary Node execution remain unavailable pending typed effect-specific owners and recovery semantics.",
+    "The polished Permission Settings renderer remains unbound until its exact UI-owned adapter is mechanically integrated.",
+    "Windows and signed packaged permission/capability evidence remain open, including OS-specific protected resources and cancellation behavior.",
+    "Operation visibility and release-wide permission history acceptance remain open; no Requirement, Exit or Phase status is promoted."
   ]
 }

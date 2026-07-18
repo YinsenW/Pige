@@ -65,10 +65,9 @@ Recommended v0.1 storage:
 
 ```txt
 OS app data/
-  settings.json                  machine-local non-secret settings
+  settings.json                  machine-local non-secret settings, permission mode/grants/YOLO
   provider-profiles.json          provider metadata without secrets
   model-profiles.json             model IDs and selected default model
-  settings.json                   machine-local settings, including permission mode, saved grants, and YOLO status
   local-capabilities.json         local tool/model/package status
   vault-bindings.json             vault_id -> machine-specific paths
   jobs/                           machine-local job records
@@ -178,9 +177,9 @@ This table is the v0.1 baseline. Implementation can split storage files differen
 | Memory enabled state | Agent & Memory | `vault_portable` for vault memory | Agent Memory Service | `.pige/config.json` | Yes | `none` | New memory reads/writes |
 | Memory backup inclusion | Agent & Memory/Backup flow | `vault_portable` | Backup Service | `.pige/config.json` | Yes | `none` | Next backup |
 | Exceptional intervention policy (`confirmation.*` compatibility) | Agent & Memory | `vault_portable` | Agent Orchestrator, Change Proposal Service | `.pige/config.json` | Yes | `explicit_confirmation` | New jobs; cannot turn uncertainty into routine prompts |
-| Default permission mode | Permissions & Privacy | `machine_local` | Permission Settings Service, Permission Broker | OS app data `settings.json` | No | `none`; YOLO is separate | Immediate, revision fenced |
-| Saved scoped grants | Permissions & Privacy | `permission_grant` | Permission Settings Service, Permission Broker | OS app data `settings.json` | No | `none` to inspect/revoke; creation remains separately authorized | Immediate, revision fenced |
-| YOLO Full Access | Permissions & Privacy | `permission_grant` | Permission Settings Service, Permission Broker | OS app data `settings.json` | No | `explicit_confirmation` | Immediate, visible and revocable |
+| Default permission mode | Permissions & Privacy | `machine_local` | Permission Settings/Broker | `settings.json` | No | `none` | CAS |
+| Saved scoped grants | Permissions & Privacy | `permission_grant` | Permission Settings/Broker | `settings.json` | No | `none` | CAS |
+| YOLO Full Access | Permissions & Privacy | `permission_grant` | Permission Settings/Broker | `settings.json` | No | `explicit_confirmation` | CAS/revocable |
 | Secret storage mode | Permissions & Privacy | `machine_local` plus `secret` | Settings and Secrets Service | OS app data + secret store | No | `explicit_warning` | Requires explicit warning |
 | Secret redaction policy | Permissions & Privacy | `machine_local` | Diagnostics Service | OS app data | No | `explicit_confirmation` | Immediate |
 | Vault-scoped Skill enablement | Skills | `vault_portable` | Skill Registry Service | `.pige/skills/` metadata or `.pige/config.json` | Yes | `permission_broker` | New Agent runs |
@@ -211,9 +210,9 @@ This compact index mirrors every entry currently returned by `settings.registry`
 | `models.providerApiKeys` | `explicit_warning` | Connect writes only after the disclosed gesture and probe; native confirmation remains for revision-fenced credential replacement |
 | `models.manualModelIds` | `none` | Validated as part of the confirmed provider workflow |
 | `models.defaultPiAgentModel` | `none` | Validated enabled-model selection |
-| `permissions.defaultMode` | `none` | Strict revision-fenced Permission Settings IPC; selecting Ask/Remember also disables YOLO |
-| `permissions.yoloEnabled` | `explicit_confirmation` | Main-owned native warning plus single-use sender/revision token before commit |
-| `permissions.savedGrants` | `none` | Body-free list and revision-fenced revoke IPC; grant creation is not implemented by this slice |
+| `permissions.defaultMode` | `none` | CAS; Ask/Remember disables YOLO |
+| `permissions.yoloEnabled` | `explicit_confirmation` | Warning plus one-use sender/revision token |
+| `permissions.savedGrants` | `none` | Body-free revoke; creation deferred |
 | `maintenance.localDatabaseReset` | `explicit_confirmation` | `guardSettingAction` before rebuildable-state deletion |
 | `diagnostics.health` | `none` | Derived read-only status |
 | `diagnostics.supportBundleExport` | `explicit_confirmation` | Preview plus main-process native save dialog |
@@ -235,9 +234,9 @@ Agent-affecting settings are not free-form prompt snippets. They compile into ty
 | Default Pi Agent model | `model.defaultModelProfileId` | Yes | Model Provider Registry, Agent Orchestrator | New model calls |
 | Provider profile metadata | protocol-bound availability and internal `model.cloudBoundary` | Yes, redacted | Model Provider Registry | New model calls |
 | Cloud-send policy (`ordinary_allowed` default) | `model.cloudSendPolicy` | Yes | Model Egress Policy, Model Provider Registry | New model calls and queued model jobs |
-| Default permission mode | `permissions.defaultMode` | Yes | Permission Settings Service, Permission Broker | Current policy rebuild and next eligible action |
-| Saved scoped grants | `permissions.savedGrantSummaryRefs` | Opaque IDs only; no raw details | Permission Settings Service, Permission Broker | Current policy rebuild and next eligible action |
-| YOLO Full Access | `permissions.yoloEnabled` | Yes, as status only | Permission Settings Service, Permission Broker | Current policy rebuild and next covered action |
+| Default permission mode | `permissions.defaultMode` | Yes | Permission Settings, Broker | Rebuild; next eligible action |
+| Saved scoped grants | `permissions.savedGrantSummaryRefs` | Opaque IDs only | Permission Settings, Broker | Rebuild; next eligible action |
+| YOLO Full Access | `permissions.yoloEnabled` | Status only | Permission Settings, Broker | Rebuild; next covered action |
 | App language | `language.appLocale` | Yes | I18N Service, Renderer | UI immediately; generated text only when policy says so |
 | OCR language hints | `language.ocrLanguageHints` | Maybe | OCR Service | New OCR jobs |
 | Agent behavior preferences | Workflow-specific policy fields | Yes | Agent Orchestrator | New Agent jobs |

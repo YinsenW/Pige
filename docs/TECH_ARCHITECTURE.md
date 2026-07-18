@@ -1191,14 +1191,13 @@ Service-level constraints:
   consumed/effect state fails final without replay or Retry.
 - The renderer receives only reviewed actor/action/resource summaries. Raw action input,
   paths, commands, hashes, credentials, bodies, records and transport errors stay in main.
-- The current foundation exposes Deny/Allow once only. Saved grants, Remember and YOLO
-  remain future layers and cannot be substituted into current-action authority.
+- Prompts expose Deny/Allow once; mode/YOLO/revocation use CAS; grants remain deferred.
 - Every applicable authorization layer must pass; a broader grant or YOLO result cannot stand in for destructive intent or weaken a stricter Model Egress Decision.
 - Raw credentials stay inside reviewed provider adapters behind secret references and are never returned to the requesting actor.
 - Renderer surfaces receive safe request/decision summaries, not permission-store internals.
 - A denial or revocation leaves prior safe durable outputs intact and produces an explainable job result.
-- The production external adapter registry is empty in this slice. Injected assembled
-  evidence proves the Broker lifecycle, not a shipped Skill/package/local-tool caller.
+- Main registers bounded folder/text/fetch adapters behind Broker/Job; protected roots and
+  authority stay out of preload, results face egress, and mutating tools remain absent.
 
 ### 5.7.2 Skill Registry Service
 

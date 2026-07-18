@@ -682,29 +682,28 @@ References:
 
 Status: Accepted
 Date: 2026-07-14
+Revised: 2026-07-18
 Supersedes: D-20260709-Permission-Modes-And-YOLO
 
 Decision:
 
-Pi may request arbitrary path, filesystem, command, and commit actions, but capability is
-not authority. Active-vault recoverable knowledge Markdown has standing prompt-free
-authority; a drop/picker gesture covers admission of that exact source. Other effects use
-Permission Broker unless an eligible exact grant/default applies. Destructive, policy,
-source-original, model-egress, and raw-secret boundaries remain stronger.
+Pi may request path, filesystem, command and commit actions, but capability is not
+authority. Active-vault recoverable Markdown and exact selected-source admission have
+standing authority; other effects use Permission Broker. Destructive, policy,
+source-original, model-egress and raw-secret boundaries remain stronger.
 
 Rationale:
 
-Pi must be free to plan useful actions and ask, without model output silently becoming
-authority over user-owned paths. Standing Markdown authority keeps normal growth quiet;
-scoped authorization keeps broader computer capability user-owned.
+Pi plans useful actions without model output becoming authority over user-owned paths.
 
 Consequences:
 
 - Tool ownership never bypasses the gate for its exact action.
-- Allow once binds vault, Job, actor/action versions and digests, capability, resource,
-  policy/runtime and request identity, then is consumed once through Job claim/CAS.
+- Allow once binds exact action/Job/policy/resource identity and is consumed once.
 - UI receives bounded system-authored summaries only; main executes the exact action.
 - Permission defaults cover eligible scopes only; stronger gates and raw-secret blocks remain.
+- Machine-local revision fences explicit YOLO and grant revocation. Main ships bounded
+  read-only folder/text/network tools; their untrusted output faces egress again.
 
 References:
 
@@ -2900,42 +2899,6 @@ Consequences:
 References:
 
 - `docs/API_AND_IPC_DESIGN.md`
-
-### D-20260718-Permission-Settings-Authority
-
-Status: Accepted
-Date: 2026-07-18
-
-Decision:
-
-Permission defaults, YOLO status, and saved-grant records are machine-local state owned by
-Permission Settings Service and projected through a revision-fenced, body-free renderer
-API. YOLO enablement requires a main-owned strong confirmation and a short-lived one-use
-sender/revision token. Eligible desktop-local filesystem, network, and shell actions may
-then receive a system-authored one-action decision bound to that revision.
-
-Rationale:
-
-The Agent may have broad capabilities without allowing renderer state, model output, or a
-stale preference snapshot to become authority. One machine-local revision gives policy
-compilation, Broker consumption, and adapter execution a common revocation boundary.
-
-Consequences:
-
-- Any permission-settings mutation invalidates outstanding YOLO authority before effect.
-- Destructive actions, OS permissions, restricted content, model egress, credentials,
-  settings/schema changes, and remote/client boundaries retain their stronger owners.
-- Saved grants can be projected and revoked without exposing raw actor/resource identity;
-  this slice does not create grants or claim concrete Node/OS adapters.
-- Permission settings stay excluded from backup/restore. Requirement, Exit, and Phase
-  status do not change.
-
-References:
-
-- `docs/API_AND_IPC_DESIGN.md`
-- `docs/AGENT_RUNTIME_POLICY_CONTEXT.md`
-- `docs/SETTINGS_AND_PREFERENCES.md`
-- `docs/SECURITY_THREAT_MODEL.md`
 
 ## 4. Deferred Decisions
 

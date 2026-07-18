@@ -642,8 +642,7 @@ export class JobsService implements PermissionedExternalJobPort {
   bindPermissionRequest(input: {
     readonly jobId: string;
     readonly requestId: string;
-    readonly bindingHash: string;
-    readonly waitForDecision?: boolean;
+    readonly bindingHash: string; readonly waitForDecision?: boolean;
   }): void {
     const vaultPath = this.#requireActiveVaultPath();
     const snapshot = this.#readJobSnapshot(vaultPath, input.jobId);
@@ -660,19 +659,8 @@ export class JobsService implements PermissionedExternalJobPort {
     }
     const permissionRef = createPermissionBindingRef(input.requestId, input.bindingHash);
     if (input.waitForDecision === false) {
-      this.#jobExecutionCoordinator(vaultPath).patch(snapshot, {
-        inputRefs: [permissionRef],
-        permissionRequestIds: [input.requestId],
-        checkpoints: [{
-          id: permissionCheckpointId(input.requestId),
-          step: "permission_authorization",
-          state: "not_started",
-          inputRefs: [permissionRef],
-          outputRefs: [],
-          resumeHint: "consume_revision_fenced_automatic_decision"
-        }],
-        message: "The automatic permission decision is bound before consumption."
-      });
+      const checkpoint = { id: permissionCheckpointId(input.requestId), step: "permission_authorization" as const, state: "not_started" as const, inputRefs: [permissionRef], outputRefs: [], resumeHint: "consume_revision_fenced_automatic_decision" };
+      this.#jobExecutionCoordinator(vaultPath).patch(snapshot, { inputRefs: [permissionRef], permissionRequestIds: [input.requestId], checkpoints: [checkpoint], message: "The automatic permission decision is bound before consumption." });
       return;
     }
     this.#jobExecutionCoordinator(vaultPath).settle(snapshot, {

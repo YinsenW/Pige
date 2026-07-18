@@ -618,42 +618,21 @@ Recent Work until resolution, then ordinary Job status ownership returns.
 Commands:
 
 - `permissions.resolve`
-- `permissions.settings.setDefaultMode`
-- `permissions.settings.prepareYoloEnable`
-- `permissions.settings.enableYolo`
-- `permissions.settings.disableYolo`
-- `permissions.settings.revokeGrant`
-- `permissions.settings.revokeAllGrants`
+- `permissions.settings.{setDefaultMode,prepareYoloEnable,enableYolo,disableYolo,revokeGrant,revokeAllGrants}`
 
 Queries:
 
-- `permissions.pending`
-- `permissions.settings.current`
+- `permissions.pending`, `permissions.settings.current`
 
-The current-action prompt accepts only `deny` or `allow_once`; creating a reusable scoped
-grant remains deferred. `permissions.pending({ requestId })` returns one bounded typed
-summary: request/Job IDs, reviewed actor display/type/version, capability/data boundary,
-action label, resource scope/kind/count, reason code and creation time. It never returns
-raw action input, paths, commands, hashes, credentials, bodies, store records, or model
-reasoning. The prompt solely owns its matching Job status/actions.
+Current-action prompts accept `deny`/`allow_once`; grant creation is deferred. DTOs bind
+request/Job/action/resource/policy identity, exclude bodies, paths, secrets and authority,
+and fail closed on drift.
 
-The body-free lifecycle binds exact vault, Job, actor/version/digest, action/version/input
-hash, capability, resource identity/scope, policy/runtime context and binding hash.
-`permissions.resolve({ requestId, jobId, decision })` commits the exact decision; allow
-resumes the same Job and consumes authority once only after current binding revalidation,
-while deny executes nothing. IPC uncertainty rereads durable truth; unreadable, stale,
-consumed-without-completion, or conflicting state fails closed without Retry authority.
-Renderer receives no filesystem or capability handle.
+Permission Settings projects revision, mode, YOLO and bounded grants. Mutations use CAS;
+YOLO consumes a one-use sender/revision token after the main warning.
 
-Permission Settings is a separate renderer-safe owner over machine-local state.
-`current()` projects only revision, effective default mode, YOLO status, and bounded saved
-grant summaries; actor IDs/digests, resource identity hashes, paths, bodies, and secrets do
-not cross IPC. All mutations compare `expectedRevision`. YOLO enablement is two-phase:
-`prepareYoloEnable` owns the native strong warning, then returns a short-lived, one-use
-token bound to the exact WebContents and revision; `enableYolo` consumes it. Sender loss,
-expiry, replay, or revision drift fails closed. Disable and grant revocation take effect
-immediately; the Permission Broker rechecks a YOLO-bound revision at consume and directly
-before adapter execution.
+Main registers bounded folder list, UTF-8 read and SSRF-safe fetch tools. Protected roots
+stay denied; results face egress again. Mutating/shell/package Node tools remain absent.
 
 ### 6.8 Settings, Providers, Tools
 
