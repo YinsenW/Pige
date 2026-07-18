@@ -148,8 +148,10 @@ import { PermissionSettingsService } from "./services/permission-settings-servic
 import { PermissionYoloConfirmationRegistry } from "./services/permission-yolo-confirmation-registry";
 import {
   createPermissionedExternalCapabilityRegistry,
-  PermissionedExternalCapabilityRegistry
+  PermissionedExternalCapabilityRegistry,
+  registerPermissionedExternalCapabilityAdapter
 } from "./services/permissioned-external-capability-service";
+import { createFirstPartyReadonlyNodeOsCapabilityAdapters } from "./services/readonly-node-os/first-party-readonly-node-os-capability-adapters";
 import { NotesService } from "./services/notes-service";
 import { OcrService } from "./services/ocr-service";
 import { MacOSSpeechAdapter } from "./services/macos-speech-adapter";
@@ -180,6 +182,7 @@ let permissionSettingsService: PermissionSettingsService | undefined;
 const permissionYoloConfirmationRegistry = new PermissionYoloConfirmationRegistry();
 const permissionYoloTrackedSenders = new Set<number>();
 let permissionedExternalCapabilityRegistry: PermissionedExternalCapabilityRegistry | undefined;
+let firstPartyReadonlyNodeOsCapabilitiesRegistered = false;
 let windowModeService: WindowModeService | undefined;
 let backupRestoreService: BackupRestoreService | undefined;
 let backupCoordinatorService: BackupCoordinatorService | undefined;
@@ -711,6 +714,14 @@ const getJobsService = (): JobsService => {
 
 const getPermissionedExternalCapabilityRegistry = (): PermissionedExternalCapabilityRegistry => {
   if (!permissionedExternalCapabilityRegistry) {
+    if (!firstPartyReadonlyNodeOsCapabilitiesRegistered) {
+      for (const adapter of createFirstPartyReadonlyNodeOsCapabilityAdapters({
+        protectedRoots: getReadonlyNodeOsProtectedRoots()
+      })) {
+        registerPermissionedExternalCapabilityAdapter(adapter);
+      }
+      firstPartyReadonlyNodeOsCapabilitiesRegistered = true;
+    }
     permissionedExternalCapabilityRegistry = createPermissionedExternalCapabilityRegistry(
       getPermissionBrokerService(),
       getJobsService()
@@ -718,6 +729,25 @@ const getPermissionedExternalCapabilityRegistry = (): PermissionedExternalCapabi
   }
   return permissionedExternalCapabilityRegistry;
 };
+
+function getReadonlyNodeOsProtectedRoots(): readonly string[] {
+  const home = app.getPath("home");
+  return [
+    app.getPath("userData"),
+    app.getPath("sessionData"),
+    app.getPath("logs"),
+    app.getPath("crashDumps"),
+    join(home, ".aws"),
+    join(home, ".codex"),
+    join(home, ".docker"),
+    join(home, ".gnupg"),
+    join(home, ".kube"),
+    join(home, ".netrc"),
+    join(home, ".npmrc"),
+    join(home, ".ssh"),
+    join(home, "Library", "Keychains")
+  ];
+}
 
 const getDocumentParserService = (): DocumentParserService => {
   if (!documentParserService) documentParserService = new DocumentParserService();

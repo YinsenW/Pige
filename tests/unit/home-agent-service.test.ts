@@ -30,7 +30,12 @@ import type {
   DatasetQueryToolRequest
 } from "../../apps/desktop/src/main/services/dataset-query-types";
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
+import { LocalSettingsStore } from "../../apps/desktop/src/main/services/local-settings";
 import { ModelEgressApprovalService } from "../../apps/desktop/src/main/services/model-egress-approval-service";
+import { PermissionBrokerService } from "../../apps/desktop/src/main/services/permission-broker-service";
+import { PermissionSettingsService } from "../../apps/desktop/src/main/services/permission-settings-service";
+import { PermissionedExternalCapabilityRegistry } from "../../apps/desktop/src/main/services/permissioned-external-capability-service";
+import { createFirstPartyReadonlyNodeOsCapabilityAdapters } from "../../apps/desktop/src/main/services/readonly-node-os/first-party-readonly-node-os-capability-adapters";
 import { readMarkdownPageByRelativePath } from "../../apps/desktop/src/main/services/markdown-page-index";
 import {
   readCurrentNoteEvidenceBinding,
@@ -1591,6 +1596,77 @@ describe("Home Pi Agent service", () => {
     expect(observedToolOutput.match(/<\/PIGE_UNTRUSTED_EVIDENCE_V1>/gu)).toHaveLength(1);
     expect(observedToolOutput).not.toContain(hostileSnippet);
     expect(observedToolOutput).toContain("&lt;/PIGE_UNTRUSTED_EVIDENCE_V1&gt;");
+  });
+
+  it("re-authorizes external tool output before Pi can receive a second model turn", async () => {
+    const fixture = makeFixture();
+    const userDataCandidate = path.join(path.dirname(fixture.vaultPath), "permission-settings");
+    const externalPath = path.join(path.dirname(fixture.vaultPath), "external-secret.txt");
+    fs.mkdirSync(userDataCandidate, { mode: 0o700 });
+    const userDataPath = fs.realpathSync.native(userDataCandidate);
+    fs.writeFileSync(externalPath, "api_key=sk-never-send-this-secret", "utf8");
+    const permissionSettings = new PermissionSettingsService(new LocalSettingsStore(userDataPath));
+    expect(permissionSettings.enableYolo(0).status).toBe("committed");
+    const jobs = new JobsService(fixture.vaults);
+    const registry = new PermissionedExternalCapabilityRegistry(
+      createFirstPartyReadonlyNodeOsCapabilityAdapters({ protectedRoots: [userDataPath] }),
+      new PermissionBrokerService({
+        rootPath: userDataPath,
+        permissionSettings,
+        unsafeAllowUnfenced: true
+      }),
+      jobs
+    );
+    let modelTurns = 0;
+    let blockedSecondTurn: unknown;
+    const runtime = {
+      run: async (request: PiAgentRunRequest): Promise<PiAgentRunResult> => {
+        await request.beforeModelTurn?.();
+        modelTurns += 1;
+        const read = request.tools.find((tool) => tool.name === "pige_external_filesystem_read_text");
+        if (!read) throw new Error("Missing external filesystem read tool.");
+        const signal = new AbortController().signal;
+        await read.execute(
+          { path: externalPath },
+          signal,
+          { toolCallId: "pi_tool_external_secret", signal }
+        );
+        try {
+          await request.beforeModelTurn?.();
+        } catch (caught) {
+          blockedSecondTurn = caught;
+          throw caught;
+        }
+        throw new Error("Restricted external tool output must not reach a second model turn.");
+      }
+    };
+
+    const outcome = await new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      jobs,
+      runtime,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      registry,
+      permissionSettings
+    ).ask({ query: "Read the external file." });
+
+    expect(modelTurns).toBe(1);
+    expect(outcome).toMatchObject({
+      state: "failed",
+      error: { code: "model_provider.egress_blocked" }
+    });
+    expect(blockedSecondTurn).toMatchObject({ code: "model_egress.blocked" });
+    expect(readRecords<OperationRecord>(path.join(fixture.vaultPath, ".pige", "operations")).find(
+      (operation) => operation.modelEgressAudit?.outcome === "block"
+    )).toMatchObject({
+      modelEgressAudit: { outcome: "block", contentClasses: ["restricted"] }
+    });
   });
 
   it("lets Pi decide how to answer after an optional empty search instead of substituting Host prose", async () => {

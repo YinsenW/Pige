@@ -600,6 +600,32 @@ describe("desktop shell build contract", () => {
     }
   });
 
+  it("registers first-party read-only Node OS capabilities only behind the main-owned permission registry", () => {
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
+
+    expect(mainSource).toContain("createFirstPartyReadonlyNodeOsCapabilityAdapters({");
+    expect(mainSource).toContain("registerPermissionedExternalCapabilityAdapter(adapter)");
+    expect(mainSource).toContain('join(home, ".ssh")');
+    expect(mainSource).toContain('join(home, "Library", "Keychains")');
+    expect(mainSource.indexOf("createFirstPartyReadonlyNodeOsCapabilityAdapters({"))
+      .toBeLessThan(mainSource.indexOf("createPermissionedExternalCapabilityRegistry("));
+
+    for (const toolName of [
+      "pige_external_filesystem_list",
+      "pige_external_filesystem_read_text",
+      "pige_external_network_fetch_text"
+    ]) {
+      expect(preloadSource).not.toContain(toolName);
+      expect(rendererSource).not.toContain(toolName);
+    }
+    for (const ambientNodeApi of ["node:fs", "node:child_process", "process.env"]) {
+      expect(preloadSource).not.toContain(ambientNodeApi);
+      expect(rendererSource).not.toContain(ambientNodeApi);
+    }
+  });
+
   it("keeps durable proposal recovery internal while renderer decisions fail closed", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const approveHandler = mainSource.slice(

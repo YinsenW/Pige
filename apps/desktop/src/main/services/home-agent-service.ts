@@ -89,7 +89,8 @@ import {
   type PiAgentRunResult,
   type PiAgentHistoryMessage,
   type PigeAgentToolCallContext,
-  type PigeAgentToolDefinition
+  type PigeAgentToolDefinition,
+  type PigeAgentToolResult
 } from "./pi-agent-runtime-adapter";
 import {
   createRetrievalEvidencePrivacyHash,
@@ -1299,6 +1300,7 @@ export class HomeAgentService {
     let datasetServiceResult: DatasetQueryExecutionResult | undefined;
     let datasetResult: DatasetQueryExecutionResult | undefined;
     let approvedDatasetEvidenceHash: string | undefined;
+    const externalToolEvidence: HomeExternalToolEvidence[] = [];
 
     const readBoundCurrentNote = (): CurrentNoteEvidenceBinding => {
       if (!currentNoteScope || !currentNoteRef?.checksum) {
@@ -1390,7 +1392,8 @@ export class HomeAgentService {
         currentUrlEvidence,
         urlEvidenceInspected,
         currentDatasetEvidence,
-        currentNoteToolUsed ? currentNoteBinding : undefined
+        currentNoteToolUsed ? currentNoteBinding : undefined,
+        externalToolEvidence
       );
       const evidencePrivacy = currentNoteBinding
         ? currentNoteBinding.snapshot
@@ -1416,6 +1419,7 @@ export class HomeAgentService {
           evidencePrivacy.privateContent ||
           currentUrlEvidence?.privateContent === true ||
           currentDatasetEvidence?.privateContent === true ||
+          externalToolEvidence.length > 0 ||
           historyContentClasses.includes("private"),
         sensitiveContent:
           evidencePrivacy.sensitiveContent ||
@@ -1440,7 +1444,8 @@ export class HomeAgentService {
         currentDatasetEvidence,
         currentNoteScope,
         currentNoteBinding,
-        normalizeContentClasses(historyContentClasses)
+        normalizeContentClasses(historyContentClasses),
+        externalToolEvidence
       );
       const baseDecisionHash = createModelEgressDecisionHash(decision);
       const evidenceBindingDrifted =
@@ -1845,7 +1850,9 @@ export class HomeAgentService {
       ...tool,
       execute: async (args, toolSignal, context) => {
         try {
-          return await tool.execute(args, toolSignal, context);
+          const result = await tool.execute(args, toolSignal, context);
+          externalToolEvidence.push(projectExternalToolEvidence(tool.name, result));
+          return result;
         } finally {
           session.current = this.#jobs.readAgentTurnJob(jobId) ?? session.current;
         }
@@ -2799,7 +2806,8 @@ function createHomeModelPayload(
   urlEvidence: HomeAgentUrlEvidence | undefined,
   urlEvidenceInspected: boolean,
   datasetEvidence?: DatasetQueryEvidenceSnapshot,
-  currentNoteEvidence?: CurrentNoteEvidenceBinding
+  currentNoteEvidence?: CurrentNoteEvidenceBinding,
+  externalToolEvidence: readonly HomeExternalToolEvidence[] = []
 ): string {
   return JSON.stringify({
     query,
@@ -2814,8 +2822,18 @@ function createHomeModelPayload(
         ? createUntrustedUrlEvidenceEnvelope(urlEvidence)
         : createUntrustedUrlReceiptEnvelope(urlEvidence)
       : null,
-    datasetEvidence: datasetEvidence?.modelText ?? null
+    datasetEvidence: datasetEvidence?.modelText ?? null,
+    externalToolEvidence
   });
+}
+
+interface HomeExternalToolEvidence {
+  readonly toolName: string;
+  readonly result: PigeAgentToolResult;
+}
+
+function projectExternalToolEvidence(toolName: string, result: PigeAgentToolResult): HomeExternalToolEvidence {
+  return Object.freeze({ toolName, result });
 }
 
 function projectDatasetResultForHome(result: DatasetQueryExecutionResult): DatasetQueryExecutionResult {
@@ -2967,7 +2985,8 @@ function createHomeEvidenceSummaryHash(
   datasetEvidence?: DatasetQueryEvidenceSnapshot,
   scope?: AgentTurnCurrentNoteScope,
   currentNoteEvidence?: CurrentNoteEvidenceBinding,
-  historyContentClasses: readonly ModelEgressContentClass[] = ["ordinary"]
+  historyContentClasses: readonly ModelEgressContentClass[] = ["ordinary"],
+  externalToolEvidence: readonly HomeExternalToolEvidence[] = []
 ): string {
   const noteContext = currentNoteEvidence
     ? buildNoteAgentContextPack(currentNoteEvidence)
@@ -2978,6 +2997,7 @@ function createHomeEvidenceSummaryHash(
     modelIdentityHash: binding.modelIdentityHash,
     retrievalScope: scope ?? null,
     historyContentClasses: normalizeContentClasses(historyContentClasses),
+    externalToolEvidenceHashes: externalToolEvidence.map((evidence) => hashValue(JSON.stringify(evidence))),
     evidence: searchResult
       ? buildHomeQueryContextPack(searchResult).selectedEvidence.map(({ item, citation }) => ({
           pageId: item.summary.pageId,
