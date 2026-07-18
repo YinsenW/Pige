@@ -224,6 +224,10 @@ interface HomeAgentJobSession {
   modelUsage: HomeAgentModelUsage;
 }
 
+export type HomeAgentReaderSelectionPublication =
+  | { readonly status: "applied"; readonly operationId: string }
+  | { readonly status: "review_required"; readonly proposalId: string };
+
 export interface HomeAgentReaderSelectionMutationPort {
   apply(input: {
     readonly vaultPath: string;
@@ -231,7 +235,7 @@ export interface HomeAgentReaderSelectionMutationPort {
     readonly selection: ReaderSelectionIdentity;
     readonly replacement: string;
     readonly action: ReaderSelectionTransformAction;
-  }): { readonly operationId: string };
+  }): HomeAgentReaderSelectionPublication;
 }
 
 export interface PreparedSourceAgentTurn {
@@ -872,7 +876,7 @@ export class HomeAgentService {
             text
           })
         : undefined;
-      const { execution, assistantEvent, completedSourceIds } = await this.#jobs.runTextAgentTurn(
+      const { execution, assistantEvent, completedSourceIds, reviewRequired } = await this.#jobs.runTextAgentTurn(
         activeSession.current.id,
         async (jobExecution) => {
           activeSession.current = jobExecution.job;
@@ -906,23 +910,42 @@ export class HomeAgentService {
             execution.answer
           );
           const completedSourceIds = Array.from(new Set([...sourceIds, ...execution.sourceIds]));
-          const transformOperationId = this.#applyReaderSelectionTransform(
+          const transformPublication = this.#applyReaderSelectionTransform(
             vaultPath,
             activeSession.current,
             execution.answer
           );
-          this.#completeJob(
+          const reviewRequired = this.#settleJobAfterAssistant(
             activeSession,
             execution.answer,
             assistantEvent.id,
             completedSourceIds,
             assistantEvent.contentHash,
-            transformOperationId ? [transformOperationId] : []
+            transformPublication
           );
-          return { execution, assistantEvent, completedSourceIds };
+          return { execution, assistantEvent, completedSourceIds, reviewRequired };
         }
       );
       tailEventId = assistantEvent.id;
+      if (reviewRequired) {
+        return {
+          requestId,
+          jobId: activeSession.current.id,
+          conversationEventId: preservedTurn.event.id,
+          conversationId: preservedTurn.event.conversationId,
+          tailEventId: assistantEvent.id,
+          state: "waiting",
+          modelUsage: actualHomeModelUsage(activeSession),
+          sourceIds: completedSourceIds,
+          error: createErrorSummary(
+            "agent_runtime.review_required",
+            "errors.agent_runtime.review_required",
+            false,
+            "review_proposal",
+            "info"
+          )
+        };
+      }
       return {
         requestId,
         jobId: activeSession.current.id,
@@ -1000,20 +1023,58 @@ export class HomeAgentService {
       const answer = readAssistantAnswer(assistant);
       session.modelInvocationStarted = true;
       session.modelUsage = session.current.privacy?.usedCloudModel === true ? "cloud" : "local";
+      if (session.current.state === "awaiting_review") {
+        return {
+          requestId,
+          jobId: session.current.id,
+          conversationEventId: preservedTurn.event.id,
+          conversationId: preservedTurn.event.conversationId,
+          tailEventId: assistant.id,
+          state: "waiting",
+          modelUsage: actualHomeModelUsage(session),
+          sourceIds: collectAgentTurnSourceIds(session.current, sourceIds),
+          error: createErrorSummary(
+            "agent_runtime.review_required",
+            "errors.agent_runtime.review_required",
+            false,
+            "review_proposal",
+            "info"
+          )
+        };
+      }
       if (session.current.state !== "completed" && session.current.state !== "completed_with_warnings") {
-        const transformOperationId = this.#applyReaderSelectionTransform(
+        const publication = this.#applyReaderSelectionTransform(
           vaultPath,
           session.current,
           answer
         );
-        this.#completeJob(
+        const reviewRequired = this.#settleJobAfterAssistant(
           session,
           answer,
           assistant.id,
           collectAgentTurnSourceIds(session.current, sourceIds),
           assistant.contentHash,
-          transformOperationId ? [transformOperationId] : []
+          publication
         );
+        if (reviewRequired) {
+          return {
+            requestId,
+            jobId: session.current.id,
+            conversationEventId: preservedTurn.event.id,
+            conversationId: preservedTurn.event.conversationId,
+            tailEventId: assistant.id,
+            state: "waiting",
+            modelUsage: actualHomeModelUsage(session),
+            sourceIds: collectAgentTurnSourceIds(session.current, sourceIds),
+            error: createErrorSummary(
+              "agent_runtime.review_required",
+              "errors.agent_runtime.review_required",
+              false,
+              "review_proposal",
+              "info"
+            )
+          };
+        }
       }
       return {
         requestId,
@@ -1153,11 +1214,23 @@ export class HomeAgentService {
         const durableAssistant = this.#conversations.findAssistantTurn(vaultPath, preserved.locator, job.id);
         if (durableAssistant) {
           session.modelInvocationStarted = true;
-          const transformOperationId = this.#applyReaderSelectionTransform(
+          const publication = this.#applyReaderSelectionTransform(
             vaultPath,
             session.current,
             readAssistantAnswer(durableAssistant)
           );
+          if (publication?.status === "review_required") {
+            this.#settleJobAfterAssistant(
+              session,
+              readAssistantAnswer(durableAssistant),
+              durableAssistant.id,
+              collectAgentTurnSourceIds(session.current, []),
+              durableAssistant.contentHash,
+              publication
+            );
+            waiting += 1;
+            continue;
+          }
           session.current = this.#jobs.adoptAgentTurnCompletion(session.current, {
             checkpointId: "agent_turn_assistant_event_persisted",
             message: "Recovered the durable assistant result without another model call.",
@@ -1167,12 +1240,12 @@ export class HomeAgentService {
                 id: durableAssistant.id,
                 role: "agent_turn_assistant_event",
                 ...(durableAssistant.contentHash ? { checksum: durableAssistant.contentHash } : {})
-              }, ...(transformOperationId ? [{
+              }, ...(publication?.status === "applied" ? [{
                 kind: "operation" as const,
-                id: transformOperationId,
+                id: publication.operationId,
                 role: "reader_selection_transform_operation"
               }] : [])],
-              ...(transformOperationId ? { operationIds: [transformOperationId] } : {}),
+              ...(publication?.status === "applied" ? { operationIds: [publication.operationId] } : {}),
               privacy: modelInvocationPrivacy(session)
             }
           });
@@ -1229,21 +1302,22 @@ export class HomeAgentService {
             ...(job.sourceId ? [job.sourceId] : []),
             ...execution.sourceIds
           ]));
-          const transformOperationId = this.#applyReaderSelectionTransform(
+          const publication = this.#applyReaderSelectionTransform(
             vaultPath,
             session.current,
             execution.answer
           );
-          this.#completeJob(
+          this.#settleJobAfterAssistant(
             session,
             execution.answer,
             assistantEvent.id,
             completedSourceIds,
             assistantEvent.contentHash,
-            transformOperationId ? [transformOperationId] : []
+            publication
           );
         });
-        completed += 1;
+        if (session.current.state === "awaiting_review") waiting += 1;
+        else completed += 1;
       } catch (caught) {
         const failure = toHomeAgentFailure(caught);
         const cancellationHandled = caught instanceof PigeDomainError &&
@@ -2263,7 +2337,7 @@ export class HomeAgentService {
     vaultPath: string,
     job: JobRecord,
     answer: AgentTurnAnswer
-  ): string | undefined {
+  ): HomeAgentReaderSelectionPublication | undefined {
     const binding = readReaderSelectionTransformBinding(job);
     if (!binding) return undefined;
     if (!this.#readerSelectionMutations) {
@@ -2278,7 +2352,49 @@ export class HomeAgentService {
       selection: binding.selection,
       replacement: answer.answer,
       action: binding.action
-    }).operationId;
+    });
+  }
+
+  #settleJobAfterAssistant(
+    session: HomeAgentJobSession,
+    result: AgentTurnAnswer,
+    assistantEventId: string,
+    sourceIds: readonly string[],
+    assistantContentHash: string | undefined,
+    publication: HomeAgentReaderSelectionPublication | undefined
+  ): boolean {
+    if (publication?.status === "review_required") {
+      session.current = this.#jobs.settleAgentTurnJob(session.current, {
+        kind: "waiting",
+        reason: "review",
+        proposalId: publication.proposalId,
+        message: "The Reader transform requires bounded review before any note bytes are changed.",
+        facts: {
+          stage: "planning",
+          outputRefs: [
+            ...mergeAgentTurnOutputRefs(
+              session.current,
+              assistantEventId,
+              sourceIds,
+              result,
+              assistantContentHash,
+              []
+            ),
+            { kind: "proposal", id: publication.proposalId, role: "awaiting_review" }
+          ]
+        }
+      });
+      return true;
+    }
+    this.#completeJob(
+      session,
+      result,
+      assistantEventId,
+      sourceIds,
+      assistantContentHash,
+      publication?.status === "applied" ? [publication.operationId] : []
+    );
+    return false;
   }
 
   #completeJob(

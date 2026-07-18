@@ -124,11 +124,34 @@ describe("Reader selection mutation", () => {
     })).toThrowError(expect.objectContaining({ code: "agent_ingest.update_content_restricted" }));
     expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(fixture.markdown);
   });
+
+  it("applies an approved awaiting-review replacement through the same reversible writer", () => {
+    const fixture = makeFixture(undefined, "expand", "awaiting_review");
+    const result = applyReaderSelectionPageUpdate({
+      vaultPath: fixture.vaultPath,
+      job: fixture.job,
+      target: readCurrentNotePageForMutation(fixture.vaultPath, fixture.selection.pageId),
+      selection: fixture.selection,
+      replacement: "The reviewed expansion is now approved.",
+      action: "expand"
+    });
+
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toContain("The reviewed expansion is now approved.");
+    const activity = new KnowledgeActivityService(fixture.vaults);
+    expect(activity.list().activities[0]).toMatchObject({
+      operationId: result.operation.id,
+      kind: "update_page",
+      canUndo: true
+    });
+    expect(activity.undo({ operationId: result.operation.id })).toMatchObject({ status: "undone" });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(fixture.markdown);
+  });
 });
 
 function makeFixture(
   selectedText = "The original selected passage remains private.",
-  transformAction: "translate" | "polish" | "expand" = "polish"
+  transformAction: "translate" | "polish" | "expand" = "polish",
+  lifecycle: "completed" | "awaiting_review" = "completed"
 ): {
   readonly vaultPath: string;
   readonly pagePath: string;
@@ -179,10 +202,17 @@ function makeFixture(
     }
   });
   const running = jobs.beginAgentTurnJob(created, { stage: "planning", message: "Reader transform started." });
-  const job = jobs.settleAgentTurnJob(running, {
-    kind: "completed",
-    message: "Reader transform model turn completed."
-  });
+  const job = jobs.settleAgentTurnJob(running, lifecycle === "completed"
+    ? {
+        kind: "completed",
+        message: "Reader transform model turn completed."
+      }
+    : {
+        kind: "waiting",
+        reason: "review",
+        proposalId: "proposal_20260718_readerreview",
+        message: "Reader transform waits for review."
+      });
   return {
     vaultPath,
     pagePath,

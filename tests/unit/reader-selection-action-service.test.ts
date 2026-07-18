@@ -150,7 +150,7 @@ describe("Reader selection action service", () => {
     const service = new ReaderSelectionActionService(
       fixture.vaults,
       { submitTurn },
-      { readJob, readAppliedOperationId }
+      { readJob, readAppliedOperationId, readProposal: () => undefined }
     );
     const request = {
       ...actionRequest(fixture.selection, "explain"),
@@ -200,7 +200,8 @@ describe("Reader selection action service", () => {
     }));
     const service = new ReaderSelectionActionService(fixture.vaults, { submitTurn }, {
       readJob: () => ({ id: "job_20260718_ineligible12" } as never),
-      readAppliedOperationId: () => undefined
+      readAppliedOperationId: () => undefined,
+      readProposal: () => undefined
     });
     const result = await service.submitTransform({
       ...actionRequest(fixture.selection, "explain"),
@@ -214,6 +215,53 @@ describe("Reader selection action service", () => {
       reason: "mutation_ineligible"
     });
     expect(JSON.stringify(result)).not.toContain("PRIVATE_MODEL_REPLACEMENT");
+  });
+
+  it("projects an exceptional transform as one bounded review preview", async () => {
+    const fixture = makeFixture("Before. SELECTED_PRIVATE_PASSAGE. After.");
+    const submitTurn = vi.fn(async () => ({
+      requestId: "job_20260718_review1234",
+      jobId: "job_20260718_review1234",
+      conversationEventId: "evt_20260718_review1234",
+      conversationId: "conv_20260718_review",
+      tailEventId: "evt_20260718_reviewanswer",
+      state: "waiting" as const,
+      modelUsage: "cloud" as const,
+      sourceIds: [],
+      error: {
+        code: "agent_runtime.review_required",
+        domain: "agent_runtime",
+        messageKey: "errors.agent_runtime.review_required",
+        retryable: false,
+        severity: "info" as const,
+        userAction: "review_proposal" as const
+      }
+    }));
+    const preview = {
+      proposalId: "proposal_20260718_abcdefgh12345678",
+      action: "expand" as const,
+      state: "ready" as const,
+      revision: 1,
+      lines: [{ kind: "added" as const, text: "Bounded replacement preview" }]
+    };
+    const service = new ReaderSelectionActionService(fixture.vaults, { submitTurn }, {
+      readJob: () => ({
+        id: "job_20260718_review1234",
+        state: "awaiting_review",
+        proposalIds: [preview.proposalId]
+      } as never),
+      readAppliedOperationId: () => undefined,
+      readProposal: () => preview
+    });
+
+    const result = await service.submitTransform({
+      ...actionRequest(fixture.selection, "explain"),
+      action: "expand"
+    });
+
+    expect(result).toMatchObject({ status: "review_required", proposal: preview });
+    expect(JSON.stringify(result)).not.toContain("SELECTED_PRIVATE_PASSAGE");
+    expect(JSON.stringify(result)).not.toContain("pageContentHash");
   });
 });
 

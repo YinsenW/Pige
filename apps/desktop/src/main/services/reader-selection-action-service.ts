@@ -5,6 +5,7 @@ import type {
   ReaderSelectionActionResult,
   ReaderSelectionTransformRequest,
   ReaderSelectionTransformResult,
+  ReaderSelectionProposalPreview,
   VaultSummary
 } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
@@ -41,6 +42,7 @@ export interface ReaderSelectionActionMutationPort {
     readonly selection: ReaderSelectionTransformRequest["selection"];
     readonly action: ReaderSelectionTransformRequest["action"];
   }): string | undefined;
+  readProposal(proposalId: string): ReaderSelectionProposalPreview | undefined;
 }
 
 export class ReaderSelectionActionService {
@@ -135,6 +137,21 @@ export class ReaderSelectionActionService {
       ...(context.onDraft ? { onDraft: context.onDraft } : {})
     });
     if (turn.state === "waiting") {
+      const job = turn.jobId ? this.#mutations.readJob(turn.jobId) : undefined;
+      const proposalId = job?.state === "awaiting_review" ? job.proposalIds?.[0] : undefined;
+      const proposal = proposalId ? this.#mutations.readProposal(proposalId) : undefined;
+      if (proposal) {
+        return {
+          apiVersion: 1,
+          requestId: request.requestId,
+          status: "review_required",
+          jobId: turn.jobId,
+          conversationEventId: turn.conversationEventId,
+          conversationId: turn.conversationId,
+          tailEventId: turn.tailEventId,
+          proposal
+        };
+      }
       return {
         apiVersion: 1,
         requestId: request.requestId,

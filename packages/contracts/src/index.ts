@@ -40,6 +40,11 @@ import type {
   ReaderSelectionReadAction,
   ReaderSelectionTransformRequest,
   ReaderSelectionTransformResult,
+  ReaderSelectionProposalDecisionRequest,
+  ReaderSelectionProposalDecisionResult,
+  ReaderSelectionProposalGetRequest,
+  ReaderSelectionProposalGetResult,
+  ReaderSelectionProposalPreview,
   ReaderSelectionResolveRequest,
   ReaderSelectionResolveResult,
   ProviderAuthRequirement,
@@ -117,6 +122,11 @@ export type {
   ReaderSelectionTransformAction,
   ReaderSelectionTransformRequest,
   ReaderSelectionTransformResult,
+  ReaderSelectionProposalDecisionRequest,
+  ReaderSelectionProposalDecisionResult,
+  ReaderSelectionProposalGetRequest,
+  ReaderSelectionProposalGetResult,
+  ReaderSelectionProposalPreview,
   ReaderSelectionRequestId,
   ReaderSelectionResolveRequest,
   ReaderSelectionResolveResult,
@@ -1316,6 +1326,12 @@ export interface PigeDesktopApi {
     readonly submitTransform: (
       request: ReaderSelectionTransformRequest
     ) => Promise<ReaderSelectionTransformResult>;
+    readonly currentProposal: (
+      request: ReaderSelectionProposalGetRequest
+    ) => Promise<ReaderSelectionProposalGetResult>;
+    readonly decideProposal: (
+      request: ReaderSelectionProposalDecisionRequest
+    ) => Promise<ReaderSelectionProposalDecisionResult>;
   };
   readonly library: {
     readonly list: (request?: LibraryListRequest) => Promise<LibraryListResult>;
