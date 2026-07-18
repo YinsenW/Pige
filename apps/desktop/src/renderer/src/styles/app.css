@@ -1290,6 +1290,54 @@ button.ghost {
   color: var(--text-primary);
 }
 
+.conversation-message-actions {
+  display: flex;
+  min-height: 26px;
+  align-items: center;
+  gap: 2px;
+  margin-top: 5px;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition:
+    opacity var(--duration-fast) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-standard);
+}
+
+.conversation-message.role-assistant:hover > .conversation-message-actions,
+.conversation-message.role-assistant:focus-within > .conversation-message-actions {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.conversation-message-actions button {
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
+  min-height: 26px;
+  display: inline-grid;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  padding: 0;
+  background: transparent;
+  color: var(--text-tertiary);
+}
+
+.conversation-message-actions button:hover:not(:disabled),
+.conversation-message-actions button:focus-visible {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.conversation-message-actions button:disabled { opacity: .55; }
+
+@media (hover: none) {
+  .conversation-message-actions {
+    opacity: .72;
+    transform: none;
+  }
+}
+
 .conversation-citations {
   display: grid;
   gap: 6px;

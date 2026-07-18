@@ -2324,6 +2324,69 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("copies only an authoritative assistant response and announces completion", async () => {
+    const dom = createDom();
+    const copied: string[] = [];
+    Object.defineProperty(dom.window.navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: async (text: string) => { copied.push(text); } }
+    });
+    const mount = await mountHome(dom, makePigeApi(createHarness(completedTimeline())));
+
+    const assistant = requireElement(mount.container.querySelector<HTMLElement>(".conversation-message.role-assistant"));
+    const user = requireElement(mount.container.querySelector<HTMLElement>(".conversation-message.role-user"));
+    expect(user.querySelector('[data-conversation-action="copy"]')).toBeNull();
+    expect(assistant.querySelectorAll('[data-conversation-action="copy"]')).toHaveLength(1);
+
+    await clickButtonByAriaLabel(dom, assistant, enMessages["home.copyMessage"]);
+    await waitFor(dom, () => copied.length === 1);
+    expect(copied).toEqual(["Remember the durable boundary."]);
+    expect(assistant.querySelector('[role="status"]')?.textContent).toBe(enMessages["home.messageCopied"]);
+    expect(buttonsByAriaLabel(assistant, enMessages["home.messageCopied"])).toHaveLength(1);
+
+    await act(async () => mount.root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps clipboard failure body-free and never adds copy to a provisional draft", async () => {
+    const dom = createDom();
+    Object.defineProperty(dom.window.navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: async () => { throw new Error("private /Users/example/vault body"); } }
+    });
+    const harness = createHarness(completedTimeline());
+    let resolveTurn: ((result: AgentSubmitTurnResult) => void) | undefined;
+    harness.submitTurn = (request) => {
+      harness.submitRequests.push(request);
+      return new Promise((resolve) => { resolveTurn = resolve; });
+    };
+    const mount = await mountHome(dom, makePigeApi(harness));
+    const assistant = requireElement(mount.container.querySelector<HTMLElement>(".conversation-message.role-assistant"));
+
+    await clickButtonByAriaLabel(dom, assistant, enMessages["home.copyMessage"]);
+    await waitFor(dom, () => buttonsByAriaLabel(assistant, enMessages["home.messageCopyFailed"]).length === 1);
+    expect(assistant.querySelector('[role="status"]')?.textContent).toBe(enMessages["home.messageCopyFailed"]);
+    expect(mount.container.textContent).not.toContain("/Users/example");
+
+    await setTextareaValue(dom, mount.container, "Stream a draft.");
+    await clickButton(dom, mount.container, "Send");
+    await waitFor(dom, () => harness.submitRequests.length === 1);
+    const clientTurnId = harness.submitRequests[0]?.clientTurnId;
+    if (!clientTurnId) throw new Error("Expected a client turn identity.");
+    await act(async () => {
+      harness.emitDraft(draftEvent({ clientTurnId, sequence: 1, text: "Temporary answer." }));
+      await settle(dom);
+    });
+    expect(mount.container.querySelector('[data-agent-draft="true"] [data-conversation-action="copy"]')).toBeNull();
+
+    await act(async () => {
+      resolveTurn?.(completedResult());
+      await settle(dom);
+      mount.root.unmount();
+    });
+    dom.window.close();
+  });
+
   it("renders final grounded citations without internal retrieval data and opens the stable page target", async () => {
     const dom = createDom();
     const harness = createHarness(completedGroundedTimeline());

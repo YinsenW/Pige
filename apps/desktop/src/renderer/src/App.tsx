@@ -129,6 +129,10 @@ export type DevelopmentNotice = {
 };
 type NoteRelatedState = LibraryRelatedResult | "loading" | "unavailable" | null;
 type HomeAgentUiState = "idle" | "accepted" | "running" | "waiting" | "failed" | "completed";
+type ConversationCopyState = {
+  readonly messageId: string;
+  readonly state: "copying" | "copied" | "failed";
+};
 type ActiveAgentDraftBinding = {
   readonly clientTurnId: string;
   requestId?: string;
@@ -3278,6 +3282,7 @@ function HomeComposer(props: {
   const [activeSourceTurn, setActiveSourceTurn] = useState<ActiveSourceTurnBinding | null>(null);
   const [conversationTimeline, setConversationTimeline] = useState<AgentConversationTimeline | undefined>();
   const [liveAnswerEventId, setLiveAnswerEventId] = useState<string | null>(null);
+  const [conversationCopyState, setConversationCopyState] = useState<ConversationCopyState | null>(null);
   const [processingListExpanded, setProcessingListExpanded] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [modelSwitching, setModelSwitching] = useState(false);
@@ -3295,6 +3300,8 @@ function HomeComposer(props: {
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
   const conversationTimelineRef = useRef<HTMLElement | null>(null);
   const followConversationRef = useRef(true);
+  const conversationCopySequenceRef = useRef(0);
+  const conversationCopyResetTimerRef = useRef<number | undefined>(undefined);
   const composerSubmitInFlightRef = useRef(false);
   const composerCompositionActiveRef = useRef(false);
   const composerCompositionRaceRef = useRef(false);
@@ -3335,6 +3342,61 @@ function HomeComposer(props: {
   selectedNoteRef.current = selectedNote;
   voiceLanguageTagRef.current = props.locale;
   draftTextRef.current = text;
+
+  useEffect(() => () => {
+    if (conversationCopyResetTimerRef.current !== undefined) {
+      window.clearTimeout(conversationCopyResetTimerRef.current);
+    }
+  }, []);
+
+  const copyConversationMessage = async (messageId: string, markdown: string): Promise<void> => {
+    const sequence = conversationCopySequenceRef.current + 1;
+    conversationCopySequenceRef.current = sequence;
+    if (conversationCopyResetTimerRef.current !== undefined) {
+      window.clearTimeout(conversationCopyResetTimerRef.current);
+      conversationCopyResetTimerRef.current = undefined;
+    }
+    setConversationCopyState({ messageId, state: "copying" });
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(markdown);
+      if (sequence !== conversationCopySequenceRef.current) return;
+      setConversationCopyState({ messageId, state: "copied" });
+      conversationCopyResetTimerRef.current = window.setTimeout(() => {
+        if (sequence === conversationCopySequenceRef.current) setConversationCopyState(null);
+      }, 1_800);
+    } catch {
+      if (sequence !== conversationCopySequenceRef.current) return;
+      setConversationCopyState({ messageId, state: "failed" });
+    }
+  };
+
+  const conversationCopyAction = (messageId: string, markdown: string): React.JSX.Element => {
+    const state = conversationCopyState?.messageId === messageId ? conversationCopyState.state : null;
+    const label = state === "copied"
+      ? props.t("home.messageCopied")
+      : state === "failed"
+        ? props.t("home.messageCopyFailed")
+        : props.t("home.copyMessage");
+    return (
+      <div className="conversation-message-actions">
+        <button
+          type="button"
+          data-conversation-action="copy"
+          title={label}
+          aria-label={label}
+          aria-busy={state === "copying"}
+          disabled={state === "copying"}
+          onClick={() => void copyConversationMessage(messageId, markdown)}
+        >
+          <PigeIcon name="copy" size={15} />
+        </button>
+        {state === "copied" || state === "failed" ? (
+          <span className="visually-hidden" role="status" aria-live="polite">{label}</span>
+        ) : null}
+      </div>
+    );
+  };
   const agentStatusLabel = props.agentRuntimeStatus?.state === "ready" ? props.t("home.agentReady") : props.t("home.captureOnly");
   const enabledHomeModels = props.modelSummary?.models.filter((model) => model.enabled) ?? [];
   const selectedHomeModel = enabledHomeModels.find(
@@ -4585,6 +4647,7 @@ function HomeComposer(props: {
                   />
                 </>
               )}
+              {message.role === "assistant" ? conversationCopyAction(message.id, message.text) : null}
             </article>
           ))}
           {agentDraft ? (
@@ -4659,6 +4722,10 @@ function HomeComposer(props: {
                 onOpen={openResult}
                 t={props.t}
               />
+              {conversationCopyAction(
+                liveAnswerEventId ?? "live-conversation-answer",
+                liveConversationAnswer.answer
+              )}
             </article>
           ) : null}
         </section>
