@@ -212,6 +212,9 @@ Rules:
 - Device-installed Skills under this directory do not enter vault backup sets.
 - Useful for personal workflows that should not travel with a vault.
 
+Current `skills/registry.json` projects confirmed machine-local non-package identity and
+checksum matches. CAS disable is the sole mutation; other owners remain absent.
+
 ## 7. Safety Rules
 
 Skill install safety:

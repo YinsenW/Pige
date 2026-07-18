@@ -614,7 +614,7 @@ Build:
 - [B8.02 -> E8.02] Permission-dialog UI with safe summaries.
 - [B8.03 -> E8.03] Ask Every Time, Remember Scoped Grants, and YOLO Full Access defaults.
 - [B8.04 -> E8.03] Machine-local, scoped, revocable permission records with provenance.
-- [B8.05 -> E8.01] Skill Registry Service.
+- [B8.05 -> E8.01] Skill Registry Service (inventory/disable foundation only).
 - [B8.06 -> E8.01] Pure Skill staging/install from URL, Markdown, and ZIP plus explicit chat-initiated staging, enable, disable, uninstall, export, and source-aware update.
 - [B8.07 -> E8.01] External/Web Skill staging with capability disclosure.
 - [B8.08 -> E8.02] Runtime permission prompts for non-default Agent, Skill, package, and local-tool capabilities.

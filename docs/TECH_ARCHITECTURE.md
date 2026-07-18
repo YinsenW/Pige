@@ -1190,7 +1190,8 @@ Service-level constraints:
 
 ### 5.7.2 Skill Registry Service
 
-Responsibilities:
+Target responsibilities (current code has only checksum-bound machine-local summary,
+CAS disable and change events):
 
 - Manage built-in, vault-scoped, and machine-local Pige Skills.
 - Install Skills from explicit chat install requests, URL, Markdown file, or ZIP file.
@@ -1207,25 +1208,8 @@ Skill scope, storage/staging layout, metadata, capability vocabulary, and instal
 lifecycle are owned by
 [`SKILL_EXTENSION_DESIGN.md`](SKILL_EXTENSION_DESIGN.md#6-storage) and shared executable
 schemas. This section owns only the Registry Service placement and mediation boundary.
-
-Install rules:
-
-- A normal dropped Markdown file remains knowledge capture unless the user explicitly asks to install it as a Skill.
-- URL and file installs create a staged Skill proposal first.
-- ZIP extraction must block path traversal and enforce size and file-count limits.
-- Default allowed files are Markdown, JSON metadata, and small supporting examples/assets.
-- Scripts, binaries, npm packages, MCP configs, native modules, and package install hooks cannot execute during Skill staging.
-- Executable or package-backed capabilities require a reviewed runtime adapter and permission prompt before use.
-- The Agent never executes Skill contents during installation preview.
-
-Runtime rules:
-
-- Current user instruction outranks Skill instructions.
-- `PIGE.md`, explicit settings, privacy rules, package permissions, local tool policies, prompt-injection defenses, and confirmation gates outrank Skills.
-- Skills can guide Agent reasoning and output shape, but service permissions remain enforced by Pige.
-- The Agent receives only relevant active Skill text, not the entire Skill library.
-- Sensitive Skill actions must pause in `waiting_permission` state until the user allows or denies, unless covered by an explicit default permission mode.
-- Permission grants are scoped to Skill ID, Skill version, capability, resource scope, and duration.
+Install/runtime precedence and safety rules remain single-owned by that document and the
+Permission Broker contract rather than duplicated here.
 
 ### 5.7.3 Localization Service
 
