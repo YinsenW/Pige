@@ -1,0 +1,374 @@
+name: Signed prerelease publication
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: signed-release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate exact protected release tag
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
+      commit: ${{ steps.release.outputs.commit }}
+    steps:
+      - name: Checkout exact release tag
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Validate release identity
+        id: release
+        env:
+          PIGE_RELEASE_TAG: ${{ github.ref_name }}
+          PIGE_RELEASE_EVENT: ${{ github.event_name }}
+          PIGE_RELEASE_REPOSITORY: ${{ github.repository }}
+          PIGE_RELEASE_REF_PROTECTED: ${{ github.ref_protected }}
+        run: >-
+          node scripts/release/release-tag.mjs
+          --tag="$PIGE_RELEASE_TAG"
+          --event="$PIGE_RELEASE_EVENT"
+          --repository="$PIGE_RELEASE_REPOSITORY"
+          --protected-ref="$PIGE_RELEASE_REF_PROTECTED"
+          --github-output="$GITHUB_OUTPUT"
+
+  quality:
+    name: Release quality and security gates
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout validated release commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24.14.0"
+          cache: npm
+
+      - name: Install pinned dependencies
+        run: npm ci
+
+      - name: Audit packaged runtime dependencies
+        run: npm audit --omit=dev
+
+      - name: Verify governed repository contracts
+        run: npm run verify
+
+      - name: Run test suite
+        run: npm test -- --maxWorkers=2
+
+  build-macos-arm64:
+    name: Build signed and notarized macOS arm64
+    needs: [validate, quality]
+    runs-on: macos-26
+    timeout-minutes: 60
+    environment: production-release
+    env:
+      PIGE_RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+      PIGE_RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+      PIGE_RELEASE_COMMIT: ${{ needs.validate.outputs.commit }}
+      CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      PIGE_MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+      PIGE_MACOS_TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
+      PIGE_APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+      APPLE_API_KEY: ${{ runner.temp }}/pige-notarization/AuthKey.p8
+      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+    steps:
+      - name: Checkout validated release commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24.14.0"
+          cache: npm
+
+      - name: Install pinned dependencies
+        run: npm ci
+
+      - name: Audit packaged runtime dependencies
+        run: npm audit --omit=dev
+
+      - name: Materialize ephemeral notarization key
+        run: node scripts/release/materialize-notarization-key.mjs --output="$APPLE_API_KEY"
+
+      - name: Build signed and notarized release artifacts
+        run: npm run release:package:mac:arm64
+
+      - name: Notarize and staple release DMG
+        run: >-
+          node scripts/release/notarize-macos-container.mjs
+          --directory=artifacts/release-publication/macos-arm64
+          --tag="$PIGE_RELEASE_TAG"
+
+      - name: Verify local signatures, notarization, and staple
+        run: >-
+          node scripts/release/verify-macos-release.mjs
+          --directory=artifacts/release-publication/macos-arm64
+          --tag="$PIGE_RELEASE_TAG"
+          --team-id="$PIGE_MACOS_TEAM_ID"
+
+      - name: Create immutable artifact manifest
+        run: >-
+          npm run release:artifacts --
+          --action=create
+          --directory=artifacts/release-publication/macos-arm64
+          --platform=macos-arm64
+          --tag="$PIGE_RELEASE_TAG"
+          --commit="$PIGE_RELEASE_COMMIT"
+
+      - name: Remove notarization key
+        if: always()
+        run: rm -f "$APPLE_API_KEY"
+
+      - name: Upload unverified macOS release candidate
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pige-release-macos-arm64-${{ needs.validate.outputs.commit }}
+          path: |
+            artifacts/release-publication/macos-arm64/Pige-${{ needs.validate.outputs.version }}-arm64.dmg
+            artifacts/release-publication/macos-arm64/Pige-${{ needs.validate.outputs.version }}-arm64.zip
+            artifacts/release-publication/macos-arm64/Pige-${{ needs.validate.outputs.version }}-arm64.zip.blockmap
+            artifacts/release-publication/macos-arm64/alpha-mac.yml
+            artifacts/release-publication/macos-arm64/release-manifest-macos-arm64.json
+            artifacts/release-publication/macos-arm64/SHA256SUMS-macos-arm64.txt
+            artifacts/release-publication/macos-arm64/macos-signature-report.json
+          if-no-files-found: error
+          retention-days: 2
+
+  verify-macos-arm64:
+    name: Independently verify downloaded macOS arm64
+    needs: [validate, build-macos-arm64]
+    runs-on: macos-26
+    timeout-minutes: 20
+    environment: production-release
+    env:
+      PIGE_RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+      PIGE_RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+      PIGE_RELEASE_COMMIT: ${{ needs.validate.outputs.commit }}
+      PIGE_MACOS_TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
+    steps:
+      - name: Checkout verifier at validated commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+
+      - name: Download macOS candidate
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: pige-release-macos-arm64-${{ needs.validate.outputs.commit }}
+          path: artifacts/release-publication/macos-arm64
+
+      - name: Verify immutable checksums and update metadata
+        run: >-
+          node scripts/release/release-artifacts.mjs
+          --action=verify
+          --directory=artifacts/release-publication/macos-arm64
+          --platform=macos-arm64
+          --tag="$PIGE_RELEASE_TAG"
+          --commit="$PIGE_RELEASE_COMMIT"
+
+      - name: Independently verify Developer ID and notarization
+        run: >-
+          node scripts/release/verify-macos-release.mjs
+          --directory=artifacts/release-publication/macos-arm64
+          --tag="$PIGE_RELEASE_TAG"
+          --team-id="$PIGE_MACOS_TEAM_ID"
+
+      - name: Upload verified macOS release assets
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pige-verified-macos-arm64-${{ needs.validate.outputs.commit }}
+          path: artifacts/release-publication/macos-arm64
+          if-no-files-found: error
+          retention-days: 2
+
+  build-windows-x64:
+    name: Build signed Windows x64
+    needs: [validate, quality]
+    runs-on: windows-2025
+    timeout-minutes: 60
+    environment: production-release
+    env:
+      PIGE_RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+      PIGE_RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+      PIGE_RELEASE_COMMIT: ${{ needs.validate.outputs.commit }}
+      CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+      PIGE_WINDOWS_CERTIFICATE_SUBJECT: ${{ secrets.WINDOWS_CERTIFICATE_SUBJECT }}
+      PIGE_WINDOWS_CERTIFICATE_THUMBPRINT: ${{ secrets.WINDOWS_CERTIFICATE_THUMBPRINT }}
+    steps:
+      - name: Checkout validated release commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24.14.0"
+          cache: npm
+
+      - name: Install pinned dependencies
+        run: npm ci
+
+      - name: Audit packaged runtime dependencies
+        run: npm audit --omit=dev
+
+      - name: Build signed release artifacts
+        run: npm run release:package:win:x64
+
+      - name: Verify local Authenticode signatures
+        shell: pwsh
+        run: >-
+          ./scripts/release/verify-windows-release.ps1
+          -Directory artifacts/release-publication/windows-x64
+          -Tag $env:PIGE_RELEASE_TAG
+          -ExpectedThumbprint $env:PIGE_WINDOWS_CERTIFICATE_THUMBPRINT
+          -RequireUnpackedExecutable
+
+      - name: Create immutable artifact manifest
+        shell: pwsh
+        run: >-
+          npm run release:artifacts --
+          --action=create
+          --directory=artifacts/release-publication/windows-x64
+          --platform=windows-x64
+          --tag=$env:PIGE_RELEASE_TAG
+          --commit=$env:PIGE_RELEASE_COMMIT
+
+      - name: Upload unverified Windows release candidate
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pige-release-windows-x64-${{ needs.validate.outputs.commit }}
+          path: |
+            artifacts/release-publication/windows-x64/Pige-${{ needs.validate.outputs.version }}-x64-setup.exe
+            artifacts/release-publication/windows-x64/Pige-${{ needs.validate.outputs.version }}-x64-setup.exe.blockmap
+            artifacts/release-publication/windows-x64/alpha.yml
+            artifacts/release-publication/windows-x64/release-manifest-windows-x64.json
+            artifacts/release-publication/windows-x64/SHA256SUMS-windows-x64.txt
+            artifacts/release-publication/windows-x64/windows-signature-report.json
+          if-no-files-found: error
+          retention-days: 2
+
+  verify-windows-x64:
+    name: Independently verify downloaded Windows x64
+    needs: [validate, build-windows-x64]
+    runs-on: windows-2025
+    timeout-minutes: 15
+    environment: production-release
+    env:
+      PIGE_RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+      PIGE_RELEASE_COMMIT: ${{ needs.validate.outputs.commit }}
+      PIGE_WINDOWS_CERTIFICATE_THUMBPRINT: ${{ secrets.WINDOWS_CERTIFICATE_THUMBPRINT }}
+    steps:
+      - name: Checkout verifier at validated commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+
+      - name: Download Windows candidate
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: pige-release-windows-x64-${{ needs.validate.outputs.commit }}
+          path: artifacts/release-publication/windows-x64
+
+      - name: Verify immutable checksums and update metadata
+        shell: pwsh
+        run: >-
+          node scripts/release/release-artifacts.mjs
+          --action=verify
+          --directory=artifacts/release-publication/windows-x64
+          --platform=windows-x64
+          --tag=$env:PIGE_RELEASE_TAG
+          --commit=$env:PIGE_RELEASE_COMMIT
+
+      - name: Independently verify Authenticode signature
+        shell: pwsh
+        run: >-
+          ./scripts/release/verify-windows-release.ps1
+          -Directory artifacts/release-publication/windows-x64
+          -Tag $env:PIGE_RELEASE_TAG
+          -ExpectedThumbprint $env:PIGE_WINDOWS_CERTIFICATE_THUMBPRINT
+
+      - name: Upload verified Windows release assets
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pige-verified-windows-x64-${{ needs.validate.outputs.commit }}
+          path: artifacts/release-publication/windows-x64
+          if-no-files-found: error
+          retention-days: 2
+
+  publish:
+    name: Publish verified GitHub prerelease
+    needs: [validate, verify-macos-arm64, verify-windows-x64]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: production-release
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PIGE_RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+      PIGE_RELEASE_COMMIT: ${{ needs.validate.outputs.commit }}
+      PIGE_RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+    steps:
+      - name: Checkout publisher at validated commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+
+      - name: Download independently verified macOS assets
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: pige-verified-macos-arm64-${{ needs.validate.outputs.commit }}
+          path: artifacts/release-publication/macos-arm64
+
+      - name: Download independently verified Windows assets
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: pige-verified-windows-x64-${{ needs.validate.outputs.commit }}
+          path: artifacts/release-publication/windows-x64
+
+      - name: Reverify exact publication bytes
+        run: |
+          node scripts/release/release-artifacts.mjs --action=verify --directory=artifacts/release-publication/macos-arm64 --platform=macos-arm64 --tag="$PIGE_RELEASE_TAG" --commit="$PIGE_RELEASE_COMMIT"
+          node scripts/release/release-artifacts.mjs --action=verify --directory=artifacts/release-publication/windows-x64 --platform=windows-x64 --tag="$PIGE_RELEASE_TAG" --commit="$PIGE_RELEASE_COMMIT"
+
+      - name: Publish immutable prerelease assets
+        run: >-
+          gh release create "$PIGE_RELEASE_TAG"
+          artifacts/release-publication/macos-arm64/*.dmg
+          artifacts/release-publication/macos-arm64/*.zip
+          artifacts/release-publication/macos-arm64/*.blockmap
+          artifacts/release-publication/macos-arm64/alpha-mac.yml
+          artifacts/release-publication/macos-arm64/release-manifest-macos-arm64.json
+          artifacts/release-publication/macos-arm64/SHA256SUMS-macos-arm64.txt
+          artifacts/release-publication/windows-x64/*.exe
+          artifacts/release-publication/windows-x64/*.blockmap
+          artifacts/release-publication/windows-x64/alpha.yml
+          artifacts/release-publication/windows-x64/release-manifest-windows-x64.json
+          artifacts/release-publication/windows-x64/SHA256SUMS-windows-x64.txt
+          --repo "$GITHUB_REPOSITORY"
+          --verify-tag
+          --prerelease
+          --generate-notes
+          --title "Pige $PIGE_RELEASE_VERSION (Alpha)"
