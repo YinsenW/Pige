@@ -32,6 +32,7 @@ export type NoteAgentProposal = {
     readonly text: string;
   }[];
   readonly state: "ready" | "resolving" | "applied" | "rejected" | "conflicted";
+  readonly errorMessageKey?: string;
 };
 
 export type NoteAgentModelOption = {
@@ -373,6 +374,11 @@ export function NoteAgentPanel(props: {
                         </div>
                       ))}
                     </div>
+                  ) : null}
+                  {props.proposal.errorMessageKey ? (
+                    <p className="proposal-error" role="alert">
+                      {props.t(props.proposal.errorMessageKey)}
+                    </p>
                   ) : null}
                   {props.proposal.state === "ready" || props.proposal.state === "resolving" ? (
                     <div className="proposal-actions">

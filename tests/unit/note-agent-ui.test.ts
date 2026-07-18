@@ -80,6 +80,8 @@ describe("Note Agent production UI", () => {
 
     expect(mount.container.querySelector(".agent-message-card")?.textContent).toContain("source evidence");
     const proposalPanel = required(mount.container.querySelector<HTMLElement>(".proposal-panel"));
+    expect(proposalPanel.getAttribute("aria-labelledby")).toBe("note-agent-proposal-title");
+    expect(proposalPanel.getAttribute("aria-describedby")).toBe("note-agent-proposal-description");
     expect(proposalPanel.innerHTML).toContain("Old wording");
     expect(mount.container.querySelector('[data-kind="removed"]')?.textContent).toContain("Old wording");
     expect(mount.container.querySelector('[data-kind="added"]')?.textContent).toContain("Grounded wording");
@@ -93,6 +95,24 @@ describe("Note Agent production UI", () => {
     expect(opened).toEqual(["page_fixture_current"]);
     expect(decisions).toEqual(["proposal-fixture:apply"]);
 
+    await unmount(dom, mount.root);
+  });
+
+  it("keeps a resolving proposal focus-owned and blocks duplicate decisions", async () => {
+    const dom = createDom();
+    const mount = await mountPanel(dom, {
+      proposal: {
+        ...proposalFixture(),
+        state: "resolving",
+        errorMessageKey: "note.proposal.decisionFailed"
+      },
+      onProposalAction: () => undefined
+    });
+    const panel = required(mount.container.querySelector<HTMLElement>(".proposal-panel"));
+    expect(panel.getAttribute("aria-busy")).toBe("true");
+    expect(panel.querySelector('[role="alert"]')?.textContent).toContain(t("note.proposal.decisionFailed"));
+    expect(Array.from(panel.querySelectorAll<HTMLButtonElement>("button"))).toHaveLength(3);
+    expect(Array.from(panel.querySelectorAll<HTMLButtonElement>("button")).every((button) => button.disabled)).toBe(true);
     await unmount(dom, mount.root);
   });
 
@@ -793,6 +813,55 @@ describe("Note Agent production UI", () => {
     await unmount(failedDom, failedRoot);
   });
 
+  it("renders Reader transform timeline intent from the strict presentation enum, never Host instructions", async () => {
+    const dom = createDom();
+    const conversation = vi.fn().mockResolvedValue({
+      conversationId: "conversation_reader_transform",
+      tailEventId: "event_reader_transform_user",
+      canFollowUp: false,
+      messages: [{
+        id: "event_reader_transform_user",
+        role: "user",
+        createdAt: "2026-07-18T15:20:00.000Z",
+        text: "INTERNAL HOST INSTRUCTION MUST NOT RENDER",
+        inputPresentation: { kind: "reader_selection_transform", action: "translate" },
+        jobId: "job_reader_transform"
+      }],
+      latestTurn: {
+        jobId: "job_reader_transform",
+        userEventId: "event_reader_transform_user",
+        state: "waiting_dependency",
+        error: {
+          code: "model_provider.default_model_missing",
+          domain: "model_provider",
+          messageKey: "errors.model_provider.default_model_missing",
+          retryable: false,
+          severity: "warning",
+          userAction: "configure_models"
+        }
+      }
+    });
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: noteAgentApi(conversation)
+    });
+    const container = dom.window.document.createElement("div");
+    dom.window.document.body.append(container);
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(createElement(CurrentNoteAgent, currentNoteAgentProps("page_reader_transform")));
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.textContent?.includes(t("note.proposal.action.translate")) === true);
+
+    expect(container.textContent).toContain(t("note.proposal.action.translate"));
+    expect(container.textContent).not.toContain("INTERNAL HOST INSTRUCTION");
+
+    await unmount(dom, root);
+  });
+
   it("invalidates a pending submit when the active vault changes for the same page ID", async () => {
     const dom = createDom();
     const pageId = "page_shared_between_vaults";
@@ -1101,13 +1170,20 @@ describe("Note Agent production UI", () => {
     expect(componentSource).not.toContain("errorMessage?:");
     expect(componentSource).toContain("errorMessageKey?: string");
     expect(appSource).toContain("<CurrentNoteAgent");
-    expect(appSource).toContain('key={`${activeVault.vaultId}:${selectedNote.summary.pageId}`}');
+    expect(appSource).toContain('key={`${activeVault.vaultId}:${selectedNote.summary.pageId}:${noteAgentExternalRevision}`}');
     expect(appSource).toContain("vaultId={activeVault.vaultId}");
     expect(appSource).toContain("selectedNoteVaultId === activeVault.vaultId");
     expect(appSource).toContain("pageId={selectedNote.summary.pageId}");
     expect(appSource).toContain("onSelectModel={setHomeDefaultModel}");
     expect(adapterSource).toContain('scope: { kind: "current_note", pageId }');
-    expect(adapterSource).toContain("proposal={null}");
+    expect(adapterSource).toContain("proposal={props.proposal ? {");
+    expect(appSource).toContain("window.pige.readerSelection.decideProposal");
+    expect(appSource).toContain("window.pige.readerSelection.currentProposal");
+    expect(appSource).toContain('decision: action === "apply" ? "approve" : "reject"');
+    expect(appSource).toContain('if (result.status === "applied") await openNoteTarget(current.pageId);');
+    expect(appSource).toContain('result.status !== "waiting" && !(result.status === "failed" && result.conversationId)');
+    expect(appSource).toContain("current.vaultId === onboarding?.activeVault?.vaultId");
+    expect(appSource).toContain("current.pageId === selectedNote?.summary.pageId");
     expect(adapterSource).not.toContain("window.pige.proposals");
     expect(adapterSource).not.toContain("window.pige.activity");
     expect(cssSource).toContain(".agent-message-card {");
@@ -1143,12 +1219,17 @@ describe("Note Agent production UI", () => {
       "note.proposal.action.polish",
       "note.proposal.action.translate",
       "note.proposal.description",
+      "note.proposal.decisionFailed",
       "note.proposal.later",
       "note.proposal.line.added",
       "note.proposal.line.context",
       "note.proposal.line.removed",
       "note.proposal.preview",
-      "note.proposal.reject"
+      "note.proposal.reject",
+      "note.proposal.stale",
+      "note.proposal.unavailable",
+      "note.selection.applied",
+      "note.selection.reviewReady"
     ];
     for (const locale of ["de", "en", "fr", "ja", "ko", "zh-Hans"]) {
       const catalog = JSON.parse(fs.readFileSync(path.join(rendererRoot, "locales", locale, "messages.json"), "utf8")) as Record<string, unknown>;

@@ -4789,6 +4789,7 @@ dd {
 .diff-line.removed { background: rgb(224 46 42 / 8%); color: #8d2926; }
 .diff-line.added { background: rgb(0 162 64 / 8%); color: #176a35; }
 .proposal-actions { display: flex; justify-content: flex-end; gap: 7px; margin-top: 12px; }
+.proposal-panel > .proposal-error { margin: 10px 0 0; color: var(--danger); }
 .proposal-result { margin: 12px 0 0; border-radius: 8px; padding: 8px 10px; background: var(--surface-subtle); color: var(--text-secondary); }
 .proposal-result.conflicted { background: var(--danger-soft); color: var(--danger); }
 

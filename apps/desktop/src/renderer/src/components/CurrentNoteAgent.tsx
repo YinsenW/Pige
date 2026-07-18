@@ -4,7 +4,8 @@ import type {
   AgentSubmitTurnResult,
   AgentTurnDraftEvent,
   ModelEgressPendingRequest,
-  PigeErrorSummary
+  PigeErrorSummary,
+  ReaderSelectionProposalPreview
 } from "@pige/contracts";
 import type { JobState, Locale } from "@pige/schemas";
 import {
@@ -43,6 +44,9 @@ export function CurrentNoteAgent(props: {
   readonly onClose: () => void;
   readonly onOpenModels: (opener: HTMLButtonElement) => void;
   readonly onSelectModel: (modelId: string) => Promise<boolean>;
+  readonly proposal?: ReaderSelectionProposalPreview | null;
+  readonly proposalErrorMessageKey?: string;
+  readonly onProposalAction?: (proposalId: string, action: "reject" | "later" | "apply") => void;
   readonly onOpenCitation: (pageId: string) => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
@@ -188,8 +192,8 @@ export function CurrentNoteAgent(props: {
   }, [activeEgressRequestId, currentJobId, props.pageId]);
 
   const messages = useMemo(
-    () => timelineMessages(timeline, liveDraft, currentOutcome),
-    [timeline, liveDraft, currentOutcome]
+    () => timelineMessages(timeline, liveDraft, currentOutcome, props.t),
+    [timeline, liveDraft, currentOutcome, props.t]
   );
   const availability = noteAgentAvailability(
     latestTurn?.state,
@@ -335,7 +339,14 @@ export function CurrentNoteAgent(props: {
       availability={availability}
       composerDisabled={timelineReadState !== "ready"}
       messages={messages}
-      proposal={null}
+      proposal={props.proposal ? {
+        id: props.proposal.proposalId,
+        action: props.proposal.action,
+        revision: props.proposal.revision,
+        lines: props.proposal.lines,
+        state: props.proposal.state,
+        ...(props.proposalErrorMessageKey ? { errorMessageKey: props.proposalErrorMessageKey } : {})
+      } : null}
       draft={draft}
       models={props.models}
       switchingModel={switchingModel || modelSwitchBlocked}
@@ -351,6 +362,7 @@ export function CurrentNoteAgent(props: {
       onOpenModels={props.onOpenModels}
       onSelectModel={selectModel}
       onModelEgressDecision={(decision) => void decideEgress(decision)}
+      {...(props.onProposalAction ? { onProposalAction: props.onProposalAction } : {})}
       onOpenCitation={props.onOpenCitation}
       onCopyMessage={async (messageId) => {
         const message = messages.find((candidate) => candidate.id === messageId);
@@ -370,14 +382,19 @@ export function CurrentNoteAgent(props: {
 function timelineMessages(
   timeline: AgentConversationTimeline | undefined,
   liveDraft: AgentTurnDraftEvent | null,
-  currentOutcome: AgentSubmitTurnResult | null
+  currentOutcome: AgentSubmitTurnResult | null,
+  t: (key: string) => string
 ): readonly NoteAgentMessage[] {
   const messages: NoteAgentMessage[] = (timeline?.messages ?? []).map((message) => {
     const timestamp = formatMessageTime(message.createdAt);
     return {
       id: message.id,
       role: message.role,
-      body: message.text,
+      body: message.inputPresentation
+        ? t(message.inputPresentation.kind === "reader_selection_action"
+          ? `note.selection.${message.inputPresentation.action}`
+          : `note.proposal.action.${message.inputPresentation.action}`)
+        : message.text,
       ...(timestamp ? { timestamp } : {}),
       ...(message.answer?.citations.length ? {
       citations: message.answer.citations.flatMap((citation) =>

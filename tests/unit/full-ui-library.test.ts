@@ -12,6 +12,8 @@ import type {
   ReaderSelectionActionResult,
   ReaderSelectionResolveRequest,
   ReaderSelectionResolveResult,
+  ReaderSelectionTransformRequest,
+  ReaderSelectionTransformResult,
   RetrievalSearchRequest,
   RetrievalSearchResult
 } from "@pige/contracts";
@@ -1068,10 +1070,32 @@ describe("full UI Library", () => {
     });
     const root = createRoot(dom.window.document.querySelector("#root")!);
     const unavailable: string[] = [];
+    const transformRequests: ReaderSelectionTransformRequest[] = [];
+    const transformResults: ReaderSelectionTransformResult[] = [];
     await act(async () => {
       root.render(createElement(NoteReader, {
         note: readerNote(),
         ...resolvedSelectionProps(),
+        onSubmitSelectionTransform: async (request) => {
+          transformRequests.push(request);
+          return {
+            apiVersion: 1,
+            requestId: request.requestId,
+            status: "review_required",
+            jobId: "job_20260718_transform01",
+            conversationEventId: "evt_20260718_transform01",
+            conversationId: "conv_20260718_transform01",
+            tailEventId: "evt_20260718_transform01",
+            proposal: {
+              proposalId: "proposal_20260718_transform01",
+              action: request.action,
+              state: "ready",
+              revision: 1,
+              lines: [{ kind: "added", text: "Reviewed replacement" }]
+            }
+          };
+        },
+        onSelectionTransformResult: (result) => transformResults.push(result),
         related: null,
         relatedLoadingPageId: null,
         onOpenRelated: async () => undefined,
@@ -1193,6 +1217,28 @@ describe("full UI Library", () => {
       "> Selected first line\n> Selected second line"
     ]);
     expect(container.querySelector('[role="status"]')?.textContent).toBe("Quote copied.");
+
+    await showSelection();
+    more = requireElement(container.querySelector<HTMLButtonElement>('[data-selection-action="more"]'));
+    await act(async () => {
+      more.click();
+      await settle(dom);
+      requireElement(container.querySelector<HTMLButtonElement>('[data-selection-more-action="translate"]')).click();
+      await settle(dom);
+    });
+    expect(transformRequests).toHaveLength(1);
+    expect(transformRequests[0]).toMatchObject({
+      apiVersion: 1,
+      action: "translate",
+      locale: "en",
+      selection: {
+        pageId: "page_20260715_reader1111",
+        span: { unit: "utf8_bytes", start: 0, endExclusive: 8 }
+      }
+    });
+    expect(transformResults[0]?.status).toBe("review_required");
+    expect(unavailable).toEqual([]);
+    expect(container.querySelector('[role="status"]')?.textContent).toBe("Review the proposed change in Note Agent.");
 
     await act(async () => root.unmount());
     dom.window.HTMLElement.prototype.getBoundingClientRect = originalBoundingClientRect;
