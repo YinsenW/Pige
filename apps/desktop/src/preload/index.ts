@@ -62,6 +62,8 @@ import type {
   NoteResolveInlineReferenceResult,
   NoteRenderRequest,
   NoteRenderResult,
+  ReaderSelectionResolveRequest,
+  ReaderSelectionResolveResult,
   OnboardingStatus,
   OpenRecentVaultRequest,
   PigeDesktopApi,
@@ -121,6 +123,8 @@ import {
   RetrievalSearchResultSchema,
   NoteResolveInlineReferenceRequestSchema,
   NoteResolveInlineReferenceResultSchema,
+  ReaderSelectionResolveRequestSchema,
+  ReaderSelectionResolveResultSchema,
   OpenRecentVaultRequestSchema,
   PermissionSettingsSummarySchema,
   PermissionSetDefaultModeRequestSchema,
@@ -500,6 +504,17 @@ const api: PigeDesktopApi = {
         await ipcRenderer.invoke(
           "notes.resolveInlineReference",
           NoteResolveInlineReferenceRequestSchema.parse(request)
+        )
+      )
+  },
+  readerSelection: {
+    resolve: async (
+      request: ReaderSelectionResolveRequest
+    ): Promise<ReaderSelectionResolveResult> =>
+      ReaderSelectionResolveResultSchema.parse(
+        await ipcRenderer.invoke(
+          "readerSelection.resolve",
+          ReaderSelectionResolveRequestSchema.parse(request)
         )
       )
   },

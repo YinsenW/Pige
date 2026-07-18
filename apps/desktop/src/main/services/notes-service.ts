@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type {
@@ -9,10 +9,15 @@ import type {
   NoteResolveInlineReferenceResult,
   NoteRenderRequest,
   NoteRenderResult,
+  ReaderSelectionResolveRequest,
+  ReaderSelectionResolveResult,
   VaultSummary
 } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
-import { renderPigeMarkdownToHtml } from "@pige/markdown";
+import {
+  renderPigeMarkdownToHtml,
+  type PigeMarkdownSelectionSegment
+} from "@pige/markdown";
 import {
   CitationLocatorSchema,
   NoteInlineReferenceHrefSchema,
@@ -25,7 +30,7 @@ import {
   createMarkdownPageReferenceKeys,
   findMarkdownPageByIdAtSignature,
   normalizeMarkdownPageReferenceKey,
-  readMarkdownPageBodyAtSignature,
+  readMarkdownPageContentAtSignature,
   readMarkdownPageByRelativePath
 } from "./markdown-page-index";
 
@@ -54,7 +59,10 @@ export interface NotesInlineReferenceIndexPort {
 }
 
 export interface NotesMarkdownRenderer {
-  (markdown: string): Promise<{ readonly html: string }>;
+  (markdown: string): Promise<{
+    readonly html: string;
+    readonly selectionSegments?: readonly PigeMarkdownSelectionSegment[];
+  }>;
 }
 
 interface FileIdentity {
@@ -73,6 +81,10 @@ interface NoteRenderContext {
   readonly pagePath: string;
   readonly absolutePath: string;
   readonly pageIdentity: FileIdentity;
+  readonly pageContentHash: string;
+  readonly markdown: string;
+  readonly bodyStartOffset: number;
+  readonly selectionSegments: ReadonlyMap<string, PigeMarkdownSelectionSegment>;
   readonly hrefs: ReadonlySet<string>;
   readonly referenceIndexRevision?: string;
   readonly ownerEpoch: number;
@@ -81,6 +93,9 @@ interface NoteRenderContext {
 
 interface StableNoteDocument {
   readonly document: NoteDocument;
+  readonly markdown: string;
+  readonly bodyStartOffset: number;
+  readonly pageContentHash: string;
   readonly pagePath: string;
   readonly absolutePath: string;
   readonly identity: FileIdentity;
@@ -129,7 +144,7 @@ export class NotesService {
 
     const hrefs = extractRenderedInternalHrefs(rendered.html);
     const referenceIndexRevision = this.#referenceIndex?.inlineReferenceRevision(vaultPath);
-    const renderContextId = ownerId === undefined || hrefs === undefined
+    const renderContextId = ownerId === undefined
       ? undefined
       : this.#registerRenderContext(ownerId, {
           vaultId: vault.vaultId,
@@ -138,7 +153,13 @@ export class NotesService {
           pagePath: stable.pagePath,
           absolutePath: stable.absolutePath,
           pageIdentity: stable.identity,
-          hrefs,
+          pageContentHash: stable.pageContentHash,
+          markdown: stable.markdown,
+          bodyStartOffset: stable.bodyStartOffset,
+          selectionSegments: new Map(
+            (rendered.selectionSegments ?? []).map((segment) => [segment.segmentId, segment])
+          ),
+          hrefs: hrefs ?? new Set<string>(),
           ownerEpoch: ownerEpoch!,
           ...(referenceIndexRevision ? { referenceIndexRevision } : {})
         });
@@ -194,6 +215,72 @@ export class NotesService {
       return result;
     } catch {
       return failedInlineReference(request.requestId);
+    }
+  }
+
+  resolveSelection(
+    ownerId: string,
+    request: ReaderSelectionResolveRequest
+  ): ReaderSelectionResolveResult {
+    const initialVault = this.#vaults.current();
+    const vaultPath = this.#vaults.activeVaultPath();
+    if (!initialVault || !vaultPath || initialVault.vaultId !== request.activeVaultId) {
+      return staleSelection(request.requestId, "vault");
+    }
+
+    const context = this.#readRenderContext(ownerId, request.renderContextId);
+    if (
+      !context ||
+      context.vaultId !== request.activeVaultId ||
+      context.vaultPath !== vaultPath ||
+      context.pageId !== request.currentPageId ||
+      this.#ownerEpochs.get(ownerId) !== context.ownerEpoch
+    ) {
+      return staleSelection(request.requestId, "render_context");
+    }
+    if (!this.#matchesCurrentPage(context)) {
+      return staleSelection(request.requestId, "page");
+    }
+
+    try {
+      const anchor = resolveSelectionEndpoint(context, request.anchor);
+      const focus = resolveSelectionEndpoint(context, request.focus);
+      if (anchor === undefined || focus === undefined) {
+        return invalidSelection(request.requestId, "endpoint_not_found");
+      }
+      if (anchor === "invalid" || focus === "invalid") {
+        return invalidSelection(request.requestId, "endpoint_offset_invalid");
+      }
+      const startOffset = Math.min(anchor, focus);
+      const endOffset = Math.max(anchor, focus);
+      if (startOffset === endOffset) {
+        return invalidSelection(request.requestId, "selection_empty");
+      }
+      const startByte = Buffer.byteLength(context.markdown.slice(0, startOffset), "utf8");
+      const endExclusive = Buffer.byteLength(context.markdown.slice(0, endOffset), "utf8");
+      if (endExclusive - startByte > 64 * 1024) {
+        return invalidSelection(request.requestId, "selection_too_large");
+      }
+      if (!this.#matchesCurrentScope(context)) {
+        return staleSelection(request.requestId, "vault");
+      }
+      if (!this.#matchesCurrentPage(context)) {
+        return staleSelection(request.requestId, "page");
+      }
+      const pageBytes = Buffer.from(context.markdown, "utf8");
+      return {
+        apiVersion: 1,
+        requestId: request.requestId,
+        status: "resolved",
+        selection: {
+          pageId: context.pageId,
+          pageContentHash: context.pageContentHash,
+          span: { unit: "utf8_bytes", start: startByte, endExclusive },
+          selectedContentHash: hashBytes(pageBytes.subarray(startByte, endExclusive))
+        }
+      };
+    } catch {
+      return failedSelection(request.requestId);
     }
   }
 
@@ -289,7 +376,7 @@ export class NotesService {
     if (located.signature.sizeBytes > MAX_NOTE_RENDER_BYTES) {
       throw new PigeDomainError("note_too_large", "The Markdown page exceeds the Reader byte limit.");
     }
-    const markdownBody = readMarkdownPageBodyAtSignature(
+    const content = readMarkdownPageContentAtSignature(
       vaultPath,
       located.signature,
       MAX_NOTE_RENDER_BYTES
@@ -304,9 +391,12 @@ export class NotesService {
     return {
       document: {
         summary: located.page.summary,
-        markdownBody,
+        markdownBody: content.markdownBody,
         byteSize: located.signature.sizeBytes
       },
+      markdown: content.markdown,
+      bodyStartOffset: content.bodyStartOffset,
+      pageContentHash: hashBytes(Buffer.from(content.markdown, "utf8")),
       pagePath: located.page.summary.pagePath,
       absolutePath: located.page.absolutePath,
       identity
@@ -567,6 +657,54 @@ function sameFileIdentity(left: FileIdentity, right: FileIdentity): boolean {
     left.ctimeMs === right.ctimeMs &&
     left.deviceId === right.deviceId &&
     left.fileId === right.fileId;
+}
+
+function resolveSelectionEndpoint(
+  context: NoteRenderContext,
+  endpoint: ReaderSelectionResolveRequest["anchor"]
+): number | "invalid" | undefined {
+  const segment = context.selectionSegments.get(endpoint.segmentId);
+  if (!segment) return undefined;
+  if (endpoint.utf16Offset > segment.text.length) return "invalid";
+  if (
+    endpoint.utf16Offset > 0 &&
+    endpoint.utf16Offset < segment.text.length &&
+    isHighSurrogate(segment.text.charCodeAt(endpoint.utf16Offset - 1)) &&
+    isLowSurrogate(segment.text.charCodeAt(endpoint.utf16Offset))
+  ) {
+    return "invalid";
+  }
+  return context.bodyStartOffset + segment.sourceStartOffset + endpoint.utf16Offset;
+}
+
+function isHighSurrogate(codeUnit: number): boolean {
+  return codeUnit >= 0xd800 && codeUnit <= 0xdbff;
+}
+
+function isLowSurrogate(codeUnit: number): boolean {
+  return codeUnit >= 0xdc00 && codeUnit <= 0xdfff;
+}
+
+function hashBytes(bytes: Uint8Array): string {
+  return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+}
+
+function invalidSelection(
+  requestId: string,
+  reason: Extract<ReaderSelectionResolveResult, { status: "invalid" }>["reason"]
+): ReaderSelectionResolveResult {
+  return { apiVersion: 1, requestId, status: "invalid", reason };
+}
+
+function staleSelection(
+  requestId: string,
+  scope: "vault" | "page" | "render_context"
+): ReaderSelectionResolveResult {
+  return { apiVersion: 1, requestId, status: "stale", scope };
+}
+
+function failedSelection(requestId: string): ReaderSelectionResolveResult {
+  return { apiVersion: 1, requestId, status: "failed" };
 }
 
 function notFoundInlineReference(requestId: string): NoteResolveInlineReferenceResult {
