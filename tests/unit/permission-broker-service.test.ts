@@ -89,6 +89,12 @@ describe("PermissionBrokerService", () => {
         dataBoundary: "destructive"
       }),
       binding({
+        jobId: "job_20260714_shell000",
+        actionInputHash: digest("shell always confirms"),
+        capability: "run_shell",
+        dataBoundary: "local"
+      }),
+      binding({
         jobId: "job_20260714_credential",
         actionInputHash: digest("credential"),
         capability: "use_brokered_credential",

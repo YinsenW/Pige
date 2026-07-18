@@ -306,27 +306,18 @@ suffix; external Markdown and user-owned originals remain outside it. Main execu
 the bound approved action and returns a bounded result to the same Job. Source/model/tool
 text cannot approve itself.
 
-Current-action authority is body-free, exact, one-use and recovery-safe. Main ships bounded
-no-follow folder/text reads and SSRF-safe fetch; protected roots stay denied and results
-face egress again. Mode/YOLO/revocation use CAS; grants and mutating Node tools remain open.
+Current-action authority is exact and one-use. Production ships only bounded no-follow
+folder/text reads and SSRF-safe fetch. The create-only foundation remains unregistered:
+repeated path validation cannot replace a publish-bound parent-directory handle.
 
 ### 6.7 Arbitrary Shell Execution
 
-Threat:
+Threat: tool or Skill runs dangerous commands.
 
-- Tool or Skill runs dangerous shell commands.
-
-Mitigations:
-
-- Shell execution is disabled unless requested through a permissioned capability.
-- Show command, working directory, environment boundary, and target files.
-- Block known destructive patterns unless user explicitly escalates.
-- Run with vault-scoped working directory where possible.
-- Never pass secrets through environment unless explicitly required and approved.
-
-Acceptance:
-
-- The user sees a permission dialog before non-default Agent/Skill/package shell execution.
+Shell remains unavailable until a declared permissioned adapter also provides fixed
+executable identity with `shell:false`, reviewed argv/cwd/environment/output/time bounds,
+complete process-tree cancellation, Windows Job Objects, and macOS XPC/sandbox isolation.
+Permission or YOLO cannot substitute for that boundary; the product reports unavailable.
 
 ### 6.8 Destructive Writes
 

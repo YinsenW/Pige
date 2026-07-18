@@ -405,10 +405,11 @@ Tests must verify:
   Pending/approved/denied restart safely; consumed-without-completion never replays.
 - Pending UI exposes one localized safe summary/status owner, disables while resolving,
   rereads durable truth after IPC uncertainty, and fails closed for stale/unreadable state.
-- Built-in tools do not prompt. The production external registry stays empty until a
-  reviewed caller exists; an injected read-only adapter proves only the Broker core.
+- Production exposes only three reviewed read-only adapters; create-foundation tests prove
+  no write authority or exit.
 - Symlink/root/parent/successor races, fsync errors, cancellation and marker disagreement
   fail closed without deleting a successor or creating Retry authority.
+- Mutation/shell admission needs platform race, recovery, and isolation evidence.
 - Grant-matching fixtures distinguish a non-reusable one-action decision from a
   revocable saved grant bound to actor/version/capability/resource scope.
 - Deny blocks the action and leaves the app stable.

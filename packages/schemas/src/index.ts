@@ -811,6 +811,48 @@ export const PermissionSettingsMutationResultSchema = z.discriminatedUnion("stat
   z.object({ status: z.literal("not_found"), settings: PermissionSettingsSummarySchema }).strict()
 ]);
 
+export const ExternalMutationIntentIdSchema = z.string().regex(/^extmut_\d{8}_[a-z0-9]{12,}$/);
+export const ExternalMutationIntentSchema = z.object({
+  id: ExternalMutationIntentIdSchema,
+  schemaVersion: z.literal(1),
+  revision: z.number().int().positive(),
+  state: z.enum(["planned", "published", "operation_committed", "completed", "failed_uncertain"]),
+  vaultId: VaultIdSchema,
+  jobId: JobIdSchema,
+  toolCallId: z.string().min(1).max(256),
+  permissionRequestId: PermissionRequestIdSchema,
+  permissionDecisionId: PermissionDecisionIdSchema,
+  bindingHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  policyContextId: z.string().min(1),
+  policyHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  targetPath: z.string().min(1),
+  stagePath: z.string().min(1),
+  targetResourceHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  contentHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  byteLength: z.number().int().nonnegative().max(48 * 1_024),
+  operationId: OperationIdSchema,
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true })
+}).strict().superRefine((intent, context) => {
+  if (Date.parse(intent.updatedAt) < Date.parse(intent.createdAt)) {
+    context.addIssue({
+      code: "custom",
+      path: ["updatedAt"],
+      message: "An external mutation intent cannot be updated before it is created."
+    });
+  }
+  for (const key of ["targetPath", "stagePath"] as const) {
+    const value = intent[key];
+    if (value.length > 4_096 || /[\u0000-\u001f\u007f]/u.test(value)) {
+      context.addIssue({
+        code: "custom",
+        path: [key],
+        message: "An external mutation intent path is invalid."
+      });
+    }
+  }
+});
+
 export const ModelEgressContentClassSchema = z.enum([
   "ordinary",
   "private",
@@ -2425,6 +2467,7 @@ export const OperationRefSchema = z.object({
     "model",
     "permission",
     "root_binding",
+    "external_resource",
     "backup",
     "operation",
     "proposal"
@@ -2432,7 +2475,15 @@ export const OperationRefSchema = z.object({
   id: z.string().min(1),
   path: z.string().min(1).optional(),
   checksum: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional()
-}).strict();
+}).strict().superRefine((reference, context) => {
+  if (reference.kind === "external_resource" && reference.path !== undefined) {
+    context.addIssue({
+      code: "custom",
+      path: ["path"],
+      message: "External resource references must never persist machine paths."
+    });
+  }
+});
 
 export const ModelEgressAuditSchema = z.object({
   payloadHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
@@ -2563,7 +2614,8 @@ export const OperationRecordSchema = z.object({
     "repair_record",
     "backup_created",
     "restore_applied",
-    "migration_applied"
+    "migration_applied",
+    "create_external_file"
   ]),
   targetRefs: z.array(OperationRefSchema),
   sourceRefs: z.array(OperationRefSchema),
@@ -2595,6 +2647,30 @@ export const OperationRecordSchema = z.object({
       path: ["modelEgressAudit"],
       message: "Only a model-egress decision operation may contain modelEgressAudit."
     });
+  }
+  if (operation.kind === "create_external_file") {
+    const target = operation.targetRefs[0];
+    if (
+      !operation.jobId ||
+      operation.permissionDecisionIds.length !== 1 ||
+      !operation.policyAudit ||
+      operation.targetRefs.length !== 1 ||
+      target?.kind !== "external_resource" ||
+      !/^sha256:[a-f0-9]{64}$/u.test(target.id) ||
+      operation.sourceRefs.length !== 0 ||
+      operation.before !== undefined ||
+      operation.patchRef !== undefined ||
+      operation.after?.kind !== "external_resource" ||
+      operation.after.id !== target.id ||
+      operation.after.checksum === undefined ||
+      operation.reversible !== "no"
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["kind"],
+        message: "An external-file creation Operation requires one path-free audited target and checksum."
+      });
+    }
   }
 });
 
@@ -3060,6 +3136,7 @@ export type PermissionDisableYoloRequest = z.infer<typeof PermissionDisableYoloR
 export type PermissionRevokeSavedGrantRequest = z.infer<typeof PermissionRevokeSavedGrantRequestSchema>;
 export type PermissionRevokeAllSavedGrantsRequest = z.infer<typeof PermissionRevokeAllSavedGrantsRequestSchema>;
 export type PermissionSettingsMutationResult = z.infer<typeof PermissionSettingsMutationResultSchema>;
+export type ExternalMutationIntent = z.infer<typeof ExternalMutationIntentSchema>;
 export type ProposalState = z.infer<typeof ProposalStateSchema>;
 export type ProposalTrustLevel = z.infer<typeof ProposalTrustLevelSchema>;
 export type ProviderKind = z.infer<typeof ProviderKindSchema>;

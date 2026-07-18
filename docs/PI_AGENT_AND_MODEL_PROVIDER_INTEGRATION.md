@@ -309,10 +309,9 @@ stable ID/version/description/capability; strict input/output schemas and trust;
 required capabilities, resource scope, permission, data boundary, execution order,
 idempotency, limits, owner service, and handler.
 
-The current Permission Broker foundation proves one injected read-only/idempotent
-external adapter, current-action Deny/Allow once, same-Job pause/resume and restart-safe
-one-use execution. The production external adapter registry remains empty; arbitrary-path
-tools, real Skill/package/local-tool callers, saved grants and YOLO remain Phase 8 work.
+Production exposes only read-only folder/text/fetch adapters. The create journal/Operation
+foundation is unregistered; external write/delete/shell remain unavailable pending the
+filesystem and process isolation owned by `docs/SECURITY_THREAT_MODEL.md`.
 
 Pi-selected Dataset tools bind the exact source or Dataset revision. A deterministic
 `dataset_import` child may materialize one validated Bundle/Operation; read-only Home

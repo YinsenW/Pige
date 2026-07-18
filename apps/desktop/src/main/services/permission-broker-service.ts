@@ -611,8 +611,7 @@ function isYoloEligibleBinding(binding: PermissionActionBinding): boolean {
   return binding.runtimeKind === "desktop_local" &&
     binding.clientCapabilityTier === "desktop_full" &&
     (binding.capability === "external_filesystem" ||
-      binding.capability === "external_network" ||
-      binding.capability === "run_shell") &&
+      binding.capability === "external_network") &&
     binding.dataBoundary !== "destructive" &&
     binding.dataBoundary !== "cloud" &&
     binding.dataBoundary !== "brokered_credential";
