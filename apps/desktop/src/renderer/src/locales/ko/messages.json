@@ -599,6 +599,8 @@
   "note.selection.copy": "복사",
   "note.selection.copyAsQuote": "인용문으로 복사",
   "note.selection.copied": "복사했습니다.",
+  "note.selection.sentToAgent": "Note Agent에서 열었습니다.",
+  "note.selection.actionFailed": "선택 영역 작업을 시작할 수 없습니다. 구절을 다시 선택한 후 재시도하세요.",
   "note.selection.copyFailed": "선택 영역을 복사할 수 없습니다.",
   "note.selection.expand": "확장",
   "note.selection.link": "연결",

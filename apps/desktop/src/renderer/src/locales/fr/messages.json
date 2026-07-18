@@ -599,6 +599,8 @@
   "note.selection.copy": "Copier",
   "note.selection.copyAsQuote": "Copier comme citation",
   "note.selection.copied": "Copié.",
+  "note.selection.sentToAgent": "Ouvert dans Note Agent.",
+  "note.selection.actionFailed": "Impossible de démarrer cette action sur la sélection. Sélectionnez à nouveau le passage et réessayez.",
   "note.selection.copyFailed": "Impossible de copier la sélection.",
   "note.selection.expand": "Développer",
   "note.selection.link": "Lier",

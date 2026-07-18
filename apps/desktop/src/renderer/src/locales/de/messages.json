@@ -599,6 +599,8 @@
   "note.selection.copy": "Kopieren",
   "note.selection.copyAsQuote": "Als Zitat kopieren",
   "note.selection.copied": "Kopiert.",
+  "note.selection.sentToAgent": "In Note Agent geöffnet.",
+  "note.selection.actionFailed": "Diese Auswahlaktion konnte nicht gestartet werden. Wählen Sie die Passage erneut aus und versuchen Sie es noch einmal.",
   "note.selection.copyFailed": "Die Auswahl konnte nicht kopiert werden.",
   "note.selection.expand": "Erweitern",
   "note.selection.link": "Verknüpfen",

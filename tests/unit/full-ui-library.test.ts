@@ -8,6 +8,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import type {
   LibraryListResult,
   NoteRenderResult,
+  ReaderSelectionActionRequest,
+  ReaderSelectionActionResult,
   ReaderSelectionResolveRequest,
   ReaderSelectionResolveResult,
   RetrievalSearchRequest,
@@ -758,6 +760,7 @@ describe("full UI Library", () => {
     const root = createRoot(dom.window.document.querySelector("#root")!);
     const first = deferred<ReaderSelectionResolveResult>();
     const requests: ReaderSelectionResolveRequest[] = [];
+    const actionRequests: ReaderSelectionActionRequest[] = [];
     await act(async () => {
       root.render(createElement(NoteReader, {
         note: readerNote(),
@@ -781,6 +784,18 @@ describe("full UI Library", () => {
               span: { unit: "utf8_bytes", start: 1, endExclusive: 9 },
               selectedContentHash: `sha256:${"b".repeat(64)}`
             }
+          };
+        },
+        onSubmitSelectionAction: async (request) => {
+          actionRequests.push(request);
+          return {
+            apiVersion: 1,
+            requestId: request.requestId,
+            status: "completed",
+            jobId: "job_20260718_selection01",
+            conversationEventId: "evt_20260718_selection01",
+            conversationId: "conv_20260718_selection01",
+            tailEventId: "evt_20260718_selection02"
           };
         },
         related: null,
@@ -871,6 +886,23 @@ describe("full UI Library", () => {
     });
     await waitFor(dom, () => requests.length === 3);
     await waitFor(dom, () => container.querySelector('[data-selection-action="more"]') !== null);
+    await act(async () => {
+      requireElement(container.querySelector<HTMLButtonElement>('[data-selection-action="explain"]')).click();
+      await settle(dom);
+    });
+    expect(actionRequests).toHaveLength(1);
+    expect(actionRequests[0]).toMatchObject({
+      apiVersion: 1,
+      action: "explain",
+      locale: "en",
+      selection: {
+        pageId: "page_20260715_reader1111",
+        span: { unit: "utf8_bytes", start: 1, endExclusive: 9 }
+      }
+    });
+    expect(actionRequests[0]!.requestId).toMatch(/^readerselaction_[a-z0-9]{8,64}$/u);
+    expect(actionRequests[0]!.clientTurnId).toMatch(/^turn_\d{8}_[a-z0-9]{12,64}$/u);
+    expect(JSON.stringify(actionRequests[0])).not.toContain("private selected body");
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -984,7 +1016,8 @@ describe("full UI Library", () => {
     });
     expect(pointerDown.defaultPrevented).toBe(true);
     await waitFor(dom, () => dom.window.document.activeElement === focusOwner);
-    expect(unavailable).toEqual(["selection_actions"]);
+    expect(unavailable).toEqual([]);
+    expect(container.querySelector('[role="status"]')?.textContent).toBe("Opened in Note Agent.");
     expect(container.querySelector('[role="toolbar"]')).toBeNull();
 
     focusOwner.focus();
@@ -1189,6 +1222,7 @@ function readerNote(): NoteRenderResult {
 function resolvedSelectionProps(): {
   readonly activeVaultId: string;
   readonly onResolveSelection: (request: ReaderSelectionResolveRequest) => Promise<ReaderSelectionResolveResult>;
+  readonly onSubmitSelectionAction: (request: ReaderSelectionActionRequest) => Promise<ReaderSelectionActionResult>;
 } {
   return {
     activeVaultId: "vault_20260715_fullui01",
@@ -1202,6 +1236,15 @@ function resolvedSelectionProps(): {
         span: { unit: "utf8_bytes", start: 0, endExclusive: 8 },
         selectedContentHash: `sha256:${"b".repeat(64)}`
       }
+    }),
+    onSubmitSelectionAction: async (request) => ({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "completed",
+      jobId: "job_20260718_selection01",
+      conversationEventId: "evt_20260718_selection01",
+      conversationId: "conv_20260718_selection01",
+      tailEventId: "evt_20260718_selection02"
     })
   };
 }

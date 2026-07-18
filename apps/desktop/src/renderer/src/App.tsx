@@ -52,6 +52,8 @@ import type {
   NoteResolveInlineReferenceRequest,
   ReaderSelectionEndpoint,
   ReaderSelectionIdentity,
+  ReaderSelectionActionRequest,
+  ReaderSelectionActionResult,
   ReaderSelectionResolveRequest,
   ReaderSelectionResolveResult,
   OnboardingStatus,
@@ -230,6 +232,7 @@ export function App(): React.JSX.Element {
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
   const [developmentNotice, setDevelopmentNotice] = useState<DevelopmentNotice | null>(null);
   const [noteAgentOpen, setNoteAgentOpen] = useState(false);
+  const [noteAgentExternalRevision, setNoteAgentExternalRevision] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [openingRecentVaultId, setOpeningRecentVaultId] = useState<string | null>(null);
@@ -1079,6 +1082,19 @@ export function App(): React.JSX.Element {
     window.requestAnimationFrame(() => noteAgentToggleRef.current?.focus());
   };
 
+  const revealReaderSelectionAction = (result: ReaderSelectionActionResult): void => {
+    const hasConversation = result.status === "completed" || result.status === "waiting" ||
+      (result.status === "failed" && Boolean(result.conversationId));
+    if (!selectedNote || !hasConversation) return;
+    setNoteAgentExternalRevision((current) => current + 1);
+    void requestWindowLayout({
+      apiVersion: 1,
+      surface: "reader",
+      sidebarOpen,
+      noteAgentOpen: true
+    });
+  };
+
   return (
     <div
       className={`shell app-window mode-${windowState?.mode ?? "compact"}${macosWindowShell ? " platform-macos" : ""}${homeSurface ? " home-surface" : ""}${sidebarOpen ? " sidebar-expanded" : ""}${selectedNote ? " note-mode" : ""}${dropActive ? " drop-active" : ""}`}
@@ -1264,6 +1280,9 @@ export function App(): React.JSX.Element {
             libraryList={libraryList}
             activeVaultId={activeVault.vaultId}
             onResolveReaderSelection={resolveReaderSelection}
+            onSubmitReaderSelectionAction={submitReaderSelectionAction}
+            locale={locale}
+            onReaderSelectionAction={revealReaderSelectionAction}
             selectedNote={selectedNote}
             selectedNoteRelated={selectedNoteRelated}
             noteLoadingPageId={noteLoadingPageId}
@@ -1297,6 +1316,9 @@ export function App(): React.JSX.Element {
               libraryList={libraryList}
               activeVaultId={activeVault.vaultId}
               onResolveReaderSelection={resolveReaderSelection}
+              onSubmitReaderSelectionAction={submitReaderSelectionAction}
+              locale={locale}
+              onReaderSelectionAction={revealReaderSelectionAction}
               selectedNote={selectedNote}
               selectedNoteRelated={selectedNoteRelated}
               noteLoadingPageId={noteLoadingPageId}
@@ -1350,6 +1372,7 @@ export function App(): React.JSX.Element {
             modelSummary={modelSummary}
             recentJobs={recentJobs}
             locale={locale}
+            onReaderSelectionAction={revealReaderSelectionAction}
             draftText={homeDraftText}
             onDraftChange={setHomeDraftText}
             showFirstHomeGuide={onboarding?.showFirstHomeGuide === true}
@@ -1374,7 +1397,7 @@ export function App(): React.JSX.Element {
         </main>
         {selectedNote && noteAgentOpen && activeVault && selectedNoteVaultId === activeVault.vaultId ? (
           <CurrentNoteAgent
-            key={`${activeVault.vaultId}:${selectedNote.summary.pageId}`}
+            key={`${activeVault.vaultId}:${selectedNote.summary.pageId}:${noteAgentExternalRevision}`}
             modal={agentModal}
             vaultId={activeVault.vaultId}
             pageId={selectedNote.summary.pageId}
@@ -1701,6 +1724,9 @@ export function LibraryPanel(props: {
   readonly onCopyNote: (pageId: string) => Promise<boolean>;
   readonly activeVaultId?: string;
   readonly onResolveReaderSelection?: (request: ReaderSelectionResolveRequest) => Promise<ReaderSelectionResolveResult>;
+  readonly onSubmitReaderSelectionAction?: (request: ReaderSelectionActionRequest) => Promise<ReaderSelectionActionResult>;
+  readonly locale?: Locale;
+  readonly onReaderSelectionAction?: (result: ReaderSelectionActionResult) => void;
   readonly onActivateInlineReference?: (href: string) => Promise<ReaderInlineReferenceActivation>;
   readonly onDevelopment: (capability: DevelopmentCapability) => void;
   readonly t: (key: string) => string;
@@ -1880,6 +1906,9 @@ export function LibraryPanel(props: {
           note={props.selectedNote}
           {...(props.activeVaultId ? { activeVaultId: props.activeVaultId } : {})}
           {...(props.onResolveReaderSelection ? { onResolveSelection: props.onResolveReaderSelection } : {})}
+          {...(props.onSubmitReaderSelectionAction ? { onSubmitSelectionAction: props.onSubmitReaderSelectionAction } : {})}
+          {...(props.locale ? { locale: props.locale } : {})}
+          {...(props.onReaderSelectionAction ? { onSelectionActionResult: props.onReaderSelectionAction } : {})}
           related={props.selectedNoteRelated}
           relatedLoadingPageId={props.noteLoadingPageId}
           onOpenRelated={props.onOpenNote}
@@ -2317,10 +2346,21 @@ function resolveReaderSelection(request: ReaderSelectionResolveRequest): Promise
   return window.pige.readerSelection.resolve(request);
 }
 
+function submitReaderSelectionAction(request: ReaderSelectionActionRequest): Promise<ReaderSelectionActionResult> {
+  return window.pige.readerSelection.submitAction(request);
+}
+
+function createReaderSelectionActionRequestId(): string {
+  return `readerselaction_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
+}
+
 export function NoteReader(props: {
   readonly note: NoteRenderResult;
   readonly activeVaultId?: string;
   readonly onResolveSelection?: (request: ReaderSelectionResolveRequest) => Promise<ReaderSelectionResolveResult>;
+  readonly onSubmitSelectionAction?: (request: ReaderSelectionActionRequest) => Promise<ReaderSelectionActionResult>;
+  readonly locale?: Locale;
+  readonly onSelectionActionResult?: (result: ReaderSelectionActionResult) => void;
   readonly related: NoteRelatedState;
   readonly relatedLoadingPageId: string | null;
   readonly onOpenRelated: (pageId: string) => Promise<void>;
@@ -2358,6 +2398,7 @@ export function NoteReader(props: {
   const [selectionMoreActionIndex, setSelectionMoreActionIndex] = useState(0);
   const [selectionMorePlacement, setSelectionMorePlacement] = useState<"above" | "below">("below");
   const [selectionFeedback, setSelectionFeedback] = useState<string | null>(null);
+  const [selectionActionPending, setSelectionActionPending] = useState(false);
   const [selectionResolution, setSelectionResolution] = useState<
     | { readonly kind: "copy_only" }
     | { readonly kind: "checking" }
@@ -2608,6 +2649,41 @@ export function NoteReader(props: {
     }
   };
 
+  const submitSelectionAction = async (
+    action: "explain" | "summarize",
+    selection: ReaderSelectionIdentity
+  ): Promise<void> => {
+    if (selectionActionPending) return;
+    const resolveSequence = selectionResolveSequence.current;
+    setSelectionActionPending(true);
+    setSelectionFeedback(null);
+    try {
+      if (!props.onSubmitSelectionAction) throw new Error("Reader selection actions are unavailable.");
+      const result = await props.onSubmitSelectionAction({
+        apiVersion: 1,
+        requestId: createReaderSelectionActionRequestId(),
+        action,
+        selection,
+        locale: props.locale ?? "en",
+        clientTurnId: createAgentClientTurnId()
+      });
+      if (resolveSequence !== selectionResolveSequence.current) return;
+      closeSelectionToolbar(true);
+      props.onSelectionActionResult?.(result);
+      setSelectionFeedback(props.t(
+        result.status === "completed" || result.status === "waiting"
+          ? "note.selection.sentToAgent"
+          : "note.selection.actionFailed"
+      ));
+    } catch {
+      if (resolveSequence !== selectionResolveSequence.current) return;
+      closeSelectionToolbar(true);
+      setSelectionFeedback(props.t("note.selection.actionFailed"));
+    } finally {
+      if (resolveSequence === selectionResolveSequence.current) setSelectionActionPending(false);
+    }
+  };
+
   const selectionActions = selectionResolution.kind === "resolved"
     ? (["explain", "summarize", "link", "more"] as const)
     : (["copy", "copyAsQuote"] as const);
@@ -2645,6 +2721,7 @@ export function NoteReader(props: {
                 else selectionActionRefs.current.delete(index);
               }}
               type="button"
+              disabled={selectionActionPending}
               tabIndex={selectionActionIndex === index ? 0 : -1}
               data-selection-action={action}
               aria-expanded={action === "more" ? selectionMoreOpen : undefined}
@@ -2657,6 +2734,10 @@ export function NoteReader(props: {
                 }
                 if (action === "more") {
                   toggleSelectionMore();
+                  return;
+                }
+                if ((action === "explain" || action === "summarize") && selectionResolution.kind === "resolved") {
+                  void submitSelectionAction(action, selectionResolution.selection);
                   return;
                 }
                 closeSelectionToolbar(true);
@@ -3591,6 +3672,7 @@ function HomeComposer(props: {
   readonly modelSummary: ModelProviderSettingsSummary | null;
   readonly recentJobs: readonly JobSummary[];
   readonly locale: Locale;
+  readonly onReaderSelectionAction: (result: ReaderSelectionActionResult) => void;
   readonly draftText: string;
   readonly onDraftChange: (text: string) => void;
   readonly showFirstHomeGuide: boolean;
@@ -5096,8 +5178,11 @@ function HomeComposer(props: {
             note={selectedNote}
             {...(props.activeVault && selectedNote.renderContextId ? {
               activeVaultId: props.activeVault.vaultId,
-              onResolveSelection: resolveReaderSelection
+              onResolveSelection: resolveReaderSelection,
+              onSubmitSelectionAction: submitReaderSelectionAction
             } : {})}
+            locale={props.locale}
+            onSelectionActionResult={props.onReaderSelectionAction}
             related={selectedNoteRelated}
             relatedLoadingPageId={noteLoadingPageId}
             onOpenRelated={openResult}

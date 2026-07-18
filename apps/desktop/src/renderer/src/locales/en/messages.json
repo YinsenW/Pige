@@ -599,6 +599,8 @@
   "note.selection.copy": "Copy",
   "note.selection.copyAsQuote": "Copy as quote",
   "note.selection.copied": "Copied.",
+  "note.selection.sentToAgent": "Opened in Note Agent.",
+  "note.selection.actionFailed": "This selection action could not be started. Select the passage again and retry.",
   "note.selection.copyFailed": "The selection could not be copied.",
   "note.selection.expand": "Expand",
   "note.selection.link": "Link",

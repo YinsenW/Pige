@@ -599,6 +599,8 @@
   "note.selection.copy": "コピー",
   "note.selection.copyAsQuote": "引用としてコピー",
   "note.selection.copied": "コピーしました。",
+  "note.selection.sentToAgent": "Note Agent で開きました。",
+  "note.selection.actionFailed": "選択範囲の操作を開始できませんでした。もう一度範囲を選択して再試行してください。",
   "note.selection.copyFailed": "選択範囲をコピーできませんでした。",
   "note.selection.expand": "展開",
   "note.selection.link": "リンク",

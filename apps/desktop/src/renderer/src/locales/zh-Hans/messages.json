@@ -599,6 +599,8 @@
   "note.selection.copy": "复制",
   "note.selection.copyAsQuote": "复制为引用",
   "note.selection.copied": "已复制。",
+  "note.selection.sentToAgent": "已在 Note Agent 中打开。",
+  "note.selection.actionFailed": "无法开始处理这个选区。请重新选择后再试。",
   "note.selection.copyFailed": "无法复制所选内容。",
   "note.selection.expand": "扩写",
   "note.selection.link": "关联",
