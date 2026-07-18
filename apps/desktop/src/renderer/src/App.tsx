@@ -51,6 +51,8 @@ import type {
   OnboardingStatus,
   PigeErrorSummary,
   PermissionPendingRequest,
+  PermissionSettingsMutationResult,
+  PermissionSettingsSummary,
   ProviderConnectNeedsManualModel,
   RecentVaultSummary,
   RetrievalAnswerCitation,
@@ -5863,6 +5865,135 @@ export function PermissionsPrivacySettingsPanel(props: {
   readonly onDevelopment: () => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
+  const [permissionSettings, setPermissionSettings] = useState<PermissionSettingsSummary | null>(null);
+  const [permissionSettingsLoading, setPermissionSettingsLoading] = useState(true);
+  const [permissionSettingsBusy, setPermissionSettingsBusy] = useState<string | null>(null);
+  const [permissionSettingsNotice, setPermissionSettingsNotice] = useState<
+    "updated" | "stale" | "cancelled" | "failed" | null
+  >(null);
+  const [savedGrantsOpen, setSavedGrantsOpen] = useState(false);
+  const permissionSettingsRef = useRef<PermissionSettingsSummary | null>(null);
+  const permissionSettingsSequence = useRef(0);
+  const permissionSettingsMutationInFlight = useRef(false);
+
+  const commitPermissionSettings = (next: PermissionSettingsSummary): void => {
+    const current = permissionSettingsRef.current;
+    if (current && next.revision < current.revision) return;
+    permissionSettingsRef.current = next;
+    setPermissionSettings(next);
+  };
+
+  useEffect(() => {
+    const sequence = permissionSettingsSequence.current + 1;
+    permissionSettingsSequence.current = sequence;
+    setPermissionSettingsLoading(true);
+    setPermissionSettingsNotice(null);
+    void window.pige.permissions.settings.current().then((current) => {
+      if (permissionSettingsSequence.current !== sequence) return;
+      commitPermissionSettings(current);
+    }).catch(() => {
+      if (permissionSettingsSequence.current === sequence) setPermissionSettingsNotice("failed");
+    }).finally(() => {
+      if (permissionSettingsSequence.current === sequence) setPermissionSettingsLoading(false);
+    });
+    return () => {
+      if (permissionSettingsSequence.current === sequence) permissionSettingsSequence.current += 1;
+    };
+  }, []);
+
+  const runPermissionSettingsMutation = async (
+    action: string,
+    mutate: (
+      current: PermissionSettingsSummary
+    ) => Promise<PermissionSettingsMutationResult | "cancelled" | "stale">
+  ): Promise<void> => {
+    const current = permissionSettingsRef.current;
+    if (!current || permissionSettingsMutationInFlight.current) return;
+    permissionSettingsMutationInFlight.current = true;
+    const sequence = permissionSettingsSequence.current + 1;
+    permissionSettingsSequence.current = sequence;
+    setPermissionSettingsBusy(action);
+    setPermissionSettingsNotice(null);
+    try {
+      const result = await mutate(current);
+      if (permissionSettingsSequence.current !== sequence) return;
+      if (result === "cancelled") {
+        setPermissionSettingsNotice("cancelled");
+      } else if (result === "stale") {
+        const latest = await window.pige.permissions.settings.current();
+        if (permissionSettingsSequence.current !== sequence) return;
+        commitPermissionSettings(latest);
+        setPermissionSettingsNotice("stale");
+      } else {
+        commitPermissionSettings(result.settings);
+        setPermissionSettingsNotice(result.status === "committed" ? "updated" : "stale");
+      }
+    } catch {
+      if (permissionSettingsSequence.current === sequence) setPermissionSettingsNotice("failed");
+    } finally {
+      permissionSettingsMutationInFlight.current = false;
+      if (permissionSettingsSequence.current === sequence) setPermissionSettingsBusy(null);
+    }
+  };
+
+  const updateDefaultMode = (defaultMode: "ask_every_time" | "remember_scoped_grants"): void => {
+    void runPermissionSettingsMutation("default-mode", (current) =>
+      window.pige.permissions.settings.setDefaultMode({
+        apiVersion: 1,
+        expectedRevision: current.revision,
+        defaultMode
+      })
+    );
+  };
+
+  const toggleYolo = (): void => {
+    if (permissionSettings?.yoloEnabled) {
+      void runPermissionSettingsMutation("yolo", (current) =>
+        window.pige.permissions.settings.disableYolo({
+          apiVersion: 1,
+          expectedRevision: current.revision
+        })
+      );
+      return;
+    }
+    void runPermissionSettingsMutation("yolo", async (current) => {
+      const prepared = await window.pige.permissions.settings.prepareYoloEnable({
+        apiVersion: 1,
+        expectedRevision: current.revision
+      });
+      if (prepared.status === "cancelled") return "cancelled";
+      if (prepared.status === "stale") return "stale";
+      return window.pige.permissions.settings.enableYolo({
+        apiVersion: 1,
+        expectedRevision: prepared.revision,
+        confirmationToken: prepared.confirmationToken
+      });
+    });
+  };
+
+  const revokeGrant = (grantId: PermissionSettingsSummary["savedGrants"][number]["grantId"]): void => {
+    void runPermissionSettingsMutation(`grant:${grantId}`, (current) =>
+      window.pige.permissions.settings.revokeGrant({
+        apiVersion: 1,
+        expectedRevision: current.revision,
+        grantId
+      })
+    );
+  };
+
+  const revokeAllGrants = (): void => {
+    void runPermissionSettingsMutation("all-grants", (current) =>
+      window.pige.permissions.settings.revokeAllGrants({
+        apiVersion: 1,
+        expectedRevision: current.revision
+      })
+    );
+  };
+
+  const selectedMode = permissionSettings?.defaultMode ?? "unavailable";
+  const settingsUnavailable = permissionSettingsLoading || permissionSettings === null;
+  const settingsBusy = permissionSettingsBusy !== null;
+
   return (
     <section className="settings-page privacy-settings-page" aria-labelledby="settings-privacy-title">
       <header className="settings-panel-header">
@@ -5935,48 +6066,123 @@ export function PermissionsPrivacySettingsPanel(props: {
               <strong>{props.t("privacy.defaultModeTitle")}</strong>
               <span id="privacy-default-mode-description">{props.t("privacy.defaultModeDescription")}</span>
             </div>
-            <button
-              className="settings-button"
-              type="button"
+            <select
+              className="settings-select"
               data-privacy-control="default-mode"
               aria-label={props.t("privacy.defaultModeTitle")}
               aria-describedby="privacy-default-mode-description privacy-partial-note"
-              onClick={props.onDevelopment}
+              value={selectedMode}
+              disabled={settingsUnavailable || settingsBusy || permissionSettings?.yoloEnabled === true}
+              onChange={(event) => {
+                const next = event.target.value;
+                if (next === "ask_every_time" || next === "remember_scoped_grants") updateDefaultMode(next);
+              }}
             >
-              {props.t("settings.status.development")}
-            </button>
+              <option value="unavailable" disabled>{props.t("privacy.mode.unavailable")}</option>
+              <option value="ask_every_time">{props.t("privacy.mode.askEveryTime")}</option>
+              <option value="remember_scoped_grants">{props.t("privacy.mode.rememberScoped")}</option>
+              <option value="yolo_full_access" disabled={!permissionSettings?.yoloEnabled}>
+                {props.t("privacy.mode.yolo")}
+              </option>
+            </select>
           </div>
           <div className="settings-row">
             <div className="settings-row-copy">
               <strong>{props.t("privacy.savedGrantsTitle")}</strong>
               <span>{props.t("privacy.savedGrantsDescription")}</span>
             </div>
-            <button
-              className="settings-button"
-              type="button"
-              data-privacy-control="saved-grants"
-              aria-describedby="privacy-partial-note"
-              onClick={props.onDevelopment}
-            >
-              {props.t("settings.status.development")}
-            </button>
+            <div className="settings-row-control">
+              {permissionSettings ? (
+                <span className={`settings-status ${permissionSettings.savedGrants.length === 0 ? "neutral" : ""}`}>
+                  {permissionSettings.savedGrants.length} {props.t("privacy.savedGrantsCount")}
+                </span>
+              ) : null}
+              <button
+                className="settings-button"
+                type="button"
+                data-privacy-control="saved-grants"
+                aria-expanded={savedGrantsOpen}
+                aria-controls="privacy-saved-grants"
+                aria-describedby="privacy-partial-note"
+                disabled={settingsUnavailable || settingsBusy}
+                onClick={() => setSavedGrantsOpen((open) => !open)}
+              >
+                {props.t(savedGrantsOpen ? "privacy.close" : "privacy.review")}
+              </button>
+            </div>
           </div>
+          {savedGrantsOpen && permissionSettings ? (
+            <div id="privacy-saved-grants">
+              {permissionSettings.savedGrants.length === 0 ? (
+                <div className="settings-row">
+                  <span className="settings-status neutral">{props.t("privacy.savedGrantsEmpty")}</span>
+                </div>
+              ) : permissionSettings.savedGrants.map((grant) => (
+                <div className="settings-row tall" key={grant.grantId}>
+                  <div className="settings-row-copy">
+                    <strong>{grant.actorDisplayName}</strong>
+                    <span>{props.t(permissionResourceMessageKey(grant.resourceKind))}</span>
+                  </div>
+                  <button
+                    className="settings-button"
+                    type="button"
+                    aria-label={`${props.t("privacy.revoke")}: ${grant.actorDisplayName}`}
+                    disabled={settingsBusy}
+                    onClick={() => revokeGrant(grant.grantId)}
+                  >
+                    {props.t("privacy.revoke")}
+                  </button>
+                </div>
+              ))}
+              {permissionSettings.savedGrants.length > 0 ? (
+                <div className="settings-row">
+                  <div className="settings-row-copy">
+                    <span>{props.t("privacy.revokeAllDescription")}</span>
+                  </div>
+                  <button
+                    className="settings-button danger"
+                    type="button"
+                    disabled={settingsBusy}
+                    onClick={revokeAllGrants}
+                  >
+                    {props.t("privacy.revokeAll")}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           <div className="settings-row">
             <div className="settings-row-copy">
               <strong>{props.t("privacy.yoloTitle")}</strong>
               <span>{props.t("privacy.yoloDescription")}</span>
             </div>
-            <button
-              className="settings-button"
-              type="button"
-              data-privacy-control="yolo"
-              aria-describedby="privacy-partial-note"
-              onClick={props.onDevelopment}
-            >
-              {props.t("settings.status.development")}
-            </button>
+            <div className="settings-row-control">
+              {permissionSettings ? (
+                <span className={`settings-status ${permissionSettings.yoloEnabled ? "warning" : "neutral"}`}>
+                  {props.t(permissionSettings.yoloEnabled ? "privacy.yoloEnabled" : "privacy.yoloDisabled")}
+                </span>
+              ) : null}
+              <button
+                className={`settings-button${permissionSettings?.yoloEnabled ? "" : " danger"}`}
+                type="button"
+                data-privacy-control="yolo"
+                aria-describedby="privacy-partial-note"
+                disabled={settingsUnavailable || settingsBusy}
+                onClick={toggleYolo}
+              >
+                {props.t(permissionSettings?.yoloEnabled ? "privacy.yoloDisable" : "privacy.yoloEnable")}
+              </button>
+            </div>
           </div>
         </div>
+        {permissionSettingsNotice ? (
+          <p
+            className={permissionSettingsNotice === "failed" ? "settings-note error" : "settings-note"}
+            role={permissionSettingsNotice === "failed" ? "alert" : "status"}
+          >
+            {props.t(`privacy.status.${permissionSettingsNotice}`)}
+          </p>
+        ) : null}
       </section>
 
       <section className="settings-section" aria-labelledby="privacy-api-keys-title">
