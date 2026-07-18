@@ -18,6 +18,7 @@ import type {
   ModelProfileSummary,
   ProviderProfileSummary,
   ReaderSelectionIdentity,
+  ReaderSelectionReadAction,
   ReaderSelectionTransformAction,
   RetrievalAnswerCitation,
   RetrievalAskResult,
@@ -515,6 +516,7 @@ export class HomeAgentService {
       readonly prepared?: PreparedSourceAgentTurn;
       readonly onDraft?: (snapshot: HomeAgentDraftSnapshot) => void;
       readonly currentNoteSelection?: ReaderSelectionIdentity;
+      readonly currentNoteReadAction?: ReaderSelectionReadAction;
       readonly currentNoteTransformAction?: ReaderSelectionTransformAction;
     } = {}
   ): Promise<AgentSubmitTurnResult> {
@@ -545,10 +547,16 @@ export class HomeAgentService {
           "A Reader selection action requires the exact current-note scope."
         );
       }
-      if (context.currentNoteTransformAction && !context.currentNoteSelection) {
+      if ((context.currentNoteReadAction || context.currentNoteTransformAction) && !context.currentNoteSelection) {
         throw new PigeDomainError(
           "agent_runtime.turn_binding_invalid",
-          "A Reader transform requires an exact selection identity."
+          "A Reader selection presentation requires an exact selection identity."
+        );
+      }
+      if (context.currentNoteReadAction && context.currentNoteTransformAction) {
+        throw new PigeDomainError(
+          "agent_runtime.turn_binding_invalid",
+          "One Reader selection turn cannot bind read and transform actions together."
         );
       }
       const query = validatedRequest.text?.trim() ??
@@ -588,13 +596,25 @@ export class HomeAgentService {
               inputKind: validatedRequest.inputKind,
               objective,
               locale: validatedRequest.locale,
-              ...(validatedRequest.scope ? { scope: validatedRequest.scope } : {})
+              ...(validatedRequest.scope ? { scope: validatedRequest.scope } : {}),
+              ...(context.currentNoteReadAction ? {
+                inputPresentation: {
+                  kind: "reader_selection_action" as const,
+                  action: context.currentNoteReadAction
+                }
+              } : {})
             }, createConversationBinding(validatedRequest))
           : this.#conversations.appendUserTurn(vaultPath, query, {
               inputKind: validatedRequest.inputKind,
               objective,
               locale: validatedRequest.locale,
-              ...(validatedRequest.scope ? { scope: validatedRequest.scope } : {})
+              ...(validatedRequest.scope ? { scope: validatedRequest.scope } : {}),
+              ...(context.currentNoteReadAction ? {
+                inputPresentation: {
+                  kind: "reader_selection_action" as const,
+                  action: context.currentNoteReadAction
+                }
+              } : {})
             }, createConversationBinding(validatedRequest));
         const existingScopedJob = validatedRequest.scope
           ? this.#jobs.findAgentTurnJobByConversationEvent(preservedTurn.event.id)

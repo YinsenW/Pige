@@ -28,6 +28,7 @@ export interface ReaderSelectionActionAgentPort {
     context: {
       readonly currentNoteSelection: ReaderSelectionActionRequest["selection"];
       readonly onDraft?: (snapshot: HomeAgentDraftSnapshot) => void;
+      readonly currentNoteReadAction?: ReaderSelectionActionRequest["action"];
       readonly currentNoteTransformAction?: ReaderSelectionTransformRequest["action"];
     }
   ): Promise<AgentSubmitTurnResult>;
@@ -86,9 +87,10 @@ export class ReaderSelectionActionService {
         scope: { kind: "current_note", pageId: request.selection.pageId },
         locale: request.locale,
         clientTurnId: request.clientTurnId
-      }, {
-        currentNoteSelection: request.selection,
-        ...(context.onDraft ? { onDraft: context.onDraft } : {})
+    }, {
+      currentNoteSelection: request.selection,
+      currentNoteReadAction: request.action,
+      ...(context.onDraft ? { onDraft: context.onDraft } : {})
       });
       return projectTurn(request.requestId, turn);
     } catch (caught) {
