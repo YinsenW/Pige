@@ -71,6 +71,53 @@ afterEach(() => {
 });
 
 describe("Unified Agent ingress", () => {
+  it.each([
+    ["en", "Organize these files."],
+    ["zh-Hans", "整理这些文件。"],
+    ["ja", "これらのファイルを整理してください。"],
+    ["ko", "이 파일들을 정리해 주세요."],
+    ["fr", "Organisez ces fichiers."],
+    ["de", "Organisiere diese Dateien."]
+  ] as const)("uses the minimal attachment-only intent for %s", (locale, expectedText) => {
+    const fixture = makeVault();
+    const home = new HomeAgentService(
+      fixture.vaultPort,
+      createMutableModels(false),
+      neverRetrieval,
+      new JobsService(fixture.vaultPort)
+    );
+
+    home.prepareSourceTurn({ inputKind: "file_picker", objective: "auto", locale });
+
+    expect(home.conversation()?.messages).toEqual([
+      expect.objectContaining({ role: "user", text: expectedText })
+    ]);
+  });
+
+  it("preserves an explicit attachment query as the user-owned intent", () => {
+    const fixture = makeVault();
+    const home = new HomeAgentService(
+      fixture.vaultPort,
+      createMutableModels(false),
+      neverRetrieval,
+      new JobsService(fixture.vaultPort)
+    );
+
+    home.prepareSourceTurn({
+      text: "Which note in my knowledge base is most similar to this file?",
+      inputKind: "file_picker",
+      objective: "auto",
+      locale: "en"
+    });
+
+    expect(home.conversation()?.messages).toEqual([
+      expect.objectContaining({
+        role: "user",
+        text: "Which note in my knowledge base is most similar to this file?"
+      })
+    ]);
+  });
+
   it("continues one preserved CSV turn through Pi-selected materialization and a cited Dataset answer", async () => {
     const fixture = makeVault();
     const sourceFile = path.join(path.dirname(fixture.vaultPath), "regional-counts.csv");
