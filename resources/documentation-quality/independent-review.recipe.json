@@ -87,17 +87,17 @@
       "tests/unit/local-settings.test.ts",
       "package.json"
     ],
-    "scope": "Independent Product Planning review binds the check-only Update Service and its real Updates Settings projection mechanically replayed onto sole main 6acf5b4, including renderer-safe API ownership, machine-local CAS state, stale request/event fencing and release/architecture/settings/trace synchronization without claiming download, install, restart, automatic updates or a production feed.",
+    "scope": "Independent Product Planning review retains the published check-only Update Service contract and binds the compact Settings modal ownership repair on sole main c365e9e, including inert background ownership, the 720-to-420 focus transition and exact Escape focus restoration without changing layout, copy, persistence, service or API behavior.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 130,
-    "reviewedSha256": "d236d229985af6ff8e7c0f61f724e2baa674cff91e5136cea31bfd0981f1c75a"
+    "reviewedSha256": "141d4799910a4a81df469183bb000370028040337a5ad9ec94f55c7fd8a93c27"
   },
   "reviewers": [
     {
       "reviewerId": "update-service-planning-review",
-      "task": "Check-only Update Service and Updates Settings contract review",
+      "task": "Update Service continuity and compact Settings modal ownership review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -105,7 +105,7 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Product Planning did not author the Development or UI commits and independently compared their exact contracts, schemas, service, persistence, IPC, renderer projection and tests with API, settings, release, architecture, phase and trace owners on the latest Reader-enabled main."
+      "independence": "Product Planning did not author the compact Settings UI commit and independently compared its exact renderer and test bytes with the published Update Service baseline, Settings interaction contract and existing modal/focus owners on sole main c365e9e."
     }
   ],
   "dimensions": [
@@ -114,66 +114,67 @@
       "score": 9.8,
       "reviewerId": "update-service-planning-review",
       "blockerCount": 0,
-      "summary": "API And IPC Design remains the single renderer boundary owner, while Release Engineering and Settings retain release-flow and machine-local-state ownership; no duplicate update owner document is added."
+      "summary": "Settings remains the existing surface owner and the repair uses the established dialog, compact navigator and opener focus references; no duplicate modal, navigation or service owner is added."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
       "reviewerId": "update-service-planning-review",
       "blockerCount": 0,
-      "summary": "API, Settings, Architecture, Release Engineering and the accepted auto-update decision agree that the current default is zero-network and check-only; the renderer exposes only typed summary/check/event truth while signed feed, download, install and restart remain future production work."
+      "summary": "The published Update Service contract remains unchanged, while compact and resident Settings now agree on one modal boundary: background chrome/workspace is inert, compact transition focus enters Settings, and Escape restores the exact opener."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
       "reviewerId": "update-service-planning-review",
       "blockerCount": 0,
-      "summary": "PIGE-REL-001, B9.13 and E9.09 keep their existing status; acceptance targets record the check-only foundation and truthful Settings projection while preserving signed-feed, packaged alpha-to-alpha and risky-job evidence gaps."
+      "summary": "Existing requirement, build, exit and phase statuses remain unchanged; the candidate adds focused interaction evidence only and does not promote Update Service or broader Settings completion."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
       "reviewerId": "update-service-planning-review",
       "blockerCount": 0,
-      "summary": "Focused schema, service, persistence, desktop-shell and Settings tests cover body-free DTOs, zero-network defaults, serialization, request/event identity, CAS stale rejection, renderer stale fencing and failure ordering; repository gates remain directly runnable."
+      "summary": "Focused Settings, Home conversation and renderer tests cover inert ownership, resident-to-compact focus transfer, Tab containment and exact Escape restoration; typecheck, build and UI visual gates remain directly runnable."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
       "reviewerId": "update-service-planning-review",
       "blockerCount": 0,
-      "summary": "The synchronization is confined to existing API, settings, architecture, release, quality, playbook and trace owners plus their semantic lock and independent review recipe; no new owner document is introduced."
+      "summary": "The product delta remains confined to App.tsx and its focused UI regression; this excluded recipe records the independent publication review without adding or rewriting an owner document."
     }
   ],
   "verification": [
     {
-      "command": "Independent review of the Development Update Service and UI binding on sole main 6acf5b4",
+      "command": "Independent review of compact Settings modal ownership on sole main c365e9e",
       "status": "passed",
-      "evidence": "Review confirms strict body-free summary/check/event contracts, a zero-network default adapter, serialized checks, machine-local CAS terminal state, stale-write ordering and a renderer projection that never fabricates download/install capability; packaged_ready remains only an injected future seam."
+      "evidence": "Review confirms titlebar, sidebar and workspace become inert only while Settings is open; crossing into compact mode moves focus to the Settings navigator; Escape removes inert and restores the exact opener without renderer restyling or service changes."
     },
     {
       "command": "npm run verify:docs && npm run verify:decisions && npm run verify:traceability",
       "status": "passed",
-      "evidence": "Links, whitespace, document map, PRD structure, decisions and locked update claims pass with no Requirement, Build, Exit or Phase promotion."
+      "evidence": "Links, whitespace, document map, PRD structure, decisions and locked claims pass with no Requirement, Build, Exit or Phase promotion."
     },
     {
       "command": "npm run verify:contracts && npm run verify:independent-documentation-review && npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "CON-001 through CON-004 remain green; focused update and Settings tests, typecheck and build bind the exact service/contracts/UI while the union recipe retains the already-published Reader, release and security roots."
+      "evidence": "CON-001 through CON-004 remain green; focused UI tests, typecheck, build and visual-contract verification bind the exact repair while the union recipe retains the published Reader, Update, release and security roots."
     }
   ],
   "coordination": {
-    "taskId": "update-service-main6acf-20260719",
-    "taskTitle": "Check-only Update Service and Updates Settings binding",
+    "taskId": "settings-modal-mainc365-20260719",
+    "taskTitle": "Compact Settings modal ownership repair",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The candidate adds a fail-closed check-only Update Service, machine-local status state and typed Settings projection without a production network client, download, install, restart, feed selection, Job or vault data change.",
-    "acknowledgement": "Product Planning reviewed the exact Development and UI bytes on the latest Reader-enabled main and synchronized only affected owner/trace contracts; this candidate does not claim a connected production updater, signed feed, automatic update or Public Alpha readiness."
+    "compatibility": "The candidate changes only modal inert/focus ownership in the existing Settings renderer and its regression test; it adds no API, persistence, Job, permission, layout, locale or service behavior.",
+    "acknowledgement": "Product Planning reviewed the exact UI bytes on sole main c365e9e and records this bounded accessibility repair without restyling Settings or claiming broader feature completion."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
     "The default adapter intentionally performs no network request; production signed-feed connectivity and its runtime dependency remain unselected and unimplemented.",
-    "No automatic schedule, download, install, restart, risky-job interlock or real packaged alpha-to-alpha update was produced; no Requirement, Build, Exit or Phase status is promoted."
+    "No automatic schedule, download, install, restart, risky-job interlock or real packaged alpha-to-alpha update was produced; no Requirement, Build, Exit or Phase status is promoted.",
+    "The existing real macOS 720-to-420 Settings evidence covers the foreground modal transition; this repair makes no claim about unrelated Windows titlebar geometry."
   ]
 }
