@@ -36,10 +36,12 @@ import { ModelEgressApprovalService } from "../../apps/desktop/src/main/services
 import { PermissionBrokerService } from "../../apps/desktop/src/main/services/permission-broker-service";
 import { PermissionSettingsService } from "../../apps/desktop/src/main/services/permission-settings-service";
 import { PermissionedExternalCapabilityRegistry } from "../../apps/desktop/src/main/services/permissioned-external-capability-service";
+import { applyReaderSelectionPageUpdate } from "../../apps/desktop/src/main/services/agent-page-update-service";
 import { createFirstPartyReadonlyNodeOsCapabilityAdapters } from "../../apps/desktop/src/main/services/readonly-node-os/first-party-readonly-node-os-capability-adapters";
 import { readMarkdownPageByRelativePath } from "../../apps/desktop/src/main/services/markdown-page-index";
 import {
   readCurrentNoteEvidenceBinding,
+  readCurrentNotePageForMutation,
   resolveCurrentNoteEvidenceQuoteLocator
 } from "../../apps/desktop/src/main/services/retrieval-evidence-boundary";
 import {
@@ -922,6 +924,96 @@ describe("Home Pi Agent service", () => {
       state: "completed",
       outputRefs: [expect.objectContaining({ id: assistant.id, role: "agent_turn_assistant_event" })],
       privacy: { usedCloudModel: true, usedNetwork: true }
+    });
+  });
+
+  it("recovers a durable Reader transform assistant event and publishes one reversible Operation", async () => {
+    const fixture = makeFixture();
+    const pageId = "page_20260718_recovertransform";
+    const pagePath = path.join(fixture.vaultPath, "wiki", "generated", "2026", `${pageId}.md`);
+    const selectedText = "The recovery passage needs polishing.";
+    const markdown = `---\nid: "${pageId}"\nschema_version: 1\ntitle: "Recovery transform"\ntype: "note"\ncreated_at: "2026-07-18T12:00:00.000Z"\nupdated_at: "2026-07-18T12:00:00.000Z"\nstatus: "active"\nlanguage: "en"\naliases: []\ntags: []\ntopics: []\nentities: []\nsource_ids: []\nrelated_page_ids: []\nprovenance:\n  generated_by: "pige"\n  last_job_id: "job_20260718_recoverseed"\n  model_profile_id: "model_home"\n  confidence: "high"\nnote:\n  note_kind: "summary"\n  review_state: "clean"\n---\n\n# Recovery transform\n\n${selectedText}\n`;
+    fs.mkdirSync(path.dirname(pagePath), { recursive: true });
+    fs.writeFileSync(pagePath, markdown, "utf8");
+    const start = Buffer.byteLength(markdown.slice(0, markdown.indexOf(selectedText)), "utf8");
+    const selectedBytes = Buffer.from(selectedText, "utf8");
+    const selection = {
+      pageId,
+      pageContentHash: `sha256:${createHash("sha256").update(markdown, "utf8").digest("hex")}`,
+      span: { unit: "utf8_bytes" as const, start, endExclusive: start + selectedBytes.length },
+      selectedContentHash: `sha256:${createHash("sha256").update(selectedBytes).digest("hex")}`
+    };
+    const models = makeMutableHomeModels(false);
+    const jobs = new JobsService(fixture.vaults);
+    const conversations = new AgentTurnConversationStore();
+    let runtimeCalls = 0;
+    const service = new HomeAgentService(
+      fixture.vaults,
+      models,
+      makeRetrievalPort(fixture.vault.vaultId),
+      jobs,
+      { run: async () => { runtimeCalls += 1; throw new Error("Durable transform output must be adopted."); } },
+      undefined,
+      conversations,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        apply: ({ vaultPath, job, selection: durableSelection, replacement, action }) => ({
+          operationId: applyReaderSelectionPageUpdate({
+            vaultPath,
+            job,
+            target: readCurrentNotePageForMutation(vaultPath, durableSelection.pageId),
+            selection: durableSelection,
+            replacement,
+            action
+          }).operation.id
+        })
+      }
+    );
+    const waiting = await service.submitTurn({
+      text: "Polish the selected passage.",
+      inputKind: "typed_text",
+      objective: "auto",
+      scope: { kind: "current_note", pageId },
+      locale: "en"
+    }, {
+      currentNoteSelection: selection,
+      currentNoteTransformAction: "polish"
+    });
+    if (waiting.state !== "waiting") throw new Error("Expected a waiting Reader transform turn.");
+    const job = jobs.readAgentTurnJob(waiting.jobId);
+    const inputRef = job?.inputRefs?.find((ref) => ref.role === "agent_turn_user_event");
+    if (!inputRef?.locator || !inputRef.checksum || !inputRef.id) throw new Error("Missing transform conversation binding.");
+    const userTurn = conversations.readUserTurn(
+      fixture.vaultPath,
+      inputRef.locator,
+      inputRef.id,
+      inputRef.checksum
+    );
+    conversations.appendAssistantTurn(
+      fixture.vaultPath,
+      userTurn,
+      waiting.jobId,
+      "The recovery passage is polished."
+    );
+
+    models.setReady(true);
+    const resumed = await service.resumeWaitingTurns();
+    expect(resumed, JSON.stringify({ resumed, job: jobs.readAgentTurnJob(waiting.jobId) })).toMatchObject({
+      completed: 1,
+      failed: 0
+    });
+    expect(runtimeCalls).toBe(0);
+    expect(fs.readFileSync(pagePath, "utf8")).toContain("The recovery passage is polished.");
+    expect(jobs.readAgentTurnJob(waiting.jobId)).toMatchObject({
+      state: "completed",
+      operationIds: [expect.stringMatching(/^op_/u)],
+      outputRefs: expect.arrayContaining([
+        expect.objectContaining({ kind: "operation", role: "reader_selection_transform_operation" })
+      ])
     });
   });
 

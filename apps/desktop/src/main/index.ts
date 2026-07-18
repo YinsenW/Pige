@@ -39,6 +39,7 @@ import type {
   NoteResolveInlineReferenceRequest,
   NoteRenderRequest,
   ReaderSelectionActionRequest,
+  ReaderSelectionTransformRequest,
   ReaderSelectionResolveRequest,
   OpenRecentVaultRequest,
   ProviderConnectResult,
@@ -92,6 +93,8 @@ import {
   NoteResolveInlineReferenceResultSchema,
   ReaderSelectionActionRequestSchema,
   ReaderSelectionActionResultSchema,
+  ReaderSelectionTransformRequestSchema,
+  ReaderSelectionTransformResultSchema,
   ReaderSelectionResolveRequestSchema,
   ReaderSelectionResolveResultSchema,
   OpenRecentVaultRequestSchema,
@@ -152,7 +155,12 @@ import { ModelEgressApprovalService } from "./services/model-egress-approval-ser
 import { PermissionBrokerService } from "./services/permission-broker-service";
 import { PermissionSettingsService } from "./services/permission-settings-service";
 import { PermissionYoloConfirmationRegistry } from "./services/permission-yolo-confirmation-registry";
+import {
+  applyReaderSelectionPageUpdate,
+  createAgentPageUpdateOperationId
+} from "./services/agent-page-update-service";
 import { ReaderSelectionActionService } from "./services/reader-selection-action-service";
+import { readCurrentNotePageForMutation } from "./services/retrieval-evidence-boundary";
 import {
   createPermissionedExternalCapabilityRegistry,
   PermissionedExternalCapabilityRegistry,
@@ -859,7 +867,19 @@ const getHomeAgentService = (): HomeAgentService => {
       getDatasetQueryService(),
       getModelEgressApprovalService(),
       getPermissionedExternalCapabilityRegistry(),
-      getPermissionSettingsService()
+      getPermissionSettingsService(),
+      {
+        apply: ({ vaultPath, job, selection, replacement, action }) => ({
+          operationId: applyReaderSelectionPageUpdate({
+            vaultPath,
+            job,
+            target: readCurrentNotePageForMutation(vaultPath, selection.pageId),
+            selection,
+            replacement,
+            action
+          }).operation.id
+        })
+      }
     );
   }
   return homeAgentService;
@@ -912,7 +932,14 @@ const getReaderSelectionActionService = (): ReaderSelectionActionService => {
   if (!readerSelectionActionService) {
     readerSelectionActionService = new ReaderSelectionActionService(
       getVaultService(),
-      getHomeAgentService()
+      getHomeAgentService(),
+      {
+        readJob: (jobId) => getJobsService().readAgentTurnJob(jobId),
+        readAppliedOperationId: ({ job, selection }) => {
+          const operationId = createAgentPageUpdateOperationId(job.id, selection.pageId);
+          return job.operationIds?.includes(operationId) ? operationId : undefined;
+        }
+      }
     );
   }
   return readerSelectionActionService;
@@ -1663,6 +1690,24 @@ ipcMain.handle("readerSelection.submitAction", async (event, request: ReaderSele
   try {
     return ReaderSelectionActionResultSchema.parse(
       await getReaderSelectionActionService().submit(parsed, {
+        onDraft: (draft) => draftPublisher.publish(draft)
+      })
+    );
+  } finally {
+    draftPublisher.close();
+  }
+});
+ipcMain.handle("readerSelection.submitTransform", async (event, request: ReaderSelectionTransformRequest) => {
+  const parsed = ReaderSelectionTransformRequestSchema.parse(request);
+  const draftPublisher = new AgentTurnDraftPublisher({
+    clientTurnId: parsed.clientTurnId,
+    send: (draft) => {
+      if (!event.sender.isDestroyed()) event.sender.send("agent.turnDraft", draft);
+    }
+  });
+  try {
+    return ReaderSelectionTransformResultSchema.parse(
+      await getReaderSelectionActionService().submitTransform(parsed, {
         onDraft: (draft) => draftPublisher.publish(draft)
       })
     );

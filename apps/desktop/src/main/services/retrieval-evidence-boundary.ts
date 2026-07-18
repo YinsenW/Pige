@@ -183,6 +183,33 @@ export function readCurrentNoteEvidenceBinding(
   }
 }
 
+export function readCurrentNotePageForMutation(
+  vaultPath: string,
+  pageId: string
+): CurrentRetrievalPageMutationBinding {
+  try {
+    if (!PageIdSchema.safeParse(pageId).success) throw evidencePrivacyUnavailableError();
+    const scan = scanMarkdownPages(vaultPath);
+    const matches = scan.pages.filter((page) => page.summary.pageId === pageId);
+    if (matches.length !== 1) throw evidencePrivacyUnavailableError();
+    const page = matches[0];
+    if (!page) throw evidencePrivacyUnavailableError();
+    const signature = scan.files.find((file) => file.pagePath === page.summary.pagePath);
+    if (!signature) throw evidencePrivacyUnavailableError();
+    return readCurrentRetrievalPageBinding(vaultPath, {
+      summary: page.summary,
+      score: 1,
+      snippets: [],
+      matchReasons: ["current_note"]
+    }, undefined, signature);
+  } catch (caught) {
+    if (caught instanceof PigeDomainError && caught.code === "rag.evidence_privacy_unavailable") {
+      throw caught;
+    }
+    throw evidencePrivacyUnavailableError();
+  }
+}
+
 export function readCurrentNoteSelectionEvidenceBinding(
   vaultPath: string,
   selection: ReaderSelectionIdentity

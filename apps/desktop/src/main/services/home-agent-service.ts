@@ -18,6 +18,7 @@ import type {
   ModelProfileSummary,
   ProviderProfileSummary,
   ReaderSelectionIdentity,
+  ReaderSelectionTransformAction,
   RetrievalAnswerCitation,
   RetrievalAskResult,
   RetrievalSearchRequest,
@@ -35,6 +36,7 @@ import {
   MarkdownPageTypeSchema,
   OperationRecordSchema,
   PigeErrorSummarySchema,
+  ReaderSelectionIdentitySchema,
   type ConversationEvent,
   type JobRecord,
   type ModelEgressContentClass,
@@ -190,6 +192,7 @@ export interface HomeAgentJobPort {
       readonly pageId: string;
       readonly bindingHash: string;
       readonly selection?: ReaderSelectionIdentity;
+      readonly transformAction?: ReaderSelectionTransformAction;
     };
   }): JobRecord;
   findAgentTurnJobByConversationEvent(conversationEventId: string): JobRecord | undefined;
@@ -218,6 +221,16 @@ interface HomeAgentJobSession {
   current: JobRecord;
   modelInvocationStarted: boolean;
   modelUsage: HomeAgentModelUsage;
+}
+
+export interface HomeAgentReaderSelectionMutationPort {
+  apply(input: {
+    readonly vaultPath: string;
+    readonly job: JobRecord;
+    readonly selection: ReaderSelectionIdentity;
+    readonly replacement: string;
+    readonly action: ReaderSelectionTransformAction;
+  }): { readonly operationId: string };
 }
 
 export interface PreparedSourceAgentTurn {
@@ -322,6 +335,7 @@ export class HomeAgentService {
   readonly #modelEgressApprovals: ModelEgressApprovalService | undefined;
   readonly #externalCapabilities: PermissionedExternalCapabilityRegistry | undefined;
   readonly #permissionSettings: AgentPermissionSettingsPort | undefined;
+  readonly #readerSelectionMutations: HomeAgentReaderSelectionMutationPort | undefined;
 
   constructor(
     vaults: HomeAgentVaultPort,
@@ -335,7 +349,8 @@ export class HomeAgentService {
     datasets?: HomeAgentDatasetQueryPort,
     modelEgressApprovals?: ModelEgressApprovalService,
     externalCapabilities?: PermissionedExternalCapabilityRegistry,
-    permissionSettings?: AgentPermissionSettingsPort
+    permissionSettings?: AgentPermissionSettingsPort,
+    readerSelectionMutations?: HomeAgentReaderSelectionMutationPort
   ) {
     this.#vaults = vaults;
     this.#models = models;
@@ -349,6 +364,7 @@ export class HomeAgentService {
     this.#modelEgressApprovals = modelEgressApprovals;
     this.#externalCapabilities = externalCapabilities;
     this.#permissionSettings = permissionSettings;
+    this.#readerSelectionMutations = readerSelectionMutations;
   }
 
   async ask(request: HomeAgentAskRequest): Promise<HomeAgentAskResult> {
@@ -499,6 +515,7 @@ export class HomeAgentService {
       readonly prepared?: PreparedSourceAgentTurn;
       readonly onDraft?: (snapshot: HomeAgentDraftSnapshot) => void;
       readonly currentNoteSelection?: ReaderSelectionIdentity;
+      readonly currentNoteTransformAction?: ReaderSelectionTransformAction;
     } = {}
   ): Promise<AgentSubmitTurnResult> {
     let requestId = `turn_${randomUUID().replaceAll("-", "")}`;
@@ -526,6 +543,12 @@ export class HomeAgentService {
         throw new PigeDomainError(
           "agent_runtime.turn_binding_invalid",
           "A Reader selection action requires the exact current-note scope."
+        );
+      }
+      if (context.currentNoteTransformAction && !context.currentNoteSelection) {
+        throw new PigeDomainError(
+          "agent_runtime.turn_binding_invalid",
+          "A Reader transform requires an exact selection identity."
         );
       }
       const query = validatedRequest.text?.trim() ??
@@ -606,7 +629,12 @@ export class HomeAgentService {
                   pageId: validatedRequest.scope.pageId,
                   bindingHash: currentNoteBinding.bindingHash,
                   ...(context.currentNoteSelection
-                    ? { selection: context.currentNoteSelection }
+                    ? {
+                        selection: context.currentNoteSelection,
+                        ...(context.currentNoteTransformAction
+                          ? { transformAction: context.currentNoteTransformAction }
+                          : {})
+                      }
                     : {})
                 }
               } : {})
@@ -858,12 +886,18 @@ export class HomeAgentService {
             execution.answer
           );
           const completedSourceIds = Array.from(new Set([...sourceIds, ...execution.sourceIds]));
+          const transformOperationId = this.#applyReaderSelectionTransform(
+            vaultPath,
+            activeSession.current,
+            execution.answer
+          );
           this.#completeJob(
             activeSession,
             execution.answer,
             assistantEvent.id,
             completedSourceIds,
-            assistantEvent.contentHash
+            assistantEvent.contentHash,
+            transformOperationId ? [transformOperationId] : []
           );
           return { execution, assistantEvent, completedSourceIds };
         }
@@ -947,12 +981,18 @@ export class HomeAgentService {
       session.modelInvocationStarted = true;
       session.modelUsage = session.current.privacy?.usedCloudModel === true ? "cloud" : "local";
       if (session.current.state !== "completed" && session.current.state !== "completed_with_warnings") {
+        const transformOperationId = this.#applyReaderSelectionTransform(
+          vaultPath,
+          session.current,
+          answer
+        );
         this.#completeJob(
           session,
           answer,
           assistant.id,
           collectAgentTurnSourceIds(session.current, sourceIds),
-          assistant.contentHash
+          assistant.contentHash,
+          transformOperationId ? [transformOperationId] : []
         );
       }
       return {
@@ -1093,6 +1133,11 @@ export class HomeAgentService {
         const durableAssistant = this.#conversations.findAssistantTurn(vaultPath, preserved.locator, job.id);
         if (durableAssistant) {
           session.modelInvocationStarted = true;
+          const transformOperationId = this.#applyReaderSelectionTransform(
+            vaultPath,
+            session.current,
+            readAssistantAnswer(durableAssistant)
+          );
           session.current = this.#jobs.adoptAgentTurnCompletion(session.current, {
             checkpointId: "agent_turn_assistant_event_persisted",
             message: "Recovered the durable assistant result without another model call.",
@@ -1102,7 +1147,12 @@ export class HomeAgentService {
                 id: durableAssistant.id,
                 role: "agent_turn_assistant_event",
                 ...(durableAssistant.contentHash ? { checksum: durableAssistant.contentHash } : {})
-              }],
+              }, ...(transformOperationId ? [{
+                kind: "operation" as const,
+                id: transformOperationId,
+                role: "reader_selection_transform_operation"
+              }] : [])],
+              ...(transformOperationId ? { operationIds: [transformOperationId] } : {}),
               privacy: modelInvocationPrivacy(session)
             }
           });
@@ -1159,12 +1209,18 @@ export class HomeAgentService {
             ...(job.sourceId ? [job.sourceId] : []),
             ...execution.sourceIds
           ]));
+          const transformOperationId = this.#applyReaderSelectionTransform(
+            vaultPath,
+            session.current,
+            execution.answer
+          );
           this.#completeJob(
             session,
             execution.answer,
             assistantEvent.id,
             completedSourceIds,
-            assistantEvent.contentHash
+            assistantEvent.contentHash,
+            transformOperationId ? [transformOperationId] : []
           );
         });
         completed += 1;
@@ -2183,12 +2239,35 @@ export class HomeAgentService {
     };
   }
 
+  #applyReaderSelectionTransform(
+    vaultPath: string,
+    job: JobRecord,
+    answer: AgentTurnAnswer
+  ): string | undefined {
+    const binding = readReaderSelectionTransformBinding(job);
+    if (!binding) return undefined;
+    if (!this.#readerSelectionMutations) {
+      throw new PigeDomainError(
+        "agent_ingest.update_target_ineligible",
+        "Reader selection mutation publication is unavailable."
+      );
+    }
+    return this.#readerSelectionMutations.apply({
+      vaultPath,
+      job,
+      selection: binding.selection,
+      replacement: answer.answer,
+      action: binding.action
+    }).operationId;
+  }
+
   #completeJob(
     session: HomeAgentJobSession,
     result: AgentTurnAnswer,
     assistantEventId: string,
     sourceIds: readonly string[] = [],
-    assistantContentHash?: string
+    assistantContentHash?: string,
+    operationIds: readonly string[] = []
   ): void {
     session.current = this.#jobs.settleAgentTurnJob(session.current, {
       kind: "completed",
@@ -2206,8 +2285,12 @@ export class HomeAgentService {
           assistantEventId,
           sourceIds,
           result,
-          assistantContentHash
+          assistantContentHash,
+          operationIds
         ),
+        ...(operationIds.length > 0 ? {
+          operationIds: Array.from(new Set([...(session.current.operationIds ?? []), ...operationIds]))
+        } : {}),
         privacy: modelInvocationPrivacy(session)
       }
     });
@@ -3246,12 +3329,59 @@ function actualHomeModelUsage(session: HomeAgentJobSession | undefined): HomeAge
   return session?.modelInvocationStarted ? session.modelUsage : "none";
 }
 
+function readReaderSelectionTransformBinding(job: JobRecord): {
+  readonly selection: ReaderSelectionIdentity;
+  readonly action: ReaderSelectionTransformAction;
+} | undefined {
+  const refs = job.inputRefs ?? [];
+  const transformRefs = refs.filter((ref) => ref.role === "agent_turn_reader_transform");
+  if (transformRefs.length === 0) return undefined;
+  const scopeRefs = refs.filter((ref) => ref.role === "agent_turn_current_note_scope");
+  const selectionRefs = refs.filter((ref) => ref.role === "agent_turn_reader_selection");
+  const transform = transformRefs[0];
+  const scope = scopeRefs[0];
+  const selection = selectionRefs[0];
+  const actionMatch = /^reader_selection_(translate|polish|expand)$/u.exec(transform?.id ?? "");
+  const locatorMatch = /^utf8_bytes:(\d+):(\d+)$/u.exec(selection?.locator ?? "");
+  const parsed = ReaderSelectionIdentitySchema.safeParse({
+    pageId: scope?.id,
+    pageContentHash: transform?.checksum,
+    span: {
+      unit: "utf8_bytes",
+      start: Number(locatorMatch?.[1]),
+      endExclusive: Number(locatorMatch?.[2])
+    },
+    selectedContentHash: selection?.checksum
+  });
+  if (
+    transformRefs.length !== 1 ||
+    scopeRefs.length !== 1 ||
+    selectionRefs.length !== 1 ||
+    transform?.kind !== "tool" ||
+    selection?.kind !== "page" ||
+    selection.id !== scope?.id ||
+    !actionMatch ||
+    !locatorMatch ||
+    !parsed.success
+  ) {
+    throw new PigeDomainError(
+      "agent_runtime.turn_binding_invalid",
+      "The durable Reader transform binding is invalid."
+    );
+  }
+  return {
+    selection: parsed.data,
+    action: actionMatch[1] as ReaderSelectionTransformAction
+  };
+}
+
 function mergeAgentTurnOutputRefs(
   job: JobRecord,
   assistantEventId: string,
   sourceIds: readonly string[],
   result: AgentTurnAnswer,
-  assistantContentHash?: string
+  assistantContentHash?: string,
+  operationIds: readonly string[] = []
 ): NonNullable<JobRecord["outputRefs"]> {
   type OutputRef = NonNullable<JobRecord["outputRefs"]>[number];
   const refs = new Map<string, OutputRef>();
@@ -3270,6 +3400,13 @@ function mergeAgentTurnOutputRefs(
       kind: "source",
       id: sourceId,
       role: result.datasetResult ? "agent_turn_dataset_source" : "agent_turn_url_source"
+    });
+  }
+  for (const operationId of operationIds) {
+    add({
+      kind: "operation",
+      id: operationId,
+      role: "reader_selection_transform_operation"
     });
   }
   for (const citation of result.citations) {
