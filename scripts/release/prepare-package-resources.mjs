@@ -14,6 +14,11 @@ assertPackageabilityHost(target);
 
 const desktopRoot = path.join(root, "apps/desktop");
 const desktopPackage = readJson(path.join(desktopRoot, "package.json"));
+const packagedVersion = resolvePackagedVersion(
+  desktopPackage.version,
+  process.env.PIGE_RELEASE_VERSION,
+  process.env.PIGE_RELEASE_TAG
+);
 const lockfile = readJson(path.join(root, "package-lock.json"));
 const outputRoot = path.join(root, "artifacts/release-packageability/package-resources");
 const legalRoot = path.join(outputRoot, "legal");
@@ -132,7 +137,7 @@ if (target.platform === "macos") {
   }
 }
 
-const appRef = "pkg:generic/pige@0.0.0";
+const appRef = `pkg:generic/pige@${encodeURIComponent(packagedVersion)}`;
 const sbom = {
   bomFormat: "CycloneDX",
   specVersion: "1.6",
@@ -143,7 +148,7 @@ const sbom = {
       type: "application",
       "bom-ref": appRef,
       name: "Pige",
-      version: desktopPackage.version,
+      version: packagedVersion,
       licenses: [{ expression: "Apache-2.0" }],
       properties: [
         { name: "pige:platform", value: target.platform },
@@ -218,6 +223,20 @@ for (const generatedJsonPath of [attributionPath, sbomPath, path.join(outputRoot
   }
 }
 console.log(`Package resources prepared: ${packages.length} runtime packages, ${generatedFiles.length} attributed files.`);
+
+function resolvePackagedVersion(defaultVersion, releaseVersion, releaseTag) {
+  const taggedVersion = releaseTag ? releaseTag.replace(/^v/u, "") : undefined;
+  if (releaseVersion && taggedVersion && releaseVersion !== taggedVersion) {
+    throw new Error("Release package resource version does not match the release tag.");
+  }
+  const effectiveVersion = releaseVersion || taggedVersion;
+  if (effectiveVersion === undefined || effectiveVersion === "") return defaultVersion;
+  if (!/^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)-alpha(?:\.(?:0|[1-9]\d*|[A-Za-z][0-9A-Za-z-]*))*$/u.test(effectiveVersion)) {
+    throw new Error("Release package resources require an exact alpha prerelease version.");
+  }
+  if (effectiveVersion.startsWith("0.0.0-")) throw new Error("Release package resources reject version 0.0.0.");
+  return effectiveVersion;
+}
 
 function enqueueDependencies(packageJson, packageRoot, ownerRef, rootOwned = false) {
   const requiredNames = Object.keys(packageJson.dependencies ?? {});

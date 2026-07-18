@@ -1,7 +1,7 @@
 # Decision Log
 
 Status: Active decision ledger
-Last reviewed: 2026-07-17
+Last reviewed: 2026-07-18
 
 ## 1. Purpose
 
@@ -905,6 +905,37 @@ References:
 
 - `docs/RELEASE_ENGINEERING.md`
 - `docs/TECH_ARCHITECTURE.md`
+
+### D-20260718-Protected-Signed-Alpha-Publication
+
+Status: Accepted
+Date: 2026-07-18
+
+Decision:
+
+Public alpha publication requires an exact protected alpha tag push in the canonical
+repository, `production-release` approval, signed/notarized/stapled macOS arm64,
+Authenticode Windows x64, and independent verification of final artifacts and metadata.
+Unsigned/ad-hoc builds remain internal-only.
+
+Rationale:
+
+Alpha installers carry the same update-supply-chain authority as later releases. Exact
+identity and signed-byte verification keep publication fail closed and credentials external.
+
+Consequences:
+
+- Manual/unprotected/wrong-repository invocation, identity drift, missing authority or failed
+  verification blocks publication; release setup actions are commit-pinned before secrets.
+- The workflow alone proves no release. Credentials, execution, signed artifacts, notes,
+  installed updates, platform breadth and acceptance evidence remain open with no status promotion.
+
+References:
+
+- `docs/RELEASE_ENGINEERING.md`
+- `docs/SECURITY_THREAT_MODEL.md`
+- `.github/workflows/release.yml`
+- `tests/unit/release-publication.test.ts`
 
 ### D-20260709-Scale-Target
 

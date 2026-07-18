@@ -2,6 +2,7 @@
 
 Status: Draft baseline
 Date: 2026-07-09
+Last reviewed: 2026-07-18
 
 ## 1. Purpose
 
@@ -84,6 +85,9 @@ v0.1 uses `alpha`.
 
 Rules:
 
+- Public alpha publication is triggered only by a protected tag push in the canonical
+  repository. The accepted tag form is `vMAJOR.MINOR.PATCH-alpha[.N]`; manual workflow
+  dispatch is not a publication authority.
 - Alpha builds may show a subtle "Public Alpha" label in About.
 - Update channel is recorded in app settings.
 - Channel switching is explicit.
@@ -91,37 +95,19 @@ Rules:
 
 ## 5. GitHub Actions Pipeline
 
-Required workflows:
+Required workflows cover PR/main checks, dependency/license policy, tagged builds, artifact
+publication, and public security/privacy/support/contribution readiness. PRs run root
+format/schema/docs/dependency checks; the constrained xvfb foundation may run Electron only
+under its fixed Linux CI guard and emits a body-free report.
 
-- Pull request checks.
-- Main branch checks.
-- Tagged release build.
-- Dependency audit.
-- License notice generation.
-- Release artifact publishing.
-- Security policy and private vulnerability reporting readiness check before public alpha.
-- Privacy policy and public data-use copy readiness check before public alpha.
-- Support policy and public issue-triage readiness check before public alpha.
-- Code of conduct and GitHub issue/PR template readiness check before public alpha.
-
-PRs run root checks plus format/schema/docs/deps. Under xvfb no-sandbox requires
-Linux+CI+GITHUB_ACTIONS+fixed=1; foundation runs Electron and uploads body-free report.
-
-Release build:
-
-1. Verify tag format.
-2. Install pinned dependencies.
-3. Build renderer/main/preload bundles.
-4. Run unit and integration tests.
-5. Build macOS artifacts.
-6. Build Windows artifacts.
-7. Sign artifacts where credentials are available.
-8. Notarize macOS artifacts.
-9. Generate checksums.
-10. Generate update metadata.
-11. Generate SBOM/license notices.
-12. Upload artifacts to GitHub Releases.
-13. Publish release notes.
+Public alpha publication accepts only a protected canonical-repository
+`vMAJOR.MINOR.PATCH-alpha[.N]` push. Commit-pinned checkout/setup actions precede pinned
+install, tests and bundles. `production-release` then gates Developer ID/hardened/notarized/
+stapled macOS arm64 (including nested helpers) and Authenticode Windows x64 builds. Exact
+`alpha-mac.yml`/`alpha.yml` plus tag/version/commit/platform/file-set SHA-256/SHA-512
+manifests are downloaded and reverified on independent platform runners, then reverified by
+the publisher before one GitHub prerelease with generated notes. Missing authority,
+credentials or proof blocks publication; unsigned/ad-hoc packageability never falls back.
 
 macOS native OCR build order:
 
@@ -137,19 +123,9 @@ macOS native speech build order:
 - Sign helpers inside-out; verify bounded session/install protocol, deep seal, staging/ZIP
   equality and fresh distribution. Availability/start never download; success still needs Start.
 
-Secrets:
-
-- Apple signing certificates.
-- Apple notarization credentials.
-- Windows signing certificate.
-- GitHub release token.
-- Optional update signing keys.
-
-Rules:
-
-- Release secrets live only in GitHub Actions secrets or local maintainer signing environment.
-- Release secrets never enter the repository.
-- Public fork pull requests must not receive signing secrets.
+Apple signing/notarization and Windows signing credentials live only in GitHub secrets or a
+maintainer signing environment. Secret-consuming/write-authorized jobs require
+`production-release`; credentials never enter the repository or fork PRs.
 
 ## 6. Packaging And Update Dependencies
 
@@ -189,49 +165,27 @@ Rules:
 
 macOS:
 
-- Public distribution requires Developer ID, notarization, hardened runtime, minimal
-  entitlements, and release-identity signing of nested native helpers before the app.
-  Helper checksums complement rather than replace signing/notarization.
-- Internal no-Developer-ID artifacts use identity `-` and a builder-owned inside-out
-  ad-hoc seal after all Bundle writes; incomplete inherited signatures fail. The official
-  ZIP follows the outer seal with no intervening mutation.
-- Ad-hoc proves integrity/loadability only, not Team ID, Developer ID, trust,
-  notarization, staple, hardened runtime, or entitlements. Runners remove signing
-  authority and verify strict `codesign`, expected-untrusted `spctl`, quarantine, and
-  packaged runtime without publishing bypass commands.
+- Public macOS arm64 requires Developer ID, hardened runtime, minimal entitlements,
+  inside-out helper/app signing, notarization and staple; checksums do not replace trust.
+- Internal identity `-` packageability seals only after bundle writes and proves
+  loadability/integrity, never Team ID, public trust, notarization, staple or hardened runtime.
 
 Windows:
 
-- Code signing strongly recommended for v0.1.
-- Unsigned alpha builds are allowed only if clearly marked and not presented as production-ready.
+- Public Windows x64 requires Authenticode for app/installer; unsigned builds are internal-only.
 - Windows installer must not require admin privileges unless a selected installer format makes it unavoidable.
 
 Rules:
 
-- Signed artifacts should be the default download.
-- Release notes must disclose if a build is unsigned.
-- Auto-update should prefer signed artifacts only.
+- Public assets and updates are signed-only; release notes record verified trust state and
+  cannot promote an unsigned preflight.
 
 ## 9. Update Security
 
-Threats:
-
-- Tampered binary.
-- Wrong update channel.
-- Compromised release metadata.
-- Downgrade attack.
-- Dependency compromise.
-
-Mitigations:
-
-- Signed release artifacts.
-- Checksums in release metadata.
-- Protected GitHub release tags.
-- Version monotonicity checks.
-- Channel checks.
-- Dependency lockfiles.
-- Release provenance from GitHub Actions.
-- Manual maintainer review for dependency upgrades that affect bundled binaries or update pipeline.
+Tampered binaries/metadata, wrong channels, downgrades and dependency compromise are bounded by
+signed artifacts, protected tag/environment authority, exact identity/file-set manifests,
+SHA-256 checksums, update-metadata SHA-512/size, monotonic channel checks, lockfiles,
+independent downloaded-byte verification and manual review of release-sensitive upgrades.
 
 ## 10. Versioning
 
@@ -240,20 +194,20 @@ Version scheme:
 - Semantic versioning.
 - Pre-release labels for alpha/beta, such as `0.1.0-alpha.1`.
 
-Artifact naming:
+Exact v0.1 alpha names:
 
 ```txt
-Pige-0.1.0-alpha.1-mac-arm64.dmg
-Pige-0.1.0-alpha.1-mac-x64.dmg
-Pige-0.1.0-alpha.1-win-x64.exe
-Pige-0.1.0-alpha.1-win-arm64.exe
+Pige-0.1.0-alpha.1-arm64.dmg
+Pige-0.1.0-alpha.1-arm64.zip
+Pige-0.1.0-alpha.1-arm64.zip.blockmap
+alpha-mac.yml
+Pige-0.1.0-alpha.1-x64-setup.exe
+Pige-0.1.0-alpha.1-x64-setup.exe.blockmap
+alpha.yml
 ```
 
-Rules:
-
-- App version, vault schema version, database schema version, dependency manifest version, and model manifest version are separate.
-- App upgrade must not silently migrate vault schema in a destructive way.
-- Stable ID, conflict, tombstone, schema-version, backup-compatibility, and migration-plan rules are governed by `docs/SYNC_CONFLICT_AND_MIGRATION.md`.
+App, vault/database schema, dependency and model manifest versions remain separate. Upgrades
+must not silently destructively migrate vaults; sync/migration rules own compatibility.
 
 ## 11. Dependency And Tool Updates
 
@@ -400,71 +354,38 @@ Release evidence layout:
 - Release evidence must reference fixture manifest versions, app build ID, platform, installer artifact IDs, backup manifest summary, restore result, and unresolved blockers.
 - Release evidence must not include private vault content, source bodies, raw prompts, raw model responses, secrets, tokens, or unredacted private paths.
 
-Current packageability foundation, last reconciled 2026-07-14:
+Current evidence, reconciled 2026-07-18: unsigned macOS 26 arm64 and Windows x64
+packageability jobs build from the lockfile and fail closed across packaged identity/runtime,
+workers, Pi/Home, attribution/SBOM/license, size, redaction and signing-state probes; macOS
+also checks Vision/speech, sealed staging/ZIP equality and fresh-runner quarantine/runtime.
+Ad-hoc bytes prove no public trust; Git/Bun/`uv` IDs, platform breadth, installed lifecycle,
+update, scale/recovery, release notes and optional tools remain open.
 
-- macOS 26 arm64 and Windows x64 jobs build from the lockfile, audit, smoke, and upload
-  the official ZIP/blockmap or NSIS plus a body-free report.
-- Smokes fail closed on identity, canonical ASAR/resources, BrowserWindow renderer,
-  preload/health/toolchain, Pi/Home, workers, attribution/SBOM/license, size, signing
-  state, or redaction; macOS also proves Vision.
-- macOS applies section 8, compares staging/ZIP manifests, then has a fresh runner repeat
-  integrity/quarantine/runtime checks without staging. Variable ad-hoc bytes make ZIP
-  hashes build evidence, not release IDs.
-- Current arm64 speech evidence preserves both helpers, records `native speech: true`
-  and zero post-seal writes; it claims no Team/Developer ID, hardened runtime,
-  entitlement, notarization, staple or public trust.
-- Build-only tools stay outside the runtime SBOM; Git, Bun and `uv` remain missing IDs.
-
-This is packageability preflight, not Public Alpha release acceptance. macOS x64,
-Windows 10/11 breadth, Windows native OCR/speech, signed nested helpers, hardened runtime,
-signing/notarization, installed upgrade/uninstall and alpha-to-alpha update behavior,
-installed-app memory/scale/post-heavy recovery, release notes, bundled Git/Bun/uv,
-PaddleOCR, and manual signed-platform evidence remain open.
+The protected-publication code rejects manual/non-alpha/unprotected/wrong-repository/`0.0.0`/
+identity-drift invocation, pins checkout/setup actions before secrets, requires
+`production-release`, native platform trust checks, exact metadata/manifests, independent
+download verification and publisher revalidation. It has not run with production credentials:
+no signed artifact, release, notes or update is claimed, so B9.12/B9.15/E9.08 and
+PIGE-REL-001/PIGE-REL-005 remain open.
 
 ## 17. v0.1 Release Gates
 
-Pige can publish v0.1 alpha when:
-
-- Supported platform installers build from GitHub Actions.
-- macOS artifact is signed and notarized, or clearly marked unsigned if still internal-only.
-- Windows artifact is signed or clearly marked unsigned alpha.
-- Auto-update check works against GitHub Releases.
-- App can update from one alpha build to the next in a test channel.
-- Each platform distributable is at most 330,000,000 bytes without optional model/OCR
-  weights, with 300,000,000 bytes retained as the optimization target.
-- Packaged idle and ordinary-use memory pass the exact reference scenarios in
-  `docs/PERFORMANCE_AND_RELIABILITY.md`; there is no unrecorded runtime-overhead waiver.
-- Release contains license notices.
-- Dependency registry is current.
-- Smoke tests pass.
-- Public Alpha usability scenario passes on macOS and at least one supported Windows target, or release notes clearly mark the platform gap as blocking/internal-only.
-- Backup/restore works before and after update.
-- No critical security issue remains open.
-- `SECURITY.md` is current and the private vulnerability reporting path is enabled or clearly documented.
-- `PRIVACY.md` is current and matches BYOK, telemetry, diagnostics, update, optional download, and Skill/package network behavior.
-- `SUPPORT.md` is current and explains public issue triage, redacted reproductions, and safe support bundle sharing.
-- `CODE_OF_CONDUCT.md`, issue templates, and PR template are present and aligned with support, privacy, security, and contribution policies.
+Public alpha requires: exact protected-tag/`production-release` authority; independently
+reverified Developer ID/hardened/notarized/stapled macOS arm64 and Authenticode Windows x64;
+exact final metadata/manifests; GitHub update check plus alpha-to-alpha risky-job-safe update;
+distributables at or below 330,000,000 bytes (300,000,000 target); packaged memory/scale/
+recovery budgets with no hidden waiver; notices, current dependency registry, smokes,
+backup/restore across update, and the 25-source scenario on macOS plus supported Windows.
+No critical security issue may remain; current security/private-reporting, privacy,
+support/redaction, conduct and issue/PR policies must match the released behavior.
 
 ## 18. Implementation Checklist
 
-Before shipping any release:
-
-- Are all dependencies pinned?
-- Do dependency manifests validate against schema?
-- Are dependency waivers unexpired and allowed?
-- Are bundled binary checksums recorded?
-- Are model downloads excluded from installer?
-- Are update artifacts signed or labeled?
-- Are app and vault schema versions documented?
-- Are migration paths tested?
-- Are release notes complete?
-- Is the Public Alpha usability scenario report attached to the release evidence?
-- Are dependency changes reflected in Technical Architecture?
-- Are external users able to recover if update fails?
-- Is `SECURITY.md` current, and is the private vulnerability reporting path enabled or clearly documented for this release?
-- Is `PRIVACY.md` current, and does it match the release's actual data flows and network behavior?
-- Is `SUPPORT.md` current, and does it match the release's diagnostics/support-bundle behavior?
-- Are `CODE_OF_CONDUCT.md`, issue templates, and PR template current for this release?
+Before shipping, confirm: pinned/schema-valid dependencies and current architecture registry;
+valid waivers, notices/checksums and no bundled optional models; exact protected tag/environment;
+required signatures/notarization; independent manifest/SHA-256/SHA-512/metadata identity;
+documented app/vault schemas and tested migrations/recovery; complete notes and Public Alpha
+scenario report; and current security/private-reporting, privacy, support and collaboration copy.
 
 ## 19. Upstream References
 

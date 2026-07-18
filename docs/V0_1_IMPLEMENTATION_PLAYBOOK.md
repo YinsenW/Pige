@@ -657,10 +657,11 @@ Build:
 - [B9.09 -> E9.05] Deterministic Knowledge Health report for broken links, orphans, duplicate-topic candidates, and unsourced claims.
 - [B9.10 -> E9.06] Six-locale coverage for release-critical workflows, including unavailable, error, permission, restore, and long-label states.
 - [B9.11 -> E9.07] Keyboard, focus, accessible-name, contrast, reduced-motion, and narrow-window accessibility baseline.
-- [B9.12 -> E9.08] GitHub Actions release artifacts for macOS and supported Windows versions.
+- [B9.12 -> E9.08] Protected-tag exact-identity publication of independently verified,
+  trusted macOS arm64 and Windows x64 artifacts; no unsigned public fallback.
 - [B9.13 -> E9.09] Auto-update alpha channel with risky-job safeguards.
 - [B9.14 -> E9.08] Installer-size, 10,000-page/100,000-chunk scale, and idle/active-memory threshold reporting.
-- [B9.15 -> E9.08] License notices, release notes, dependency attribution, and signing/notarization evidence when credentials are available.
+- [B9.15 -> E9.08] Notices, notes, attribution, immutable metadata and platform-trust evidence.
 - [B9.16 -> E9.10] Public Alpha scenario with at least 25 mixed sources, degraded paths, restarts, backup, fresh-folder restore, and post-restore retrieval.
 - [B9.17 -> E9.11] Error-state, empty-state, privacy-copy, known-limitations, and basic-shortcut release polish.
 - [B9.18 -> E9.12] Language metadata for sources/pages/OCR/chunks/memory, source-language preservation, and query-language response behavior.
@@ -673,6 +674,11 @@ macOS now applies the Release Engineering section 8 ad-hoc seal before its offic
 and rechecks the download on a fresh runner; no Developer ID/trust is claimed.
 B9.12/B9.14/B9.15/E9.08 remain open for platform breadth, trusted signing,
 installed/update, Windows OCR, scale/recovery, release notes and missing tools.
+
+Protected-publication code now binds protected alpha tag/version/commit, required platform
+trust and independently verified metadata before prerelease creation. It is unexecuted:
+credentials, signed artifacts, notes, platform/update/scale/recovery and a real release remain
+open; no Build, Exit, Requirement or Phase status changes.
 
 Current Backup foundation covers bounded B9.01/B9.02: one pre-scan durable Job resumes five
 identity/checksum checkpoints, no-replace publishes a validated archive, links one
@@ -701,7 +707,10 @@ Exit criteria:
   rewrites never happen silently.
 - [E9.06] Core workflows pass smoke tests in `zh-Hans`, `en`, `ja`, `ko`, `fr`, and `de`, including CJK search and narrow long-label layouts.
 - [E9.07] Keyboard-only navigation, visible focus, accessible names/tooltips, readable contrast, reduced-motion behavior, and unavailable/error states pass the v0.1 accessibility baseline.
-- [E9.08] CI produces attributable macOS and supported Windows alpha artifacts; each core distributable is at or below 330,000,000 bytes excluding optional weights, packaged idle/ordinary-use memory and post-heavy-Job recovery pass the exact Performance and Reliability reference scenarios, the 10,000-page/100,000-chunk scale smoke passes, and license/signing/release-note evidence is recorded.
+- [E9.08] One protected alpha tag produces attributable trusted macOS/Windows artifacts whose
+  downloaded bytes and metadata are independently verified before publication; each core
+  distributable is at or below 330,000,000 bytes excluding optional weights, packaged memory/
+  recovery and 10,000-page/100,000-chunk scale pass, and notices/trust/notes are evidenced.
 - [E9.09] App updates from one alpha to another without breaking vault data and does not update during an active risky job.
 - [E9.10] The scripted Public Alpha scenario report proves at least 25 mixed sources, a degraded path, restart recovery, backup, fresh-folder restore, and continued grounded retrieval.
 - [E9.11] Public privacy/support/security copy matches actual data flows; error and empty states are localized, actionable, and do not expose secrets or private paths.

@@ -1,0 +1,62 @@
+appId: com.yinsenw.pige
+productName: Pige
+forceCodeSigning: true
+asar: true
+asarUnpack:
+  - "**/*.node"
+files:
+  - out/**
+  - package.json
+  - "!out/main/unified-agent-roundtrip-smoke.js"
+extraResources:
+  - from: ../../LICENSE
+    to: LICENSE
+  - from: ../../NOTICE
+    to: NOTICE
+  - from: ../../resources/licenses
+    to: licenses
+  - from: ../../resources/toolchain-manifest
+    to: toolchain-manifest
+  - from: ../../artifacts/release-packageability/package-resources
+    to: release
+generateUpdatesFilesForAllChannels: true
+publish:
+  provider: github
+  owner: YinsenW
+  repo: Pige
+  channel: alpha
+  releaseType: prerelease
+mac:
+  category: public.app-category.productivity
+  extendInfo:
+    NSMicrophoneUsageDescription: Pige uses the microphone only while you explicitly dictate text.
+  icon: ../../resources/brand/pige-icon/macos/Pige.icns
+  artifactName: Pige-${version}-${arch}.${ext}
+  extraResources:
+    - from: ../../artifacts/native/macos/arm64
+      to: native/macos/arm64
+  target:
+    - dmg
+    - zip
+  identity: ${env.PIGE_MACOS_SIGNING_IDENTITY}
+  hardenedRuntime: true
+  notarize: true
+  entitlements: ../../scripts/release/entitlements.mac.plist
+  entitlementsInherit: ../../scripts/release/entitlements.mac.inherit.plist
+  strictVerify: true
+win:
+  icon: ../../resources/brand/pige-icon/windows/Pige.ico
+  artifactName: Pige-${version}-${arch}-setup.${ext}
+  target:
+    - nsis
+  signtoolOptions:
+    certificateSubjectName: ${env.PIGE_WINDOWS_CERTIFICATE_SUBJECT}
+    signingHashAlgorithms:
+      - sha256
+  verifyUpdateCodeSignature: true
+nsis:
+  artifactName: Pige-${version}-${arch}-setup.${ext}
+  oneClick: false
+  perMachine: false
+  allowElevation: false
+  allowToChangeInstallationDirectory: true
