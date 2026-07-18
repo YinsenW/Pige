@@ -4543,59 +4543,43 @@ dd {
 .note-agent-messages {
   display: grid;
   align-content: start;
-  gap: 18px;
+  gap: 12px;
 }
 
 .agent-message-card {
-  min-width: 0;
-  max-width: 100%;
-  justify-self: start;
-  border: 0;
-  padding: 2px 0;
-  background: transparent;
+  padding: 15px 16px;
+  border: 1px solid var(--border-default);
+  border-radius: 14px;
+  background: var(--surface);
   color: var(--text-primary);
   font-size: 13px;
-  line-height: 1.65;
+  line-height: 1.7;
 }
 
-.agent-message-card.role-user {
-  width: fit-content;
-  max-width: 88%;
-  justify-self: end;
-  border-radius: 16px;
-  padding: 10px 12px;
-  background: var(--surface-muted);
-}
+.agent-message-card.role-user { background: var(--surface-subtle); }
 
 .agent-message-card.provisional {
-  color: var(--text-primary);
+  border-style: dashed;
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
 }
 
-.agent-message-card .conversation-markdown { font-size: 13px; }
-.agent-message-card.provisional .conversation-markdown > :last-child::after {
-  content: "";
-  display: inline-block;
-  width: 1.5px;
-  height: 1em;
-  margin-left: 3px;
-  background: currentColor;
-  vertical-align: -0.12em;
-  animation: conversation-caret 900ms steps(2, jump-none) infinite;
+.agent-message-card.provisional .agent-message-author::after {
+  content: "\2026";
+  color: var(--text-tertiary);
 }
 
-.note-agent-loading-message {
+.agent-message-author {
   display: flex;
-  min-height: 28px;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-weight: 600;
 }
 
-.note-agent-loading-message .quiet-button {
-  min-height: 28px;
-  margin-left: auto;
-  padding: 4px 9px;
-  font-size: 10px;
-}
+.agent-message-author img { width: 28px; height: 28px; border-radius: 8px; }
+.agent-message-author time { margin-left: auto; color: var(--text-tertiary); font-size: 11px; font-weight: 400; }
+.agent-message-body { margin: 0; white-space: pre-wrap; }
 
 .note-agent-citations {
   display: flex;
@@ -4652,15 +4636,6 @@ dd {
   padding: 4px 9px;
   font-size: 10px;
 }
-
-.note-agent-run-state.note-agent-loading-message {
-  justify-content: flex-start;
-  border-radius: 0;
-  padding: 2px 0;
-  background: transparent;
-}
-
-.note-agent-run-state.note-agent-loading-message .quiet-button { margin-left: auto; }
 
 .note-agent-egress-prompt {
   margin: 0;

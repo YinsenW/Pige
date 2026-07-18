@@ -88,67 +88,6 @@ describe("Note Agent production UI", () => {
     await unmount(dom, mount.root);
   });
 
-  it("renders role-free sanitized Markdown messages with one provisional streaming owner", async () => {
-    const dom = createDom();
-    const mount = await mountPanel(dom, {
-      availability: "ready",
-      messages: [
-        {
-          id: "user-markdown",
-          role: "user",
-          body: "Please explain **this note**."
-        },
-        {
-          id: "assistant-markdown",
-          role: "assistant",
-          body: "## Summary\n\n- First point\n- Second point\n\n`local only`\n\n<script>private()</script>"
-        },
-        {
-          id: "assistant-draft",
-          role: "assistant",
-          body: "**Draft** answer",
-          provisional: true,
-          citations: [{ pageId: "page_must_not_render", label: "Hidden draft citation" }]
-        }
-      ],
-      onCopyMessage: () => undefined
-    });
-
-    await waitFor(dom, () => mount.container.querySelectorAll('[data-markdown-ready="true"]').length === 3);
-    expect(mount.container.querySelectorAll(".agent-message-author")).toHaveLength(0);
-    expect(mount.container.querySelectorAll(".agent-message-role.visually-hidden")).toHaveLength(3);
-    expect(mount.container.querySelector(".role-user strong")?.textContent).toBe("this note");
-    expect(mount.container.querySelector(".role-assistant h2")?.textContent).toBe("Summary");
-    expect(mount.container.querySelectorAll(".role-assistant li")).toHaveLength(2);
-    expect(mount.container.querySelector(".role-assistant code")?.textContent).toBe("local only");
-    expect(mount.container.querySelector("script")).toBeNull();
-    expect(mount.container.textContent).not.toContain("private()");
-    expect(mount.container.querySelector('[data-provisional="true"] .provisional-markdown strong')?.textContent).toBe("Draft");
-    expect(mount.container.querySelector('[data-provisional="true"] .message-actions')).toBeNull();
-    expect(mount.container.querySelector('[data-provisional="true"] .note-agent-citations')).toBeNull();
-
-    await unmount(dom, mount.root);
-  });
-
-  it("places running feedback in the message thread instead of a separate status strip", async () => {
-    const dom = createDom();
-    const mount = await mountPanel(dom, {
-      availability: "running",
-      messages: [],
-      onCancel: () => undefined
-    });
-
-    expect(mount.container.querySelectorAll(".note-agent-loading-message .conversation-loading-dots")).toHaveLength(1);
-    expect(mount.container.querySelector("article.note-agent-run-state.note-agent-loading-message")).not.toBeNull();
-    const workingLabels = Array.from(mount.container.querySelectorAll(".note-agent-loading-message > span"))
-      .filter((node) => node.textContent === t("note.agentWorking"));
-    expect(workingLabels).toHaveLength(1);
-    expect(workingLabels[0]?.classList.contains("visually-hidden")).toBe(true);
-    expect(mount.container.querySelector(".note-agent-loading-message .agent-message-role")?.classList.contains("visually-hidden")).toBe(true);
-
-    await unmount(dom, mount.root);
-  });
-
   it("uses the approved model listbox keyboard and exact focus-return behavior", async () => {
     const dom = createDom();
     const selected: string[] = [];
@@ -964,13 +903,6 @@ describe("Note Agent production UI", () => {
     expect(adapterSource).not.toContain("window.pige.activity");
     expect(cssSource).toContain(".agent-message-card {");
     expect(cssSource).toContain(".agent-message-card.provisional {");
-    expect(cssSource).toMatch(/\.agent-message-card\.role-user\s*\{[\s\S]*?justify-self:\s*end;[\s\S]*?background:\s*var\(--surface-muted\);/);
-    expect(cssSource).toContain(".note-agent-loading-message {");
-    expect(componentSource).toContain('<span className="agent-message-role visually-hidden">');
-    expect(componentSource).not.toContain('className="agent-message-author"');
-    expect(componentSource).toContain("<ConversationMarkdown");
-    expect(componentSource).toContain("markdown={message.body}");
-    expect(componentSource).toContain("...(message.provisional ? { provisional: true } : {})");
     expect(cssSource).toContain(".proposal-panel {");
     expect(cssSource).toMatch(/\.note-agent\s*\{[\s\S]*?background:\s*var\(--surface\);/);
     expect(cssSource).not.toMatch(/\.note-agent\s*\{[\s\S]*?background:\s*#fdfdfd;/);

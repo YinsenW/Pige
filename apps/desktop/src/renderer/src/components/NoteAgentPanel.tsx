@@ -5,7 +5,6 @@ import {
   type KeyboardEvent as ReactKeyboardEvent
 } from "react";
 import { PigeIcon } from "./PigeIcon";
-import { ConversationMarkdown } from "./ConversationMarkdown";
 import pigeMarkUrl from "../../../../../../resources/brand/pige-icon/master/pige-icon-1024.png";
 
 export type NoteAgentAvailability = "unavailable" | "ready" | "running" | "failed";
@@ -206,14 +205,12 @@ export function NoteAgentPanel(props: {
                   data-provisional={message.provisional ? "true" : undefined}
                   aria-busy={message.provisional ? "true" : undefined}
                 >
-                  <span className="agent-message-role visually-hidden">
-                    {props.t(message.role === "assistant" ? "note.agentAssistant" : "note.agentUser")}
-                  </span>
-                  {message.timestamp ? <time className="visually-hidden">{message.timestamp}</time> : null}
-                  <ConversationMarkdown
-                    markdown={message.body}
-                    {...(message.provisional ? { provisional: true } : {})}
-                  />
+                  <div className="agent-message-author">
+                    {message.role === "assistant" ? <img src={pigeMarkUrl} alt="" /> : null}
+                    <span>{props.t(message.role === "assistant" ? "note.agentAssistant" : "note.agentUser")}</span>
+                    {message.timestamp ? <time>{message.timestamp}</time> : null}
+                  </div>
+                  <p className="agent-message-body">{message.body}</p>
                   {!message.provisional && message.citations?.length ? (
                     <div className="note-agent-citations" aria-label={props.t("note.agentCitations")}>
                       {message.citations.map((citation) => (
@@ -313,16 +310,14 @@ export function NoteAgentPanel(props: {
               ) : null}
             </div>
           ) : props.availability === "running" ? (
-            <article className="note-agent-run-state note-agent-loading-message role-assistant" role="status" aria-live="polite">
-              <span className="agent-message-role visually-hidden">{props.t("note.agentAssistant")}</span>
-              <span className="conversation-loading-dots" aria-hidden="true"><i /><i /><i /></span>
-              <span className="visually-hidden">{props.t("note.agentWorking")}</span>
+            <div className="note-agent-run-state" role="status" aria-live="polite">
+              <span>{props.t("note.agentWorking")}</span>
               {props.onCancel ? (
                 <button type="button" className="quiet-button" onClick={props.onCancel}>
                   {props.t("home.cancelJob")}
                 </button>
               ) : null}
-            </article>
+            </div>
           ) : props.availability === "failed" ? (
             <div className="note-agent-run-state error" role="alert">
               <span>{props.t(props.errorMessageKey ?? "error.generic")}</span>
