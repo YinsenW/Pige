@@ -620,10 +620,9 @@ Prototype:
 
 Current production boundary:
 
-- Exact current-note owns timeline/follow-up, provisional/final cited answers, wait recovery and egress.
-- Unknown/stale ownership, model switches and failed/cancelled drafts fail closed.
-- Attachments, selection, related/backlinks, memory and mutations stay honestly unavailable.
-- Read-only answers never mutate notes
+- Exact current-note owns timeline/citations/wait/egress; stale ownership and drafts fail closed.
+- Selection uses exact identity/action presentation; writes gain Operation/Undo or bounded review.
+- Attachments, related/backlinks, memory and other mutations remain unavailable; reads do not write.
 
 ### 8.3 Selection Actions
 
@@ -640,8 +639,8 @@ Copy  Quote  Ask  Translate  Polish  Expand  Summarize  More
 Action behavior:
 
 - Copy and quote are local and instant.
-- Translate, polish, expand, summarize, and explain can return inline output or send results to the Note Agent panel.
-- Mutations preserve base/original, record an Operation, and expose Undo; preview is optional.
+- Read/transform submits only identity; writes refresh after Operation or show <=8 safe lines.
+- Drift/failure is body-free; renderer owns no body, path, hash/span or apply authority.
 
 ### 8.4 Structured Knowledge Surface
 

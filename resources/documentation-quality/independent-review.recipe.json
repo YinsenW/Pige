@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-18T15:47:20Z",
+  "reviewedAt": "2026-07-18T08:30:00Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -30,15 +30,24 @@
       "apps/desktop/src/main/index.ts",
       "apps/desktop/src/main/services/backup-coordinator-service.ts",
       "apps/desktop/src/main/services/backup-service.ts",
+      "apps/desktop/src/main/services/agent-page-update-service.ts",
+      "apps/desktop/src/main/services/agent-turn-conversation-store.ts",
       "apps/desktop/src/main/services/home-agent-service.ts",
+      "apps/desktop/src/main/services/jobs-service.ts",
       "apps/desktop/src/main/services/model-egress-approval-service.ts",
       "apps/desktop/src/main/services/model-provider-registry.ts",
+      "apps/desktop/src/main/services/notes-service.ts",
       "apps/desktop/src/main/services/pi-agent-completion-policy.ts",
       "apps/desktop/src/main/services/pi-agent-runtime-adapter.ts",
+      "apps/desktop/src/main/services/reader-selection-action-service.ts",
+      "apps/desktop/src/main/services/reader-selection-proposal-service.ts",
+      "apps/desktop/src/main/services/retrieval-evidence-boundary.ts",
       "apps/desktop/src/main/services/secret-store.ts",
       "apps/desktop/src/preload/index.ts",
       "apps/desktop/src/renderer/src/App.tsx",
+      "apps/desktop/src/renderer/src/components/CurrentNoteAgent.tsx",
       "apps/desktop/src/renderer/src/components/KnowledgeTreeMap.tsx",
+      "apps/desktop/src/renderer/src/components/NoteAgentPanel.tsx",
       "apps/desktop/src/renderer/src/locales/de/messages.json",
       "apps/desktop/src/renderer/src/locales/en/messages.json",
       "apps/desktop/src/renderer/src/locales/fr/messages.json",
@@ -58,24 +67,29 @@
       "tests/unit/model-egress-approval-service.test.ts",
       "tests/unit/model-provider-registry.test.ts",
       "tests/unit/model-settings-error-ui.test.ts",
+      "tests/unit/note-agent-ui.test.ts",
+      "tests/unit/notes-service.test.ts",
       "tests/unit/pi-agent-runtime-adapter.test.ts",
+      "tests/unit/reader-selection-action-service.test.ts",
+      "tests/unit/reader-selection-mutation-service.test.ts",
+      "tests/unit/reader-selection-proposal-service.test.ts",
       "tests/unit/restore-ui.test.ts",
       "tests/unit/security-contract-schemas.test.ts",
       "tests/unit/release-publication.test.ts",
       "tests/unit/release-packageability-platforms.test.ts",
       "package.json"
     ],
-    "scope": "Independent Product Planning review binds the exact Activity stable page-target implementation at 2848995a to the Activity API, UI and acceptance owners without changing implementation, renderer or test bytes.",
+    "scope": "Independent Product Planning review binds exact Reader selection identity, read action, reversible transform, safe presentation and exceptional bounded review candidate 84d2d33 to API, recovery, architecture, data, UI and trace owners without changing implementation bytes or promoting Requirement, Exit or Phase status.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 130,
-    "reviewedSha256": "944e40feb164155b3f44bc7b9fb7d3aece426d018fabc2cec48a39479e47d46c"
+    "reviewedSha256": "36f016b3b1e72f6e768bffeaac162a5279b6754873c5f65bf9d1250f6a0c515e"
   },
   "reviewers": [
     {
-      "reviewerId": "activity-page-target-independent-review",
-      "task": "Activity stable page-target implementation and owner-contract review",
+      "reviewerId": "reader-selection-planning-review",
+      "task": "Reader selection mutation and safe presentation contract synchronization",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -83,75 +97,75 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Product Planning did not author the Activity implementation or renderer delta and independently compared its stable target, active-vault fences, Reader routing and Undo separation with the exact tests and UI Design handoff."
+      "independence": "Product Planning did not author the implementation candidate and independently compared its contracts, schemas, Main services, renderer projection, recovery behavior and focused evidence before synchronizing owner documents and governance manifests."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "activity-page-target-independent-review",
+      "reviewerId": "reader-selection-planning-review",
       "blockerCount": 0,
-      "summary": "The Activity API owns one optional stable page target and active-vault list identity; the existing Reader adapter owns navigation without a duplicate route or path authority."
+      "summary": "Existing API, Job/recovery, architecture, data and UI owners carry the Reader selection vertical; no duplicate design owner or unrelated Activity contract was introduced."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "activity-page-target-independent-review",
+      "reviewerId": "reader-selection-planning-review",
       "blockerCount": 0,
-      "summary": "Main and preload project only an optional page ID target, while renderer fences the list's active Vault and never derives authority from targetLabel or a path."
+      "summary": "Renderer-local endpoints resolve to Main-owned hash/span identity; selected bodies and replacements stay out of IPC presentation, while Host instructions and localized safe presentation remain distinct."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "activity-page-target-independent-review",
+      "reviewerId": "reader-selection-planning-review",
       "blockerCount": 0,
-      "summary": "Exact service, shell and renderer tests add target/open evidence while Requirement and Exit remain partial and packaged visual/platform proof remains explicitly open."
+      "summary": "Exact focused, type, build and UI-contract gates cover identity, read actions, mutation, recovery and bounded review without changing Requirement, Exit or Phase status or claiming held real-raster evidence."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "activity-page-target-independent-review",
+      "reviewerId": "reader-selection-planning-review",
       "blockerCount": 0,
-      "summary": "Focused regressions cover stable-target presence and omission, exact page ID routing, vault drift, close-after-render behavior and independent Undo recovery."
+      "summary": "Focused regressions cover stale identity, bounded context, durable retry/adoption, reversible Operation/Undo, exceptional proposal CAS and safe timeline presentation."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "activity-page-target-independent-review",
+      "reviewerId": "reader-selection-planning-review",
       "blockerCount": 0,
-      "summary": "The bounded change fits the existing Activity API and UI owners plus existing trace IDs; no new owner document, PRD promise, durable decision or status promotion is needed."
+      "summary": "The semantic change is synchronized into existing owner sections and trace manifests; no new design document, decision record, Activity candidate or broad status rewrite was added."
     }
   ],
   "verification": [
     {
-      "command": "Independent implementation and owner-contract review of Activity page-target candidate 2848995a",
+      "command": "Independent implementation and owner-contract review of Reader selection candidate 84d2d33",
       "status": "passed",
-      "evidence": "Review covers the exact ten implementation/UI/test paths, safe optional target DTO, active-vault ownership, Reader routing and independent checksum-bound Undo."
+      "evidence": "Review covers exact contracts/schemas, resolve/action/transform/proposal services, Job/conversation recovery, renderer binding and focused tests; this Planning commit changes documentation/governance only."
     },
     {
       "command": "npm run verify:docs && npm run verify:decisions && npm run verify:traceability",
       "status": "passed",
-      "evidence": "Links, whitespace, document map, PRD structure, trace evidence and decision records pass without a Requirement, Exit or Phase status change."
+      "evidence": "Owner links, trace semantics, whitespace, document map, PRD structure and decision records pass without Requirement, Exit or Phase promotion."
     },
     {
       "command": "npm run verify:contracts && npm run verify:independent-documentation-review && npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "CON-001 through CON-004 remain green and the recipe binds governed roots plus the exact Activity contract/UI tests without broadening renderer authority."
+      "evidence": "CON-001 through CON-004 remain green and the recipe binds governed owners plus exact Reader services/UI/tests without exposing selected bodies or changing implementation bytes."
     }
   ],
   "coordination": {
-    "taskId": "activity-page-target-2848995-20260718",
-    "taskTitle": "Activity stable page-target owner synchronization",
+    "taskId": "reader-selection-mutation-planning-20260718",
+    "taskTitle": "Reader selection mutation and safe presentation Planning synchronization",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The candidate adds only an optional stable page target and list-level active-vault identity; target absence preserves prior Activity display and Undo behavior, with no migration or path authority.",
-    "acknowledgement": "Product Planning reviewed the exact Activity implementation and UI evidence, synchronized the bounded owners, and retained partial statuses plus the real macOS visual hold."
+    "compatibility": "The candidate confines selection authority to Main-resolved identity, keeps replacement/apply authority out of renderer, and uses a dedicated bounded Reader proposal projection without changing legacy generic proposal IPC.",
+    "acknowledgement": "Product Planning reviewed exact 84d2d33 implementation/evidence and synchronized only its owner contracts and trace facts; Activity integration and broader Note Agent mutation remain separate."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Real macOS Activity Open raster evidence remains on hold because desktop control was unavailable; focused interaction tests are exact but do not substitute for packaged visual proof.",
-    "Broader Activity history/routing, restore/redo, mutation and platform coverage remain open; no Requirement, Exit or Phase status is promoted."
+    "Post-repair real macOS raster evidence is held because desktop control was unavailable; focused renderer and interaction tests pass, but no raster PASS is inferred.",
+    "Broader Note Agent mutations, complete Activity/Undo routing, generic exception coverage and Windows evidence remain open; no Requirement, Exit or Phase status is promoted."
   ]
 }

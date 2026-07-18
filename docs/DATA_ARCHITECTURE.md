@@ -461,7 +461,9 @@ Rules:
 - Phase 2 file capture conversation events store source ID, display name, and source kind. File bodies are never duplicated in conversation JSONL, and renderer-visible results do not include absolute source paths.
 - Assistant answers that become wiki pages are stored once as the page content and referenced from the conversation.
 - Assistant answers that are not saved as pages may be stored in the conversation event.
-- Model prompts and raw provider responses are not stored by default unless needed for a user-visible answer or explicit diagnostics mode.
+- Prompts/raw responses are not stored by default. Selection events add only strict action
+  presentation; body/path/span/hash/Provider data stay out, while Jobs/proposals/Operations
+  own selection/review/apply.
 - Conversation records are not the knowledge source of truth; they are the activity history.
 
 Compaction:

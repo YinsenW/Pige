@@ -122,12 +122,15 @@ Required v0.1 job classes:
 exact values. Aliases such as `capture_preserve`, `parse_source`, `backup_create`, or
 `restore_validate` are forbidden.
 
-`agent_turn` writes a bounded user event, Job and preserve-first source ref. `current_note`
-atomically binds one page ref/checksum and isolates conversation/follow-up. Adoption,
-continuation and cancellation reject missing, duplicate or drifted refs. Exact-tail
-follow-up rehydrates bounded history; valid output is adopted without another model call.
-Short chat creates no Source Record; one attachment reconciles preservation crashes.
-Legacy records remain readable; multi-source/cross-process recovery stays open.
+`agent_turn` atomically binds bounded user event, Job and source/current-note refs. Exact-tail
+follow-up/adoption reject missing, duplicate or drifted refs and adopt valid output without
+another model call. Short chat creates no Source Record; one attachment reconciles preserve
+crashes; legacy reads remain while multi-source/cross-process recovery stays open.
+
+Reader selection resolves render endpoints to checksummed page/UTF-8-span/content/action refs;
+body is reread, never copied into Job/instruction. Recovery rejects drift and adopts existing
+Operation/proposal. Input hash binds Host instruction plus strict presentation enum; UI
+localizes the enum instead of prompt matching.
 
 An in-progress Home `draft_replace` is sender/turn/Job-bound temporary UI state, never a
 conversation event, checkpoint, recovery input or assistant truth. Only validated
@@ -565,31 +568,19 @@ Validated same-vault work commits with an Operation when evidence-bound, checksu
 and recoverable. Only irreversible loss, authority/security escalation, destination drift,
 unreconcilable conflict, or an explicit stricter user policy waits as a proposal.
 
-Proposal states:
-
-```txt
-draft
-ready
-approved
-rejected
-superseded
-conflicted
-expired
-applied
-```
+Proposal states are `draft | ready | approved | rejected | superseded | conflicted |
+expired | applied`.
 
 Executable `ConfirmationProposalSchema` owns the durable record: identity/state/trust,
 Job/source/target/diff refs, operations, warnings, base hashes and permission refs.
 
-Rules:
+Proposals persist before display. Full records/decisions stay Main-only; apply rechecks base
+hash, changed targets conflict, rejection records recurrence context, and approval creates an
+Operation before `applied`. Historical ingest can recover; new turns use only a bounded owner.
 
-- Proposals are durable before the UI displays them.
-- Full records and decisions are Main-only. Renderer methods fail closed until a localized,
-  bounded-diff DTO exists. Historical ingest may recover; new `agent_turn` cannot stage one.
-- Applying a proposal rechecks base hashes immediately before write.
-- If a target changed, mark proposal `conflicted` and create a conflict proposal.
-- Rejection should record enough reason to avoid repeated suggestions when possible.
-- Approval creates operation records; the proposal then becomes `applied`.
+Reader transforms auto-apply through the reversible writer or stage a private exceptional
+proposal. Renderer gets only bounded preview; Main-owned revision-fenced approve/reject and
+interrupted resolving/applied/rejected recovery reconcile the same Job/identity/writer.
 
 `requiredPermissionIds` is a compatibility field for permission prerequisites and may
 contain canonical `permreq_` request IDs or `permdec_` decision IDs; a later schema may
@@ -765,8 +756,8 @@ Home:
 
 Reader:
 
-- Shows current-note proposals only after a bounded preview/decision DTO is available;
-  the current raw proposal surface is unavailable rather than exposing full records.
+- Shows exact selection read/transform turns; exceptional Reader transforms expose only
+  bounded preview and Main-owned decisions, never legacy raw proposal records.
 - Shows recent safe operation summaries when relevant.
 - Note Agent can explain what changed using operation records.
 

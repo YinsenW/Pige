@@ -417,30 +417,12 @@ Rules:
 
 ### 6.4 Exceptional Change Proposals
 
-All legacy renderer proposal channels currently fail closed with a body-free error:
-
-- `proposals.list`
-- `proposals.get`
-- `proposals.approve`
-- `proposals.reject`
-
-Legacy list/get/decision DTOs stay Main-internal. A future renderer projection must use
-localized keys and bounded diff lines, excluding model-generated summary/reason, paths,
-full content, base hashes, source bodies, and Operation internals.
-
-Rules:
-
-- Records live under `.pige/proposals/YYYY/MM/`. Durable service list/get/decision stays
-  Main-internal for recovery/tests; invalid records are skipped.
-- Approve applies only the exact Job-scoped Pi create note under `wiki/generated/`:
-  `approved` -> page/index/Operation -> `applied` -> idempotent log -> parent. Generic
-  apply is `not_allowed`; generic reject remains state-only.
-- Main-owned recovery rereads rejected calls; exact proposal writes are ordered, not transactional.
-  Generic apply/replacement, CAS/TOCTOU, and platforms remain open.
-- Main-owned historical approval/rejection/reconciliation remains available to recovery
-  services even while renderer decision channels fail closed.
-- New `agent_turn` exposes no legacy proposal-stage tool until a bounded renderer preview
-  and decision owner exists; historical `agent_ingest` may still stage/recover old records.
+Legacy `proposals.list`, `proposals.get`, `proposals.approve`, `proposals.reject` stay
+body-free fail-closed and Main-internal. Their `.pige/proposals/YYYY/MM/` records support
+historical Job-scoped generated-note recovery only; generic apply, CAS/platform coverage and
+new-`agent_turn` legacy staging remain unavailable. Reader selection review instead uses the
+separate bounded channels in 6.5; it never exposes raw proposal summary/reason, path, body,
+base hash or Operation internals.
 
 #### 6.4.1 Knowledge Activity And Undo
 
@@ -462,40 +444,46 @@ Queries:
 - `notes.render`
 - `notes.resolveInlineReference`
 
-Later commands:
-
-- `notes.saveDraft`
-- `notes.applyProposal`
-- `notes.rejectProposal`
-
 Current bridge queries:
 
-- `library.list({ limit?, pageTypes? })` reads the Local Database index or scans active-vault
-  `sources/`/`wiki/` frontmatter when unavailable. It skips/counts invalid files and returns
-  only page ID, title, type, status, relative page path, timestamps, language, and source IDs.
-- `library.tree()` returns one body-free rebuildable aggregate with stable refs and metrics,
-  or a typed degraded empty result. `library.related({ pageId, limit? })` returns resolved
-  outgoing/backlink summaries plus visible target text, or an empty degraded result; neither
-  query fabricates hierarchy, exposes unresolved files, or falls back to renderer file access.
-- `notes.get({ pageId })` returns a stable-ID-resolved summary, frontmatter-free Markdown
-  body, and byte size. `notes.render({ pageId })` substitutes sanitized HTML and may add an
-  opaque sender-owned `renderContextId` when href extraction is bounded. The token authorizes
-  only hrefs in that render and is neither durable state nor filesystem authority.
-- Library/Notes never accept arbitrary paths or return source-record/managed-copy/original
-  paths, bodies, prompts, model responses, secrets, raw frontmatter, handles, executable raw
-  HTML, scripts, event handlers, or unsafe links. Main owns all Markdown/filesystem access.
+- `library.list/tree/related` returns bounded stable-ID summaries/aggregates from index or
+  active-vault Markdown fallback; invalid/unresolved data degrades without renderer file access.
+- `notes.get/render` resolve stable page ID to safe Markdown/HTML. `renderContextId` authorizes
+  only bounded href/selection resolution for that sender/render, never filesystem access.
+- Main owns Markdown/filesystem access; arbitrary paths, private source locations, prompts,
+  responses, secrets, raw frontmatter/HTML/script and unsafe links never cross.
 
 Reader inline-reference query contract:
 
-- Request is strict `apiVersion: 1`, `requestId`, `activeVaultId`, `currentPageId`,
-  `renderContextId`, and a 1,024-byte internal `#wiki:`/`#source:` `href`.
-- Result echoes version/request ID. `resolved` adds either `{ kind: "page", pageId }` or
-  `{ kind: "source", sourceId, pageId, locator? }`; `ambiguous`, `not_found`, and `failed`
-  add nothing; `stale` adds only `scope: "vault" | "page" | "render_context"`. Paths,
-  bodies, candidates, prompts, secrets, and raw errors are forbidden.
-- This query emits no event. Renderer correlates `requestId` and consumes only
-  `target.pageId`; `sourceId`/`locator` grant no separate action. Technical Architecture
-  owns sender, context, page, index/watcher, and post-lookup fences; uncertainty fails closed.
+- Version/request/vault/page/render-context plus <=1,024-byte href may return a stable page/source
+  target. `ambiguous`, `not_found`, and `failed` add nothing; `stale` adds only scope. Renderer
+  consumes correlated page ID; paths, bodies, candidates, errors, source ID and locator never
+  authorize action.
+
+Reader selection uses queries `readerSelection.resolve`, `readerSelection.currentProposal`
+and commands `readerSelection.submitAction`, `readerSelection.submitTransform`,
+`readerSelection.decideProposal`:
+
+- `resolve` takes version/request/vault/page/render-context plus anchor/focus
+  `{segmentId,utf16Offset}`. `resolved` returns only page ID/hash, a non-empty <=64 KiB
+  `utf8_bytes` span and selected-content hash. Other states are body-free `invalid` reasons
+  (`selection_empty | selection_too_large | endpoint_not_found | endpoint_offset_invalid |
+  unsupported_content`), `stale` scope (`vault | page | render_context`) or `failed`.
+- Action/transform take version/request, the resolved identity, locale and client-turn ID.
+  Actions are `explain | summarize` with `completed | waiting | failed | invalid`; transforms
+  are `translate | polish | expand` with `applied | review_required | waiting | failed |
+  invalid`. Results expose only correlation, Job/conversation/tail, body-free error,
+  `operationId`, or preview as applicable. Invalid reasons are vault/page/selection/size plus
+  transform-only `mutation_ineligible | replacement_invalid`.
+- Preview is only opaque ID, action, `ready | resolving | applied | rejected | conflicted`,
+  revision and <=8 context/removed/added lines of <=160 characters. `currentProposal` returns
+  it or `not_found | vault_changed | record_invalid`; `decideProposal` accepts
+  `{proposalId,expectedRevision,decision: approve | reject}` and returns
+  `applied | rejected | conflicted | stale | failed` (applied may add Operation ID).
+- Main revalidates vault/page/hash/span before Agent/write and owns instructions, replacement,
+  CAS and apply. Renderer-selected text, paths, bodies, hashes, replacements and raw proposal
+  data never cross; renderer correlates requests, `Later` stays local, same-page refresh uses
+  `notes.render`, and Activity/Undo remains Operation-owned.
 
 Current Home Dataset read boundary:
 
