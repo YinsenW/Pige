@@ -1,10 +1,12 @@
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent
 } from "react";
 import { PigeIcon } from "./PigeIcon";
+import { ConversationMarkdown } from "./ConversationMarkdown";
 import pigeMarkUrl from "../../../../../../resources/brand/pige-icon/master/pige-icon-1024.png";
 
 export type NoteAgentAvailability = "unavailable" | "ready" | "running" | "failed";
@@ -73,6 +75,8 @@ export function NoteAgentPanel(props: {
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const paneRef = useRef<HTMLElement | null>(null);
+  const threadRef = useRef<HTMLDivElement | null>(null);
+  const followThreadRef = useRef(true);
   const modelSwitcherRef = useRef<HTMLButtonElement | null>(null);
   const modelMenuRef = useRef<HTMLDivElement | null>(null);
   const modelOptionRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -86,6 +90,14 @@ export function NoteAgentPanel(props: {
   const modelName = selectedModel?.name ?? props.t("note.agentOpenModels");
   const composerReady = props.composerDisabled !== true && props.availability === "ready" && selectedModel?.ready === true;
   const submitReady = composerReady && props.draft.trim().length > 0 && props.onSubmit !== undefined;
+  const threadFollowKey = [
+    props.messages.length,
+    props.messages.at(-1)?.id ?? "none",
+    props.messages.at(-1)?.body.length ?? 0,
+    props.availability,
+    props.modelEgressPrompt?.kind ?? "none",
+    props.proposal?.state ?? "none"
+  ].join(":");
 
   useEffect(() => {
     if (!props.modal) return;
@@ -95,6 +107,22 @@ export function NoteAgentPanel(props: {
 
   useEffect(() => () => {
     if (compositionTimerRef.current !== undefined) window.clearTimeout(compositionTimerRef.current);
+  }, []);
+
+  useLayoutEffect(() => {
+    const thread = threadRef.current;
+    if (!thread || !followThreadRef.current) return;
+    thread.scrollTop = thread.scrollHeight;
+  }, [threadFollowKey]);
+
+  useEffect(() => {
+    const thread = threadRef.current;
+    if (!thread) return;
+    const observer = new window.MutationObserver(() => {
+      if (followThreadRef.current) thread.scrollTop = thread.scrollHeight;
+    });
+    observer.observe(thread, { childList: true, subtree: true, characterData: true });
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
@@ -181,7 +209,15 @@ export function NoteAgentPanel(props: {
           </button>
         </header>
 
-        <div className="note-agent-thread" aria-busy={props.availability === "running"}>
+        <div
+          ref={threadRef}
+          className="note-agent-thread"
+          aria-busy={props.availability === "running"}
+          onScroll={(event) => {
+            const thread = event.currentTarget;
+            followThreadRef.current = thread.scrollHeight - thread.scrollTop - thread.clientHeight <= 48;
+          }}
+        >
           {props.availability === "unavailable" ? (
             <section className="note-agent-state" role="status" aria-live="polite" aria-atomic="true">
               <img src={pigeMarkUrl} alt="" />
@@ -205,12 +241,14 @@ export function NoteAgentPanel(props: {
                   data-provisional={message.provisional ? "true" : undefined}
                   aria-busy={message.provisional ? "true" : undefined}
                 >
-                  <div className="agent-message-author">
-                    {message.role === "assistant" ? <img src={pigeMarkUrl} alt="" /> : null}
-                    <span>{props.t(message.role === "assistant" ? "note.agentAssistant" : "note.agentUser")}</span>
-                    {message.timestamp ? <time>{message.timestamp}</time> : null}
-                  </div>
-                  <p className="agent-message-body">{message.body}</p>
+                  <span className="agent-message-role visually-hidden">
+                    {props.t(message.role === "assistant" ? "note.agentAssistant" : "note.agentUser")}
+                  </span>
+                  {message.timestamp ? <time className="visually-hidden">{message.timestamp}</time> : null}
+                  <ConversationMarkdown
+                    markdown={message.body}
+                    {...(message.provisional ? { provisional: true } : {})}
+                  />
                   {!message.provisional && message.citations?.length ? (
                     <div className="note-agent-citations" aria-label={props.t("note.agentCitations")}>
                       {message.citations.map((citation) => (
@@ -310,14 +348,16 @@ export function NoteAgentPanel(props: {
               ) : null}
             </div>
           ) : props.availability === "running" ? (
-            <div className="note-agent-run-state" role="status" aria-live="polite">
-              <span>{props.t("note.agentWorking")}</span>
+            <article className="note-agent-run-state note-agent-loading-message role-assistant" role="status" aria-live="polite">
+              <span className="agent-message-role visually-hidden">{props.t("note.agentAssistant")}</span>
+              <span className="conversation-loading-dots" aria-hidden="true"><i /><i /><i /></span>
+              <span className="visually-hidden">{props.t("note.agentWorking")}</span>
               {props.onCancel ? (
                 <button type="button" className="quiet-button" onClick={props.onCancel}>
                   {props.t("home.cancelJob")}
                 </button>
               ) : null}
-            </div>
+            </article>
           ) : props.availability === "failed" ? (
             <div className="note-agent-run-state error" role="alert">
               <span>{props.t(props.errorMessageKey ?? "error.generic")}</span>
