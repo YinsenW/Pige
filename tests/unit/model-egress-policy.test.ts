@@ -94,7 +94,8 @@ afterEach(() => {
 describe("model egress policy", () => {
   const trustedExternalProviders = [
     ["verified cloud", makeProvider("provider_cloud", "cloud", "builtin_verified")],
-    ["user-asserted self-hosted", makeProvider("provider_self_hosted", "self_hosted", "user_asserted")]
+    ["user-asserted self-hosted", makeProvider("provider_self_hosted", "self_hosted", "user_asserted")],
+    ["connected exact endpoint", makeProvider("provider_connected", "unknown", "user_asserted")]
   ] as const;
 
   const ordinaryAllowedPayloads = [

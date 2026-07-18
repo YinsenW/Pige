@@ -2627,11 +2627,12 @@ References:
 
 Status: Accepted
 Date: 2026-07-12
+Revised: 2026-07-17
 
 Decision:
 
-One exact-destination disclosure authorizes routine selected context; sensitive confirms,
-restricted blocks, and unknown/changed destinations reconfirm.
+Settings Connect/Save authorizes routine selected context for that exact Profile/endpoint
+without another native dialog. Sensitive confirms, restricted blocks, and drift reconnects.
 
 Rationale:
 
@@ -2639,8 +2640,8 @@ Local ownership and no telemetry define local-first; repeated BYOK prompts add f
 
 Consequences:
 
-- Trust grants no other authority or whole-vault/proxy send; `ordinary_allowed` has quiet
-  status while stricter persisted policy/resume stays open.
+- Trust grants no other authority or whole-vault/proxy send; `ordinary_allowed` stays
+  quiet. Credential replacement and Provider deletion remain native-confirmed.
 
 References:
 

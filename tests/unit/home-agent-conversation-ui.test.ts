@@ -1652,7 +1652,7 @@ describe("Home durable Agent conversation UI", () => {
     expect(prompt?.textContent).toContain("Fetch release notes");
     expect(prompt?.textContent).toContain("Network access");
     expect(container.querySelector(".task-panel")).toBeNull();
-    expect(container.querySelector(".agent-run-state")).toBeNull();
+    expect(container.querySelector(".conversation-status-message")).toBeNull();
     expect(container.querySelector('[aria-label="Needs attention"]')).toBeNull();
     expect(container.textContent).not.toContain("errors.permission.confirmation_required");
     expect(container.textContent).not.toContain("This external action needs your permission.");
@@ -1699,7 +1699,7 @@ describe("Home durable Agent conversation UI", () => {
       request.states?.includes("waiting_permission") === true
     )).toBe(true);
     expect(container.querySelector(".task-panel")).toBeNull();
-    expect(container.querySelector(".agent-run-state")).toBeNull();
+    expect(container.querySelector(".conversation-status-message")).toBeNull();
     await clickButton(dom, container, "Allow once");
     await waitFor(dom, () => harness.permissionResolveRequests.length === 1);
     expect(harness.permissionResolveRequests[0]).toEqual({
@@ -1709,7 +1709,7 @@ describe("Home durable Agent conversation UI", () => {
     });
     await waitFor(dom, () => container.querySelector(".permission-prompt") === null);
     expect(container.querySelector(".task-panel")).toBeNull();
-    expect(container.querySelector(".agent-run-state.state-running")).not.toBeNull();
+    expect(container.querySelector(".conversation-status-message.state-running")).not.toBeNull();
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -1754,7 +1754,7 @@ describe("Home durable Agent conversation UI", () => {
     });
     await waitFor(dom, () => container.querySelector(".permission-prompt") === null);
     expect(container.querySelector(".task-panel")).toBeNull();
-    expect(container.querySelector(".agent-run-state.state-failed")).not.toBeNull();
+    expect(container.querySelector(".conversation-status-message.state-failed")).not.toBeNull();
     expect(container.textContent).toContain("This external action was denied. Your existing work remains saved.");
 
     await act(async () => root.unmount());
@@ -1790,7 +1790,7 @@ describe("Home durable Agent conversation UI", () => {
     await clickButton(committedDom, committedMount.container, "Deny");
     await waitFor(committedDom, () => committedMount.container.querySelector(".permission-prompt") === null);
     expect(committedMount.container.querySelector(".task-panel")).toBeNull();
-    expect(committedMount.container.querySelector(".agent-run-state.state-failed")).not.toBeNull();
+    expect(committedMount.container.querySelector(".conversation-status-message.state-failed")).not.toBeNull();
     expect(committedMount.container.textContent).not.toContain("synthetic");
     await act(async () => committedMount.root.unmount());
     committedDom.window.close();
@@ -1863,7 +1863,7 @@ describe("Home durable Agent conversation UI", () => {
     expect(container.textContent).not.toContain("provider_sensitive_home");
     expect(container.textContent).not.toContain("This model service needs cloud-send approval");
     expect(container.querySelector(".task-panel")).toBeNull();
-    expect(container.querySelector(".agent-run-state")).toBeNull();
+    expect(container.querySelector(".conversation-status-message")).toBeNull();
     expect(container.querySelector('[aria-label="Needs attention"]')).toBeNull();
 
     await clickButton(dom, container, "Allow once");
@@ -1876,7 +1876,7 @@ describe("Home durable Agent conversation UI", () => {
     await waitFor(dom, () => buttons(container, "Allow once").length === 0);
     expect(buttons(container, "Don't send")).toHaveLength(0);
     expect(container.querySelector(".task-panel")).toBeNull();
-    expect(container.querySelector(".agent-run-state.state-running")).not.toBeNull();
+    expect(container.querySelector(".conversation-status-message.state-running")).not.toBeNull();
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -1904,7 +1904,7 @@ describe("Home durable Agent conversation UI", () => {
     expect(buttons(container, "Allow once")).toHaveLength(1);
     expect(buttons(container, "Don't send")).toHaveLength(1);
     expect(container.querySelector(".task-panel")).toBeNull();
-    expect(container.querySelector(".agent-run-state")).toBeNull();
+    expect(container.querySelector(".conversation-status-message")).toBeNull();
     expect(container.querySelector('[aria-label="Needs attention"]')).toBeNull();
 
     await act(async () => root.unmount());
@@ -1931,7 +1931,7 @@ describe("Home durable Agent conversation UI", () => {
       expect(container.textContent).not.toContain("could not verify");
       expect(container.querySelector(".task-panel")).toBeNull();
       expect(container.querySelector(
-        `.agent-run-state.state-${decision === "deny" ? "failed" : "running"}`
+        `.conversation-status-message.state-${decision === "deny" ? "failed" : "running"}`
       )).not.toBeNull();
 
       await act(async () => root.unmount());
@@ -2232,16 +2232,26 @@ describe("Home durable Agent conversation UI", () => {
     await setTextareaValue(dom, container, "Stream one safe answer.");
     await clickButton(dom, container, "Send");
     await waitFor(dom, () => harness.submitRequests.length === 1);
+    await waitFor(dom, () => container.querySelector(".conversation-status-message.state-running") !== null);
+    expect(container.querySelector(".conversation-status-message .conversation-loading-dots")).not.toBeNull();
+    expect(container.querySelector(".composer > .agent-run-state")).toBeNull();
     const clientTurnId = harness.submitRequests[0]?.clientTurnId;
     if (!clientTurnId) throw new Error("Expected a client turn identity.");
 
     await act(async () => {
       harness.emitDraft(draftEvent({ clientTurnId: "turn_20260713_wrongturn000", sequence: 1, text: "Wrong turn." }));
-      harness.emitDraft(draftEvent({ clientTurnId, sequence: 1, text: "<img src=x onerror=alert(1)> Safe draft one." }));
+      harness.emitDraft(draftEvent({
+        clientTurnId,
+        sequence: 1,
+        text: "## Safe draft one\n\n- Local item\n\n<img src=x onerror=alert(1)>"
+      }));
       await settle(dom);
     });
     const provisional = container.querySelector<HTMLElement>('[data-agent-draft="true"]');
-    expect(provisional?.textContent).toContain("<img src=x onerror=alert(1)> Safe draft one.");
+    expect(container.querySelector(".conversation-status-message")).toBeNull();
+    await waitFor(dom, () => provisional?.querySelector('[data-markdown-ready="true"]') !== null);
+    expect(provisional?.querySelector("h2")?.textContent).toBe("Safe draft one");
+    expect(provisional?.querySelector("li")?.textContent).toBe("Local item");
     expect(provisional?.querySelector("img")).toBeNull();
     expect(provisional?.closest("[aria-busy]")?.getAttribute("aria-busy")).toBe("true");
     expect(provisional?.getAttribute("aria-live")).toBeNull();
@@ -2270,6 +2280,77 @@ describe("Home durable Agent conversation UI", () => {
     expect(reopened.container.querySelector('[data-agent-draft="true"]')).toBeNull();
     expect(reopened.container.textContent).not.toContain("Must not replay after reopen.");
     await act(async () => reopened.root.unmount());
+    dom.window.close();
+  });
+
+  it("renders final conversation Markdown through the sanitized Pige renderer", async () => {
+    const dom = createDom();
+    const baseTimeline = completedTimeline();
+    const markdownTimeline: AgentConversationTimeline = {
+      ...baseTimeline,
+      messages: baseTimeline.messages.map((message) => message.role === "assistant" ? {
+        ...message,
+        text: [
+          "## Summary",
+          "",
+          "- **Local-first**",
+          "- `Private`",
+          "",
+          "| State | Owner |",
+          "| --- | --- |",
+          "| Ready | Pige |",
+          "",
+          "[remote](https://example.com/private)",
+          "<script>alert('no')</script>"
+        ].join("\n")
+      } : message)
+    };
+    const mount = await mountHome(dom, makePigeApi(createHarness(markdownTimeline)));
+
+    await waitFor(dom, () => mount.container.querySelector('[data-markdown-ready="true"]') !== null);
+    const assistant = requireElement(mount.container.querySelector<HTMLElement>(".conversation-message.role-assistant"));
+    const user = requireElement(mount.container.querySelector<HTMLElement>(".conversation-message.role-user"));
+    expect(assistant.querySelector(".conversation-message-role")?.classList.contains("visually-hidden")).toBe(true);
+    expect(user.querySelector(".conversation-message-role")?.classList.contains("visually-hidden")).toBe(true);
+    expect(assistant.querySelector("h2")?.textContent).toBe("Summary");
+    expect(Array.from(assistant.querySelectorAll("li")).map((item) => item.textContent))
+      .toEqual(["Local-first", "Private"]);
+    expect(assistant.querySelector("code")?.textContent).toBe("Private");
+    expect(assistant.querySelector("table")?.textContent).toContain("Ready");
+    expect(assistant.querySelector("script")).toBeNull();
+    expect(assistant.querySelector("a")?.getAttribute("href")).toBeNull();
+
+    await act(async () => mount.root.unmount());
+    dom.window.close();
+  });
+
+  it("renders the just-completed answer as the same role-free Markdown message", async () => {
+    const dom = createDom();
+    const harness = createHarness(completedTimeline());
+    const completed = completedResult();
+    if (completed.state !== "completed") throw new Error("Expected completed result fixture.");
+    harness.submitTurn = async (request) => {
+      harness.submitRequests.push(request);
+      return {
+        ...completed,
+        answer: {
+          ...completed.answer,
+          answer: "## Live answer\n\n- First\n- Second"
+        }
+      };
+    };
+    const mount = await mountHome(dom, makePigeApi(harness));
+
+    await setTextareaValue(dom, mount.container, "Return Markdown now.");
+    await clickButton(dom, mount.container, "Send");
+    await waitFor(dom, () => mount.container.querySelector('[data-live-agent-answer="true"] [data-markdown-ready="true"]') !== null);
+    const live = requireElement(mount.container.querySelector<HTMLElement>('[data-live-agent-answer="true"]'));
+    expect(live.querySelector(".conversation-message-role")?.classList.contains("visually-hidden")).toBe(true);
+    expect(live.querySelector("h2")?.textContent).toBe("Live answer");
+    expect(Array.from(live.querySelectorAll("li")).map((item) => item.textContent)).toEqual(["First", "Second"]);
+    expect(mount.container.querySelector(".retrieval-answer")).toBeNull();
+
+    await act(async () => mount.root.unmount());
     dom.window.close();
   });
 
@@ -2456,7 +2537,7 @@ describe("Home durable Agent conversation UI", () => {
     await waitFor(dom, () => harness.retryJobIds.length === 1);
     await waitFor(dom, () => container.querySelector(".capture-toast") === null);
 
-    expect(container.querySelector(".agent-run-state")?.textContent)
+    expect(container.querySelector(".conversation-status-message")?.textContent)
       .toContain("The model service did not complete this answer. Try again.");
     expect(buttons(container, "Try again")).toHaveLength(1);
     expect(harness.submitRequests).toHaveLength(0);
@@ -2483,14 +2564,16 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
-  it("shows compact Activity and disables repeated Undo after the durable change moves to trash", async () => {
+  it("keeps Activity out of Home and disables repeated Undo from Settings History after durable trash", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
     harness.activities = [reversibleActivity()];
     const { container, root } = await mountHome(dom, makePigeApi(harness));
 
+    expect(container.querySelector('[aria-label="Activity"]')).toBeNull();
+    await openSettingsSection(dom, container, "Activity History");
     await waitFor(dom, () => buttons(container, "Undo").length === 1);
-    expect(container.querySelector('[aria-label="Activity"]')?.textContent)
+    expect(container.querySelector(".settings-history-page")?.textContent)
       .toContain("Knowledge note created: Grounded boundary");
     await clickButton(dom, container, "Undo");
     await waitFor(dom, () => harness.undoOperationIds.length === 1);
@@ -2502,7 +2585,7 @@ describe("Home durable Agent conversation UI", () => {
     const successToast = container.querySelector<HTMLElement>('[role="status"]');
     expect(successToast?.getAttribute("aria-live")).toBe("polite");
     const activityRow = container.querySelector<HTMLElement>('[data-activity-row-id="op_20260712_activityfixture"]');
-    expect(activityRow?.querySelector(".activity-row-copy")).not.toBeNull();
+    expect(activityRow?.querySelector(".settings-row-copy")).not.toBeNull();
     expect(activityRow?.querySelector(".activity-row-dot")?.classList.contains("is-undone")).toBe(true);
     await waitFor(dom, () => dom.window.document.activeElement === activityRow);
 
@@ -2516,11 +2599,13 @@ describe("Home durable Agent conversation UI", () => {
     harness.activities = [reversibleActivity(), reversibleUpdatedActivity()];
     const { container, root } = await mountHome(dom, makePigeApi(harness));
 
+    expect(container.querySelector('[aria-label="Activity"]')).toBeNull();
+    await openSettingsSection(dom, container, "Activity History");
     const createOpenLabel = "Open: Knowledge note created: Grounded boundary (1)";
     const updateOpenLabel = "Open: Knowledge note updated: Refined boundary (2)";
     const updateUndoLabel = "Undo: Knowledge note updated: Refined boundary (2)";
     await waitFor(dom, () => buttonsByAriaLabel(container, updateUndoLabel).length === 1);
-    const activityRegion = container.querySelector('[aria-label="Activity"]');
+    const activityRegion = container.querySelector(".settings-history-page");
     expect(activityRegion?.textContent).toContain("Knowledge note created: Grounded boundary");
     expect(activityRegion?.textContent).toContain("Knowledge note updated: Refined boundary");
     expect(container.querySelector('[data-activity-row-id="op_20260712_activityfixture"]')?.getAttribute("aria-label"))
@@ -2564,6 +2649,7 @@ describe("Home durable Agent conversation UI", () => {
     harness.activityUndoMode = "post_commit_reject";
     const { container, root } = await mountHome(dom, makePigeApi(harness));
 
+    await openSettingsSection(dom, container, "Activity History");
     await waitFor(dom, () => buttons(container, "Undo").length === 1);
     await clickButton(dom, container, "Undo");
     await waitFor(dom, () => container.textContent?.includes("Undone") === true);
@@ -2585,6 +2671,7 @@ describe("Home durable Agent conversation UI", () => {
     harness.activityUndoMode = "retryable_reject";
     const { container, root } = await mountHome(dom, makePigeApi(harness));
 
+    await openSettingsSection(dom, container, "Activity History");
     await waitFor(dom, () => buttons(container, "Undo").length === 1);
     await clickButton(dom, container, "Undo");
     await waitFor(dom, () => container.textContent?.includes("Pige could not safely undo this change.") === true);
@@ -2605,6 +2692,7 @@ describe("Home durable Agent conversation UI", () => {
     harness.activityUndoMode = "unknown_reject";
     const { container, root } = await mountHome(dom, makePigeApi(harness));
 
+    await openSettingsSection(dom, container, "Activity History");
     await waitFor(dom, () => buttons(container, "Undo").length === 1);
     await clickButton(dom, container, "Undo");
     await waitFor(dom, () => container.textContent?.includes("could not verify whether this change was undone") === true);
@@ -2630,10 +2718,10 @@ describe("Home durable Agent conversation UI", () => {
       path.resolve("apps/desktop/src/renderer/src/styles/app.css"),
       "utf8"
     );
-    expect(styles).toMatch(/\.activity-row\s*\{[\s\S]*?grid-template-columns:\s*8px minmax\(0, 1fr\) auto;[\s\S]*?min-height:\s*32px;/);
+    expect(styles).toMatch(/\.activity-history-row\s*\{[\s\S]*?grid-template-columns:\s*8px minmax\(0, 1fr\) auto;/);
     expect(styles).toMatch(/\.activity-row-dot\s*\{[\s\S]*?width:\s*6px;[\s\S]*?background:\s*var\(--success\);/);
-    expect(styles).toMatch(/\.activity-row-actions\s*\{[\s\S]*?display:\s*inline-flex;[\s\S]*?white-space:\s*nowrap;/);
-    expect(styles).toMatch(/@media \(max-width:\s*420px\)\s*\{[\s\S]*?\.activity-row-actions\s*\{[\s\S]*?gap:\s*2px;/);
+    expect(styles).not.toContain(".activity-strip");
+    expect(styles).toContain(".conversation-loading-dots");
     const submitFiles = appSource.slice(
       appSource.indexOf("const submitFiles"),
       appSource.indexOf("const cancelJob")
@@ -4070,7 +4158,15 @@ async function clickButtonByAriaLabel(dom: JSDOM, container: HTMLElement, label:
 }
 
 async function openSettingsSection(dom: JSDOM, container: HTMLElement, label: string): Promise<void> {
-  const settingsTrigger = container.querySelector<HTMLButtonElement>(".sidebar-settings-control");
+  let settingsTrigger = container.querySelector<HTMLButtonElement>(".sidebar-settings-control");
+  if (!settingsTrigger) {
+    const sidebarToggle = buttonsByAriaLabel(container, "Expand sidebar")[0];
+    if (sidebarToggle) {
+      await clickElement(dom, sidebarToggle);
+      await waitFor(dom, () => container.querySelector(".sidebar-settings-control") !== null);
+      settingsTrigger = container.querySelector<HTMLButtonElement>(".sidebar-settings-control");
+    }
+  }
   if (!settingsTrigger) throw new Error("Settings trigger not found.");
   await clickElement(dom, settingsTrigger);
   const section = Array.from(container.querySelectorAll<HTMLButtonElement>(".settings-nav-item"))

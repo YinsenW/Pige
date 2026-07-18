@@ -721,7 +721,10 @@ export const ModelEgressDecisionSchema = z.object({
   } else if (decision.cloudSendPolicy === "local_only") {
     expectedOutcome = "block";
     expectedReason = "local_only_block";
-  } else if (decision.cloudBoundary === "unknown" || decision.cloudBoundary === "local") {
+  } else if (
+    decision.cloudBoundary === "local" ||
+    (decision.cloudBoundary === "unknown" && decision.boundaryVerification !== "user_asserted")
+  ) {
     expectedOutcome = "confirm";
     expectedReason = "unknown_boundary_confirmation";
   } else if (decision.cloudSendPolicy === "confirm_all") {

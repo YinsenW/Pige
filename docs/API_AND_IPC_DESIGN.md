@@ -701,8 +701,9 @@ Rules:
 - Settings APIs return redacted page DTOs, not raw storage files.
 - `settings.appearance` returns the current app locale and supported locale list. `settings.setLocale` stores the user override in machine-local settings and applies it without writing to the vault.
 - Secret writes use dedicated secret handling and return secret references only.
-- Provider create is write-only, confirmed/probed before commit, secret-store-only, and
-  returns redacted summaries; cancellation or validation failure changes nothing.
+- Provider create is write-only, authorized by the disclosed Settings Connect/Save
+  gesture, probed before commit, secret-store-only, and returns redacted summaries.
+  Failure changes nothing; main adds no second native trust dialog.
 - Discovery needing a bootstrap ID returns `needs_manual_model` with zero writes; Custom
   may resubmit one transient ID. Manual IDs share the same inventory, which preserves
   alias/enabled/default on Refresh; replace default before disabling it.

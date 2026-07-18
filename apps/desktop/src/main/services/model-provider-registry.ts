@@ -154,7 +154,7 @@ export class ModelProviderRegistry {
     const defaultModel = modelFile.models.find((model) => model.id === modelFile.defaultModelProfileId && model.enabled);
     if (!defaultModel) return undefined;
     const provider = this.#readProviders().providers.find((profile) => profile.id === defaultModel.providerProfileId);
-    if (!provider) return undefined;
+    if (!provider || !hasStandingProviderAuthority(provider)) return undefined;
     if (this.#mutatingProviderIds.has(provider.id)) {
       throw new PigeDomainError(
         "model_provider.active_reference",
@@ -1120,6 +1120,19 @@ function hasUsableProviderCredential(provider: ProviderProfile, secrets: JsonSec
   return secrets.hasProviderSecret(provider.authSecretRef);
 }
 
+function hasStandingProviderAuthority(provider: ProviderProfile): boolean {
+  return (
+    provider.cloudBoundary === "local" &&
+    provider.boundaryVerification === "loopback_verified"
+  ) || (
+    provider.cloudBoundary === "cloud" &&
+    provider.boundaryVerification === "builtin_verified"
+  ) || (
+    provider.cloudBoundary !== "local" &&
+    provider.boundaryVerification === "user_asserted"
+  );
+}
+
 function createNeedsManualModelResult(
   reason: ProviderConnectNeedsManualModel["reason"],
   discoveredModels: readonly DiscoveredModel[],
@@ -1176,12 +1189,9 @@ function classifyProviderBoundary(
       return { cloudBoundary: "local", boundaryVerification: "loopback_verified" };
     }
   }
-  if (requestedBoundary === "local") {
-    return { cloudBoundary: "unknown", boundaryVerification: "unknown" };
-  }
   return {
-    cloudBoundary: requestedBoundary,
-    boundaryVerification: requestedBoundary === "unknown" ? "unknown" : "user_asserted"
+    cloudBoundary: requestedBoundary === "local" ? "unknown" : requestedBoundary,
+    boundaryVerification: "user_asserted"
   };
 }
 
@@ -1221,7 +1231,7 @@ function selectDeterministicDefaultModel(
 ): ModelProfile | undefined {
   const usableProviderIds = new Set(providers.filter((provider) => {
     try {
-      return hasUsableProviderCredential(provider, secrets);
+      return hasStandingProviderAuthority(provider) && hasUsableProviderCredential(provider, secrets);
     } catch {
       return false;
     }
@@ -1257,7 +1267,7 @@ function resolveDefaultBinding(
     });
   }
   try {
-    if (!hasUsableProviderCredential(provider, secrets)) {
+    if (!hasStandingProviderAuthority(provider) || !hasUsableProviderCredential(provider, secrets)) {
       return configuredUnusableBinding({
         providerProfileId: provider.id,
         modelProfileId: selected.id

@@ -780,7 +780,7 @@ describe("model provider registry", () => {
     expect(fs.existsSync(path.join(root, "secrets.json"))).toBe(false);
   });
 
-  it("does not treat an unverified remote compatible endpoint as local", async () => {
+  it("turns a successfully connected remote endpoint into exact user-asserted standing authority", async () => {
     const { registry } = makeRegistry(okModelListFetch(["remote-model"]));
 
     const summary = await registry.addManualProvider({
@@ -794,7 +794,43 @@ describe("model provider registry", () => {
     });
 
     expect(summary.providers[0]?.cloudBoundary).toBe("unknown");
-    expect(summary.providers[0]?.boundaryVerification).toBe("unknown");
+    expect(summary.providers[0]?.boundaryVerification).toBe("user_asserted");
+    expect(summary.defaultBinding.state).toBe("ready");
+    expect(registry.getDefaultRuntimeConfig()?.provider).toMatchObject({
+      cloudBoundary: "unknown",
+      boundaryVerification: "user_asserted"
+    });
+  });
+
+  it("requires reconnect instead of exposing a runtime binding for a historical unknown boundary", async () => {
+    const { root, registry } = makeRegistry(okModelListFetch(["remote-model"]));
+    const summary = await registry.addManualProvider({
+      displayName: "Historical unknown",
+      providerKind: "openai_compatible",
+      endpointProtocol: "openai_chat_completions",
+      baseUrl: "https://historical.example.com/v1",
+      apiKey: "historical-secret",
+      manualModelId: "remote-model",
+      cloudBoundary: "unknown"
+    });
+    const providersPath = path.join(root, "provider-profiles.json");
+    const providers = JSON.parse(fs.readFileSync(providersPath, "utf8")) as {
+      schemaVersion: 1;
+      providers: Array<Record<string, unknown>>;
+    };
+    providers.providers[0] = {
+      ...providers.providers[0],
+      cloudBoundary: "unknown",
+      boundaryVerification: "unknown"
+    };
+    fs.writeFileSync(providersPath, `${JSON.stringify(providers, null, 2)}\n`, "utf8");
+
+    expect(summary.defaultBinding.state).toBe("ready");
+    expect(registry.summary().defaultBinding).toMatchObject({
+      state: "configured_unusable",
+      providerProfileId: providers.providers[0]?.id
+    });
+    expect(registry.getDefaultRuntimeConfig()).toBeUndefined();
   });
 
   it("classifies a canonical loopback compatible endpoint as verified local", async () => {

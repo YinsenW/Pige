@@ -1550,35 +1550,19 @@ function isDiagnosticsExportRequestId(value: unknown): value is string {
   return typeof value === "string" && /^[a-f0-9-]{16,64}$/u.test(value);
 }
 ipcMain.handle("models.summary", () => getModelProviderRegistry().summary());
-ipcMain.handle("models.addPresetProvider", async (event, request: AddPresetProviderRequest) => {
+ipcMain.handle("models.addPresetProvider", async (_event, request: AddPresetProviderRequest) => {
   const parsedRequest = AddPresetProviderRequestSchema.parse(request);
   const validatedRequest: AddPresetProviderRequest = {
     presetId: parsedRequest.presetId,
     ...(parsedRequest.apiKey ? { apiKey: parsedRequest.apiKey } : {})
   };
-  await confirmSettingAction(
-    event.sender,
-    validatedRequest.apiKey
-      ? ["models.providerProfiles", "models.providerApiKeys"]
-      : ["models.providerProfiles"],
-    {
-    title: "Connect this model service?",
-    message: "Pige will test this exact reviewed service and may send selected context, including ordinary, private, and bounded large content, to this Provider Profile and endpoint for ongoing model calls. Sensitive content still asks each time; restricted content is never sent. If the endpoint or trust boundary changes or becomes unknown, Pige asks again. Credentials, when required, stay in protected local storage.",
-    confirmLabel: "Connect service"
-    }
-  );
   return getModelProviderRegistry().addPresetProvider(validatedRequest).then((result) => {
     if (!isNeedsManualModelResult(result)) scheduleWaitingAgentIngestAfterModelReady();
     return result;
   });
 });
-ipcMain.handle("models.addManualProvider", async (event, request: AddManualProviderRequest) => {
+ipcMain.handle("models.addManualProvider", async (_event, request: AddManualProviderRequest) => {
   const validatedRequest = AddManualProviderRequestSchema.parse(request) as AddManualProviderRequest;
-  await confirmSettingAction(event.sender, ["models.providerProfiles", "models.providerApiKeys"], {
-    title: "Connect this model service?",
-    message: "Pige will test this exact configured service and may send selected context, including ordinary, private, and bounded large content, to this Provider Profile and endpoint for ongoing model calls. Sensitive content still asks each time; restricted content is never sent. If the endpoint or trust boundary changes or becomes unknown, Pige asks again. The API key stays in protected local storage.",
-    confirmLabel: "Connect service"
-  });
   return getModelProviderRegistry().addManualProvider(validatedRequest).then((result) => {
     if (!isNeedsManualModelResult(result)) scheduleWaitingAgentIngestAfterModelReady();
     return result;

@@ -97,12 +97,20 @@ for (const [key, requirement] of registryPermissions) {
 
 const main = read("apps/desktop/src/main/index.ts");
 for (const [startMarker, endMarker, mutationMarker] of [
-  ['ipcMain.handle("maintenance.resetLocalDatabase"', 'ipcMain.handle("maintenance.localDatabaseStatus"', "getVaultService().resetLocalDatabase()"],
-  ['ipcMain.handle("models.addManualProvider"', 'ipcMain.handle("models.setDefaultModel"', "getModelProviderRegistry().addManualProvider(validatedRequest)"]
+  ['ipcMain.handle("maintenance.resetLocalDatabase"', 'ipcMain.handle("maintenance.localDatabaseStatus"', "getVaultService().resetLocalDatabase()"]
 ]) {
   const block = main.slice(main.indexOf(startMarker), main.indexOf(endMarker));
   if (!(block.indexOf("confirmSettingAction") >= 0 && block.indexOf("confirmSettingAction") < block.indexOf(mutationMarker))) {
     failures.push(`${startMarker} does not enforce the registry-driven confirmation before mutation.`);
+  }
+}
+for (const [startMarker, endMarker, mutationMarker] of [
+  ['ipcMain.handle("models.addPresetProvider"', 'ipcMain.handle("models.addManualProvider"', "getModelProviderRegistry().addPresetProvider(validatedRequest)"],
+  ['ipcMain.handle("models.addManualProvider"', 'ipcMain.handle("models.refreshProviderModels"', "getModelProviderRegistry().addManualProvider(validatedRequest)"]
+]) {
+  const block = main.slice(main.indexOf(startMarker), main.indexOf(endMarker));
+  if (block.indexOf(mutationMarker) < 0 || block.includes("confirmSettingAction")) {
+    failures.push(`${startMarker} must treat the validated Settings Connect gesture as standing authority without a second native confirmation.`);
   }
 }
 requireAll("apps/desktop/src/main/index.ts", [

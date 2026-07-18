@@ -107,9 +107,11 @@ describe("full production UI renderer contract", () => {
     expect(appSource).toContain('className="sidebar-settings-control"');
     expect(appSource).toContain('aria-haspopup="dialog"');
     expect(appSource).toContain('{ id: "maintenance", icon: "database", status: "real" }');
-    expect(appSource).toContain('{ id: "system", icon: "activity", status: "partial" }');
+    expect(appSource).toContain('{ id: "history", icon: "activity", status: "real" }');
+    expect(appSource).toContain('{ id: "updates", icon: "package", status: "development", capability: "updates" }');
+    expect(appSource).toContain('{ id: "diagnostics", icon: "wrench", status: "real" }');
     expect(appSource).toContain('settingsSection === "vault" || settingsSection === "maintenance"');
-    expect(appSource).toContain('settingsSection === "system"');
+    expect(appSource).toContain('settingsSection === "updates" || settingsSection === "diagnostics"');
   });
 
   it("binds the approved Library search surface and Home composer icons to existing real actions", () => {
@@ -215,12 +217,15 @@ describe("full production UI renderer contract", () => {
       "settings.navigation",
       "settings.section.maintenance",
       "settings.section.models",
-      "settings.section.system",
+      "settings.section.history",
+      "settings.section.updates",
+      "settings.section.diagnostics",
       "settings.section.vault",
       "settings.status.development",
       "system.localOnlyNote",
       "system.previewSupport",
-      "system.title"
+      "system.updatesTitle",
+      "system.diagnosticsTitle"
     );
 
     for (const locale of locales) {

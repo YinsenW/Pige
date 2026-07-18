@@ -123,6 +123,9 @@ describe("repository foundation smoke", () => {
     expect(rootPackage.scripts.dev).toBe(
       "tsc -b tsconfig.packages.json --pretty false && install-electron --no && npm run dev --workspace @pige/desktop"
     );
+    expect(rootPackage.scripts.build).toBe(
+      "tsc -b tsconfig.packages.json --pretty false --force && npm run build --workspace @pige/desktop"
+    );
     expect(workflow).toContain("xvfb-run -a npm run smoke:repository-foundation");
     expect(workflow).toContain("PIGE_REPORT_BUILD_ID: ${{ github.sha }}");
     expect(workflow).toContain('PIGE_DEVELOPMENT_SMOKE_NO_SANDBOX: "1"');

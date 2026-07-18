@@ -201,7 +201,7 @@ describe("desktop shell build contract", () => {
     );
     const providerHandler = mainSource.slice(
       mainSource.indexOf('ipcMain.handle("models.addManualProvider"'),
-      mainSource.indexOf('ipcMain.handle("models.setDefaultModel"')
+      mainSource.indexOf('ipcMain.handle("models.refreshProviderModels"')
     );
     const presetHandler = mainSource.slice(
       mainSource.indexOf('ipcMain.handle("models.addPresetProvider"'),
@@ -216,10 +216,14 @@ describe("desktop shell build contract", () => {
       mainSource.indexOf('ipcMain.handle("models.addManualModel"')
     );
     expect(resetHandler.indexOf("confirmSettingAction")).toBeLessThan(resetHandler.indexOf("getVaultService().resetLocalDatabase()"));
-    expect(providerHandler.indexOf("AddManualProviderRequestSchema.parse(request)")).toBeLessThan(providerHandler.indexOf("confirmSettingAction"));
-    expect(providerHandler.indexOf("confirmSettingAction")).toBeLessThan(providerHandler.indexOf("getModelProviderRegistry().addManualProvider(validatedRequest)"));
-    expect(presetHandler.indexOf("AddPresetProviderRequestSchema.parse(request)")).toBeLessThan(presetHandler.indexOf("confirmSettingAction"));
-    expect(presetHandler.indexOf("confirmSettingAction")).toBeLessThan(presetHandler.indexOf("getModelProviderRegistry().addPresetProvider(validatedRequest)"));
+    expect(providerHandler.indexOf("AddManualProviderRequestSchema.parse(request)"))
+      .toBeLessThan(providerHandler.indexOf("getModelProviderRegistry().addManualProvider(validatedRequest)"));
+    expect(presetHandler.indexOf("AddPresetProviderRequestSchema.parse(request)"))
+      .toBeLessThan(presetHandler.indexOf("getModelProviderRegistry().addPresetProvider(validatedRequest)"));
+    expect(providerHandler).not.toContain("confirmSettingAction");
+    expect(presetHandler).not.toContain("confirmSettingAction");
+    expect(providerHandler).not.toContain("Connect this model service?");
+    expect(presetHandler).not.toContain("Connect this model service?");
     expect(credentialHandler.indexOf("UpdateProviderCredentialRequestSchema.parse(request)"))
       .toBeLessThan(credentialHandler.indexOf("confirmSettingAction"));
     expect(credentialHandler.indexOf("confirmSettingAction"))
@@ -233,11 +237,7 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain("getModelEgressApprovalService().assertProviderInactive(activeVaultPath, providerProfileId)");
     expect(credentialHandler).not.toContain("oldApiKey");
     expect(deleteProviderHandler).not.toContain("authSecretRef");
-    for (const handler of [presetHandler, providerHandler]) {
-      expect(handler).toContain("ordinary, private, and bounded large content");
-      expect(handler).toContain("Sensitive content still asks each time; restricted content is never sent.");
-      expect(handler).toContain("endpoint or trust boundary changes or becomes unknown");
-    }
+    expect(mainSource).not.toContain('title: "Connect this model service?"');
     for (const channel of ["models.updateProviderCredential", "models.deleteProvider"]) {
       expect(mainSource).toContain(`ipcMain.handle("${channel}"`);
       expect(preloadSource).toContain(`ipcRenderer.invoke("${channel}"`);
@@ -439,11 +439,10 @@ describe("desktop shell build contract", () => {
     expect(homeComposer).toContain('setAgentRunState("running")');
     expect(homeComposer).toContain("outcome.error");
     expect(homeComposer).toContain("outcome.modelUsage");
-    expect(homeComposer).toContain('plannedModelUsage === "cloud" ? "home.cloudSend" : null');
-    expect(homeComposer).toContain('agentModelUsage === "cloud" ? "home.cloudCallAttempted" : null');
+    expect(homeComposer).not.toContain('className="agent-cloud-boundary"');
+    expect(homeComposer).toContain('className="conversation-loading-dots"');
     expect(homeComposer).toContain("setAgentModelUsage(outcome.modelUsage)");
-    expect(rendererSource).toContain('status.policySnapshot?.cloudBoundary === "local" &&');
-    expect(rendererSource).toContain('status.policySnapshot.boundaryVerification === "loopback_verified"');
+    expect(homeComposer).toContain('modelUsage={agentModelUsage}');
     expect(rendererSource).toContain('props.result.warnings.includes("insufficient_evidence")');
     expect(rendererSource).toContain('props.result.answerMode === "model_grounded" ? "retrieval.modelGrounded" : "retrieval.localOnly"');
     expect(rendererSource).toContain('props.t("retrieval.cloudSent")');
@@ -458,7 +457,7 @@ describe("desktop shell build contract", () => {
     expect(homeComposer).toContain("props.fileDropRequest");
     expect(homeComposer).toContain("void submitHomeFiles(request.files, request.text, request.clientTurnId)");
     expect(homeComposer).toContain('data-agent-draft="true"');
-    expect(homeComposer).toContain("aria-busy={agentDraft !== null}");
+    expect(homeComposer).toContain('aria-busy={agentDraft !== null || effectiveAgentRunState === "accepted" || effectiveAgentRunState === "running"}');
     expect(homeComposer).toContain("event.sequence <= active.sequence");
     expect(rendererSource).toContain('...(homeDraftText.trim() ? { text: homeDraftText } : {})');
     expect(homeComposer).toContain("const text = props.draftText");
@@ -615,12 +614,12 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).toContain('ipcRenderer.invoke("activity.list", request)');
     expect(preloadSource).toContain('ipcRenderer.invoke("activity.undo", request)');
     expect(contractsSource).toContain('readonly kind: "create_page" | "update_page";');
-    expect(rendererSource).toContain('window.pige.activity.list({ limit: 5 })');
-    expect(rendererSource).toContain('className="activity-strip"');
+    expect(rendererSource).toContain('window.pige.activity.list({ limit: 20 })');
+    expect(rendererSource).toContain('className="settings-page settings-history-page"');
     expect(rendererSource).toContain('activity.kind === "update_page"');
     expect(rendererSource).toContain('"activity.updatedPage"');
     expect(rendererSource).toContain('"activity.createdPage"');
-    expect(rendererSource).toContain('props.onUndoActivity(activity.operationId)');
+    expect(rendererSource).toContain('onUndo={undoActivity}');
     expect(undoHandler).toContain('window.pige.activity.list({ limit: 20 })');
     expect(undoHandler).toContain('t("activity.undoStateUnknown")');
     expect(undoHandler).toContain("restoreActivityFocus(operationId)");
@@ -752,7 +751,8 @@ describe("desktop shell build contract", () => {
       expect(mainSource).toContain(`ipcMain.handle("${channel}"`);
       expect(preloadSource).toContain(`ipcRenderer.invoke("${channel}"`);
     }
-    expect(styles).toContain(".agent-run-state > span:nth-child(2)");
+    expect(styles).toContain(".conversation-status-content p");
+    expect(styles).toContain(".conversation-loading-dots");
     expect(styles).toContain("overflow-wrap: anywhere");
   });
 

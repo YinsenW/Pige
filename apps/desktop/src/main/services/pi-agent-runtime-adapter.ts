@@ -100,7 +100,10 @@ export class PiAgentRuntimeAdapter {
     const binding = createPiBinding(request.runtimeConfig, this.#options.fauxResponses);
     const history = createPiHistoryMessages(request.history ?? [], binding.model);
     const toolsByName = new Map(tools.map((tool) => [tool.name, tool]));
-    const terminalDrafts = new SafeTerminalDraftController(request.terminalDraft);
+    const terminalDrafts = new SafeTerminalDraftController(
+      request.terminalDraft,
+      request.completionPolicy?.nativeAssistantCompletion === "allow_without_tool_calls"
+    );
     const events: PiAgentEventRecord[] = [];
     const invokedTools: string[] = [];
     let streamUpdateCount = 0;
