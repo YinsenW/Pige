@@ -1290,6 +1290,74 @@ button.ghost {
   color: var(--text-primary);
 }
 
+.conversation-citations {
+  display: grid;
+  gap: 6px;
+  max-width: 34rem;
+  margin-top: 12px;
+}
+
+.conversation-citations .citation-row {
+  min-width: 0;
+  min-height: 42px;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  border: .5px solid var(--border-light);
+  border-radius: 10px;
+  padding: 7px 8px;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: start;
+}
+
+.conversation-citations .citation-row:not(:disabled):hover {
+  border-color: var(--border-default);
+  background: var(--surface-hover);
+}
+
+.conversation-citations .citation-row:disabled {
+  cursor: wait;
+  opacity: .62;
+}
+
+.conversation-citations .citation-index {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--surface-hover);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation-citations .citation-copy {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.conversation-citations .citation-copy strong {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation-citations .citation-copy span {
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+
+.conversation-citations .citation-row > svg {
+  color: var(--text-tertiary);
+}
+
 @media (max-width: 620px) {
   .first-home-guide {
     align-items: stretch;

@@ -2324,6 +2324,73 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("renders final grounded citations without internal retrieval data and opens the stable page target", async () => {
+    const dom = createDom();
+    const harness = createHarness(completedGroundedTimeline());
+    let resolveNote: ((note: NoteRenderResult) => void) | undefined;
+    harness.renderNote = (pageId) => new Promise((resolve) => {
+      if (pageId !== "page_20260715_note0001") throw new Error("Unexpected citation target.");
+      resolveNote = resolve;
+    });
+    const mount = await mountHome(dom, makePigeApi(harness));
+
+    const citation = requireElement(mount.container.querySelector<HTMLButtonElement>(".conversation-citations .citation-row"));
+    expect(citation.textContent).toContain("1");
+    expect(citation.textContent).toContain("Durable boundaries");
+    expect(citation.textContent).toContain("Note");
+    expect(mount.container.textContent).not.toContain("page_20260715_note0001");
+    expect(mount.container.textContent).not.toContain("wiki/note-a.md");
+    expect(mount.container.textContent).not.toContain("heading:durable-boundaries");
+    expect(mount.container.textContent).not.toContain("92%");
+
+    await clickElement(dom, citation);
+    await waitFor(dom, () => citation.hasAttribute("disabled"));
+    expect(harness.noteRenderRequests).toEqual(["page_20260715_note0001"]);
+    expect(citation.hasAttribute("disabled")).toBe(true);
+
+    await act(async () => {
+      resolveNote?.(testRenderedNote("page_20260715_note0001"));
+      await settle(dom);
+    });
+    await waitFor(dom, () => mount.container.querySelector(".note-reader") !== null);
+    expect(mount.container.querySelector(".note-reader")?.textContent).toContain("Note A");
+
+    await act(async () => mount.root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps citations final-only and omits them from user messages and provisional drafts", async () => {
+    const dom = createDom();
+    const harness = createHarness(completedGroundedTimeline());
+    let resolveTurn: ((result: AgentSubmitTurnResult) => void) | undefined;
+    harness.submitTurn = (request) => {
+      harness.submitRequests.push(request);
+      return new Promise((resolve) => { resolveTurn = resolve; });
+    };
+    const mount = await mountHome(dom, makePigeApi(harness));
+
+    expect(mount.container.querySelectorAll(".conversation-citations")).toHaveLength(1);
+    expect(mount.container.querySelector(".conversation-message.role-user .conversation-citations")).toBeNull();
+    await setTextareaValue(dom, mount.container, "Stream without final citations.");
+    await clickButton(dom, mount.container, "Send");
+    await waitFor(dom, () => harness.submitRequests.length === 1);
+    const clientTurnId = harness.submitRequests[0]?.clientTurnId;
+    if (!clientTurnId) throw new Error("Expected a client turn identity.");
+    await act(async () => {
+      harness.emitDraft(draftEvent({ clientTurnId, sequence: 1, text: "Provisional grounded copy." }));
+      await settle(dom);
+    });
+    expect(mount.container.querySelector('[data-agent-draft="true"] .conversation-citations')).toBeNull();
+    expect(mount.container.querySelectorAll(".conversation-citations")).toHaveLength(1);
+
+    await act(async () => {
+      resolveTurn?.(completedResult());
+      await settle(dom);
+    });
+    await act(async () => mount.root.unmount());
+    dom.window.close();
+  });
+
   it("renders the just-completed answer as the same role-free Markdown message", async () => {
     const dom = createDom();
     const harness = createHarness(completedTimeline());
@@ -2428,6 +2495,58 @@ describe("Home durable Agent conversation UI", () => {
     await waitFor(dom, () => container.querySelector('[data-agent-draft="true"]') === null);
     expect(container.textContent).not.toContain("Temporary safe answer.");
     expect(container.textContent).toContain("The model service did not complete this answer. Try again.");
+    expect(textareaValue(container)).toBe("");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("preserves an unsaved prompt when a failed submission has no durable conversation event", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.submitTurn = async (request) => {
+      harness.submitRequests.push(request);
+      const failed = failedResult();
+      if (failed.state !== "failed") throw new Error("Expected a failed fixture.");
+      return {
+        requestId: failed.requestId,
+        state: failed.state,
+        modelUsage: failed.modelUsage,
+        sourceIds: failed.sourceIds,
+        error: failed.error
+      };
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await setTextareaValue(dom, container, "Keep this prompt if no event was saved.");
+    await clickButton(dom, container, "Send");
+    await waitFor(dom, () => container.querySelector(".conversation-status-message.state-failed") !== null);
+    expect(textareaValue(container)).toBe("Keep this prompt if no event was saved.");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("does not clear a newer draft when a durable submitted turn later fails", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    let resolveTurn: ((result: AgentSubmitTurnResult) => void) | undefined;
+    harness.submitTurn = (request) => {
+      harness.submitRequests.push(request);
+      return new Promise((resolve) => { resolveTurn = resolve; });
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await setTextareaValue(dom, container, "Submit the first prompt.");
+    await clickButton(dom, container, "Send");
+    await waitFor(dom, () => harness.submitRequests.length === 1);
+    await setTextareaValue(dom, container, "Keep this newer draft.");
+    await act(async () => {
+      resolveTurn?.(failedResult());
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.querySelector(".conversation-status-message.state-failed") !== null);
+    expect(textareaValue(container)).toBe("Keep this newer draft.");
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -3580,6 +3699,28 @@ function completedDatasetTimeline(): AgentConversationTimeline {
       userEventId: completed.conversationEventId,
       state: "completed"
     }
+  };
+}
+
+function completedGroundedTimeline(): AgentConversationTimeline {
+  const timeline = completedTimeline();
+  return {
+    ...timeline,
+    messages: timeline.messages.map((message) => message.role === "assistant" ? {
+      ...message,
+      answer: {
+        answer: message.text,
+        grounding: "local_knowledge",
+        citations: [{
+          refId: "citation_home_grounded_01",
+          label: "1",
+          pageId: "page_20260715_note0001",
+          title: "Durable boundaries",
+          pageType: "note",
+          locator: "heading:durable-boundaries"
+        }]
+      }
+    } : message)
   };
 }
 
