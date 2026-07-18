@@ -64,6 +64,7 @@ import type {
   RestoreMode,
   RestorePreviewWarning,
   RestorePreviewResult,
+  SpeechAvailabilityResult,
   SpeechAssetInstallEvent,
   SpeechAssetInstallRequest,
   SpeechAssetInstallResult,
@@ -239,6 +240,9 @@ export function App(): React.JSX.Element {
   const [availableLocales, setAvailableLocales] = useState<readonly Locale[]>(["zh-Hans", "en", "ja", "ko", "fr", "de"]);
   const [appearanceLoadState, setAppearanceLoadState] = useState<AppearanceLoadState>("loading");
   const [toolchainHealth, setToolchainHealth] = useState<ToolchainHealth | null>(null);
+  const [speechAvailability, setSpeechAvailability] = useState<SpeechAvailabilityResult | null>(null);
+  const [speechAvailabilityLoading, setSpeechAvailabilityLoading] = useState(false);
+  const [speechAvailabilityFailed, setSpeechAvailabilityFailed] = useState(false);
   const [dropActive, setDropActive] = useState(false);
   const [homeDraftText, setHomeDraftText] = useState("");
   const [voiceAssetInstallActive, setVoiceAssetInstallActive] = useState(false);
@@ -273,6 +277,7 @@ export function App(): React.JSX.Element {
   const knowledgeTreeReturnFocusKey = useRef<string | null>(null);
   const modelRefreshSequence = useRef(0);
   const agentRuntimeRefreshSequence = useRef(0);
+  const speechAvailabilitySequence = useRef(0);
   const vaultRefreshSequence = useRef(0);
   const recentVaultOpenRequestRef = useRef<string | null>(null);
   const voiceAssetInstallActiveRef = useRef(false);
@@ -393,6 +398,11 @@ export function App(): React.JSX.Element {
     const timer = window.setTimeout(() => void refreshVaultState(), 1_200);
     return () => window.clearTimeout(timer);
   }, [recentJobs, backupJobs]);
+
+  useEffect(() => {
+    if (!settingsOpen || settingsSection !== "capabilities") return;
+    void refreshSpeechAvailability();
+  }, [locale, settingsOpen, settingsSection]);
 
   const t = (key: string): string => messageCatalogs[locale][key] ?? messageCatalogs.en[key] ?? key;
 
@@ -526,6 +536,33 @@ export function App(): React.JSX.Element {
     setDiagnosticsHealth(nextDiagnostics);
     setLocalDatabaseStatus(nextDatabaseStatus);
     setToolchainHealth(nextToolchainHealth);
+  };
+
+  const refreshSpeechAvailability = async (): Promise<void> => {
+    const requestId = ++speechAvailabilitySequence.current;
+    setSpeechAvailabilityLoading(true);
+    setSpeechAvailabilityFailed(false);
+    try {
+      const nextAvailability = await window.pige.speech.availability({ languageTag: locale });
+      if (requestId !== speechAvailabilitySequence.current) return;
+      setSpeechAvailability(nextAvailability);
+    } catch {
+      if (requestId !== speechAvailabilitySequence.current) return;
+      setSpeechAvailability(null);
+      setSpeechAvailabilityFailed(true);
+    } finally {
+      if (requestId === speechAvailabilitySequence.current) setSpeechAvailabilityLoading(false);
+    }
+  };
+
+  const refreshLocalCapabilities = async (): Promise<void> => {
+    const results = await Promise.allSettled([
+      refreshDiagnostics(),
+      refreshSpeechAvailability()
+    ]);
+    if (results.some((result) => result.status === "rejected")) {
+      throw new Error("One or more local capability checks failed.");
+    }
   };
 
   const setHomeDefaultModel = async (modelProfileId: string): Promise<boolean> => {
@@ -1385,7 +1422,13 @@ export function App(): React.JSX.Element {
           ) : settingsSection === "capabilities" ? (
             <LocalCapabilitiesSettingsPanel
               toolchainHealth={toolchainHealth}
-              onRefresh={refreshDiagnostics}
+              speechAvailability={speechAvailability}
+              speechAvailabilityLoading={speechAvailabilityLoading}
+              speechAvailabilityFailed={speechAvailabilityFailed}
+              onRefresh={refreshLocalCapabilities}
+              onOpenSpeechSettings={() => window.pige.speech.openSystemSettings()
+                .then(() => undefined)
+                .catch(() => setSpeechAvailabilityFailed(true))}
               onDevelopment={() => showDevelopmentCapability("settings", "local_capabilities")}
               t={t}
             />
@@ -6278,7 +6321,11 @@ export function PermissionsPrivacySettingsPanel(props: {
 
 export function LocalCapabilitiesSettingsPanel(props: {
   readonly toolchainHealth: ToolchainHealth | null;
+  readonly speechAvailability: SpeechAvailabilityResult | null;
+  readonly speechAvailabilityLoading: boolean;
+  readonly speechAvailabilityFailed: boolean;
   readonly onRefresh: () => Promise<void>;
+  readonly onOpenSpeechSettings: () => Promise<void>;
   readonly onDevelopment: () => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
@@ -6287,6 +6334,22 @@ export function LocalCapabilitiesSettingsPanel(props: {
   const missingRequiredTools =
     props.toolchainHealth?.tools.filter((tool) => tool.required && tool.status === "missing") ?? [];
   const toolchainState = props.toolchainHealth?.status ?? "checking";
+  const speechCapabilityState = props.speechAvailabilityLoading
+    ? "checking"
+    : props.speechAvailabilityFailed || props.speechAvailability?.status === "failed"
+      ? "failed"
+      : props.speechAvailability?.status === "supported"
+        ? props.speechAvailability.permission === "denied" || props.speechAvailability.permission === "restricted"
+          ? "permission_needed"
+          : "available"
+        : props.speechAvailability?.status === "unsupported"
+          ? props.speechAvailability.reason === "assets_unavailable"
+            ? "asset_needed"
+            : "unavailable"
+          : "checking";
+  const speechSettingsAvailable = props.speechAvailability?.status === "supported" &&
+    props.speechAvailability.canOpenSystemSettings &&
+    (props.speechAvailability.permission === "denied" || props.speechAvailability.permission === "restricted");
 
   const refresh = async (): Promise<void> => {
     if (refreshing) return;
@@ -6457,16 +6520,26 @@ export function LocalCapabilitiesSettingsPanel(props: {
               <strong>{props.t("capabilities.voiceTitle")}</strong>
               <span>{props.t("capabilities.voiceDescription")}</span>
             </div>
-            <button
-              className="settings-button"
-              type="button"
-              data-capability-control="voice-input"
-              aria-label={`${props.t("capabilities.voiceTitle")}: ${props.t("settings.status.development")}`}
-              aria-describedby="capabilities-partial-note"
-              onClick={props.onDevelopment}
-            >
-              {props.t("settings.status.development")}
-            </button>
+            <div className="settings-row-control">
+              <span
+                className={`settings-status${speechCapabilityState === "available" ? "" : " warning"}`}
+                data-capability-status="voice-input"
+                role={speechCapabilityState === "failed" ? "alert" : "status"}
+                aria-live="polite"
+              >
+                {props.t(`capabilities.voice.${speechCapabilityState}`)}
+              </span>
+              {speechSettingsAvailable ? (
+                <button
+                  className="settings-button"
+                  type="button"
+                  data-capability-control="voice-open-settings"
+                  onClick={() => void props.onOpenSpeechSettings()}
+                >
+                  {props.t("capabilities.voice.openSettings")}
+                </button>
+              ) : null}
+            </div>
           </div>
         </div>
       </section>
