@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-18T08:30:00Z",
+  "reviewedAt": "2026-07-19T01:00:00Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -28,6 +28,8 @@
       "packages/schemas/src/index.ts",
       "packages/contracts/src/index.ts",
       "apps/desktop/src/main/index.ts",
+      "apps/desktop/src/main/services/local-settings.ts",
+      "apps/desktop/src/main/services/update-service.ts",
       "apps/desktop/src/main/services/backup-coordinator-service.ts",
       "apps/desktop/src/main/services/backup-service.ts",
       "apps/desktop/src/main/services/agent-page-update-service.ts",
@@ -80,21 +82,22 @@
       "tests/unit/reader-selection-proposal-service.test.ts",
       "tests/unit/restore-ui.test.ts",
       "tests/unit/security-contract-schemas.test.ts",
-      "tests/unit/release-publication.test.ts",
-      "tests/unit/release-packageability-platforms.test.ts",
+      "tests/unit/update-contract-schemas.test.ts",
+      "tests/unit/update-service.test.ts",
+      "tests/unit/local-settings.test.ts",
       "package.json"
     ],
-    "scope": "Independent Product Planning review binds the PR #96 replacement candidate: Reader selection identity, read action, reversible transform, safe presentation and exceptional bounded review remain unchanged, while Home and Job responsibilities move into dedicated lifecycle/binding owners and Markdown inline-reference scanning becomes linear and adversarially tested; no renderer behavior or Requirement, Exit or Phase status changes.",
+    "scope": "Independent Product Planning review binds the check-only Update Service and its real Updates Settings projection mechanically replayed onto sole main 6acf5b4, including renderer-safe API ownership, machine-local CAS state, stale request/event fencing and release/architecture/settings/trace synchronization without claiming download, install, restart, automatic updates or a production feed.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 130,
-    "reviewedSha256": "fa28ba3a5bd569ec8d6959de4e1badc833304b6b2d15ab8a90375b81f6b2f47b"
+    "reviewedSha256": "d236d229985af6ff8e7c0f61f724e2baa674cff91e5136cea31bfd0981f1c75a"
   },
   "reviewers": [
     {
-      "reviewerId": "reader-selection-planning-review",
-      "task": "Reader selection mutation and safe presentation contract synchronization",
+      "reviewerId": "update-service-planning-review",
+      "task": "Check-only Update Service and Updates Settings contract review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -102,75 +105,75 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Product Planning did not author the implementation candidate and independently compared its contracts, schemas, Main services, renderer projection, recovery behavior and focused evidence before synchronizing owner documents and governance manifests."
+      "independence": "Product Planning did not author the Development or UI commits and independently compared their exact contracts, schemas, service, persistence, IPC, renderer projection and tests with API, settings, release, architecture, phase and trace owners on the latest Reader-enabled main."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "reader-selection-planning-review",
+      "reviewerId": "update-service-planning-review",
       "blockerCount": 0,
-      "summary": "Existing API, Job/recovery, architecture, data and UI owners carry the Reader selection vertical; dedicated lifecycle and Job-binding modules keep Home and Jobs within frozen responsibility budgets without moving authority or introducing an unrelated Activity contract."
+      "summary": "API And IPC Design remains the single renderer boundary owner, while Release Engineering and Settings retain release-flow and machine-local-state ownership; no duplicate update owner document is added."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "reader-selection-planning-review",
+      "reviewerId": "update-service-planning-review",
       "blockerCount": 0,
-      "summary": "Renderer-local endpoints resolve to Main-owned hash/span identity; selected bodies and replacements stay out of IPC presentation, while Host instructions and localized safe presentation remain distinct."
+      "summary": "API, Settings, Architecture, Release Engineering and the accepted auto-update decision agree that the current default is zero-network and check-only; the renderer exposes only typed summary/check/event truth while signed feed, download, install and restart remain future production work."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "reader-selection-planning-review",
+      "reviewerId": "update-service-planning-review",
       "blockerCount": 0,
-      "summary": "Exact focused, type, build and UI-contract gates cover identity, read actions, mutation, recovery and bounded review without changing Requirement, Exit or Phase status or claiming held real-raster evidence."
+      "summary": "PIGE-REL-001, B9.13 and E9.09 keep their existing status; acceptance targets record the check-only foundation and truthful Settings projection while preserving signed-feed, packaged alpha-to-alpha and risky-job evidence gaps."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "reader-selection-planning-review",
+      "reviewerId": "update-service-planning-review",
       "blockerCount": 0,
-      "summary": "Focused regressions cover stale identity, bounded context, durable retry/adoption, reversible Operation/Undo, exceptional proposal CAS, safe timeline presentation and linear handling of adversarial unclosed wiki-link input."
+      "summary": "Focused schema, service, persistence, desktop-shell and Settings tests cover body-free DTOs, zero-network defaults, serialization, request/event identity, CAS stale rejection, renderer stale fencing and failure ordering; repository gates remain directly runnable."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "reader-selection-planning-review",
+      "reviewerId": "update-service-planning-review",
       "blockerCount": 0,
-      "summary": "The semantic change is synchronized into existing owner sections and trace manifests; no new design document, decision record, Activity candidate or broad status rewrite was added."
+      "summary": "The synchronization is confined to existing API, settings, architecture, release, quality, playbook and trace owners plus their semantic lock and independent review recipe; no new owner document is introduced."
     }
   ],
   "verification": [
     {
-      "command": "Independent implementation, security and owner-contract review of the PR #96 replacement candidate",
+      "command": "Independent review of the Development Update Service and UI binding on sole main 6acf5b4",
       "status": "passed",
-      "evidence": "Review covers exact contracts/schemas, resolve/action/transform/proposal services, dedicated Home lifecycle and Reader Job binding, Job/conversation recovery, byte-unchanged renderer behavior, the linear Markdown reference scanner and focused adversarial tests."
+      "evidence": "Review confirms strict body-free summary/check/event contracts, a zero-network default adapter, serialized checks, machine-local CAS terminal state, stale-write ordering and a renderer projection that never fabricates download/install capability; packaged_ready remains only an injected future seam."
     },
     {
       "command": "npm run verify:docs && npm run verify:decisions && npm run verify:traceability",
       "status": "passed",
-      "evidence": "Owner links, trace semantics, whitespace, document map, PRD structure and decision records pass without Requirement, Exit or Phase promotion."
+      "evidence": "Links, whitespace, document map, PRD structure, decisions and locked update claims pass with no Requirement, Build, Exit or Phase promotion."
     },
     {
       "command": "npm run verify:contracts && npm run verify:independent-documentation-review && npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "CON-001 through CON-004 remain green and the recipe binds governed owners plus exact Reader, lifecycle, Job-binding, Markdown, UI and test paths without exposing selected bodies or relaxing responsibility budgets."
+      "evidence": "CON-001 through CON-004 remain green; focused update and Settings tests, typecheck and build bind the exact service/contracts/UI while the union recipe retains the already-published Reader, release and security roots."
     }
   ],
   "coordination": {
-    "taskId": "reader-selection-mutation-planning-20260718",
-    "taskTitle": "Reader selection mutation and safe presentation Planning synchronization",
+    "taskId": "update-service-main6acf-20260719",
+    "taskTitle": "Check-only Update Service and Updates Settings binding",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The candidate confines selection authority to Main-resolved identity, keeps replacement/apply authority out of renderer, and uses a dedicated bounded Reader proposal projection without changing legacy generic proposal IPC.",
-    "acknowledgement": "Product Planning reviewed the PR #96 replacement implementation/evidence, including the responsibility split and CodeQL-safe Markdown scanner; renderer behavior is unchanged, while Activity integration and broader Note Agent mutation remain separate."
+    "compatibility": "The candidate adds a fail-closed check-only Update Service, machine-local status state and typed Settings projection without a production network client, download, install, restart, feed selection, Job or vault data change.",
+    "acknowledgement": "Product Planning reviewed the exact Development and UI bytes on the latest Reader-enabled main and synchronized only affected owner/trace contracts; this candidate does not claim a connected production updater, signed feed, automatic update or Public Alpha readiness."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Post-repair real macOS raster evidence is held because desktop control was unavailable; focused renderer and interaction tests pass, but no raster PASS is inferred.",
-    "Broader Note Agent mutations, complete Activity/Undo routing, generic exception coverage and Windows evidence remain open; no Requirement, Exit or Phase status is promoted."
+    "The default adapter intentionally performs no network request; production signed-feed connectivity and its runtime dependency remain unselected and unimplemented.",
+    "No automatic schedule, download, install, restart, risky-job interlock or real packaged alpha-to-alpha update was produced; no Requirement, Build, Exit or Phase status is promoted."
   ]
 }

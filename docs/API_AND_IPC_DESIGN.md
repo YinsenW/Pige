@@ -710,6 +710,12 @@ Rules:
 
 Agent policy DTOs must follow `docs/AGENT_RUNTIME_POLICY_CONTEXT.md`.
 
+#### 6.8.1 Update Check
+
+`updates.summary`, `updates.check`, and `updates.onStatusChanged` are body-free;
+`updates.check` takes `{apiVersion:1,requestId}`. Main serializes/CAS-persists; default is
+zero-network; `packaged_ready` is test-only. No feed/path/error/action crosses.
+
 ### 6.9 Diagnostics
 
 Diagnostics APIs must follow `docs/DIAGNOSTICS_AND_OBSERVABILITY.md`.

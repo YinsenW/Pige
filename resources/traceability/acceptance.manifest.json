@@ -693,7 +693,7 @@
     "PIGE-BACKUP-004":{"status":"partial","evidence":["EV-BACKUP","EV-BACKUP-EXTERNAL-MANAGED-COPIES","EV-RESTORE-CONFLICT","EV-RESTORE-PREVIEW-FENCE","EV-RESTORE-PUBLICATION","EV-RESTORE-LEGACY-LINEAGE","EV-RESTORE-IDENTITY-RECOVERY","EV-RESTORE-REPLACE-ROLLBACK","EV-RESTORE-ROLLBACK-RECOVERY","EV-RESTORE-JOB-RECOVERY","EV-RESTORE-DURABLE-OPERATION","EV-RESTORE-STARTUP-ADOPTION","EV-RESTORE-SAFE-UI"],"open":{"id":"OPEN-REQ-PIGE-BACKUP-004","description":"Migrations, atomicity, cleanup, signing remain.","targetBuilds":["B9.03","B9.04","B9.05","B9.06"],"targetExits":["E9.02"]}},
     "PIGE-REL-001": {
       "status": "planned",
-      "plannedTarget": "Protected exact-identity signed publication is implemented but unexecuted; credentials, real releases, platform breadth and alpha updates remain open."
+      "plannedTarget": "Publication code and zero-network check-only service exist; credentials, signed feed/releases, automatic update, risky-job, platform and alpha-to-alpha proof remain open."
     },
     "PIGE-REL-002": {
       "status": "verified",
@@ -1062,7 +1062,7 @@
     "E9.06":{"status":"partial","evidence":["EV-I18N","EV-BACKUP-SETTINGS-UI","EV-RESTORE-SAFE-UI"],"open":{"id":"OPEN-EXIT-E9.06","description":"The shell and safety surfaces align across six catalogs with local narrow evidence; Windows packaged and broader workflow rendering remain open.","targetBuilds":["B9.10"],"targetExits":["E9.06"]}},
     "E9.07": { "status": "planned", "plannedTarget": "Keyboard, focus, accessible-name, contrast, reduced-motion, and narrow-layout report." },
     "E9.08": { "status": "planned", "plannedTarget": "Signed-publication code remains below exit; real trusted artifacts, platform/update, scale/recovery, notes and attribution remain open." },
-    "E9.09": { "status": "planned", "plannedTarget": "Alpha-to-alpha update and active-risky-job safeguard report." },
+    "E9.09": { "status": "planned", "plannedTarget": "Check-only service exists; signed-feed alpha-to-alpha update and risky-job evidence remain required." },
     "E9.10": { "status": "planned", "plannedTarget": "25-source Public Alpha scenario generated report." },
     "E9.11": {
       "status": "partial",

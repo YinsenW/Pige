@@ -678,7 +678,7 @@ installed/update, Windows OCR, scale/recovery, release notes and missing tools.
 Protected-publication code now binds protected alpha tag/version/commit, required platform
 trust and independently verified metadata before prerelease creation. It is unexecuted:
 credentials, signed artifacts, notes, platform/update/scale/recovery and a real release remain
-open; no Build, Exit, Requirement or Phase status changes.
+open; the zero-network check service changes no controlled status.
 
 Current Backup foundation covers bounded B9.01/B9.02: one pre-scan durable Job resumes five
 identity/checksum checkpoints, no-replace publishes a validated archive, links one
