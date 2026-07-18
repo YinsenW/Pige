@@ -1003,7 +1003,7 @@ describe("full UI Settings surface", () => {
     expect(
       Array.from(container.querySelectorAll("button")).some((button) => button.textContent === "Repair...")
     ).toBe(false);
-    expect(onDevelopment).toHaveBeenCalledTimes(5);
+    expect(onDevelopment).toHaveBeenCalledTimes(4);
     expect(ipcRead).toBe(false);
 
     await act(async () => root.unmount());
