@@ -4,22 +4,36 @@ import {
   type MouseEvent as ReactMouseEvent
 } from "react";
 
+type RenderedConversationMarkdown = {
+  readonly source: string;
+  readonly html: string | null;
+};
+
+let markdownRendererPromise: Promise<(
+  markdown: string
+) => Promise<{ readonly html: string }>> | undefined;
+
+function renderConversationMarkdown(markdown: string): Promise<{ readonly html: string }> {
+  markdownRendererPromise ??= import("@pige/markdown")
+    .then(({ renderPigeMarkdownToHtml }) => renderPigeMarkdownToHtml);
+  return markdownRendererPromise.then((renderMarkdown) => renderMarkdown(markdown));
+}
+
 export function ConversationMarkdown(props: {
   readonly markdown: string;
   readonly provisional?: boolean;
 }): React.JSX.Element {
-  const [html, setHtml] = useState<string | null>(null);
+  const [rendered, setRendered] = useState<RenderedConversationMarkdown | null>(null);
 
   useEffect(() => {
     let current = true;
-    setHtml(null);
-    void import("@pige/markdown")
-      .then(({ renderPigeMarkdownToHtml }) => renderPigeMarkdownToHtml(props.markdown))
+    const source = props.markdown;
+    void renderConversationMarkdown(source)
       .then((rendered) => {
-        if (current) setHtml(rendered.html);
+        if (current) setRendered({ source, html: rendered.html });
       })
       .catch(() => {
-        if (current) setHtml(null);
+        if (current) setRendered({ source, html: null });
       });
     return () => {
       current = false;
@@ -30,9 +44,14 @@ export function ConversationMarkdown(props: {
     if ((event.target as Element).closest("a")) event.preventDefault();
   };
 
-  if (html === null) {
+  const updating = rendered !== null && rendered.source !== props.markdown;
+  if (rendered === null || rendered.html === null) {
     return (
-      <div className="conversation-markdown" data-markdown-ready="false">
+      <div
+        className="conversation-markdown"
+        data-markdown-ready="false"
+        data-markdown-updating={updating ? "true" : undefined}
+      >
         <p>{props.markdown}</p>
       </div>
     );
@@ -42,8 +61,9 @@ export function ConversationMarkdown(props: {
     <div
       className={`conversation-markdown${props.provisional ? " provisional-markdown" : ""}`}
       data-markdown-ready="true"
+      data-markdown-updating={updating ? "true" : undefined}
       onClick={preventConversationNavigation}
-      dangerouslySetInnerHTML={{ __html: html }}
+      dangerouslySetInnerHTML={{ __html: rendered.html ?? "" }}
     />
   );
 }
