@@ -265,6 +265,14 @@ describe("schemas", () => {
         compactSize: { width: 420, height: 760 }
       },
       dismissedFirstHomeVaultIds: ["vault_20260709_ab12cd"],
+      updates: {
+        revision: 2,
+        channel: "alpha",
+        lastCheck: {
+          phase: "failed",
+          checkedAt: "2026-07-18T08:00:00.000Z"
+        }
+      },
       recentVaults: []
     });
 
@@ -272,6 +280,7 @@ describe("schemas", () => {
     expect(settings.appLocale).toBe("en");
     expect(settings.window?.sidebarOpen).toBe(true);
     expect(settings.dismissedFirstHomeVaultIds).toEqual(["vault_20260709_ab12cd"]);
+    expect(settings.updates).toMatchObject({ revision: 2, channel: "alpha", lastCheck: { phase: "failed" } });
   });
 
   it("validates a pathless Activity page target projection", () => {

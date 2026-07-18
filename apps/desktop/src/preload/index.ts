@@ -115,6 +115,10 @@ import type {
   SupportBundleExportResult,
   SupportBundlePreview,
   ToolchainHealth,
+  UpdateCheckRequest,
+  UpdateCheckResult,
+  UpdateStatusEvent,
+  UpdateSummary,
   UpdateSourceStoragePolicyRequest,
   WindowLayoutRequest,
   WindowLayoutState,
@@ -164,6 +168,10 @@ import {
   SpeechStartRequestSchema,
   SpeechStartResultSchema,
   SpeechStopResultSchema,
+  UpdateCheckRequestSchema,
+  UpdateCheckResultSchema,
+  UpdateStatusEventSchema,
+  UpdateSummarySchema,
   WindowLayoutRequestSchema,
   WindowLayoutStateSchema,
   VaultActionResultSchema
@@ -648,6 +656,22 @@ const api: PigeDesktopApi = {
       ipcRenderer.invoke("settings.setLocale", request) as Promise<AppearanceSettingsSummary>,
     registry: async (): Promise<SettingsRegistrySummary> =>
       ipcRenderer.invoke("settings.registry") as Promise<SettingsRegistrySummary>
+  },
+  updates: {
+    summary: async (): Promise<UpdateSummary> =>
+      UpdateSummarySchema.parse(await ipcRenderer.invoke("updates.summary")),
+    check: async (request: UpdateCheckRequest): Promise<UpdateCheckResult> => {
+      const parsedRequest = UpdateCheckRequestSchema.parse(request);
+      return UpdateCheckResultSchema.parse(await ipcRenderer.invoke("updates.check", parsedRequest));
+    },
+    onStatusChanged: (listener: (event: UpdateStatusEvent) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, value: unknown): void => {
+        const parsed = UpdateStatusEventSchema.safeParse(value);
+        if (parsed.success) listener(parsed.data);
+      };
+      ipcRenderer.on("updates.statusChanged", handler);
+      return () => ipcRenderer.removeListener("updates.statusChanged", handler);
+    }
   },
   speech: {
     availability: async (request: SpeechAvailabilityRequest): Promise<SpeechAvailabilityResult> => {

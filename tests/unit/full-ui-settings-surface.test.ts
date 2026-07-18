@@ -446,6 +446,7 @@ describe("full UI Settings surface", () => {
       const [preview, setPreview] = useState<Awaited<ReturnType<typeof previewSupportBundle>> | null>(null);
       return createElement(SystemSettingsPanel, {
         surface: "diagnostics",
+        locale: "en",
         diagnosticsHealth: {
           status: "ok",
           checkedAt: "2026-07-16T00:00:00.000Z",
@@ -493,20 +494,46 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
-  it("keeps Updates separate and unavailable without reading diagnostics", async () => {
+  it("binds explicit update checks with stale-event and synchronous busy fences", async () => {
     const dom = createDom();
-    let ipcRead = false;
+    let statusListener: ((event: {
+      apiVersion: 1;
+      requestId: string;
+      sequence: number;
+      summary: import("@pige/contracts").UpdateSummary;
+    }) => void) | undefined;
+    const unsubscribe = vi.fn();
+    let resolveCheck: ((result: import("@pige/contracts").UpdateCheckResult) => void) | undefined;
+    const check = vi.fn((request: import("@pige/contracts").UpdateCheckRequest) =>
+      new Promise<import("@pige/contracts").UpdateCheckResult>((resolve) => {
+        resolveCheck = resolve;
+      })
+    );
     Object.defineProperty(dom.window, "pige", {
       configurable: true,
-      get() {
-        ipcRead = true;
-        throw new Error("Updates must stay local until Update Service exists.");
+      value: {
+        updates: {
+          summary: vi.fn(async () => ({
+            apiVersion: 1 as const,
+            revision: 2,
+            channel: "alpha" as const,
+            capability: "packaged_ready" as const,
+            currentVersion: "0.1.0",
+            phase: "idle" as const
+          })),
+          check,
+          onStatusChanged: vi.fn((listener: typeof statusListener) => {
+            statusListener = listener;
+            return unsubscribe;
+          })
+        }
       }
     });
     const root = createRoot(dom.window.document.querySelector("#root")!);
     await act(async () => {
       root.render(createElement(SystemSettingsPanel, {
         surface: "updates",
+        locale: "en",
         diagnosticsHealth: null,
         supportBundlePreview: null,
         onRefreshDiagnostics: async () => undefined,
@@ -518,13 +545,98 @@ describe("full UI Settings surface", () => {
     const panel = dom.window.document.querySelector<HTMLElement>(".settings-updates-page")!;
     expect(panel.querySelector("h1")?.textContent).toBe("Updates");
     expect(panel.textContent).not.toContain("Support bundle");
+    expect(panel.textContent).toContain("0.1.0");
+    expect(panel.textContent).toContain("Not checked yet");
     expect(buttonNamed(panel, "Temporarily unavailable. Nothing was changed.").disabled).toBe(true);
+
     await act(async () => {
       buttonNamed(panel, "Check for updates").click();
+      buttonNamed(panel, "Check for updates").click();
+    });
+    expect(check).toHaveBeenCalledOnce();
+    const request = check.mock.calls[0]?.[0];
+    expect(request?.requestId).toMatch(/^updatereq_[a-z0-9]{32}$/);
+
+    await act(async () => {
+      statusListener?.({
+        apiVersion: 1,
+        requestId: request!.requestId,
+        sequence: 1,
+        summary: {
+          apiVersion: 1,
+          revision: 2,
+          channel: "alpha",
+          capability: "packaged_ready",
+          currentVersion: "0.1.0",
+          phase: "checking"
+        }
+      });
       await settle(dom);
     });
-    expect(panel.textContent).toContain("Update Service is in development");
-    expect(ipcRead).toBe(false);
+    expect(buttonNamed(panel, "Checking…").disabled).toBe(true);
+
+    await act(async () => {
+      resolveCheck?.({
+        status: "checked",
+        requestId: request!.requestId,
+        summary: {
+          apiVersion: 1,
+          revision: 3,
+          channel: "alpha",
+          capability: "packaged_ready",
+          currentVersion: "0.1.0",
+          phase: "available",
+          availableVersion: "0.2.0",
+          checkedAt: "2026-07-19T08:00:00.000Z"
+        }
+      });
+      await settle(dom);
+    });
+    expect(panel.textContent).toContain("0.2.0");
+    expect(buttonNamed(panel, "Download update").disabled).toBe(true);
+
+    await act(async () => root.unmount());
+    expect(unsubscribe).toHaveBeenCalledOnce();
+    dom.window.close();
+  });
+
+  it("shows the real development capability without offering a fake update action", async () => {
+    const dom = createDom();
+    const check = vi.fn();
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: {
+        updates: {
+          summary: vi.fn(async () => ({
+            apiVersion: 1 as const,
+            revision: 0,
+            channel: "alpha" as const,
+            capability: "development" as const,
+            currentVersion: "0.1.0-alpha.1",
+            phase: "idle" as const
+          })),
+          check,
+          onStatusChanged: vi.fn(() => () => undefined)
+        }
+      }
+    });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(SystemSettingsPanel, {
+        surface: "updates",
+        locale: "en",
+        diagnosticsHealth: null,
+        supportBundlePreview: null,
+        onRefreshDiagnostics: async () => undefined,
+        onSupportBundlePreviewChange: vi.fn(),
+        t
+      }));
+      await settle(dom);
+    });
+    const panel = dom.window.document.querySelector<HTMLElement>(".settings-updates-page")!;
+    expect(panel.textContent).toContain("Update checking is still in development for this build.");
+    expect(buttonNamed(panel, "Check for updates").disabled).toBe(true);
+    expect(check).not.toHaveBeenCalled();
     await act(async () => root.unmount());
     dom.window.close();
   });
@@ -546,6 +658,7 @@ describe("full UI Settings surface", () => {
     await act(async () => {
       root.render(createElement(SystemSettingsPanel, {
         surface: "diagnostics",
+        locale: "en",
         diagnosticsHealth: null,
         supportBundlePreview: {
           previewId: "support_unknown",

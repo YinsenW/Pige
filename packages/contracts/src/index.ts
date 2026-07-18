@@ -507,6 +507,40 @@ export interface SetLocaleRequest {
   readonly locale: Locale;
 }
 
+export type UpdateChannel = "alpha";
+export type UpdateCapability = "development" | "unsupported_platform" | "packaged_ready";
+export type UpdatePhase = "idle" | "checking" | "up_to_date" | "available" | "failed";
+
+export type UpdateSummary = {
+  readonly apiVersion: 1;
+  readonly revision: number;
+  readonly channel: UpdateChannel;
+  readonly capability: UpdateCapability;
+  readonly currentVersion: string;
+} & (
+  | { readonly phase: "idle" | "checking" }
+  | { readonly phase: "up_to_date" | "failed"; readonly checkedAt: string }
+  | { readonly phase: "available"; readonly availableVersion: string; readonly checkedAt: string }
+);
+
+export interface UpdateCheckRequest {
+  readonly apiVersion: 1;
+  readonly requestId: string;
+}
+
+export interface UpdateCheckResult {
+  readonly status: "checked" | "unavailable" | "busy" | "stale";
+  readonly requestId: string;
+  readonly summary: UpdateSummary;
+}
+
+export interface UpdateStatusEvent {
+  readonly apiVersion: 1;
+  readonly requestId: string;
+  readonly sequence: number;
+  readonly summary: UpdateSummary;
+}
+
 export type CaptureUserIntent = "capture" | "ask" | "unknown";
 
 export interface SubmitTextCaptureRequest {
@@ -1397,6 +1431,11 @@ export interface PigeDesktopApi {
     readonly appearance: () => Promise<AppearanceSettingsSummary>;
     readonly setLocale: (request: SetLocaleRequest) => Promise<AppearanceSettingsSummary>;
     readonly registry: () => Promise<SettingsRegistrySummary>;
+  };
+  readonly updates: {
+    readonly summary: () => Promise<UpdateSummary>;
+    readonly check: (request: UpdateCheckRequest) => Promise<UpdateCheckResult>;
+    readonly onStatusChanged: (listener: (event: UpdateStatusEvent) => void) => () => void;
   };
   readonly backup: {
     readonly status: () => Promise<BackupRestoreStatus>;

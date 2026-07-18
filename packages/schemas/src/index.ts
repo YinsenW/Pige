@@ -1406,12 +1406,115 @@ export const VaultConfigSchema = z.object({
   })
 });
 
+export const UpdateChannelSchema = z.literal("alpha");
+export const UpdateCapabilitySchema = z.enum([
+  "development",
+  "unsupported_platform",
+  "packaged_ready"
+]);
+export const UpdatePhaseSchema = z.enum([
+  "idle",
+  "checking",
+  "up_to_date",
+  "available",
+  "failed"
+]);
+export const UpdateCheckRequestIdSchema = z.string().regex(/^updatereq_[a-z0-9]{16,64}$/u);
+export const UpdateVersionSchema = z.string()
+  .min(1)
+  .max(64)
+  .regex(/^[0-9A-Za-z][0-9A-Za-z.+-]*$/u);
+
+const UpdateTerminalStateSchema = z.discriminatedUnion("phase", [
+  z.object({
+    phase: z.literal("up_to_date"),
+    checkedAt: z.string().datetime({ offset: true })
+  }).strict(),
+  z.object({
+    phase: z.literal("available"),
+    availableVersion: UpdateVersionSchema,
+    checkedAt: z.string().datetime({ offset: true })
+  }).strict(),
+  z.object({
+    phase: z.literal("failed"),
+    checkedAt: z.string().datetime({ offset: true })
+  }).strict()
+]);
+
+export const UpdateMachineSettingsSchema = z.object({
+  revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  channel: UpdateChannelSchema,
+  lastCheck: UpdateTerminalStateSchema.optional()
+}).strict();
+
+const UpdateSummaryBaseSchema = z.object({
+  apiVersion: z.literal(1),
+  revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  channel: UpdateChannelSchema,
+  capability: UpdateCapabilitySchema,
+  currentVersion: UpdateVersionSchema
+}).strict();
+
+export const UpdateSummarySchema = z.discriminatedUnion("phase", [
+  UpdateSummaryBaseSchema.extend({ phase: z.literal("idle") }).strict(),
+  UpdateSummaryBaseSchema.extend({ phase: z.literal("checking") }).strict(),
+  UpdateSummaryBaseSchema.extend({
+    phase: z.literal("up_to_date"),
+    checkedAt: z.string().datetime({ offset: true })
+  }).strict(),
+  UpdateSummaryBaseSchema.extend({
+    phase: z.literal("available"),
+    availableVersion: UpdateVersionSchema,
+    checkedAt: z.string().datetime({ offset: true })
+  }).strict(),
+  UpdateSummaryBaseSchema.extend({
+    phase: z.literal("failed"),
+    checkedAt: z.string().datetime({ offset: true })
+  }).strict()
+]);
+
+export const UpdateCheckRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: UpdateCheckRequestIdSchema
+}).strict();
+
+export const UpdateCheckResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("checked"),
+    requestId: UpdateCheckRequestIdSchema,
+    summary: UpdateSummarySchema
+  }).strict(),
+  z.object({
+    status: z.literal("unavailable"),
+    requestId: UpdateCheckRequestIdSchema,
+    summary: UpdateSummarySchema
+  }).strict(),
+  z.object({
+    status: z.literal("busy"),
+    requestId: UpdateCheckRequestIdSchema,
+    summary: UpdateSummarySchema
+  }).strict(),
+  z.object({
+    status: z.literal("stale"),
+    requestId: UpdateCheckRequestIdSchema,
+    summary: UpdateSummarySchema
+  }).strict()
+]);
+
+export const UpdateStatusEventSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: UpdateCheckRequestIdSchema,
+  sequence: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  summary: UpdateSummarySchema
+}).strict();
+
 export const MachineLocalSettingsSchema = z.object({
   schemaVersion: z.literal(1),
   activeVaultPath: z.string().min(1).optional(),
   appLocale: LocaleSchema.optional(),
   window: WindowPreferencesSchema.optional(),
   permissions: PermissionMachineSettingsSchema.optional(),
+  updates: UpdateMachineSettingsSchema.optional(),
   dismissedFirstHomeVaultIds: z.array(VaultIdSchema).max(32).optional(),
   recentVaults: z.array(
     z.object({
@@ -3404,6 +3507,14 @@ export type JobRecord = z.infer<typeof JobRecordSchema>;
 export type JobStage = z.infer<typeof JobStageSchema>;
 export type JobState = z.infer<typeof JobStateSchema>;
 export type MachineLocalSettings = z.infer<typeof MachineLocalSettingsSchema>;
+export type UpdateCapability = z.infer<typeof UpdateCapabilitySchema>;
+export type UpdateChannel = z.infer<typeof UpdateChannelSchema>;
+export type UpdateCheckRequest = z.infer<typeof UpdateCheckRequestSchema>;
+export type UpdateCheckResult = z.infer<typeof UpdateCheckResultSchema>;
+export type UpdateMachineSettings = z.infer<typeof UpdateMachineSettingsSchema>;
+export type UpdatePhase = z.infer<typeof UpdatePhaseSchema>;
+export type UpdateStatusEvent = z.infer<typeof UpdateStatusEventSchema>;
+export type UpdateSummary = z.infer<typeof UpdateSummarySchema>;
 export type MarkdownPageStatus = z.infer<typeof MarkdownPageStatusSchema>;
 export type MarkdownPageType = z.infer<typeof MarkdownPageTypeSchema>;
 export type NoteInlineReferenceTarget = z.infer<typeof NoteInlineReferenceTargetSchema>;

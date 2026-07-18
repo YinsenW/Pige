@@ -186,7 +186,7 @@ This table is the v0.1 baseline. Implementation can split storage files differen
 | Machine-local Skill enablement | Skills | `machine_local` | Skill Registry Service | OS app data | No | `permission_broker` | New Agent runs |
 | Pi package install records | Pi Packages | `machine_local` | Pi Package Registry Service | OS app data | No | `permission_and_confirmation` | After install/remove job |
 | Package permission grants | Pi Packages/Permissions | `permission_grant` | Permission Broker | Machine-local permission store | No | `explicit_confirmation` | Immediate |
-| Update channel/status | Updates & Diagnostics | `machine_local` | Update Service | OS app data | No | `none` | Next update check |
+| Update check state | Updates & Diagnostics | `machine_local` | Update Service | `settings.json` | No | `none` | Serialized CAS; default zero-network |
 | Diagnostics export preferences | Updates & Diagnostics | `machine_local` | Diagnostics Service | OS app data | No | `explicit_confirmation` | Next export |
 
 If a new setting does not fit this table, update this document before implementation.

@@ -4,9 +4,11 @@ import path from "node:path";
 import {
   MachineLocalSettingsSchema,
   PermissionMachineSettingsSchema,
+  UpdateMachineSettingsSchema,
   type Locale,
   type MachineLocalSettings,
   type PermissionMachineSettings,
+  type UpdateMachineSettings,
   type WindowPreferences
 } from "@pige/schemas";
 import type { RecentVaultSummary, VaultSummary } from "@pige/contracts";
@@ -23,6 +25,11 @@ export interface RecentVaultBinding {
 export interface PermissionSettingsMutation {
   readonly status: "committed" | "stale";
   readonly settings: PermissionMachineSettings;
+}
+
+export interface UpdateSettingsMutation {
+  readonly status: "committed" | "stale";
+  readonly settings: UpdateMachineSettings;
 }
 
 export class LocalSettingsStore {
@@ -64,6 +71,41 @@ export class LocalSettingsStore {
     return this.read().permissions ?? createDefaultPermissionSettings();
   }
 
+  getUpdateSettings(): UpdateMachineSettings {
+    return this.read().updates ?? createDefaultUpdateSettings();
+  }
+
+  mutateUpdateSettings(
+    expectedRevision: number,
+    mutation: (settings: UpdateMachineSettings) => UpdateMachineSettings
+  ): UpdateSettingsMutation {
+    return this.#withWriterLease(() => {
+      const current = this.read();
+      const updateSettings = current.updates ?? createDefaultUpdateSettings();
+      if (updateSettings.revision !== expectedRevision) {
+        return { status: "stale", settings: updateSettings };
+      }
+      if (updateSettings.revision === Number.MAX_SAFE_INTEGER) {
+        throw new PigeDomainError("update.revision_exhausted", "Update settings revision is exhausted.");
+      }
+      const candidate = UpdateMachineSettingsSchema.parse(mutation(updateSettings));
+      const nextUpdates = UpdateMachineSettingsSchema.parse({
+        ...candidate,
+        revision: updateSettings.revision + 1
+      });
+      this.#writeUnlocked(createMachineLocalSettings({
+        activeVaultPath: current.activeVaultPath,
+        appLocale: current.appLocale,
+        window: current.window,
+        permissions: current.permissions,
+        updates: nextUpdates,
+        dismissedFirstHomeVaultIds: current.dismissedFirstHomeVaultIds,
+        recentVaults: current.recentVaults
+      }));
+      return { status: "committed", settings: nextUpdates };
+    });
+  }
+
   mutatePermissionSettings(
     expectedRevision: number,
     mutation: (settings: PermissionMachineSettings) => PermissionMachineSettings
@@ -87,6 +129,7 @@ export class LocalSettingsStore {
         appLocale: current.appLocale,
         window: current.window,
         permissions: nextPermissions,
+        updates: current.updates,
         dismissedFirstHomeVaultIds: current.dismissedFirstHomeVaultIds,
         recentVaults: current.recentVaults
       }));
@@ -105,6 +148,7 @@ export class LocalSettingsStore {
         appLocale: settings.appLocale,
         window: settings.window,
         permissions: settings.permissions,
+        updates: settings.updates,
         dismissedFirstHomeVaultIds: [
           vaultId,
           ...(settings.dismissedFirstHomeVaultIds ?? []).filter((id) => id !== vaultId)
@@ -120,6 +164,7 @@ export class LocalSettingsStore {
       appLocale,
       window: settings.window,
       permissions: settings.permissions,
+      updates: settings.updates,
       dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
       recentVaults: settings.recentVaults
     }));
@@ -131,6 +176,7 @@ export class LocalSettingsStore {
       appLocale: settings.appLocale,
       window,
       permissions: settings.permissions,
+      updates: settings.updates,
       dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
       recentVaults: settings.recentVaults
     }));
@@ -163,6 +209,7 @@ export class LocalSettingsStore {
       appLocale: settings.appLocale,
       window: settings.window,
       permissions: settings.permissions,
+      updates: settings.updates,
       dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
       recentVaults: settings.recentVaults
     }));
@@ -174,6 +221,7 @@ export class LocalSettingsStore {
       appLocale: settings.appLocale,
       window: settings.window,
       permissions: settings.permissions,
+      updates: settings.updates,
       dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
       recentVaults: settings.recentVaults.filter((recent) => recent.vaultId !== vaultId)
     }));
@@ -308,6 +356,7 @@ function activateVault(
     appLocale: settings.appLocale,
     window: settings.window,
     permissions: settings.permissions,
+    updates: settings.updates,
     dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
     recentVaults: nextRecent
   });
@@ -418,6 +467,7 @@ function createMachineLocalSettings(input: {
   readonly appLocale?: Locale | undefined;
   readonly window?: WindowPreferences | undefined;
   readonly permissions?: PermissionMachineSettings | undefined;
+  readonly updates?: UpdateMachineSettings | undefined;
   readonly dismissedFirstHomeVaultIds?: readonly string[] | undefined;
   readonly recentVaults: RecentVaultSettings;
 }): MachineLocalSettings {
@@ -442,6 +492,10 @@ function createMachineLocalSettings(input: {
     settings.permissions = input.permissions;
   }
 
+  if (input.updates) {
+    settings.updates = input.updates;
+  }
+
   if (input.dismissedFirstHomeVaultIds?.length) {
     settings.dismissedFirstHomeVaultIds = [...input.dismissedFirstHomeVaultIds];
   }
@@ -455,5 +509,12 @@ function createDefaultPermissionSettings(): PermissionMachineSettings {
     defaultMode: "ask_every_time",
     yoloEnabled: false,
     savedGrants: []
+  });
+}
+
+function createDefaultUpdateSettings(): UpdateMachineSettings {
+  return UpdateMachineSettingsSchema.parse({
+    revision: 0,
+    channel: "alpha"
   });
 }

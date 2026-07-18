@@ -81,6 +81,7 @@ import type {
   SpeechAssetInstallResult,
   SupportBundlePreview,
   ToolchainHealth,
+  UpdateSummary,
   VaultRevealTarget,
   VaultSummary,
   WindowLayoutRequest,
@@ -1721,6 +1722,7 @@ export function App(): React.JSX.Element {
           ) : settingsSection === "updates" || settingsSection === "diagnostics" ? (
             <SystemSettingsPanel
               surface={settingsSection}
+              locale={locale}
               diagnosticsHealth={diagnosticsHealth}
               supportBundlePreview={supportBundlePreview}
               onRefreshDiagnostics={refreshDiagnostics}
@@ -6157,7 +6159,7 @@ const settingsSections: readonly {
   { id: "skills", icon: "skill", status: "development", capability: "skills" },
   { id: "packages", icon: "package", status: "development", capability: "packages" },
   { id: "history", icon: "activity", status: "real" },
-  { id: "updates", icon: "package", status: "development", capability: "updates" },
+  { id: "updates", icon: "package", status: "partial" },
   { id: "diagnostics", icon: "wrench", status: "real" }
 ];
 
@@ -7494,6 +7496,30 @@ function supportBundlePreviewIsFullyProjected(preview: SupportBundlePreview): bo
     preview.privacyWarnings.every((warning) => projectSupportBundlePrivacyWarning(warning) !== null);
 }
 
+function updateSummaryDescription(
+  summary: UpdateSummary,
+  locale: Locale,
+  t: (key: string) => string
+): string {
+  if (summary.capability === "development") return t("system.updateCapabilityDevelopment");
+  if (summary.capability === "unsupported_platform") return t("system.updateCapabilityUnsupported");
+  if (summary.phase === "idle") return t("system.updateNotChecked");
+  if (summary.phase === "checking") return t("system.checkingUpdates");
+  const status = summary.phase === "up_to_date"
+    ? t("system.updateUpToDate")
+    : summary.phase === "available"
+      ? t("system.updateAvailable")
+      : t("system.updateCheckFailed");
+  if (!("checkedAt" in summary)) return status;
+  const date = new Date(summary.checkedAt);
+  if (Number.isNaN(date.getTime())) return status;
+  const dateLocale = locale === "zh-Hans" ? "zh-CN" : locale;
+  return `${status} · ${t("system.lastChecked")} ${new Intl.DateTimeFormat(dateLocale, {
+    dateStyle: "medium",
+    timeStyle: "short"
+  }).format(date)}`;
+}
+
 export function ActivityHistorySettingsPanel(props: {
   readonly activities: readonly KnowledgeActivitySummary[];
   readonly undoingId: string | null;
@@ -7581,6 +7607,7 @@ export function ActivityHistorySettingsPanel(props: {
 
 export function SystemSettingsPanel(props: {
   readonly surface: "updates" | "diagnostics";
+  readonly locale: Locale;
   readonly diagnosticsHealth: DiagnosticsHealth | null;
   readonly supportBundlePreview: SupportBundlePreview | null;
   readonly onRefreshDiagnostics: () => Promise<void>;
@@ -7589,8 +7616,50 @@ export function SystemSettingsPanel(props: {
 }): React.JSX.Element {
   const [diagnosticsBusy, setDiagnosticsBusy] = useState<"refresh" | "preview" | "export" | "cancel" | null>(null);
   const [notice, setNotice] = useState<{ readonly kind: "success" | "error"; readonly key: string } | null>(null);
+  const [updateSummary, setUpdateSummary] = useState<UpdateSummary | null>(null);
+  const [updateLoadState, setUpdateLoadState] = useState<"loading" | "ready" | "failed">("loading");
+  const [updateBusy, setUpdateBusy] = useState(false);
   const supportBundleExportRequestRef = useRef<string | null>(null);
   const supportBundleCancelRequestRef = useRef<string | null>(null);
+  const updateSummaryRevisionRef = useRef(-1);
+  const updateEventSequenceRef = useRef(0);
+  const updateCheckBusyRef = useRef(false);
+
+  useEffect(() => {
+    if (props.surface !== "updates") return;
+    let active = true;
+    updateSummaryRevisionRef.current = -1;
+    updateEventSequenceRef.current = 0;
+    updateCheckBusyRef.current = false;
+    setUpdateSummary(null);
+    setUpdateLoadState("loading");
+    setUpdateBusy(false);
+    setNotice(null);
+
+    const applySummary = (summary: UpdateSummary): void => {
+      if (!active || summary.revision < updateSummaryRevisionRef.current) return;
+      updateSummaryRevisionRef.current = summary.revision;
+      setUpdateSummary(summary);
+      setUpdateLoadState("ready");
+    };
+    const unsubscribe = window.pige.updates.onStatusChanged((event) => {
+      if (!active || event.sequence <= updateEventSequenceRef.current) return;
+      updateEventSequenceRef.current = event.sequence;
+      applySummary(event.summary);
+    });
+    void window.pige.updates.summary()
+      .then((summary) => {
+        if (updateEventSequenceRef.current === 0) applySummary(summary);
+      })
+      .catch(() => {
+        if (!active || updateEventSequenceRef.current > 0) return;
+        setUpdateLoadState("failed");
+      });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [props.surface]);
 
   useEffect(() => () => {
     const exportRequestId = supportBundleExportRequestRef.current;
@@ -7682,8 +7751,34 @@ export function SystemSettingsPanel(props: {
     : props.diagnosticsHealth?.status === "degraded"
       ? "system.healthDegraded"
       : "system.healthLoading";
-  const showUpdateUnavailable = (): void => {
-    setNotice({ kind: "success", key: "system.updateUnavailable" });
+  const checkForUpdates = async (): Promise<void> => {
+    if (
+      updateCheckBusyRef.current ||
+      updateSummary?.capability !== "packaged_ready" ||
+      updateSummary.phase === "checking"
+    ) return;
+    updateCheckBusyRef.current = true;
+    setUpdateBusy(true);
+    setNotice(null);
+    const requestId = `updatereq_${crypto.randomUUID().replaceAll("-", "")}`;
+    try {
+      const result = await window.pige.updates.check({ apiVersion: 1, requestId });
+      if (result.summary.revision >= updateSummaryRevisionRef.current) {
+        updateSummaryRevisionRef.current = result.summary.revision;
+        setUpdateSummary(result.summary);
+        setUpdateLoadState("ready");
+      }
+      if (result.status === "unavailable") {
+        setNotice({ kind: "error", key: "system.updateCheckUnavailable" });
+      } else if (result.status === "busy") {
+        setNotice({ kind: "success", key: "system.updateCheckAlreadyRunning" });
+      }
+    } catch {
+      setNotice({ kind: "error", key: "system.updateCheckFailed" });
+    } finally {
+      updateCheckBusyRef.current = false;
+      setUpdateBusy(false);
+    }
   };
   const supportPreviewProjection = props.supportBundlePreview
     ? {
@@ -7706,13 +7801,22 @@ export function SystemSettingsPanel(props: {
       {props.surface === "updates" ? (
       <section className="settings-section" aria-labelledby="system-update-title">
         <h2 className="settings-section-title" id="system-update-title">{props.t("system.updateSection")}</h2>
+        <div className="settings-card settings-update-summary" aria-live="polite" aria-busy={updateLoadState === "loading" || updateSummary?.phase === "checking"}>
+          <div className="settings-row tall">
+            <div className="settings-row-copy">
+              <strong>{props.t("system.currentVersion")}</strong>
+              <span>{updateSummary?.currentVersion ?? props.t(updateLoadState === "failed" ? "system.updateSummaryFailed" : "system.updateSummaryLoading")}</span>
+            </div>
+            <span className="settings-status">{props.t("system.publicAlpha")}</span>
+          </div>
+        </div>
         <div className="settings-card">
           <div className="settings-row">
             <div className="settings-row-copy">
               <strong>{props.t("system.updateChannel")}</strong>
               <span>{props.t("system.updateChannelDescription")}</span>
             </div>
-            <span className="settings-status unavailable">{props.t("development.state.unavailable")}</span>
+            <span className="settings-status">{props.t("system.publicAlpha")}</span>
           </div>
           <div className="settings-row">
             <div className="settings-row-copy">
@@ -7726,19 +7830,35 @@ export function SystemSettingsPanel(props: {
           <div className="settings-row">
             <div className="settings-row-copy">
               <strong>{props.t("system.updateStatus")}</strong>
-              <span>{props.t("system.updateStatusDescription")}</span>
+              <span>{updateSummary ? updateSummaryDescription(updateSummary, props.locale, props.t) : props.t(updateLoadState === "failed" ? "system.updateSummaryFailed" : "system.updateSummaryLoading")}</span>
             </div>
-            <button className="settings-button" type="button" onClick={showUpdateUnavailable}>
-              {props.t("system.checkUpdates")}
+            <button
+              className="settings-button"
+              type="button"
+              disabled={updateLoadState !== "ready" || updateSummary?.capability !== "packaged_ready" || updateBusy || updateSummary?.phase === "checking"}
+              onClick={() => void checkForUpdates()}
+            >
+              {props.t(updateBusy || updateSummary?.phase === "checking" ? "system.checkingUpdates" : "system.checkUpdates")}
             </button>
           </div>
+          {updateSummary?.phase === "available" ? (
+            <div className="settings-row">
+              <div className="settings-row-copy">
+                <strong>{props.t("system.updateAvailable")}</strong>
+                <span>{updateSummary.availableVersion}</span>
+              </div>
+              <button className="settings-button" type="button" disabled title={props.t("system.updateDownloadUnavailable")}>
+                {props.t("system.downloadUpdate")}
+              </button>
+            </div>
+          ) : null}
         </div>
         {notice ? (
           <p className={notice.kind === "error" ? "error" : "muted"} role={notice.kind === "error" ? "alert" : "status"} aria-live="polite">
             {props.t(notice.key)}
           </p>
         ) : null}
-        <p className="settings-note">{props.t("system.updatesUnavailableNote")}</p>
+        <p className="settings-note">{props.t(updateSummary?.capability === "unsupported_platform" ? "system.updateUnsupportedNote" : updateSummary?.capability === "packaged_ready" ? "system.updatesPrivacyNote" : "system.updatesUnavailableNote")}</p>
       </section>
       ) : (
 

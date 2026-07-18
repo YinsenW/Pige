@@ -1990,7 +1990,7 @@ These exit paths must be considered before major dependency upgrades:
 - Git/Git Bash, Bun, `uv`, and Python: keep them as bundled toolchain components owned by Pige, not user-installed hidden prerequisites.
 - Pi packages: keep Package Manager optional and permissioned; Pige-native RAG, memory, parser, and backup behavior must not require community packages.
 - GitHub Actions/GitHub Releases: keep release metadata and update feed generation conventional enough to migrate to another host later.
-- electron-builder/electron-updater: keep update checks behind a Pige Update Service so the packaging/update client can be replaced without touching application features.
+- electron-builder/electron-updater: keep checks behind Pige Update Service; its current default is zero-network/check-only, with no connected updater.
 
 ### 16.12 Pre-Implementation Pinning Gates
 
