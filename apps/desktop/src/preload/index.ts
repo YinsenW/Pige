@@ -62,6 +62,16 @@ import type {
   NoteResolveInlineReferenceResult,
   NoteRenderRequest,
   NoteRenderResult,
+  ReaderSelectionActionRequest,
+  ReaderSelectionActionResult,
+  ReaderSelectionProposalDecisionRequest,
+  ReaderSelectionProposalDecisionResult,
+  ReaderSelectionProposalGetRequest,
+  ReaderSelectionProposalGetResult,
+  ReaderSelectionTransformRequest,
+  ReaderSelectionTransformResult,
+  ReaderSelectionResolveRequest,
+  ReaderSelectionResolveResult,
   OnboardingStatus,
   OpenRecentVaultRequest,
   PigeDesktopApi,
@@ -121,6 +131,16 @@ import {
   RetrievalSearchResultSchema,
   NoteResolveInlineReferenceRequestSchema,
   NoteResolveInlineReferenceResultSchema,
+  ReaderSelectionActionRequestSchema,
+  ReaderSelectionActionResultSchema,
+  ReaderSelectionProposalDecisionRequestSchema,
+  ReaderSelectionProposalDecisionResultSchema,
+  ReaderSelectionProposalGetRequestSchema,
+  ReaderSelectionProposalGetResultSchema,
+  ReaderSelectionTransformRequestSchema,
+  ReaderSelectionTransformResultSchema,
+  ReaderSelectionResolveRequestSchema,
+  ReaderSelectionResolveResultSchema,
   OpenRecentVaultRequestSchema,
   PermissionSettingsSummarySchema,
   PermissionSetDefaultModeRequestSchema,
@@ -500,6 +520,53 @@ const api: PigeDesktopApi = {
         await ipcRenderer.invoke(
           "notes.resolveInlineReference",
           NoteResolveInlineReferenceRequestSchema.parse(request)
+        )
+      )
+  },
+  readerSelection: {
+    resolve: async (
+      request: ReaderSelectionResolveRequest
+    ): Promise<ReaderSelectionResolveResult> =>
+      ReaderSelectionResolveResultSchema.parse(
+        await ipcRenderer.invoke(
+          "readerSelection.resolve",
+          ReaderSelectionResolveRequestSchema.parse(request)
+        )
+        ),
+    submitAction: async (
+      request: ReaderSelectionActionRequest
+    ): Promise<ReaderSelectionActionResult> =>
+      ReaderSelectionActionResultSchema.parse(
+        await ipcRenderer.invoke(
+          "readerSelection.submitAction",
+          ReaderSelectionActionRequestSchema.parse(request)
+        )
+      ),
+    submitTransform: async (
+      request: ReaderSelectionTransformRequest
+    ): Promise<ReaderSelectionTransformResult> =>
+      ReaderSelectionTransformResultSchema.parse(
+        await ipcRenderer.invoke(
+          "readerSelection.submitTransform",
+          ReaderSelectionTransformRequestSchema.parse(request)
+        )
+      ),
+    currentProposal: async (
+      request: ReaderSelectionProposalGetRequest
+    ): Promise<ReaderSelectionProposalGetResult> =>
+      ReaderSelectionProposalGetResultSchema.parse(
+        await ipcRenderer.invoke(
+          "readerSelection.currentProposal",
+          ReaderSelectionProposalGetRequestSchema.parse(request)
+        )
+      ),
+    decideProposal: async (
+      request: ReaderSelectionProposalDecisionRequest
+    ): Promise<ReaderSelectionProposalDecisionResult> =>
+      ReaderSelectionProposalDecisionResultSchema.parse(
+        await ipcRenderer.invoke(
+          "readerSelection.decideProposal",
+          ReaderSelectionProposalDecisionRequestSchema.parse(request)
         )
       )
   },

@@ -35,6 +35,19 @@ import type {
   PermissionSettingsMutationResult,
   ProposalState,
   ProposalTrustLevel,
+  ReaderSelectionActionRequest,
+  ReaderSelectionActionResult,
+  ReaderSelectionReadAction,
+  ReaderSelectionTransformAction,
+  ReaderSelectionTransformRequest,
+  ReaderSelectionTransformResult,
+  ReaderSelectionProposalDecisionRequest,
+  ReaderSelectionProposalDecisionResult,
+  ReaderSelectionProposalGetRequest,
+  ReaderSelectionProposalGetResult,
+  ReaderSelectionProposalPreview,
+  ReaderSelectionResolveRequest,
+  ReaderSelectionResolveResult,
   ProviderAuthRequirement,
   ProviderEndpointProtocol,
   ProviderKind,
@@ -101,6 +114,25 @@ export type {
   NoteRenderContextId,
   NoteResolveInlineReferenceRequest,
   NoteResolveInlineReferenceResult,
+  ReaderSelectionEndpoint,
+  ReaderSelectionActionRequest,
+  ReaderSelectionActionRequestId,
+  ReaderSelectionActionResult,
+  ReaderSelectionIdentity,
+  ReaderSelectionReadAction,
+  ReaderSelectionTransformAction,
+  ReaderSelectionTransformRequest,
+  ReaderSelectionTransformResult,
+  ReaderSelectionProposalDecisionRequest,
+  ReaderSelectionProposalDecisionResult,
+  ReaderSelectionProposalGetRequest,
+  ReaderSelectionProposalGetResult,
+  ReaderSelectionProposalPreview,
+  ReaderSelectionRequestId,
+  ReaderSelectionResolveRequest,
+  ReaderSelectionResolveResult,
+  ReaderSelectionSegmentId,
+  ReaderSelectionUtf8ByteSpan,
   RetrievalSearchRequest,
   RetrievalSearchResult,
   RetrievalSearchResultItem,
@@ -1024,7 +1056,18 @@ export interface AgentConversationMessage {
   readonly text: string;
   readonly jobId?: string;
   readonly answer?: AgentTurnAnswer;
+  readonly inputPresentation?: AgentConversationInputPresentation;
 }
+
+export type AgentConversationInputPresentation =
+  | {
+      readonly kind: "reader_selection_action";
+      readonly action: ReaderSelectionReadAction;
+    }
+  | {
+      readonly kind: "reader_selection_transform";
+      readonly action: ReaderSelectionTransformAction;
+    };
 
 export interface AgentConversationTurnSummary {
   readonly jobId: string;
@@ -1278,6 +1321,23 @@ export interface PigeDesktopApi {
     readonly get: (request: ProposalGetRequest) => Promise<ProposalGetResult>;
     readonly approve: (request: ProposalDecisionRequest) => Promise<ProposalDecisionResult>;
     readonly reject: (request: ProposalDecisionRequest) => Promise<ProposalDecisionResult>;
+  };
+  readonly readerSelection: {
+    readonly resolve: (
+      request: ReaderSelectionResolveRequest
+    ) => Promise<ReaderSelectionResolveResult>;
+    readonly submitAction: (
+      request: ReaderSelectionActionRequest
+    ) => Promise<ReaderSelectionActionResult>;
+    readonly submitTransform: (
+      request: ReaderSelectionTransformRequest
+    ) => Promise<ReaderSelectionTransformResult>;
+    readonly currentProposal: (
+      request: ReaderSelectionProposalGetRequest
+    ) => Promise<ReaderSelectionProposalGetResult>;
+    readonly decideProposal: (
+      request: ReaderSelectionProposalDecisionRequest
+    ) => Promise<ReaderSelectionProposalDecisionResult>;
   };
   readonly library: {
     readonly list: (request?: LibraryListRequest) => Promise<LibraryListResult>;

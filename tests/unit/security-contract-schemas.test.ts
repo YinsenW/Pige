@@ -24,6 +24,15 @@ import {
   PermissionEnableYoloRequestSchema,
   PigeErrorSummarySchema,
   ProviderProfileSchema,
+  ReaderSelectionActionRequestSchema,
+  ReaderSelectionActionResultSchema,
+  ReaderSelectionProposalDecisionRequestSchema,
+  ReaderSelectionProposalDecisionResultSchema,
+  ReaderSelectionProposalGetResultSchema,
+  ReaderSelectionTransformRequestSchema,
+  ReaderSelectionTransformResultSchema,
+  ReaderSelectionResolveRequestSchema,
+  ReaderSelectionResolveResultSchema,
   UpdateProviderCredentialRequestSchema
 } from "@pige/schemas";
 
@@ -63,6 +72,169 @@ describe("security-sensitive shared contracts", () => {
       status: "ambiguous",
       candidates: ["page_20260710_abcdef12"]
     })).toThrow();
+  });
+
+  it("binds Reader selections to an opaque render context without renderer text authority", () => {
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "readerselreq_abcdefghijklmnop",
+      activeVaultId: "vault_20260710_abcdef12",
+      currentPageId: "page_20260710_abcdef12",
+      renderContextId: `notectx_${"a".repeat(32)}`,
+      anchor: { segmentId: `readerseg_${"b".repeat(16)}`, utf16Offset: 0 },
+      focus: { segmentId: `readerseg_${"c".repeat(16)}`, utf16Offset: 7 }
+    };
+    expect(ReaderSelectionResolveRequestSchema.parse(request)).toEqual(request);
+    expect(() => ReaderSelectionResolveRequestSchema.parse({
+      ...request,
+      selectedText: "renderer text must never become selection authority"
+    })).toThrow();
+    expect(() => ReaderSelectionResolveRequestSchema.parse({
+      ...request,
+      path: "/private/vault/wiki/page.md"
+    })).toThrow();
+    expect(() => ReaderSelectionResolveRequestSchema.parse({
+      ...request,
+      focus: { ...request.focus, utf16Offset: 4 * 1024 * 1024 + 1 }
+    })).toThrow();
+
+    const resolved = {
+      apiVersion: 1 as const,
+      requestId: request.requestId,
+      status: "resolved" as const,
+      selection: {
+        pageId: request.currentPageId,
+        pageContentHash: `sha256:${"d".repeat(64)}`,
+        span: { unit: "utf8_bytes" as const, start: 200, endExclusive: 212 },
+        selectedContentHash: `sha256:${"e".repeat(64)}`
+      }
+    };
+    expect(ReaderSelectionResolveResultSchema.parse(resolved)).toEqual(resolved);
+    expect(() => ReaderSelectionResolveResultSchema.parse({
+      ...resolved,
+      selection: { ...resolved.selection, text: "private selected body" }
+    })).toThrow();
+    expect(() => ReaderSelectionResolveResultSchema.parse({
+      ...resolved,
+      selection: {
+        ...resolved.selection,
+        span: { unit: "utf8_bytes", start: 0, endExclusive: 64 * 1024 + 1 }
+      }
+    })).toThrow();
+    expect(ReaderSelectionResolveResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "failed"
+    })).toEqual({ apiVersion: 1, requestId: request.requestId, status: "failed" });
+  });
+
+  it("accepts Reader read actions only by resolved identity and returns body-free state", () => {
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "readerselaction_abcdefghijklmnop",
+      action: "explain" as const,
+      selection: {
+        pageId: "page_20260710_abcdef12",
+        pageContentHash: `sha256:${"a".repeat(64)}`,
+        span: { unit: "utf8_bytes" as const, start: 200, endExclusive: 212 },
+        selectedContentHash: `sha256:${"b".repeat(64)}`
+      },
+      locale: "en" as const,
+      clientTurnId: "turn_20260710_abcdefghijkl"
+    };
+    expect(ReaderSelectionActionRequestSchema.parse(request)).toEqual(request);
+    expect(() => ReaderSelectionActionRequestSchema.parse({
+      ...request,
+      selectedText: "renderer-selected body"
+    })).toThrow();
+    expect(() => ReaderSelectionActionRequestSchema.parse({
+      ...request,
+      action: "polish"
+    })).toThrow();
+    expect(ReaderSelectionActionResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "completed",
+      jobId: "job_20260710_abcdef12",
+      conversationEventId: "evt_20260710_abcdef12",
+      conversationId: "conv_20260710_abcd",
+      tailEventId: "evt_20260710_bcdef123"
+    })).toMatchObject({ status: "completed" });
+    expect(() => ReaderSelectionActionResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "completed",
+      jobId: "job_20260710_abcdef12",
+      conversationEventId: "evt_20260710_abcdef12",
+      conversationId: "conv_20260710_abcd",
+      tailEventId: "evt_20260710_bcdef123",
+      answer: "raw provider body"
+    })).toThrow();
+
+    const transform = { ...request, action: "polish" as const };
+    expect(ReaderSelectionTransformRequestSchema.parse(transform)).toEqual(transform);
+    expect(() => ReaderSelectionTransformRequestSchema.parse({
+      ...transform,
+      replacement: "renderer-authored replacement"
+    })).toThrow();
+    expect(ReaderSelectionTransformResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "applied",
+      jobId: "job_20260710_abcdef12",
+      conversationEventId: "evt_20260710_abcdef12",
+      conversationId: "conv_20260710_abcd",
+      tailEventId: "evt_20260710_bcdef123",
+      operationId: "op_20260710_abcdef12"
+    })).toMatchObject({ status: "applied" });
+    expect(() => ReaderSelectionTransformResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "applied",
+      jobId: "job_20260710_abcdef12",
+      conversationEventId: "evt_20260710_abcdef12",
+      conversationId: "conv_20260710_abcd",
+      tailEventId: "evt_20260710_bcdef123",
+      operationId: "op_20260710_abcdef12",
+      replacement: "main-only model output"
+    })).toThrow();
+
+    const proposal = {
+      proposalId: "proposal_20260710_readerreview",
+      action: "polish" as const,
+      state: "ready" as const,
+      revision: 1,
+      lines: [{ kind: "removed" as const, text: "bounded preview" }]
+    };
+    expect(ReaderSelectionProposalGetResultSchema.parse({
+      apiVersion: 1,
+      status: "available",
+      proposal
+    })).toMatchObject({ status: "available" });
+    expect(() => ReaderSelectionProposalGetResultSchema.parse({
+      apiVersion: 1,
+      status: "available",
+      proposal: { ...proposal, path: "/private/vault/wiki/page.md" }
+    })).toThrow();
+    expect(ReaderSelectionProposalDecisionRequestSchema.parse({
+      apiVersion: 1,
+      proposalId: proposal.proposalId,
+      expectedRevision: 1,
+      decision: "approve"
+    })).toMatchObject({ decision: "approve" });
+    expect(() => ReaderSelectionProposalDecisionRequestSchema.parse({
+      apiVersion: 1,
+      proposalId: proposal.proposalId,
+      expectedRevision: 1,
+      decision: "approve",
+      replacement: "renderer apply bytes"
+    })).toThrow();
+    expect(ReaderSelectionProposalDecisionResultSchema.parse({
+      apiVersion: 1,
+      status: "applied",
+      proposal: { ...proposal, state: "applied", revision: 3 },
+      operationId: "op_20260710_abcdef12"
+    })).toMatchObject({ status: "applied" });
   });
 
   it("rejects raw-secret capabilities and YOLO eligibility for always-confirmed actions", () => {

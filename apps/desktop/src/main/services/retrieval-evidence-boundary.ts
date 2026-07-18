@@ -3,7 +3,11 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { TextDecoder } from "node:util";
-import type { LibraryPageSummary, RetrievalSearchResultItem } from "@pige/contracts";
+import type {
+  LibraryPageSummary,
+  ReaderSelectionIdentity,
+  RetrievalSearchResultItem
+} from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 import { parsePigeFrontmatter } from "@pige/markdown";
 import { PageIdSchema, SourceRecordSchema } from "@pige/schemas";
@@ -177,6 +181,87 @@ export function readCurrentNoteEvidenceBinding(
     }
     throw evidencePrivacyUnavailableError();
   }
+}
+
+export function readCurrentNotePageForMutation(
+  vaultPath: string,
+  pageId: string
+): CurrentRetrievalPageMutationBinding {
+  try {
+    if (!PageIdSchema.safeParse(pageId).success) throw evidencePrivacyUnavailableError();
+    const scan = scanMarkdownPages(vaultPath);
+    const matches = scan.pages.filter((page) => page.summary.pageId === pageId);
+    if (matches.length !== 1) throw evidencePrivacyUnavailableError();
+    const page = matches[0];
+    if (!page) throw evidencePrivacyUnavailableError();
+    const signature = scan.files.find((file) => file.pagePath === page.summary.pagePath);
+    if (!signature) throw evidencePrivacyUnavailableError();
+    return readCurrentRetrievalPageBinding(vaultPath, {
+      summary: page.summary,
+      score: 1,
+      snippets: [],
+      matchReasons: ["current_note"]
+    }, undefined, signature);
+  } catch (caught) {
+    if (caught instanceof PigeDomainError && caught.code === "rag.evidence_privacy_unavailable") {
+      throw caught;
+    }
+    throw evidencePrivacyUnavailableError();
+  }
+}
+
+export function readCurrentNoteSelectionEvidenceBinding(
+  vaultPath: string,
+  selection: ReaderSelectionIdentity
+): CurrentNoteEvidenceBinding {
+  const current = readCurrentNoteEvidenceBinding(vaultPath, selection.pageId);
+  if (current.contentHash !== selection.pageContentHash) throw evidencePrivacyUnavailableError();
+  const relativeStart = selection.span.start - current.durableBodyRange.start;
+  const relativeEnd = selection.span.endExclusive - current.durableBodyRange.start;
+  const bodyBytes = Buffer.from(current.durableBodyText, "utf8");
+  if (
+    selection.span.unit !== "utf8_bytes" ||
+    relativeStart < 0 ||
+    relativeEnd <= relativeStart ||
+    relativeEnd > bodyBytes.length ||
+    relativeEnd - relativeStart > MAX_CURRENT_NOTE_MODEL_BYTES ||
+    !isUtf8Boundary(bodyBytes, relativeStart) ||
+    !isUtf8Boundary(bodyBytes, relativeEnd)
+  ) {
+    throw evidencePrivacyUnavailableError();
+  }
+  const selectedBytes = bodyBytes.subarray(relativeStart, relativeEnd);
+  if (`sha256:${createHash("sha256").update(selectedBytes).digest("hex")}` !== selection.selectedContentHash) {
+    throw evidencePrivacyUnavailableError();
+  }
+  const selectedText = new TextDecoder("utf-8", { fatal: true }).decode(selectedBytes);
+  const modelText = sanitizeSearchBody(selectedText);
+  const suppliedBytes = Buffer.byteLength(modelText, "utf8");
+  const selectionBindingHash = hashValue(JSON.stringify({
+    schemaVersion: 1,
+    pageBindingHash: current.bindingHash,
+    pageContentHash: selection.pageContentHash,
+    span: selection.span,
+    selectedContentHash: selection.selectedContentHash
+  }));
+  return {
+    ...current,
+    modelText,
+    bindingHash: selectionBindingHash,
+    modelSuppliedRange: {
+      unit: "utf8_bytes",
+      start: 0,
+      endExclusive: suppliedBytes,
+      total: suppliedBytes,
+      truncated: false
+    },
+    durableBodyRange: {
+      locator: `utf8_bytes:${selection.span.start}:${selection.span.endExclusive}`,
+      start: selection.span.start,
+      endExclusive: selection.span.endExclusive
+    },
+    durableBodyText: selectedText
+  };
 }
 
 export function resolveCurrentNoteEvidenceQuoteLocator(
@@ -446,6 +531,10 @@ function evidencePrivacyUnavailableError(): PigeDomainError {
 
 function hashValue(value: string): string {
   return `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
+}
+
+function isUtf8Boundary(bytes: Uint8Array, offset: number): boolean {
+  return offset === 0 || offset === bytes.length || (bytes[offset]! & 0xc0) !== 0x80;
 }
 
 function truncateUtf8(value: string, maxBytes: number): {

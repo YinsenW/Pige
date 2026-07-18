@@ -240,6 +240,20 @@ export function readMarkdownPageBodyAtSignature(
   expected: MarkdownFileSignatureRecord,
   maxBytes: number
 ): string {
+  return readMarkdownPageContentAtSignature(vaultPath, expected, maxBytes).markdownBody;
+}
+
+export interface MarkdownPageContentSnapshot {
+  readonly markdown: string;
+  readonly markdownBody: string;
+  readonly bodyStartOffset: number;
+}
+
+export function readMarkdownPageContentAtSignature(
+  vaultPath: string,
+  expected: MarkdownFileSignatureRecord,
+  maxBytes: number
+): MarkdownPageContentSnapshot {
   let descriptor: number | undefined;
   try {
     assertMarkdownPagePathConfined(vaultPath, expected.absolutePath);
@@ -251,7 +265,12 @@ export function readMarkdownPageBodyAtSignature(
     if (before.isSymbolicLink() || !before.isFile() || !matchesSignature(before, expected)) {
       throw new Error("Markdown file changed before its body was read.");
     }
-    const body = readMarkdownPageBody(descriptor, maxBytes);
+    const markdown = readBoundedUtf8(descriptor, maxBytes);
+    const parsed = parsePigeFrontmatter(markdown);
+    const untrimmedBodyStart = parsed?.bodyStartOffset ?? 0;
+    const untrimmedBody = markdown.slice(untrimmedBodyStart);
+    const bodyStartOffset = untrimmedBodyStart + (untrimmedBody.length - untrimmedBody.trimStart().length);
+    const markdownBody = markdown.slice(bodyStartOffset);
     const after = fs.fstatSync(descriptor);
     const named = fs.lstatSync(expected.absolutePath);
     assertMarkdownPagePathConfined(vaultPath, expected.absolutePath);
@@ -264,7 +283,7 @@ export function readMarkdownPageBodyAtSignature(
     ) {
       throw new Error("Markdown file changed while its body was read.");
     }
-    return body;
+    return { markdown, markdownBody, bodyStartOffset };
   } finally {
     if (descriptor !== undefined) fs.closeSync(descriptor);
   }

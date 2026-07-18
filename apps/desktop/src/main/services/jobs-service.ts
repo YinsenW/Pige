@@ -74,8 +74,15 @@ import {
   type JobExecutionFactsPatch,
   type JobExecutionOutcome,
   type JobExecutionResumeProof,
+  type ResolveJobReviewInput,
   type ResumeJobInput
 } from "./job-execution-coordinator";
+import {
+  assertReaderSelectionJobBinding,
+  createReaderSelectionJobRefs,
+  isValidReaderSelectionJobScope,
+  type ReaderSelectionJobScope
+} from "./reader-selection-job-binding";
 import {
   ModelEgressApprovalService,
   ModelEgressConfirmationRequiredError
@@ -154,10 +161,7 @@ export interface CreateAgentTurnJobRequest {
   readonly inputHash: string;
   readonly sourceIds?: readonly string[];
   readonly sourceExpected?: boolean;
-  readonly currentNoteScope?: {
-    readonly pageId: string;
-    readonly bindingHash: string;
-  };
+  readonly currentNoteScope?: ReaderSelectionJobScope;
 }
 
 export interface TextAgentTurnExecution {
@@ -1220,9 +1224,8 @@ export class JobsService implements PermissionedExternalJobPort {
       !isConfinedConversationLocator(request.conversationLocator) ||
       sourceIds.length > 1 ||
       (request.sourceExpected === true && sourceIds.length !== 1) ||
-      (currentNoteScope !== undefined && (
-        !/^page_\d{8}_[a-z0-9]{8,}$/u.test(currentNoteScope.pageId) ||
-        !/^sha256:[a-f0-9]{64}$/u.test(currentNoteScope.bindingHash) ||
+      (currentNoteScope !== undefined && !isValidReaderSelectionJobScope(
+        currentNoteScope,
         sourceIds.length > 0
       ))
     ) {
@@ -1240,32 +1243,16 @@ export class JobsService implements PermissionedExternalJobPort {
           .filter((ref) => ref.kind === "source" && ref.role === "agent_turn_source")
           .flatMap((ref) => ref.id ? [ref.id] : [])
       ]));
-      const existingCurrentNoteRefs = (existing.job.inputRefs ?? []).filter(
-        (ref) => ref.role === "agent_turn_current_note_scope"
-      );
-      const existingCurrentNoteRef = existingCurrentNoteRefs[0];
+      assertReaderSelectionJobBinding(existing.job.inputRefs, currentNoteScope);
       if (
         existing.job.activeVaultId !== activeVault.vaultId ||
         conversationRef?.id !== request.conversationEventId ||
         conversationRef.locator !== request.conversationLocator ||
         conversationRef.checksum !== request.inputHash ||
         existingSourceIds.length !== sourceIds.length ||
-        existingSourceIds.some((sourceId, index) => sourceId !== sourceIds[index]) ||
-        existingCurrentNoteRefs.length > 1 ||
-        (existingCurrentNoteRef !== undefined && (
-          currentNoteScope === undefined ||
-          existingCurrentNoteRef.kind !== "page" ||
-          existingCurrentNoteRef.id !== currentNoteScope.pageId ||
-          existingCurrentNoteRef.checksum !== currentNoteScope.bindingHash
-        ))
+        existingSourceIds.some((sourceId, index) => sourceId !== sourceIds[index])
       ) {
         throw new PigeDomainError("agent_runtime.turn_conflict", "The existing Agent Job binding does not match the preserved turn.");
-      }
-      if (currentNoteScope && !existingCurrentNoteRef) {
-        throw new PigeDomainError(
-          "agent_runtime.turn_binding_invalid",
-          "A current-note Agent Job cannot adopt an evidence binding after creation."
-        );
       }
       return existing.job;
     }
@@ -1300,7 +1287,7 @@ export class JobsService implements PermissionedExternalJobPort {
           id: sourceId,
           role: "agent_turn_source"
         })),
-        ...(currentNoteScope ? [createCurrentNoteScopeRef(currentNoteScope)] : [])
+        ...(currentNoteScope ? createReaderSelectionJobRefs(currentNoteScope) : [])
       ],
       retry: {
         retryCount: 0,
@@ -1803,6 +1790,12 @@ export class JobsService implements PermissionedExternalJobPort {
   settleAgentTurnJob(expected: JobRecord, outcome: JobExecutionOutcome): JobRecord {
     const snapshot = this.#requireAgentTurnSnapshot(expected);
     return this.#jobExecutionCoordinator(this.#requireActiveVaultPath()).settle(snapshot, outcome).job;
+  }
+
+  resolveAgentTurnReview(input: ResolveJobReviewInput & { readonly job: JobRecord }): JobRecord {
+    const { job, ...review } = input;
+    const snapshot = this.#requireAgentTurnSnapshot(job);
+    return this.#jobExecutionCoordinator(this.#requireActiveVaultPath()).resolveReview(snapshot, review).job;
   }
 
   adoptAgentTurnCompletion(expected: JobRecord, input: AdoptDurableCompletionInput): JobRecord {
@@ -4440,15 +4433,6 @@ function createAgentTurnSourceId(jobId: string): string {
     throw new PigeDomainError("agent_runtime.turn_invalid", "The unified Agent turn Job identity is invalid.");
   }
   return `src_${match[1]}_${match[2]}`;
-}
-
-function createCurrentNoteScopeRef(scope: NonNullable<CreateAgentTurnJobRequest["currentNoteScope"]>) {
-  return {
-    kind: "page" as const,
-    id: scope.pageId,
-    role: "agent_turn_current_note_scope",
-    checksum: scope.bindingHash
-  };
 }
 
 function createAgentTurnJobId(conversationEventId: string): string {

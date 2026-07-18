@@ -38,6 +38,11 @@ import type {
   NoteGetRequest,
   NoteResolveInlineReferenceRequest,
   NoteRenderRequest,
+  ReaderSelectionActionRequest,
+  ReaderSelectionProposalDecisionRequest,
+  ReaderSelectionProposalGetRequest,
+  ReaderSelectionTransformRequest,
+  ReaderSelectionResolveRequest,
   OpenRecentVaultRequest,
   ProviderConnectResult,
   RetrievalAskRequest,
@@ -90,6 +95,16 @@ import {
   PermissionSettingsSummarySchema,
   NoteResolveInlineReferenceRequestSchema,
   NoteResolveInlineReferenceResultSchema,
+  ReaderSelectionActionRequestSchema,
+  ReaderSelectionActionResultSchema,
+  ReaderSelectionProposalDecisionRequestSchema,
+  ReaderSelectionProposalDecisionResultSchema,
+  ReaderSelectionProposalGetRequestSchema,
+  ReaderSelectionProposalGetResultSchema,
+  ReaderSelectionTransformRequestSchema,
+  ReaderSelectionTransformResultSchema,
+  ReaderSelectionResolveRequestSchema,
+  ReaderSelectionResolveResultSchema,
   OpenRecentVaultRequestSchema,
   type Locale,
   UpdateModelRequestSchema,
@@ -149,6 +164,16 @@ import { PermissionBrokerService } from "./services/permission-broker-service";
 import { PermissionSettingsService } from "./services/permission-settings-service";
 import { PermissionYoloConfirmationRegistry } from "./services/permission-yolo-confirmation-registry";
 import {
+  applyReaderSelectionPageUpdate,
+  createAgentPageUpdateOperationId
+} from "./services/agent-page-update-service";
+import { ReaderSelectionActionService } from "./services/reader-selection-action-service";
+import { ReaderSelectionProposalService } from "./services/reader-selection-proposal-service";
+import {
+  readCurrentNotePageForMutation,
+  readCurrentNoteSelectionEvidenceBinding
+} from "./services/retrieval-evidence-boundary";
+import {
   createPermissionedExternalCapabilityRegistry,
   PermissionedExternalCapabilityRegistry,
   registerPermissionedExternalCapabilityAdapter
@@ -200,6 +225,8 @@ let jobsService: JobsService | undefined;
 let knowledgeActivityService: KnowledgeActivityService | undefined;
 let libraryService: LibraryService | undefined;
 let notesService: NotesService | undefined;
+let readerSelectionActionService: ReaderSelectionActionService | undefined;
+let readerSelectionProposalService: ReaderSelectionProposalService | undefined;
 let proposalService: ProposalService | undefined;
 let retrievalService: RetrievalService | undefined;
 let documentParserService: DocumentParserService | undefined;
@@ -853,7 +880,34 @@ const getHomeAgentService = (): HomeAgentService => {
       getDatasetQueryService(),
       getModelEgressApprovalService(),
       getPermissionedExternalCapabilityRegistry(),
-      getPermissionSettingsService()
+      getPermissionSettingsService(),
+      {
+        apply: ({ vaultPath, job, selection, replacement, action }) => {
+          const proposalService = getReaderSelectionProposalService();
+          if (proposalService.shouldRequireReview(selection, replacement)) {
+            const selected = readCurrentNoteSelectionEvidenceBinding(vaultPath, selection);
+            const proposal = proposalService.stage({
+              job,
+              action,
+              selection,
+              selectedText: selected.modelText,
+              replacement
+            });
+            return { status: "review_required" as const, proposalId: proposal.proposalId };
+          }
+          return {
+            status: "applied" as const,
+            operationId: applyReaderSelectionPageUpdate({
+            vaultPath,
+            job,
+            target: readCurrentNotePageForMutation(vaultPath, selection.pageId),
+            selection,
+            replacement,
+            action
+            }).operation.id
+          };
+        }
+      }
     );
   }
   return homeAgentService;
@@ -900,6 +954,50 @@ const getNotesService = (): NotesService => {
     notesService = new NotesService(getVaultService(), getLocalDatabaseService());
   }
   return notesService;
+};
+
+const getReaderSelectionActionService = (): ReaderSelectionActionService => {
+  if (!readerSelectionActionService) {
+    readerSelectionActionService = new ReaderSelectionActionService(
+      getVaultService(),
+      getHomeAgentService(),
+      {
+        readJob: (jobId) => getJobsService().readAgentTurnJob(jobId),
+        readAppliedOperationId: ({ job, selection }) => {
+          const operationId = createAgentPageUpdateOperationId(job.id, selection.pageId);
+          return job.operationIds?.includes(operationId) ? operationId : undefined;
+        },
+        readProposal: (proposalId) => {
+          const result = getReaderSelectionProposalService().get({ apiVersion: 1, proposalId });
+          return result.status === "available" ? result.proposal : undefined;
+        }
+      }
+    );
+  }
+  return readerSelectionActionService;
+};
+
+const getReaderSelectionProposalService = (): ReaderSelectionProposalService => {
+  if (!readerSelectionProposalService) {
+    readerSelectionProposalService = new ReaderSelectionProposalService(
+      getVaultService(),
+      {
+        readAgentTurnJob: (jobId) => getJobsService().readAgentTurnJob(jobId),
+        resolveAgentTurnReview: (input) => getJobsService().resolveAgentTurnReview(input)
+      },
+      {
+        apply: ({ vaultPath, job, selection, replacement, action }) => applyReaderSelectionPageUpdate({
+          vaultPath,
+          job,
+          target: readCurrentNotePageForMutation(vaultPath, selection.pageId),
+          selection,
+          replacement,
+          action
+        }).operation
+      }
+    );
+  }
+  return readerSelectionProposalService;
 };
 
 const getProposalService = (): ProposalService => {
@@ -1630,6 +1728,71 @@ ipcMain.handle("notes.resolveInlineReference", (event, request: NoteResolveInlin
     ownerId === undefined
       ? { apiVersion: 1, requestId: parsed.requestId, status: "stale", scope: "render_context" }
       : getNotesService().resolveInlineReference(ownerId, parsed)
+  );
+});
+ipcMain.handle("readerSelection.resolve", (event, request: ReaderSelectionResolveRequest) => {
+  const parsed = ReaderSelectionResolveRequestSchema.parse(request);
+  const ownerId = notesTrackedSenders.get(event.sender.id);
+  return ReaderSelectionResolveResultSchema.parse(
+    ownerId === undefined
+      ? { apiVersion: 1, requestId: parsed.requestId, status: "stale", scope: "render_context" }
+      : getNotesService().resolveSelection(ownerId, parsed)
+  );
+});
+ipcMain.handle("readerSelection.submitAction", async (event, request: ReaderSelectionActionRequest) => {
+  const parsed = ReaderSelectionActionRequestSchema.parse(request);
+  const draftPublisher = new AgentTurnDraftPublisher({
+    clientTurnId: parsed.clientTurnId,
+    send: (draft) => {
+      if (!event.sender.isDestroyed()) event.sender.send("agent.turnDraft", draft);
+    }
+  });
+  try {
+    return ReaderSelectionActionResultSchema.parse(
+      await getReaderSelectionActionService().submit(parsed, {
+        onDraft: (draft) => draftPublisher.publish(draft)
+      })
+    );
+  } finally {
+    draftPublisher.close();
+  }
+});
+ipcMain.handle("readerSelection.submitTransform", async (event, request: ReaderSelectionTransformRequest) => {
+  const parsed = ReaderSelectionTransformRequestSchema.parse(request);
+  const draftPublisher = new AgentTurnDraftPublisher({
+    clientTurnId: parsed.clientTurnId,
+    send: (draft) => {
+      if (!event.sender.isDestroyed()) event.sender.send("agent.turnDraft", draft);
+    }
+  });
+  try {
+    return ReaderSelectionTransformResultSchema.parse(
+      await getReaderSelectionActionService().submitTransform(parsed, {
+        onDraft: (draft) => draftPublisher.publish(draft)
+      })
+    );
+  } finally {
+    draftPublisher.close();
+  }
+});
+
+ipcMain.handle("readerSelection.currentProposal", (event, request: ReaderSelectionProposalGetRequest) => {
+  const parsed = ReaderSelectionProposalGetRequestSchema.parse(request);
+  if (!notesTrackedSenders.has(event.sender.id)) {
+    throw new PigeDomainError("desktop.ipc_sender_invalid", "Reader proposal access requires the active renderer.");
+  }
+  return ReaderSelectionProposalGetResultSchema.parse(
+    getReaderSelectionProposalService().get(parsed)
+  );
+});
+
+ipcMain.handle("readerSelection.decideProposal", (event, request: ReaderSelectionProposalDecisionRequest) => {
+  const parsed = ReaderSelectionProposalDecisionRequestSchema.parse(request);
+  if (!notesTrackedSenders.has(event.sender.id)) {
+    throw new PigeDomainError("desktop.ipc_sender_invalid", "Reader proposal decisions require the active renderer.");
+  }
+  return ReaderSelectionProposalDecisionResultSchema.parse(
+    getReaderSelectionProposalService().decide(parsed)
   );
 });
 

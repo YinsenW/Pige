@@ -5,7 +5,18 @@ import { JSDOM } from "jsdom";
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { LibraryListResult, NoteRenderResult, RetrievalSearchRequest, RetrievalSearchResult } from "@pige/contracts";
+import type {
+  LibraryListResult,
+  NoteRenderResult,
+  ReaderSelectionActionRequest,
+  ReaderSelectionActionResult,
+  ReaderSelectionResolveRequest,
+  ReaderSelectionResolveResult,
+  ReaderSelectionTransformRequest,
+  ReaderSelectionTransformResult,
+  RetrievalSearchRequest,
+  RetrievalSearchResult
+} from "@pige/contracts";
 import { filterLibraryPages, LibraryPanel, NoteReader } from "../../apps/desktop/src/renderer/src/App";
 import type { ReaderInlineReferenceActivation } from "../../apps/desktop/src/renderer/src/components/ReaderInlineReferenceSurface";
 import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.json";
@@ -36,6 +47,17 @@ afterEach(() => {
 });
 
 describe("full UI Library", () => {
+  it("lets the selection menu escape its toolbar while the menu owns internal scrolling", () => {
+    const styles = fs.readFileSync(
+      path.resolve("apps/desktop/src/renderer/src/styles/app.css"),
+      "utf8"
+    );
+    const toolbarRule = styles.match(/\.selection-toolbar\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
+    const menuRule = styles.match(/\.selection-more-menu\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
+    expect(toolbarRule).toContain("overflow: visible");
+    expect(menuRule).toContain("overflow: auto");
+  });
+
   it("keeps inline-reference feedback out of the Reader document flow", () => {
     const styles = fs.readFileSync(
       path.resolve("apps/desktop/src/renderer/src/styles/app.css"),
@@ -735,6 +757,159 @@ describe("full UI Library", () => {
     dom.window.close();
   });
 
+  it("submits only exact render identity and keeps unresolved or stale selections copy-only", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const first = deferred<ReaderSelectionResolveResult>();
+    const requests: ReaderSelectionResolveRequest[] = [];
+    const actionRequests: ReaderSelectionActionRequest[] = [];
+    await act(async () => {
+      root.render(createElement(NoteReader, {
+        note: readerNote(),
+        activeVaultId: "vault_20260715_fullui01",
+        onResolveSelection: async (request) => {
+          requests.push(request);
+          if (requests.length === 1) return first.promise;
+          if (requests.length === 2) return {
+            apiVersion: 1,
+            requestId: request.requestId,
+            status: "invalid",
+            reason: "unsupported_content"
+          };
+          return {
+            apiVersion: 1,
+            requestId: request.requestId,
+            status: "resolved",
+            selection: {
+              pageId: request.currentPageId,
+              pageContentHash: `sha256:${"a".repeat(64)}`,
+              span: { unit: "utf8_bytes", start: 1, endExclusive: 9 },
+              selectedContentHash: `sha256:${"b".repeat(64)}`
+            }
+          };
+        },
+        onSubmitSelectionAction: async (request) => {
+          actionRequests.push(request);
+          return {
+            apiVersion: 1,
+            requestId: request.requestId,
+            status: "completed",
+            jobId: "job_20260718_selection01",
+            conversationEventId: "evt_20260718_selection01",
+            conversationId: "conv_20260718_selection01",
+            tailEventId: "evt_20260718_selection02"
+          };
+        },
+        related: null,
+        relatedLoadingPageId: null,
+        onOpenRelated: async () => undefined,
+        onDevelopment: () => undefined,
+        t
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    const paragraph = requireElement(container.querySelector(".markdown-body p"));
+    const selectionNode = requireElement(paragraph.querySelector("[data-pige-selection-segment]")).firstChild!;
+    let revision = 1;
+    Object.defineProperty(dom.window, "getSelection", {
+      configurable: true,
+      value: () => ({
+        isCollapsed: false,
+        rangeCount: 1,
+        anchorNode: selectionNode,
+        anchorOffset: revision - 1,
+        focusNode: selectionNode,
+        focusOffset: revision + 7,
+        toString: () => `private selected body ${revision}`,
+        getRangeAt: () => ({
+          commonAncestorContainer: paragraph,
+          startContainer: selectionNode,
+          startOffset: revision - 1,
+          endContainer: selectionNode,
+          endOffset: revision + 7,
+          getBoundingClientRect: () => ({
+            left: 80 + revision,
+            top: 90,
+            width: 120,
+            height: 18,
+            right: 200 + revision,
+            bottom: 108
+          })
+        })
+      })
+    });
+
+    await act(async () => {
+      dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+      await settle(dom);
+    });
+    await waitFor(dom, () => requests.length === 1);
+    expect(requests[0]).toMatchObject({
+      apiVersion: 1,
+      activeVaultId: "vault_20260715_fullui01",
+      currentPageId: "page_20260715_reader1111",
+      renderContextId: `notectx_${"c".repeat(32)}`,
+      anchor: { segmentId: "readerseg_aaaaaaaaaaaaaaaa", utf16Offset: 0 },
+      focus: { segmentId: "readerseg_aaaaaaaaaaaaaaaa", utf16Offset: 8 }
+    });
+    expect(JSON.stringify(requests[0])).not.toContain("private selected body");
+    expect(Array.from(container.querySelectorAll<HTMLButtonElement>('[role="toolbar"] > button')).map((button) => button.dataset.selectionAction))
+      .toEqual(["copy", "copyAsQuote"]);
+
+    revision = 2;
+    await act(async () => {
+      dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+      await settle(dom);
+    });
+    await waitFor(dom, () => requests.length === 2);
+    await waitFor(dom, () => container.querySelector('[data-selection-action="more"]') === null);
+    await act(async () => {
+      first.resolve({
+        apiVersion: 1,
+        requestId: requests[0]!.requestId,
+        status: "resolved",
+        selection: {
+          pageId: requests[0]!.currentPageId,
+          pageContentHash: `sha256:${"a".repeat(64)}`,
+          span: { unit: "utf8_bytes", start: 0, endExclusive: 8 },
+          selectedContentHash: `sha256:${"b".repeat(64)}`
+        }
+      });
+      await first.promise;
+      await settle(dom);
+    });
+    expect(container.querySelector('[data-selection-action="more"]')).toBeNull();
+
+    revision = 3;
+    await act(async () => {
+      dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+      await settle(dom);
+    });
+    await waitFor(dom, () => requests.length === 3);
+    await waitFor(dom, () => container.querySelector('[data-selection-action="more"]') !== null);
+    await act(async () => {
+      requireElement(container.querySelector<HTMLButtonElement>('[data-selection-action="explain"]')).click();
+      await settle(dom);
+    });
+    expect(actionRequests).toHaveLength(1);
+    expect(actionRequests[0]).toMatchObject({
+      apiVersion: 1,
+      action: "explain",
+      locale: "en",
+      selection: {
+        pageId: "page_20260715_reader1111",
+        span: { unit: "utf8_bytes", start: 1, endExclusive: 9 }
+      }
+    });
+    expect(actionRequests[0]!.requestId).toMatch(/^readerselaction_[a-z0-9]{8,64}$/u);
+    expect(actionRequests[0]!.clientTurnId).toMatch(/^turn_\d{8}_[a-z0-9]{12,64}$/u);
+    expect(JSON.stringify(actionRequests[0])).not.toContain("private selected body");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("measures compact selection actions, dismisses on scroll, and restores exact focus ownership", async () => {
     const dom = createDom();
     Object.defineProperty(dom.window, "innerWidth", { configurable: true, value: 360 });
@@ -748,6 +923,7 @@ describe("full UI Library", () => {
     await act(async () => {
       root.render(createElement(NoteReader, {
         note: readerNote(),
+        ...resolvedSelectionProps(),
         related: null,
         relatedLoadingPageId: null,
         onOpenRelated: async () => undefined,
@@ -757,7 +933,8 @@ describe("full UI Library", () => {
       await settle(dom);
     });
     const container = dom.window.document.querySelector("#root")!;
-    requireElement(container.querySelector(".markdown-body p"));
+    const paragraph = requireElement(container.querySelector(".markdown-body p"));
+    const selectionNode = requireElement(paragraph.querySelector("[data-pige-selection-segment]")).firstChild!;
     const originalBoundingClientRect = dom.window.HTMLElement.prototype.getBoundingClientRect;
     dom.window.HTMLElement.prototype.getBoundingClientRect = function getBoundingClientRect(): DOMRect {
       if ((this as HTMLElement).classList.contains("selection-toolbar")) {
@@ -781,8 +958,16 @@ describe("full UI Library", () => {
       value: () => ({
         isCollapsed: selectionCollapsed,
         rangeCount: selectionCollapsed ? 0 : 1,
+        anchorNode: selectionNode,
+        anchorOffset: 0,
+        focusNode: selectionNode,
+        focusOffset: 8,
         getRangeAt: () => ({
-          commonAncestorContainer: requireElement(container.querySelector(".markdown-body p")),
+          commonAncestorContainer: paragraph,
+          startContainer: selectionNode,
+          startOffset: 0,
+          endContainer: selectionNode,
+          endOffset: 8,
           getBoundingClientRect: () => ({ left: 330, top: 15, width: 20, height: 18, right: 350, bottom: 33 })
         })
       })
@@ -833,7 +1018,8 @@ describe("full UI Library", () => {
     });
     expect(pointerDown.defaultPrevented).toBe(true);
     await waitFor(dom, () => dom.window.document.activeElement === focusOwner);
-    expect(unavailable).toEqual(["selection_actions"]);
+    expect(unavailable).toEqual([]);
+    expect(container.querySelector('[role="status"]')?.textContent).toBe("Opened in Note Agent.");
     expect(container.querySelector('[role="toolbar"]')).toBeNull();
 
     focusOwner.focus();
@@ -870,6 +1056,194 @@ describe("full UI Library", () => {
     dom.window.HTMLElement.prototype.getBoundingClientRect = originalBoundingClientRect;
     dom.window.close();
   });
+
+  it("keeps Copy and quoted Copy local while More owns its keyboard and body-free status", async () => {
+    const dom = createDom();
+    const clipboardWrites: string[] = [];
+    Object.defineProperty(dom.window.navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (value: string) => {
+          clipboardWrites.push(value);
+        }
+      }
+    });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const unavailable: string[] = [];
+    const transformRequests: ReaderSelectionTransformRequest[] = [];
+    const transformResults: ReaderSelectionTransformResult[] = [];
+    await act(async () => {
+      root.render(createElement(NoteReader, {
+        note: readerNote(),
+        ...resolvedSelectionProps(),
+        onSubmitSelectionTransform: async (request) => {
+          transformRequests.push(request);
+          return {
+            apiVersion: 1,
+            requestId: request.requestId,
+            status: "review_required",
+            jobId: "job_20260718_transform01",
+            conversationEventId: "evt_20260718_transform01",
+            conversationId: "conv_20260718_transform01",
+            tailEventId: "evt_20260718_transform01",
+            proposal: {
+              proposalId: "proposal_20260718_transform01",
+              action: request.action,
+              state: "ready",
+              revision: 1,
+              lines: [{ kind: "added", text: "Reviewed replacement" }]
+            }
+          };
+        },
+        onSelectionTransformResult: (result) => transformResults.push(result),
+        related: null,
+        relatedLoadingPageId: null,
+        onOpenRelated: async () => undefined,
+        onDevelopment: (capability) => unavailable.push(capability),
+        t
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    const paragraph = requireElement(container.querySelector(".markdown-body p"));
+    const selectionNode = requireElement(paragraph.querySelector("[data-pige-selection-segment]")).firstChild!;
+    const originalBoundingClientRect = dom.window.HTMLElement.prototype.getBoundingClientRect;
+    dom.window.HTMLElement.prototype.getBoundingClientRect = function getBoundingClientRect(): DOMRect {
+      if ((this as HTMLElement).classList.contains("selection-toolbar")) {
+        return {
+          left: 40, top: 40, width: 220, height: 34, right: 260, bottom: 74,
+          x: 40, y: 40, toJSON: () => ({})
+        } as DOMRect;
+      }
+      if ((this as HTMLElement).classList.contains("selection-more-menu")) {
+        return {
+          left: 84, top: 80, width: 176, height: 172, right: 260, bottom: 252,
+          x: 84, y: 80, toJSON: () => ({})
+        } as DOMRect;
+      }
+      return originalBoundingClientRect.call(this);
+    };
+    let collapsed = false;
+    Object.defineProperty(dom.window, "getSelection", {
+      configurable: true,
+      value: () => ({
+        isCollapsed: collapsed,
+        rangeCount: collapsed ? 0 : 1,
+        anchorNode: selectionNode,
+        anchorOffset: 0,
+        focusNode: selectionNode,
+        focusOffset: 8,
+        toString: () => "Selected first line\nSelected second line",
+        getRangeAt: () => ({
+          commonAncestorContainer: paragraph,
+          startContainer: selectionNode,
+          startOffset: 0,
+          endContainer: selectionNode,
+          endOffset: 8,
+          getBoundingClientRect: () => ({ left: 90, top: 100, width: 120, height: 18, right: 210, bottom: 118 })
+        })
+      })
+    });
+
+    const showSelection = async (): Promise<void> => {
+      await act(async () => {
+        collapsed = true;
+        dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+        collapsed = false;
+        dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+        await settle(dom);
+      });
+      await waitFor(dom, () => container.querySelector('[role="toolbar"]') !== null);
+    };
+
+    await showSelection();
+    let more = requireElement(container.querySelector<HTMLButtonElement>('[data-selection-action="more"]'));
+    await act(async () => {
+      more.click();
+      collapsed = true;
+      dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+      collapsed = false;
+      await settle(dom);
+    });
+    let menu = requireElement(container.querySelector<HTMLElement>('[role="menu"]'));
+    const menuItems = Array.from(menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
+    expect(more.getAttribute("aria-expanded")).toBe("true");
+    expect(menuItems.map((item) => item.dataset.selectionMoreAction)).toEqual([
+      "copy", "copyAsQuote", "translate", "polish", "expand"
+    ]);
+    expect(dom.window.document.activeElement).toBe(menuItems[0]);
+    await act(async () => {
+      menu.dispatchEvent(new dom.window.Event("scroll"));
+      await settle(dom);
+    });
+    expect(container.querySelector('[role="menu"]')).toBe(menu);
+    await act(async () => {
+      menu.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+      await settle(dom);
+    });
+    expect(dom.window.document.activeElement).toBe(menuItems[1]);
+    await act(async () => {
+      menu.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await settle(dom);
+    });
+    expect(container.querySelector('[role="menu"]')).toBeNull();
+    await waitFor(dom, () => dom.window.document.activeElement === container.querySelector('[data-selection-action="more"]'));
+    more = requireElement(container.querySelector<HTMLButtonElement>('[data-selection-action="more"]'));
+
+    await act(async () => {
+      more.click();
+      await settle(dom);
+    });
+    menu = requireElement(container.querySelector<HTMLElement>('[role="menu"]'));
+    await act(async () => {
+      requireElement(menu.querySelector<HTMLButtonElement>('[data-selection-more-action="copy"]')).click();
+      await settle(dom);
+    });
+    expect(clipboardWrites).toEqual(["Selected first line\nSelected second line"]);
+    expect(unavailable).toEqual([]);
+    expect(container.querySelector('[role="toolbar"]')).toBeNull();
+    expect(container.querySelector('[role="status"]')?.textContent).toBe("Copied.");
+
+    await showSelection();
+    more = requireElement(container.querySelector<HTMLButtonElement>('[data-selection-action="more"]'));
+    await act(async () => {
+      more.click();
+      await settle(dom);
+      requireElement(container.querySelector<HTMLButtonElement>('[data-selection-more-action="copyAsQuote"]')).click();
+      await settle(dom);
+    });
+    expect(clipboardWrites).toEqual([
+      "Selected first line\nSelected second line",
+      "> Selected first line\n> Selected second line"
+    ]);
+    expect(container.querySelector('[role="status"]')?.textContent).toBe("Quote copied.");
+
+    await showSelection();
+    more = requireElement(container.querySelector<HTMLButtonElement>('[data-selection-action="more"]'));
+    await act(async () => {
+      more.click();
+      await settle(dom);
+      requireElement(container.querySelector<HTMLButtonElement>('[data-selection-more-action="translate"]')).click();
+      await settle(dom);
+    });
+    expect(transformRequests).toHaveLength(1);
+    expect(transformRequests[0]).toMatchObject({
+      apiVersion: 1,
+      action: "translate",
+      locale: "en",
+      selection: {
+        pageId: "page_20260715_reader1111",
+        span: { unit: "utf8_bytes", start: 0, endExclusive: 8 }
+      }
+    });
+    expect(transformResults[0]?.status).toBe("review_required");
+    expect(unavailable).toEqual([]);
+    expect(container.querySelector('[role="status"]')?.textContent).toBe("Review the proposed change in Note Agent.");
+
+    await act(async () => root.unmount());
+    dom.window.HTMLElement.prototype.getBoundingClientRect = originalBoundingClientRect;
+    dom.window.close();
+  });
 });
 
 function readerNote(): NoteRenderResult {
@@ -885,8 +1259,39 @@ function readerNote(): NoteRenderResult {
       language: "en",
       sourceIds: ["source_private_0001", "source_private_0002"]
     },
-    html: "<p>Selected note body</p>",
+    html: '<p><span data-pige-selection-segment="readerseg_aaaaaaaaaaaaaaaa">Selected note body</span></p>',
+    renderContextId: `notectx_${"c".repeat(32)}`,
     byteSize: 256
+  };
+}
+
+function resolvedSelectionProps(): {
+  readonly activeVaultId: string;
+  readonly onResolveSelection: (request: ReaderSelectionResolveRequest) => Promise<ReaderSelectionResolveResult>;
+  readonly onSubmitSelectionAction: (request: ReaderSelectionActionRequest) => Promise<ReaderSelectionActionResult>;
+} {
+  return {
+    activeVaultId: "vault_20260715_fullui01",
+    onResolveSelection: async (request) => ({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "resolved",
+      selection: {
+        pageId: request.currentPageId,
+        pageContentHash: `sha256:${"a".repeat(64)}`,
+        span: { unit: "utf8_bytes", start: 0, endExclusive: 8 },
+        selectedContentHash: `sha256:${"b".repeat(64)}`
+      }
+    }),
+    onSubmitSelectionAction: async (request) => ({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "completed",
+      jobId: "job_20260718_selection01",
+      conversationEventId: "evt_20260718_selection01",
+      conversationId: "conv_20260718_selection01",
+      tailEventId: "evt_20260718_selection02"
+    })
   };
 }
 

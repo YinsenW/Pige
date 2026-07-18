@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ConfirmationProposalSchema,
+  ConversationEventSchema,
   FixtureManifestSchema,
   JobRecordSchema,
   KnowledgeActivityListResultSchema,
@@ -18,6 +19,40 @@ import {
 } from "@pige/schemas";
 
 describe("schemas", () => {
+  it("accepts only the bounded Reader transform input presentation", () => {
+    const event = {
+      schemaVersion: 1,
+      id: "evt_20260718_transformpresentation",
+      conversationId: "conv_20260718_transform",
+      type: "user_message",
+      createdAt: "2026-07-18T12:00:00.000Z",
+      text: "HOST_EXECUTION_INSTRUCTION",
+      inputPresentation: {
+        kind: "reader_selection_transform",
+        action: "translate"
+      }
+    };
+
+    expect(ConversationEventSchema.parse(event).inputPresentation).toEqual({
+      kind: "reader_selection_transform",
+      action: "translate"
+    });
+    expect(() => ConversationEventSchema.parse({
+      ...event,
+      inputPresentation: {
+        ...event.inputPresentation,
+        selectedText: "PRIVATE_SELECTION"
+      }
+    })).toThrow();
+    expect(() => ConversationEventSchema.parse({
+      ...event,
+      inputPresentation: {
+        kind: "reader_selection_transform",
+        action: "rewrite"
+      }
+    })).toThrow();
+  });
+
   it("validates the renderer-safe resident pane layout boundary", () => {
     expect(
       WindowLayoutRequestSchema.parse({

@@ -328,7 +328,8 @@ contract. This service consumes that schema rather than maintaining a parallel e
 Rules:
 
 - Conversation history is durable activity history, not the knowledge source of truth.
-- Model prompts and raw provider responses are not stored by default unless they are user-visible conversation content or explicitly included in a support bundle.
+- Prompts/raw responses are stored only as user-visible content or explicit support data;
+  selection UI localizes strict presentation metadata, never Host instruction text.
 - Long source bodies are represented by source references and optional short excerpts.
 
 ### 5.1.5 Local Database Service
@@ -1074,29 +1075,11 @@ Note Agent context:
 
 Responsibilities:
 
-- Receive selected text and action type from renderer.
+- Resolve render endpoints under vault/page/context into Main identity.
 - Run local clipboard actions without model calls when possible.
-- Route transform/understand/organize actions through Pi Agent with task-scoped tools;
-  feature-level direct model profiles are not an alternate runtime.
+- Route schema-owned read/transform actions through Pi and Host-owned current-note tools.
 - Return read-only results inline or in the Note Agent panel.
-- Create ChangeSets only through the registered proposal/publication tool boundary.
-
-Selection actions:
-
-```ts
-type SelectionAction =
-  | "copy"
-  | "copy_as_quote"
-  | "translate"
-  | "polish"
-  | "shorten"
-  | "expand"
-  | "summarize"
-  | "explain"
-  | "create_note"
-  | "add_backlink"
-  | "ask_agent";
-```
+- Auto-apply with Operation/Undo; bound exceptions to Reader preview.
 
 Rules:
 
@@ -1104,6 +1087,8 @@ Rules:
 - Read-only model actions may show inline output.
 - Mutating actions use base hashes, Operations, and Undo. Breadth alone does not prompt;
   only an exceptional boundary stages review.
+- No selected/replacement body, path or apply authority crosses. Recovery adopts valid output;
+  review is bounded, decisions stay in Main and `Later` stays local.
 
 ### 5.6.5 Window And Layout Service
 
