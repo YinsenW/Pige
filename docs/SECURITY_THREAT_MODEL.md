@@ -311,7 +311,10 @@ resource, policy/runtime and request digests; stores only body-free machine-loca
 supports Deny/Allow once; and reconciles one-use consumption/restart fail closed. Its
 production external adapter registry is empty. An injected same-process read-only adapter
 proves the Broker core but not a shipped arbitrary-path, Skill, package or local-tool
-caller; saved grants, Remember, YOLO and broader actors remain planned.
+caller. Machine-local Ask/Remember/YOLO settings, bounded saved-grant inspection/revocation,
+and eligible desktop-local filesystem/network/shell YOLO auto-allow are implemented with
+revision fencing. Creating a new saved scoped grant and concrete Node/OS adapters are not
+claimed by this slice.
 
 ### 6.7 Arbitrary Shell Execution
 
@@ -448,6 +451,12 @@ YOLO Full Access rules:
 - Must require an explicit Settings action and a strong warning.
 - Must show a persistent visible status indicator while enabled.
 - Must be revocable immediately.
+- Enablement uses a main-owned strong warning followed by a short-lived, single-use token
+  bound to the exact renderer sender and machine-local permission revision. The token is
+  never durable and cannot be transferred between windows.
+- Each auto-allowed decision records that revision. Disable, mode change, grant revocation,
+  or any other permission-settings mutation invalidates it before consumption or adapter
+  execution.
 - Must still record permission decisions, operation records, command previews where available, affected paths, and data boundaries.
 - Must not bypass OS-level privacy prompts, app sandbox restrictions, update signature checks, malware protections, or filesystem errors.
 - Cannot be enabled by source content, prompt injection, a Skill, package, local tool, or model output.

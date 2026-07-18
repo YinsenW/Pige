@@ -2901,6 +2901,42 @@ References:
 
 - `docs/API_AND_IPC_DESIGN.md`
 
+### D-20260718-Permission-Settings-Authority
+
+Status: Accepted
+Date: 2026-07-18
+
+Decision:
+
+Permission defaults, YOLO status, and saved-grant records are machine-local state owned by
+Permission Settings Service and projected through a revision-fenced, body-free renderer
+API. YOLO enablement requires a main-owned strong confirmation and a short-lived one-use
+sender/revision token. Eligible desktop-local filesystem, network, and shell actions may
+then receive a system-authored one-action decision bound to that revision.
+
+Rationale:
+
+The Agent may have broad capabilities without allowing renderer state, model output, or a
+stale preference snapshot to become authority. One machine-local revision gives policy
+compilation, Broker consumption, and adapter execution a common revocation boundary.
+
+Consequences:
+
+- Any permission-settings mutation invalidates outstanding YOLO authority before effect.
+- Destructive actions, OS permissions, restricted content, model egress, credentials,
+  settings/schema changes, and remote/client boundaries retain their stronger owners.
+- Saved grants can be projected and revoked without exposing raw actor/resource identity;
+  this slice does not create grants or claim concrete Node/OS adapters.
+- Permission settings stay excluded from backup/restore. Requirement, Exit, and Phase
+  status do not change.
+
+References:
+
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/AGENT_RUNTIME_POLICY_CONTEXT.md`
+- `docs/SETTINGS_AND_PREFERENCES.md`
+- `docs/SECURITY_THREAT_MODEL.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

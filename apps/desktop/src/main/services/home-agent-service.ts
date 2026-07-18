@@ -42,7 +42,10 @@ import {
   type PigeErrorSummary
 } from "@pige/schemas";
 import { z } from "zod";
-import { buildAgentRuntimePolicyContext } from "./agent-policy-context";
+import {
+  buildAgentRuntimePolicyContext,
+  type AgentPermissionSettingsPort
+} from "./agent-policy-context";
 import {
   AgentTurnConversationStore,
   type AgentTurnConversationBinding,
@@ -314,6 +317,7 @@ export class HomeAgentService {
   readonly #datasets: HomeAgentDatasetQueryPort | undefined;
   readonly #modelEgressApprovals: ModelEgressApprovalService | undefined;
   readonly #externalCapabilities: PermissionedExternalCapabilityRegistry | undefined;
+  readonly #permissionSettings: AgentPermissionSettingsPort | undefined;
 
   constructor(
     vaults: HomeAgentVaultPort,
@@ -326,7 +330,8 @@ export class HomeAgentService {
     urls?: HomeAgentUrlPort,
     datasets?: HomeAgentDatasetQueryPort,
     modelEgressApprovals?: ModelEgressApprovalService,
-    externalCapabilities?: PermissionedExternalCapabilityRegistry
+    externalCapabilities?: PermissionedExternalCapabilityRegistry,
+    permissionSettings?: AgentPermissionSettingsPort
   ) {
     this.#vaults = vaults;
     this.#models = models;
@@ -339,6 +344,7 @@ export class HomeAgentService {
     this.#datasets = datasets;
     this.#modelEgressApprovals = modelEgressApprovals;
     this.#externalCapabilities = externalCapabilities;
+    this.#permissionSettings = permissionSettings;
   }
 
   async ask(request: HomeAgentAskRequest): Promise<HomeAgentAskResult> {
@@ -1180,6 +1186,9 @@ export class HomeAgentService {
       jobId: session.current.id,
       defaultModel: model,
       defaultProvider: provider,
+      ...(this.#permissionSettings
+        ? { permissionSettings: this.#permissionSettings.policyProjection() }
+        : {}),
       ...(this.#capabilities?.snapshot() ?? {})
     });
     const payloadCharacters = Array.from(query).length;
@@ -1249,6 +1258,9 @@ export class HomeAgentService {
       jobId,
       defaultModel,
       defaultProvider,
+      ...(this.#permissionSettings
+        ? { permissionSettings: this.#permissionSettings.policyProjection() }
+        : {}),
       ...(this.#capabilities?.snapshot() ?? {})
     });
     session.current = this.#jobs.patchAgentTurnJob(session.current, {
@@ -1319,6 +1331,9 @@ export class HomeAgentService {
         jobId,
         defaultModel: currentDefaultModel,
         defaultProvider: currentDefaultProvider,
+        ...(this.#permissionSettings
+          ? { permissionSettings: this.#permissionSettings.policyProjection() }
+          : {}),
         ...(this.#capabilities?.snapshot() ?? {})
       });
       if (

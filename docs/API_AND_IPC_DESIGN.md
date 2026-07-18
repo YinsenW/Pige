@@ -618,13 +618,20 @@ Recent Work until resolution, then ordinary Job status ownership returns.
 Commands:
 
 - `permissions.resolve`
+- `permissions.settings.setDefaultMode`
+- `permissions.settings.prepareYoloEnable`
+- `permissions.settings.enableYolo`
+- `permissions.settings.disableYolo`
+- `permissions.settings.revokeGrant`
+- `permissions.settings.revokeAllGrants`
 
 Queries:
 
 - `permissions.pending`
+- `permissions.settings.current`
 
-The current-action core accepts only `deny` or `allow_once`; saved grants, Remember and
-YOLO APIs remain planned. `permissions.pending({ requestId })` returns one bounded typed
+The current-action prompt accepts only `deny` or `allow_once`; creating a reusable scoped
+grant remains deferred. `permissions.pending({ requestId })` returns one bounded typed
 summary: request/Job IDs, reviewed actor display/type/version, capability/data boundary,
 action label, resource scope/kind/count, reason code and creation time. It never returns
 raw action input, paths, commands, hashes, credentials, bodies, store records, or model
@@ -637,6 +644,16 @@ resumes the same Job and consumes authority once only after current binding reva
 while deny executes nothing. IPC uncertainty rereads durable truth; unreadable, stale,
 consumed-without-completion, or conflicting state fails closed without Retry authority.
 Renderer receives no filesystem or capability handle.
+
+Permission Settings is a separate renderer-safe owner over machine-local state.
+`current()` projects only revision, effective default mode, YOLO status, and bounded saved
+grant summaries; actor IDs/digests, resource identity hashes, paths, bodies, and secrets do
+not cross IPC. All mutations compare `expectedRevision`. YOLO enablement is two-phase:
+`prepareYoloEnable` owns the native strong warning, then returns a short-lived, one-use
+token bound to the exact WebContents and revision; `enableYolo` consumes it. Sender loss,
+expiry, replay, or revision drift fails closed. Disable and grant revocation take effect
+immediately; the Permission Broker rechecks a YOLO-bound revision at consume and directly
+before adapter execution.
 
 ### 6.8 Settings, Providers, Tools
 

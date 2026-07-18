@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PermissionBrokerService } from "../../apps/desktop/src/main/services/permission-broker-service";
+import { LocalSettingsStore } from "../../apps/desktop/src/main/services/local-settings";
+import { PermissionSettingsService } from "../../apps/desktop/src/main/services/permission-settings-service";
 import {
   PermissionedExternalCapabilityRegistry,
   type PermissionedExternalCapabilityAdapter,
@@ -161,6 +163,20 @@ describe("PermissionedExternalCapabilityRegistry", () => {
     expect(fixture.execute).toHaveBeenCalledTimes(1);
     expect(fixture.jobs.completions).toHaveLength(0);
   });
+
+  it("rechecks YOLO revision immediately before adapter execution", async () => {
+    const fixture = createFixture({ yolo: true });
+    const tool = requireTool(fixture.registry.toolsForTurn(fixture.turn));
+    fixture.jobs.onConsumption = () => {
+      const current = fixture.settings?.current();
+      if (current) fixture.settings?.disableYolo(current.revision);
+    };
+
+    await expect(callTool(tool)).rejects.toMatchObject({ code: "permission.authority_revoked" });
+    expect(fixture.execute).toHaveBeenCalledTimes(0);
+    expect(fixture.jobs.consumptions).toHaveLength(1);
+    expect(fixture.jobs.completions).toHaveLength(0);
+  });
 });
 
 type ExternalExecute = PermissionedExternalCapabilityAdapter["execute"];
@@ -174,6 +190,7 @@ class MemoryJobPort implements PermissionedExternalJobPort {
   readonly completions: Array<JobPortInput<"completePermissionAction">> = [];
   readonly #completionMarkers = new Map<string, string>();
   failCompletion = false;
+  onConsumption: (() => void) | undefined;
 
   bindPermissionRequest(input: JobPortInput<"bindPermissionRequest">): void {
     this.bindings.push(input);
@@ -181,6 +198,7 @@ class MemoryJobPort implements PermissionedExternalJobPort {
 
   commitPermissionConsumption(input: JobPortInput<"commitPermissionConsumption">): void {
     this.consumptions.push(input);
+    this.onConsumption?.();
   }
 
   completePermissionAction(input: JobPortInput<"completePermissionAction">): void {
@@ -194,11 +212,12 @@ class MemoryJobPort implements PermissionedExternalJobPort {
   }
 }
 
-function createFixture(options: { readonly destructive?: boolean } = {}): {
+function createFixture(options: { readonly destructive?: boolean; readonly yolo?: boolean } = {}): {
   readonly root: string;
   readonly machineRoot: string;
   readonly vaultPath: string;
   readonly broker: PermissionBrokerService;
+  readonly settings: PermissionSettingsService | undefined;
   readonly jobs: MemoryJobPort;
   readonly adapter: PermissionedExternalCapabilityAdapter;
   readonly execute: ReturnType<typeof vi.fn<ExternalExecute>>;
@@ -210,7 +229,15 @@ function createFixture(options: { readonly destructive?: boolean } = {}): {
   const machineRoot = path.join(root, "machine");
   fs.mkdirSync(machineRoot, { mode: 0o700 });
   const vaultPath = createTestVault(root);
-  const broker = new PermissionBrokerService({ rootPath: machineRoot, unsafeAllowUnfenced: true });
+  const settings = options.yolo
+    ? new PermissionSettingsService(new LocalSettingsStore(machineRoot))
+    : undefined;
+  if (settings) settings.enableYolo(0);
+  const broker = new PermissionBrokerService({
+    rootPath: machineRoot,
+    unsafeAllowUnfenced: true,
+    ...(settings ? { permissionSettings: settings } : {})
+  });
   const jobs = new MemoryJobPort();
   const execute = vi.fn<ExternalExecute>(async () => TOOL_RESULT);
   const adoptCompleted = vi.fn<ExternalAdopt>(async () => TOOL_RESULT);
@@ -221,6 +248,7 @@ function createFixture(options: { readonly destructive?: boolean } = {}): {
     machineRoot,
     vaultPath,
     broker,
+    settings,
     jobs,
     adapter,
     execute,

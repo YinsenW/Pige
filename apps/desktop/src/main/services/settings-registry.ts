@@ -135,6 +135,39 @@ export const implementedSettingsRegistry: SettingsRegistrySummary = {
       agentPolicyEffect: "model.defaultModelProfileId"
     },
     {
+      key: "permissions.defaultMode",
+      page: "Permissions & Privacy",
+      scope: "machine_local",
+      owner: "Permission Settings Service, Permission Broker",
+      storage: "OS app data/settings.json",
+      backedUpByDefault: false,
+      applyBehavior: "immediate",
+      permissionRequirement: "none",
+      agentPolicyEffect: "permissions.defaultMode"
+    },
+    {
+      key: "permissions.yoloEnabled",
+      page: "Permissions & Privacy",
+      scope: "machine_local",
+      owner: "Permission Settings Service, Permission Broker",
+      storage: "OS app data/settings.json",
+      backedUpByDefault: false,
+      applyBehavior: "immediate",
+      permissionRequirement: "explicit_confirmation",
+      agentPolicyEffect: "permissions.yoloEnabled"
+    },
+    {
+      key: "permissions.savedGrants",
+      page: "Permissions & Privacy",
+      scope: "machine_local",
+      owner: "Permission Settings Service, Permission Broker",
+      storage: "OS app data/settings.json",
+      backedUpByDefault: false,
+      applyBehavior: "immediate",
+      permissionRequirement: "none",
+      agentPolicyEffect: "permissions.savedGrantSummaryRefs"
+    },
+    {
       key: "maintenance.localDatabaseReset",
       page: "Index & Maintenance",
       scope: "runtime_transient",

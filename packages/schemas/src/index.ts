@@ -354,6 +354,8 @@ export const PermissionRequestSchema = z.object({
   }
 });
 
+export const PermissionSettingsRevisionSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+
 export const PermissionDecisionRecordSchema = z.object({
   id: PermissionDecisionIdSchema,
   schemaVersion: z.literal(1),
@@ -364,6 +366,7 @@ export const PermissionDecisionRecordSchema = z.object({
   resourceScope: PermissionResourceScopeSchema,
   decidedBy: z.enum(["user", "system"]),
   autoAllowedBy: z.enum(["none", "saved_grant", "yolo_full_access"]),
+  permissionSettingsRevision: PermissionSettingsRevisionSchema.optional(),
   decidedAt: z.string().datetime({ offset: true }),
   reason: z.string().min(1).optional()
 }).superRefine((decision, context) => {
@@ -423,6 +426,16 @@ export const PermissionDecisionRecordSchema = z.object({
       path: ["autoAllowedBy"]
     });
   }
+  if (
+    (decision.autoAllowedBy === "yolo_full_access") !==
+    (decision.permissionSettingsRevision !== undefined)
+  ) {
+    context.addIssue({
+      code: "custom",
+      message: "A YOLO auto-allow must bind exactly one machine-local permission settings revision.",
+      path: ["permissionSettingsRevision"]
+    });
+  }
 });
 
 const PermissionSha256HashSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/);
@@ -443,7 +456,7 @@ const PermissionActionLabelKeySchema = z.string()
   .min(1)
   .max(160)
   .regex(/^[A-Za-z][A-Za-z0-9_.-]+$/);
-const PermissionResourceKindSchema = z.enum([
+export const PermissionResourceKindSchema = z.enum([
   "file",
   "folder",
   "url",
@@ -637,6 +650,166 @@ export const PermissionResolveResultSchema = z.object({
   requestId: PermissionRequestIdSchema,
   jobId: JobIdSchema
 }).strict();
+
+export const PermissionSavedGrantIdSchema = z.string().regex(/^permgrant_\d{8}_[a-z0-9]{8,}$/);
+export const PermissionYoloConfirmationTokenSchema = z.string().regex(/^permyolo_\d{8}_[a-z0-9]{16,}$/);
+
+export const PermissionSavedGrantRecordSchema = z.object({
+  grantId: PermissionSavedGrantIdSchema,
+  actorType: PermissionActorTypeSchema,
+  actorId: PermissionStableIdSchema,
+  actorVersion: PermissionVersionSchema,
+  actorDigest: PermissionSha256HashSchema,
+  actorDisplayName: PermissionActorDisplayNameSchema,
+  capability: PermissionCapabilitySchema,
+  dataBoundary: PermissionDataBoundarySchema,
+  resourceScope: PermissionResourceScopeSchema,
+  resourceKind: PermissionResourceKindSchema,
+  resourceIdentityHash: PermissionSha256HashSchema,
+  decisionScope: z.enum(["actor_version", "resource_scope", "profile_default"]),
+  createdAt: z.string().datetime({ offset: true }),
+  lastUsedAt: z.string().datetime({ offset: true }).optional()
+}).strict().superRefine((grant, context) => {
+  if (grant.resourceScope === "current_action") {
+    context.addIssue({
+      code: "custom",
+      path: ["resourceScope"],
+      message: "A saved grant cannot target only the current action."
+    });
+  }
+  if (
+    grant.capability !== "external_filesystem" &&
+    grant.capability !== "external_network" &&
+    grant.capability !== "run_shell"
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["capability"],
+      message: "A saved grant cannot cover destructive, credential, model-egress, installation, settings, or schema authority."
+    });
+  }
+  if (
+    grant.dataBoundary !== "local" &&
+    grant.dataBoundary !== "filesystem" &&
+    grant.dataBoundary !== "network"
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["dataBoundary"],
+      message: "A saved grant cannot cover destructive, cloud, or brokered-credential boundaries."
+    });
+  }
+});
+
+export const PermissionMachineSettingsSchema = z.object({
+  revision: PermissionSettingsRevisionSchema,
+  defaultMode: PermissionDefaultModeSchema,
+  yoloEnabled: z.boolean(),
+  yoloFallbackMode: z.enum(["ask_every_time", "remember_scoped_grants"]).optional(),
+  savedGrants: z.array(PermissionSavedGrantRecordSchema).max(128)
+}).strict().superRefine((settings, context) => {
+  const yoloStateIsConsistent = settings.yoloEnabled
+    ? settings.defaultMode === "yolo_full_access" && settings.yoloFallbackMode !== undefined
+    : settings.defaultMode !== "yolo_full_access" && settings.yoloFallbackMode === undefined;
+  if (!yoloStateIsConsistent) {
+    context.addIssue({
+      code: "custom",
+      path: ["yoloEnabled"],
+      message: "YOLO status, effective mode, and fallback mode must change atomically."
+    });
+  }
+  if (new Set(settings.savedGrants.map((grant) => grant.grantId)).size !== settings.savedGrants.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["savedGrants"],
+      message: "Saved grant identifiers must be unique."
+    });
+  }
+});
+
+export const PermissionSavedGrantSummarySchema = z.object({
+  grantId: PermissionSavedGrantIdSchema,
+  actorType: PermissionActorTypeSchema,
+  actorDisplayName: PermissionActorDisplayNameSchema,
+  capability: PermissionCapabilitySchema,
+  resourceScope: PermissionResourceScopeSchema,
+  resourceKind: PermissionResourceKindSchema,
+  decisionScope: z.enum(["actor_version", "resource_scope", "profile_default"]),
+  createdAt: z.string().datetime({ offset: true }),
+  lastUsedAt: z.string().datetime({ offset: true }).optional()
+}).strict();
+
+export const PermissionSettingsSummarySchema = z.object({
+  apiVersion: z.literal(1),
+  revision: PermissionSettingsRevisionSchema,
+  defaultMode: PermissionDefaultModeSchema,
+  yoloEnabled: z.boolean(),
+  savedGrants: z.array(PermissionSavedGrantSummarySchema).max(128)
+}).strict().superRefine((summary, context) => {
+  if (summary.yoloEnabled !== (summary.defaultMode === "yolo_full_access")) {
+    context.addIssue({
+      code: "custom",
+      path: ["yoloEnabled"],
+      message: "Renderer permission mode and YOLO status must describe the same committed state."
+    });
+  }
+});
+
+export const PermissionSetDefaultModeRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  expectedRevision: PermissionSettingsRevisionSchema,
+  defaultMode: z.enum(["ask_every_time", "remember_scoped_grants"])
+}).strict();
+
+export const PermissionPrepareYoloEnableRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  expectedRevision: PermissionSettingsRevisionSchema
+}).strict();
+
+export const PermissionPrepareYoloEnableResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("confirmation_ready"),
+    revision: PermissionSettingsRevisionSchema,
+    confirmationToken: PermissionYoloConfirmationTokenSchema,
+    expiresAt: z.string().datetime({ offset: true })
+  }).strict(),
+  z.object({
+    status: z.literal("cancelled"),
+    revision: PermissionSettingsRevisionSchema
+  }).strict(),
+  z.object({
+    status: z.literal("stale"),
+    revision: PermissionSettingsRevisionSchema
+  }).strict()
+]);
+
+export const PermissionEnableYoloRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  expectedRevision: PermissionSettingsRevisionSchema,
+  confirmationToken: PermissionYoloConfirmationTokenSchema
+}).strict();
+
+export const PermissionDisableYoloRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  expectedRevision: PermissionSettingsRevisionSchema
+}).strict();
+
+export const PermissionRevokeSavedGrantRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  expectedRevision: PermissionSettingsRevisionSchema,
+  grantId: PermissionSavedGrantIdSchema
+}).strict();
+
+export const PermissionRevokeAllSavedGrantsRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  expectedRevision: PermissionSettingsRevisionSchema
+}).strict();
+
+export const PermissionSettingsMutationResultSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("committed"), settings: PermissionSettingsSummarySchema }).strict(),
+  z.object({ status: z.literal("stale"), settings: PermissionSettingsSummarySchema }).strict(),
+  z.object({ status: z.literal("not_found"), settings: PermissionSettingsSummarySchema }).strict()
+]);
 
 export const ModelEgressContentClassSchema = z.enum([
   "ordinary",
@@ -1070,6 +1243,7 @@ export const MachineLocalSettingsSchema = z.object({
   activeVaultPath: z.string().min(1).optional(),
   appLocale: LocaleSchema.optional(),
   window: WindowPreferencesSchema.optional(),
+  permissions: PermissionMachineSettingsSchema.optional(),
   dismissedFirstHomeVaultIds: z.array(VaultIdSchema).max(32).optional(),
   recentVaults: z.array(
     z.object({
@@ -2872,6 +3046,20 @@ export type PermissionRequest = z.infer<typeof PermissionRequestSchema>;
 export type PermissionResourceScope = z.infer<typeof PermissionResourceScopeSchema>;
 export type PermissionResolveRequest = z.infer<typeof PermissionResolveRequestSchema>;
 export type PermissionResolveResult = z.infer<typeof PermissionResolveResultSchema>;
+export type PermissionResourceKind = z.infer<typeof PermissionResourceKindSchema>;
+export type PermissionMachineSettings = z.infer<typeof PermissionMachineSettingsSchema>;
+export type PermissionSavedGrantId = z.infer<typeof PermissionSavedGrantIdSchema>;
+export type PermissionSavedGrantRecord = z.infer<typeof PermissionSavedGrantRecordSchema>;
+export type PermissionSavedGrantSummary = z.infer<typeof PermissionSavedGrantSummarySchema>;
+export type PermissionSettingsSummary = z.infer<typeof PermissionSettingsSummarySchema>;
+export type PermissionSetDefaultModeRequest = z.infer<typeof PermissionSetDefaultModeRequestSchema>;
+export type PermissionPrepareYoloEnableRequest = z.infer<typeof PermissionPrepareYoloEnableRequestSchema>;
+export type PermissionPrepareYoloEnableResult = z.infer<typeof PermissionPrepareYoloEnableResultSchema>;
+export type PermissionEnableYoloRequest = z.infer<typeof PermissionEnableYoloRequestSchema>;
+export type PermissionDisableYoloRequest = z.infer<typeof PermissionDisableYoloRequestSchema>;
+export type PermissionRevokeSavedGrantRequest = z.infer<typeof PermissionRevokeSavedGrantRequestSchema>;
+export type PermissionRevokeAllSavedGrantsRequest = z.infer<typeof PermissionRevokeAllSavedGrantsRequestSchema>;
+export type PermissionSettingsMutationResult = z.infer<typeof PermissionSettingsMutationResultSchema>;
 export type ProposalState = z.infer<typeof ProposalStateSchema>;
 export type ProposalTrustLevel = z.infer<typeof ProposalTrustLevelSchema>;
 export type ProviderKind = z.infer<typeof ProviderKindSchema>;

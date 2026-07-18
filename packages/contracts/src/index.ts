@@ -24,6 +24,15 @@ import type {
   PermissionPendingRequestQuery,
   PermissionResolveRequest,
   PermissionResolveResult,
+  PermissionSettingsSummary,
+  PermissionSetDefaultModeRequest,
+  PermissionPrepareYoloEnableRequest,
+  PermissionPrepareYoloEnableResult,
+  PermissionEnableYoloRequest,
+  PermissionDisableYoloRequest,
+  PermissionRevokeSavedGrantRequest,
+  PermissionRevokeAllSavedGrantsRequest,
+  PermissionSettingsMutationResult,
   ProposalState,
   ProposalTrustLevel,
   ProviderAuthRequirement,
@@ -78,6 +87,15 @@ export type {
   PermissionPendingRequestQuery,
   PermissionResolveRequest,
   PermissionResolveResult,
+  PermissionSettingsSummary,
+  PermissionSetDefaultModeRequest,
+  PermissionPrepareYoloEnableRequest,
+  PermissionPrepareYoloEnableResult,
+  PermissionEnableYoloRequest,
+  PermissionDisableYoloRequest,
+  PermissionRevokeSavedGrantRequest,
+  PermissionRevokeAllSavedGrantsRequest,
+  PermissionSettingsMutationResult,
   NoteInlineReferenceTarget,
   NoteInlineReferenceRequestId,
   NoteRenderContextId,
@@ -1223,6 +1241,27 @@ export interface PigeDesktopApi {
       request: PermissionPendingRequestQuery
     ) => Promise<PermissionPendingRequest | undefined>;
     readonly resolve: (request: PermissionResolveRequest) => Promise<PermissionResolveResult>;
+    readonly settings: {
+      readonly current: () => Promise<PermissionSettingsSummary>;
+      readonly setDefaultMode: (
+        request: PermissionSetDefaultModeRequest
+      ) => Promise<PermissionSettingsMutationResult>;
+      readonly prepareYoloEnable: (
+        request: PermissionPrepareYoloEnableRequest
+      ) => Promise<PermissionPrepareYoloEnableResult>;
+      readonly enableYolo: (
+        request: PermissionEnableYoloRequest
+      ) => Promise<PermissionSettingsMutationResult>;
+      readonly disableYolo: (
+        request: PermissionDisableYoloRequest
+      ) => Promise<PermissionSettingsMutationResult>;
+      readonly revokeGrant: (
+        request: PermissionRevokeSavedGrantRequest
+      ) => Promise<PermissionSettingsMutationResult>;
+      readonly revokeAllGrants: (
+        request: PermissionRevokeAllSavedGrantsRequest
+      ) => Promise<PermissionSettingsMutationResult>;
+    };
   };
   readonly activity: {
     readonly list: (request?: KnowledgeActivityListRequest) => Promise<KnowledgeActivityListResult>;

@@ -228,6 +228,7 @@ export class PermissionedExternalCapabilityRegistry {
         });
         turn.assertCurrent();
         signal.throwIfAborted();
+        broker.assertExecutionAuthority(turn.vaultPath, consumed.id, binding);
         const result = await adapter.execute(normalizedInput, signal, context);
         const completionMarkerHash = hashToolResult(result);
         jobs.completePermissionAction({

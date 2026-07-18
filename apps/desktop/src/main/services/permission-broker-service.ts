@@ -12,6 +12,7 @@ import {
   type PermissionResolveRequest
 } from "@pige/schemas";
 import { JobRecordStore, type NamedJobRecordClaim } from "./job-record-store";
+import type { PermissionSettingsService } from "./permission-settings-service";
 import { readVaultManifest } from "./vault-layout";
 
 const PERMISSION_BROKER_DIRECTORY = "permission-broker";
@@ -39,6 +40,7 @@ interface PermissionBrokerTestOnlyHooks {
 
 interface PermissionBrokerServiceCommonOptions {
   readonly rootPath: string;
+  readonly permissionSettings?: PermissionSettingsService;
   readonly testOnlyHooks?: PermissionBrokerTestOnlyHooks;
 }
 
@@ -67,6 +69,7 @@ export class PermissionConfirmationRequiredError extends PigeDomainError {
 export class PermissionBrokerService {
   readonly #rootPath: string;
   readonly #assertWriterLease: ((vaultPath: string) => void) | undefined;
+  readonly #permissionSettings: PermissionSettingsService | undefined;
   readonly #testOnlyHooks: PermissionBrokerTestOnlyHooks;
   readonly #claimStores = new Map<string, JobRecordStore>();
 
@@ -85,6 +88,7 @@ export class PermissionBrokerService {
     }
     this.#rootPath = path.resolve(options.rootPath);
     this.#assertWriterLease = options.assertWriterLease;
+    this.#permissionSettings = options.permissionSettings;
     this.#testOnlyHooks = options.testOnlyHooks ?? {};
   }
 
@@ -110,7 +114,9 @@ export class PermissionBrokerService {
     );
     if (reusable) {
       assertPermissionActionBinding(reusable.binding, binding);
-      return reusable;
+      return reusable.state === "pending"
+        ? this.#authorizeWithYolo(vaultPath, reusable)
+        : reusable;
     }
     if (exact.some((record) => record.state === "consumed" && record.completionMarkerHash === undefined)) {
       throw permissionCompletionUncertain();
@@ -139,7 +145,7 @@ export class PermissionBrokerService {
       createdAt: now,
       updatedAt: now
     });
-    return this.#withClaim(vaultPath, request.id, (claim) => {
+    const created = this.#withClaim(vaultPath, request.id, (claim) => {
       createRecord(
         roots.requests,
         request.id,
@@ -149,6 +155,7 @@ export class PermissionBrokerService {
       );
       return this.read(vaultPath, request.id);
     });
+    return this.#authorizeWithYolo(vaultPath, created);
   }
 
   read(vaultPath: string, requestId: string): PermissionActionLifecycleRecord {
@@ -278,6 +285,7 @@ export class PermissionBrokerService {
       if (current.state !== "approved" || current.decision !== "allow_once" || !current.decisionId) {
         throw new PermissionConfirmationRequiredError(current.id, binding.bindingHash);
       }
+      this.#assertLiveDecisionAuthority(readDecisionRecord(roots.decisions, current.decisionId));
       const now = new Date().toISOString();
       const consumed = PermissionActionLifecycleRecordSchema.parse({
         ...current,
@@ -295,6 +303,19 @@ export class PermissionBrokerService {
       );
       return this.read(vaultPath, current.id);
     });
+  }
+
+  assertExecutionAuthority(
+    vaultPath: string,
+    requestId: string,
+    bindingInput: PermissionActionBinding
+  ): void {
+    const binding = parseAndVerifyBinding(bindingInput);
+    const roots = this.#roots(vaultPath, binding.vaultId);
+    const current = this.read(vaultPath, requestId);
+    assertPermissionActionBinding(current.binding, binding);
+    if (current.state !== "consumed" || !current.decisionId) throw permissionStale();
+    this.#assertLiveDecisionAuthority(readDecisionRecord(roots.decisions, current.decisionId));
   }
 
   markCompleted(
@@ -371,6 +392,69 @@ export class PermissionBrokerService {
     } finally {
       claim.release();
     }
+  }
+
+  #authorizeWithYolo(
+    vaultPath: string,
+    record: PermissionActionLifecycleRecord
+  ): PermissionActionLifecycleRecord {
+    if (!this.#permissionSettings || !isYoloEligibleBinding(record.binding)) return record;
+    const roots = this.#roots(vaultPath, record.binding.vaultId);
+    return this.#withClaim(vaultPath, record.id, (claim) => {
+      const current = this.read(vaultPath, record.id);
+      if (current.state !== "pending") return current;
+      const authority = this.#permissionSettings?.authoritySnapshot();
+      if (
+        !authority ||
+        !authority.yoloEnabled ||
+        authority.defaultMode !== "yolo_full_access"
+      ) return current;
+
+      const now = new Date().toISOString();
+      const decision = PermissionDecisionRecordSchema.parse({
+        id: createPermissionDecisionId(current.id, current.createdAt),
+        schemaVersion: 1,
+        authorizationLayer: "permission_broker",
+        permissionRequestId: current.id,
+        decision: "allow_once",
+        scope: "once",
+        resourceScope: current.binding.resourceScope,
+        decidedBy: "system",
+        autoAllowedBy: "yolo_full_access",
+        permissionSettingsRevision: authority.revision,
+        decidedAt: now
+      });
+      if (!recordExists(roots.decisions, decision.id)) {
+        createRecord(
+          roots.decisions,
+          decision.id,
+          decision,
+          () => this.#assertMutation(vaultPath, claim),
+          () => this.#testOnlyHooks.beforeCreateCommit?.("decisions")
+        );
+      } else if (!sameCanonicalRecord(readDecisionRecord(roots.decisions, decision.id), decision)) {
+        throw permissionReplay();
+      }
+      const approved = lifecycleForDecision(current, decision);
+      replaceRecord(
+        roots.requests,
+        current.id,
+        current,
+        approved,
+        () => this.#assertMutation(vaultPath, claim),
+        PermissionActionLifecycleRecordSchema,
+        () => this.#testOnlyHooks.beforeReplaceCommit?.("requests")
+      );
+      return this.read(vaultPath, current.id);
+    });
+  }
+
+  #assertLiveDecisionAuthority(decision: PermissionDecisionRecord): void {
+    if (decision.autoAllowedBy !== "yolo_full_access") return;
+    if (!this.#permissionSettings || decision.permissionSettingsRevision === undefined) {
+      throw permissionStoreInvalid();
+    }
+    this.#permissionSettings.assertYoloAuthority(decision.permissionSettingsRevision);
   }
 
   #reconcileCommittedDecision(
@@ -504,14 +588,34 @@ function assertCurrentActionDecision(
   if (
     decision.id !== createPermissionDecisionId(request.id, request.createdAt) ||
     decision.permissionRequestId !== request.id ||
-    decision.decidedBy !== "user" ||
-    decision.autoAllowedBy !== "none" ||
     decision.resourceScope !== request.binding.resourceScope ||
     decision.reason !== undefined ||
     (decision.decision === "allow_once" && decision.scope !== "once") ||
     (decision.decision === "deny" && decision.scope !== "never") ||
-    (decision.decision !== "allow_once" && decision.decision !== "deny")
+    (decision.decision !== "allow_once" && decision.decision !== "deny") ||
+    !isSupportedCurrentActionAuthority(decision)
   ) throw permissionStoreInvalid();
+}
+
+function isSupportedCurrentActionAuthority(decision: PermissionDecisionRecord): boolean {
+  if (decision.decidedBy === "user") {
+    return decision.autoAllowedBy === "none" && decision.permissionSettingsRevision === undefined;
+  }
+  return decision.decidedBy === "system" &&
+    decision.decision === "allow_once" &&
+    decision.autoAllowedBy === "yolo_full_access" &&
+    decision.permissionSettingsRevision !== undefined;
+}
+
+function isYoloEligibleBinding(binding: PermissionActionBinding): boolean {
+  return binding.runtimeKind === "desktop_local" &&
+    binding.clientCapabilityTier === "desktop_full" &&
+    (binding.capability === "external_filesystem" ||
+      binding.capability === "external_network" ||
+      binding.capability === "run_shell") &&
+    binding.dataBoundary !== "destructive" &&
+    binding.dataBoundary !== "cloud" &&
+    binding.dataBoundary !== "brokered_credential";
 }
 
 function assertPersistedDecisionAuthority(

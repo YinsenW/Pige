@@ -11,6 +11,8 @@ import {
   PermissionConfirmationRequiredError,
   type PermissionActionSummary
 } from "../../apps/desktop/src/main/services/permission-broker-service";
+import { LocalSettingsStore } from "../../apps/desktop/src/main/services/local-settings";
+import { PermissionSettingsService } from "../../apps/desktop/src/main/services/permission-settings-service";
 import { createVaultOnDisk } from "../../apps/desktop/src/main/services/vault-layout";
 
 const VAULT_ID = "vault_20260714_permission01";
@@ -31,6 +33,80 @@ afterEach(() => {
 });
 
 describe("PermissionBrokerService", () => {
+  it("auto-authorizes only eligible desktop-local actions and binds the exact permission revision", () => {
+    const fixture = createYoloFixture();
+    const exact = binding();
+    const approved = fixture.service.prepare(fixture.vaultPath, exact, summary);
+
+    expect(approved).toMatchObject({ state: "approved", decision: "allow_once" });
+    const decision = readJson(path.join(
+      decisionDirectory(fixture.machineRoot, VAULT_ID),
+      `${approved.decisionId}.json`
+    ));
+    expect(decision).toMatchObject({
+      decidedBy: "system",
+      autoAllowedBy: "yolo_full_access",
+      permissionSettingsRevision: 1
+    });
+    expect(fixture.service.consume(fixture.vaultPath, approved.id, exact).state).toBe("consumed");
+    expect(() => fixture.service.assertExecutionAuthority(fixture.vaultPath, approved.id, exact)).not.toThrow();
+  });
+
+  it("revokes a YOLO decision before consume or adapter execution when settings change", () => {
+    const fixture = createYoloFixture();
+    const beforeConsumeBinding = binding();
+    const beforeConsume = fixture.service.prepare(fixture.vaultPath, beforeConsumeBinding, summary);
+    fixture.settings.disableYolo(1);
+    expect(captureError(() => fixture.service.consume(
+      fixture.vaultPath,
+      beforeConsume.id,
+      beforeConsumeBinding
+    ))).toMatchObject({ code: "permission.authority_revoked" });
+
+    fixture.settings.enableYolo(2);
+    const beforeExecuteBinding = binding({
+      jobId: "job_20260714_permissionexecute",
+      actionInputHash: digest("execute fence")
+    });
+    const beforeExecute = fixture.service.prepare(fixture.vaultPath, beforeExecuteBinding, summary);
+    fixture.service.consume(fixture.vaultPath, beforeExecute.id, beforeExecuteBinding);
+    fixture.settings.disableYolo(3);
+    expect(captureError(() => fixture.service.assertExecutionAuthority(
+      fixture.vaultPath,
+      beforeExecute.id,
+      beforeExecuteBinding
+    ))).toMatchObject({ code: "permission.authority_revoked" });
+  });
+
+  it("keeps remote, destructive, credential, and non-external capabilities pending under YOLO", () => {
+    const fixture = createYoloFixture();
+    const ineligible = [
+      binding({ runtimeKind: "remote_agent_backend", clientCapabilityTier: "web_client" }),
+      binding({
+        jobId: "job_20260714_destructive",
+        actionInputHash: digest("destructive"),
+        capability: "run_shell",
+        dataBoundary: "destructive"
+      }),
+      binding({
+        jobId: "job_20260714_credential",
+        actionInputHash: digest("credential"),
+        capability: "use_brokered_credential",
+        dataBoundary: "brokered_credential"
+      }),
+      binding({
+        jobId: "job_20260714_settings",
+        actionInputHash: digest("settings"),
+        capability: "change_settings",
+        dataBoundary: "local"
+      })
+    ];
+
+    for (const exact of ineligible) {
+      expect(fixture.service.prepare(fixture.vaultPath, exact, summary).state).toBe("pending");
+    }
+  });
+
   it("rejects drift in every exact current-action binding fact", () => {
     const exact = binding();
     const variants: readonly Partial<BindingIdentity>[] = [
@@ -572,6 +648,23 @@ function createFixture(): {
     machineRoot,
     vaultPath,
     service: reopen(machineRoot)
+  };
+}
+
+function createYoloFixture(): ReturnType<typeof createFixture> & {
+  readonly settings: PermissionSettingsService;
+} {
+  const fixture = createFixture();
+  const settings = new PermissionSettingsService(new LocalSettingsStore(fixture.machineRoot));
+  expect(settings.enableYolo(0).status).toBe("committed");
+  return {
+    ...fixture,
+    settings,
+    service: new PermissionBrokerService({
+      rootPath: fixture.machineRoot,
+      unsafeAllowUnfenced: true,
+      permissionSettings: settings
+    })
   };
 }
 

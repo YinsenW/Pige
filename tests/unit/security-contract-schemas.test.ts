@@ -19,6 +19,9 @@ import {
   PermissionRequestSchema,
   PermissionResolveRequestSchema,
   PermissionResolveResultSchema,
+  PermissionMachineSettingsSchema,
+  PermissionSettingsSummarySchema,
+  PermissionEnableYoloRequestSchema,
   PigeErrorSummarySchema,
   ProviderProfileSchema,
   UpdateProviderCredentialRequestSchema
@@ -140,6 +143,79 @@ describe("security-sensitive shared contracts", () => {
       decision: "deny",
       scope: "once"
     })).toThrow("denial must use the never");
+    expect(() => PermissionDecisionRecordSchema.parse({
+      ...manualAllowOnce,
+      decidedBy: "system",
+      autoAllowedBy: "yolo_full_access"
+    })).toThrow("bind exactly one machine-local permission settings revision");
+    expect(PermissionDecisionRecordSchema.parse({
+      ...manualAllowOnce,
+      decidedBy: "system",
+      autoAllowedBy: "yolo_full_access",
+      permissionSettingsRevision: 4
+    }).permissionSettingsRevision).toBe(4);
+  });
+
+  it("keeps permission settings internally strict and renderer projections body-free", () => {
+    const grant = {
+      grantId: "permgrant_20260718_abcdefgh",
+      actorType: "skill" as const,
+      actorId: "skill.synthetic.internal",
+      actorVersion: "1.0.0",
+      actorDigest: policyHash,
+      actorDisplayName: "Synthetic Skill",
+      capability: "external_filesystem" as const,
+      dataBoundary: "filesystem" as const,
+      resourceScope: "current_folder" as const,
+      resourceKind: "folder" as const,
+      resourceIdentityHash: policyHash,
+      decisionScope: "resource_scope" as const,
+      createdAt: timestamp
+    };
+    const machine = PermissionMachineSettingsSchema.parse({
+      revision: 2,
+      defaultMode: "remember_scoped_grants",
+      yoloEnabled: false,
+      savedGrants: [grant]
+    });
+    expect(machine.savedGrants[0]?.actorId).toBe("skill.synthetic.internal");
+    expect(() => PermissionMachineSettingsSchema.parse({
+      ...machine,
+      defaultMode: "yolo_full_access",
+      yoloEnabled: false
+    })).toThrow("must change atomically");
+    expect(() => PermissionMachineSettingsSchema.parse({
+      ...machine,
+      savedGrants: [{ ...grant, capability: "change_settings", dataBoundary: "destructive" }]
+    })).toThrow("cannot cover destructive");
+
+    const summary = PermissionSettingsSummarySchema.parse({
+      apiVersion: 1,
+      revision: 2,
+      defaultMode: "remember_scoped_grants",
+      yoloEnabled: false,
+      savedGrants: [{
+        grantId: grant.grantId,
+        actorType: grant.actorType,
+        actorDisplayName: grant.actorDisplayName,
+        capability: grant.capability,
+        resourceScope: grant.resourceScope,
+        resourceKind: grant.resourceKind,
+        decisionScope: grant.decisionScope,
+        createdAt: grant.createdAt
+      }]
+    });
+    expect(JSON.stringify(summary)).not.toContain("actorId");
+    expect(JSON.stringify(summary)).not.toContain("sha256:");
+    expect(() => PermissionSettingsSummarySchema.parse({
+      ...summary,
+      savedGrants: [{ ...summary.savedGrants[0], actorId: grant.actorId }]
+    })).toThrow();
+    expect(PermissionEnableYoloRequestSchema.parse({
+      apiVersion: 1,
+      expectedRevision: 2,
+      confirmationToken: "permyolo_20260718_abcdefghijklmnop"
+    }).expectedRevision).toBe(2);
   });
 
   it("binds current permission actions to an exact versioned actor and hashed input identity", () => {
