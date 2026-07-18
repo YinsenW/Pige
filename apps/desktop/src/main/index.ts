@@ -58,6 +58,7 @@ import type {
   SetLocaleRequest,
   SetSidebarOpenRequest,
   SetWindowModeRequest,
+  SkillDisableRequest,
   SpeechAvailabilityRequest,
   SpeechAssetInstallRequest,
   SpeechCancelRequest,
@@ -122,6 +123,9 @@ import {
   UpdateCheckResultSchema,
   UpdateStatusEventSchema,
   UpdateSummarySchema,
+  SkillDisableRequestSchema,
+  SkillRegistryMutationResultSchema,
+  SkillRegistrySummarySchema,
   WindowLayoutRequestSchema,
   WindowLayoutStateSchema,
   VaultActionResultSchema
@@ -203,6 +207,7 @@ import { getSettingsRegistry } from "./services/settings-registry";
 import { ToolchainService } from "./services/toolchain-service";
 import { SpeechService } from "./services/speech-service";
 import { NoNetworkUpdateCheckAdapter, UpdateService } from "./services/update-service";
+import { SkillRegistryService } from "./services/skill-registry-service";
 import { VaultService } from "./services/vault-service";
 import { WindowModeService } from "./services/window-mode-service";
 import { getWindowShellOptions } from "./window-shell-options";
@@ -246,6 +251,7 @@ let datasetService: DatasetService | undefined;
 let ocrService: OcrService | undefined;
 let speechService: SpeechService | undefined;
 let updateService: UpdateService | undefined;
+let skillRegistryService: SkillRegistryService | undefined;
 let latestSupportBundlePreview: SupportBundlePreview | undefined;
 const activeSupportBundleExports = new Map<string, {
   readonly senderId: number;
@@ -591,6 +597,13 @@ const getPermissionSettingsService = (): PermissionSettingsService => {
     permissionSettingsService = new PermissionSettingsService(getLocalSettingsStore());
   }
   return permissionSettingsService;
+};
+
+const getSkillRegistryService = (): SkillRegistryService => {
+  if (!skillRegistryService) {
+    skillRegistryService = new SkillRegistryService(app.getPath("userData"));
+  }
+  return skillRegistryService;
 };
 
 const getVaultService = (): VaultService => {
@@ -1725,6 +1738,19 @@ ipcMain.handle("permissions.settings.revokeAllGrants", (_event, request: Permiss
     getPermissionSettingsService().revokeAllGrants(parsed.expectedRevision)
   );
 });
+ipcMain.handle("skills.summary", () =>
+  SkillRegistrySummarySchema.parse(getSkillRegistryService().summary())
+);
+ipcMain.handle("skills.disable", (_event, request: SkillDisableRequest) => {
+  const parsed = SkillDisableRequestSchema.parse(request);
+  const result = SkillRegistryMutationResultSchema.parse(getSkillRegistryService().disable(parsed));
+  if (result.status === "committed") {
+    for (const window of mainWindows) {
+      if (!window.isDestroyed()) window.webContents.send("skills.changed", result.registry);
+    }
+  }
+  return result;
+});
 ipcMain.handle("activity.list", (_event, request?: KnowledgeActivityListRequest) =>
   (() => {
     const parsed = KnowledgeActivityListRequestSchema.parse(request ?? {});
@@ -2292,6 +2318,7 @@ app.whenReady().then(async () => {
 
   localSettingsStore = new LocalSettingsStore(app.getPath("userData"));
   permissionSettingsService = new PermissionSettingsService(getLocalSettingsStore());
+  skillRegistryService = new SkillRegistryService(app.getPath("userData"));
   appearanceService = new AppearanceService(getLocalSettingsStore(), app.getLocale());
   updateService = new UpdateService({
     settings: getLocalSettingsStore(),

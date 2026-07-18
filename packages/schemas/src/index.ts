@@ -398,6 +398,135 @@ export const PermissionCapabilitySchema = z.enum([
   "spawn_agent"
 ]);
 
+export const SkillIdSchema = z.string()
+  .min(1)
+  .max(80)
+  .regex(/^[a-z0-9][a-z0-9._-]*$/);
+
+export const SkillVersionSchema = z.union([
+  z.string().min(1).max(80).regex(/^[0-9A-Za-z][0-9A-Za-z._+-]*$/),
+  z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).transform((value) => String(value))
+]);
+
+export const SkillKindSchema = z.enum(["pure", "external_web", "package_provided"]);
+export const SkillScopeSchema = z.enum(["built_in", "vault", "machine_local"]);
+export const SkillTrustSchema = z.enum(["built_in", "user_confirmed", "package_managed"]);
+export const SkillWorkflowCapabilitySchema = z.enum([
+  "read_current_source",
+  "suggest_note",
+  "create_review_proposal"
+]);
+export const SkillCapabilitySchema = z.union([
+  SkillWorkflowCapabilitySchema,
+  PermissionCapabilitySchema
+]);
+export const SkillDataBoundarySchema = z.enum([
+  "local",
+  "filesystem",
+  "network",
+  "cloud",
+  "brokered_credential",
+  "destructive"
+]);
+
+const SkillCapabilityListSchema = z.array(SkillCapabilitySchema).min(1).max(32)
+  .refine((values) => new Set(values).size === values.length, "Skill capabilities must be unique.");
+const SkillDataBoundaryListSchema = z.array(SkillDataBoundarySchema).min(1).max(6)
+  .refine((values) => new Set(values).size === values.length, "Skill data boundaries must be unique.");
+
+export const SkillManifestSchema = z.object({
+  id: SkillIdSchema,
+  name: z.string().trim().min(1).max(120),
+  version: SkillVersionSchema,
+  description: z.string().trim().min(1).max(500),
+  scope: SkillScopeSchema,
+  kind: SkillKindSchema.default("pure"),
+  capabilities: SkillCapabilityListSchema,
+  triggers: z.array(z.string().trim().min(1).max(120)).max(32).optional(),
+  author: z.string().trim().min(1).max(120).optional(),
+  sourceUrl: z.string().url().max(2048).optional(),
+  license: z.string().trim().min(1).max(120).optional(),
+  updatedAt: z.string().datetime({ offset: true }).optional(),
+  dataBoundary: SkillDataBoundaryListSchema.optional(),
+  permissionSummary: z.string().trim().min(1).max(500).optional()
+}).strict().superRefine((manifest, context) => {
+  const permissionCapabilities = manifest.capabilities.filter((capability) =>
+    PermissionCapabilitySchema.safeParse(capability).success
+  );
+  if (manifest.kind === "pure" && permissionCapabilities.length > 0) {
+    context.addIssue({
+      code: "custom",
+      message: "Pure Skills cannot declare permission-mediated runtime capabilities.",
+      path: ["capabilities"]
+    });
+  }
+  if (manifest.kind === "external_web" && permissionCapabilities.length === 0) {
+    context.addIssue({
+      code: "custom",
+      message: "External/Web Skills must declare at least one permission-mediated capability.",
+      path: ["capabilities"]
+    });
+  }
+});
+
+export const SkillRegistryRecordSchema = z.object({
+  id: SkillIdSchema,
+  version: z.string().min(1).max(80).regex(/^[0-9A-Za-z][0-9A-Za-z._+-]*$/),
+  manifestSha256: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  enabled: z.boolean(),
+  trust: SkillTrustSchema,
+  installedAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true })
+}).strict();
+
+export const SkillRegistryFileSchema = z.object({
+  schemaVersion: z.literal(1),
+  revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  skills: z.array(SkillRegistryRecordSchema).max(512)
+}).strict().superRefine((registry, context) => {
+  const ids = new Set<string>();
+  for (const [index, skill] of registry.skills.entries()) {
+    if (ids.has(skill.id)) {
+      context.addIssue({ code: "custom", message: "Skill IDs must be unique.", path: ["skills", index, "id"] });
+    }
+    ids.add(skill.id);
+  }
+});
+
+export const SkillSummarySchema = z.object({
+  id: SkillIdSchema,
+  name: z.string().min(1).max(120),
+  version: z.string().min(1).max(80),
+  description: z.string().min(1).max(500),
+  scope: SkillScopeSchema,
+  kind: SkillKindSchema,
+  enabled: z.boolean(),
+  trust: SkillTrustSchema,
+  capabilities: SkillCapabilityListSchema,
+  dataBoundaries: SkillDataBoundaryListSchema,
+  author: z.string().min(1).max(120).optional(),
+  license: z.string().min(1).max(120).optional()
+}).strict();
+
+export const SkillRegistrySummarySchema = z.object({
+  apiVersion: z.literal(1),
+  revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  invalidManifestCount: z.number().int().nonnegative().max(512),
+  skills: z.array(SkillSummarySchema).max(512)
+}).strict();
+
+export const SkillDisableRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  skillId: SkillIdSchema,
+  expectedRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
+}).strict();
+
+export const SkillRegistryMutationResultSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("committed"), registry: SkillRegistrySummarySchema }).strict(),
+  z.object({ status: z.literal("stale"), registry: SkillRegistrySummarySchema }).strict(),
+  z.object({ status: z.literal("not_found"), registry: SkillRegistrySummarySchema }).strict()
+]);
+
 export const PermissionResourceScopeSchema = z.enum([
   "current_action",
   "current_source",
@@ -3577,6 +3706,20 @@ export type PermissionActionLifecycleRecord = z.infer<typeof PermissionActionLif
 export type PermissionActionLifecycleState = z.infer<typeof PermissionActionLifecycleStateSchema>;
 export type PermissionActorType = z.infer<typeof PermissionActorTypeSchema>;
 export type PermissionCapability = z.infer<typeof PermissionCapabilitySchema>;
+export type SkillId = z.infer<typeof SkillIdSchema>;
+export type SkillVersion = z.infer<typeof SkillVersionSchema>;
+export type SkillKind = z.infer<typeof SkillKindSchema>;
+export type SkillScope = z.infer<typeof SkillScopeSchema>;
+export type SkillTrust = z.infer<typeof SkillTrustSchema>;
+export type SkillCapability = z.infer<typeof SkillCapabilitySchema>;
+export type SkillDataBoundary = z.infer<typeof SkillDataBoundarySchema>;
+export type SkillManifest = z.infer<typeof SkillManifestSchema>;
+export type SkillRegistryRecord = z.infer<typeof SkillRegistryRecordSchema>;
+export type SkillRegistryFile = z.infer<typeof SkillRegistryFileSchema>;
+export type SkillSummary = z.infer<typeof SkillSummarySchema>;
+export type SkillRegistrySummary = z.infer<typeof SkillRegistrySummarySchema>;
+export type SkillDisableRequest = z.infer<typeof SkillDisableRequestSchema>;
+export type SkillRegistryMutationResult = z.infer<typeof SkillRegistryMutationResultSchema>;
 export type PermissionDataBoundary = z.infer<typeof PermissionDataBoundarySchema>;
 export type PermissionDecisionRecord = z.infer<typeof PermissionDecisionRecordSchema>;
 export type PermissionDefaultMode = z.infer<typeof PermissionDefaultModeSchema>;
