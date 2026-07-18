@@ -154,6 +154,12 @@ type ActiveAgentDraftBinding = {
   conversationEventId?: string;
   sequence: number;
 };
+type OptimisticConversationTurn = {
+  readonly clientTurnId: string;
+  readonly text: string;
+  readonly conversationEventId?: string;
+  readonly jobId?: string;
+};
 type ActiveSourceTurnBinding = {
   readonly clientTurnId: string;
   readonly jobId: string | null;
@@ -3968,6 +3974,7 @@ function HomeComposer(props: {
   const [agentModelUsage, setAgentModelUsage] = useState<HomeAgentModelUsage>("none");
   const [activeSourceTurn, setActiveSourceTurn] = useState<ActiveSourceTurnBinding | null>(null);
   const [conversationTimeline, setConversationTimeline] = useState<AgentConversationTimeline | undefined>();
+  const [optimisticConversationTurns, setOptimisticConversationTurns] = useState<readonly OptimisticConversationTurn[]>([]);
   const [liveAnswerEventId, setLiveAnswerEventId] = useState<string | null>(null);
   const [conversationCopyState, setConversationCopyState] = useState<ConversationCopyState | null>(null);
   const [processingListExpanded, setProcessingListExpanded] = useState(false);
@@ -4532,16 +4539,26 @@ function HomeComposer(props: {
   const showConversationRunMessage = !permissionRequestId &&
     !modelEgressRequestId &&
     !sourceWaitOwnsAgentState &&
+    agentAnswer === null &&
     effectiveAgentRunState !== "idle" &&
     effectiveAgentRunState !== "completed";
   const visibleConversationMessages = (conversationTimeline?.messages ?? []).filter((message) =>
     !(agentAnswer && message.role === "assistant" && message.id === liveAnswerEventId)
+  );
+  const visibleOptimisticConversationTurns = optimisticConversationTurns.filter((turn) =>
+    !(conversationTimeline?.messages.some((message) =>
+      message.role === "user" && (
+        (turn.conversationEventId !== undefined && message.id === turn.conversationEventId) ||
+        (turn.jobId !== undefined && message.jobId === turn.jobId)
+      )
+    ) ?? false)
   );
   const liveConversationAnswer = agentAnswer && !agentAnswer.datasetResult && !agentAnswer.retrieval
     ? agentAnswer
     : null;
   const conversationFollowKey = [
     visibleConversationMessages.at(-1)?.id ?? "none",
+    visibleOptimisticConversationTurns.at(-1)?.clientTurnId ?? "none",
     agentDraft?.sequence ?? 0,
     agentDraft?.text.length ?? 0,
     liveConversationAnswer?.answer.length ?? 0,
@@ -4562,8 +4579,9 @@ function HomeComposer(props: {
     });
     observer.observe(timeline, { childList: true, subtree: true, characterData: true });
     return () => observer.disconnect();
-  }, [visibleConversationMessages.length > 0 || agentDraft !== null || showConversationRunMessage || liveConversationAnswer !== null]);
+  }, [visibleConversationMessages.length > 0 || visibleOptimisticConversationTurns.length > 0 || agentDraft !== null || showConversationRunMessage || liveConversationAnswer !== null]);
   const showHomeHero = visibleConversationMessages.length === 0 &&
+    visibleOptimisticConversationTurns.length === 0 &&
     agentDraft === null &&
     agentAnswer === null &&
     selectedNote === null &&
@@ -4619,6 +4637,11 @@ function HomeComposer(props: {
     active.conversationId ??= event.conversationId;
     active.conversationEventId ??= event.conversationEventId;
     active.sequence = event.sequence;
+    setOptimisticConversationTurns((current) => current.map((turn) =>
+      turn.clientTurnId === event.clientTurnId
+        ? { ...turn, conversationEventId: event.conversationEventId, jobId: event.jobId }
+        : turn
+    ));
     setAgentDraft(event);
   }), []);
 
@@ -4636,6 +4659,7 @@ function HomeComposer(props: {
     setSelectedNoteRelated(null);
     setNoteLoadingPageId(null);
     setConversationTimeline(undefined);
+    setOptimisticConversationTurns([]);
     setLiveAnswerEventId(null);
     setAgentAnswer(null);
     clearAgentDraft();
@@ -4733,7 +4757,13 @@ function HomeComposer(props: {
     const nextState = homeUiStateForJobState(latestTurn.state);
     if (nextState) setAgentRunState(nextState);
     setAgentError(latestTurn.error ?? null);
-    if (latestTurn.state !== "queued" && latestTurn.state !== "running") clearAgentDraft();
+    if (
+      latestTurn.state !== "queued" &&
+      latestTurn.state !== "running" &&
+      !composerSubmitInFlightRef.current
+    ) {
+      clearAgentDraft();
+    }
   }, [
     agentRunState,
     latestTurn?.jobId,
@@ -4764,6 +4794,11 @@ function HomeComposer(props: {
     setSelectedNoteRelated(null);
     const turnText = text.trim();
     const submittedDraftRevision = draftRevisionRef.current;
+    const clearedDraftRevision = submittedDraftRevision + 1;
+    const clientTurnId = createAgentClientTurnId();
+    draftRevisionRef.current = clearedDraftRevision;
+    props.onDraftChange("");
+    setOptimisticConversationTurns((current) => [...current, { clientTurnId, text: turnText }]);
     setAgentError(null);
     setAgentAnswer(null);
     setLiveAnswerEventId(null);
@@ -4774,7 +4809,6 @@ function HomeComposer(props: {
     const followUpConversation = canFollowUpToConversation(conversationTimeline)
       ? conversationTimeline
       : undefined;
-    const clientTurnId = createAgentClientTurnId();
     beginAgentDraft(clientTurnId);
     try {
       const submission = window.pige.agent.submitTurn({
@@ -4794,9 +4828,22 @@ function HomeComposer(props: {
       await props.onHomeStateChanged().catch(() => undefined);
       const outcome = await submission;
       const durableUserTurnExists = outcome.state !== "failed" || Boolean(outcome.conversationEventId);
-      if (durableUserTurnExists && draftRevisionRef.current === submittedDraftRevision) {
+      if (durableUserTurnExists) {
+        setOptimisticConversationTurns((current) => current.map((turn) =>
+          turn.clientTurnId === clientTurnId
+            ? {
+                ...turn,
+                ...(outcome.conversationEventId ? { conversationEventId: outcome.conversationEventId } : {}),
+                ...(outcome.jobId ? { jobId: outcome.jobId } : {})
+              }
+            : turn
+        ));
+      } else {
+        setOptimisticConversationTurns((current) => current.filter((turn) => turn.clientTurnId !== clientTurnId));
+      }
+      if (!durableUserTurnExists && draftRevisionRef.current === clearedDraftRevision) {
         draftRevisionRef.current += 1;
-        props.onDraftChange("");
+        props.onDraftChange(turnText);
       }
       if (outcome.state === "completed") {
         clearAgentDraft();
@@ -4804,16 +4851,41 @@ function HomeComposer(props: {
         setLiveAnswerEventId(outcome.tailEventId);
         setAgentModelUsage(outcome.modelUsage);
         setAgentRunState("completed");
-        await refreshConversation();
+        void refreshConversation();
         return;
       }
       clearAgentDraft();
       setAgentModelUsage(outcome.modelUsage);
       setAgentError(outcome.error);
       setAgentRunState(outcome.state);
-      await refreshConversation();
+      void refreshConversation();
     } catch {
+      const activeDraft = activeAgentDraftRef.current;
+      const durableConversationEventId = activeDraft?.clientTurnId === clientTurnId
+        ? activeDraft.conversationEventId
+        : undefined;
+      const durableJobId = activeDraft?.clientTurnId === clientTurnId
+        ? activeDraft.jobId
+        : undefined;
+      const durableUserTurnExists = durableConversationEventId !== undefined;
       clearAgentDraft();
+      if (durableUserTurnExists) {
+        setOptimisticConversationTurns((current) => current.map((turn) =>
+          turn.clientTurnId === clientTurnId
+            ? {
+                ...turn,
+                conversationEventId: durableConversationEventId,
+                ...(durableJobId ? { jobId: durableJobId } : {})
+              }
+            : turn
+        ));
+      } else {
+        setOptimisticConversationTurns((current) => current.filter((turn) => turn.clientTurnId !== clientTurnId));
+        if (draftRevisionRef.current === clearedDraftRevision) {
+          draftRevisionRef.current += 1;
+          props.onDraftChange(turnText);
+        }
+      }
       setAgentError({
         code: "model_provider.call_failed",
         domain: "model_provider",
@@ -4823,7 +4895,7 @@ function HomeComposer(props: {
         userAction: "retry"
       });
       setAgentRunState("failed");
-      await refreshConversation();
+      void refreshConversation();
     } finally {
       composerSubmitInFlightRef.current = false;
     }
@@ -5305,7 +5377,7 @@ function HomeComposer(props: {
           </div>
         </section>
       ) : null}
-      {visibleConversationMessages.length > 0 || agentDraft || showConversationRunMessage || liveConversationAnswer ? (
+      {visibleConversationMessages.length > 0 || visibleOptimisticConversationTurns.length > 0 || agentDraft || showConversationRunMessage || liveConversationAnswer ? (
         <section
           ref={conversationTimelineRef}
           className="conversation-timeline"
@@ -5339,6 +5411,17 @@ function HomeComposer(props: {
                 </>
               )}
               {message.role === "assistant" ? conversationCopyAction(message.id, message.text) : null}
+            </article>
+          ))}
+          {visibleOptimisticConversationTurns.map((turn) => (
+            <article
+              className="conversation-message role-user optimistic"
+              data-optimistic-user-message="true"
+              data-client-turn-id={turn.clientTurnId}
+              key={turn.clientTurnId}
+            >
+              <span className="conversation-message-role visually-hidden">{props.t("home.userMessage")}</span>
+              <ConversationMarkdown markdown={turn.text} t={props.t} />
             </article>
           ))}
           {agentDraft ? (

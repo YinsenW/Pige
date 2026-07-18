@@ -2330,6 +2330,94 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("clears and posts the prompt immediately, then converges one streamed turn without a final duplicate", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    const completed = completedResult();
+    if (completed.state !== "completed") throw new Error("Expected completed result fixture.");
+    let resolveTurn: ((result: AgentSubmitTurnResult) => void) | undefined;
+    harness.submitTurn = (request) => {
+      harness.submitRequests.push(request);
+      harness.jobs = [{ ...runningAgentJob(), id: completed.jobId }];
+      return new Promise((resolve) => { resolveTurn = resolve; });
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await setTextareaValue(dom, container, "Show this prompt immediately.");
+    await clickButton(dom, container, "Send");
+    await waitFor(dom, () => harness.submitRequests.length === 1);
+    const clientTurnId = harness.submitRequests[0]?.clientTurnId;
+    if (!clientTurnId) throw new Error("Expected a client turn identity.");
+
+    expect(textareaValue(container)).toBe("");
+    expect(container.querySelectorAll('[data-optimistic-user-message="true"]')).toHaveLength(1);
+    expect(container.querySelector('[data-optimistic-user-message="true"]')?.textContent)
+      .toContain("Show this prompt immediately.");
+    expect(container.querySelectorAll(".conversation-message.role-user")).toHaveLength(1);
+    expect(container.querySelector(".conversation-loading-dots")).not.toBeNull();
+
+    await act(async () => {
+      harness.emitDraft(draftEvent({
+        clientTurnId,
+        requestId: completed.requestId,
+        jobId: completed.jobId,
+        conversationId: completed.conversationId,
+        conversationEventId: completed.conversationEventId,
+        sequence: 1,
+        text: "Streaming answer"
+      }));
+      await settle(dom);
+    });
+    expect(textareaValue(container)).toBe("");
+    expect(container.querySelectorAll(".conversation-message.role-user")).toHaveLength(1);
+    expect(container.querySelectorAll('[data-agent-draft="true"]')).toHaveLength(1);
+    expect(container.querySelector('[data-agent-draft="true"]')?.textContent).toContain("Streaming answer");
+
+    harness.timeline = {
+      conversationId: completed.conversationId,
+      tailEventId: completed.tailEventId,
+      canFollowUp: true,
+      messages: [
+        {
+          id: completed.conversationEventId,
+          role: "user",
+          createdAt: "2026-07-18T08:00:00.000Z",
+          text: "Show this prompt immediately.",
+          jobId: completed.jobId
+        },
+        {
+          id: completed.tailEventId,
+          role: "assistant",
+          createdAt: "2026-07-18T08:00:01.000Z",
+          text: completed.answer.answer,
+          jobId: completed.jobId,
+          answer: completed.answer
+        }
+      ],
+      latestTurn: {
+        jobId: completed.jobId,
+        userEventId: completed.conversationEventId,
+        state: "completed"
+      }
+    };
+    await act(async () => {
+      resolveTurn?.(completed);
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.querySelector('[data-live-agent-answer="true"]') !== null);
+
+    expect(textareaValue(container)).toBe("");
+    expect(container.querySelector('[data-optimistic-user-message="true"]')).toBeNull();
+    expect(container.querySelector('[data-agent-draft="true"]')).toBeNull();
+    expect(container.querySelectorAll(".conversation-message.role-user")).toHaveLength(1);
+    expect(container.querySelectorAll(".conversation-message.role-assistant")).toHaveLength(1);
+    expect(container.querySelector('[data-live-agent-answer="true"]')?.textContent)
+      .toContain(completed.answer.answer);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("renders final conversation Markdown through the sanitized Pige renderer", async () => {
     const dom = createDom();
     const baseTimeline = completedTimeline();
