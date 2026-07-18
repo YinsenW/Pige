@@ -4700,6 +4700,15 @@ dd {
   font-size: 14px;
 }
 
+.maintenance-reset-preview {
+  align-items: start;
+  background: color-mix(in oklab, var(--danger) 3%, var(--surface));
+}
+
+.maintenance-reset-preview .settings-row-control {
+  align-self: center;
+}
+
 .settings-search-wrap { position: relative; display: block; margin-top: 8px; }
 .settings-search-wrap > svg {
   position: absolute;
