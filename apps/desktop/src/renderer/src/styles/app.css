@@ -3851,6 +3851,74 @@ dd {
   box-shadow: 0 12px 30px rgb(29 42 38 / 8%), 0 2px 7px rgb(29 42 38 / 5%);
 }
 
+.attachment-strip {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  margin: -2px 0 4px;
+}
+
+.attachment-strip.visible { display: flex; }
+
+.attachment-list {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.attachment-chip,
+.conversation-attachment {
+  display: inline-flex;
+  max-width: 260px;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.attachment-chip {
+  padding: 6px 9px;
+  border-radius: 9px;
+}
+
+.attachment-chip > span,
+.conversation-attachment {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chip-remove {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.chip-remove:hover { background: var(--surface-hover); color: var(--text-primary); }
+
+.conversation-attachment-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 7px;
+}
+
+.conversation-attachment {
+  padding: 4px 8px;
+  border-radius: 9999px;
+  font-size: 11px;
+}
+
 .composer textarea {
   min-height: 72px;
   resize: none;

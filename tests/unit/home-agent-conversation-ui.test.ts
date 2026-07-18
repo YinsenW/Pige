@@ -1992,7 +1992,7 @@ describe("Home durable Agent conversation UI", () => {
     unknownDom.window.close();
   });
 
-  it("gives a picker source Job sole status ownership before submission resolves", async () => {
+  it("stages a picker attachment with zero side effects, then submits it once with the exact query", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
     harness.onboarding = captureOnlyOnboarding(true);
@@ -2003,25 +2003,107 @@ describe("Home durable Agent conversation UI", () => {
       return new Promise((resolve) => { resolveTurn = resolve; });
     };
     const { container, root } = await mountHome(dom, makePigeApi(harness));
-    const expectedStatus = "Source saved. Connect a model for the Agent to continue.";
-
     await attachFile(dom, container, "public-alpha.csv", "item,score\nAlpha,9\n");
-    await waitFor(dom, () => countText(container, expectedStatus) === 1);
-    expect(countText(container, expectedStatus)).toBe(1);
-    expect(buttons(container, "Connect Model")).toHaveLength(1);
-    expect(modelActionButtons(container)).toHaveLength(1);
-    expect(container.textContent).not.toContain("Pi Agent is working.");
-    expect(container.textContent).not.toContain("Connect a model service before asking Pi Agent.");
-    expect(container.textContent).not.toContain("Open Models");
-    expect(container.textContent).not.toContain("Waiting for a local capability");
+    expect(harness.submitRequests).toHaveLength(0);
+    expect(harness.submittedFileNames).toHaveLength(0);
+    expect(container.querySelector(".attachment-chip")?.textContent).toContain("public-alpha.csv");
+    expect(container.querySelector(".task-panel")).toBeNull();
+
+    await setTextareaValue(dom, container, "Compare this file with related notes.");
+    expect(harness.submitRequests).toHaveLength(0);
+    expect(await dispatchComposerKey(dom, container, { key: "Enter" })).toBe(true);
+    await waitFor(dom, () => harness.submitRequests.length === 1);
+    expect(harness.submitRequests[0]).toMatchObject({
+      inputKind: "file_picker",
+      text: "Compare this file with related notes."
+    });
+    expect(harness.submittedFileNames).toEqual([["public-alpha.csv"]]);
+    expect(textareaValue(container)).toBe("");
+    expect(container.querySelector(".attachment-chip")).toBeNull();
+    expect(container.querySelector('[data-optimistic-user-message="true"]')?.textContent)
+      .toContain("Compare this file with related notes.");
 
     await act(async () => {
       resolveTurn?.(sourceWaitingForModelResult());
       await settle(dom);
     });
-    await waitFor(dom, () => countText(container, expectedStatus) === 1);
-    expect(modelActionButtons(container)).toHaveLength(1);
-    expect(container.textContent).not.toContain("Pi Agent is working.");
+    await waitFor(dom, () => container.querySelector(".conversation-status-message.state-waiting") !== null);
+    expect(harness.submitRequests).toHaveLength(1);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("submits a staged attachment without typed text once using the localized organize intent", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.onboarding = captureOnlyOnboarding(true);
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await attachFile(dom, container, "notes.md", "# Notes\n");
+    expect(harness.submitRequests).toHaveLength(0);
+    await clickButton(dom, container, "Send");
+    await waitFor(dom, () => harness.submitRequests.length === 1);
+
+    expect(harness.submitRequests[0]).toMatchObject({
+      inputKind: "file_picker",
+      text: "Organize these files"
+    });
+    expect(harness.submittedFileNames).toEqual([["notes.md"]]);
+    expect(container.querySelector('[data-optimistic-user-message="true"]')?.textContent)
+      .toContain("Organize these files");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("removes a staged picker attachment locally without submitting anything", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.onboarding = captureOnlyOnboarding(true);
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await attachFile(dom, container, "remove-me.csv", "value\n1\n");
+    await clickButtonByAriaLabel(dom, container, "Remove attachment remove-me.csv");
+
+    expect(container.querySelector(".attachment-chip")).toBeNull();
+    expect(harness.submitRequests).toHaveLength(0);
+    expect(harness.submittedFileNames).toHaveLength(0);
+    expect(dom.window.document.activeElement).toBe(homeComposer(container));
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("restores the exact query and staged attachment after a non-durable picker submit failure", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.onboarding = captureOnlyOnboarding(true);
+    harness.submitTurn = async (request) => {
+      harness.submitRequests.push(request);
+      const failed = failedResult();
+      if (failed.state !== "failed") throw new Error("Expected a failed fixture.");
+      return {
+        requestId: failed.requestId,
+        state: failed.state,
+        modelUsage: failed.modelUsage,
+        sourceIds: failed.sourceIds,
+        error: failed.error
+      };
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await attachFile(dom, container, "retry.csv", "value\n1\n");
+    await setTextareaValue(dom, container, "Analyze this exact file.");
+    await clickButton(dom, container, "Send");
+    await waitFor(dom, () => container.querySelector(".conversation-status-message.state-failed") !== null);
+
+    expect(harness.submitRequests).toHaveLength(1);
+    expect(harness.submittedFileNames).toEqual([["retry.csv"]]);
+    expect(textareaValue(container)).toBe("Analyze this exact file.");
+    expect(container.querySelectorAll(".attachment-chip")).toHaveLength(1);
+    expect(container.querySelector(".attachment-chip")?.textContent).toContain("retry.csv");
+    expect(container.querySelector('[data-optimistic-user-message="true"]')).toBeNull();
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -2483,6 +2565,93 @@ describe("Home durable Agent conversation UI", () => {
     expect(mount.container.querySelector(".retrieval-answer")).toBeNull();
 
     await act(async () => mount.root.unmount());
+    dom.window.close();
+  });
+
+  it("clears and posts the prompt immediately, then converges one streamed turn without a final duplicate", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    const completed = completedResult();
+    if (completed.state !== "completed") throw new Error("Expected completed result fixture.");
+    let resolveTurn: ((result: AgentSubmitTurnResult) => void) | undefined;
+    harness.submitTurn = (request) => {
+      harness.submitRequests.push(request);
+      return new Promise((resolve) => { resolveTurn = resolve; });
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await setTextareaValue(dom, container, "Show this prompt immediately.");
+    await clickButton(dom, container, "Send");
+    await waitFor(dom, () => harness.submitRequests.length === 1);
+    const clientTurnId = harness.submitRequests[0]?.clientTurnId;
+    if (!clientTurnId) throw new Error("Expected a client turn identity.");
+
+    expect(textareaValue(container)).toBe("");
+    expect(container.querySelectorAll('[data-optimistic-user-message="true"]')).toHaveLength(1);
+    expect(container.querySelector('[data-optimistic-user-message="true"]')?.textContent)
+      .toContain("Show this prompt immediately.");
+    expect(container.querySelectorAll(".conversation-message.role-user")).toHaveLength(1);
+    expect(container.querySelector(".conversation-loading-dots")).not.toBeNull();
+
+    await act(async () => {
+      harness.emitDraft(draftEvent({
+        clientTurnId,
+        requestId: completed.requestId,
+        jobId: completed.jobId,
+        conversationId: completed.conversationId,
+        conversationEventId: completed.conversationEventId,
+        sequence: 1,
+        text: "Streaming answer"
+      }));
+      await settle(dom);
+    });
+    expect(textareaValue(container)).toBe("");
+    expect(container.querySelectorAll(".conversation-message.role-user")).toHaveLength(1);
+    expect(container.querySelectorAll('[data-agent-draft="true"]')).toHaveLength(1);
+    expect(container.querySelector('[data-agent-draft="true"]')?.textContent).toContain("Streaming answer");
+
+    harness.timeline = {
+      conversationId: completed.conversationId,
+      tailEventId: completed.tailEventId,
+      canFollowUp: true,
+      messages: [
+        {
+          id: completed.conversationEventId,
+          role: "user",
+          createdAt: "2026-07-18T08:00:00.000Z",
+          text: "Show this prompt immediately.",
+          jobId: completed.jobId
+        },
+        {
+          id: completed.tailEventId,
+          role: "assistant",
+          createdAt: "2026-07-18T08:00:01.000Z",
+          text: completed.answer.answer,
+          jobId: completed.jobId,
+          answer: completed.answer
+        }
+      ],
+      latestTurn: {
+        jobId: completed.jobId,
+        userEventId: completed.conversationEventId,
+        state: "completed"
+      }
+    };
+    await act(async () => {
+      resolveTurn?.(completed);
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.querySelector('[data-live-agent-answer="true"]') !== null);
+
+    expect(textareaValue(container)).toBe("");
+    expect(container.querySelector('[data-optimistic-user-message="true"]')).toBeNull();
+    expect(container.querySelector('[data-agent-draft="true"]')).toBeNull();
+    expect(container.querySelectorAll(".conversation-message.role-user")).toHaveLength(1);
+    expect(container.querySelectorAll(".conversation-message.role-assistant")).toHaveLength(1);
+    expect(container.querySelector('[data-live-agent-answer="true"]')?.textContent)
+      .toContain(completed.answer.answer);
+
+    await act(async () => root.unmount());
     dom.window.close();
   });
 
@@ -2956,6 +3125,7 @@ interface ConversationHarness {
   readonly jobListRequests: JobsListRequest[];
   activities: KnowledgeActivitySummary[];
   readonly submitRequests: AgentSubmitTurnRequest[];
+  readonly submittedFileNames: string[][];
   readonly retryJobIds: string[];
   retryMode: "queued" | "immediate_refail";
   readonly cancelJobIds: string[];
@@ -3026,6 +3196,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     jobListRequests: [],
     activities: [],
     submitRequests: [],
+    submittedFileNames: [],
     retryJobIds: [],
     retryMode: "queued",
     cancelJobIds: [],
@@ -3323,7 +3494,10 @@ function makePigeApi(harness: ConversationHarness): object {
     agent: {
       runtimeStatus: () => harness.loadAgentRuntimeStatus(),
       conversation: () => harness.loadConversation(),
-      submitTurn: (request: AgentSubmitTurnRequest) => harness.submitTurn(request),
+      submitTurn: (request: AgentSubmitTurnRequest, files: readonly File[] = []) => {
+        harness.submittedFileNames.push(files.map((file) => file.name));
+        return harness.submitTurn(request);
+      },
       onTurnDraft: (listener: (event: AgentTurnDraftEvent) => void) => {
         harness.draftListeners.add(listener);
         return () => harness.draftListeners.delete(listener);
