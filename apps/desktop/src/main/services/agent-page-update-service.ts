@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import type { RetrievalSearchResultItem } from "@pige/contracts";
+import type { ReaderSelectionIdentity, RetrievalSearchResultItem } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 import {
   createPigeTagKey,
@@ -88,6 +88,12 @@ export interface AgentPageUpdateOperationBinding {
   readonly afterHash: string;
   readonly relationshipPageId?: string;
   readonly relationshipPagePath?: string;
+}
+
+export interface ReaderSelectionPageUpdateResult {
+  readonly pageId: string;
+  readonly operation: OperationRecord;
+  readonly recovered: boolean;
 }
 
 export function applyAgentPageUpdate(input: {
@@ -288,6 +294,93 @@ export function applyAgentPageUpdate(input: {
   };
 }
 
+export function applyReaderSelectionPageUpdate(input: {
+  readonly vaultPath: string;
+  readonly job: JobRecord;
+  readonly target: CurrentRetrievalPageMutationBinding;
+  readonly selection: ReaderSelectionIdentity;
+  readonly replacement: string;
+  readonly action: "translate" | "polish" | "expand";
+}): ReaderSelectionPageUpdateResult {
+  const job = JobRecordSchema.parse(input.job);
+  if (job.class !== "agent_turn" || !["queued", "running", "completed", "completed_with_warnings"].includes(job.state)) {
+    throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The Reader transform Job is not at a publishable lifecycle state.");
+  }
+  assertReaderSelectionJobBinding(job, input.selection, input.action);
+  const target = assertEligibleTarget(input.vaultPath, input.target);
+  if (target.pageId !== input.selection.pageId) {
+    throw pageConflict("The Reader transform target does not match its selected page.");
+  }
+  const operationId = createAgentPageUpdateOperationId(job.id, target.pageId);
+  const beforePath = createAgentPageUpdateBeforePath(operationId);
+  const stagedPath = createAgentPageUpdateStagedPath(operationId);
+  const before = readGeneratedNoteExact(
+    input.vaultPath,
+    resolveVaultPath(input.vaultPath, beforePath),
+    MAX_AGENT_PAGE_UPDATE_BYTES
+  ) ?? target.markdown;
+  if (hashText(before) !== input.selection.pageContentHash) {
+    throw pageConflict("The Reader transform before-image no longer matches its selection identity.");
+  }
+  const beforeMetadata = parsePigeFrontmatter(before);
+  if (!beforeMetadata || typeof beforeMetadata.frontmatter.updated_at !== "string") {
+    throw pageConflict("The Reader transform before-image metadata is invalid.");
+  }
+  const nextMarkdown = createReaderSelectionReplacement(
+    before,
+    input.selection,
+    input.replacement,
+    createMonotonicUpdatedAt(beforeMetadata.frontmatter.updated_at, job.createdAt)
+  );
+  assertValidAgentManagedNote(nextMarkdown, target.pageId, target.pagePath);
+  if (Buffer.byteLength(nextMarkdown, "utf8") > MAX_AGENT_PAGE_UPDATE_BYTES) {
+    throw new PigeDomainError("agent_ingest.update_too_large", "The Reader transform exceeds the bounded page limit.");
+  }
+  const afterHash = hashText(nextMarkdown);
+  const operation = createReaderSelectionUpdateOperation({
+    operationId,
+    job,
+    pageId: target.pageId,
+    pagePath: target.pagePath,
+    beforeHash: input.selection.pageContentHash,
+    beforePath,
+    afterHash,
+    selection: input.selection,
+    action: input.action
+  });
+  preflightUpdateOperation(input.vaultPath, operation);
+  const existingOperation = readCommittedOperation(input.vaultPath, operation);
+  if (existingOperation) {
+    return { pageId: target.pageId, operation: existingOperation, recovered: true };
+  }
+
+  stageExact(input.vaultPath, beforePath, before, input.selection.pageContentHash);
+  stageExact(input.vaultPath, stagedPath, nextMarkdown, afterHash);
+  const liveHash = hashText(target.markdown);
+  if (liveHash === input.selection.pageContentHash) {
+    replaceGeneratedNoteExact(
+      input.vaultPath,
+      resolveVaultPath(input.vaultPath, target.pagePath),
+      resolveVaultPath(input.vaultPath, stagedPath),
+      {
+        beforeHash: input.selection.pageContentHash,
+        afterHash,
+        maximumBytes: MAX_AGENT_PAGE_UPDATE_BYTES
+      }
+    );
+  } else if (liveHash !== afterHash) {
+    throw pageConflict("The Reader transform target changed before publication.");
+  }
+  const committed = commitUpdateOperation(input.vaultPath, operation);
+  removeGeneratedNoteExact(
+    input.vaultPath,
+    resolveVaultPath(input.vaultPath, stagedPath),
+    afterHash,
+    MAX_AGENT_PAGE_UPDATE_BYTES
+  );
+  return { pageId: target.pageId, operation: committed, recovered: liveHash === afterHash };
+}
+
 export function recoverAgentPageUpdate(input: {
   readonly vaultPath: string;
   readonly job: JobRecord;
@@ -458,6 +551,18 @@ export function readAgentPageUpdateOperationBinding(
   const after = operation.after;
   const relationshipRefs = operation.sourceRefs.filter((ref) => ref.kind === "page");
   const relationship = relationshipRefs[0];
+  const sourceRefs = operation.sourceRefs.filter((ref) => ref.kind === "source");
+  const jobRefs = operation.sourceRefs.filter((ref) => ref.kind === "job");
+  const readerSelectionRefs = operation.sourceRefs.filter(
+    (ref) => ref.kind === "artifact" && /^art_reader_selection_[a-f0-9]{16}$/u.test(ref.id)
+  );
+  const hasReaderSelectionProvenance =
+    readerSelectionRefs.length === 1 &&
+    sourceRefs.length === 0 &&
+    relationshipRefs.length === 0 &&
+    jobRefs.length === 1 &&
+    operation.sourceRefs.length === 2 &&
+    /^sha256:[a-f0-9]{64}$/u.test(readerSelectionRefs[0]?.checksum ?? "");
   if (
     operation.kind !== "update_page" ||
     operation.actor.kind !== "pige_agent" ||
@@ -475,7 +580,9 @@ export function readAgentPageUpdateOperationBinding(
     !isContentHash(after.id) ||
     after.path !== target.path ||
     !operation.sourceRefs.some((ref) => ref.kind === "job" && ref.id === operation.jobId) ||
-    !operation.sourceRefs.some((ref) => ref.kind === "source") ||
+    !(sourceRefs.length === 1 || hasReaderSelectionProvenance) ||
+    sourceRefs.length > 1 ||
+    readerSelectionRefs.length > 1 ||
     operation.sourceRefs.some((ref) => ref.kind === "operation") ||
     relationshipRefs.length > 1 ||
     (relationship !== undefined && (
@@ -1293,6 +1400,135 @@ function createUpdateOperation(input: {
   });
 }
 
+function createReaderSelectionReplacement(
+  before: string,
+  selection: ReaderSelectionIdentity,
+  replacement: string,
+  updatedAt: string
+): string {
+  const beforeBytes = Buffer.from(before, "utf8");
+  const start = selection.span.start;
+  const end = selection.span.endExclusive;
+  const replacementBytes = Buffer.from(replacement, "utf8");
+  const parsed = parsePigeFrontmatter(before);
+  const bodyStart = parsed ? Buffer.byteLength(before.slice(0, parsed.bodyStartOffset), "utf8") : -1;
+  if (
+    selection.span.unit !== "utf8_bytes" ||
+    start < bodyStart ||
+    end <= start ||
+    end > beforeBytes.length ||
+    replacementBytes.length === 0 ||
+    replacementBytes.length > 16 * 1024 ||
+    !isUtf8Boundary(beforeBytes, start) ||
+    !isUtf8Boundary(beforeBytes, end) ||
+    hashBytes(beforeBytes.subarray(start, end)) !== selection.selectedContentHash ||
+    containsUnsafeControlCharacter(replacement) ||
+    containsRestrictedModelContent(replacement)
+  ) {
+    throw new PigeDomainError("agent_ingest.update_content_restricted", "The Reader transform replacement is not eligible for publication.");
+  }
+  const replaced = Buffer.concat([
+    beforeBytes.subarray(0, start),
+    replacementBytes,
+    beforeBytes.subarray(end)
+  ]).toString("utf8");
+  return replaceUniqueFrontmatterLine(replaced, "updated_at", JSON.stringify(updatedAt));
+}
+
+function assertReaderSelectionJobBinding(
+  job: JobRecord,
+  selection: ReaderSelectionIdentity,
+  action: "translate" | "polish" | "expand"
+): void {
+  const refs = job.inputRefs ?? [];
+  const scopeRefs = refs.filter((ref) => ref.role === "agent_turn_current_note_scope");
+  const selectionRefs = refs.filter((ref) => ref.role === "agent_turn_reader_selection");
+  const transformRefs = refs.filter((ref) => ref.role === "agent_turn_reader_transform");
+  const scope = scopeRefs[0];
+  const selected = selectionRefs[0];
+  const transform = transformRefs[0];
+  if (
+    scopeRefs.length !== 1 ||
+    selectionRefs.length !== 1 ||
+    transformRefs.length !== 1 ||
+    scope?.kind !== "page" ||
+    scope.id !== selection.pageId ||
+    selected?.kind !== "page" ||
+    selected.id !== selection.pageId ||
+    selected.checksum !== selection.selectedContentHash ||
+    selected.locator !== `utf8_bytes:${selection.span.start}:${selection.span.endExclusive}` ||
+    transform?.kind !== "tool" ||
+    transform.id !== `reader_selection_${action}` ||
+    transform.checksum !== selection.pageContentHash
+  ) {
+    throw new PigeDomainError(
+      "agent_runtime.turn_binding_invalid",
+      "The Reader transform Job does not bind this exact selection action."
+    );
+  }
+}
+
+function createReaderSelectionUpdateOperation(input: {
+  readonly operationId: string;
+  readonly job: JobRecord;
+  readonly pageId: string;
+  readonly pagePath: string;
+  readonly beforeHash: string;
+  readonly beforePath: string;
+  readonly afterHash: string;
+  readonly selection: ReaderSelectionIdentity;
+  readonly action: "translate" | "polish" | "expand";
+}): OperationRecord {
+  const artifactId = `art_reader_selection_${createHash("sha256")
+    .update(`${input.job.id}:${input.action}:${input.selection.selectedContentHash}`, "utf8")
+    .digest("hex")
+    .slice(0, 16)}`;
+  return OperationRecordSchema.parse({
+    id: input.operationId,
+    schemaVersion: 1,
+    jobId: input.job.id,
+    createdAt: input.job.createdAt,
+    actor: {
+      kind: "pige_agent",
+      runtimeKind: "desktop_local",
+      clientCapabilityTier: "desktop_full"
+    },
+    permissionDecisionIds: [],
+    kind: "update_page",
+    targetRefs: [{ kind: "page", id: input.pageId, path: input.pagePath }],
+    sourceRefs: [
+      { kind: "job", id: input.job.id },
+      {
+        kind: "artifact",
+        id: artifactId,
+        checksum: input.selection.selectedContentHash
+      }
+    ],
+    before: { kind: "page", id: input.beforeHash, path: input.beforePath },
+    after: { kind: "page", id: input.afterHash, path: input.pagePath },
+    summary: `Applied a bounded ${input.action} transform to Pige-managed note ${input.pageId}.`,
+    reversible: "yes",
+    rollbackHint: "Restore the exact private before-image only while the live page matches this Operation's after hash.",
+    warnings: []
+  });
+}
+
+function readCommittedOperation(vaultPath: string, expected: OperationRecord): OperationRecord | undefined {
+  const operationPath = resolveVaultPath(vaultPath, createOperationPath(expected.id));
+  const existing = readGeneratedNoteExact(vaultPath, operationPath, 256 * 1024);
+  if (existing === undefined) return undefined;
+  let parsed: OperationRecord;
+  try {
+    parsed = OperationRecordSchema.parse(JSON.parse(existing));
+  } catch {
+    throw pageConflict("The Reader transform Operation is invalid.");
+  }
+  if (stableJson(parsed) !== stableJson(expected)) {
+    throw pageConflict("The Reader transform Operation identity is occupied by different audit facts.");
+  }
+  return parsed;
+}
+
 function commitUpdateOperation(vaultPath: string, operation: OperationRecord): OperationRecord {
   const operationPath = resolveVaultPath(vaultPath, createOperationPath(operation.id));
   const content = `${JSON.stringify(operation, null, 2)}\n`;
@@ -1534,6 +1770,18 @@ function hashJson(value: unknown): string {
 
 function hashText(value: string): string {
   return `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
+}
+
+function hashBytes(value: Uint8Array): string {
+  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+}
+
+function isUtf8Boundary(bytes: Uint8Array, offset: number): boolean {
+  return offset === 0 || offset === bytes.length || (bytes[offset]! & 0xc0) !== 0x80;
+}
+
+function containsUnsafeControlCharacter(value: string): boolean {
+  return /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/u.test(value);
 }
 
 function isContentHash(value: string): boolean {

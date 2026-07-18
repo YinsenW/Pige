@@ -26,6 +26,8 @@ import {
   ProviderProfileSchema,
   ReaderSelectionActionRequestSchema,
   ReaderSelectionActionResultSchema,
+  ReaderSelectionTransformRequestSchema,
+  ReaderSelectionTransformResultSchema,
   ReaderSelectionResolveRequestSchema,
   ReaderSelectionResolveResultSchema,
   UpdateProviderCredentialRequestSchema
@@ -164,6 +166,34 @@ describe("security-sensitive shared contracts", () => {
       conversationId: "conv_20260710_abcd",
       tailEventId: "evt_20260710_bcdef123",
       answer: "raw provider body"
+    })).toThrow();
+
+    const transform = { ...request, action: "polish" as const };
+    expect(ReaderSelectionTransformRequestSchema.parse(transform)).toEqual(transform);
+    expect(() => ReaderSelectionTransformRequestSchema.parse({
+      ...transform,
+      replacement: "renderer-authored replacement"
+    })).toThrow();
+    expect(ReaderSelectionTransformResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "applied",
+      jobId: "job_20260710_abcdef12",
+      conversationEventId: "evt_20260710_abcdef12",
+      conversationId: "conv_20260710_abcd",
+      tailEventId: "evt_20260710_bcdef123",
+      operationId: "op_20260710_abcdef12"
+    })).toMatchObject({ status: "applied" });
+    expect(() => ReaderSelectionTransformResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "applied",
+      jobId: "job_20260710_abcdef12",
+      conversationEventId: "evt_20260710_abcdef12",
+      conversationId: "conv_20260710_abcd",
+      tailEventId: "evt_20260710_bcdef123",
+      operationId: "op_20260710_abcdef12",
+      replacement: "main-only model output"
     })).toThrow();
   });
 

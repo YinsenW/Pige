@@ -123,6 +123,97 @@ describe("Reader selection action service", () => {
     });
     expect(submitTurn).not.toHaveBeenCalled();
   });
+
+  it("keeps transform replacement main-owned and returns only its durable Operation identity", async () => {
+    const fixture = makeFixture("Before. SELECTED_PRIVATE_PASSAGE. After.");
+    const submitTurn = vi.fn(async () => ({
+      requestId: "job_20260718_transform12",
+      jobId: "job_20260718_transform12",
+      conversationEventId: "evt_20260718_transform12",
+      conversationId: "conv_20260718_transform",
+      tailEventId: "evt_20260718_transformanswer",
+      state: "completed" as const,
+      modelUsage: "cloud" as const,
+      sourceIds: [],
+      answer: {
+        answer: "MAIN_ONLY_REPLACEMENT",
+        grounding: "local_knowledge" as const,
+        citations: []
+      }
+    }));
+    const readJob = vi.fn(() => ({
+      id: "job_20260718_transform12",
+      operationIds: ["op_20260718_transform12"]
+    } as never));
+    const readAppliedOperationId = vi.fn(() => "op_20260718_transform12");
+    const service = new ReaderSelectionActionService(
+      fixture.vaults,
+      { submitTurn },
+      { readJob, readAppliedOperationId }
+    );
+    const request = {
+      ...actionRequest(fixture.selection, "explain"),
+      action: "polish" as const
+    };
+
+    const result = await service.submitTransform(request);
+
+    expect(result).toEqual({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "applied",
+      jobId: "job_20260718_transform12",
+      conversationEventId: "evt_20260718_transform12",
+      conversationId: "conv_20260718_transform",
+      tailEventId: "evt_20260718_transformanswer",
+      operationId: "op_20260718_transform12"
+    });
+    expect(readAppliedOperationId).toHaveBeenCalledWith(expect.objectContaining({
+      action: "polish",
+      selection: fixture.selection
+    }));
+    expect(submitTurn.mock.calls[0]?.[1]).toMatchObject({
+      currentNoteSelection: fixture.selection,
+      currentNoteTransformAction: "polish"
+    });
+    expect(JSON.stringify(result)).not.toContain("MAIN_ONLY_REPLACEMENT");
+    expect(JSON.stringify(submitTurn.mock.calls[0]?.[0])).not.toContain("SELECTED_PRIVATE_PASSAGE");
+  });
+
+  it("projects an ineligible mutation target without exposing the model replacement", async () => {
+    const fixture = makeFixture("Before. SELECTED_PRIVATE_PASSAGE. After.");
+    const submitTurn = vi.fn(async () => ({
+      requestId: "job_20260718_ineligible12",
+      jobId: "job_20260718_ineligible12",
+      conversationEventId: "evt_20260718_ineligible12",
+      conversationId: "conv_20260718_ineligible",
+      tailEventId: "evt_20260718_ineligibleanswer",
+      state: "completed" as const,
+      modelUsage: "cloud" as const,
+      sourceIds: [],
+      answer: {
+        answer: "PRIVATE_MODEL_REPLACEMENT",
+        grounding: "local_knowledge" as const,
+        citations: []
+      }
+    }));
+    const service = new ReaderSelectionActionService(fixture.vaults, { submitTurn }, {
+      readJob: () => ({ id: "job_20260718_ineligible12" } as never),
+      readAppliedOperationId: () => undefined
+    });
+    const result = await service.submitTransform({
+      ...actionRequest(fixture.selection, "explain"),
+      action: "expand"
+    });
+
+    expect(result).toEqual({
+      apiVersion: 1,
+      requestId: "readerselaction_abcdefgh",
+      status: "invalid",
+      reason: "mutation_ineligible"
+    });
+    expect(JSON.stringify(result)).not.toContain("PRIVATE_MODEL_REPLACEMENT");
+  });
 });
 
 function makeFixture(body: string): {

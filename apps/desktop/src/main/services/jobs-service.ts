@@ -18,6 +18,7 @@ import type {
   ProposalDecisionRequest,
   ProposalDecisionResult,
   ReaderSelectionIdentity,
+  ReaderSelectionTransformAction,
   VaultSummary
 } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
@@ -160,6 +161,7 @@ export interface CreateAgentTurnJobRequest {
     readonly pageId: string;
     readonly bindingHash: string;
     readonly selection?: ReaderSelectionIdentity;
+    readonly transformAction?: ReaderSelectionTransformAction;
   };
 }
 
@@ -1230,6 +1232,10 @@ export class JobsService implements PermissionedExternalJobPort {
           !ReaderSelectionIdentitySchema.safeParse(currentNoteScope.selection).success ||
           currentNoteScope.selection.pageId !== currentNoteScope.pageId
         )) ||
+        (currentNoteScope.transformAction !== undefined && (
+          currentNoteScope.selection === undefined ||
+          !["translate", "polish", "expand"].includes(currentNoteScope.transformAction)
+        )) ||
         sourceIds.length > 0
       ))
     ) {
@@ -1258,9 +1264,17 @@ export class JobsService implements PermissionedExternalJobPort {
       const expectedSelectionRef = currentNoteScope?.selection
         ? createCurrentNoteSelectionRef(currentNoteScope.selection)
         : undefined;
+      const existingTransformRefs = (existing.job.inputRefs ?? []).filter(
+        (ref) => ref.role === "agent_turn_reader_transform"
+      );
+      const existingTransformRef = existingTransformRefs[0];
+      const expectedTransformRef = currentNoteScope?.selection && currentNoteScope.transformAction
+        ? createCurrentNoteTransformRef(currentNoteScope.selection, currentNoteScope.transformAction)
+        : undefined;
       if (
         (currentNoteScope !== undefined && existingCurrentNoteRef === undefined) ||
-        (expectedSelectionRef !== undefined && existingSelectionRef === undefined)
+        (expectedSelectionRef !== undefined && existingSelectionRef === undefined) ||
+        (expectedTransformRef !== undefined && existingTransformRef === undefined)
       ) {
         throw new PigeDomainError(
           "agent_runtime.turn_binding_invalid",
@@ -1276,13 +1290,15 @@ export class JobsService implements PermissionedExternalJobPort {
         existingSourceIds.some((sourceId, index) => sourceId !== sourceIds[index]) ||
         existingCurrentNoteRefs.length > 1 ||
         existingSelectionRefs.length > 1 ||
+        existingTransformRefs.length > 1 ||
         (existingCurrentNoteRef !== undefined && (
           currentNoteScope === undefined ||
           existingCurrentNoteRef.kind !== "page" ||
           existingCurrentNoteRef.id !== currentNoteScope.pageId ||
           existingCurrentNoteRef.checksum !== currentNoteScope.bindingHash
         )) ||
-        !isDeepStrictEqual(existingSelectionRef, expectedSelectionRef)
+        !isDeepStrictEqual(existingSelectionRef, expectedSelectionRef) ||
+        !isDeepStrictEqual(existingTransformRef, expectedTransformRef)
       ) {
         throw new PigeDomainError("agent_runtime.turn_conflict", "The existing Agent Job binding does not match the preserved turn.");
       }
@@ -1322,6 +1338,9 @@ export class JobsService implements PermissionedExternalJobPort {
         ...(currentNoteScope ? [createCurrentNoteScopeRef(currentNoteScope)] : []),
         ...(currentNoteScope?.selection
           ? [createCurrentNoteSelectionRef(currentNoteScope.selection)]
+          : []),
+        ...(currentNoteScope?.selection && currentNoteScope.transformAction
+          ? [createCurrentNoteTransformRef(currentNoteScope.selection, currentNoteScope.transformAction)]
           : [])
       ],
       retry: {
@@ -4480,6 +4499,18 @@ function createCurrentNoteSelectionRef(selection: ReaderSelectionIdentity) {
     role: "agent_turn_reader_selection",
     checksum: selection.selectedContentHash,
     locator: `utf8_bytes:${selection.span.start}:${selection.span.endExclusive}`
+  };
+}
+
+function createCurrentNoteTransformRef(
+  selection: ReaderSelectionIdentity,
+  action: ReaderSelectionTransformAction
+) {
+  return {
+    kind: "tool" as const,
+    id: `reader_selection_${action}`,
+    role: "agent_turn_reader_transform",
+    checksum: selection.pageContentHash
   };
 }
 
