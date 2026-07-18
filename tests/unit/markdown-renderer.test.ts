@@ -85,6 +85,14 @@ status: "active"
     expect(rendered.html).toContain('href="#source:src_20260709_abcd1234#source"');
   });
 
+  it("fails closed in linear time for hostile unclosed wiki reference prefixes", async () => {
+    const hostile = `${"[[\\".repeat(20_000)}tail`;
+    const rendered = await renderPigeMarkdownToHtml(hostile);
+
+    expect(rendered.html).not.toContain('href="#wiki:');
+    expect(rendered.markdownBody).toBe(hostile);
+  }, 1_000);
+
   it("keeps reader content from navigating or loading remote resources", async () => {
     const rendered = await renderPigeMarkdownToHtml(`# Safe reader
 

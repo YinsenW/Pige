@@ -17,8 +17,6 @@ import type {
   PermissionResolveResult,
   ProposalDecisionRequest,
   ProposalDecisionResult,
-  ReaderSelectionIdentity,
-  ReaderSelectionTransformAction,
   VaultSummary
 } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
@@ -26,7 +24,6 @@ import { parsePigeFrontmatter } from "@pige/markdown";
 import {
   JobRecordSchema,
   OperationRecordSchema,
-  ReaderSelectionIdentitySchema,
   SourceRecordSchema,
   type ConfirmationProposal,
   type JobClass,
@@ -77,8 +74,15 @@ import {
   type JobExecutionFactsPatch,
   type JobExecutionOutcome,
   type JobExecutionResumeProof,
+  type ResolveJobReviewInput,
   type ResumeJobInput
 } from "./job-execution-coordinator";
+import {
+  assertReaderSelectionJobBinding,
+  createReaderSelectionJobRefs,
+  isValidReaderSelectionJobScope,
+  type ReaderSelectionJobScope
+} from "./reader-selection-job-binding";
 import {
   ModelEgressApprovalService,
   ModelEgressConfirmationRequiredError
@@ -157,12 +161,7 @@ export interface CreateAgentTurnJobRequest {
   readonly inputHash: string;
   readonly sourceIds?: readonly string[];
   readonly sourceExpected?: boolean;
-  readonly currentNoteScope?: {
-    readonly pageId: string;
-    readonly bindingHash: string;
-    readonly selection?: ReaderSelectionIdentity;
-    readonly transformAction?: ReaderSelectionTransformAction;
-  };
+  readonly currentNoteScope?: ReaderSelectionJobScope;
 }
 
 export interface TextAgentTurnExecution {
@@ -1225,17 +1224,8 @@ export class JobsService implements PermissionedExternalJobPort {
       !isConfinedConversationLocator(request.conversationLocator) ||
       sourceIds.length > 1 ||
       (request.sourceExpected === true && sourceIds.length !== 1) ||
-      (currentNoteScope !== undefined && (
-        !/^page_\d{8}_[a-z0-9]{8,}$/u.test(currentNoteScope.pageId) ||
-        !/^sha256:[a-f0-9]{64}$/u.test(currentNoteScope.bindingHash) ||
-        (currentNoteScope.selection !== undefined && (
-          !ReaderSelectionIdentitySchema.safeParse(currentNoteScope.selection).success ||
-          currentNoteScope.selection.pageId !== currentNoteScope.pageId
-        )) ||
-        (currentNoteScope.transformAction !== undefined && (
-          currentNoteScope.selection === undefined ||
-          !["translate", "polish", "expand"].includes(currentNoteScope.transformAction)
-        )) ||
+      (currentNoteScope !== undefined && !isValidReaderSelectionJobScope(
+        currentNoteScope,
         sourceIds.length > 0
       ))
     ) {
@@ -1253,52 +1243,14 @@ export class JobsService implements PermissionedExternalJobPort {
           .filter((ref) => ref.kind === "source" && ref.role === "agent_turn_source")
           .flatMap((ref) => ref.id ? [ref.id] : [])
       ]));
-      const existingCurrentNoteRefs = (existing.job.inputRefs ?? []).filter(
-        (ref) => ref.role === "agent_turn_current_note_scope"
-      );
-      const existingCurrentNoteRef = existingCurrentNoteRefs[0];
-      const existingSelectionRefs = (existing.job.inputRefs ?? []).filter(
-        (ref) => ref.role === "agent_turn_reader_selection"
-      );
-      const existingSelectionRef = existingSelectionRefs[0];
-      const expectedSelectionRef = currentNoteScope?.selection
-        ? createCurrentNoteSelectionRef(currentNoteScope.selection)
-        : undefined;
-      const existingTransformRefs = (existing.job.inputRefs ?? []).filter(
-        (ref) => ref.role === "agent_turn_reader_transform"
-      );
-      const existingTransformRef = existingTransformRefs[0];
-      const expectedTransformRef = currentNoteScope?.selection && currentNoteScope.transformAction
-        ? createCurrentNoteTransformRef(currentNoteScope.selection, currentNoteScope.transformAction)
-        : undefined;
-      if (
-        (currentNoteScope !== undefined && existingCurrentNoteRef === undefined) ||
-        (expectedSelectionRef !== undefined && existingSelectionRef === undefined) ||
-        (expectedTransformRef !== undefined && existingTransformRef === undefined)
-      ) {
-        throw new PigeDomainError(
-          "agent_runtime.turn_binding_invalid",
-          "A current-note Agent Job cannot adopt an evidence binding after creation."
-        );
-      }
+      assertReaderSelectionJobBinding(existing.job.inputRefs, currentNoteScope);
       if (
         existing.job.activeVaultId !== activeVault.vaultId ||
         conversationRef?.id !== request.conversationEventId ||
         conversationRef.locator !== request.conversationLocator ||
         conversationRef.checksum !== request.inputHash ||
         existingSourceIds.length !== sourceIds.length ||
-        existingSourceIds.some((sourceId, index) => sourceId !== sourceIds[index]) ||
-        existingCurrentNoteRefs.length > 1 ||
-        existingSelectionRefs.length > 1 ||
-        existingTransformRefs.length > 1 ||
-        (existingCurrentNoteRef !== undefined && (
-          currentNoteScope === undefined ||
-          existingCurrentNoteRef.kind !== "page" ||
-          existingCurrentNoteRef.id !== currentNoteScope.pageId ||
-          existingCurrentNoteRef.checksum !== currentNoteScope.bindingHash
-        )) ||
-        !isDeepStrictEqual(existingSelectionRef, expectedSelectionRef) ||
-        !isDeepStrictEqual(existingTransformRef, expectedTransformRef)
+        existingSourceIds.some((sourceId, index) => sourceId !== sourceIds[index])
       ) {
         throw new PigeDomainError("agent_runtime.turn_conflict", "The existing Agent Job binding does not match the preserved turn.");
       }
@@ -1335,13 +1287,7 @@ export class JobsService implements PermissionedExternalJobPort {
           id: sourceId,
           role: "agent_turn_source"
         })),
-        ...(currentNoteScope ? [createCurrentNoteScopeRef(currentNoteScope)] : []),
-        ...(currentNoteScope?.selection
-          ? [createCurrentNoteSelectionRef(currentNoteScope.selection)]
-          : []),
-        ...(currentNoteScope?.selection && currentNoteScope.transformAction
-          ? [createCurrentNoteTransformRef(currentNoteScope.selection, currentNoteScope.transformAction)]
-          : [])
+        ...(currentNoteScope ? createReaderSelectionJobRefs(currentNoteScope) : [])
       ],
       retry: {
         retryCount: 0,
@@ -1846,30 +1792,10 @@ export class JobsService implements PermissionedExternalJobPort {
     return this.#jobExecutionCoordinator(this.#requireActiveVaultPath()).settle(snapshot, outcome).job;
   }
 
-  resolveAgentTurnReview(input: {
-    readonly job: JobRecord;
-    readonly proposalId: string;
-    readonly result: "completed" | "failed_final";
-    readonly operationId?: string;
-    readonly error?: PigeErrorSummary;
-  }): JobRecord {
-    const snapshot = this.#requireAgentTurnSnapshot(input.job);
-    const outputRefs = input.operationId
-      ? [{ kind: "operation" as const, id: input.operationId, role: "reader_selection_transform_operation" }]
-      : [];
-    return this.#jobExecutionCoordinator(this.#requireActiveVaultPath()).resolveReview(snapshot, {
-      proposalId: input.proposalId,
-      result: input.result,
-      ...(input.error ? { error: input.error } : {}),
-      facts: {
-        stage: "planning",
-        outputRefs,
-        ...(input.operationId ? { operationIds: [input.operationId] } : {})
-      },
-      message: input.result === "completed"
-        ? "The Reader selection review was resolved."
-        : "The Reader selection review conflicted with current note state."
-    }).job;
+  resolveAgentTurnReview(input: ResolveJobReviewInput & { readonly job: JobRecord }): JobRecord {
+    const { job, ...review } = input;
+    const snapshot = this.#requireAgentTurnSnapshot(job);
+    return this.#jobExecutionCoordinator(this.#requireActiveVaultPath()).resolveReview(snapshot, review).job;
   }
 
   adoptAgentTurnCompletion(expected: JobRecord, input: AdoptDurableCompletionInput): JobRecord {
@@ -4507,37 +4433,6 @@ function createAgentTurnSourceId(jobId: string): string {
     throw new PigeDomainError("agent_runtime.turn_invalid", "The unified Agent turn Job identity is invalid.");
   }
   return `src_${match[1]}_${match[2]}`;
-}
-
-function createCurrentNoteScopeRef(scope: NonNullable<CreateAgentTurnJobRequest["currentNoteScope"]>) {
-  return {
-    kind: "page" as const,
-    id: scope.pageId,
-    role: "agent_turn_current_note_scope",
-    checksum: scope.bindingHash
-  };
-}
-
-function createCurrentNoteSelectionRef(selection: ReaderSelectionIdentity) {
-  return {
-    kind: "page" as const,
-    id: selection.pageId,
-    role: "agent_turn_reader_selection",
-    checksum: selection.selectedContentHash,
-    locator: `utf8_bytes:${selection.span.start}:${selection.span.endExclusive}`
-  };
-}
-
-function createCurrentNoteTransformRef(
-  selection: ReaderSelectionIdentity,
-  action: ReaderSelectionTransformAction
-) {
-  return {
-    kind: "tool" as const,
-    id: `reader_selection_${action}`,
-    role: "agent_turn_reader_transform",
-    checksum: selection.pageContentHash
-  };
 }
 
 function createAgentTurnJobId(conversationEventId: string): string {

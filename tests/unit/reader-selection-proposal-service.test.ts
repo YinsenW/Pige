@@ -78,7 +78,16 @@ describe("Reader selection proposal service", () => {
     expect(resolveReview).toHaveBeenCalledWith(expect.objectContaining({
       proposalId: preview.proposalId,
       result: "completed",
-      operationId: "op_20260718_readerreview"
+      message: "The Reader selection review was resolved.",
+      facts: {
+        stage: "planning",
+        outputRefs: [{
+          kind: "operation",
+          id: "op_20260718_readerreview",
+          role: "reader_selection_transform_operation"
+        }],
+        operationIds: ["op_20260718_readerreview"]
+      }
     }));
     if (result.status !== "applied") throw new Error("Expected an applied proposal result.");
     expect(result.proposal.lines.every((line) => line.text.length <= 160)).toBe(true);
@@ -251,7 +260,10 @@ describe("Reader selection proposal service", () => {
     });
     expect(writer).toHaveBeenCalledOnce();
     expect(resolveReview).toHaveBeenCalledWith(expect.objectContaining({
-      operationId: "op_20260718_readerreview"
+      message: "The Reader selection review was resolved.",
+      facts: expect.objectContaining({
+        operationIds: ["op_20260718_readerreview"]
+      })
     }));
   });
 });

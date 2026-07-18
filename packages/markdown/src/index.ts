@@ -452,37 +452,128 @@ function preparePigeInlineReferences(markdown: string): PreparedMarkdown {
   const identityMap = Array.from({ length: markdown.length + 1 }, (_value, index) => index);
   const wikiPrepared = replaceMappedMarkdown(
     { markdown, originalOffsetAtBoundary: identityMap },
-    /\[\[([^\]\n]+)\]\]/gu,
-    (_match, rawTarget: string) => {
-      const [targetPart, labelPart] = rawTarget.split("|", 2);
-      const target = normalizeInlineRef(targetPart ?? "");
-      const label = normalizeInlineRef(labelPart ?? targetPart ?? "");
-      if (!target || !label) return `[[${rawTarget}]]`;
-      return `[${escapeMarkdownLinkText(label)}](#wiki:${encodeURIComponent(target)})`;
-    }
+    findWikiReplacements(markdown)
   );
   return replaceMappedMarkdown(
     wikiPrepared,
-    /\[(source:src_\d{8}_[a-z0-9]{8,}(?:#[^\]\s]+)?)\](?!\()/gu,
-    (_match, citation: string) => {
-      return `[${escapeMarkdownLinkText(citation)}](#${citation})`;
-    }
+    findSourceCitationReplacements(wikiPrepared.markdown)
   );
+}
+
+interface MappedReplacement {
+  readonly start: number;
+  readonly end: number;
+  readonly replacement: string;
+}
+
+function findWikiReplacements(markdown: string): MappedReplacement[] {
+  const replacements: MappedReplacement[] = [];
+  let cursor = 0;
+  while (cursor < markdown.length) {
+    const start = markdown.indexOf("[[", cursor);
+    if (start < 0) break;
+    let delimiter = start + 2;
+    while (
+      delimiter < markdown.length &&
+      markdown[delimiter] !== "]" &&
+      markdown[delimiter] !== "\n" &&
+      markdown[delimiter] !== "\r"
+    ) {
+      delimiter += 1;
+    }
+    if (
+      delimiter > start + 2 &&
+      markdown[delimiter] === "]" &&
+      markdown[delimiter + 1] === "]"
+    ) {
+      const rawTarget = markdown.slice(start + 2, delimiter);
+      const [targetPart, labelPart] = rawTarget.split("|", 2);
+      const target = normalizeInlineRef(targetPart ?? "");
+      const label = normalizeInlineRef(labelPart ?? targetPart ?? "");
+      if (target && label) {
+        replacements.push({
+          start,
+          end: delimiter + 2,
+          replacement: `[${escapeMarkdownLinkText(label)}](#wiki:${encodeURIComponent(target)})`
+        });
+      }
+      cursor = delimiter + 2;
+      continue;
+    }
+    if (delimiter >= markdown.length) break;
+    cursor = delimiter + 1;
+  }
+  return replacements;
+}
+
+function findSourceCitationReplacements(markdown: string): MappedReplacement[] {
+  const replacements: MappedReplacement[] = [];
+  const marker = "[source:src_";
+  let cursor = 0;
+  while (cursor < markdown.length) {
+    const start = markdown.indexOf(marker, cursor);
+    if (start < 0) break;
+    let end = start + marker.length;
+    while (end < markdown.length && markdown[end] !== "]" && !isInlineWhitespace(markdown[end])) {
+      end += 1;
+    }
+    if (markdown[end] === "]" && markdown[end + 1] !== "(") {
+      const citation = markdown.slice(start + 1, end);
+      if (isSourceCitation(citation)) {
+        replacements.push({
+          start,
+          end: end + 1,
+          replacement: `[${escapeMarkdownLinkText(citation)}](#${citation})`
+        });
+      }
+    }
+    cursor = end < markdown.length ? end + 1 : markdown.length;
+  }
+  return replacements;
+}
+
+function isSourceCitation(value: string): boolean {
+  const prefix = "source:src_";
+  if (!value.startsWith(prefix)) return false;
+  let cursor = prefix.length;
+  for (let index = 0; index < 8; index += 1) {
+    if (!isAsciiDigit(value[cursor + index])) return false;
+  }
+  cursor += 8;
+  if (value[cursor] !== "_") return false;
+  cursor += 1;
+  const idStart = cursor;
+  while (isLowerAsciiAlphanumeric(value[cursor])) cursor += 1;
+  if (cursor - idStart < 8) return false;
+  if (cursor === value.length) return true;
+  if (value[cursor] !== "#" || cursor + 1 >= value.length) return false;
+  return !Array.from(value.slice(cursor + 1)).some(isInlineWhitespace);
+}
+
+function isAsciiDigit(value: string | undefined): boolean {
+  return value !== undefined && value >= "0" && value <= "9";
+}
+
+function isLowerAsciiAlphanumeric(value: string | undefined): boolean {
+  return value !== undefined && (
+    (value >= "a" && value <= "z") ||
+    (value >= "0" && value <= "9")
+  );
+}
+
+function isInlineWhitespace(value: string | undefined): boolean {
+  return value !== undefined && value.trim() === "";
 }
 
 function replaceMappedMarkdown(
   input: PreparedMarkdown,
-  pattern: RegExp,
-  replace: (match: string, capture: string) => string
+  replacements: readonly MappedReplacement[]
 ): PreparedMarkdown {
   let cursor = 0;
   let markdown = "";
   const originalOffsetAtBoundary: number[] = [input.originalOffsetAtBoundary[0] ?? 0];
-  for (const match of input.markdown.matchAll(pattern)) {
-    const start = match.index;
-    const end = start + match[0].length;
+  for (const { start, end, replacement } of replacements) {
     appendMappedSlice(start);
-    const replacement = replace(match[0], match[1] ?? "");
     const originalStart = input.originalOffsetAtBoundary[start] ?? 0;
     const originalEnd = input.originalOffsetAtBoundary[end] ?? originalStart;
     markdown += replacement;

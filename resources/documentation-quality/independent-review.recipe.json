@@ -33,6 +33,7 @@
       "apps/desktop/src/main/services/agent-page-update-service.ts",
       "apps/desktop/src/main/services/agent-turn-conversation-store.ts",
       "apps/desktop/src/main/services/home-agent-service.ts",
+      "apps/desktop/src/main/services/home-agent-turn-lifecycle.ts",
       "apps/desktop/src/main/services/jobs-service.ts",
       "apps/desktop/src/main/services/model-egress-approval-service.ts",
       "apps/desktop/src/main/services/model-provider-registry.ts",
@@ -40,6 +41,7 @@
       "apps/desktop/src/main/services/pi-agent-completion-policy.ts",
       "apps/desktop/src/main/services/pi-agent-runtime-adapter.ts",
       "apps/desktop/src/main/services/reader-selection-action-service.ts",
+      "apps/desktop/src/main/services/reader-selection-job-binding.ts",
       "apps/desktop/src/main/services/reader-selection-proposal-service.ts",
       "apps/desktop/src/main/services/retrieval-evidence-boundary.ts",
       "apps/desktop/src/main/services/secret-store.ts",
@@ -55,6 +57,8 @@
       "apps/desktop/src/renderer/src/locales/ko/messages.json",
       "apps/desktop/src/renderer/src/locales/zh-Hans/messages.json",
       "apps/desktop/src/renderer/src/styles/app.css",
+      "packages/markdown/src/index.ts",
+      "tests/fixtures/service-responsibility-inventory.json",
       "tests/unit/desktop-shell-contract.test.ts",
       "tests/unit/backup-coordinator-service.test.ts",
       "tests/unit/backup-service.test.ts",
@@ -64,6 +68,7 @@
       "tests/unit/home-agent-service.test.ts",
       "tests/unit/home-agent-conversation-ui.test.ts",
       "tests/unit/knowledge-tree-ui.test.ts",
+      "tests/unit/markdown-renderer.test.ts",
       "tests/unit/model-egress-approval-service.test.ts",
       "tests/unit/model-provider-registry.test.ts",
       "tests/unit/model-settings-error-ui.test.ts",
@@ -79,12 +84,12 @@
       "tests/unit/release-packageability-platforms.test.ts",
       "package.json"
     ],
-    "scope": "Independent Product Planning review binds exact Reader selection identity, read action, reversible transform, safe presentation and exceptional bounded review candidate 84d2d33 to API, recovery, architecture, data, UI and trace owners without changing implementation bytes or promoting Requirement, Exit or Phase status.",
+    "scope": "Independent Product Planning review binds the PR #96 replacement candidate: Reader selection identity, read action, reversible transform, safe presentation and exceptional bounded review remain unchanged, while Home and Job responsibilities move into dedicated lifecycle/binding owners and Markdown inline-reference scanning becomes linear and adversarially tested; no renderer behavior or Requirement, Exit or Phase status changes.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 130,
-    "reviewedSha256": "36f016b3b1e72f6e768bffeaac162a5279b6754873c5f65bf9d1250f6a0c515e"
+    "reviewedSha256": "fa28ba3a5bd569ec8d6959de4e1badc833304b6b2d15ab8a90375b81f6b2f47b"
   },
   "reviewers": [
     {
@@ -106,7 +111,7 @@
       "score": 9.8,
       "reviewerId": "reader-selection-planning-review",
       "blockerCount": 0,
-      "summary": "Existing API, Job/recovery, architecture, data and UI owners carry the Reader selection vertical; no duplicate design owner or unrelated Activity contract was introduced."
+      "summary": "Existing API, Job/recovery, architecture, data and UI owners carry the Reader selection vertical; dedicated lifecycle and Job-binding modules keep Home and Jobs within frozen responsibility budgets without moving authority or introducing an unrelated Activity contract."
     },
     {
       "id": "cross_document_contract_consistency",
@@ -127,7 +132,7 @@
       "score": 9.8,
       "reviewerId": "reader-selection-planning-review",
       "blockerCount": 0,
-      "summary": "Focused regressions cover stale identity, bounded context, durable retry/adoption, reversible Operation/Undo, exceptional proposal CAS and safe timeline presentation."
+      "summary": "Focused regressions cover stale identity, bounded context, durable retry/adoption, reversible Operation/Undo, exceptional proposal CAS, safe timeline presentation and linear handling of adversarial unclosed wiki-link input."
     },
     {
       "id": "documentation_leanness_and_maintainability",
@@ -139,9 +144,9 @@
   ],
   "verification": [
     {
-      "command": "Independent implementation and owner-contract review of Reader selection candidate 84d2d33",
+      "command": "Independent implementation, security and owner-contract review of the PR #96 replacement candidate",
       "status": "passed",
-      "evidence": "Review covers exact contracts/schemas, resolve/action/transform/proposal services, Job/conversation recovery, renderer binding and focused tests; this Planning commit changes documentation/governance only."
+      "evidence": "Review covers exact contracts/schemas, resolve/action/transform/proposal services, dedicated Home lifecycle and Reader Job binding, Job/conversation recovery, byte-unchanged renderer behavior, the linear Markdown reference scanner and focused adversarial tests."
     },
     {
       "command": "npm run verify:docs && npm run verify:decisions && npm run verify:traceability",
@@ -151,7 +156,7 @@
     {
       "command": "npm run verify:contracts && npm run verify:independent-documentation-review && npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "CON-001 through CON-004 remain green and the recipe binds governed owners plus exact Reader services/UI/tests without exposing selected bodies or changing implementation bytes."
+      "evidence": "CON-001 through CON-004 remain green and the recipe binds governed owners plus exact Reader, lifecycle, Job-binding, Markdown, UI and test paths without exposing selected bodies or relaxing responsibility budgets."
     }
   ],
   "coordination": {
@@ -161,7 +166,7 @@
     "action": "Active-phase follow-up",
     "status": "acknowledged",
     "compatibility": "The candidate confines selection authority to Main-resolved identity, keeps replacement/apply authority out of renderer, and uses a dedicated bounded Reader proposal projection without changing legacy generic proposal IPC.",
-    "acknowledgement": "Product Planning reviewed exact 84d2d33 implementation/evidence and synchronized only its owner contracts and trace facts; Activity integration and broader Note Agent mutation remain separate."
+    "acknowledgement": "Product Planning reviewed the PR #96 replacement implementation/evidence, including the responsibility split and CodeQL-safe Markdown scanner; renderer behavior is unchanged, while Activity integration and broader Note Agent mutation remain separate."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [

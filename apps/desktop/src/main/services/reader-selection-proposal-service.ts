@@ -26,6 +26,10 @@ import {
 } from "@pige/schemas";
 import { z } from "zod";
 import { containsRestrictedModelContent } from "./model-egress-content";
+import {
+  createReaderSelectionReviewResolution
+} from "./reader-selection-job-binding";
+import type { ResolveJobReviewInput } from "./job-execution-coordinator";
 
 const MAX_RECORD_BYTES = 64 * 1024;
 const MAX_REPLACEMENT_BYTES = 16 * 1024;
@@ -62,13 +66,7 @@ export interface ReaderSelectionProposalVaultPort {
 
 export interface ReaderSelectionProposalJobPort {
   readAgentTurnJob(jobId: string): JobRecord | undefined;
-  resolveAgentTurnReview(input: {
-    readonly job: JobRecord;
-    readonly proposalId: string;
-    readonly result: "completed" | "failed_final";
-    readonly operationId?: string;
-    readonly error?: PigeErrorSummary;
-  }): JobRecord;
+  resolveAgentTurnReview(input: ResolveJobReviewInput & { readonly job: JobRecord }): JobRecord;
 }
 
 export interface ReaderSelectionProposalWriterPort {
@@ -197,7 +195,7 @@ export class ReaderSelectionProposalService {
       const job = this.#jobs.readAgentTurnJob(current.jobId);
       if (!job) return { apiVersion: 1, status: "stale", proposal: project(rejected) };
       try {
-        this.#jobs.resolveAgentTurnReview({ job, proposalId: current.proposalId, result: "completed" });
+        this.#resolveReview(job, { proposalId: current.proposalId, result: "completed" });
       } catch {
         // The durable rejection remains authoritative; get() retries Job reconciliation.
       }
@@ -223,8 +221,7 @@ export class ReaderSelectionProposalService {
       const conflicted = replaceRecord(vaultPath, resolving, { state: "conflicted" });
       const error = conflictError();
       try {
-        this.#jobs.resolveAgentTurnReview({
-          job,
+        this.#resolveReview(job, {
           proposalId: current.proposalId,
           result: "failed_final",
           error
@@ -243,8 +240,7 @@ export class ReaderSelectionProposalService {
       operationId: operation.id
     });
     try {
-      this.#jobs.resolveAgentTurnReview({
-        job,
+      this.#resolveReview(job, {
         proposalId: current.proposalId,
         result: "completed",
         operationId: operation.id
@@ -292,17 +288,15 @@ export class ReaderSelectionProposalService {
     }
     try {
       if (current.state === "applied" && current.operationId) {
-        this.#jobs.resolveAgentTurnReview({
-          job,
+        this.#resolveReview(job, {
           proposalId: current.proposalId,
           result: "completed",
           operationId: current.operationId
         });
       } else if (current.state === "rejected") {
-        this.#jobs.resolveAgentTurnReview({ job, proposalId: current.proposalId, result: "completed" });
+        this.#resolveReview(job, { proposalId: current.proposalId, result: "completed" });
       } else if (current.state === "conflicted") {
-        this.#jobs.resolveAgentTurnReview({
-          job,
+        this.#resolveReview(job, {
           proposalId: current.proposalId,
           result: "failed_final",
           error: conflictError()
@@ -312,6 +306,18 @@ export class ReaderSelectionProposalService {
       // A terminal or concurrently advanced parent already owns the settled state.
     }
     return current;
+  }
+
+  #resolveReview(job: JobRecord, input: {
+    readonly proposalId: string;
+    readonly result: "completed" | "failed_final";
+    readonly operationId?: string;
+    readonly error?: PigeErrorSummary;
+  }): JobRecord {
+    return this.#jobs.resolveAgentTurnReview({
+      job,
+      ...createReaderSelectionReviewResolution(input)
+    });
   }
 }
 

@@ -9,7 +9,6 @@ import type {
   AgentTurnAnswer,
   AgentTurnCurrentNoteScope,
   AgentRuntimePolicyContext,
-  DatasetAnswerCitation,
   DefaultModelBindingSummary,
   HomeAgentAskRequest,
   HomeAgentAskResult,
@@ -17,9 +16,6 @@ import type {
   ModelProviderSettingsSummary,
   ModelProfileSummary,
   ProviderProfileSummary,
-  ReaderSelectionIdentity,
-  ReaderSelectionReadAction,
-  ReaderSelectionTransformAction,
   RetrievalAnswerCitation,
   RetrievalAskResult,
   RetrievalSearchRequest,
@@ -37,8 +33,6 @@ import {
   MarkdownPageTypeSchema,
   OperationRecordSchema,
   PigeErrorSummarySchema,
-  ReaderSelectionIdentitySchema,
-  type ConversationEvent,
   type JobRecord,
   type ModelEgressContentClass,
   type ModelEgressDecision,
@@ -99,7 +93,6 @@ import {
 import {
   createRetrievalEvidencePrivacyHash,
   readCurrentNoteEvidenceBinding,
-  readCurrentNoteSelectionEvidenceBinding,
   readRetrievalEvidencePrivacySnapshot,
   resolveCurrentNoteEvidenceQuoteLocator,
   type CurrentNoteEvidenceBinding,
@@ -113,6 +106,23 @@ import type {
   ReadHomeAgentUrlRequest
 } from "./home-agent-url-service";
 import { HomeAgentEvidenceLedger } from "./home-agent-evidence-ledger";
+import {
+  actualHomeModelUsage,
+  collectAgentTurnSourceIds,
+  createCurrentNoteJobScope,
+  isDatasetAnswerCitation,
+  readBoundCurrentNoteEvidence,
+  readDurableTurnResult,
+  readInitialCurrentNoteEvidence,
+  readerSelectionInputPresentation,
+  recoverDurableAssistantPublication,
+  settleJobAfterAssistant,
+  validateReaderSelectionTurnContext,
+  type HomeAgentCurrentNoteJobScope,
+  type HomeAgentJobSession,
+  type HomeAgentReaderSelectionContext,
+  type HomeAgentReaderSelectionMutationPort
+} from "./home-agent-turn-lifecycle";
 import type {
   AdoptDurableCompletionInput,
   BeginJobInput,
@@ -189,12 +199,7 @@ export interface HomeAgentJobPort {
     readonly inputHash: string;
     readonly sourceIds?: readonly string[];
     readonly sourceExpected?: boolean;
-    readonly currentNoteScope?: {
-      readonly pageId: string;
-      readonly bindingHash: string;
-      readonly selection?: ReaderSelectionIdentity;
-      readonly transformAction?: ReaderSelectionTransformAction;
-    };
+    readonly currentNoteScope?: HomeAgentCurrentNoteJobScope;
   }): JobRecord;
   findAgentTurnJobByConversationEvent(conversationEventId: string): JobRecord | undefined;
   runTextAgentTurn<T>(
@@ -216,26 +221,6 @@ export interface HomeAgentJobPort {
   processAgentTurnSource(jobId: string): Promise<JobRecord>;
   requeueWaitingTextAgentTurns(): { readonly requeued: number };
   listQueuedTextAgentTurns(limit?: number): readonly JobRecord[];
-}
-
-interface HomeAgentJobSession {
-  current: JobRecord;
-  modelInvocationStarted: boolean;
-  modelUsage: HomeAgentModelUsage;
-}
-
-export type HomeAgentReaderSelectionPublication =
-  | { readonly status: "applied"; readonly operationId: string }
-  | { readonly status: "review_required"; readonly proposalId: string };
-
-export interface HomeAgentReaderSelectionMutationPort {
-  apply(input: {
-    readonly vaultPath: string;
-    readonly job: JobRecord;
-    readonly selection: ReaderSelectionIdentity;
-    readonly replacement: string;
-    readonly action: ReaderSelectionTransformAction;
-  }): HomeAgentReaderSelectionPublication;
 }
 
 export interface PreparedSourceAgentTurn {
@@ -519,10 +504,7 @@ export class HomeAgentService {
       readonly sourceIds?: readonly string[];
       readonly prepared?: PreparedSourceAgentTurn;
       readonly onDraft?: (snapshot: HomeAgentDraftSnapshot) => void;
-      readonly currentNoteSelection?: ReaderSelectionIdentity;
-      readonly currentNoteReadAction?: ReaderSelectionReadAction;
-      readonly currentNoteTransformAction?: ReaderSelectionTransformAction;
-    } = {}
+    } & HomeAgentReaderSelectionContext = {}
   ): Promise<AgentSubmitTurnResult> {
     let requestId = `turn_${randomUUID().replaceAll("-", "")}`;
     let session: HomeAgentJobSession | undefined;
@@ -539,30 +521,13 @@ export class HomeAgentService {
         throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The Agent input kind does not match its preserved source binding.");
       }
       const objective = validatedRequest.objective ?? "auto";
-      if (
-        context.currentNoteSelection &&
-        (!validatedRequest.scope ||
-          validatedRequest.scope.pageId !== context.currentNoteSelection.pageId ||
-          sourceTurn ||
-          context.prepared)
-      ) {
-        throw new PigeDomainError(
-          "agent_runtime.turn_binding_invalid",
-          "A Reader selection action requires the exact current-note scope."
-        );
-      }
-      if ((context.currentNoteReadAction || context.currentNoteTransformAction) && !context.currentNoteSelection) {
-        throw new PigeDomainError(
-          "agent_runtime.turn_binding_invalid",
-          "A Reader selection presentation requires an exact selection identity."
-        );
-      }
-      if (context.currentNoteReadAction && context.currentNoteTransformAction) {
-        throw new PigeDomainError(
-          "agent_runtime.turn_binding_invalid",
-          "One Reader selection turn cannot bind read and transform actions together."
-        );
-      }
+      const inputPresentation = readerSelectionInputPresentation(context);
+      validateReaderSelectionTurnContext({
+        ...(validatedRequest.scope ? { scopePageId: validatedRequest.scope.pageId } : {}),
+        sourceTurn,
+        prepared: context.prepared !== undefined,
+        context
+      });
       const query = validatedRequest.text?.trim() ??
         "Inspect the attached preserved source and decide how to help with it.";
       const activeVault = this.#vaults.current();
@@ -601,34 +566,14 @@ export class HomeAgentService {
               objective,
               locale: validatedRequest.locale,
               ...(validatedRequest.scope ? { scope: validatedRequest.scope } : {}),
-              ...(context.currentNoteReadAction ? {
-                inputPresentation: {
-                  kind: "reader_selection_action" as const,
-                  action: context.currentNoteReadAction
-                }
-              } : context.currentNoteTransformAction ? {
-                inputPresentation: {
-                  kind: "reader_selection_transform" as const,
-                  action: context.currentNoteTransformAction
-                }
-              } : {})
+              ...(inputPresentation ? { inputPresentation } : {})
             }, createConversationBinding(validatedRequest))
           : this.#conversations.appendUserTurn(vaultPath, query, {
               inputKind: validatedRequest.inputKind,
               objective,
               locale: validatedRequest.locale,
               ...(validatedRequest.scope ? { scope: validatedRequest.scope } : {}),
-              ...(context.currentNoteReadAction ? {
-                inputPresentation: {
-                  kind: "reader_selection_action" as const,
-                  action: context.currentNoteReadAction
-                }
-              } : context.currentNoteTransformAction ? {
-                inputPresentation: {
-                  kind: "reader_selection_transform" as const,
-                  action: context.currentNoteTransformAction
-                }
-              } : {})
+              ...(inputPresentation ? { inputPresentation } : {})
             }, createConversationBinding(validatedRequest));
         const existingScopedJob = validatedRequest.scope
           ? this.#jobs.findAgentTurnJobByConversationEvent(preservedTurn.event.id)
@@ -648,9 +593,7 @@ export class HomeAgentService {
           };
         } else {
           currentNoteBinding = validatedRequest.scope
-            ? context.currentNoteSelection
-              ? readCurrentNoteSelectionEvidenceBinding(vaultPath, context.currentNoteSelection)
-              : readCurrentNoteEvidenceBinding(vaultPath, validatedRequest.scope.pageId)
+            ? readInitialCurrentNoteEvidence(vaultPath, validatedRequest.scope.pageId, context)
             : undefined;
           session = {
             current: this.#jobs.createAgentTurnJob({
@@ -659,18 +602,11 @@ export class HomeAgentService {
               inputHash: preservedTurn.inputHash,
               ...(sourceIds.length > 0 ? { sourceIds } : {}),
               ...(validatedRequest.scope && currentNoteBinding ? {
-                currentNoteScope: {
-                  pageId: validatedRequest.scope.pageId,
-                  bindingHash: currentNoteBinding.bindingHash,
-                  ...(context.currentNoteSelection
-                    ? {
-                        selection: context.currentNoteSelection,
-                        ...(context.currentNoteTransformAction
-                          ? { transformAction: context.currentNoteTransformAction }
-                          : {})
-                      }
-                    : {})
-                }
+                currentNoteScope: createCurrentNoteJobScope(
+                  validatedRequest.scope.pageId,
+                  currentNoteBinding.bindingHash,
+                  context
+                )
               } : {})
             }),
             modelInvocationStarted: false,
@@ -680,13 +616,16 @@ export class HomeAgentService {
       }
       requestId = session.current.id;
       if (!context.prepared) {
-        const durableResult = this.#readDurableTurnResult(
+        const durableResult = readDurableTurnResult({
           vaultPath,
           session,
-          preservedTurn,
+          preservedTurn: preservedTurn,
           requestId,
-          sourceIds
-        );
+          sourceIds,
+          conversations: this.#conversations,
+          jobs: this.#jobs,
+          mutations: this.#readerSelectionMutations
+        });
         if (durableResult) return durableResult;
       }
       if (validatedRequest.scope) {
@@ -920,19 +859,16 @@ export class HomeAgentService {
             execution.answer
           );
           const completedSourceIds = Array.from(new Set([...sourceIds, ...execution.sourceIds]));
-          const transformPublication = this.#applyReaderSelectionTransform(
+          const reviewRequired = settleJobAfterAssistant({
+            session: activeSession,
+            jobs: this.#jobs,
+            mutations: this.#readerSelectionMutations,
             vaultPath,
-            activeSession.current,
-            execution.answer
-          );
-          const reviewRequired = this.#settleJobAfterAssistant(
-            activeSession,
-            execution.answer,
-            assistantEvent.id,
-            completedSourceIds,
-            assistantEvent.contentHash,
-            transformPublication
-          );
+            result: execution.answer,
+            assistantEventId: assistantEvent.id,
+            sourceIds: completedSourceIds,
+            ...(assistantEvent.contentHash ? { assistantContentHash: assistantEvent.contentHash } : {})
+          });
           return { execution, assistantEvent, completedSourceIds, reviewRequired };
         }
       );
@@ -1017,137 +953,6 @@ export class HomeAgentService {
     }
   }
 
-  #readDurableTurnResult(
-    vaultPath: string,
-    session: HomeAgentJobSession,
-    preservedTurn: PreservedAgentTurn,
-    requestId: string,
-    sourceIds: readonly string[]
-  ): AgentSubmitTurnResult | undefined {
-    const assistant = this.#conversations.findAssistantTurn(
-      vaultPath,
-      preservedTurn.locator,
-      session.current.id
-    );
-    if (assistant) {
-      const answer = readAssistantAnswer(assistant);
-      session.modelInvocationStarted = true;
-      session.modelUsage = session.current.privacy?.usedCloudModel === true ? "cloud" : "local";
-      if (session.current.state === "awaiting_review") {
-        return {
-          requestId,
-          jobId: session.current.id,
-          conversationEventId: preservedTurn.event.id,
-          conversationId: preservedTurn.event.conversationId,
-          tailEventId: assistant.id,
-          state: "waiting",
-          modelUsage: actualHomeModelUsage(session),
-          sourceIds: collectAgentTurnSourceIds(session.current, sourceIds),
-          error: createErrorSummary(
-            "agent_runtime.review_required",
-            "errors.agent_runtime.review_required",
-            false,
-            "review_proposal",
-            "info"
-          )
-        };
-      }
-      if (session.current.state !== "completed" && session.current.state !== "completed_with_warnings") {
-        const publication = this.#applyReaderSelectionTransform(
-          vaultPath,
-          session.current,
-          answer
-        );
-        const reviewRequired = this.#settleJobAfterAssistant(
-          session,
-          answer,
-          assistant.id,
-          collectAgentTurnSourceIds(session.current, sourceIds),
-          assistant.contentHash,
-          publication
-        );
-        if (reviewRequired) {
-          return {
-            requestId,
-            jobId: session.current.id,
-            conversationEventId: preservedTurn.event.id,
-            conversationId: preservedTurn.event.conversationId,
-            tailEventId: assistant.id,
-            state: "waiting",
-            modelUsage: actualHomeModelUsage(session),
-            sourceIds: collectAgentTurnSourceIds(session.current, sourceIds),
-            error: createErrorSummary(
-              "agent_runtime.review_required",
-              "errors.agent_runtime.review_required",
-              false,
-              "review_proposal",
-              "info"
-            )
-          };
-        }
-      }
-      return {
-        requestId,
-        jobId: session.current.id,
-        conversationEventId: preservedTurn.event.id,
-        conversationId: preservedTurn.event.conversationId,
-        tailEventId: assistant.id,
-        state: "completed",
-        modelUsage: actualHomeModelUsage(session),
-        sourceIds: collectAgentTurnSourceIds(session.current, sourceIds),
-        answer
-      };
-    }
-    if (session.current.state === "queued") return undefined;
-    if (
-      session.current.state === "running" ||
-      session.current.state === "cancel_requested" ||
-      session.current.state === "waiting_dependency" ||
-      session.current.state === "waiting_permission" ||
-      session.current.state === "waiting_model_egress" ||
-      session.current.state === "awaiting_review"
-    ) {
-      return {
-        requestId,
-        jobId: session.current.id,
-        conversationEventId: preservedTurn.event.id,
-        conversationId: preservedTurn.event.conversationId,
-        tailEventId: preservedTurn.event.id,
-        state: "waiting",
-        modelUsage: actualHomeModelUsage(session),
-        sourceIds: collectAgentTurnSourceIds(session.current, sourceIds),
-        error: session.current.error ?? createErrorSummary(
-          "agent_runtime.turn_in_progress",
-          "errors.agent_runtime.turn_in_progress",
-          false,
-          "none",
-          "info"
-        )
-      };
-    }
-    return {
-      requestId,
-      jobId: session.current.id,
-      conversationEventId: preservedTurn.event.id,
-      conversationId: preservedTurn.event.conversationId,
-      tailEventId: preservedTurn.event.id,
-      state: "failed",
-      modelUsage: actualHomeModelUsage(session),
-      sourceIds: collectAgentTurnSourceIds(session.current, sourceIds),
-      error: session.current.error ?? createErrorSummary(
-        session.current.state === "cancelled"
-          ? "agent_runtime.turn_cancelled"
-          : "agent_runtime.turn_conflict",
-        session.current.state === "cancelled"
-          ? "errors.agent_runtime.turn_cancelled"
-          : "errors.agent_runtime.turn_conflict",
-        session.current.state === "cancelled",
-        session.current.state === "cancelled" ? "retry" : "none",
-        session.current.state === "cancelled" ? "info" : "error"
-      )
-    };
-  }
-
   async resumeWaitingTurns(limit = 20): Promise<{
     readonly requeued: number;
     readonly processed: number;
@@ -1223,42 +1028,16 @@ export class HomeAgentService {
         }
         const durableAssistant = this.#conversations.findAssistantTurn(vaultPath, preserved.locator, job.id);
         if (durableAssistant) {
-          session.modelInvocationStarted = true;
-          const publication = this.#applyReaderSelectionTransform(
+          if (recoverDurableAssistantPublication({
             vaultPath,
-            session.current,
-            readAssistantAnswer(durableAssistant)
-          );
-          if (publication?.status === "review_required") {
-            this.#settleJobAfterAssistant(
-              session,
-              readAssistantAnswer(durableAssistant),
-              durableAssistant.id,
-              collectAgentTurnSourceIds(session.current, []),
-              durableAssistant.contentHash,
-              publication
-            );
+            session,
+            assistant: durableAssistant,
+            jobs: this.#jobs,
+            mutations: this.#readerSelectionMutations
+          }) === "waiting") {
             waiting += 1;
             continue;
           }
-          session.current = this.#jobs.adoptAgentTurnCompletion(session.current, {
-            checkpointId: "agent_turn_assistant_event_persisted",
-            message: "Recovered the durable assistant result without another model call.",
-            facts: {
-              outputRefs: [{
-                kind: "conversation",
-                id: durableAssistant.id,
-                role: "agent_turn_assistant_event",
-                ...(durableAssistant.contentHash ? { checksum: durableAssistant.contentHash } : {})
-              }, ...(publication?.status === "applied" ? [{
-                kind: "operation" as const,
-                id: publication.operationId,
-                role: "reader_selection_transform_operation"
-              }] : [])],
-              ...(publication?.status === "applied" ? { operationIds: [publication.operationId] } : {}),
-              privacy: modelInvocationPrivacy(session)
-            }
-          });
           completed += 1;
           continue;
         }
@@ -1312,19 +1091,16 @@ export class HomeAgentService {
             ...(job.sourceId ? [job.sourceId] : []),
             ...execution.sourceIds
           ]));
-          const publication = this.#applyReaderSelectionTransform(
-            vaultPath,
-            session.current,
-            execution.answer
-          );
-          this.#settleJobAfterAssistant(
+          settleJobAfterAssistant({
             session,
-            execution.answer,
-            assistantEvent.id,
-            completedSourceIds,
-            assistantEvent.contentHash,
-            publication
-          );
+            jobs: this.#jobs,
+            mutations: this.#readerSelectionMutations,
+            vaultPath,
+            result: execution.answer,
+            assistantEventId: assistantEvent.id,
+            sourceIds: completedSourceIds,
+            ...(assistantEvent.contentHash ? { assistantContentHash: assistantEvent.contentHash } : {})
+          });
         });
         if (session.current.state === "awaiting_review") waiting += 1;
         else completed += 1;
@@ -2343,105 +2119,6 @@ export class HomeAgentService {
     };
   }
 
-  #applyReaderSelectionTransform(
-    vaultPath: string,
-    job: JobRecord,
-    answer: AgentTurnAnswer
-  ): HomeAgentReaderSelectionPublication | undefined {
-    const binding = readReaderSelectionTransformBinding(job);
-    if (!binding) return undefined;
-    if (!this.#readerSelectionMutations) {
-      throw new PigeDomainError(
-        "agent_ingest.update_target_ineligible",
-        "Reader selection mutation publication is unavailable."
-      );
-    }
-    return this.#readerSelectionMutations.apply({
-      vaultPath,
-      job,
-      selection: binding.selection,
-      replacement: answer.answer,
-      action: binding.action
-    });
-  }
-
-  #settleJobAfterAssistant(
-    session: HomeAgentJobSession,
-    result: AgentTurnAnswer,
-    assistantEventId: string,
-    sourceIds: readonly string[],
-    assistantContentHash: string | undefined,
-    publication: HomeAgentReaderSelectionPublication | undefined
-  ): boolean {
-    if (publication?.status === "review_required") {
-      session.current = this.#jobs.settleAgentTurnJob(session.current, {
-        kind: "waiting",
-        reason: "review",
-        proposalId: publication.proposalId,
-        message: "The Reader transform requires bounded review before any note bytes are changed.",
-        facts: {
-          stage: "planning",
-          outputRefs: [
-            ...mergeAgentTurnOutputRefs(
-              session.current,
-              assistantEventId,
-              sourceIds,
-              result,
-              assistantContentHash,
-              []
-            ),
-            { kind: "proposal", id: publication.proposalId, role: "awaiting_review" }
-          ]
-        }
-      });
-      return true;
-    }
-    this.#completeJob(
-      session,
-      result,
-      assistantEventId,
-      sourceIds,
-      assistantContentHash,
-      publication?.status === "applied" ? [publication.operationId] : []
-    );
-    return false;
-  }
-
-  #completeJob(
-    session: HomeAgentJobSession,
-    result: AgentTurnAnswer,
-    assistantEventId: string,
-    sourceIds: readonly string[] = [],
-    assistantContentHash?: string,
-    operationIds: readonly string[] = []
-  ): void {
-    session.current = this.#jobs.settleAgentTurnJob(session.current, {
-      kind: "completed",
-      message: result.grounding === "insufficient_evidence"
-        ? "Agent turn completed with a contract-owned insufficient-evidence result."
-        : result.grounding === "local_knowledge"
-          ? "Agent turn completed with validated local citations."
-          : result.grounding === "source"
-            ? "Agent turn completed from one Agent-selected preserved URL source."
-          : "Agent turn completed with a validated general response.",
-      facts: {
-        stage: "planning",
-        outputRefs: mergeAgentTurnOutputRefs(
-          session.current,
-          assistantEventId,
-          sourceIds,
-          result,
-          assistantContentHash,
-          operationIds
-        ),
-        ...(operationIds.length > 0 ? {
-          operationIds: Array.from(new Set([...(session.current.operationIds ?? []), ...operationIds]))
-        } : {}),
-        privacy: modelInvocationPrivacy(session)
-      }
-    });
-  }
-
   #failJob(
     session: HomeAgentJobSession,
     failure: ReturnType<typeof toHomeAgentFailure>
@@ -3319,42 +2996,6 @@ function createHomeEvidenceSummaryHash(
   }));
 }
 
-function readBoundCurrentNoteEvidence(
-  vaultPath: string,
-  pageId: string,
-  job: JobRecord
-): CurrentNoteEvidenceBinding {
-  const selectionRefs = (job.inputRefs ?? []).filter(
-    (ref) => ref.role === "agent_turn_reader_selection"
-  );
-  if (selectionRefs.length === 0) return readCurrentNoteEvidenceBinding(vaultPath, pageId);
-  const selectionRef = selectionRefs[0];
-  const locator = /^utf8_bytes:(\d+):(\d+)$/u.exec(selectionRef?.locator ?? "");
-  if (
-    selectionRefs.length !== 1 ||
-    selectionRef?.kind !== "page" ||
-    selectionRef.id !== pageId ||
-    !selectionRef.checksum ||
-    !locator
-  ) {
-    throw new PigeDomainError(
-      "agent_runtime.turn_binding_invalid",
-      "The durable Reader selection binding is invalid."
-    );
-  }
-  const current = readCurrentNoteEvidenceBinding(vaultPath, pageId);
-  return readCurrentNoteSelectionEvidenceBinding(vaultPath, {
-    pageId,
-    pageContentHash: current.contentHash,
-    span: {
-      unit: "utf8_bytes",
-      start: Number(locator[1]),
-      endExclusive: Number(locator[2])
-    },
-    selectedContentHash: selectionRef.checksum
-  });
-}
-
 function writeHomeModelEgressDecisionOperation(input: {
   readonly vaultPath: string;
   readonly job: JobRecord;
@@ -3471,131 +3112,6 @@ function modelInvocationPrivacy(session: HomeAgentJobSession): NonNullable<JobRe
   };
 }
 
-function actualHomeModelUsage(session: HomeAgentJobSession | undefined): HomeAgentModelUsage {
-  return session?.modelInvocationStarted ? session.modelUsage : "none";
-}
-
-function readReaderSelectionTransformBinding(job: JobRecord): {
-  readonly selection: ReaderSelectionIdentity;
-  readonly action: ReaderSelectionTransformAction;
-} | undefined {
-  const refs = job.inputRefs ?? [];
-  const transformRefs = refs.filter((ref) => ref.role === "agent_turn_reader_transform");
-  if (transformRefs.length === 0) return undefined;
-  const scopeRefs = refs.filter((ref) => ref.role === "agent_turn_current_note_scope");
-  const selectionRefs = refs.filter((ref) => ref.role === "agent_turn_reader_selection");
-  const transform = transformRefs[0];
-  const scope = scopeRefs[0];
-  const selection = selectionRefs[0];
-  const actionMatch = /^reader_selection_(translate|polish|expand)$/u.exec(transform?.id ?? "");
-  const locatorMatch = /^utf8_bytes:(\d+):(\d+)$/u.exec(selection?.locator ?? "");
-  const parsed = ReaderSelectionIdentitySchema.safeParse({
-    pageId: scope?.id,
-    pageContentHash: transform?.checksum,
-    span: {
-      unit: "utf8_bytes",
-      start: Number(locatorMatch?.[1]),
-      endExclusive: Number(locatorMatch?.[2])
-    },
-    selectedContentHash: selection?.checksum
-  });
-  if (
-    transformRefs.length !== 1 ||
-    scopeRefs.length !== 1 ||
-    selectionRefs.length !== 1 ||
-    transform?.kind !== "tool" ||
-    selection?.kind !== "page" ||
-    selection.id !== scope?.id ||
-    !actionMatch ||
-    !locatorMatch ||
-    !parsed.success
-  ) {
-    throw new PigeDomainError(
-      "agent_runtime.turn_binding_invalid",
-      "The durable Reader transform binding is invalid."
-    );
-  }
-  return {
-    selection: parsed.data,
-    action: actionMatch[1] as ReaderSelectionTransformAction
-  };
-}
-
-function mergeAgentTurnOutputRefs(
-  job: JobRecord,
-  assistantEventId: string,
-  sourceIds: readonly string[],
-  result: AgentTurnAnswer,
-  assistantContentHash?: string,
-  operationIds: readonly string[] = []
-): NonNullable<JobRecord["outputRefs"]> {
-  type OutputRef = NonNullable<JobRecord["outputRefs"]>[number];
-  const refs = new Map<string, OutputRef>();
-  const add = (ref: OutputRef): void => {
-    refs.set(`${ref.kind}:${ref.id ?? ""}:${ref.role ?? ""}`, ref);
-  };
-  for (const ref of job.outputRefs ?? []) add(ref);
-  add({
-    kind: "conversation",
-    id: assistantEventId,
-    role: "agent_turn_assistant_event",
-    ...(assistantContentHash ? { checksum: assistantContentHash } : {})
-  });
-  for (const sourceId of sourceIds) {
-    add({
-      kind: "source",
-      id: sourceId,
-      role: result.datasetResult ? "agent_turn_dataset_source" : "agent_turn_url_source"
-    });
-  }
-  for (const operationId of operationIds) {
-    add({
-      kind: "operation",
-      id: operationId,
-      role: "reader_selection_transform_operation"
-    });
-  }
-  for (const citation of result.citations) {
-    if (isDatasetAnswerCitation(citation)) {
-      add({ kind: "dataset", id: citation.evidence.datasetId, role: "answer_dataset_citation" });
-      add({
-        kind: "dataset_revision",
-        id: citation.evidence.revisionId,
-        locator: citation.evidence.resultHash,
-        role: "answer_dataset_query_result"
-      });
-      add({
-        kind: "table",
-        id: citation.evidence.tableId,
-        locator: citation.locator,
-        role: "answer_dataset_table"
-      });
-    } else {
-      add({
-        kind: "page",
-        id: citation.pageId,
-        locator: citation.locator,
-        role: "answer_citation"
-      });
-    }
-  }
-  return Array.from(refs.values());
-}
-
-function collectAgentTurnSourceIds(
-  job: JobRecord | undefined,
-  contextualSourceIds: readonly string[] | undefined
-): readonly string[] {
-  return Array.from(new Set([
-    ...(contextualSourceIds ?? []),
-    ...(job?.outputRefs ?? [])
-      .filter((ref) => ref.kind === "source" && (
-        ref.role === "agent_turn_url_source" || ref.role === "agent_turn_dataset_source"
-      ))
-      .flatMap((ref) => ref.id ? [ref.id] : [])
-  ]));
-}
-
 function isDatasetQueryContinuationJob(job: JobRecord): boolean {
   if (
     job.class !== "agent_turn" ||
@@ -3684,12 +3200,6 @@ function toLegacyRetrievalAskResult(
         ],
     query: request.query.trim()
   };
-}
-
-function isDatasetAnswerCitation(
-  citation: AgentTurnAnswer["citations"][number]
-): citation is DatasetAnswerCitation {
-  return "kind" in citation && citation.kind === "dataset";
 }
 
 function isRetrievalAnswerCitation(
@@ -3848,18 +3358,6 @@ function assertConversationContextCurrent(
   ) {
     throw new PigeDomainError("agent_runtime.turn_changed", "The durable conversation changed during the Agent turn.");
   }
-}
-
-function readAssistantAnswer(event: ConversationEvent): AgentTurnAnswer {
-  if (event.type !== "assistant_message" || typeof event.text !== "string") {
-    throw new PigeDomainError("agent_runtime.turn_conflict", "The durable assistant event is invalid.");
-  }
-  return {
-    answer: event.text,
-    grounding: event.answerGrounding ?? "general",
-    citations: event.answerCitations ?? [],
-    ...(event.answerDatasetResult ? { datasetResult: event.answerDatasetResult } : {})
-  };
 }
 
 type HomeAgentFailure = {

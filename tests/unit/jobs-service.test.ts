@@ -442,7 +442,8 @@ describe("jobs service", () => {
         pageContentHash: `sha256:${"a".repeat(64)}`,
         span: { unit: "utf8_bytes" as const, start: 200, endExclusive: 212 },
         selectedContentHash: `sha256:${"b".repeat(64)}`
-      }
+      },
+      transformAction: "translate" as const
     };
     const atomic = jobs.createAgentTurnJob({
       conversationEventId: "evt_20260716_atomicnote01",
@@ -467,6 +468,24 @@ describe("jobs service", () => {
         locator: "utf8_bytes:200:212"
       }
     ]));
+    expect(atomic.inputRefs).toEqual(expect.arrayContaining([{
+      kind: "tool",
+      id: "reader_selection_translate",
+      role: "agent_turn_reader_transform",
+      checksum: currentNoteScope.selection.pageContentHash
+    }]));
+    expect(jobs.createAgentTurnJob({
+      conversationEventId: "evt_20260716_atomicnote01",
+      conversationLocator: ".pige/conversations/2026/07/conv_20260716.jsonl",
+      inputHash: `sha256:${"d".repeat(64)}`,
+      currentNoteScope
+    })).toEqual(atomic);
+    expect(() => jobs.createAgentTurnJob({
+      conversationEventId: "evt_20260716_atomicnote01",
+      conversationLocator: ".pige/conversations/2026/07/conv_20260716.jsonl",
+      inputHash: `sha256:${"d".repeat(64)}`,
+      currentNoteScope: { ...currentNoteScope, transformAction: "polish" }
+    })).toThrowError(expect.objectContaining({ code: "agent_runtime.turn_conflict" }));
 
     const legacyRequest = {
       conversationEventId: "evt_20260716_legacygap001",
