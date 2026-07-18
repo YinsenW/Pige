@@ -1,10 +1,17 @@
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import fs, { constants as fsConstants, type BigIntStats, type Dirent } from "node:fs";
-import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
+import {
+  assertExternalIdentity,
+  externalFilesystemError,
+  ExternalFilesystemPathGuard,
+  lstatExternal,
+  MAX_EXTERNAL_PATH_UTF8_BYTES,
+  normalizeExternalAbsolutePath
+} from "./external-filesystem-path-guard";
 
-export const MAX_EXTERNAL_PATH_UTF8_BYTES = 4_096;
+export { MAX_EXTERNAL_PATH_UTF8_BYTES, normalizeExternalAbsolutePath } from "./external-filesystem-path-guard";
 export const MAX_EXTERNAL_LIST_ENTRIES = 128;
 export const MAX_EXTERNAL_TEXT_BYTES = 48 * 1_024;
 const MAX_EXTERNAL_LIST_PROJECTION_BYTES = 24 * 1_024;
@@ -32,16 +39,11 @@ export interface ExternalTextReadResult {
   readonly revisionHash: `sha256:${string}`;
 }
 
-interface ProtectedRoot {
-  readonly lexicalPath: string;
-  readonly realPath?: string;
-}
-
 export class ReadonlyExternalFilesystemCore {
-  readonly #protectedRoots: readonly ProtectedRoot[];
+  readonly #guard: ExternalFilesystemPathGuard;
 
   constructor(options: ExternalFilesystemProtectionOptions = {}) {
-    this.#protectedRoots = Object.freeze((options.protectedRoots ?? []).map(normalizeProtectedRoot));
+    this.#guard = new ExternalFilesystemPathGuard(options.protectedRoots);
   }
 
   async list(
@@ -50,14 +52,14 @@ export class ReadonlyExternalFilesystemCore {
     signal: AbortSignal
   ): Promise<ExternalDirectoryListResult> {
     assertNotAborted(signal);
-    const target = this.#resolveTarget(absolutePath);
-    const before = lstatNoFollow(target.lexicalPath);
+    const target = this.#guard.captureExisting(absolutePath);
+    const before = target.stats;
     if (!before.isDirectory()) throw filesystemError("external_filesystem.not_directory");
-    const handle = await openNoFollow(target.lexicalPath, true);
+    const handle = await openNoFollow(target.path, true);
     try {
       const openedBefore = await handle.stat({ bigint: true });
       assertSameIdentity(before, openedBefore);
-      const directory = await fs.promises.opendir(target.lexicalPath);
+      const directory = await fs.promises.opendir(target.path);
       const entries: ExternalDirectoryEntry[] = [];
       let truncated = false;
       try {
@@ -65,7 +67,7 @@ export class ReadonlyExternalFilesystemCore {
           assertNotAborted(signal);
           const entry = await directory.read();
           if (!entry) break;
-          if (this.#isProtectedEntry(target.lexicalPath, entry.name)) continue;
+          if (this.#guard.isProtectedEntry(target.path, entry.name)) continue;
           const projected = projectDirectoryEntry(entry);
           if (projectedEntriesBytes([...entries, projected]) > MAX_EXTERNAL_LIST_PROJECTION_BYTES) {
             truncated = true;
@@ -78,7 +80,7 @@ export class ReadonlyExternalFilesystemCore {
             assertNotAborted(signal);
             const extra = await directory.read();
             if (!extra) break;
-            if (!this.#isProtectedEntry(target.lexicalPath, extra.name)) {
+            if (!this.#guard.isProtectedEntry(target.path, extra.name)) {
               truncated = true;
               break;
             }
@@ -89,7 +91,7 @@ export class ReadonlyExternalFilesystemCore {
       }
       assertNotAborted(signal);
       const openedAfter = await handle.stat({ bigint: true });
-      const pathAfter = lstatNoFollow(target.lexicalPath);
+      const pathAfter = lstatExternal(target.path);
       assertSameRevision(openedBefore, openedAfter);
       assertSameIdentity(openedAfter, pathAfter);
       const identityHash = hashIdentity(openedAfter);
@@ -112,10 +114,10 @@ export class ReadonlyExternalFilesystemCore {
     signal: AbortSignal
   ): Promise<ExternalTextReadResult> {
     assertNotAborted(signal);
-    const target = this.#resolveTarget(absolutePath);
-    const before = lstatNoFollow(target.lexicalPath);
+    const target = this.#guard.captureExisting(absolutePath);
+    const before = target.stats;
     if (!before.isFile()) throw filesystemError("external_filesystem.not_file");
-    const handle = await openNoFollow(target.lexicalPath, false);
+    const handle = await openNoFollow(target.path, false);
     try {
       const openedBefore = await handle.stat({ bigint: true });
       assertSameIdentity(before, openedBefore);
@@ -132,7 +134,7 @@ export class ReadonlyExternalFilesystemCore {
       }
       assertNotAborted(signal);
       const openedAfter = await handle.stat({ bigint: true });
-      const pathAfter = lstatNoFollow(target.lexicalPath);
+      const pathAfter = lstatExternal(target.path);
       assertSameRevision(openedBefore, openedAfter);
       assertSameIdentity(openedAfter, pathAfter);
       let text: string;
@@ -156,43 +158,6 @@ export class ReadonlyExternalFilesystemCore {
     }
   }
 
-  #resolveTarget(value: string): { readonly lexicalPath: string } {
-    const lexicalPath = normalizeAbsolutePath(value);
-    this.#assertNotProtected(lexicalPath, false);
-    const before = lstatNoFollow(lexicalPath);
-    if (before.isSymbolicLink()) throw filesystemError("external_filesystem.symlink_not_allowed");
-    let realPath: string;
-    try {
-      realPath = fs.realpathSync.native(lexicalPath);
-    } catch {
-      throw filesystemError("external_filesystem.unavailable");
-    }
-    this.#assertNotProtected(realPath, true);
-    if (!samePath(lexicalPath, realPath)) {
-      const realStats = lstatNoFollow(realPath);
-      assertSameIdentity(before, realStats);
-    }
-    return { lexicalPath };
-  }
-
-  #assertNotProtected(candidatePath: string, useRealRoots: boolean): void {
-    for (const root of this.#protectedRoots) {
-      const protectedPath = useRealRoots ? (root.realPath ?? root.lexicalPath) : root.lexicalPath;
-      if (isSameOrDescendant(candidatePath, protectedPath)) {
-        throw filesystemError("external_filesystem.protected_path");
-      }
-    }
-  }
-
-  #isProtectedEntry(parentPath: string, entryName: string): boolean {
-    const childPath = path.join(parentPath, entryName);
-    return this.#protectedRoots.some((root) => samePath(childPath, root.lexicalPath));
-  }
-}
-
-export function normalizeExternalAbsolutePath(value: unknown): string {
-  if (typeof value !== "string") throw filesystemError("external_filesystem.invalid_input");
-  return normalizeAbsolutePath(value);
 }
 
 export function requireBoundedInteger(
@@ -212,32 +177,6 @@ export function hashExternalResource(kind: string, value: string): `sha256:${str
   return hashCanonical("pige.external_resource_identity.v1", { kind, value });
 }
 
-function normalizeProtectedRoot(value: string): ProtectedRoot {
-  const lexicalPath = normalizeAbsolutePath(value);
-  try {
-    return { lexicalPath, realPath: fs.realpathSync.native(lexicalPath) };
-  } catch {
-    return { lexicalPath };
-  }
-}
-
-function normalizeAbsolutePath(value: string): string {
-  if (
-    value.length === 0 ||
-    value.includes("\0") ||
-    Buffer.byteLength(value, "utf8") > MAX_EXTERNAL_PATH_UTF8_BYTES ||
-    !path.isAbsolute(value)
-  ) throw filesystemError("external_filesystem.path_not_absolute");
-  return path.resolve(value);
-}
-
-function lstatNoFollow(filePath: string): BigIntStats {
-  try {
-    return fs.lstatSync(filePath, { bigint: true });
-  } catch {
-    throw filesystemError("external_filesystem.unavailable");
-  }
-}
 
 async function openNoFollow(filePath: string, directory: boolean): Promise<fs.promises.FileHandle> {
   const flags = fsConstants.O_RDONLY |
@@ -269,9 +208,7 @@ function projectedEntriesBytes(entries: readonly ExternalDirectoryEntry[]): numb
 }
 
 function assertSameIdentity(left: BigIntStats, right: BigIntStats): void {
-  if (left.dev !== right.dev || left.ino !== right.ino || left.mode !== right.mode) {
-    throw filesystemError("external_filesystem.changed");
-  }
+  assertExternalIdentity(left, right);
 }
 
 function assertSameRevision(left: BigIntStats, right: BigIntStats): void {
@@ -304,20 +241,6 @@ function hashCanonical(domain: string, value: unknown): `sha256:${string}` {
     .digest("hex")}`;
 }
 
-function isSameOrDescendant(candidatePath: string, rootPath: string): boolean {
-  const relative = path.relative(normalizeForComparison(rootPath), normalizeForComparison(candidatePath));
-  return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
-}
-
-function samePath(left: string, right: string): boolean {
-  return normalizeForComparison(left) === normalizeForComparison(right);
-}
-
-function normalizeForComparison(value: string): string {
-  const resolved = path.resolve(value);
-  return process.platform === "win32" ? resolved.toLocaleLowerCase("en-US") : resolved;
-}
-
 function assertNotAborted(signal: AbortSignal): void {
   if (signal.aborted) throw filesystemError("external_filesystem.cancelled");
 }
@@ -327,5 +250,5 @@ function isErrno(value: unknown, code: string): boolean {
 }
 
 function filesystemError(code: string): PigeDomainError {
-  return new PigeDomainError(code, "The external filesystem request could not be completed safely.");
+  return externalFilesystemError(code);
 }

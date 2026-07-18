@@ -1196,8 +1196,10 @@ Service-level constraints:
 - Raw credentials stay inside reviewed provider adapters behind secret references and are never returned to the requesting actor.
 - Renderer surfaces receive safe request/decision summaries, not permission-store internals.
 - A denial or revocation leaves prior safe durable outputs intact and produces an explainable job result.
-- Main registers bounded folder/text/fetch adapters behind Broker/Job; protected roots and
-  authority stay out of preload, results face egress, and mutating tools remain absent.
+- Main registers only read-only folder/text/fetch external adapters.
+- The unregistered create foundation owns local revision intents, publication/recovery
+  sequencing and path-free Operations. Mutation needs a parent-handle adapter; shell needs
+  Windows Job Object and macOS XPC/sandbox containment. Permission admits neither.
 
 ### 5.7.2 Skill Registry Service
 

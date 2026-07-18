@@ -636,10 +636,9 @@ Exit criteria:
 - [E8.03] External-capability grants and YOLO honor scope, provenance, visibility, revocation, and Operations; no source/model/package input can enable them or expand core authority.
 - [E8.04] Curated Pi packages can be searched, inspected, explicitly installed, enabled/disabled, updated, version-pinned, rolled back, and uninstalled; ordinary Agent jobs never install them implicitly.
 
-Current evidence has the body-free Broker, safe Deny/Allow once, one-use Job CAS/restart
-reconciliation and one read-only adapter. The complete Skills shell is unavailable and
-earns no E8.01 credit; real registries/callers, grants, YOLO, capacity and signed platforms
-remain open, so Phase 8 stays planned.
+Current evidence has Broker/restart, permission settings, three read-only adapters, and an
+unregistered create foundation. External write/delete/shell and platform isolation remain
+open; Requirement, Exit, and Phase statuses do not change.
 
 ## 14. Phase 9: Backup, Restore, Knowledge Health, Migration, And Release Hardening
 

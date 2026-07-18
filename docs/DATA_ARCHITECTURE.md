@@ -168,6 +168,7 @@ Examples:
 - Machine-local provider profile metadata.
 - Body-free current-action model-egress approval records, scoped by vault and excluded
   from Permission Broker grants.
+- Unregistered external-create intent revisions/paths, excluded from backup/export.
 - Machine-local diagnostics, error summaries, local metrics, crash recovery summaries, and support bundle export metadata.
 - Global user/device memory if introduced later.
 - App update state.

@@ -2900,6 +2900,27 @@ References:
 
 - `docs/API_AND_IPC_DESIGN.md`
 
+### D-20260718-External-Mutation-Foundation
+
+Status: Accepted
+Date: 2026-07-18
+
+Decision:
+
+Keep create-only journal/Operation code unregistered; external mutation/shell stay unavailable.
+
+Rationale:
+
+Permission cannot replace filesystem/process isolation.
+
+Consequences:
+
+- Paths stay local, Operations path-free, and statuses unchanged pending platform proof.
+
+References:
+
+- `docs/SECURITY_THREAT_MODEL.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation
