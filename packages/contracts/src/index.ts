@@ -38,6 +38,7 @@ import type {
   ReaderSelectionActionRequest,
   ReaderSelectionActionResult,
   ReaderSelectionReadAction,
+  ReaderSelectionTransformAction,
   ReaderSelectionTransformRequest,
   ReaderSelectionTransformResult,
   ReaderSelectionProposalDecisionRequest,
@@ -1058,10 +1059,15 @@ export interface AgentConversationMessage {
   readonly inputPresentation?: AgentConversationInputPresentation;
 }
 
-export type AgentConversationInputPresentation = {
-  readonly kind: "reader_selection_action";
-  readonly action: ReaderSelectionReadAction;
-};
+export type AgentConversationInputPresentation =
+  | {
+      readonly kind: "reader_selection_action";
+      readonly action: ReaderSelectionReadAction;
+    }
+  | {
+      readonly kind: "reader_selection_transform";
+      readonly action: ReaderSelectionTransformAction;
+    };
 
 export interface AgentConversationTurnSummary {
   readonly jobId: string;

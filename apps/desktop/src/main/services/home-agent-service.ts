@@ -606,6 +606,11 @@ export class HomeAgentService {
                   kind: "reader_selection_action" as const,
                   action: context.currentNoteReadAction
                 }
+              } : context.currentNoteTransformAction ? {
+                inputPresentation: {
+                  kind: "reader_selection_transform" as const,
+                  action: context.currentNoteTransformAction
+                }
               } : {})
             }, createConversationBinding(validatedRequest))
           : this.#conversations.appendUserTurn(vaultPath, query, {
@@ -617,6 +622,11 @@ export class HomeAgentService {
                 inputPresentation: {
                   kind: "reader_selection_action" as const,
                   action: context.currentNoteReadAction
+                }
+              } : context.currentNoteTransformAction ? {
+                inputPresentation: {
+                  kind: "reader_selection_transform" as const,
+                  action: context.currentNoteTransformAction
                 }
               } : {})
             }, createConversationBinding(validatedRequest));

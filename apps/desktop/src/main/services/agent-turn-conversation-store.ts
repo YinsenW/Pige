@@ -673,12 +673,20 @@ function readTurnScope(value: unknown): AgentTurnScope | undefined {
 function readInputPresentation(value: unknown): AgentConversationInputPresentation | undefined {
   if (!value || typeof value !== "object") return undefined;
   const candidate = value as Record<string, unknown>;
+  if (Object.keys(candidate).some((key) => key !== "kind" && key !== "action")) return undefined;
   if (
-    candidate.kind !== "reader_selection_action" ||
-    (candidate.action !== "explain" && candidate.action !== "summarize") ||
-    Object.keys(candidate).some((key) => key !== "kind" && key !== "action")
-  ) return undefined;
-  return { kind: candidate.kind, action: candidate.action };
+    candidate.kind === "reader_selection_action" &&
+    (candidate.action === "explain" || candidate.action === "summarize")
+  ) {
+    return { kind: candidate.kind, action: candidate.action };
+  }
+  if (
+    candidate.kind === "reader_selection_transform" &&
+    (candidate.action === "translate" || candidate.action === "polish" || candidate.action === "expand")
+  ) {
+    return { kind: candidate.kind, action: candidate.action };
+  }
+  return undefined;
 }
 
 function assertStoredUserIntegrity(event: ConversationEvent): void {
@@ -810,7 +818,7 @@ function selectRecentMessages(
       id: event.id,
       role: event.type === "user_message" ? "user" : "assistant",
       createdAt: event.createdAt,
-      text: event.text,
+      text: inputPresentation?.kind === "reader_selection_transform" ? "" : event.text,
       ...(event.jobId === undefined ? {} : { jobId: event.jobId }),
       ...(inputPresentation ? { inputPresentation } : {}),
       ...(event.type === "assistant_message" && event.answerGrounding !== undefined ? {
