@@ -308,7 +308,8 @@ text cannot approve itself.
 
 Current-action authority is exact and one-use. Production ships only bounded no-follow
 folder/text reads and SSRF-safe fetch. The create-only foundation remains unregistered:
-repeated path validation cannot replace a publish-bound parent-directory handle.
+it binds parent/leaf/resource/tool/content, rechecks authority, and records receipts/completion.
+Unknown effects remain uncertain; no-follow parent handles remain required.
 
 ### 6.7 Arbitrary Shell Execution
 

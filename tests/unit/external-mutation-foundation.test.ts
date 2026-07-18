@@ -1,10 +1,10 @@
-import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { ExternalMutationIntentStore } from "../../apps/desktop/src/main/services/external-mutation-intent-store";
 import { ExternalOperationRecordStore } from "../../apps/desktop/src/main/services/external-operation-record-store";
+import { hashExternalTarget } from "../../apps/desktop/src/main/services/external-file-publication-protocol";
 import {
   ExternalMutationIntentSchema,
   OperationRecordSchema,
@@ -116,18 +116,47 @@ describe("external mutation durable foundation", () => {
     expect(() => store.create({ ...intent, targetResourceHash: `sha256:${"f".repeat(64)}` })).toThrowError(
       expect.objectContaining({ code: "external_mutation.intent_invalid" })
     );
+    expect(() => store.create({ ...intent, targetLeafName: "different.txt" })).toThrowError(
+      expect.objectContaining({ code: "external_mutation.intent_invalid" })
+    );
+    expect(() => store.create({ ...intent, parentIdentityHash: `sha256:${"f".repeat(64)}` })).toThrowError(
+      expect.objectContaining({ code: "external_mutation.intent_invalid" })
+    );
+    expect(() => ExternalMutationIntentSchema.parse({ ...intent, schemaVersion: 1 })).toThrow();
     expect(() => ExternalMutationIntentSchema.parse({ ...intent, targetPath: `${intent.targetPath}\nforge` })).toThrow();
+  });
+
+  it("rejects the unregistered schema-v1 development record instead of guessing a parent identity", () => {
+    const root = tempRoot();
+    const store = new ExternalMutationIntentStore(root);
+    const intent = intentFixture(root);
+    const directory = path.join(root, "external-mutation-intents", intent.id);
+    fs.mkdirSync(directory, { mode: 0o700 });
+    fs.writeFileSync(
+      path.join(directory, "00000001.json"),
+      `${JSON.stringify({
+        ...intent,
+        schemaVersion: 1,
+        targetLeafName: undefined,
+        parentIdentityHash: undefined
+      })}\n`,
+      { encoding: "utf8", mode: 0o600 }
+    );
+
+    expect(() => store.read(intent.id)).toThrowError(expect.objectContaining({ code: "external_mutation.intent_invalid" }));
   });
 });
 
 function intentFixture(root: string): ExternalMutationIntent {
   const id = "extmut_20260718_abcdefabcdefabcdefab";
   const targetPath = path.join(root, "external", "created.txt");
+  const targetLeafName = path.basename(targetPath);
+  const parentIdentityHash = `sha256:${"e".repeat(64)}` as const;
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });
   const now = "2026-07-18T06:00:00.000Z";
   return ExternalMutationIntentSchema.parse({
     id,
-    schemaVersion: 1,
+    schemaVersion: 2,
     revision: 1,
     state: "planned",
     vaultId: "vault_20260718_external01",
@@ -139,8 +168,10 @@ function intentFixture(root: string): ExternalMutationIntent {
     policyContextId: "policy_external_create_01",
     policyHash: `sha256:${"b".repeat(64)}`,
     targetPath,
+    targetLeafName,
+    parentIdentityHash,
     stagePath: path.join(path.dirname(targetPath), `.pige-${id}.stage`),
-    targetResourceHash: hashResource(targetPath),
+    targetResourceHash: hashExternalTarget(parentIdentityHash, targetLeafName),
     contentHash: `sha256:${"c".repeat(64)}`,
     byteLength: 4,
     operationId: "op_20260718_abcdefabcdefabcdefab",
@@ -171,14 +202,6 @@ function operationFixture(): OperationRecord {
     reversible: "no",
     warnings: []
   });
-}
-
-function hashResource(targetPath: string): `sha256:${string}` {
-  return `sha256:${createHash("sha256")
-    .update("pige.external_resource.v1", "utf8")
-    .update("\0", "utf8")
-    .update(targetPath, "utf8")
-    .digest("hex")}`;
 }
 
 function tempRoot(): string {

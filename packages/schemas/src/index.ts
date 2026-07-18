@@ -814,9 +814,17 @@ export const PermissionSettingsMutationResultSchema = z.discriminatedUnion("stat
 export const ExternalMutationIntentIdSchema = z.string().regex(/^extmut_\d{8}_[a-z0-9]{12,}$/);
 export const ExternalMutationIntentSchema = z.object({
   id: ExternalMutationIntentIdSchema,
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
   revision: z.number().int().positive(),
-  state: z.enum(["planned", "published", "operation_committed", "completed", "failed_uncertain"]),
+  state: z.enum([
+    "planned",
+    "published",
+    "operation_committed",
+    "completed",
+    "failed_no_effect",
+    "cancelled",
+    "failed_uncertain"
+  ]),
   vaultId: VaultIdSchema,
   jobId: JobIdSchema,
   toolCallId: z.string().min(1).max(256),
@@ -826,6 +834,8 @@ export const ExternalMutationIntentSchema = z.object({
   policyContextId: z.string().min(1),
   policyHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
   targetPath: z.string().min(1),
+  targetLeafName: z.string().min(1).max(255),
+  parentIdentityHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
   stagePath: z.string().min(1),
   targetResourceHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
   contentHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
@@ -850,6 +860,16 @@ export const ExternalMutationIntentSchema = z.object({
         message: "An external mutation intent path is invalid."
       });
     }
+  }
+  if (
+    intent.targetLeafName === "." || intent.targetLeafName === ".." ||
+    /[\\/\u0000-\u001f\u007f]/u.test(intent.targetLeafName)
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["targetLeafName"],
+      message: "An external mutation target leaf is invalid."
+    });
   }
 });
 
