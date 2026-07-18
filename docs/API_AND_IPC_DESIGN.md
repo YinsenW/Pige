@@ -444,11 +444,12 @@ Rules:
 
 #### 6.4.1 Knowledge Activity And Undo
 
-`activity.list` (default 5, max 20) returns safe `create_page | update_page` summaries,
-never paths/hashes/bodies/source/Provider data. `activity.undo` rechecks live checksum:
-create uses private trash + `trash_page`; update restores exact before bytes + inverse
-`update_page`; both schedule rebuild. Hashless/changed/missing/malformed/other Operations
-stay ineligible; restore/redo and broad routing/history remain open.
+`activity.list` (default 5, max 20) returns `activeVaultId` and safe create/update
+summaries. Matching applied rows may add `target?: { kind: "page"; pageId }`; missing,
+identity-mismatched or undone rows omit it. No paths/bodies/hashes cross preload; `targetLabel` is
+display-only. Renderer sends only `pageId` to Reader, fences the vault before/after
+render, and leaves Settings open on failure. `activity.undo` independently rechecks checksum,
+trashes create, restores update, and rebuilds. Other Operations/history remain open.
 
 ### 6.5 Library And Notes
 
