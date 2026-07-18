@@ -1,12 +1,17 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { MachineLocalSettingsSchema, type Locale, type MachineLocalSettings, type WindowPreferences } from "@pige/schemas";
 import type { RecentVaultSummary, VaultSummary } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
+import { MachineLocalSettingsSchema, type Locale, type MachineLocalSettings, type WindowPreferences } from "@pige/schemas";
 import { acquireVaultWriterLease } from "./vault-writer-lease";
 
 type RecentVaultSettings = MachineLocalSettings["recentVaults"];
+
+export interface RecentVaultBinding {
+  readonly vaultId: string;
+  readonly vaultPath: string;
+}
 
 export class LocalSettingsStore {
   readonly #userDataPath: string;
@@ -122,6 +127,40 @@ export class LocalSettingsStore {
       recentVaults: settings.recentVaults.filter((recent) => recent.vaultId !== vaultId)
     }));
     return this.toRecentVaultSummaries(nextSettings);
+  }
+
+  resolveRecentVaultBinding(vaultId: string): RecentVaultBinding {
+    const matches = this.read().recentVaults.filter((recent) => recent.vaultId === vaultId);
+    if (matches.length === 0) {
+      throw new PigeDomainError("vault.recent_not_found", "The recent vault is no longer available.");
+    }
+    if (matches.length !== 1) {
+      throw new PigeDomainError("vault.recent_ambiguous", "The recent vault identity is ambiguous.");
+    }
+    return { vaultId, vaultPath: path.resolve(matches[0]!.path) };
+  }
+
+  activateRecentVault(
+    binding: RecentVaultBinding,
+    activeVaultPath: string,
+    summary: VaultSummary
+  ): MachineLocalSettings {
+    return this.#mutate((settings) => {
+      const matches = settings.recentVaults.filter((recent) => recent.vaultId === binding.vaultId);
+      if (matches.length === 0) {
+        throw new PigeDomainError("vault.recent_not_found", "The recent vault is no longer available.");
+      }
+      if (matches.length !== 1) {
+        throw new PigeDomainError("vault.recent_ambiguous", "The recent vault identity is ambiguous.");
+      }
+      if (
+        path.resolve(matches[0]!.path) !== binding.vaultPath ||
+        summary.vaultId !== binding.vaultId
+      ) {
+        throw new PigeDomainError("vault.recent_stale", "The recent vault identity changed.");
+      }
+      return activateVault(settings, activeVaultPath, summary);
+    });
   }
 
   toRecentVaultSummaries(settings = this.read()): RecentVaultSummary[] {

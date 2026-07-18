@@ -54,6 +54,7 @@ import type {
   NoteRenderRequest,
   NoteRenderResult,
   OnboardingStatus,
+  OpenRecentVaultRequest,
   PigeDesktopApi,
   ProposalDecisionRequest,
   ProposalDecisionResult,
@@ -109,6 +110,7 @@ import {
   RetrievalSearchResultSchema,
   NoteResolveInlineReferenceRequestSchema,
   NoteResolveInlineReferenceResultSchema,
+  OpenRecentVaultRequestSchema,
   SpeechAvailabilityRequestSchema,
   SpeechAvailabilityResultSchema,
   SpeechAssetInstallEventSchema,
@@ -123,7 +125,8 @@ import {
   SpeechStartResultSchema,
   SpeechStopResultSchema,
   WindowLayoutRequestSchema,
-  WindowLayoutStateSchema
+  WindowLayoutStateSchema,
+  VaultActionResultSchema
 } from "@pige/schemas";
 
 function isRestoreMode(value: unknown): value is RestoreMode {
@@ -171,6 +174,40 @@ function projectBackupManifestSummary(manifest: BackupManifestSummary): BackupMa
       trash: manifest.includes.trash,
       rebuildableDatabaseCache: manifest.includes.rebuildableDatabaseCache,
       secrets: false
+    }
+  };
+}
+
+function projectVaultActionResult(value: unknown): VaultActionResult {
+  const parsed = VaultActionResultSchema.parse(value);
+  if (parsed.status === "canceled") return { status: "canceled" };
+
+  const projectSummary = (vault: typeof parsed.vault): VaultSummary => ({
+    vaultId: vault.vaultId,
+    name: vault.name,
+    activeVaultPathDisplay: vault.activeVaultPathDisplay,
+    knowledgeRootDisplay: vault.knowledgeRootDisplay,
+    sourceAssetRootDisplay: vault.sourceAssetRootDisplay,
+    sourceAssetRootKind: vault.sourceAssetRootKind,
+    defaultSourceStorageStrategy: vault.defaultSourceStorageStrategy,
+    schemaVersion: vault.schemaVersion,
+    ...(vault.counts ? { counts: vault.counts } : {}),
+    ...(vault.lastBackupAt ? { lastBackupAt: vault.lastBackupAt } : {})
+  });
+
+  return {
+    status: "completed",
+    vault: projectSummary(parsed.vault),
+    onboarding: {
+      state: parsed.onboarding.state,
+      ...(parsed.onboarding.activeVault
+        ? { activeVault: projectSummary(parsed.onboarding.activeVault) }
+        : {}),
+      hasDefaultModel: parsed.onboarding.hasDefaultModel,
+      showFirstHomeGuide: parsed.onboarding.showFirstHomeGuide,
+      ...(parsed.onboarding.waitingDependencyCounts
+        ? { waitingDependencyCounts: parsed.onboarding.waitingDependencyCounts }
+        : {})
     }
   };
 }
@@ -396,6 +433,11 @@ const api: PigeDesktopApi = {
     create: async (request: CreateVaultRequest): Promise<VaultActionResult> =>
       ipcRenderer.invoke("vault.create", request) as Promise<VaultActionResult>,
     open: async (): Promise<VaultActionResult> => ipcRenderer.invoke("vault.open") as Promise<VaultActionResult>,
+    openRecent: async (request: OpenRecentVaultRequest): Promise<VaultActionResult> => {
+      const parsedRequest = OpenRecentVaultRequestSchema.parse(request);
+      const result: unknown = await ipcRenderer.invoke("vault.openRecent", parsedRequest);
+      return projectVaultActionResult(result);
+    },
     revealKnowledgeRoot: async (): Promise<VaultRevealResult> =>
       projectVaultRevealResult(await ipcRenderer.invoke("vault.revealKnowledgeRoot"), "knowledge_root"),
     revealSourceAssetRoot: async (): Promise<VaultRevealResult> =>

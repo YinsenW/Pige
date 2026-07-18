@@ -240,6 +240,7 @@ Rules:
 
 - If the active vault opens cleanly, skip first run.
 - If the active vault path is missing, show recent vaults and open/create/restore actions.
+- Recent rows open by `vaultId`; display paths are never authority.
 - If the vault schema is too new, show read-only/blocking compatibility UI according to `docs/SYNC_CONFLICT_AND_MIGRATION.md`.
 - If model credentials fail, enter Home with a quiet model status and mark model-dependent jobs `waiting_dependency`.
 

@@ -2863,32 +2863,43 @@ Date: 2026-07-17
 
 Decision:
 
-Reader wiki/source activation uses one typed Main-owned `notes.resolveInlineReference`
-query bound to the active vault, current page, opaque render context, rendered href, and
-request ID. It returns one stable page/source target or body-free `ambiguous`, `not_found`,
-`stale`, or `failed`; no event exists and renderer uses only `target.pageId`.
+Reader links use one Main-owned contextual query. It returns one stable target or a body-free
+failure; renderer uses only `target.pageId`.
 
 Rationale:
 
-Rendered href text cannot authorize guessed files or identity. A sender-owned snapshot
-and stable IDs enable links without renderer file access or candidate/path/body/error leaks.
+Stable IDs enable links without renderer file access or target guessing.
 
 Consequences:
 
-- Main/Notes own sender context, href, page/vault, and pre/post fences; Local Database owns
-  rebuildable keys, generation, and watcher freshness. Uncertainty fails closed.
-- Source targets require durable Source Record knowledge-page ownership; ordinary
-  `source_ids` do not authorize navigation.
-- Requirement, Exit, and Phase status remain unchanged; evidence is projected separately.
+- Main/Notes fence context; Local Database owns rebuildable keys and freshness. Source targets
+  require durable page ownership; uncertainty fails closed. Statuses remain unchanged.
 
 References:
 
 - `docs/API_AND_IPC_DESIGN.md`
-- `docs/TECH_ARCHITECTURE.md`
-- `docs/DATA_ARCHITECTURE.md`
-- `docs/LOCAL_DATABASE_DESIGN.md`
-- `docs/KNOWLEDGE_MODEL_AND_LINKING.md`
-- `docs/UI_PROTOTYPE.md`
+
+### D-20260717-Recent-Vault-Open-By-Stable-ID
+
+Status: Accepted
+Date: 2026-07-17
+
+Decision:
+
+Recent-vault actions submit only `vaultId`; main resolves and revalidates the binding. Display
+paths are never authority and invalid bindings fail body-free.
+
+Rationale:
+
+Resume without renderer filesystem authority.
+
+Consequences:
+
+- Remove never deletes vault files; statuses remain unchanged.
+
+References:
+
+- `docs/API_AND_IPC_DESIGN.md`
 
 ## 4. Deferred Decisions
 

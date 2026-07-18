@@ -1166,6 +1166,10 @@ export interface CreateVaultRequest {
   readonly vaultName: string;
 }
 
+export interface OpenRecentVaultRequest {
+  readonly vaultId: string;
+}
+
 export interface UpdateSourceStoragePolicyRequest {
   readonly defaultStrategy: SourceStorageStrategy;
 }
@@ -1252,6 +1256,7 @@ export interface PigeDesktopApi {
     readonly dismissFirstHomeGuide: () => Promise<OnboardingStatus>;
     readonly create: (request: CreateVaultRequest) => Promise<VaultActionResult>;
     readonly open: () => Promise<VaultActionResult>;
+    readonly openRecent: (request: OpenRecentVaultRequest) => Promise<VaultActionResult>;
     readonly revealKnowledgeRoot: () => Promise<VaultRevealResult>;
     readonly revealSourceAssetRoot: () => Promise<VaultRevealResult>;
     readonly updateSourceStoragePolicy: (request: UpdateSourceStoragePolicyRequest) => Promise<VaultSummary>;

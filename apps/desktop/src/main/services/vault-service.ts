@@ -3,6 +3,7 @@ import path from "node:path";
 import type {
   CreateVaultRequest,
   OnboardingStatus,
+  OpenRecentVaultRequest,
   RecentVaultSummary,
   UpdateSourceStoragePolicyRequest,
   VaultActionResult,
@@ -11,7 +12,7 @@ import type {
   VaultSummary
 } from "@pige/contracts";
 import { PIGE_DEFAULT_VAULT_NAME, PigeDomainError } from "@pige/domain";
-import { LocalSettingsStore } from "./local-settings";
+import { LocalSettingsStore, type RecentVaultBinding } from "./local-settings";
 import {
   createVaultOnDisk,
   isPigeVault,
@@ -199,6 +200,20 @@ export class VaultService {
     return { status: "completed", vault: this.#requireActiveVault(), onboarding: this.onboardingStatus() };
   }
 
+  openRecent(request: OpenRecentVaultRequest): VaultActionResult {
+    this.#assertNoRestoreTransition();
+    const binding = this.#settings.resolveRecentVaultBinding(request.vaultId);
+    if (!isPigeVault(binding.vaultPath)) {
+      throw new PigeDomainError("vault.recent_not_found", "The recent vault is no longer available.");
+    }
+    const vault = loadVaultSummary(binding.vaultPath);
+    if (vault.vaultId !== binding.vaultId) {
+      throw new PigeDomainError("vault.recent_stale", "The recent vault identity changed.");
+    }
+    this.#setActiveVault(binding.vaultPath, vault, binding);
+    return { status: "completed", vault: this.#requireActiveVault(), onboarding: this.onboardingStatus() };
+  }
+
   async revealKnowledgeRoot(): Promise<VaultRevealResult> {
     return this.#revealStorageRoot("knowledge_root");
   }
@@ -340,14 +355,15 @@ export class VaultService {
     }
   }
 
-  #setActiveVault(vaultPath: string, vault: VaultSummary): void {
+  #setActiveVault(vaultPath: string, vault: VaultSummary, recentBinding?: RecentVaultBinding): void {
     this.#assertNoRestoreTransition();
     const requestedPath = path.resolve(vaultPath);
     if (this.#activeWriterLease?.vaultPath === requestedPath) {
       this.#activeWriterLease.assertHeld();
       this.#activeVaultPath = requestedPath;
       this.#activeVault = vault;
-      this.#settings.setActiveVault(requestedPath, vault);
+      if (recentBinding) this.#settings.activateRecentVault(recentBinding, requestedPath, vault);
+      else this.#settings.setActiveVault(requestedPath, vault);
       return;
     }
 
@@ -360,7 +376,11 @@ export class VaultService {
       if (nextVault.vaultId !== vault.vaultId) {
         throw new PigeDomainError("vault.binding_changed", "The canonical vault identity changed.");
       }
-      this.#settings.setActiveVault(nextPath, nextVault);
+      if (recentBinding) {
+        this.#settings.activateRecentVault(recentBinding, nextPath, nextVault);
+      } else {
+        this.#settings.setActiveVault(nextPath, nextVault);
+      }
       this.#activeVault = nextVault;
       settingsCommitted = true;
     } finally {

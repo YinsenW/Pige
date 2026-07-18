@@ -2731,6 +2731,14 @@ dd {
   gap: 8px;
 }
 
+.recent-vault-row .settings-row-control {
+  flex-wrap: nowrap;
+}
+
+.recent-vault-error {
+  color: var(--danger) !important;
+}
+
 .recent-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -6519,6 +6527,11 @@ dd {
   border-top: .5px solid var(--border-light);
 }
 
+.first-run .recent-vault-row {
+  align-items: flex-start;
+  gap: 12px;
+}
+
 @media (max-width: 679px) {
   .first-run { padding: 16px; }
   .first-run-card { padding: 22px; }
@@ -6534,5 +6547,12 @@ dd {
   .first-run-model-panel .model-settings-page .model-bootstrap-field {
     width: 100%;
     max-width: 100%;
+  }
+  .first-run .recent-vault-row {
+    flex-wrap: wrap;
+  }
+  .first-run .recent-vault-row .settings-row-control {
+    width: 100%;
+    justify-content: flex-end;
   }
 }

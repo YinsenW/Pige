@@ -233,6 +233,9 @@ type OnboardingStatus = {
 };
 ```
 
+`vault.openRecent` takes `{ vaultId }` and returns `VaultActionResult`; main revalidates the binding.
+`pathDisplay` is never authority and failures return no path.
+
 Local database status DTO:
 
 ```ts

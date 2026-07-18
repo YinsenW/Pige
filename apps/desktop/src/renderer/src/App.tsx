@@ -219,6 +219,8 @@ export function App(): React.JSX.Element {
   const [noteAgentOpen, setNoteAgentOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [openingRecentVaultId, setOpeningRecentVaultId] = useState<string | null>(null);
+  const [recentVaultErrorId, setRecentVaultErrorId] = useState<string | null>(null);
   const [diagnosticsHealth, setDiagnosticsHealth] = useState<DiagnosticsHealth | null>(null);
   const [localDatabaseStatus, setLocalDatabaseStatus] = useState<LocalDatabaseStatus | null>(null);
   const [supportBundlePreview, setSupportBundlePreview] = useState<SupportBundlePreview | null>(null);
@@ -265,6 +267,7 @@ export function App(): React.JSX.Element {
   const modelRefreshSequence = useRef(0);
   const agentRuntimeRefreshSequence = useRef(0);
   const vaultRefreshSequence = useRef(0);
+  const recentVaultOpenRequestRef = useRef<string | null>(null);
   const voiceAssetInstallActiveRef = useRef(false);
   const deferredAppearanceRef = useRef<{
     readonly locale: Locale;
@@ -474,8 +477,36 @@ export function App(): React.JSX.Element {
       if (result.status === "completed") setView("home");
     });
 
+  const openRecentVault = async (vaultId: string): Promise<void> => {
+    if (recentVaultOpenRequestRef.current) return;
+    recentVaultOpenRequestRef.current = vaultId;
+    setOpeningRecentVaultId(vaultId);
+    setRecentVaultErrorId(null);
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await window.pige.vault.openRecent({ vaultId });
+      if (result.status !== "completed") {
+        setRecentVaultErrorId(vaultId);
+        return;
+      }
+      setOnboarding(result.onboarding);
+      setView("home");
+      void refreshVaultState().catch(() => {
+        setCaptureToast({ kind: "error", message: t("error.generic") });
+      });
+    } catch {
+      setRecentVaultErrorId(vaultId);
+    } finally {
+      recentVaultOpenRequestRef.current = null;
+      setOpeningRecentVaultId(null);
+      setBusy(false);
+    }
+  };
+
   const removeRecent = (vaultId: string): Promise<void> =>
     runVaultAction(async () => {
+      setRecentVaultErrorId((current) => current === vaultId ? null : current);
       setRecentVaults(await window.pige.vault.removeRecent(vaultId));
     });
 
@@ -1119,7 +1150,10 @@ export function App(): React.JSX.Element {
             onBusy={setBusy}
             onCreate={createVault}
             onOpen={openVault}
+            onOpenRecent={openRecentVault}
             onRemoveRecent={removeRecent}
+            openingRecentVaultId={openingRecentVaultId}
+            recentVaultErrorId={recentVaultErrorId}
             onRestoreCompleted={async () => {
               await refreshVaultState();
               setView("home");
@@ -2552,7 +2586,10 @@ interface FirstRunPanelProps {
   readonly onBusy: (busy: boolean) => void;
   readonly onCreate: () => Promise<void>;
   readonly onOpen: () => Promise<void>;
+  readonly onOpenRecent: (vaultId: string) => Promise<void>;
   readonly onRemoveRecent: (vaultId: string) => Promise<void>;
+  readonly openingRecentVaultId: string | null;
+  readonly recentVaultErrorId: string | null;
   readonly onRestoreCompleted: () => Promise<void>;
   readonly onVaultNameChange: (value: string) => void;
   readonly onError: (error: string | null) => void;
@@ -3159,7 +3196,15 @@ function FirstRunPanel(props: FirstRunPanelProps): React.JSX.Element {
             {!restore.restorePreview && restore.restoreErrorKey ? (
               <p className="error" role="alert">{props.t(restore.restoreErrorKey)}</p>
             ) : null}
-            <RecentVaults recentVaults={props.recentVaults} onRemoveRecent={props.onRemoveRecent} t={props.t} />
+            <RecentVaults
+              recentVaults={props.recentVaults}
+              onOpenRecent={props.onOpenRecent}
+              onRemoveRecent={props.onRemoveRecent}
+              openingVaultId={props.openingRecentVaultId}
+              errorVaultId={props.recentVaultErrorId}
+              disabled={props.busy}
+              t={props.t}
+            />
             <div className="first-run-actions">
               <button type="button" className="secondary first-run-back" disabled={props.busy} onClick={() => moveTo("models")}>
                 {props.t("firstRun.back")}
@@ -8286,7 +8331,11 @@ function InfoGroup(props: { readonly title: string; readonly rows: readonly (rea
 
 function RecentVaults(props: {
   readonly recentVaults: readonly RecentVaultSummary[];
+  readonly onOpenRecent?: (vaultId: string) => Promise<void>;
   readonly onRemoveRecent: (vaultId: string) => Promise<void>;
+  readonly openingVaultId?: string | null;
+  readonly errorVaultId?: string | null;
+  readonly disabled?: boolean;
   readonly t: (key: string) => string;
 }): React.JSX.Element | null {
   if (props.recentVaults.length === 0) return null;
@@ -8296,14 +8345,44 @@ function RecentVaults(props: {
       <h2 className="settings-section-title" id="recent-vaults-title">{props.t("recent.title")}</h2>
       <div className="settings-card">
         {props.recentVaults.map((recent) => (
-          <div className="settings-row" key={recent.vaultId}>
+          <div className="settings-row recent-vault-row" key={recent.vaultId}>
             <div className="settings-row-copy">
               <strong>{recent.name}</strong>
               <span>{recent.pathDisplay}</span>
+              {props.errorVaultId === recent.vaultId ? (
+                <span className="recent-vault-error" role="alert">{props.t("recent.openFailed")}</span>
+              ) : null}
             </div>
-            <button className="settings-button" type="button" onClick={() => void props.onRemoveRecent(recent.vaultId)}>
-              {props.t("recent.remove")}
-            </button>
+            <div className="settings-row-control" role="group" aria-label={recent.name}>
+              {props.onOpenRecent ? (
+                <button
+                  className="settings-button primary"
+                  type="button"
+                  aria-busy={props.openingVaultId === recent.vaultId}
+                  aria-label={`${props.t("recent.open")}: ${recent.name}`}
+                  disabled={props.disabled}
+                  onClick={(event) => {
+                    const button = event.currentTarget;
+                    void props.onOpenRecent?.(recent.vaultId).finally(() => {
+                      window.requestAnimationFrame(() => {
+                        if (button.isConnected) button.focus();
+                      });
+                    });
+                  }}
+                >
+                  {props.t(props.openingVaultId === recent.vaultId ? "recent.opening" : "recent.open")}
+                </button>
+              ) : null}
+              <button
+                className="settings-button"
+                type="button"
+                aria-label={`${props.t("recent.remove")}: ${recent.name}`}
+                disabled={props.disabled}
+                onClick={() => void props.onRemoveRecent(recent.vaultId)}
+              >
+                {props.t("recent.remove")}
+              </button>
+            </div>
           </div>
         ))}
       </div>
