@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-18T05:10:00Z",
+  "reviewedAt": "2026-07-18T08:30:00Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -61,17 +61,17 @@
       "tests/unit/security-contract-schemas.test.ts",
       "package.json"
     ],
-    "scope": "Independent Planning review binds machine-local Permission Settings, revision-fenced YOLO, first-party read-only filesystem/network adapters, durable Job authority and model-egress reauthorization to the permission, settings, API, architecture, security and trace owners on origin/main aac6b47.",
+    "scope": "Independent Planning review binds the mechanically integrated Settings Index and Maintenance production surface to the existing Local Database typed owners on sole origin/main b17c659, without changing service, IPC, contract or governance semantics.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 130,
-    "reviewedSha256": "6ee5560034dac2634d1d9af290c6647ee5eb4fd907b2a577b342ac8385330771"
+    "reviewedSha256": "71575fb9271e3ab208d96993f86051dfb495cb14611c869fef3c5cf835c5d5bc"
   },
   "reviewers": [
     {
-      "reviewerId": "permission-node-os-independent-review",
-      "task": "Permission Settings and read-only Node OS capability contract-impact review",
+      "reviewerId": "settings-maintenance-independent-review",
+      "task": "Settings Index and Maintenance mechanical integration review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -79,78 +79,75 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Product Planning did not author the capability adapters and independently compared permission revision authority, protected resources, durable Job binding, model-egress reauthorization and renderer disclosure boundaries with owner contracts and trace evidence."
+      "independence": "Product Planning did not author the UI delta and independently compared the Settings Index and Maintenance surface with the existing Local Database status, check, rebuild and reset-preview owners, focused tests and exact UI Design handoff."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "permission-node-os-independent-review",
+      "reviewerId": "settings-maintenance-independent-review",
       "blockerCount": 0,
-      "summary": "Existing Permission, Settings, API, Architecture and Security owners carry the capability behavior without introducing a duplicate owner document or granting renderer-side Node authority."
+      "summary": "The existing Settings and Local Database owners carry the visible Index and Maintenance workflow without a duplicate owner document or a new service boundary."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "permission-node-os-independent-review",
+      "reviewerId": "settings-maintenance-independent-review",
       "blockerCount": 0,
-      "summary": "Owner text agrees that explicit YOLO is revision fenced, protected roots and raw credentials remain blocked, read-only tools bind to durable Jobs, and untrusted results face model-egress review."
+      "summary": "The renderer uses only existing typed status, check, rebuild and reset-preview/apply owners; raw maintenance and filesystem failures remain body-free and localized."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "permission-node-os-independent-review",
+      "reviewerId": "settings-maintenance-independent-review",
       "blockerCount": 0,
-      "summary": "Exact tests narrow the Permission and E8.03 gaps without promotion; semantic claims retain planned status and enumerate saved grants, mutating tools, UI, Operations and platform residuals."
+      "summary": "Exact focused, type, build and visual gates cover the production surface without changing Requirement, Exit or Phase status or claiming that destructive reset was executed."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "permission-node-os-independent-review",
+      "reviewerId": "settings-maintenance-independent-review",
       "blockerCount": 0,
-      "summary": "Focused regressions cover token replay, revision drift, protected roots, symlinks, SSRF, bounded output, cancellation, durable automatic decisions and restricted-result egress blocking."
+      "summary": "Focused regressions cover body-free failures, real status/check/rebuild binding, preview-first reset, Escape/cancel focus restoration and compact Settings navigation."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "permission-node-os-independent-review",
+      "reviewerId": "settings-maintenance-independent-review",
       "blockerCount": 0,
-      "summary": "One bounded durable Decision plus existing subject owners and trace projections carry the implementation delta without a new owner document or duplicated permission policy."
+      "summary": "The mechanical UI integration needs only this refreshed independent-review binding; no product, architecture, decision or trace owner requires a semantic edit."
     }
   ],
   "verification": [
     {
-      "command": "Independent implementation and owner-contract review of Permission Settings and read-only Node OS capabilities based on origin/main aac6b47",
+      "command": "Independent implementation and owner-contract review of Settings Index and Maintenance on origin/main b17c659",
       "status": "passed",
-      "evidence": "Review covers Main permission/capability implementation, executable schemas, focused tests and affected owner/trace projections; raw paths, credentials and permission internals remain excluded from renderer IPC."
+      "evidence": "Review covers the exact nine UI-owned paths, existing Local Database projections, body-free failures and reset-preview ownership; no main, preload, service, contract or governance byte changed."
     },
     {
       "command": "npm run verify:docs && npm run verify:decisions && npm run verify:traceability",
       "status": "passed",
-      "evidence": "Links, whitespace, document map, PRD structure, decision records and narrowed Permission requirement mappings pass after bounded owner synchronization."
+      "evidence": "Links, whitespace, document map, PRD structure and decision records remain unchanged and pass for the mechanical UI integration."
     },
     {
       "command": "npm run verify:contracts && npm run verify:independent-documentation-review && npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "CON-001 through CON-004 remain green and the recipe binds governed roots plus changed permission/capability code and tests without Requirement, Exit or Phase promotion."
+      "evidence": "CON-001 through CON-004 remain green and the recipe binds governed roots plus the changed Settings UI and tests without Requirement, Exit or Phase promotion."
     }
   ],
   "coordination": {
-    "taskId": "permission-node-os-mainaac6-20260718",
-    "taskTitle": "Permission Settings and read-only Node OS capability synchronization",
+    "taskId": "settings-maintenance-mainb17-20260718",
+    "taskTitle": "Settings Index and Maintenance mechanical integration",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The candidate adds explicit machine-local authority and bounded read-only tools without ambient renderer access; existing vault tools, stronger confirmation layers and release scope remain unchanged.",
-    "acknowledgement": "Product Planning synchronized permission, settings, API, architecture, security and trace owners; this review does not claim saved-grant creation, write/delete/shell/package tools, visible UI or signed-platform acceptance."
+    "compatibility": "The candidate exposes existing Local Database maintenance owners through the approved Settings hierarchy; service behavior, IPC contracts, persistence and release scope remain unchanged.",
+    "acknowledgement": "Product Planning reviewed the exact mechanical UI delta and its evidence; reset remained preview-only during real macOS validation and this review does not claim new maintenance capability."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Saved scoped grants can be inspected and revoked but are not yet created by a production authorization flow.",
-    "External write, delete, shell, package and arbitrary Node execution remain unavailable pending typed effect-specific owners and recovery semantics.",
-    "The polished Permission Settings renderer remains unbound until its exact UI-owned adapter is mechanically integrated.",
-    "Windows and signed packaged permission/capability evidence remain open, including OS-specific protected resources and cancellation behavior.",
-    "Operation visibility and release-wide permission history acceptance remain open; no Requirement, Exit or Phase status is promoted."
+    "The real macOS reset flow was not executed; preview, cancel and focus restoration are verified while destructive application remains covered by existing typed tests.",
+    "Windows visual evidence remains deferred; no Requirement, Exit or Phase status is promoted."
   ]
 }
