@@ -38,6 +38,7 @@ import type {
   NoteGetRequest,
   NoteResolveInlineReferenceRequest,
   NoteRenderRequest,
+  ReaderSelectionActionRequest,
   ReaderSelectionResolveRequest,
   OpenRecentVaultRequest,
   ProviderConnectResult,
@@ -91,6 +92,8 @@ import {
   PermissionSettingsSummarySchema,
   NoteResolveInlineReferenceRequestSchema,
   NoteResolveInlineReferenceResultSchema,
+  ReaderSelectionActionRequestSchema,
+  ReaderSelectionActionResultSchema,
   ReaderSelectionResolveRequestSchema,
   ReaderSelectionResolveResultSchema,
   OpenRecentVaultRequestSchema,
@@ -151,6 +154,7 @@ import { ModelEgressApprovalService } from "./services/model-egress-approval-ser
 import { PermissionBrokerService } from "./services/permission-broker-service";
 import { PermissionSettingsService } from "./services/permission-settings-service";
 import { PermissionYoloConfirmationRegistry } from "./services/permission-yolo-confirmation-registry";
+import { ReaderSelectionActionService } from "./services/reader-selection-action-service";
 import {
   createPermissionedExternalCapabilityRegistry,
   PermissionedExternalCapabilityRegistry,
@@ -203,6 +207,7 @@ let jobsService: JobsService | undefined;
 let knowledgeActivityService: KnowledgeActivityService | undefined;
 let libraryService: LibraryService | undefined;
 let notesService: NotesService | undefined;
+let readerSelectionActionService: ReaderSelectionActionService | undefined;
 let proposalService: ProposalService | undefined;
 let retrievalService: RetrievalService | undefined;
 let documentParserService: DocumentParserService | undefined;
@@ -903,6 +908,16 @@ const getNotesService = (): NotesService => {
     notesService = new NotesService(getVaultService(), getLocalDatabaseService());
   }
   return notesService;
+};
+
+const getReaderSelectionActionService = (): ReaderSelectionActionService => {
+  if (!readerSelectionActionService) {
+    readerSelectionActionService = new ReaderSelectionActionService(
+      getVaultService(),
+      getHomeAgentService()
+    );
+  }
+  return readerSelectionActionService;
 };
 
 const getProposalService = (): ProposalService => {
@@ -1643,6 +1658,24 @@ ipcMain.handle("readerSelection.resolve", (event, request: ReaderSelectionResolv
       ? { apiVersion: 1, requestId: parsed.requestId, status: "stale", scope: "render_context" }
       : getNotesService().resolveSelection(ownerId, parsed)
   );
+});
+ipcMain.handle("readerSelection.submitAction", async (event, request: ReaderSelectionActionRequest) => {
+  const parsed = ReaderSelectionActionRequestSchema.parse(request);
+  const draftPublisher = new AgentTurnDraftPublisher({
+    clientTurnId: parsed.clientTurnId,
+    send: (draft) => {
+      if (!event.sender.isDestroyed()) event.sender.send("agent.turnDraft", draft);
+    }
+  });
+  try {
+    return ReaderSelectionActionResultSchema.parse(
+      await getReaderSelectionActionService().submit(parsed, {
+        onDraft: (draft) => draftPublisher.publish(draft)
+      })
+    );
+  } finally {
+    draftPublisher.close();
+  }
 });
 
 function proposalRendererBoundaryUnavailable(): never {

@@ -436,7 +436,13 @@ describe("jobs service", () => {
     const bindingHash = `sha256:${"c".repeat(64)}`;
     const currentNoteScope = {
       pageId: "page_20260716_atomicnote",
-      bindingHash
+      bindingHash,
+      selection: {
+        pageId: "page_20260716_atomicnote",
+        pageContentHash: `sha256:${"a".repeat(64)}`,
+        span: { unit: "utf8_bytes" as const, start: 200, endExclusive: 212 },
+        selectedContentHash: `sha256:${"b".repeat(64)}`
+      }
     };
     const atomic = jobs.createAgentTurnJob({
       conversationEventId: "evt_20260716_atomicnote01",
@@ -450,6 +456,15 @@ describe("jobs service", () => {
         id: currentNoteScope.pageId,
         role: "agent_turn_current_note_scope",
         checksum: bindingHash
+      }
+    ]));
+    expect(atomic.inputRefs).toEqual(expect.arrayContaining([
+      {
+        kind: "page",
+        id: currentNoteScope.pageId,
+        role: "agent_turn_reader_selection",
+        checksum: currentNoteScope.selection.selectedContentHash,
+        locator: "utf8_bytes:200:212"
       }
     ]));
 

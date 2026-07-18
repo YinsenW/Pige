@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { createHash } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -2234,6 +2235,76 @@ SYNTHETIC_DISTRACTOR_BODY
       ]
     });
     expect(service.conversation()).toBeUndefined();
+  });
+
+  it("persists and revalidates an exact Reader selection without duplicating its body in conversation", async () => {
+    const fixture = makeFixture();
+    const selected = "SELECTED_PRIVATE_PASSAGE";
+    const unselected = "UNSELECTED_PRIVATE_PASSAGE";
+    writeKnowledgePage(fixture.vaultPath, [], `${unselected}\n${selected}\n`);
+    const pagePath = path.join(fixture.vaultPath, "wiki", "launch.md");
+    const markdown = fs.readFileSync(pagePath, "utf8");
+    const selectedCharacter = markdown.indexOf(selected);
+    const start = Buffer.byteLength(markdown.slice(0, selectedCharacter), "utf8");
+    const selectedBytes = Buffer.from(selected, "utf8");
+    const selection = {
+      pageId: HOME_PAGE_ID,
+      pageContentHash: `sha256:${createHash("sha256").update(markdown).digest("hex")}`,
+      span: { unit: "utf8_bytes" as const, start, endExclusive: start + selectedBytes.length },
+      selectedContentHash: `sha256:${createHash("sha256").update(selectedBytes).digest("hex")}`
+    };
+    let observedModelText = "";
+    const service = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      {
+        run: async (request) => {
+          const readTool = request.tools.find((tool) => tool.name === "pige_read_current_note");
+          if (!readTool) throw new Error("Missing current-note tool.");
+          await request.beforeModelTurn?.();
+          const signal = new AbortController().signal;
+          const result = await readTool.execute({}, signal, {
+            toolCallId: "pi_tool_reader_selection",
+            signal
+          });
+          observedModelText = readPiToolText(result);
+          await request.beforeModelTurn?.();
+          return makeRuntimeResult(request, "pige_read_current_note", {
+            answer: "The selected passage is synthetic. [1]",
+            citationRefs: ["citation_1"],
+            grounding: "local_knowledge",
+            evidenceQuotes: [{ citationRef: "citation_1", quote: selected }]
+          });
+        }
+      }
+    );
+
+    const outcome = await service.submitTurn({
+      text: "Explain the selected passage in the current note.",
+      inputKind: "typed_text",
+      scope: { kind: "current_note", pageId: HOME_PAGE_ID },
+      locale: "en",
+      clientTurnId: "turn_20260718_readersel001"
+    }, { currentNoteSelection: selection });
+
+    expect(outcome.state).toBe("completed");
+    expect(observedModelText).toContain(selected);
+    expect(observedModelText).not.toContain(unselected);
+    const job = readRecords<JobRecord>(path.join(fixture.vaultPath, ".pige", "jobs"))[0];
+    expect(job?.inputRefs).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: "page",
+        id: HOME_PAGE_ID,
+        role: "agent_turn_reader_selection",
+        checksum: selection.selectedContentHash,
+        locator: `utf8_bytes:${selection.span.start}:${selection.span.endExclusive}`
+      })
+    ]));
+    const timeline = service.conversation({ scope: { kind: "current_note", pageId: HOME_PAGE_ID } });
+    expect(timeline?.messages[0]?.text).toBe("Explain the selected passage in the current note.");
+    expect(JSON.stringify(timeline)).not.toContain(selected);
   });
 
   it("requires insufficient evidence for an empty current-note body", async () => {

@@ -17,6 +17,7 @@ import type {
   ModelProviderSettingsSummary,
   ModelProfileSummary,
   ProviderProfileSummary,
+  ReaderSelectionIdentity,
   RetrievalAnswerCitation,
   RetrievalAskResult,
   RetrievalSearchRequest,
@@ -95,6 +96,7 @@ import {
 import {
   createRetrievalEvidencePrivacyHash,
   readCurrentNoteEvidenceBinding,
+  readCurrentNoteSelectionEvidenceBinding,
   readRetrievalEvidencePrivacySnapshot,
   resolveCurrentNoteEvidenceQuoteLocator,
   type CurrentNoteEvidenceBinding,
@@ -187,6 +189,7 @@ export interface HomeAgentJobPort {
     readonly currentNoteScope?: {
       readonly pageId: string;
       readonly bindingHash: string;
+      readonly selection?: ReaderSelectionIdentity;
     };
   }): JobRecord;
   findAgentTurnJobByConversationEvent(conversationEventId: string): JobRecord | undefined;
@@ -495,6 +498,7 @@ export class HomeAgentService {
       readonly sourceIds?: readonly string[];
       readonly prepared?: PreparedSourceAgentTurn;
       readonly onDraft?: (snapshot: HomeAgentDraftSnapshot) => void;
+      readonly currentNoteSelection?: ReaderSelectionIdentity;
     } = {}
   ): Promise<AgentSubmitTurnResult> {
     let requestId = `turn_${randomUUID().replaceAll("-", "")}`;
@@ -512,6 +516,18 @@ export class HomeAgentService {
         throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The Agent input kind does not match its preserved source binding.");
       }
       const objective = validatedRequest.objective ?? "auto";
+      if (
+        context.currentNoteSelection &&
+        (!validatedRequest.scope ||
+          validatedRequest.scope.pageId !== context.currentNoteSelection.pageId ||
+          sourceTurn ||
+          context.prepared)
+      ) {
+        throw new PigeDomainError(
+          "agent_runtime.turn_binding_invalid",
+          "A Reader selection action requires the exact current-note scope."
+        );
+      }
       const query = validatedRequest.text?.trim() ??
         "Inspect the attached preserved source and decide how to help with it.";
       const activeVault = this.#vaults.current();
@@ -575,7 +591,9 @@ export class HomeAgentService {
           };
         } else {
           currentNoteBinding = validatedRequest.scope
-            ? readCurrentNoteEvidenceBinding(vaultPath, validatedRequest.scope.pageId)
+            ? context.currentNoteSelection
+              ? readCurrentNoteSelectionEvidenceBinding(vaultPath, context.currentNoteSelection)
+              : readCurrentNoteEvidenceBinding(vaultPath, validatedRequest.scope.pageId)
             : undefined;
           session = {
             current: this.#jobs.createAgentTurnJob({
@@ -586,7 +604,10 @@ export class HomeAgentService {
               ...(validatedRequest.scope && currentNoteBinding ? {
                 currentNoteScope: {
                   pageId: validatedRequest.scope.pageId,
-                  bindingHash: currentNoteBinding.bindingHash
+                  bindingHash: currentNoteBinding.bindingHash,
+                  ...(context.currentNoteSelection
+                    ? { selection: context.currentNoteSelection }
+                    : {})
                 }
               } : {})
             }),
@@ -607,9 +628,10 @@ export class HomeAgentService {
         if (durableResult) return durableResult;
       }
       if (validatedRequest.scope) {
-        const currentNote = currentNoteBinding ?? readCurrentNoteEvidenceBinding(
+        const currentNote = currentNoteBinding ?? readBoundCurrentNoteEvidence(
           vaultPath,
-          validatedRequest.scope.pageId
+          validatedRequest.scope.pageId,
+          session.current
         );
         const currentNoteRefs = (session.current.inputRefs ?? []).filter(
           (ref) => ref.role === "agent_turn_current_note_scope"
@@ -1276,7 +1298,11 @@ export class HomeAgentService {
       )
       : undefined;
     if (currentNoteScope) {
-      const initialCurrentNote = readCurrentNoteEvidenceBinding(vaultPath, currentNoteScope.pageId);
+      const initialCurrentNote = readBoundCurrentNoteEvidence(
+        vaultPath,
+        currentNoteScope.pageId,
+        session.current
+      );
       if (
         !currentNoteRef ||
         currentNoteRef.id !== currentNoteScope.pageId ||
@@ -1306,7 +1332,7 @@ export class HomeAgentService {
       if (!currentNoteScope || !currentNoteRef?.checksum) {
         throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The current-note scope is unavailable.");
       }
-      const current = readCurrentNoteEvidenceBinding(vaultPath, currentNoteScope.pageId);
+      const current = readBoundCurrentNoteEvidence(vaultPath, currentNoteScope.pageId, session.current);
       if (current.bindingHash !== currentNoteRef.checksum) {
         throw new PigeDomainError("model_egress.privacy_drift", "The current note changed during the Agent turn.");
       }
@@ -1353,7 +1379,7 @@ export class HomeAgentService {
     const authorizeCurrentModelTurn = async (consumeApproval = false): Promise<void> => {
       assertCurrentBindingAndVault();
       const currentNoteBinding = currentNoteScope && currentNoteToolUsed
-        ? readCurrentNoteEvidenceBinding(vaultPath, currentNoteScope.pageId)
+        ? readBoundCurrentNoteEvidence(vaultPath, currentNoteScope.pageId, session.current)
         : undefined;
       const currentNoteEvidenceDrifted = currentNoteBinding !== undefined &&
         currentNoteRef?.checksum !== currentNoteBinding.bindingHash;
@@ -3062,6 +3088,42 @@ function createHomeEvidenceSummaryHash(
       sources: evidencePrivacy.sources
     }
   }));
+}
+
+function readBoundCurrentNoteEvidence(
+  vaultPath: string,
+  pageId: string,
+  job: JobRecord
+): CurrentNoteEvidenceBinding {
+  const selectionRefs = (job.inputRefs ?? []).filter(
+    (ref) => ref.role === "agent_turn_reader_selection"
+  );
+  if (selectionRefs.length === 0) return readCurrentNoteEvidenceBinding(vaultPath, pageId);
+  const selectionRef = selectionRefs[0];
+  const locator = /^utf8_bytes:(\d+):(\d+)$/u.exec(selectionRef?.locator ?? "");
+  if (
+    selectionRefs.length !== 1 ||
+    selectionRef?.kind !== "page" ||
+    selectionRef.id !== pageId ||
+    !selectionRef.checksum ||
+    !locator
+  ) {
+    throw new PigeDomainError(
+      "agent_runtime.turn_binding_invalid",
+      "The durable Reader selection binding is invalid."
+    );
+  }
+  const current = readCurrentNoteEvidenceBinding(vaultPath, pageId);
+  return readCurrentNoteSelectionEvidenceBinding(vaultPath, {
+    pageId,
+    pageContentHash: current.contentHash,
+    span: {
+      unit: "utf8_bytes",
+      start: Number(locator[1]),
+      endExclusive: Number(locator[2])
+    },
+    selectedContentHash: selectionRef.checksum
+  });
 }
 
 function writeHomeModelEgressDecisionOperation(input: {
