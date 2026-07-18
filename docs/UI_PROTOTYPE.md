@@ -275,12 +275,11 @@ Behavior:
 
 Behavior:
 
-- Activity is secondary to the home composer.
-- Recent rows summarize durable changes. Unchanged generated pages offer direct Undo;
-  reread announces truth, restores focus, keeps eligible retry, or fails closed.
-- Activity `Open` never treats its label as authority and stays development-only until
-  bound to a stable active-vault target.
-- The user can ignore the activity area and keep adding sources or asking questions.
+- Activity History is in Settings; Home keeps active attention.
+- Eligible pages offer Undo; reread restores truth/focus/retry or fails closed.
+- Applied rows open only an active-vault `{ kind: "page", pageId }` through Reader;
+  Settings closes after success. Missing/stale/failed targets fail closed; labels/paths
+  grant no authority, and Open never invokes Undo.
 
 ### 4.4 Sidebar Expanded
 

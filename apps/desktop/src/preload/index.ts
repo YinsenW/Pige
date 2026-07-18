@@ -115,6 +115,8 @@ import type {
   VaultSummary
 } from "@pige/contracts";
 import {
+  KnowledgeActivityListRequestSchema,
+  KnowledgeActivityListResultSchema,
   RetrievalSearchRequestSchema,
   RetrievalSearchResultSchema,
   NoteResolveInlineReferenceRequestSchema,
@@ -165,6 +167,34 @@ async function invokeRetrievalSearch(request: RetrievalSearchRequest): Promise<R
     throw new Error("Invalid local search response.");
   }
   return parsedResponse.data;
+}
+
+async function invokeKnowledgeActivityList(
+  request?: KnowledgeActivityListRequest
+): Promise<KnowledgeActivityListResult> {
+  const parsedRequest = KnowledgeActivityListRequestSchema.parse(request ?? {});
+  const parsed = KnowledgeActivityListResultSchema.parse(await ipcRenderer.invoke(
+    "activity.list",
+    parsedRequest.limit === undefined ? {} : { limit: parsedRequest.limit }
+  ));
+  return {
+    scannedAt: parsed.scannedAt,
+    activeVaultId: parsed.activeVaultId,
+    total: parsed.total,
+    invalidOperationCount: parsed.invalidOperationCount,
+    activities: parsed.activities.map((activity) => ({
+      operationId: activity.operationId,
+      kind: activity.kind,
+      createdAt: activity.createdAt,
+      ...(activity.targetLabel === undefined ? {} : { targetLabel: activity.targetLabel }),
+      ...(activity.target === undefined ? {} : { target: activity.target }),
+      status: activity.status,
+      canUndo: activity.canUndo,
+      ...(activity.undoUnavailableReason === undefined
+        ? {}
+        : { undoUnavailableReason: activity.undoUnavailableReason })
+    }))
+  };
 }
 
 function projectBackupManifestSummary(manifest: BackupManifestSummary): BackupManifestSummary {
@@ -436,8 +466,7 @@ const api: PigeDesktopApi = {
     }
   },
   activity: {
-    list: async (request?: KnowledgeActivityListRequest): Promise<KnowledgeActivityListResult> =>
-      ipcRenderer.invoke("activity.list", request) as Promise<KnowledgeActivityListResult>,
+    list: invokeKnowledgeActivityList,
     undo: async (request: KnowledgeActivityUndoRequest): Promise<KnowledgeActivityUndoResult> =>
       ipcRenderer.invoke("activity.undo", request) as Promise<KnowledgeActivityUndoResult>
   },

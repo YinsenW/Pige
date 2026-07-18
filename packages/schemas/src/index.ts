@@ -91,6 +91,39 @@ export const AgentTurnCurrentNoteScopeSchema = z.object({
 export const JobIdSchema = z.string().regex(/^job_\d{8}_[a-z0-9]{8,}$/);
 export const ProposalIdSchema = z.string().regex(/^proposal_\d{8}_[a-z0-9]{8,}$/);
 export const OperationIdSchema = z.string().regex(/^op_\d{8}_[a-z0-9]{8,}$/);
+
+export const KnowledgeActivityPageTargetSchema = z.object({
+  kind: z.literal("page"),
+  pageId: PageIdSchema
+}).strict();
+
+export const KnowledgeActivityListRequestSchema = z.object({
+  limit: z.number().int().min(1).max(20).optional()
+}).strict();
+
+export const KnowledgeActivitySummarySchema = z.object({
+  operationId: OperationIdSchema,
+  kind: z.enum(["create_page", "update_page"]),
+  createdAt: z.string().datetime({ offset: true }),
+  targetLabel: z.string().min(1).max(120).optional(),
+  target: KnowledgeActivityPageTargetSchema.optional(),
+  status: z.enum(["applied", "undone"]),
+  canUndo: z.boolean(),
+  undoUnavailableReason: z.enum([
+    "already_undone",
+    "content_changed",
+    "legacy_record",
+    "target_missing"
+  ]).optional()
+}).strict();
+
+export const KnowledgeActivityListResultSchema = z.object({
+  scannedAt: z.string().datetime({ offset: true }),
+  activeVaultId: VaultIdSchema,
+  total: z.number().int().nonnegative(),
+  invalidOperationCount: z.number().int().nonnegative(),
+  activities: z.array(KnowledgeActivitySummarySchema).max(20)
+}).strict();
 export const ArtifactIdSchema = z.string().regex(/^art_[a-z0-9][a-z0-9_]{2,}$/);
 export const RootBindingIdSchema = z.string().regex(/^root_[a-z0-9][a-z0-9_]{5,}$/);
 export const BackupIdSchema = z.string().regex(/^backup_\d{8}_[a-z0-9]{8,}$/);
@@ -3089,6 +3122,10 @@ export type DatasetRevision = z.infer<typeof DatasetRevisionSchema>;
 export type DatasetSchemaRecord = z.infer<typeof DatasetSchemaRecordSchema>;
 export type DatasetTable = z.infer<typeof DatasetTableSchema>;
 export type JobClass = z.infer<typeof JobClassSchema>;
+export type KnowledgeActivityPageTarget = z.infer<typeof KnowledgeActivityPageTargetSchema>;
+export type KnowledgeActivitySummary = z.infer<typeof KnowledgeActivitySummarySchema>;
+export type KnowledgeActivityListRequest = z.infer<typeof KnowledgeActivityListRequestSchema>;
+export type KnowledgeActivityListResult = z.infer<typeof KnowledgeActivityListResultSchema>;
 export type JobCheckpoint = z.infer<typeof JobCheckpointSchema>;
 export type JobRef = z.infer<typeof JobRefSchema>;
 export type JobRecord = z.infer<typeof JobRecordSchema>;

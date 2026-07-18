@@ -2799,16 +2799,6 @@ describe("Home durable Agent conversation UI", () => {
     expect(buttonsByAriaLabel(container, createOpenLabel)).toHaveLength(1);
     expect(buttonsByAriaLabel(container, updateOpenLabel)).toHaveLength(1);
 
-    const readsBeforeOpen = harness.activityListReads;
-    await clickElement(dom, buttonsByAriaLabel(container, createOpenLabel)[0]!);
-    await waitFor(dom, () => container.querySelector(".development-status")?.textContent?.includes("Activity target") === true);
-    const developmentStatus = container.querySelector<HTMLElement>(".development-status");
-    expect(developmentStatus?.getAttribute("role")).toBe("status");
-    expect(developmentStatus?.getAttribute("aria-live")).toBe("polite");
-    expect(developmentStatus?.textContent).toContain("In development. This action does not change your vault.");
-    expect(harness.activityListReads).toBe(readsBeforeOpen);
-    expect(harness.undoOperationIds).toHaveLength(0);
-
     await clickElement(dom, buttonsByAriaLabel(container, updateUndoLabel)[0]!);
     await waitFor(dom, () => harness.undoOperationIds.length === 1);
 
@@ -2821,6 +2811,63 @@ describe("Home durable Agent conversation UI", () => {
     const updatedRow = container.querySelector<HTMLElement>('[data-activity-row-id="op_20260712_updateactivity"]');
     expect(updatedRow?.textContent).toContain("Undone");
     await waitFor(dom, () => dom.window.document.activeElement === updatedRow);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("opens an exact stable Activity target and closes Settings only after Reader render succeeds", async () => {
+    const dom = createDom(840);
+    const harness = createHarness(undefined);
+    harness.activities = [reversibleActivity()];
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await openSettingsSection(dom, container, "Activity History");
+    const openLabel = "Open: Knowledge note created: Grounded boundary (1)";
+    await waitFor(dom, () => buttonsByAriaLabel(container, openLabel).length === 1);
+    const readsBeforeOpen = harness.activityListReads;
+    await clickElement(dom, buttonsByAriaLabel(container, openLabel)[0]!);
+    await waitFor(dom, () => container.querySelector(".note-reader") !== null);
+
+    expect(container.querySelector("[data-settings-overlay]")).toBeNull();
+    expect(harness.noteRenderRequests).toEqual(["page_20260715_note0001"]);
+    expect(harness.activityListReads).toBe(readsBeforeOpen);
+    expect(harness.undoOperationIds).toHaveLength(0);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("shows Activity Open only for a stable target and rejects an old-vault target after async render", async () => {
+    const dom = createDom(840);
+    const harness = createHarness(undefined);
+    const target = reversibleActivity();
+    const { target: _ignoredTarget, ...withoutTarget } = target;
+    harness.activities = [{ ...withoutTarget, operationId: "op_20260712_activitynotarget" }, target];
+    const pending = deferred<NoteRenderResult>();
+    harness.renderNote = async () => pending.promise;
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await openSettingsSection(dom, container, "Activity History");
+    await waitFor(dom, () => buttonsByAriaLabel(container, "Open: Knowledge note created: Grounded boundary (2)").length === 1);
+    expect(buttonsByAriaLabel(container, "Open: Knowledge note created: Grounded boundary (1)")).toHaveLength(0);
+    await clickElement(dom, buttonsByAriaLabel(container, "Open: Knowledge note created: Grounded boundary (2)")[0]!);
+    await waitFor(dom, () => harness.noteRenderRequests.length === 1);
+
+    harness.onboarding = {
+      ...readyOnboarding(),
+      activeVault: { ...homeVaultSummary(), vaultId: "vault_second_activity", name: "Second Activity Vault" }
+    };
+    await clickButtonByAriaLabel(dom, container, "Close Settings");
+    await waitFor(dom, () => container.querySelector("[data-settings-overlay]") === null);
+    await act(async () => {
+      pending.resolve(testRenderedNote("page_20260715_note0001"));
+      await pending.promise;
+      await settle(dom);
+    });
+
+    expect(container.querySelector(".note-reader")).toBeNull();
+    expect(harness.noteRenderRequests).toEqual(["page_20260715_note0001"]);
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -3690,6 +3737,7 @@ function reversibleActivity(): KnowledgeActivitySummary {
     kind: "create_page",
     createdAt: "2026-07-12T08:00:00.000Z",
     targetLabel: "Grounded boundary",
+    target: { kind: "page", pageId: "page_20260715_note0001" },
     status: "applied",
     canUndo: true
   };
@@ -3701,6 +3749,7 @@ function reversibleUpdatedActivity(): KnowledgeActivitySummary {
     kind: "update_page",
     createdAt: "2026-07-12T08:01:00.000Z",
     targetLabel: "Refined boundary",
+    target: { kind: "page", pageId: "page_20260715_note0002" },
     status: "applied",
     canUndo: true
   };

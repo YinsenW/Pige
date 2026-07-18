@@ -572,7 +572,7 @@ Context pack: `docs/AGENT_MEMORY_DESIGN.md`; `docs/DATA_ARCHITECTURE.md`; `docs/
 
 Build:
 
-- [B7.01 -> E7.01] Exact create, cited append, bounded tags/link Activity/Undo plus transitional review.
+- [B7.01 -> E7.01] Exact create/append/tags/link Activity/Undo, stable page Open, and transitional review.
 - [B7.02 -> E7.01] Bounded escaped exceptional preview; unified conflict diff remains open.
 - [B7.03 -> E7.01] Exact create-note review/apply/conflict recovery foundation; autonomous eligibility and generic operations remain open.
 - [B7.04 -> E7.01] Hash-bound create/update/tag/link recovery plus `trash_page` or inverse `update_page`; other mutations open.
@@ -594,8 +594,8 @@ Exit criteria:
 - [E7.01] Evidence-bound reversible edits auto-apply with Operation/Undo; irreversible/
   security/destination/conflict/stricter-policy exceptions use durable stale-checked
   decisions. Evidence covers exact create, cited append, bounded tags, and one directed
-  link on clean generated notes; removal/replacement/synonyms, other pages/mutations,
-  restore/redo, exceptions, CAS/transactions, and platforms remain open.
+  link plus stable page Open; broad history, other mutations, restore/redo, exceptions,
+  CAS and packaged platforms remain open.
 - [E7.02] Memory is inspectable, provenance-linked, scoped, reversible, exportable, and independent from note/source deletion.
 - [E7.03] Conversation history remains readable and restart-safe without duplicating large source assets or saved note bodies.
 - [E7.04] Compaction preserves event identity, source/job/operation references, decisions, and user-visible summaries while discarding only rebuildable detail.
