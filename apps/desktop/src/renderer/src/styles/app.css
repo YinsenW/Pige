@@ -1250,6 +1250,59 @@ button.ghost {
   white-space: pre;
 }
 
+.conversation-code-block {
+  max-width: 100%;
+  overflow: hidden;
+  margin: 0 0 12px;
+  border: .5px solid var(--border-default);
+  border-radius: 10px;
+  background: var(--surface-subtle);
+}
+
+.conversation-code-header {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: .5px solid var(--border-default);
+  padding: 0 9px 0 12px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.conversation-code-language {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation-code-header button {
+  min-height: 24px;
+  border: 0;
+  border-radius: 6px;
+  padding: 2px 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+}
+
+.conversation-code-header button:hover:not(:disabled),
+.conversation-code-header button:focus-visible {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.conversation-code-header button:disabled { opacity: .58; }
+
+.conversation-code-block > pre {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
 .conversation-markdown table {
   display: block;
   max-width: 100%;
@@ -1330,6 +1383,7 @@ button.ghost {
 }
 
 .conversation-message-actions button:disabled { opacity: .55; }
+.conversation-message-actions .spinning { animation: pige-spin 900ms linear infinite; }
 
 @media (hover: none) {
   .conversation-message-actions {
@@ -4665,6 +4719,9 @@ dd {
 .message-actions { display: flex; gap: 8px; margin-top: 14px; color: var(--text-tertiary); }
 .message-actions button { width: 28px; height: 28px; border: 0; border-radius: 7px; padding: 0; background: transparent; color: inherit; }
 .message-actions button:hover:not(:disabled) { background: var(--surface-hover); color: var(--text-primary); }
+.message-actions .spinning { animation: pige-spin 900ms linear infinite; }
+.message-copy-feedback { align-self: center; font-size: 12px; line-height: 1; color: var(--text-secondary); }
+.message-copy-feedback.failed { color: var(--danger); }
 
 .proposal-panel {
   padding: 15px 16px;
@@ -5451,6 +5508,7 @@ dd {
 }
 
 .capability-tool-list small.missing::before { background: #d99424; }
+.capability-tool-list small.optional-missing::before { background: var(--text-tertiary); }
 
 .settings-inline-status {
   min-height: 0;

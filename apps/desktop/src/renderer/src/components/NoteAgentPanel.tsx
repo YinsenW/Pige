@@ -70,7 +70,7 @@ export function NoteAgentPanel(props: {
   readonly onSelectModel?: (modelId: string) => Promise<boolean>;
   readonly onModelEgressDecision?: (decision: "allow_once" | "deny") => void;
   readonly onOpenCitation?: (pageId: string) => void;
-  readonly onCopyMessage?: (messageId: string) => void;
+  readonly onCopyMessage?: (messageId: string) => Promise<boolean> | boolean;
   readonly onProposalAction?: (proposalId: string, action: "reject" | "later" | "apply") => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
@@ -85,6 +85,11 @@ export function NoteAgentPanel(props: {
   const compositionTimerRef = useRef<number | undefined>(undefined);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [modelSwitchFailed, setModelSwitchFailed] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState<{
+    readonly messageId: string;
+    readonly status: "copying" | "copied" | "failed";
+  } | null>(null);
+  const copyRequestSequenceRef = useRef(0);
 
   const selectedModel = props.models.find((model) => model.selected);
   const modelName = selectedModel?.name ?? props.t("note.agentOpenModels");
@@ -107,7 +112,15 @@ export function NoteAgentPanel(props: {
 
   useEffect(() => () => {
     if (compositionTimerRef.current !== undefined) window.clearTimeout(compositionTimerRef.current);
+    copyRequestSequenceRef.current += 1;
   }, []);
+
+  useEffect(() => {
+    if (copyFeedback && !props.messages.some((message) => message.id === copyFeedback.messageId)) {
+      copyRequestSequenceRef.current += 1;
+      setCopyFeedback(null);
+    }
+  }, [copyFeedback, props.messages]);
 
   useLayoutEffect(() => {
     const thread = threadRef.current;
@@ -181,6 +194,21 @@ export function NoteAgentPanel(props: {
     if (submitReady) props.onSubmit?.();
   };
 
+  const copyMessage = async (messageId: string): Promise<void> => {
+    if (!props.onCopyMessage || (copyFeedback?.messageId === messageId && copyFeedback.status === "copying")) return;
+    const requestSequence = copyRequestSequenceRef.current + 1;
+    copyRequestSequenceRef.current = requestSequence;
+    setCopyFeedback({ messageId, status: "copying" });
+    try {
+      const copied = await props.onCopyMessage(messageId);
+      if (copyRequestSequenceRef.current !== requestSequence) return;
+      setCopyFeedback({ messageId, status: copied ? "copied" : "failed" });
+    } catch {
+      if (copyRequestSequenceRef.current !== requestSequence) return;
+      setCopyFeedback({ messageId, status: "failed" });
+    }
+  };
+
   return (
     <aside
       ref={paneRef}
@@ -234,7 +262,16 @@ export function NoteAgentPanel(props: {
             ) : null
           ) : (
             <div className="note-agent-messages" aria-label={props.t("note.agentTitle")}>
-              {props.messages.map((message) => (
+              {props.messages.map((message) => {
+                const messageCopyStatus = copyFeedback?.messageId === message.id ? copyFeedback.status : null;
+                const copyLabel = messageCopyStatus === "copying"
+                  ? props.t("note.agentCopying")
+                  : messageCopyStatus === "copied"
+                    ? props.t("note.agentCopied")
+                    : messageCopyStatus === "failed"
+                      ? props.t("note.agentCopyFailed")
+                      : props.t("note.agentCopy");
+                return (
                 <article
                   className={`agent-message-card role-${message.role}${message.provisional ? " provisional" : ""}`}
                   key={message.id}
@@ -247,6 +284,7 @@ export function NoteAgentPanel(props: {
                   {message.timestamp ? <time className="visually-hidden">{message.timestamp}</time> : null}
                   <ConversationMarkdown
                     markdown={message.body}
+                    t={props.t}
                     {...(message.provisional ? { provisional: true } : {})}
                   />
                   {!message.provisional && message.citations?.length ? (
@@ -267,12 +305,22 @@ export function NoteAgentPanel(props: {
                     <div className="message-actions" aria-label={props.t("note.agentMessageActions")}>
                       <button
                         type="button"
-                        aria-label={props.t("note.agentCopy")}
-                        disabled={!props.onCopyMessage}
-                        onClick={() => props.onCopyMessage?.(message.id)}
+                        aria-label={copyLabel}
+                        title={copyLabel}
+                        disabled={!props.onCopyMessage || messageCopyStatus === "copying"}
+                        onClick={() => void copyMessage(message.id)}
                       >
-                        <PigeIcon name="copy" size={16} />
+                        <PigeIcon
+                          name={messageCopyStatus === "copied" ? "check" : messageCopyStatus === "copying" ? "loading" : "copy"}
+                          size={16}
+                          className={messageCopyStatus === "copying" ? "spinning" : undefined}
+                        />
                       </button>
+                      {messageCopyStatus === "copied" || messageCopyStatus === "failed" ? (
+                        <span className={`message-copy-feedback ${messageCopyStatus}`} role="status" aria-live="polite">
+                          {copyLabel}
+                        </span>
+                      ) : null}
                       <button type="button" aria-label={props.t("note.agentHelpful")} disabled>
                         <PigeIcon name="thumbsUp" size={16} />
                       </button>
@@ -285,7 +333,8 @@ export function NoteAgentPanel(props: {
                     </div>
                   ) : null}
                 </article>
-              ))}
+                );
+              })}
               {props.proposal ? (
                 <section className="proposal-panel" aria-label={props.t("note.proposalTitle")} aria-busy={props.proposal.state === "resolving"}>
                   <h2>{props.proposal.title}</h2>

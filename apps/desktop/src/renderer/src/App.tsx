@@ -64,6 +64,7 @@ import type {
   RestoreMode,
   RestorePreviewWarning,
   RestorePreviewResult,
+  SpeechAvailabilityResult,
   SpeechAssetInstallEvent,
   SpeechAssetInstallRequest,
   SpeechAssetInstallResult,
@@ -239,6 +240,9 @@ export function App(): React.JSX.Element {
   const [availableLocales, setAvailableLocales] = useState<readonly Locale[]>(["zh-Hans", "en", "ja", "ko", "fr", "de"]);
   const [appearanceLoadState, setAppearanceLoadState] = useState<AppearanceLoadState>("loading");
   const [toolchainHealth, setToolchainHealth] = useState<ToolchainHealth | null>(null);
+  const [speechAvailability, setSpeechAvailability] = useState<SpeechAvailabilityResult | null>(null);
+  const [speechAvailabilityLoading, setSpeechAvailabilityLoading] = useState(false);
+  const [speechAvailabilityFailed, setSpeechAvailabilityFailed] = useState(false);
   const [dropActive, setDropActive] = useState(false);
   const [homeDraftText, setHomeDraftText] = useState("");
   const [voiceAssetInstallActive, setVoiceAssetInstallActive] = useState(false);
@@ -273,6 +277,7 @@ export function App(): React.JSX.Element {
   const knowledgeTreeReturnFocusKey = useRef<string | null>(null);
   const modelRefreshSequence = useRef(0);
   const agentRuntimeRefreshSequence = useRef(0);
+  const speechAvailabilitySequence = useRef(0);
   const vaultRefreshSequence = useRef(0);
   const recentVaultOpenRequestRef = useRef<string | null>(null);
   const voiceAssetInstallActiveRef = useRef(false);
@@ -393,6 +398,11 @@ export function App(): React.JSX.Element {
     const timer = window.setTimeout(() => void refreshVaultState(), 1_200);
     return () => window.clearTimeout(timer);
   }, [recentJobs, backupJobs]);
+
+  useEffect(() => {
+    if (!settingsOpen || settingsSection !== "capabilities") return;
+    void refreshSpeechAvailability();
+  }, [locale, settingsOpen, settingsSection]);
 
   const t = (key: string): string => messageCatalogs[locale][key] ?? messageCatalogs.en[key] ?? key;
 
@@ -526,6 +536,33 @@ export function App(): React.JSX.Element {
     setDiagnosticsHealth(nextDiagnostics);
     setLocalDatabaseStatus(nextDatabaseStatus);
     setToolchainHealth(nextToolchainHealth);
+  };
+
+  const refreshSpeechAvailability = async (): Promise<void> => {
+    const requestId = ++speechAvailabilitySequence.current;
+    setSpeechAvailabilityLoading(true);
+    setSpeechAvailabilityFailed(false);
+    try {
+      const nextAvailability = await window.pige.speech.availability({ languageTag: locale });
+      if (requestId !== speechAvailabilitySequence.current) return;
+      setSpeechAvailability(nextAvailability);
+    } catch {
+      if (requestId !== speechAvailabilitySequence.current) return;
+      setSpeechAvailability(null);
+      setSpeechAvailabilityFailed(true);
+    } finally {
+      if (requestId === speechAvailabilitySequence.current) setSpeechAvailabilityLoading(false);
+    }
+  };
+
+  const refreshLocalCapabilities = async (): Promise<void> => {
+    const results = await Promise.allSettled([
+      refreshDiagnostics(),
+      refreshSpeechAvailability()
+    ]);
+    if (results.some((result) => result.status === "rejected")) {
+      throw new Error("One or more local capability checks failed.");
+    }
   };
 
   const setHomeDefaultModel = async (modelProfileId: string): Promise<boolean> => {
@@ -1385,7 +1422,13 @@ export function App(): React.JSX.Element {
           ) : settingsSection === "capabilities" ? (
             <LocalCapabilitiesSettingsPanel
               toolchainHealth={toolchainHealth}
-              onRefresh={refreshDiagnostics}
+              speechAvailability={speechAvailability}
+              speechAvailabilityLoading={speechAvailabilityLoading}
+              speechAvailabilityFailed={speechAvailabilityFailed}
+              onRefresh={refreshLocalCapabilities}
+              onOpenSpeechSettings={() => window.pige.speech.openSystemSettings()
+                .then(() => undefined)
+                .catch(() => setSpeechAvailabilityFailed(true))}
               onDevelopment={() => showDevelopmentCapability("settings", "local_capabilities")}
               t={t}
             />
@@ -3389,7 +3432,11 @@ function HomeComposer(props: {
           disabled={state === "copying"}
           onClick={() => void copyConversationMessage(messageId, markdown)}
         >
-          <PigeIcon name="copy" size={15} />
+          <PigeIcon
+            name={state === "copied" ? "check" : state === "copying" ? "loading" : "copy"}
+            size={15}
+            className={state === "copying" ? "spinning" : undefined}
+          />
         </button>
         {state === "copied" || state === "failed" ? (
           <span className="visually-hidden" role="status" aria-live="polite">{label}</span>
@@ -4638,7 +4685,7 @@ function HomeComposer(props: {
                 <DatasetAnswerResult answer={message.answer} modelUsage="none" t={props.t} />
               ) : (
                 <>
-                  <ConversationMarkdown markdown={message.text} />
+                  <ConversationMarkdown markdown={message.text} t={props.t} />
                   <ConversationCitations
                     answer={message.answer}
                     noteLoadingPageId={noteLoadingPageId}
@@ -4659,7 +4706,7 @@ function HomeComposer(props: {
               <span className="conversation-message-role visually-hidden">
                 {props.t("home.assistantMessage")}
               </span>
-              <ConversationMarkdown markdown={agentDraft.text} provisional />
+              <ConversationMarkdown markdown={agentDraft.text} provisional t={props.t} />
             </article>
           ) : showConversationRunMessage ? (
             <article
@@ -4715,7 +4762,7 @@ function HomeComposer(props: {
               <span className="conversation-message-role visually-hidden">
                 {props.t("home.assistantMessage")}
               </span>
-              <ConversationMarkdown markdown={liveConversationAnswer.answer} />
+              <ConversationMarkdown markdown={liveConversationAnswer.answer} t={props.t} />
               <ConversationCitations
                 answer={liveConversationAnswer}
                 noteLoadingPageId={noteLoadingPageId}
@@ -5826,7 +5873,6 @@ export function AppearanceSettingsPanel(props: {
 }): React.JSX.Element {
   const themeOptionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const themeChoices = ["system", "light", "dark"] as const;
-  const activeTheme = "light";
 
   const moveThemeFocus = (event: ReactKeyboardEvent<HTMLButtonElement>, index: number): void => {
     if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
@@ -5837,7 +5883,7 @@ export function AppearanceSettingsPanel(props: {
     else if (event.key === "ArrowRight" || event.key === "ArrowDown") nextIndex = (index + 1) % themeChoices.length;
     else nextIndex = (index - 1 + themeChoices.length) % themeChoices.length;
     themeOptionRefs.current[nextIndex]?.focus();
-    if (themeChoices[nextIndex] !== activeTheme) props.onDevelopment();
+    props.onDevelopment();
   };
 
   return (
@@ -5854,12 +5900,12 @@ export function AppearanceSettingsPanel(props: {
             <button
               key={choice}
               ref={(element) => { themeOptionRefs.current[index] = element; }}
-              className={choice === activeTheme ? "theme-option active" : "theme-option"}
+              className="theme-option"
               type="button"
               role="radio"
-              aria-checked={choice === activeTheme}
-              tabIndex={choice === activeTheme ? 0 : -1}
-              onClick={choice === activeTheme ? undefined : props.onDevelopment}
+              aria-checked={false}
+              tabIndex={index === 0 ? 0 : -1}
+              onClick={props.onDevelopment}
               onKeyDown={(event) => moveThemeFocus(event, index)}
             >
               <span className={`theme-preview ${choice}`} aria-hidden="true" />
@@ -6274,14 +6320,35 @@ export function PermissionsPrivacySettingsPanel(props: {
 
 export function LocalCapabilitiesSettingsPanel(props: {
   readonly toolchainHealth: ToolchainHealth | null;
+  readonly speechAvailability: SpeechAvailabilityResult | null;
+  readonly speechAvailabilityLoading: boolean;
+  readonly speechAvailabilityFailed: boolean;
   readonly onRefresh: () => Promise<void>;
+  readonly onOpenSpeechSettings: () => Promise<void>;
   readonly onDevelopment: () => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const [refreshing, setRefreshing] = useState(false);
   const [refreshFailed, setRefreshFailed] = useState(false);
-  const missingTools = props.toolchainHealth?.tools.filter((tool) => tool.status === "missing") ?? [];
+  const missingRequiredTools =
+    props.toolchainHealth?.tools.filter((tool) => tool.required && tool.status === "missing") ?? [];
   const toolchainState = props.toolchainHealth?.status ?? "checking";
+  const speechCapabilityState = props.speechAvailabilityLoading
+    ? "checking"
+    : props.speechAvailabilityFailed || props.speechAvailability?.status === "failed"
+      ? "failed"
+      : props.speechAvailability?.status === "supported"
+        ? props.speechAvailability.permission === "denied" || props.speechAvailability.permission === "restricted"
+          ? "permission_needed"
+          : "available"
+        : props.speechAvailability?.status === "unsupported"
+          ? props.speechAvailability.reason === "assets_unavailable"
+            ? "asset_needed"
+            : "unavailable"
+          : "checking";
+  const speechSettingsAvailable = props.speechAvailability?.status === "supported" &&
+    props.speechAvailability.canOpenSystemSettings &&
+    (props.speechAvailability.permission === "denied" || props.speechAvailability.permission === "restricted");
 
   const refresh = async (): Promise<void> => {
     if (refreshing) return;
@@ -6322,14 +6389,32 @@ export function LocalCapabilitiesSettingsPanel(props: {
               <strong>{props.t("capabilities.detectedTools")}</strong>
               {props.toolchainHealth ? (
                 <ul className="capability-tool-list" aria-label={props.t("capabilities.detectedTools")}>
-                  {props.toolchainHealth.tools.map((tool) => (
-                    <li key={tool.id}>
-                      <span>{tool.name}</span>
-                      <small className={tool.status === "missing" ? "missing" : "ready"}>
-                        {props.t(`capabilities.tool.${tool.status}`)}
-                      </small>
-                    </li>
-                  ))}
+                  {props.toolchainHealth.tools.map((tool) => {
+                    const statusKey =
+                      tool.status === "ready"
+                        ? "capabilities.tool.ready"
+                        : tool.required
+                          ? "capabilities.tool.missing"
+                          : "capabilities.tool.optional_missing";
+                    const statusLabel = props.t(statusKey);
+                    return (
+                      <li
+                        key={tool.id}
+                        aria-label={`${tool.name}: ${statusLabel}`}
+                        data-tool-required={tool.required ? "true" : "false"}
+                        data-tool-status={tool.status}
+                      >
+                        <span>{tool.name}</span>
+                        <small
+                          className={
+                            tool.status === "ready" ? "ready" : tool.required ? "missing" : "optional-missing"
+                          }
+                        >
+                          {statusLabel}
+                        </small>
+                      </li>
+                    );
+                  })}
                 </ul>
               ) : (
                 <span>{props.t("capabilities.checkingDescription")}</span>
@@ -6345,7 +6430,7 @@ export function LocalCapabilitiesSettingsPanel(props: {
               {props.t(refreshing ? "capabilities.checking" : "capabilities.checkAgain")}
             </button>
           </div>
-          {missingTools.length > 0 ? (
+          {missingRequiredTools.length > 0 ? (
             <div className="settings-row">
               <div className="settings-row-copy">
                 <strong>{props.t("capabilities.repairTitle")}</strong>
@@ -6434,16 +6519,26 @@ export function LocalCapabilitiesSettingsPanel(props: {
               <strong>{props.t("capabilities.voiceTitle")}</strong>
               <span>{props.t("capabilities.voiceDescription")}</span>
             </div>
-            <button
-              className="settings-button"
-              type="button"
-              data-capability-control="voice-input"
-              aria-label={`${props.t("capabilities.voiceTitle")}: ${props.t("settings.status.development")}`}
-              aria-describedby="capabilities-partial-note"
-              onClick={props.onDevelopment}
-            >
-              {props.t("settings.status.development")}
-            </button>
+            <div className="settings-row-control">
+              <span
+                className={`settings-status${speechCapabilityState === "available" ? "" : " warning"}`}
+                data-capability-status="voice-input"
+                role={speechCapabilityState === "failed" ? "alert" : "status"}
+                aria-live="polite"
+              >
+                {props.t(`capabilities.voice.${speechCapabilityState}`)}
+              </span>
+              {speechSettingsAvailable ? (
+                <button
+                  className="settings-button"
+                  type="button"
+                  data-capability-control="voice-open-settings"
+                  onClick={() => void props.onOpenSpeechSettings()}
+                >
+                  {props.t("capabilities.voice.openSettings")}
+                </button>
+              ) : null}
+            </div>
           </div>
         </div>
       </section>

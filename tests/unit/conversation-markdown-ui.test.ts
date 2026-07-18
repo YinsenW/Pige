@@ -18,7 +18,7 @@ vi.mock("@pige/markdown", () => ({
 
 import { ConversationMarkdown } from "../../apps/desktop/src/renderer/src/components/ConversationMarkdown";
 
-const globalKeys = ["window", "document", "navigator", "Node", "HTMLElement", "Element"] as const;
+const globalKeys = ["window", "document", "navigator", "Node", "HTMLElement", "HTMLButtonElement", "Element", "MouseEvent"] as const;
 const originalDescriptors = new Map<PropertyKey, PropertyDescriptor | undefined>();
 
 afterEach(() => {
@@ -75,6 +75,88 @@ describe("Conversation Markdown streaming presentation", () => {
     await act(async () => root.unmount());
     dom.window.close();
   });
+
+  it("adds a localized final-code copy action with success, failure, focus, and provisional fences", async () => {
+    const dom = installDom();
+    const copied: string[] = [];
+    let rejectCopy = false;
+    let finishCopy: (() => void) | undefined;
+    Object.defineProperty(dom.window.navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (value: string) => {
+          if (rejectCopy) throw new Error("private clipboard detail");
+          copied.push(value);
+          await new Promise<void>((resolve) => { finishCopy = resolve; });
+        }
+      }
+    });
+    const labels: Record<string, string> = {
+      "conversation.code": "Code",
+      "conversation.copyCode": "Copy code",
+      "conversation.copyingCode": "Copying…",
+      "conversation.codeCopied": "Copied",
+      "conversation.copyCodeFailed": "Copy failed — retry"
+    };
+    const t = (key: string): string => labels[key] ?? key;
+    const { createRoot } = await import("react-dom/client");
+    const container = dom.window.document.createElement("div");
+    dom.window.document.body.append(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(createElement(ConversationMarkdown, { markdown: "```ts\nconst safe = true;\n```", t }));
+    });
+    await waitFor(() => markdownRenders.pending.length === 1);
+    await act(async () => {
+      markdownRenders.pending[0]?.resolve({ html: '<pre><code class="language-ts">const safe = true;\n</code></pre>' });
+      await Promise.resolve();
+    });
+
+    const wrapper = required(container.querySelector<HTMLElement>(".conversation-code-block"));
+    expect(wrapper.querySelector(".conversation-code-language")?.textContent).toBe("ts");
+    const copyButton = required(wrapper.querySelector<HTMLButtonElement>("[data-conversation-code-copy]"));
+    expect(copyButton.textContent).toBe("Copy code");
+    copyButton.focus();
+    await act(async () => {
+      copyButton.click();
+      await Promise.resolve();
+    });
+    expect(copied).toEqual(["const safe = true;\n"]);
+    expect(copyButton.textContent).toBe("Copying…");
+    expect(copyButton.disabled).toBe(true);
+    expect(copyButton.getAttribute("aria-busy")).toBe("true");
+    await act(async () => {
+      finishCopy?.();
+      await Promise.resolve();
+    });
+    expect(copyButton.textContent).toBe("Copied");
+    expect(wrapper.querySelector('[role="status"]')?.textContent).toBe("Copied");
+    expect(dom.window.document.activeElement).toBe(copyButton);
+
+    rejectCopy = true;
+    await act(async () => {
+      copyButton.click();
+      await Promise.resolve();
+    });
+    expect(copyButton.textContent).toBe("Copy failed — retry");
+    expect(wrapper.querySelector('[role="status"]')?.textContent).toBe("Copy failed — retry");
+    expect(container.textContent).not.toContain("private clipboard detail");
+    expect(dom.window.document.activeElement).toBe(copyButton);
+
+    await act(async () => {
+      root.render(createElement(ConversationMarkdown, {
+        markdown: "```ts\nconst safe = true;\n```",
+        provisional: true,
+        t
+      }));
+    });
+    expect(container.querySelector("[data-conversation-code-copy]")).toBeNull();
+    expect(container.querySelector("pre code")?.textContent).toBe("const safe = true;\n");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
 });
 
 function installDom(): JSDOM {
@@ -100,4 +182,9 @@ async function waitFor(predicate: () => boolean): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
   throw new Error("Timed out waiting for streaming Markdown state.");
+}
+
+function required<T>(value: T | null | undefined): T {
+  if (value === null || value === undefined) throw new Error("Required test value missing");
+  return value;
 }

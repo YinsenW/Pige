@@ -19,7 +19,11 @@ import {
   type SettingsSection
 } from "../../apps/desktop/src/renderer/src/App";
 import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.json";
-import type { PermissionPrepareYoloEnableResult, PermissionSettingsSummary } from "@pige/contracts";
+import type {
+  PermissionPrepareYoloEnableResult,
+  PermissionSettingsSummary,
+  SpeechAvailabilityResult
+} from "@pige/contracts";
 
 const globalKeys = ["window", "document", "navigator", "Node", "HTMLElement", "HTMLSelectElement", "Event", "KeyboardEvent", "MouseEvent"] as const;
 const originalDescriptors = new Map<PropertyKey, PropertyDescriptor | undefined>();
@@ -835,17 +839,17 @@ describe("full UI Settings surface", () => {
     const themeGroup = requireElement(container.querySelector<HTMLElement>('[role="radiogroup"]'));
     const themes = Array.from(themeGroup.querySelectorAll<HTMLButtonElement>('[role="radio"]'));
     expect(themes).toHaveLength(3);
-    expect(themes.map((theme) => theme.getAttribute("aria-checked"))).toEqual(["false", "true", "false"]);
-    expect(themes.map((theme) => theme.tabIndex)).toEqual([-1, 0, -1]);
+    expect(themes.map((theme) => theme.getAttribute("aria-checked"))).toEqual(["false", "false", "false"]);
+    expect(themes.map((theme) => theme.tabIndex)).toEqual([0, -1, -1]);
 
     await act(async () => {
       themes[2]!.click();
-      themes[1]!.focus();
-      themes[1]!.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+      themes[0]!.focus();
+      themes[0]!.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
       await settle(dom);
     });
-    expect(dom.window.document.activeElement).toBe(themes[2]);
-    expect(themes.map((theme) => theme.getAttribute("aria-checked"))).toEqual(["false", "true", "false"]);
+    expect(dom.window.document.activeElement).toBe(themes[1]);
+    expect(themes.map((theme) => theme.getAttribute("aria-checked"))).toEqual(["false", "false", "false"]);
 
     const appLanguage = requireElement(container.querySelector<HTMLSelectElement>('select[aria-label="App language"]'));
     const knowledgeLanguage = requireElement(container.querySelector<HTMLButtonElement>('[data-appearance-control="knowledge-language"]'));
@@ -902,10 +906,24 @@ describe("full UI Settings surface", () => {
               required: true,
               status: "missing",
               repairHint: "Install a private dependency from a private path."
+            },
+            {
+              id: "bun",
+              name: "Bun",
+              required: false,
+              status: "missing"
             }
           ]
         },
+        speechAvailability: {
+          status: "unsupported",
+          reason: "assets_unavailable",
+          canOpenSystemSettings: false
+        },
+        speechAvailabilityLoading: false,
+        speechAvailabilityFailed: false,
         onRefresh,
+        onOpenSpeechSettings: vi.fn(async () => undefined),
         onDevelopment,
         t
       }));
@@ -919,16 +937,21 @@ describe("full UI Settings surface", () => {
     expect(container.textContent).toContain("PDF tools");
     expect(container.textContent).toContain("Ready");
     expect(container.textContent).toContain("Missing");
+    expect(container.textContent).toContain("Not installed");
+    expect(container.querySelector('[aria-label="Bun: Not installed"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="PDF tools: Missing"]')).not.toBeNull();
     expect(container.textContent).not.toContain("/private/hidden/bin/git");
     expect(container.textContent).not.toContain("Install a private dependency");
     expect(container.textContent).toContain("Not reported");
 
     const ocrEngine = requireElement(container.querySelector<HTMLButtonElement>('[data-capability-control="ocr-engine"]'));
     const imageOcr = requireElement(container.querySelector<HTMLButtonElement>('[data-capability-control="image-ocr"]'));
-    const voice = requireElement(container.querySelector<HTMLButtonElement>('[data-capability-control="voice-input"]'));
+    const voice = requireElement(container.querySelector<HTMLElement>('[data-capability-status="voice-input"]'));
     expect(ocrEngine.textContent).toBe("In development");
     expect(imageOcr.textContent).toBe("In development");
-    expect(voice.textContent).toBe("In development");
+    expect(voice.textContent).toBe("Language resource needed");
+    expect(container.querySelector('[data-capability-control="voice-input"]')).toBeNull();
+    expect(container.querySelector('[data-capability-control="voice-open-settings"]')).toBeNull();
     expect(container.querySelector('select[aria-label="OCR engine"]')).toBeNull();
     expect(container.querySelector('button[role="switch"][aria-label="Image and scanned-page OCR"]')).toBeNull();
     expect(container.querySelector('button[role="switch"][aria-label="Voice input"]')).toBeNull();
@@ -939,15 +962,109 @@ describe("full UI Settings surface", () => {
       buttonNamed(container, "Manage").click();
       ocrEngine.click();
       imageOcr.click();
-      voice.click();
       await settle(dom);
     });
     expect(onRefresh).toHaveBeenCalledOnce();
-    expect(onDevelopment).toHaveBeenCalledTimes(5);
+    expect(onDevelopment).toHaveBeenCalledTimes(4);
     expect(ocrEngine.textContent).toBe("In development");
     expect(imageOcr.textContent).toBe("In development");
-    expect(voice.textContent).toBe("In development");
+    expect(voice.textContent).toBe("Language resource needed");
     expect(ipcRead).toBe(false);
+
+    await act(async () => {
+      root.render(createElement(LocalCapabilitiesSettingsPanel, {
+        toolchainHealth: {
+          status: "ready",
+          checkedAt: "2026-07-16T01:01:00.000Z",
+          tools: [
+            {
+              id: "git",
+              name: "Git",
+              required: true,
+              status: "ready"
+            },
+            {
+              id: "bun",
+              name: "Bun",
+              required: false,
+              status: "missing"
+            }
+          ]
+        },
+        onRefresh,
+        onDevelopment,
+        t
+      }));
+      await settle(dom);
+    });
+    expect(container.textContent).toContain("Ready");
+    expect(container.querySelector('[aria-label="Bun: Not installed"]')).not.toBeNull();
+    expect(container.textContent).not.toContain("Missing required tools");
+    expect(
+      Array.from(container.querySelectorAll("button")).some((button) => button.textContent === "Repair...")
+    ).toBe(false);
+    expect(onDevelopment).toHaveBeenCalledTimes(4);
+    expect(ipcRead).toBe(false);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps Speech Service availability App-owned, locale-scoped, and stale-result fenced", () => {
+    const appSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/renderer/src/App.tsx"),
+      "utf8"
+    );
+    expect(appSource).toContain('if (!settingsOpen || settingsSection !== "capabilities") return;');
+    expect(appSource).toContain("window.pige.speech.availability({ languageTag: locale })");
+    expect(appSource).toContain("requestId !== speechAvailabilitySequence.current");
+    expect(appSource).toContain("window.pige.speech.openSystemSettings()");
+    expect(appSource).not.toContain("navigator.mediaDevices");
+  });
+
+  it("projects real speech availability without requesting permission and opens system settings only after denial", async () => {
+    const dom = createDom();
+    const onOpenSpeechSettings = vi.fn(async () => undefined);
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const renderPanel = async (speechAvailability: SpeechAvailabilityResult): Promise<void> => {
+      await act(async () => {
+        root.render(createElement(LocalCapabilitiesSettingsPanel, {
+          toolchainHealth: null,
+          speechAvailability,
+          speechAvailabilityLoading: false,
+          speechAvailabilityFailed: false,
+          onRefresh: vi.fn(async () => undefined),
+          onOpenSpeechSettings,
+          onDevelopment: vi.fn(),
+          t
+        }));
+        await settle(dom);
+      });
+    };
+
+    await renderPanel({
+      status: "supported",
+      languageTag: "en",
+      permission: "not-determined",
+      canOpenSystemSettings: true
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    expect(container.querySelector('[data-capability-status="voice-input"]')?.textContent).toBe("Available");
+    expect(container.querySelector('[data-capability-control="voice-open-settings"]')).toBeNull();
+    expect(onOpenSpeechSettings).not.toHaveBeenCalled();
+
+    await renderPanel({
+      status: "supported",
+      languageTag: "en",
+      permission: "denied",
+      canOpenSystemSettings: true
+    });
+    expect(container.querySelector('[data-capability-status="voice-input"]')?.textContent).toBe("Permission needed");
+    await act(async () => {
+      requireElement(container.querySelector<HTMLButtonElement>('[data-capability-control="voice-open-settings"]')).click();
+      await settle(dom);
+    });
+    expect(onOpenSpeechSettings).toHaveBeenCalledOnce();
 
     await act(async () => root.unmount());
     dom.window.close();

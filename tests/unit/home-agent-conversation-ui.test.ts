@@ -2343,6 +2343,8 @@ describe("Home durable Agent conversation UI", () => {
     expect(copied).toEqual(["Remember the durable boundary."]);
     expect(assistant.querySelector('[role="status"]')?.textContent).toBe(enMessages["home.messageCopied"]);
     expect(buttonsByAriaLabel(assistant, enMessages["home.messageCopied"])).toHaveLength(1);
+    expect(assistant.querySelector(".lucide-check")).not.toBeNull();
+    expect(assistant.querySelector(".lucide-copy")).toBeNull();
 
     await act(async () => mount.root.unmount());
     dom.window.close();
