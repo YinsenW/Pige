@@ -67,7 +67,10 @@ import {
   type AgentIngestRespondToolInput,
   type AgentIngestUpdateToolInput
 } from "./agent-ingest-tool-registry";
-import { buildAgentRuntimePolicyContext } from "./agent-policy-context";
+import {
+  buildAgentRuntimePolicyContext,
+  type AgentPermissionSettingsPort
+} from "./agent-policy-context";
 import { createModelEgressDecision } from "./model-egress-policy";
 import { containsRestrictedModelContent } from "./model-egress-content";
 import {
@@ -449,6 +452,7 @@ export class AgentIngestService {
   readonly #retrieval: AgentIngestRetrievalPort | undefined;
   readonly #proposals: AgentIngestProposalPort | undefined;
   readonly #modelEgressApprovals: ModelEgressApprovalService | undefined;
+  readonly #permissionSettings: AgentPermissionSettingsPort | undefined;
 
   constructor(
     models: AgentIngestModelConfigPort,
@@ -458,7 +462,8 @@ export class AgentIngestService {
     toolAuthorization: AgentIngestToolAuthorizationPort = allowCurrentAgentIngestTools,
     retrieval?: AgentIngestRetrievalPort,
     proposals?: AgentIngestProposalPort,
-    modelEgressApprovals?: ModelEgressApprovalService
+    modelEgressApprovals?: ModelEgressApprovalService,
+    permissionSettings?: AgentPermissionSettingsPort
   ) {
     this.#models = models;
     this.#runtime = runtime;
@@ -468,6 +473,7 @@ export class AgentIngestService {
     this.#retrieval = retrieval;
     this.#proposals = proposals;
     this.#modelEgressApprovals = modelEgressApprovals;
+    this.#permissionSettings = permissionSettings;
   }
 
   hasDefaultModel(): boolean {
@@ -806,6 +812,9 @@ export class AgentIngestService {
       jobId: job.id,
       defaultModel,
       defaultProvider,
+      ...(this.#permissionSettings
+        ? { permissionSettings: this.#permissionSettings.policyProjection() }
+        : {}),
       ...capabilitySnapshot
     });
     hooks.onPolicyResolved?.({

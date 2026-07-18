@@ -571,6 +571,61 @@ describe("desktop shell build contract", () => {
       .toBeLessThan(mainSource.indexOf("recoverInterruptedJobs()"));
   });
 
+  it("exposes machine-local permission settings through revision-fenced body-free IPC", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const settingsHandlers = mainSource.slice(
+      mainSource.indexOf('ipcMain.handle("permissions.settings.current"'),
+      mainSource.indexOf('ipcMain.handle("activity.list"')
+    );
+    const settingsPreload = preloadSource.slice(
+      preloadSource.indexOf("settings: {", preloadSource.indexOf("permissions: {")),
+      preloadSource.indexOf("activity: {")
+    );
+
+    expect(contractsSource).toContain("readonly prepareYoloEnable:");
+    expect(contractsSource).toContain("readonly revokeAllGrants:");
+    expect(settingsHandlers).toContain("PermissionSetDefaultModeRequestSchema.parse(request)");
+    expect(settingsHandlers).toContain("PermissionPrepareYoloEnableRequestSchema.parse(request)");
+    expect(settingsHandlers).toContain("permissionYoloConfirmationRegistry.issue(event.sender.id");
+    expect(settingsHandlers).toContain("permissionYoloConfirmationRegistry.consume(");
+    expect(settingsHandlers).toContain("getPermissionSettingsService().revokeGrant(");
+    expect(settingsHandlers).toContain("getPermissionSettingsService().revokeAllGrants(");
+    expect(settingsPreload).toContain('ipcRenderer.invoke("permissions.settings.current")');
+    expect(settingsPreload).toContain('"permissions.settings.prepareYoloEnable"');
+    expect(settingsPreload).toContain('"permissions.settings.revokeAllGrants"');
+    for (const unsafeField of ["actorId", "actorDigest", "resourceIdentityHash", "path", "secret"]) {
+      expect(settingsPreload).not.toContain(unsafeField);
+    }
+  });
+
+  it("registers first-party read-only Node OS capabilities only behind the main-owned permission registry", () => {
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
+
+    expect(mainSource).toContain("createFirstPartyReadonlyNodeOsCapabilityAdapters({");
+    expect(mainSource).toContain("registerPermissionedExternalCapabilityAdapter(adapter)");
+    expect(mainSource).toContain('join(home, ".ssh")');
+    expect(mainSource).toContain('join(home, "Library", "Keychains")');
+    expect(mainSource.indexOf("createFirstPartyReadonlyNodeOsCapabilityAdapters({"))
+      .toBeLessThan(mainSource.indexOf("createPermissionedExternalCapabilityRegistry("));
+
+    for (const toolName of [
+      "pige_external_filesystem_list",
+      "pige_external_filesystem_read_text",
+      "pige_external_network_fetch_text"
+    ]) {
+      expect(preloadSource).not.toContain(toolName);
+      expect(rendererSource).not.toContain(toolName);
+    }
+    for (const ambientNodeApi of ["node:fs", "node:child_process", "process.env"]) {
+      expect(preloadSource).not.toContain(ambientNodeApi);
+      expect(rendererSource).not.toContain(ambientNodeApi);
+    }
+  });
+
   it("keeps durable proposal recovery internal while renderer decisions fail closed", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const approveHandler = mainSource.slice(

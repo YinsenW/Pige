@@ -17,6 +17,10 @@ describe("settings registry", () => {
     expect(byKey.get("backup.entryPoints")?.scope).toBe("derived_status");
     expect(byKey.get("models.providerApiKeys")?.scope).toBe("secret");
     expect(byKey.get("models.defaultPiAgentModel")?.agentPolicyEffect).toBe("model.defaultModelProfileId");
+    expect(byKey.get("permissions.defaultMode")?.scope).toBe("machine_local");
+    expect(byKey.get("permissions.defaultMode")?.agentPolicyEffect).toBe("permissions.defaultMode");
+    expect(byKey.get("permissions.yoloEnabled")?.permissionRequirement).toBe("explicit_confirmation");
+    expect(byKey.get("permissions.savedGrants")?.backedUpByDefault).toBe(false);
     expect(byKey.get("diagnostics.supportBundleExport")?.scope).toBe("runtime_transient");
     expect(byKey.get("toolchain.health")?.scope).toBe("derived_status");
     expect(registry.entries.every((entry) => SettingPermissionRequirementSchema.safeParse(entry.permissionRequirement).success)).toBe(true);

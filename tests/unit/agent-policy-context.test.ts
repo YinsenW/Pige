@@ -56,6 +56,25 @@ describe("agent runtime policy context", () => {
     expect(after).not.toBe(before);
   });
 
+  it("binds the machine-local permission projection into the policy hash", () => {
+    const vaultPath = makeVault();
+    const ordinary = buildAgentRuntimePolicyContext(vaultPath);
+    const yolo = buildAgentRuntimePolicyContext(vaultPath, {
+      permissionSettings: {
+        defaultMode: "yolo_full_access",
+        yoloEnabled: true,
+        savedGrantSummaryRefs: ["permgrant_20260718_abcdefgh"]
+      }
+    });
+
+    expect(yolo.permissions).toEqual({
+      defaultMode: "yolo_full_access",
+      yoloEnabled: true,
+      savedGrantSummaryRefs: ["permgrant_20260718_abcdefgh"]
+    });
+    expect(yolo.policyHash).not.toBe(ordinary.policyHash);
+  });
+
   it.each(["confirm_private_or_large", "confirm_all", "local_only"] as const)(
     "accepts the explicit stricter %s cloud-send policy and binds it into the policy hash",
     (cloudSendPolicy) => {

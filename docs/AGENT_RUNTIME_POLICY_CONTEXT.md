@@ -220,7 +220,7 @@ Rules:
   selected-source admission. Any Agent/Skill/package/local-tool action outside that scope
   uses Permission Broker; a core tool name is not authority.
 - Prompt text may tell the Agent that sensitive actions require permission, but tool calls still check Permission Broker.
-- YOLO may suppress prompts only when explicitly enabled by the user and still logs auto-allowed actions.
+- Permission Settings supplies revision-fenced machine-local mode, grants, and YOLO.
 - Do not expose raw permission-store details to the model.
 
 ### 5.4 Language

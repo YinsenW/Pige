@@ -100,6 +100,7 @@ export interface PermissionedExternalJobPort {
     readonly jobId: string;
     readonly requestId: string;
     readonly bindingHash: string;
+    readonly waitForDecision?: boolean;
   }): void;
   commitPermissionConsumption(input: {
     readonly jobId: string;
@@ -174,12 +175,15 @@ export class PermissionedExternalCapabilityRegistry {
         };
         const lifecycle = broker.prepare(turn.vaultPath, binding, summary);
 
-        if (lifecycle.state === "pending") {
+        if (lifecycle.state === "pending" || lifecycle.state === "approved") {
           jobs.bindPermissionRequest({
             jobId: turn.jobId,
             requestId: lifecycle.id,
-            bindingHash: binding.bindingHash
+            bindingHash: binding.bindingHash,
+            waitForDecision: lifecycle.state === "pending"
           });
+        }
+        if (lifecycle.state === "pending") {
           throw new PermissionConfirmationRequiredError(lifecycle.id, binding.bindingHash);
         }
         if (lifecycle.state === "denied" || lifecycle.state === "cancelled") {
@@ -228,6 +232,7 @@ export class PermissionedExternalCapabilityRegistry {
         });
         turn.assertCurrent();
         signal.throwIfAborted();
+        broker.assertExecutionAuthority(turn.vaultPath, consumed.id, binding);
         const result = await adapter.execute(normalizedInput, signal, context);
         const completionMarkerHash = hashToolResult(result);
         jobs.completePermissionAction({

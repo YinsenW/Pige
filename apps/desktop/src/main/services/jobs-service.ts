@@ -642,7 +642,7 @@ export class JobsService implements PermissionedExternalJobPort {
   bindPermissionRequest(input: {
     readonly jobId: string;
     readonly requestId: string;
-    readonly bindingHash: string;
+    readonly bindingHash: string; readonly waitForDecision?: boolean;
   }): void {
     const vaultPath = this.#requireActiveVaultPath();
     const snapshot = this.#readJobSnapshot(vaultPath, input.jobId);
@@ -658,6 +658,11 @@ export class JobsService implements PermissionedExternalJobPort {
       throw new PigeDomainError("permission.request_stale", "The permission request Job is not running.");
     }
     const permissionRef = createPermissionBindingRef(input.requestId, input.bindingHash);
+    if (input.waitForDecision === false) {
+      const checkpoint = { id: permissionCheckpointId(input.requestId), step: "permission_authorization" as const, state: "not_started" as const, inputRefs: [permissionRef], outputRefs: [], resumeHint: "consume_revision_fenced_automatic_decision" };
+      this.#jobExecutionCoordinator(vaultPath).patch(snapshot, { inputRefs: [permissionRef], permissionRequestIds: [input.requestId], checkpoints: [checkpoint], message: "The automatic permission decision is bound before consumption." });
+      return;
+    }
     this.#jobExecutionCoordinator(vaultPath).settle(snapshot, {
       kind: "waiting",
       reason: "permission",

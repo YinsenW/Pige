@@ -560,7 +560,7 @@
     "PIGE-DATA-003":{"status":"planned","plannedTarget":"Managed Collection field/view/relation/formula lifecycle with stable IDs, revision conflicts, Activity/Undo, backup, and safe exceptional boundaries."},
     "PIGE-SEC-001":{"status":"partial","evidence":["EV-PROVIDER"],"open":{"id":"OPEN-REQ-PIGE-SEC-001","description":"OS-keychain integration, portable-mode warning, and release backup secret scans remain open.","targetBuilds":["B3.02"],"targetExits":["E3.02"]}},
     "PIGE-SEC-002":{"status":"planned","plannedTarget":"Current-action Broker foundation is implemented; real production Agent/Skill/package/local-tool callers, focused modal convergence, capacity, broader scope and signed-platform proof remain."},
-    "PIGE-SEC-003":{"status":"planned","plannedTarget":"Permission-mode scope, provenance, revocation, auto-allow, and operation-log tests."},
+    "PIGE-SEC-003":{"status":"planned","plannedTarget":"Permission modes, Node/OS grants, Operations, UI, signed-platform evidence."},
     "PIGE-SEC-004":{"status":"partial","evidence":["EV-SECURITY-POLICY"],"open":{"id":"OPEN-REQ-PIGE-SEC-004","description":"Live private-reporting availability and release-time public-surface review remain open.","targetBuilds":["B9.17"],"targetExits":["E9.11"]}},
     "PIGE-SEC-005":{"status":"partial","evidence":["EV-EGRESS","EV-MODEL-EGRESS-POLICY","EV-POLICY","EV-DESKTOP-SETTING-GUARD","EV-EGRESS-SERVICE","EV-EGRESS-PROFILE-BINDING","EV-EGRESS-RUNTIME-BINDING","EV-RUNTIME-NONSECRET-BINDING","EV-JOB-NONSECRET-READINESS","EV-HOME-AGENT","EV-PI-INGEST-RETRIEVAL","EV-DATASET-QUERY-DRIFT-AUDIT","EV-NOTE-AGENT-EGRESS","EV-MODEL-EGRESS-SCHEMA","EV-MODEL-EGRESS-APPROVAL-STORE","EV-MODEL-EGRESS-JOB-RECOVERY","EV-MODEL-EGRESS-HOME","EV-MODEL-EGRESS-INGEST","EV-MODEL-EGRESS-HOME-UI"],"open":{"id":"OPEN-REQ-PIGE-SEC-005","description":"Ordinary default, disclosure, Home/ingest/Dataset/current-note drift gates and one-use restart-safe confirmation work. Persisted stricter-policy UI, in-flight no-duplicate Pi continuation, remaining providers and signed platforms stay open.","targetBuilds":["B3.05"],"targetExits":["E3.03"]}},
     "PIGE-SEC-006":{"status":"partial","evidence":["EV-PROVIDER"],"open":{"id":"OPEN-REQ-PIGE-SEC-006","description":"OS-keychain integration and explicit portable-mode warning remain open.","targetBuilds":["B1.19"],"targetExits":["E1.15"]}},
@@ -1048,7 +1048,7 @@
     },
     "E8.03": {
       "status": "planned",
-      "plannedTarget": "External grant/YOLO scope, provenance, revocation, and Operation report."
+      "plannedTarget": "Grants, mutating tools, Operations, UI, signed-platform scope/provenance evidence."
     },
     "E8.04": {
       "status": "planned",

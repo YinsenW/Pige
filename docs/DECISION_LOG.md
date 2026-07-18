@@ -682,29 +682,28 @@ References:
 
 Status: Accepted
 Date: 2026-07-14
+Revised: 2026-07-18
 Supersedes: D-20260709-Permission-Modes-And-YOLO
 
 Decision:
 
-Pi may request arbitrary path, filesystem, command, and commit actions, but capability is
-not authority. Active-vault recoverable knowledge Markdown has standing prompt-free
-authority; a drop/picker gesture covers admission of that exact source. Other effects use
-Permission Broker unless an eligible exact grant/default applies. Destructive, policy,
-source-original, model-egress, and raw-secret boundaries remain stronger.
+Pi may request path, filesystem, command and commit actions, but capability is not
+authority. Active-vault recoverable Markdown and exact selected-source admission have
+standing authority; other effects use Permission Broker. Destructive, policy,
+source-original, model-egress and raw-secret boundaries remain stronger.
 
 Rationale:
 
-Pi must be free to plan useful actions and ask, without model output silently becoming
-authority over user-owned paths. Standing Markdown authority keeps normal growth quiet;
-scoped authorization keeps broader computer capability user-owned.
+Pi plans useful actions without model output becoming authority over user-owned paths.
 
 Consequences:
 
 - Tool ownership never bypasses the gate for its exact action.
-- Allow once binds vault, Job, actor/action versions and digests, capability, resource,
-  policy/runtime and request identity, then is consumed once through Job claim/CAS.
+- Allow once binds exact action/Job/policy/resource identity and is consumed once.
 - UI receives bounded system-authored summaries only; main executes the exact action.
 - Permission defaults cover eligible scopes only; stronger gates and raw-secret blocks remain.
+- Machine-local revision fences explicit YOLO and grant revocation. Main ships bounded
+  read-only folder/text/network tools; their untrusted output faces egress again.
 
 References:
 
