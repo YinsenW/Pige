@@ -2045,13 +2045,36 @@ describe("Home durable Agent conversation UI", () => {
     await clickButton(dom, container, "Send");
     await waitFor(dom, () => harness.submitRequests.length === 1);
 
-    expect(harness.submitRequests[0]).toMatchObject({
-      inputKind: "file_picker",
-      text: "Organize these files"
-    });
+    expect(harness.submitRequests[0]).toMatchObject({ inputKind: "file_picker" });
+    expect(harness.submitRequests[0]?.text).toBeUndefined();
     expect(harness.submittedFileNames).toEqual([["notes.md"]]);
     expect(container.querySelector('[data-optimistic-user-message="true"]')?.textContent)
       .toContain("Organize these files");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("preserves a staged source through the durable waiting path when no model is configured", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.loadModelSummary = async () => emptyModelSummary();
+    harness.loadAgentRuntimeStatus = async () => null;
+    harness.submitTurn = async (request) => {
+      harness.submitRequests.push(request);
+      harness.jobs = [sourceWaitingForModelJob()];
+      return sourceWaitingForModelResult();
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await attachFile(dom, container, "offline-source.md", "# Offline source\n");
+    await clickButton(dom, container, "Send");
+    await waitFor(dom, () => harness.submitRequests.length === 1);
+
+    expect(harness.submitRequests[0]).toMatchObject({ inputKind: "file_picker" });
+    expect(harness.submitRequests[0]?.text).toBeUndefined();
+    expect(harness.submittedFileNames).toEqual([["offline-source.md"]]);
+    await waitFor(dom, () => container.querySelector(".conversation-status-message.state-waiting") !== null);
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -2105,6 +2128,16 @@ describe("Home durable Agent conversation UI", () => {
     expect(container.querySelector(".attachment-chip")?.textContent).toContain("retry.csv");
     expect(container.querySelector('[data-optimistic-user-message="true"]')).toBeNull();
 
+    await clickButton(dom, container, "Send");
+    await waitFor(dom, () => harness.submitRequests.length === 2);
+    expect(harness.submitRequests[1]?.clientTurnId).toBe(harness.submitRequests[0]?.clientTurnId);
+    expect(harness.submittedFileNames).toEqual([["retry.csv"], ["retry.csv"]]);
+
+    await setTextareaValue(dom, container, "Analyze this changed request.");
+    await clickButton(dom, container, "Send");
+    await waitFor(dom, () => harness.submitRequests.length === 3);
+    expect(harness.submitRequests[2]?.clientTurnId).not.toBe(harness.submitRequests[0]?.clientTurnId);
+
     await act(async () => root.unmount());
     dom.window.close();
   });
@@ -2125,6 +2158,7 @@ describe("Home durable Agent conversation UI", () => {
     await dropFile(dom, container, "public-alpha.csv", "item,score\nAlpha,9\n");
     await waitFor(dom, () => countText(container, expectedStatus) === 1);
     expect(harness.submitRequests).toHaveLength(1);
+    expect(harness.submitRequests[0]?.inputKind).toBe("file_drop");
     expect(modelActionButtons(container)).toHaveLength(1);
     expect(container.textContent).not.toContain("Pi Agent is working.");
     expect(container.textContent).not.toContain("Waiting for a local capability");
