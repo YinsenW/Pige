@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type {
   JobSummary,
   JobsListRequest,
+  LocalDatabaseStatus,
   Locale,
   ModelProviderSettingsSummary,
   OnboardingStatus,
@@ -160,6 +161,26 @@ describe("First-run onboarding UI", () => {
     expect(container.textContent).not.toContain("/Users/private-vault");
     expect(container.querySelector('textarea[aria-label="Capture or ask"]')).toBeNull();
     await waitFor(dom, () => dom.window.document.activeElement === open);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps vault action failures body-free during first run", async () => {
+    const dom = createDom();
+    const harness = createHarness(blockedOnboarding(), cloneOnlyPreview());
+    const api = makePigeApi(harness);
+    api.vault.create = async () => {
+      throw new Error("RAW_CREATE_SENTINEL /private/first-run-vault");
+    };
+    const { container, root } = await mountApp(dom, api);
+
+    await advanceToVault(dom, container);
+    await click(dom, button(container, "Create Vault"));
+    await waitFor(dom, () => container.textContent?.includes("Something went wrong.") ?? false);
+
+    expect(container.textContent).not.toContain("RAW_CREATE_SENTINEL");
+    expect(container.textContent).not.toContain("/private/first-run-vault");
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -357,6 +378,91 @@ describe("Restore identity UI", () => {
     expect(harness.retryJobIds).toEqual(["job_20260714_backupui1"]);
     expect(container.textContent).not.toContain("The backup stopped safely");
     expect(container.querySelectorAll(".backup-job-status")).toHaveLength(0);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("uses the approved maintenance cards, previews reset, restores focus, and keeps failures body-free", async () => {
+    const dom = createDom();
+    const harness = createHarness(readyOnboarding(), bothModesPreview());
+    harness.localDatabaseStatus = {
+      driver: "node_sqlite",
+      appSchemaVersion: 1,
+      appliedMigrationCount: 4,
+      status: "ready",
+      updatedAt: "2026-07-18T04:00:00.000Z"
+    };
+    const api = makePigeApi(harness, true);
+    api.maintenance.rebuildLocalDatabase = async () => {
+      throw new Error("RAW_REBUILD_SENTINEL /private/index");
+    };
+    let resetCalls = 0;
+    api.maintenance.resetLocalDatabase = async () => {
+      resetCalls += 1;
+      throw new Error("RAW_RESET_SENTINEL /private/database");
+    };
+    const { container, root } = await mountApp(dom, api);
+
+    await openSettingsSection(dom, container, "Index & Maintenance");
+    await waitFor(dom, () => container.querySelector(".maintenance-settings-page") !== null);
+    const page = requireElement(container.querySelector(".maintenance-settings-page"));
+    expect(page.querySelector(".settings-panel-header")).not.toBeNull();
+    expect(page.querySelectorAll(".settings-section")).toHaveLength(2);
+    expect(page.querySelectorAll(".settings-card")).toHaveLength(2);
+    expect(page.textContent).toContain("Knowledge Index");
+    expect(page.textContent).toContain("Healthy");
+    expect(page.textContent).toContain("Repair");
+    expect(page.textContent).not.toContain("Core Toolchain");
+
+    await click(dom, button(page, "Rebuild"));
+    await waitFor(dom, () => page.textContent?.includes("Something went wrong.") ?? false);
+    expect(page.textContent).not.toContain("RAW_REBUILD_SENTINEL");
+    expect(page.textContent).not.toContain("/private/index");
+
+    const previewReset = button(page, "Preview Reset…");
+    await click(dom, previewReset);
+    expect(resetCalls).toBe(0);
+    expect(page.querySelector("#maintenance-reset-preview")).not.toBeNull();
+    await waitFor(dom, () => dom.window.document.activeElement === button(page, "Cancel"));
+    await act(async () => {
+      page.querySelector("#maintenance-reset-preview")?.dispatchEvent(
+        new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true })
+      );
+      await settle(dom);
+    });
+    await waitFor(dom, () => page.querySelector("#maintenance-reset-preview") === null);
+    await waitFor(dom, () => dom.window.document.activeElement === previewReset);
+
+    await click(dom, previewReset);
+    await click(dom, button(page, "Reset Database"));
+    expect(resetCalls).toBe(1);
+    await waitFor(dom, () => page.textContent?.includes("Something went wrong.") ?? false);
+    expect(page.textContent).not.toContain("RAW_RESET_SENTINEL");
+    expect(page.textContent).not.toContain("/private/database");
+    expect(page.querySelector("#maintenance-reset-preview")).toBeNull();
+    await waitFor(dom, () => dom.window.document.activeElement === previewReset);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps source storage policy failures body-free", async () => {
+    const dom = createDom();
+    const harness = createHarness(readyOnboarding(), bothModesPreview());
+    const api = makePigeApi(harness, true);
+    api.vault.updateSourceStoragePolicy = async () => {
+      throw new Error("RAW_POLICY_SENTINEL /private/source-root");
+    };
+    const { container, root } = await mountApp(dom, api);
+
+    await openVaultSettings(dom, container);
+    const policy = container.querySelector<HTMLSelectElement>("#vault-source-storage-strategy");
+    if (!policy) throw new Error("Source storage selector not found.");
+    await changeSelect(dom, policy, "reference_original");
+    await waitFor(dom, () => container.textContent?.includes("Something went wrong.") ?? false);
+    expect(container.textContent).not.toContain("RAW_POLICY_SENTINEL");
+    expect(container.textContent).not.toContain("/private/source-root");
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -592,6 +698,7 @@ interface RestoreHarness {
   readonly cancelJobIds: string[];
   readonly revealRequests: VaultRevealTarget[];
   lastBackupAt?: string;
+  localDatabaseStatus: LocalDatabaseStatus | null;
   applyRestore: (request: RestoreApplyRequest) => Promise<RestoreApplyResult>;
   openRecent: (request: OpenRecentVaultRequest) => Promise<VaultActionResult>;
   revealStorageRoot: (target: VaultRevealTarget) => Promise<VaultRevealResult>;
@@ -612,6 +719,7 @@ function createHarness(onboarding: OnboardingStatus, preview: RestorePreviewResu
     retryJobIds: [],
     cancelJobIds: [],
     revealRequests: [],
+    localDatabaseStatus: null,
     applyRestore: async (request) => {
       harness.applyRequests.push(request);
       return { status: "canceled" };
@@ -628,7 +736,7 @@ function createHarness(onboarding: OnboardingStatus, preview: RestorePreviewResu
   return harness;
 }
 
-function makePigeApi(harness: RestoreHarness, sidebarOpen = false): object {
+function makePigeApi(harness: RestoreHarness, sidebarOpen = false) {
   return {
     getHealth: async () => ({ status: "ok", appVersion: "test", checkedAt: "2026-07-14T08:00:00.000Z" }),
     window: {
@@ -695,7 +803,7 @@ function makePigeApi(harness: RestoreHarness, sidebarOpen = false): object {
       toolchainHealth: async () => null
     },
     maintenance: {
-      localDatabaseStatus: async () => null,
+      localDatabaseStatus: async () => harness.localDatabaseStatus,
       rebuildLocalDatabase: async () => ({ status: "queued" }),
       resetLocalDatabase: async () => ({ resetAt: "2026-07-15T00:00:00.000Z", removedRoots: [], recreatedRoots: [] })
     },
@@ -709,10 +817,16 @@ function makePigeApi(harness: RestoreHarness, sidebarOpen = false): object {
       onboardingStatus: async () => harness.onboarding,
       recent: async () => harness.recentVaults,
       openRecent: (request: OpenRecentVaultRequest) => harness.openRecent(request),
+      create: async () => ({ status: "canceled" as const }),
+      open: async () => ({ status: "canceled" as const }),
       removeRecent: async () => [],
       dismissFirstHomeGuide: async () => harness.onboarding,
       revealKnowledgeRoot: async () => harness.revealStorageRoot("knowledge_root"),
-      revealSourceAssetRoot: async () => harness.revealStorageRoot("source_asset_root")
+      revealSourceAssetRoot: async () => harness.revealStorageRoot("source_asset_root"),
+      updateSourceStoragePolicy: async () => {
+        if (!harness.onboarding.activeVault) throw new Error("No active vault.");
+        return harness.onboarding.activeVault;
+      }
     },
     backup: {
       status: async () => ({

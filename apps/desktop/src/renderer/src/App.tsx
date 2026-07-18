@@ -458,8 +458,8 @@ export function App(): React.JSX.Element {
     try {
       await action();
       await refreshVaultState();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Something went wrong.");
+    } catch {
+      setError(t("error.generic"));
     } finally {
       setBusy(false);
     }
@@ -592,8 +592,8 @@ export function App(): React.JSX.Element {
     setLibraryError(null);
     try {
       setLibraryList(await window.pige.library.list({ limit: 50 }));
-    } catch (caught) {
-      setLibraryError(caught instanceof Error ? caught.message : t("error.generic"));
+    } catch {
+      setLibraryError(t("error.generic"));
     }
   };
 
@@ -6886,12 +6886,17 @@ interface VaultSettingsPanelProps {
 function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
   const [backupNotice, setBackupNotice] = useState<string | null>(null);
   const [backupBusy, setBackupBusy] = useState(false);
+  const [maintenanceBusy, setMaintenanceBusy] = useState<"check" | "rebuild" | "reset" | null>(null);
+  const [maintenanceNotice, setMaintenanceNotice] = useState<{ readonly kind: "success" | "error"; readonly key: string } | null>(null);
+  const [resetConfirming, setResetConfirming] = useState(false);
   const [revealTarget, setRevealTarget] = useState<VaultRevealTarget | null>(null);
   const [revealNotice, setRevealNotice] = useState<{ readonly kind: "success" | "error"; readonly message: string } | null>(null);
   const revealRequestSequence = useRef(0);
   const revealRequestActiveRef = useRef(false);
   const knowledgeRootButtonRef = useRef<HTMLButtonElement>(null);
   const sourceAssetRootButtonRef = useRef<HTMLButtonElement>(null);
+  const resetDatabaseButtonRef = useRef<HTMLButtonElement>(null);
+  const cancelResetButtonRef = useRef<HTMLButtonElement>(null);
   const activeBackupJob = props.backupJobs[0];
   const lastBackupDisplay = props.backupStatus?.lastBackupAt
     ? new Intl.DateTimeFormat(props.locale === "zh-Hans" ? "zh-CN" : props.locale, {
@@ -6909,6 +6914,15 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
     revealRequestSequence.current += 1;
     revealRequestActiveRef.current = false;
   }, []);
+
+  useEffect(() => {
+    if (props.surface !== "maintenance") return;
+    let active = true;
+    void props.onRefreshDiagnostics().catch(() => {
+      if (active) setMaintenanceNotice({ kind: "error", key: "error.generic" });
+    });
+    return () => { active = false; };
+  }, [props.surface]);
 
   const runBackupAction = async (action: () => Promise<void>): Promise<void> => {
     props.onError(null);
@@ -6962,8 +6976,8 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
     try {
       await window.pige.vault.updateSourceStoragePolicy({ defaultStrategy });
       await props.onRefresh();
-    } catch (caught) {
-      props.onError(caught instanceof Error ? caught.message : "Something went wrong.");
+    } catch {
+      props.onError(props.t("error.generic"));
     }
   };
 
@@ -6999,27 +7013,72 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
     }
   };
 
-  const resetLocalDatabase = async (): Promise<void> => {
+  const runMaintenanceAction = async (
+    kind: "check" | "rebuild" | "reset",
+    action: () => Promise<void>,
+    successKey: string
+  ): Promise<void> => {
+    if (maintenanceBusy) return;
     props.onError(null);
+    setMaintenanceBusy(kind);
+    setMaintenanceNotice(null);
     try {
-      await window.pige.maintenance.resetLocalDatabase();
-      await props.onRefresh();
-      await props.onRefreshDiagnostics();
-    } catch (caught) {
-      props.onError(caught instanceof Error ? caught.message : "Something went wrong.");
+      await action();
+      setMaintenanceNotice({ kind: "success", key: successKey });
+    } catch {
+      setMaintenanceNotice({ kind: "error", key: "error.generic" });
+    } finally {
+      setMaintenanceBusy(null);
     }
   };
 
-  const rebuildLocalDatabase = async (): Promise<void> => {
-    props.onError(null);
-    try {
+  const refreshMaintenance = async (): Promise<void> =>
+    runMaintenanceAction("check", props.onRefreshDiagnostics, "maintenance.checkCompleted");
+
+  const resetLocalDatabase = async (): Promise<void> => {
+    setResetConfirming(false);
+    await runMaintenanceAction("reset", async () => {
+      await window.pige.maintenance.resetLocalDatabase();
+      await props.onRefresh();
+      await props.onRefreshDiagnostics();
+    }, "maintenance.resetCompleted");
+    window.requestAnimationFrame(() => resetDatabaseButtonRef.current?.focus());
+  };
+
+  const rebuildLocalDatabase = async (): Promise<void> =>
+    runMaintenanceAction("rebuild", async () => {
       await window.pige.maintenance.rebuildLocalDatabase();
       await props.onRefresh();
       await props.onRefreshDiagnostics();
-    } catch (caught) {
-      props.onError(caught instanceof Error ? caught.message : "Something went wrong.");
-    }
+    }, "maintenance.rebuildStarted");
+
+  const beginResetConfirmation = (): void => {
+    if (maintenanceBusy) return;
+    setMaintenanceNotice(null);
+    setResetConfirming(true);
+    window.requestAnimationFrame(() => cancelResetButtonRef.current?.focus());
   };
+
+  const cancelResetConfirmation = (): void => {
+    setResetConfirming(false);
+    window.requestAnimationFrame(() => resetDatabaseButtonRef.current?.focus());
+  };
+
+  const databaseStatus = props.localDatabaseStatus?.status ?? "checking";
+  const databaseStatusClass = databaseStatus === "error"
+    ? " error"
+    : databaseStatus === "needs_rebuild" || databaseStatus === "not_initialized"
+      ? " warning"
+      : "";
+  const databaseUpdatedAt = props.localDatabaseStatus?.updatedAt
+    ? new Date(props.localDatabaseStatus.updatedAt)
+    : null;
+  const databaseUpdatedLabel = databaseUpdatedAt && !Number.isNaN(databaseUpdatedAt.getTime())
+    ? new Intl.DateTimeFormat(props.locale === "zh-Hans" ? "zh-CN" : props.locale, {
+      dateStyle: "medium",
+      timeStyle: "short"
+    }).format(databaseUpdatedAt)
+    : props.t("maintenance.timeUnavailable");
 
   if (props.surface === "vault" && restore.restorePreview) {
     return (
@@ -7042,7 +7101,7 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
 
   return (
     <section
-      className={`settings-page ${props.surface === "vault" ? "settings-vault-page" : ""}`}
+      className={`settings-page ${props.surface === "vault" ? "settings-vault-page" : "maintenance-settings-page"}`}
       aria-labelledby={props.surface === "maintenance" ? "settings-maintenance-title" : "settings-vault-title"}
     >
       <header className="settings-panel-header">
@@ -7050,7 +7109,7 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
           {props.t(props.surface === "maintenance" ? "maintenance.title" : "vaultSettings.title")}
         </h1>
         <p>{props.t(
-          props.surface === "maintenance" ? "maintenance.resetCopy" : "vaultSettings.subtitle"
+          props.surface === "maintenance" ? "maintenance.subtitle" : "vaultSettings.subtitle"
         )}</p>
       </header>
 
@@ -7228,29 +7287,123 @@ function VaultSettingsPanel(props: VaultSettingsPanelProps): React.JSX.Element {
       </section>
       </> : null}
 
-      {props.surface === "maintenance" ? (
-      <section className="settings-group">
-        <div className="settings-actions">
-          <button type="button" className="secondary" onClick={() => void rebuildLocalDatabase()}>
-            {props.t("maintenance.rebuildIndex")}
-          </button>
-          <button type="button" className="secondary" onClick={() => void resetLocalDatabase()}>
-            {props.t("maintenance.resetDatabase")}
-          </button>
-        </div>
-        {props.localDatabaseStatus ? (
-          <p className="muted">
-            {props.t("maintenance.localDb")}: {props.localDatabaseStatus.status}; {props.t("maintenance.migrations")}: {props.localDatabaseStatus.appliedMigrationCount}
+      {props.surface === "maintenance" ? <>
+        <section className="settings-section" aria-labelledby="maintenance-index-title">
+          <h2 className="settings-section-title" id="maintenance-index-title">{props.t("maintenance.indexSection")}</h2>
+          <div className="settings-card" aria-busy={maintenanceBusy ? "true" : undefined}>
+            <div className="settings-row">
+              <div className="settings-row-copy">
+                <strong>{props.t("maintenance.indexStatus")}</strong>
+                <span>{props.t("maintenance.statusDescription." + databaseStatus)}</span>
+              </div>
+              <span className={"settings-status" + databaseStatusClass}>
+                {props.t("maintenance.status." + databaseStatus)}
+              </span>
+            </div>
+            <div className="settings-row">
+              <div className="settings-row-copy">
+                <strong>{props.t("maintenance.lastChecked")}</strong>
+                <span>
+                  {databaseUpdatedLabel}
+                  {props.localDatabaseStatus
+                    ? " · " + props.t("maintenance.migrations") + ": " + props.localDatabaseStatus.appliedMigrationCount
+                    : ""}
+                </span>
+              </div>
+              <button
+                className="settings-button settings-action"
+                type="button"
+                disabled={maintenanceBusy !== null}
+                onClick={() => void refreshMaintenance()}
+              >
+                {props.t(maintenanceBusy === "check" ? "maintenance.checking" : "maintenance.checkIndex")}
+              </button>
+            </div>
+            <div className="settings-row">
+              <div className="settings-row-copy">
+                <strong>{props.t("maintenance.rebuildIndex")}</strong>
+                <span>{props.t("maintenance.rebuildDescription")}</span>
+              </div>
+              <button
+                className="settings-button settings-action"
+                type="button"
+                disabled={maintenanceBusy !== null}
+                onClick={() => void rebuildLocalDatabase()}
+              >
+                {props.t(maintenanceBusy === "rebuild" ? "maintenance.rebuilding" : "maintenance.rebuild")}
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section className="settings-section" aria-labelledby="maintenance-repair-title">
+          <h2 className="settings-section-title" id="maintenance-repair-title">{props.t("maintenance.repairSection")}</h2>
+          <div className="settings-card">
+            <div className="settings-row">
+              <div className="settings-row-copy">
+                <strong>{props.t("maintenance.resetDatabase")}</strong>
+                <span>{props.t("maintenance.resetCopy")}</span>
+              </div>
+              <button
+                ref={resetDatabaseButtonRef}
+                className="settings-button danger settings-action"
+                type="button"
+                aria-expanded={resetConfirming}
+                aria-controls="maintenance-reset-preview"
+                disabled={maintenanceBusy !== null}
+                onClick={beginResetConfirmation}
+              >
+                {props.t("maintenance.previewReset")}
+              </button>
+            </div>
+            {resetConfirming ? (
+              <div
+                className="settings-row tall maintenance-reset-preview"
+                id="maintenance-reset-preview"
+                role="group"
+                aria-labelledby="maintenance-reset-preview-title"
+                onKeyDown={(event) => {
+                  if (event.key !== "Escape") return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  cancelResetConfirmation();
+                }}
+              >
+                <div className="settings-row-copy">
+                  <strong id="maintenance-reset-preview-title">{props.t("maintenance.confirmResetTitle")}</strong>
+                  <span>{props.t("maintenance.confirmResetDescription")}</span>
+                </div>
+                <div className="settings-row-control">
+                  <button
+                    ref={cancelResetButtonRef}
+                    className="settings-button"
+                    type="button"
+                    onClick={cancelResetConfirmation}
+                  >
+                    {props.t("backup.restoreCancel")}
+                  </button>
+                  <button
+                    className="settings-button danger"
+                    type="button"
+                    onClick={() => void resetLocalDatabase()}
+                  >
+                    {props.t("maintenance.confirmReset")}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </section>
+        {maintenanceNotice ? (
+          <p
+            className={maintenanceNotice.kind === "error" ? "error" : "settings-note"}
+            role={maintenanceNotice.kind === "error" ? "alert" : "status"}
+            aria-live="polite"
+          >
+            {props.t(maintenanceNotice.key)}
           </p>
         ) : null}
-        {props.toolchainHealth ? (
-          <p className="muted">
-            {props.t("maintenance.toolchain")}: {props.toolchainHealth.status}; {props.t("maintenance.missingTools")}:{" "}
-            {props.toolchainHealth.tools.filter((tool) => tool.status === "missing").length}
-          </p>
-        ) : null}
-      </section>
-      ) : null}
+      </> : null}
 
       {props.surface === "vault" ? (
         <RecentVaults recentVaults={props.recentVaults} onRemoveRecent={props.onRemoveRecent} t={props.t} />
