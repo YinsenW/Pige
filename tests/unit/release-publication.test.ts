@@ -138,6 +138,10 @@ describe("release publication", () => {
     expect(packageabilityConfig).toContain("notarize: false");
 
     expect(workflow).toContain('tags:\n      - "v*"');
+    expect(workflow).not.toContain("actions/checkout@v7");
+    expect(workflow).not.toContain("actions/setup-node@v6");
+    expect(workflow).toContain("actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7");
+    expect(workflow).toContain("actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6");
     expect(workflow).toContain("github.ref_protected");
     expect(workflow).toContain("environment: production-release");
     expect(workflow).toContain("PIGE_RELEASE_VERSION: ${{ needs.validate.outputs.version }}");
