@@ -4039,16 +4039,17 @@ function HomeComposer(props: {
       await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
       await props.onHomeStateChanged().catch(() => undefined);
       const outcome = await submission;
+      const durableUserTurnExists = outcome.state !== "failed" || Boolean(outcome.conversationEventId);
+      if (durableUserTurnExists && draftRevisionRef.current === submittedDraftRevision) {
+        draftRevisionRef.current += 1;
+        props.onDraftChange("");
+      }
       if (outcome.state === "completed") {
         clearAgentDraft();
         setAgentAnswer(outcome.answer);
         setLiveAnswerEventId(outcome.tailEventId);
         setAgentModelUsage(outcome.modelUsage);
         setAgentRunState("completed");
-        if (draftRevisionRef.current === submittedDraftRevision) {
-          draftRevisionRef.current += 1;
-          props.onDraftChange("");
-        }
         await refreshConversation();
         return;
       }
@@ -4056,10 +4057,6 @@ function HomeComposer(props: {
       setAgentModelUsage(outcome.modelUsage);
       setAgentError(outcome.error);
       setAgentRunState(outcome.state);
-      if (outcome.state === "waiting" && draftRevisionRef.current === submittedDraftRevision) {
-        draftRevisionRef.current += 1;
-        props.onDraftChange("");
-      }
       await refreshConversation();
     } catch {
       clearAgentDraft();
@@ -4577,7 +4574,15 @@ function HomeComposer(props: {
               {message.answer?.datasetResult ? (
                 <DatasetAnswerResult answer={message.answer} modelUsage="none" t={props.t} />
               ) : (
-                <ConversationMarkdown markdown={message.text} />
+                <>
+                  <ConversationMarkdown markdown={message.text} />
+                  <ConversationCitations
+                    answer={message.answer}
+                    noteLoadingPageId={noteLoadingPageId}
+                    onOpen={openResult}
+                    t={props.t}
+                  />
+                </>
               )}
             </article>
           ))}
@@ -4647,6 +4652,12 @@ function HomeComposer(props: {
                 {props.t("home.assistantMessage")}
               </span>
               <ConversationMarkdown markdown={liveConversationAnswer.answer} />
+              <ConversationCitations
+                answer={liveConversationAnswer}
+                noteLoadingPageId={noteLoadingPageId}
+                onOpen={openResult}
+                t={props.t}
+              />
             </article>
           ) : null}
         </section>
@@ -5263,6 +5274,38 @@ function formatDatasetScalar(value: string | number | boolean | null): string {
   if (value === null) return "-";
   if (typeof value === "boolean") return value ? "true" : "false";
   return String(value);
+}
+
+function ConversationCitations(props: {
+  readonly answer: AgentTurnAnswer | undefined;
+  readonly noteLoadingPageId: string | null;
+  readonly onOpen: (pageId: string) => Promise<void>;
+  readonly t: (key: string) => string;
+}): React.JSX.Element | null {
+  const citations = props.answer?.citations.filter(
+    (citation): citation is RetrievalAnswerCitation => !("kind" in citation)
+  ) ?? [];
+  if (citations.length === 0) return null;
+  return (
+    <div className="citation-list conversation-citations" aria-label={props.t("retrieval.citations")}>
+      {citations.map((citation) => (
+        <button
+          type="button"
+          className="citation-row"
+          key={citation.refId}
+          disabled={props.noteLoadingPageId === citation.pageId}
+          onClick={() => void props.onOpen(citation.pageId)}
+        >
+          <span className="citation-index" aria-hidden="true">{citation.label}</span>
+          <span className="citation-copy">
+            <strong>{citation.title}</strong>
+            <span>{props.t(`library.type.${citation.pageType}`)}</span>
+          </span>
+          <PigeIcon name="expand" size={13} />
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function RetrievalResults(props: {
