@@ -3,6 +3,7 @@ import {
   ConfirmationProposalSchema,
   FixtureManifestSchema,
   JobRecordSchema,
+  KnowledgeActivityListResultSchema,
   MachineLocalSettingsSchema,
   MarkdownPageStatusSchema,
   MarkdownPageTypeSchema,
@@ -236,6 +237,32 @@ describe("schemas", () => {
     expect(settings.appLocale).toBe("en");
     expect(settings.window?.sidebarOpen).toBe(true);
     expect(settings.dismissedFirstHomeVaultIds).toEqual(["vault_20260709_ab12cd"]);
+  });
+
+  it("validates a pathless Activity page target projection", () => {
+    const result = KnowledgeActivityListResultSchema.parse({
+      scannedAt: "2026-07-18T00:00:00.000Z",
+      activeVaultId: "vault_20260718_activitysafe",
+      total: 1,
+      invalidOperationCount: 0,
+      activities: [{
+        operationId: "op_20260718_activitysafe",
+        kind: "create_page",
+        createdAt: "2026-07-18T00:00:00.000Z",
+        targetLabel: "Activity page",
+        target: { kind: "page", pageId: "page_20260718_activitysafe" },
+        status: "applied",
+        canUndo: true
+      }]
+    });
+    expect(result.activities[0]?.target).toEqual({
+      kind: "page",
+      pageId: "page_20260718_activitysafe"
+    });
+    expect(() => KnowledgeActivityListResultSchema.parse({
+      ...result,
+      activities: [{ ...result.activities[0], path: "/private/vault/page.md" }]
+    })).toThrow();
   });
 
   it("validates toolchain manifests", () => {

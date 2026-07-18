@@ -41,6 +41,7 @@ describe("Knowledge Activity and Undo", () => {
       activities: [{
         operationId: fixture.operation.id,
         targetLabel: "Activity fixture",
+        target: { kind: "page", pageId: fixture.operation.targetRefs[0]!.id },
         status: "applied",
         canUndo: true
       }]
@@ -78,6 +79,7 @@ describe("Knowledge Activity and Undo", () => {
       canUndo: false,
       undoUnavailableReason: "already_undone"
     }]);
+    expect(restarted.activities[0]).not.toHaveProperty("target");
     const undoOperation = readOperations(fixture.vaultPath).find((operation) => operation.id === first.undoOperationId);
     expect(undoOperation).toMatchObject({
       kind: "trash_page",
@@ -99,6 +101,7 @@ describe("Knowledge Activity and Undo", () => {
         operationId: fixture.operation.id,
         kind: "update_page",
         targetLabel: "Updated Activity fixture",
+        target: { kind: "page", pageId: fixture.operation.targetRefs[0]!.id },
         status: "applied",
         canUndo: true
       }]
@@ -130,6 +133,7 @@ describe("Knowledge Activity and Undo", () => {
       canUndo: false,
       undoUnavailableReason: "already_undone"
     });
+    expect(new KnowledgeActivityService(fixture.vaults).list().activities[0]).not.toHaveProperty("target");
     expect(new LocalDatabaseService().listPages(fixture.vaultPath)?.pages[0]?.updatedAt)
       .toBe("2026-07-12T12:00:00.000Z");
     const undoOperation = requireOperation(fixture.vaultPath, first.undoOperationId);
@@ -234,6 +238,42 @@ describe("Knowledge Activity and Undo", () => {
     expect(fs.readFileSync(fixture.pagePath, "utf8")).toContain("User-authored correction.");
     expect(fs.existsSync(fixture.trashPath)).toBe(false);
     expect(readOperations(fixture.vaultPath).filter((operation) => operation.kind === "trash_page")).toEqual([]);
+  });
+
+  it("omits navigation authority when the current page identity no longer matches the Operation", () => {
+    const fixture = createFixture();
+    fs.writeFileSync(
+      fixture.pagePath,
+      fixture.pageContent.replace(
+        'id: "page_20260712_activityfixture"',
+        'id: "page_20260712_otheractivity"'
+      ),
+      "utf8"
+    );
+
+    const activity = new KnowledgeActivityService(fixture.vaults).list().activities[0];
+    expect(activity).toMatchObject({
+      operationId: fixture.operation.id,
+      status: "applied",
+      canUndo: false,
+      undoUnavailableReason: "content_changed"
+    });
+    expect(activity).not.toHaveProperty("target");
+    expect(JSON.stringify(activity)).not.toContain(fixture.pageRelativePath);
+  });
+
+  it("omits navigation authority when the current page is missing", () => {
+    const fixture = createFixture();
+    fs.unlinkSync(fixture.pagePath);
+
+    const activity = new KnowledgeActivityService(fixture.vaults).list().activities[0];
+    expect(activity).toMatchObject({
+      operationId: fixture.operation.id,
+      status: "applied",
+      canUndo: false,
+      undoUnavailableReason: "target_missing"
+    });
+    expect(activity).not.toHaveProperty("target");
   });
 
   it("keeps legacy create Operations visible but not undoable without a result hash", () => {

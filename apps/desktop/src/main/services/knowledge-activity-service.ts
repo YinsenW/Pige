@@ -212,6 +212,7 @@ function toActivitySummary(
       undoUnavailableReason: "already_undone"
     };
   }
+  const target = readActivityPageTarget(vaultPath, operation);
   const binding = generatedPageBinding(operation);
   if (!binding) {
     return {
@@ -219,6 +220,7 @@ function toActivitySummary(
       kind: "create_page",
       createdAt: operation.createdAt,
       ...(targetLabel ? { targetLabel } : {}),
+      ...(target ? { target } : {}),
       status: "applied",
       canUndo: false,
       undoUnavailableReason: "legacy_record"
@@ -262,6 +264,7 @@ function toActivitySummary(
       kind: "create_page",
       createdAt: operation.createdAt,
       ...(targetLabel ? { targetLabel } : {}),
+      ...(target ? { target } : {}),
       status: "applied",
       canUndo: currentHash === binding.contentHash,
       ...(currentHash === binding.contentHash ? {} : { undoUnavailableReason: "content_changed" as const })
@@ -272,6 +275,7 @@ function toActivitySummary(
       kind: "create_page",
       createdAt: operation.createdAt,
       ...(targetLabel ? { targetLabel } : {}),
+      ...(target ? { target } : {}),
       status: "applied",
       canUndo: false,
       undoUnavailableReason: "content_changed"
@@ -296,6 +300,7 @@ function toPageUpdateActivitySummary(
       undoUnavailableReason: "already_undone"
     };
   }
+  const target = readActivityPageTarget(vaultPath, operation);
   const binding = readAgentPageUpdateOperationBinding(operation);
   if (!binding) {
     return {
@@ -303,6 +308,7 @@ function toPageUpdateActivitySummary(
       kind: "update_page",
       createdAt: operation.createdAt,
       ...(targetLabel ? { targetLabel } : {}),
+      ...(target ? { target } : {}),
       status: "applied",
       canUndo: false,
       undoUnavailableReason: "legacy_record"
@@ -328,6 +334,7 @@ function toPageUpdateActivitySummary(
       kind: "update_page",
       createdAt: operation.createdAt,
       ...(targetLabel ? { targetLabel } : {}),
+      ...(target ? { target } : {}),
       status: "applied",
       canUndo,
       ...(canUndo ? {} : { undoUnavailableReason: "content_changed" as const })
@@ -338,10 +345,42 @@ function toPageUpdateActivitySummary(
       kind: "update_page",
       createdAt: operation.createdAt,
       ...(targetLabel ? { targetLabel } : {}),
+      ...(target ? { target } : {}),
       status: "applied",
       canUndo: false,
       undoUnavailableReason: "content_changed"
     };
+  }
+}
+
+function readActivityPageTarget(
+  vaultPath: string,
+  operation: OperationRecord
+): { readonly kind: "page"; readonly pageId: string } | undefined {
+  const updateBinding = readAgentPageUpdateOperationBinding(operation);
+  const operationTarget = operation.targetRefs[0];
+  const pageId = updateBinding?.pageId ?? operationTarget?.id;
+  const pagePath = updateBinding?.pagePath ?? operationTarget?.path;
+  if (
+    !pageId ||
+    !pagePath ||
+    !GENERATED_PAGE_ID.test(pageId) ||
+    !GENERATED_PAGE_PATH.test(pagePath) ||
+    path.posix.basename(pagePath) !== `${pageId}.md`
+  ) {
+    return undefined;
+  }
+  try {
+    const snapshot = readPrivateFile(
+      vaultPath,
+      resolveVaultPath(vaultPath, pagePath),
+      MAX_GENERATED_PAGE_BYTES,
+      1
+    );
+    const frontmatter = parsePigeFrontmatter(snapshot.bytes.toString("utf8"))?.frontmatter;
+    return frontmatter?.id === pageId ? { kind: "page", pageId } : undefined;
+  } catch {
+    return undefined;
   }
 }
 

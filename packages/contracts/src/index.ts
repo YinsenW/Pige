@@ -579,11 +579,17 @@ export type KnowledgeActivityUndoUnavailableReason =
   | "legacy_record"
   | "target_missing";
 
+export interface KnowledgeActivityPageTarget {
+  readonly kind: "page";
+  readonly pageId: string;
+}
+
 export interface KnowledgeActivitySummary {
   readonly operationId: string;
   readonly kind: "create_page" | "update_page";
   readonly createdAt: string;
   readonly targetLabel?: string;
+  readonly target?: KnowledgeActivityPageTarget;
   readonly status: "applied" | "undone";
   readonly canUndo: boolean;
   readonly undoUnavailableReason?: KnowledgeActivityUndoUnavailableReason;

@@ -600,6 +600,25 @@ describe("desktop shell build contract", () => {
     }
   });
 
+  it("projects Activity open authority as a parsed stable page identity without paths", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+
+    expect(contractsSource).toContain("interface KnowledgeActivityPageTarget");
+    expect(contractsSource).toContain('readonly kind: "page"');
+    expect(contractsSource).toContain("readonly pageId: string");
+    expect(mainSource).toContain("KnowledgeActivityListResultSchema.parse(");
+    expect(mainSource).toContain("KnowledgeActivityListRequestSchema.parse(request ?? {})");
+    expect(preloadSource).toContain("async function invokeKnowledgeActivityList(");
+    expect(preloadSource).toContain("const parsed = KnowledgeActivityListResultSchema.parse(await ipcRenderer.invoke(");
+    const activityPreload = preloadSource.slice(
+      preloadSource.indexOf("activity: {"),
+      preloadSource.indexOf("proposals: {")
+    );
+    expect(activityPreload).not.toContain("path");
+  });
+
   it("registers first-party read-only Node OS capabilities only behind the main-owned permission registry", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
@@ -666,7 +685,8 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain("scheduleActivityIndexRebuild()");
     expect(mainUndoHandler).toContain("scheduleActivityIndexRebuild()");
     expect(mainUndoHandler).not.toContain("getLocalDatabaseService().rebuild");
-    expect(preloadSource).toContain('ipcRenderer.invoke("activity.list", request)');
+    expect(preloadSource).toContain('"activity.list",');
+    expect(preloadSource).toContain("KnowledgeActivityListResultSchema.parse");
     expect(preloadSource).toContain('ipcRenderer.invoke("activity.undo", request)');
     expect(contractsSource).toContain('readonly kind: "create_page" | "update_page";');
     expect(rendererSource).toContain('window.pige.activity.list({ limit: 20 })');

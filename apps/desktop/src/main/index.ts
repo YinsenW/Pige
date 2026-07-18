@@ -63,6 +63,8 @@ import type {
   WindowLayoutRequest
 } from "@pige/contracts";
 import {
+  KnowledgeActivityListRequestSchema,
+  KnowledgeActivityListResultSchema,
   AddManualProviderRequestSchema,
   AddPresetProviderRequestSchema,
   AddManualModelRequestSchema,
@@ -1580,7 +1582,12 @@ ipcMain.handle("permissions.settings.revokeAllGrants", (_event, request: Permiss
   );
 });
 ipcMain.handle("activity.list", (_event, request?: KnowledgeActivityListRequest) =>
-  getKnowledgeActivityService().list(request)
+  (() => {
+    const parsed = KnowledgeActivityListRequestSchema.parse(request ?? {});
+    return KnowledgeActivityListResultSchema.parse(
+      getKnowledgeActivityService().list(parsed.limit === undefined ? {} : { limit: parsed.limit })
+    );
+  })()
 );
 ipcMain.handle("activity.undo", (_event, request: KnowledgeActivityUndoRequest) => {
   const result = getKnowledgeActivityService().undo(request);
