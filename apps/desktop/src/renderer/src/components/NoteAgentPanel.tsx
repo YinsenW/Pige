@@ -284,6 +284,7 @@ export function NoteAgentPanel(props: {
                   {message.timestamp ? <time className="visually-hidden">{message.timestamp}</time> : null}
                   <ConversationMarkdown
                     markdown={message.body}
+                    t={props.t}
                     {...(message.provisional ? { provisional: true } : {})}
                   />
                   {!message.provisional && message.citations?.length ? (

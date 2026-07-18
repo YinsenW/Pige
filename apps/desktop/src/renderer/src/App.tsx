@@ -4642,7 +4642,7 @@ function HomeComposer(props: {
                 <DatasetAnswerResult answer={message.answer} modelUsage="none" t={props.t} />
               ) : (
                 <>
-                  <ConversationMarkdown markdown={message.text} />
+                  <ConversationMarkdown markdown={message.text} t={props.t} />
                   <ConversationCitations
                     answer={message.answer}
                     noteLoadingPageId={noteLoadingPageId}
@@ -4663,7 +4663,7 @@ function HomeComposer(props: {
               <span className="conversation-message-role visually-hidden">
                 {props.t("home.assistantMessage")}
               </span>
-              <ConversationMarkdown markdown={agentDraft.text} provisional />
+              <ConversationMarkdown markdown={agentDraft.text} provisional t={props.t} />
             </article>
           ) : showConversationRunMessage ? (
             <article
@@ -4719,7 +4719,7 @@ function HomeComposer(props: {
               <span className="conversation-message-role visually-hidden">
                 {props.t("home.assistantMessage")}
               </span>
-              <ConversationMarkdown markdown={liveConversationAnswer.answer} />
+              <ConversationMarkdown markdown={liveConversationAnswer.answer} t={props.t} />
               <ConversationCitations
                 answer={liveConversationAnswer}
                 noteLoadingPageId={noteLoadingPageId}
