@@ -2841,6 +2841,55 @@ h2 {
   gap: 6px;
 }
 
+.skills-registry-list {
+  overflow: hidden;
+}
+
+.skill-registry-row {
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.skills-empty-icon.is-enabled {
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--border-default));
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface-hover));
+}
+
+.skill-registry-copy {
+  min-width: 0;
+}
+
+.skill-registry-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 3px;
+}
+
+.skill-registry-meta > span {
+  padding: 2px 7px;
+  border: .5px solid var(--border-default);
+  border-radius: 999px;
+  background: var(--surface-hover);
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.skill-registry-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.skill-registry-control .settings-status.is-enabled {
+  color: var(--accent-strong);
+}
+
+.skill-registry-warning {
+  margin-top: 8px;
+}
+
 .vault-create,
 .settings-group {
   display: grid;
@@ -6376,6 +6425,19 @@ dd {
     white-space: normal;
     overflow-wrap: anywhere;
     line-height: 1.25;
+  }
+
+  .settings-skills .skill-registry-row {
+    display: grid;
+    grid-template-columns: 32px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .settings-skills .skill-registry-control {
+    grid-column: 1 / -1;
+    justify-content: space-between;
+    width: 100%;
+    padding-left: 44px;
   }
 }
 

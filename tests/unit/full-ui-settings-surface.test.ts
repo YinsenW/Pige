@@ -22,6 +22,8 @@ import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.
 import type {
   PermissionPrepareYoloEnableResult,
   PermissionSettingsSummary,
+  SkillRegistryMutationResult,
+  SkillRegistrySummary,
   SpeechAvailabilityResult
 } from "@pige/contracts";
 
@@ -129,6 +131,10 @@ describe("full UI Settings surface", () => {
     expect(compactSettings).toContain("white-space: normal;");
     expect(compactSettings).toContain("overflow-wrap: anywhere;");
     expect(compactSettings).toContain("text-overflow: clip;");
+    expect(compactSettings).toContain(".settings-skills .skill-registry-row");
+    expect(compactSettings).toContain("grid-template-columns: 32px minmax(0, 1fr);");
+    expect(compactSettings).toContain(".settings-skills .skill-registry-control");
+    expect(compactSettings).toContain("grid-column: 1 / -1;");
     expect(compactSettings).toContain("grid-template-columns: minmax(0, 1fr);");
     expect(compactSettings).toContain("width: min(320px, calc(100% - 48px));");
     expect(compactSettings).toContain('.settings-surface[data-compact-navigation-open="true"] .settings-sidebar');
@@ -308,6 +314,13 @@ describe("full UI Settings surface", () => {
     expect(ipcRead).toBe(false);
 
     await act(async () => {
+      buttonNamed(dialog, "SkillsPartially available").click();
+      await settle(dom);
+    });
+    expect(dialog.querySelector('[role="status"]')).toBeNull();
+    expect(ipcRead).toBe(false);
+
+    await act(async () => {
       buttonNamed(dialog, "AppearancePartially available").click();
       await settle(dom);
     });
@@ -335,15 +348,29 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
-  it("renders the complete Skills shell without inventing installed Skills or service work", async () => {
+  it("renders verified Skills, disables with exact CAS, and ignores stale registry events", async () => {
     const dom = createDom();
     const onDevelopment = vi.fn();
-    let ipcRead = false;
+    let resolveSummary!: (summary: SkillRegistrySummary) => void;
+    let registryListener: ((summary: SkillRegistrySummary) => void) | undefined;
+    const unsubscribe = vi.fn();
+    const enabledRegistry = skillRegistry(7, true, 1);
+    const disabledRegistry = skillRegistry(8, false, 1);
+    const summary = vi.fn(() => new Promise<SkillRegistrySummary>((resolve) => {
+      resolveSummary = resolve;
+    }));
+    const disable = vi.fn(async () => ({ status: "committed" as const, registry: disabledRegistry }));
     Object.defineProperty(dom.window, "pige", {
       configurable: true,
-      get() {
-        ipcRead = true;
-        throw new Error("Skills development actions must not access IPC.");
+      value: {
+        skills: {
+          summary,
+          disable,
+          onChanged: (listener: (next: SkillRegistrySummary) => void) => {
+            registryListener = listener;
+            return unsubscribe;
+          }
+        }
       }
     });
     const root = createRoot(dom.window.document.querySelector("#root")!);
@@ -356,11 +383,44 @@ describe("full UI Settings surface", () => {
     const page = dom.window.document.querySelector<HTMLElement>(".settings-skills")!;
     expect(page.getAttribute("aria-labelledby")).toBe("settings-skills-title");
     expect(page.querySelectorAll('[role="group"]')).toHaveLength(2);
-    expect(page.textContent).toContain("Skill inventory unavailable");
-    expect(page.textContent).toContain("Nothing has been read or changed yet");
+    expect(page.textContent).toContain("Loading Skills");
+    expect(page.textContent).not.toContain("No Skills installed");
+    expect(summary).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      resolveSummary(enabledRegistry);
+      await settle(dom);
+    });
+
+    const row = requireElement(page.querySelector<HTMLElement>('[data-skill-id="review-notes"]'));
+    expect(page.dataset.skillRegistryRevision).toBeUndefined();
+    expect(page.querySelector("[data-skill-registry-revision]")?.getAttribute("data-skill-registry-revision")).toBe("7");
+    expect(row.textContent).toContain("Review notes");
+    expect(row.textContent).toContain("Summarizes the current source for review.");
+    expect(row.textContent).toContain("v1.2.0");
+    expect(row.textContent).toContain("Local workflow");
+    expect(row.textContent).toContain("This Mac");
+    expect(row.textContent).toContain("Local only");
+    expect(row.textContent).toContain("Enabled");
+    expect(page.textContent).toContain("Some registry entries could not be verified and are hidden.");
+    expect(page.textContent).not.toContain("/Users/private");
     expect(page.textContent).toContain("Source, files, and warnings stay visible");
-    expect(page.querySelector('[role="switch"]')).toBeNull();
-    expect(page.querySelector("[data-skill-id]")).toBeNull();
+
+    await act(async () => {
+      buttonNamed(row, "Disable: Review notes").click();
+      await settle(dom);
+    });
+    expect(disable).toHaveBeenCalledWith({ apiVersion: 1, skillId: "review-notes", expectedRevision: 7 });
+    expect(row.textContent).toContain("Disabled");
+    expect(row.textContent).toContain("Enable unavailable");
+    expect(buttonNamed(row, "Enable unavailable: Review notes").disabled).toBe(true);
+    expect(page.textContent).toContain("The Skill is disabled for new Agent runs.");
+
+    await act(async () => {
+      registryListener?.(enabledRegistry);
+      await settle(dom);
+    });
+    expect(row.textContent).toContain("Disabled");
 
     await act(async () => {
       buttonNamed(page, "Install from link").click();
@@ -368,7 +428,103 @@ describe("full UI Settings surface", () => {
       await settle(dom);
     });
     expect(onDevelopment).toHaveBeenCalledTimes(2);
-    expect(ipcRead).toBe(false);
+
+    await act(async () => root.unmount());
+    expect(unsubscribe).toHaveBeenCalledOnce();
+    dom.window.close();
+  });
+
+  it("fails closed on a body-bearing Skill Registry read error and retries to a verified empty state", async () => {
+    const dom = createDom();
+    const summary = vi.fn()
+      .mockRejectedValueOnce(new Error("/Users/private/.pige/skills/registry.json API_KEY=secret"))
+      .mockResolvedValueOnce(skillRegistry(0, false, 0, []));
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: {
+        skills: {
+          summary,
+          disable: vi.fn(),
+          onChanged: () => () => undefined
+        }
+      }
+    });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+
+    await act(async () => {
+      root.render(createElement(SkillsSettingsPanel, { onDevelopment: vi.fn(), t }));
+      await settle(dom);
+      await settle(dom);
+    });
+    const page = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-skills"));
+    expect(page.textContent).toContain("Skill Registry unavailable");
+    expect(page.textContent).toContain("No inventory state is being inferred.");
+    expect(page.textContent).not.toContain("/Users/private");
+    expect(page.textContent).not.toContain("API_KEY");
+
+    await act(async () => {
+      buttonNamed(page, "Try again").click();
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(summary).toHaveBeenCalledTimes(2);
+    expect(page.textContent).toContain("No Skills installed");
+    expect(page.textContent).toContain("verified machine-local registry contains no installed Skills");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps verified Skill state unchanged for body-free busy and unavailable disable results", async () => {
+    const dom = createDom();
+    const registry = skillRegistry(11, true, 0);
+    const failedResult = (code: "skill.registry_busy" | "skill.registry_unavailable"): SkillRegistryMutationResult => ({
+      status: "failed",
+      error: {
+        code,
+        domain: "skill",
+        messageKey: "error.generic",
+        retryable: true,
+        severity: "error",
+        userAction: "retry"
+      }
+    });
+    const disable = vi.fn()
+      .mockResolvedValueOnce(failedResult("skill.registry_busy"))
+      .mockResolvedValueOnce(failedResult("skill.registry_unavailable"));
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: {
+        skills: {
+          summary: async () => registry,
+          disable,
+          onChanged: () => () => undefined
+        }
+      }
+    });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+
+    await act(async () => {
+      root.render(createElement(SkillsSettingsPanel, { onDevelopment: vi.fn(), t }));
+      await settle(dom);
+    });
+    const page = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-skills"));
+    const row = requireElement(page.querySelector<HTMLElement>('[data-skill-id="review-notes"]'));
+
+    await act(async () => {
+      buttonNamed(row, "Disable: Review notes").click();
+      await settle(dom);
+    });
+    expect(row.textContent).toContain("Enabled");
+    expect(page.textContent).toContain("Another Skill Registry change is in progress. Try again.");
+
+    await act(async () => {
+      buttonNamed(row, "Disable: Review notes").click();
+      await settle(dom);
+    });
+    expect(row.textContent).toContain("Enabled");
+    expect(page.textContent).toContain("Skill Registry could not save this change. Nothing was changed.");
+    expect(page.textContent).not.toContain("registry.json");
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -1325,6 +1481,26 @@ function permissionSettings(
     savedGrants: [],
     ...overrides
   };
+}
+
+function skillRegistry(
+  revision: number,
+  enabled: boolean,
+  invalidManifestCount = 0,
+  skills: SkillRegistrySummary["skills"] = [{
+    id: "review-notes",
+    name: "Review notes",
+    version: "1.2.0",
+    description: "Summarizes the current source for review.",
+    scope: "machine_local",
+    kind: "pure",
+    enabled,
+    trust: "user_confirmed",
+    capabilities: ["read_current_source"],
+    dataBoundaries: ["local"]
+  }]
+): SkillRegistrySummary {
+  return { apiVersion: 1, revision, invalidManifestCount, skills };
 }
 
 function t(key: string): string {

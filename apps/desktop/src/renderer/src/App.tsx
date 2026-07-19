@@ -79,6 +79,8 @@ import type {
   SpeechAssetInstallEvent,
   SpeechAssetInstallRequest,
   SpeechAssetInstallResult,
+  SkillRegistrySummary,
+  SkillSummary,
   SupportBundlePreview,
   ToolchainHealth,
   UpdateSummary,
@@ -6272,7 +6274,7 @@ const settingsSections: readonly {
   { id: "capabilities", icon: "wrench", status: "partial" },
   { id: "memory", icon: "memory", status: "development" },
   { id: "privacy", icon: "shield", status: "partial" },
-  { id: "skills", icon: "skill", status: "development", capability: "skills" },
+  { id: "skills", icon: "skill", status: "partial" },
   { id: "packages", icon: "package", status: "development", capability: "packages" },
   { id: "history", icon: "activity", status: "real" },
   { id: "updates", icon: "package", status: "partial" },
@@ -7440,6 +7442,73 @@ export function SkillsSettingsPanel(props: {
   readonly onDevelopment: () => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
+  const [registry, setRegistry] = useState<SkillRegistrySummary | null>(null);
+  const [readState, setReadState] = useState<"loading" | "ready" | "failed">("loading");
+  const [reloadSequence, setReloadSequence] = useState(0);
+  const [disablingSkillId, setDisablingSkillId] = useState<string | null>(null);
+  const [statusKey, setStatusKey] = useState<string | null>(null);
+  const latestRevisionRef = useRef(-1);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    let active = true;
+    let requestCurrent = true;
+    const adoptRegistry = (next: SkillRegistrySummary): void => {
+      if (!active || next.revision < latestRevisionRef.current) return;
+      latestRevisionRef.current = next.revision;
+      setRegistry(next);
+      setReadState("ready");
+    };
+    const unsubscribe = window.pige.skills.onChanged(adoptRegistry);
+    if (registry === null) setReadState("loading");
+    void window.pige.skills.summary().then((next) => {
+      if (requestCurrent) adoptRegistry(next);
+    }).catch(() => {
+      if (active && requestCurrent && latestRevisionRef.current < 0) setReadState("failed");
+    });
+    return () => {
+      active = false;
+      requestCurrent = false;
+      mountedRef.current = false;
+      unsubscribe();
+    };
+  }, [reloadSequence]);
+
+  const disableSkill = async (skill: SkillSummary): Promise<void> => {
+    if (!registry || disablingSkillId || !skill.enabled) return;
+    setDisablingSkillId(skill.id);
+    setStatusKey(null);
+    try {
+      const result = await window.pige.skills.disable({
+        apiVersion: 1,
+        skillId: skill.id,
+        expectedRevision: registry.revision
+      });
+      if (!mountedRef.current) return;
+      if (result.status === "failed") {
+        setStatusKey(result.error.code === "skill.registry_busy"
+          ? "skills.registryBusy"
+          : "skills.registryUnavailable");
+        return;
+      }
+      if (result.registry.revision >= latestRevisionRef.current) {
+        latestRevisionRef.current = result.registry.revision;
+        setRegistry(result.registry);
+        setReadState("ready");
+      }
+      setStatusKey(result.status === "committed"
+        ? "skills.disableCompleted"
+        : result.status === "stale"
+          ? "skills.registryChanged"
+          : "skills.skillUnavailable");
+    } catch {
+      if (mountedRef.current) setStatusKey("skills.disableFailed");
+    } finally {
+      if (mountedRef.current) setDisablingSkillId(null);
+    }
+  };
+
   return (
     <section className="settings-page settings-skills" aria-labelledby="settings-skills-title">
       <header className="settings-panel-header">
@@ -7449,13 +7518,79 @@ export function SkillsSettingsPanel(props: {
 
       <section className="settings-section" role="group" aria-labelledby="skills-installed-title">
         <h2 className="settings-section-title" id="skills-installed-title">{props.t("skills.installedTitle")}</h2>
-        <div className="settings-card skills-empty-card">
-          <span className="skills-empty-icon" aria-hidden="true"><PigeIcon name="skill" size={19} /></span>
-          <div className="settings-row-copy">
-            <strong>{props.t("skills.emptyTitle")}</strong>
-            <span>{props.t("skills.emptyDescription")}</span>
+        {readState === "loading" ? (
+          <div className="settings-card skills-empty-card" role="status" aria-live="polite">
+            <span className="skills-empty-icon" aria-hidden="true"><PigeIcon name="loading" size={19} className="spinning" /></span>
+            <div className="settings-row-copy">
+              <strong>{props.t("skills.loadingTitle")}</strong>
+              <span>{props.t("skills.loadingDescription")}</span>
+            </div>
           </div>
-        </div>
+        ) : readState === "failed" ? (
+          <div className="settings-card skills-empty-card" role="status" aria-live="polite">
+            <span className="skills-empty-icon" aria-hidden="true"><PigeIcon name="shield" size={19} /></span>
+            <div className="settings-row-copy">
+              <strong>{props.t("skills.loadFailedTitle")}</strong>
+              <span>{props.t("skills.loadFailedDescription")}</span>
+            </div>
+            <button className="settings-button" type="button" onClick={() => setReloadSequence((current) => current + 1)}>
+              {props.t("skills.retryLoad")}
+            </button>
+          </div>
+        ) : registry && registry.skills.length > 0 ? (
+          <div className="settings-card skills-registry-list" data-skill-registry-revision={registry.revision}>
+            {registry.skills.map((skill) => (
+              <div className="settings-row tall skill-registry-row" data-skill-id={skill.id} key={skill.id}>
+                <span className={`skills-empty-icon${skill.enabled ? " is-enabled" : ""}`} aria-hidden="true">
+                  <PigeIcon name="skill" size={18} />
+                </span>
+                <div className="settings-row-copy skill-registry-copy">
+                  <strong>{skill.name}</strong>
+                  <span>{skill.description}</span>
+                  <div className="skill-registry-meta" aria-label={props.t("skills.skillDetails")}>
+                    <span>{`v${skill.version}`}</span>
+                    <span>{props.t(`skills.kind.${skill.kind}`)}</span>
+                    <span>{props.t(`skills.scope.${skill.scope}`)}</span>
+                    {skill.dataBoundaries.map((boundary) => (
+                      <span key={boundary}>{props.t(`skills.boundary.${boundary}`)}</span>
+                    ))}
+                  </div>
+                </div>
+                <div className="settings-row-control skill-registry-control">
+                  <span className={`settings-status${skill.enabled ? " is-enabled" : ""}`}>
+                    {props.t(skill.enabled ? "skills.statusEnabled" : "skills.statusDisabled")}
+                  </span>
+                  <button
+                    className="settings-button"
+                    type="button"
+                    aria-label={`${props.t(skill.enabled ? "skills.disable" : "skills.enableUnavailable")}: ${skill.name}`}
+                    disabled={!skill.enabled || disablingSkillId !== null}
+                    title={skill.enabled ? props.t("skills.disableDescription") : props.t("skills.enableUnavailableDescription")}
+                    onClick={() => void disableSkill(skill)}
+                  >
+                    {disablingSkillId === skill.id
+                      ? props.t("skills.disabling")
+                      : props.t(skill.enabled ? "skills.disable" : "skills.enableUnavailable")}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="settings-card skills-empty-card">
+            <span className="skills-empty-icon" aria-hidden="true"><PigeIcon name="skill" size={19} /></span>
+            <div className="settings-row-copy">
+              <strong>{props.t("skills.emptyTitle")}</strong>
+              <span>{props.t("skills.emptyDescription")}</span>
+            </div>
+          </div>
+        )}
+        {registry && registry.invalidManifestCount > 0 ? (
+          <p className="settings-note skill-registry-warning" role="status" data-invalid-skill-count={registry.invalidManifestCount}>
+            {props.t("skills.invalidManifestWarning")}
+          </p>
+        ) : null}
+        {statusKey ? <p className="settings-note" role="status" aria-live="polite">{props.t(statusKey)}</p> : null}
         <div className="settings-inline-actions">
           <button className="settings-button primary settings-action" type="button" onClick={props.onDevelopment}>
             <PigeIcon name="link" size={15} aria-hidden="true" />
