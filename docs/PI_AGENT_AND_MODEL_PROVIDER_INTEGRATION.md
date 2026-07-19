@@ -309,9 +309,10 @@ stable ID/version/description/capability; strict input/output schemas and trust;
 required capabilities, resource scope, permission, data boundary, execution order,
 idempotency, limits, owner service, and handler.
 
-Production exposes only read-only folder/text/fetch adapters. The create journal/Operation
-foundation is unregistered; external write/delete/shell remain unavailable pending the
-filesystem and process isolation owned by `docs/SECURITY_THREAT_MODEL.md`.
+Production exposes read-only folder/text/fetch plus current-action
+`pige_install_pi_package` (`install_package`) for exact-package `installed_disabled`
+install only. Enable/runtime/shell/catalog/update/uninstall remain unavailable; the create
+journal/Operation foundation is unregistered pending the isolation security owner.
 
 Pi-selected Dataset tools bind the exact source or Dataset revision. A deterministic
 `dataset_import` child may materialize one validated Bundle/Operation; read-only Home

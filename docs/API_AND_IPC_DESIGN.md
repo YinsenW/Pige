@@ -614,14 +614,19 @@ Queries:
 - `permissions.pending`, `permissions.settings.current`
 
 Current-action prompts accept `deny`/`allow_once`; grant creation is deferred. DTOs bind
-request/Job/action/resource/policy identity, exclude bodies, paths, secrets and authority,
-and fail closed on drift.
+request/Job/action/resource/policy identity and may expose only a bounded
+`resourceDisplayName`, such as exact `package@version`, for informed approval. Bodies,
+paths, secrets and authority stay excluded; drift fails closed.
 
 Permission Settings projects revision, mode, YOLO and bounded grants. Mutations use CAS;
 YOLO consumes a one-use sender/revision token after the main warning.
 
-Main registers bounded folder list, UTF-8 read and SSRF-safe fetch tools. Protected roots
-stay denied; results face egress again. Mutating/shell/package Node tools remain absent.
+Main registers bounded folder list, UTF-8 read, SSRF-safe fetch and
+`pige_install_pi_package`. The package tool requires an exact disclosed npm name/version,
+one-use `install_package` authority and the fixed public registry; it verifies integrity,
+extracts without scripts, and commits only machine-local `installed_disabled`. Enable,
+runtime, dependency graphs, update and uninstall remain absent. Protected roots stay
+denied and fetched results face egress again; arbitrary shell tools remain absent.
 
 ### 6.8 Settings, Providers, Tools
 

@@ -242,6 +242,10 @@ Mitigations:
 - Skills/packages cannot directly access API keys. A reviewed adapter can request brokered credential use for one declared provider action, but never receives or returns raw credential bytes.
 - Executable/package-backed Skills run only through reviewed runtime adapters in a dedicated worker, utility process, or child process with scoped source handles and Permission Broker decisions.
 - Install preview/staging never executes Skill/package code, package hooks, shell commands, or network callbacks.
+- Exact public npm package install requires current-action `install_package`, SHA-512,
+  pinned same-origin redirects, bounded link-free extraction, and rejects unsafe paths,
+  hooks, dependencies and executable/native input. PID-aware locking and immutable
+  `installed_disabled` publication grant no runtime authority.
 
 Sensitive capabilities:
 
@@ -283,6 +287,8 @@ Acceptance:
 - An Agent, Skill, or package requesting non-default shell, filesystem, network,
   brokered credential use, delete, commit, or settings authority cannot proceed without
   Permission Broker authorization. Always-confirmed actions retain their stronger gate.
+- Package-install tests prove deny-before-network and fail-closed identity, integrity,
+  archive, cancellation, locking, recovery and disabled-only behavior.
 - Denying a permission leaves the app stable and records the denial in operation history.
 
 ### 6.6.1 Pi Capability And Filesystem Authority

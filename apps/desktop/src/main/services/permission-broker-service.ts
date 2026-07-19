@@ -28,6 +28,7 @@ const SHA256_PATTERN = /^sha256:[a-f0-9]{64}$/u;
 export interface PermissionActionSummary {
   readonly actorDisplayName: string;
   readonly actionLabelKey: string;
+  readonly resourceDisplayName?: string;
   readonly resourceKind: "file" | "folder" | "url" | "network" | "shell" | "credential" | "setting" | "package" | "other";
   readonly resourceCount: number;
   readonly reasonCode: string;

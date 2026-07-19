@@ -289,6 +289,7 @@
   "packages.unavailableTitle": "软件包注册表暂不可用",
   "permissions.action.fetch_release_notes": "获取发行说明",
   "permissions.action.generic": "继续当前外部操作",
+  "permissions.actions.install_pi_package": "安装 Pi 软件包",
   "permissions.resource.credential": "使用凭据",
   "permissions.resource.file": "访问文件",
   "permissions.resource.folder": "访问文件夹",

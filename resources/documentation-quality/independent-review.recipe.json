@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-19T04:34:08Z",
+  "reviewedAt": "2026-07-19T02:06:39Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -19,6 +19,7 @@
       "docs",
       "resources/brand",
       "resources/documentation-quality",
+      "resources/dependency-manifest",
       "resources/parser-manifests",
       "resources/traceability",
       "resources/ui-visual-contract.manifest.json",
@@ -42,6 +43,8 @@
       "apps/desktop/src/main/services/notes-service.ts",
       "apps/desktop/src/main/services/pi-agent-completion-policy.ts",
       "apps/desktop/src/main/services/pi-agent-runtime-adapter.ts",
+      "apps/desktop/src/main/services/pi-package-capability-adapter.ts",
+      "apps/desktop/src/main/services/pi-package-manager-service.ts",
       "apps/desktop/src/main/services/reader-selection-action-service.ts",
       "apps/desktop/src/main/services/reader-selection-job-binding.ts",
       "apps/desktop/src/main/services/reader-selection-proposal-service.ts",
@@ -79,6 +82,7 @@
       "tests/unit/note-agent-ui.test.ts",
       "tests/unit/notes-service.test.ts",
       "tests/unit/pi-agent-runtime-adapter.test.ts",
+      "tests/unit/pi-package-manager-service.test.ts",
       "tests/unit/reader-selection-action-service.test.ts",
       "tests/unit/reader-selection-mutation-service.test.ts",
       "tests/unit/reader-selection-proposal-service.test.ts",
@@ -91,17 +95,17 @@
       "tests/unit/local-settings.test.ts",
       "package.json"
     ],
-    "scope": "Independent Product Planning review binds public_only URL capture to canonical hostnames and fresh fail-closed Fake-IP checks: target and example.com probe each require benchmark IPv4 and only strict Fake-IP forms; connections pin target IPv4, while literal, mixed, IPv6-only, unconfirmed, localhost and private targets still block with existing per-hop, bound, redaction and inert-content controls.",
+    "scope": "Independent Product Planning review binds the install-only Pi package foundation to exact public npm package/version intent and current-action install_package authority. SHA-512, public-registry pinning, bounded link-free extraction, executable/native and lifecycle rejection, runtime-dependency rejection, PID-aware locking and request-stable adoption publish immutable installed_disabled bytes only; catalog, enable/runtime and the remaining lifecycle stay open.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 130,
-      "reviewedSha256": "e7bf58cf4cfac44ffdb9323bee4e581df7f5a2db90700873a32c0980c28a3f87"
+      "reviewedSha256": "23b447abbbcff8060938b586de4de4bd7fb43b9a64f730528ebdaab374e3908a"
   },
   "reviewers": [
     {
-      "reviewerId": "public-url-fake-ip-dns-planning-review",
-      "task": "Public URL system DNS Fake-IP compatibility review",
+      "reviewerId": "pi-package-install-planning-review",
+      "task": "Exact disabled Pi package install foundation review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -109,75 +113,75 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Product Planning owns only documentation and independently compares the Development-only Source Fetch and focused test bytes with security, parser, transport, trace and test contracts."
+      "independence": "Product Planning owns only documentation and independently compares the Development-owned package manager and capability adapter with Permission Broker, package lifecycle, supply-chain, recovery, dependency, trace and test contracts."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "public-url-fake-ip-dns-planning-review",
+      "reviewerId": "pi-package-install-planning-review",
       "blockerCount": 0,
-      "summary": "Source Fetch remains the sole transport owner; each blocked target and redirect gets a fresh hostname-only probe, adding no renderer, storage, Job, permission or secret owner."
+      "summary": "Permission Broker remains the sole install authority; only bounded exact package identity reaches its existing renderer prompt, while bytes and Registry records stay machine-local outside the vault with no secret, enable or runtime owner."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "public-url-fake-ip-dns-planning-review",
+      "reviewerId": "pi-package-install-planning-review",
       "blockerCount": 0,
-      "summary": "Security owns the full Fake-IP predicate; Parser, Architecture, Quality and Decision projections agree that benchmark space is not reclassified and text/markdown stays inert."
+      "summary": "Skill, architecture, security, recovery, quality, dependency and decision owners agree that exact acquisition ends at immutable installed_disabled state and never executes package code."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "public-url-fake-ip-dns-planning-review",
+      "reviewerId": "pi-package-install-planning-review",
       "blockerCount": 0,
-      "summary": "PIGE-PI-003, B5.02 and existing partial E5.01 evidence reflect the bounded compatibility rule without promoting any Requirement, Build, Exit, Phase or release status."
+      "summary": "PIGE-SKILL-002, E8.04 and P8 remain planned; catalog, runtime, UI, update, rollback and uninstall are explicitly open."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "public-url-fake-ip-dns-planning-review",
+      "reviewerId": "pi-package-install-planning-review",
       "blockerCount": 0,
-      "summary": "Focused Source Fetch tests cover fresh target/probe checks, required and pinned IPv4, inert Markdown, plus literal, mixed, IPv6-only, unconfirmed, private and redirect failures."
+      "summary": "Focused package tests cover disclosed identity, integrity, hooks, executable/native magic, every runtime dependency field, links, post-strip collisions, total entries, public addressing, locks, cleanup and stable adoption."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "public-url-fake-ip-dns-planning-review",
+      "reviewerId": "pi-package-install-planning-review",
       "blockerCount": 0,
-      "summary": "One security owner holds the full rule; short projections and compact trace updates keep governed Markdown and trace manifests within their exact byte budgets."
+      "summary": "Existing package, architecture, security, quality and recovery owners absorb the decision; one dependency record and one service inventory update avoid duplicate contracts."
     }
   ],
   "verification": [
     {
-      "command": "Independent review of public URL system DNS Fake-IP compatibility",
+      "command": "Independent review of exact disabled Pi package install foundation",
       "status": "passed",
-      "evidence": "Review confirms every blocked target and redirect gets a fresh probe; target and probe require strict Fake-IP plus IPv4, only validated target IPv4 is pinned, and all other fetch controls remain."
+      "evidence": "Review confirms explicit exact-package authority is required, downloads remain fixed-public-registry and integrity-bound, extraction cannot execute package code, and success remains disabled."
     },
     {
       "command": "npm run verify:docs && npm run verify:decisions && npm run verify:traceability",
       "status": "passed",
-      "evidence": "Links, whitespace, document map, PRD structure, decisions and locked claims pass with no Requirement, Build, Exit or Phase promotion."
+      "evidence": "Links, document map, decisions and locked claims pass with no Requirement, Exit or Phase promotion."
     },
     {
       "command": "npm run verify:contracts && npm run verify:independent-documentation-review && npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "CON-001 through CON-004 remain green; focused UI tests, typecheck, build and visual-contract verification bind the exact repair while the union recipe retains the published Reader, Update, release and security roots."
+      "evidence": "CON-001 through CON-004, dependency manifest, service responsibility inventory and focused package tests bind the exact foundation while the union recipe retains published product roots."
     }
   ],
   "coordination": {
-      "taskId": "public-url-fake-ip-dns-20260719",
-      "taskTitle": "Public URL system DNS Fake-IP compatibility",
+      "taskId": "pi-package-install-foundation-20260719",
+      "taskTitle": "Exact disabled Pi package install foundation",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-      "compatibility": "The candidate changes only public_only Source Fetch handling for confirmed system Fake-IP hostnames and text/markdown; no renderer, IPC, persistence, secret, Job, model, destructive, permission or filesystem authority changes.",
-      "acknowledgement": "Product Planning records the bounded compatibility boundary and keeps Development code/test ownership separate, with no broad status promotion."
+      "compatibility": "The candidate adds one exact permissioned public-registry package acquisition and machine-local disabled Registry owner; no renderer, secret, runtime execution, enable, catalog, update, uninstall, vault or backup authority is added.",
+      "acknowledgement": "Product Planning records only the bounded install prerequisite, keeps Development code/test ownership separate, and leaves E8.04, P8 and all broader lifecycle acceptance planned."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "A compromised system DNS/proxy can still redirect public hostnames; all-address confirmation, independent probing, per-hop revalidation and connection pinning are retained defenses, not proof of remote ownership.",
-    "No Requirement, Build, Exit or Phase status is promoted; broader bypass coverage and signed-platform proxy/DNS evidence remain open."
+    "Public npm metadata and archives remain untrusted supply-chain input even after integrity verification; package enable/runtime review remains mandatory and unavailable.",
+    "PIGE-SKILL-002, E8.04 and P8 remain planned; broader lifecycle and platform evidence is open."
   ]
 }

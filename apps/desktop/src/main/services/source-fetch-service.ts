@@ -277,7 +277,7 @@ export class SourceFetchService {
     if (normalizedAddresses.length === 0 || normalizedAddresses.some((address) => net.isIP(address) === 0)) {
       throw new PigeDomainError("url_fetch.hostname_unreachable", "The URL hostname could not be resolved.");
     }
-    const hasBlockedAddress = normalizedAddresses.some(isBlockedAddress);
+    const hasBlockedAddress = normalizedAddresses.some(isNonPublicNetworkAddress);
     const usesDnsProxyFakeIp = networkAccess === "public_only" && hasBlockedAddress
       ? await this.#allowsPublicHostnameThroughDnsProxy(parsed.hostname, normalizedAddresses)
       : false;
@@ -633,7 +633,7 @@ function normalizeHostnameForPolicy(value: string): string {
   return stripIpv6Brackets(value).replace(/\.+$/u, "").toLocaleLowerCase();
 }
 
-function isBlockedAddress(address: string): boolean {
+export function isNonPublicNetworkAddress(address: string): boolean {
   const literal = stripIpv6Brackets(address);
   const family = net.isIP(literal);
   if (family === 4) return isBlockedIpv4(literal);

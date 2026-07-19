@@ -5775,6 +5775,9 @@ function HomeComposer(props: {
                 <div className="permission-summary">
                   <strong>{permissionPrompt.request.actorDisplayName}</strong>
                   <span>{permissionActionMessage(permissionPrompt.request.actionLabelKey, props.t)}</span>
+                  {permissionPrompt.request.resourceDisplayName ? (
+                    <span>{permissionPrompt.request.resourceDisplayName}</span>
+                  ) : null}
                   <span className="permission-category">
                     {props.t(permissionResourceMessageKey(permissionPrompt.request.resourceKind))}
                   </span>

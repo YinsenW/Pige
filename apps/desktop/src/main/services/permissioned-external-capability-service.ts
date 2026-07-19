@@ -89,6 +89,7 @@ export interface PermissionedExternalCapabilityAdapter {
   };
   normalizeInput(args: unknown): unknown;
   resourceIdentity(normalizedInput: unknown): unknown;
+  resourceDisplayName?(normalizedInput: unknown): string;
   resourceCount(normalizedInput: unknown): number;
   execute(
     normalizedInput: unknown,
@@ -189,6 +190,7 @@ export class PermissionedExternalCapabilityRegistry {
         const summary: PermissionActionSummary = {
           actorDisplayName: adapter.actor.displayName,
           actionLabelKey: adapter.action.labelKey,
+          ...(adapter.resourceDisplayName ? { resourceDisplayName: adapter.resourceDisplayName(normalizedInput) } : {}),
           resourceKind: adapter.permission.resourceKind,
           resourceCount: requireResourceCount(adapter.resourceCount(normalizedInput)),
           reasonCode: adapter.permission.reasonCode

@@ -185,6 +185,8 @@ import {
   registerPermissionedExternalCapabilityAdapter
 } from "./services/permissioned-external-capability-service";
 import { createFirstPartyReadonlyNodeOsCapabilityAdapters } from "./services/readonly-node-os/first-party-readonly-node-os-capability-adapters";
+import { createPiPackageInstallCapabilityAdapter } from "./services/pi-package-capability-adapter";
+import { PiPackageManagerService } from "./services/pi-package-manager-service";
 import { NotesService } from "./services/notes-service";
 import { OcrService } from "./services/ocr-service";
 import { MacOSSpeechAdapter } from "./services/macos-speech-adapter";
@@ -217,6 +219,8 @@ const permissionYoloConfirmationRegistry = new PermissionYoloConfirmationRegistr
 const permissionYoloTrackedSenders = new Set<number>();
 let permissionedExternalCapabilityRegistry: PermissionedExternalCapabilityRegistry | undefined;
 let firstPartyReadonlyNodeOsCapabilitiesRegistered = false;
+let firstPartyPiPackageCapabilityRegistered = false;
+let piPackageManagerService: PiPackageManagerService | undefined;
 let windowModeService: WindowModeService | undefined;
 let backupRestoreService: BackupRestoreService | undefined;
 let backupCoordinatorService: BackupCoordinatorService | undefined;
@@ -780,12 +784,25 @@ const getPermissionedExternalCapabilityRegistry = (): PermissionedExternalCapabi
       }
       firstPartyReadonlyNodeOsCapabilitiesRegistered = true;
     }
+    if (!firstPartyPiPackageCapabilityRegistered) {
+      registerPermissionedExternalCapabilityAdapter(
+        createPiPackageInstallCapabilityAdapter(getPiPackageManagerService())
+      );
+      firstPartyPiPackageCapabilityRegistered = true;
+    }
     permissionedExternalCapabilityRegistry = createPermissionedExternalCapabilityRegistry(
       getPermissionBrokerService(),
       getJobsService()
     );
   }
   return permissionedExternalCapabilityRegistry;
+};
+
+const getPiPackageManagerService = (): PiPackageManagerService => {
+  if (!piPackageManagerService) {
+    piPackageManagerService = new PiPackageManagerService({ appDataRoot: app.getPath("userData") });
+  }
+  return piPackageManagerService;
 };
 
 function getReadonlyNodeOsProtectedRoots(): readonly string[] {
