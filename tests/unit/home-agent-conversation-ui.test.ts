@@ -2357,6 +2357,7 @@ describe("Home durable Agent conversation UI", () => {
       .toContain("Show this prompt immediately.");
     expect(container.querySelectorAll(".conversation-message.role-user")).toHaveLength(1);
     expect(container.querySelector(".conversation-loading-dots")).not.toBeNull();
+    expect(container.querySelector(".home")?.classList.contains("home-conversation-active")).toBe(true);
 
     await act(async () => {
       harness.emitDraft(draftEvent({
@@ -3121,6 +3122,10 @@ describe("Home durable Agent conversation UI", () => {
     expect(conversationStyles).toContain("overflow-wrap: anywhere;");
     expect(conversationStyles).toContain("white-space: pre-wrap;");
     expect(conversationStyles).toContain("max-height: min(36vh, 26rem);");
+    expect(styles).toMatch(/\.home\.home-conversation-active\s*>\s*\.conversation-timeline\s*\{[\s\S]*?flex:\s*1 1 auto;[\s\S]*?max-height:\s*none;[\s\S]*?align-content:\s*end;/);
+    expect(styles).toContain("padding-bottom: calc(18px + var(--home-processing-panel-height, 0px));");
+    expect(appSource).toContain('"--home-processing-panel-height"');
+    expect(appSource).toContain("new window.ResizeObserver(updateHeight)");
 
     const localeKeys = ["en", "zh-Hans", "ja", "ko", "fr", "de"].map((locale) =>
       Object.keys(JSON.parse(fs.readFileSync(
