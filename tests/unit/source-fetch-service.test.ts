@@ -119,6 +119,131 @@ describe("source fetch service", () => {
     } satisfies Partial<PigeDomainError>);
   });
 
+  it("accepts a public hostname routed through confirmed system DNS fake-IP mode", async () => {
+    const fetchImpl = vi.fn(async () => new Response("# Feishu CLI guide", {
+      headers: { "content-type": "text/markdown; charset=utf-8" }
+    }));
+    const service = new SourceFetchService({
+      lookup: async (hostname) => hostname === "example.com"
+        ? ["198.18.0.2", "::ffff:0:c612:2"]
+        : ["198.18.0.17", "::ffff:0:c612:11"],
+      fetchImpl
+    });
+
+    await expect(service.fetchSnapshot(
+      "https://open.feishu.cn/document/no_class/mcp-archive/feishu-cli-installation-guide.md"
+    )).resolves.toMatchObject({
+      contentType: "text/markdown",
+      extractedText: "# Feishu CLI guide"
+    });
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it("keeps benchmark addresses blocked without confirmed DNS fake-IP mode", async () => {
+    const fetchImpl = vi.fn(async () => new Response("should not run"));
+    const service = new SourceFetchService({
+      lookup: async (hostname) => hostname === "example.com" ? ["93.184.216.34"] : ["198.18.0.17"],
+      fetchImpl
+    });
+
+    await expect(service.fetchSnapshot("https://untrusted.example/source")).rejects.toMatchObject({
+      code: "url_fetch.private_network_blocked"
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("keeps literal and mixed private targets blocked in DNS fake-IP mode", async () => {
+    const fetchImpl = vi.fn(async () => new Response("should not run"));
+    const lookup = async (hostname: string): Promise<readonly string[]> => hostname === "example.com"
+      ? ["198.18.0.2"]
+      : ["198.18.0.17", "192.168.1.20"];
+    const service = new SourceFetchService({ lookup, fetchImpl });
+
+    await expect(service.fetchSnapshot("https://198.18.0.17/source")).rejects.toMatchObject({
+      code: "url_fetch.private_network_blocked"
+    });
+    await expect(service.fetchSnapshot("https://mixed.example/source")).rejects.toMatchObject({
+      code: "url_fetch.private_network_blocked"
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "http://localhost./source",
+    "http://foo.localhost./source",
+    "http://127.0.0.1./source"
+  ])("keeps rooted local hostname %s blocked in DNS fake-IP mode", async (url) => {
+    const fetchImpl = vi.fn(async () => new Response("should not run"));
+    const service = new SourceFetchService({
+      lookup: async () => ["198.18.0.17"],
+      fetchImpl
+    });
+
+    await expect(service.fetchSnapshot(url)).rejects.toMatchObject({
+      code: "url_fetch.private_network_blocked"
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("keeps translated IPv6-only fake targets blocked", async () => {
+    const fetchImpl = vi.fn(async () => new Response("should not run"));
+    const service = new SourceFetchService({
+      lookup: async (hostname) => hostname === "example.com"
+        ? ["198.18.0.2", "::ffff:0:c612:2"]
+        : ["::ffff:0:c612:11"],
+      fetchImpl
+    });
+
+    await expect(service.fetchSnapshot("https://ipv6-only.example/source")).rejects.toMatchObject({
+      code: "url_fetch.private_network_blocked"
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("rechecks DNS fake-IP mode after the network configuration changes", async () => {
+    let fakeIpMode = true;
+    const fetchImpl = vi.fn(async () => new Response("allowed", {
+      headers: { "content-type": "text/plain" }
+    }));
+    const service = new SourceFetchService({
+      lookup: async (hostname) => hostname === "example.com" && !fakeIpMode
+        ? ["93.184.216.34"]
+        : ["198.18.0.17"],
+      fetchImpl
+    });
+
+    await expect(service.fetchSnapshot("https://first.example/source")).resolves.toMatchObject({
+      extractedText: "allowed"
+    });
+    fakeIpMode = false;
+    await expect(service.fetchSnapshot("https://second.example/source")).rejects.toMatchObject({
+      code: "url_fetch.private_network_blocked"
+    });
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it("rechecks DNS fake-IP mode before following each redirect", async () => {
+    let fakeIpMode = true;
+    const fetchImpl = vi.fn(async () => {
+      fakeIpMode = false;
+      return new Response("", {
+        status: 302,
+        headers: { location: "https://redirected.example/final" }
+      });
+    });
+    const service = new SourceFetchService({
+      lookup: async (hostname) => hostname === "example.com" && !fakeIpMode
+        ? ["93.184.216.34"]
+        : ["198.18.0.17"],
+      fetchImpl
+    });
+
+    await expect(service.fetchSnapshot("https://initial.example/source")).rejects.toMatchObject({
+      code: "url_fetch.private_network_blocked"
+    });
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
   it("revalidates redirects before following them", async () => {
     const requests: { readonly url: string; readonly redirect: RequestRedirect | undefined }[] = [];
     const service = new SourceFetchService({

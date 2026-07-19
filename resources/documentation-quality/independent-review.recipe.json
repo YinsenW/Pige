@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-19T02:06:39Z",
+  "reviewedAt": "2026-07-19T04:34:08Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -91,17 +91,17 @@
       "tests/unit/local-settings.test.ts",
       "package.json"
     ],
-    "scope": "Independent Product Planning review binds private-network reachability to exact Permission Broker external_network authority. Default Source Fetch still blocks private targets; an authorized action no longer receives a second class-based denial, while scheme, URL credential, per-hop resolution and address pinning, redirect, size, deadline, redaction and untrusted-content controls remain.",
+    "scope": "Independent Product Planning review binds public_only URL capture to canonical hostnames and fresh fail-closed Fake-IP checks: target and example.com probe each require benchmark IPv4 and only strict Fake-IP forms; connections pin target IPv4, while literal, mixed, IPv6-only, unconfirmed, localhost and private targets still block with existing per-hop, bound, redaction and inert-content controls.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 130,
-      "reviewedSha256": "887282fbad1de4a65f35a25469cdfd19ef4d68dcad277ac5ebd6cf184f83be70"
+      "reviewedSha256": "e7bf58cf4cfac44ffdb9323bee4e581df7f5a2db90700873a32c0980c28a3f87"
   },
   "reviewers": [
     {
-      "reviewerId": "private-network-authority-planning-review",
-      "task": "Permissioned private-network target authority review",
+      "reviewerId": "public-url-fake-ip-dns-planning-review",
+      "task": "Public URL system DNS Fake-IP compatibility review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -109,51 +109,51 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Product Planning owns only documentation and independently compares the Development-only Source Fetch and capability-adapter bytes with Permission Broker, privacy, transport, trace and test contracts."
+      "independence": "Product Planning owns only documentation and independently compares the Development-only Source Fetch and focused test bytes with security, parser, transport, trace and test contracts."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "private-network-authority-planning-review",
+      "reviewerId": "public-url-fake-ip-dns-planning-review",
       "blockerCount": 0,
-      "summary": "Permission Broker remains the sole authority owner; Source Fetch receives only an internal authorized/public mode and adds no renderer, storage, Job or secret owner."
+      "summary": "Source Fetch remains the sole transport owner; each blocked target and redirect gets a fresh hostname-only probe, adding no renderer, storage, Job, permission or secret owner."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "private-network-authority-planning-review",
+      "reviewerId": "public-url-fake-ip-dns-planning-review",
       "blockerCount": 0,
-      "summary": "Security, runtime policy, parser, architecture, privacy and decision owners agree that private targets block without authority and work after exact authority while all other fetch controls remain."
+      "summary": "Security owns the full Fake-IP predicate; Parser, Architecture, Quality and Decision projections agree that benchmark space is not reclassified and text/markdown stays inert."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "private-network-authority-planning-review",
+      "reviewerId": "public-url-fake-ip-dns-planning-review",
       "blockerCount": 0,
-      "summary": "PIGE-PI-003 and B5.02 wording reflects the new authority rule without promoting any Requirement, Build, Exit, Phase or release status."
+      "summary": "PIGE-PI-003, B5.02 and existing partial E5.01 evidence reflect the bounded compatibility rule without promoting any Requirement, Build, Exit, Phase or release status."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "private-network-authority-planning-review",
+      "reviewerId": "public-url-fake-ip-dns-planning-review",
       "blockerCount": 0,
-      "summary": "Focused Source Fetch and first-party capability tests cover default denial, authorized private and metadata targets, redirects, credentials and unchanged bounded projections."
+      "summary": "Focused Source Fetch tests cover fresh target/probe checks, required and pinned IPv4, inert Markdown, plus literal, mixed, IPv6-only, unconfirmed, private and redirect failures."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "private-network-authority-planning-review",
+      "reviewerId": "public-url-fake-ip-dns-planning-review",
       "blockerCount": 0,
       "summary": "One security owner holds the full rule; short projections and compact trace updates keep governed Markdown and trace manifests within their exact byte budgets."
     }
   ],
   "verification": [
     {
-      "command": "Independent review of exact external_network private-target authority",
+      "command": "Independent review of public URL system DNS Fake-IP compatibility",
       "status": "passed",
-      "evidence": "Review confirms public_only remains fail-closed, permissioned_external_network reaches private classes across redirects, and schemes, credentials, pinning, bounds, redaction and content distrust remain independent controls."
+      "evidence": "Review confirms every blocked target and redirect gets a fresh probe; target and probe require strict Fake-IP plus IPv4, only validated target IPv4 is pinned, and all other fetch controls remain."
     },
     {
       "command": "npm run verify:docs && npm run verify:decisions && npm run verify:traceability",
@@ -167,17 +167,17 @@
     }
   ],
   "coordination": {
-      "taskId": "private-network-authority-20260719",
-      "taskTitle": "Permissioned private-network target authority",
+      "taskId": "public-url-fake-ip-dns-20260719",
+      "taskTitle": "Public URL system DNS Fake-IP compatibility",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-      "compatibility": "The candidate changes only Source Fetch target-class policy after exact external_network authorization; no renderer, IPC, persistence, secret, Job, model, destructive or filesystem authority changes.",
-      "acknowledgement": "Product Planning records the user-authoritative network boundary and keeps Development code/test ownership separate, with no broad status promotion."
+      "compatibility": "The candidate changes only public_only Source Fetch handling for confirmed system Fake-IP hostnames and text/markdown; no renderer, IPC, persistence, secret, Job, model, destructive, permission or filesystem authority changes.",
+      "acknowledgement": "Product Planning records the bounded compatibility boundary and keeps Development code/test ownership separate, with no broad status promotion."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Authorization can expose services on the user's local or infrastructure networks; the explicit Broker decision and operation history remain the user-visible control.",
-    "No Requirement, Build, Exit or Phase status is promoted; broader production callers, modal convergence, bypass coverage and signed-platform evidence remain open."
+    "A compromised system DNS/proxy can still redirect public hostnames; all-address confirmation, independent probing, per-hop revalidation and connection pinning are retained defenses, not proof of remote ownership.",
+    "No Requirement, Build, Exit or Phase status is promoted; broader bypass coverage and signed-platform proxy/DNS evidence remain open."
   ]
 }

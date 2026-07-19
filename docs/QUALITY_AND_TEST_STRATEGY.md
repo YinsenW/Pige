@@ -107,7 +107,8 @@ Web fixtures:
 - Article with scripts and navigation clutter.
 - Redirect chain.
 - Oversized response.
-- Default-blocked and exact-authorized private targets, with redirect/pinning negative cases.
+- Private authority and fresh strict-Fake-IP target/probe tests require/pin IPv4 and reject
+  cache reuse, literal, mixed, IPv6-only, unconfirmed, changed redirects, and active Markdown.
 - Page containing prompt-injection text.
 
 Document fixtures:

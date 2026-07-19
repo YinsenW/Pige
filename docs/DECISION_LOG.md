@@ -1921,22 +1921,25 @@ References:
 
 Status: Accepted
 Date: 2026-07-10
+Revised: 2026-07-19
 
 Decision:
 
-Basic URL capture fetches HTTP/HTTPS pages in the main process through Source Fetch Service, stores raw responses as untrusted managed source snapshots, and stores extracted readable text as a separate `extracted_text` artifact. Source pages and Agent ingest use the extracted text artifact by default, not raw HTML.
+Source Fetch stores bounded HTTP(S) snapshots as untrusted evidence and separate readable
+text used by pages/Pi. `text/markdown` is inert.
 
 Rationale:
 
-Pasted links are a core capture input, but web pages are untrusted and can contain scripts, prompt injection, tracking URLs, or sensitive query parameters. Separating raw evidence from extracted text lets Pige preserve source evidence while keeping reader, prompt, and Markdown surfaces safer.
+Evidence/text separation contains active content. System DNS proxies may map public hosts to
+benchmark Fake-IP, requiring narrow compatibility without trusting benchmark space.
 
 Consequences:
 
-- Renderer code never fetches web pages directly.
-- URL fetch blocks unsupported schemes, embedded credentials, local/private/link-local/metadata-network targets, and redirect targets that fail the same checks.
-- Durable URL references redact sensitive query values before writing source records, Markdown pages, prompts, operation records, conversations, diagnostics, or support bundles.
-- `.pige/conversations/` stores only source references for URL captures, never raw HTML or extracted web text.
-- Static-page Readability extraction, richer metadata, and redacted image references are implemented by `D-20260710-Bounded-Readability-Web-Extractor`; browser-rendered JavaScript-heavy pages remain deferred.
+- Renderer never fetches; security/parser own transport, bounds, redaction, and inert content.
+- Under `public_only`, canonicalized blocked hostnames/redirects and fresh `example.com`
+  probes each require `198.18/15` IPv4 and only strict Fake-IP forms; connect only to target
+  IPv4. Literal, mixed, IPv6-only, unconfirmed, localhost, and private targets block.
+- Readability stays bounded; browser execution and all statuses remain unchanged.
 
 References:
 
