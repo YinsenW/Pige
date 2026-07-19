@@ -7563,7 +7563,7 @@ export function SkillsSettingsPanel(props: {
                   </div>
                 </div>
                 <div className="settings-row-control skill-registry-control">
-                  <span className={`settings-status${skill.enabled ? " is-enabled" : ""}`}>
+                  <span className={`settings-status ${skill.enabled ? "is-enabled" : "neutral"}`}>
                     {props.t(skill.enabled ? "skills.statusEnabled" : "skills.statusDisabled")}
                   </span>
                   <button

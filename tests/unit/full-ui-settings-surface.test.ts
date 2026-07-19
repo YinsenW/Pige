@@ -414,6 +414,9 @@ describe("full UI Settings surface", () => {
     expect(disable).toHaveBeenCalledWith({ apiVersion: 1, skillId: "review-notes", expectedRevision: 7 });
     expect(row.textContent).toContain("Disabled");
     expect(row.textContent).toContain("Enable unavailable");
+    const disabledStatus = requireElement(row.querySelector<HTMLElement>(".settings-status"));
+    expect(disabledStatus.classList.contains("neutral")).toBe(true);
+    expect(disabledStatus.classList.contains("is-enabled")).toBe(false);
     expect(buttonNamed(row, "Enable unavailable: Review notes").disabled).toBe(true);
     expect(page.textContent).toContain("The Skill is disabled for new Agent runs.");
 
