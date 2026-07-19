@@ -763,6 +763,7 @@
   "appearance.knowledgeLanguage.preserve": "保留来源语言",
   "appearance.knowledgeLanguageDescription": "默认保留来源语言；翻译始终是明确选择。",
   "appearance.language": "语言",
+  "appearance.languageUpdateFailed": "无法更改语言，已保留当前语言。",
   "appearance.ocrLanguage": "OCR 语言提示",
   "appearance.ocrLanguage.auto": "自动检测",
   "appearance.ocrLanguage.zhEn": "中文 + English",

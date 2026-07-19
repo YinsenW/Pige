@@ -957,7 +957,9 @@ describe("full UI Settings surface", () => {
         throw new Error("The Appearance panel must use only its provided adapters.");
       }
     });
-    const onLocaleChange = vi.fn(async () => undefined);
+    const onLocaleChange = vi.fn(async (locale: string) => {
+      if (locale === "de") throw new Error("raw locale persistence failure /Users/private");
+    });
     const onThemeChange = vi.fn(async () => true);
     const onDevelopment = vi.fn();
     const root = createRoot(dom.window.document.querySelector("#root")!);
@@ -1012,6 +1014,17 @@ describe("full UI Settings surface", () => {
     expect(knowledgeLanguage.textContent).toBe("In development");
     expect(ocrLanguage.textContent).toBe("In development");
     expect(ipcRead).toBe(false);
+
+    await act(async () => {
+      selectValue(dom, appLanguage, "de");
+      await settle(dom);
+    });
+    expect(onLocaleChange).toHaveBeenLastCalledWith("de");
+    expect(container.querySelector("#appearance-language-error")?.textContent)
+      .toBe("Language could not be changed. The current language was kept.");
+    expect(appLanguage.disabled).toBe(false);
+    expect(container.textContent).not.toContain("raw locale persistence failure");
+    expect(container.textContent).not.toContain("/Users/private");
 
     await act(async () => root.unmount());
     dom.window.close();

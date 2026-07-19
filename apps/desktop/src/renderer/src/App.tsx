@@ -6697,6 +6697,25 @@ export function AppearanceSettingsPanel(props: {
 }): React.JSX.Element {
   const themeOptionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const themeChoices = ["system", "light", "dark"] as const;
+  const [languageBusy, setLanguageBusy] = useState(false);
+  const [languageError, setLanguageError] = useState(false);
+
+  useEffect(() => {
+    setLanguageError(false);
+  }, [props.locale]);
+
+  const changeLanguage = async (nextLocale: Locale): Promise<void> => {
+    if (languageBusy || nextLocale === props.locale) return;
+    setLanguageBusy(true);
+    setLanguageError(false);
+    try {
+      await props.onLocaleChange(nextLocale);
+    } catch {
+      setLanguageError(true);
+    } finally {
+      setLanguageBusy(false);
+    }
+  };
 
   const moveThemeFocus = (event: ReactKeyboardEvent<HTMLButtonElement>, index: number): void => {
     if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
@@ -6755,13 +6774,15 @@ export function AppearanceSettingsPanel(props: {
           <div className="settings-row">
             <div className="settings-row-copy">
               <strong>{props.t("appearance.appLanguage")}</strong>
-              <span>{props.t("appearance.appLanguageDescription")}</span>
+              <span id="appearance-app-language-description">{props.t("appearance.appLanguageDescription")}</span>
             </div>
             <select
               className="settings-select"
               value={props.locale}
+              disabled={languageBusy}
               aria-label={props.t("appearance.appLanguage")}
-              onChange={(event) => void props.onLocaleChange(event.target.value as Locale)}
+              aria-describedby={`appearance-app-language-description${languageError ? " appearance-language-error" : ""}`}
+              onChange={(event) => void changeLanguage(event.target.value as Locale)}
             >
               {props.availableLocales.map((availableLocale) => (
                 <option key={availableLocale} value={availableLocale}>{localeLabels[availableLocale]}</option>
@@ -6801,6 +6822,11 @@ export function AppearanceSettingsPanel(props: {
             </button>
           </div>
         </div>
+        {languageError ? (
+          <p className="settings-inline-status error" id="appearance-language-error" role="status">
+            {props.t("appearance.languageUpdateFailed")}
+          </p>
+        ) : null}
       </section>
 
       <p className="settings-note" id="appearance-partial-note">{props.t("appearance.partialNote")}</p>

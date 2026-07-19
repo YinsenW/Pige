@@ -763,6 +763,7 @@
   "appearance.knowledgeLanguage.preserve": "ソースの言語を維持",
   "appearance.knowledgeLanguageDescription": "既定ではソースの言語を維持し、翻訳は常に明示的に選択します。",
   "appearance.language": "言語",
+  "appearance.languageUpdateFailed": "言語を変更できませんでした。現在の言語を維持しています。",
   "appearance.ocrLanguage": "OCR 言語ヒント",
   "appearance.ocrLanguage.auto": "自動検出",
   "appearance.ocrLanguage.zhEn": "中国語 + 英語",

@@ -763,6 +763,7 @@
   "appearance.knowledgeLanguage.preserve": "Quellsprache beibehalten",
   "appearance.knowledgeLanguageDescription": "Die Quellsprache bleibt standardmäßig erhalten; Übersetzungen sind immer eine ausdrückliche Wahl.",
   "appearance.language": "Sprache",
+  "appearance.languageUpdateFailed": "Die Sprache konnte nicht geändert werden. Die aktuelle Sprache wurde beibehalten.",
   "appearance.ocrLanguage": "OCR-Sprachhinweis",
   "appearance.ocrLanguage.auto": "Automatisch erkennen",
   "appearance.ocrLanguage.zhEn": "Chinesisch + Englisch",

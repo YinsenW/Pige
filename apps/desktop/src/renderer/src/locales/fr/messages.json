@@ -763,6 +763,7 @@
   "appearance.knowledgeLanguage.preserve": "Conserver la langue source",
   "appearance.knowledgeLanguageDescription": "La langue source est conservée par défaut ; toute traduction reste un choix explicite.",
   "appearance.language": "Langue",
+  "appearance.languageUpdateFailed": "Impossible de changer la langue. La langue actuelle a été conservée.",
   "appearance.ocrLanguage": "Indication de langue OCR",
   "appearance.ocrLanguage.auto": "Détection automatique",
   "appearance.ocrLanguage.zhEn": "Chinois + anglais",
