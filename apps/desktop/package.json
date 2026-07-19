@@ -20,7 +20,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit --pretty false"
   },
   "dependencies": {
-    "@earendil-works/pi-agent-core": "0.80.7",
+    "@earendil-works/pi-agent-core": "0.80.10",
     "@earendil-works/pi-ai": "0.80.7",
     "@mozilla/readability": "0.6.0",
     "@napi-rs/canvas": "1.0.2",
