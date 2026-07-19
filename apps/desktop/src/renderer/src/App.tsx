@@ -504,9 +504,9 @@ export function App(): React.JSX.Element {
     const unsubscribeLayout = window.pige.window.onLayoutChanged((nextState) => {
       if (active) applyWindowLayoutState(nextState);
     });
-    const unsubscribeAppearance = window.pige.settings.onAppearanceChanged((event) => {
+    const unsubscribeAppearance = window.pige.settings.onAppearanceChanged((appearance) => {
       if (!active) return;
-      applyAppearanceSummary(event.settings);
+      applyAppearanceSummary(appearance);
       setAppearanceLoadState("ready");
     });
     void window.pige.getHealth().then(setHealth);

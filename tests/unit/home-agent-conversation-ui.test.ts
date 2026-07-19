@@ -6,7 +6,6 @@ import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it } from "vitest";
 import type {
   AgentConversationTimeline,
-  AppearanceChangedEvent,
   AppearanceSettingsSummary,
   AgentRuntimeStatus,
   AgentSubmitTurnRequest,
@@ -588,8 +587,7 @@ describe("Home durable Agent conversation UI", () => {
 
     await act(async () => {
       for (const listener of harness.appearanceListeners) listener({
-        apiVersion: 1,
-        settings: { ...testAppearanceSummary("en"), themePreference: "light", revision: 0 }
+        ...testAppearanceSummary("en"), themePreference: "light", revision: 0
       });
       await settle(dom);
     });
@@ -597,8 +595,7 @@ describe("Home durable Agent conversation UI", () => {
 
     await act(async () => {
       for (const listener of harness.appearanceListeners) listener({
-        apiVersion: 1,
-        settings: { ...testAppearanceSummary("en"), themePreference: "light", revision: 2 }
+        ...testAppearanceSummary("en"), themePreference: "light", revision: 2
       });
       await settle(dom);
     });
@@ -3316,7 +3313,7 @@ interface ConversationHarness {
   readonly windowLayoutListeners: Set<(state: WindowLayoutState) => void>;
   appearanceSummary: AppearanceSettingsSummary;
   readonly appearanceThemeRequests: SetThemeRequest[];
-  readonly appearanceListeners: Set<(event: AppearanceChangedEvent) => void>;
+  readonly appearanceListeners: Set<(settings: AppearanceSettingsSummary) => void>;
   failNextWindowLayout: boolean;
   readonly noteRenderRequests: string[];
   readonly inlineReferenceRequests: NoteResolveInlineReferenceRequest[];
@@ -3632,7 +3629,7 @@ function makePigeApi(harness: ConversationHarness): object {
         };
         return { status: "committed" as const, settings: harness.appearanceSummary };
       },
-      onAppearanceChanged: (listener: (event: AppearanceChangedEvent) => void) => {
+      onAppearanceChanged: (listener: (settings: AppearanceSettingsSummary) => void) => {
         harness.appearanceListeners.add(listener);
         return () => harness.appearanceListeners.delete(listener);
       }
