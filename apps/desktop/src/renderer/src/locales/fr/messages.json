@@ -289,6 +289,7 @@
   "packages.unavailableTitle": "Registre de packages indisponible",
   "permissions.action.fetch_release_notes": "Récupérer les notes de version",
   "permissions.action.generic": "Continuer l'action externe en cours",
+  "permissions.actions.install_pi_package": "Installer le paquet Pi",
   "permissions.resource.credential": "Utilisation d'identifiants",
   "permissions.resource.file": "Accès à un fichier",
   "permissions.resource.folder": "Accès à un dossier",

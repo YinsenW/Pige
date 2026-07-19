@@ -1680,6 +1680,7 @@ describe("Home durable Agent conversation UI", () => {
     harness.jobs = [permissionWaitingJob()];
     harness.permissionPending = {
       ...permissionPendingRequest(),
+      resourceDisplayName: "pige-synthetic-package@1.2.3",
       rawCommand: "curl https://private.example/release-notes",
       path: "/Users/private/notes.md",
       body: "private source body",
@@ -1698,6 +1699,7 @@ describe("Home durable Agent conversation UI", () => {
     expect(prompt?.querySelector('[role="status"]')?.textContent).toContain("Release Notes Skill");
     expect(prompt?.textContent).toContain("Fetch release notes");
     expect(prompt?.textContent).toContain("Network access");
+    expect(prompt?.textContent).toContain("pige-synthetic-package@1.2.3");
     expect(container.querySelector(".task-panel")).toBeNull();
     expect(container.querySelector(".conversation-status-message")).toBeNull();
     expect(container.querySelector('[aria-label="Needs attention"]')).toBeNull();

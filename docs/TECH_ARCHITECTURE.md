@@ -1351,10 +1351,17 @@ Responsibilities:
 - Block task-time package installation from Agent plans.
 - Show update diffs for version, permissions, and data boundary when possible.
 
+The bounded `PiPackageManagerService` is install-only: exact public npm identity,
+`install_package`, SHA-512, pinned bounded link-free extraction, unsafe-input rejection,
+PID-aware recovery and immutable `installed_disabled` publication. Request-bound revisions
+keep adoption stable; uncertain commits preserve owned bytes for startup reconciliation.
+Catalog, renderer, runtime and remaining lifecycle owners are absent.
+
 Package metadata, categories, trust tiers, capability declarations, and lifecycle are
 owned by [`SKILL_EXTENSION_DESIGN.md`](SKILL_EXTENSION_DESIGN.md#10-relationship-to-pi-packages)
 and the package manifest/schema. Architecture owns the Registry Service process boundary:
-it exposes only enabled, permission-checked adapters and never performs task-time install.
+it exposes only enabled, permission-checked adapters. Only explicit exact-package intent may
+invoke this Broker-mediated prerequisite; inferred or hidden install is forbidden.
 
 ### 5.10 Backup Service
 
@@ -1928,6 +1935,7 @@ Reference-only capture, conversion, and local-tool evaluation:
 | Pi Package Catalog | reference | Source for curated package review and user-installable package metadata. | https://pi.dev/packages | Re-crawl/review before changing curated recommendations. | Do not auto-install packages during Agent jobs. |
 | Pi package docs | reference | Package format, install, and resource conventions. | https://github.com/earendil-works/pi/tree/main/packages/coding-agent/docs/packages.md | Re-check before Package Manager implementation. | Package installs require review and permissions. |
 | npm registry | optional | Package resolution for reviewed Pi packages and explicit permissioned external Skill/package flows. | https://www.npmjs.com | Use only through Package Manager or a reviewed runtime adapter with version pins and permission prompts. | No hidden install during ordinary Agent jobs; capability disclosure required. |
+| `tar` (`runtime.tar`) | required | Extract the already-downloaded, integrity-verified Pi package archive inside the bounded install staging root. | https://github.com/isaacs/node-tar | Pin `7.5.20`; update only with archive traversal, link, collision, cancellation, integrity, executable/native-content, and packaged-platform regression. | BlueOak-1.0.0 bundled runtime dependency. Pige disables package lifecycle scripts, rejects links, unsafe paths and executable/native metadata/content, bounds files/bytes/depth, and never uses `tar` to execute or enable package code. |
 | TencentDB Agent Memory | reference | Memory architecture reference. | https://github.com/TencentCloud/TencentDB-Agent-Memory | Reference only unless future integration is explicitly designed. | Pige default memory remains native. |
 | pi-hermes-memory | reference | Pi memory and secret-scanning reference. | https://github.com/chandra447/pi-hermes-memory | Reference/experimental only in v0.1. | Not default memory runtime. |
 | pi-memctx | reference | Markdown-native memory/context reference. | https://github.com/weauratech/pi-memctx | Reference only unless curated later. | Not default memory runtime. |

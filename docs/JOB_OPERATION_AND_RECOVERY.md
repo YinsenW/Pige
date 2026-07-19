@@ -532,6 +532,9 @@ When permission is required:
 6. Completion writes an exact marker. Restart adopts pending/approved/denied truth;
    consumed authority without matching completion fails final and never replays an effect.
 
+Exact package adoption uses its request-bound revision, so later Registry changes cannot
+alter its completion hash or authorize another download.
+
 Rules:
 
 - A permission prompt must not hold important state only in renderer memory.

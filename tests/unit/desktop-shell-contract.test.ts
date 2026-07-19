@@ -682,6 +682,26 @@ describe("desktop shell build contract", () => {
     }
   });
 
+  it("registers exact Pi package install only behind main-owned permission authority", () => {
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
+    const adapterSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/services/pi-package-capability-adapter.ts"),
+      "utf8"
+    );
+
+    expect(mainSource).toContain("createPiPackageInstallCapabilityAdapter(getPiPackageManagerService())");
+    expect(mainSource).toContain('new PiPackageManagerService({ appDataRoot: app.getPath("userData") })');
+    expect(mainSource.indexOf("createPiPackageInstallCapabilityAdapter(getPiPackageManagerService())"))
+      .toBeLessThan(mainSource.indexOf("createPermissionedExternalCapabilityRegistry("));
+    expect(adapterSource).toContain('capability: "install_package"');
+    expect(adapterSource).toContain('status: { const: "installed_disabled" }');
+    expect(adapterSource).toContain('resourceScope: "none"');
+    expect(preloadSource).not.toContain("pige_install_pi_package");
+    expect(rendererSource).not.toContain("pige_install_pi_package");
+  });
+
   it("keeps durable proposal recovery internal while renderer decisions fail closed", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const approveHandler = mainSource.slice(

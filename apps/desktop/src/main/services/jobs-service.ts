@@ -447,6 +447,7 @@ export class JobsService implements PermissionedExternalJobPort {
       capability: record.binding.capability,
       dataBoundary: record.binding.dataBoundary,
       actionLabelKey: record.actionLabelKey,
+      ...(record.resourceDisplayName ? { resourceDisplayName: record.resourceDisplayName } : {}),
       resourceScope: record.binding.resourceScope,
       resourceKind: record.resourceKind,
       resourceCount: record.resourceCount,

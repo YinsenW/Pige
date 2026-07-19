@@ -406,8 +406,10 @@ Tests must verify:
   Pending/approved/denied restart safely; consumed-without-completion never replays.
 - Pending UI exposes one localized safe summary/status owner, disables while resolving,
   rereads durable truth after IPC uncertainty, and fails closed for stale/unreadable state.
-- Production exposes only three reviewed read-only adapters; create-foundation tests prove
-  no write authority or exit.
+- Production exposes three reviewed read-only adapters; create tests prove no write
+  authority. Package-install tests prove exact permission, deny-before-network, disabled
+  output, stable adoption, integrity/archive bounds, hook/dependency/native rejection,
+  cancellation, lock/residue recovery and no package-code execution.
 - Symlink/root/parent/successor races, fsync errors, cancellation and marker disagreement
   fail closed without deleting a successor or creating Retry authority.
 - Mutation/shell admission needs platform race, recovery, and isolation evidence.

@@ -2703,7 +2703,7 @@ function createHomeSystemPrompt(
       ? `This is a current-note request. Call ${HOME_READ_CURRENT_NOTE_TOOL_NAME} and use only its exact supplied UTF-8 byte range. For local_knowledge, cite citation_1 and include one exact supporting substring in evidenceQuotes. If the supplied range is empty or does not support the answer, use insufficient_evidence with no citation or quote.`
       : objective === "vault_only"
       ? "This is an explicit vault-only request. Use only registered current-vault evidence tools and return insufficient_evidence when no selected evidence supports an answer."
-      : "Choose any registered read-only evidence tools only when they materially help the user request.",
+      : "Choose registered evidence tools only when they materially help the request. Use a registered external mutation tool only for the user's explicit current-turn action intent; the Host remains the sole permission and execution authority.",
     currentNoteScoped
       ? "Do not search other notes, query Datasets, fetch URLs, or invoke external capabilities in this scoped turn."
       : "You may answer ordinary questions directly without a tool, including when the vault is empty.",

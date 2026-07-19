@@ -329,100 +329,47 @@ Skill use should be logged when it materially affects output:
 ## 10. Relationship To Pi Packages
 
 Pi packages may include skills, extensions, prompts, themes, and executable capabilities.
-
-Pige's rule:
-
-- Pure Markdown Skills can use the Skill Manager.
-- External/Web Skills can use the Skill Manager only when capabilities are declared and mediated by Pige.
-- Pi packages and anything executable use the Pi Package Manager, Local Tools, or a reviewed runtime adapter for execution.
-- A Pi package that contains a Skill can expose that Skill after package install, but package permissions remain governed by the Package Manager.
+Pure Markdown uses Skill Manager; declared External/Web capabilities remain mediated.
+Packages and executables use Package Manager, Local Tools, or a reviewed adapter, and any
+included Skill remains under package permission authority.
 
 ### 10.1 Package Manager Product Boundary
 
-The Pi Package Manager owns the user-visible package metadata, trust disclosure, and
-lifecycle contract. The default Packages screen must show only a short Pige-reviewed set
-with direct personal knowledge-management value plus packages already installed on the
-machine. Community catalog search is an explicit Advanced action; Pige must not present a
-general Agent marketplace during first-run or ordinary knowledge work.
-
-Catalog metadata is untrusted display data and never grants a capability. Package source,
-metadata, install scripts, and model output cannot mark a package as reviewed, enable it,
-or change its permissions.
+Package Manager owns metadata, trust disclosure and lifecycle. Default UI shows reviewed
+and installed packages; Advanced owns community search. Catalog data cannot grant trust,
+enablement or permission.
 
 ### 10.2 Inspectable Package Metadata
 
-Before install or update, Package Manager must show the available fields relevant to the
-decision:
-
-- Stable package identity, name, description, author, license, and package type: extension,
-  Skill, prompt, theme, or mixed package.
-- Pi catalog, npm, and repository source links when available; exact resolved version and
-  integrity/provenance information belong to the install record.
-- Installed version, available version, pin state, compatible rollback target, last publish
-  time, and update summary when known.
-- Declared capabilities, requested permission scopes, runtime adapter requirements, and
-  local/network/cloud/filesystem/brokered-credential/destructive data boundaries.
-- Trust category, installation state, health flags, warnings, and whether the package is
-  enabled.
-- Upstream popularity fields such as download counts only when available and clearly
-  identified as informational rather than a Pige trust signal.
-
-Unknown metadata must be displayed as unknown; it must not be inferred from popularity,
-package naming, an installed state, or a successful prior run.
+Before install/update, disclose available identity, author, license, type, source, exact
+version/integrity, capabilities, permissions, runtime/boundary, trust and lifecycle facts.
+Popularity is informational; unknown stays unknown.
 
 ### 10.3 Trust Categories And Runtime Authority
 
-The trust/disposition category is a review/provenance label, not a permission grant. Use
-these mutually exclusive user-visible categories, matching the package-details UI:
-
-- `built_in`: capability implemented and shipped as Pige core; it is not a community
-  package recommendation.
-- `curated`: Pige reviewed the identified package version for relevance, provenance,
-  license, declared capabilities, and known safety boundaries. Review does not remove
-  runtime permission checks.
-- `community`: discoverable through explicit Advanced search but not reviewed by
-  Pige. Installation requires stronger unreviewed-source disclosure.
-- `blocked`: Package Manager refuses install, enable, or update because provenance,
-  integrity, compatibility, license, declared behavior, or a security policy is
-  unacceptable or unresolved.
-
-Installing a package does not promote its trust category. Updating a `curated` package to
-an unreviewed version must show the change to `community` and cannot retain the prior
-version's reviewed label. Every enabled package remains capability-scoped and mediated by
-Permission Broker and reviewed runtime adapters.
+Trust is `built_in | curated | community | blocked`, never authority. Curated binds only
+the reviewed version; install does not promote trust, and every enabled package remains
+adapter- and Permission-Broker-scoped.
 
 ### 10.4 Lifecycle And Health
 
-Package Manager keeps installation state separate from health flags so the UI does not
-conflate “installed” with “trusted” or “healthy”:
+Install state is `not_installed | staged | installed_disabled | installed_enabled`; health
+flags `update_available | deprecated | repair_needed` are independent from trust.
 
-- Installation state: `not_installed`, `staged`, `installed_disabled`, or
-  `installed_enabled`.
-- Independent health flags: `update_available`, `deprecated`, or `repair_needed`; no flag
-  means no known package-health exception. A policy or integrity block changes the separate
-  trust/disposition category to `blocked`.
+- Search/inspect/stage never run package code, hooks, shell, or package callbacks.
+- Install/update need explicit disclosed intent; enable exposes only reviewed adapters;
+  disable stops new use without deleting durable output.
+- Manual update discloses version/capability/permission/boundary/trust/dependency drift;
+  pinning, rollback records and failed-change restoration remain required.
+- Uninstall explicitly removes machine-local files/grants, never user Markdown/evidence.
+- Ordinary work never infers or hides install/update. Explicit chat install must name an
+  exact package/version; Pi cannot choose dependencies or turn another task into install.
 
-Required lifecycle behavior:
-
-- Search and inspection never execute package code, lifecycle hooks, or network callbacks
-  declared by the package.
-- Install and update require explicit user confirmation after capability, permission, data
-  boundary, trust, version, and relevant warning disclosure.
-- Enable exposes only reviewed-adapter capabilities after Permission Broker enforcement;
-  disable stops new use without deleting package files or user-created durable output.
-- Update shows version, capability, permission, data-boundary, trust, and dependency changes
-  before apply. Version pinning suppresses automatic selection of a newer version.
-- Update and rollback use rollback-safe machine-local records. A failed change restores the
-  last verified installed version or leaves the package disabled with a repair action.
-- Uninstall removes machine-local package files and package-specific grants after explicit
-  confirmation. Durable Markdown, source evidence, and other user-owned output are preserved
-  through their normal trash/recovery owners rather than deleted with the package.
-- Package files and install records remain machine-local outside the vault. Ordinary Agent,
-  capture, parse, retrieval, and wiki-maintenance jobs never install or update packages.
-
-Automatic remote package updates are not a v0.1 behavior. Pige may report an available
-version from reviewed catalog metadata, but applying it remains an explicit Package Manager
-action.
+Current foundation permits that exact public npm request only after current-action
+`install_package`; SHA-512 and bounded path-safe extraction are required, while hooks,
+executable/native metadata/content, and runtime dependencies fail closed. Success is an
+immutable machine-local `installed_disabled` record only. It adds no trust, catalog, UI,
+enable/runtime tool, update, rollback, or uninstall authority.
 
 ## 11. v0.1 Scope
 

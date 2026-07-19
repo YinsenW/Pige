@@ -2977,6 +2977,31 @@ References:
 - `docs/SECURITY_THREAT_MODEL.md`
 - `docs/AGENT_RUNTIME_POLICY_CONTEXT.md`
 
+### D-20260719-Exact-Pi-Package-Install-Foundation
+
+Status: Accepted
+Date: 2026-07-19
+
+Decision:
+
+An explicit current-turn request may permission-install one exact public npm Pi
+package/version as immutable machine-local `installed_disabled` bytes.
+
+Rationale:
+
+Acquisition must not silently become execution or dependency selection.
+
+Consequences:
+
+- SHA-512, bounded link-free extraction, hook/dependency/native rejection, PID-aware locking
+  and request-stable adoption are mandatory. Remaining lifecycle owners stay open; no Exit
+  or Phase advances.
+
+References:
+
+- `docs/SKILL_EXTENSION_DESIGN.md`
+- `docs/SECURITY_THREAT_MODEL.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

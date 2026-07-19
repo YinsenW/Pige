@@ -289,6 +289,7 @@
   "packages.unavailableTitle": "Package registry unavailable",
   "permissions.action.fetch_release_notes": "Fetch release notes",
   "permissions.action.generic": "Continue the current external action",
+  "permissions.actions.install_pi_package": "Install Pi package",
   "permissions.resource.credential": "Credential use",
   "permissions.resource.file": "File access",
   "permissions.resource.folder": "Folder access",
