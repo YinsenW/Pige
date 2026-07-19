@@ -71,6 +71,7 @@ import type {
   SpeechStartResult,
   SpeechStopResult,
   SkillDisableRequest,
+  SkillRegistryQueryResult,
   SkillRegistryMutationResult,
   SkillRegistrySummary,
   SettingApplyBehavior,
@@ -158,6 +159,7 @@ export type {
   SkillCapability,
   SkillDataBoundary,
   SkillDisableRequest,
+  SkillRegistryQueryResult,
   SkillKind,
   SkillRegistryMutationResult,
   SkillRegistrySummary,
@@ -1359,7 +1361,7 @@ export interface PigeDesktopApi {
     };
   };
   readonly skills: {
-    readonly summary: () => Promise<SkillRegistrySummary>;
+    readonly summary: () => Promise<SkillRegistryQueryResult>;
     readonly disable: (request: SkillDisableRequest) => Promise<SkillRegistryMutationResult>;
     readonly onChanged: (listener: (summary: SkillRegistrySummary) => void) => () => void;
   };

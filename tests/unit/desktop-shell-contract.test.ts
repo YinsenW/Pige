@@ -674,10 +674,10 @@ describe("desktop shell build contract", () => {
     );
 
     expect(contractsSource).toContain("readonly skills: {");
-    expect(contractsSource).toContain("readonly summary: () => Promise<SkillRegistrySummary>;");
+    expect(contractsSource).toContain("readonly summary: () => Promise<SkillRegistryQueryResult>;");
     expect(contractsSource).toContain("readonly disable: (request: SkillDisableRequest)");
     expect(contractsSource).toContain("readonly onChanged: (listener: (summary: SkillRegistrySummary)");
-    expect(handlers).toContain("SkillRegistrySummarySchema.parse(getSkillRegistryService().summary())");
+    expect(handlers).toContain("SkillRegistryQueryResultSchema.parse(getSkillRegistryService().summary())");
     expect(handlers).toContain("SkillDisableRequestSchema.parse(request)");
     expect(handlers).toContain("SkillRegistryMutationResultSchema.parse(getSkillRegistryService().disable(parsed))");
     expect(handlers).toContain('window.webContents.send("skills.changed", result.registry)');
@@ -694,10 +694,14 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).not.toContain("readonly installSkill:");
     expect(contractsSource).not.toContain("readonly enableSkill:");
     expect(contractsSource).not.toContain("readonly uninstallSkill:");
-    expect(serviceSource).toContain("lockfile.lockSync(this.#rootPath");
+    expect(mainSource).toContain("app.requestSingleInstanceLock()");
+    expect(mainSource).toContain("recoverOrphanedMutationLock: true");
+    expect(serviceSource).toContain("acquireSkillRegistryMutationLock(this.#registryLockPath)");
+    expect(serviceSource).toContain("fs.constants.O_EXCL");
+    expect(serviceSource).toContain("parsed.ownerId !== ownerId");
     expect(serviceSource).toContain('status: "failed"');
     expect(serviceSource).toContain('messageKey: "error.generic"');
-    expect(serviceSource).toContain("assertRendererSafeDisplayText");
+    expect(serviceSource).toContain("containsRestrictedModelContent(value)");
     for (const forbiddenRuntime of ["node:child_process", "node:http", "node:https", "fetch(", "spawn("]) {
       expect(serviceSource).not.toContain(forbiddenRuntime);
     }

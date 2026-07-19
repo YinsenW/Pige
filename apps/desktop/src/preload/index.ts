@@ -114,6 +114,7 @@ import type {
   SpeechStopResult,
   SkillDisableRequest,
   SkillRegistryMutationResult,
+  SkillRegistryQueryResult,
   SkillRegistrySummary,
   SupportBundleExportResult,
   SupportBundlePreview,
@@ -177,6 +178,7 @@ import {
   UpdateSummarySchema,
   SkillDisableRequestSchema,
   SkillRegistryMutationResultSchema,
+  SkillRegistryQueryResultSchema,
   SkillRegistrySummarySchema,
   WindowLayoutRequestSchema,
   WindowLayoutStateSchema,
@@ -500,8 +502,8 @@ const api: PigeDesktopApi = {
     }
   },
   skills: {
-    summary: async (): Promise<SkillRegistrySummary> =>
-      SkillRegistrySummarySchema.parse(await ipcRenderer.invoke("skills.summary")),
+    summary: async (): Promise<SkillRegistryQueryResult> =>
+      SkillRegistryQueryResultSchema.parse(await ipcRenderer.invoke("skills.summary")),
     disable: async (request: SkillDisableRequest): Promise<SkillRegistryMutationResult> =>
       SkillRegistryMutationResultSchema.parse(await ipcRenderer.invoke(
         "skills.disable",

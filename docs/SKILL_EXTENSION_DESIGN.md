@@ -212,8 +212,7 @@ Rules:
 - Device-installed Skills under this directory do not enter vault backup sets.
 - Useful for personal workflows that should not travel with a vault.
 
-`skills/registry.json` projects checksum-confirmed safe identity. A machine lock and revision
-recheck fence disable; persistence failures are body-free.
+`skills/registry.json` is checksum-safe; token/revision fence disable; failures are body-free.
 
 ## 7. Safety Rules
 

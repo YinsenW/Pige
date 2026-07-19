@@ -36,6 +36,7 @@ import {
   SkillDisableRequestSchema,
   SkillManifestSchema,
   SkillRegistryMutationResultSchema,
+  SkillRegistryQueryResultSchema,
   SkillRegistrySummarySchema,
   UpdateProviderCredentialRequestSchema
 } from "@pige/schemas";
@@ -63,6 +64,10 @@ describe("security-sensitive shared contracts", () => {
       }]
     };
     expect(SkillRegistrySummarySchema.parse(summary)).toEqual(summary);
+    expect(SkillRegistryQueryResultSchema.parse({ status: "ready", registry: summary })).toEqual({
+      status: "ready",
+      registry: summary
+    });
     expect(() => SkillRegistrySummarySchema.parse({
       ...summary,
       skills: [{ ...summary.skills[0], path: "/private/skills/paper-reading/SKILL.md" }]
@@ -100,6 +105,7 @@ describe("security-sensitive shared contracts", () => {
       }
     };
     expect(SkillRegistryMutationResultSchema.parse(failed)).toEqual(failed);
+    expect(SkillRegistryQueryResultSchema.parse(failed)).toEqual(failed);
     expect(() => SkillRegistryMutationResultSchema.parse({
       ...failed,
       error: { ...failed.error, path: "/private/skills" }

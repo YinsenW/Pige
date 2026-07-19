@@ -4,12 +4,14 @@ import { once } from "node:events";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   SkillRegistryFileSchema,
-  SkillRegistrySummarySchema
+  SkillRegistrySummarySchema,
+  type SkillRegistrySummary
 } from "@pige/schemas";
 import {
+  acquireSkillRegistryMutationLock,
   SkillRegistryService,
   parseSkillManifest
 } from "../../apps/desktop/src/main/services/skill-registry-service";
@@ -40,7 +42,7 @@ describe("SkillRegistryService", () => {
     });
     seedInstalledSkill(root, source, true);
 
-    const summary = new SkillRegistryService(root).summary();
+    const summary = readySummary(new SkillRegistryService(root));
 
     expect(summary).toEqual({
       apiVersion: 1,
@@ -85,7 +87,7 @@ describe("SkillRegistryService", () => {
     });
     seedInstalledSkill(root, source, false);
 
-    expect(new SkillRegistryService(root).summary().skills[0]).toMatchObject({
+    expect(readySummary(new SkillRegistryService(root)).skills[0]).toMatchObject({
       id: "web-research",
       enabled: false,
       capabilities: ["external_network", "external_filesystem", "use_brokered_credential"],
@@ -93,7 +95,7 @@ describe("SkillRegistryService", () => {
     });
   });
 
-  it("rejects path, URL, and credential-shaped display metadata before renderer projection", () => {
+  it("rejects path and credential-shaped display metadata while allowing benign public URLs", () => {
     const root = createRoot();
     const unsafeSources = [
       manifest({
@@ -105,18 +107,74 @@ describe("SkillRegistryService", () => {
         body: "## Procedure\n\nRead."
       }),
       manifest({
-        id: "url-display",
-        name: "URL Display",
+        id: "sensitive-url-display",
+        name: "Sensitive URL Display",
         version: "1",
         description: "Visit https://example.com/?token=private",
         capabilities: ["read_current_source"],
         body: "## Procedure\n\nRead."
       }),
       manifest({
-        id: "secret-display",
-        name: "Secret Display",
+        id: "aws-key-display",
+        name: "AWS Key Display",
         version: "1",
-        description: "API key = sk-abcdefghijklmnop",
+        description: "Credential AKIAABCDEFGHIJKLMNOP",
+        capabilities: ["read_current_source"],
+        body: "## Procedure\n\nRead."
+      }),
+      manifest({
+        id: "bearer-display",
+        name: "Bearer Display",
+        version: "1",
+        description: "Authorization Bearer abcdefghijklmnop",
+        capabilities: ["read_current_source"],
+        body: "## Procedure\n\nRead."
+      }),
+      manifest({
+        id: "private-key-display",
+        name: "Private Key Display",
+        version: "1",
+        description: "-----BEGIN PRIVATE KEY-----",
+        capabilities: ["read_current_source"],
+        body: "## Procedure\n\nRead."
+      }),
+      manifest({
+        id: "root-path-display",
+        name: "Root Path Display",
+        version: "1",
+        description: "Reads /private",
+        capabilities: ["read_current_source"],
+        body: "## Procedure\n\nRead."
+      }),
+      manifest({
+        id: "assigned-path-display",
+        name: "Assigned Path Display",
+        version: "1",
+        description: "path=/secret",
+        capabilities: ["read_current_source"],
+        body: "## Procedure\n\nRead."
+      }),
+      manifest({
+        id: "labelled-path-display",
+        name: "Labelled Path Display",
+        version: "1",
+        description: "path:/secret",
+        capabilities: ["read_current_source"],
+        body: "## Procedure\n\nRead."
+      }),
+      manifest({
+        id: "url-adjacent-path-display",
+        name: "URL Adjacent Path Display",
+        version: "1",
+        description: "See https://example.com),path=/secret",
+        capabilities: ["read_current_source"],
+        body: "## Procedure\n\nRead."
+      }),
+      manifest({
+        id: "current-drive-display",
+        name: "Current Drive Display",
+        version: "1",
+        description: String.raw`Reads \private`,
         capabilities: ["read_current_source"],
         body: "## Procedure\n\nRead."
       }),
@@ -131,9 +189,17 @@ describe("SkillRegistryService", () => {
       })
     ];
     for (const source of unsafeSources) seedInstalledSkill(root, source, true);
+    seedInstalledSkill(root, manifest({
+      id: "public-docs",
+      name: "Public Docs",
+      version: "1",
+      description: "See https://example.com/docs for public guidance.",
+      capabilities: ["read_current_source"],
+      body: "## Procedure\n\nRead."
+    }), true);
 
-    expect(new SkillRegistryService(root).summary()).toMatchObject({
-      skills: [],
+    expect(readySummary(new SkillRegistryService(root))).toMatchObject({
+      skills: [{ id: "public-docs" }],
       invalidManifestCount: unsafeSources.length
     });
   });
@@ -178,7 +244,7 @@ describe("SkillRegistryService", () => {
     });
     seedRawInstalledSkill(root, "malformed-skill", "1", malformed, true);
 
-    const summary = new SkillRegistryService(root).summary();
+    const summary = readySummary(new SkillRegistryService(root));
     expect(summary.skills.map((skill) => skill.id)).toEqual(["valid-skill"]);
     expect(summary.invalidManifestCount).toBe(3);
   });
@@ -209,7 +275,7 @@ describe("SkillRegistryService", () => {
       updatedAt: timestamp
     }]);
 
-    expect(new SkillRegistryService(root).summary()).toMatchObject({ skills: [], invalidManifestCount: 1 });
+    expect(readySummary(new SkillRegistryService(root))).toMatchObject({ skills: [], invalidManifestCount: 1 });
   });
 
   it("disables by revision with atomic persistence while stale and missing requests change nothing", () => {
@@ -232,7 +298,7 @@ describe("SkillRegistryService", () => {
       status: "committed",
       registry: { revision: 4, skills: [{ id: "disable-me", enabled: false }] }
     });
-    expect(new SkillRegistryService(root).summary()).toMatchObject({
+    expect(readySummary(new SkillRegistryService(root))).toMatchObject({
       revision: 4,
       skills: [{ id: "disable-me", enabled: false }]
     });
@@ -251,11 +317,11 @@ describe("SkillRegistryService", () => {
     });
     seedInstalledSkill(root, source, true);
     const service = new SkillRegistryService(root);
-    const skillRoot = path.join(root, "skills");
+    const lockPath = path.join(root, "skills", ".registry.lock");
     const child = spawn(process.execPath, [
       "-e",
-      `const path=require("node:path");const lockfile=require("proper-lockfile");const root=process.argv[1];const release=lockfile.lockSync(root,{lockfilePath:path.join(root,".registry.lock"),realpath:false,retries:0,stale:30000,update:10000});process.send("locked");process.on("message",()=>{release();process.exit(0);});`,
-      skillRoot
+      `const fs=require("node:fs");const crypto=require("node:crypto");const lockPath=process.argv[1];const fd=fs.openSync(lockPath,fs.constants.O_RDWR|fs.constants.O_CREAT|fs.constants.O_EXCL,0o600);fs.writeFileSync(fd,JSON.stringify({schemaVersion:1,ownerId:crypto.randomUUID(),pid:process.pid})+"\\n");fs.fsyncSync(fd);process.send("locked");process.on("message",()=>{fs.unlinkSync(lockPath);fs.closeSync(fd);process.exit(0);});`,
+      lockPath
     ], { cwd: process.cwd(), stdio: ["ignore", "ignore", "inherit", "ipc"] });
     try {
       await once(child, "message");
@@ -288,7 +354,93 @@ describe("SkillRegistryService", () => {
     })).toMatchObject({ status: "committed", registry: { revision: 4 } });
   });
 
-  it("rejects a malformed durable registry instead of inventing empty inventory", () => {
+  it("never removes a successor mutation lock when an old owner releases", async () => {
+    const root = createRoot();
+    fs.mkdirSync(path.join(root, "skills"), { recursive: true });
+    const lockPath = path.join(root, "skills", ".registry.lock");
+    const oldOwner = acquireSkillRegistryMutationLock(lockPath);
+    fs.unlinkSync(lockPath);
+    const child = spawn(process.execPath, [
+      "-e",
+      `const fs=require("node:fs");const crypto=require("node:crypto");const lockPath=process.argv[1];const fd=fs.openSync(lockPath,fs.constants.O_RDWR|fs.constants.O_CREAT|fs.constants.O_EXCL,0o600);fs.writeFileSync(fd,JSON.stringify({schemaVersion:1,ownerId:crypto.randomUUID(),pid:process.pid})+"\\n");fs.fsyncSync(fd);process.send("locked");process.on("message",()=>{fs.unlinkSync(lockPath);fs.closeSync(fd);process.exit(0);});`,
+      lockPath
+    ], { cwd: process.cwd(), stdio: ["ignore", "ignore", "inherit", "ipc"] });
+    try {
+      await once(child, "message");
+      oldOwner.release();
+      expect(() => acquireSkillRegistryMutationLock(lockPath)).toThrow(/EEXIST/u);
+      expect(fs.existsSync(lockPath)).toBe(true);
+    } finally {
+      child.send("release");
+      await once(child, "exit");
+    }
+  });
+
+  it("recovers a valid orphan only for the single-instance startup owner", () => {
+    const root = createRoot();
+    fs.mkdirSync(path.join(root, "skills"), { recursive: true });
+    const lockPath = path.join(root, "skills", ".registry.lock");
+    fs.writeFileSync(lockPath, `${JSON.stringify({
+      schemaVersion: 1,
+      ownerId: "00000000-0000-4000-8000-000000000000",
+      pid: 999_999
+    })}\n`, { mode: 0o600 });
+
+    const service = new SkillRegistryService(root, { recoverOrphanedMutationLock: true });
+    expect(service.summary()).toMatchObject({ status: "ready", registry: { revision: 0 } });
+    const successor = acquireSkillRegistryMutationLock(lockPath);
+    successor.assertOwned();
+    successor.release();
+  });
+
+  it("recovers an empty crash-torn lock for the single-instance startup owner", () => {
+    const root = createRoot();
+    const skillRoot = path.join(root, "skills");
+    fs.mkdirSync(skillRoot, { recursive: true });
+    fs.writeFileSync(path.join(skillRoot, ".registry.lock"), "", { mode: 0o600 });
+
+    expect(new SkillRegistryService(root, { recoverOrphanedMutationLock: true }).summary())
+      .toMatchObject({ status: "ready", registry: { revision: 0 } });
+    expect(fs.existsSync(path.join(skillRoot, ".registry.lock"))).toBe(false);
+  });
+
+  it("keeps desktop startup available while an unsafe lock blocks mutation", () => {
+    const root = createRoot();
+    const skillRoot = path.join(root, "skills");
+    fs.mkdirSync(path.join(skillRoot, ".registry.lock"), { recursive: true });
+
+    const service = new SkillRegistryService(root, { recoverOrphanedMutationLock: true });
+    expect(service.summary()).toMatchObject({ status: "ready", registry: { revision: 0 } });
+    expect(service.disable({ apiVersion: 1, skillId: "missing", expectedRevision: 0 }))
+      .toMatchObject({ status: "failed", error: { code: "skill.registry_busy" } });
+  });
+
+  it("recovers a same-process lock after transient release rename failure", () => {
+    const root = createRoot();
+    const skillRoot = path.join(root, "skills");
+    fs.mkdirSync(skillRoot, { recursive: true });
+    const lockPath = path.join(skillRoot, ".registry.lock");
+    const owner = acquireSkillRegistryMutationLock(lockPath);
+    const rename = fs.renameSync.bind(fs);
+    const renameSpy = vi.spyOn(fs, "renameSync").mockImplementation((source, destination) => {
+      if (source === lockPath && String(destination).includes(".released.")) {
+        const failure = new Error("transient rename failure") as NodeJS.ErrnoException;
+        failure.code = "EACCES";
+        throw failure;
+      }
+      return rename(source, destination);
+    });
+    owner.release();
+    renameSpy.mockRestore();
+    expect(fs.existsSync(lockPath)).toBe(true);
+
+    const successor = acquireSkillRegistryMutationLock(lockPath);
+    successor.assertOwned();
+    successor.release();
+    expect(fs.existsSync(lockPath)).toBe(false);
+  });
+
+  it("returns a strict body-free failure for malformed durable registry state", () => {
     const root = createRoot();
     fs.mkdirSync(path.join(root, "skills", "installed"), { recursive: true });
     fs.writeFileSync(path.join(root, "skills", "registry.json"), JSON.stringify({
@@ -296,7 +448,19 @@ describe("SkillRegistryService", () => {
       revision: 2,
       skills: [{ id: "duplicate", version: "1" }, { id: "duplicate", version: "1" }]
     }));
-    expect(() => new SkillRegistryService(root).summary()).toThrow("Skill Registry is unavailable");
+    const result = new SkillRegistryService(root).summary();
+    expect(result).toEqual({
+      status: "failed",
+      error: {
+        code: "skill.registry_unavailable",
+        domain: "skill",
+        messageKey: "error.generic",
+        retryable: true,
+        severity: "error",
+        userAction: "retry"
+      }
+    });
+    expect(JSON.stringify(result)).not.toContain(root);
   });
 });
 
@@ -338,6 +502,13 @@ function createRoot(): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-skill-registry-"));
   temporaryRoots.push(root);
   return root;
+}
+
+function readySummary(service: SkillRegistryService): SkillRegistrySummary {
+  const result = service.summary();
+  expect(result.status).toBe("ready");
+  if (result.status !== "ready") throw new Error("Expected a ready Skill Registry summary.");
+  return result.registry;
 }
 
 function manifest(input: {

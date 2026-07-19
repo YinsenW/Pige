@@ -659,9 +659,10 @@ Queries:
 - `skills.summary`
 - `system.toolchainHealth`
 
-`skills.summary`, lock-fenced CAS `skills.disable({apiVersion:1,skillId,expectedRevision})`, and
-`skills.changed` are schema-validated. Main emits checksum-confirmed safe identity plus an invalid
-count. Disable only reduces authority; busy/storage failures are strict and body-free.
+`skills.summary`, owner-token/CAS `skills.disable({apiVersion:1,skillId,expectedRevision})`, and
+`skills.changed` are schema-validated. Summary is `ready {registry}` or body-free `failed {error}`.
+Main projects checksum-safe identity/count; disable reduces authority. Singleton recovery and
+token/inode release protect successor locks.
 
 Provider/model DTOs:
 

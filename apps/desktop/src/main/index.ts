@@ -125,7 +125,7 @@ import {
   UpdateSummarySchema,
   SkillDisableRequestSchema,
   SkillRegistryMutationResultSchema,
-  SkillRegistrySummarySchema,
+  SkillRegistryQueryResultSchema,
   WindowLayoutRequestSchema,
   WindowLayoutStateSchema,
   VaultActionResultSchema
@@ -403,6 +403,15 @@ function trackRestorePreviewSender(sender: WebContents): void {
 }
 
 const mainWindows = new Set<BrowserWindow>();
+const ownsAppInstanceLock = app.requestSingleInstanceLock();
+if (!ownsAppInstanceLock) app.quit();
+app.on("second-instance", () => {
+  const window = mainWindows.values().next().value;
+  if (!window || window.isDestroyed()) return;
+  if (window.isMinimized()) window.restore();
+  window.show();
+  window.focus();
+});
 let captureDrainer: CoalescedBatchDrainer<ProcessQueuedCapturesResult> | undefined;
 let parseDrainer: CoalescedBatchDrainer<ProcessQueuedParsesResult> | undefined;
 let ocrDrainer: CoalescedBatchDrainer<ProcessQueuedOcrResult> | undefined;
@@ -601,7 +610,9 @@ const getPermissionSettingsService = (): PermissionSettingsService => {
 
 const getSkillRegistryService = (): SkillRegistryService => {
   if (!skillRegistryService) {
-    skillRegistryService = new SkillRegistryService(app.getPath("userData"));
+    skillRegistryService = new SkillRegistryService(app.getPath("userData"), {
+      recoverOrphanedMutationLock: ownsAppInstanceLock
+    });
   }
   return skillRegistryService;
 };
@@ -1739,7 +1750,7 @@ ipcMain.handle("permissions.settings.revokeAllGrants", (_event, request: Permiss
   );
 });
 ipcMain.handle("skills.summary", () =>
-  SkillRegistrySummarySchema.parse(getSkillRegistryService().summary())
+  SkillRegistryQueryResultSchema.parse(getSkillRegistryService().summary())
 );
 ipcMain.handle("skills.disable", (_event, request: SkillDisableRequest) => {
   const parsed = SkillDisableRequestSchema.parse(request);
@@ -2259,6 +2270,7 @@ ipcMain.handle("restore.apply", async (event, request: RestoreApplyRequest): Pro
 ipcMain.handle("system.toolchainHealth", () => getToolchainService().health());
 
 app.whenReady().then(async () => {
+  if (!ownsAppInstanceLock) return;
   const packagedRuntimeSmokeReportPath = resolvePackagedRuntimeSmokeReportPath();
   if (packagedRuntimeSmokeReportPath) {
     let smokeWindow: BrowserWindow | undefined;
@@ -2318,7 +2330,9 @@ app.whenReady().then(async () => {
 
   localSettingsStore = new LocalSettingsStore(app.getPath("userData"));
   permissionSettingsService = new PermissionSettingsService(getLocalSettingsStore());
-  skillRegistryService = new SkillRegistryService(app.getPath("userData"));
+  skillRegistryService = new SkillRegistryService(app.getPath("userData"), {
+    recoverOrphanedMutationLock: true
+  });
   appearanceService = new AppearanceService(getLocalSettingsStore(), app.getLocale());
   updateService = new UpdateService({
     settings: getLocalSettingsStore(),

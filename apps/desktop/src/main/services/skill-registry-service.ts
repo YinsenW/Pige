@@ -2,12 +2,12 @@ import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
-import lockfile from "proper-lockfile";
 import {
   PermissionCapabilitySchema,
   SkillManifestSchema,
   SkillRegistryFileSchema,
   SkillRegistryMutationResultSchema,
+  SkillRegistryQueryResultSchema,
   SkillRegistrySummarySchema,
   type SkillCapability,
   type SkillDataBoundary,
@@ -15,16 +15,18 @@ import {
   type SkillManifest,
   type SkillRegistryFile,
   type SkillRegistryMutationResult,
+  type SkillRegistryQueryResult,
   type SkillRegistryRecord,
   type SkillRegistrySummary,
   type SkillSummary
 } from "@pige/schemas";
+import { containsRestrictedModelContent } from "./model-egress-content";
 
 const MAX_REGISTRY_BYTES = 1024 * 1024;
 const MAX_MANIFEST_BYTES = 256 * 1024;
 const MAX_FRONTMATTER_BYTES = 32 * 1024;
-const REGISTRY_LOCK_STALE_MS = 30_000;
-const REGISTRY_LOCK_UPDATE_MS = 10_000;
+const MAX_REGISTRY_LOCK_BYTES = 512;
+const ACTIVE_SKILL_REGISTRY_LOCK_PATHS = new Set<string>();
 const ARRAY_FIELDS = new Set(["capabilities", "triggers", "dataBoundary"]);
 const MANIFEST_FIELDS = new Set([
   "id",
@@ -58,7 +60,7 @@ export class SkillRegistryService {
   readonly #registryPath: string;
   readonly #registryLockPath: string;
 
-  constructor(appDataRoot: string) {
+  constructor(appDataRoot: string, options: { readonly recoverOrphanedMutationLock?: boolean } = {}) {
     if (!path.isAbsolute(appDataRoot)) {
       throw skillError("skill.registry_root_invalid", "Skill Registry requires an absolute app-data root.");
     }
@@ -79,31 +81,28 @@ export class SkillRegistryService {
     this.#installedRoot = path.join(this.#rootPath, "installed");
     this.#registryPath = path.join(this.#rootPath, "registry.json");
     this.#registryLockPath = path.join(this.#rootPath, ".registry.lock");
+    if (options.recoverOrphanedMutationLock) {
+      try {
+        this.#recoverOrphanedMutationLock();
+      } catch {
+        // An unsafe lock blocks mutation but must not prevent the desktop from opening.
+      }
+    }
   }
 
-  summary(): SkillRegistrySummary {
+  summary(): SkillRegistryQueryResult {
     try {
-      return this.#project(this.#readRegistry());
+      return SkillRegistryQueryResultSchema.parse({ status: "ready", registry: this.#project(this.#readRegistry()) });
     } catch {
-      throw skillError("skill.registry_unavailable", "Skill Registry is unavailable.");
+      return skillQueryFailed();
     }
   }
 
   disable(request: SkillDisableRequest): SkillRegistryMutationResult {
-    let release: (() => void) | undefined;
-    let compromised = false;
+    let mutationLock: SkillRegistryMutationLock | undefined;
     try {
       this.#prepare();
-      release = lockfile.lockSync(this.#rootPath, {
-        lockfilePath: this.#registryLockPath,
-        onCompromised: () => {
-          compromised = true;
-        },
-        realpath: false,
-        retries: 0,
-        stale: REGISTRY_LOCK_STALE_MS,
-        update: REGISTRY_LOCK_UPDATE_MS
-      });
+      mutationLock = acquireSkillRegistryMutationLock(this.#registryLockPath);
       const current = this.#readRegistry();
       if (request.expectedRevision !== current.revision) {
         return SkillRegistryMutationResultSchema.parse({ status: "stale", registry: this.#project(current) });
@@ -126,21 +125,41 @@ export class SkillRegistryService {
         revision: current.revision + 1,
         skills: nextSkills
       });
-      if (compromised) throw skillError("skill.registry_lock_lost", "Skill Registry mutation lock was lost.");
+      mutationLock.assertOwned();
       this.#writeRegistry(next);
-      if (compromised) throw skillError("skill.registry_lock_lost", "Skill Registry mutation lock was lost.");
       return SkillRegistryMutationResultSchema.parse({ status: "committed", registry: this.#project(next) });
     } catch (caught) {
-      return skillMutationFailed(isErrno(caught, "ELOCKED") ? "busy" : "unavailable");
+      return skillMutationFailed(isErrno(caught, "EEXIST") ? "busy" : "unavailable");
     } finally {
-      if (release) {
-        try {
-          release();
-        } catch {
-          // A failed release cannot authorize another mutation or expose lock details.
-        }
+      mutationLock?.release();
+    }
+  }
+
+  #recoverOrphanedMutationLock(): void {
+    this.#prepare();
+    let stats: fs.Stats | undefined;
+    try {
+      stats = fs.lstatSync(this.#registryLockPath);
+    } catch (caught) {
+      if (!isErrno(caught, "ENOENT")) {
+        throw skillError("skill.registry_lock_invalid", "Skill Registry mutation lock is unavailable.");
       }
     }
+    if (stats) {
+      if (!stats.isFile() || stats.isSymbolicLink()) {
+        throw skillError("skill.registry_lock_invalid", "Skill Registry mutation lock is unsafe.");
+      }
+      const recoveryPath = path.join(this.#rootPath, `.registry.lock.recovered.${randomUUID()}`);
+      fs.renameSync(this.#registryLockPath, recoveryPath);
+      fs.rmSync(recoveryPath, { force: true });
+    }
+    for (const entry of fs.readdirSync(this.#rootPath)) {
+      if (!/^\.registry\.lock\.(?:released|recovered)\.[0-9a-f-]{36}$/iu.test(entry)) continue;
+      const stalePath = path.join(this.#rootPath, entry);
+      const staleStats = fs.lstatSync(stalePath);
+      if (staleStats.isFile() && !staleStats.isSymbolicLink()) fs.rmSync(stalePath, { force: true });
+    }
+    fsyncDirectory(this.#rootPath);
   }
 
   #project(registry: SkillRegistryFile): SkillRegistrySummary {
@@ -503,27 +522,178 @@ function isErrno(caught: unknown, code: string): boolean {
 }
 
 function assertRendererSafeDisplayText(value: string): void {
-  const containsAbsolutePath = /(?:^|[\s"'(`])(?:~[\\/]|[a-z]:[\\/]|\\\\|\/(?:[^\s/]+\/)+)/iu.test(value);
-  const containsUrl = /\bhttps?:\/\//iu.test(value);
-  const containsAssignedSecret = /\b(?:api[ _-]?key|access[ _-]?token|authorization|bearer|password|secret)\s*[:=]\s*\S+/iu.test(value);
-  const containsTokenShape = /\b(?:sk-[a-z0-9_-]{12,}|gh[pousr]_[a-z0-9]{12,}|github_pat_[a-z0-9_]{12,}|xox[baprs]-[a-z0-9-]{12,})\b/iu.test(value);
-  if (containsAbsolutePath || containsUrl || containsAssignedSecret || containsTokenShape) {
+  const withoutPublicUrls = value.replace(/https?:\/\/[^\s<>"'`),;\]}]+/giu, "[url]");
+  const containsPathSyntax = /(?:^|[\s"'`([{=,:;])(?:file:\/\/|~[\\/]|\.{1,2}[\\/]|[a-z]:[\\/]|\\\\|\\[^\\\s]+|\/[^/\s]+)/iu.test(withoutPublicUrls);
+  if (containsPathSyntax || containsRestrictedModelContent(value)) {
     throw skillError("skill.manifest_display_unsafe", "Installed Skill display metadata is unsafe.");
   }
 }
 
+function skillErrorSummary(reason: "busy" | "unavailable") {
+  return {
+    code: reason === "busy" ? "skill.registry_busy" : "skill.registry_unavailable",
+    domain: "skill",
+    messageKey: "error.generic",
+    retryable: true,
+    severity: "error",
+    userAction: "retry"
+  } as const;
+}
+
+function skillQueryFailed(): SkillRegistryQueryResult {
+  return SkillRegistryQueryResultSchema.parse({ status: "failed", error: skillErrorSummary("unavailable") });
+}
+
 function skillMutationFailed(reason: "busy" | "unavailable"): SkillRegistryMutationResult {
-  return SkillRegistryMutationResultSchema.parse({
-    status: "failed",
-    error: {
-      code: reason === "busy" ? "skill.registry_busy" : "skill.registry_unavailable",
-      domain: "skill",
-      messageKey: "error.generic",
-      retryable: true,
-      severity: "error",
-      userAction: "retry"
+  return SkillRegistryMutationResultSchema.parse({ status: "failed", error: skillErrorSummary(reason) });
+}
+
+interface SkillRegistryLockRecord {
+  readonly schemaVersion: 1;
+  readonly ownerId: string;
+  readonly pid: number;
+}
+
+interface SkillRegistryMutationLock {
+  readonly assertOwned: () => void;
+  readonly release: () => void;
+}
+
+export function acquireSkillRegistryMutationLock(lockPath: string): SkillRegistryMutationLock {
+  if (ACTIVE_SKILL_REGISTRY_LOCK_PATHS.has(lockPath)) {
+    const busy = new Error("Skill Registry mutation lock is already active.") as NodeJS.ErrnoException;
+    busy.code = "EEXIST";
+    throw busy;
+  }
+  recoverAbandonedCurrentProcessLock(lockPath);
+  const ownerId = randomUUID();
+  const record: SkillRegistryLockRecord = { schemaVersion: 1, ownerId, pid: process.pid };
+  let descriptor: number | undefined;
+  let identity: fs.Stats;
+  try {
+    descriptor = fs.openSync(
+      lockPath,
+      fs.constants.O_RDWR | fs.constants.O_CREAT | fs.constants.O_EXCL | (fs.constants.O_NOFOLLOW ?? 0),
+      0o600
+    );
+    fs.writeFileSync(descriptor, `${JSON.stringify(record)}\n`, "utf8");
+    fs.fsyncSync(descriptor);
+    identity = fs.fstatSync(descriptor);
+    ACTIVE_SKILL_REGISTRY_LOCK_PATHS.add(lockPath);
+  } catch (caught) {
+    if (descriptor !== undefined) {
+      removeExactLockPath(lockPath, descriptor);
+      fs.closeSync(descriptor);
     }
-  });
+    throw caught;
+  }
+  let released = false;
+  const assertOwned = (): void => {
+    if (released || descriptor === undefined) {
+      throw skillError("skill.registry_lock_lost", "Skill Registry mutation lock was lost.");
+    }
+    const held = fs.fstatSync(descriptor);
+    let current: fs.Stats;
+    try {
+      current = fs.lstatSync(lockPath);
+    } catch {
+      throw skillError("skill.registry_lock_lost", "Skill Registry mutation lock was lost.");
+    }
+    if (current.isSymbolicLink() || !current.isFile() || !sameFileIdentity(held, identity) || !sameFileIdentity(current, identity)) {
+      throw skillError("skill.registry_lock_lost", "Skill Registry mutation lock was replaced.");
+    }
+    const parsed = parseSkillRegistryLock(readBoundedNoFollow(lockPath, MAX_REGISTRY_LOCK_BYTES) ?? "");
+    if (parsed.ownerId !== ownerId || parsed.pid !== process.pid) {
+      throw skillError("skill.registry_lock_lost", "Skill Registry mutation lock ownership changed.");
+    }
+  };
+  return {
+    assertOwned,
+    release: () => {
+      if (released) return;
+      let releasedPath: string | undefined;
+      try {
+        assertOwned();
+        releasedPath = `${lockPath}.released.${ownerId}`;
+        fs.renameSync(lockPath, releasedPath);
+        fsyncDirectory(path.dirname(lockPath));
+      } catch {
+        // Never remove a path that no longer names this exact owner and inode.
+      } finally {
+        released = true;
+        ACTIVE_SKILL_REGISTRY_LOCK_PATHS.delete(lockPath);
+        if (descriptor !== undefined) fs.closeSync(descriptor);
+        descriptor = undefined;
+        if (releasedPath) {
+          try {
+            fs.rmSync(releasedPath, { force: true });
+          } catch {
+            // The fixed lock name is already free; startup removes a leftover tombstone.
+          }
+        }
+      }
+    }
+  };
+}
+
+function recoverAbandonedCurrentProcessLock(lockPath: string): void {
+  let stats: fs.Stats;
+  try {
+    stats = fs.lstatSync(lockPath);
+  } catch (caught) {
+    if (isErrno(caught, "ENOENT")) return;
+    throw caught;
+  }
+  if (!stats.isFile() || stats.isSymbolicLink()) return;
+  let record: SkillRegistryLockRecord;
+  try {
+    record = parseSkillRegistryLock(readBoundedNoFollow(lockPath, MAX_REGISTRY_LOCK_BYTES) ?? "");
+  } catch {
+    return;
+  }
+  const verified = fs.lstatSync(lockPath);
+  if (record.pid !== process.pid || !sameFileIdentity(stats, verified)) return;
+  const abandonedPath = `${lockPath}.released.${record.ownerId}`;
+  fs.renameSync(lockPath, abandonedPath);
+  try {
+    fs.rmSync(abandonedPath, { force: true });
+  } catch {
+    // The fixed lock name is free; startup can remove the tombstone.
+  }
+}
+
+function removeExactLockPath(lockPath: string, descriptor: number): void {
+  try {
+    const held = fs.fstatSync(descriptor);
+    const current = fs.lstatSync(lockPath);
+    if (current.isFile() && !current.isSymbolicLink() && sameFileIdentity(held, current)) {
+      fs.unlinkSync(lockPath);
+    }
+  } catch {
+    // A failed acquisition must never remove a different path occupant.
+  }
+}
+
+function parseSkillRegistryLock(source: string): SkillRegistryLockRecord {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(source);
+  } catch {
+    throw skillError("skill.registry_lock_invalid", "Skill Registry mutation lock is invalid.");
+  }
+  if (
+    !parsed ||
+    typeof parsed !== "object" ||
+    Object.keys(parsed).length !== 3 ||
+    (parsed as { schemaVersion?: unknown }).schemaVersion !== 1 ||
+    typeof (parsed as { ownerId?: unknown }).ownerId !== "string" ||
+    !/^[0-9a-f-]{36}$/iu.test((parsed as { ownerId: string }).ownerId) ||
+    !Number.isSafeInteger((parsed as { pid?: unknown }).pid) ||
+    Number((parsed as { pid: number }).pid) <= 0
+  ) {
+    throw skillError("skill.registry_lock_invalid", "Skill Registry mutation lock is invalid.");
+  }
+  return parsed as SkillRegistryLockRecord;
 }
 
 function skillError(code: string, message: string): PigeDomainError {
