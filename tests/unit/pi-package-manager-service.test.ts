@@ -205,6 +205,32 @@ describe("PiPackageManagerService", () => {
     );
   });
 
+  it("rejects adoption when an installed regular file becomes an equal-content external symlink", async () => {
+    const fixture = await createFixture();
+    const tool = requireTool(fixture.registry.toolsForTurn(fixture.turn));
+    await approveTool(fixture, tool);
+    const result = await callTool(tool);
+    const installedVersionRoot = path.join(
+      fixture.machineRoot,
+      "pi-packages",
+      "installed",
+      String(result.details?.packageId),
+      PACKAGE_VERSION
+    );
+    const installedRoot = path.join(installedVersionRoot, fs.readdirSync(installedVersionRoot)[0]!);
+    const readmePath = path.join(installedRoot, "README.md");
+    const externalPath = path.join(fixture.root, "external-readme.md");
+    fs.writeFileSync(externalPath, fs.readFileSync(readmePath));
+    fs.rmSync(readmePath);
+    fs.symlinkSync(externalPath, readmePath);
+
+    expect(() => fixture.packages.adopt({
+      requestId: REQUEST_ID,
+      packageName: PACKAGE_NAME,
+      version: PACKAGE_VERSION
+    })).toThrow(expect.objectContaining({ code: "package.install_changed" }));
+  });
+
   it("keeps denial and malformed package metadata at zero committed package state", async () => {
     const fixture = await createFixture();
     const tool = requireTool(fixture.registry.toolsForTurn(fixture.turn));
@@ -407,6 +433,7 @@ async function createFixture(options: {
   };
   fs.writeFileSync(path.join(packageRoot, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
   fs.writeFileSync(path.join(packageRoot, "dist", "index.js"), "export const marker = 'SYNTHETIC_PACKAGE_CODE';\n", "utf8");
+  fs.writeFileSync(path.join(packageRoot, "README.md"), "Synthetic package documentation.\n", "utf8");
   if (options.includeSymlink) fs.symlinkSync("../../outside", path.join(packageRoot, "unsafe-link"));
   if (options.includeReservedPath) {
     fs.writeFileSync(path.join(packageRoot, "CON"), "reserved\n", "utf8");

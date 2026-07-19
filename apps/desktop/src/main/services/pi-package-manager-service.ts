@@ -786,10 +786,38 @@ function hashTree(root: string, directory: string, digest: ReturnType<typeof cre
     if (entry === OWNER_MARKER && directory === root) continue;
     const candidate = path.join(directory, entry);
     const stats = fs.lstatSync(candidate);
+    if (stats.isSymbolicLink() || (!stats.isFile() && !stats.isDirectory())) {
+      throw packageError("package.install_changed", "Installed package contains an unsafe filesystem entry.");
+    }
     const relative = path.relative(root, candidate).split(path.sep).join("/");
     digest.update(stats.isDirectory() ? "d\0" : "f\0").update(relative).update("\0");
     if (stats.isDirectory()) hashTree(root, candidate, digest);
-    else digest.update(fs.readFileSync(candidate)).update("\0");
+    else digest.update(readRegularFileNoFollow(candidate, stats)).update("\0");
+  }
+}
+
+function readRegularFileNoFollow(filePath: string, expected: fs.Stats): Buffer {
+  let descriptor: number | undefined;
+  try {
+    descriptor = fs.openSync(filePath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+    const opened = fs.fstatSync(descriptor);
+    if (!opened.isFile() || opened.dev !== expected.dev || opened.ino !== expected.ino) {
+      throw packageError("package.install_changed", "Installed package file identity changed.");
+    }
+    const body = fs.readFileSync(descriptor);
+    const completed = fs.fstatSync(descriptor);
+    if (
+      completed.dev !== opened.dev || completed.ino !== opened.ino ||
+      completed.size !== opened.size || completed.size !== body.byteLength
+    ) {
+      throw packageError("package.install_changed", "Installed package file changed while it was inspected.");
+    }
+    return body;
+  } catch (caught) {
+    if (caught instanceof PigeDomainError) throw caught;
+    throw packageError("package.install_changed", "Installed package file could not be inspected safely.");
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
   }
 }
 
