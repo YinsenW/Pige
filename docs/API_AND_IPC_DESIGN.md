@@ -654,9 +654,9 @@ Queries:
 - `skills.summary`
 - `system.toolchainHealth`
 
-`skills.summary`, CAS `skills.disable({apiVersion:1,skillId,expectedRevision})`, and
-`skills.changed` are schema-validated. Main projects only checksum-confirmed
-machine-local non-package identity; invalid entries expose a count. Disable only reduces authority.
+`skills.summary`, lock-fenced CAS `skills.disable({apiVersion:1,skillId,expectedRevision})`, and
+`skills.changed` are schema-validated. Main emits checksum-confirmed safe identity plus an invalid
+count. Disable only reduces authority; busy/storage failures are strict and body-free.
 
 Provider/model DTOs:
 
@@ -713,7 +713,7 @@ Rules:
 - Settings updates include expected versions where concurrent edits or external vault changes are possible.
 - Agent policy preview returns redacted, typed policy summaries for debugging/settings UI; it never returns raw secrets, full settings files, or permission-store internals.
 - `system.toolchainHealth` reports bundled toolchain readiness or repair-needed status from `resources/toolchain-manifest/toolchain.manifest.json`; it does not trigger downloads.
-- Skill Settings cannot infer absent lifecycle authority from summaries or registry files.
+- Skill Settings cannot infer absent lifecycle actions from inventory.
 
 Agent policy DTOs must follow `docs/AGENT_RUNTIME_POLICY_CONTEXT.md`.
 

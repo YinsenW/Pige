@@ -694,6 +694,10 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).not.toContain("readonly installSkill:");
     expect(contractsSource).not.toContain("readonly enableSkill:");
     expect(contractsSource).not.toContain("readonly uninstallSkill:");
+    expect(serviceSource).toContain("lockfile.lockSync(this.#rootPath");
+    expect(serviceSource).toContain('status: "failed"');
+    expect(serviceSource).toContain('messageKey: "error.generic"');
+    expect(serviceSource).toContain("assertRendererSafeDisplayText");
     for (const forbiddenRuntime of ["node:child_process", "node:http", "node:https", "fetch(", "spawn("]) {
       expect(serviceSource).not.toContain(forbiddenRuntime);
     }

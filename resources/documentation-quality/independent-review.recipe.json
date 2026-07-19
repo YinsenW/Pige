@@ -96,7 +96,7 @@
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 135,
-    "reviewedSha256": "b0cc22829edae2857e759cb2321ce0cc2ff64f0abeb8064370692720721bf091"
+    "reviewedSha256": "f5bc550762c3ce3d9b72980278ec4d6e0aebe1f0beb0f0a4ed627ebe9b4aeb6e"
   },
   "reviewers": [
     {
@@ -139,7 +139,7 @@
       "score": 9.8,
       "reviewerId": "skill-registry-planning-review",
       "blockerCount": 0,
-      "summary": "Focused service/schema/shell tests cover checksum and identity binding, no-follow failures, strict pathless projections, atomic CAS disable and parsed main/preload IPC; repository gates remain directly runnable."
+      "summary": "Focused service/schema/shell tests cover checksum and identity binding, no-follow failures, adversarial safe-display rejection, cross-process lock-fenced CAS disable, body-free failures, portable IDs and parsed main/preload IPC; repository gates remain directly runnable."
     },
     {
       "id": "documentation_leanness_and_maintainability",
@@ -153,7 +153,7 @@
     {
       "command": "Independent review of the machine-local Skill Registry foundation mechanically replayed on sole main a13c42e",
       "status": "passed",
-      "evidence": "Review confirms exact main-owned app-data layout, manifest checksum and identity binding, pathless/body-free summaries, invalid counting, atomic CAS disable and the absence of install, enable, uninstall, execution, network, process, package and grant authority."
+      "evidence": "Review confirms exact main-owned app-data layout, manifest checksum and identity binding, renderer-safe/body-free summaries, invalid counting, cross-process lock-fenced CAS disable and the absence of install, enable, uninstall, execution, network, process, package and grant authority."
     },
     {
       "command": "npm run verify:docs && npm run verify:decisions && npm run verify:traceability",

@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -88,6 +90,51 @@ describe("SkillRegistryService", () => {
       enabled: false,
       capabilities: ["external_network", "external_filesystem", "use_brokered_credential"],
       dataBoundaries: ["filesystem", "network", "brokered_credential"]
+    });
+  });
+
+  it("rejects path, URL, and credential-shaped display metadata before renderer projection", () => {
+    const root = createRoot();
+    const unsafeSources = [
+      manifest({
+        id: "path-display",
+        name: "Path Display",
+        version: "1",
+        description: "Reads /Users/example/private/notes.md",
+        capabilities: ["read_current_source"],
+        body: "## Procedure\n\nRead."
+      }),
+      manifest({
+        id: "url-display",
+        name: "URL Display",
+        version: "1",
+        description: "Visit https://example.com/?token=private",
+        capabilities: ["read_current_source"],
+        body: "## Procedure\n\nRead."
+      }),
+      manifest({
+        id: "secret-display",
+        name: "Secret Display",
+        version: "1",
+        description: "API key = sk-abcdefghijklmnop",
+        capabilities: ["read_current_source"],
+        body: "## Procedure\n\nRead."
+      }),
+      manifest({
+        id: "author-display",
+        name: "Author Display",
+        version: "1",
+        description: "A local workflow.",
+        capabilities: ["read_current_source"],
+        extra: [String.raw`author: C:\Users\example\private`],
+        body: "## Procedure\n\nRead."
+      })
+    ];
+    for (const source of unsafeSources) seedInstalledSkill(root, source, true);
+
+    expect(new SkillRegistryService(root).summary()).toMatchObject({
+      skills: [],
+      invalidManifestCount: unsafeSources.length
     });
   });
 
@@ -192,6 +239,55 @@ describe("SkillRegistryService", () => {
     expect(fs.readdirSync(path.join(root, "skills")).filter((name) => name.endsWith(".tmp"))).toEqual([]);
   });
 
+  it("fails body-free while another process owns the registry mutation lock, then rechecks and commits", async () => {
+    const root = createRoot();
+    const source = manifest({
+      id: "cross-process-disable",
+      name: "Cross Process Disable",
+      version: "1",
+      description: "A lock-fenced local workflow.",
+      capabilities: ["read_current_source"],
+      body: "## Procedure\n\nRead only."
+    });
+    seedInstalledSkill(root, source, true);
+    const service = new SkillRegistryService(root);
+    const skillRoot = path.join(root, "skills");
+    const child = spawn(process.execPath, [
+      "-e",
+      `const path=require("node:path");const lockfile=require("proper-lockfile");const root=process.argv[1];const release=lockfile.lockSync(root,{lockfilePath:path.join(root,".registry.lock"),realpath:false,retries:0,stale:30000,update:10000});process.send("locked");process.on("message",()=>{release();process.exit(0);});`,
+      skillRoot
+    ], { cwd: process.cwd(), stdio: ["ignore", "ignore", "inherit", "ipc"] });
+    try {
+      await once(child, "message");
+      const failed = service.disable({
+        apiVersion: 1,
+        skillId: "cross-process-disable",
+        expectedRevision: 3
+      });
+      expect(failed).toEqual({
+        status: "failed",
+        error: {
+          code: "skill.registry_busy",
+          domain: "skill",
+          messageKey: "error.generic",
+          retryable: true,
+          severity: "error",
+          userAction: "retry"
+        }
+      });
+      expect(JSON.stringify(failed)).not.toContain(root);
+    } finally {
+      child.send("release");
+      await once(child, "exit");
+    }
+
+    expect(service.disable({
+      apiVersion: 1,
+      skillId: "cross-process-disable",
+      expectedRevision: 3
+    })).toMatchObject({ status: "committed", registry: { revision: 4 } });
+  });
+
   it("rejects a malformed durable registry instead of inventing empty inventory", () => {
     const root = createRoot();
     fs.mkdirSync(path.join(root, "skills", "installed"), { recursive: true });
@@ -200,7 +296,7 @@ describe("SkillRegistryService", () => {
       revision: 2,
       skills: [{ id: "duplicate", version: "1" }, { id: "duplicate", version: "1" }]
     }));
-    expect(() => new SkillRegistryService(root).summary()).toThrow("Skill Registry state is unavailable or invalid");
+    expect(() => new SkillRegistryService(root).summary()).toThrow("Skill Registry is unavailable");
   });
 });
 
