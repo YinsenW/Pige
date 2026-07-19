@@ -8,6 +8,7 @@ import type {
   ReaderSelectionActionRequest,
   ReaderSelectionIdentity
 } from "@pige/contracts";
+import { PigeDomainError } from "@pige/domain";
 import { ReaderSelectionActionService } from "../../apps/desktop/src/main/services/reader-selection-action-service";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
 
@@ -215,6 +216,43 @@ describe("Reader selection action service", () => {
       reason: "mutation_ineligible"
     });
     expect(JSON.stringify(result)).not.toContain("PRIVATE_MODEL_REPLACEMENT");
+  });
+
+  it("projects an unexpected transform failure without leaking its internal domain or body", async () => {
+    const fixture = makeFixture("Before. SELECTED_PRIVATE_PASSAGE. After.");
+    const submitTurn = vi.fn(async () => {
+      throw new PigeDomainError(
+        "agent_ingest.update_content_restricted",
+        "PRIVATE_PROVIDER_OR_REPLACEMENT_BODY"
+      );
+    });
+    const service = new ReaderSelectionActionService(fixture.vaults, { submitTurn }, {
+      readJob: () => undefined,
+      readAppliedOperationId: () => undefined,
+      readProposal: () => undefined
+    });
+
+    const result = await service.submitTransform({
+      ...actionRequest(fixture.selection, "explain"),
+      action: "translate"
+    });
+
+    expect(result).toEqual({
+      apiVersion: 1,
+      requestId: "readerselaction_abcdefgh",
+      status: "failed",
+      error: {
+        code: "agent_runtime.completion_invalid",
+        domain: "agent_runtime",
+        messageKey: "errors.agent_runtime.completion_invalid",
+        retryable: true,
+        severity: "error",
+        userAction: "retry"
+      }
+    });
+    expect(JSON.stringify(result)).not.toContain("agent_ingest");
+    expect(JSON.stringify(result)).not.toContain("PRIVATE_PROVIDER_OR_REPLACEMENT_BODY");
+    expect(JSON.stringify(result)).not.toContain("SELECTED_PRIVATE_PASSAGE");
   });
 
   it("projects an exceptional transform as one bounded review preview", async () => {

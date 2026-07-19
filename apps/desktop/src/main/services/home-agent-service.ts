@@ -32,6 +32,7 @@ import {
   LocaleSchema,
   MarkdownPageTypeSchema,
   OperationRecordSchema,
+  PigeErrorDomainSchema,
   PigeErrorSummarySchema,
   type JobRecord,
   type ModelEgressContentClass,
@@ -3503,6 +3504,17 @@ function toHomeAgentFailure(caught: unknown): HomeAgentFailure {
     }
     if (caught.code === "model_provider.call_failed") {
       return homeAgentFailure("failed", caught.code, "errors.model_provider.call_failed", true, "retry", "error");
+    }
+    const caughtDomain = caught.code.split(".", 1)[0];
+    if (!PigeErrorDomainSchema.safeParse(caughtDomain).success) {
+      return homeAgentFailure(
+        "failed",
+        "agent_runtime.completion_invalid",
+        "errors.agent_runtime.completion_invalid",
+        true,
+        "retry",
+        "error"
+      );
     }
     return homeAgentFailure("failed", caught.code, "errors.agent_runtime.completion_invalid", true, "retry", "error");
   }

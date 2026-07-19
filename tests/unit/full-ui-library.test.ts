@@ -914,6 +914,19 @@ describe("full UI Library", () => {
     const dom = createDom();
     Object.defineProperty(dom.window, "innerWidth", { configurable: true, value: 360 });
     Object.defineProperty(dom.window, "innerHeight", { configurable: true, value: 240 });
+    let resizeToolbar: (() => void) | null = null;
+    Object.defineProperty(dom.window, "ResizeObserver", {
+      configurable: true,
+      value: class TestResizeObserver {
+        constructor(private readonly callback: ResizeObserverCallback) {}
+        observe(target: Element): void {
+          if (target.classList.contains("selection-toolbar")) {
+            resizeToolbar = () => this.callback([], this as unknown as ResizeObserver);
+          }
+        }
+        disconnect(): void {}
+      }
+    });
     const focusOwner = dom.window.document.createElement("button");
     focusOwner.textContent = "Reader focus owner";
     dom.window.document.body.prepend(focusOwner);
@@ -936,15 +949,16 @@ describe("full UI Library", () => {
     const paragraph = requireElement(container.querySelector(".markdown-body p"));
     const selectionNode = requireElement(paragraph.querySelector("[data-pige-selection-segment]")).firstChild!;
     const originalBoundingClientRect = dom.window.HTMLElement.prototype.getBoundingClientRect;
+    let toolbarHeight = 84;
     dom.window.HTMLElement.prototype.getBoundingClientRect = function getBoundingClientRect(): DOMRect {
       if ((this as HTMLElement).classList.contains("selection-toolbar")) {
         return {
           left: 0,
           top: 0,
           width: 330,
-          height: 84,
+          height: toolbarHeight,
           right: 330,
-          bottom: 84,
+          bottom: toolbarHeight,
           x: 0,
           y: 0,
           toJSON: () => ({})
@@ -953,6 +967,10 @@ describe("full UI Library", () => {
       return originalBoundingClientRect.call(this);
     };
     let selectionCollapsed = false;
+    let selectionLeft = 330;
+    let selectionRight = 350;
+    let selectionTop = 15;
+    let selectionBottom = 33;
     Object.defineProperty(dom.window, "getSelection", {
       configurable: true,
       value: () => ({
@@ -968,7 +986,14 @@ describe("full UI Library", () => {
           startOffset: 0,
           endContainer: selectionNode,
           endOffset: 8,
-          getBoundingClientRect: () => ({ left: 330, top: 15, width: 20, height: 18, right: 350, bottom: 33 })
+          getBoundingClientRect: () => ({
+            left: selectionLeft,
+            top: selectionTop,
+            width: 20,
+            height: 18,
+            right: selectionRight,
+            bottom: selectionBottom
+          })
         })
       })
     });
@@ -984,6 +1009,29 @@ describe("full UI Library", () => {
     expect(toolbar.style.top).toBe("41px");
     expect(actions.map((button) => button.textContent)).toEqual(["Explain", "Summarize", "Link", "More"]);
     expect(actions.map((button) => button.tabIndex)).toEqual([0, -1, -1, -1]);
+
+    Object.defineProperty(dom.window, "innerWidth", { configurable: true, value: 600 });
+    await act(async () => {
+      dom.window.dispatchEvent(new dom.window.Event("resize"));
+      selectionLeft = 300;
+      selectionRight = 320;
+      selectionTop = 130;
+      selectionBottom = 148;
+      await settle(dom);
+    });
+    await waitFor(dom, () => toolbar.style.top === "38px");
+    expect(toolbar.style.left).toBe("145px");
+
+    toolbarHeight = 110;
+    await act(async () => {
+      resizeToolbar?.();
+      await settle(dom);
+    });
+    await waitFor(dom, () => toolbar.style.top === "12px");
+    expect(Number.parseFloat(toolbar.style.top) + toolbarHeight).toBeLessThanOrEqual(selectionTop - 8);
+
+    toolbar = requireElement(container.querySelector<HTMLElement>('[role="toolbar"]'));
+    actions = Array.from(toolbar.querySelectorAll<HTMLButtonElement>("button"));
     actions[0]!.focus();
     await act(async () => {
       toolbar.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
@@ -1007,7 +1055,7 @@ describe("full UI Library", () => {
       dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
       await settle(dom);
     });
-    await waitFor(dom, () => container.querySelector<HTMLElement>('[role="toolbar"]')?.style.left === "18px");
+    await waitFor(dom, () => container.querySelector<HTMLElement>('[role="toolbar"]')?.style.left === "145px");
     toolbar = requireElement(container.querySelector<HTMLElement>('[role="toolbar"]'));
     actions = Array.from(toolbar.querySelectorAll<HTMLButtonElement>("button"));
     const pointerDown = new dom.window.MouseEvent("pointerdown", { bubbles: true, cancelable: true });

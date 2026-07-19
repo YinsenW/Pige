@@ -465,6 +465,42 @@ describe("Home Pi Agent service", () => {
     expect(outcomes).toEqual(["verified", "failed"]);
   });
 
+  it("normalizes an internal Reader transform domain before shared error projection", async () => {
+    const fixture = makeFixture();
+    const outcome = await new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      {
+        run: async () => {
+          throw new PigeDomainError(
+            "agent_ingest.update_content_restricted",
+            "PRIVATE_PROVIDER_OR_REPLACEMENT_BODY"
+          );
+        }
+      }
+    ).submitTurn({
+      text: "Translate the selected passage.",
+      inputKind: "typed_text",
+      objective: "auto",
+      locale: "en"
+    });
+
+    expect(outcome).toMatchObject({
+      state: "failed",
+      error: {
+        code: "agent_runtime.completion_invalid",
+        domain: "agent_runtime",
+        messageKey: "errors.agent_runtime.completion_invalid",
+        retryable: true,
+        userAction: "retry"
+      }
+    });
+    expect(JSON.stringify(outcome)).not.toContain("agent_ingest");
+    expect(JSON.stringify(outcome)).not.toContain("PRIVATE_PROVIDER_OR_REPLACEMENT_BODY");
+  });
+
   it("lets Pi catalog and query one bounded Dataset before returning exact Dataset citations", async () => {
     const fixture = makeFixture();
     DatasetAnswerCitationSchema.parse(DATASET_CITATION);

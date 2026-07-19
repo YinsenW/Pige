@@ -9,7 +9,7 @@ import type {
   VaultSummary
 } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
-import type { JobRecord } from "@pige/schemas";
+import { PigeErrorSummarySchema, type JobRecord } from "@pige/schemas";
 import type { HomeAgentDraftSnapshot } from "./home-agent-service";
 import {
   readCurrentNoteEvidenceBinding,
@@ -124,18 +124,23 @@ export class ReaderSelectionActionService {
     }
     if (!this.#mutations) return transformInvalid(request.requestId, "mutation_ineligible");
 
-    const turn = await this.#agent.submitTurn({
-      schemaVersion: 1,
-      text: transformInstruction(request.action, request.locale),
-      inputKind: "typed_text",
-      scope: { kind: "current_note", pageId: request.selection.pageId },
-      locale: request.locale,
-      clientTurnId: request.clientTurnId
-    }, {
-      currentNoteSelection: request.selection,
-      currentNoteTransformAction: request.action,
-      ...(context.onDraft ? { onDraft: context.onDraft } : {})
-    });
+    let turn: AgentSubmitTurnResult;
+    try {
+      turn = await this.#agent.submitTurn({
+        schemaVersion: 1,
+        text: transformInstruction(request.action, request.locale),
+        inputKind: "typed_text",
+        scope: { kind: "current_note", pageId: request.selection.pageId },
+        locale: request.locale,
+        clientTurnId: request.clientTurnId
+      }, {
+        currentNoteSelection: request.selection,
+        currentNoteTransformAction: request.action,
+        ...(context.onDraft ? { onDraft: context.onDraft } : {})
+      });
+    } catch {
+      return transformFailure(request.requestId);
+    }
     if (turn.state === "waiting") {
       const job = turn.jobId ? this.#mutations.readJob(turn.jobId) : undefined;
       const proposalId = job?.state === "awaiting_review" ? job.proposalIds?.[0] : undefined;
@@ -247,6 +252,22 @@ function transformInvalid(
   reason: Extract<ReaderSelectionTransformResult, { status: "invalid" }>["reason"]
 ): ReaderSelectionTransformResult {
   return { apiVersion: 1, requestId, status: "invalid", reason };
+}
+
+function transformFailure(requestId: string): ReaderSelectionTransformResult {
+  return {
+    apiVersion: 1,
+    requestId,
+    status: "failed",
+    error: PigeErrorSummarySchema.parse({
+      code: "agent_runtime.completion_invalid",
+      domain: "agent_runtime",
+      messageKey: "errors.agent_runtime.completion_invalid",
+      retryable: true,
+      severity: "error",
+      userAction: "retry"
+    })
+  };
 }
 
 function actionInstruction(

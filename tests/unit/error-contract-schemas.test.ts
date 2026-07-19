@@ -61,6 +61,14 @@ describe("shared error taxonomy schemas", () => {
       ...retryableParserError,
       domain: "ocr"
     })).toThrow();
+    expect(() => PigeErrorSummarySchema.parse({
+      code: "agent_ingest.update_content_restricted",
+      domain: "agent_ingest",
+      messageKey: "errors.agent_runtime.completion_invalid",
+      retryable: true,
+      severity: "error",
+      userAction: "retry"
+    })).toThrow();
   });
 
   it("rejects unknown fields that could bypass the redacted scalar metadata boundary", () => {
