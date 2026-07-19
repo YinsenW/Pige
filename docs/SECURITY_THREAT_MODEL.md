@@ -158,18 +158,18 @@ Threat:
 
 Mitigations:
 
-- Permit only `http`/`https`; reject URL credentials.
-- Block localhost, private/LAN, link-local, metadata, and reserved targets without exact
-  `external_network` authority. Matching authority permits that action and redirect chain;
-  Source Fetch adds no second class veto, while invalid or drifted authority blocks.
-- Resolve and pin every hop; bound redirects, compressed/decoded size, and total deadline.
-- Redact sensitive queries from every projection.
-- Keep HTML inert and untrusted; disable scripts/subresources, bound extraction, and pass
-  extracted text rather than HTML to the Agent.
+- Allow credential-free HTTP(S); exact `external_network` authority admits private targets,
+  otherwise localhost, private/LAN, link-local, metadata, and reserved space block.
+- Canonicalize hostnames for policy (lowercase, no trailing root dots). `public_only` Fake-IP
+  requires target and fresh `example.com` probe to each have `198.18/15` IPv4 and only that
+  class/mapped forms. Recheck every blocked target/redirect; pin target IPv4 only. Literal,
+  mixed, IPv6-only, unconfirmed, and private targets block.
+- Resolve/pin every hop; bound redirects, sizes and deadline; redact sensitive queries.
+- Keep HTML and `text/markdown` inert; disable scripts/subresources and pass text to Pi.
 
 Acceptance:
 
-- Private targets block without exact authority and work with it; all other fetch controls remain.
+- Private authority and strict Fake-IP compatibility retain all other fetch controls.
 
 ### 6.5 Malicious Files
 

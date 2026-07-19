@@ -1539,13 +1539,11 @@ URL ingest must protect the local machine.
 
 Rules:
 
-- Only allow `http` and `https`.
-- Block private targets unless exact `external_network` authority permits them.
-- Resolve/pin each hop; reject credentials, redact sensitive queries, and limit redirects.
-- Enforce size limits.
-- Enforce timeout.
-- Store raw HTML as inert source content, not executable UI.
-- Strip scripts before any preview rendering.
+- Allow credential-free HTTP(S); exact `external_network` authority admits private targets.
+- `public_only` Fake-IP requires target/probe benchmark IPv4 plus strict-only address sets;
+  recheck each hop, pin target IPv4, and otherwise fail closed.
+- Resolve/pin hops; limit redirects, sizes, and time; redact sensitive queries.
+- Keep HTML/Markdown inert and strip scripts before preview.
 
 ## 11.1 Prompt Injection Defense
 

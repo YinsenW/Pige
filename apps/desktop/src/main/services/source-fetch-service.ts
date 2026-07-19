@@ -258,6 +258,11 @@ export class SourceFetchService {
     if (parsed.username || parsed.password) {
       throw new PigeDomainError("url_fetch.credentials_not_allowed", "URL capture does not allow embedded credentials.");
     }
+    const normalizedHostname = normalizeHostnameForPolicy(parsed.hostname);
+    if (!normalizedHostname) {
+      throw new PigeDomainError("url_fetch.invalid_url", "URL capture requires a valid hostname.");
+    }
+    parsed.hostname = net.isIP(normalizedHostname) === 6 ? `[${normalizedHostname}]` : normalizedHostname;
     if (networkAccess === "public_only" && isLocalHostname(parsed.hostname)) {
       throw new PigeDomainError("url_fetch.private_network_blocked", "URL capture blocked a local or private network address.");
     }
@@ -272,12 +277,48 @@ export class SourceFetchService {
     if (normalizedAddresses.length === 0 || normalizedAddresses.some((address) => net.isIP(address) === 0)) {
       throw new PigeDomainError("url_fetch.hostname_unreachable", "The URL hostname could not be resolved.");
     }
-    if (networkAccess === "public_only" && normalizedAddresses.some(isBlockedAddress)) {
+    const hasBlockedAddress = normalizedAddresses.some(isBlockedAddress);
+    const usesDnsProxyFakeIp = networkAccess === "public_only" && hasBlockedAddress
+      ? await this.#allowsPublicHostnameThroughDnsProxy(parsed.hostname, normalizedAddresses)
+      : false;
+    if (networkAccess === "public_only" && hasBlockedAddress && !usesDnsProxyFakeIp) {
       throw new PigeDomainError("url_fetch.private_network_blocked", "URL capture blocked a local or private network address.");
     }
 
     parsed.hash = "";
-    return { url: parsed.toString(), hostname: stripIpv6Brackets(parsed.hostname), addresses: normalizedAddresses };
+    return {
+      url: parsed.toString(),
+      hostname: stripIpv6Brackets(parsed.hostname),
+      addresses: usesDnsProxyFakeIp ? preferDnsProxyIpv4(normalizedAddresses) : normalizedAddresses
+    };
+  }
+
+  async #allowsPublicHostnameThroughDnsProxy(
+    hostname: string,
+    addresses: readonly string[]
+  ): Promise<boolean> {
+    if (
+      net.isIP(stripIpv6Brackets(hostname)) !== 0 ||
+      addresses.length === 0 ||
+      !addresses.some((address) => net.isIP(address) === 4) ||
+      !addresses.every(isDnsProxyFakeIpAddress)
+    ) {
+      return false;
+    }
+    return this.#detectDnsProxyFakeIpMode();
+  }
+
+  async #detectDnsProxyFakeIpMode(): Promise<boolean> {
+    try {
+      const probeAddresses = Array.from(new Set(
+        (await this.#lookup("example.com")).map(stripIpv6Brackets)
+      ));
+      return probeAddresses.length > 0 &&
+        probeAddresses.some((address) => net.isIP(address) === 4) &&
+        probeAddresses.every((address) => net.isIP(address) !== 0 && isDnsProxyFakeIpAddress(address));
+    } catch {
+      return false;
+    }
   }
 
   async #fetchWithTimeout(
@@ -315,7 +356,7 @@ export class SourceFetchService {
         ...(dispatcher ? { dispatcher } : {}),
         headers: {
           "User-Agent": "Pige/0.1 URL Capture",
-          Accept: "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.1"
+          Accept: "text/html,application/xhtml+xml,text/markdown,text/plain;q=0.9,*/*;q=0.1"
         }
       });
       let disposed = false;
@@ -400,7 +441,7 @@ function normalizeContentType(value: string | null): string {
 }
 
 function isSupportedContentType(contentType: string): boolean {
-  return ["text/html", "application/xhtml+xml", "text/plain"].includes(contentType);
+  return ["text/html", "application/xhtml+xml", "text/markdown", "text/plain"].includes(contentType);
 }
 
 async function readResponseText(
@@ -588,12 +629,38 @@ function stripIpv6Brackets(value: string): string {
   return value.startsWith("[") && value.endsWith("]") ? value.slice(1, -1) : value;
 }
 
+function normalizeHostnameForPolicy(value: string): string {
+  return stripIpv6Brackets(value).replace(/\.+$/u, "").toLocaleLowerCase();
+}
+
 function isBlockedAddress(address: string): boolean {
   const literal = stripIpv6Brackets(address);
   const family = net.isIP(literal);
   if (family === 4) return isBlockedIpv4(literal);
   if (family === 6) return isBlockedIpv6(literal);
   return true;
+}
+
+function isDnsProxyFakeIpAddress(address: string): boolean {
+  const literal = stripIpv6Brackets(address);
+  if (net.isIP(literal) === 4) return isBenchmarkIpv4(literal);
+  if (net.isIP(literal) !== 6) return false;
+  const words = parseIpv6Words(literal);
+  if (!words) return false;
+  const [first, second, third, fourth, fifth, sixth, seventh = 0, eighth = 0] = words;
+  const hasMappedPrefix = first === 0 && second === 0 && third === 0 && fourth === 0 && fifth === 0 && sixth === 0xffff;
+  const hasTranslatedPrefix = first === 0 && second === 0 && third === 0 && fourth === 0 && fifth === 0xffff && sixth === 0;
+  return (hasMappedPrefix || hasTranslatedPrefix) &&
+    isBenchmarkIpv4(`${seventh >>> 8}.${seventh & 0xff}.${eighth >>> 8}.${eighth & 0xff}`);
+}
+
+function preferDnsProxyIpv4(addresses: readonly string[]): readonly string[] {
+  return addresses.filter((address) => net.isIP(address) === 4);
+}
+
+function isBenchmarkIpv4(address: string): boolean {
+  const [first = 0, second = 0] = address.split(".").map((part) => Number.parseInt(part, 10));
+  return first === 198 && (second === 18 || second === 19);
 }
 
 function isBlockedIpv4(address: string): boolean {
