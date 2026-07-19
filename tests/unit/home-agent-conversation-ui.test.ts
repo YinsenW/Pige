@@ -607,6 +607,28 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("keeps the authoritative theme and reports both stale and failed mutations locally", async () => {
+    for (const status of ["stale", "failed"] as const) {
+      const dom = createDom(960);
+      const harness = createHarness(undefined);
+      harness.appearanceThemeMutationStatus = status;
+      const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+      await openSettingsSection(dom, container, enMessages["settings.section.appearance"]);
+      const radios = Array.from(container.querySelectorAll<HTMLButtonElement>('.theme-option[role="radio"]'));
+      await clickElement(dom, radios[2]!);
+
+      await waitFor(dom, () => container.textContent?.includes(enMessages["appearance.themeUpdateFailed"]) === true);
+      expect(harness.appearanceThemeRequests).toEqual([{ themePreference: "dark", expectedRevision: 0 }]);
+      expect(dom.window.document.documentElement.dataset.theme).toBe("light");
+      expect(radios.map((radio) => radio.getAttribute("aria-checked"))).toEqual(["true", "false", "false"]);
+      expect(container.querySelector(".appearance-settings-page")).not.toBeNull();
+
+      await act(async () => root.unmount());
+      dom.window.close();
+    }
+  });
+
   it("keeps Home Library modal only below its resident width budget", async () => {
     for (const [width, modal] of [[719, true], [720, false]] as const) {
       const dom = createDom(width);
@@ -3312,6 +3334,7 @@ interface ConversationHarness {
   readonly windowLayoutRequests: WindowLayoutRequest[];
   readonly windowLayoutListeners: Set<(state: WindowLayoutState) => void>;
   appearanceSummary: AppearanceSettingsSummary;
+  appearanceThemeMutationStatus: "committed" | "stale" | "failed";
   readonly appearanceThemeRequests: SetThemeRequest[];
   readonly appearanceListeners: Set<(settings: AppearanceSettingsSummary) => void>;
   failNextWindowLayout: boolean;
@@ -3385,6 +3408,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     windowLayoutRequests: [],
     windowLayoutListeners: new Set(),
     appearanceSummary: testAppearanceSummary("en"),
+    appearanceThemeMutationStatus: "committed",
     appearanceThemeRequests: [],
     appearanceListeners: new Set(),
     failNextWindowLayout: false,
@@ -3621,6 +3645,9 @@ function makePigeApi(harness: ConversationHarness): object {
       appearance: () => harness.loadAppearance(),
       setTheme: async (request: SetThemeRequest) => {
         harness.appearanceThemeRequests.push(request);
+        if (harness.appearanceThemeMutationStatus !== "committed") {
+          return { status: harness.appearanceThemeMutationStatus, settings: harness.appearanceSummary };
+        }
         harness.appearanceSummary = {
           ...harness.appearanceSummary,
           themePreference: request.themePreference,

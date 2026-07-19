@@ -973,7 +973,7 @@ export function App(): React.JSX.Element {
         expectedRevision: appearanceSummary.revision
       });
       applyAppearanceSummary(result.settings);
-      if (result.status === "stale") {
+      if (result.status !== "committed") {
         setAppearanceThemeError(t("appearance.themeUpdateFailed"));
         return false;
       }
