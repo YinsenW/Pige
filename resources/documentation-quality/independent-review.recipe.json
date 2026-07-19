@@ -91,12 +91,12 @@
       "tests/unit/release-packageability-platforms.test.ts",
       "package.json"
     ],
-    "scope": "Independent Product Planning review retains the published Reader, Home conversation, Update, release, security and Settings contracts and binds the machine-local Skill Registry foundation on sole main a13c42e: checksum-bound pathless inventory, fail-closed manifests, revision-fenced disable and exact API/data/Skill/phase/trace ownership without renderer binding or lifecycle-status promotion.",
+    "scope": "Independent Product Planning review retains the published Reader, Home conversation, Update, release, security and Settings contracts and binds the machine-local Skill Registry foundation on sole main a13c42e: checksum-bound renderer-safe inventory, fail-closed manifests, revision-fenced disable and exact API/data/Skill/phase/trace ownership without renderer UI binding or lifecycle-status promotion.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 135,
-    "reviewedSha256": "f5bc550762c3ce3d9b72980278ec4d6e0aebe1f0beb0f0a4ed627ebe9b4aeb6e"
+    "reviewedSha256": "122b1ef62ba7522c9cd36a5d741466117aa2e9ab8d5a951eafdf989ef4a28b2b"
   },
   "reviewers": [
     {
@@ -139,7 +139,7 @@
       "score": 9.8,
       "reviewerId": "skill-registry-planning-review",
       "blockerCount": 0,
-      "summary": "Focused service/schema/shell tests cover checksum and identity binding, no-follow failures, adversarial safe-display rejection, cross-process lock-fenced CAS disable, body-free failures, portable IDs and parsed main/preload IPC; repository gates remain directly runnable."
+      "summary": "Focused service/schema/shell tests cover checksum and identity binding, no-follow failures, adversarial safe-display rejection, bounded regular orphan recovery, cross-process owner-token CAS disable, successor-safe release, typed body-free query/mutation failures, portable IDs and parsed main/preload IPC; repository gates remain directly runnable."
     },
     {
       "id": "documentation_leanness_and_maintainability",
@@ -153,7 +153,7 @@
     {
       "command": "Independent review of the machine-local Skill Registry foundation mechanically replayed on sole main a13c42e",
       "status": "passed",
-      "evidence": "Review confirms exact main-owned app-data layout, manifest checksum and identity binding, renderer-safe/body-free summaries, invalid counting, cross-process lock-fenced CAS disable and the absence of install, enable, uninstall, execution, network, process, package and grant authority."
+      "evidence": "Review confirms exact main-owned app-data layout, manifest checksum and identity binding, renderer-safe summaries, typed body-free query/mutation failure, invalid counting, bounded regular orphan recovery from the static single-instance main owner, cross-process owner-token CAS disable, successor-safe release and the absence of install, enable, uninstall, execution, network, process, package and grant authority."
     },
     {
       "command": "npm run verify:docs && npm run verify:decisions && npm run verify:traceability",
@@ -172,7 +172,7 @@
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The candidate adds a fail-closed machine-local inventory and authority-reducing disable without renderer binding, Skill execution, package behavior, vault data, backup input, network access or permission-grant mutation.",
+    "compatibility": "The candidate adds a fail-closed machine-local inventory and authority-reducing disable without renderer UI binding, Skill execution, package behavior, vault data, backup input, network access or permission-grant mutation.",
     "acknowledgement": "Product Planning reviewed the exact Development bytes and synchronized only existing owners; this foundation does not claim staging, install, enable, update, uninstall, export, runtime use, Permission Broker integration or complete Skill lifecycle acceptance."
   },
   "resolvedBlockers": [],

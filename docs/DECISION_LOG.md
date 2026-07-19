@@ -2959,16 +2959,16 @@ Date: 2026-07-19
 
 Decision:
 
-Use checksum-bound safe summaries and locked CAS disable; invalid records are not authority and
-failures are body-free.
+Use checksum-safe summaries and owner-token CAS. Invalid records lack authority; failures are
+body-free. Only the Electron singleton recovers valid orphan locks.
 
 Rationale:
 
-Inventory and disable can precede lifecycle authority.
+Inventory can precede lifecycle.
 
 Consequences:
 
-- State is backup-excluded; disable removes no files/grants; other lifecycle actions remain planned.
+- Backup excludes state; disable removes no files/grants; lifecycle stays open.
 
 References:
 

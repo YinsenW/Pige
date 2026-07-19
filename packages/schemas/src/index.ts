@@ -529,6 +529,11 @@ export const SkillDisableRequestSchema = z.object({
 const SkillRegistryErrorSummarySchema = PigeErrorCoreSchema.strict()
   .superRefine(requireErrorDomainMatchesCode);
 
+export const SkillRegistryQueryResultSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("ready"), registry: SkillRegistrySummarySchema }).strict(),
+  z.object({ status: z.literal("failed"), error: SkillRegistryErrorSummarySchema }).strict()
+]);
+
 export const SkillRegistryMutationResultSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("committed"), registry: SkillRegistrySummarySchema }).strict(),
   z.object({ status: z.literal("stale"), registry: SkillRegistrySummarySchema }).strict(),
@@ -3725,6 +3730,7 @@ export type SkillRegistryRecord = z.infer<typeof SkillRegistryRecordSchema>;
 export type SkillRegistryFile = z.infer<typeof SkillRegistryFileSchema>;
 export type SkillSummary = z.infer<typeof SkillSummarySchema>;
 export type SkillRegistrySummary = z.infer<typeof SkillRegistrySummarySchema>;
+export type SkillRegistryQueryResult = z.infer<typeof SkillRegistryQueryResultSchema>;
 export type SkillDisableRequest = z.infer<typeof SkillDisableRequestSchema>;
 export type SkillRegistryMutationResult = z.infer<typeof SkillRegistryMutationResultSchema>;
 export type PermissionDataBoundary = z.infer<typeof PermissionDataBoundarySchema>;
