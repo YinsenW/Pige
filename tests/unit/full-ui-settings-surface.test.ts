@@ -147,6 +147,13 @@ describe("full UI Settings surface", () => {
     expect(styles).toContain("--settings-border: var(--border-default);");
     expect(styles).toContain("--settings-elevated: var(--surface-elevated);");
     expect(styles).toContain("--titlebar-height: 58px;");
+    const reducedTransparency = styles.slice(
+      styles.indexOf("@media (prefers-reduced-transparency: reduce)"),
+      styles.indexOf("\n* {\n  box-sizing: border-box;")
+    );
+    expect(reducedTransparency).toContain("*::before,\n  *::after {");
+    expect(reducedTransparency).toContain("-webkit-backdrop-filter: none !important;");
+    expect(reducedTransparency).toContain("backdrop-filter: none !important;");
     const customPropertyDefinitions = new Set(
       Array.from(styles.matchAll(/(--[a-z0-9-]+)\s*:/gi), (match) => match[1]!)
     );

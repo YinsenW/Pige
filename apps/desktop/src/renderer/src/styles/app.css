@@ -199,9 +199,11 @@
     --surface-elevated: var(--surface);
   }
 
-  .capture-toast,
-  .drop-overlay {
-    backdrop-filter: none;
+  *,
+  *::before,
+  *::after {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
   }
 }
 
