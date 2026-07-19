@@ -614,7 +614,7 @@ export const PermissionDecisionRecordSchema = z.object({
   scope: PermissionDecisionScopeSchema,
   resourceScope: PermissionResourceScopeSchema,
   decidedBy: z.enum(["user", "system"]),
-  autoAllowedBy: z.enum(["none", "saved_grant", "yolo_full_access"]),
+  autoAllowedBy: z.enum(["none", "user_task", "saved_grant", "yolo_full_access"]),
   permissionSettingsRevision: PermissionSettingsRevisionSchema.optional(),
   decidedAt: z.string().datetime({ offset: true }),
   reason: z.string().min(1).optional()
@@ -671,7 +671,7 @@ export const PermissionDecisionRecordSchema = z.object({
   if (decision.decidedBy === "system" && decision.decision !== "deny" && decision.autoAllowedBy === "none") {
     context.addIssue({
       code: "custom",
-      message: "A system allow must identify the saved grant or YOLO mode that authorized it.",
+      message: "A system allow must identify the user task, saved grant, or YOLO mode that authorized it.",
       path: ["autoAllowedBy"]
     });
   }
@@ -1216,7 +1216,10 @@ export const ModelEgressDecisionSchema = z.object({
   } else if (decision.cloudSendPolicy === "confirm_all") {
     expectedOutcome = "confirm";
     expectedReason = "confirm_all";
-  } else if (classes.has("sensitive")) {
+  } else if (
+    classes.has("sensitive") &&
+    decision.cloudSendPolicy !== "ordinary_allowed"
+  ) {
     expectedOutcome = "confirm";
     expectedReason = "sensitive_confirmation";
   } else if (

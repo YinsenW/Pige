@@ -125,7 +125,7 @@ describe("model egress policy", () => {
   }
 
   it.each(trustedExternalProviders)(
-    "requires confirmation for sensitive content sent to a %s profile",
+    "treats sensitive context submitted to a connected %s profile as part of the ordinary task",
     (_label, provider) => {
       const decision = createModelEgressDecision(
         provider,
@@ -134,8 +134,8 @@ describe("model egress policy", () => {
       );
 
       expect(decision).toMatchObject({
-        outcome: "confirm",
-        reasonCode: "sensitive_confirmation",
+        outcome: "allow",
+        reasonCode: "ordinary_external_allowed",
         contentClasses: ["sensitive"]
       });
     }

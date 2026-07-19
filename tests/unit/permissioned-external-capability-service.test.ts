@@ -7,6 +7,7 @@ import { PermissionBrokerService } from "../../apps/desktop/src/main/services/pe
 import { LocalSettingsStore } from "../../apps/desktop/src/main/services/local-settings";
 import { PermissionSettingsService } from "../../apps/desktop/src/main/services/permission-settings-service";
 import { SourceFetchService } from "../../apps/desktop/src/main/services/source-fetch-service";
+import { createFirstPartyCommandCapabilityAdapter } from "../../apps/desktop/src/main/services/command-capability-adapter";
 import { createFirstPartyReadonlyNodeOsCapabilityAdapters } from "../../apps/desktop/src/main/services/readonly-node-os/first-party-readonly-node-os-capability-adapters";
 import {
   assertPermissionedExternalExecutionAuthority,
@@ -72,7 +73,7 @@ describe("PermissionedExternalCapabilityRegistry", () => {
     expect(fixture.jobs.completions).toHaveLength(0);
   });
 
-  it("reaches private redirect targets only after exact external-network authority is consumed", async () => {
+  it("lets the first-party task reach an explicitly requested private redirect without a duplicate prompt", async () => {
     const fixture = createFixture();
     const requests: string[] = [];
     const sourceFetch = new SourceFetchService({
@@ -100,24 +101,35 @@ describe("PermissionedExternalCapabilityRegistry", () => {
       signal: controller.signal
     };
 
-    await expect(tool.execute(args, controller.signal, context)).rejects.toMatchObject({
-      code: "permission.confirmation_required"
-    });
-    expect(requests).toEqual([]);
-
-    const pending = requireRecord(fixture.broker.listForJob(fixture.vaultPath, JOB_ID));
-    fixture.broker.commitDecision(fixture.vaultPath, {
-      requestId: pending.id,
-      jobId: JOB_ID,
-      decision: "allow_once"
-    });
-
     const result = await tool.execute(args, controller.signal, context);
     expect(result.content).toEqual([{ type: "text", text: "metadata" }]);
     expect(requests).toEqual([
       "https://example.com/start",
       "http://169.254.169.254/latest"
     ]);
+    expect(fixture.broker.listForJob(fixture.vaultPath, JOB_ID)[0]).toMatchObject({
+      state: "consumed",
+      decision: "allow_once"
+    });
+  });
+
+  it("runs a first-party OS command directly under the submitted user task", async () => {
+    const fixture = createFixture();
+    const registry = new PermissionedExternalCapabilityRegistry(
+      [createFirstPartyCommandCapabilityAdapter()],
+      fixture.broker,
+      fixture.jobs
+    );
+    const tool = requireTool(registry.toolsForTurn(fixture.turn));
+    const signal = new AbortController().signal;
+    const result = await tool.execute({
+      executable: process.execPath,
+      args: ["-e", "process.stdout.write('command-ok')"]
+    }, signal, { toolCallId: "tool_call_command", signal });
+
+    expect(result.details).toMatchObject({ status: "completed", stdout: "command-ok" });
+    expect(fixture.jobs.consumptions).toHaveLength(1);
+    expect(fixture.jobs.completions).toHaveLength(1);
   });
 
   it("revokes the unforgeable execution authority when the adapter settles", async () => {

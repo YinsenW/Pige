@@ -1486,7 +1486,9 @@ Privacy promises:
 - Connecting and selecting a BYOK Provider Profile authorizes ordinary, private, and
   larger bounded calls to that destination. Setup discloses the boundary once; routine
   calls use non-blocking status instead of repeated prompts. Stricter policy remains
-  available; sensitive content may require confirmation and restricted content is blocked.
+  available; the default policy sends non-restricted context already owned by the user
+  task without duplicate confirmation, stricter user-selected policies may confirm, and
+  restricted content is blocked.
 - Agent memory is inspectable, reversible, and can be disabled or reset.
 - Memory candidates are scanned for secrets before persistence.
 - Skill content is untrusted until installed and still cannot weaken permissions, privacy settings, prompt-injection defenses, or confirmation gates.

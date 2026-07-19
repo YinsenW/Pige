@@ -39,7 +39,8 @@ Pige is local-first, not network-free: local durable knowledge is trusted truth,
 reason to reapprove normal Agent work or connected model calls.
 
 - BYOK: one disclosure grants routine bounded calls to the exact Profile/endpoint with
-  selected context and quiet status. Drift reconnects; sensitive confirms; restricted blocks.
+  selected context and quiet status. The default policy sends all non-restricted task
+  context without another prompt; boundary drift reconnects and restricted content blocks.
 - URL capture fetches a pasted link and stores the result locally as a source.
 - Model/tool/Apple speech assets download only through explicit flows. Apple speech
   install may contact Apple; Pige receives only bounded progress/completion, never assets.

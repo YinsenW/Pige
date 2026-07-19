@@ -621,12 +621,13 @@ paths, secrets and authority stay excluded; drift fails closed.
 Permission Settings projects revision, mode, YOLO and bounded grants. Mutations use CAS;
 YOLO consumes a one-use sender/revision token after the main warning.
 
-Main registers bounded folder list, UTF-8 read, SSRF-safe fetch and
-`pige_install_pi_package`. The package tool requires an exact disclosed npm name/version,
-one-use `install_package` authority and the fixed public registry; it verifies integrity,
-extracts without scripts, and commits only machine-local `installed_disabled`. Enable,
-runtime, dependency graphs, update and uninstall remain absent. Protected roots stay
-denied and fetched results face egress again; arbitrary shell tools remain absent.
+Main registers bounded folder list, UTF-8 read, permissioned network fetch,
+`pige_install_pi_package`, and `pige_run_command`. The general command tool accepts only
+an executable, argv, cwd and timeout, resolves and rechecks executable identity, spawns
+without implicit shell interpolation, strips ambient secret environment variables, bounds
+output/time, and terminates the process tree on cancel. The submitted user task authorizes
+ordinary first-party desktop calls once; the same Permission Broker record is the audit,
+not a second user prompt. Third-party and destructive/credential boundaries remain gated.
 
 ### 6.8 Settings, Providers, Tools
 

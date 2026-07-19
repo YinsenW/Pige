@@ -33,6 +33,23 @@ afterEach(() => {
 });
 
 describe("PermissionBrokerService", () => {
+  it("treats ordinary first-party OS capability calls as authorized by the submitted user task", () => {
+    const fixture = createFixture();
+    const exact = binding({
+      actorType: "local_tool",
+      actorId: "pige.command-execution",
+      capability: "run_shell",
+      dataBoundary: "local"
+    });
+    const approved = fixture.service.prepare(fixture.vaultPath, exact, summary);
+
+    expect(approved).toMatchObject({ state: "approved", decision: "allow_once" });
+    expect(readJson(path.join(
+      decisionDirectory(fixture.machineRoot, VAULT_ID),
+      `${approved.decisionId}.json`
+    ))).toMatchObject({ decidedBy: "system", autoAllowedBy: "user_task" });
+  });
+
   it("auto-authorizes only eligible desktop-local actions and binds the exact permission revision", () => {
     const fixture = createYoloFixture();
     const exact = binding();
@@ -78,7 +95,20 @@ describe("PermissionBrokerService", () => {
     ))).toMatchObject({ code: "permission.authority_revoked" });
   });
 
-  it("keeps remote, destructive, credential, and non-external capabilities pending under YOLO", () => {
+  it("auto-authorizes ordinary local command and install capabilities under YOLO", () => {
+    const fixture = createYoloFixture();
+    for (const [index, capability] of (["run_shell", "install_package", "install_local_tool"] as const).entries()) {
+      const exact = binding({
+        jobId: `job_20260714_yolocap${index}`,
+        actionInputHash: digest(`yolo capability ${capability}`),
+        capability,
+        dataBoundary: capability === "run_shell" ? "local" : "network"
+      });
+      expect(fixture.service.prepare(fixture.vaultPath, exact, summary).state).toBe("approved");
+    }
+  });
+
+  it("keeps remote, destructive, credential, and unrelated capabilities pending under YOLO", () => {
     const fixture = createYoloFixture();
     const ineligible = [
       binding({ runtimeKind: "remote_agent_backend", clientCapabilityTier: "web_client" }),
@@ -87,12 +117,6 @@ describe("PermissionBrokerService", () => {
         actionInputHash: digest("destructive"),
         capability: "run_shell",
         dataBoundary: "destructive"
-      }),
-      binding({
-        jobId: "job_20260714_shell000",
-        actionInputHash: digest("shell always confirms"),
-        capability: "run_shell",
-        dataBoundary: "local"
       }),
       binding({
         jobId: "job_20260714_credential",
@@ -110,6 +134,23 @@ describe("PermissionBrokerService", () => {
 
     for (const exact of ineligible) {
       expect(fixture.service.prepare(fixture.vaultPath, exact, summary).state).toBe("pending");
+    }
+  });
+
+  it("does not let third-party actors inherit first-party user-task authority", () => {
+    const fixture = createFixture();
+    for (const [index, actor] of [
+      { actorType: "package" as const, actorId: "package.unreviewed.command" },
+      { actorType: "local_tool" as const, actorId: "third_party.pige.command-spoof" }
+    ].entries()) {
+      const thirdParty = binding({
+        jobId: `job_20260714_thirdparty${index}`,
+        actionInputHash: digest(`third-party ${index}`),
+        ...actor,
+        capability: "run_shell",
+        dataBoundary: "local"
+      });
+      expect(fixture.service.prepare(fixture.vaultPath, thirdParty, summary).state).toBe("pending");
     }
   });
 

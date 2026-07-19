@@ -3025,6 +3025,38 @@ References:
 - `docs/SKILL_EXTENSION_DESIGN.md`
 - `docs/TECH_ARCHITECTURE.md`
 
+### D-20260719-OS-Agent-Capability-Is-Present-By-Default
+
+Status: Accepted
+Date: 2026-07-19
+
+Decision:
+
+Pige is an OS-level Agent product. First-party filesystem, network, command, and package
+capabilities are present in the Agent catalog rather than hidden behind capability-absence
+messages. A submitted user task is one-use authority for ordinary desktop-local effects;
+the Host performs one exact binding/audit and does not ask the user to confirm the same
+intent again. Explicit YOLO remains useful for broader third-party grants, not as a
+prerequisite for basic Pige capability. Destructive loss, credential disclosure, changed
+trust boundaries, and source/model attempts to self-authorize remain distinct controls.
+
+Rationale:
+
+Permission should govern effects, not make basic Agent tools disappear or repeatedly ask
+the user to restate an intent already expressed by submitting the task.
+
+Consequences:
+
+- Pige exposes one general first-party OS command tool with bounded execution mechanics.
+- Ordinary first-party calls are audited without a duplicate prompt.
+- Third-party, destructive, credential, and changed-boundary effects keep separate gates.
+
+References:
+
+- `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`
+- `docs/SECURITY_THREAT_MODEL.md`
+- `docs/API_AND_IPC_DESIGN.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

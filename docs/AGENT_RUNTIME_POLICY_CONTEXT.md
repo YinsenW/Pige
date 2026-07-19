@@ -171,7 +171,9 @@ The body-free operation audit records `payloadHash` for that exact redacted boun
 Readiness checks use only an enabled default model, matching provider, and presence-only required-auth satisfaction; `none` needs no secret and checks never decrypt credentials. Before `allow`, context assembly may build a bounded redacted plan but cannot render provider prompts or request credentials. After `allow`, the caller re-reads Provider/Model summaries and verifies any credential-bearing config against the approved routing identity immediately before invocation. Endpoint, boundary, model, enabled-state, revision, or privacy-class drift invalidates the decision; changed private/sensitive metadata creates a new audit.
 
 - `restricted` means raw credentials, secret-store material, permission-store internals, or content another invariant forbids sending. It is always blocked and cannot be overridden by YOLO or a saved grant.
-- `sensitive` is explicit ask-before-cloud metadata or a high-confidence post-redaction security finding; it confirms once per action.
+- `sensitive` is explicit metadata or a high-confidence post-redaction security finding.
+  Under the default `ordinary_allowed` policy it remains part of the user-submitted task
+  and is sent without a duplicate prompt; stricter user-selected policies may confirm it.
 - `private` means the user or durable source/page metadata explicitly marks the selected evidence private. Pige does not silently infer that every personal-vault snippet is private after the user has configured a provider.
 - `large` means the exact planned payload exceeds the workflow's recorded `normalPayloadCharacterLimit` or would require bypassing its normal bounded-snippet contract. The limit comes from the workflow/model budget and is recorded in the decision.
 - `ordinary` applies only when none of the higher classes applies.
@@ -181,7 +183,7 @@ Decision matrix:
 | Effective boundary | `ordinary_allowed` | `confirm_private_or_large` | `confirm_all` | `local_only` |
 | --- | --- | --- | --- | --- |
 | `local` + `loopback_verified` | Allow non-restricted content | Allow non-restricted content | Allow non-restricted content | Allow non-restricted content |
-| `cloud`, `self_hosted`, or exact connected `unknown` + `user_asserted` endpoint | Allow ordinary/private/large; confirm sensitive | Allow ordinary; confirm private/large/sensitive | Confirm every non-restricted payload | Block |
+| `cloud`, `self_hosted`, or exact connected `unknown` + `user_asserted` endpoint | Allow all non-restricted task context | Allow ordinary; confirm private/large/sensitive | Confirm every non-restricted payload | Block |
 | `unknown` + `unknown`, or `local` without loopback verification | No runtime binding; reconnect | No runtime binding; reconnect | No runtime binding; reconnect | Block |
 
 Settings Connect/Save records `user_asserted` standing authority for its exact

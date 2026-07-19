@@ -753,6 +753,25 @@ describe("desktop shell build contract", () => {
     expect(rendererSource).not.toContain("pige_install_pi_package");
   });
 
+  it("registers the general OS command capability only in Main", () => {
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
+    const adapterSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/services/command-capability-adapter.ts"),
+      "utf8"
+    );
+
+    expect(mainSource).toContain("createFirstPartyCommandCapabilityAdapter()");
+    expect(mainSource.indexOf("createFirstPartyCommandCapabilityAdapter()"))
+      .toBeLessThan(mainSource.indexOf("createPermissionedExternalCapabilityRegistry("));
+    expect(adapterSource).toContain('name: "pige_run_command"');
+    expect(adapterSource).toContain('capability: "run_shell"');
+    expect(adapterSource).toContain('shell such as zsh, bash, cmd, or PowerShell');
+    expect(preloadSource).not.toContain("pige_run_command");
+    expect(rendererSource).not.toContain("pige_run_command");
+  });
+
   it("keeps durable proposal recovery internal while renderer decisions fail closed", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const approveHandler = mainSource.slice(

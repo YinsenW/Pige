@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-19T04:10:00Z",
+  "reviewedAt": "2026-07-19T07:30:00Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -38,6 +38,9 @@
       "apps/desktop/src/main/services/home-agent-service.ts",
       "apps/desktop/src/main/services/home-agent-turn-lifecycle.ts",
       "apps/desktop/src/main/services/jobs-service.ts",
+      "apps/desktop/src/main/services/command-capability-adapter.ts",
+      "apps/desktop/src/main/services/command-execution-service.ts",
+      "apps/desktop/src/main/services/model-egress-policy.ts",
       "apps/desktop/src/main/services/model-egress-approval-service.ts",
       "apps/desktop/src/main/services/model-provider-registry.ts",
       "apps/desktop/src/main/services/notes-service.ts",
@@ -45,6 +48,7 @@
       "apps/desktop/src/main/services/pi-agent-runtime-adapter.ts",
       "apps/desktop/src/main/services/pi-package-capability-adapter.ts",
       "apps/desktop/src/main/services/pi-package-manager-service.ts",
+      "apps/desktop/src/main/services/permission-broker-service.ts",
       "apps/desktop/src/main/services/reader-selection-action-service.ts",
       "apps/desktop/src/main/services/reader-selection-job-binding.ts",
       "apps/desktop/src/main/services/reader-selection-proposal-service.ts",
@@ -68,6 +72,8 @@
       "packages/markdown/src/index.ts",
       "tests/fixtures/service-responsibility-inventory.json",
       "tests/unit/desktop-shell-contract.test.ts",
+      "tests/unit/command-execution-service.test.ts",
+      "tests/unit/agent-led-ingest-retrieval.test.ts",
       "tests/unit/backup-coordinator-service.test.ts",
       "tests/unit/backup-service.test.ts",
       "tests/unit/full-ui-library.test.ts",
@@ -78,12 +84,15 @@
       "tests/unit/knowledge-tree-ui.test.ts",
       "tests/unit/markdown-renderer.test.ts",
       "tests/unit/model-egress-approval-service.test.ts",
+      "tests/unit/model-egress-policy.test.ts",
       "tests/unit/model-provider-registry.test.ts",
       "tests/unit/model-settings-error-ui.test.ts",
       "tests/unit/note-agent-ui.test.ts",
       "tests/unit/notes-service.test.ts",
       "tests/unit/pi-agent-runtime-adapter.test.ts",
       "tests/unit/pi-package-manager-service.test.ts",
+      "tests/unit/permission-broker-service.test.ts",
+      "tests/unit/permissioned-external-capability-service.test.ts",
       "tests/unit/reader-selection-action-service.test.ts",
       "tests/unit/reader-selection-mutation-service.test.ts",
       "tests/unit/reader-selection-proposal-service.test.ts",
@@ -97,17 +106,17 @@
       "tests/unit/local-settings.test.ts",
       "package.json"
     ],
-    "scope": "Independent Product Planning review binds the exact disabled Pi package install foundation together with the checksum-bound machine-local Skill Registry inventory and revision-CAS disable. Permissioned acquisition ends at installed_disabled; registry summaries remain pathless/body-free and authority-reducing; catalog, enable/runtime, update, uninstall and remaining lifecycle stay open.",
+    "scope": "Independent Product Planning review binds the built-in desktop Agent's first-party filesystem, network, command and package capabilities to one submitted-task authority and one exact audit without duplicate prompts. The general command tool uses exact executable/argv execution, bounded output/time/cancellation and a reduced environment; ordinary connected-provider task context proceeds without a second confirmation. Restricted content, unknown or changed provider boundaries, irreversible destructive effects, credential disclosure and third-party self-authorization remain separate hard boundaries.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 132,
-    "reviewedSha256": "c71f467ed05a5960fbf0430b6dfe8355ab2c2299fa9e26c596d65f6a738635f3"
+      "reviewedSha256": "314c3792d5303b74962adecfc38de8b00719a562326467290997c33aed82b6b8"
   },
   "reviewers": [
     {
-      "reviewerId": "package-skill-registry-planning-review",
-      "task": "Exact disabled package install and Skill Registry foundation review",
+      "reviewerId": "os-agent-task-authority-planning-review",
+      "task": "Built-in OS capability and submitted-task authority review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -115,51 +124,51 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Product Planning owns only documentation and independently compares the Development-owned package manager, capability adapter and Skill Registry with Permission Broker, lifecycle, supply-chain, recovery, IPC, trace and test contracts."
+      "independence": "Product Planning owns only documentation and independently compares the Development-owned command executor, capability adapter, Permission Broker and model-egress policy with task authority, secret handling, hard safety boundaries, recovery, IPC and test contracts."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "package-skill-registry-planning-review",
+      "reviewerId": "os-agent-task-authority-planning-review",
       "blockerCount": 0,
-      "summary": "Permission Broker solely authorizes exact install; package bytes and Skill Registry stay machine-local outside the vault, while only bounded package identity and pathless confirmed Skill summaries cross renderer boundaries."
+      "summary": "Built-in OS capabilities stay main-owned and machine-local. Exact executable identity, argv, working directory, timeout and one-use task authority are bound without exposing raw command authority to the renderer."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "package-skill-registry-planning-review",
+      "reviewerId": "os-agent-task-authority-planning-review",
       "blockerCount": 0,
-      "summary": "Skill, API, architecture, security, recovery and decision owners agree that acquisition ends at installed_disabled, registry metadata grants no authority, and disable only reduces authority."
+      "summary": "PRD, runtime policy, API, Pi integration, privacy and security owners agree that submitting a task authorizes ordinary first-party OS effects and connected-provider context once, while hard boundaries remain explicit."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "package-skill-registry-planning-review",
+      "reviewerId": "os-agent-task-authority-planning-review",
       "blockerCount": 0,
-      "summary": "PIGE-SKILL-001/002, E8.01/04 and P8 remain planned; renderer lifecycle binding, catalog, enable/runtime, update, rollback and uninstall are explicitly open."
+      "summary": "The change binds capability presence and duplicate-prompt removal without promoting unrelated Requirements, Exits or phases; full interactive terminal sessions and third-party grant defaults remain separate follow-ups."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "package-skill-registry-planning-review",
+      "reviewerId": "os-agent-task-authority-planning-review",
       "blockerCount": 0,
-      "summary": "Focused tests cover disclosed package identity, integrity/extraction/recovery and Skill checksum/identity binding, no-follow reads, pathless projection, owner-fenced CAS disable and parsed IPC."
+      "summary": "Focused tests cover exact command execution, output and time bounds, cancellation, environment reduction, real Feishu CLI installation, Home tool use, task authority, third-party spoof rejection and context-egress policy."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "package-skill-registry-planning-review",
+      "reviewerId": "os-agent-task-authority-planning-review",
       "blockerCount": 0,
-      "summary": "Existing Skill, API, architecture, security, quality and recovery owners absorb both foundations; dependency and service inventories avoid duplicate lifecycle contracts."
+      "summary": "Existing Pi, permission, runtime-policy, API, privacy and security owners absorb the decision; two bounded main services and the responsibility inventory avoid a renderer or parallel permission stack."
     }
   ],
   "verification": [
     {
-      "command": "Independent review of exact disabled Pi package install and Skill Registry foundations",
+      "command": "Independent review of built-in OS capability and submitted-task authority",
       "status": "passed",
-      "evidence": "Review confirms exact permissioned acquisition remains fixed-registry/integrity-bound and disabled, while Skill inventory is checksum-bound, pathless and unable to enable or execute code."
+      "evidence": "Review confirms the Agent can use first-party filesystem, network, command and package capabilities without duplicate prompts while third-party self-authorization, restricted content and irreversible effects remain blocked or separately confirmed."
     },
     {
       "command": "npm run verify:docs && npm run verify:decisions && npm run verify:traceability",
@@ -169,21 +178,21 @@
     {
       "command": "npm run verify:contracts && npm run verify:independent-documentation-review && npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "CON-001 through CON-004, dependency/service inventories and focused package/Skill tests bind both foundations while the union recipe retains published product roots."
+      "evidence": "CON-001 through CON-004, service inventory and focused command/permission/egress tests bind the implementation while the union recipe retains published product roots."
     }
   ],
   "coordination": {
-      "taskId": "package-skill-registry-foundations-20260719",
-      "taskTitle": "Exact disabled package install and Skill Registry foundations",
+      "taskId": "os-agent-task-authority-20260719",
+      "taskTitle": "Built-in OS capability and submitted-task authority",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-      "compatibility": "The candidate adds exact permissioned public-registry package acquisition plus pathless Skill inventory/disable; no secret, runtime execution, enable, catalog, update, uninstall, vault or backup authority is added.",
-      "acknowledgement": "Product Planning records only bounded lifecycle prerequisites, keeps Development code/test ownership separate, and leaves Skill/package Requirements, Exits and P8 planned."
+      "compatibility": "The candidate adds one bounded first-party command executor and removes duplicate first-party task/context prompts; it does not expose secrets, grant third-party packages authority, bypass restricted content, or change destructive, backup, restore or vault confirmations.",
+      "acknowledgement": "Product Planning records the user-authoritative OS Agent model, keeps Development code/test ownership separate, and leaves interactive terminal sessions and broader third-party grant policy as explicit future work."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Public npm metadata and archives remain untrusted supply-chain input even after integrity verification; package enable/runtime review remains mandatory and unavailable.",
-    "Skill Registry renderer binding, enable/grant integration, uninstall and broader package lifecycle/platform evidence remain open."
+    "The bounded command runner has no persistent PTY or interactive stdin session; commands that require an interactive terminal may still need a dedicated follow-up capability.",
+    "Third-party packages and Skills remain unable to inherit Pige first-party task authority by naming convention and still require their own reviewed authority path."
   ]
 }
