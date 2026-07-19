@@ -116,7 +116,7 @@ export class PermissionBrokerService {
     if (reusable) {
       assertPermissionActionBinding(reusable.binding, binding);
       return reusable.state === "pending"
-        ? this.#authorizeWithYolo(vaultPath, reusable)
+        ? this.#authorizeAutomatically(vaultPath, reusable)
         : reusable;
     }
     if (exact.some((record) => record.state === "consumed" && record.completionMarkerHash === undefined)) {
@@ -156,7 +156,7 @@ export class PermissionBrokerService {
       );
       return this.read(vaultPath, request.id);
     });
-    return this.#authorizeWithYolo(vaultPath, created);
+    return this.#authorizeAutomatically(vaultPath, created);
   }
 
   read(vaultPath: string, requestId: string): PermissionActionLifecycleRecord {
@@ -395,21 +395,20 @@ export class PermissionBrokerService {
     }
   }
 
-  #authorizeWithYolo(
+  #authorizeAutomatically(
     vaultPath: string,
     record: PermissionActionLifecycleRecord
   ): PermissionActionLifecycleRecord {
-    if (!this.#permissionSettings || !isYoloEligibleBinding(record.binding)) return record;
+    const userTaskAuthority = isUserTaskEligibleBinding(record.binding);
+    if (!userTaskAuthority && (!this.#permissionSettings || !isYoloEligibleBinding(record.binding))) return record;
     const roots = this.#roots(vaultPath, record.binding.vaultId);
     return this.#withClaim(vaultPath, record.id, (claim) => {
       const current = this.read(vaultPath, record.id);
       if (current.state !== "pending") return current;
-      const authority = this.#permissionSettings?.authoritySnapshot();
-      if (
-        !authority ||
-        !authority.yoloEnabled ||
-        authority.defaultMode !== "yolo_full_access"
-      ) return current;
+      const authority = userTaskAuthority ? undefined : this.#permissionSettings?.authoritySnapshot();
+      if (!userTaskAuthority && (
+        !authority || !authority.yoloEnabled || authority.defaultMode !== "yolo_full_access"
+      )) return current;
 
       const now = new Date().toISOString();
       const decision = PermissionDecisionRecordSchema.parse({
@@ -421,8 +420,8 @@ export class PermissionBrokerService {
         scope: "once",
         resourceScope: current.binding.resourceScope,
         decidedBy: "system",
-        autoAllowedBy: "yolo_full_access",
-        permissionSettingsRevision: authority.revision,
+        autoAllowedBy: userTaskAuthority ? "user_task" : "yolo_full_access",
+        ...(authority ? { permissionSettingsRevision: authority.revision } : {}),
         decidedAt: now
       });
       if (!recordExists(roots.decisions, decision.id)) {
@@ -604,15 +603,39 @@ function isSupportedCurrentActionAuthority(decision: PermissionDecisionRecord): 
   }
   return decision.decidedBy === "system" &&
     decision.decision === "allow_once" &&
-    decision.autoAllowedBy === "yolo_full_access" &&
-    decision.permissionSettingsRevision !== undefined;
+    ((decision.autoAllowedBy === "user_task" && decision.permissionSettingsRevision === undefined) ||
+      (decision.autoAllowedBy === "yolo_full_access" && decision.permissionSettingsRevision !== undefined));
 }
+
+function isUserTaskEligibleBinding(binding: PermissionActionBinding): boolean {
+  return binding.runtimeKind === "desktop_local" &&
+    binding.clientCapabilityTier === "desktop_full" &&
+    binding.actorType === "local_tool" &&
+    FIRST_PARTY_USER_TASK_ACTOR_IDS.has(binding.actorId) &&
+    (binding.capability === "external_filesystem" ||
+      binding.capability === "external_network" ||
+      binding.capability === "run_shell" ||
+      binding.capability === "install_package" ||
+      binding.capability === "install_local_tool") &&
+    binding.dataBoundary !== "destructive" &&
+    binding.dataBoundary !== "cloud" &&
+    binding.dataBoundary !== "brokered_credential";
+}
+
+const FIRST_PARTY_USER_TASK_ACTOR_IDS = new Set([
+  "local_tool.pige.node_os_readonly",
+  "pige.command-execution",
+  "pige.pi-package-manager"
+]);
 
 function isYoloEligibleBinding(binding: PermissionActionBinding): boolean {
   return binding.runtimeKind === "desktop_local" &&
     binding.clientCapabilityTier === "desktop_full" &&
     (binding.capability === "external_filesystem" ||
-      binding.capability === "external_network") &&
+      binding.capability === "external_network" ||
+      binding.capability === "run_shell" ||
+      binding.capability === "install_package" ||
+      binding.capability === "install_local_tool") &&
     binding.dataBoundary !== "destructive" &&
     binding.dataBoundary !== "cloud" &&
     binding.dataBoundary !== "brokered_credential";

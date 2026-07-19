@@ -267,7 +267,10 @@ Shell policy:
 
 - Shell execution is denied by default.
 - Pige-owned bundled tool commands may run only through the Local Tool Service with fixed argv construction, path validation, timeout, and output limits.
-- Agent/Skill/package/user-requested shell commands require declared capability, human permission unless covered by explicit default mode, command preview, working-directory scope, and operation logging.
+- Pige's first-party command capability is standing product capability. A submitted user
+  task authorizes its ordinary desktop-local command, network, filesystem, and package
+  effects once and records one audit without another prompt. Third-party actors and
+  destructive, credential, or changed-boundary effects still require their own authority.
 - Source content, model output, or package metadata cannot grant shell access.
 
 Authorization dialog requirements:
@@ -300,7 +303,8 @@ catalog is not blanket authority. The governing matrix is:
 | --- | --- | --- |
 | Schema-valid recoverable knowledge Markdown inside the active vault | Standing Pige authority; no prompt | Confined writer, schema/evidence/base hash, Operation/Undo |
 | Read/preserve the exact drop/file-picker source for this Job | Current user gesture; no duplicate prompt | Source/path validation |
-| Other path/file/folder/repository/command/commit action | Available, not pre-authorized | Exact Permission Broker decision or future eligible explicit grant/default |
+| First-party path/file/folder/repository/command/package action requested by the current user task | Current task authority; no duplicate prompt | Exact executable/resource binding, bounded execution, one-use audit |
+| Third-party path/file/folder/repository/command/commit action | Available, not pre-authorized | Exact Permission Broker decision or eligible explicit grant/default |
 | Permanent deletion, source-original overwrite, protected policy/settings, other always-confirmed effect | Never covered by ordinary standing/grant authority | Strong current-action confirmation |
 | Raw secret bytes | Not grantable | Block; reviewed adapters may use secret refs only |
 
@@ -318,10 +322,13 @@ Unknown effects remain uncertain; no-follow parent handles remain required.
 
 Threat: tool or Skill runs dangerous commands.
 
-Shell remains unavailable until a declared permissioned adapter also provides fixed
-executable identity with `shell:false`, reviewed argv/cwd/environment/output/time bounds,
-complete process-tree cancellation, Windows Job Objects, and macOS XPC/sandbox isolation.
-Permission or YOLO cannot substitute for that boundary; the product reports unavailable.
+Pige exposes a first-party OS command adapter with exact executable identity, argv/cwd,
+`shell:false` spawning, a reduced environment, bounded output/time, cancellation, and
+process-tree termination. Shell syntax remains available by explicitly choosing a shell
+executable; it is not silently interpolated by the Host. The current user task is the
+single ordinary-action authority. Third-party code cannot inherit that identity, source
+or model text cannot self-authorize, and destructive or credential effects remain
+separate boundaries.
 
 ### 6.8 Destructive Writes
 
@@ -410,7 +417,7 @@ Authorization and confirmation are separate gates:
 - Intervene for irreversible loss, authority/security escalation, destination drift,
   unresolved conflict, or explicit stricter user policy.
 - Model Egress Decision normally enforces silently; exact connected calls proceed while
-  sensitive/blocked/stricter outcomes gate. A `confirm` or `block` result is not weakened by YOLO.
+  blocked/stricter outcomes gate. A `confirm` or `block` result is not weakened by YOLO.
 - A model-egress confirmation is a distinct body-free current-action record, not a
   `permission_broker` record or saved grant. It authorizes only the exact bound vault,
   Job, Profile, canonical endpoint, model, policy, payload/evidence digests, and content

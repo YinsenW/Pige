@@ -36,6 +36,7 @@ import { ModelEgressApprovalService } from "../../apps/desktop/src/main/services
 import { PermissionBrokerService } from "../../apps/desktop/src/main/services/permission-broker-service";
 import { PermissionSettingsService } from "../../apps/desktop/src/main/services/permission-settings-service";
 import { PermissionedExternalCapabilityRegistry } from "../../apps/desktop/src/main/services/permissioned-external-capability-service";
+import { createFirstPartyCommandCapabilityAdapter } from "../../apps/desktop/src/main/services/command-capability-adapter";
 import { applyReaderSelectionPageUpdate } from "../../apps/desktop/src/main/services/agent-page-update-service";
 import { createFirstPartyReadonlyNodeOsCapabilityAdapters } from "../../apps/desktop/src/main/services/readonly-node-os/first-party-readonly-node-os-capability-adapters";
 import { readMarkdownPageByRelativePath } from "../../apps/desktop/src/main/services/markdown-page-index";
@@ -1359,7 +1360,7 @@ describe("Home Pi Agent service", () => {
     expect(durableAudit).not.toContain(fixture.vaultPath);
   });
 
-  it("still requires a current-action confirmation for sensitive selected context", async () => {
+  it("does not ask twice for sensitive context already submitted to the connected Agent", async () => {
     const testCase = {
       sourceId: "src_20260711_sensitive",
       metadata: { sensitive: true }
@@ -1370,6 +1371,16 @@ describe("Home Pi Agent service", () => {
     const result = makeSearchResult(fixture.vault.vaultId, { sourceIds: [testCase.sourceId] });
     let runtimeConfigReads = 0;
     let runtimeCalls = 0;
+    const adapter = new PiAgentRuntimeAdapter({
+      fauxResponses: [
+        { kind: "tool_call", toolName: "pige_search_knowledge", args: {} },
+        finishHome({
+          answer: "The launch date is July 18. [1]",
+          citationRefs: ["citation_1"],
+          grounding: "local_knowledge"
+        })
+      ]
+    });
     const outcome = await new HomeAgentService(
       fixture.vaults,
       makeModels(() => { runtimeConfigReads += 1; }),
@@ -1378,30 +1389,29 @@ describe("Home Pi Agent service", () => {
       {
         run: async (request) => {
           runtimeCalls += 1;
-          return runUntilSecondModelTurn(request, "pi_tool_sensitive_evidence");
+          return adapter.run(request);
         }
       }
     ).ask({ query: result.query });
 
     expect(outcome).toMatchObject({
-      state: "waiting",
-      modelUsage: "cloud",
-      error: { code: "model_provider.egress_confirmation_required" }
+      state: "completed",
+      modelUsage: "cloud"
     });
     expect(runtimeConfigReads).toBe(1);
     expect(runtimeCalls).toBe(1);
     const operation = readRecords<OperationRecord>(path.join(fixture.vaultPath, ".pige", "operations"))
-      .find((candidate) => candidate.modelEgressAudit?.outcome === "confirm");
+      .find((candidate) => candidate.modelEgressAudit?.contentClasses.includes("sensitive"));
     expect(operation).toMatchObject({
       modelEgressAudit: {
         contentClasses: ["sensitive"],
-        outcome: "confirm",
-        reasonCode: "sensitive_confirmation"
+        outcome: "allow",
+        reasonCode: "ordinary_external_allowed"
       }
     });
   });
 
-  it("resumes the same sensitive Home turn after one exact approval and consumes it before the next model call", async () => {
+  it("keeps the exact approval path for an unverified provider boundary", async () => {
     const fixture = makeFixture();
     const sourceId = "src_20260711_sensitive2";
     writeSourceRecord(fixture.vaultPath, sourceId, { sensitive: true });
@@ -1415,17 +1425,16 @@ describe("Home Pi Agent service", () => {
     let runtimeCalls = 0;
     const completedAdapter = new PiAgentRuntimeAdapter({
       fauxResponses: [
-        { kind: "tool_call", toolName: "pige_search_knowledge", args: {} },
         finishHome({
-          answer: "The launch date is July 18. [1]",
-          citationRefs: ["citation_1"],
-          grounding: "local_knowledge"
+          answer: "The connected provider answered.",
+          citationRefs: [],
+          grounding: "general"
         })
       ]
     });
     const service = new HomeAgentService(
       fixture.vaults,
-      makeModels(() => { runtimeConfigReads += 1; }),
+      makeUnverifiedModels(() => { runtimeConfigReads += 1; }),
       makeRetrievalPort(fixture.vault.vaultId, { result }),
       jobs,
       {
@@ -1453,14 +1462,14 @@ describe("Home Pi Agent service", () => {
     const waitingJob = await waitForValue(() => jobs.list({ states: ["waiting_model_egress"] }).jobs[0]);
     const requestId = waitingJob.modelEgressApprovalRequestId;
     expect(requestId).toMatch(/^egressreq_/u);
-    expect(runtimeConfigReads).toBe(1);
-    expect(runtimeCalls).toBe(1);
+    expect(runtimeConfigReads).toBe(0);
+    expect(runtimeCalls).toBe(0);
     expect(jobs.readAgentTurnJob(waitingJob.id)?.state).toBe("waiting_model_egress");
     expect(jobs.pendingModelEgress(requestId ?? "")).toMatchObject({
       requestId,
       jobId: waitingJob.id,
-      reasonCode: "sensitive_confirmation",
-      contentClasses: ["sensitive"]
+      reasonCode: "unknown_boundary_confirmation",
+      contentClasses: ["ordinary"]
     });
 
     const decision = jobs.resolveModelEgress({
@@ -1476,7 +1485,7 @@ describe("Home Pi Agent service", () => {
     expect(jobs.readAgentTurnJob(waitingJob.id)?.state).toBe("completed");
     expect(service.conversation().messages.at(-1)).toMatchObject({
       role: "assistant",
-      text: "The launch date is July 18. [1]"
+      text: "The connected provider answered."
     });
     expect(runtimeConfigReads).toBe(1);
     expect(runtimeCalls).toBe(1);
@@ -1490,7 +1499,7 @@ describe("Home Pi Agent service", () => {
       permissionDecisionIds: [],
       modelEgressAudit: {
         outcome: "confirm",
-        reasonCode: "sensitive_confirmation",
+        reasonCode: "unknown_boundary_confirmation",
         modelEgressApprovalRequestId: requestId
       }
     });
@@ -1818,6 +1827,61 @@ describe("Home Pi Agent service", () => {
     )).toMatchObject({
       modelEgressAudit: { outcome: "block", contentClasses: ["restricted"] }
     });
+  });
+
+  it("offers Pi the first-party OS command tool and executes it under the submitted task", async () => {
+    const fixture = makeFixture();
+    const jobs = new JobsService(fixture.vaults);
+    const commandPermissionCandidate = path.join(path.dirname(fixture.vaultPath), "command-permission");
+    fs.mkdirSync(commandPermissionCandidate, { mode: 0o700 });
+    const commandPermissionRoot = fs.realpathSync.native(commandPermissionCandidate);
+    const registry = new PermissionedExternalCapabilityRegistry(
+      [createFirstPartyCommandCapabilityAdapter()],
+      new PermissionBrokerService({
+        rootPath: commandPermissionRoot,
+        unsafeAllowUnfenced: true
+      }),
+      jobs
+    );
+    const adapter = new PiAgentRuntimeAdapter({
+      fauxResponses: [
+        {
+          kind: "tool_call",
+          toolName: "pige_run_command",
+          args: {
+            executable: process.execPath,
+            args: ["-e", "process.stdout.write('agent-command-ok')"]
+          }
+        },
+        finishHome({
+          answer: "The requested command completed.",
+          citationRefs: [],
+          grounding: "general"
+        })
+      ]
+    });
+    const outcome = await new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      jobs,
+      { run: async (request) => adapter.run(request) },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      registry
+    ).submitTurn({
+      text: "Run the requested local command.",
+      inputKind: "typed_text",
+      objective: "auto",
+      locale: "en"
+    });
+
+    expect(outcome).toMatchObject({ state: "completed" });
+    expect(jobs.readAgentTurnJob(outcome.requestId)?.privacy?.usedShell).toBe(true);
+    expect(jobs.list({ states: ["waiting_permission"] }).jobs).toEqual([]);
   });
 
   it("lets Pi decide how to answer after an optional empty search instead of substituting Host prose", async () => {
@@ -2827,7 +2891,7 @@ SYNTHETIC_DISTRACTOR_BODY
     expect(resolveCurrentNoteEvidenceQuoteLocator(binding, "[redacted-secret]")).toBeUndefined();
   });
 
-  it("makes the first current-note model turn query-only and confirms sensitive evidence only after the read", async () => {
+  it("makes current-note sensitive evidence part of the submitted task without another confirmation", async () => {
     const fixture = makeFixture();
     const sourceId = "src_20260716_notesensitive";
     writeSourceRecord(fixture.vaultPath, sourceId, { sensitive: true });
@@ -2848,7 +2912,13 @@ SYNTHETIC_DISTRACTOR_BODY
           readAttempted = true;
           const signal = new AbortController().signal;
           await readTool.execute({}, signal, { toolCallId: "pi_tool_sensitive_current_note", signal });
-          throw new Error("Sensitive evidence must wait before another provider turn.");
+          await request.beforeModelTurn?.();
+          return makeRuntimeResult(request, "pige_read_current_note", {
+            answer: "The scoped note says July 18. [1]",
+            citationRefs: ["citation_1"],
+            grounding: "local_knowledge",
+            evidenceQuotes: [{ citationRef: "citation_1", quote: "The launch date is July 18." }]
+          });
         }
       }
     );
@@ -2864,15 +2934,14 @@ SYNTHETIC_DISTRACTOR_BODY
     expect(runtimeCalls).toBe(1);
     expect(readAttempted).toBe(true);
     expect(outcome).toMatchObject({
-      state: "waiting",
-      error: { code: "model_provider.egress_confirmation_required" }
+      state: "completed"
     });
     const confirmationAudits = readRecords<OperationRecord>(path.join(fixture.vaultPath, ".pige", "operations"))
       .filter((operation) => operation.modelEgressAudit?.outcome === "confirm");
-    expect(confirmationAudits).toHaveLength(1);
-    expect(confirmationAudits[0]).toMatchObject({
-      modelEgressAudit: { contentClasses: ["sensitive"], reasonCode: "sensitive_confirmation" }
-    });
+    expect(confirmationAudits).toHaveLength(0);
+    expect(readRecords<OperationRecord>(path.join(fixture.vaultPath, ".pige", "operations"))
+      .find((operation) => operation.modelEgressAudit?.contentClasses.includes("sensitive")))
+      .toMatchObject({ modelEgressAudit: { outcome: "allow" } });
   });
 
   it("treats current-note vault-only as the exact scoped read rather than requiring a vault search", async () => {
@@ -2912,7 +2981,7 @@ SYNTHETIC_DISTRACTOR_BODY
     })).resolves.toMatchObject({ state: "completed" });
   });
 
-  it("confirms sensitive current-note follow-up history before any provider runtime call", async () => {
+  it("does not re-confirm sensitive current-note history already owned by the task", async () => {
     const fixture = makeFixture();
     const sourceId = "src_20260716_scopehistory";
     writeSourceRecord(fixture.vaultPath, sourceId, { sensitive: true });
@@ -2947,7 +3016,20 @@ SYNTHETIC_DISTRACTOR_BODY
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId),
       jobs,
-      { run: async () => { runtimeCalls += 1; throw new Error("Provider runtime must wait for confirmation."); } },
+      { run: async (request) => {
+        runtimeCalls += 1;
+        return new PiAgentRuntimeAdapter({
+          fauxResponses: [
+            { kind: "tool_call", toolName: "pige_read_current_note", args: {} },
+            finishHome({
+              answer: "The date is July 18. [1]",
+              grounding: "local_knowledge",
+              citationRefs: ["citation_1"],
+              evidenceQuotes: [{ citationRef: "citation_1", quote: "The launch date is July 18." }]
+            })
+          ]
+        }).run(request);
+      } },
       undefined,
       conversations,
       undefined,
@@ -2964,29 +3046,9 @@ SYNTHETIC_DISTRACTOR_BODY
       conversationId: first.event.conversationId,
       expectedTailEventId: assistant.id
     });
-    const waitingJob = await waitForValue(() => jobs.list({ states: ["waiting_model_egress"] }).jobs[0]);
-    expect(runtimeCalls).toBe(0);
-    const durableWaitingJob = jobs.readAgentTurnJob(waitingJob.id);
-    expect(durableWaitingJob?.inputRefs).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        kind: "page",
-        id: HOME_PAGE_ID,
-        role: "agent_turn_current_note_scope",
-        checksum: expect.stringMatching(/^sha256:/u)
-      })
-    ]));
-    const requestId = waitingJob.modelEgressApprovalRequestId;
-    expect(jobs.pendingModelEgress(requestId ?? "")).toMatchObject({
-      reasonCode: "sensitive_confirmation",
-      contentClasses: ["sensitive"]
-    });
-    expect(jobs.resolveModelEgress({
-      requestId: requestId ?? "",
-      jobId: waitingJob.id,
-      decision: "deny"
-    }).status).toBe("denied");
-    expect(await outcomePromise).toMatchObject({ state: "failed" });
-    expect(runtimeCalls).toBe(0);
+    expect(await outcomePromise).toMatchObject({ state: "completed" });
+    expect(runtimeCalls).toBe(1);
+    expect(jobs.list({ states: ["waiting_model_egress"] }).jobs).toEqual([]);
   });
 
   it("rejects scoped attachments and duplicate current-note page identities before Pi", async () => {
@@ -3466,8 +3528,37 @@ const LOCAL_RUNTIME_CONFIG: ModelProviderRuntimeConfig = {
   apiKey: "synthetic-local-secret"
 };
 
+const UNVERIFIED_PROVIDER: ProviderProfileSummary = {
+  ...DEFAULT_PROVIDER,
+  id: "provider_unverified_home",
+  displayName: "Unverified compatible model",
+  cloudBoundary: "unknown",
+  boundaryVerification: "unknown"
+};
+
+const UNVERIFIED_MODEL: ModelProfileSummary = {
+  ...DEFAULT_MODEL,
+  id: "model_unverified_home",
+  providerProfileId: UNVERIFIED_PROVIDER.id
+};
+
+const UNVERIFIED_RUNTIME_CONFIG: ModelProviderRuntimeConfig = {
+  provider: { ...UNVERIFIED_PROVIDER, authSecretRef: "provider_secret_unverified_home" },
+  model: UNVERIFIED_MODEL,
+  apiKey: "synthetic-unverified-secret"
+};
+
 function makeModels(onRuntimeConfigRead: () => void = () => undefined): HomeAgentModelPort {
   return makeModelsFor(DEFAULT_PROVIDER, DEFAULT_MODEL, RUNTIME_CONFIG, onRuntimeConfigRead);
+}
+
+function makeUnverifiedModels(onRuntimeConfigRead: () => void = () => undefined): HomeAgentModelPort {
+  return makeModelsFor(
+    UNVERIFIED_PROVIDER,
+    UNVERIFIED_MODEL,
+    UNVERIFIED_RUNTIME_CONFIG,
+    onRuntimeConfigRead
+  );
 }
 
 interface MutableHomeModels extends HomeAgentModelPort {

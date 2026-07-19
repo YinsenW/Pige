@@ -2059,44 +2059,42 @@ describe("Agent-selected ingest retrieval tool", () => {
     expect(bodyFreeAudit).not.toContain(fixture.vaultPath);
   });
 
-  it("writes a body-free sensitive decision and blocks the post-search model turn", async () => {
+  it("keeps selected sensitive context inside the submitted connected-provider task", async () => {
     const fixture = makeVault({
       relatedSourceId: "src_20260712_sensitiveaa",
       relatedSourceMetadata: { sensitive: true }
     });
     const prepared = prepareAgentSource(fixture, "Selected sensitive knowledge requires a current-action decision.");
     const retrieval = new RecordingRetrievalPort(fixture, (request) => makeSearchResult(fixture, request.query));
-    let postSearchModelInvocations = 0;
-    const runtime = new FunctionalRuntime(async (request) => {
-      await invokeTool(request, "pige_inspect_source", {}, "inspect_sensitive");
-      await invokeTool(request, "pige_search_knowledge", { query: "classified related knowledge" }, "search_sensitive");
-      await request.beforeModelTurn?.();
-      postSearchModelInvocations += 1;
-      throw new Error("Sensitive retrieval must prevent this model invocation.");
-    });
+    const runtime = new RecordingPiRuntime([
+      toolCall("pige_inspect_source", "inspect_sensitive", {}),
+      toolCall("pige_search_knowledge", "search_sensitive", { query: "classified related knowledge" }),
+      toolCall(
+        "pige_create_knowledge_note",
+        "publish_sensitive",
+        groundedOutput("Authorized sensitive related knowledge", ["related_01"])
+      )
+    ]);
 
-    await expect(new AgentIngestService(
+    await new AgentIngestService(
       modelPort(cloudRuntimeConfig),
       runtime,
       undefined,
       undefined,
       undefined,
       retrieval
-    ).ingestSource(fixture.vaultPath, prepared.source, prepared.parent)).rejects.toMatchObject({
-      code: "model_egress.confirmation_required"
-    });
+    ).ingestSource(fixture.vaultPath, prepared.source, prepared.parent);
     const operations = readOperations(fixture.vaultPath).filter((operation) =>
       operation.kind === "model_egress_decision"
     );
-    expect(postSearchModelInvocations).toBe(0);
     expect(operations.at(-1)).toMatchObject({
       modelEgressAudit: {
-        outcome: "confirm",
-        reasonCode: "sensitive_confirmation",
+        outcome: "allow",
+        reasonCode: "ordinary_external_allowed",
         contentClasses: ["sensitive"]
       }
     });
-    expect(generatedNotes(fixture.vaultPath)).toEqual([]);
+    expect(generatedNotes(fixture.vaultPath)).toHaveLength(1);
   });
 
   it.each(["body", "title"] as const)(

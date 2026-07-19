@@ -189,6 +189,7 @@ import {
   registerPermissionedExternalCapabilityAdapter
 } from "./services/permissioned-external-capability-service";
 import { createFirstPartyReadonlyNodeOsCapabilityAdapters } from "./services/readonly-node-os/first-party-readonly-node-os-capability-adapters";
+import { createFirstPartyCommandCapabilityAdapter } from "./services/command-capability-adapter";
 import { createPiPackageInstallCapabilityAdapter } from "./services/pi-package-capability-adapter";
 import { PiPackageManagerService } from "./services/pi-package-manager-service";
 import { NotesService } from "./services/notes-service";
@@ -224,6 +225,7 @@ const permissionYoloConfirmationRegistry = new PermissionYoloConfirmationRegistr
 const permissionYoloTrackedSenders = new Set<number>();
 let permissionedExternalCapabilityRegistry: PermissionedExternalCapabilityRegistry | undefined;
 let firstPartyReadonlyNodeOsCapabilitiesRegistered = false;
+let firstPartyCommandCapabilityRegistered = false;
 let firstPartyPiPackageCapabilityRegistered = false;
 let piPackageManagerService: PiPackageManagerService | undefined;
 let windowModeService: WindowModeService | undefined;
@@ -813,6 +815,10 @@ const getPermissionedExternalCapabilityRegistry = (): PermissionedExternalCapabi
         createPiPackageInstallCapabilityAdapter(getPiPackageManagerService())
       );
       firstPartyPiPackageCapabilityRegistered = true;
+    }
+    if (!firstPartyCommandCapabilityRegistered) {
+      registerPermissionedExternalCapabilityAdapter(createFirstPartyCommandCapabilityAdapter());
+      firstPartyCommandCapabilityRegistered = true;
     }
     permissionedExternalCapabilityRegistry = createPermissionedExternalCapabilityRegistry(
       getPermissionBrokerService(),

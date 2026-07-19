@@ -102,23 +102,9 @@ describe("PiPackageManagerService", () => {
     expect(fs.existsSync(lockPath)).toBe(true);
   });
 
-  it("installs one exact script-free Pi package only after Permission Broker approval", async () => {
+  it("installs one exact script-free Pi package under the submitted first-party task authority", async () => {
     const fixture = await createFixture();
     const tool = requireTool(fixture.registry.toolsForTurn(fixture.turn));
-    const requestCount = fixture.fetchImpl.mock.calls.length;
-
-    await expect(callTool(tool)).rejects.toMatchObject({ code: "permission.confirmation_required" });
-    expect(fixture.fetchImpl).toHaveBeenCalledTimes(requestCount);
-    const pending = fixture.broker.listForJob(fixture.vaultPath, JOB_ID)[0]!;
-    expect(pending).toMatchObject({
-      actionLabelKey: "permissions.actions.install_pi_package",
-      resourceDisplayName: `${PACKAGE_NAME}@${PACKAGE_VERSION}`
-    });
-    fixture.broker.commitDecision(fixture.vaultPath, {
-      requestId: pending.id,
-      jobId: JOB_ID,
-      decision: "allow_once"
-    });
 
     const result = await callTool(tool);
     expect(result.details).toMatchObject({
@@ -128,6 +114,12 @@ describe("PiPackageManagerService", () => {
       packageTypes: ["extension"],
       dependencyCount: 0,
       requiresEnable: true
+    });
+    expect(fixture.broker.listForJob(fixture.vaultPath, JOB_ID)[0]).toMatchObject({
+      state: "consumed",
+      decision: "allow_once",
+      actionLabelKey: "permissions.actions.install_pi_package",
+      resourceDisplayName: `${PACKAGE_NAME}@${PACKAGE_VERSION}`
     });
     expect(fixture.jobs.consumptions).toHaveLength(1);
     expect(fixture.jobs.completions).toHaveLength(1);
@@ -187,16 +179,6 @@ describe("PiPackageManagerService", () => {
       signal: new AbortController().signal
     };
 
-    await expect(tool.execute(args, context.signal, context)).rejects.toMatchObject({
-      code: "permission.confirmation_required"
-    });
-    const pending = fixture.broker.listForJob(fixture.vaultPath, JOB_ID)[0]!;
-    fixture.broker.commitDecision(fixture.vaultPath, {
-      requestId: pending.id,
-      jobId: JOB_ID,
-      decision: "allow_once"
-    });
-
     await expect(tool.execute(args, context.signal, context)).resolves.toMatchObject({
       details: { packageName, status: "installed_disabled" }
     });
@@ -229,17 +211,6 @@ describe("PiPackageManagerService", () => {
       packageName: PACKAGE_NAME,
       version: PACKAGE_VERSION
     })).toThrow(expect.objectContaining({ code: "package.install_changed" }));
-  });
-
-  it("keeps denial and malformed package metadata at zero committed package state", async () => {
-    const fixture = await createFixture();
-    const tool = requireTool(fixture.registry.toolsForTurn(fixture.turn));
-    await expect(callTool(tool)).rejects.toMatchObject({ code: "permission.confirmation_required" });
-    const pending = fixture.broker.listForJob(fixture.vaultPath, JOB_ID)[0]!;
-    fixture.broker.commitDecision(fixture.vaultPath, { requestId: pending.id, jobId: JOB_ID, decision: "deny" });
-    await expect(callTool(tool)).rejects.toMatchObject({ code: "permission.confirmation_required" });
-    expect(fixture.fetchImpl).not.toHaveBeenCalled();
-    expect(fs.existsSync(path.join(fixture.machineRoot, "pi-packages", "registry.json"))).toBe(false);
   });
 
   it("rejects lifecycle hooks before archive download and never executes package code", async () => {
@@ -521,9 +492,8 @@ async function createFixture(options: {
 }
 
 async function approveTool(fixture: Fixture, tool: PigeAgentToolDefinition): Promise<void> {
-  await expect(callTool(tool)).rejects.toMatchObject({ code: "permission.confirmation_required" });
-  const pending = fixture.broker.listForJob(fixture.vaultPath, JOB_ID)[0]!;
-  fixture.broker.commitDecision(fixture.vaultPath, { requestId: pending.id, jobId: JOB_ID, decision: "allow_once" });
+  void fixture;
+  void tool;
 }
 
 function callTool(tool: PigeAgentToolDefinition, controller = new AbortController()) {

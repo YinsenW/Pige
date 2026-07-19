@@ -42,7 +42,10 @@ export function createModelEgressDecision(
   } else if (policy.model.cloudSendPolicy === "confirm_all") {
     outcome = "confirm";
     reasonCode = "confirm_all";
-  } else if (contentClasses.includes("sensitive")) {
+  } else if (
+    contentClasses.includes("sensitive") &&
+    policy.model.cloudSendPolicy !== "ordinary_allowed"
+  ) {
     outcome = "confirm";
     reasonCode = "sensitive_confirmation";
   } else if (

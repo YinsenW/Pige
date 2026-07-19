@@ -309,10 +309,13 @@ stable ID/version/description/capability; strict input/output schemas and trust;
 required capabilities, resource scope, permission, data boundary, execution order,
 idempotency, limits, owner service, and handler.
 
-Production exposes read-only folder/text/fetch plus current-action
-`pige_install_pi_package` (`install_package`) for exact-package `installed_disabled`
-install only. Enable/runtime/shell/catalog/update/uninstall remain unavailable; the create
-journal/Operation foundation is unregistered pending the isolation security owner.
+Production exposes read-only folder/text/fetch, `pige_install_pi_package` for managed Pi
+packages, and the first-party `pige_run_command` OS capability. The command tool accepts
+an executable plus argv/cwd/timeout rather than an interpolated command string; an Agent
+may explicitly invoke a shell, npm, npx, a CLI, or another system utility when the user
+task needs it. Ordinary first-party desktop calls inherit the submitted user task as
+one-use authority and emit one audit record without a duplicate prompt. Third-party
+actors, credentials, destructive effects, and boundary changes retain their own gates.
 
 Pi-selected Dataset tools bind the exact source or Dataset revision. A deterministic
 `dataset_import` child may materialize one validated Bundle/Operation; read-only Home

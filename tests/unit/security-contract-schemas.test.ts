@@ -375,6 +375,11 @@ describe("security-sensitive shared contracts", () => {
 
     expect(PermissionDecisionRecordSchema.parse(manualAllowOnce).scope).toBe("once");
     expect(PermissionDecisionRecordSchema.parse(automaticAllowOnce).autoAllowedBy).toBe("saved_grant");
+    expect(PermissionDecisionRecordSchema.parse({
+      ...automaticAllowOnce,
+      id: "permdec_20260710_abcdef15",
+      autoAllowedBy: "user_task"
+    }).autoAllowedBy).toBe("user_task");
     expect(PermissionDecisionRecordSchema.parse(scopedAllow).decision).toBe("allow_scoped");
     expect(() => PermissionDecisionRecordSchema.parse({ ...manualAllowOnce, scope: "never" })).toThrow(
       "allow-once decision must use the once"
