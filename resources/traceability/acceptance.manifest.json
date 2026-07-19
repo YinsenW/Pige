@@ -1217,7 +1217,7 @@
     "EV-FULL-UI-SETTINGS": { "kind": "test", "path": "tests/unit/full-ui-settings-surface.test.ts", "selector": "traps focus, closes with Escape, and keeps development activation local" },
     "EV-READER-ACTIONS-UI":{"kind":"test","path":"tests/unit/full-ui-library.test.ts","selector":"submits only exact render identity and keeps unresolved or stale selections copy-only"},
     "EV-READER-SELECTION-PROPOSAL":{"kind":"test","path":"tests/unit/reader-selection-proposal-service.test.ts","selector":"projects only bounded safe preview lines and keeps private mutation identity out of the DTO"},
-    "EV-SKILLS-SHELL-UI":{"kind":"test","path":"tests/unit/full-ui-settings-surface.test.ts","selector":"renders the complete Skills shell without inventing installed Skills or service work"},
+    "EV-SKILLS-SHELL-UI":{"kind":"test","path":"tests/unit/full-ui-settings-surface.test.ts","selector":"renders verified Skills, disables with exact CAS, and ignores stale registry events"},
     "EV-DIAGNOSTICS-SETTINGS-UI":{"kind":"test","path":"tests/unit/full-ui-settings-surface.test.ts","selector":"binds real redacted diagnostics and support preview on its own page"},
     "EV-PROCESSING-FILES-UI":{"kind":"test","path":"tests/unit/home-agent-conversation-ui.test.ts","selector":"docks processing files to the composer and removes terminal or non-source Jobs"},
     "EV-ACTIVITY-UI":{"kind":"test","path":"tests/unit/home-agent-conversation-ui.test.ts","selector":"opens an exact stable Activity target and closes Settings only after Reader render succeeds"},
