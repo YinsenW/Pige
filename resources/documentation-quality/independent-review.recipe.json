@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-19T04:00:00Z",
+  "reviewedAt": "2026-07-19T08:00:00Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -87,17 +87,17 @@
       "tests/unit/local-settings.test.ts",
       "package.json"
     ],
-    "scope": "Independent Product Planning review binds the Reader transform body-free failure repair and responsive selection-toolbar geometry correction on sole main 2b2d5889. Unsupported internal error domains are normalized at the existing public failure boundary, unexpected transform submission failures return the strict failed projection, and the toolbar remeasures the selection and itself after Reader layout changes without changing action authority, copy, persistence or API behavior.",
+    "scope": "Independent Product Planning review retains the published Reader transform and toolbar repairs and binds the Home optimistic-send and streamed-turn convergence correction on sole main 885872e9. Send clears and projects one temporary user turn immediately, durable event and Job identities deduplicate it, authoritative completion wins over stale running summaries, and non-durable failure restores only the unchanged draft without altering Agent, attachment, persistence or API authority.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 130,
-    "reviewedSha256": "5823add6c56cf4dd2f06c99a7bae4be43dad6e32547e07e7781700cca10bb63d"
+    "reviewedSha256": "628e1b61645d8a36b3ea5bfe76b79d35e1a3d475ffa5334a10323b3c062e6f86"
   },
   "reviewers": [
     {
-      "reviewerId": "reader-transform-planning-review",
-      "task": "Reader transform failure and responsive toolbar review",
+      "reviewerId": "home-conversation-planning-review",
+      "task": "Home optimistic send and streaming convergence review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -105,51 +105,51 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Product Planning did not author the Development or UI commits and independently compared their exact service, renderer and test bytes with the published Reader selection contracts, shared error taxonomy and existing focus owners on sole main 2b2d5889."
+      "independence": "Product Planning did not author the Home UI commit and independently compared its exact renderer and test bytes with the published Agent turn, draft-event, durable conversation and retry contracts on sole main 885872e9."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "reader-transform-planning-review",
+      "reviewerId": "home-conversation-planning-review",
       "blockerCount": 0,
-      "summary": "ReaderSelectionActionService remains the transform owner and App retains the established toolbar and Reader focus owners; no duplicate action, navigation or error-taxonomy owner is added."
+      "summary": "HomeComposer remains the single transient conversation owner while Main retains durable Agent turn, Job and conversation ownership; no duplicate submit, persistence or streaming service is added."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "reader-transform-planning-review",
+      "reviewerId": "home-conversation-planning-review",
       "blockerCount": 0,
-      "summary": "The published Reader selection contract remains unchanged: internal errors are projected through an allowed body-free public domain, and responsive geometry remeasurement changes no selection identity, transform authority or proposal lifecycle."
+      "summary": "The published Agent turn contract remains unchanged: renderer optimism is correlated by clientTurnId and adopted durable IDs, draft events remain non-durable, and the authoritative completed answer outranks only stale UI job projection."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "reader-transform-planning-review",
+      "reviewerId": "home-conversation-planning-review",
       "blockerCount": 0,
-      "summary": "Existing requirement, build, exit and phase statuses remain unchanged; the candidate closes two bounded Reader defects and does not promote broader Reader mutation or release completion."
+      "summary": "Existing requirement, build, exit and phase statuses remain unchanged; the candidate closes a bounded Home lifecycle defect and does not promote multi-source attachments or broader release completion."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "reader-transform-planning-review",
+      "reviewerId": "home-conversation-planning-review",
       "blockerCount": 0,
-      "summary": "Focused error-schema, Home Agent, Reader action and renderer tests cover normalization, strict failed projection, responsive remeasurement, keyboard behavior and focus restoration; typecheck, build and UI visual gates remain directly runnable."
+      "summary": "Focused Home conversation tests cover same-frame optimism, durable deduplication, draft-to-final convergence, stale running summaries, retry restoration and vault switching; typecheck, build and UI visual gates remain directly runnable."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "reader-transform-planning-review",
+      "reviewerId": "home-conversation-planning-review",
       "blockerCount": 0,
-      "summary": "The product delta remains confined to two existing services, App.tsx and focused regressions; this excluded recipe records the independent publication review without adding or rewriting an owner document."
+      "summary": "The product delta remains confined to App.tsx and its focused regression; this excluded recipe records the independent publication review without adding or rewriting an owner document."
     }
   ],
   "verification": [
     {
-      "command": "Independent review of Reader transform failure and toolbar geometry on sole main 2b2d5889",
+      "command": "Independent review of Home optimistic send and streaming convergence on sole main 885872e9",
       "status": "passed",
-      "evidence": "Review confirms unsupported internal domains cannot cross the public failure schema, unexpected transform failures return one strict body-free result, and 420, 840 and 1240 Reader layouts reposition the existing toolbar without changing action or focus ownership."
+      "evidence": "Review confirms one optimistic user turn appears in the send frame, draft events advance behind it, durable identities remove duplicates, final content does not regress to stale running UI, and a non-durable failure restores only the unchanged prompt."
     },
     {
       "command": "npm run verify:docs && npm run verify:decisions && npm run verify:traceability",
@@ -159,22 +159,22 @@
     {
       "command": "npm run verify:contracts && npm run verify:independent-documentation-review && npm run verify:documentation-leanness",
       "status": "passed",
-      "evidence": "CON-001 through CON-004 remain green; focused service and UI tests, typecheck, build, boundary and visual-contract verification bind the exact repair while the union recipe retains the published Reader, Update, release and security roots."
+      "evidence": "CON-001 through CON-004 remain green; focused UI tests, typecheck, build and visual-contract verification bind the exact repair while the union recipe retains the published Reader, Update, release and security roots."
     }
   ],
   "coordination": {
-    "taskId": "reader-transform-toolbar-main2b2d-20260719",
-    "taskTitle": "Reader transform failure and responsive toolbar repair",
+    "taskId": "home-conversation-main8858-20260719",
+    "taskTitle": "Home optimistic send and streaming convergence repair",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The candidate changes only error normalization, strict transform failure projection and responsive toolbar geometry; it adds no API, persistence, Job, permission, locale or mutation authority.",
-    "acknowledgement": "Product Planning reviewed the exact Development and UI bytes on sole main 2b2d5889 and records these bounded Reader repairs without restyling the toolbar or claiming broader feature completion."
+    "compatibility": "The candidate changes only transient Home conversation projection and convergence; it adds no API, persistence, Job, attachment, permission, locale or model authority.",
+    "acknowledgement": "Product Planning reviewed the exact Home UI bytes on sole main 885872e9 and records this bounded lifecycle repair without restyling messages or claiming broader feature completion."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "A model/provider failure may still prevent a transform from producing an applied result; this candidate guarantees only the strict body-free failure contract and does not claim provider availability.",
-    "No Reader mutation, proposal, Activity, Undo, Requirement, Build, Exit or Phase status is promoted by these repairs.",
-    "Real macOS evidence covers responsive Reader geometry at 420, 840 and 1240; this candidate makes no additional Windows geometry claim."
+    "The published single-file guards remain unchanged; ordered multi-source partial acceptance and mixed-result projection require a separate typed service vertical.",
+    "No attachment, Agent orchestration, Requirement, Build, Exit or Phase status is promoted by this repair.",
+    "Real macOS evidence covers the 420 Home send, stream and final sequence with synthetic prompts; this candidate makes no additional Windows timing claim."
   ]
 }
