@@ -136,6 +136,37 @@ describe("full UI Settings surface", () => {
     expect(compactSettings).toContain("grid-column: 1 / -1;");
     expect(styles).toContain(".skill-registry-control .settings-status.is-enabled {\n  color: var(--accent);");
     expect(styles).not.toContain("--accent-strong");
+    expect(styles).toContain("--border-strong: var(--border-heavy);");
+    expect(styles).toContain("--danger-soft: var(--danger-surface);");
+    expect(styles).toContain("--shadow-float: var(--shadow-floating);");
+    expect(styles).toContain("--shadow-lg: var(--shadow-floating);");
+    expect(styles).toContain("--shadow-xl: var(--shadow-floating);");
+    expect(styles).toContain("--ease-basic: var(--ease-standard);");
+    expect(styles).toContain("--settings-text: var(--text-primary);");
+    expect(styles).toContain("--settings-secondary: var(--text-secondary);");
+    expect(styles).toContain("--settings-border: var(--border-default);");
+    expect(styles).toContain("--settings-elevated: var(--surface-elevated);");
+    expect(styles).toContain("--titlebar-height: 58px;");
+    const customPropertyDefinitions = new Set(
+      Array.from(styles.matchAll(/(--[a-z0-9-]+)\s*:/gi), (match) => match[1]!)
+    );
+    const undefinedCustomPropertyUses = Array.from(
+      new Set(Array.from(styles.matchAll(/var\((--[a-z0-9-]+)/gi), (match) => match[1]!))
+    ).filter((property) => !customPropertyDefinitions.has(property)).sort();
+    expect(undefinedCustomPropertyUses).toEqual([
+      "--branch-opacity",
+      "--branch-width",
+      "--home-processing-panel-height",
+      "--minimap-opacity",
+      "--minimap-width",
+      "--progress"
+    ]);
+    expect(styles).toContain("--knowledge-node-root: #d9e2ef;");
+    expect(styles).toContain("stroke: var(--knowledge-branch-strong);");
+    expect(styles).toContain("color: var(--knowledge-node-root);");
+    expect(styles).toContain(".diff-line.removed { background: var(--danger-surface); color: var(--danger); }");
+    expect(styles).toContain(".diff-line.added { background: var(--success-surface); color: var(--success); }");
+    expect(styles).toContain("background: color-mix(in oklab, var(--surface-elevated) 97%, transparent);");
     expect(compactSettings).toContain("grid-template-columns: minmax(0, 1fr);");
     expect(compactSettings).toContain("width: min(320px, calc(100% - 48px));");
     expect(compactSettings).toContain('.settings-surface[data-compact-navigation-open="true"] .settings-sidebar');
