@@ -192,7 +192,7 @@ describe("first-party read-only Node/OS capability adapters", () => {
     });
   });
 
-  it("delegates network validation to SourceFetchService and blocks SSRF", async () => {
+  it("cannot elevate direct adapter execution to private-network authority", async () => {
     const fetchImpl = vi.fn(async () => new Response("should not run"));
     const sourceFetch = new SourceFetchService({
       lookup: async () => ["127.0.0.1"],

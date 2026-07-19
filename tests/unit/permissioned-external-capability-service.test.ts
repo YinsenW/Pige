@@ -6,9 +6,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { PermissionBrokerService } from "../../apps/desktop/src/main/services/permission-broker-service";
 import { LocalSettingsStore } from "../../apps/desktop/src/main/services/local-settings";
 import { PermissionSettingsService } from "../../apps/desktop/src/main/services/permission-settings-service";
+import { SourceFetchService } from "../../apps/desktop/src/main/services/source-fetch-service";
+import { createFirstPartyReadonlyNodeOsCapabilityAdapters } from "../../apps/desktop/src/main/services/readonly-node-os/first-party-readonly-node-os-capability-adapters";
 import {
+  assertPermissionedExternalExecutionAuthority,
   PermissionedExternalCapabilityRegistry,
   type PermissionedExternalCapabilityAdapter,
+  type PermissionedExternalExecutionAuthority,
   type PermissionedExternalJobPort,
   type PermissionedExternalTurnContext
 } from "../../apps/desktop/src/main/services/permissioned-external-capability-service";
@@ -66,6 +70,83 @@ describe("PermissionedExternalCapabilityRegistry", () => {
     expect(fixture.execute).toHaveBeenCalledTimes(0);
     expect(fixture.jobs.consumptions).toHaveLength(0);
     expect(fixture.jobs.completions).toHaveLength(0);
+  });
+
+  it("reaches private redirect targets only after exact external-network authority is consumed", async () => {
+    const fixture = createFixture();
+    const requests: string[] = [];
+    const sourceFetch = new SourceFetchService({
+      lookup: async (hostname) => hostname === "example.com" ? ["93.184.216.34"] : ["169.254.169.254"],
+      fetchImpl: async (url) => {
+        requests.push(url.toString());
+        if (requests.length === 1) {
+          return new Response("", {
+            status: 302,
+            headers: { location: "http://169.254.169.254/latest" }
+          });
+        }
+        return new Response("metadata", { headers: { "content-type": "text/plain" } });
+      }
+    });
+    const adapter = createFirstPartyReadonlyNodeOsCapabilityAdapters({ sourceFetch })
+      .find((candidate) => candidate.tool.name === "pige_external_network_fetch_text");
+    if (!adapter) throw new Error("Expected the first-party network adapter.");
+    const registry = new PermissionedExternalCapabilityRegistry([adapter], fixture.broker, fixture.jobs);
+    const tool = requireTool(registry.toolsForTurn(fixture.turn));
+    const controller = new AbortController();
+    const args = { url: "https://example.com/start", maxBytes: 1_024 };
+    const context: PigeAgentToolCallContext = {
+      toolCallId: "tool_call_permissioned_private_network",
+      signal: controller.signal
+    };
+
+    await expect(tool.execute(args, controller.signal, context)).rejects.toMatchObject({
+      code: "permission.confirmation_required"
+    });
+    expect(requests).toEqual([]);
+
+    const pending = requireRecord(fixture.broker.listForJob(fixture.vaultPath, JOB_ID));
+    fixture.broker.commitDecision(fixture.vaultPath, {
+      requestId: pending.id,
+      jobId: JOB_ID,
+      decision: "allow_once"
+    });
+
+    const result = await tool.execute(args, controller.signal, context);
+    expect(result.content).toEqual([{ type: "text", text: "metadata" }]);
+    expect(requests).toEqual([
+      "https://example.com/start",
+      "http://169.254.169.254/latest"
+    ]);
+  });
+
+  it("revokes the unforgeable execution authority when the adapter settles", async () => {
+    const fixture = createFixture();
+    let capturedAuthority: PermissionedExternalExecutionAuthority | undefined;
+    const adapter: PermissionedExternalCapabilityAdapter = {
+      ...fixture.adapter,
+      execute: async (_input, _signal, _context, authority) => {
+        capturedAuthority = authority;
+        return TOOL_RESULT;
+      }
+    };
+    const registry = new PermissionedExternalCapabilityRegistry([adapter], fixture.broker, fixture.jobs);
+    const tool = requireTool(registry.toolsForTurn(fixture.turn));
+
+    await expect(callTool(tool)).rejects.toMatchObject({ code: "permission.confirmation_required" });
+    const pending = requireRecord(fixture.broker.listForJob(fixture.vaultPath, JOB_ID));
+    fixture.broker.commitDecision(fixture.vaultPath, {
+      requestId: pending.id,
+      jobId: JOB_ID,
+      decision: "allow_once"
+    });
+    await expect(callTool(tool)).resolves.toEqual(TOOL_RESULT);
+
+    expect(capturedAuthority).toBeDefined();
+    expect(() => assertPermissionedExternalExecutionAuthority(
+      capturedAuthority,
+      "external_network"
+    )).toThrowError(expect.objectContaining({ code: "permission.execution_authority_invalid" }));
   });
 
   it("executes one allow-once action exactly once and adopts its completion after restart", async () => {

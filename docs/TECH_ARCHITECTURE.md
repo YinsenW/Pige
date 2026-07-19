@@ -1540,8 +1540,8 @@ URL ingest must protect the local machine.
 Rules:
 
 - Only allow `http` and `https`.
-- Block localhost and private network ranges by default.
-- Follow limited redirects.
+- Block private targets unless exact `external_network` authority permits them.
+- Resolve/pin each hop; reject credentials, redact sensitive queries, and limit redirects.
 - Enforce size limits.
 - Enforce timeout.
 - Store raw HTML as inert source content, not executable UI.

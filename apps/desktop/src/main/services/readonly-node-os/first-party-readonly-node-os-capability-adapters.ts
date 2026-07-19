@@ -202,7 +202,7 @@ function createNetworkFetchTextAdapter(
     tool: {
       name: "pige_external_network_fetch_text",
       label: "Fetch external text",
-      description: "Fetches bounded readable text from one public HTTP or HTTPS URL through Pige's SSRF-safe source fetcher.",
+      description: "Fetches bounded readable text from one permission-authorized HTTP or HTTPS URL.",
       parameters: strictObjectSchema({
         url: { type: "string", minLength: 1, maxLength: MAX_URL_UTF8_BYTES },
         maxBytes: { type: "integer", minimum: 1, maximum: MAX_EXTERNAL_TEXT_BYTES }
@@ -254,10 +254,14 @@ function createNetworkFetchTextAdapter(
       urlHash: hashExternalResource("url", (input as FetchTextInput).url)
     }),
     resourceCount: () => 1,
-    execute: async (input, signal) => {
+    execute: async (input, signal, _context, authority) => {
       const request = input as FetchTextInput;
       assertNetworkNotAborted(signal);
-      const snapshot = await sourceFetch.fetchSnapshot(request.url, signal);
+      const snapshot = await sourceFetch.fetchSnapshot(
+        request.url,
+        signal,
+        authority ? { permissionedExternalAuthority: authority } : {}
+      );
       assertNetworkNotAborted(signal);
       const projected = projectUtf8(snapshot.extractedText, request.maxBytes);
       const details = projectFetchDetails(snapshot, projected.byteLength, projected.truncated);

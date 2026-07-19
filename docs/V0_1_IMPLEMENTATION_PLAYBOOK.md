@@ -387,7 +387,7 @@ Context pack: `docs/PRD.md` input handling; `docs/PARSER_INGEST_SPEC.md`;
 Build:
 
 - [B5.01 -> E5.01] URL detection beyond the single-URL Home composer route.
-- [B5.02 -> E5.01] Bounded SSRF-resistant fetch rules beyond the current foundation.
+- [B5.02 -> E5.01] Address-pinned fetch with default-blocked, exactly authorized private targets.
 - [B5.03 -> E5.01] Local Readability extraction.
 - [B5.04 -> E5.01] PDF text extraction with page locators.
 - [B5.05 -> E5.01] Semantic DOCX extraction.

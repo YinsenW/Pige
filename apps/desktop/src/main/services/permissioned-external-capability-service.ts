@@ -31,7 +31,26 @@ const ID_PATTERN = /^[a-z][a-z0-9_.:-]{2,127}$/u;
 const VERSION_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$/u;
 const MAX_EXTERNAL_CAPABILITIES = 16;
 const processAdapters: PermissionedExternalCapabilityAdapter[] = [];
+const executionAuthorities = new WeakMap<object, {
+  readonly bindingHash: string;
+  readonly capability: PermissionCapability;
+}>();
 let processRegistryCreated = false;
+
+export interface PermissionedExternalExecutionAuthority {
+  readonly bindingHash: string;
+}
+
+export function assertPermissionedExternalExecutionAuthority(
+  authority: PermissionedExternalExecutionAuthority | undefined,
+  capability: PermissionCapability
+): void {
+  if (!authority) throw executionAuthorityInvalid();
+  const record = executionAuthorities.get(authority);
+  if (!record || record.bindingHash !== authority.bindingHash || record.capability !== capability) {
+    throw executionAuthorityInvalid();
+  }
+}
 
 export interface PermissionedExternalCapabilityAdapter {
   readonly tool: {
@@ -74,7 +93,8 @@ export interface PermissionedExternalCapabilityAdapter {
   execute(
     normalizedInput: unknown,
     signal: AbortSignal,
-    context: PigeAgentToolCallContext
+    context: PigeAgentToolCallContext,
+    authority?: PermissionedExternalExecutionAuthority
   ): Promise<PigeAgentToolResult>;
   adoptCompleted?(
     completionMarkerHash: string,
@@ -233,7 +253,13 @@ export class PermissionedExternalCapabilityRegistry {
         turn.assertCurrent();
         signal.throwIfAborted();
         broker.assertExecutionAuthority(turn.vaultPath, consumed.id, binding);
-        const result = await adapter.execute(normalizedInput, signal, context);
+        const authority = issueExecutionAuthority(binding);
+        let result: PigeAgentToolResult;
+        try {
+          result = await adapter.execute(normalizedInput, signal, context, authority);
+        } finally {
+          executionAuthorities.delete(authority);
+        }
         const completionMarkerHash = hashToolResult(result);
         jobs.completePermissionAction({
           jobId: turn.jobId,
@@ -256,6 +282,22 @@ export class PermissionedExternalCapabilityRegistry {
     if (!this.#jobs) throw registryInvalid();
     return this.#jobs;
   }
+}
+
+function issueExecutionAuthority(binding: PermissionActionBinding): PermissionedExternalExecutionAuthority {
+  const authority = Object.freeze({ bindingHash: binding.bindingHash });
+  executionAuthorities.set(authority, {
+    bindingHash: binding.bindingHash,
+    capability: binding.capability
+  });
+  return authority;
+}
+
+function executionAuthorityInvalid(): PigeDomainError {
+  return new PigeDomainError(
+    "permission.execution_authority_invalid",
+    "The external action does not have current execution authority."
+  );
 }
 
 export function registerPermissionedExternalCapabilityAdapter(

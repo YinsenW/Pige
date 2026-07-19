@@ -138,7 +138,7 @@ After a new document-parser or direct-image OCR Artifact is persisted, its owner
 ### 8.2 URL
 
 - Fetch only through an Agent-selected Source Fetch tool.
-- Block local/private network targets unless explicitly allowed.
+- Block private targets unless exact `external_network` authority permits them; retain all fetch bounds.
 - Store canonical URL, final URL, capture timestamp, content type, and extraction warnings.
 - Preserve a readable snapshot when feasible.
 - Current static-URL ingress is Pi-selected and preserves one restart-recoverable source,

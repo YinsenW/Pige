@@ -1,7 +1,7 @@
 # Decision Log
 
 Status: Active decision ledger
-Last reviewed: 2026-07-18
+Last reviewed: 2026-07-19
 
 ## 1. Purpose
 
@@ -2951,6 +2951,28 @@ Consequences:
 References:
 
 - `docs/SECURITY_THREAT_MODEL.md`
+
+### D-20260719-Permissioned-Private-Network-Targets
+
+Status: Accepted
+Date: 2026-07-19
+
+Decision:
+
+Exact `external_network` authority includes private targets; they otherwise block.
+
+Rationale:
+
+Network permission is destination authority, so a second veto is misleading.
+
+Consequences:
+
+- Fetch controls remain; invalid authority blocks; statuses do not change.
+
+References:
+
+- `docs/SECURITY_THREAT_MODEL.md`
+- `docs/AGENT_RUNTIME_POLICY_CONTEXT.md`
 
 ## 4. Deferred Decisions
 

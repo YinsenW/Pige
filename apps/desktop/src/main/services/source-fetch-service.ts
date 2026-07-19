@@ -3,6 +3,10 @@ import type { LookupFunction } from "node:net";
 import net from "node:net";
 import { PigeDomainError } from "@pige/domain";
 import { Agent, fetch as undiciFetch, type Dispatcher } from "undici";
+import {
+  assertPermissionedExternalExecutionAuthority,
+  type PermissionedExternalExecutionAuthority
+} from "./permissioned-external-capability-service";
 import { WebContentExtractorWorkerAdapter, type WebContentExtractorPort } from "./web-content-extractor-service";
 import { WEB_EXTRACTOR_MAX_OUTPUT_CHARACTERS, type WebExtractionResult } from "./web-content-extractor-types";
 
@@ -43,6 +47,10 @@ export interface SourceFetchServiceOptions {
   readonly timeoutMs?: number;
   readonly maxBytes?: number;
   readonly maxRedirects?: number;
+}
+
+export interface SourceFetchRequestOptions {
+  readonly permissionedExternalAuthority?: PermissionedExternalExecutionAuthority;
 }
 
 interface ValidatedFetchTarget {
@@ -97,11 +105,24 @@ export class SourceFetchService {
     this.#pinValidatedAddresses = !options.fetchImpl;
   }
 
-  async fetchSnapshot(url: string, externalSignal?: AbortSignal): Promise<SourceFetchSnapshot> {
+  async fetchSnapshot(
+    url: string,
+    externalSignal?: AbortSignal,
+    options: SourceFetchRequestOptions = {}
+  ): Promise<SourceFetchSnapshot> {
     if (externalSignal?.aborted) {
       throw new PigeDomainError("url_fetch.cancelled", "The URL fetch was cancelled.");
     }
-    const originalTarget = await this.#validateFetchableUrl(url);
+    const networkAccess = options.permissionedExternalAuthority
+      ? "permissioned_external_network"
+      : "public_only";
+    if (options.permissionedExternalAuthority) {
+      assertPermissionedExternalExecutionAuthority(
+        options.permissionedExternalAuthority,
+        "external_network"
+      );
+    }
+    const originalTarget = await this.#validateFetchableUrl(url, networkAccess);
     let currentTarget = originalTarget;
     const warnings: string[] = [];
 
@@ -120,7 +141,10 @@ export class SourceFetchService {
           if (redirectCount === this.#maxRedirects) {
             throw new PigeDomainError("url_fetch.too_many_redirects", "The URL redirected too many times.");
           }
-          nextTarget = await this.#validateFetchableUrl(new URL(location, currentTarget.url).toString());
+          nextTarget = await this.#validateFetchableUrl(
+            new URL(location, currentTarget.url).toString(),
+            networkAccess
+          );
           warnings.push("redirected");
         } else {
           if (!response.ok) {
@@ -217,7 +241,10 @@ export class SourceFetchService {
     }
   }
 
-  async #validateFetchableUrl(value: string): Promise<ValidatedFetchTarget> {
+  async #validateFetchableUrl(
+    value: string,
+    networkAccess: "public_only" | "permissioned_external_network"
+  ): Promise<ValidatedFetchTarget> {
     let parsed: URL;
     try {
       parsed = new URL(value.trim());
@@ -231,7 +258,7 @@ export class SourceFetchService {
     if (parsed.username || parsed.password) {
       throw new PigeDomainError("url_fetch.credentials_not_allowed", "URL capture does not allow embedded credentials.");
     }
-    if (isLocalHostname(parsed.hostname)) {
+    if (networkAccess === "public_only" && isLocalHostname(parsed.hostname)) {
       throw new PigeDomainError("url_fetch.private_network_blocked", "URL capture blocked a local or private network address.");
     }
 
@@ -242,7 +269,10 @@ export class SourceFetchService {
       throw new PigeDomainError("url_fetch.hostname_unreachable", "The URL hostname could not be resolved.");
     }
     const normalizedAddresses = Array.from(new Set(addresses.map(stripIpv6Brackets)));
-    if (normalizedAddresses.length === 0 || normalizedAddresses.some(isBlockedAddress)) {
+    if (normalizedAddresses.length === 0 || normalizedAddresses.some((address) => net.isIP(address) === 0)) {
+      throw new PigeDomainError("url_fetch.hostname_unreachable", "The URL hostname could not be resolved.");
+    }
+    if (networkAccess === "public_only" && normalizedAddresses.some(isBlockedAddress)) {
       throw new PigeDomainError("url_fetch.private_network_blocked", "URL capture blocked a local or private network address.");
     }
 

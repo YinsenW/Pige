@@ -569,7 +569,7 @@
     "PIGE-PI-002":{"status":"partial","evidence":["EV-PROVIDER","EV-PI-PROVIDER-BINDING","EV-HOME-MODEL-SWITCHER"],"open":{"id":"OPEN-REQ-PIGE-PI-002","description":"Full catalog/help, Provider delete, DeepSeek Anthropic, and packaged model matrix remain; Advanced/Fast stays hidden.","targetBuilds":["B3.04"],"targetExits":["E3.01"]}},
     "PIGE-PI-003": {
       "status": "planned",
-      "plannedTarget": "Injected adapter proves exact Broker gating; production arbitrary-path/Skill/package/local-tool adapters, focused modal convergence and the full bypass matrix remain."
+      "plannedTarget": "Prove default private-target denial, exact external_network access, and retained fetch controls; broader callers and bypass matrix remain."
     },
     "PIGE-PI-004":{"status":"partial","evidence":["EV-PROVIDER","EV-PROVIDER-CONNECTION","EV-MODELS-ERROR-OWNER","EV-MODELS-PROGRESSIVE-UI"],"open":{"id":"OPEN-REQ-PIGE-PI-004","description":"Progressive Models owns repair; catalog/help, deletion, DeepSeek Anthropic and packaged BYOK remain.","targetBuilds":["B3.01","B3.03","B3.04"],"targetExits":["E3.01"]}},
     "PIGE-PI-005": {
