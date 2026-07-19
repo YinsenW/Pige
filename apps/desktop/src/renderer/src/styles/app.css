@@ -2973,7 +2973,7 @@ h2 {
 }
 
 .skill-registry-control .settings-status.is-enabled {
-  color: var(--accent-strong);
+  color: var(--accent);
 }
 
 .skill-registry-warning {

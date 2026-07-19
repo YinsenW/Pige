@@ -134,6 +134,8 @@ describe("full UI Settings surface", () => {
     expect(compactSettings).toContain("grid-template-columns: 32px minmax(0, 1fr);");
     expect(compactSettings).toContain(".settings-skills .skill-registry-control");
     expect(compactSettings).toContain("grid-column: 1 / -1;");
+    expect(styles).toContain(".skill-registry-control .settings-status.is-enabled {\n  color: var(--accent);");
+    expect(styles).not.toContain("--accent-strong");
     expect(compactSettings).toContain("grid-template-columns: minmax(0, 1fr);");
     expect(compactSettings).toContain("width: min(320px, calc(100% - 48px));");
     expect(compactSettings).toContain('.settings-surface[data-compact-navigation-open="true"] .settings-sidebar');
