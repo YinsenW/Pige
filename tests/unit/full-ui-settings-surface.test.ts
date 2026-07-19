@@ -957,7 +957,9 @@ describe("full UI Settings surface", () => {
         throw new Error("The Appearance panel must use only its provided adapters.");
       }
     });
+    let finishLocaleChange: (() => void) | undefined;
     const onLocaleChange = vi.fn(async (locale: string) => {
+      if (locale === "fr") await new Promise<void>((resolve) => { finishLocaleChange = resolve; });
       if (locale === "de") throw new Error("raw locale persistence failure /Users/private");
     });
     const onThemeChange = vi.fn(async () => true);
@@ -1005,6 +1007,20 @@ describe("full UI Settings surface", () => {
     expect(container.querySelector('select[aria-label="OCR language hint"]')).toBeNull();
     await act(async () => {
       selectValue(dom, appLanguage, "fr");
+      await settle(dom);
+    });
+    expect(appLanguage.disabled).toBe(true);
+    await act(async () => {
+      selectValue(dom, appLanguage, "de");
+      await settle(dom);
+    });
+    expect(onLocaleChange.mock.calls.map(([locale]) => locale)).toEqual(["fr"]);
+    await act(async () => {
+      finishLocaleChange?.();
+      await settle(dom);
+    });
+    expect(appLanguage.disabled).toBe(false);
+    await act(async () => {
       knowledgeLanguage.click();
       ocrLanguage.click();
       await settle(dom);
@@ -1022,6 +1038,9 @@ describe("full UI Settings surface", () => {
     expect(onLocaleChange).toHaveBeenLastCalledWith("de");
     expect(container.querySelector("#appearance-language-error")?.textContent)
       .toBe("Language could not be changed. The current language was kept.");
+    expect(appLanguage.getAttribute("aria-describedby"))
+      .toBe("appearance-app-language-description appearance-language-error");
+    expect(container.querySelector("#appearance-language-error")?.getAttribute("role")).toBe("status");
     expect(appLanguage.disabled).toBe(false);
     expect(container.textContent).not.toContain("raw locale persistence failure");
     expect(container.textContent).not.toContain("/Users/private");
