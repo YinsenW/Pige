@@ -3798,6 +3798,19 @@ dd {
   overflow-y: auto;
 }
 
+.home.home-conversation-active {
+  overflow: hidden;
+}
+
+.home.home-conversation-active > .conversation-timeline {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  align-content: end;
+  padding-bottom: calc(18px + var(--home-processing-panel-height, 0px));
+  scroll-padding-bottom: calc(18px + var(--home-processing-panel-height, 0px));
+}
+
 .hero {
   display: flex;
   min-height: 0;

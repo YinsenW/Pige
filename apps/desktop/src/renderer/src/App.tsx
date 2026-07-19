@@ -3996,6 +3996,8 @@ function HomeComposer(props: {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
   const conversationTimelineRef = useRef<HTMLElement | null>(null);
+  const homeSectionRef = useRef<HTMLElement | null>(null);
+  const processingPanelRef = useRef<HTMLElement | null>(null);
   const followConversationRef = useRef(true);
   const conversationCopySequenceRef = useRef(0);
   const conversationCopyResetTimerRef = useRef<number | undefined>(undefined);
@@ -4574,6 +4576,29 @@ function HomeComposer(props: {
     timeline.scrollTop = timeline.scrollHeight;
   }, [conversationFollowKey]);
 
+  useLayoutEffect(() => {
+    const home = homeSectionRef.current;
+    const panel = processingPanelRef.current;
+    if (!home || !panel) {
+      home?.style.removeProperty("--home-processing-panel-height");
+      return;
+    }
+    const updateHeight = (): void => {
+      home.style.setProperty(
+        "--home-processing-panel-height",
+        `${Math.ceil(panel.getBoundingClientRect().height)}px`
+      );
+    };
+    updateHeight();
+    if (typeof window.ResizeObserver !== "function") return;
+    const observer = new window.ResizeObserver(updateHeight);
+    observer.observe(panel);
+    return () => {
+      observer.disconnect();
+      home.style.removeProperty("--home-processing-panel-height");
+    };
+  }, [processingListExpanded, visibleRecentJobs.length]);
+
   useEffect(() => {
     const timeline = conversationTimelineRef.current;
     if (!timeline) return;
@@ -4590,6 +4615,15 @@ function HomeComposer(props: {
     selectedNote === null &&
     permissionPrompt === null &&
     modelEgressPrompt === null;
+  const showConversationTimeline = visibleConversationMessages.length > 0 ||
+    visibleOptimisticConversationTurns.length > 0 ||
+    agentDraft !== null ||
+    showConversationRunMessage ||
+    liveConversationAnswer !== null;
+  const conversationOwnsFlexibleSpace = showConversationTimeline &&
+    selectedNote === null &&
+    agentAnswer?.datasetResult === undefined &&
+    agentAnswer?.retrieval === undefined;
 
   const beginAgentDraft = (clientTurnId: string): void => {
     activeAgentDraftRef.current = { clientTurnId, sequence: 0 };
@@ -5194,7 +5228,11 @@ function HomeComposer(props: {
   };
 
   return (
-    <section className={`home${showHomeHero ? " home-empty" : " home-active"}`} aria-label={props.t("nav.home")}>
+    <section
+      ref={homeSectionRef}
+      className={`home${showHomeHero ? " home-empty" : " home-active"}${conversationOwnsFlexibleSpace ? " home-conversation-active" : ""}`}
+      aria-label={props.t("nav.home")}
+    >
       {showHomeHero ? (
         <div className="hero">
           <div className="hero-content">
@@ -5227,6 +5265,7 @@ function HomeComposer(props: {
       ) : null}
       {visibleRecentJobs.length > 0 ? (
         <section
+          ref={processingPanelRef}
           className={processingListExpanded ? "task-panel" : "task-panel collapsed"}
           aria-labelledby="home-processing-title"
         >
@@ -5380,7 +5419,7 @@ function HomeComposer(props: {
           </div>
         </section>
       ) : null}
-      {visibleConversationMessages.length > 0 || visibleOptimisticConversationTurns.length > 0 || agentDraft || showConversationRunMessage || liveConversationAnswer ? (
+      {showConversationTimeline ? (
         <section
           ref={conversationTimelineRef}
           className="conversation-timeline"
