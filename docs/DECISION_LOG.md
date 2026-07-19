@@ -2984,18 +2984,17 @@ Date: 2026-07-19
 
 Decision:
 
-An explicit current-turn request may permission-install one exact public npm Pi
-package/version as immutable machine-local `installed_disabled` bytes.
+Current-turn permission may install one exact public npm Pi package/version as immutable
+machine-local `installed_disabled` bytes.
 
 Rationale:
 
-Acquisition must not silently become execution or dependency selection.
+Acquisition cannot imply execution or dependency selection.
 
 Consequences:
 
-- SHA-512, bounded link-free extraction, hook/dependency/native rejection, PID-aware locking
-  and request-stable adoption are mandatory. Remaining lifecycle owners stay open; no Exit
-  or Phase advances.
+- Require SHA-512, bounded link-free extraction, hook/dependency/native rejection, locking
+  and stable adoption. Remaining lifecycle, Exit and Phase status stay open.
 
 References:
 
