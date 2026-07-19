@@ -79,6 +79,7 @@ import type {
   SpeechAssetInstallEvent,
   SpeechAssetInstallRequest,
   SpeechAssetInstallResult,
+  SkillRegistryQueryResult,
   SkillRegistrySummary,
   SkillSummary,
   SupportBundlePreview,
@@ -7462,8 +7463,13 @@ export function SkillsSettingsPanel(props: {
     };
     const unsubscribe = window.pige.skills.onChanged(adoptRegistry);
     if (registry === null) setReadState("loading");
-    void window.pige.skills.summary().then((next) => {
-      if (requestCurrent) adoptRegistry(next);
+    void window.pige.skills.summary().then((result: SkillRegistryQueryResult) => {
+      if (!requestCurrent) return;
+      if (result.status === "failed") {
+        if (active && latestRevisionRef.current < 0) setReadState("failed");
+        return;
+      }
+      adoptRegistry(result.registry);
     }).catch(() => {
       if (active && requestCurrent && latestRevisionRef.current < 0) setReadState("failed");
     });

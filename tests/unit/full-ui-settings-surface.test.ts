@@ -23,6 +23,7 @@ import type {
   PermissionPrepareYoloEnableResult,
   PermissionSettingsSummary,
   SkillRegistryMutationResult,
+  SkillRegistryQueryResult,
   SkillRegistrySummary,
   SpeechAvailabilityResult
 } from "@pige/contracts";
@@ -351,12 +352,12 @@ describe("full UI Settings surface", () => {
   it("renders verified Skills, disables with exact CAS, and ignores stale registry events", async () => {
     const dom = createDom();
     const onDevelopment = vi.fn();
-    let resolveSummary!: (summary: SkillRegistrySummary) => void;
+    let resolveSummary!: (result: SkillRegistryQueryResult) => void;
     let registryListener: ((summary: SkillRegistrySummary) => void) | undefined;
     const unsubscribe = vi.fn();
     const enabledRegistry = skillRegistry(7, true, 1);
     const disabledRegistry = skillRegistry(8, false, 1);
-    const summary = vi.fn(() => new Promise<SkillRegistrySummary>((resolve) => {
+    const summary = vi.fn(() => new Promise<SkillRegistryQueryResult>((resolve) => {
       resolveSummary = resolve;
     }));
     const disable = vi.fn(async () => ({ status: "committed" as const, registry: disabledRegistry }));
@@ -388,7 +389,7 @@ describe("full UI Settings surface", () => {
     expect(summary).toHaveBeenCalledOnce();
 
     await act(async () => {
-      resolveSummary(enabledRegistry);
+      resolveSummary({ status: "ready", registry: enabledRegistry });
       await settle(dom);
     });
 
@@ -434,11 +435,22 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
-  it("fails closed on a body-bearing Skill Registry read error and retries to a verified empty state", async () => {
+  it("fails closed on the body-free Skill Registry failed result and retries to a verified empty state", async () => {
     const dom = createDom();
+    const failedQuery: SkillRegistryQueryResult = {
+      status: "failed",
+      error: {
+        code: "skill.registry_unavailable",
+        domain: "skill",
+        messageKey: "error.generic",
+        retryable: true,
+        severity: "error",
+        userAction: "retry"
+      }
+    };
     const summary = vi.fn()
-      .mockRejectedValueOnce(new Error("/Users/private/.pige/skills/registry.json API_KEY=secret"))
-      .mockResolvedValueOnce(skillRegistry(0, false, 0, []));
+      .mockResolvedValueOnce(failedQuery)
+      .mockResolvedValueOnce({ status: "ready" as const, registry: skillRegistry(0, false, 0, []) });
     Object.defineProperty(dom.window, "pige", {
       configurable: true,
       value: {
@@ -459,8 +471,7 @@ describe("full UI Settings surface", () => {
     const page = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-skills"));
     expect(page.textContent).toContain("Skill Registry unavailable");
     expect(page.textContent).toContain("No inventory state is being inferred.");
-    expect(page.textContent).not.toContain("/Users/private");
-    expect(page.textContent).not.toContain("API_KEY");
+    expect(page.textContent).not.toContain("skill.registry_unavailable");
 
     await act(async () => {
       buttonNamed(page, "Try again").click();
@@ -496,7 +507,7 @@ describe("full UI Settings surface", () => {
       configurable: true,
       value: {
         skills: {
-          summary: async () => registry,
+          summary: async () => ({ status: "ready" as const, registry }),
           disable,
           onChanged: () => () => undefined
         }
