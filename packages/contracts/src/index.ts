@@ -70,6 +70,10 @@ import type {
   SpeechStartRequest,
   SpeechStartResult,
   SpeechStopResult,
+  SkillDisableRequest,
+  SkillRegistryQueryResult,
+  SkillRegistryMutationResult,
+  SkillRegistrySummary,
   SettingApplyBehavior,
   SettingPermissionRequirement,
   SettingScope,
@@ -152,6 +156,16 @@ export type {
   SpeechStartRequest,
   SpeechStartResult,
   SpeechStopResult,
+  SkillCapability,
+  SkillDataBoundary,
+  SkillDisableRequest,
+  SkillRegistryQueryResult,
+  SkillKind,
+  SkillRegistryMutationResult,
+  SkillRegistrySummary,
+  SkillScope,
+  SkillSummary,
+  SkillTrust,
   WindowLayoutRequest,
   WindowLayoutState
 } from "@pige/schemas";
@@ -1345,6 +1359,11 @@ export interface PigeDesktopApi {
         request: PermissionRevokeAllSavedGrantsRequest
       ) => Promise<PermissionSettingsMutationResult>;
     };
+  };
+  readonly skills: {
+    readonly summary: () => Promise<SkillRegistryQueryResult>;
+    readonly disable: (request: SkillDisableRequest) => Promise<SkillRegistryMutationResult>;
+    readonly onChanged: (listener: (summary: SkillRegistrySummary) => void) => () => void;
   };
   readonly activity: {
     readonly list: (request?: KnowledgeActivityListRequest) => Promise<KnowledgeActivityListResult>;

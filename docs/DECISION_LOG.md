@@ -2984,23 +2984,46 @@ Date: 2026-07-19
 
 Decision:
 
-An explicit current-turn request may permission-install one exact public npm Pi
-package/version as immutable machine-local `installed_disabled` bytes.
+Current-turn permission may install one exact public npm Pi package/version as immutable
+machine-local `installed_disabled` bytes.
 
 Rationale:
 
-Acquisition must not silently become execution or dependency selection.
+Acquisition cannot imply execution or dependency selection.
 
 Consequences:
 
-- SHA-512, bounded link-free extraction, hook/dependency/native rejection, PID-aware locking
-  and request-stable adoption are mandatory. Remaining lifecycle owners stay open; no Exit
-  or Phase advances.
+- Require SHA-512, bounded link-free extraction, hook/dependency/native rejection, locking
+  and stable adoption. Remaining lifecycle, Exit and Phase status stay open.
 
 References:
 
 - `docs/SKILL_EXTENSION_DESIGN.md`
 - `docs/SECURITY_THREAT_MODEL.md`
+
+### D-20260719-Machine-Local-Skill-Registry-Foundation
+
+Status: Accepted
+Date: 2026-07-19
+
+Decision:
+
+Use checksum-safe summaries and owner-token CAS. Invalid records lack authority; failures are
+body-free. Only the Electron singleton recovers valid orphan locks.
+
+Rationale:
+
+Inventory can precede lifecycle.
+
+Consequences:
+
+- Backup excludes state; disable removes no files/grants; lifecycle stays open.
+
+References:
+
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/SKILL_EXTENSION_DESIGN.md`
+- `docs/TECH_ARCHITECTURE.md`
 
 ## 4. Deferred Decisions
 

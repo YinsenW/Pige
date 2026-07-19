@@ -371,6 +371,7 @@ Source locator compatibility:
 | API keys | OS keychain/app secret store | Yes, machine-local | No | No | Future explicit export only |
 | Local model files | OS app data | No | No | Downloadable | No |
 | Tool binaries | App bundle/app data | No | No | Reinstallable | No |
+| Machine-local Skills | OS app data `skills/` | Checksum-bound manifests | No | No | No |
 | Local diagnostics | OS app data diagnostics store | Machine-local operational evidence | No | Partially | No |
 | User-created support bundle | User-selected output path | Explicit diagnostic export | No | No | No |
 

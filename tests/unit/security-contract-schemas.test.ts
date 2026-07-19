@@ -33,6 +33,11 @@ import {
   ReaderSelectionTransformResultSchema,
   ReaderSelectionResolveRequestSchema,
   ReaderSelectionResolveResultSchema,
+  SkillDisableRequestSchema,
+  SkillManifestSchema,
+  SkillRegistryMutationResultSchema,
+  SkillRegistryQueryResultSchema,
+  SkillRegistrySummarySchema,
   UpdateProviderCredentialRequestSchema
 } from "@pige/schemas";
 
@@ -40,6 +45,83 @@ const timestamp = "2026-07-10T00:00:00.000Z";
 const policyHash = `sha256:${"a".repeat(64)}`;
 
 describe("security-sensitive shared contracts", () => {
+  it("keeps Skill inventory and lifecycle requests strict, pathless, and body-free", () => {
+    const summary = {
+      apiVersion: 1 as const,
+      revision: 4,
+      invalidManifestCount: 1,
+      skills: [{
+        id: "paper-reading",
+        name: "Paper Reading",
+        version: "1",
+        description: "Create source-backed notes.",
+        scope: "machine_local" as const,
+        kind: "pure" as const,
+        enabled: true,
+        trust: "user_confirmed" as const,
+        capabilities: ["read_current_source" as const],
+        dataBoundaries: ["local" as const]
+      }]
+    };
+    expect(SkillRegistrySummarySchema.parse(summary)).toEqual(summary);
+    expect(SkillRegistryQueryResultSchema.parse({ status: "ready", registry: summary })).toEqual({
+      status: "ready",
+      registry: summary
+    });
+    expect(() => SkillRegistrySummarySchema.parse({
+      ...summary,
+      skills: [{ ...summary.skills[0], path: "/private/skills/paper-reading/SKILL.md" }]
+    })).toThrow();
+    expect(() => SkillRegistrySummarySchema.parse({
+      ...summary,
+      skills: [{ ...summary.skills[0], body: "untrusted instructions" }]
+    })).toThrow();
+    expect(() => SkillRegistrySummarySchema.parse({
+      ...summary,
+      skills: [{ ...summary.skills[0], capabilities: ["raw_secret_access"] }]
+    })).toThrow();
+    expect(SkillDisableRequestSchema.parse({
+      apiVersion: 1,
+      skillId: "paper-reading",
+      expectedRevision: 4
+    }).skillId).toBe("paper-reading");
+    expect(() => SkillDisableRequestSchema.parse({
+      apiVersion: 1,
+      skillId: "../../outside",
+      expectedRevision: 4
+    })).toThrow();
+    for (const skillId of ["con", "nul.logs", "com1", "portable."]) {
+      expect(() => SkillDisableRequestSchema.parse({ apiVersion: 1, skillId, expectedRevision: 4 })).toThrow();
+    }
+    const failed = {
+      status: "failed" as const,
+      error: {
+        code: "skill.registry_unavailable",
+        domain: "skill" as const,
+        messageKey: "error.generic",
+        retryable: true,
+        severity: "error" as const,
+        userAction: "retry" as const
+      }
+    };
+    expect(SkillRegistryMutationResultSchema.parse(failed)).toEqual(failed);
+    expect(SkillRegistryQueryResultSchema.parse(failed)).toEqual(failed);
+    expect(() => SkillRegistryMutationResultSchema.parse({
+      ...failed,
+      error: { ...failed.error, path: "/private/skills" }
+    })).toThrow();
+
+    expect(() => SkillManifestSchema.parse({
+      id: "unsafe-pure",
+      name: "Unsafe Pure Skill",
+      version: "1",
+      description: "Incorrectly claims pure execution.",
+      scope: "machine_local",
+      kind: "pure",
+      capabilities: ["external_network"]
+    })).toThrow("Pure Skills cannot declare permission-mediated");
+  });
+
   it("keeps inline note reference requests bounded and results pathless", () => {
     const request = {
       apiVersion: 1 as const,

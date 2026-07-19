@@ -112,6 +112,10 @@ import type {
   SpeechStartRequest,
   SpeechStartResult,
   SpeechStopResult,
+  SkillDisableRequest,
+  SkillRegistryMutationResult,
+  SkillRegistryQueryResult,
+  SkillRegistrySummary,
   SupportBundleExportResult,
   SupportBundlePreview,
   ToolchainHealth,
@@ -172,6 +176,10 @@ import {
   UpdateCheckResultSchema,
   UpdateStatusEventSchema,
   UpdateSummarySchema,
+  SkillDisableRequestSchema,
+  SkillRegistryMutationResultSchema,
+  SkillRegistryQueryResultSchema,
+  SkillRegistrySummarySchema,
   WindowLayoutRequestSchema,
   WindowLayoutStateSchema,
   VaultActionResultSchema
@@ -491,6 +499,23 @@ const api: PigeDesktopApi = {
           "permissions.settings.revokeAllGrants",
           PermissionRevokeAllSavedGrantsRequestSchema.parse(request)
         ))
+    }
+  },
+  skills: {
+    summary: async (): Promise<SkillRegistryQueryResult> =>
+      SkillRegistryQueryResultSchema.parse(await ipcRenderer.invoke("skills.summary")),
+    disable: async (request: SkillDisableRequest): Promise<SkillRegistryMutationResult> =>
+      SkillRegistryMutationResultSchema.parse(await ipcRenderer.invoke(
+        "skills.disable",
+        SkillDisableRequestSchema.parse(request)
+      )),
+    onChanged: (listener: (summary: SkillRegistrySummary) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, value: unknown): void => {
+        const parsed = SkillRegistrySummarySchema.safeParse(value);
+        if (parsed.success) listener(parsed.data);
+      };
+      ipcRenderer.on("skills.changed", handler);
+      return () => ipcRenderer.removeListener("skills.changed", handler);
     }
   },
   activity: {

@@ -656,6 +656,57 @@ describe("desktop shell build contract", () => {
     expect(activityPreload).not.toContain("path");
   });
 
+  it("exposes the machine-local Skill inventory and authority-reducing disable through strict IPC", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const serviceSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/services/skill-registry-service.ts"),
+      "utf8"
+    );
+    const handlers = mainSource.slice(
+      mainSource.indexOf('ipcMain.handle("skills.summary"'),
+      mainSource.indexOf('ipcMain.handle("activity.list"')
+    );
+    const preloadApi = preloadSource.slice(
+      preloadSource.indexOf("skills: {"),
+      preloadSource.indexOf("activity: {")
+    );
+
+    expect(contractsSource).toContain("readonly skills: {");
+    expect(contractsSource).toContain("readonly summary: () => Promise<SkillRegistryQueryResult>;");
+    expect(contractsSource).toContain("readonly disable: (request: SkillDisableRequest)");
+    expect(contractsSource).toContain("readonly onChanged: (listener: (summary: SkillRegistrySummary)");
+    expect(handlers).toContain("SkillRegistryQueryResultSchema.parse(getSkillRegistryService().summary())");
+    expect(handlers).toContain("SkillDisableRequestSchema.parse(request)");
+    expect(handlers).toContain("SkillRegistryMutationResultSchema.parse(getSkillRegistryService().disable(parsed))");
+    expect(handlers).toContain('window.webContents.send("skills.changed", result.registry)');
+    expect(preloadApi).toContain('ipcRenderer.invoke("skills.summary")');
+    expect(preloadApi).toContain('ipcRenderer.invoke(\n        "skills.disable"');
+    expect(preloadApi).toContain("SkillDisableRequestSchema.parse(request)");
+    expect(preloadApi).toContain("SkillRegistryMutationResultSchema.parse(");
+    expect(preloadApi).toContain('ipcRenderer.on("skills.changed", handler)');
+    expect(preloadApi).toContain("SkillRegistrySummarySchema.safeParse(value)");
+    expect(preloadApi).toContain('ipcRenderer.removeListener("skills.changed", handler)');
+    for (const unsafeField of ["manifestSha256", "sourceUrl", "permissionSummary", "SKILL.md", "path", "body", "secret"]) {
+      expect(preloadApi).not.toContain(unsafeField);
+    }
+    expect(contractsSource).not.toContain("readonly installSkill:");
+    expect(contractsSource).not.toContain("readonly enableSkill:");
+    expect(contractsSource).not.toContain("readonly uninstallSkill:");
+    expect(mainSource).toContain("app.requestSingleInstanceLock()");
+    expect(mainSource).toContain("recoverOrphanedMutationLock: true");
+    expect(serviceSource).toContain("acquireSkillRegistryMutationLock(this.#registryLockPath)");
+    expect(serviceSource).toContain("fs.constants.O_EXCL");
+    expect(serviceSource).toContain("parsed.ownerId !== ownerId");
+    expect(serviceSource).toContain('status: "failed"');
+    expect(serviceSource).toContain('messageKey: "error.generic"');
+    expect(serviceSource).toContain("containsRestrictedModelContent(value)");
+    for (const forbiddenRuntime of ["node:child_process", "node:http", "node:https", "fetch(", "spawn("]) {
+      expect(serviceSource).not.toContain(forbiddenRuntime);
+    }
+  });
+
   it("registers first-party read-only Node OS capabilities only behind the main-owned permission registry", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
