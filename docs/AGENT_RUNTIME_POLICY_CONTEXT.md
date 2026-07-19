@@ -216,9 +216,9 @@ type PermissionPolicyContext = {
 
 Rules:
 
-- Standing authority covers active-vault recoverable knowledge Markdown and exact
-  selected-source admission. Any Agent/Skill/package/local-tool action outside that scope
-  uses Permission Broker; a core tool name is not authority.
+- Standing authority covers recoverable active-vault Markdown and exact selected-source
+  admission; other actions use Permission Broker regardless of tool owner.
+- Exact `external_network` authority includes private targets; transport/content rules remain.
 - Prompt text may tell the Agent that sensitive actions require permission, but tool calls still check Permission Broker.
 - Permission Settings supplies revision-fenced machine-local mode, grants, and YOLO.
 - Do not expose raw permission-store details to the model.

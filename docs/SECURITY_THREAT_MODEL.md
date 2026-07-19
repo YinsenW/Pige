@@ -154,25 +154,22 @@ Acceptance:
 
 Threat:
 
-- A pasted URL or Skill fetch tries to access local/private network resources, cloud metadata endpoints, router admin pages, or file URLs.
+- An untrusted URL attempts private-network or file access.
 
 Mitigations:
 
-- Block `file://`, local/private IP ranges, loopback, link-local, and cloud metadata IPs by default.
-- Follow redirects only after revalidating final URL.
-- Resolve and validate each target before connecting, then pin the production transport lookup to that approved address set so DNS cannot change between policy validation and socket connection.
-- Limit redirects, declared body size, decompressed streamed body size, and the deadline across both response headers and body reads.
-- Store fetched HTML as untrusted source.
-- Do not execute scripts from fetched HTML.
-- Parse HTML in a bounded worker with jsdom script execution and subresource loading disabled; do not render or persist Readability HTML as trusted UI.
-- Bound worker input, element count, output text, image references, heap, timeout, and concurrency. A worker failure may use a reduced plain-text fallback but must remain visible in durable quality metadata.
-- Reject embedded URL credentials.
-- Redact sensitive query values before writing URLs to source records, Markdown pages, prompts, operation records, job summaries, diagnostics, conversations, or support bundles.
-- Use extracted text artifacts, not raw HTML, as the default source-page and Agent-ingest input for URL captures.
+- Permit only `http`/`https`; reject URL credentials.
+- Block localhost, private/LAN, link-local, metadata, and reserved targets without exact
+  `external_network` authority. Matching authority permits that action and redirect chain;
+  Source Fetch adds no second class veto, while invalid or drifted authority blocks.
+- Resolve and pin every hop; bound redirects, compressed/decoded size, and total deadline.
+- Redact sensitive queries from every projection.
+- Keep HTML inert and untrusted; disable scripts/subresources, bound extraction, and pass
+  extracted text rather than HTML to the Agent.
 
 Acceptance:
 
-- Fetching `http://127.0.0.1`, private LAN IPs, and metadata endpoints is blocked unless a future advanced setting explicitly allows it.
+- Private targets block without exact authority and work with it; all other fetch controls remain.
 
 ### 6.5 Malicious Files
 
@@ -525,7 +522,7 @@ Before v0.1 public alpha:
 
 - Secret storage works on supported macOS and Windows versions.
 - Prompt injection fixtures cannot change tools/settings or reveal secrets.
-- SSRF/private-network URL tests are blocked.
+- SSRF tests cover default denial, exact-authorized private access, and retained fetch controls.
 - ZIP path traversal is blocked.
 - Agent/external Skill permission prompts work for non-default shell, filesystem, commit,
   network, write, delete, model, and brokered-credential capabilities; raw-secret access

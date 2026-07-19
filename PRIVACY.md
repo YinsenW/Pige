@@ -44,7 +44,8 @@ reason to reapprove normal Agent work or connected model calls.
 - Model/tool/Apple speech assets download only through explicit flows. Apple speech
   install may contact Apple; Pige receives only bounded progress/completion, never assets.
 - Public alpha may check GitHub Releases or configured update metadata.
-- Skills/packages use network access only through declared, brokered capabilities.
+- Brokered Skill/package `external_network` grants may reach public or private targets;
+  private classes otherwise block, and transport/redaction/content boundaries remain.
 
 Providers process received data under their own terms. Pige does not proxy calls through
 a Pige cloud service; other network features still disclose their boundary.

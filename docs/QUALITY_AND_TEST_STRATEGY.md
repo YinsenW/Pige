@@ -107,7 +107,7 @@ Web fixtures:
 - Article with scripts and navigation clutter.
 - Redirect chain.
 - Oversized response.
-- Blocked localhost/private network URL.
+- Default-blocked and exact-authorized private targets, with redirect/pinning negative cases.
 - Page containing prompt-injection text.
 
 Document fixtures:

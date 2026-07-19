@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-19T08:00:00Z",
+  "reviewedAt": "2026-07-19T02:06:39Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -47,6 +47,8 @@
       "apps/desktop/src/main/services/reader-selection-proposal-service.ts",
       "apps/desktop/src/main/services/retrieval-evidence-boundary.ts",
       "apps/desktop/src/main/services/secret-store.ts",
+      "apps/desktop/src/main/services/source-fetch-service.ts",
+      "apps/desktop/src/main/services/readonly-node-os/first-party-readonly-node-os-capability-adapters.ts",
       "apps/desktop/src/preload/index.ts",
       "apps/desktop/src/renderer/src/App.tsx",
       "apps/desktop/src/renderer/src/components/CurrentNoteAgent.tsx",
@@ -82,22 +84,24 @@
       "tests/unit/reader-selection-proposal-service.test.ts",
       "tests/unit/restore-ui.test.ts",
       "tests/unit/security-contract-schemas.test.ts",
+      "tests/unit/source-fetch-service.test.ts",
+      "tests/unit/first-party-readonly-node-os-capabilities.test.ts",
       "tests/unit/update-contract-schemas.test.ts",
       "tests/unit/update-service.test.ts",
       "tests/unit/local-settings.test.ts",
       "package.json"
     ],
-    "scope": "Independent Product Planning review retains the published Reader transform and toolbar repairs and binds the Home optimistic-send and streamed-turn convergence correction on sole main 885872e9. Send clears and projects one temporary user turn immediately, durable event and Job identities deduplicate it, authoritative completion wins over stale running summaries, and non-durable failure restores only the unchanged draft without altering Agent, attachment, persistence or API authority.",
+    "scope": "Independent Product Planning review binds private-network reachability to exact Permission Broker external_network authority. Default Source Fetch still blocks private targets; an authorized action no longer receives a second class-based denial, while scheme, URL credential, per-hop resolution and address pinning, redirect, size, deadline, redaction and untrusted-content controls remain.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 130,
-    "reviewedSha256": "628e1b61645d8a36b3ea5bfe76b79d35e1a3d475ffa5334a10323b3c062e6f86"
+      "reviewedSha256": "887282fbad1de4a65f35a25469cdfd19ef4d68dcad277ac5ebd6cf184f83be70"
   },
   "reviewers": [
     {
-      "reviewerId": "home-conversation-planning-review",
-      "task": "Home optimistic send and streaming convergence review",
+      "reviewerId": "private-network-authority-planning-review",
+      "task": "Permissioned private-network target authority review",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -105,51 +109,51 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Product Planning did not author the Home UI commit and independently compared its exact renderer and test bytes with the published Agent turn, draft-event, durable conversation and retry contracts on sole main 885872e9."
+      "independence": "Product Planning owns only documentation and independently compares the Development-only Source Fetch and capability-adapter bytes with Permission Broker, privacy, transport, trace and test contracts."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "home-conversation-planning-review",
+      "reviewerId": "private-network-authority-planning-review",
       "blockerCount": 0,
-      "summary": "HomeComposer remains the single transient conversation owner while Main retains durable Agent turn, Job and conversation ownership; no duplicate submit, persistence or streaming service is added."
+      "summary": "Permission Broker remains the sole authority owner; Source Fetch receives only an internal authorized/public mode and adds no renderer, storage, Job or secret owner."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "home-conversation-planning-review",
+      "reviewerId": "private-network-authority-planning-review",
       "blockerCount": 0,
-      "summary": "The published Agent turn contract remains unchanged: renderer optimism is correlated by clientTurnId and adopted durable IDs, draft events remain non-durable, and the authoritative completed answer outranks only stale UI job projection."
+      "summary": "Security, runtime policy, parser, architecture, privacy and decision owners agree that private targets block without authority and work after exact authority while all other fetch controls remain."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "home-conversation-planning-review",
+      "reviewerId": "private-network-authority-planning-review",
       "blockerCount": 0,
-      "summary": "Existing requirement, build, exit and phase statuses remain unchanged; the candidate closes a bounded Home lifecycle defect and does not promote multi-source attachments or broader release completion."
+      "summary": "PIGE-PI-003 and B5.02 wording reflects the new authority rule without promoting any Requirement, Build, Exit, Phase or release status."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "home-conversation-planning-review",
+      "reviewerId": "private-network-authority-planning-review",
       "blockerCount": 0,
-      "summary": "Focused Home conversation tests cover same-frame optimism, durable deduplication, draft-to-final convergence, stale running summaries, retry restoration and vault switching; typecheck, build and UI visual gates remain directly runnable."
+      "summary": "Focused Source Fetch and first-party capability tests cover default denial, authorized private and metadata targets, redirects, credentials and unchanged bounded projections."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "home-conversation-planning-review",
+      "reviewerId": "private-network-authority-planning-review",
       "blockerCount": 0,
-      "summary": "The product delta remains confined to App.tsx and its focused regression; this excluded recipe records the independent publication review without adding or rewriting an owner document."
+      "summary": "One security owner holds the full rule; short projections and compact trace updates keep governed Markdown and trace manifests within their exact byte budgets."
     }
   ],
   "verification": [
     {
-      "command": "Independent review of Home optimistic send and streaming convergence on sole main 885872e9",
+      "command": "Independent review of exact external_network private-target authority",
       "status": "passed",
-      "evidence": "Review confirms one optimistic user turn appears in the send frame, draft events advance behind it, durable identities remove duplicates, final content does not regress to stale running UI, and a non-durable failure restores only the unchanged prompt."
+      "evidence": "Review confirms public_only remains fail-closed, permissioned_external_network reaches private classes across redirects, and schemes, credentials, pinning, bounds, redaction and content distrust remain independent controls."
     },
     {
       "command": "npm run verify:docs && npm run verify:decisions && npm run verify:traceability",
@@ -163,18 +167,17 @@
     }
   ],
   "coordination": {
-    "taskId": "home-conversation-main8858-20260719",
-    "taskTitle": "Home optimistic send and streaming convergence repair",
+      "taskId": "private-network-authority-20260719",
+      "taskTitle": "Permissioned private-network target authority",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The candidate changes only transient Home conversation projection and convergence; it adds no API, persistence, Job, attachment, permission, locale or model authority.",
-    "acknowledgement": "Product Planning reviewed the exact Home UI bytes on sole main 885872e9 and records this bounded lifecycle repair without restyling messages or claiming broader feature completion."
+      "compatibility": "The candidate changes only Source Fetch target-class policy after exact external_network authorization; no renderer, IPC, persistence, secret, Job, model, destructive or filesystem authority changes.",
+      "acknowledgement": "Product Planning records the user-authoritative network boundary and keeps Development code/test ownership separate, with no broad status promotion."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "The published single-file guards remain unchanged; ordered multi-source partial acceptance and mixed-result projection require a separate typed service vertical.",
-    "No attachment, Agent orchestration, Requirement, Build, Exit or Phase status is promoted by this repair.",
-    "Real macOS evidence covers the 420 Home send, stream and final sequence with synthetic prompts; this candidate makes no additional Windows timing claim."
+    "Authorization can expose services on the user's local or infrastructure networks; the explicit Broker decision and operation history remain the user-visible control.",
+    "No Requirement, Build, Exit or Phase status is promoted; broader production callers, modal convergence, bypass coverage and signed-platform evidence remain open."
   ]
 }

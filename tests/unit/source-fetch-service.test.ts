@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { PigeDomainError } from "@pige/domain";
 import { extractWebContent } from "../../apps/desktop/src/main/services/web-content-extractor-core";
 import {
@@ -55,6 +55,19 @@ describe("source fetch service", () => {
       name: "PigeDomainError",
       code: "url_fetch.private_network_blocked"
     } satisfies Partial<PigeDomainError>);
+  });
+
+  it("rejects a forged permissioned external-network authority", async () => {
+    const fetchImpl = vi.fn(async () => new Response("should not run"));
+    const service = new SourceFetchService({
+      lookup: async () => ["192.168.1.20"],
+      fetchImpl
+    });
+
+    await expect(service.fetchSnapshot("http://internal.example/status", undefined, {
+      permissionedExternalAuthority: { bindingHash: `sha256:${"a".repeat(64)}` }
+    })).rejects.toMatchObject({ code: "permission.execution_authority_invalid" });
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it("blocks embedded credentials before fetch", async () => {
