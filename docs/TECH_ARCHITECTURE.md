@@ -1181,7 +1181,9 @@ Service-level constraints:
 - Raw credentials stay inside reviewed provider adapters behind secret references and are never returned to the requesting actor.
 - Renderer surfaces receive safe request/decision summaries, not permission-store internals.
 - A denial or revocation leaves prior safe durable outputs intact and produces an explainable job result.
-- Main registers only read-only folder/text/fetch external adapters.
+- Main registers read-only folder/text/fetch plus current-action `pige_install_pi_package`
+  (`install_package`) for exact-package `installed_disabled` install only. No
+  enable/runtime/shell/catalog/update/uninstall adapter is registered.
 - The unregistered create foundation owns local revision intents, publication/recovery
   sequencing and path-free Operations through an async identity/tool/content, receipt,
   permission and lease protocol. No-follow/process helpers required.
