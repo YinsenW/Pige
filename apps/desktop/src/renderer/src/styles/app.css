@@ -19,6 +19,7 @@
   --accent-surface: #eaf4f1;
   --focus: #1677d2;
   --success: #20b657;
+  --success-text: #13733a;
   --warning: #a44908;
   --danger: #c5322e;
   --success-surface: rgb(0 162 64 / 7%);
@@ -108,6 +109,7 @@
   --accent-surface: rgb(64 201 119 / 12%);
   --focus: rgb(51 156 255 / 70%);
   --success: #40c977;
+  --success-text: #62d38d;
   --warning: #ff8549;
   --danger: #ff6764;
   --success-surface: rgb(4 184 76 / 16%);
@@ -158,6 +160,7 @@
     --accent-surface: rgb(64 201 119 / 12%);
     --focus: rgb(51 156 255 / 70%);
     --success: #40c977;
+    --success-text: #62d38d;
     --warning: #ff8549;
     --danger: #ff6764;
     --success-surface: rgb(4 184 76 / 16%);
@@ -5100,7 +5103,7 @@ dd {
 .diff-line { padding: 5px 8px; }
 .diff-line.context { background: var(--surface-subtle); color: var(--text-secondary); }
 .diff-line.removed { background: var(--danger-surface); color: var(--danger); }
-.diff-line.added { background: var(--success-surface); color: var(--success); }
+.diff-line.added { background: var(--success-surface); color: var(--success-text); }
 .proposal-actions { display: flex; justify-content: flex-end; gap: 7px; margin-top: 12px; }
 .proposal-panel > .proposal-error { margin: 10px 0 0; color: var(--danger); }
 .proposal-result { margin: 12px 0 0; border-radius: 8px; padding: 8px 10px; background: var(--surface-subtle); color: var(--text-secondary); }

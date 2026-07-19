@@ -172,7 +172,8 @@ describe("full UI Settings surface", () => {
     expect(styles).toContain("stroke: var(--knowledge-branch-strong);");
     expect(styles).toContain("color: var(--knowledge-node-root);");
     expect(styles).toContain(".diff-line.removed { background: var(--danger-surface); color: var(--danger); }");
-    expect(styles).toContain(".diff-line.added { background: var(--success-surface); color: var(--success); }");
+    expect(styles).toContain("--success-text: #13733a;");
+    expect(styles).toContain(".diff-line.added { background: var(--success-surface); color: var(--success-text); }");
     expect(styles).toContain("background: color-mix(in oklab, var(--surface-elevated) 97%, transparent);");
     expect(compactSettings).toContain("grid-template-columns: minmax(0, 1fr);");
     expect(compactSettings).toContain("width: min(320px, calc(100% - 48px));");
