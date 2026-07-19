@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
+import lockfile from "proper-lockfile";
 import {
   PermissionCapabilitySchema,
   SkillManifestSchema,
@@ -22,6 +23,8 @@ import {
 const MAX_REGISTRY_BYTES = 1024 * 1024;
 const MAX_MANIFEST_BYTES = 256 * 1024;
 const MAX_FRONTMATTER_BYTES = 32 * 1024;
+const REGISTRY_LOCK_STALE_MS = 30_000;
+const REGISTRY_LOCK_UPDATE_MS = 10_000;
 const ARRAY_FIELDS = new Set(["capabilities", "triggers", "dataBoundary"]);
 const MANIFEST_FIELDS = new Set([
   "id",
@@ -53,52 +56,91 @@ export class SkillRegistryService {
   readonly #rootPath: string;
   readonly #installedRoot: string;
   readonly #registryPath: string;
+  readonly #registryLockPath: string;
 
   constructor(appDataRoot: string) {
     if (!path.isAbsolute(appDataRoot)) {
       throw skillError("skill.registry_root_invalid", "Skill Registry requires an absolute app-data root.");
     }
-    fs.mkdirSync(appDataRoot, { recursive: true, mode: 0o700 });
-    const canonicalRoot = fs.realpathSync.native(appDataRoot);
-    const rootStats = fs.lstatSync(canonicalRoot);
-    if (!rootStats.isDirectory() || rootStats.isSymbolicLink()) {
-      throw skillError("skill.registry_root_invalid", "Skill Registry app-data root is unsafe.");
+    let canonicalRoot: string;
+    try {
+      fs.mkdirSync(appDataRoot, { recursive: true, mode: 0o700 });
+      canonicalRoot = fs.realpathSync.native(appDataRoot);
+      const rootStats = fs.lstatSync(canonicalRoot);
+      if (!rootStats.isDirectory() || rootStats.isSymbolicLink()) {
+        throw skillError("skill.registry_root_invalid", "Skill Registry app-data root is unsafe.");
+      }
+    } catch (caught) {
+      if (caught instanceof PigeDomainError) throw caught;
+      throw skillError("skill.registry_root_invalid", "Skill Registry app-data root is unavailable.");
     }
     this.#appDataRoot = canonicalRoot;
     this.#rootPath = path.join(canonicalRoot, "skills");
     this.#installedRoot = path.join(this.#rootPath, "installed");
     this.#registryPath = path.join(this.#rootPath, "registry.json");
+    this.#registryLockPath = path.join(this.#rootPath, ".registry.lock");
   }
 
   summary(): SkillRegistrySummary {
-    return this.#project(this.#readRegistry());
+    try {
+      return this.#project(this.#readRegistry());
+    } catch {
+      throw skillError("skill.registry_unavailable", "Skill Registry is unavailable.");
+    }
   }
 
   disable(request: SkillDisableRequest): SkillRegistryMutationResult {
-    const current = this.#readRegistry();
-    if (request.expectedRevision !== current.revision) {
-      return SkillRegistryMutationResultSchema.parse({ status: "stale", registry: this.#project(current) });
+    let release: (() => void) | undefined;
+    let compromised = false;
+    try {
+      this.#prepare();
+      release = lockfile.lockSync(this.#rootPath, {
+        lockfilePath: this.#registryLockPath,
+        onCompromised: () => {
+          compromised = true;
+        },
+        realpath: false,
+        retries: 0,
+        stale: REGISTRY_LOCK_STALE_MS,
+        update: REGISTRY_LOCK_UPDATE_MS
+      });
+      const current = this.#readRegistry();
+      if (request.expectedRevision !== current.revision) {
+        return SkillRegistryMutationResultSchema.parse({ status: "stale", registry: this.#project(current) });
+      }
+      const index = current.skills.findIndex((skill) => skill.id === request.skillId);
+      if (index < 0) {
+        return SkillRegistryMutationResultSchema.parse({ status: "not_found", registry: this.#project(current) });
+      }
+      const existing = current.skills[index]!;
+      if (!existing.enabled) {
+        return SkillRegistryMutationResultSchema.parse({ status: "committed", registry: this.#project(current) });
+      }
+      if (current.revision === Number.MAX_SAFE_INTEGER) {
+        throw skillError("skill.registry_revision_exhausted", "Skill Registry revision is exhausted.");
+      }
+      const nextSkills = [...current.skills];
+      nextSkills[index] = { ...existing, enabled: false, updatedAt: new Date().toISOString() };
+      const next = SkillRegistryFileSchema.parse({
+        schemaVersion: 1,
+        revision: current.revision + 1,
+        skills: nextSkills
+      });
+      if (compromised) throw skillError("skill.registry_lock_lost", "Skill Registry mutation lock was lost.");
+      this.#writeRegistry(next);
+      if (compromised) throw skillError("skill.registry_lock_lost", "Skill Registry mutation lock was lost.");
+      return SkillRegistryMutationResultSchema.parse({ status: "committed", registry: this.#project(next) });
+    } catch (caught) {
+      return skillMutationFailed(isErrno(caught, "ELOCKED") ? "busy" : "unavailable");
+    } finally {
+      if (release) {
+        try {
+          release();
+        } catch {
+          // A failed release cannot authorize another mutation or expose lock details.
+        }
+      }
     }
-    const index = current.skills.findIndex((skill) => skill.id === request.skillId);
-    if (index < 0) {
-      return SkillRegistryMutationResultSchema.parse({ status: "not_found", registry: this.#project(current) });
-    }
-    const existing = current.skills[index]!;
-    if (!existing.enabled) {
-      return SkillRegistryMutationResultSchema.parse({ status: "committed", registry: this.#project(current) });
-    }
-    if (current.revision === Number.MAX_SAFE_INTEGER) {
-      throw skillError("skill.registry_revision_exhausted", "Skill Registry revision is exhausted.");
-    }
-    const nextSkills = [...current.skills];
-    nextSkills[index] = { ...existing, enabled: false, updatedAt: new Date().toISOString() };
-    const next = SkillRegistryFileSchema.parse({
-      schemaVersion: 1,
-      revision: current.revision + 1,
-      skills: nextSkills
-    });
-    this.#writeRegistry(next);
-    return SkillRegistryMutationResultSchema.parse({ status: "committed", registry: this.#project(next) });
   }
 
   #project(registry: SkillRegistryFile): SkillRegistrySummary {
@@ -134,6 +176,10 @@ export class SkillRegistryService {
     ) {
       throw skillError("skill.manifest_changed", "Installed Skill identity no longer matches its registry record.");
     }
+    assertRendererSafeDisplayText(loaded.manifest.name);
+    assertRendererSafeDisplayText(loaded.manifest.description);
+    if (loaded.manifest.author) assertRendererSafeDisplayText(loaded.manifest.author);
+    if (loaded.manifest.license) assertRendererSafeDisplayText(loaded.manifest.license);
     return {
       id: loaded.manifest.id,
       name: loaded.manifest.name,
@@ -454,6 +500,30 @@ function fsyncDirectory(directoryPath: string): void {
 
 function isErrno(caught: unknown, code: string): boolean {
   return Boolean(caught && typeof caught === "object" && "code" in caught && caught.code === code);
+}
+
+function assertRendererSafeDisplayText(value: string): void {
+  const containsAbsolutePath = /(?:^|[\s"'(`])(?:~[\\/]|[a-z]:[\\/]|\\\\|\/(?:[^\s/]+\/)+)/iu.test(value);
+  const containsUrl = /\bhttps?:\/\//iu.test(value);
+  const containsAssignedSecret = /\b(?:api[ _-]?key|access[ _-]?token|authorization|bearer|password|secret)\s*[:=]\s*\S+/iu.test(value);
+  const containsTokenShape = /\b(?:sk-[a-z0-9_-]{12,}|gh[pousr]_[a-z0-9]{12,}|github_pat_[a-z0-9_]{12,}|xox[baprs]-[a-z0-9-]{12,})\b/iu.test(value);
+  if (containsAbsolutePath || containsUrl || containsAssignedSecret || containsTokenShape) {
+    throw skillError("skill.manifest_display_unsafe", "Installed Skill display metadata is unsafe.");
+  }
+}
+
+function skillMutationFailed(reason: "busy" | "unavailable"): SkillRegistryMutationResult {
+  return SkillRegistryMutationResultSchema.parse({
+    status: "failed",
+    error: {
+      code: reason === "busy" ? "skill.registry_busy" : "skill.registry_unavailable",
+      domain: "skill",
+      messageKey: "error.generic",
+      retryable: true,
+      severity: "error",
+      userAction: "retry"
+    }
+  });
 }
 
 function skillError(code: string, message: string): PigeDomainError {

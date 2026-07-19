@@ -35,6 +35,7 @@ import {
   ReaderSelectionResolveResultSchema,
   SkillDisableRequestSchema,
   SkillManifestSchema,
+  SkillRegistryMutationResultSchema,
   SkillRegistrySummarySchema,
   UpdateProviderCredentialRequestSchema
 } from "@pige/schemas";
@@ -83,6 +84,25 @@ describe("security-sensitive shared contracts", () => {
       apiVersion: 1,
       skillId: "../../outside",
       expectedRevision: 4
+    })).toThrow();
+    for (const skillId of ["con", "nul.logs", "com1", "portable."]) {
+      expect(() => SkillDisableRequestSchema.parse({ apiVersion: 1, skillId, expectedRevision: 4 })).toThrow();
+    }
+    const failed = {
+      status: "failed" as const,
+      error: {
+        code: "skill.registry_unavailable",
+        domain: "skill" as const,
+        messageKey: "error.generic",
+        retryable: true,
+        severity: "error" as const,
+        userAction: "retry" as const
+      }
+    };
+    expect(SkillRegistryMutationResultSchema.parse(failed)).toEqual(failed);
+    expect(() => SkillRegistryMutationResultSchema.parse({
+      ...failed,
+      error: { ...failed.error, path: "/private/skills" }
     })).toThrow();
 
     expect(() => SkillManifestSchema.parse({

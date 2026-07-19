@@ -401,7 +401,12 @@ export const PermissionCapabilitySchema = z.enum([
 export const SkillIdSchema = z.string()
   .min(1)
   .max(80)
-  .regex(/^[a-z0-9][a-z0-9._-]*$/);
+  .regex(/^[a-z0-9][a-z0-9._-]*$/)
+  .refine((value) => !value.endsWith("."), "Skill IDs must be portable directory names.")
+  .refine(
+    (value) => !/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/iu.test(value),
+    "Skill IDs must not use reserved Windows device names."
+  );
 
 export const SkillVersionSchema = z.union([
   z.string().min(1).max(80).regex(/^[0-9A-Za-z][0-9A-Za-z._+-]*$/),
@@ -521,10 +526,14 @@ export const SkillDisableRequestSchema = z.object({
   expectedRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
 }).strict();
 
+const SkillRegistryErrorSummarySchema = PigeErrorCoreSchema.strict()
+  .superRefine(requireErrorDomainMatchesCode);
+
 export const SkillRegistryMutationResultSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("committed"), registry: SkillRegistrySummarySchema }).strict(),
   z.object({ status: z.literal("stale"), registry: SkillRegistrySummarySchema }).strict(),
-  z.object({ status: z.literal("not_found"), registry: SkillRegistrySummarySchema }).strict()
+  z.object({ status: z.literal("not_found"), registry: SkillRegistrySummarySchema }).strict(),
+  z.object({ status: z.literal("failed"), error: SkillRegistryErrorSummarySchema }).strict()
 ]);
 
 export const PermissionResourceScopeSchema = z.enum([

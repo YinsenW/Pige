@@ -3009,17 +3009,16 @@ Date: 2026-07-19
 
 Decision:
 
-Use a machine-local registry with checksum-bound summaries and CAS disable; mismatched
-records are never authority.
+Use checksum-bound safe summaries and locked CAS disable; invalid records are not authority and
+failures are body-free.
 
 Rationale:
 
-Inventory and disable can precede lifecycle owners without granting authority.
+Inventory and disable can precede lifecycle authority.
 
 Consequences:
 
-- State is backup-excluded; disable removes no files or grants.
-- Other lifecycle/runtime/grant actions remain unavailable and planned.
+- State is backup-excluded; disable removes no files/grants; other lifecycle actions remain planned.
 
 References:
 
