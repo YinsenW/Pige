@@ -177,6 +177,34 @@ describe("PiPackageManagerService", () => {
     })).toThrow(expect.objectContaining({ code: "package.request_conflict" }));
   });
 
+  it("encodes the complete scoped package name in the fixed registry request", async () => {
+    const packageName = "@pige/synthetic-package";
+    const fixture = await createFixture({ packageName });
+    const tool = requireTool(fixture.registry.toolsForTurn(fixture.turn));
+    const args = { request_id: REQUEST_ID, package_name: packageName, version: PACKAGE_VERSION };
+    const context: PigeAgentToolCallContext = {
+      toolCallId: "tool_call_scoped_package_install",
+      signal: new AbortController().signal
+    };
+
+    await expect(tool.execute(args, context.signal, context)).rejects.toMatchObject({
+      code: "permission.confirmation_required"
+    });
+    const pending = fixture.broker.listForJob(fixture.vaultPath, JOB_ID)[0]!;
+    fixture.broker.commitDecision(fixture.vaultPath, {
+      requestId: pending.id,
+      jobId: JOB_ID,
+      decision: "allow_once"
+    });
+
+    await expect(tool.execute(args, context.signal, context)).resolves.toMatchObject({
+      details: { packageName, status: "installed_disabled" }
+    });
+    expect(fixture.fetchImpl.mock.calls[0]?.[0].toString()).toBe(
+      `https://registry.npmjs.org/@pige%2Fsynthetic-package/${PACKAGE_VERSION}`
+    );
+  });
+
   it("keeps denial and malformed package metadata at zero committed package state", async () => {
     const fixture = await createFixture();
     const tool = requireTool(fixture.registry.toolsForTurn(fixture.turn));
@@ -349,6 +377,7 @@ interface Fixture {
 }
 
 async function createFixture(options: {
+  readonly packageName?: string;
   readonly manifestOverrides?: Record<string, unknown>;
   readonly integrityOverride?: string;
   readonly includeSymlink?: boolean;
@@ -362,6 +391,7 @@ async function createFixture(options: {
   readonly lookupAddresses?: readonly string[];
   readonly testOnlyMaxExtractedEntries?: number;
 } = {}): Promise<Fixture> {
+  const packageName = options.packageName ?? PACKAGE_NAME;
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-package-manager-"));
   roots.push(root);
   const machineRoot = path.join(root, "machine");
@@ -370,7 +400,7 @@ async function createFixture(options: {
   const packageRoot = path.join(packageFixtureRoot, "package");
   fs.mkdirSync(path.join(packageRoot, "dist"), { recursive: true });
   const manifest = {
-    name: PACKAGE_NAME,
+    name: packageName,
     version: PACKAGE_VERSION,
     pi: { extensions: ["dist/index.js"] },
     ...options.manifestOverrides
@@ -402,10 +432,14 @@ async function createFixture(options: {
   await tar.c({ cwd: packageFixtureRoot, file: archivePath, gzip: true }, archiveEntries);
   const archive = fs.readFileSync(archivePath);
   const integrity = options.integrityOverride ?? `sha512-${createHash("sha512").update(archive).digest("base64")}`;
-  const tarballUrl = `https://registry.npmjs.org/${PACKAGE_NAME}/-/${PACKAGE_NAME}-${PACKAGE_VERSION}.tgz`;
+  const archiveName = packageName.split("/").at(-1)!;
+  const tarballUrl = `https://registry.npmjs.org/${encodeURIComponent(packageName)}/-/${archiveName}-${PACKAGE_VERSION}.tgz`;
   const fetchImpl = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = input.toString();
-    if (url === `https://registry.npmjs.org/${PACKAGE_NAME}/${PACKAGE_VERSION}`) {
+    const encodedName = packageName.startsWith("@")
+      ? encodeURIComponent(packageName).replace(/^%40/u, "@")
+      : packageName;
+    if (url === `https://registry.npmjs.org/${encodedName}/${PACKAGE_VERSION}`) {
       return new Response(JSON.stringify({ ...manifest, dist: { tarball: tarballUrl, integrity } }), {
         headers: { "content-type": "application/json" }
       });

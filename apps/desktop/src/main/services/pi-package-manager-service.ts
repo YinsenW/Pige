@@ -266,7 +266,7 @@ export class PiPackageManagerService {
 
   async #resolvePlan(request: PiPackageInstallRequest, signal: AbortSignal): Promise<ResolvedPackagePlan> {
     const encodedName = request.packageName.startsWith("@")
-      ? request.packageName.replace("/", "%2f")
+      ? encodeURIComponent(request.packageName).replace(/^%40/u, "@")
       : request.packageName;
     const handle = await this.#fetchFollowingRedirects(`${REGISTRY_ORIGIN}/${encodedName}/${request.version}`, signal, MAX_PACKUMENT_BYTES);
     let body: Buffer;
