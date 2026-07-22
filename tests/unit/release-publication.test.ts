@@ -145,6 +145,10 @@ describe("release publication", () => {
     expect(workflow).toContain("github.ref_protected");
     expect(workflow).toContain("environment: production-release");
     expect(workflow).toContain("PIGE_RELEASE_VERSION: ${{ needs.validate.outputs.version }}");
+    expect(workflow).not.toContain("APPLE_API_KEY: ${{ runner.temp }}");
+    expect(workflow).toContain(
+      'echo "APPLE_API_KEY=$RUNNER_TEMP/pige-notarization/AuthKey.p8" >> "$GITHUB_ENV"'
+    );
     expect(workflow).toContain("needs: [validate, verify-macos-arm64, verify-windows-x64]");
     expect(workflow).toContain("pige-verified-macos-arm64-");
     expect(workflow).toContain("pige-verified-windows-x64-");
