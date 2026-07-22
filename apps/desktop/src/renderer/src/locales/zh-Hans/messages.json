@@ -198,7 +198,7 @@
   "home.connectModel": "连接模型",
   "home.conversation": "对话",
   "home.createVaultBeforeDrop": "请先创建或打开仓库。",
-  "home.dropToCapture": "松手交给 Pige",
+  "home.dropToCapture": "松手立即发送这些文件",
   "home.attachmentsPartiallyAccepted": "部分文件未能附加。",
   "home.attachmentsRejected": "这些文件未能附加。",
   "home.attachmentRejection.emptyPath": "文件位置不可用。",

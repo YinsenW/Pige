@@ -198,7 +198,7 @@
   "home.connectModel": "Connecter un modèle",
   "home.conversation": "Conversation",
   "home.createVaultBeforeDrop": "Créez ou ouvrez d'abord un coffre.",
-  "home.dropToCapture": "Relâchez pour demander à Pige",
+  "home.dropToCapture": "Relâchez pour envoyer ces fichiers maintenant",
   "home.attachmentsPartiallyAccepted": "Certains fichiers n’ont pas pu être joints.",
   "home.attachmentsRejected": "Les fichiers n’ont pas pu être joints.",
   "home.attachmentRejection.emptyPath": "L’emplacement du fichier était indisponible.",

@@ -198,7 +198,7 @@
   "home.connectModel": "Modell verbinden",
   "home.conversation": "Unterhaltung",
   "home.createVaultBeforeDrop": "Erstelle oder öffne zuerst einen Tresor.",
-  "home.dropToCapture": "Loslassen, um Pige zu fragen",
+  "home.dropToCapture": "Loslassen, um diese Dateien jetzt zu senden",
   "home.attachmentsPartiallyAccepted": "Einige Dateien konnten nicht angehängt werden.",
   "home.attachmentsRejected": "Die Dateien konnten nicht angehängt werden.",
   "home.attachmentRejection.emptyPath": "Der Dateispeicherort war nicht verfügbar.",

@@ -198,7 +198,7 @@
   "home.connectModel": "Connect Model",
   "home.conversation": "Conversation",
   "home.createVaultBeforeDrop": "Create or open a vault first.",
-  "home.dropToCapture": "Release to ask Pige",
+  "home.dropToCapture": "Release to send these files now",
   "home.attachmentsPartiallyAccepted": "Some files could not be attached.",
   "home.attachmentsRejected": "The files could not be attached.",
   "home.attachmentRejection.emptyPath": "The file location was unavailable.",

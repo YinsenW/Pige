@@ -198,7 +198,7 @@
   "home.connectModel": "モデルを接続",
   "home.conversation": "会話",
   "home.createVaultBeforeDrop": "先に Vault を作成または開いてください。",
-  "home.dropToCapture": "離して Pige に依頼",
+  "home.dropToCapture": "ここで離すと今すぐ送信",
   "home.attachmentsPartiallyAccepted": "一部のファイルを添付できませんでした。",
   "home.attachmentsRejected": "ファイルを添付できませんでした。",
   "home.attachmentRejection.emptyPath": "ファイルの場所を利用できませんでした。",

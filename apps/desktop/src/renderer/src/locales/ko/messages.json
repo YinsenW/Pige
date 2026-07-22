@@ -198,7 +198,7 @@
   "home.connectModel": "모델 연결",
   "home.conversation": "대화",
   "home.createVaultBeforeDrop": "먼저 Vault를 만들거나 여세요.",
-  "home.dropToCapture": "놓아서 Pige에 요청",
+  "home.dropToCapture": "놓으면 이 파일을 바로 전송",
   "home.attachmentsPartiallyAccepted": "일부 파일을 첨부하지 못했습니다.",
   "home.attachmentsRejected": "파일을 첨부하지 못했습니다.",
   "home.attachmentRejection.emptyPath": "파일 위치를 사용할 수 없습니다.",
