@@ -180,17 +180,11 @@ type ActiveSourceTurnBinding = {
   readonly pending: boolean;
   readonly sourceDisplayName: string | null;
 };
-type StagedPastedTextItem = {
-  readonly localId: string;
-} & Omit<AgentStagedLargePasteItem, "kind" | "ordinal">;
+type StagedPastedTextItem = { readonly localId: string } & Omit<AgentStagedLargePasteItem, "kind" | "ordinal">;
 type HomeLargePasteClassification =
   | { readonly kind: "ordinary" }
   | { readonly kind: "staged"; readonly item: StagedPastedTextItem }
-  | {
-      readonly kind: "rejected";
-      readonly item: StagedPastedTextItem;
-      readonly reason: AgentStagedItemRejectionReason;
-    };
+  | { readonly kind: "rejected"; readonly item: StagedPastedTextItem; readonly reason: AgentStagedItemRejectionReason };
 type StagedComposerItem =
   | { readonly kind: "file"; readonly localId: string; readonly file: File }
   | ({ readonly kind: "pasted_text" } & StagedPastedTextItem)
@@ -4917,9 +4911,6 @@ function HomeComposer(props: {
 
   const submitHomeInput = async (): Promise<void> => {
     const hasText = text.trim().length > 0;
-    const stagedComposerFiles = stagedComposerItems
-      .filter((item): item is Extract<StagedComposerItem, { kind: "file" }> => item.kind === "file")
-      .map((item) => item.file);
     const hasRejectedPaste = stagedComposerItems.some((item) => item.kind === "rejected_pasted_text");
     const hasAttachments = stagedComposerItems.length > 0;
     if (
@@ -4942,13 +4933,10 @@ function HomeComposer(props: {
         .filter((item): item is Extract<StagedComposerItem, { kind: "file" }> => item.kind === "file")
         .map((item) => item.file);
       const turnText = hasText ? submittedText : props.t("home.organizeAttachedFilesIntent");
-      const sourceDisplayName = submittedItems[0]?.kind === "file"
-        ? submittedItems[0].file.name
-        : props.t("home.pastedText");
+      const sourceDisplayName = submittedItems[0]?.kind === "file" ? submittedItems[0].file.name : props.t("home.pastedText");
       const attemptKey = composerAttemptKey(submittedText, submittedItems);
       const clientTurnId = stagedComposerAttemptRef.current?.key === attemptKey
-        ? stagedComposerAttemptRef.current.clientTurnId
-        : createAgentClientTurnId();
+        ? stagedComposerAttemptRef.current.clientTurnId : createAgentClientTurnId();
       stagedComposerAttemptRef.current = { key: attemptKey, clientTurnId };
       followConversationRef.current = true;
       composerSubmitInFlightRef.current = true;
@@ -4975,9 +4963,7 @@ function HomeComposer(props: {
             : props.t("home.pastedText"))
         }
       ]);
-      const followUpConversation = canFollowUpToConversation(conversationTimeline)
-        ? conversationTimeline
-        : undefined;
+      const followUpConversation = canFollowUpToConversation(conversationTimeline) ? conversationTimeline : undefined;
       beginAgentDraft(clientTurnId);
       try {
         const outcome = await window.pige.agent.submitTurn({
@@ -5070,30 +5056,21 @@ function HomeComposer(props: {
     inlineReferenceSequence.current += 1;
     setSelectedNote(null);
     setSelectedNoteRelated(null);
-    const submittedFiles = stagedComposerFiles;
     const submittedText = text;
-    const turnText = hasText ? submittedText : props.t("home.organizeAttachedFilesIntent");
-    const sourceDisplayName = submittedFiles[0]?.name ?? null;
+    const turnText = submittedText;
     const submittedVaultId = activeVaultIdRef.current;
     const submittedDraftRevision = draftRevisionRef.current;
     const clearedDraftRevision = submittedDraftRevision + 1;
-    const submittedAttachmentRevision = stagedAttachmentRevisionRef.current;
-    const clearedAttachmentRevision = submittedAttachmentRevision + 1;
     const attemptKey = composerAttemptKey(submittedText, []);
     const clientTurnId = stagedComposerAttemptRef.current?.key === attemptKey
       ? stagedComposerAttemptRef.current.clientTurnId
       : createAgentClientTurnId();
     stagedComposerAttemptRef.current = { key: attemptKey, clientTurnId };
-    if (submittedFiles.length > 0) {
-      setActiveSourceTurn({ clientTurnId, jobId: null, pending: true, sourceDisplayName });
-    }
     draftRevisionRef.current = clearedDraftRevision;
-    stagedAttachmentRevisionRef.current = clearedAttachmentRevision;
     props.onDraftChange("");
-    setStagedComposerItems([]);
     setOptimisticConversationTurns((current) => [
       ...current,
-      { clientTurnId, text: turnText, attachmentNames: submittedFiles.map((file) => file.name) }
+      { clientTurnId, text: turnText, attachmentNames: [] }
     ]);
     setAgentError(null);
     setAgentAnswer(null);
@@ -5107,48 +5084,24 @@ function HomeComposer(props: {
       : undefined;
     beginAgentDraft(clientTurnId);
     try {
-      const submission = submittedFiles.length > 0
-        ? props.onFilesSelected(
-            submittedFiles,
-            "file_picker",
-            hasText ? submittedText : undefined,
-            clientTurnId
-          )
-        : window.pige.agent.submitTurn({
-            schemaVersion: 1,
-            text: turnText,
-            inputKind: followUpConversation ? "follow_up" : classifyTextTransportKind(turnText),
-            locale: props.locale,
-            clientTurnId,
-            ...(followUpConversation ? {
-              conversationId: followUpConversation.conversationId,
-              expectedTailEventId: followUpConversation.tailEventId
-            } : {})
-          });
+      const submission = window.pige.agent.submitTurn({
+        schemaVersion: 1,
+        text: turnText,
+        inputKind: followUpConversation ? "follow_up" : classifyTextTransportKind(turnText),
+        locale: props.locale,
+        clientTurnId,
+        ...(followUpConversation ? {
+          conversationId: followUpConversation.conversationId,
+          expectedTailEventId: followUpConversation.tailEventId
+        } : {})
+      });
       void submission.catch(() => undefined);
       await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
-      if (submittedFiles.length === 0) {
-        await props.onHomeStateChanged().catch(() => undefined);
-      }
+      await props.onHomeStateChanged().catch(() => undefined);
       const outcome = await submission;
-      if (!outcome) throw new Error("Attachment submission did not start.");
-      if (outcome.rejectedFiles?.length) {
-        setAttachmentSubmissionNotice({
-          acceptedCount: outcome.sourceIds.length,
-          rejectedFiles: outcome.rejectedFiles
-        });
-      }
       const durableUserTurnExists = outcome.state !== "failed" || Boolean(outcome.conversationEventId);
       if (durableUserTurnExists) {
         stagedComposerAttemptRef.current = null;
-        if (submittedFiles.length > 0) {
-          setActiveSourceTurn({
-            clientTurnId,
-            jobId: outcome.jobId ?? null,
-            pending: false,
-            sourceDisplayName
-          });
-        }
         setOptimisticConversationTurns((current) => current.map((turn) =>
           turn.clientTurnId === clientTurnId
             ? {
@@ -5159,20 +5112,11 @@ function HomeComposer(props: {
             : turn
         ));
       } else {
-        if (submittedFiles.length > 0) setActiveSourceTurn(null);
         setOptimisticConversationTurns((current) => current.filter((turn) => turn.clientTurnId !== clientTurnId));
       }
       if (!durableUserTurnExists && draftRevisionRef.current === clearedDraftRevision) {
         draftRevisionRef.current += 1;
         props.onDraftChange(submittedText);
-      }
-      if (!durableUserTurnExists && stagedAttachmentRevisionRef.current === clearedAttachmentRevision) {
-        stagedAttachmentRevisionRef.current += 1;
-        setStagedComposerItems(submittedFiles.map((file) => ({
-          kind: "file" as const,
-          localId: createComposerItemId("file"),
-          file
-        })));
       }
       if (outcome.state === "completed") {
         const completedAt = new Date().toISOString();
@@ -5244,14 +5188,6 @@ function HomeComposer(props: {
       clearAgentDraft();
       if (durableUserTurnExists) {
         stagedComposerAttemptRef.current = null;
-        if (submittedFiles.length > 0) {
-          setActiveSourceTurn({
-            clientTurnId,
-            jobId: durableJobId ?? null,
-            pending: durableJobId === undefined,
-            sourceDisplayName
-          });
-        }
         setOptimisticConversationTurns((current) => current.map((turn) =>
           turn.clientTurnId === clientTurnId
             ? {
@@ -5262,19 +5198,10 @@ function HomeComposer(props: {
             : turn
         ));
       } else {
-        if (submittedFiles.length > 0) setActiveSourceTurn(null);
         setOptimisticConversationTurns((current) => current.filter((turn) => turn.clientTurnId !== clientTurnId));
         if (draftRevisionRef.current === clearedDraftRevision) {
           draftRevisionRef.current += 1;
           props.onDraftChange(submittedText);
-        }
-        if (stagedAttachmentRevisionRef.current === clearedAttachmentRevision) {
-          stagedAttachmentRevisionRef.current += 1;
-          setStagedComposerItems(submittedFiles.map((file) => ({
-            kind: "file" as const,
-            localId: createComposerItemId("file"),
-            file
-          })));
         }
       }
       setAgentError({
@@ -6247,11 +6174,9 @@ function composerAttemptKey(text: string, items: readonly StagedComposerItem[]):
       : [item.kind, item.localId, item.unicodeCodePointCount, item.utf8ByteSize])
   ]);
 }
-
 function createComposerItemId(kind: "file" | "paste"): string {
   return `${kind}_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
 }
-
 function handleComposerPaste(
   event: ReactClipboardEvent<HTMLTextAreaElement>,
   composerText: string,
@@ -6284,7 +6209,6 @@ function handleComposerPaste(
   event.preventDefault();
   onStage(classification);
 }
-
 function toAgentStagedItems(items: readonly StagedComposerItem[]): readonly AgentStagedItem[] {
   return items
     .filter((item) => item.kind !== "rejected_pasted_text")
@@ -6300,9 +6224,8 @@ function toAgentStagedItems(items: readonly StagedComposerItem[]): readonly Agen
 }
 
 function largePasteRejectionMessageKey(reason: AgentStagedItemRejectionReason): string {
-  if (reason === "item_limit") return "home.largePasteRejectedItemLimit";
-  if (reason === "aggregate_too_large") return "home.largePasteRejectedAggregateLimit";
-  return "home.largePasteRejectedItemTooLarge";
+  return reason === "item_limit" ? "home.largePasteRejectedItemLimit"
+    : reason === "aggregate_too_large" ? "home.largePasteRejectedAggregateLimit" : "home.largePasteRejectedItemTooLarge";
 }
 
 function formatByteCount(byteCount: number, locale: Locale): string {
