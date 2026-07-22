@@ -75,6 +75,7 @@ import {
   isValidReaderSelectionJobScope,
   type ReaderSelectionJobScope
 } from "./reader-selection-job-binding";
+import type { AgentSourceToolExecutionPort } from "./agent-source-tool-execution";
 
 type JobRecordFile = JobRecordSnapshot;
 
@@ -153,6 +154,7 @@ export interface CreateAgentTurnJobRequest {
 export interface TextAgentTurnExecution {
   readonly job: JobRecord;
   readonly signal: AbortSignal;
+  readonly sourceTools?: AgentSourceToolExecutionPort;
   readonly markDurableCheckpoint: (checkpointId: string) => void;
 }
 
@@ -670,9 +672,32 @@ export class JobsService {
       "Pi Agent is interpreting the preserved Home turn."
     );
     try {
+      const sourceTools: AgentSourceToolExecutionPort | undefined = execution.job.sourceId
+        ? {
+            parse: (request) => this.#runAgentSelectedParseTool(
+              vaultPath,
+              execution.job,
+              { ...request, signal: execution.control.signal },
+              execution.control
+            ),
+            ocr: (request) => this.#runAgentSelectedOcrTool(
+              vaultPath,
+              execution.job,
+              { ...request, signal: execution.control.signal },
+              execution.control
+            ),
+            materializeDataset: (request) => this.#runAgentSelectedDatasetTool(
+              vaultPath,
+              execution.job,
+              { ...request, signal: execution.control.signal },
+              execution.control
+            )
+          }
+        : undefined;
       return await execute({
         job: execution.job,
         signal: execution.control.signal,
+        ...(sourceTools ? { sourceTools } : {}),
         markDurableCheckpoint: (checkpointId) => {
           const current = this.#readJobSnapshot(vaultPath, jobId)?.job;
           if (current?.cancellation?.durableWritesApplied === true) return;
@@ -3402,9 +3427,7 @@ function isDatasetQueryContinuationTurn(job: JobRecord): boolean {
 }
 
 function isQueuedHomeAgentTurn(job: JobRecord): boolean {
-  return job.class === "agent_turn" &&
-    job.state === "queued" &&
-    (job.sourceId === undefined || isDatasetQueryContinuationTurn(job));
+  return job.class === "agent_turn" && job.state === "queued";
 }
 
 function findQueuedCaptureJobFiles(
