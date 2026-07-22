@@ -118,7 +118,7 @@ export async function runHomeAgentRuntimeSmoke(): Promise<{
       new PiAgentRuntimeAdapter({
         fauxResponses: [
           { kind: "tool_call", toolName: "pige_search_knowledge", args: {} },
-          { kind: "text", text: "Smoke evidence is grounded. [1]" }
+          { kind: "text", text: "Smoke evidence is grounded. [citation_1]" }
         ]
       })
     );
