@@ -1853,6 +1853,79 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("keeps following the recovered conversation when its obsolete Job metadata is safely omitted", async () => {
+    const dom = createDom();
+    const { latestTurn: _obsoleteJob, ...recoveredTimeline } = completedTimeline();
+    const harness = createHarness(recoveredTimeline);
+    harness.submitTurn = async (request) => {
+      harness.submitRequests.push(request);
+      harness.timeline = {
+        conversationId: recoveredTimeline.conversationId,
+        tailEventId: "event_20260712_assistant02",
+        canFollowUp: true,
+        messages: [
+          ...recoveredTimeline.messages,
+          {
+            id: "event_20260712_user02",
+            role: "user",
+            createdAt: "2026-07-12T08:02:00.000Z",
+            text: "Continue after recovering the old turn.",
+            jobId: "job_20260712_turn02"
+          },
+          {
+            id: "event_20260712_assistant02",
+            role: "assistant",
+            createdAt: "2026-07-12T08:02:01.000Z",
+            text: "The recovered conversation remains continuous.",
+            jobId: "job_20260712_turn02"
+          }
+        ],
+        latestTurn: {
+          jobId: "job_20260712_turn02",
+          userEventId: "event_20260712_user02",
+          state: "completed"
+        }
+      };
+      const completed = completedResult();
+      if (completed.state !== "completed") throw new Error("Expected completed result fixture.");
+      return {
+        ...completed,
+        answer: {
+          ...completed.answer,
+          answer: "The recovered conversation remains continuous."
+        }
+      };
+    };
+    const firstMount = await mountHome(dom, makePigeApi(harness));
+
+    expect(firstMount.container.textContent).toContain("What should I remember?");
+    expect(firstMount.container.textContent).toContain("Remember the durable boundary.");
+    await setTextareaValue(dom, firstMount.container, "Continue after recovering the old turn.");
+    await clickButton(dom, firstMount.container, "Send");
+    await waitFor(dom, () => harness.submitRequests.length === 1);
+
+    expect(harness.submitRequests[0]).toMatchObject({
+      inputKind: "follow_up",
+      conversationId: recoveredTimeline.conversationId,
+      expectedTailEventId: recoveredTimeline.tailEventId
+    });
+    await waitFor(dom, () => countText(
+      firstMount.container,
+      "The recovered conversation remains continuous."
+    ) === 1);
+
+    await act(async () => firstMount.root.unmount());
+    const secondMount = await mountHome(dom, makePigeApi(harness));
+    expect(secondMount.container.textContent).toContain("What should I remember?");
+    expect(secondMount.container.textContent).toContain("Remember the durable boundary.");
+    expect(secondMount.container.textContent).toContain("Continue after recovering the old turn.");
+    expect(secondMount.container.textContent).toContain("The recovered conversation remains continuous.");
+    expect(secondMount.container.querySelectorAll(".conversation-message")).toHaveLength(4);
+
+    await act(async () => secondMount.root.unmount());
+    dom.window.close();
+  });
+
   it("renders a bounded Agent-selected Dataset result as an accessible table with exact citations", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);

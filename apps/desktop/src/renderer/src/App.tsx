@@ -5759,7 +5759,8 @@ function isConversationPollingState(state: JobState | undefined): boolean {
 
 function canFollowUpToConversation(timeline: AgentConversationTimeline | undefined): timeline is AgentConversationTimeline {
   return timeline?.canFollowUp === true && (
-    timeline.latestTurn?.state === "completed" ||
+    timeline.latestTurn === undefined ||
+    timeline.latestTurn.state === "completed" ||
     timeline.latestTurn?.state === "completed_with_warnings"
   );
 }
