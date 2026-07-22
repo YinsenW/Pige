@@ -432,17 +432,17 @@ Examples:
 
 Retry can be automatic only for safe, bounded failures.
 
-### 8.1 Agent-Internal Completion Recovery Is Not A Job Retry
+### 8.1 Pi Turn Recovery Is Reliability, Not Semantic Dispatch
 
 A durable `agent_turn` or historical `agent_ingest` may contain multiple Pi turns/tools.
-Recoverable schema/citation/evidence/input rejection returns typed feedback while the Job
-stays `running`; no AgentIngest terminal prompt, retrieval poison, or Host fallback exists.
+Jobs recover the same Pi turn, tool/effect identities, checkpoints and cancellation; they
+do not choose a semantic next step, require a terminal tool, or repair assistant prose.
 
-- Pi may gather more evidence, revisit a read-only/idempotent tool, correct a tool call,
-  narrow its claim, or return a grounded abstention.
-- Progress is measured by changed failure fingerprint, changed plan/tool input, newly
-  validated evidence, or an accepted effect/result. Repeating an identical rejected call
-  is not progress.
+- Pi may gather more evidence, revisit a read-only/idempotent tool, correct a rejected
+  tool input, or finish naturally. The Job coordinator observes events and owns durable
+  reliability only.
+- Tool/effect validation failures may return typed boundary feedback. Missing grounding,
+  citation shape, answer schema or Pige terminal call is not a Job failure or retry cause.
 - Service-owned wall-time, model/tool-work, byte, and non-progress bounds prevent runaway
   cost or loops without prescribing a fixed semantic route or one-correction limit.
 - Reaching one internal execution slice checkpoints a body-free PlanSummary/failure
@@ -516,6 +516,9 @@ first-party tools inherit the submitted turn; connected Provider identity plus S
 ordinary cloud authorization. A high-risk effect returns a typed decision requirement to
 the current turn or Operation, and denial executes nothing.
 
+Jobs may record Pi-selected work and recover the same turn, but must never become a Host
+semantic state machine or dispatch pipeline.
+
 The effect owner—not a parallel approval store—owns deterministic effect identity,
 checkpoint, CAS/idempotency, cancellation, commit, and recovery. If the app cannot prove
 whether an irreversible effect committed, it fails closed and exposes repair; it does
@@ -568,17 +571,6 @@ type OperationRecord = {
     policyHash: string;
     enforcementOwners: string[];
   };
-  modelEgressAudit?: {
-    payloadHash: string;
-    evidenceSummaryHash: string;
-    decisionHash: string;
-    payloadCharacters: number;
-    estimatedPayloadTokens: number;
-    normalPayloadCharacterLimit: number;
-    contentClasses: ModelEgressContentClass[];
-    outcome: ModelEgressDecision["outcome"];
-    reasonCode: ModelEgressReasonCode;
-  };
   kind: OperationKind;
   targetRefs: OperationRef[];
   sourceRefs: OperationRef[];
@@ -605,7 +597,8 @@ Executable operation-kind vocabulary (machine checked):
 - `create_memory`, `update_memory`, `trash_memory`, `restore_memory`.
 - `install_skill`, `disable_skill`, `uninstall_skill`.
 - `install_package`, `disable_package`, `uninstall_package`.
-- `change_setting`, `model_egress_decision`.
+- `change_setting`; legacy `model_egress_decision` remains executable vocabulary only
+  until PT1 deletion and must not be created for new work.
 - `compact_job`, `repair_record`.
 - `create_external_file` (reserved for the unregistered external create-only foundation).
 - `backup_created`, `restore_applied`, `migration_applied`.
@@ -620,7 +613,8 @@ Lifecycle coverage:
 | Markdown page | create/update/rename/archive/trash/restore page |
 | Memory | create/update/trash/restore memory through the memory lifecycle |
 | Skills/packages | install/disable/uninstall Skill or package |
-| Settings/policy/provider send | change a sensitive setting with exact effect evidence; record body-free provider-send allow/block audit evidence |
+| Settings/policy | change a sensitive setting with exact effect evidence |
+| Legacy Provider-send audit | `model_egress_decision` is read-only cleanup residue; no new record |
 | Index/job maintenance | update index, compact job, repair record |
 | Backup/restore/migration | backup created, restore applied, migration applied |
 
@@ -634,7 +628,10 @@ Rules:
   a machine-local journal binding parent/leaf and rejecting v1. Receipts prove no effect;
   other effects are `failed_uncertain`; completion prevents replay.
 - An operation affected by Agent Runtime Policy Context records `policyAudit` with the context ID/hash and enforcing service names. Permissioned operations also retain permission decision IDs. Neither field contains full settings, grant bodies, paths, prompts, or secrets.
-- Before any provider credential lookup, a model-dependent Job writes an idempotent `model_egress_decision` operation containing only outcome, reason, content classes, bounded payload counts, model/source/job references, `policyAudit`, and a typed `modelEgressAudit`. Its `payloadHash` identifies the exact redacted bounded payload, `evidenceSummaryHash` identifies the source/artifact/locator summary without storing that summary body, and `decisionHash` fingerprints the complete typed decision including content classification, provider boundary, cloud policy, counts, policy hash, and permission decision. All three hashes participate in the operation identity. Reuse is allowed only when payload, evidence identity, and final decision are equivalent; changing private/privacy/sensitive metadata cannot reuse an ordinary-content audit. Confirmed or blocked attempts remain auditable even when no model call or page write occurs.
+- Provider sends do not create a content-class, allow/block, payload-digest, or
+  `model_egress_decision` Operation. Durable Agent work may retain Provider/model and
+  selected-evidence identity needed for recovery, but never stored credentials or raw
+  payload bodies.
 - Source relink/root change, settings change, trash/restore, backup/restore, migration, Skill/package lifecycle, and memory trash/restore must not fall through to a generic page-update record.
 - `create_page.after` binds result hash/path; `trash_page` binds unchanged live `before`
   and private-trash `after`; later edits are never signed retroactively.

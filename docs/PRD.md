@@ -1043,14 +1043,12 @@ conflicts remain exceptional.
 
 ## 11. Agent Workflows
 
-One user submission owns one durable Agent Job, not one fragile model-output attempt. Pi
-may use multiple internal model turns and registered tool calls while it is making
-progress. Recoverable schema, citation, grounding, evidence, or tool-input rejection is
-returned to Pi as bounded typed feedback so it can correct, retrieve, inspect, or choose
-another authorized tool without asking the user to retry. The Job completes with a valid
-answer/result, a grounded abstention, or an explicit external blocked outcome. Only user
-cancellation, unavailable model/capability, security or authority denial, irreconcilable
-conflict/drift, or another true external boundary terminates autonomous completion.
+One user submission owns one durable Agent Job. Pi may use multiple internal model turns
+and registered tool calls; its final assistant message is the ordinary answer authority.
+Host does not require a terminal tool, grounding label, citation count/shape, or semantic
+repair follow-up. Tool inputs and durable mutations remain validated by their owners;
+user cancellation, unavailable model/capability, security or authority denial,
+irreconcilable conflict/drift, and malformed provider transport remain real boundaries.
 
 ### 11.1 Ingest
 
@@ -1456,8 +1454,10 @@ StepFun, SiliconFlow, CherryIn, Ollama, and LM Studio; DeepSeek is the first rea
 Connecting and selecting a Provider Profile is the user's standing choice for ordinary,
 private, and larger bounded calls to that exact destination. Setup explains once that
 selected context may leave the device; routine calls then proceed without per-call
-confirmation and show calm non-blocking status. Users may choose a stricter policy.
-Secret/local-only/unknown/changed Provider boundaries follow the Provider send contract.
+confirmation and show calm non-blocking status. Pressing Send transmits the exact
+user-authored and explicitly selected bounded context without Host content classification,
+redaction, rewriting, or blocking. Unknown or changed Provider/model identity requires a
+new explicit user action; stored credentials stay outside payload content.
 
 Models shows Provider connection/sync health, its unified inventory, and Global Default.
 Cloud, self-hosted, and local remain internal endpoint/egress facts, not setup categories
@@ -1491,9 +1491,11 @@ Privacy promises:
 - Plaintext secret storage is allowed only as an explicit portable/developer mode with warning.
 - Connecting and selecting a BYOK Provider Profile authorizes ordinary, private, and
   larger bounded calls to that destination. Setup discloses the boundary once; routine
-  calls use non-blocking status instead of repeated prompts. Explicit secrets and
-  credentials are stripped locally, `local_only` is blocked, provider drift requires a
-  new explicit action, and the whole vault is never sent by default.
+  calls use non-blocking status instead of repeated prompts. Explicit Send transmits the
+  exact user-authored and explicitly selected bounded context; Pige does not classify,
+  redact, rewrite, or block that content. Provider/model drift requires a new explicit
+  action, stored credentials remain authentication-only, and the whole vault is never
+  sent by default.
 - Agent memory is inspectable, reversible, and can be disabled or reset.
 - Memory candidates are scanned for secrets before persistence.
 - Skill content is untrusted until installed and still cannot weaken authority, privacy settings, prompt-injection defenses, or confirmation gates.

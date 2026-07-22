@@ -125,9 +125,10 @@ Rules:
 - Keys go only to the secret store; provider/model behavior follows the Pi owner.
 - Manual ID follows incomplete discovery; custom protocol/Endpoint and inventory
   management stay progressively disclosed in Settings.
-- Sensitive content still asks, restricted content never sends, and unknown or changed
-  boundaries ask again. Add no routing, marketplace, second wizard, or routine prompt;
-  expose stricter policy later.
+- Explicit Send transmits exact user-authored and selected bounded context without Host
+  content classification or rewriting; unknown or changed Provider/model identity asks
+  for a new explicit user action. Add no routing, marketplace, second wizard, or routine
+  prompt.
 
 ## 6. Step 3: Home
 

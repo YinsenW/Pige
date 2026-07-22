@@ -282,7 +282,8 @@ Build:
 - [B3.03 -> E3.01] Non-durable discovery plus one real Pi bootstrap generation/tool probe and all-or-restore readback before persistence.
 - [B3.04 -> E3.01] Unified Provider model inventory with auto-sync/Refresh, merged manual fallback, enable/alias controls, and provider-grouped Global Default.
 - [B3.05 -> E3.03] Simple Provider send boundary: Connect/select plus Send authorizes
-  bounded selected context; strip secrets, block `local_only`, and fail on identity drift.
+  exact user-authored and selected bounded context unchanged; keep stored credentials
+  out of the payload and fail on Provider/model identity drift.
 - [B3.06 -> E3.04] Basic ingest prompt path with untrusted-source boundaries.
 - [B3.07 -> E3.05] Structured validation feedback plus autonomous correction,
   replan/narrow/abstain/exception routing inside the same Agent Job.
@@ -320,8 +321,8 @@ provider timing, multi-window/source recovery, and signed packaged macOS/Windows
 remain open; E3.09 stays incomplete.
 
 B3.05 has the default, exact-destination disclosure, matrix/profile-switch tests,
-per-turn body-free audits, binding revalidation, secret stripping, `local_only` blocking,
-and ordinary selected-provider sends without a second approval state machine. Durable
+exact-payload and credential-isolation tests, binding revalidation, and ordinary
+selected-provider sends without content-policy or approval/audit state. Durable
 no-duplicate continuation of an in-flight Pi transcript, remaining provider adoption,
 and signed cross-platform proof keep E3.03 incomplete.
 
@@ -338,12 +339,14 @@ Exit criteria:
   auto-sync one deduplicated inventory, preserve it on refresh failure, accept manual
   fallback, and resolve one enabled Global Default through the real Pi probe.
 - [E3.02] API keys do not appear in vault files, SQLite, logs, persisted prompts, diagnostics, operations, or backups.
-- [E3.03] Every external model attempt obtains a typed pre-prompt/pre-credential decision. Connected known destinations default to uninterrupted ordinary/private/bounded-large use with visible status; sensitive, restricted, unknown, changed, and stricter-policy cases enforce their gates.
+- [E3.03] Explicit Send to an exact connected Provider/model transmits the exact
+  user-authored and selected bounded context unchanged. Stored credentials stay outside
+  payload content; no content classification, rewriting, blocking, or egress audit occurs.
 - [E3.04] Pasted text can autonomously become a cited source page, schema-valid wiki note, index update, append-only log, and Operation when eligibility passes.
-- [E3.05] Invalid/hostile output cannot write; recoverable schema/citation/grounding/tool
-  rejection returns bounded typed feedback and Pi autonomously corrects, replans, narrows,
-  preserves alternatives, or abstains. Only a true exception or external block exits the
-  Agent Job without a valid result.
+- [E3.05] Upstream Pi's final assistant message is not rejected for missing a Host semantic
+  schema, terminal tool, grounding label, or citation shape. Invalid tool input or durable
+  mutation still fails at its owner boundary without applying an effect; true technical,
+  authority, conflict, cancellation, or resource boundaries remain typed.
 - [E3.06] Irreversible/security/destination/conflict/stricter-policy exceptions stage
   durably; current exact create-note review is transitional recovery evidence.
 - [E3.07] Agent ingest emits required knowledge/citation/write fields and a deterministic created/updated/linked/skipped/failed/needs-attention summary with recovery refs.
@@ -529,8 +532,8 @@ Build:
   revision/schema/row/range/aggregate evidence refs; whole Dataset payloads stay local.
 
 Current Home has durable chat, optional cited retrieval, wait/resume, bounded transcript,
-follow-up/retry/cancel, IME-safe Enter and safe draft replacement. Terminal/citation repair
-stays inside its Job. B6.07 now has deterministic metadata-only chunking, worker rebuild
+follow-up/retry/cancel, IME-safe Enter and safe draft replacement. Pi final pass-through
+and optional known-ref citation projection replace terminal/citation repair. B6.07 now has deterministic metadata-only chunking, worker rebuild
 and 10,000-page/100,000-chunk warm lexical evidence. Embeddings, vectors, semantic
 retrieval/reranking, model lifecycle, full RAG, mid-repair recovery, Note Agent mutation,
 production Broker callers and packaged cross-platform proof remain open; E6.02 is partial.

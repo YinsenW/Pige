@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "contractVersion": "2026-07-22",
-  "baselineCommit": "f0cfdd5cd7effccb0f7eca197dfc38c2000b878a",
+  "baselineCommit": "6812dd53917171963378e98bdfe5716888708e82",
   "status": "contract_frozen_implementation_pending",
   "statusPolicy": "Requirement, Exit, and Phase status may stay equal or move down while legacy evidence is removed; this contract never promotes status.",
   "principle": "Host provides capabilities, authority boundaries, data reliability, and recovery; Pi Agent chooses semantic work.",
@@ -27,20 +27,69 @@
       "goal": "Remove legacy approval UI/tests and split App.tsx and oversized mixed-owner services without restyling or moving orchestration intact."
     }
   ],
+  "passThroughSequence": [
+    {"id":"PT1","owner":"Development","goal":"Introduce one Pi-final publication primitive; delete semantic completion policy and Host terminal/repair ownership."},
+    {"id":"PT2","owner":"Development","goal":"Move Home, current-note and Reader Agent turns to the shared Pi-final primitive while preserving tool/effect validation."},
+    {"id":"PT3","owner":"Development","goal":"Submit attachments, global drop, URL, source ingest and Dataset work as one Pi turn; remove Host objective/modality/tool-order pipelines."},
+    {"id":"PT4","owner":"Development and UI Design","goal":"Delete legacy ingest/capture/egress/error residue and prove every production Pi entry uses the same pass-through contract."}
+  ],
+  "agentPassThroughInventory": [
+    ["apps/desktop/src/main/services/pi-agent-completion-policy.ts","DELETE","PT1","Semantic terminal/repair policy is not a Host responsibility."],
+    ["apps/desktop/src/main/services/pi-agent-runtime-adapter.ts","REWRITE","PT1","Thin Pi event/tool/abort adapter publishes upstream final without semantic verdict."],
+    ["apps/desktop/src/main/services/pi-agent-safe-projection.ts","REWRITE","PT1","Keep bounded safe text projection; delete finish-tool-specific projection."],
+    ["apps/desktop/src/main/services/pi-agent-tool-boundary.ts","REWRITE","PT1","Keep registered tool schema/authority/resource checks; delete assistant-semantic repair categories."],
+    ["apps/desktop/src/main/services/model-egress-policy.ts","DELETE","PT1","Content classification, redaction, local_only blocking and egress decisions are removed."],
+    ["apps/desktop/src/main/services/home-agent-service.ts","REWRITE","PT2","Home/general/current-note publishes Pi final; delete terminal tool, answer schema, grounding/citation verdict and objective routing."],
+    ["apps/desktop/src/main/services/reader-selection-action-service.ts","REWRITE","PT2","Keep exact selection and mutation ownership; do not reject assistant prose semantically."],
+    ["apps/desktop/src/main/services/reader-selection-proposal-service.ts","REWRITE","PT2","Keep revision/effect validation; delete semantic output-invalid mapping."],
+    ["apps/desktop/src/main/services/agent-turn-conversation-store.ts","REWRITE","PT2","Keep durable turn identity/history; remove Host semantic objective from new records."],
+    ["apps/desktop/src/main/services/agent-turn-publication.ts","REWRITE","PT2","Publish Pi final and known refs; do not require Host terminal shape."],
+    ["apps/desktop/src/main/index.ts","REWRITE","PT2","Every renderer Agent entry submits one typed turn without semantic dispatch."],
+    ["apps/desktop/src/preload/index.ts","REWRITE","PT2","Expose the canonical turn contract without semantic modes or approval actions."],
+    ["apps/desktop/src/main/services/capture-service.ts","REWRITE","PT3","Preserve evidence and bind it to the same turn; do not choose downstream semantic work."],
+    ["apps/desktop/src/main/services/home-agent-url-service.ts","REWRITE","PT3","Provide URL capability/binding only; Pi chooses whether and when to fetch/use it."],
+    ["apps/desktop/src/main/services/agent-ingest-service.ts","REWRITE","PT3","Delete fixed parse/OCR/index/publish/terminal orchestration; retain preservation and typed capability adapters."],
+    ["apps/desktop/src/main/services/agent-ingest-tool-registry.ts","KEEP","PT3","Registered typed tools may not encode mandatory order, mode or terminal choice."],
+    ["apps/desktop/src/main/services/agent-source-tool-execution.ts","KEEP","PT3","Execute a Pi-selected source tool with strict input/effect bounds only."],
+    ["apps/desktop/src/main/services/retrieval-service.ts","KEEP","PT3","Bounded local search capability; it does not synthesize answers or force use."],
+    ["apps/desktop/src/main/services/dataset-service.ts","KEEP","PT3","Dataset identity/revision capability; Pi chooses if and when to call it."],
+    ["apps/desktop/src/main/services/pi-package-capability-adapter.ts","KEEP","PT3","Package capability adapter exposes reviewed tools without a Host semantic continuation."],
+    ["apps/desktop/src/main/services/jobs-service.ts","REWRITE","PT3","Record/recover the same Pi turn and effects; delete semantic dispatch and legacy new-record chains."],
+    ["packages/contracts/src/index.ts","REWRITE","PT3","One canonical turn/final/tool contract without capture/objective/terminal/egress semantics."],
+    ["packages/schemas/src/index.ts","REWRITE","PT3","Canonical schemas remove semantic mode, terminal, egress and dead legacy states."],
+    ["apps/desktop/src/renderer/src/App.tsx","REWRITE","PT4","Attachment plus query and global drop each submit one turn; remove content/semantic error actions plus Privacy redaction/partial rows."],
+    ["apps/desktop/src/renderer/src/components/CurrentNoteAgent.tsx","REWRITE","PT4","Current-note uses the same turn/final contract without objective or egress UI."],
+    ["apps/desktop/src/renderer/src/components/NoteAgentPanel.tsx","REWRITE","PT4","Delete approval/output-invalid residue; keep safe final rendering."],
+    ["apps/desktop/src/renderer/src/locales/en/messages.json","REWRITE","PT4","Delete output/completion/egress-invalid dead copy and add informational Provider-send copy."],
+    ["apps/desktop/src/renderer/src/locales/de/messages.json","REWRITE","PT4","Mechanical locale parity for the same deletion/copy."],
+    ["apps/desktop/src/renderer/src/locales/fr/messages.json","REWRITE","PT4","Mechanical locale parity for the same deletion/copy."],
+    ["apps/desktop/src/renderer/src/locales/ja/messages.json","REWRITE","PT4","Mechanical locale parity for the same deletion/copy."],
+    ["apps/desktop/src/renderer/src/locales/ko/messages.json","REWRITE","PT4","Mechanical locale parity for the same deletion/copy."],
+    ["apps/desktop/src/renderer/src/locales/zh-Hans/messages.json","REWRITE","PT4","Mechanical locale parity for the same deletion/copy."]
+  ],
+  "passThroughNoGrowth": [
+    {"id":"terminal.finish_tool","token":"pige_finish_home_turn","maximumMatches":3,"allowedPaths":["apps/desktop/src/main/services/home-agent-service.ts","apps/desktop/src/main/services/pi-agent-safe-projection.ts","apps/desktop/src/main/smokes/pi-agent-runtime-smoke.ts"]},
+    {"id":"completion.policy","token":"PiCompletionPolicy","maximumMatches":3,"allowedPaths":["apps/desktop/src/main/services/pi-agent-completion-policy.ts","apps/desktop/src/main/services/pi-agent-runtime-adapter.ts"]},
+    {"id":"semantic.repair","token":"AgentRepairRequiredError","maximumMatches":13,"allowedPaths":["apps/desktop/src/main/services/home-agent-service.ts","apps/desktop/src/main/services/pi-agent-completion-policy.ts","apps/desktop/src/main/services/pi-agent-runtime-adapter.ts","apps/desktop/src/main/services/pi-agent-tool-boundary.ts"]},
+    {"id":"completion.missing","token":"knowledge_action_missing","maximumMatches":4,"allowedPaths":["apps/desktop/src/main/services/agent-ingest-service.ts","apps/desktop/src/main/services/home-agent-service.ts","apps/desktop/src/main/services/jobs-service.ts","apps/desktop/src/main/services/pi-agent-completion-policy.ts"]},
+    {"id":"answer.output_invalid","token":"model_provider.output_invalid","maximumMatches":12,"allowedPaths":["apps/desktop/src/main/services/home-agent-service.ts","apps/desktop/src/main/services/reader-selection-proposal-service.ts","apps/desktop/src/renderer/src/locales/de/messages.json","apps/desktop/src/renderer/src/locales/en/messages.json","apps/desktop/src/renderer/src/locales/fr/messages.json","apps/desktop/src/renderer/src/locales/ja/messages.json","apps/desktop/src/renderer/src/locales/ko/messages.json","apps/desktop/src/renderer/src/locales/zh-Hans/messages.json"]},
+    {"id":"answer.completion_invalid","token":"agent_runtime.completion_invalid","maximumMatches":12,"allowedPaths":["apps/desktop/src/main/services/home-agent-service.ts","apps/desktop/src/main/services/reader-selection-action-service.ts","apps/desktop/src/renderer/src/locales/de/messages.json","apps/desktop/src/renderer/src/locales/en/messages.json","apps/desktop/src/renderer/src/locales/fr/messages.json","apps/desktop/src/renderer/src/locales/ja/messages.json","apps/desktop/src/renderer/src/locales/ko/messages.json","apps/desktop/src/renderer/src/locales/zh-Hans/messages.json"]},
+    {"id":"answer.schema","token":"HomeAgentOutputSchema","maximumMatches":5,"allowedPaths":["apps/desktop/src/main/services/home-agent-service.ts"]},
+    {"id":"answer.evidence_quotes","token":"evidenceQuotes","maximumMatches":12,"allowedPaths":["apps/desktop/src/main/services/home-agent-service.ts"]},
+    {"id":"turn.objective","token":"objective","maximumMatches":60,"allowedPaths":["apps/desktop/src/main/index.ts","apps/desktop/src/main/services/agent-ingest-service.ts","apps/desktop/src/main/services/agent-turn-conversation-store.ts","apps/desktop/src/main/services/home-agent-service.ts","apps/desktop/src/main/services/home-agent-url-service.ts","apps/desktop/src/main/smokes/pi-agent-runtime-smoke.ts","apps/desktop/src/renderer/src/App.tsx","apps/desktop/src/renderer/src/components/CurrentNoteAgent.tsx","packages/contracts/src/index.ts"]},
+    {"id":"legacy.agent_ingest","token":"agent_ingest","maximumMatches":100,"allowedPaths":["apps/desktop/src/main/index.ts","apps/desktop/src/main/services/agent-ingest-service.ts","apps/desktop/src/main/services/agent-page-update-service.ts","apps/desktop/src/main/services/agent-turn-publication.ts","apps/desktop/src/main/services/diagnostics-service.ts","apps/desktop/src/main/services/evidence-assembly-service.ts","apps/desktop/src/main/services/generated-note-file.ts","apps/desktop/src/main/services/jobs-service.ts","apps/desktop/src/main/services/reader-selection-proposal-service.ts","apps/desktop/src/renderer/src/App.tsx","packages/schemas/src/index.ts"]},
+    {"id":"legacy.retrieval_query","token":"retrieval_query","maximumMatches":8,"allowedPaths":["apps/desktop/src/main/services/jobs-service.ts","apps/desktop/src/main/services/retrieval-service.ts","apps/desktop/src/renderer/src/App.tsx","packages/schemas/src/index.ts"]},
+    {"id":"egress.content_classes","token":"contentClasses","maximumMatches":17,"allowedPaths":["apps/desktop/src/main/services/agent-ingest-service.ts","apps/desktop/src/main/services/home-agent-service.ts","apps/desktop/src/main/services/model-egress-policy.ts","packages/schemas/src/index.ts"]},
+    {"id":"ui.egress_confirmation","token":"errors.model_provider.egress_confirmation_required","maximumMatches":6,"allowedPaths":["apps/desktop/src/renderer/src/locales/de/messages.json","apps/desktop/src/renderer/src/locales/en/messages.json","apps/desktop/src/renderer/src/locales/fr/messages.json","apps/desktop/src/renderer/src/locales/ja/messages.json","apps/desktop/src/renderer/src/locales/ko/messages.json","apps/desktop/src/renderer/src/locales/zh-Hans/messages.json"]}
+  ],
   "legacyMarkers": [
     {
       "id": "onboarding.capture_only",
       "disposition": "DELETE",
       "targetPhase": "AR2",
       "token": "capture_only",
-      "maximumMatches": 9,
-      "allowedPaths": [
-        "apps/desktop/src/main/services/capture-service.ts",
-        "apps/desktop/src/main/services/vault-service.ts",
-        "apps/desktop/src/renderer/src/App.tsx",
-        "packages/contracts/src/index.ts",
-        "packages/schemas/src/index.ts"
-      ]
+      "maximumMatches": 0,
+      "allowedPaths": []
     },
     {
       "id": "job.waiting_permission",
@@ -94,10 +143,10 @@
     },
     {
       "id": "model.egress_approval",
-      "disposition": "REWRITE",
+      "disposition": "DELETE",
       "targetPhase": "AR1",
       "token": "ModelEgress",
-      "maximumMatches": 354,
+      "maximumMatches": 102,
       "allowedPaths": [
         "apps/desktop/src/main/index.ts",
         "apps/desktop/src/main/services/agent-ingest-service.ts",
@@ -143,7 +192,7 @@
     ],
     "REWRITE": [
       ["apps/desktop/src/main/services/permission-broker-service.ts", "AR1", "Development", "Shrink to the closed high-risk effect boundary."],
-      ["apps/desktop/src/main/services/model-egress-policy.ts", "AR1", "Development", "Retain local secret stripping, local_only blocking, identity drift, and bounded-context validation only."],
+      ["apps/desktop/src/main/services/model-egress-policy.ts", "AR1", "Development", "Delete content classification/redaction/blocking; move only Provider/model identity, context bounds and stored-credential isolation to their technical owners."],
       ["packages/schemas/src/index.ts", "AR1", "Development", "Remove permission/egress approval DTOs and unreachable Job states; keep canonical boundary schemas."],
       ["packages/contracts/src/index.ts", "AR1", "Development", "Derive public types from canonical schemas and remove duplicate approval contracts."],
       ["apps/desktop/src/main/index.ts", "AR1", "Development", "Remove approval IPC/actions while preserving renderer/main isolation."],
@@ -157,7 +206,7 @@
       ["apps/desktop/src/main/services/job-execution-coordinator.ts", "AR3", "Development", "Own reliability transitions only, never semantic dispatch."],
       ["tests/unit/permission-broker-service.test.ts", "AR1", "Development", "Replace lifecycle internals with closed-list allow/deny/effect tests."],
       ["tests/unit/permission-broker-home-agent.test.ts", "AR1", "Development", "Prove ordinary tools create zero permission records and high-risk denial has no effect."],
-      ["tests/unit/model-egress-policy.test.ts", "AR1", "Development", "Replace approval hashes with secret/local_only/identity/bounded-context tests."],
+      ["tests/unit/model-egress-policy.test.ts", "AR1", "Development", "Replace content-policy assertions with exact-payload, Provider/model identity, context-bound and credential-isolation tests."],
       ["tests/unit/agent-ingest-service.test.ts", "AR1/AR2", "Development", "Remove egress approval and fixed pipeline assertions; test Pi-selected tools and retained boundaries."],
       ["tests/unit/home-agent-service.test.ts", "AR1/AR2", "Development", "Remove waiting states/Host routing internals; retain user-visible turn, persistence and failure behavior."],
       ["tests/unit/job-execution-coordinator.test.ts", "AR3", "Development", "Test CAS/cancel/retry/checkpoint/terminal only."],

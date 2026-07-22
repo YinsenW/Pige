@@ -26,10 +26,10 @@
       "scripts/verify/architecture-reset.mjs",
       "package.json"
     ],
-    "scope": "Independent review of the personal-Agent architecture reset: Pi semantic ownership, submitted-turn authority, closed high-risk effects, Provider Send, deletion inventory, risk-tiered verification, budgets, macOS-first sequencing, and unchanged product status.",
+    "scope": "Independent review of the Pi pass-through reset: exact Provider payload, upstream final authority, strict tool/effect boundaries, removal inventory/no-growth guards, static Privacy UI truth, staged implementation, and unchanged product status.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 18,
-    "reviewedSha256": "21906f2a6754398a3453ada98e8422225f2749f9ff5c813029a0035145b29659"
+    "reviewedSha256": "bfa03c56ba9e18aae114af0db3279ed08aa1726c90046a48d82b6e3a4df02884"
   },
   "reviewers": [{
     "reviewerId": "architecture-reset-planning-review",
@@ -45,13 +45,13 @@
   }],
   "dimensions": [
     {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"The start contract routes ordinary work to one semantic owner, Pi, while Host capability, authority, persistence and recovery owners stay explicit."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"Security, privacy, runtime, Job, Provider and UI owners share submitted-turn authority, a closed high-risk list and no ordinary approval state machine."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"Affected Requirements and Exits are planned, AR1 through AR4 are explicit, and the reset cannot promote product status."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"Security, privacy, runtime, Job, Provider and UI owners share exact payload/Pi-final pass-through while tool, effect, credential and durable boundaries stay strict."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"Affected statuses remain unchanged, AR1-AR4/PT1-PT4 are explicit, and the reset cannot promote product status."},
     {"id":"ongoing_development_support","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"The machine inventory gives Development exact DELETE, REWRITE and KEEP targets, no-growth guards, owner budgets and staged verification nodes."},
     {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"Decisions are defined once in canonical owners; ordinary PRs avoid full snapshot ceremony while architecture, merge-candidate and main retain complete review."}
   ],
   "verification": [
-    {"command":"npm run verify:architecture-reset","status":"passed","evidence":"Executable guards freeze AR1-AR4, legacy-mechanism no-growth, implementation dispositions, owner budgets and planned status."},
+    {"command":"npm run verify:architecture-reset","status":"passed","evidence":"Executable guards freeze AR1-AR4/PT1-PT4, 32 production call sites, pass-through no-growth, implementation dispositions and unchanged status."},
     {"command":"npm run verify:contracts","status":"passed","evidence":"Canonical Job reliability plus submitted-turn, high-risk and Provider-send contracts remain single-owned and fail safe."},
     {"command":"npm run verify","status":"passed","evidence":"The full merge-candidate governance suite passes after trace, semantic and reviewed-snapshot regeneration."}
   ],
@@ -62,11 +62,11 @@
     "action": "Active-phase follow-up",
     "status": "acknowledged",
     "compatibility": "Legacy internal approval and Host-orchestration mechanisms are intentionally not a compatibility target; durable user knowledge, sources, credentials and recoverable data remain protected.",
-    "acknowledgement": "Product Planning freezes the contract and machine inventory; Development executes AR1-AR4 before ordinary feature work resumes, with no Requirement, Exit or Phase promotion."
+    "acknowledgement": "Product Planning freezes the contract and machine inventory; Development executes PT1-PT4 as small reviewable candidates without Requirement, Exit or Phase promotion."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Current Host ingest/retrieval orchestration remains bounded deletion debt until AR2 lands.",
+    "Current terminal/output validators and remaining Host pipelines are bounded deletion debt until PT1-PT4 land.",
     "Windows and Linux qualification remains deferred and unclaimed during early macOS-first development."
   ]
 }

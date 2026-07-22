@@ -12,6 +12,9 @@ if (manifest.status !== "contract_frozen_implementation_pending") failures.push(
 if (!Array.isArray(manifest.phases) || manifest.phases.map((phase) => phase.id).join(",") !== "AR1,AR2,AR3,AR4") {
   failures.push("architecture reset must retain the reviewed AR1-AR4 sequence");
 }
+if (!Array.isArray(manifest.passThroughSequence) || manifest.passThroughSequence.map((phase) => phase.id).join(",") !== "PT1,PT2,PT3,PT4") {
+  failures.push("Pi pass-through remediation must retain the reviewed PT1-PT4 sequence");
+}
 
 const sourceRoots = ["apps/desktop/src", "packages"];
 const ignoredSourceDirectories = new Set([
@@ -19,7 +22,20 @@ const ignoredSourceDirectories = new Set([
 ]);
 const sourceFiles = collectAuthoritativeSourceFiles(root);
 failures.push(...auditLegacyMarkers(root, sourceFiles, manifest.legacyMarkers));
+failures.push(...auditNoGrowthMarkers(root, sourceFiles, manifest.passThroughNoGrowth));
 failures.push(...verifySourceScopeGuard());
+
+if (!Array.isArray(manifest.agentPassThroughInventory) || manifest.agentPassThroughInventory.length < 30) {
+  failures.push("agent pass-through production inventory is incomplete");
+}
+for (const [relativePath, disposition, batch, rationale] of manifest.agentPassThroughInventory ?? []) {
+  if (!relativePath || !["DELETE", "REWRITE", "KEEP"].includes(disposition) || !/^PT[1-4]$/u.test(batch) || !rationale) {
+    failures.push(`invalid agent pass-through inventory entry for ${relativePath ?? "unknown"}`);
+  }
+  if (!fs.existsSync(path.join(root, relativePath)) && disposition !== "DELETE") {
+    failures.push(`${disposition} pass-through inventory path is missing: ${relativePath}`);
+  }
+}
 
 for (const disposition of ["DELETE", "REWRITE", "KEEP"]) {
   const entries = manifest.implementationInventory?.[disposition];
@@ -81,7 +97,7 @@ if (failures.length > 0) {
 }
 
 const inventoryCount = Object.values(manifest.implementationInventory).reduce((total, entries) => total + entries.length, 0);
-console.log(`Architecture reset contract OK: ${manifest.legacyMarkers.length} legacy guards, ${inventoryCount} DELETE/REWRITE/KEEP entries, ${oversized.size} oversized owners, authoritative-source scope regression passed, AR1-AR4 frozen without status promotion.`);
+console.log(`Architecture reset contract OK: ${manifest.legacyMarkers.length} legacy guards, ${manifest.passThroughNoGrowth.length} pass-through no-growth guards, ${manifest.agentPassThroughInventory.length} production call sites, ${inventoryCount} DELETE/REWRITE/KEEP entries, ${oversized.size} oversized owners, authoritative-source scope regression passed, AR1-AR4/PT1-PT4 frozen without status promotion.`);
 
 function collectAuthoritativeSourceFiles(baseRoot) {
   return sourceRoots.flatMap((relativeRoot) => walk(path.join(baseRoot, relativeRoot)))
@@ -107,10 +123,29 @@ function auditLegacyMarkers(baseRoot, relativePaths, markers) {
   return diagnostics;
 }
 
+function auditNoGrowthMarkers(baseRoot, relativePaths, markers) {
+  const diagnostics = [];
+  if (!Array.isArray(markers) || markers.length === 0) return ["pass-through no-growth markers are missing"];
+  for (const marker of markers) {
+    const allowed = new Set(marker.allowedPaths);
+    let matches = 0;
+    for (const relativePath of relativePaths) {
+      const source = fs.readFileSync(path.join(baseRoot, relativePath), "utf8");
+      const count = source.split(marker.token).length - 1;
+      if (count === 0) continue;
+      matches += count;
+      if (!allowed.has(relativePath)) diagnostics.push(`${marker.id} appeared in new path ${relativePath}`);
+    }
+    if (matches > marker.maximumMatches) diagnostics.push(`${marker.id} grew from ${marker.maximumMatches} to ${matches} matches`);
+  }
+  return diagnostics;
+}
+
 function verifySourceScopeGuard() {
   const diagnostics = [];
   const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "pige-architecture-reset-scope-"));
-  const generatedTokenBody = manifest.legacyMarkers.map((marker) => marker.token).join("\n");
+  const generatedTokenBody = [...manifest.legacyMarkers, ...manifest.passThroughNoGrowth]
+    .map((marker) => marker.token).join("\n");
   const generatedPaths = [
     "packages/contracts/dist/index.d.ts",
     "packages/contracts/build/index.ts",
@@ -139,6 +174,14 @@ function verifySourceScopeGuard() {
       : ["capture_only legacy marker is missing"];
     if (!mutationDiagnostics.some((failure) => failure.includes(`appeared in new path ${sourceMutationPath}`))) {
       diagnostics.push("authoritative source mutation was not rejected");
+    }
+    const finishTool = manifest.passThroughNoGrowth.find((marker) => marker.id === "terminal.finish_tool");
+    writeFixture(fixtureRoot, sourceMutationPath, "export const forbidden = 'pige_finish_home_turn';\n");
+    const passThroughMutationDiagnostics = finishTool
+      ? auditNoGrowthMarkers(fixtureRoot, collectAuthoritativeSourceFiles(fixtureRoot), [finishTool])
+      : ["terminal finish-tool no-growth marker is missing"];
+    if (!passThroughMutationDiagnostics.some((failure) => failure.includes(`appeared in new path ${sourceMutationPath}`))) {
+      diagnostics.push("pass-through authoritative source mutation was not rejected");
     }
   } finally {
     fs.rmSync(fixtureRoot, { recursive: true, force: true });

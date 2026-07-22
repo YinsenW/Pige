@@ -119,7 +119,8 @@ Mitigations:
 - Store secrets in OS keychain or encrypted local secret store by default.
 - Plaintext portable mode is explicit, warned, and not default.
 - Secret scanning before memory persistence, diagnostics export, and support bundles.
-- Redact obvious secrets before model calls where feasible.
+- Keep Pige-owned stored credentials out of prompt content and construct authentication
+  only in the reviewed Provider adapter. Do not rewrite user-authored submitted content.
 - Exclude secrets from backups by default.
 
 Acceptance:
@@ -140,7 +141,7 @@ Product decision:
 Mitigations:
 
 - Explain the boundary once; routine Home and Agent calls show non-blocking cloud status.
-- Sensitive confirms; restricted blocks; endpoint/Profile drift reconnects once. A
+- Exact endpoint/Profile drift requires a new explicit user action. A
   cloud/local label alone never causes per-call prompts.
 - Provider trust grants no tool, setting, extension, filesystem, or destructive authority.
 - Do not send full vault for retrieval.
@@ -424,11 +425,12 @@ state machine does not. Pige has no Ask-Every-Time, saved-grant, or YOLO mode fo
 Agent work, and new Jobs cannot enter `waiting_permission`.
 
 Cloud Provider calls are a separate simple boundary. Connecting/selecting the exact
-Provider and pressing Send authorizes that turn's bounded selected context. Explicit
-secrets/credentials are removed locally, `local_only` content is blocked, provider
-identity drift requires a new explicit user action, and the whole vault is never sent by
-default. Ordinary/private/bounded-large context does not create a model-egress approval,
-one-use digest record, renderer action, or `waiting_model_egress` Job.
+Provider and pressing Send authorizes that turn's exact user-authored and explicitly
+selected bounded context. Host code does not classify, redact, rewrite, or block that
+payload. Provider identity drift requires a new explicit user action; the whole vault is
+never sent by default, and stored Provider credentials remain isolated in the secret
+store/authentication layer. There is no model-egress approval, audit decision, renderer
+action, content-class indicator, or `waiting_model_egress` Job.
 
 OS privacy prompts, sandboxing, update signatures, malware protection, filesystem errors,
 secret-store isolation, renderer/main isolation, and source prompt-injection defenses

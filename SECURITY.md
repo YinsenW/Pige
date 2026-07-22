@@ -43,7 +43,9 @@ Do not include:
 Security-sensitive areas include:
 
 - API key and token storage.
-- Secret redaction in logs, prompts, diagnostics, memory, conversations, backups, and support bundles.
+- Pige-owned credential isolation from prompt content, plus redaction in logs,
+  diagnostics, memory, conversations, backups, and support bundles. This does not
+  authorize rewriting user-authored content submitted to a selected Provider.
 - High-risk confirmation bypass for destructive writes, out-of-root writes, arbitrary
   shell/unknown-package install, or credential disclosure.
 - A third-party Skill/package acquiring first-party submitted-turn authority.

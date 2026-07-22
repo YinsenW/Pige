@@ -259,7 +259,8 @@ type ModelTaskClass =
 Rules:
 
 - Internal routing must be observable in operation records as redacted model profile references.
-- Internal routing must respect cloud-send policy.
+- Internal routing must preserve the exact selected Provider/model binding and may not
+  introduce a Host content-policy branch.
 - Internal routing must fall back to the default model.
 - User-visible model slots stay hidden until the gate in section 9 is satisfied.
 
@@ -336,33 +337,31 @@ call, never what it must call; zero-tool answers and typed empty-result replanni
 valid. Ephemeral `PlanSummary` excludes chain of thought, and stale/denied/unavailable
 results require revision before another effect.
 
-### 11.1 Autonomous Completion And Repair
+### 11.1 Pi Final Authority And Tool Validation
 
 One user submission owns one durable Pige Agent Job and may contain multiple upstream Pi
-model turns and tool calls. The completion target is one accepted result, not one attempt
-at a terminal tool.
+model turns and tool calls. Upstream Pi's final assistant message is authoritative for
+ordinary Agent completion, whether or not tools ran.
 
-- Terminal tools are repeatable validation boundaries; only accepted calls publish.
-  Rejected arguments/evidence/bindings return bounded typed repair to Pi.
-- A no-current-note Home `auto` turn may accept one validated native assistant final only
-  when Pi invoked zero tools. After any tool, `pige_finish_home_turn` remains mandatory
-  for grounding, citation, evidence, egress, and publication validation.
-- Repair carries stable categories, safe pointers/counts/opaque refs, and fixed hints; no
-  body, prompt, output, path, credential, endpoint, policy secret, or private diagnostic.
-- Pi may repair, gather evidence, choose another tool, narrow, or abstain; Pige imposes no
-  fixed prompt loop, Host fallback, or one-repair limit.
-- Denied high-risk authority, `local_only`/secret blocking, cancellation, unavailable required runtime, and
+- No `pige_finish_home_turn`, `HomeAgentOutput`, grounding label, evidence-quote count, or
+  citation shape is mandatory for an ordinary/current-note/Dataset/source answer. Host
+  code must not discard or repair-follow-up a successful assistant final for omitting one.
+- Registered tool input/result, evidence identity, authority, and resource bounds validate
+  at each tool boundary. Durable mutations still require their owner service's schema,
+  revision, conflict, permission, idempotency, and commit checks.
+- Citations are optional answer metadata. The Host may project only known current evidence
+  refs; invalid or stale refs are removed or marked unavailable without rejecting the
+  remaining assistant answer.
+- Denied high-risk authority, Provider/source identity drift, cancellation, unavailable required runtime, and
   irreconcilable conflict or evidence drift remain hard Host boundaries. Pi may choose a
   different already-authorized route, but it cannot reinterpret or override the denial.
 - Resource controls cap time/work/bytes/repeated failure; safe limits checkpoint/resume.
-  Persistent non-progress becomes abstention or typed incompatibility, not output-invalid.
-- No intermediate repair attempt creates a durable assistant event, Job result, proposal,
-  or Operation. Accepted effects keep their deterministic identity, so repair/restart
-  cannot duplicate a write.
+  Malformed provider transport remains `call_failed` or `protocol_incompatible`, not a
+  semantic output verdict.
 - Only exact `model_provider.call_failed` projects as provider-call failure.
   `model_provider.binding_changed` requests binding repair; other typed Host errors keep
-  their safe code with body-free Agent repair. Unknown non-domain exceptions alone use
-  the provider fallback. `knowledge_action_missing` uses `completion_invalid`.
+  their safe code. `knowledge_action_missing`, semantic `output_invalid` and
+  `completion_invalid` are retired from new ordinary Agent turns.
 
 This is upstream Pi continuation, not a Pige-authored parallel Agent loop. Pige supplies
 typed feedback and durable Job/checkpoint ownership through the sole adapter; Pi retains
@@ -387,15 +386,14 @@ messages/64 KiB; history cannot become the current result. Pige events/Jobs, not
 sessions, are authoritative. Compaction/indexing and steer queues remain open.
 
 Home draft streaming is a Pi-owned answer presentation boundary, not raw provider output.
-Pige accepts bounded `answer` replacement snapshots from reviewed Pi/parsed terminal-answer
-events after control/restricted-content filtering. A rejected candidate may shrink or
-replace the draft while Pi repairs it. Draft validity never determines Job success.
+Pige accepts bounded assistant replacement snapshots from reviewed upstream Pi events
+after transport framing and envelope validation. Draft validity never determines Job success.
 Pige must not make a second provider call solely to force the model to reproduce an answer
 it already generated for UI streaming.
 
 Both paths emit sender/turn/Job-bound, monotonically sequenced `draft_replace` snapshots.
-Pige never emits thinking, raw JSON/tool arguments, provider events, model refs, grounding,
-or citations. Replacement snapshots may shrink or revise prior text and grant no tool,
+Pige never emits thinking, raw JSON/tool arguments, provider events, or model refs.
+Replacement snapshots may shrink or revise prior text and grant no tool,
 data, destination, or durable-write authority.
 
 Pi event retention and provider-stream safety are separate bounds. Every raw update is
@@ -403,13 +401,12 @@ still inspected by the safe draft controller and counts toward an independent ha
 consecutive body-free `message_update` records may coalesce in the structural turn-event
 history so token cadence cannot exhaust the smaller tool/lifecycle event budget.
 
-The draft is escaped, non-durable, and non-authoritative. Full output schema, evidence,
-source revision, grounding, and citations still validate before the assistant event and
-Job result commit. Repair replaces the provisional draft in place; the accepted durable
-final replaces it exactly once. Cancellation or a true external block clears/marks it,
-and restart restores only durable conversation state. Ambient provider payloads and Pi
-thinking are never Home answer events; the sole adapter must identify a reviewed Pi-owned
-answer channel rather than infer one from arbitrary text.
+The draft is escaped, non-durable, and non-authoritative. The upstream Pi final becomes
+the durable assistant event after typed envelope, sender/turn identity, length/resource,
+and cancellation checks. Optional citation refs are projected only when Host-known and
+current. Cancellation or a true external block clears/marks the draft, and restart
+restores only durable conversation state. Ambient provider payloads and Pi thinking are
+never Home answer events; the sole adapter identifies a reviewed Pi-owned answer channel.
 
 Agent memory:
 
@@ -430,9 +427,15 @@ Rules:
 - Initial context may contain only the user instruction, policy, and scoped tool
   descriptors. Parsed or retrieved evidence enters only after its Pi-selected result.
 - Connected/selected Provider identity plus user Send authorizes the bounded selected
-  context for that turn. Host strips explicit secrets, blocks `local_only`, and rechecks
-  provider/source identity; ordinary/private/bounded-large content does not create a
-  separate egress approval or waiting Job state.
+  context for that turn. Host rechecks Provider/source identity and bounds but preserves
+  the exact user-authored and selected payload without classifying, redacting, rewriting,
+  or blocking its content. Stored Provider credentials stay isolated in authentication;
+  no separate egress approval or waiting Job state exists.
+- Trimming may classify only semantic emptiness. Accepted user and assistant strings keep
+  their exact whitespace and line breaks through durable history, input identity,
+  retry/restart, safe projection and Provider transport. Structural size bounds reject
+  before Send or bound explicitly selected context; they never silently mutate accepted
+  text.
 
 ## 14. API And IPC
 

@@ -274,25 +274,23 @@ Tests must verify:
   scoped credential adapter, or Custom/unknown fallback.
 - Renderer→preload→main proves direct, Pi-selected retrieve, preserve-first source,
   wait/resume, and removal of capture/retrieval semantic bypass from the Home renderer.
-- Draft-stream tests prove multiple `answer`-only replacement snapshots from the reviewed
-  Pi answer boundary without a second provider turn solely for presentation. A rejected
-  candidate may shrink or replace the provisional text and does not fail the Job; only the
-  accepted validated result becomes durable. Tests also cover sender/request/turn/Job
+- Draft-stream tests prove multiple assistant replacement snapshots from the reviewed Pi
+  answer boundary without a second provider turn solely for presentation. The upstream
+  final becomes durable after envelope/identity/resource checks. Tests also cover sender/request/turn/Job
   binding, monotonic sequence, bounds,
   coalescing, escaping, and repair that can shrink prior text. They reject ambient Pi
   text, partial JSON, thinking, other tool arguments, citations/grounding, IDs, provider
-  payloads, restricted/control content, wrong sender, stale sequence, and post-cancel events.
-- Final validation replaces the draft exactly once and alone creates durable assistant/
-  Job output. Schema/citation/source drift, provider failure, and cancellation leave no
-  durable draft; restart/conversation recovery never replays one.
+  payloads, control frames, wrong sender, stale sequence, and post-cancel events.
+- The Pi final replaces the draft exactly once and creates durable assistant/Job output.
+  Invalid/stale citation refs are removed or marked unavailable without rejecting body
+  text; provider failure and cancellation leave no durable draft; restart never replays one.
 - Initial context has instruction/policy/tools; evidence follows selected calls. Without
   a model, one durable turn waits and performs no semantic work.
 - Only registered tool calls write; retry/restart reuses call/Operation identity.
-- Autonomous-completion tests reject a one-correction script. They prove malformed terminal
-  input, unknown citation, stale evidence, and incomplete grounding return bounded typed
-  feedback to Pi; Pi can retrieve/inspect/revise and then complete the same Job. Repeated
-  identical non-progress is bounded, denied authority remains blocked, cancellation wins,
-  and no intermediate candidate becomes a conversation event, Job result, or Operation.
+- Pass-through tests prove every production Pi entry accepts the upstream final without a
+  mandatory finish tool, grounding/citation schema, or Host repair follow-up. Tool input,
+  authority, resource, revision and durable-effect failures remain bounded at their owning
+  boundaries; denied authority remains blocked and cancellation wins.
 - Tool-freedom tests prove the Host does not select a semantic route, relevant registered
   core tools remain available, read-only/idempotent tools may be revisited, and corrected
   side-effect calls retain deterministic identity without duplicate writes.
@@ -307,9 +305,14 @@ Tests must verify:
   external extensions cannot inherit first-party submitted-turn authority.
 - Pige does not mutate the user's global `~/.pi/agent/models.json` during normal provider setup.
 - Cloud-send indicators appear when content is sent to a cloud-hosted provider.
-- Provider-send tests keep ordinary calls prompt-free, strip secrets, block `local_only`,
-  reject Provider identity drift, and prove bounded selected-context assembly without
-  approval hashes, renderer actions, or waiting Job states.
+- Provider-send tests keep calls prompt-free, preserve exact user-authored/selected
+  payloads, keep stored credentials out of payloads, reject Provider/model identity
+  drift, and prove bounded selected-context assembly without content classification,
+  approval/audit records, renderer actions, or waiting Job states.
+- Exact-string regressions cover leading/trailing spaces and multiline identity across
+  durable conversation input, hash/identity, history, retry/restart and Provider payload.
+  They separately prove text-only whitespace creates no turn while attachments plus
+  whitespace-only text receive only the minimal organize intent.
 
 ## 6.2 Agent Runtime Policy Context Gates
 
@@ -420,9 +423,11 @@ Tests must verify:
 - Irreversible delete, original overwrite, out-of-root write, arbitrary shell/unknown
   install, credential disclosure, risky edit, and equivalent escalation require one
   concrete confirmation; denial executes nothing.
-- Connected Provider + Send permits bounded selected context; secrets are stripped,
-  `local_only` and identity drift block, and ordinary/private/bounded-large context does
-  not create approval UI or a waiting Job.
+- Connected Provider/model + Send permits the exact user-authored and selected bounded
+  context unchanged; stored credentials remain out of payload content, identity drift
+  blocks, and no content policy creates approval UI or a waiting Job.
+- Selected bounded-context text and accepted assistant text retain exact whitespace and
+  line breaks; safe projection may enforce structural limits but must not trim either.
 - New Jobs cannot reach `waiting_permission` or `waiting_model_egress`.
 
 Delete tests that only preserve request/decision/consume/completion internals, YOLO,
@@ -543,8 +548,8 @@ Documentation checks must verify:
   dependency/model, type/schema, path, and owner-reference regressions.
 - Decision Log verification passes for unique/date-aligned IDs, required rationale/consequences/references, legal lifecycle state, bidirectional supersession, and stale temporal wording.
 - Cross-document contract verification passes for stable IDs, Markdown/Dataset/source
-  authority, Job lifecycle, asset roots, backup/restore, provider, permissions, secrets,
-  and model egress.
+  authority, Job lifecycle, asset roots, backup/restore, Provider pass-through,
+  permissions, and stored-credential isolation.
 - Documentation leanness verification enforces an always-read attention budget, single-owner projections, normalized trace manifests, a bounded inventory, and material reduction from the audited baseline. Its copy/paste gate rejects every unapproved repeated short normative line, consecutive list or table-data window, mixed multiline block, external URL, same-name typed declaration, and exact or high-coverage long prose/fenced block; each run also executes mutation and false-positive controls.
 - The five-dimension scorecard reports at least `9.5/10` at full-governance nodes; it is
   not an inner-loop or ordinary-PR acceptance ritual.
