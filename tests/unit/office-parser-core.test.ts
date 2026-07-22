@@ -143,6 +143,18 @@ describe("Office parser core", () => {
     })).rejects.toMatchObject({ code: "parser.docx.doctype_not_allowed" });
   });
 
+  it("rejects repeated DOCTYPE declarations during package preflight", async () => {
+    const repeatedDoctype = `${"<!DOCTYPE w:document [<!ENTITY x \"unsafe\">]>".repeat(32)}<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>&x;</w:t></w:r></w:p></w:body></w:document>`;
+    const filePath = await writeFixture("repeated-doctype.docx", await createOpenXmlZip(docxRequiredEntries(repeatedDoctype)));
+
+    await expect(extractOfficeText({
+      requestId: "docx-repeated-doctype",
+      filePath,
+      sourceKind: "docx_file",
+      limits: parserLimits()
+    })).rejects.toMatchObject({ code: "parser.docx.doctype_not_allowed" });
+  });
+
   it("preflights secondary DOCX XML parts before Mammoth follows relationships", async () => {
     const documentXml = `<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body/></w:document>`;
     const unsafeStyles = `<?xml version="1.0"?><!DOCTYPE w:styles [<!ENTITY x "unsafe">]><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:styleId="&x;"/></w:styles>`;

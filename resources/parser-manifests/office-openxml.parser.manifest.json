@@ -3,7 +3,7 @@
   "id": "office_openxml",
   "engines": [
     { "id": "mammoth", "version": "1.12.0", "sourceKinds": ["docx_file"] },
-    { "id": "fast-xml-parser", "version": "5.9.3", "sourceKinds": ["docx_file", "pptx_file"] },
+    { "id": "fast-xml-parser", "version": "5.10.1", "sourceKinds": ["docx_file", "pptx_file"] },
     { "id": "yauzl", "version": "3.4.0", "sourceKinds": ["docx_file", "pptx_file"] }
   ],
   "capabilities": [

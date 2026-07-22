@@ -1853,7 +1853,7 @@ Waiver rules:
 | PDFium-style renderer | candidate | Alternative PDF rendering path if Poppler packaging fails. | https://pdfium.googlesource.com/pdfium/ | Record concrete package/binary before use. | Local parser. |
 | `mammoth` (`parser.mammoth`) | required | Semantic local DOCX conversion for headings, paragraphs, lists, tables, links, and image references. | https://github.com/mwilliamson/mammoth.js | Pin `1.12.0`; update only after semantic, external-file, malformed ZIP/XML, image, and Electron worker fixtures. | BSD-2-Clause; pure JS; disable embedded style maps and external file access; never render converter HTML directly. |
 | OpenXML parser for PPTX | required | Best-effort PPTX text/image/notes extraction using bounded ZIP + XML parsing. | Open XML SDK docs: https://learn.microsoft.com/en-us/office/open-xml/open-xml-sdk | Keep the adapter format-driven and fixture-backed; do not assume slide filenames equal presentation order. | Do not bundle LibreOffice in v0.1. |
-| `fast-xml-parser` (`parser.fast-xml-parser`) | required | Parse bounded PPTX relationships, slide order, slide text, notes, metadata, and normalized DOCX converter output. | https://github.com/NaturalIntelligence/fast-xml-parser | Pin `5.9.3`; fuzz malformed XML and recheck entity/order options on update. | MIT; pure JS; disable value coercion and entity processing for untrusted Office XML. |
+| `fast-xml-parser` (`parser.fast-xml-parser`) | required | Parse bounded PPTX relationships, slide order, slide text, notes, metadata, and normalized DOCX converter output. | https://github.com/NaturalIntelligence/fast-xml-parser | Pin `5.10.1`; fuzz malformed XML and recheck entity/order options on update. | MIT; pure JS; disable value coercion and entity processing for untrusted Office XML. |
 | JSZip | transitive | Mammoth uses JSZip internally for DOCX package reads; Pige does not import it directly and uses yauzl for Pige-owned OpenXML inspection. | https://stuk.github.io/jszip/ | Version follows the pinned Mammoth lock graph; audit through lockfile/SBOM. | Do not add a second direct ZIP abstraction without fixture evidence. |
 | PaddleOCR | optional | Cross-platform OCR fallback managed by Local Tools. | https://github.com/PaddlePaddle/PaddleOCR | Download/install only after user consent; pin supported model packs. | Local OCR; network off during OCR execution. |
 | PP-OCRv5 language packs | optional | CPU-friendly OCR language packs for v0.1 locales. | PaddleOCR registry entry above | Install only needed language packs and record their own version/checksum. | Local OCR fallback for Chinese/English/Japanese, Korean, and Latin text. |
@@ -1992,7 +1992,7 @@ Pin before implementing:
 
 - Markdown stack: CodeMirror 6 plus unified/remark/rehype packages.
 - Web extraction: exact `@mozilla/readability` `0.6.0`, jsdom `29.1.1`, Undici `8.7.0`, and `@types/jsdom` `28.0.3`.
-- PPTX extraction: yauzl `3.4.0` plus fast-xml-parser `5.9.3`; JSZip remains Mammoth-transitive only.
+- PPTX extraction: yauzl `3.4.0` plus fast-xml-parser `5.10.1`; JSZip remains Mammoth-transitive only.
 - Backup/restore archive engine: yazl/yauzl.
 - Secret storage: Electron `safeStorage` encrypted local store, including unavailable-encryption behavior.
 - Vector index backend: sqlite-vec behind `VectorIndexDriver`, or a documented fallback if packaging validation fails.

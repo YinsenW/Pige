@@ -2153,7 +2153,7 @@ Revised: 2026-07-11
 
 Decision:
 
-Pige uses exact Mammoth `1.12.0` for semantic DOCX conversion and a Pige-owned PPTX/OpenXML adapter built from exact yauzl `3.4.0` plus fast-xml-parser `5.9.3`. Both formats run in one separately built bounded Office worker behind `DocumentParserService`. JSZip remains transitive through Mammoth only. Pige does not add officeparser, pptxtojson, node-pptx-parser, LibreOffice, or task-time parser downloads for this v0.1 slice.
+Pige uses exact Mammoth `1.12.0` for semantic DOCX conversion and a Pige-owned PPTX/OpenXML adapter built from exact yauzl `3.4.0` plus fast-xml-parser `5.10.1`. Both formats run in one separately built bounded Office worker behind `DocumentParserService`. JSZip remains transitive through Mammoth only. Pige does not add officeparser, pptxtojson, node-pptx-parser, LibreOffice, or task-time parser downloads for this v0.1 slice.
 
 Rationale:
 

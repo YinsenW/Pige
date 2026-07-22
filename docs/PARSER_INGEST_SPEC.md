@@ -187,7 +187,7 @@ After a new document-parser or direct-image OCR Artifact is persisted, its owner
 
 - Extract slide text, speaker notes, image references, and slide order.
 - OCR slide images when visible text is not otherwise recoverable.
-- Current Phase 5 adapter uses yauzl `3.4.0` plus fast-xml-parser `5.9.3` over selected bounded OpenXML parts. Presentation relationships determine slide order; speaker notes, external counts, `slide:N` units, and schema-v1 `slide:N/media:M` raster targets are preserved.
+- Current Phase 5 adapter uses yauzl `3.4.0` plus fast-xml-parser `5.10.1` over selected bounded OpenXML parts. Presentation relationships determine slide order; speaker notes, external counts, `slide:N` units, and schema-v1 `slide:N/media:M` raster targets are preserved.
 - XML value coercion and entity processing are disabled, DOCTYPE is rejected, nesting is capped, internal relationship traversal is rejected, and external targets are recorded but never opened.
 - Image-bearing slides with sparse text return OCR candidates to Pi; they do not execute
   or delay another semantic step themselves.

@@ -1209,7 +1209,7 @@
       "usage": "Parse bounded local OpenXML parts for PPTX slide order, text, notes, relationships, metadata, and media references, plus normalized Mammoth output.",
       "packageManager": "npm",
       "packageId": "fast-xml-parser",
-      "version": "5.9.3",
+      "version": "5.10.1",
       "upstreamUrl": "https://github.com/NaturalIntelligence/fast-xml-parser",
       "license": "MIT",
       "noticeRequired": true,
@@ -1222,9 +1222,9 @@
       "sizeClass": "small",
       "updatePolicy": "release-train",
       "replacementPath": "Replace behind the OpenXML parser adapter if malformed XML, entity handling, or ordered-node fixtures regress.",
-      "lastReviewedAt": "2026-07-10",
+      "lastReviewedAt": "2026-07-22",
       "reviewedBy": "Codex",
-      "notes": "Pure JavaScript, ESM/CJS compatible. Parser options preserve order where needed, disable value coercion and entity processing for untrusted Office XML, and operate only on XML entries already bounded by yauzl preflight."
+      "notes": "Pure JavaScript, ESM/CJS compatible. Version 5.10.1 includes the repeated-DOCTYPE entity-expansion fix. Parser options preserve order where needed, disable value coercion and entity processing for untrusted Office XML, and operate only on XML entries already bounded by yauzl preflight."
     },
     {
       "registryRef": "parser.napi-rs-canvas",

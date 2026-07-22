@@ -1923,7 +1923,7 @@ describe("jobs service", () => {
       expect(sourceRecord.metadata).toMatchObject({
         parserStatus: "parsed_needs_ocr",
         parserId: "office_openxml",
-        parserVersion: "1.12.0+5.9.3+3.4.0",
+        parserVersion: "1.12.0+5.10.1+3.4.0",
         agentTextReady: true,
         needsOcr: true
       });
